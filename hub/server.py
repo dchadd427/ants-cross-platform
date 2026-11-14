@@ -10,7 +10,7 @@ import signal
 import sys
 import time
 
-from . import chat as chatmod, config as configmod, http, limits as limitmod, roles as rolesmod, session as sessionmod, store as storemod, text as textrules, ws
+from . import admindoor, chat as chatmod, config as configmod, http, limits as limitmod, roles as rolesmod, session as sessionmod, store as storemod, text as textrules, ws
 from .log import Log
 
 WS_PATH = "/hub/ws"
@@ -129,6 +129,7 @@ class Hub:
         self.next_deletions = self.next_forget = self.next_purge = self.next_checkpoint = self.next_crowded = self.next_room = float("-inf")
         self.pruning = False                        # True while the oldest lines are being deleted to make room (from prune_from_percent of the limit down to prune_to_percent)
         self.routes = getattr(sessions, "routes", None) or {}
+        self.admin = admindoor.Door(self)                # (the admin page's door: hub/admindoor.py)
         if hasattr(sessions, "attach"):
             sessions.attach(self)
 
@@ -171,6 +172,10 @@ class Hub:
             request = http.parse_head(head)
             if request.path == HEALTH_PATH and request.method == "GET":
                 return writer.write(http.response(200, {"ok": True}))
+            if request.split()[0].startswith(admindoor.ROUTE_PREFIX):
+                self.pending -= 1                                     # (as for a page of the login: the handshake is over, and this one may wait for Discord)
+                pending = False
+                return await self.admin_page(request, reader, writer)
             route = self.routes.get(request.split()[0])
             if route is None and request.split()[0].startswith(PICTURE_PREFIX):
                 route = getattr(self.sessions, "picture_route", None)
@@ -211,6 +216,12 @@ class Hub:
         peername = writer.get_extra_info("peername")
         address = limitmod.address_key(h.get("x-client-address"), peername[0] if peername else "")
         writer.write(await route(request, address))
+
+    async def admin_page(self, request, reader, writer):
+        """One request of the admin page's door: the gate, or the page's API (its POST has a body, which hub/admindoor.py reads); the answer ends the connection."""
+        peername = writer.get_extra_info("peername")
+        address = limitmod.address_key(request.headers.get("x-client-address"), peername[0] if peername else "")
+        writer.write(await self.admin.serve(request, reader, address))
 
     async def upgrade(self, request, reader, writer):
         """Check the handshake and take the socket in: an HttpError says no; otherwise the 101 and the welcome are written and the Peer is returned."""
@@ -364,6 +375,7 @@ class Hub:
             self.chat.pics_limits.forget_idle(now)
             self.chat.wait_limits.forget_idle(now)
             self.chat.named_limits.forget_idle(now)
+            self.admin.forget_idle(now)
             if hasattr(self.sessions, "forget_idle"):
                 self.sessions.forget_idle(now, wall)
         if now >= self.next_purge:
@@ -433,6 +445,7 @@ def main(env=None):
         log.event("warning", what="a_fake_discord_is_on")
     if (cfg.login_client_id or cfg.login_client_secret) and not cfg.login_on:
         log.event("warning", what="discord_login_off_needs_id_secret_and_site_address")
+    admindoor.warn(cfg, log)
     if cfg.roles_partial:
         log.event("warning", what="discord_roles_off_needs_token_server_and_a_role")
     if (os.environ if env is None else env).get("ANTS_HUB_MODS", "").strip():

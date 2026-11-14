@@ -10,6 +10,7 @@ CLIENT_ID = re.compile(r"[0-9]{5,30}\Z")                 # the number of the Dis
 CLIENT_SECRET = re.compile(r"[\x21-\x7e]{8,256}\Z")      # printable characters, no blank
 BOT_TOKEN = re.compile(r"[A-Za-z0-9._-]{30,200}\Z")        # a bot's token is one plain word; one that is not is not Discord's, and is never put in a header
 SNOWFLAKE = re.compile(r"[1-9][0-9]{4,19}\Z")             # the id of a server or of a role
+GATE_SECRET = re.compile(r"[\x21-\x7e]{32,256}\Z")         # the key of the admin page's door (ANTS_HUB_ADMIN_GATE_SECRET): 32 to 256 printable characters, no blank
 MIN_RECHECK_SECONDS = 60
 MAX_RECHECK_SECONDS = 3600
 RECHECK_SECONDS = 180                                       # how often the role of everybody who is here is asked again (ANTS_HUB_ROLE_RECHECK_SECONDS)
@@ -37,12 +38,19 @@ class Config:
     login_client_id: str = dataclasses.field(default="", repr=False)
     login_client_secret: str = dataclasses.field(default="", repr=False)    # the Discord login's (hub/login.py); never printed
     min_account_days: int = MIN_ACCOUNT_DAYS                                               # a Discord account younger than this cannot write (its age is in its id)
+    admin_gate_secret: str = dataclasses.field(default="", repr=False)      # the key that signs the admin page's pass and its CSRF token (hub/admindoor.py); a secret, never printed; "" when absent or not of the shape: the door is shut
+    admin_gate_given: bool = False                                          # whether the setting was there at all (a value that is there and is no good is said at the start; one that is absent is said as well, differently)
     discord_test_url: str = ""                                              # TESTS ONLY: where the fake Discord of the tests listens (a loopback address, refused for any other)
 
     @property
     def login_on(self):
         """Whether this hub offers the Discord login: both settings of the application and the site's address (the way back is <site>/hub/callback)."""
         return bool(self.login_client_id and self.login_client_secret and self.origin)
+
+    @property
+    def admin_gate_on(self):
+        """Whether the admin page's door can open: the key is there and of the shape (32 or more printable characters). Otherwise the door answers 403 to everybody."""
+        return bool(GATE_SECRET.match(self.admin_gate_secret))
 
     @property
     def roles_on(self):
@@ -114,6 +122,9 @@ def load(env):
         raise ConfigError("ANTS_HUB_DISCORD_CLIENT_ID must be the application's number (digits only)")
     if cfg.login_client_secret and not CLIENT_SECRET.match(cfg.login_client_secret):
         raise ConfigError("ANTS_HUB_DISCORD_CLIENT_SECRET must be 8 to 256 printable characters with no blank")
+    gate = env.get("ANTS_HUB_ADMIN_GATE_SECRET", "").strip()
+    cfg.admin_gate_given = bool(gate)
+    cfg.admin_gate_secret = gate if GATE_SECRET.match(gate) else ""                  # (a short or malformed key never stops the hub: the door stays shut and the start says so)
     cfg.discord_bot_token, cfg.discord_guild = env.get("ANTS_HUB_DISCORD_BOT_TOKEN", "").strip(), env.get("ANTS_HUB_DISCORD_GUILD", "").strip()
     cfg.role_admin, cfg.role_mod, cfg.owner = (env.get(name, "").strip() for name in ("ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_OWNER"))
     if cfg.discord_bot_token and not BOT_TOKEN.match(cfg.discord_bot_token):

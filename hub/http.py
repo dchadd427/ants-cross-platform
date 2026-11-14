@@ -11,8 +11,8 @@ MAX_HEADERS = 60
 REQUEST_LINE = re.compile(r"([A-Z]{1,10}) (/[!-~]{0,1999}) HTTP/1\.[01]\Z")
 HEADER_LINE = re.compile(r"([!#$%&'*+.^_`|~0-9A-Za-z-]+):([\t\x20-\x7e\x80-\xff]*)\Z")        # (the blanks around the value are cut after the match: a pattern that did it itself backtracked, quadratically, on a long run of blanks)
 ONCE = frozenset(("origin", "upgrade", "connection", "sec-websocket-key", "sec-websocket-version", "x-client-address", "content-length", "transfer-encoding", "host",
-                  "cookie", "x-hub-test-login", "sec-fetch-site"))
-REASONS = {101: "Switching Protocols", 200: "OK", 302: "Found", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 408: "Request Timeout",
+                  "cookie", "x-hub-test-login", "sec-fetch-site")) | frozenset(("content-type", "x-ants-csrf"))
+REASONS = {101: "Switching Protocols", 200: "OK", 204: "No Content", 302: "Found", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 408: "Request Timeout", 413: "Content Too Large", 415: "Unsupported Media Type",
            426: "Upgrade Required", 429: "Too Many Requests", 431: "Request Header Fields Too Large", 500: "Internal Server Error", 503: "Service Unavailable"}
 HEADER_NAME = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+\Z")
 HEADER_VALUE = re.compile(r"[\t\x20-\x7e]*\Z")              # (no line end, no other control character, nothing past ASCII: a value that came from outside cannot start another header)
@@ -78,9 +78,11 @@ def response(status, body=None, headers=None, page=None):
     payload = page.encode("utf-8") if page is not None else b"" if body is None else json.dumps(body, separators=(",", ":")).encode("utf-8")
     lines = ["HTTP/1.1 %d %s" % (status, REASONS.get(status, "Status"))]
     if status != 101:
-        if status != 302:
+        if status not in (204, 302):
             lines.append("Content-Type: " + ("text/html; charset=utf-8" if page is not None else "application/json"))
-        lines += ["Content-Length: %d" % len(payload), "Cache-Control: no-store", "X-Content-Type-Options: nosniff", "Connection: close"]
+        if status != 204:                                           # (a 204 has no body and says nothing of one)
+            lines.append("Content-Length: %d" % len(payload))
+        lines += ["Cache-Control: no-store", "X-Content-Type-Options: nosniff", "Connection: close"]
     pairs = list(headers.items()) if isinstance(headers, dict) else list(headers or [])
     for name, value in pairs:
         if not HEADER_NAME.match(name) or not HEADER_VALUE.match(str(value)):

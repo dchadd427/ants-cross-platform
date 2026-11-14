@@ -1,7 +1,7 @@
 """The Discord login of the chat hub (docs/HUB.md, "Login"): who a visitor is, from one cookie and the one scope `identify`.
 
 The pages (nginx passes these five, /hub/pic/<name>.png and /hub/ws to the hub, docker/nginx.conf):
-  GET  /hub/login?next=home|room   a random state (128 bits, one use, 10 minutes) is kept here and in a short cookie, and the visitor is sent to Discord
+  GET  /hub/login?next=home|room|admin   a random state (128 bits, one use, 10 minutes) is kept here and in a short cookie, and the visitor is sent to Discord
   GET  /hub/callback               Discord sends the visitor back with a code: the state of the cookie, of the address and of this hub must be one, the code is exchanged (hub/discord.py),
                                    the id, the username and the display name are kept (a login: the SHA-256 of a random cookie value, the id, the username, 30 days; and the account's
                                    profile, refreshed at every login: the username, the display name if it has a usable one, and which of the two the account is shown by) and the
@@ -32,6 +32,7 @@ STATE_COOKIE = "__Host-ants_oauth"          # the state of a login on its way: S
 VALUE = re.compile(r"[0-9a-f]{32}\Z")
 CODE = re.compile(r"[\x21-\x7e]{1,512}\Z")
 NEXT = {"home": "/", "room": "/#room"}      # where the visitor goes back to: a fixed list, chosen by a word
+NEXT["admin"] = "/admin"                    # (the admin page's "Log in with Discord": hub/admindoor.py)
 DISCORD_EPOCH_MS = 1420070400000            # the time that the first bits of a Discord id count from
 MAX_QUERY = 1500
 

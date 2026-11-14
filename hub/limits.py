@@ -53,6 +53,10 @@ class Limits:
     login_refill_seconds: float = 6.0
     session_burst: int = 20             # /hub/me, /hub/logout and /hub/forget: a burst of 20, then one every 3 seconds
     session_refill_seconds: float = 3.0
+    admin_burst: int = 60               # the admin page's door (hub/admindoor.py: the gate and /hub/admin/api/*): for each client address a burst of 60, then one every second
+    admin_refill_seconds: float = 1.0
+    admin_lookups_burst: int = 3        # an account that is not an administrator (as far as the hub knows) makes the hub ask Discord again at most this often: a burst of 3, then one every 20 seconds
+    admin_lookups_refill_seconds: float = 20.0
     login_inflight: int = 6             # logins that wait for Discord at one time (the 7th gets the page "Login unavailable" at once, and the sockets never wait for it)
     login_states_max: int = 10000       # logins that were started and not finished (each is about 200 bytes of memory); the oldest go first
     state_seconds: float = 600.0        # how long a login may take, from /hub/login to /hub/callback

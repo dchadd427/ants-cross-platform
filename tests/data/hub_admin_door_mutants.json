@@ -1,0 +1,456 @@
+{
+ "note": "Mutants of the admin page's door (hub/admindoor.py, hub/admin.py `resolve`, the key in hub/config.py, the 204 of hub/http.py, hub/server.py, hub/login.py; docs/HUB.md 'The admin page's door') for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose (a role that is let in, a key that opens the door, a pass that lives too long or holds an id, a gate that answers what it must not, a fence that is not asked, a token that is not of the login, a body that is not bounded, a change that is not logged or not done, a power that a role does not have, an answer that is not marked as typed), and a test of tests/scripts/test_hub_admin_door.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_admin_door_mutants.json --keep-going --jobs 1; every mutant must be caught.",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest tests.scripts.test_hub_admin_door"
+ },
+ "mutants": [
+  {
+   "id": "a_moderator_is_let_in",
+   "file": "hub/admindoor.py",
+   "old": "return (\"ok\", who, \"admin\") if role == rolesmod.ADMIN else (\"no\", who, None)",
+   "new": "return (\"ok\", who, \"admin\") if role in (rolesmod.ADMIN, rolesmod.MOD) else (\"no\", who, None)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_operators_account_needs_discord",
+   "file": "hub/admindoor.py",
+   "old": "        if self.is_owner(who.account_id):\n            return \"ok\", who, \"owner\"",
+   "new": "        if False:\n            return \"ok\", who, \"owner\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "an_unknown_role_is_not_looked_up",
+   "file": "hub/admindoor.py",
+   "old": "                await roles.confirm([who.account_id])                # (one urgent lookup",
+   "new": "                pass                                                  # (one urgent lookup",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "every_call_looks_up_again",
+   "file": "hub/admindoor.py",
+   "old": "if role != rolesmod.ADMIN and self.lookups.take(self.hub.chat.key_of(who.account_id), self.hub.clock()):",
+   "new": "if self.lookups.take(self.hub.chat.key_of(who.account_id), self.hub.clock()):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_lookups_of_one_account_are_not_limited",
+   "file": "hub/admindoor.py",
+   "old": "if role != rolesmod.ADMIN and self.lookups.take(self.hub.chat.key_of(who.account_id), self.hub.clock()):",
+   "new": "if role != rolesmod.ADMIN:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_shut_door_opens_without_a_key",
+   "file": "hub/admindoor.py",
+   "old": "        if self.key is None:\n            return \"closed\", None, None",
+   "new": "        if False:\n            return \"closed\", None, None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_failed_lookup_is_an_administrator",
+   "file": "hub/admindoor.py",
+   "old": "return (\"ok\", who, \"admin\") if role == rolesmod.ADMIN else (\"no\", who, None)",
+   "new": "return (\"ok\", who, \"admin\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_pass_lives_ten_minutes",
+   "file": "hub/admindoor.py",
+   "old": "PASS_SECONDS = 60",
+   "new": "PASS_SECONDS = 600",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_mac_is_of_nothing_in_particular",
+   "file": "hub/admindoor.py",
+   "old": "hmac.new(key, body.encode(\"ascii\"), hashlib.sha256).hexdigest()",
+   "new": "hmac.new(key, b\"v1\", hashlib.sha256).hexdigest()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_pass_has_no_nonce_of_its_own",
+   "file": "hub/admindoor.py",
+   "old": "\"nonce\": secrets.token_hex(8)}",
+   "new": "\"nonce\": \"0\" * 16}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_pass_holds_the_id",
+   "file": "hub/admindoor.py",
+   "old": "\"ref\": self.hub.chat.ref(who.account_id), \"name\": who.username",
+   "new": "\"ref\": who.account_id, \"name\": who.username",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_pass_says_admin_for_the_operator",
+   "file": "hub/admindoor.py",
+   "old": "payload = {\"ref\": self.hub.chat.ref(who.account_id), \"name\": who.username, \"role\": role,",
+   "new": "payload = {\"ref\": self.hub.chat.ref(who.account_id), \"name\": who.username, \"role\": \"admin\",",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_gate_answers_a_post",
+   "file": "hub/admindoor.py",
+   "old": "    async def gate(self, request):\n        if request.method != \"GET\":",
+   "new": "    async def gate(self, request):\n        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_gate_takes_a_body",
+   "file": "hub/admindoor.py",
+   "old": "        if \"transfer-encoding\" in h or h.get(\"content-length\", \"0\") != \"0\":\n            return http.response(400)",
+   "new": "        if False:\n            return http.response(400)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_gate_has_no_limit",
+   "file": "hub/admindoor.py",
+   "old": "            if not self.rate.take(address, self.hub.clock()):\n                return self.fail(429, \"rate\", {\"Retry-After\": \"5\"})",
+   "new": "            if False:\n                return self.fail(429, \"rate\", {\"Retry-After\": \"5\"})",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_gate_sends_cors",
+   "file": "hub/admindoor.py",
+   "old": "return http.response(204, headers={PASS_HEADER: sign(self.key, payload)})",
+   "new": "return http.response(204, headers={PASS_HEADER: sign(self.key, payload), \"Access-Control-Allow-Origin\": \"*\"})",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_204_has_a_length",
+   "file": "hub/http.py",
+   "old": "        if status != 204:                                           # (a 204 has no body and says nothing of one)",
+   "new": "        if True:                                                    # (a 204 has no body and says nothing of one)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_origin_of_a_post_is_not_asked",
+   "file": "hub/admindoor.py",
+   "old": "            return origin == self.hub.cfg.origin and bool(origin) and site == \"same-origin\"",
+   "new": "            return site == \"same-origin\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_site_of_a_get_is_not_asked",
+   "file": "hub/admindoor.py",
+   "old": "        return (origin is None or (origin == self.hub.cfg.origin and bool(origin))) and site == \"same-origin\"",
+   "new": "        return origin is None or (origin == self.hub.cfg.origin and bool(origin))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_type_is_not_asked",
+   "file": "hub/admindoor.py",
+   "old": "        if post and h.get(\"content-type\", \"\").split(\";\")[0].strip().lower() != \"application/json\":",
+   "new": "        if False and post and h.get(\"content-type\", \"\").split(\";\")[0].strip().lower() != \"application/json\":",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_token_is_not_asked",
+   "file": "hub/admindoor.py",
+   "old": "        if post and not (h.get(CSRF_HEADER) and hmac.compare_digest(",
+   "new": "        if False and not (h.get(CSRF_HEADER) and hmac.compare_digest(",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_token_is_not_of_the_login",
+   "file": "hub/admindoor.py",
+   "old": "message = b\"csrf1\\0\" + (who.session or \"\").encode(\"ascii\") + b\"\\0\" + self.hub.chat.ref(who.account_id).encode(\"ascii\")",
+   "new": "message = b\"csrf1\\0\" + b\"\\0\" + self.hub.chat.ref(who.account_id).encode(\"ascii\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_token_is_not_of_the_account",
+   "file": "hub/admindoor.py",
+   "old": "message = b\"csrf1\\0\" + (who.session or \"\").encode(\"ascii\") + b\"\\0\" + self.hub.chat.ref(who.account_id).encode(\"ascii\")",
+   "new": "message = b\"csrf1\\0\" + (who.session or \"\").encode(\"ascii\") + b\"\\0\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_body_is_not_bounded",
+   "file": "hub/admindoor.py",
+   "old": "MAX_BODY = 512 ",
+   "new": "MAX_BODY = 5000000 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_get_may_have_a_body",
+   "file": "hub/admindoor.py",
+   "old": "            if length != \"0\":\n                raise Refused(self.fail(400, \"body\"))\n            return None",
+   "new": "            return None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_chunked_body_is_taken",
+   "file": "hub/admindoor.py",
+   "old": "        if \"transfer-encoding\" in h:\n            raise Refused(self.fail(400, \"body\"))\n        length",
+   "new": "        length",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "another_field_is_taken",
+   "file": "hub/admindoor.py",
+   "old": "return (account, None, None) if set(data) == {\"account\"} else None",
+   "new": "return (account, None, None)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_mute_may_last_a_year",
+   "file": "hub/admindoor.py",
+   "old": "1 <= minutes <= MAX_MUTE_MINUTES",
+   "new": "1 <= minutes",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_mute_may_be_nothing",
+   "file": "hub/admindoor.py",
+   "old": "1 <= minutes <= MAX_MUTE_MINUTES",
+   "new": "0 <= minutes <= MAX_MUTE_MINUTES",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "true_is_one_minute",
+   "file": "hub/admindoor.py",
+   "old": "type(minutes) is int and 1 <=",
+   "new": "isinstance(minutes, int) and 1 <=",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_line_may_be_a_string",
+   "file": "hub/admindoor.py",
+   "old": "type(line) is int and 0 < line < 2 ** 62",
+   "new": "0 < int(line) < 2 ** 62",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "an_id_is_an_account",
+   "file": "hub/admindoor.py",
+   "old": "        else:\n            target, shown = adminmod.resolve(store, argument, ids=False)",
+   "new": "        else:\n            target, shown = adminmod.resolve(store, argument, ids=True)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "an_id_is_an_account_for_a_picture",
+   "file": "hub/admindoor.py",
+   "old": "                target, shown = adminmod.resolve(store, argument, ids=False)\n                if target is None:\n                    return self.fail(404, \"who\")\n                state",
+   "new": "                target, shown = adminmod.resolve(store, argument, ids=True)\n                if target is None:\n                    return self.fail(404, \"who\")\n                state",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_ban_is_not_logged",
+   "file": "hub/admindoor.py",
+   "old": "store.ban(target, by, shown, note=(by, \"ban\", whom, \"\"))",
+   "new": "store.ban(target, by, shown, note=None)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_mute_is_not_logged",
+   "file": "hub/admindoor.py",
+   "old": "until = store.mute(target, minutes, by, shown, note=(by, \"mute\", whom, str(minutes)))",
+   "new": "until = store.mute(target, minutes, by, shown, note=None)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "an_unban_is_not_logged",
+   "file": "hub/admindoor.py",
+   "old": "if not store.unban(target, note=(by, \"unban\", whom, \"\")):",
+   "new": "if not store.unban(target):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_deletion_is_not_logged",
+   "file": "hub/admindoor.py",
+   "old": "if not store.delete_line(line, by, note=(by, \"del\", whom, str(line))):",
+   "new": "if not store.delete_line(line, by):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_actor_is_the_terminal",
+   "file": "hub/admindoor.py",
+   "old": "        by = chat.ref(me)\n",
+   "new": "        by = \"terminal\"\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_ban_leaves_the_sockets_open",
+   "file": "hub/admindoor.py",
+   "old": "            chat.remove(chat.sockets_of(target), \"banned\")\n",
+   "new": "            pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_deletion_stays_on_the_screens",
+   "file": "hub/admindoor.py",
+   "old": "            chat.sync_deletions()\n        else:",
+   "new": "            pass\n        else:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "an_administrator_has_power_over_an_administrator",
+   "file": "hub/admindoor.py",
+   "old": "        return chatmod.allowed(TABLE_WORD.get(command, command), rolesmod.ADMIN, target_role, same)",
+   "new": "        return True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_operators_account_may_be_acted_on",
+   "file": "hub/admindoor.py",
+   "old": "        if self.is_owner(target):\n            return same and command == \"del\"",
+   "new": "        if False:\n            return same and command == \"del\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_operators_account_has_no_power_above_an_administrator",
+   "file": "hub/admindoor.py",
+   "old": "        if role == \"owner\" and not same:\n            return True\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_fresh_check_is_not_made",
+   "file": "hub/admindoor.py",
+   "old": "        if not await roles.confirm(accounts) or not roles.fresh(accounts):",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_roles_of_the_person_acted_on_are_not_asked",
+   "file": "hub/admindoor.py",
+   "old": "        accounts = [me] + ([target] if target is not None else [])",
+   "new": "        accounts = [me]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_actor_may_have_lost_the_role",
+   "file": "hub/admindoor.py",
+   "old": "        if not self.is_owner(me) and roles.role_of(me) != rolesmod.ADMIN:",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_picture_change_is_not_logged",
+   "file": "hub/admindoor.py",
+   "old": "lambda show, note: setter(show, (by,) + note[1:])",
+   "new": "lambda show, note: setter(show, None)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_picture_change_is_the_terminals",
+   "file": "hub/admindoor.py",
+   "old": "lambda show, note: setter(show, (by,) + note[1:])",
+   "new": "lambda show, note: setter(show, note)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_block_is_not_found_by_its_reference",
+   "file": "hub/admindoor.py",
+   "old": "if pseudo.REFERENCE.match(argument) and store.picture_state_by_reference(argument) is not None:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_list_of_bans_is_not_marked_as_typed",
+   "file": "hub/admindoor.py",
+   "old": "            return http.response(200, {\"bans\": out, \"untrusted\": True, \"untrusted_fields\": [\"name\"]})",
+   "new": "            return http.response(200, {\"bans\": out})",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_log_is_not_marked_as_typed",
+   "file": "hub/admindoor.py",
+   "old": "\"untrusted\": True, \"untrusted_fields\": [\"actor_name\", \"target_name\"]}",
+   "new": "\"untrusted\": False, \"untrusted_fields\": []}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_log_goes_back_a_year",
+   "file": "hub/admindoor.py",
+   "old": "MODLOG_DAYS = 30",
+   "new": "MODLOG_DAYS = 400",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_log_gives_the_id",
+   "file": "hub/admindoor.py",
+   "old": "\"target\": r.target, \"target_name\"",
+   "new": "\"target\": store.account_of_reference(r.target) or r.target, \"target_name\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_list_of_bans_gives_the_id",
+   "file": "hub/admindoor.py",
+   "old": "out = [{\"ref\": chat.ref(a), \"name\": names.get(chat.ref(a), n), \"at\": at, \"by\"",
+   "new": "out = [{\"ref\": a, \"name\": names.get(chat.ref(a), n), \"at\": at, \"by\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_operator_is_called_an_administrator_by_me",
+   "file": "hub/admindoor.py",
+   "old": "\"role\": role, \"csrf\": self.token(who)",
+   "new": "\"role\": \"admin\", \"csrf\": self.token(who)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_bug_costs_the_class_and_the_text",
+   "file": "hub/admindoor.py",
+   "old": "            self.hub.log.event(\"error\", kind=type(e).__name__, where=\"admin\")\n            return self.fail(500, \"error\")",
+   "new": "            self.hub.log.event(\"error\", kind=type(e).__name__, where=\"admin\", text=str(e))\n            return self.fail(500, \"error\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_short_key_opens_the_door",
+   "file": "hub/config.py",
+   "old": "GATE_SECRET = re.compile(r\"[\\x21-\\x7e]{32,256}\\Z\")",
+   "new": "GATE_SECRET = re.compile(r\"[\\x21-\\x7e]{1,256}\\Z\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_key_with_a_blank_opens_the_door",
+   "file": "hub/config.py",
+   "old": "GATE_SECRET = re.compile(r\"[\\x21-\\x7e]{32,256}\\Z\")",
+   "new": "GATE_SECRET = re.compile(r\"[\\x20-\\x7e]{32,256}\\Z\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_bad_key_stops_the_hub",
+   "file": "hub/config.py",
+   "old": "    cfg.admin_gate_secret = gate if GATE_SECRET.match(gate) else \"\"",
+   "new": "    if gate and not GATE_SECRET.match(gate):\n        raise ConfigError(\"ANTS_HUB_ADMIN_GATE_SECRET is not good\")\n    cfg.admin_gate_secret = gate",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_shut_door_is_not_said",
+   "file": "hub/admindoor.py",
+   "old": "    if not cfg.admin_gate_on:\n        log.event(",
+   "new": "    if False:\n        log.event(",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_start_does_not_say_it",
+   "file": "hub/server.py",
+   "old": "    admindoor.warn(cfg, log)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_login_does_not_come_back_to_the_admin_page",
+   "file": "hub/login.py",
+   "old": "NEXT[\"admin\"] = \"/admin\"",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_server_does_not_answer_the_door",
+   "file": "hub/server.py",
+   "old": "            if request.split()[0].startswith(admindoor.ROUTE_PREFIX):",
+   "new": "            if False and request.split()[0].startswith(admindoor.ROUTE_PREFIX):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_page_resolves_an_id",
+   "file": "hub/admin.py",
+   "old": "    if not ids:\n        return None, \"a number is not an account here",
+   "new": "    if False:\n        return None, \"a number is not an account here",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  }
+ ]
+}

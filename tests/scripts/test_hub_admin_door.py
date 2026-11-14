@@ -1,0 +1,906 @@
+#!/usr/bin/env python3
+"""The admin page's door (hub/admindoor.py, hub/admin.py `resolve`, docs/HUB.md "The admin page's door"): who may use it, the pass that the site's nginx hands on, and the hub's side of what the page does.
+
+  TheRule          the one rule: nobody / no role / moderator / administrator / the operator's account, each with a fresh answer, an old one and a Discord that is down; no key, a short key, a key with a blank
+  ThePass          `v1.<payload>.<mac>`: the mac holds with the key and with nothing else, the expiry is a minute from now, the payload says a reference, a name and a role and never an id
+  TheGate          what the gate is and is not: GET only, no body in or out, no CORS, a limit for each address
+  TheFences        the page's calls: the same-origin rules, the JSON type, the token (none, wrong, another login's), the shape of the body, the size of the body
+  TheChanges       every change and its row of the moderators' log, the powers, the fresh check, the lists and the status
+  TheIdIsLikeAPassword   an id that is planted is in no answer, pass, log line or frame
+  TheRealLogin     the same through the Discord login's cookie, and `next=admin`
+  TheStart         a missing, short or malformed key does not stop the hub and is said once at the start
+
+The fake Discord holds the roles (tests/scripts/fake_discord.py); the intervals are short (a check every second, a grace of a third of a second more). Every id here is made up.
+"""
+import base64
+import hashlib
+import hmac
+import json
+import os
+import re
+import sys
+import tempfile
+import time
+import unittest
+
+REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, REPO)
+sys.path.insert(0, HERE)
+import fake_discord as fd  # noqa: E402
+import hub_client as hc  # noqa: E402
+import hub_rig  # noqa: E402
+from login_flow import Visitor  # noqa: E402
+from test_hub_server import read_text, start_process, wait_for_port  # noqa: E402
+from hub import admindoor, config as configmod, log as logmod  # noqa: E402
+
+SECRET = "canary-gate-key-5d8f0c1e7a9b4263-q"            # 34 characters
+OWNER = "9100000000000001"
+ADMIN = "9100000000000002"
+ADMIN2 = "9100000000000007"
+MOD = "9100000000000003"
+PLAIN = "9100000000000004"
+TARGET = "9100000000000005"
+AWAY = "9100000000000006"                              # an account that has no login and no line: nobody the hub has seen
+NAMES = {OWNER: "olive.owner", ADMIN: "adam.admin", ADMIN2: "ada.admin", MOD: "molly.mod", PLAIN: "pat.plain", TARGET: "terry.target", AWAY: "away.person"}
+EVERY_ID = tuple(NAMES)
+OPTIONS = dict(roles_grace_seconds=0.3, roles_refill_seconds=0.01, roles_jitter=0.0, tick_seconds=0.05, sockets_per_address=50, frame_burst=1000, frame_refill_seconds=0.001,
+               discord_seconds=1.0, discord_connect_seconds=1.0, roles_pause_seconds=60.0, admin_lookups_burst=50, admin_lookups_refill_seconds=0.01)
+BOSS = fd.snowflake(900)                               # (the ids that a login by Discord has are old enough to write: one number for the whole file, a snowflake is new at every call)
+OTHER = fd.snowflake(901)
+OLDOWNER = fd.snowflake(777)
+PASS_FORM = re.compile(r"v1\.([A-Za-z0-9_-]+)\.([0-9a-f]{64})\Z")
+
+
+def b64decode(text):
+    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+
+
+def verify(header, key, now):
+    """What the game server does with a pass (written here from the description alone): the payload, or None for a pass whose mac is wrong or that has run out."""
+    m = PASS_FORM.match(header or "")
+    if not m:
+        return None
+    good = hmac.new(key.encode(), ("v1." + m.group(1)).encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(good, m.group(2)):
+        return None
+    payload = json.loads(b64decode(m.group(1)))
+    return payload if payload["exp"] > now else None
+
+
+class DoorTest(unittest.TestCase):
+    secret = SECRET
+    options = {}
+    recheck = 1
+
+    def setUp(self):
+        self.fake = fd.FakeDiscord()
+        self.addCleanup(self.fake.close)
+        self.fake.members = {OWNER: [], ADMIN: [fd.ROLE_ADMIN], ADMIN2: [fd.ROLE_ADMIN], MOD: [fd.ROLE_MOD], PLAIN: [], TARGET: [], AWAY: []}
+        env = {"ANTS_HUB_ADMIN_GATE_SECRET": self.secret} if self.secret is not None else {}
+        self.rig = hub_rig.Rig(member_fake=self.fake, owner=OWNER, recheck=self.recheck, env=env, **dict(OPTIONS, **self.options))
+        self.rig.__enter__()
+        self.addCleanup(self.rig.__exit__, None, None, None)
+        self.tokens = {}
+        self.count = 0
+        self.sockets = []
+        self.addCleanup(self.close_sockets)
+        for account in (OWNER, ADMIN, ADMIN2, MOD, PLAIN, TARGET):
+            self.rig.call(self.rig.store.set_profile, account, NAMES[account], "", 1000)
+
+    def close_sockets(self):
+        for c in self.sockets:
+            c.close()
+
+    # ---- the calls of a page ---------------------------------------------------------------------------------------------------------------
+
+    def login_header(self, account):
+        return ("X-Hub-Test-Login", "%s:%s" % (account, NAMES[account]))
+
+    def call(self, method, path, account=None, body=None, site="same-origin", origin="default", ctype="default", csrf="default", extra=(), address=None, raw=None):
+        """One request as the admin page makes it (or not): the test login of `account`, Sec-Fetch-Site, the Origin of a POST, a JSON type and the token of /me."""
+        self.count += 1
+        pairs = [("X-Client-Address", address or "198.51.100.%d" % (self.count % 200 + 1))]
+        if account:
+            pairs.append(self.login_header(account))
+        if site is not None:
+            pairs.append(("Sec-Fetch-Site", site))
+        post = method == "POST"
+        if (origin == "default" and post) or origin not in ("default", None):
+            pairs.append(("Origin", hc.SITE if origin == "default" else origin))
+        data = raw if raw is not None else json.dumps(body).encode() if body is not None else b""
+        if post and ctype is not None:
+            pairs.append(("Content-Type", "application/json" if ctype == "default" else ctype))
+        if post and csrf is not None:
+            pairs.append(("X-Ants-Csrf", self.token(account) if csrf == "default" else csrf))
+        pairs += list(extra)
+        return hc.request(self.rig.port, method, path, pairs, body=data)
+
+    def token(self, account):
+        """The token of /me for this login (a made-up one for somebody who is not let in: the call is then refused for that, and the test says so)."""
+        if account not in self.tokens:
+            r = self.call("GET", "/hub/admin/api/me", account)
+            if r.status != 200:
+                return "0" * 64
+            self.tokens[account] = r.json()["csrf"]
+        return self.tokens[account]
+
+    def get(self, name, account=ADMIN, **kw):
+        return self.call("GET", "/hub/admin/api/" + name, account, **kw)
+
+    def post(self, name, body, account=ADMIN, **kw):
+        return self.call("POST", "/hub/admin/api/" + name, account, body=body, **kw)
+
+    def gate(self, account=None, **kw):
+        return self.call("GET", "/hub/admin/gate", account, **kw)
+
+    def modlog(self):
+        return self.rig.call(self.rig.store.actions, 0, 100)
+
+    def ref(self, account):
+        return self.rig.call(self.rig.hub.chat.ref, account)
+
+    def socket(self, account):
+        c = hc.Client(self.rig.port, login="%s:%s" % (account, NAMES[account]))
+        self.sockets.append(c)
+        self.assertTrue(c.ok, c.status)
+        c.recv_json()
+        return c
+
+
+class TheRule(DoorTest):
+    def test_nobody_logged_in_is_a_401_and_the_door_never_asks_discord(self):
+        r = self.gate()
+        self.assertEqual((r.status, r.body), (401, b""))
+        self.assertEqual(self.get("me", None).status, 401)
+        self.assertEqual(self.fake.member_ids, [])
+
+    def test_the_matrix_of_who_gets_in_with_a_fresh_answer(self):
+        want = {OWNER: 204, ADMIN: 204, MOD: 403, PLAIN: 403, AWAY: 403}
+        for account, status in want.items():
+            with self.subTest(NAMES[account]):
+                self.assertEqual(self.gate(account).status, status)
+        self.assertEqual(self.fake.member_ids.count(OWNER), 0, "the operator's account needs no call to Discord")
+
+    def test_a_moderator_is_not_let_in_by_the_page_or_the_gate(self):
+        self.assertEqual(self.gate(MOD).status, 403)
+        r = self.get("bans", MOD)
+        self.assertEqual((r.status, r.json()), (403, {"error": "admin"}))
+        r = self.post("ban", {"account": NAMES[TARGET]}, MOD, csrf="0" * 64)
+        self.assertEqual(r.status, 403)
+        self.assertFalse(self.rig.call(self.rig.store.is_banned, TARGET))
+
+    def test_a_fresh_answer_is_believed_without_another_call(self):
+        self.assertEqual(self.gate(ADMIN).status, 204)
+        asked = len(self.fake.member_ids)
+        self.assertEqual(asked, 1)
+        for _ in range(5):
+            self.assertEqual(self.gate(ADMIN).status, 204)
+        self.assertEqual(len(self.fake.member_ids), asked, "a role that is fresh costs no call to Discord")
+
+    def test_an_answer_that_is_old_and_a_discord_that_is_down_close_the_door(self):
+        self.assertEqual(self.gate(ADMIN).status, 204)
+        self.fake.member_mode = "status:500"
+        time.sleep(1.8)                                              # (the interval of a second, the tenth more and the grace: the answer is no longer believed)
+        self.assertEqual(self.gate(ADMIN).status, 403)
+        self.assertEqual(self.get("bans", ADMIN).status, 403)
+        self.assertEqual(self.gate(OWNER).status, 204, "the operator's account works with Discord down")
+        self.fake.member_mode = "ok"
+        self.assertEqual(self.gate(ADMIN).status, 204, "and the door opens again with the first answer")
+
+    def test_a_discord_that_is_down_from_the_start_lets_in_nobody_but_the_operator(self):
+        self.fake.member_mode = "status:500"
+        self.assertEqual([self.gate(a).status for a in (ADMIN, MOD, PLAIN)], [403, 403, 403])
+        self.assertEqual(self.gate(OWNER).status, 204)
+
+    def test_a_token_that_discord_refuses_closes_the_door_for_everybody_but_the_operator(self):
+        self.assertEqual(self.gate(ADMIN).status, 204)
+        self.fake.member_mode = "err:401"
+        time.sleep(1.8)
+        self.assertEqual(self.gate(ADMIN).status, 403)
+        self.assertEqual(self.gate(OWNER).status, 204)
+
+    def test_a_role_that_is_taken_away_closes_the_door_within_the_interval(self):
+        self.assertEqual(self.gate(ADMIN).status, 204)
+        self.fake.members[ADMIN] = []
+        time.sleep(1.8)
+        self.assertEqual(self.gate(ADMIN).status, 403)
+
+    def test_a_person_who_asks_again_and_again_costs_discord_one_call_and_a_discord_that_is_down_a_burst(self):
+        def ask(rig, account, times):
+            for _ in range(times):
+                r = hc.request(rig.port, "GET", "/hub/admin/gate", [("X-Client-Address", "198.51.100.77"), ("X-Hub-Test-Login", "%s:%s" % (account, NAMES[account]))])
+                self.assertEqual(r.status, 403)
+        with hub_rig.Rig(member_fake=self.fake, owner=OWNER, recheck=1, env={"ANTS_HUB_ADMIN_GATE_SECRET": SECRET},
+                         **dict(OPTIONS, admin_lookups_burst=2, admin_lookups_refill_seconds=60.0, roles_grace_seconds=30.0)) as rig:
+            ask(rig, PLAIN, 10)
+            self.assertEqual(self.fake.member_ids.count(PLAIN), 1, "an answer of `none` is an answer, and a fresh one is believed")
+            self.fake.member_mode = "status:500"
+            ask(rig, MOD, 10)
+            self.assertEqual(self.fake.member_ids.count(MOD), 2, "a person that no answer is known of makes the hub ask a burst and then waits")
+
+    def test_the_door_is_shut_for_everybody_without_a_good_key(self):
+        for secret in (None, "", "x" * 31, "a b" * 20, "café-" * 8):
+            with self.subTest(secret=len(secret or "")):
+                env = {"ANTS_HUB_ADMIN_GATE_SECRET": secret} if secret is not None else {}
+                with hub_rig.Rig(member_fake=self.fake, owner=OWNER, recheck=1, env=env, **OPTIONS) as rig:
+                    for account in (OWNER, ADMIN):
+                        pairs = [("X-Client-Address", "198.51.100.5"), ("X-Hub-Test-Login", "%s:%s" % (account, NAMES[account])), ("Sec-Fetch-Site", "same-origin")]
+                        r = hc.request(rig.port, "GET", "/hub/admin/gate", pairs)
+                        self.assertEqual((r.status, r.get("x-ants-admin-pass")), (403, None))
+                        r = hc.request(rig.port, "GET", "/hub/admin/api/me", pairs)
+                        self.assertEqual(r.status, 403)
+                        self.assertNotIn(b"csrf", r.body)
+                    r = hc.request(rig.port, "GET", "/hub/admin/gate", [("X-Client-Address", "198.51.100.5")])
+                    self.assertEqual(r.status, 403, "a door that is shut is shut for everybody, nobody logged in too")
+
+
+class ThePass(DoorTest):
+    def test_the_pass_holds_with_the_key_and_with_nothing_else(self):
+        r = self.gate(ADMIN)
+        header = r.get("x-ants-admin-pass")
+        self.assertRegex(header, PASS_FORM)
+        now = time.time()
+        payload = verify(header, SECRET, now)
+        self.assertIsNotNone(payload)
+        self.assertIsNone(verify(header, SECRET + "x", now))
+        self.assertIsNone(verify(header, "another-key-of-the-same-sort-0123456789", now))
+        version, body, mac = header.split(".")
+        flipped = body[:-2] + ("AA" if body[-2:] != "AA" else "BB")
+        self.assertIsNone(verify("v1.%s.%s" % (flipped, mac), SECRET, now))
+        self.assertIsNone(verify("v2.%s.%s" % (body, mac), SECRET, now))
+        self.assertIsNone(verify("v1.%s.%s" % (body, "0" * 64), SECRET, now))
+
+    def test_the_payload_has_a_reference_a_name_a_role_an_expiry_and_a_nonce_and_nothing_else(self):
+        header = self.gate(ADMIN).get("x-ants-admin-pass")
+        payload = verify(header, SECRET, time.time())
+        self.assertEqual(sorted(payload), ["exp", "name", "nonce", "ref", "role"])
+        self.assertEqual((payload["name"], payload["role"], payload["ref"]), (NAMES[ADMIN], "admin", self.ref(ADMIN)))
+        self.assertRegex(payload["ref"], r"[0-9a-f]{16}\Z")
+        self.assertRegex(payload["nonce"], r"[0-9a-f]{16}\Z")
+        owner = verify(self.gate(OWNER).get("x-ants-admin-pass"), SECRET, time.time())
+        self.assertEqual((owner["name"], owner["role"], owner["ref"]), (NAMES[OWNER], "owner", self.ref(OWNER)))
+
+    def test_the_expiry_is_a_minute_from_the_hub_clock_and_a_verifier_honours_it(self):
+        self.rig.call(setattr, self.rig.store, "clock", lambda: 5_000_000.0)
+        header = self.gate(OWNER).get("x-ants-admin-pass")
+        self.assertEqual(verify(header, SECRET, 5_000_000.0)["exp"], 5_000_060)
+        self.assertIsNotNone(verify(header, SECRET, 5_000_059.0))
+        self.assertIsNone(verify(header, SECRET, 5_000_060.0), "a pass of a minute ago is no pass")
+        self.assertIsNone(verify(header, SECRET, 5_000_600.0))
+        self.rig.call(setattr, self.rig.store, "clock", lambda: 5_000_100.0)
+        self.assertEqual(verify(self.gate(OWNER).get("x-ants-admin-pass"), SECRET, 5_000_100.0)["exp"], 5_000_160)
+
+    def test_every_pass_has_a_nonce_of_its_own(self):
+        seen = {verify(self.gate(OWNER).get("x-ants-admin-pass"), SECRET, time.time())["nonce"] for _ in range(8)}
+        self.assertEqual(len(seen), 8)
+
+    def test_no_refusal_carries_a_pass(self):
+        for account in (None, MOD, PLAIN):
+            r = self.gate(account)
+            self.assertIsNone(r.get("x-ants-admin-pass"), account)
+            self.assertEqual(r.body, b"")
+
+    def test_the_pass_is_the_answer_of_the_gate_only(self):
+        for name in ("me", "bans", "status"):
+            r = self.get(name)
+            self.assertEqual(r.status, 200)
+            self.assertIsNone(r.get("x-ants-admin-pass"), name)
+
+
+class TheGate(DoorTest):
+    options = dict(admin_burst=6, admin_refill_seconds=60.0)
+
+    def test_a_good_gate_is_a_204_with_no_body_and_no_length_and_no_cors(self):
+        r = self.gate(OWNER, address="203.0.113.1")
+        self.assertEqual((r.status, r.body), (204, b""))
+        self.assertIsNone(r.get("content-length"))
+        self.assertIsNone(r.get("content-type"))
+        self.assertEqual(r.get("cache-control"), "no-store")
+        for status_account in (None, MOD, OWNER):
+            r = self.gate(status_account, extra=[("Origin", "https://other.example")], address="203.0.113.2")
+            self.assertFalse([n for n, _ in r.headers if n.startswith("access-control")], r.headers)
+
+    def test_only_a_get_with_no_body_and_no_query_is_answered(self):
+        for method in ("POST", "PUT", "DELETE", "OPTIONS", "PATCH"):
+            r = self.call(method, "/hub/admin/gate", OWNER, address="203.0.113.3")
+            self.assertEqual(r.status, 405, method)
+            self.assertIsNone(r.get("x-ants-admin-pass"))
+            self.assertFalse([n for n, _ in r.headers if n.startswith("access-control")])
+        r = self.call("GET", "/hub/admin/gate", OWNER, raw=b"{}", extra=[("Content-Length", "2")], address="203.0.113.4", site=None)
+        self.assertEqual(r.status, 400, "a body is refused")
+        r = self.call("GET", "/hub/admin/gate", OWNER, extra=[("Transfer-Encoding", "chunked")], address="203.0.113.5")
+        self.assertEqual(r.status, 400)
+        r = self.call("GET", "/hub/admin/gate?x=1", OWNER, address="203.0.113.6")
+        self.assertEqual(r.status, 404)
+        r = self.call("GET", "/hub/admin/gate/", OWNER, address="203.0.113.7")
+        self.assertEqual(r.status, 404)
+
+    def test_each_address_has_a_limit_and_another_address_is_not_held_by_it(self):
+        statuses = [self.gate(OWNER, address="203.0.113.50").status for _ in range(9)]
+        self.assertEqual(statuses[:6], [204] * 6)
+        self.assertEqual(set(statuses[6:]), {429})
+        self.assertEqual(self.gate(OWNER, address="203.0.113.51").status, 204)
+        r = self.gate(OWNER, address="203.0.113.50")
+        self.assertEqual((r.status, r.get("retry-after")), (429, "5"))
+
+    def test_the_limit_is_asked_before_discord(self):
+        before = len(self.fake.member_ids)
+        for _ in range(12):
+            self.gate(PLAIN, address="203.0.113.60")
+        self.assertLessEqual(len(self.fake.member_ids) - before, 6)
+
+    def test_other_paths_under_the_door_are_not_found(self):
+        for path in ("/hub/admin", "/hub/admin/", "/hub/admin/api", "/hub/admin/api/", "/hub/admin/api/nothing", "/hub/admin/api/me/x", "/hub/admin/gate2", "/hub/admin/API/me"):
+            r = self.call("GET", path, OWNER, address="203.0.113.70")
+            self.assertEqual(r.status, 404, path)
+
+
+class TheFences(DoorTest):
+    options = dict(handshake_seconds=1.0)
+    BODY = {"account": NAMES[TARGET]}
+
+    def untouched(self):
+        store = self.rig.store
+        self.assertFalse(self.rig.call(store.is_banned, TARGET))
+        self.assertEqual(self.modlog(), [])
+
+    def test_a_good_change_goes_through_and_is_the_baseline_of_the_refusals_below(self):
+        self.assertEqual(self.post("ban", self.BODY).status, 200)
+        self.assertTrue(self.rig.call(self.rig.store.is_banned, TARGET))
+
+    def test_a_change_without_the_token_or_with_a_wrong_one_is_refused(self):
+        self.get("me")
+        for csrf in (None, "", "0" * 64, "x", self.token(ADMIN)[:-1], self.token(ADMIN).upper(), self.token(ADMIN) + "0"):
+            r = self.post("ban", self.BODY, csrf=csrf)
+            self.assertEqual((r.status, r.json()), (403, {"error": "csrf"}), csrf)
+        self.untouched()
+
+    def test_the_token_of_another_login_is_no_token(self):
+        self.assertEqual(self.post("ban", self.BODY, csrf=self.token(ADMIN2)).status, 403)
+        self.assertEqual(self.post("ban", self.BODY, csrf=self.token(OWNER)).status, 403)
+        self.untouched()
+
+    def test_a_token_is_not_an_answer_to_a_page_of_another_site(self):
+        for site in ("cross-site", "same-site", "none", None, "", "Same-Origin"):
+            r = self.post("ban", self.BODY, site=site)
+            self.assertEqual((r.status, r.json()), (403, {"error": "origin"}), site)
+            r = self.get("me", site=site)
+            self.assertEqual(r.status, 403, site)
+        self.untouched()
+
+    def test_the_origin_of_a_post_must_be_the_sites_and_a_get_may_have_none(self):
+        for origin in (None, "", "https://other.example", "https://chat.example.org.evil.example", "http://chat.example.org", "null", "https://chat.example.org/"):
+            r = self.post("ban", self.BODY, origin=origin)
+            self.assertEqual(r.status, 403, origin)
+        self.assertEqual(self.get("me", origin=None).status, 200)
+        self.assertEqual(self.get("me", origin="https://other.example").status, 403)
+        self.untouched()
+
+    def test_a_change_must_say_that_it_is_json(self):
+        for ctype in (None, "", "text/plain", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x", "text/json", "application/jsonp", "application/json2"):
+            r = self.post("ban", self.BODY, ctype=ctype)
+            self.assertEqual((r.status, r.json()), (415, {"error": "type"}), ctype)
+        self.assertEqual(self.post("unban", self.BODY, ctype="Application/JSON; charset=utf-8").status, 409, "the type is read as a type is (and the change that follows was not asked for: nobody is banned)")
+        self.untouched()
+
+    def test_a_header_that_comes_twice_is_refused(self):
+        for name, value in (("Content-Type", "application/json"), ("X-Ants-Csrf", self.token(ADMIN)), ("Content-Length", "20")):
+            r = self.post("ban", self.BODY, extra=[(name, value)])
+            self.assertEqual(r.status, 400, name)
+        self.untouched()
+
+    def test_the_wrong_method_is_a_405(self):
+        self.assertEqual(self.call("POST", "/hub/admin/api/me", ADMIN, body={}).status, 405)
+        self.assertEqual(self.call("GET", "/hub/admin/api/ban", ADMIN).status, 405)
+        self.assertEqual(self.call("PUT", "/hub/admin/api/ban", ADMIN, body=self.BODY).status, 405)
+        self.untouched()
+
+    def test_a_body_that_is_not_what_the_change_takes_is_a_400(self):
+        bad = [b"", b"{", b"[]", b"null", b'"x"', b"{}", b'{"account":1}', b'{"account":""}', b'{"account":"a b"}', b'{"account":"%s","extra":1}' % NAMES[TARGET].encode(), b'{"account":null}',
+               b'{"account":"' + b"a" * 41 + b'"}', b'{"account":"%s","account":"%s"}' % (NAMES[TARGET].encode(), b"x" * 50), b"\xff\xfe", b'{"account":NaN}', b"[" * 400]
+        for raw in bad:
+            r = self.call("POST", "/hub/admin/api/ban", ADMIN, raw=raw)
+            self.assertIn(r.status, (400,), raw[:30])
+        self.untouched()
+
+    def test_the_size_of_a_body_is_bounded_and_a_missing_length_is_refused(self):
+        r = self.call("POST", "/hub/admin/api/ban", ADMIN, raw=b'{"account":"' + b"a" * 600 + b'"}')
+        self.assertEqual(r.status, 413)
+        r = self.call("POST", "/hub/admin/api/ban", ADMIN, raw=b'{"account":"x"}', extra=[("Transfer-Encoding", "chunked")])
+        self.assertEqual(r.status, 400)
+        r = hc.request(self.rig.port, "POST", "/hub/admin/api/ban", [("Sec-Fetch-Site", "same-origin"), ("Origin", hc.SITE), ("Content-Type", "application/json"), ("X-Ants-Csrf", self.token(ADMIN)),
+                                                                     self.login_header(ADMIN)], body=b'{"account":"x"}', send_length=False)
+        self.assertEqual(r.status, 400)
+        r = self.call("GET", "/hub/admin/api/me", ADMIN, raw=b"{}", extra=[("Content-Length", "2")])
+        self.assertEqual(r.status, 400)
+        self.untouched()
+
+    def test_a_body_that_is_shorter_than_it_says_is_a_400_and_costs_nothing_else(self):
+        r = hc.request(self.rig.port, "POST", "/hub/admin/api/ban", [("Sec-Fetch-Site", "same-origin"), ("Origin", hc.SITE), ("Content-Type", "application/json"), ("X-Ants-Csrf", self.token(ADMIN)),
+                                                                     self.login_header(ADMIN), ("Content-Length", "400")], body=b'{"account":"x"}', send_length=False, timeout=15.0)
+        self.assertEqual(r.status, 400)
+        self.assertEqual(self.get("me").status, 200)
+
+    def test_a_body_that_is_not_the_answer_is_never_written_back(self):
+        r = self.call("POST", "/hub/admin/api/ban", ADMIN, raw=b"HTTP/1.1 200 OK\r\nSet-Cookie: x=1\r\n\r\n")
+        self.assertEqual(r.status, 400)
+        self.assertIsNone(r.get("set-cookie"))
+        self.assertNotIn(b"Set-Cookie", r.body)
+
+    def test_the_checks_come_before_the_login_and_the_login_before_the_work(self):
+        r = self.post("ban", self.BODY, None, csrf=None)
+        self.assertEqual(r.status, 401)
+        r = self.post("ban", self.BODY, PLAIN, csrf="x")
+        self.assertEqual(r.status, 403)
+        self.assertEqual(r.json(), {"error": "admin"})
+        self.untouched()
+
+    def test_every_answer_of_the_door_says_that_it_is_not_to_be_kept_or_sniffed_and_none_is_cors(self):
+        for r in (self.get("me"), self.get("bans"), self.post("ban", self.BODY), self.get("me", None), self.post("ban", self.BODY, csrf=None)):
+            self.assertEqual(r.get("cache-control"), "no-store")
+            self.assertEqual(r.get("x-content-type-options"), "nosniff")
+            self.assertFalse([n for n, _ in r.headers if n.startswith("access-control")])
+
+
+class TheChanges(DoorTest):
+    def row(self, action):
+        return [r for r in self.modlog() if r.action == action]
+
+    def line(self, account=TARGET, text="canary line"):
+        return self.rig.call(self.rig.store.add_line, account, NAMES[account], text, 0).id
+
+    def test_me_says_the_name_the_role_and_the_token_and_marks_the_name_as_typed(self):
+        r = self.get("me")
+        body = r.json()
+        self.assertEqual((body["name"], body["role"]), (NAMES[ADMIN], "admin"))
+        self.assertRegex(body["csrf"], r"[0-9a-f]{64}\Z")
+        self.assertEqual((body["untrusted"], body["untrusted_fields"]), (True, ["name"]))
+        self.assertEqual(self.get("me", OWNER).json()["role"], "owner")
+        self.assertNotEqual(self.token(ADMIN), self.token(OWNER))
+
+    def test_ban_closes_the_sockets_lists_and_writes_the_log_and_unban_undoes_it(self):
+        target = self.socket(TARGET)
+        r = self.post("ban", {"account": NAMES[TARGET]})
+        self.assertEqual((r.status, r.json()), (200, {"ok": True}))
+        self.assertTrue(self.rig.call(self.rig.store.is_banned, TARGET))
+        self.assertEqual(target.recv_json()["t"], "bye")
+        rows = self.get("bans").json()
+        self.assertEqual([(b["ref"], b["name"], b["by"]) for b in rows["bans"]], [(self.ref(TARGET), NAMES[TARGET], self.ref(ADMIN))])
+        self.assertEqual((rows["untrusted"], rows["untrusted_fields"]), (True, ["name"]))
+        log = self.row("ban")
+        self.assertEqual([(a.actor, a.target, a.detail) for a in log], [(self.ref(ADMIN), self.ref(TARGET), "")])
+        self.assertEqual(self.post("ban", {"account": NAMES[TARGET]}).status, 409, "banned already")
+        r = self.post("unban", {"account": self.ref(TARGET)})
+        self.assertEqual(r.status, 200)
+        self.assertFalse(self.rig.call(self.rig.store.is_banned, TARGET))
+        self.assertEqual([(a.actor, a.target) for a in self.row("unban")], [(self.ref(ADMIN), self.ref(TARGET))])
+        self.assertEqual(self.post("unban", {"account": self.ref(TARGET)}).status, 409, "not banned")
+        self.assertEqual(self.get("bans").json()["bans"], [])
+
+    def test_mute_takes_minutes_one_to_a_week_and_unmute_lifts_it(self):
+        r = self.post("mute", {"account": NAMES[TARGET], "minutes": 30})
+        self.assertEqual(r.status, 200)
+        until = r.json()["until"]
+        self.assertAlmostEqual(until, time.time() + 1800, delta=5)
+        rows = self.get("mutes").json()
+        self.assertEqual([(m["ref"], m["name"], m["until"], m["by"]) for m in rows["mutes"]], [(self.ref(TARGET), NAMES[TARGET], until, self.ref(ADMIN))])
+        self.assertEqual(rows["untrusted_fields"], ["name"])
+        self.assertEqual([(a.actor, a.target, a.detail) for a in self.row("mute")], [(self.ref(ADMIN), self.ref(TARGET), "30")])
+        self.assertEqual(self.post("mute", {"account": NAMES[TARGET], "minutes": 10080}).status, 200)
+        self.assertEqual(self.post("mute", {"account": NAMES[TARGET], "minutes": 1}).status, 200)
+        for minutes in (0, -1, 10081, 525600, 1.5, "30", True, None, [30]):
+            r = self.post("mute", {"account": NAMES[TARGET], "minutes": minutes})
+            self.assertEqual(r.status, 400, minutes)
+        self.assertEqual(self.post("mute", {"account": NAMES[TARGET]}).status, 400)
+        self.assertEqual(self.post("unmute", {"account": self.ref(TARGET)}).status, 200)
+        self.assertEqual(self.rig.call(self.rig.store.muted_until, TARGET), 0)
+        self.assertEqual([a.actor for a in self.row("unmute")], [self.ref(ADMIN)])
+        self.assertEqual(self.post("unmute", {"account": self.ref(TARGET)}).status, 409, "not muted")
+        self.assertEqual(self.get("mutes").json()["mutes"], [])
+
+    def test_a_muted_account_cannot_write_and_a_banned_one_cannot_either(self):
+        self.post("mute", {"account": NAMES[TARGET], "minutes": 5})
+        target = self.socket(TARGET)
+        target.say("hello")
+        self.assertEqual(target.recv_reply(), {"t": "err", "code": "muted"})
+
+    def test_nopic_and_pic_block_and_lift_a_picture_and_the_list_shows_the_block(self):
+        self.assertEqual(self.post("nopic", {"account": NAMES[TARGET]}).status, 200)
+        rows = self.get("hidden").json()
+        self.assertEqual(rows["hidden"], [{"ref": self.ref(TARGET), "name": NAMES[TARGET]}])
+        self.assertEqual(rows["untrusted_fields"], ["name"])
+        self.assertEqual([(a.actor, a.target) for a in self.row("nopic")], [(self.ref(ADMIN), self.ref(TARGET))])
+        self.assertEqual(self.post("nopic", {"account": NAMES[TARGET]}).status, 409, "blocked already")
+        self.assertEqual(self.post("pic", {"account": self.ref(TARGET)}).status, 200)
+        self.assertEqual(self.get("hidden").json()["hidden"], [])
+        self.assertEqual([(a.actor, a.target) for a in self.row("pic")], [(self.ref(ADMIN), self.ref(TARGET))])
+        self.assertEqual(self.post("pic", {"account": self.ref(TARGET)}).status, 409, "not blocked")
+
+    def test_a_block_that_outlived_its_account_is_lifted_by_its_reference(self):
+        self.post("nopic", {"account": NAMES[TARGET]})
+        self.rig.call(self.rig.store.forget, TARGET)
+        self.assertEqual([h["ref"] for h in self.get("hidden").json()["hidden"]], [self.ref(TARGET)])
+        self.assertEqual(self.post("pic", {"account": self.ref(TARGET)}).status, 200)
+        self.assertEqual(self.get("hidden").json()["hidden"], [])
+
+    def test_del_deletes_a_line_tells_the_screens_and_writes_the_log(self):
+        watcher = self.socket(PLAIN)
+        line_id = self.line()
+        r = self.post("del", {"line": line_id})
+        self.assertEqual((r.status, r.json()), (200, {"ok": True}))
+        deadline = time.monotonic() + 5
+        seen = []
+        while time.monotonic() < deadline and {"t": "del", "id": line_id} not in seen:
+            seen += watcher.drain(0.3)
+        self.assertIn({"t": "del", "id": line_id}, seen)
+        self.assertEqual([(a.actor, a.target, a.detail) for a in self.row("del")], [(self.ref(ADMIN), self.ref(TARGET), str(line_id))])
+        self.assertEqual(self.post("del", {"line": line_id}).status, 404, "deleted already: there is no such line")
+        self.assertEqual(self.post("del", {"line": 99999}).status, 404, "no such line")
+        for line in (0, -1, 2 ** 62, "1", 1.0, True, None):
+            self.assertEqual(self.post("del", {"line": line}).status, 400, line)
+        self.assertEqual(self.post("del", {"line": line_id, "account": "x"}).status, 400)
+
+    def test_an_account_is_a_username_or_a_reference_and_never_an_id_or_a_display_name(self):
+        for who in (TARGET, "@" + TARGET, "9" * 17, "1", "0123", "x", "UPPER.CASE", "a" * 40, self.ref(AWAY)):
+            r = self.post("ban", {"account": who})
+            self.assertEqual((r.status, r.json()), (404, {"error": "who"}), who)
+        self.assertEqual(self.post("ban", {"account": "not a name"}).status, 400)
+        self.assertEqual(self.modlog(), [])
+        self.assertEqual(self.post("ban", {"account": "@" + NAMES[TARGET]}).status, 200, "@name is a username too")
+
+    def test_a_username_of_digits_is_written_with_an_at_sign_and_is_not_an_id(self):
+        self.rig.call(self.rig.store.set_profile, AWAY, "123456789012", "", 1000)
+        self.assertEqual(self.post("ban", {"account": "123456789012"}).status, 404)
+        self.assertEqual(self.post("ban", {"account": "@123456789012"}).status, 200)
+        self.assertTrue(self.rig.call(self.rig.store.is_banned, AWAY))
+
+    def test_an_account_that_the_hub_has_not_seen_is_nobody(self):
+        self.assertEqual(self.post("mute", {"account": "nobody.here", "minutes": 5}).status, 404)
+        self.assertEqual(self.post("nopic", {"account": "nobody.here"}).status, 404)
+        self.assertEqual(self.modlog(), [])
+
+    def test_the_powers_the_table_of_the_chat_and_the_operator_above_it(self):
+        s = self.rig.store
+        self.assertEqual(self.post("ban", {"account": NAMES[ADMIN2]}).status, 403, "an administrator has no power over an administrator")
+        self.assertEqual(self.post("ban", {"account": NAMES[ADMIN]}).status, 403, "nor over themselves")
+        self.assertEqual(self.post("mute", {"account": NAMES[OWNER], "minutes": 5}).status, 403, "nor over the operator's account")
+        self.assertEqual(self.post("nopic", {"account": NAMES[OWNER]}).status, 403)
+        self.assertEqual(self.post("ban", {"account": NAMES[OWNER]}, OWNER).status, 403, "and the operator's account does not act on itself")
+        self.assertEqual(self.post("mute", {"account": NAMES[ADMIN], "minutes": 5}, OWNER).status, 200, "the operator's account is above an administrator")
+        self.assertEqual(self.post("ban", {"account": NAMES[ADMIN2]}, OWNER).status, 200)
+        self.assertEqual(self.post("ban", {"account": NAMES[MOD]}).status, 200, "an administrator may act on a moderator")
+        self.assertEqual(self.post("ban", {"account": NAMES[PLAIN]}).status, 200)
+        self.assertFalse(self.rig.call(s.is_banned, OWNER))
+        self.assertTrue(self.rig.call(s.is_banned, ADMIN2))
+
+    def test_a_line_of_an_administrator_is_theirs_to_delete_and_not_another_administrators(self):
+        line_id = self.line(ADMIN2)
+        self.assertEqual(self.post("del", {"line": line_id}).status, 403)
+        self.assertEqual(self.post("del", {"line": line_id}, OWNER).status, 200)
+        mine = self.line(ADMIN)
+        self.assertEqual(self.post("del", {"line": mine}).status, 200, "one's own line is one's own to delete")
+        owners = self.line(OWNER)
+        self.assertEqual(self.post("del", {"line": owners}).status, 403)
+        theirs = self.line(OWNER)
+        self.assertEqual(self.post("del", {"line": theirs}, OWNER).status, 200)
+
+    def test_a_line_of_the_hubs_own_may_be_deleted(self):
+        line_id = self.rig.call(self.rig.store.add_line, "", "system", "canary notice", False).id
+        self.assertEqual(self.post("del", {"line": line_id}).status, 200)
+        self.assertEqual([(a.target, a.detail) for a in self.row("del")], [("", str(line_id))])
+
+    def test_an_action_needs_the_fresh_check_of_both_and_a_discord_that_is_down_refuses_it(self):
+        self.token(ADMIN)
+        self.fake.member_mode = "status:500"
+        time.sleep(1.2)                          
+        r = self.post("ban", {"account": NAMES[TARGET]})
+        self.assertEqual((r.status, r.json()), (503, {"error": "role"}))
+        self.assertFalse(self.rig.call(self.rig.store.is_banned, TARGET))
+        self.assertEqual(self.modlog(), [])
+
+    def test_the_operators_account_acts_on_a_person_whose_role_is_confirmed_and_on_nobody_else(self):
+        self.fake.member_mode = "status:500"
+        r = self.post("ban", {"account": NAMES[TARGET]}, OWNER)
+        self.assertEqual(r.status, 503, "the person acted on needs a fresh answer, whoever acts")
+        self.fake.member_mode = "ok"
+        self.assertEqual(self.post("ban", {"account": NAMES[TARGET]}, OWNER).status, 200)
+
+    def test_an_administrator_whose_role_went_is_told_so_by_the_fresh_answer(self):
+        self.token(ADMIN)
+        self.fake.members[ADMIN] = []
+        time.sleep(1.8)
+        r = self.post("ban", {"account": NAMES[TARGET]})
+        self.assertEqual(r.status, 403)
+        self.assertFalse(self.rig.call(self.rig.store.is_banned, TARGET))
+
+    def test_the_log_is_thirty_days_newest_first_with_usernames_where_there_is_a_profile_and_marked_as_typed(self):
+        self.post("mute", {"account": NAMES[TARGET], "minutes": 5})
+        self.post("ban", {"account": NAMES[TARGET]})
+        self.rig.call(self.rig.store.mute, AWAY, 5, "terminal", "away.person", (("terminal", "mute", self.ref(AWAY), "5")))
+        rows = self.get("modlog").json()
+        self.assertEqual((rows["untrusted"], rows["untrusted_fields"]), (True, ["actor_name", "target_name"]))
+        got = [(r["action"], r["actor"], r["actor_name"], r["target"], r["target_name"], r["detail"]) for r in rows["modlog"]]
+        self.assertEqual(got, [("mute", "terminal", "", self.ref(AWAY), "", "5"),
+                               ("ban", self.ref(ADMIN), NAMES[ADMIN], self.ref(TARGET), NAMES[TARGET], ""),
+                               ("mute", self.ref(ADMIN), NAMES[ADMIN], self.ref(TARGET), NAMES[TARGET], "5")])
+        self.assertEqual(sorted(rows["modlog"][0]), ["action", "actor", "actor_name", "at", "detail", "target", "target_name"])
+        old = self.rig.call(self.rig.store.actions, 0, 5)[-1]
+        self.assertEqual(old.action, "mute")
+
+    def test_the_log_leaves_out_what_is_older_than_thirty_days(self):
+        self.rig.call(setattr, self.rig.store, "clock", lambda: time.time() - 40 * 86400)
+        self.rig.call(self.rig.store.mute, TARGET, 5, "terminal", "x", ("terminal", "mute", self.ref(TARGET), "5"))
+        self.rig.call(setattr, self.rig.store, "clock", time.time)
+        self.rig.call(self.rig.store.mute, TARGET, 6, "terminal", "x", ("terminal", "mute", self.ref(TARGET), "6"))
+        details = [r["detail"] for r in self.get("modlog").json()["modlog"]]
+        self.assertEqual(details, ["6"])
+
+    def test_the_status_is_what_the_command_line_prints_and_the_health_of_the_roles(self):
+        from hub import admin
+        import io
+        self.line()
+        body = self.get("status").json()
+        self.assertEqual(sorted(body), ["health", "status"])
+        out = io.StringIO()
+        self.rig.call(admin.show_usage, self.rig.store, self.rig.limits.db_max_bytes, out)
+        self.rig.call(admin.show_pictures, self.rig.store, self.rig.limits, out)
+        self.assertEqual(body["status"], out.getvalue().splitlines())
+        self.assertRegex(body["status"][0], r"^database: [0-9.]+ MB of 64\.0 MB used \(0%\), log file [0-9.]+ MB; [0-9.]+ MB free to reuse; 1 lines, the oldest from ")
+        self.assertRegex(body["status"][1], r"^pictures: 0 of [0-9,]+ kept, 0\.0 MB of [0-9.]+ MB; 0 switched off, 0 blocked$")
+        self.assertEqual(body["health"]["roles"], "ok")
+        self.fake.member_mode = "status:500"
+        self.gate(PLAIN)
+        time.sleep(0.4)
+        self.assertEqual(self.get("status", OWNER).json()["health"]["roles"], "down")
+
+    def test_the_status_says_refused_while_discord_refuses_the_token(self):
+        self.fake.member_mode = "err:401"
+        self.gate(PLAIN)
+        time.sleep(0.4)
+        self.assertEqual(self.get("status", OWNER).json()["health"]["roles"], "refused")
+
+
+class TheIdIsLikeAPassword(DoorTest):
+    """Every id that is planted (the accounts' ids are the ones above) is looked for in every answer, pass, log line, row and frame."""
+
+    def test_no_id_is_in_an_answer_a_pass_a_row_a_frame_or_the_log(self):
+        sock = self.socket(PLAIN)
+        target = self.socket(TARGET)
+        owners = []
+        for body in ({"account": NAMES[TARGET], "minutes": 5},):
+            owners.append(self.post("mute", body))
+        owners += [self.post("unmute", {"account": NAMES[TARGET]}), self.post("ban", {"account": NAMES[TARGET]}), self.post("unban", {"account": NAMES[TARGET]}),
+                   self.post("nopic", {"account": NAMES[TARGET]}), self.post("pic", {"account": NAMES[TARGET]}), self.post("ban", {"account": TARGET}), self.post("ban", {"account": "@" + TARGET}),
+                   self.post("mute", {"account": "x", "minutes": 5}), self.post("del", {"line": 5}), self.post("ban", {"account": NAMES[ADMIN2]}), self.post("ban", {"account": TARGET}, csrf="x"),
+                   self.post("ban", {"account": TARGET}, PLAIN), self.post("ban", {"account": TARGET}, None), self.post("ban", {"account": TARGET}, site="cross-site"),
+                   self.post("ban", {"account": TARGET}, ctype="text/plain"), self.post("ban", {"account": TARGET}, csrf=None), self.post("ban", {"account": TARGET}, origin="https://x.example"),
+                   self.post("ban", {"account": TARGET, "x": TARGET})]
+        owners += [self.gate(a) for a in (None, OWNER, ADMIN, MOD, PLAIN, AWAY)]
+        texts = [r.headers.__repr__().encode() + r.body for r in owners]
+        for name in ("me", "bans", "mutes", "hidden", "modlog", "status"):
+            for account in (ADMIN, OWNER, MOD, None):
+                r = self.get(name, account)
+                texts.append(r.headers.__repr__().encode() + r.body)
+        frames = [json.dumps(f).encode() for f in sock.drain(0.5) + target.drain(0.5)]
+        texts += frames
+        texts.append(self.rig.log_text.getvalue().encode())
+        rows = self.rig.call(self.rig.store.actions, 0, 1000)
+        texts.append(repr(rows).encode())
+        header = self.gate(OWNER).get("x-ants-admin-pass")
+        texts.append(b64decode(header.split(".")[1]))
+        blob = b"\n".join(texts).decode("utf-8", "replace")
+        for account in EVERY_ID:
+            self.assertNotIn(account, blob, "an id is somewhere that an id must never be")
+        self.assertNotRegex(blob, r"(?<![0-9a-f])[0-9]{15,}(?![0-9a-f])")
+
+    def test_the_stores_modlog_and_picture_rows_hold_references_and_no_id(self):
+        self.post("ban", {"account": NAMES[TARGET]})
+        self.post("mute", {"account": NAMES[TARGET], "minutes": 3}, OWNER)
+        self.post("nopic", {"account": NAMES[TARGET]})
+        db = os.path.join(os.path.dirname(self.rig.db), "hub.db")
+        import sqlite3
+        c = sqlite3.connect(db)
+        try:
+            rows = c.execute("SELECT * FROM modlog").fetchall() + c.execute("SELECT * FROM pictures").fetchall()
+        finally:
+            c.close()
+        text = repr(rows)
+        for account in EVERY_ID:
+            self.assertNotIn(account, text)
+
+    def test_an_error_that_is_a_bug_logs_its_class_only(self):
+        from unittest import mock
+        with mock.patch.object(self.rig.store, "bans", side_effect=RuntimeError("canary %s" % TARGET)):
+            r = self.get("bans")
+        self.assertEqual(r.status, 500)
+        text = self.rig.log_text.getvalue()
+        self.assertIn("error kind=RuntimeError where=admin", text)
+        self.assertNotIn(TARGET, text + r.text())
+        self.assertNotIn("canary", text + r.text())
+
+    def test_a_store_that_refuses_is_a_503_that_says_busy_and_nothing_else(self):
+        from unittest import mock
+        from hub.store import StoreError
+        with mock.patch.object(self.rig.store, "bans", side_effect=StoreError("canary %s" % TARGET)):
+            r = self.get("bans")
+        self.assertEqual((r.status, r.json()), (503, {"error": "busy"}))
+        self.assertNotIn(TARGET, self.rig.log_text.getvalue())
+
+
+class TheRealLogin(unittest.TestCase):
+    """The door with the Discord login's cookie: the account is the one that the cookie's login names, and a login that ends ends the door."""
+
+    def setUp(self):
+        self.fake = fd.FakeDiscord(hc.SITE + "/hub/callback", user=(BOSS, "maple.leaf"))
+        self.fake.consent = False
+        self.addCleanup(self.fake.close)
+        self.rig = hub_rig.Rig(discord=self.fake, member_fake=self.fake, env={"ANTS_HUB_ADMIN_GATE_SECRET": SECRET}, **dict(OPTIONS, sockets_per_address=100))
+        self.rig.__enter__()
+        self.addCleanup(self.rig.__exit__, None, None, None)
+        self.count = 0
+
+    def visitor(self, user):
+        self.fake.user = user
+        self.count += 1
+        v = Visitor(self.rig.port, self.fake, address="198.51.100.%d" % self.count)
+        r = v.login("admin")
+        self.assertEqual((r.status, r.get("location")), (302, "/admin"), "the way back from Discord is the admin page")
+        return v
+
+    def test_the_cookie_of_an_administrator_opens_the_gate_and_a_plain_member_does_not(self):
+        self.fake.members = {BOSS: [fd.ROLE_ADMIN], OTHER: []}
+        boss = self.visitor((BOSS, "boss.person"))
+        plain = self.visitor((OTHER, "plain.person"))
+        nobody = Visitor(self.rig.port, self.fake, address="198.51.100.200")
+        self.assertEqual(boss.call("GET", "/hub/admin/gate").status, 204)
+        self.assertEqual(plain.call("GET", "/hub/admin/gate").status, 403)
+        self.assertEqual(nobody.call("GET", "/hub/admin/gate").status, 401)
+        header = boss.call("GET", "/hub/admin/gate").get("x-ants-admin-pass")
+        self.assertEqual(verify(header, SECRET, time.time())["name"], "boss.person")
+
+    def test_a_login_that_ends_ends_the_door_and_the_token_is_bound_to_the_login(self):
+        self.fake.members = {BOSS: [fd.ROLE_ADMIN]}
+        a = self.visitor((BOSS, "boss.person"))
+        b = self.visitor((BOSS, "boss.person"))
+        token_a = a.call("GET", "/hub/admin/api/me").json()["csrf"]
+        token_b = b.call("GET", "/hub/admin/api/me").json()["csrf"]
+        self.assertNotEqual(token_a, token_b, "a token belongs to one login")
+        body = json.dumps({"account": "nobody.here", "minutes": 5}).encode()
+        r = hc.request(self.rig.port, "POST", "/hub/admin/api/mute", [("Cookie", a.jar.header()), ("Origin", hc.SITE), ("Sec-Fetch-Site", "same-origin"), ("Content-Type", "application/json"),
+                                                                      ("X-Ants-Csrf", token_b), ("X-Client-Address", "198.51.100.150")], body=body)
+        self.assertEqual((r.status, r.json()), (403, {"error": "csrf"}), "the token of another login")
+        r = hc.request(self.rig.port, "POST", "/hub/admin/api/mute", [("Cookie", a.jar.header()), ("Origin", hc.SITE), ("Sec-Fetch-Site", "same-origin"), ("Content-Type", "application/json"),
+                                                                      ("X-Ants-Csrf", token_a), ("X-Client-Address", "198.51.100.150")], body=body)
+        self.assertEqual((r.status, r.json()), (404, {"error": "who"}), "its own token is accepted (and nobody is called that)")
+        self.assertEqual(a.call("POST", "/hub/logout").status, 200)
+        self.assertEqual(a.call("GET", "/hub/admin/gate", cookies=False).status, 401)
+        old = [("Cookie", "__Host-ants_hub=" + "0" * 32)]
+        self.assertEqual(hc.request(self.rig.port, "GET", "/hub/admin/gate", old + [("X-Client-Address", "198.51.100.151")]).status, 401)
+        self.assertEqual(b.call("GET", "/hub/admin/gate").status, 204, "the other login is still good")
+
+    def test_the_owner_of_the_hub_needs_no_role_through_the_cookie_either(self):
+        owner_id = OLDOWNER
+        with hub_rig.Rig(discord=self.fake, member_fake=self.fake, owner=owner_id, env={"ANTS_HUB_ADMIN_GATE_SECRET": SECRET}, **dict(OPTIONS, sockets_per_address=100)) as rig:
+            self.fake.redirect = hc.SITE + "/hub/callback"
+            self.fake.user = (owner_id, "olive.owner")
+            v = Visitor(rig.port, self.fake, address="198.51.100.180")
+            self.assertEqual(v.login("admin").status, 302)
+            self.fake.member_mode = "status:500"
+            r = v.call("GET", "/hub/admin/gate")
+            self.assertEqual(r.status, 204)
+            self.assertEqual(verify(r.get("x-ants-admin-pass"), SECRET, time.time())["role"], "owner")
+
+
+class TheLoginReturnsToTheAdminPage(unittest.TestCase):
+    def test_next_admin_is_one_of_the_fixed_words_and_nothing_else_is(self):
+        from hub import login
+        self.assertEqual(login.NEXT["admin"], "/admin")
+        self.assertEqual(sorted(login.NEXT), ["admin", "home", "room"])
+        self.assertTrue(all(v.startswith("/") and not v.startswith("//") for v in login.NEXT.values()))
+
+
+class TheKey(unittest.TestCase):
+    def load(self, **env):
+        return configmod.load(dict(ANTS_HUB_PORT="0", **env))
+
+    def test_a_key_of_thirty_two_printable_characters_or_more_opens_the_door(self):
+        for key in ("k" * 32, "k" * 256, "a1!~" * 10):
+            self.assertTrue(self.load(ANTS_HUB_ADMIN_GATE_SECRET=key).admin_gate_on, len(key))
+        for key in ("", "k" * 31, "k" * 257, "k" * 16 + " " + "k" * 16, "café" * 10, "tab\t" * 10):
+            cfg = self.load(ANTS_HUB_ADMIN_GATE_SECRET=key)
+            self.assertFalse(cfg.admin_gate_on, repr(len(key)))
+            self.assertEqual(cfg.admin_gate_secret, "")
+        self.assertFalse(self.load().admin_gate_on)
+
+    def test_a_malformed_key_never_stops_the_load_and_the_key_is_in_no_text(self):
+        cfg = self.load(ANTS_HUB_ADMIN_GATE_SECRET=SECRET)
+        for text in (repr(cfg), str(cfg), json.dumps(cfg.summary())):
+            self.assertNotIn(SECRET, text)
+        self.load(ANTS_HUB_ADMIN_GATE_SECRET="\x01\x02")
+        self.load(ANTS_HUB_ADMIN_GATE_SECRET="x" * 100000)
+
+    def test_the_warning_is_one_line_and_never_holds_the_key(self):
+        import io
+        for key, word in (("", "no_secret_set"), ("tiny-" * 2, "secret_too_short_or_not_printable"), ("a b " * 20, "secret_too_short_or_not_printable")):
+            stream = io.StringIO()
+            admindoor.warn(self.load(ANTS_HUB_ADMIN_GATE_SECRET=key), logmod.Log(stream))
+            lines = stream.getvalue().splitlines()
+            self.assertEqual(len(lines), 1, key)
+            self.assertIn("warning what=admin_page_door_shut_" + word, lines[0])
+            self.assertNotIn(key.strip() or "\0", lines[0])
+        stream = io.StringIO()
+        admindoor.warn(self.load(ANTS_HUB_ADMIN_GATE_SECRET=SECRET), logmod.Log(stream))
+        self.assertEqual(stream.getvalue(), "")
+
+
+class TheStart(unittest.TestCase):
+    def setUp(self):
+        self.procs = []
+        self.addCleanup(self.stop_all)
+
+    def stop_all(self):
+        for proc in self.procs:
+            if proc.poll() is None:
+                proc.kill()
+            proc.wait(5)
+
+    def run_hub(self, extra):
+        proc, folder, log_path, env = start_process(extra)
+        self.procs.append(proc)
+        port = wait_for_port(proc, log_path)
+        self.assertIsNotNone(port, "the hub did not start:\n" + read_text(log_path))
+        return port, log_path
+
+    def test_a_hub_with_a_missing_or_short_or_malformed_key_starts_answers_403_and_says_so_once(self):
+        for key, word in ((None, "no_secret_set"), ("tiny-key", "secret_too_short_or_not_printable"), ("\x01" * 40, "secret_too_short_or_not_printable")):
+            with self.subTest(key=key and len(key)):
+                extra = {"ANTS_HUB_TEST_LOGIN": "1", "ANTS_HUB_OWNER": OWNER}
+                if key is not None:
+                    extra["ANTS_HUB_ADMIN_GATE_SECRET"] = key
+                port, log_path = self.run_hub(extra)
+                r = hc.request(port, "GET", "/hub/admin/gate", [("X-Hub-Test-Login", "%s:%s" % (OWNER, NAMES[OWNER]))])
+                self.assertEqual(r.status, 403)
+                r = hc.request(port, "GET", "/hub/healthz")
+                self.assertEqual(r.status, 200)
+                text = read_text(log_path)
+                self.assertEqual(text.count("admin_page_door_shut"), 1, text)
+                self.assertIn("what=admin_page_door_shut_" + word, text)
+                self.assertNotIn(key or "\0", text)
+
+    def test_a_hub_with_a_good_key_opens_the_door_for_the_operator_and_says_nothing(self):
+        port, log_path = self.run_hub({"ANTS_HUB_TEST_LOGIN": "1", "ANTS_HUB_OWNER": OWNER, "ANTS_HUB_ADMIN_GATE_SECRET": SECRET})
+        r = hc.request(port, "GET", "/hub/admin/gate", [("X-Hub-Test-Login", "%s:%s" % (OWNER, NAMES[OWNER]))])
+        self.assertEqual(r.status, 204)
+        self.assertEqual(verify(r.get("x-ants-admin-pass"), SECRET, time.time())["role"], "owner")
+        text = read_text(log_path)
+        self.assertNotIn("admin_page_door_shut", text)
+        self.assertNotIn(SECRET, text)
+        for account in EVERY_ID:
+            self.assertNotIn(account, text)
+
+
+class TheCommandLineStillWorks(unittest.TestCase):
+    """The command line's own functions (hub/admin.py) are what the page's API uses: `resolve` takes an id for the command line and never for the page."""
+
+    def test_the_command_line_and_the_page_resolve_an_account_the_same_way(self):
+        from hub import admin, store as storemod
+        with tempfile.TemporaryDirectory() as folder:
+            s = storemod.Store(os.path.join(folder, "hub.db"))
+            try:
+                s.set_profile(TARGET, "terry.target", "", 1000)
+                self.assertEqual(admin.resolve(s, "terry.target"), (TARGET, "terry.target"))
+                self.assertEqual(admin.resolve(s, "@terry.target"), (TARGET, "terry.target"))
+                self.assertEqual(admin.resolve(s, admin.ref(s, TARGET)), (TARGET, "terry.target"))
+                self.assertEqual(admin.resolve(s, TARGET), (TARGET, "terry.target"), "the command line takes an id")
+                self.assertEqual(admin.resolve(s, TARGET, ids=False)[0], None, "the page's API never does")
+                self.assertEqual(admin.resolve(s, "@" + TARGET, ids=False)[0], None)
+                for why in (admin.resolve(s, TARGET, ids=False)[1], admin.resolve(s, "BAD NAME", ids=False)[1], admin.resolve(s, "nobody.at.all", ids=False)[1]):
+                    self.assertNotIn(TARGET, why)
+                    self.assertNotIn("BAD", why)
+            finally:
+                s.close()
+
+
+if __name__ == "__main__":
+    unittest.main()
