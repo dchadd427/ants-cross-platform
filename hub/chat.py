@@ -4,7 +4,7 @@
 Messages (JSON, "v":1; docs/HUB.md has the table):
   up    {"t":"say","text":"..."}   {"t":"ping"}   {"t":"who"}   {"t":"here",...}      (the last two: hub/presence.py)
         {"t":"pics","on":true|false}                 the switch of the account's Discord picture (a login is needed; a hub without the Discord login does not know it); switching off deletes the copy at once,
-                                                     switching on shows nothing until the next login; the answer is the whole `you` again (the account's every socket), or `err pics` (not a boolean, past the limit, blocked)
+                                                     switching on shows nothing until the next login; the answer is the whole `you` again (the account's every socket; for a request that changes nothing, the asking socket alone), or `err pics` (not a boolean, past the limit, blocked)
         {"t":"pick","pick":"display"|"username"}     which of its two names the account is shown by (only an account that has a display name as well may); stored, then every socket of
                                                      the account is closed (the same call as a logout's: end_logins), and the page connects again and reads the new name in the welcome
   down  {"t":"welcome",...}  {"t":"line",...}  {"t":"del","id":n}  {"t":"online","n":n}  {"t":"who",...}  {"t":"err","code":"login|rate|quota|muted|banned|long|empty|young|bad|here|pick|pics|power|role|who"}
@@ -334,7 +334,7 @@ class Chat:
     def on_pics(self, peer, msg):
         """The switch of the account's Discord picture. Refused (a mistake of the socket) with `login` for a guest and with `pics` for anything but a true or a false, past the account's limit, and for an account
         whose picture the operator blocked (a block is not the person's to lift). Done: the copy is deleted first (off) or the switch is remembered (on: nothing is shown until the next login), then every socket of the account gets
-        the whole `you` again. Nothing else of the message is read."""
+        the whole `you` again; when the switch was already in the asked state nothing changed, and the asking socket alone gets the whole `you`. A look that fails ends the call with `err pics` and no `you`. Nothing else of the message is read."""
         who = peer.identity
         if who is None:
             return self.mistake(peer, "login")
@@ -351,7 +351,7 @@ class Chat:
         try:
             self.pictures.sync()
         except StoreError as e:
-            self.trouble(peer, e, PICS_REFUSED)
+            return self.trouble(peer, e, PICS_REFUSED)
         if state == before:                                                     # (nothing changed: no frame goes to the account, so the asking socket is answered all the same, and a page's box never waits for nothing)
             peer.send_text(dumps({"t": "you", "you": self.you_of(who)}))
 

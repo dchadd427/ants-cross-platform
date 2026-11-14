@@ -135,6 +135,7 @@ class Pictures:
         self.cache = {}                                      # {reference: name} of the pictures that may be shown, as sync() last read them
         self.marks = {}                                      # {reference: SHOW_OFF or SHOW_BLOCKED} of the accounts that are not in the default state
         self.ends = None                                     # the soonest end of a picture in `cache`: past it, the list is read again for time alone
+        self.guessed = False                                 # a page was answered before the first look could be made (the database refused it)
         self.on_change = None                                # called with the set of references whose name or state changed, each time sync() finds a change (the chat tells their sockets)
 
     # ---- the fetch ---------------------------------------------------------------------------------------------------------------------------
@@ -247,7 +248,8 @@ class Pictures:
             return
         number, names, marks, ends = self.store.picture_look()                # (one moment of the data: the names and the marks of a look agree)
         changed = {ref for ref in set(self.cache) | set(names) if self.cache.get(ref) != names.get(ref)} | {ref for ref in set(self.marks) | set(marks) if self.marks.get(ref) != marks.get(ref)}
-        first = self.seen is None
+        first = self.seen is None and not self.guessed            # (a page was answered "no pictures, on" before the first look: this look tells the sockets what is true)
+        self.guessed = False
         self.seen, self.cache, self.marks, self.ends = number, names, marks, ends
         if changed and not first and self.on_change is not None:
             self.on_change(changed)
@@ -258,7 +260,7 @@ class Pictures:
             try:
                 self.sync()
             except StoreError:
-                pass
+                self.guessed = True
 
     def name_of(self, ref):
         """The public name of the account's picture (the account by its reference) when it may be shown now, else None: the list that sync() last read, no database read. Never a name for an account whose

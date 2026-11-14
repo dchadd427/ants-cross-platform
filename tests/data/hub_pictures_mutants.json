@@ -952,8 +952,8 @@
   {
    "id": "no_look_after_the_switch",
    "file": "hub/chat.py",
-   "old": "        try:\n            self.pictures.sync()\n        except StoreError as e:\n            self.trouble(peer, e, PICS_REFUSED)",
-   "new": "        try:\n            pass\n        except StoreError as e:\n            self.trouble(peer, e, PICS_REFUSED)",
+   "old": "        try:\n            self.pictures.sync()\n        except StoreError as e:\n            return self.trouble(peer, e, PICS_REFUSED)",
+   "new": "        try:\n            pass\n        except StoreError as e:\n            return self.trouble(peer, e, PICS_REFUSED)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheAtOnce"
   },
   {
@@ -1001,8 +1001,8 @@
   {
    "id": "the_first_look_of_a_refusing_database_drops_the_handshake",
    "file": "hub/pictures.py",
-   "old": "            except StoreError:\n                pass\n\n    def name_of",
-   "new": "            except ZeroDivisionError:\n                pass\n\n    def name_of",
+   "old": "            except StoreError:\n                self.guessed = True\n\n    def name_of",
+   "new": "            except ZeroDivisionError:\n                self.guessed = True\n\n    def name_of",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheStoreRefusing"
   },
   {
@@ -1046,6 +1046,48 @@
    "old": "            self.chat.pics_limits.forget_idle(now)\n",
    "new": "",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheHubTidiesTheLimits"
+  },
+  {
+   "id": "the_lift_turns_the_picture_on",
+   "file": "hub/admin.py",
+   "old": "    setter(SHOW_OFF, (TERMINAL, \"pic\", whom, \"\"))",
+   "new": "    setter(1, (TERMINAL, \"pic\", whom, \"\"))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheOperator"
+  },
+  {
+   "id": "the_first_look_after_a_fallback_tells_nobody",
+   "file": "hub/pictures.py",
+   "old": "        first = self.seen is None and not self.guessed ",
+   "new": "        first = self.seen is None ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheFirstLookAfterAFallback"
+  },
+  {
+   "id": "a_switch_whose_look_fails_is_still_answered_with_a_you",
+   "file": "hub/chat.py",
+   "old": "        except StoreError as e:\n            return self.trouble(peer, e, PICS_REFUSED)\n        if state == before:",
+   "new": "        except StoreError as e:\n            self.trouble(peer, e, PICS_REFUSED)\n        if state == before:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheStoreRefusing"
+  },
+  {
+   "id": "a_look_is_three_separate_reads",
+   "file": "hub/store/sqlite.py",
+   "old": "        self.db.execute(\"BEGIN\")\n        try:\n            return self.last_picture_change(), self.picture_names(), self.picture_marks(), self.picture_end()\n        finally:\n            self.db.execute(\"COMMIT\")",
+   "new": "        return self.last_picture_change(), self.picture_names(), self.picture_marks(), self.picture_end()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheEnds"
+  },
+  {
+   "id": "a_name_is_hidden_only_for_a_block",
+   "file": "hub/pictures.py",
+   "old": "        return None if ref in self.marks else self.cache.get(ref)",
+   "new": "        return None if self.marks.get(ref) == SHOW_BLOCKED else self.cache.get(ref)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheEnds"
+  },
+  {
+   "id": "a_look_is_made_for_every_frame",
+   "file": "hub/pictures.py",
+   "old": "        if self.seen is None:\n            try:\n                self.sync()",
+   "new": "        if True:\n            try:\n                self.sync()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheTick"
   }
  ]
 }

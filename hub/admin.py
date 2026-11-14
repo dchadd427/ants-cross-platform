@@ -5,7 +5,7 @@
     docker exec ants-hub python -m hub.admin ban ACCOUNT
     docker exec ants-hub python -m hub.admin unban ACCOUNT
     docker exec ants-hub python -m hub.admin nopic ACCOUNT               (block the account's Discord picture on this site; it survives logins, the person's switch and Forget me)
-    docker exec ants-hub python -m hub.admin pic ACCOUNT                 (lift that block)
+    docker exec ants-hub python -m hub.admin pic ACCOUNT                 (lift that block: the picture then stays off until the person turns it on)
     docker exec ants-hub python -m hub.admin del LINE_ID
     docker exec ants-hub python -m hub.admin log [--days N] [--lines N]
     docker exec ants-hub python -m hub.admin status
@@ -30,7 +30,7 @@ import sys
 import time
 
 from . import config, limits as limitmod, pseudo, store as storemod, text
-from .store.base import SHOW_BLOCKED, SHOW_OFF, SHOW_ON, TERMINAL
+from .store.base import SHOW_BLOCKED, SHOW_OFF, TERMINAL
 
 BY = "command line"
 MAX_MINUTES = 525600                    # a year
@@ -130,8 +130,8 @@ def change_picture(store, command, whom, state, setter, out, err):
     if state != SHOW_BLOCKED:
         err.write("hub.admin: the picture of %s was not blocked\n" % whom)
         return 1
-    setter(SHOW_ON, (TERMINAL, "pic", whom, ""))
-    out.write("%s picture is no longer blocked\n" % whom)
+    setter(SHOW_OFF, (TERMINAL, "pic", whom, ""))
+    out.write("%s picture is no longer blocked; after a lift the picture stays off until the person turns it on\n" % whom)
     return 0
 
 
