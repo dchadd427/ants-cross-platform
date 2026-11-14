@@ -2,8 +2,8 @@
 // model of the game's countdown card (Module._ants_probe 60 - 64), and checks:
 //   * the button is shown while the game says that a countdown runs (probe 60 >= 0), the page's game is ready and the page is not fullscreen, and hidden in every other case (no countdown, the game
 //     not ready, fullscreen of the browser's or the page's own, a game without the export);
-//   * it lies over the place that the game gave (probes 61 - 64, the canvas's pixels) in the stage's coordinates, the size of the game's place scaled with the picture (within 1 px), at least 32 CSS pixels tall, never wider than the card, with its text 0.5 x the height (12 px at least), and stays inside the
-//     picture; checked for a phone held sideways (844 x 390, 740 x 360, 667 x 375) and a desktop window (1280 x 800);
+//   * it lies over the place that the game gave (probes 61 - 64, the canvas's pixels) in the stage's coordinates, the size of the game's place scaled with the picture (within 1 px), at least 28 CSS pixels tall and 80 wide, never wider than the card, with its text 0.55 x the height (12 to 20 px), and stays inside the
+//     card (its bottom above the card's bottom edge) and the picture; checked for a phone held sideways (844 x 390, 740 x 360, 667 x 375) and a desktop window (1280 x 800);
 //   * a click on it asks for fullscreen once (the page's own enterFullscreen: the click is the user gesture that a browser wants) and hides it; a click when the page is fullscreen already asks for nothing;
 //   * the button is made by the script (a child of the stage, with the page's .btn look), the poll runs every 250 ms, the card going away (the first turn) hides the button, and the page's other code is
 //     not touched: no listener on the canvas, none on the document.
@@ -78,7 +78,7 @@ try {
         expect('one click listener on the button, nothing on the canvas or the document', [p.button.listeners.map((l) => l.type), p.calls.listeners], [['click'], 1]);
         expect('hidden until the poll has looked', [p.button.hidden, p.button.style.display], [true, 'none']);
         expect('made by the script: a button of the page\'s look with the id that the tests and the stylesheet know, a child of the stage', [p.button.tag, p.button.type, p.button.id, p.button.className, p.calls.children.length, p.calls.children[0] === p.button], ['button', 'button', 'countdown-fs', 'btn', 1, true]);
-        expect('floats over the picture, above the canvas, with the page\'s .btn minimums and padding set aside', [p.button.style.position, p.button.style.zIndex, p.button.style.minWidth, p.button.style.minHeight, p.button.style.padding], ['absolute', '4', '0px', '0px', '0px']);
+        expect('floats over the picture, above the canvas, with the page\'s .btn minimums and padding set aside', [p.button.style.position, p.button.style.zIndex, p.button.style.minWidth, p.button.style.minHeight, p.button.style.padding], ['absolute', '4', '0px', '0px', '0px 4px']);
     }
 
     // ---- shown while a countdown runs, over the game's place
@@ -87,9 +87,9 @@ try {
         p.start();
         poll(p);
         expect('a countdown is on: the button is shown', [p.button.hidden, p.button.style.display], [false, '']);
-        // the game's place (405, 306) 150 x 32 in game pixels: 0.5 CSS pixel each, so 75 x 16 CSS pixels; the button is 32 tall (the floor) and 150 wide (the shape of the place), centred on it
-        // centre: x = 10 - 10 + (405 + 75) * 0.5 = 240, y = 20 - 20 + (306 + 16) * 0.5 = 161 (the stage's own coordinates: the canvas is at the stage's corner)
-        expect('over the game\'s place: 32 tall (the floor), 150 wide (its shape), centred on it, its text 16 px', [p.button.style.width, p.button.style.height, p.button.style.left, p.button.style.top, p.button.style.fontSize], ['150px', '32px', '165px', '145px', '16px']);
+        // the game's place (405, 306) 150 x 32 in game pixels: 0.5 CSS pixel each, so 75 x 16 CSS pixels; the button is 80 wide (the width floor) and 28 tall (the height floor), centred on it,
+        // then kept inside the card: its bottom 2 px above the card's bottom edge (the place's bottom, 169, + 4): top 143; text 0.55 x 28 = 15.4 px
+        expect('over the game\'s place: 80 wide, 28 tall (the floors), inside the card, its text 15.4 px', [p.button.style.width, p.button.style.height, p.button.style.left, p.button.style.top, p.button.style.fontSize], ['80px', '28px', '200px', '143px', '15.4px']);
         p.game.left = -1;
         poll(p);
         expect('the card is gone (the first turn ran): the button goes', [p.button.hidden, p.button.style.display], [true, 'none']);
@@ -110,32 +110,38 @@ try {
             poll(p);
             const f = Math.min(win[0] / 960, win[1] / 540);
             const slotW = 150 * f, slotH = 32 * f;                   // the slot in CSS pixels
-            const wantH = Math.max(32, slotH), wantW = slotW * wantH / slotH;
+            const wantH = Math.max(28, slotH), wantW = Math.max(80, slotW);
             const w = parseFloat(p.button.style.width), h = parseFloat(p.button.style.height), fs = parseFloat(p.button.style.fontSize);
             const left = parseFloat(p.button.style.left), top = parseFloat(p.button.style.top);
             const label = win.join('x') + ' (slot ' + slotW.toFixed(1) + ' x ' + slotH.toFixed(1) + ' CSS px)';
-            expect(label + ': the button\'s width is the scaled slot\'s (within 1 px)', Math.abs(w - wantW) <= 1, true);
-            expect(label + ': the button\'s height is the scaled slot\'s, floored at 32 (within 1 px)', Math.abs(h - wantH) <= 1, true);
-            expect(label + ': at least 32 CSS pixels tall', h >= 32, true);
-            expect(label + ': the text is 0.5 x the height, 12 px at least, on one line', [Math.abs(fs - Math.max(12, h * 0.5)) <= 0.5, p.button.style.whiteSpace], [true, 'nowrap']);
-            expect(label + ': no page minimum or padding is left to grow the box', [p.button.style.boxSizing, p.button.style.minWidth, p.button.style.minHeight, p.button.style.padding], ['border-box', '0px', '0px', '0px']);
+            expect(label + ': the button\'s width is the scaled slot\'s, 80 at least (within 1 px)', Math.abs(w - wantW) <= 1, true);
+            expect(label + ': the button\'s height is the scaled slot\'s, 28 at least (within 1 px)', Math.abs(h - wantH) <= 1, true);
+            expect(label + ': at least 28 CSS pixels tall', h >= 28, true);
+            expect(label + ': the text is 0.55 x the height (12 to 20 px) on one line', [Math.abs(fs - Math.min(20, Math.max(12, h * 0.55))) <= 0.1, p.button.style.whiteSpace], [true, 'nowrap']);
+            expect(label + ': no page minimum is left to grow the box, a little side padding', [p.button.style.boxSizing, p.button.style.minWidth, p.button.style.minHeight, p.button.style.padding], ['border-box', '0px', '0px', '0px 4px']);
             const cardW = 400 * f;
             expect(label + ': never wider than the card (400 game pixels)', w <= cardW + 0.01, true);
             const rectLeft = (win[0] - 960 * f) / 2, rectTop = (win[1] - 540 * f) / 2;
             expect(label + ': inside the picture', [left >= rectLeft - 0.01, top >= rectTop - 0.01, left + w <= rectLeft + 960 * f + 0.01, top + h <= rectTop + 540 * f + 0.01], [true, true, true, true]);
             const cx = rectLeft + (405 + 75) * f, cy = rectTop + (306 + 16) * f;
-            expect(label + ': centred on the game\'s place', [Math.abs(left + w / 2 - cx) <= 1, Math.abs(top + h / 2 - cy) <= 1], [true, true]);
+            expect(label + ': centred across on the game\'s place', Math.abs(left + w / 2 - cx) <= 1, true);
+            // the card: 400 x 346 game pixels, the place at y + 306; its bottom edge is 8 game pixels under the place, the hint line (y + 282, 18 px) ends 4 game pixels over it
+            const slotTop = rectTop + 306 * f, cardBottom = slotTop + 32 * f + 8 * f, hintBottom = slotTop - 4 * f;
+            expect(label + ': inside the card: its bottom at least 2 px above the card\'s bottom edge', top + h <= cardBottom - 2 + 0.01, true);
+            expect(label + ': and its top not above the hint line unless the card needs the room', top >= hintBottom - 0.01 || top + h >= cardBottom - 2 - 0.01, true);
+            if (win[0] < 900) expect(label + ': a phone: narrower than the old 120', w < 120, true);
+            if (win[0] >= 900) expect(label + ': the desktop: exactly the scaled slot', [Math.abs(w - slotW) <= 1, Math.abs(h - slotH) <= 1], [true, true]);
         }
         // on the phone the old 120 x 44 button would have been bigger than the slot: it is not any more
         const ph = page({ win: [844, 390] });
         ph.start();
         poll(ph);
-        expect('a phone held sideways: the button is under the old 44 tall', parseFloat(ph.button.style.height) < 44, true);
+        expect('a phone held sideways: the button is under the old 44 tall and 120 wide', parseFloat(ph.button.style.height) < 44 && parseFloat(ph.button.style.width) < 120, true);
         // a picture so small that the floor would make the button wider than the card: the card is the limit
-        const tiny = page({ win: [200, 112] });
+        const tiny = page({ win: [120, 68] });
         tiny.start();
         poll(tiny);
-        expect('a tiny picture: not wider than the card', parseFloat(tiny.button.style.width) <= 400 * (200 / 960) + 0.01, true);
+        expect('a tiny picture: not wider than the card', parseFloat(tiny.button.style.width) <= 400 * (120 / 960) + 0.01, true);
     }
 
     // ---- a big place is the button's size; a place at the edge is kept inside the picture
@@ -145,7 +151,7 @@ try {
         p.start();
         poll(p);
         expect('a place that is bigger than a finger is the button\'s size', [p.button.style.width, p.button.style.height], ['200px', '50px']);
-        expect('and its text is 25 px', p.button.style.fontSize, '25px');
+        expect('and its text is 20 px at most', p.button.style.fontSize, '20px');
         const q = page();
         q.game.button = [900, 520, 150, 32];
         q.start();
