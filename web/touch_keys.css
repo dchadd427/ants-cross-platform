@@ -7,7 +7,7 @@
 #touch-keys.tk-gone { visibility: hidden; }
 .tk-shield { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 4; touch-action: none; -webkit-tap-highlight-color: transparent; }
 .tk-shield[hidden] { display: none; }
-.tk-probe { position: absolute; left: 0; top: 0; width: 0; height: 0; padding-left: env(safe-area-inset-left, 0px); visibility: hidden; pointer-events: none; }
+.tk-probe { position: absolute; left: 0; top: 0; width: 0; height: 0; padding-left: env(safe-area-inset-left, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); visibility: hidden; pointer-events: none; }
 #game-stage.tk-on #touch-keys { display: flex; }
 #touch-keys .tk-btn { min-width: 44px; min-height: 44px; margin: 0; padding: 4px 1px; font-size: 14px; line-height: 1.1; text-align: center; white-space: nowrap; }
 #touch-keys .tk-btn[aria-disabled="true"] { opacity: 0.45; }
@@ -39,5 +39,9 @@
 #game-stage.tk-side.tk-two #touch-keys { display: grid; grid-template-columns: repeat(2, 1fr); grid-auto-rows: minmax(44px, 1fr); }
 #game-stage.tk-side.tk-two #touch-keys .tk-all { grid-column: 1 / -1; }
 #game-stage.tk-side.tk-two #touch-keys .tk-more { grid-column: auto; }
-/* sideways in the page, the free margin left of the stage holds the rail (outside the stage: no padding, the picture keeps its size): one column, as high as the window leaves below the stage's top */
+#game-stage.tk-side.tk-page:not(.tk-rim) #touch-keys { bottom: auto; height: var(--tk-rail-h, 100%); }
+#game-stage.tk-side.tk-page #touch-keys > .tk-btn { min-height: var(--tk-btn-h, 44px); }
+/* sideways in the page, the free margin left of the stage holds the rail (outside the stage: no padding, the picture keeps its size): one column, as high as the window leaves below the stage's top; a short window: two columns, or five targets of 40 to 44 px */
 #game-stage.tk-side.tk-rim #touch-keys { left: auto; right: calc(100% + 6px); bottom: auto; width: 60px; height: var(--tk-rail-h, 100%); padding: 0; }
+/* ...on a window too short for five targets: two columns in the margin (All ants across both) */
+#game-stage.tk-side.tk-rim.tk-two #touch-keys { width: 126px; }

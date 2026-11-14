@@ -67,7 +67,7 @@ function page(opts) {
         constructor(type, init) { this.type = type; Object.assign(this, init); if (opts.noLegacy) { delete this.keyCode; delete this.which; } }
     }
     const insets = { left: 0, top: 0, bottom: 0 };
-    const win = { innerWidth: 390, innerHeight: 844, pageYOffset: 0, KeyboardEvent: KE, listeners: [], addEventListener(type, fn, cap) { win.listeners.push({ type, fn, cap: !!cap }); }, getComputedStyle: () => ({ paddingLeft: insets.left + 'px' }) };
+    const win = { innerWidth: 390, innerHeight: 844, pageYOffset: 0, KeyboardEvent: KE, listeners: [], addEventListener(type, fn, cap) { win.listeners.push({ type, fn, cap: !!cap }); }, getComputedStyle: () => ({ paddingLeft: insets.left + 'px', paddingBottom: insets.bottom + 'px' }) };
     barHeightFn = () => (stage.classList.contains('tk-side') && stage.classList.contains('tk-full') ? stage.clientHeight - insets.top - insets.bottom : 48);
     const state = { setting: opts.setting === undefined ? null : opts.setting, writes: [], touch: opts.touch !== false, ready: opts.ready !== false, watching: !!opts.watching, fullscreen: false };
     const store = opts.noStore ? () => { throw new Error('blocked'); } : () => ({ getItem: () => state.setting, setItem: (k, v) => { state.writes.push([k, v]); state.setting = v; } });
@@ -90,6 +90,14 @@ function page(opts) {
     p.poll = () => calls.intervals.forEach((i) => i.fn());
     // a key of the real keyboard (trusted) reaching the window's capture listeners; a page-made one is not
     p.physical = (type, code, key, trusted) => { const e = { type, code, key: key || code, isTrusted: trusted !== false }; win.listeners.forEach((l) => { if (l.type === type) l.fn(e); }); return e; };
+    // a real key's path through the phases: the window's capture listeners, the document's capture listeners (the settings panel's guard may stop the event there), and only when it was not stopped the window's bubble listeners
+    p.path = (type, code, key) => {
+        const e = { type, code, key: key || code, isTrusted: true, stopped: false, stopPropagation() { e.stopped = true; }, preventDefault() { /* nothing */ } };
+        win.listeners.forEach((l) => { if (l.type === type && l.cap) l.fn(e); });
+        doc.listeners.forEach((l) => { if (l.type === type && l.cap) l.fn(e); });
+        if (!e.stopped) win.listeners.forEach((l) => { if (l.type === type && !l.cap) l.fn(e); });
+        return e;
+    };
     p.blurWindow = () => win.listeners.forEach((l) => { if (l.type === 'blur') l.fn({ type: 'blur' }); });
     p.sent = () => canvas.dispatched.map((e) => [e.type, e.key, e.code, e.keyCode, e.which, e.ctrlKey, e.repeat]);
     p.clear = () => { canvas.dispatched.length = 0; };
@@ -324,22 +332,62 @@ try {
         sideways(p, 111, 60);
         expect('sideways in the page with 111 px of free margin: the rail stands in the margin (tk-rim), the stage keeps its size', [cls(p), p.stage.style.props['--tk-rail-h']], [['tk-on', 'tk-page', 'tk-rim', 'tk-side'], '330px']);
         expect('...six buttons in the bar, in order', p.bar.children.filter((c) => c.tag === 'button').map((c) => c.attrs['data-key'] || 'more'), ['all', 'stop', 'home', 'next', 'none', 'more']);
-        sideways(p, 92, 60);
-        expect('92 px of margin is enough (a rail of 60 px and 6 px of air)', cls(p).indexOf('tk-rim') >= 0, true);
+        sideways(p, 76, 60);
+        expect('76 px of margin is enough (a rail of 60 px, 6 px of air and the page\'s 10 px frame)', cls(p).indexOf('tk-rim') >= 0, true);
+        sideways(p, 75, 60);
+        expect('75 px is not: the rail would lie under the frame (one column of five inside the stage)', cls(p).indexOf('tk-rim') < 0, true);
         sideways(p, 65, 60);
-        expect('65 px is not: one column of five inside the stage (no tk-rim, never tk-two)', [cls(p), p.stage.style.props['--tk-rail']], [['tk-on', 'tk-page', 'tk-side'], '72px']);
+        expect('65 px: one column of five inside the stage (no tk-rim, never tk-two)', [cls(p), p.stage.style.props['--tk-rail']], [['tk-on', 'tk-page', 'tk-side'], '72px']);
         expect('...Next stands first in the list under More, and the bar has five buttons', [p.more.children[0].attrs['data-key'], p.bar.children.filter((c) => c.tag === 'button').map((c) => c.attrs['data-key'] || 'more')], ['next', ['all', 'stop', 'home', 'none', 'more']]);
         p.insets.left = 10;
-        sideways(p, 76, 60);
-        expect('the phone\'s left safe area counts in the margin (76 - 10 is 66: enough)', cls(p).indexOf('tk-rim') >= 0, true);
-        sideways(p, 75, 60);
-        expect('...75 - 10 is not', cls(p).indexOf('tk-rim') < 0, true);
+        sideways(p, 86, 60);
+        expect('the phone\'s left safe area counts in the margin (86 - 10 is 76: enough)', cls(p).indexOf('tk-rim') >= 0, true);
+        sideways(p, 85, 60);
+        expect('...85 - 10 is not', cls(p).indexOf('tk-rim') < 0, true);
         p.insets.left = 0;
         sideways(p, 111, 100);
-        expect('in the margin but the window leaves only 290 px below the stage\'s top (under 306: six targets do not fit): five, Next under More, still one column', [cls(p).indexOf('tk-rim') >= 0, cls(p).indexOf('tk-two') < 0, p.more.children[0].attrs['data-key'], p.stage.style.props['--tk-rail-h']], [true, true, 'next', '290px']);
+        expect('in the margin but the window leaves only 290 px below the stage\'s top (under 294: six targets do not fit): five, Next under More, still one column', [cls(p).indexOf('tk-rim') >= 0, cls(p).indexOf('tk-two') < 0, p.more.children[0].attrs['data-key'], p.stage.style.props['--tk-rail-h']], [true, true, 'next', '290px']);
         p.moreBtn.click();
         p.btn('next').click();
         expect('Next from the list: its key (Ctrl+N) and the list closes', [p.sent(), p.keys.isOpen()], [chord('n', 'KeyN', 78), false]);
+        // the rail uses its real height (the rim rail has no padding): six targets are 294 px, five are 244
+        const win = (w, h, left, top, stageH) => { sideways(p, left, top); p.win.innerWidth = w; p.win.innerHeight = h; p.stage.clientHeight = stageH; p.poll(); };
+        const bar6 = () => p.bar.children.filter((c) => c.tag === 'button').length;
+        const prop = (n) => p.stage.style.props[n];
+        win(740, 360, 111, 66, 250);
+        expect('294 px of room (740 x 360): six in the margin, Next in the bar', [cls(p).indexOf('tk-rim') >= 0, bar6(), prop('--tk-rail-h'), prop('--tk-btn-h')], [true, 6, '294px', '44px']);
+        win(667, 375, 111, 74, 250);
+        expect('301 px (667 x 375): six', [bar6(), prop('--tk-rail-h')], [6, '301px']);
+        win(740, 360, 111, 67, 250);
+        expect('293 px: five, Next under More', [bar6(), p.more.children[0].attrs['data-key'], prop('--tk-btn-h')], [5, 'next', '44px']);
+        p.insets.bottom = 20;
+        win(740, 360, 111, 66, 250);
+        expect('the phone\'s bottom edge is not room: 294 - 20 is five', [bar6(), prop('--tk-rail-h')], [5, '274px']);
+        p.insets.bottom = 0;
+        // a short window: More never stands below it
+        win(800, 304, 173, 66, 194);
+        expect('800 x 304 with 173 px of margin: two columns in the margin (six buttons, All ants across both), as high as the window leaves', [cls(p).indexOf('tk-two') >= 0, cls(p).indexOf('tk-rim') >= 0, bar6(), prop('--tk-rail-h')], [true, true, 6, '238px']);
+        win(732, 320, 163, 102, 174);
+        expect('732 x 320 (the header wraps): 218 px: two columns', [cls(p).indexOf('tk-two') >= 0, bar6(), prop('--tk-rail-h')], [true, 6, '218px']);
+        win(800, 304, 142, 66, 194);
+        expect('142 px of margin is enough for two columns (126 px, 6 of air, the 10 px frame)', cls(p).indexOf('tk-two') >= 0, true);
+        win(800, 304, 141, 66, 194);
+        expect('141 px is not: five in one column, the targets 42 px so they fit the 238', [cls(p).indexOf('tk-two') < 0, cls(p).indexOf('tk-rim') >= 0, bar6(), prop('--tk-btn-h')], [true, true, 5, '42px']);
+        win(640, 300, 101, 74, 190);
+        expect('640 x 300 with 101 px of margin: five targets of 40 px in the 226', [cls(p).indexOf('tk-two') < 0, prop('--tk-btn-h'), prop('--tk-rail-h')], [true, '40px', '226px']);
+        win(640, 260, 101, 74, 150);
+        expect('the targets are never under 40 px', prop('--tk-btn-h'), '40px');
+        win(568, 320, 40, 74, 217);
+        expect('568 x 320 in a wide shape (no margin): the column of five stands in the window, 246 px, targets of 42', [cls(p).indexOf('tk-rim') < 0, bar6(), prop('--tk-rail-h'), prop('--tk-btn-h')], [true, 5, '246px', '42px']);
+        win(568, 320, 40, 74, 290);
+        expect('...a stage that is high enough keeps its own height and the full targets', [prop('--tk-rail-h'), prop('--tk-btn-h')], ['290px', '44px']);
+        // a page's five in one column gets Next back in the bar in fullscreen (it stood under More)
+        win(568, 320, 40, 74, 217);
+        expect('Next stands under More in the page\'s five', p.more.children[0].attrs['data-key'], 'next');
+        p.state.fullscreen = true; p.win.innerWidth = 844; p.win.innerHeight = 390; p.stage.clientHeight = 390;
+        p.poll();
+        expect('...and in fullscreen it is in the bar again (six buttons, seven in the list)', [bar6(), p.more.children.length, p.btn('next').className.indexOf('tk-item') < 0], [6, 7, true]);
+        p.state.fullscreen = false;
         p.win.innerWidth = 390; p.win.innerHeight = 844;
         p.poll();
         expect('back upright: Next is in the row again, in its place', [p.bar.children.filter((c) => c.tag === 'button').map((c) => c.attrs['data-key'] || 'more'), p.more.children.length, p.btn('next').className.indexOf('tk-item') < 0], [['all', 'stop', 'home', 'next', 'none', 'more'], 7, true]);
@@ -475,6 +523,27 @@ try {
         p.btn('all').click();
         expect('a key that the page made (not trusted: the events of an earlier press that bubbled to the window) is not a held key: the next press is whole', p.sent(), EXPECT.all);
         p.clear();
+        // an Apple keyboard: a letter let go while Cmd is down sends no lift
+        p.physical('keydown', 'MetaLeft', 'Meta');
+        p.physical('keydown', 'KeyA', 'a');
+        p.physical('keyup', 'MetaLeft', 'Meta');
+        p.btn('all').click();
+        expect('Cmd lifted with a letter whose lift never came: the letter is forgotten, All ants works', p.sent(), EXPECT.all);
+        p.clear();
+        p.physical('keydown', 'ControlLeft', 'Control');
+        p.physical('keydown', 'MetaRight', 'Meta');
+        p.physical('keyup', 'MetaRight', 'Meta');
+        p.btn('stop').click();
+        expect('...and a Control that is still held stays held (the letter alone)', p.sent().length, 2);
+        p.physical('keyup', 'ControlLeft', 'Control');
+        p.clear();
+        p.physical('keydown', 'KeyS', 's');
+        p.physical('keydown', 'MetaLeft', 'Meta');
+        p.btn('stop').click();
+        expect('a letter held while Cmd is held stays held (nothing sent)', p.sent(), []);
+        p.physical('keyup', 'KeyS', 's');
+        p.physical('keyup', 'MetaLeft', 'Meta');
+        p.clear();
         // a lift of a key that was never down is no state
         p.physical('keyup', 'KeyA', 'a');
         p.btn('all').click();
@@ -488,6 +557,7 @@ try {
         p.poll();
         const guard = { kept: false, ended: 0, reachedGame: 0 };
         p.doc.addEventListener('keydown', function (e) { if (e.code === 'Escape' && guard.kept && !e.repeat) { guard.kept = false; guard.ended++; } }, true);
+        p.doc.addEventListener('keyup', function (e) { if (e.code === 'Escape') { e.stopPropagation(); } }, true);          // (the panel takes the lift of the key it kept: a listener in the bubble phase never hears it)
         // the settings panel was up, a physical Esc closed it and stays down: the panel keeps the key
         p.byId['game-menu'] = element('div', 'game-menu');
         p.physical('keydown', 'Escape', 'Escape');
@@ -498,9 +568,9 @@ try {
         // (the model: what a page-made keydown does on the document, as the real one bubbles from the canvas through it)
         p.canvas.dispatched.forEach((e) => p.doc.listeners.forEach((l) => { if (l.type === e.type) l.fn(e); }));
         expect('the #407 case: Esc held past the panel\'s close, then None: nothing is sent, so the panel keeps its hold and the held Esc\'s repeats do not open it again', [p.sent(), guard.ended, guard.kept], [[], 0, true]);
-        p.physical('keyup', 'Escape', 'Escape');
+        p.path('keyup', 'Escape', 'Escape');
         p.btn('none').click();
-        expect('...after the real lift None is an Esc again', p.sent(), EXPECT.none);
+        expect('...after the real lift (which the panel stops at the document\'s capture phase, so only a capture listener on the window hears it) None is an Esc again', p.sent(), EXPECT.none);
     }
 
     // ---- a finger on a button reaches the game as nothing

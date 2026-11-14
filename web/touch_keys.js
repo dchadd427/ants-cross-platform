@@ -132,6 +132,9 @@
             var c = e.code || e.key;
             if (!c) return;
             if (isDown) down[c] = 1; else delete down[c];
+            if (!isDown && (e.key === 'Meta' || /^(Meta|OS)/.test(c))) {      // (an Apple keyboard sends no lift for a letter let go while Cmd is down: with Cmd up the letters are forgotten, as on a blur)
+                for (var k in down) if (!/^(Control|Shift|Alt|Meta|OS)/.test(k)) delete down[k];
+            }
         }
         win.addEventListener('keydown', function (e) { note(e, true); }, true);
         win.addEventListener('keyup', function (e) { note(e, false); }, true);
@@ -185,6 +188,7 @@
         function px(value) { var n = parseFloat(value); return isFinite(n) ? n : 0; }
         function rect() { try { return stage.getBoundingClientRect(); } catch (err) { return { left: 0, top: 0 }; } }
         function safeLeft() { try { return px(win.getComputedStyle(probe).paddingLeft); } catch (err) { return 0; } }
+        function safeBottom() { try { return px(win.getComputedStyle(probe).paddingBottom); } catch (err) { return 0; } }
 
         // Next stands in the row or the rail; in a column of five it is the first of the list under More
         function fold(want) {
@@ -204,7 +208,7 @@
             setClass('tk-full', full);
             setClass('tk-page', room && !full);
             setClass('tk-wrap', up && stage.clientWidth < 316);        // (a narrow row: All ants has a row of its own)
-            var rim = false, five = false, two = false, rail = 72, railH = 0;
+            var rim = false, five = false, two = false, rail = 72, railH = 0, btnH = 44;
             if (side) {
                 if (full) {
                     setClass('tk-rim', false);
@@ -214,19 +218,29 @@
                     two = height > 0 && height < 306;          // (a short stage: two columns of 60 px, All ants across both; 306 = six targets of 44 px, five gaps and the rail's padding)
                     rail = two ? 138 : 72;
                 } else {
-                    var r = rect();
-                    rim = r.left - safeLeft() >= 66;           // (a rail of 60 px and 6 px of air fit in the page's free margin left of the stage: the picture keeps its size)
+                    var r = rect(), margin = r.left - safeLeft();
+                    // the room from the stage's top to the window's bottom (less the phone's bottom edge): the rail may be as high as that, so More never stands below the window
+                    var below = win.innerHeight - (r.top + (win.pageYOffset || 0)) - safeBottom();
+                    // 76 = the rail's 60 px, 6 px of air and the page's 10 px frame (drawn over the window's edge); 142 = two columns of 60 px, 6 px between, the same air and frame
+                    rim = margin >= 76;
                     if (rim) {
-                        railH = Math.max(stage.clientHeight, win.innerHeight - (r.top + (win.pageYOffset || 0)));
-                        five = railH < 306;
-                    } else five = true;                         // (inside the stage, one column of five: Next stands under More; never two columns)
+                        railH = Math.max(stage.clientHeight, below);
+                        if (railH >= 294) five = false;                 // six targets of 44 px and five gaps in one column
+                        else if (railH >= 244) five = true;            // five targets and four gaps: Next stands under More
+                        else if (margin >= 142) two = true;            // too short for five: two columns in the margin (four rows of 44 px and three gaps)
+                        else five = true;                              // ...and no room for two columns: five in one column, the targets as high as the room allows
+                    } else {
+                        five = true;                                   // (inside the stage, one column of five: Next stands under More; never two columns)
+                        railH = Math.max(stage.clientHeight, Math.min(below, 256));      // (256 = five targets, four gaps and the column's padding; a short stage may not hold them: the column stands as low as the window)
+                    }
+                    if (five) btnH = Math.max(40, Math.min(44, Math.floor((railH - (rim ? 0 : 12) - 24) / 5)));
                 }
             }
             setClass('tk-rim', rim);
             setClass('tk-two', two);
             if (side && !full) fold(five); else if (!side) fold(false);
             if (room) size('--tk-rail', rail);
-            if (rim) size('--tk-rail-h', railH);
+            if (side && !full) { size('--tk-rail-h', railH); size('--tk-btn-h', btnH); }
             var total = up ? (bar.offsetHeight || 48) + 8 : 0;                // (measured with the classes in place: the row may wrap on a narrow screen)
             if (room) size('--tk-row', total);
             var next = room ? (up ? 'up' : 'side') + (full ? ' full' : ' page') + (rim ? ' rim' : '') + (five ? ' five' : '') + (two ? ' two' : '') : '';

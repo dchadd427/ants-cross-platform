@@ -10,6 +10,8 @@
 //   * sideways (844 x 390, 740 x 360, 667 x 375) in the page: one column in the page's free margin left of the stage, the picture exactly the size it has with the buttons off; in fullscreen (the
 //     browser's, and the page's own where there is no Fullscreen API) a rail at the left edge inside the stage, the box beside it with the shape of the game's canvas to the pixel; turning upright
 //     moves the buttons to the row and back;
+//   * short sideways windows (800 x 304, 780 x 300, 732 x 320, 720 x 320, 640 x 300, 568 x 320 in a wide shape): More never stands below the window; two columns in the margin where it is 142 px or more
+//     wide, else one column of five with targets of at least 40 px;
 //   * the picture never moves or changes size when the buttons hide (a dialog, the settings panel, the chat field) and come back, upright and sideways, in the page and in fullscreen;
 //   * a mouse over the rail never scrolls the map; a tap that closes the More list is not a tap of the game; a button with Control held on the keyboard is the letter alone;
 //   * a mouse as the primary pointer (a computer): no buttons.
@@ -39,7 +41,7 @@ async function open(browser, w, h, o) {
     const page = await context.newPage();
     if (o.noFullscreenApi) await page.addInitScript(() => { Element.prototype.requestFullscreen = undefined; Element.prototype.webkitRequestFullscreen = undefined; });
     page.on('pageerror', (e) => { failed++; console.log('FAIL the page threw: ' + e.message); });
-    await page.goto(base + 'play.html?map=' + (o.map || 'tiny') + '&bots=easy,none,none', { waitUntil: 'load' });
+    await page.goto(base + 'play.html?map=' + (o.map || 'tiny') + '&bots=easy,none,none' + (o.aspect ? '&aspect=' + o.aspect : ''), { waitUntil: 'load' });
     ok('the game gets ready', await waitFor(page, "typeof Module !== 'undefined' && Module._ants_probe && isReadyToPlay", 90000));
     await sleep(1500);
     for (let i = 0; i < 2; i++) { await page.keyboard.press('Enter'); await sleep(1200); }
@@ -201,12 +203,33 @@ async function run(engine) {
             const r = await bar(page), st = await rect(page, '#game-stage');
             const count = await page.evaluate(() => document.querySelectorAll('#touch-keys > .tk-btn').length);
             ok(tag + w + ' x ' + h + ' in the page: one column in the margin (' + count + ' buttons), left of the stage, never two columns', cls.indexOf('tk-rim') >= 0 && cls.indexOf('tk-two') < 0 && r.x >= 0 && r.x + r.w <= st.x + 0.5 && r.w < 70, [cls, r, st]);
+            expect(tag + w + ' x ' + h + ' in the page: six buttons (the margin rail is 294 px or less high: six targets fit)', count, 6);
             await targets(page, tag + w + ' x ' + h + ' page', count);
             const on = await boxSize(page);
             await setting(page, false); await sleep(600);
             const off = await boxSize(page);
             expect(tag + w + ' x ' + h + ' in the page: the picture keeps its size (' + on.join(' x ') + ')', on, off);
             console.log('  size ' + w + ' x ' + h + ' page: with ' + on.join(' x ') + ', without ' + off.join(' x '));
+            await context.close();
+        }
+
+        // ---- short sideways windows (an address bar shown, a wrapped header): More never stands below the window; two columns in a margin of 142 px or more, else five in one column
+        for (const [w, h, aspect, shape] of [[800, 304, '', 'two'], [780, 300, '', 'two'], [732, 320, '', 'two'], [720, 320, '', 'two'], [640, 300, '', 'five'], [568, 320, '21:9', 'five']]) {
+            ({ context, page } = await open(browser, w, h, { aspect }));
+            const cls = (await classes(page)).split(' ');
+            const list = await page.evaluate(() => [].map.call(document.querySelectorAll('#touch-keys > .tk-btn'), (b) => { const r = b.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; }));
+            const more = await page.evaluate(() => { const r = document.querySelector('#touch-keys .tk-morebtn').getBoundingClientRect(); return [r.top, r.bottom, innerHeight]; });
+            const st = await rect(page, '#game-stage');
+            const tag2 = tag + w + ' x ' + h + (aspect ? ' (' + aspect + ')' : '') + ' in the page: ';
+            expect(tag2 + (shape === 'two' ? 'two columns in the margin, six buttons' : 'one column of five'), [cls.indexOf('tk-two') >= 0, list.length], [shape === 'two', shape === 'two' ? 6 : 5]);
+            ok(tag2 + 'More ends inside the window (' + more[1].toFixed(1) + ' of ' + more[2] + ')', more[1] <= more[2] + 0.5, more);
+            ok(tag2 + 'every target is at least 40 px high and 44 wide', list.every((r) => r[3] >= 39.9 && r[2] >= 43.9), list);
+            if (cls.indexOf('tk-rim') >= 0) ok(tag2 + 'the rail is in the margin, clear of the page\'s 10 px frame', list.every((r) => r[0] >= 10 && r[0] + r[2] <= st.x + 0.5), [list, st]);
+            const on = await boxSize(page);
+            await setting(page, false); await sleep(600);
+            const off = await boxSize(page);
+            if (cls.indexOf('tk-rim') >= 0) expect(tag2 + 'the picture keeps its size (' + on.join(' x ') + ')', on, off);
+            console.log('  short ' + w + ' x ' + h + (aspect ? ' ' + aspect : '') + ': ' + cls.filter((c) => /tk-(rim|two)/.test(c)).join(' ') + ', ' + list.length + ' buttons, more ends ' + more[1].toFixed(1) + ' of ' + more[2] + ', box ' + on.join(' x ') + ' (off ' + off.join(' x ') + ')');
             await context.close();
         }
 

@@ -8,6 +8,7 @@
   - the mutants (tests/data/touch_keys_mutants.json): each broken copy of the script, the page's call or the menu is noticed by those checks;
   - the page's layout round (run as the page writes it, in the wiring check): the buttons first, then the chrome, then the fit in what the stage's padding leaves;
   - the size budgets and the files that the image and the build carry (a list of names: no run can tell a missing COPY line);
+  - the layer under the list, run in Chromium when the machine has it (tests/scripts/web_touch_keys_shield_check.js): it covers the whole window after the page is scrolled;
   - the browser check (tests/scripts/web_touch_keys_browser_check.js, opt-in: tests/scripts/test_web_touch_keys.sh): its skip without a page.
 """
 import gzip
@@ -75,6 +76,19 @@ class ThePagesOwnCode(unittest.TestCase):
         self.assertIn("0 failures", done.stdout)
 
 
+SHIELD = os.path.join(REPO, "tests", "scripts", "web_touch_keys_shield_check.js")
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed: the layer under the list was NOT run in a browser")
+class TheLayerInABrowser(unittest.TestCase):
+    def test_the_layer_covers_the_window_after_a_scroll(self):
+        done = subprocess.run([shutil.which("node"), SHIELD, SCRIPT, STYLE], capture_output=True, text=True, timeout=180)
+        if done.returncode == 3:
+            self.skipTest(done.stdout.strip() or "no browser")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertRegex(done.stdout, r"\d+ checks, 0 failures")
+
+
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the mutants of the hotkey buttons were NOT run")
 class TheMutants(unittest.TestCase):
     def test_the_checks_fail_on_every_broken_copy(self):
@@ -89,8 +103,10 @@ class TheMutants(unittest.TestCase):
                     copy = os.path.join(tmp, os.path.basename(m["file"]))
                     with open(copy, "w", encoding="utf-8", newline="") as f:
                         f.write(text.replace(m["old"], m["new"]))
-                    command = [copy if part == m["file"] else (os.path.join(REPO, part) if part.startswith("tests/") else part) for part in m["test"].split()]
+                    command = [copy if part == m["file"] else (os.path.join(REPO, part) if part.startswith(("tests/", "web/")) else part) for part in m["test"].split()]
                     done = subprocess.run([shutil.which("node")] + command[1:], capture_output=True, text=True, timeout=120)
+                    if done.returncode == 3:
+                        self.skipTest("no browser: " + m["id"])
                     self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
 
 
