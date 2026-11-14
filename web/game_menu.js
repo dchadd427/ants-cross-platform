@@ -185,7 +185,7 @@
             var wrap = el('div', 'gm-ctl gm-pick'), host = wrap.appendChild(el('span', 'pick')), line = '';
             function auto() { return !!(page.isAutomatic && page.isAutomatic()); }
             var picker = page.picker({ doc: doc, win: win, host: host, id: 'gm-picture', labelledBy: labelId, className: 'gm-select', automatic: page.automatic, auto: auto(), value: own.read(), onPick: function (name) { own.write(name); picker.set(own.read(), auto()); } });
-            listen(win, 'resize', function () { picker.set(own.read(), auto()); });       // (Automatic follows a turn of the phone while the panel is open)
+            if (page.onShape) removers.push(page.onShape(function () { picker.set(own.read(), auto()); }));       // (the page says when the picture's shape or its source was settled: Automatic follows a turn of the phone while the panel is open, also when the shape stays the same)
             state.picker = picker;
             try { line = page.shapes.fillsLine(win.screen.width, win.screen.height); } catch (e) { /* no screen to ask */ }
             if (line) { var fits = wrap.appendChild(el('div', 'gm-fits', line)); fits.id = labelId + '-fits'; picker.button.setAttribute('aria-describedby', fits.id); }

@@ -65,7 +65,8 @@
         function words() {
             if (!autoNow) return;
             var now = ''; try { now = autoNow(); } catch (e) { /* no shape to name */ }
-            ROWS[0].text = 'Automatic (now ' + now + ')';
+            var named = shapes.rowOf(now);                                                    // (the row's own words: "Classic 4:3", the others by their names)
+            ROWS[0].text = 'Automatic (now ' + (named ? named.label : now) + ')';
             options[0].textContent = ROWS[0].text;
         }
         // what the page has now: the button says it and its row is the selected one (`auto`: Automatic is in use, and `name` is the shape that it shows)

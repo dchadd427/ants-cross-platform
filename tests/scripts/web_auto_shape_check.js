@@ -117,7 +117,7 @@ function make(spec) {
     win.document = Object.assign(doc, { body, getElementById: fakeDoc.getElementById, createElement: fakeDoc.createElement, querySelectorAll: fakeDoc.querySelectorAll });
     const code = 'var isReadyToPlay = true; var Module = fakeModule; var holdsThisSeat; var stageElement = fakeStage; var progressContainer = { style: {} }; function hideLoadingScreen() {} function antsLoadGameMenu() {}\n'
         + 'function relayout(force) { events.push("relayout"); }\n' + page + '\n' + selector
-        + '\nreturn { aspect: function () { return ANTS_ASPECT; }, source: function () { return ANTS_ASPECT_SOURCE; }, args: ANTS_ARGS, pick: antsPickShape, auto: antsAutomatic, own: function () { return ANTS_ADDRESS_OWN; } };';
+        + '\nreturn { aspect: function () { return ANTS_ASPECT; }, source: function () { return ANTS_ASPECT_SOURCE; }, args: ANTS_ARGS, pick: antsPickShape, auto: antsAutomatic, own: function () { return ANTS_ADDRESS_OWN; }, onShape: antsOnShape };';
     const run = new Function('window', 'document', 'fakeModule', 'fakeStage', 'events', 'AntsShapePicker', code)(win, win.document, fakeModule, stage, events, makers);
     const env = {
         win, doc, screenOrientation, visual, storage, addressed, run, stage, pickers, gameCalls, events, phoneState,
@@ -320,6 +320,10 @@ try {
         expect('... and nothing was written', JSON.stringify(e.storage.writes) + JSON.stringify(e.addressed), '[][]');
         const over = SHELL({ phone: 'iphone', held: 'sideways', search: '?aspect=32:9', stored: { [KEY]: P('4:3') } });
         expect('the address beats a stored pick', over.now, '32:9 address');
+        const own = SHELL({ phone: 'iphone', held: 'sideways', search: '?aspect=21:9', stored: { [KEY]: P('21:9') } });
+        expect('an address that names the pick of this way (START of the front page, a reload after a pick) is that pick', own.now, '21:9 remembered');
+        own.turn('upright'); own.advance(300);
+        expect('... so a turn follows the rule of the picks: Automatic upright, and the address loses the shape', own.now + ' [' + own.win.location.search + ']', '16:9 default []');
         const junk = SHELL({ phone: 'iphone', held: 'sideways', search: '?aspect=wide' });
         expect('an address that is no shape: Automatic, and the events work', junk.now, '20:9 default');
     }
@@ -339,7 +343,7 @@ try {
     {
         const e = SHELL({ phone: 'iphone', held: 'sideways' });
         const picker = e.pickers[0];
-        expect('the Picture window\'s list has Automatic, which says what it gives now', [typeof picker.opts.automatic, picker.opts.automatic(), picker.opts.auto, picker.shown], ['function', '20:9', true, '20:9']);
+        expect('the Picture window\'s list has Automatic, which says what it gives now', [typeof picker.opts.automatic, typeof picker.opts.automatic === 'function' ? picker.opts.automatic() : null, picker.opts.auto, picker.shown], ['function', '20:9', true, '20:9']);
         e.run.pick('16:10');
         expect('a pick leaves Automatic: the list shows the shape and not Automatic', [picker.shown, picker.auto], ['16:10', false]);
         e.run.pick(AntsShapes.AUTO);
@@ -355,6 +359,23 @@ try {
         expect('Automatic sideways forgets the sideways pick only', e.storage.data[KEY], JSON.stringify({ upright: '3:2' }));
         e.turn('upright'); e.advance(300);
         expect('... the upright pick still holds', e.now, '3:2 remembered');
+    }
+    {   // whoever watches the shape (the settings menu's picker) is told at each settling, also when the shape stays and only its source changes, and no more once it let go
+        const e = SHELL({ phone: 'iphone', held: 'sideways', stored: { [KEY]: P('20:9') } });
+        const told = [];
+        const let_go = e.run.onShape(() => told.push(e.run.aspect() + ' ' + e.run.source()));
+        e.run.pick(AntsShapes.AUTO);
+        expect('Automatic chosen over a pick that has the same shape: the watcher is told, with the new source', told, ['20:9 default']);
+        e.turn('upright'); e.advance(300);
+        expect('a turn: the watcher is told the new shape', told, ['20:9 default', '16:9 default']);
+        let_go();
+        e.turn('sideways'); e.advance(300);
+        expect('a watcher that let go hears nothing more', told.length, 2);
+    }
+    {   // ... and held upright it clears the upright pick only
+        const e = SHELL({ phone: 'iphone', held: 'upright', stored: { [KEY]: JSON.stringify({ sideways: '21:9', upright: '3:2' }) } });
+        e.run.pick(AntsShapes.AUTO);
+        expect('Automatic upright forgets the upright pick only', e.storage.data[KEY], JSON.stringify({ sideways: '21:9' }));
     }
     {   // Automatic over a shape that a link named: the address's shape is dropped and the events work again
         const e = SHELL({ phone: 'iphone', held: 'sideways', search: '?aspect=32:9&room=abc' });

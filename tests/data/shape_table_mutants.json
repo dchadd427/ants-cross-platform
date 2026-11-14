@@ -381,8 +381,8 @@
     {
       "id": "page_default_beats_the_pick",
       "file": "web/shell.html",
-      "old": "a = AntsShapes.parse(remembered);\n                if (a) return { aspect: a, source: 'remembered' };\n                return { aspect: AntsShapes.parse(firstVisit)",
-      "new": "a = AntsShapes.parse(remembered);\n                if (a && !AntsShapes.parse(firstVisit)) return { aspect: a, source: 'remembered' };\n                return { aspect: AntsShapes.parse(firstVisit)",
+      "old": "a = AntsShapes.parse(remembered);\n                if (a) return { aspect: a, source: 'remembered' };\n                return { aspect: AntsShapes.parse(automatic)",
+      "new": "a = AntsShapes.parse(remembered);\n                if (a && !AntsShapes.parse(automatic)) return { aspect: a, source: 'remembered' };\n                return { aspect: AntsShapes.parse(automatic)",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {

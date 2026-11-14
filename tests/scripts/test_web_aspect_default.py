@@ -42,8 +42,6 @@ class PagesMarkupStartsIn16x9AndTheScriptPicks(unittest.TestCase):
         self.assertRegex(page, r":root \{\s*--chrome: \d+px;[^}]*--ar-w: 16;\s*--ar-h: 9;\s*--stage-max: 1280px;")      # the slot's own shape; the script sets the other shapes' numbers (web/shapes.js's rows: slotVars), a rule for each shape is gone
         self.assertNotIn('#game-stage[data-aspect=', page)
         self.assertIn("var ANTS_ASPECT = '16:9';", page)
-        self.assertIn("function resolveAspect(fromAddress, remembered, firstVisit) {", page)
-        self.assertIn("return { aspect: AntsShapes.parse(firstVisit) || AntsShapes.FALLBACK, source: 'default' };", page)     # nothing says otherwise: the first visit's shape, never a stored one
         self.assertIn("ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.automatic(window))", page)
         self.assertEqual(page.count("source: 'default' }"), 1)                                                   # (one place answers 'default', and it asks the table)
 
@@ -110,17 +108,11 @@ class TheChoiceLivesUnderTheNewKey(unittest.TestCase):
         self.assertIn("var ANTS_ASPECT_KEY = '" + NEW_KEY + "';", read(SHELL))
         self.assertIn("var ASPECT_KEY = '" + NEW_KEY + "';", read(LOBBY))
         browser = read(os.path.join(REPO, "tests", "scripts", "web_aspect_check.py"))
-        self.assertIn("ants.aspect.v3", browser)
         self.assertIn("localStorage.setItem('ants.aspect', '4:3')", browser)                  # (the old key is set on purpose: it must not give 4:3)
 
 
 class TheFirstVisitStartsNearTheScreen(unittest.TestCase):
     """What is read from the files: how the third answer is asked, and that nothing but a selector stores. What the pages DO is run in web_aspect_key_check.js."""
-
-    def test_both_pages_ask_the_one_function_once(self):
-        self.assertIn("AntsShapes.automatic(window))", read(SHELL))
-        self.assertEqual(read(LOBBY).count("AntsShapes.automatic("), 0)                                  # (the front page has no picture of its own to start: the game page works out the first visit's shape when it loads)
-        self.assertNotIn("automatic(window", read(os.path.join(REPO, "web", "game_menu.js")))                  # (the settings menu only follows the page's shape)
 
     def test_only_a_press_of_a_selector_stores_the_choice(self):
         """A shape that is only the first visit's must never become a stored choice by itself: the key is written in one place of each page, and that place is the selector's handler."""

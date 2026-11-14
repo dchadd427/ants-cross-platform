@@ -226,7 +226,7 @@ function makePage(opts) {
     const stage = make('div', 'game-stage'), box = make('div', 'game-container', stage), canvas = make('canvas', 'canvas', box), chat = make('input', 'chat-keys', box);
     stage.setAttribute('data-aspect', '16:9');
     const shapes = {};                                                                   // (what the page's own dropdown does with a pick: antsPickShape; the page's `pickShape` is that function)
-    const auto = { on: !!opts.auto };                                                    // (the page's source of the shape: Automatic's, or a pick's)
+    const auto = { on: !!opts.auto, now: '20:9' };                                                    // (the page's source of the shape: Automatic's, or a pick's)
     const pickShape = opts.noPick ? undefined : (shape) => { shapes.clicked = (shapes.clicked || []).concat(shape); auto.on = shape === AntsShapes.AUTO; if (!opts.keepShape) stage.setAttribute('data-aspect', auto.on ? '20:9' : shape); };
     win.screen = opts.screen || { width: 1440, height: 900 };
     win.innerWidth = 1440;
@@ -237,15 +237,17 @@ function makePage(opts) {
     const toast = make('div', 'toast');
     toast.hidden = true;
     const asked = [], intervals = [], state = { fullscreen: false, locked: false, ready: true, locks: [], enters: 0, leaves: 0 };
+    const watchers = [];
     const page = {
-        doc, win, shapes: AntsShapes, picker: (o) => AntsShapePicker.create(AntsShapes, o), pickShape, isAutomatic: opts.auto ? () => auto.on : undefined, automatic: opts.auto ? () => '20:9' : undefined, lock, stage, canvas, toast, module: () => (opts.noModule ? null : game.module), ready: () => state.ready, replay: !!opts.watch, live: !!opts.live, version: 'v0.12.111', query: '?v=7',
+        onShape: (fn) => { watchers.push(fn); return () => { const at = watchers.indexOf(fn); if (at !== -1) watchers.splice(at, 1); }; },
+        doc, win, shapes: AntsShapes, picker: (o) => AntsShapePicker.create(AntsShapes, o), pickShape, isAutomatic: opts.auto ? () => auto.on : undefined, automatic: opts.auto ? () => auto.now : undefined, lock, stage, canvas, toast, module: () => (opts.noModule ? null : game.module), ready: () => state.ready, replay: !!opts.watch, live: !!opts.live, version: 'v0.12.111', query: '?v=7',
         isFullscreen: () => state.fullscreen, enter: () => { state.enters++; state.fullscreen = true; }, leave: () => { state.leaves++; state.fullscreen = false; },
         isLocked: () => state.locked, releaseLock: () => { state.locks.push('release'); state.locked = false; }, requestLock: () => { state.locks.push('request'); state.locked = true; },
         every: (fn, ms) => { intervals.push({ fn, ms }); return intervals.length; },
         cancelsKey: opts.noCancel ? undefined : (e) => { asked.push(e.key + (e.ctrlKey ? '+ctrl' : '')); return !!(e.ctrlKey ? 'ahlnopqs'.indexOf(e.key) >= 0 : /^F[123]$/.test(e.key)); },       // (the page's ANTS_PAGE.cancelsBrowserKey, in the cases that matter here)
     };
     const menu = Menu.forPage(page);
-    const p = { asked, doc, win, game, state, page, menu, stage, canvas, header, menuBtn, picwrap, rbar, toast, chat, shapes, lockState, intervals, box };
+    const p = { shapeChanged: () => watchers.slice().forEach((fn) => fn()), asked, doc, win, game, state, page, menu, auto, stage, canvas, header, menuBtn, picwrap, rbar, toast, chat, shapes, lockState, intervals, box };
     p.styleLoaded = () => { doc.links.forEach((l) => { if (l.onload) l.onload(); }); };
     p.poll = () => intervals.forEach((i) => i.fn());
     p.ready = () => { p.styleLoaded(); p.poll(); return p; };
@@ -392,7 +394,7 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     p.open();
     p.tab('video');
     const pick = p.q('.gm-pick .pick-select');
-    expect('the Picture shape list has Automatic first, and says what it gives now', [p.qa('.gm-pick [role=option]').length, p.q('#gm-picture-oauto').textContent, p.q('#gm-picture-oauto').getAttribute('data-shape')], [8, 'Automatic (now 20:9)', AntsShapes.AUTO]);
+    expect('the Picture shape list has Automatic first, and says what it gives now', [p.qa('.gm-pick [role=option]').length, (p.q('#gm-picture-oauto') || {}).textContent, p.q('#gm-picture-oauto') && p.q('#gm-picture-oauto').getAttribute('data-shape')], [8, 'Automatic (now 20:9)', AntsShapes.AUTO]);
     expect('Automatic is in use at the start: the button says it', [pick.textContent, p.q('#gm-picture-oauto').getAttribute('aria-selected')], ['Automatic (now 20:9)', 'true']);
     pick.click();
     p.q('#gm-picture-o3').click();
@@ -400,6 +402,8 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     pick.click();
     p.q('#gm-picture-oauto').click();
     expect('Automatic chosen again is handed to the page as its AUTO, and the button says Automatic', [p.shapes.clicked, pick.textContent], [['16:9', AntsShapes.AUTO], 'Automatic (now 20:9)']);
+    p.auto.now = '16:9'; p.stage.setAttribute('data-aspect', '16:9'); p.shapeChanged();
+    expect('the panel open over a turn: the button and the row say what Automatic gives now, and Automatic stays the row in use', [pick.textContent, p.q('#gm-picture-oauto').textContent, p.q('#gm-picture-oauto').getAttribute('aria-selected')], ['Automatic (now 16:9)', 'Automatic (now 16:9)', 'true']);
 }
 {
     const p = makePage({ watch: true }).ready();

@@ -176,7 +176,7 @@ function setup(opts) {
     const p = setup({ automatic: () => now, auto: true, value: '20:9' });
     const S = p.w.AntsShapes;
     const selected = () => p.options().map((o) => o.getAttribute('aria-selected')).indexOf('true');
-    expect('with `automatic` the list has Automatic first, then the table\'s rows in their order, each with its own id', [p.options().length, p.options().map((o) => o.getAttribute('data-shape')), p.options()[0].id, p.options()[1].id, p.options()[7].id],
+    expect('with `automatic` the list has Automatic first, then the table\'s rows in their order, each with its own id', [p.options().length, p.options().map((o) => o.getAttribute('data-shape')), p.options().map((o) => o.id)[0], p.options().map((o) => o.id)[1], p.options().map((o) => o.id)[7]],
         [8, ['auto'].concat(S.names()), 'pic-oauto', 'pic-o0', 'pic-o6']);
     expect('Automatic says what it gives now, and when it is in use the button says it and its row is the selected one', [p.options()[0].textContent, p.button.textContent, selected(), p.picker.shape()], ['Automatic (now 20:9)', 'Automatic (now 20:9)', 0, S.AUTO]);
     now = '16:9';
@@ -198,6 +198,9 @@ function setup(opts) {
     expect('choosing Automatic over a hand pick says AUTO', p.picks, ['20:9', S.AUTO]);
     p.picker.set('16:9', true);
     expect('set(shape, true) shows Automatic again, with the shape it gives now', [p.button.textContent, selected()], ['Automatic (now 16:9)', 0]);
+    now = '4:3'; p.picker.set('4:3', true);
+    expect('when Automatic gives the classic shape it says the row\'s own words', [p.options()[0].textContent, p.button.textContent], ['Automatic (now Classic 4:3)', 'Automatic (now Classic 4:3)']);
+    now = '16:9'; p.picker.set('16:9', true);
     p.down('ArrowDown');
     p.down('End');
     p.down('Home');
