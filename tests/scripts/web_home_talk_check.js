@@ -172,6 +172,8 @@ for (const [label, o] of [['no speech recognition (Firefox)', { speech: false }]
     check('...and shown again when the field is on (the dock tells the buttons through its taps)', q.talk.root.hidden === false);
     q.field.disabled = true; q.tell('lost');
     check('...and hidden again when it goes off', q.talk.root.hidden === true);
+    q.field.disabled = false; q.tell('live'); q.talk.emoji.click(); const before = q.field.value; q.field.disabled = true; q.tell('field');
+    check('a field that goes off for a ban (the dock\'s tap `field`): the buttons go with it, the picker closes, and an emoji cannot be put into it', q.talk.root.hidden === true && q.talk.pick.hidden === true && q.field.value === before);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

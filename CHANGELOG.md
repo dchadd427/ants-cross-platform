@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.16.6 - 2026-11-13 - Chat roles from Discord and Discord pictures in the Players list
+
+**For players:**
+- **Chat moderators and administrators now come from the project's Discord server roles.** Whoever holds the moderator or administrator role there has those powers in the front page chat, within a few minutes of getting or losing the role, and the chat shows them: staff names get a color, the Players list puts them first, and moderators see line numbers. The commands are /mute, /unmute, /del and /kick for both roles, and /ban, /unban and /bans for administrators; a moderator cannot act on another staff member. If the check with Discord cannot be made, no power is given and the chat keeps working. The old hand list setting (ANTS_HUB_MODS) no longer does anything.
+- **Discord profile pictures in the Players list.** When you log in with Discord, the site keeps one small copy of your profile picture, only while you have a login, and shows it in your circle in the Players list and in the account button at the top. It is shown to everyone who opens the front page unless you switch it off with "Show my Discord picture" in the account menu, or the site's operator hides it. Chat lines still show names only. Switching it off deletes the copy at once. The Legal page says what is kept and for how long.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.5 page or game still joins. Under the hood: the chat server gained the role and picture code and its tests.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/59cbc736...3b57c6ae)
+
 ## v0.16.5 - 2026-11-13 - A countdown card for solo play, computer players stay out of your base, Settings anywhere and no Live now page
 
 **For players:**
@@ -490,18 +500,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d157bf3...dcda43d2)
 
-## v0.12.124 - 2026-10-24 - Three more picture shapes, and one dropdown to pick them
+## Older versions (v0.12.124 and before)
 
-**For players:**
-- **Three more picture shapes:** 3:2 (960 x 640, tablets and Surface-style laptops), 20:9 (1200 x 540, phones held sideways) and 32:9 (1920 x 540, super-ultrawide monitors). The list is now Classic 4:3, 3:2, 16:10, 16:9, 20:9, 21:9 and 32:9. A wider picture shows more of the map at the first zoom (32:9 shows about 2.3 times what 16:9 does) and less when zoomed all the way out; everybody picks their own shape, so no match changes.
-- **One dropdown instead of the buttons:** the Picture control under the game, in the front page's Picture row, in the settings menu (Esc: on Windows and Linux the arrow keys change the picture of the running game at once and the menu stays open; on macOS the arrows open the list and Enter picks; Esc with the list open is the browser's own and has not been checked in each browser yet) and in a recording's bar is a dropdown that lists each shape with its size. A quiet line under it ("16:10 fills your screen") names the shape closest to your screen. On an upright phone the dropdown has its own line and the page no longer scrolls sideways.
-- **The first visit** counts the new shapes too: a 3:2 tablet starts in 3:2, a 3840 x 1080 monitor in 32:9, a phone held sideways in 20:9. Anything you picked, and `?aspect=` in the address (which also takes `3:2`, `20:9` and `32:9`), still wins.
-- On a wide monitor the 32:9 picture is shown at its real size (the game area is no longer cut at 1280 pixels).
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (what a player sees: nobody's shape is sent to the server or to the other players).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b9a0ab04...c66cf43e)
-
-## Older versions (v0.12.123 and before)
-
-Every release before v0.12.124, and the long notes of v0.12.123 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.125, and the long notes of v0.12.124 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
