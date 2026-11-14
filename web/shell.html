@@ -1466,9 +1466,13 @@
             }
             // The page's own controls: a pointer over one of them is on the page and never at the game's edge (hovering a button, a link or a selector near the game must not scroll the map). `target` is
             // the element under the pointer; anything inside a control counts (the open list of the picture's dropdown is one: a page-made list lies over the page, which a native list never did).
-            var CONTROLS = 'a, button, input, select, textarea, summary, label, [role="radio"], [role="button"], [role="slider"], [role="option"], .pick-list, .rbar';
+            var CONTROLS = 'a, button, input, select, textarea, summary, label, [role="radio"], [role="button"], [role="slider"], [role="option"], .pick-list, .rbar, .tk, .tk-shield';
             function overControl(target) {
                 return !!(target && typeof target.closest === 'function' && target.closest(CONTROLS));
+            }
+            // The hotkey buttons' rail or row (touch_keys.js) and the layer under their open list: a mouse or a pen over them is on the page in fullscreen too (it never scrolls the map from the picture's edge)
+            function overTouchKeys(target) {
+                return !!(target && typeof target.closest === 'function' && target.closest('.tk, .tk-shield'));
             }
 
             // THE POINTER LOCK. While the browser holds the pointer for the game (fullscreen) it reports only how far the pointer moved (movementX / movementY, in CSS pixels, with the
@@ -1779,7 +1783,7 @@
             }
 
             return { parseAspect: AntsShapes.parse, shapeNumber: AntsShapes.placeOf, shapeForScreen: AntsShapes.forScreen, slotVars: slotVars, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, snapOffset: snapOffset, edgePixel: edgePixel, clientFor: clientFor,
-                     marginPixel: marginPixel, overControl: overControl, lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, releasesMouseLock: releasesMouseLock, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, localArguments: localArguments, asksForName: asksForName, codeText: codeText, withoutName: withoutName, withSeat: withSeat, cancelsBrowserKey: cancelsBrowserKey, badDownload: badDownload,
+                     marginPixel: marginPixel, overControl: overControl, overTouchKeys: overTouchKeys, lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, releasesMouseLock: releasesMouseLock, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, localArguments: localArguments, asksForName: asksForName, codeText: codeText, withoutName: withoutName, withSeat: withSeat, cancelsBrowserKey: cancelsBrowserKey, badDownload: badDownload,
                      downloadWithRetries: downloadWithRetries };
         })();
 
@@ -2437,6 +2441,10 @@
         window.addEventListener('pointermove', function (e) {
             if (handingOver || e.pointerType === 'touch' || isLocked() || !isFullscreen()) return;
             if (!stageElement.contains(e.target) || boxElement.contains(e.target)) return;
+            if (ANTS_PAGE.overTouchKeys(e.target)) {                        // (the hotkey buttons are the page's: a pointer over them is no edge of the picture)
+                if (edgeForwarded) handLeaveToGame();
+                return;
+            }
             if (quietAfterRelease) {
                 if (quietAfterRelease.x === undefined) { quietAfterRelease = { x: e.clientX, y: e.clientY }; return; }
                 if (Math.abs(e.clientX - quietAfterRelease.x) < 1 && Math.abs(e.clientY - quietAfterRelease.y) < 1) return;

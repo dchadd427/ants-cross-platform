@@ -390,6 +390,15 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     w.tab('video');
     ok('a page without the hotkey buttons has no Touch buttons row', w.rows().map((r) => r.name).indexOf('Touch buttons') < 0);
 }
+
+// the small form (the gear outside a match or under a dialog) has no Touch buttons row, on a touch screen with the buttons too: the setting changes nothing there
+const outsideTouch = (() => { const o = makePage({ touch: true, touchKeys: true }).ready(); o.game.where = -1; o.poll(); return o; })();
+{
+    const p = outsideTouch;
+    p.q('#settings-btn').click();
+    ok('the small form on a touch screen with the hotkey buttons: a panel with no tabs', p.menu.isOpen() && p.qa('[role=tab]').length === 0);
+    expect('...has no Touch buttons row (the table\'s page rows only)', [p.rows().map((r) => r.name).indexOf('Touch buttons') < 0, p.qa('.gm-k-touchkeys').length], [true, 0]);
+}
 {
     const p = makePage({ noLock: true }).ready();
     p.open();

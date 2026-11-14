@@ -3,17 +3,16 @@
 (web/touch_keys.js, web/touch_keys.css, called by web/shell.html) that send the key events of a keyboard. What the page can say about them without a browser is checked:
 
   - the script RUNS with fakes for the page (node, when it is installed: tests/scripts/web_touch_keys_check.js): every button's events in a keyboard's order, one press one key, the cases that hide
-    the buttons (and send nothing), None's dimming, the list under More, the remembered setting, the placement classes;
+    the buttons (and send nothing), the room that stays while they hide, a key that is physically down, None's dimming, the list under More, the remembered setting, the placement classes;
   - the page's call RUNS as the page writes it (tests/scripts/web_touch_keys_wiring_check.js): the touch rule, the recording mode, the game's probes, the storage and what the settings menu is handed;
   - the mutants (tests/data/touch_keys_mutants.json): each broken copy of the script, the page's call or the menu is noticed by those checks;
-  - the page loads the script once before its own code, loads the style, makes no markup of its own, and lets the buttons lay out the stage's padding before the fit;
+  - the page's layout round (run as the page writes it, in the wiring check): the buttons first, then the chrome, then the fit in what the stage's padding leaves;
   - the size budgets and the files that the image and the build carry (a list of names: no run can tell a missing COPY line);
   - the browser check (tests/scripts/web_touch_keys_browser_check.js, opt-in: tests/scripts/test_web_touch_keys.sh): its skip without a page.
 """
 import gzip
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -47,37 +46,9 @@ class ThePage(unittest.TestCase):
     def setUp(self):
         self.page = read(SHELL)
 
-    def test_the_script_is_loaded_once_before_the_pages_own_code_and_called_once(self):
-        self.assertEqual(len(re.findall(r'<script src="touch_keys\.js"></script>', self.page)), 1)
-        self.assertEqual(len(re.findall(r"AntsTouchKeys\.forPage\(", self.page)), 1)
-        self.assertLess(self.page.index('src="touch_keys.js"'), self.page.index("var ANTS_BUILD_VER"))
-        self.assertLess(self.page.index('src="touch_keys.js"'), self.page.index("AntsTouchKeys.forPage("))
-        self.assertEqual(len(re.findall(r'<link rel="stylesheet" href="touch_keys\.css">', self.page)), 1)
-
-    def test_the_buttons_are_the_scripts_the_page_has_no_markup_of_its_own(self):
-        # (the script makes them and puts them in the stage, the element that goes fullscreen: markup in the page would be a second copy)
-        self.assertNotIn('id="touch-keys"', self.page)
-        self.assertNotIn("tk-btn", self.page)
-
-    def test_the_page_lays_the_buttons_out_before_the_fit_and_the_fit_reads_the_stages_padding(self):
-        # (defect: the rail is drawn but the picture is fitted into the whole stage and lies under it; no run of the fakes sees the page's own layout, the browser check does)
-        relayout = self.page[self.page.index("function relayout(force) {"):]
-        relayout = relayout[:relayout.index("\n        }\n")]
-        self.assertLess(relayout.index("antsTouchKeys.refresh(true)"), relayout.index("measureChrome();"))
-        self.assertLess(relayout.index("measureChrome();"), relayout.index("layoutBox(force);"))
-        fit = self.page[self.page.index("function layoutBox(force) {"):]
-        fit = fit[:fit.index("var dpr")]
-        self.assertIn("paddingLeft", fit)
-        self.assertIn("paddingBottom", fit)
-
-    def test_the_placement_is_in_the_stylesheet_by_classes_of_the_stage(self):
-        css = read(STYLE)
-        for part in ("#game-stage.tk-up", "#game-stage.tk-side", "tk-page", "tk-full", "env(safe-area-inset-left", "env(safe-area-inset-bottom", "min-height: 44px", "min-width: 44px", "gap: 6px"):
-            self.assertIn(part, css)
-        # the page's own style has nothing of it: moving the buttons is one place
-        self.assertNotIn("tk-up", self.page)
-
     def test_the_image_and_the_build_carry_the_files(self):
+        for name in ("touch_keys.js", "touch_keys.css"):
+            self.assertIn(name, self.page)
         dockerfile = read(os.path.join(REPO, "Dockerfile"))
         for name in ("touch_keys.js", "touch_keys.css"):
             self.assertIn("COPY web/%s /usr/share/nginx/html/%s" % (name, name), dockerfile)

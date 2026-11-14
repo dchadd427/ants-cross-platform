@@ -9,9 +9,12 @@
 //     panel is open or the chat's phone keyboard has the focus. Every press asks again first.
 //   * None is dimmed (aria-disabled, no key) while the game says that nothing is picked (ants_probe 50); a game that does not answer leaves it live. Esc with nothing picked opens the settings menu,
 //     as on a keyboard.
-//   * Where: one class on the page's stage says it. Upright (the window taller than wide): a row under the picture in the page, at the bottom of the stage in fullscreen. Sideways: a rail along the
-//     left edge of the stage, outside the picture (the page's own fit code works in what the stage's padding leaves). A finger on a button reaches the game as nothing: the buttons are outside the
-//     picture's box, and the mouse events that follow a touch stop here (the touch events themselves are the page's and are left alone).
+//   * Where: classes on the page's stage say it. Upright (the window taller than wide): a row under the picture in the page, at the bottom of the stage in fullscreen. Sideways in the page: one
+//     column in the page's free margin left of the stage, so the picture keeps its size (where the margin is too narrow: one column of five inside the stage, Next under More); sideways in
+//     fullscreen: a rail along the left edge inside the stage (the page's own fit code works in what the stage's padding leaves). The room is kept for the whole match: when the buttons hide (a
+//     dialog, the settings panel, the chat field) only they go, the picture never moves or changes size. A finger on a button reaches the game as nothing: the buttons are outside the picture's
+//     box, and the mouse events that follow a touch stop here (the touch events themselves are the page's and are left alone). The tap that closes the More list is the list's alone.
+//   * A button never sends a key that is physically down (a keyboard cannot press a key that is down): with Control held a chord is the letter alone, with the key itself held nothing is sent.
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsTouchKeys, node gets module.exports (tests/scripts/web_touch_keys_check.js runs it with fakes).
 (function (root, factory) {
     var api = factory();
@@ -47,11 +50,15 @@
     // The remembered choice: only "off" turns the buttons off (a missing or other value is on)
     function setting(stored) { return stored !== 'off'; }
 
-    // The key events of one press, in order: [type, key, ctrlKey]
-    function sequence(def) {
+    // The key events of one press, in order: [type, key, ctrlKey]. `ctrlDown`: a Control key is physically down, so the chord is the letter alone (with ctrlKey true) and no Control of ours goes down or up
+    function sequence(def, ctrlDown) {
         if (!def.ctrl) return [['keydown', def.k, false], ['keyup', def.k, false]];
+        if (ctrlDown) return [['keydown', def.k, true], ['keyup', def.k, true]];
         return [['keydown', CTRL, true], ['keydown', def.k, true], ['keyup', def.k, true], ['keyup', CTRL, false]];
     }
+
+    // The reasons that only hide the buttons for a while (the match goes on and the room stays); any other reason gives the room back
+    var PASSING = { dialog: 1, card: 1, settings: 1, chat: 1 };
 
     function makeEvent(win, type, k, ctrl) {
         var e = new win.KeyboardEvent(type, { bubbles: true, cancelable: true, composed: true, view: win, key: k.key, code: k.code, location: k.loc, ctrlKey: ctrl, repeat: false, keyCode: k.vk, which: k.vk, charCode: 0 });
@@ -63,7 +70,7 @@
     // page: { doc, win, stage, canvas, touch(), ready(), watching(), running(), ask(n) (ants_probe), menu(n) (ants_menu_get), isFullscreen(), relayout(), every(fn, ms), store() (a Storage or null) }
     function forPage(page) {
         var doc = page.doc, win = page.win, stage = page.stage;
-        var on = true, open = false, shown = false, mode = '', cols = 1, rowTotal = 0, built = {};
+        var on = true, open = false, shown = false, roomOn = false, mode = '', rowTotal = 0, built = {}, down = {}, folded = false;
         try { var st = page.store && page.store(); on = setting(st ? st.getItem(KEY) : null); } catch (err) { on = true; }
 
         var bar = doc.createElement('div');
@@ -72,10 +79,17 @@
         bar.setAttribute('role', 'group');
         bar.setAttribute('aria-label', 'Game keys');
         bar.hidden = true;
+        bar.classList.toggle('tk-gone', true);
         var more = doc.createElement('div');
         more.className = 'tk-more';
         more.hidden = true;
         var moreBtn = null;
+        // A see-through layer under the list while it is open: the tap that closes the list is the list's and reaches nothing else (the game included)
+        var shield = doc.createElement('div');
+        shield.className = 'tk-shield';
+        shield.hidden = true;
+        var probe = doc.createElement('div');                               // (its padding is the phone's left safe area: see layout)
+        probe.className = 'tk-probe';
 
         function button(def, cls) {
             var b = doc.createElement('button');
@@ -102,10 +116,27 @@
         for (i = 0; i < MORE.length; i++) more.appendChild(button(MORE[i], 'tk-item'));
         bar.appendChild(more);
         // A finger that lands on a button is no mouse for the game: the compatibility mouse events that follow a touch (and a mouse's own) stop here, the touch events are left alone (the sound's unlock needs them)
-        ['mousedown', 'mouseup', 'mousemove', 'mouseover', 'mouseout', 'dblclick'].forEach(function (name) { bar.addEventListener(name, function (e) { e.stopPropagation(); }); });
+        var MOUSE = ['mousedown', 'mouseup', 'mousemove', 'mouseover', 'mouseout', 'dblclick'];
+        MOUSE.forEach(function (name) { bar.addEventListener(name, function (e) { e.stopPropagation(); }); shield.addEventListener(name, function (e) { e.stopPropagation(); }); });
         bar.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+        shield.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+        shield.addEventListener('click', function (e) { e.stopPropagation(); toggle(false); });          // (a click comes after the mouse events of a touch: until then the layer takes them all)
         bar.addEventListener('keydown', function (e) { if (e.key === 'Escape' && open) { e.stopPropagation(); e.preventDefault(); toggle(false); blur(moreBtn); } });
+        stage.appendChild(shield);
+        stage.appendChild(probe);
         stage.appendChild(bar);
+
+        // The keys that the keyboard holds down now (only a real key counts: ours are not trusted): a button never sends a key that is down
+        function note(e, isDown) {
+            if (e.isTrusted !== true) return;
+            var c = e.code || e.key;
+            if (!c) return;
+            if (isDown) down[c] = 1; else delete down[c];
+        }
+        win.addEventListener('keydown', function (e) { note(e, true); }, true);
+        win.addEventListener('keyup', function (e) { note(e, false); }, true);
+        win.addEventListener('blur', function () { down = {}; });
+        function ctrlDown() { return !!(down.ControlLeft || down.ControlRight); }
 
         function blur(b) { try { if (b && b.blur) b.blur(); } catch (err) { /* nothing to blur */ } }
         function ask(n) { try { return page.ask(n); } catch (err) { return -1; } }
@@ -130,6 +161,7 @@
         function toggle(want) {
             open = !!want;
             more.hidden = !open;
+            shield.hidden = !open;
             moreBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
             bar.classList.toggle('tk-open', open);
         }
@@ -138,8 +170,9 @@
             blur(b);
             if (why()) { refresh(); return false; }
             if (def.id === 'none' && ask(50) === 0) return false;      // (dimmed: nothing is picked; nothing is sent)
-            var seq = sequence(def), target = page.canvas || doc.body;
             if (open && b.className.indexOf('tk-item') !== -1) toggle(false);
+            if (down[def.k.code]) return false;                           // (the key is down on the keyboard: a keyboard cannot press it again)
+            var seq = sequence(def, ctrlDown()), target = page.canvas || doc.body;
             for (var s = 0; s < seq.length; s++) target.dispatchEvent(makeEvent(win, seq[s][0], seq[s][1], seq[s][2]));
             refresh();
             return true;
@@ -149,37 +182,73 @@
 
         function setClass(name, want) { if (stage.classList) stage.classList.toggle(name, !!want); }
         function size(prop, px) { stage.style.setProperty(prop, px + 'px'); }
+        function px(value) { var n = parseFloat(value); return isFinite(n) ? n : 0; }
+        function rect() { try { return stage.getBoundingClientRect(); } catch (err) { return { left: 0, top: 0 }; } }
+        function safeLeft() { try { return px(win.getComputedStyle(probe).paddingLeft); } catch (err) { return 0; } }
 
-        function layout(visible) {
-            var up = visible && upright(), full = visible && page.isFullscreen();
-            var cols2 = visible && !up && stage.clientHeight > 0 && stage.clientHeight < 306 ? 2 : 1;        // (a short stage: two columns of 60 px, All ants across both; 306 = six targets of 44 px, five gaps and the rail's padding)
-            setClass('tk-on', visible);
+        // Next stands in the row or the rail; in a column of five it is the first of the list under More
+        function fold(want) {
+            if (want === folded) return;
+            folded = want;
+            var next = built.next;
+            if (want) { more.insertBefore(next, more.children[0] || null); next.className = 'btn tk-btn tk-item tk-next'; }
+            else { bar.insertBefore(next, built.none); next.className = 'btn tk-btn tk-next'; }
+        }
+
+        // The room is the stage's classes: a match of this player's on a touch screen with the setting on, whatever hides the buttons for a while
+        function layout(room) {
+            var up = room && upright(), side = room && !up, full = room && page.isFullscreen();
+            setClass('tk-on', room);
             setClass('tk-up', up);
-            setClass('tk-side', visible && !up);
+            setClass('tk-side', side);
             setClass('tk-full', full);
-            setClass('tk-page', visible && !full);
-            setClass('tk-two', cols2 === 2);
+            setClass('tk-page', room && !full);
             setClass('tk-wrap', up && stage.clientWidth < 316);        // (a narrow row: All ants has a row of its own)
-            var rail = cols2 * 60 + (cols2 - 1) * 6 + 12;
-            if (visible) size('--tk-rail', rail);
+            var rim = false, five = false, two = false, rail = 72, railH = 0;
+            if (side) {
+                if (full) {
+                    setClass('tk-rim', false);
+                    setClass('tk-two', false);
+                    fold(false);
+                    var height = bar.offsetHeight || stage.clientHeight;      // (the rail stands inside the safe areas: what it is high is what is left of the stage)
+                    two = height > 0 && height < 306;          // (a short stage: two columns of 60 px, All ants across both; 306 = six targets of 44 px, five gaps and the rail's padding)
+                    rail = two ? 138 : 72;
+                } else {
+                    var r = rect();
+                    rim = r.left - safeLeft() >= 66;           // (a rail of 60 px and 6 px of air fit in the page's free margin left of the stage: the picture keeps its size)
+                    if (rim) {
+                        railH = Math.max(stage.clientHeight, win.innerHeight - (r.top + (win.pageYOffset || 0)));
+                        five = railH < 306;
+                    } else five = true;                         // (inside the stage, one column of five: Next stands under More; never two columns)
+                }
+            }
+            setClass('tk-rim', rim);
+            setClass('tk-two', two);
+            if (side && !full) fold(five); else if (!side) fold(false);
+            if (room) size('--tk-rail', rail);
+            if (rim) size('--tk-rail-h', railH);
             var total = up ? (bar.offsetHeight || 48) + 8 : 0;                // (measured with the classes in place: the row may wrap on a narrow screen)
-            if (visible) size('--tk-row', total);
-            var next = visible ? (up ? 'up' : 'side') + (full ? ' full' : ' page') : '';
-            var changed = next !== mode || cols2 !== cols || total !== rowTotal;
-            mode = next; cols = cols2; rowTotal = total;
+            if (room) size('--tk-row', total);
+            var next = room ? (up ? 'up' : 'side') + (full ? ' full' : ' page') + (rim ? ' rim' : '') + (five ? ' five' : '') + (two ? ' two' : '') : '';
+            var changed = next !== mode || total !== rowTotal;
+            mode = next; rowTotal = total;
             return changed;
         }
 
         // Show or hide, lay out; `quiet`: the page is laying out itself (do not ask it to)
         function refresh(quiet) {
-            var visible = !why();
+            var reason = why(), visible = !reason, room = visible || PASSING[reason] === 1;
+            if (room !== roomOn) {
+                roomOn = room;
+                bar.hidden = !room;
+                bar.style.display = room ? '' : 'none';
+            }
             if (visible !== shown) {
                 shown = visible;
-                bar.hidden = !visible;
-                bar.style.display = visible ? '' : 'none';
+                bar.classList.toggle('tk-gone', !visible);
                 if (!visible) toggle(false);
             }
-            var changed = layout(visible);
+            var changed = layout(room);
             if (visible) {
                 var none = built.none, dim = ask(50) === 0;
                 none.setAttribute('aria-disabled', dim ? 'true' : 'false');
@@ -189,14 +258,13 @@
             return visible;
         }
 
-        doc.addEventListener('pointerdown', function (e) { if (open && !bar.contains(e.target)) toggle(false); }, true);
         win.addEventListener('resize', function () { refresh(); });
         (page.every || function (f, ms) { return setInterval(f, ms); })(function () { refresh(); }, POLL_MS);
         refresh(true);
 
         return {
-            bar: bar, refresh: refresh, press: function (id) { var d = null, k; for (k = 0; k < MAIN.length; k++) if (MAIN[k].id === id) d = MAIN[k]; for (k = 0; k < MORE.length; k++) if (MORE[k].id === id) d = MORE[k]; return d ? press(d, built[id]) : false; },
-            why: why, visible: function () { return shown; }, toggle: toggle, isOpen: function () { return open; },
+            bar: bar, shield: shield, refresh: refresh, press: function (id) { var d = null, k; for (k = 0; k < MAIN.length; k++) if (MAIN[k].id === id) d = MAIN[k]; for (k = 0; k < MORE.length; k++) if (MORE[k].id === id) d = MORE[k]; return d ? press(d, built[id]) : false; },
+            why: why, visible: function () { return shown; }, room: function () { return roomOn; }, toggle: toggle, isOpen: function () { return open; },
             // the settings menu's row (web/game_menu.js): there on a touch screen only
             available: function () { return !!page.touch(); },
             get: function () { return on; },

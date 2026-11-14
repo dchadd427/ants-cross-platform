@@ -69,5 +69,70 @@ const m = (function () {
 })();
 expect('the settings menu is handed the buttons\' object (the Touch buttons row works only through it)', m && m.touchKeys && m.touchKeys.marker, 'antsTouchKeys');
 
+// The page's layout round: the buttons first (their row or rail changes the stage's padding), then the chrome, then the fit, which reads the stage's padding (what the buttons leave of the stage is the picture's room)
+function functionOf(name) {
+    const from = text.indexOf('function ' + name + '(');
+    if (from < 0) { failed++; console.log('FAIL the page has no function ' + name); return null; }
+    let depth = 0, end = -1;
+    for (let i = text.indexOf('{', from); i < text.length; i++) {
+        if (text[i] === '{') depth++;
+        else if (text[i] === '}') { depth--; if (depth === 0) { end = i; break; } }
+    }
+    return text.slice(from, end + 1);
+}
+function runFunction(name, vars) {
+    const source = functionOf(name);
+    if (!source) return null;
+    const scope = new Proxy(vars, { has: () => true, get: (t, k) => (k === Symbol.unscopables ? undefined : k in t ? t[k] : globalThis[k]), set: (t, k, v) => { t[k] = v; return true; } });
+    return new Function('scope', 'with (scope) { ' + source + '; return ' + name + '; }')(scope);
+}
+{
+    const log = [];
+    const relayout = runFunction('relayout', { window: { antsReplayPlaceBar: () => log.push('replay bar') }, antsTouchKeys: { refresh: (quiet) => log.push('buttons ' + quiet) }, measureChrome: () => log.push('chrome'), layoutBox: (force) => log.push('fit ' + force) });
+    relayout(true);
+    expect('the page\'s layout round: the buttons are laid out first (quietly: the page is laying out itself), then the chrome is measured, then the picture is fitted', log, ['replay bar', 'buttons true', 'chrome', 'fit true']);
+    log.length = 0;
+    runFunction('relayout', { window: {}, antsTouchKeys: null, measureChrome: () => log.push('chrome'), layoutBox: () => log.push('fit') })(false);
+    expect('...and a page without the buttons (a recording) lays out as before', log, ['chrome', 'fit']);
+    const fits = [];
+    const box = { style: {} };
+    const layoutBox = runFunction('layoutBox', {
+        stageElement: { clientWidth: 800, clientHeight: 400 }, boxElement: box, pageBoxKey: '', pageDispatching: false, ANTS_ASPECT: 'aspect',
+        window: { getComputedStyle: () => ({ paddingLeft: '72px', paddingRight: '2px', paddingTop: '3px', paddingBottom: '56px' }), devicePixelRatio: 2, dispatchEvent: () => true },
+        Event: function () {}, snapBox: () => {}, keepLockedCursor: () => {},
+        ANTS_PAGE: { fitBox: (w, h, dpr, aspect) => { fits.push([w, h, dpr, aspect]); return { bw: 1, bh: 1, cssW: w, cssH: h }; } },
+    });
+    layoutBox(false);
+    expect('the fit works in what the stage\'s padding leaves (the rail beside the picture, the row under it): 800 - 72 - 2 wide, 400 - 3 - 56 high', [fits, box.style.width, box.style.height], [[[726, 341, 2, 'aspect']], '726px', '341px']);
+}
+
+// The fullscreen rule of the pointer (a mouse or a pen over the stage outside the picture is the game's pointer at the picture's nearest edge): over the hotkey buttons it is the page's, never an edge
+{
+    const marker = "if (handingOver || e.pointerType === 'touch' || isLocked() || !isFullscreen()) return;";
+    const at = text.indexOf(marker);
+    const from = text.lastIndexOf("window.addEventListener('pointermove', function (e) {", at);
+    const to = text.indexOf('\n        }, true);', at);
+    if (at < 0 || from < 0 || to < 0) { failed++; console.log('FAIL the page has no fullscreen pointer rule of the shape this check reads'); }
+    else {
+        const source = text.slice(from, to + '\n        }'.length).replace(/^window\.addEventListener\('pointermove', /, 'capture(');
+        const run2 = (target, edgeForwarded) => {
+            const calls = [];
+            const vars = { handingOver: false, quietAfterRelease: null, edgeForwarded, edgeLast: null, isLocked: () => false, isFullscreen: () => true,
+                stageElement: { contains: () => true }, boxElement: { contains: (t) => t === 'box' }, canvas: { getBoundingClientRect: () => ({ left: 100, top: 0, width: 600, height: 300 }) },
+                ANTS_PAGE: { overTouchKeys: (t) => !!(t && t.keys), edgePixel: () => ({ x: 0, y: 150 }) },
+                handToGame: (type) => calls.push(['hand', type]), handLeaveToGame: () => calls.push(['leave']) };
+            let fn = null;
+            const scope = new Proxy(vars, { has: () => true, get: (t, name) => (name === Symbol.unscopables ? undefined : name === 'capture' ? (f) => { fn = f; } : name in t ? t[name] : undefined), set: (t, name, v) => { t[name] = v; return true; } });
+            new Function('scope', 'with (scope) { ' + source + '); }')(scope);
+            fn({ pointerType: 'mouse', target, clientX: 50, clientY: 100, buttons: 0 });
+            return calls;
+        };
+        expect('fullscreen: a mouse over the stage outside the picture is the game\'s pointer at the picture\'s edge', run2({ id: 'stage' }, false), [['hand', 'mousemove']]);
+        expect('fullscreen: over the hotkey buttons it is not (nothing is handed to the game)', run2({ keys: true }, false), []);
+        expect('fullscreen: ...and a pointer that was an edge a moment ago is gone for the game', run2({ keys: true }, true), [['leave']]);
+        expect('fullscreen: over the picture itself the rule does nothing', run2('box', false), []);
+    }
+}
+
 console.log('web touch keys wiring: ' + checks + ' checks, ' + failed + ' failures');
 process.exit(failed ? 1 : 0);

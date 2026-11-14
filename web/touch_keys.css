@@ -1,8 +1,13 @@
 /* The touch buttons for the game's hotkeys (web/touch_keys.js, docs/TOUCH.md). Made by the script, a child of #game-stage, shown only while it says so.
-   The placement is the stage's class: tk-up (the window taller than wide: a row) or tk-side (a rail along the stage's left edge), and tk-page or tk-full (in the page, or the stage fullscreen).
+   The placement is the stage's class: tk-up (the window taller than wide: a row) or tk-side (a rail), and tk-page or tk-full (in the page, or the stage fullscreen); tk-rim: sideways in the page, the
+   rail stands in the page's free margin left of the stage and the picture keeps its size. The room is kept for the whole match (tk-on); tk-gone only hides the buttons (a dialog, the settings panel).
    Change the placement here, nowhere else. Every target is at least 44 x 44 CSS pixels with 6 px between. */
 #touch-keys { display: none; position: absolute; z-index: 5; box-sizing: border-box; gap: 6px; touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 #touch-keys[hidden] { display: none !important; }
+#touch-keys.tk-gone { visibility: hidden; }
+.tk-shield { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 4; touch-action: none; -webkit-tap-highlight-color: transparent; }
+.tk-shield[hidden] { display: none; }
+.tk-probe { position: absolute; left: 0; top: 0; width: 0; height: 0; padding-left: env(safe-area-inset-left, 0px); visibility: hidden; pointer-events: none; }
 #game-stage.tk-on #touch-keys { display: flex; }
 #touch-keys .tk-btn { min-width: 44px; min-height: 44px; margin: 0; padding: 4px 1px; font-size: 14px; line-height: 1.1; text-align: center; white-space: nowrap; }
 #touch-keys .tk-btn[aria-disabled="true"] { opacity: 0.45; }
@@ -22,15 +27,17 @@
 #game-stage.tk-up.tk-full #touch-keys .tk-more { bottom: calc(100% + 6px); }
 #game-stage.tk-up.tk-full { padding-bottom: var(--tk-row, 0px); }
 
-/* sideways: a rail along the left edge, outside the picture; the stage's padding is what the page's fit code leaves out */
+/* sideways: a rail along the left edge, outside the picture; the stage's padding is what the page's fit code leaves out (fullscreen, and in the page where the margin is too narrow: one column of five) */
 #game-stage.tk-side #touch-keys { flex-direction: column; top: 0; bottom: 0; left: 0; width: var(--tk-rail, 72px); padding: 6px 6px 6px 0; }
 #game-stage.tk-side.tk-full #touch-keys { padding-left: 6px; background: #000; }
 #game-stage.tk-side #touch-keys .tk-btn { flex: 1 1 44px; }
 #game-stage.tk-side #touch-keys .tk-all { flex: 2 1 44px; }
 #game-stage.tk-side #touch-keys .tk-more { left: calc(100% + 6px); bottom: 0; width: 280px; max-width: calc(100vw - var(--tk-rail, 72px) - 12px); }
-#game-stage.tk-side { padding-left: var(--tk-rail, 72px); }
+#game-stage.tk-side:not(.tk-rim) { padding-left: var(--tk-rail, 72px); }
 #game-stage.tk-side.tk-full { padding-left: calc(env(safe-area-inset-left, 0px) + var(--tk-rail, 72px)); }
 #game-stage.tk-side.tk-full #touch-keys { left: env(safe-area-inset-left, 0px); top: env(safe-area-inset-top, 0px); bottom: env(safe-area-inset-bottom, 0px); }
 #game-stage.tk-side.tk-two #touch-keys { display: grid; grid-template-columns: repeat(2, 1fr); grid-auto-rows: minmax(44px, 1fr); }
 #game-stage.tk-side.tk-two #touch-keys .tk-all { grid-column: 1 / -1; }
 #game-stage.tk-side.tk-two #touch-keys .tk-more { grid-column: auto; }
+/* sideways in the page, the free margin left of the stage holds the rail (outside the stage: no padding, the picture keeps its size): one column, as high as the window leaves below the stage's top */
+#game-stage.tk-side.tk-rim #touch-keys { left: auto; right: calc(100% + 6px); bottom: auto; width: 60px; height: var(--tk-rail-h, 100%); padding: 0; }

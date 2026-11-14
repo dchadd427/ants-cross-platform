@@ -123,8 +123,8 @@
   {
    "id": "mouse_events_of_a_touch_reach_the_game",
    "file": "web/touch_keys.js",
-   "old": "['mousedown', 'mouseup', 'mousemove', 'mouseover', 'mouseout', 'dblclick'].forEach",
-   "new": "[].forEach",
+   "old": "var MOUSE = ['mousedown', 'mouseup', 'mousemove', 'mouseover', 'mouseout', 'dblclick'];",
+   "new": "var MOUSE = [];",
    "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
   },
   {
@@ -175,6 +175,230 @@
    "old": "write: function (i) { page.touchKeys.set(i === 0); }",
    "new": "write: function (i) { page.touchKeys.set(i !== 0); }",
    "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+  },
+  {
+   "id": "room_released_while_the_buttons_hide",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "room = visible || PASSING[reason] === 1;",
+   "new": "room = visible;"
+  },
+  {
+   "id": "room_kept_when_there_is_no_match",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "room = visible || PASSING[reason] === 1;",
+   "new": "room = true;"
+  },
+  {
+   "id": "room_released_for_the_chat_field",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "var PASSING = { dialog: 1, card: 1, settings: 1, chat: 1 };",
+   "new": "var PASSING = { dialog: 1, card: 1, settings: 1 };"
+  },
+  {
+   "id": "hidden_buttons_leave_the_layout",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "bar.classList.toggle('tk-gone', !visible);",
+   "new": "bar.style.display = visible ? '' : 'none';"
+  },
+  {
+   "id": "rail_not_in_the_margin",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "rim = r.left - safeLeft() >= 66;",
+   "new": "rim = false;"
+  },
+  {
+   "id": "margin_ignores_the_safe_area",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "rim = r.left - safeLeft() >= 66;",
+   "new": "rim = r.left >= 66;"
+  },
+  {
+   "id": "margin_too_narrow_is_taken",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "rim = r.left - safeLeft() >= 66;",
+   "new": "rim = r.left - safeLeft() >= 40;"
+  },
+  {
+   "id": "two_columns_in_the_page",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "} else five = true;  ",
+   "new": "} else two = true;  "
+  },
+  {
+   "id": "five_not_folded_under_more",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "if (side && !full) fold(five);",
+   "new": "if (side && !full) fold(false);"
+  },
+  {
+   "id": "rail_as_high_as_the_stage_only",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "railH = Math.max(stage.clientHeight, win.innerHeight - (r.top + (win.pageYOffset || 0)));",
+   "new": "railH = stage.clientHeight;"
+  },
+  {
+   "id": "six_targets_where_they_do_not_fit",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "five = railH < 306;",
+   "new": "five = false;"
+  },
+  {
+   "id": "short_rule_ignores_the_safe_areas",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "var height = bar.offsetHeight || stage.clientHeight;",
+   "new": "var height = stage.clientHeight;"
+  },
+  {
+   "id": "mouse_over_the_rail_scrolls_the_map_in_the_page",
+   "file": "web/shell.html",
+   "test": "node tests/scripts/web_edge_check.js web/shell.html",
+   "old": "[role=\"option\"], .pick-list, .rbar, .tk, .tk-shield';",
+   "new": "[role=\"option\"], .pick-list, .rbar';"
+  },
+  {
+   "id": "mouse_over_the_rail_scrolls_the_map_in_fullscreen",
+   "file": "web/shell.html",
+   "test": "node tests/scripts/web_touch_keys_wiring_check.js web/shell.html",
+   "old": "            if (ANTS_PAGE.overTouchKeys(e.target)) {",
+   "new": "            if (false) {"
+  },
+  {
+   "id": "fullscreen_rule_forgets_the_pointer_that_was_an_edge",
+   "file": "web/shell.html",
+   "test": "node tests/scripts/web_touch_keys_wiring_check.js web/shell.html",
+   "old": "                if (edgeForwarded) handLeaveToGame();\n                return;\n            }\n            if (quietAfterRelease) {",
+   "new": "                return;\n            }\n            if (quietAfterRelease) {"
+  },
+  {
+   "id": "rail_is_no_touch_keys_target",
+   "file": "web/shell.html",
+   "test": "node tests/scripts/web_edge_check.js web/shell.html",
+   "old": "target.closest('.tk, .tk-shield'));\n            }\n",
+   "new": "target.closest('.tk'));\n            }\n"
+  },
+  {
+   "id": "button_presses_a_held_control",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "var seq = sequence(def, ctrlDown())",
+   "new": "var seq = sequence(def, false)"
+  },
+  {
+   "id": "button_presses_a_held_key",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "            if (down[def.k.code]) return false; ",
+   "new": ""
+  },
+  {
+   "id": "pages_own_keys_count_as_held",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "            if (e.isTrusted !== true) return;\n",
+   "new": ""
+  },
+  {
+   "id": "held_keys_survive_a_lost_focus",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "        win.addEventListener('blur', function () { down = {}; });\n",
+   "new": ""
+  },
+  {
+   "id": "right_control_is_not_a_control",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "return !!(down.ControlLeft || down.ControlRight);",
+   "new": "return !!down.ControlLeft;"
+  },
+  {
+   "id": "a_lift_is_not_noted",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "if (isDown) down[c] = 1; else delete down[c];",
+   "new": "if (isDown) down[c] = 1;"
+  },
+  {
+   "id": "closing_tap_reaches_the_game",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "shield.hidden = !open;",
+   "new": "shield.hidden = true;"
+  },
+  {
+   "id": "closing_tap_does_not_close",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "shield.addEventListener('click', function (e) { e.stopPropagation(); toggle(false); });",
+   "new": "shield.addEventListener('click', function (e) { e.stopPropagation(); });"
+  },
+  {
+   "id": "layer_lets_the_mouse_events_of_a_touch_through",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "shield.addEventListener(name, function (e) { e.stopPropagation(); }); });",
+   "new": "shield.addEventListener(name, function (e) { }); });"
+  },
+  {
+   "id": "none_trusts_the_last_poll",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "if (def.id === 'none' && ask(50) === 0) return false;",
+   "new": "if (def.id === 'none' && b.getAttribute('aria-disabled') === 'true') return false;"
+  },
+  {
+   "id": "esc_on_the_list_also_goes_to_the_game",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "if (e.key === 'Escape' && open) { e.stopPropagation(); e.preventDefault();",
+   "new": "if (e.key === 'Escape' && open) { e.preventDefault();"
+  },
+  {
+   "id": "more_opens_whatever_the_state",
+   "file": "web/touch_keys.js",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js",
+   "old": "if (!why()) toggle(!open); else refresh();",
+   "new": "toggle(!open);"
+  },
+  {
+   "id": "touch_row_in_the_small_form",
+   "file": "web/game_menu.js",
+   "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data",
+   "old": "                if (row.key === 'touchkeys') return; // (the hotkey buttons' row is for the full menu: it changes nothing outside a match)\n",
+   "new": ""
+  },
+  {
+   "id": "page_fits_before_the_buttons_are_laid_out",
+   "file": "web/shell.html",
+   "test": "node tests/scripts/web_touch_keys_wiring_check.js web/shell.html",
+   "old": "            if (antsTouchKeys) antsTouchKeys.refresh(true);\n            measureChrome();\n            layoutBox(force);",
+   "new": "            measureChrome();\n            layoutBox(force);\n            if (antsTouchKeys) antsTouchKeys.refresh(true);"
+  },
+  {
+   "id": "fit_ignores_the_stages_padding",
+   "file": "web/shell.html",
+   "test": "node tests/scripts/web_touch_keys_wiring_check.js web/shell.html",
+   "old": "var availW = stageElement.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);",
+   "new": "var availW = stageElement.clientWidth;"
+  },
+  {
+   "id": "fit_ignores_the_stages_bottom_padding",
+   "file": "web/shell.html",
+   "test": "node tests/scripts/web_touch_keys_wiring_check.js web/shell.html",
+   "old": "var availH = stageElement.clientHeight - (parseFloat(style.paddingTop) || 0) - (parseFloat(style.paddingBottom) || 0);",
+   "new": "var availH = stageElement.clientHeight - (parseFloat(style.paddingTop) || 0);"
   }
  ]
 }

@@ -7,8 +7,11 @@
 //     then sends nothing, More opens the list and a choice sends its key (Quick help opens the game's dialog, and the buttons are hidden while it is up and come back when it closes);
 //   * a tap on a button is no tap on the game: the touch model's counters, the pointer and what is picked are as before when a button that changes nothing is tapped;
 //   * the settings panel hides the buttons while it is up (a tap on the gear, then Resume); the Touch buttons row turns them off and on, remembered under ants.touchkeys;
-//   * sideways (844 x 390): a rail at the left edge, outside the picture's box, the box fitted beside it with the shape of the game's canvas to the pixel; in fullscreen (the browser's, and the page's
-//     own where there is no Fullscreen API) the rail is on the screen and the box is beside it; turning upright moves the buttons to the row and back;
+//   * sideways (844 x 390, 740 x 360, 667 x 375) in the page: one column in the page's free margin left of the stage, the picture exactly the size it has with the buttons off; in fullscreen (the
+//     browser's, and the page's own where there is no Fullscreen API) a rail at the left edge inside the stage, the box beside it with the shape of the game's canvas to the pixel; turning upright
+//     moves the buttons to the row and back;
+//   * the picture never moves or changes size when the buttons hide (a dialog, the settings panel, the chat field) and come back, upright and sideways, in the page and in fullscreen;
+//   * a mouse over the rail never scrolls the map; a tap that closes the More list is not a tap of the game; a button with Control held on the keyboard is the letter alone;
 //   * a mouse as the primary pointer (a computer): no buttons.
 // The engines: Chromium; WebKit and Firefox too when Playwright has them (TK_ENGINES=chromium,webkit,firefox; one that is not installed is said and left out).
 // usage: ANTS_WEB_URL=http://127.0.0.1:19980/ node web_touch_keys_browser_check.js [--shots DIR]     (exit 0: every check holds; 1: one fails; 3: no browser or no page to run it in)
@@ -47,16 +50,16 @@ async function open(browser, w, h, o) {
 const probes = (page) => page.evaluate(() => ({ sel: Module._ants_probe(50), taps: Module._ants_probe(30), holds: Module._ants_probe(31), drags: Module._ants_probe(32), two: Module._ants_probe(33), fingers: Module._ants_probe(34), px: Module._ants_probe(0), py: Module._ants_probe(1), cx: Module._ants_probe(3), cy: Module._ants_probe(4), dialog: Module._ants_probe(5) }));
 const ants = (sel) => sel % 1000 % 100000 % 1000;
 const hill = (sel) => Math.floor(sel % 100000 / 1000) > 0;
-const rect = (page, sel) => page.evaluate((s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, shown: !e.hidden && getComputedStyle(e).display !== 'none' && r.width > 0 }; }, sel);
+const rect = (page, sel) => page.evaluate((s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, shown: !e.hidden && getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden' && r.width > 0 }; }, sel);
 async function tap(page, key) { const r = await rect(page, '#touch-keys [data-key=' + key + ']'); await page.touchscreen.tap(r.x + r.w / 2, r.y + r.h / 2); await sleep(700); }
 const bar = (page) => rect(page, '#touch-keys');
 const classes = (page) => page.evaluate(() => document.getElementById('game-stage').className);
 const boxSize = (page) => page.evaluate(() => { const r = document.getElementById('game-container').getBoundingClientRect(); return [Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10]; });
 const setting = (page, on) => page.evaluate((x) => { antsTouchKeys.set(x); return 1; }, on);                 // (the page's own object, as the settings menu's row calls it)
 
-async function targets(page, label) {
+async function targets(page, label, count) {
     const list = await page.evaluate(() => [].map.call(document.querySelectorAll('#touch-keys > .tk-btn'), (b) => { const r = b.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; }));
-    expect(label + ': six buttons', list.length, 6);
+    expect(label + ': ' + (count || 6) + ' buttons in the bar', list.length, count || 6);
     ok(label + ': every target is at least 44 x 44 CSS px', list.every((r) => r[2] >= 43.9 && r[3] >= 43.9), list);
     let gap = 1e9;
     for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
@@ -191,6 +194,97 @@ async function run(engine) {
             await context.close();
         }
 
+        // ---- sideways in the page at three phone sizes: the picture is the size it has with the buttons off
+        for (const [w, h] of [[844, 390], [740, 360], [667, 375]]) {
+            ({ context, page } = await open(browser, w, h));
+            const cls = (await classes(page)).split(' ');
+            const r = await bar(page), st = await rect(page, '#game-stage');
+            const count = await page.evaluate(() => document.querySelectorAll('#touch-keys > .tk-btn').length);
+            ok(tag + w + ' x ' + h + ' in the page: one column in the margin (' + count + ' buttons), left of the stage, never two columns', cls.indexOf('tk-rim') >= 0 && cls.indexOf('tk-two') < 0 && r.x >= 0 && r.x + r.w <= st.x + 0.5 && r.w < 70, [cls, r, st]);
+            await targets(page, tag + w + ' x ' + h + ' page', count);
+            const on = await boxSize(page);
+            await setting(page, false); await sleep(600);
+            const off = await boxSize(page);
+            expect(tag + w + ' x ' + h + ' in the page: the picture keeps its size (' + on.join(' x ') + ')', on, off);
+            console.log('  size ' + w + ' x ' + h + ' page: with ' + on.join(' x ') + ', without ' + off.join(' x '));
+            await context.close();
+        }
+
+        // ---- the picture never moves or changes size when the buttons hide and come back
+        for (const [w, h, full] of [[390, 844, false], [844, 390, false], [844, 390, true], [390, 844, true]]) {
+            ({ context, page } = await open(browser, w, h, { noFullscreenApi: full }));
+            if (full) { const f = await rect(page, '#fullscreen-btn'); await page.touchscreen.tap(f.x + f.w / 2, f.y + f.h / 2); await sleep(1800); }
+            const label = tag + w + ' x ' + h + (full ? ' fullscreen' : ' page');
+            const place = () => page.evaluate(() => { const r = document.getElementById('game-container').getBoundingClientRect(); return [r.x, r.y, r.width, r.height].map((n) => Math.round(n * 100) / 100); });
+            const home = await place();
+            ok(label + ': the buttons are shown', (await bar(page)).shown);
+            await page.keyboard.press('F1'); await sleep(900);
+            ok(label + ': the quick help hides the buttons', !(await bar(page)).shown);
+            expect(label + ': ...and the picture has not moved or changed size', await place(), home);
+            await page.keyboard.press('Escape'); await sleep(900);
+            expect(label + ': ...the buttons are back and the picture is where it was', [(await bar(page)).shown, await place()], [true, home]);
+            await page.evaluate(() => document.getElementById('settings-btn') ? document.getElementById('settings-btn').click() : window.antsGameMenu && 0); await sleep(900);
+            if (await page.evaluate(() => !!document.getElementById('game-menu'))) {
+                ok(label + ': the settings panel hides the buttons', !(await bar(page)).shown);
+                expect(label + ': ...and the picture has not moved or changed size', await place(), home);
+                await page.evaluate(() => document.querySelector('.gm-resume').click()); await sleep(900);
+                expect(label + ': ...closed: the buttons are back and the picture is where it was', [(await bar(page)).shown, await place()], [true, home]);
+            }
+            await page.evaluate(() => document.getElementById('chat-keys') && document.getElementById('chat-keys').focus()); await sleep(600);
+            if (await page.evaluate(() => document.activeElement && document.activeElement.id === 'chat-keys')) {
+                ok(label + ': the chat field hides the buttons', !(await bar(page)).shown);
+                expect(label + ': ...and the picture has not moved or changed size', await place(), home);
+                await page.evaluate(() => document.activeElement.blur()); await sleep(600);
+                expect(label + ': ...blurred: the buttons are back and the picture is where it was', [(await bar(page)).shown, await place()], [true, home]);
+            }
+            await context.close();
+        }
+
+        // ---- a tap that closes the More list is not a tap of the game; a button with Control held is the letter alone
+        ({ context, page } = await open(browser, 390, 844));
+        {
+            await tap(page, 'all');
+            const q0 = await probes(page);
+            const moreBtn2 = await rect(page, '.tk-morebtn');
+            await page.touchscreen.tap(moreBtn2.x + moreBtn2.w / 2, moreBtn2.y + moreBtn2.h / 2); await sleep(500);
+            ok(tag + 'More is open', await page.evaluate(() => antsTouchKeys.isOpen()));
+            const cb = await rect(page, '#game-container');
+            await page.touchscreen.tap(cb.x + cb.w * 0.5, cb.y + cb.h * 0.3); await sleep(700);
+            const q1 = await probes(page);
+            expect(tag + 'a tap on the map closes the list, and is no tap of the game (no tap, no hold, no drag, the same ants picked)', [await page.evaluate(() => antsTouchKeys.isOpen()), q1.taps, q1.holds, q1.drags, q1.sel], [false, q0.taps, q0.holds, q0.drags, q0.sel]);
+            await tap(page, 'none');
+            expect(tag + 'nothing is picked', (await probes(page)).sel, 0);
+            await page.keyboard.down('Control');
+            await tap(page, 'all');
+            await page.keyboard.up('Control');
+            ok(tag + 'Control held on the keyboard, All ants still picks the ants (the letter alone, with Control)', ants((await probes(page)).sel) >= 1, await probes(page));
+            await tap(page, 'none');
+            await tap(page, 'all');
+            ok(tag + '...and without Control held it is a whole chord again', ants((await probes(page)).sel) >= 1);
+        }
+        await context.close();
+
+        // ---- a mouse or a pen over the rail never scrolls the map (the big map, the view moved away from its edge)
+        for (const full of [false, true]) {
+            ({ context, page } = await open(browser, 844, 390, { map: 'treasure', noFullscreenApi: full }));
+            if (full) { const f = await rect(page, '#fullscreen-btn'); await page.touchscreen.tap(f.x + f.w / 2, f.y + f.h / 2); await sleep(1800); }
+            const cdp = await context.newCDPSession(page);
+            const rr = await page.evaluate(() => { const b = document.getElementById('canvas').getBoundingClientRect(); return [b.x, b.y, b.width, b.height]; });
+            const pts = (dx, dy) => [{ x: rr[0] + rr[2] * 0.5 + dx, y: rr[1] + rr[3] * 0.5 + dy, id: 1 }, { x: rr[0] + rr[2] * 0.5 + 30 + dx, y: rr[1] + rr[3] * 0.5 + dy, id: 2 }];
+            await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pts(0, 0) });
+            for (let i = 1; i <= 12; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pts(i * 6, i * 4) }); await sleep(30); }
+            await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+            await sleep(800);
+            const s0 = await probes(page);
+            const list = await page.evaluate(() => [].map.call(document.querySelectorAll('#touch-keys > .tk-btn'), (b) => { const r = b.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; }));
+            const barBox = await bar(page);
+            const spots = [[list[0][0] + list[0][2] / 2, list[0][1] + list[0][3] / 2], [list[0][0] + list[0][2] / 2, list[0][1] + list[0][3] + 3], [barBox.x + 2, barBox.y + barBox.h / 2]];
+            for (const [x, y] of spots) { await page.mouse.move(x, y); await sleep(1300); }
+            const s1 = await probes(page);
+            expect(tag + (full ? 'fullscreen' : 'page') + ': a mouse resting on a button, in a gap and at the rail\'s edge does not scroll the map', [s1.cx, s1.cy], [s0.cx, s0.cy]);
+            await context.close();
+        }
+
         // ---- sideways: the rail, in the page and in fullscreen
         for (const noApi of [false, true]) {
             ({ context, page } = await open(browser, 844, 390, { noFullscreenApi: noApi }));
@@ -199,6 +293,11 @@ async function run(engine) {
             let r = await bar(page), b = await rect(page, '#game-container');
             ok(tag + '...outside the picture\'s box (the box starts where the rail ends)', r.x + r.w <= b.x + 0.5 && r.h > 0, [r, b]);
             await targets(page, tag + '844 x 390 page');
+            ok(tag + 'sideways in the page: the rail stands in the free margin left of the stage (tk-rim), outside it, on the screen', cls.indexOf('tk-rim') >= 0 && r.x >= 0 && r.x + r.w <= (await rect(page, '#game-stage')).x + 0.5, [cls, r]);
+            const sideOn = await boxSize(page);
+            await setting(page, false); await sleep(600);
+            expect(tag + '...and the picture is the size it has with the buttons off (nothing lost)', sideOn, await boxSize(page));
+            await setting(page, true); await sleep(600);
             if (!noApi) await shot(page, 'sideways_page.png');
             const full = await rect(page, '#fullscreen-btn');
             await page.touchscreen.tap(full.x + full.w / 2, full.y + full.h / 2); await sleep(1800);
