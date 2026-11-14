@@ -1,6 +1,6 @@
 /* The Menu and the live count of the bar at the top of every page (web/site_nav.css; the same links, in the same order, as the Menu of the front page, web/home/home.js: a test keeps the two lists
    the same). The bar's markup is in each page; this file builds the Menu from the bar's own <nav> and the small links below, and asks /live for the count of live matches: when the page opens
-   (data-live="now"), or when the Menu is first opened (data-live="menu"), or never. The last line of the Menu is the stamped version and build
+   (data-live="now"), or when the Menu is first opened (data-live="menu"), or never, and again when the tab comes back to the front. The last line of the Menu is the stamped version and build
    of the site (data-version, data-build, data-built on the bar, text only; the build stamps them in; a page nobody stamped shows no site line) and, on the map maker, its own version (data-maker). */
 (function () {
     'use strict';
@@ -27,16 +27,17 @@
         var top = bar.querySelector('.sblive');
         if (!top) return;
         top.textContent = count + ' live';
-        top.setAttribute('aria-label', count + (count === 1 ? ' match' : ' matches') + ' live, see them on the front page');
+        top.setAttribute('aria-label', count + ' live: see them on the front page');
+        top.setAttribute('title', count + (count === 1 ? ' match is' : ' matches are') + ' being played - see them on the front page');
         top.hidden = count < 1;
     }
-    function look() {
-        if (asked || typeof fetch !== 'function') return;
+    function look(again) {
+        if ((asked && !again) || typeof fetch !== 'function') return;
         asked = true;
         fetch('/live', { cache: 'no-store', credentials: 'omit' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
             count = data && Array.isArray(data.live) ? Math.min(data.live.length, 99) : 0;
             paint();
-        }).catch(function () { /* no count */ });
+        }).catch(function () { if (again) { count = 0; paint(); } });
     }
     function build() {
         box = make('nav', 'sbm'); box.id = 'sbm'; box.setAttribute('aria-label', 'Menu'); box.hidden = true;
@@ -71,6 +72,7 @@
     d.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(true); });
     d.addEventListener('click', function (e) { if (box && !box.hidden && !box.contains(e.target) && !btn.contains(e.target)) close(false); });
     window.addEventListener('resize', function () { close(false); });
+    d.addEventListener('visibilitychange', function () { if (asked && d.visibilityState === 'visible') look(true); });
     box = null;
     if (bar.getAttribute('data-live') === 'now') look();
 })();

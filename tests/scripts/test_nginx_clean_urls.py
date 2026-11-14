@@ -70,7 +70,7 @@ def chosen(path):
     if best and best[0] == "^~":
         return best
     for mod, pattern, _ in locs:
-        if mod in ("~", "~*") and re.search(pattern, path, re.I if mod == "~*" else 0):
+        if mod in ("~", "~*") and re.search(pattern.strip('"').replace("\\z", "\\Z"), path, re.I if mod == "~*" else 0):      # (nginx's \z is \Z here; the quotes are nginx's)
             return (mod, pattern)
     return best
 
@@ -104,8 +104,14 @@ class TheText(unittest.TestCase):
     def test_the_old_addresses_of_the_page_of_the_matches_that_run_now_are_locations_that_redirect_to_the_front_page_and_are_not_in_the_map(self):
         # (the server block's `if` runs before any location and keeps the query: an address in the map could not drop it. The old page took no query, and the front page acts on some, so none is passed on.)
         self.assertNotIn("/live-now", [c for c, _ in PAGES])
-        for old in ("/live-now", "/live-now/", "/live.html"):
-            self.assertEqual(stats.block_of(CONF, "location = %s " % old).split(), ["return", "302", "/;"], old)
+        rule = r'~* "^/live(?:-now/?|\.html)\z"'
+        self.assertEqual(stats.block_of(CONF, "location %s " % rule).split(), ["return", "302", "/;"])      # (one regular expression, not three exact locations: the case of the letters does not matter)
+        self.assertEqual([m for m in location_headers() if "live" in m[1] and m[0] != "^~"][0][:2], ("~*", rule[3:]))
+        self.assertEqual([c for c in ("/live-now", "/live-now/", "/live.html") if re.search(r"^/live(?:-now/?|\.html)$", c, re.I) is None], [])
+        for other in ("/live", "/live/", "/live/R-20260101-000000Z", "/live-now.html", "/live-now/x", "/live.htm", "/live.htmlx"):
+            self.assertIsNone(re.search(r"^/live(?:-now/?|\.html)$", other, re.I), other)          # (the game server's list and snapshots are not caught)
+        self.assertEqual(chosen("/live"), ("=", "/live"))
+        self.assertEqual(chosen("/live/R-20260101-000000Z")[0], "^~")
         body = stats.block_of(HEAD, "map $ants_path $ants_clean_address ")
         self.assertNotIn("live", body)
         self.assertIn("proxy_pass http://$ants_replays;", stats.block_of(CONF, "location = /live "))   # (/live is still the server's list)
@@ -372,12 +378,14 @@ class TheRealPagesRun(unittest.TestCase):
                 self.assertFalse((lobby if marker is game else game).search(body), "%s opens the wrong page" % what)
 
     def test_the_old_addresses_of_the_matches_that_run_now_are_a_temporary_redirect_to_the_front_page_with_no_query(self):
-        for old in ("/live-now", "/live-now/", "/live.html", "/live-now?x=1", "/live.html?join=/ws&room=k7m2xq", "/live-now/?room=k7m2xq"):
+        for old in ("/live-now", "/live-now/", "/live.html", "/live-now?x=1", "/live.html?join=/ws&room=k7m2xq", "/live-now/?room=k7m2xq", "/LIVE-NOW", "/Live-Now/", "/Live.html", "/LIVE.HTML?x=1"):
             status, headers, _ = self.ask(old)
             self.assertEqual((status, headers.get("location")), (302, "/"), old)                       # (a 302: a browser does not keep it; "/", whatever the query was)
             self.assertNotIn("content-security-policy", headers, old)
-        for old in ("/live-now", "/live.html"):
+        for old in ("/live-now", "/live.html", "/Live-Now", "/LIVE.HTML"):
             self.assertEqual(self.ask(old, "HEAD")[0], 302, old)
+        for near in ("/live-now/x", "/live-nowx", "/live.htmlx", "/live.htm", "/live-now.html"):
+            self.assertNotEqual(self.ask(near)[0], 302, near)                                          # (only the old addresses are redirected, whatever the case: not a name that merely starts like one)
 
     def test_only_get_and_head_are_served_as_before(self):
         for clean, _ in PAGES:
