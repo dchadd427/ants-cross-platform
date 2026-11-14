@@ -109,6 +109,6 @@
 .gc-sw { margin: 4px 0 8px; }
 .gc-swl { display: flex; align-items: center; gap: 10px; min-height: 46px; font-size: 16px; color: var(--cream); cursor: pointer; }
 .gc-swb { flex: none; width: 22px; height: 22px; margin: 0; accent-color: #44e08a; cursor: pointer; }
-.gc-swb:disabled { cursor: default; }
+.gc-swb:disabled, .gc-swb[aria-disabled="true"] { cursor: default; }
 .gc-swn { margin: 0 0 4px 32px; font-size: 14px; line-height: 1.4; color: #a8cfc0; }
 .gc-again { min-height: 46px; margin: 6px 0 0 32px; max-width: calc(100% - 32px); white-space: normal; }

@@ -5,7 +5,7 @@
 //   2. the ring: the circle's own border (red for an administrator, yellow for a moderator, 2 px) is still there around a picture, the picture is inside it, and the status dot is on top of the picture;
 //   3. the letter: shown while the picture is on its way, hidden once it has loaded; a picture that answers 404 or 429, a request that is blocked, are the letter exactly as without a picture (no broken image, same boxes);
 //   4. the list is drawn again when one row changes: no circle that shows a picture shows its letter, or nothing, for even one frame;
-//   5. the switch by keyboard: Tab / Shift+Tab reach the box, Space presses it, the hub is told, the box waits and then follows the hub; a refusal and silence put it back; the row is 46 px tall or more;
+//   5. the switch by keyboard: the menu opens on its first control, Tab / Shift+Tab reach the box, Space presses it, the hub is told, the box waits and then follows the hub; a refusal and silence put it back; the row is 46 px tall or more;
 //   6. phone width: the chip is the circle alone and its picture is the chip; the Players view shows the pictures.
 //   --shots DIR takes the pictures of the built page (device scale factor 2), with a README.md table, for people to look at beside the approved mock-ups; --mockups DIR names the folder of those (the
 //   side-by-side files are made when both are given).
@@ -222,7 +222,13 @@ async function main() {
         await settled(page);
         const afterBoxes = await boxes(page);
         check('none of the four paths moved a row or the list', shift(beforeBoxes, afterBoxes) === 0, String(shift(beforeBoxes, afterBoxes)));
-        check('an img that failed is not asked for again by the page (404 and 429: once each, from the list; the chip asks once more for the one name it shares)', site.requests.filter((u) => u === '/hub/pic/' + N.busy + '.png').length <= 2, String(site.requests.filter((u) => u === '/hub/pic/' + N.busy + '.png').length));
+        const asked = () => ['gone', 'busy', 'blocked'].map((n) => site.requests.filter((u) => u === '/hub/pic/' + N[n] + '.png').length);
+        const askedBefore = asked();
+        for (let i = 0; i < 12; i++) { hub.broadcast({ t: 'who', full: false, n: 8, g: 2, more: 0, rows: [row(7, 'plain', i % 2 ? 'play' : 'look')], gone: [] }); await sleep(120); }
+        await sleep(300);
+        console.log('requests for the names that failed (404, 429, blocked) before and after twelve repaints of the list: ' + JSON.stringify(askedBefore) + ' and ' + JSON.stringify(asked()));
+        check('a name that failed (404, 429, a blocked request) is not asked for again when the list is drawn again: twelve repaints make no request', JSON.stringify(asked()) === JSON.stringify(askedBefore) && askedBefore[0] >= 1 && askedBefore[1] >= 1, JSON.stringify([askedBefore, asked()]));
+        check('... and the letters are still there', (await Promise.all(['gone', 'busy', 'blocked'].map((n) => circle(page, n)))).every((x) => x && !x.img && letterShown(x)));
         await context.close();
     }
 
@@ -237,9 +243,12 @@ async function main() {
         await page.waitForSelector('#gchat-login-slot:not([hidden])', { timeout: 3000 });
         await settled(page);
         check('the chip opens the dropdown from the keyboard and the focus is in it', await page.evaluate(() => document.getElementById('gchat-login-slot').contains(document.activeElement)));
-        await page.keyboard.press('Shift+Tab');
         const onBox = await page.evaluate(() => { const a = document.activeElement; return { box: a.classList.contains('gc-swb'), type: a.type, visible: a.matches(':focus-visible') }; });
-        check('Shift+Tab from Log out reaches the checkbox, and it shows the focus', onBox.box && onBox.type === 'checkbox' && onBox.visible, JSON.stringify(onBox));
+        check('the menu opens with the focus on the checkbox (the first control: no name choice here), and it shows the focus', onBox.box && onBox.type === 'checkbox' && onBox.visible, JSON.stringify(onBox));
+        await page.keyboard.press('Tab');
+        check('Tab forward from the opening focus goes on to Log out', await page.evaluate(() => document.activeElement.classList.contains('gc-out')));
+        await page.keyboard.press('Shift+Tab');
+        check('Shift+Tab goes back to the checkbox', await page.evaluate(() => document.activeElement.classList.contains('gc-swb')));
         const tall = await page.evaluate(() => document.querySelector('.gc-swl').getBoundingClientRect().height);
         check('the row of the box is 46 px tall or more', tall >= 46, String(tall));
         await shot(page, 'built_menu_off_desktop.png', 'the account menu, switch off (the box is not checked)', { clip: { x: 760, y: 0, width: 520, height: 520 } });
@@ -262,13 +271,19 @@ async function main() {
         hub.set({ picsMode: 'silent' });
         await page.keyboard.press('Space');
         await sleep(300);
-        check('while the hub is silent the box waits (disabled)', await page.evaluate(() => document.querySelector('.gc-swb').disabled));
+        check('while the hub is silent the box waits (aria-disabled), still has the focus, and a press changes nothing and sends nothing', await page.evaluate(() => { const b = document.querySelector('.gc-swb'); return b.getAttribute('aria-disabled') === 'true' && document.activeElement === b; }));
+        const sentBefore = hub.received.filter((m) => m.t === 'pics').length;
+        const waitingChecked = await page.evaluate(() => document.querySelector('.gc-swb').checked);
+        await page.keyboard.press('Space');
+        await sleep(200);
+        check('... the box is as it was asked and the hub was told nothing more', await page.evaluate((c) => document.querySelector('.gc-swb').checked === c, waitingChecked) && hub.received.filter((m) => m.t === 'pics').length === sentBefore);
         await sleep(8200);
         check('after 8 seconds of silence the box is back, enabled, with the same words', await page.evaluate(() => { const b = document.querySelector('.gc-swb'); return b.checked && !b.disabled && document.querySelector('.gc-swn').textContent === 'That did not work, try again'; }));
         hub.set({ picsMode: undefined, picAfterOn: 0 });
         hub.broadcast({ t: 'you', you: Object.assign({}, ME, { pics: 'blocked' }) });
         await sleep(250);
         check('blocked: the box is off and disabled, and the line says it is hidden on this site', await page.evaluate(() => { const b = document.querySelector('.gc-swb'); return !b.checked && b.disabled && document.querySelector('.gc-swn').textContent === 'Your picture is hidden on this site.'; }));
+        check('... and the focus is on Log out, not on the page', await page.evaluate(() => document.activeElement.classList.contains('gc-out')));
         await shot(page, 'built_menu_blocked_desktop.png', 'the account menu, blocked (the box is off and cannot be pressed)', { clip: { x: 760, y: 0, width: 520, height: 520 } });
         await context.close();
     }

@@ -95,17 +95,19 @@
     var PICNAME = /^[0-9a-f]{32}$/, PICDIR = '/hub/pic/', PICEXT = '.png';
     function picOf(v) { return typeof v === 'string' && PICNAME.test(v) ? v : ''; }       // the name of a picture in a frame of the hub (`pic` of `you` and of a players row), or '' (the one place that reads it)
     function picsOf(v) { return v === 'on' || v === 'off' || v === 'blocked' ? v : ''; }       // the switch's state in `you.pics`, or '' (no switch: a guest, a hub without the Discord login)
+    var FAILED = Object.create(null), FAILED_ORDER = [], FAILED_MAX = 200;       // the names of pictures that did not load (a 404, a refusal, not a picture): kept for the life of the page, the last 200, so that no circle asks for one again
+    function failed(name) { if (FAILED[name]) return; FAILED[name] = true; FAILED_ORDER.push(name); if (FAILED_ORDER.length > FAILED_MAX) delete FAILED[FAILED_ORDER.shift()]; }
     function picture(make, circle, name, size) {                          // the picture of a circle: an img over the letter (made with `make`, the page's element maker); the same name again changes nothing, another or none takes the old one away
         var ok = picOf(name), now = circle.picState || null;
         if (now && now.name === ok) return;
         if (now && now.img.parentNode) now.img.parentNode.removeChild(now.img);
         circle.picState = null; circle.removeAttribute('data-pic');
-        if (!ok) return;
+        if (!ok || FAILED[ok]) return;
         var img = make('img');
         img.setAttribute('src', PICDIR + ok + PICEXT);
         img.setAttribute('alt', ''); img.setAttribute('width', String(size)); img.setAttribute('height', String(size)); img.setAttribute('loading', 'lazy'); img.setAttribute('decoding', 'async'); img.setAttribute('draggable', 'false');
         img.addEventListener('load', function () { if (circle.picState && circle.picState.img === img) circle.setAttribute('data-pic', 'on'); });       // (the letter is hidden only once there is a picture over it)
-        img.addEventListener('error', function () { if (img.parentNode) img.parentNode.removeChild(img); });       // (the letter is simply still there; the same name is not asked for again)
+        img.addEventListener('error', function () { failed(ok); if (img.parentNode) img.parentNode.removeChild(img); });       // (the letter is simply still there; the name is not asked for again, by this circle or by another)
         circle.picState = { name: ok, img: img };
         circle.appendChild(img);
         if (img.complete && img.naturalWidth > 0) circle.setAttribute('data-pic', 'on');       // (a picture that the page already has, as when the list is drawn again: no frame with the letter in between)
@@ -167,7 +169,7 @@
         var now = env.now || function () { return Date.now(); }, rnd = env.random || Math.random, Socket = env.WebSocket || win.WebSocket;
         var feed = [], you = null, login = false, people = null, state = 'connecting', welcomed = false, ever = false, lastId = -1, bad = 0, attempt = 0, liveSince = null, lastTry = 0;
         var sock = null, stopped = false, isHome = false, stale = true, notice = '', unanswered = [], stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0, pics: 0 };       // (unanswered: lines and commands sent and not answered yet, oldest first)
-        var picWait = false, picWant = false, picFailed = false, picHad = false;                  // (the switch: a press waits for the `you` frame; a refusal or 8 s of silence puts it back)
+        var picWait = false, picWant = false, picFailed = false;                  // (the switch: a press waits for the `you` frame; a refusal or 8 s of silence puts it back)
         var busy = false, menuOn = false, forgetSure = false, refocus = false, forgetAt = 0;                                       // (a POST of the login is on its way; the chip's dropdown of the account is open)
         var tokens = PACE.burst, tokensAt = now(), said = Object.create(null), heard = 0, skipped = 0, muted = { repaint: false, flood: false };       // (said: the texts that were sent in the last 31 s, as the hub remembers them)
         var open = (win.innerWidth || 0) >= 701 && (win.innerHeight || 0) >= 601;       // a window of 701 x 601 or more opens with the panel out, a smaller one with the folded header (home.css and home.js have the same limits)
@@ -309,10 +311,11 @@
             swRow.hidden = !(you && you.pics);
             if (you && you.pics) {
                 var pp = you.pics, gone = pp === 'on' && !you.pic;
-                swBox.checked = picWait ? picWant : pp === 'on'; swBox.disabled = pp === 'blocked' || picWait;
+                if (pp === 'blocked' && doc.activeElement === swBox && outBtn.focus) outBtn.focus();       // (a box that is turned off gives up the focus: it goes to Log out, not to the page)
+                swBox.checked = picWait ? picWant : pp === 'on'; swBox.disabled = pp === 'blocked';       // (while it waits the box is not `disabled`, so that the focus stays on it: it says aria-disabled and ignores presses)
+                if (picWait) swBox.setAttribute('aria-disabled', 'true'); else swBox.removeAttribute('aria-disabled');
                 swNote.textContent = picFailed ? ERR.failed : pp === 'blocked' ? TEXT.picBlocked : gone && !picWait ? TEXT.picNone : TEXT.picNote;
                 swAgain.hidden = !(gone && !picWait && !picFailed);
-                if (picHad && !picWait && !swBox.disabled && !slot.hidden) { picHad = false; if (swBox.focus) swBox.focus(); }
             }
             if (!slot.hidden) place();
             if (!slot.hidden && refocus) { refocus = false; var back = pickBtn.hidden ? outBtn : pickBtn; if (back.focus) back.focus(); }       // (it is back: the focus is where it was, on the button of the name)
@@ -548,17 +551,23 @@
         pickBtn.addEventListener('click', guard(function () { if (you && you.other && !out({ t: 'pick', pick: you.pick === 'display' ? 'username' : 'display' })) tell('failed'); }));       // (the hub closes the account's sockets; the page connects again and reads the new name)
         swBox.addEventListener('change', guard(function () {                   // the switch: send what the box now says, and wait for the hub's `you` (the box is off while it waits)
             if (picWait || !you || !you.pics || you.pics === 'blocked') { render(); return; }
-            picWant = !!swBox.checked; picFailed = false; picHad = doc.activeElement === swBox;       // (a box that is off gives up the focus: it is put back when the wait is over)
+            picWant = !!swBox.checked; picFailed = false;
             if (!out({ t: 'pics', on: picWant })) { failPic(); return; }
             picWait = true; timers.pics = setTimeout(guard(function () { timers.pics = 0; if (picWait) failPic(); }), MS.pics);
             render();
         }));
+        swBox.addEventListener('click', guard(function (e) { if (picWait && e && e.preventDefault) e.preventDefault(); }));       // (a press while the box waits does nothing: the box stays as asked)
         swAgain.addEventListener('click', guard(startLogin));
         outBtn.addEventListener('click', guard(function () { leave(LOGOUT); }));
         function sure(on) { forgetSure = !!on; forgetBtn.textContent = on ? TEXT.sure : TEXT.forget; forgetBtn.setAttribute('data-sure', on ? 'true' : 'false'); }       // (Forget me asks once more: the second press does it; another place, Escape or the dropdown going away puts the question back)
         forgetBtn.addEventListener('click', guard(function () { if (!forgetSure) { forgetAt = now(); sure(true); return; } if (now() - forgetAt < 400) return; sure(false); leave(FORGET); }));       // (a double press is one press: the answer to the question comes after a moment)
         forgetBtn.addEventListener('blur', guard(function () { sure(false); }));
-        if (chip) chip.addEventListener('click', guard(function () { if (!you) { startLogin(); return; } setMenu(!menuOn); if (menuOn && outBtn.focus) outBtn.focus(); }));       // (the chip opens the dropdown and puts the focus on Log out; a second press closes it)
+        function firstControl() {                                               // the first control of the open menu that can be used: the name choice, the switch (its box, or its button), Log out
+            var list = [pickBtn, swBox, swAgain, outBtn], i;
+            for (i = 0; i < list.length; i++) if (!list[i].hidden && !list[i].disabled && !(swRow.hidden && (list[i] === swBox || list[i] === swAgain))) return list[i];
+            return outBtn;
+        }
+        if (chip) chip.addEventListener('click', guard(function () { if (!you) { startLogin(); return; } setMenu(!menuOn); if (menuOn) { var first = firstControl(); if (first.focus) first.focus(); } }));       // (the chip opens the dropdown and puts the focus on its first control, so that a Tab forward meets the rest; a second press closes it)
         doc.addEventListener('click', guard(function (e) { var t = e && e.target; if (menuOn && !(t && ((slot.contains && slot.contains(t)) || (chip && chip.contains && chip.contains(t))))) setMenu(false); }));       // (a press anywhere else puts it away)
         win.addEventListener('resize', guard(function () { if (menuOn) render(); }));
         doc.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Escape' && menuOn) { setMenu(false); if (chip && chip.focus) chip.focus(); } }));       // (Escape closes it, wherever the focus is, and the focus goes back to the chip)

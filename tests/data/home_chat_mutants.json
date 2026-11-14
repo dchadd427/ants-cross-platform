@@ -2048,7 +2048,7 @@
   {
    "id": "chip_is_dead_for_a_member",
    "file": "web/home/chat.js",
-   "old": "if (!you) { startLogin(); return; } setMenu(!menuOn); if (menuOn && outBtn.focus) outBtn.focus();",
+   "old": "if (!you) { startLogin(); return; } setMenu(!menuOn); if (menuOn) { var first = firstControl(); if (first.focus) first.focus(); }",
    "new": "if (!you) { startLogin(); }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -3294,14 +3294,14 @@
   {
    "id": "pic_kept_after_an_error",
    "file": "web/home/chat.js",
-   "old": "img.addEventListener('error', function () { if (img.parentNode) img.parentNode.removeChild(img); });",
-   "new": "img.addEventListener('error', function () { });",
+   "old": "img.addEventListener('error', function () { failed(ok); if (img.parentNode) img.parentNode.removeChild(img); });",
+   "new": "img.addEventListener('error', function () { failed(ok); });",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "pic_drawn_with_no_name",
    "file": "web/home/chat.js",
-   "old": "        if (!ok) return;\n        var img",
+   "old": "        if (!ok || FAILED[ok]) return;\n        var img",
    "new": "        var img",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -3364,8 +3364,8 @@
   {
    "id": "switch_blocked_box_stays_enabled",
    "file": "web/home/chat.js",
-   "old": "swBox.disabled = pp === 'blocked' || picWait;",
-   "new": "swBox.disabled = picWait;",
+   "old": "swBox.disabled = pp === 'blocked';",
+   "new": "swBox.disabled = false;",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -3422,6 +3422,97 @@
    "file": "web/home/chat.js",
    "old": "failPic(m.code === 'login');",
    "new": "failPic(false);",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_failed_names_not_consulted",
+   "file": "web/home/chat.js",
+   "old": "if (!ok || FAILED[ok]) return;",
+   "new": "if (!ok) return;",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_failed_names_never_forgotten",
+   "file": "web/home/chat.js",
+   "old": "if (FAILED_ORDER.length > FAILED_MAX) delete FAILED[FAILED_ORDER.shift()];",
+   "new": "if (FAILED_ORDER.length > FAILED_MAX) FAILED_ORDER.shift();",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_failed_name_not_noted_on_error",
+   "file": "web/home/chat.js",
+   "old": "img.addEventListener('error', function () { failed(ok); if",
+   "new": "img.addEventListener('error', function () { if",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_late_load_marks_a_circle_with_no_picture",
+   "file": "web/home/chat.js",
+   "old": "if (circle.picState && circle.picState.img === img) circle.setAttribute('data-pic', 'on'); });",
+   "new": "circle.setAttribute('data-pic', 'on'); });",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_late_load_of_a_replaced_img_marks_the_circle",
+   "file": "web/home/chat.js",
+   "old": "if (circle.picState && circle.picState.img === img) circle.setAttribute('data-pic', 'on'); });",
+   "new": "if (circle.picState) circle.setAttribute('data-pic', 'on'); });",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_a_finished_img_with_no_width_hides_the_letter",
+   "file": "web/home/chat.js",
+   "old": "if (img.complete && img.naturalWidth > 0)",
+   "new": "if (img.complete)",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "switch_any_err_ends_the_wait",
+   "file": "web/home/chat.js",
+   "old": "m.t === 'err' && picWait && (m.code === 'pics' || m.code === 'login')",
+   "new": "m.t === 'err' && picWait",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "switch_box_disabled_while_it_waits",
+   "file": "web/home/chat.js",
+   "old": "swBox.disabled = pp === 'blocked';",
+   "new": "swBox.disabled = pp === 'blocked' || picWait;",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "switch_press_while_waiting_not_turned_away",
+   "file": "web/home/chat.js",
+   "old": "if (picWait && e && e.preventDefault) e.preventDefault();",
+   "new": "if (false) e.preventDefault();",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "switch_blocked_box_keeps_the_focus_it_cannot_use",
+   "file": "web/home/chat.js",
+   "old": "if (pp === 'blocked' && doc.activeElement === swBox && outBtn.focus) outBtn.focus();",
+   "new": "",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "menu_opens_on_log_out_past_the_switch",
+   "file": "web/home/chat.js",
+   "old": "var first = firstControl();",
+   "new": "var first = outBtn;",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "menu_first_focus_skips_the_name_choice",
+   "file": "web/home/chat.js",
+   "old": "var list = [pickBtn, swBox, swAgain, outBtn], i;",
+   "new": "var list = [swBox, swAgain, outBtn], i;",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "menu_first_focus_on_a_switch_that_is_not_shown",
+   "file": "web/home/chat.js",
+   "old": "!(swRow.hidden && (list[i] === swBox || list[i] === swAgain))",
+   "new": "true",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]

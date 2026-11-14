@@ -712,10 +712,22 @@ function bringPlayers(env) {
     check('the letter is not hidden before the picture has loaded', sage.getAttribute('data-pic') === null);
     img.fire('load');
     check('a picture that loaded hides the letter (the circle says so)', sage.getAttribute('data-pic') === 'on');
-    q.who({ t: 'who', full: false, n: 4, g: 0, more: 0, rows: [row(3, 'tess', 'look', { pic: OTHER })], gone: [] });
+    const GONE = 'cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd', FRESH = '5656565656565656565656565656abab';
+    q.who({ t: 'who', full: false, n: 4, g: 0, more: 0, rows: [row(3, 'tess', 'look', { pic: GONE })], gone: [] });
     const tess = circleOf(q, 'tess');
+    check('a row that gains a picture is drawn again with it', imgsOf(tess).length === 1 && imgsOf(tess)[0].attributes.src === '/hub/pic/' + GONE + '.png');
     imgsOf(tess)[0].fire('error');
     same('a picture that fails to load is taken away and the letter is still there, not hidden', [imgsOf(tess).length, tess.textContent, tess.getAttribute('data-pic')], [0, 't', null]);
+    // the list is made again at every change: a picture that failed is not asked for again, one that loaded and a new one are as before
+    let failedAgain = 0, drawn = 0;
+    for (let i = 0; i < 12; i++) {
+        q.who({ t: 'who', full: false, n: 4, g: 0, more: 0, rows: [row(5, 'wade', i % 2 ? 'look' : 'wait', { pic: GONE })], gone: [] });
+        failedAgain += q.panel().findAll((e) => e.tagName === 'img' && e.attributes.src === '/hub/pic/' + GONE + '.png').length;
+        drawn += q.panel().findAll((e) => e.tagName === 'img' && e.attributes.src === '/hub/pic/' + NAME + '.png').length;
+    }
+    same('after a picture failed, 12 repaints of the list (the failed name in two rows) make no img for it; the one that loaded is made as before', [failedAgain, drawn], [0, 12]);
+    q.who({ t: 'who', full: false, n: 4, g: 0, more: 0, rows: [row(6, 'xena', 'look', { pic: FRESH })], gone: [5] });
+    same('a new name is asked for as before', imgsOf(circleOf(q, 'xena')).map((i) => i.attributes.src), ['/hub/pic/' + FRESH + '.png']);
     // a row that loses its picture is drawn again with the letter
     q.who({ t: 'who', full: false, n: 4, g: 0, more: 0, rows: [row(2, 'sage', 'look')], gone: [] });
     const lost = circleOf(q, 'sage');
