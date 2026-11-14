@@ -380,12 +380,12 @@ void run_cantgo_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI22.10 The Fixes Make The Bots' Own Refused Orders Fewer: Four Hard Standard Bots Play Whole Matches On TREASURE (Seeds 1 To 4) With The Fixes Of The Can't-Go Loop And Without Them (cg=0, The Bot As It Was): At Least 10 Percent Fewer Of Their Orders Are Refused With Them (65 Against 83 When This Was Pinned); The Loops Themselves Are Reported, Not Bounded")
+    TEST_CASE("AI22.10 The Fixes Make The Bots' Own Refused Orders Fewer: Four Hard Standard Bots Play Whole Matches On TREASURE (Seeds 1 To 12) With The Fixes Of The Can't-Go Loop And Without Them (cg=0, The Bot As It Was): At Least 10 Percent Fewer Of Their Orders Are Refused With Them (65 Against 83 For Seeds 1 To 4 When This Was Pinned; 231 Against 311 For Seeds 1 To 12); The Loops Themselves Are Reported, Not Bounded")
     {
         uint64_t orders[2] = {0, 0};
         uint64_t refused[2] = {0, 0};
         for (const bool aware : {true, false}) {
-            for (uint32_t seed = 1; seed <= 4; ++seed) {
+            for (uint32_t seed = 1; seed <= 12; ++seed) {
                 ArenaSpec spec;
                 spec.level = &level_of("TREASURE");
                 spec.seed = seed;
@@ -406,9 +406,9 @@ void run_cantgo_tests() {
                 }
             }
         }
-        ASSERT_TRUE(orders[0] >= 3000 && orders[1] >= 3000);                          // the matches were played (about 8,300 orders each when this was pinned)
+        ASSERT_TRUE(orders[0] >= 3000 && orders[1] >= 3000);                          // the matches were played (about 8,300 orders each for four seeds when this was pinned)
         ASSERT_TRUE(refused[1] >= 20);                                                // the bot as it was has refused orders to lose (83 when this was pinned)
-        ASSERT_TRUE(refused[0] * 10u <= refused[1] * 9u);                             // 65 against 83 when pinned; the bound is relative so that the next batches, which move both, do not break it
+        ASSERT_TRUE(refused[0] * 10u <= refused[1] * 9u);                             // 65 against 83 for four seeds when pinned, 231 against 311 for twelve (four matches were too few to hold the ratio steady when the counters changed what the bots do near the enemy's base); the bound is relative so that the next batches, which move both, do not break it
     } TEST_END();
 
     TEST_CASE("AI22.11 The Tally Looks At The Ants Only On A Tick That Posted A Can't-Go News Item Or While An Ant Still Shows The State, And Counts As A Look At Every Tick Does: A Quiet World Is Never Looked At; The Same Ant Refused Twice (Two Beginnings), An Ability Refused At Once And The Loop Of The Ring World Give The Reference's Numbers")
