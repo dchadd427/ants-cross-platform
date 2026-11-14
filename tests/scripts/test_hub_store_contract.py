@@ -123,11 +123,25 @@ class Contract(unittest.TestCase):
     # ---- deletions ----
 
     def test_the_account_of_a_line_is_known_until_the_line_is_deleted(self):
-        a, b = self.say(1, "1001"), self.say(2, "1002", "bob")
+        a, b = self.say(1), self.say(2, "1002", "bob")
         self.assertEqual((self.store.account_of_line(a.id), self.store.account_of_line(b.id)), ("1001", "1002"))
         self.assertIsNone(self.store.account_of_line(9999))
         self.store.delete_line(a.id, "me")
         self.assertIsNone(self.store.account_of_line(a.id))
+
+    def test_the_lines_of_an_account_since_a_time_are_deleted_each_with_its_own_number(self):
+        old = self.say(1)
+        self.clock.now += 100
+        a, b, other = self.say(1), self.say(1, "1001"), self.say(2, "1002")
+        before = self.store.last_deletion()
+        self.assertEqual(self.store.delete_lines_since("1001", int(self.clock.now) - 50, "me", note=("0" * 16, "del", "1" * 16, "purge")), 2)
+        self.assertEqual(self.store.last_deletion(), before + 2)
+        self.assertEqual([i for _, i in self.store.deletions_since(before)], [a.id, b.id])
+        self.assertEqual((self.store.account_of_line(old.id), self.store.account_of_line(other.id)), ("1001", "1002"))
+        self.assertEqual(self.store.delete_lines_since("1001", int(self.clock.now) - 50, "me"), 0)
+        rows = len(self.store.actions())
+        self.assertEqual(self.store.delete_lines_since("9999", 0, "me", note=("0" * 16, "del", "1" * 16, "purge")), 0)
+        self.assertEqual(len(self.store.actions()), rows)                       # (no line, no row of the log)
 
     def test_a_deletion_is_numbered_once_and_a_second_one_does_nothing(self):
         a, b = self.say(1), self.say(2)
