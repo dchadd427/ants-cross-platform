@@ -133,7 +133,7 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertLess(zipped, CHAT_GZIP_BUDGET, "and %d bytes gzipped" % zipped)
 
     def test_the_script_is_plain_es5(self):
-        for token in (r"\bconst\b", r"\blet\b", r"=>", r"`", r"\bimport\b", r"\bclass\b", r"\basync\b", r"\bawait\b"):
+        for token in (r"\bconst\b", r"\blet\b", r"=>", r"`", r"\bimport\b", r"\bclass\b", r"(?<!')\basync\b(?!')", r"\bawait\b"):       # ('async' in quotes is the value of an img's decoding attribute)
             self.assertIsNone(re.search(token, self.code), token)
         self.assertIn("'use strict';", self.js)
         self.assertNotRegex(self.code, r"\b(var|function)\s+(near|far)\b|\b(near|far)\s*=", "Windows has macros of these names")
@@ -147,9 +147,11 @@ class TheFolderAndTheScript(unittest.TestCase):
 
     def test_nothing_that_the_hub_says_becomes_markup_a_link_or_code(self):
         self.assertNotRegex(self.code, r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|srcdoc|createContextualFragment|DOMParser|setTimeout\(\s*['\"]")
-        self.assertNotRegex(self.code, r"\.href\b|\.src\b|setAttribute\(\s*['\"](href|src|style|on\w+|srcdoc)")
+        picture_address = "img.setAttribute('src', PICDIR + ok + PICEXT);"       # (the one address the page sets; the node rig checks by behavior that it is made of a checked name only)
+        self.assertNotRegex(self.code.replace(picture_address, ""), r"\.href\b|\.src\b|setAttribute\(\s*['\"](href|src|style|on\w+|srcdoc)")
         made = sorted(set(re.findall(r"\bel\('(\w+)'", self.code)))
-        self.assertEqual(made, ["bdi", "button", "div", "form", "h2", "i", "p", "section", "span", "textarea"], "no a, img, script, iframe, style or link: the dock makes text and boxes")
+        self.assertEqual(made, ["bdi", "button", "div", "form", "h2", "i", "input", "label", "p", "section", "span", "textarea"], "no a, script, iframe, style or link: the dock makes text, boxes and the switch (the picture's img is made by one helper)")
+        self.assertEqual(sorted(set(re.findall(r"\bmake\('(\w+)'", self.code))), ["img"])
         self.assertEqual(self.code.count("createElement"), 1, "one place makes elements")
         self.assertIn("if (text !== undefined) e.textContent = text;", self.js)
 
@@ -176,7 +178,7 @@ class TheFolderAndTheScript(unittest.TestCase):
 
     def test_the_limits_are_the_hubs_and_the_pace_is_below_it(self):
         self.assertIn("var LIMIT = { name: 32, line: 200, feed: 100, history: 50, frame: 120000, bad: 30, field: 400, count: 1e9, here: 500, said: 2 };", self.js)
-        self.assertIn("var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, flood: 3000, pending: 8000 };", self.js)
+        self.assertIn("var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, pics: 8000, flood: 3000, pending: 8000 };", self.js)
         self.assertIn("var BACKOFF = { min: 1000, max: 60000, low: 0.5, high: 1.5 };", self.js, "the wait is spread from half a step to one and a half, within 1 to 60 s")
         self.assertIn("var PACE = { burst: 2, every: 2500, same: 31000 };", self.js, "below the hub's: 3 at once, one every 2 s, the same text twice within 30 s")
 
@@ -184,7 +186,7 @@ class TheFolderAndTheScript(unittest.TestCase):
     def test_the_switch_of_the_name_is_one_frame_and_the_page_sends_nothing_else_of_its_own_about_it(self):
         self.assertEqual(self.code.count("{ t: 'pick'"), 1, "one place writes the frame")
         self.assertIn("pick: you.pick === 'display' ? 'username' : 'display'", self.js, "the other of the two words, never the one that is shown")
-        self.assertEqual(sorted(re.findall(r"out\(\{ t: '(\w+)'", self.code)), ["pick"], "the dock's own frames (a line and a ping are written where they were); the players list's come through send()")
+        self.assertEqual(sorted(re.findall(r"out\(\{ t: '(\w+)'", self.code)), ["pick", "pics"], "the dock's own frames (a line and a ping are written where they were); the players list's come through send()")
         self.assertIn("else if (m.t === 'err' && m.code === 'pick') tell('failed');", self.js)
         self.assertNotIn("'pick'", re.search(r"var SAID = \[(.*?)\];", self.code).group(1), "a refused switch is no line's refusal")
         self.assertIn("function mine(e) { return !!you && (you.k ? e.k === you.k : e.who === you.name); }", self.js, "a line is the visitor's by the hub's key; by the name only for a hub that sends none")
