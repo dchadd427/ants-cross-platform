@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the start card of a room of one person for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): who counts as a person, the shorter of the room's and the solo count, 0 meaning the 5 s dialog, the session holding what the Begin says, the setting's default, key, range and status against test_server S3.192, S3.193 and S3.264, the command line against tests/scripts/test_ants_server.sh --part options, and the card's own words against test_hud_layout. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/start_card_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "note": "Mutants of the start card of a room of one person for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): who counts as a person, the shorter of the room's and the solo count, 0 meaning the 5 s dialog, the session holding what the Begin says, the setting's default, key, range and status against test_server S3.192, S3.193 and S3.264, the command line against tests/scripts/test_ants_server.sh --part options, and the card's own words against test_hud_layout; the card of a game on this computer (--start-card-seconds: its count, its close, the option's range) against test_app_integration 7.6k and test_network_app N5.101, and what the page passes against tests/scripts/web_lobby_check.js. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/start_card_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
  "mutants": [
   {
    "id": "people_count_bots",
@@ -170,6 +170,62 @@
    "new": "people_in <= 2 ?",
    "build": "test_hud_layout",
    "test": "timeout 600 ./build/tests/test_app/test_hud_layout"
+  },
+  {
+   "id": "local_card_counts_half_the_seconds",
+   "file": "src/ants_app/application_net.cpp",
+   "old": "local_countdown_ms_ = static_cast<int64_t>(seconds) * 1000;",
+   "new": "local_countdown_ms_ = static_cast<int64_t>(seconds) * 500;",
+   "build": "test_app_integration",
+   "test": "ANTS_TEST_FILTER=7.6 timeout 900 ./build/tests/test_app/test_app_integration"
+  },
+  {
+   "id": "local_card_runs_fast",
+   "file": "src/ants_app/application_net.cpp",
+   "old": "local_countdown_ms_ - static_cast<int64_t>(sim::TICK_MS)",
+   "new": "local_countdown_ms_ - 2 * static_cast<int64_t>(sim::TICK_MS)",
+   "build": "test_app_integration",
+   "test": "ANTS_TEST_FILTER=7.6 timeout 900 ./build/tests/test_app/test_app_integration"
+  },
+  {
+   "id": "local_card_never_closes",
+   "file": "src/ants_app/application_net.cpp",
+   "old": "if (local_countdown_ms_ == 0) {",
+   "new": "if (local_countdown_ms_ < 0) {",
+   "build": "test_app_integration",
+   "test": "ANTS_TEST_FILTER=7.6 timeout 900 ./build/tests/test_app/test_app_integration"
+  },
+  {
+   "id": "local_card_without_the_option",
+   "file": "src/ants_app/application_match.cpp",
+   "old": "if (config_.start_card_seconds > 0 && !network_active()",
+   "new": "if (!network_active()",
+   "build": "test_app_integration",
+   "test": "ANTS_TEST_FILTER=7.6 timeout 900 ./build/tests/test_app/test_app_integration"
+  },
+  {
+   "id": "local_card_option_range_too_wide",
+   "file": "src/ants_app/application_args.cpp",
+   "old": "n < 0 || n > 60) {\n                if (cfg.startup_error.empty()) cfg.startup_error = \"--start-card-seconds",
+   "new": "n < 0 || n > 61) {\n                if (cfg.startup_error.empty()) cfg.startup_error = \"--start-card-seconds",
+   "build": "test_network_app",
+   "test": "ANTS_TEST_FILTER=N5.101 timeout 900 ./build/tests/test_app/test_network_app"
+  },
+  {
+   "id": "page_gives_the_card_to_every_game",
+   "file": "web/shell.html",
+   "old": "return args.indexOf('--play') !== -1 && args.indexOf('--join-url') === -1 ?",
+   "new": "return args.indexOf('--join-url') === -1 ?",
+   "build": [],
+   "test": "node tests/scripts/web_lobby_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_gives_the_card_to_a_room",
+   "file": "web/shell.html",
+   "old": "return args.indexOf('--play') !== -1 && args.indexOf('--join-url') === -1 ?",
+   "new": "return args.indexOf('--play') !== -1 ?",
+   "build": [],
+   "test": "node tests/scripts/web_lobby_check.js web/shell.html web/lobby.html"
   }
  ]
 }

@@ -1693,6 +1693,12 @@
                 return out;
             }
 
+            // The countdown card of a game on THIS computer (the game's --start-card-seconds, docs/MATCH_COUNTDOWN.md): a game that the page starts itself (its arguments hold --play) gets 10 seconds of the card, which carries
+            // the Fullscreen button; a join of a room (the server holds the wait), a rejoin and a reload into a running match (they have no start), a recording and a live view (no --play) get none.
+            function startCardArguments(args) {
+                return args.indexOf('--play') !== -1 && args.indexOf('--join-url') === -1 ? ['--start-card-seconds', '10'] : [];
+            }
+
             // Does this address make the page ASK for a name before the game connects? A link that somebody shared does: a join of a room (a door and a room code that joinArguments accepts) with no
             // `name` parameter at all. The page that makes an address of its own (web/lobby.html: START, Rejoin and its Join button) always puts
             // the name in, empty or not, because its player chose it there ("name=" with nothing behind it is a name that was chosen: none), so such an address asks nobody.
@@ -1780,7 +1786,7 @@
             }
 
             return { parseAspect: AntsShapes.parse, shapeNumber: AntsShapes.placeOf, shapeForScreen: AntsShapes.forScreen, slotVars: slotVars, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, snapOffset: snapOffset, edgePixel: edgePixel, clientFor: clientFor,
-                     marginPixel: marginPixel, overControl: overControl, lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, releasesMouseLock: releasesMouseLock, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, localArguments: localArguments, asksForName: asksForName, codeText: codeText, withoutName: withoutName, withSeat: withSeat, cancelsBrowserKey: cancelsBrowserKey, badDownload: badDownload,
+                     marginPixel: marginPixel, overControl: overControl, lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, releasesMouseLock: releasesMouseLock, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, localArguments: localArguments, startCardArguments: startCardArguments, asksForName: asksForName, codeText: codeText, withoutName: withoutName, withSeat: withSeat, cancelsBrowserKey: cancelsBrowserKey, badDownload: badDownload,
                      downloadWithRetries: downloadWithRetries };
         })();
 
@@ -1815,7 +1821,7 @@
             var joined = ANTS_PAGE.joinArguments(window.location.search, window.location.protocol === 'https:', window.location.host);
             joined.args.forEach(function (a) { ANTS_ARGS.push(a); });
             if (joined.args.indexOf('--join-url') === -1) {                  // a game on THIS computer (the front page's Play: play?map=...&bots=...): its local parameters, through a whitelist
-                var local = ANTS_PAGE.localArguments(window.location.search); local.args.forEach(function (a) { ANTS_ARGS.push(a); }); ANTS_LOCAL_FILE = local.file; ANTS_TEST = local.test; ANTS_OWN_NAME = local.nameless;
+                var local = ANTS_PAGE.localArguments(window.location.search); local.args.forEach(function (a) { ANTS_ARGS.push(a); }); ANTS_LOCAL_FILE = local.file; ANTS_TEST = local.test; ANTS_OWN_NAME = local.nameless; ANTS_PAGE.startCardArguments(local.args).forEach(function (a) { ANTS_ARGS.push(a); });
             }
         })();
 

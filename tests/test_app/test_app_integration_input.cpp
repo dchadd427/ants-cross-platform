@@ -381,6 +381,117 @@ void run_suite_7_input_controls() {
         }
     } TEST_END();
 
+    TEST_CASE("7.6k The countdown card of a game on this computer (--start-card-seconds N): the card counts N seconds in the dialog's own 50 ms steps and closes itself at 0, tick 0 runs on the step after it, the state after K ticks is the state of a game without the card, no key or click reaches the match while it is up, and without the option the 5 s dialog is as it was") {
+        const std::string tiny = "Original-Ants/Maps/TINY.LVL";
+        const auto config = [&](uint32_t card_s, bool with_bot) {
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = true;
+            cfg.default_map_path = tiny;
+            cfg.play_at_once = true;
+            cfg.start_card_seconds = card_s;
+            if (with_bot) {
+                ants::ai::BotSpec bot;
+                bot.seat = 1;
+                bot.level = ants::ai::Level::Medium;
+                cfg.bots.push_back(bot);
+            }
+            return cfg;
+        };
+        const auto steps_to_first_tick = [](Application& app) {
+            int steps = 0;
+            while (app.sim().current_tick() == 0 && steps < 4000) {
+                app.update_simulation(0.05f);
+                ++steps;
+            }
+            return steps;
+        };
+        {   // the card: up from the start, the seconds go down with the steps, the card is not the plain dialog's, and tick 0 waits for it
+            Application app;
+            ASSERT_TRUE(app.init(config(3, false)));
+            ASSERT_TRUE(app.hud().is_match_countdown_active() && app.hud().is_modal_open());
+            ASSERT_EQ(app.countdown_seconds_left(), 3);
+            ASSERT_EQ(app.sim().current_tick(), 0u);
+            ASSERT_EQ(app.hud().status_line().text(), "Match starts in 3 s");
+            {   // what the page reads to lay its Fullscreen button over the card (ants_probe 60 - 64): the same answers as for a room's card, so the page's script works on it unchanged
+                const LayoutRect b = app.web_countdown_button();
+                ASSERT_TRUE(b.w > 0 && b.h > 0);
+                ASSERT_TRUE(app.countdown_probe(60) == 3 && app.countdown_probe(61) == b.x && app.countdown_probe(62) == b.y && app.countdown_probe(63) == b.w && app.countdown_probe(64) == b.h);
+                int fullscreen_calls = 0;
+                app.hud().set_on_fullscreen([&]() { ++fullscreen_calls; });          // (the native button: a press and a release on it ask for fullscreen; the page's own button asks through the page)
+                const int32_t cx = app.hud().countdown_button_rect().x + 3;
+                const int32_t cy = app.hud().countdown_button_rect().y + 3;
+                app.hud().handle_mouse_down(cx, cy, 1, app.sim(), app.renderer().camera());
+                app.hud().handle_mouse_up(cx, cy, 1, app.sim(), app.renderer().camera());
+                ASSERT_EQ(fullscreen_calls, 1);
+                ASSERT_TRUE(app.hud().is_match_countdown_active() && app.sim().current_tick() == 0);
+            }
+            for (int i = 0; i < 20; ++i) app.update_simulation(0.05f);                // one second of steps
+            ASSERT_EQ(app.countdown_seconds_left(), 2);
+            ASSERT_EQ(app.hud().status_line().text(), "Match starts in 2 s");
+            ASSERT_EQ(app.sim().current_tick(), 0u);
+            const int steps = 20 + steps_to_first_tick(app);
+            ASSERT_EQ(app.sim().current_tick(), 1u);
+            ASSERT_TRUE(steps >= 60 && steps <= 62);                                   // N seconds of 50 ms steps, and the step that runs tick 0
+            ASSERT_FALSE(app.hud().is_match_start_modal_active() || app.hud().is_match_countdown_active());
+            ASSERT_EQ(app.countdown_seconds_left(), -1);
+            app.shutdown();
+        }
+        {   // the same game with and without the card (a bot beside, the same seed): the same state after the same number of ticks
+            uint64_t with_card = 0;
+            uint64_t without_card = 0;
+            for (const uint32_t card_s : {2u, 0u}) {
+                Application app;
+                ASSERT_TRUE(app.init(config(card_s, true)));
+                ASSERT_EQ(app.hud().is_match_countdown_active(), card_s != 0);
+                steps_to_first_tick(app);
+                while (app.sim().current_tick() < 400) app.update_simulation(0.05f);
+                (card_s != 0 ? with_card : without_card) = app.sim().state_hash().total;
+                ASSERT_EQ(app.sim().current_tick(), 400u);
+                app.shutdown();
+            }
+            ASSERT_TRUE(with_card != 0 && with_card == without_card);
+        }
+        {   // the card keeps the map and the keys of the match out of reach
+            Application app;
+            ASSERT_TRUE(app.init(config(3, false)));
+            uint32_t mine = 0;
+            for (const auto& a : app.sim().get_world_state().ants) {
+                if (a.player_id == app.local_player_id() && mine == 0) mine = a.id;
+            }
+            ASSERT_TRUE(mine != 0);
+            for (const auto& a : app.sim().get_world_state().ants) {
+                if (a.id != mine) continue;
+                app.renderer().camera().center_on(a.px, a.py, app.sim().grid().width(), app.sim().grid().height());
+                int32_t sx = 0;
+                int32_t sy = 0;
+                ASSERT_TRUE(app.renderer().camera().world_to_screen(a.px, a.py, sx, sy));
+                ASSERT_TRUE(app.hud().handle_mouse_down(sx, sy, 1, app.sim(), app.renderer().camera()));
+                app.hud().handle_mouse_up(sx, sy, 1, app.sim(), app.renderer().camera());
+            }
+            ASSERT_TRUE(app.hud().get_selected_ant_ids().empty() && app.hud().get_selected_ant_id() == 0u);
+            SDL_KeyboardEvent ev{};
+            ev.type = SDL_KEYDOWN;
+            ev.keysym.sym = SDLK_a;
+            ev.keysym.mod = KMOD_LCTRL;
+            app.handle_key_down(ev);                                                  // Ctrl+A selects every ant in a match
+            ev.keysym.sym = SDLK_F1;
+            ev.keysym.mod = 0;
+            app.handle_key_down(ev);
+            ASSERT_TRUE(app.hud().get_selected_ant_ids().empty() && !app.hud().is_quick_help_open());
+            ASSERT_TRUE(app.hud().is_match_countdown_active() && app.sim().current_tick() == 0);
+            app.shutdown();
+        }
+        {   // without the option: the plain dialog, 100 steps and the one that runs tick 0
+            Application app;
+            ASSERT_TRUE(app.init(config(0, false)));
+            ASSERT_TRUE(app.hud().is_match_start_modal_active() && !app.hud().is_match_countdown_active());
+            ASSERT_EQ(app.countdown_seconds_left(), -1);
+            ASSERT_EQ(steps_to_first_tick(app), 101);
+            app.shutdown();
+        }
+    } TEST_END();
+
     TEST_CASE("7.6h The site statistics' hook (the web page has the server count a game on this computer): told ONCE for each game, at its first tick (not at the start, not while the \"get ready\" dialog is up, not at the later ticks), again for the next match of the same application, the same for a game with bots and for the direct start; a hook that is cleared or was never set says nothing") {
         const std::string tiny = "Original-Ants/Maps/TINY.LVL";
         const auto config = [&](bool direct, bool with_bot) {
