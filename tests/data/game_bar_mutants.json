@@ -286,14 +286,14 @@
    "file": "web/site_nav.js",
    "old": "window.innerWidth !== openWidth) close(false);",
    "new": "true) close(false);",
-   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
   },
   {
    "id": "the_menu_stays_at_a_new_width",
    "file": "web/site_nav.js",
    "old": "window.innerWidth !== openWidth) close(false);",
    "new": "false) close(false);",
-   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
   }
  ]
 }
