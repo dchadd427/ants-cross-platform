@@ -130,7 +130,7 @@ struct LevelPlan {
     int32_t counter_home_radius{6};      // the ground within this many tiles of the own hill is the bot's own, whichever hill lies nearer (never the tiles of another hill's thief hole or gate ring)
     uint32_t counter_claim_percent{170}; // a pile is the bot's to clear around when its walk costs at most this percentage of the cheapest walk of any hill
     int32_t counter_work_tiles{4};       // ... or when an own ant that carries food or harvests is within this many tiles of the pile (not within counter_rival_yard of another hill, see below)
-    int32_t counter_rival_yard{10};      // a pile within this many tiles of another team's hill is not made the bot's by work alone, whatever its ants do there (0: no such limit); a team that dropped out is no rival
+    int32_t counter_rival_yard{10};      // a hazard's tile within this many tiles of another team's hill is not made the bot's by work alone, whatever its ants do there (0: no such limit); a team that dropped out is no rival
     int32_t counter_keeper_leash{12};    // while walls are wanted the Fire Ant that keeps them goes for no enemy wall farther than this from the own hill (a trip to a far pile waits until it is free)
     uint32_t counter_bomber_hp{5};       // a Bomber goes for a bomb with at least this many hit points: one more than two blasts take away (the way there may cross a second bomb); a worker that sets a bomb off needs 8, the Fire Ant that keeps the walls 3 (a wall burns, it does not throw)
     // power-ups, raids, guards (Medium and Hard)

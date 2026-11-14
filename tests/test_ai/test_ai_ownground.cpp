@@ -10,9 +10,10 @@
 //   AI40.5  a fire wall on the enemy's hole tile near a pile is left alone, one near the bot's hill is put out, and the keeper of the walls stays inside its leash while walls are wanted
 //   AI40.6  the worker's way (no Bomber): only on the own ground and not as one of the last ants; a Bomber needs five hit points; the map's own bombs are asked as they were
 //   AI40.7  the bench bot turtle on TREASURE against three Hard bots: before, every bot goes into its base now and then to defuse or put out fire; after, none does
-//   AI40.8  the claim by walking cost stops short of a pile twice as far as a rival's, the keeper's leash holds at 14 tiles, a team that dropped out is no rival
+//   AI40.8  the claim by walking cost stops short of a pile twice as far as a rival's, the keeper's leash (12 tiles) holds against a wall 15 tiles out, a team that dropped out is no rival
 //   AI40.9  a bot that helps its ally answers a bomb in the ally's yard but not one in a third team's yard
-//   AI40.10 the keeper of the walls is chosen with three hit points and answers an enemy wall on the own ground with three, with two it is no keeper (the same rule as the Bomber's)
+//   AI40.10 the keeper of the walls is chosen with three hit points and answers an enemy wall on the own ground with three, with two it is no keeper, and it also answers a wall beside a pile the bot has a claim to
+//   AI40.11 the keeper's leash and the rule of the last ants hold for a wall in the ally's yard, and a Bomber that is one of the last ants leaves the ally's bomb alone
 // AI40.1 is a pin of the plans; the others play scenes.
 #include <algorithm>
 #include <cstdint>
@@ -347,7 +348,7 @@ void run_ownground_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI40.8 The Claim By Walking Cost Stops Short Of A Pile Twice As Far As A Rival's, The Keeper's Leash Holds At 14 Tiles, A Team That Dropped Out Is No Rival") {
+    TEST_CASE("AI40.8 The Claim By Walking Cost Stops Short Of A Pile Twice As Far As A Rival's, The Keeper's Leash Holds Against A Wall 15 Tiles Out, A Team That Dropped Out Is No Rival") {
         const LevelPlan plan = scene_plan(true);
         {   // a pile whose walk costs the bot about twice what it costs the enemy (hill at (50, 4)): no claim, nothing is worked there
             sim::SimulationEngine sim;
@@ -429,6 +430,25 @@ void run_ownground_tests() {
             ASSERT_EQ(harm_to(view, map, plan, TileCoord{44, 5}), 0);                                       // (beyond the old radii: nothing either way)
             ASSERT_EQ(harm_to(view, map, plan, TileCoord{38, 8}), 2);
         }
+        {   // a pile the ally has a claim to by walking cost (a third team at (50, 4) walks there a little cheaper, so it is not the ally's own ground) is answered, one that the third team reaches by far is not
+            sim::SimulationEngine sim;
+            close_field(sim, TileCoord{30, 4});
+            sim.grid_mut().set_anthill(2, TileCoord{50, 4});
+            sim.form_alliance(0, 1);
+            add_pile(sim, 42, 14, 60, 25);
+            add_pile(sim, 47, 9, 60, 25);
+            seat_ants(sim, 1);
+            const MapInfo map(sim);
+            const BotView view = BotView::build(sim, 0, &map);
+            LevelPlan plan = scene_plan(true);
+            plan.ally_help = true;
+            ASSERT_TRUE(ally_hazard_ground(view, map, plan, TileCoord{42, 15}) == HazardGround::Claimed);
+            ASSERT_EQ(harm_to(view, map, plan, TileCoord{42, 15}), 2);
+            ASSERT_TRUE(ally_hazard_ground(view, map, plan, TileCoord{47, 11}) == HazardGround::Foreign);
+            ASSERT_EQ(harm_to(view, map, plan, TileCoord{47, 11}), 0);
+            plan.own_ground_counters = false;
+            ASSERT_TRUE(harm_to(view, map, plan, TileCoord{47, 11}) != 0);                                  // (the old rule answered both)
+        }
     } TEST_END();
 
     TEST_CASE("AI40.10 The Keeper Of The Walls Is Chosen With Three Hit Points And Answers An Enemy Wall On The Own Ground With Three (A Wall Burns, It Does Not Throw); With Two It Is Not The Keeper") {
@@ -446,6 +466,64 @@ void run_ownground_tests() {
                 plan.wall_trigger = WallTrigger::Never;
                 ASSERT_EQ(play(sim, plan, home, 100) >= 1, hp >= 3);                                       // (an ant heals a hit point every few hundred ticks: the first 100 are the question)
             }
+        }
+        {   // a keeper with three hit points answers a wall beside a pile that the bot has a claim to by walking cost, off the own ground
+            const TileCoord wall{32, 13};
+            sim::SimulationEngine sim;
+            close_field(sim, TileCoord{50, 4});
+            add_pile(sim, 10, 12, 200, 25);
+            add_pile(sim, 32, 9, 60, 25);
+            seat_ants(sim, 5);
+            const uint32_t keeper = sim.spawn_unit(0, sim::AntType::Fire, TileCoord{8, 11});
+            sim.get_unit(keeper).hp = 3;
+            sim.set_fire_at(wall, 3500);
+            LevelPlan plan = scene_plan(true);
+            plan.wall_trigger = WallTrigger::Never;
+            {
+                const MapInfo map(sim);
+                const BotView view = BotView::build(sim, 0, &map);
+                ASSERT_TRUE(hazard_ground(view, map, plan, wall) == HazardGround::Claimed);
+            }
+            ASSERT_TRUE(play(sim, plan, wall, 100) >= 1);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI40.11 The Keeper's Leash And The Rule Of The Last Ants Hold For A Wall In The Ally's Yard, And A Bomber That Is One Of The Last Ants Leaves The Ally's Bomb Alone") {
+        // the bot's hill at (4, 4), its ally's at (34, 4), a third team's at (50, 40) that can reach a Thief power-up (so walls are wanted); a fire wall in the ally's yard at (33, 8), 29 tiles from the bot's hill
+        const TileCoord wall{33, 8};
+        const auto scene = [&](sim::SimulationEngine& sim, int workers, sim::AntType type) {
+            close_field(sim, TileCoord{34, 4});
+            sim.grid_mut().set_anthill(2, TileCoord{50, 40});
+            sim.form_alliance(0, 1);
+            sim.grid_mut().place_powerup(40, 30, 3);
+            seat_ants(sim, workers, type);
+        };
+        struct Case {
+            int workers;
+            bool wanted;
+            bool goes;
+        };
+        for (const Case c : {Case{5, true, false}, Case{5, false, true}, Case{0, false, false}, Case{0, true, false}}) {
+            sim::SimulationEngine sim;
+            scene(sim, c.workers, sim::AntType::Fire);
+            sim.set_fire_at(wall, 3500);
+            LevelPlan plan = scene_plan(true);
+            plan.ally_help = true;
+            if (!c.wanted) plan.wall_trigger = WallTrigger::Never;
+            {
+                const MapInfo map(sim);
+                const BotView view = BotView::build(sim, 0, &map);
+                ASSERT_EQ(harm_to(view, map, plan, wall), 2);                                               // (the ally's yard, not the bot's)
+            }
+            ASSERT_EQ(play(sim, plan, wall, 1500) >= 1, c.goes);
+        }
+        for (const int workers : {4, 0}) {                                                                  // a bomb in the ally's yard: the Bomber goes with workers beside it, not as one of the last ants
+            sim::SimulationEngine sim;
+            scene(sim, workers, sim::AntType::Bomber);
+            sim.grid_mut().place_bomb(33, 8, 2);
+            LevelPlan plan = scene_plan(true);
+            plan.ally_help = true;
+            ASSERT_EQ(play(sim, plan, wall, 1500) >= 1, workers > 0);
         }
     } TEST_END();
 

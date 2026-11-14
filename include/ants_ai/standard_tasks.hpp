@@ -260,7 +260,7 @@ private:
 ///              reach of the hill) and one wall at a time; the other levels light the wall again after it burned out, while the threat lasts
 ///   failure    an order after which the ant is idle again and the tile is still open: the tile is left alone for 300 ticks
 ///   counter    an enemy fire wall that is in the way of the economy (harms_economy) is put out when nothing of the above is due; with plan.own_ground_counters only a wall on ground that the bot has
-///              a claim to (hazard_ground), not one farther than plan.counter_keeper_leash from the own hill while walls are wanted, and, when only the last ants are left, only on the own ground; the keeper is chosen with 3 hit points and goes to an enemy wall with the same 3: a wall hurts only an ant that walks into it, and the keeper's way is not a walk across bombs
+///              a claim to (hazard_ground), not one farther than plan.counter_keeper_leash from the own hill while walls are wanted, and, when only the last ants are left, only on the own ground; the keeper is chosen with 3 hit points and goes to an enemy wall with the same 3: a wall burns the ant that walks into it and throws nothing
 class WallTask final : public Task {
 public:
     WallTask(TaskId id, Tactics& tactics) : Task(id), tactics_(tactics) {}

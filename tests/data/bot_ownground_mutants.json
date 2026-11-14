@@ -129,7 +129,7 @@
   {
    "id": "last_ants_keeper_leaves",
    "file": "src/ants_ai/standard_tasks_build.cpp",
-   "old": "if (v.mine().size() <= tactics_.reserve_of(v) && hazard_ground(v, c.map, plan, w.tile) != HazardGround::Own) continue;",
+   "old": "if (v.mine().size() <= tactics_.reserve_of(v) && (harm == 2 || hazard_ground(v, c.map, plan, w.tile) != HazardGround::Own)) continue;",
    "new": "if (false) continue;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
    "expect": "AI40.5"
@@ -239,6 +239,46 @@
    "test": "timeout 300 ./build/bot_arena --selftest",
    "expect": "the keys ownground",
    "build": "bot_arena"
+  },
+  {
+   "id": "ally_claim_dropped",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "return ground_of(view, map, plan, tile, view.ally(), view.seat(), false);",
+   "new": "{ const HazardGround g = ground_of(view, map, plan, tile, view.ally(), view.seat(), false); return g == HazardGround::Claimed ? HazardGround::Foreign : g; }",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.9"
+  },
+  {
+   "id": "keeper_five_off_own_ground",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (plan.own_ground_counters && harm >= 1) {",
+   "new": "if (plan.own_ground_counters && harm == 1 && keeper->hp < 5 && hazard_ground(v, c.map, plan, w.tile) != HazardGround::Own) continue; if (plan.own_ground_counters && harm >= 1) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.10"
+  },
+  {
+   "id": "ally_wall_leash_skipped",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (plan.own_ground_counters && harm >= 1) {",
+   "new": "if (plan.own_ground_counters && harm == 1) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.11"
+  },
+  {
+   "id": "ally_wall_last_ants_skipped",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "(harm == 2 || hazard_ground(",
+   "new": "(hazard_ground(",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.11"
+  },
+  {
+   "id": "ally_bomb_last_ants_skipped",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "ground = harm == 2 ? HazardGround::Foreign : hazard_ground(",
+   "new": "ground = hazard_ground(",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.11"
   }
  ]
 }

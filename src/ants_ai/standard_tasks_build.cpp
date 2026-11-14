@@ -185,9 +185,9 @@ void WallTask::step(TaskContext& c) {
             if (plan.fire_defence && fired_in_wall(v, hill, plan, w.tile, hold_over)) continue;          // a wall of the ring round the own gate: not before the Fire Ant that lights it is dealt with
             const int harm = harm_to(v, c.map, plan, w.tile);                              // the own economy first, then the ally's
             if (harm == 0) continue;
-            if (plan.own_ground_counters && harm == 1) {
+            if (plan.own_ground_counters && harm >= 1) {
                 if (tactics_.wall_demand && w.tile.chebyshev_dist(hill.origin) > plan.counter_keeper_leash) continue;        // the keeper stays at its hole while the walls are wanted
-                if (v.mine().size() <= tactics_.reserve_of(v) && hazard_ground(v, c.map, plan, w.tile) != HazardGround::Own) continue;   // the last ants do not leave their own ground
+                if (v.mine().size() <= tactics_.reserve_of(v) && (harm == 2 || hazard_ground(v, c.map, plan, w.tile) != HazardGround::Own)) continue;   // the last ants do not leave their own ground (the ally's yard is not theirs)
             }
             const int32_t d = keeper->tile.chebyshev_dist(w.tile);
             if (!have_counter || harm < best_harm || (harm == best_harm && d < best)) {
@@ -379,8 +379,8 @@ void BombTask::step(TaskContext& c) {
         const int harm = harm_to(v, c.map, plan, b.tile, b.owner >= sim::MAX_PLAYERS);                 // the own economy first, then the ally's (only a Bomber goes there)
         if (harm == 0) continue;
         HazardGround ground = HazardGround::Own;
-        if (plan.own_ground_counters && harm == 1 && b.owner < sim::MAX_PLAYERS) {
-            ground = hazard_ground(v, c.map, plan, b.tile);
+        if (plan.own_ground_counters && b.owner < sim::MAX_PLAYERS) {
+            ground = harm == 2 ? HazardGround::Foreign : hazard_ground(v, c.map, plan, b.tile);          // (the ally's yard is not the bot's own ground)
             if (ground != HazardGround::Own && few_ants) continue;                                       // the last ants do not leave their own ground
         }
         const int32_t d = hill.present ? b.tile.chebyshev_dist(hill.origin) : 0;
