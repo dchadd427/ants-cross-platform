@@ -26,14 +26,14 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.16.5 - 2026-11-13 - A countdown card for solo play, computer players stay out of your base, Settings anywhere and no Live now page
 
 **For players:**
-- **A countdown card with a Fullscreen button when you play alone against computer players.** A server room with one person in it (with or without computer players) opens with the "Get ready. Fullscreen is one press away." card for 10 seconds, and a game on this computer does the same, showing the name you typed. Rooms with two or more people keep the 30-second countdown; recordings, live views and rejoins get no card. A server setting, --solo-countdown-seconds (default 10), sets the one-person time.
-- **Computer players leave your base alone.** They no longer walk into another player's base to defuse bombs or put out fire walls: a player's own walls and bombs at home are left to that player, an ally's hazards follow the same rule, and the last ants of a computer player stay home.
+- **A countdown card with a Fullscreen button when you play alone against computer players.** A server room with one person in it (with or without computer players) opens with the "Get ready. Fullscreen is one press away." card for 10 seconds, and a game on this computer in the browser does the same, showing the name you typed (the desktop game keeps its 5-second dialog unless asked). Rooms with two or more people keep the 30-second countdown; recordings, live views and rejoins get no card. A server setting, --solo-countdown-seconds (default 10), sets the one-person time.
+- **Computer players leave your base alone.** Medium and Hard computer players no longer walk into another player's base to defuse bombs or put out fire walls: a player's own walls and bombs at home are left to that player, an ally's hazards follow the same rule, and the last ants of a computer player stay home.
 - **The game's Settings work before a match too.** The gear opens a small panel with Fullscreen, Picture shape and Fullscreen mouse on the game's own screens. This corrects the v0.16.4 note: outside a match the gear was greyed out (its tip said "Not now"), and now it works anywhere. Held keys no longer reach the game when the panel is open.
 - **The Live now page is gone.** Running matches are listed on the front page with a Watch button, and the page's old addresses lead there. While matches run, the top bar shows a small red "N live" mark that leads to the front page. The installed app's Live now shortcut is gone too.
 
 **Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.4 page or game still joins. Under the hood: several tests are steadier.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/fb6cf52c...12455ae5)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/fb6cf52c...13968e10)
 
 ## v0.16.4 - 2026-11-13 - The phone chat box, Settings rows in the game, a new icon, no logo and faster site updates
 
