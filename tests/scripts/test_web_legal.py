@@ -140,7 +140,7 @@ class TheLegalPage(unittest.TestCase):
         for sentence in NOTICE:
             self.assertIn(sentence, self.text)
         self.assertIn("not legal advice", self.text)
-        self.assertEqual(re.findall(r"<strong>(.*?)</strong>", self.main), ["no warranty of any kind", "not liable", "id", "username", "display name", "Log out", "Forget me"])       # the two phrases that matter are in bold (and the words of the chat panel)
+        self.assertEqual(re.findall(r"<strong>(.*?)</strong>", self.main), ["no warranty of any kind", "not liable", "id", "username", "display name", "profile picture", "Show my Discord picture", "Log out", "Forget me"])       # the two phrases that matter are in bold (and the words of the chat panel)
 
     def test_it_says_what_the_readme_says_of_the_original_game(self):
         for words in ("belong to their copyright holders", "does not own them and cannot license them", "open an issue", "it will be taken out"):
@@ -160,22 +160,49 @@ class TheLegalPage(unittest.TestCase):
         for word in ("record", "recorded", "recordings", "stored", "kept", "retain", "retention", "cookie", "cookies", "privacy", "personal", "days", "names"):
             self.assertNotRegex(text.lower(), r"\b%s\b" % word, word)
 
+    def test_the_numbers_of_the_pictures_paragraph_are_the_numbers_of_the_code(self):
+        """A number that the page promises about the pictures is the code's own: the 30 days of a login, the 400 days that an `off` is remembered, the day that a browser may keep a picture, the five minutes of
+        nginx's cache and the hour between two purges are read from where they are made, not written twice."""
+        sys.path.insert(0, REPO)
+        from hub import http as hubhttp, limits as hublimits
+        from hub.store import PICTURE_DAYS
+        start = self.main.index('<section class="panel" id="chat-login">')
+        panel = plain(self.main[start:self.main.index("</section>", start)])
+        limits = hublimits.Limits()
+        self.assertIn("for at most %d days after the login that fetched it" % (limits.session_seconds // 86400), panel)
+        self.assertIn("for %d days after your last login" % PICTURE_DAYS, panel)
+        self.assertIn("deleted within the %s" % {3600.0: "hour"}[limits.purge_seconds], panel)
+        age = dict(hubhttp.PICTURE_HEADERS)["Cache-Control"]
+        self.assertIn("max-age=%d" % 86400, age)                                                                  # (a day: "may keep its own copy for up to a day")
+        self.assertIn("for up to a day", panel)
+        self.assertIn("up to five minutes", panel)
+        self.assertRegex(read("docker", "nginx.conf"), r"proxy_cache ants_hub_pics;(?s:.*?)proxy_cache_valid 200 5m;")      # (the cache in front of the picture's address keeps an answer five minutes)
+        self.assertIn("private", age)                                                                             # (and a proxy in front of the site keeps no copy)
+
     def test_the_panel_of_the_chat_says_what_is_kept_for_how_long_the_cookies_and_how_to_leave(self):
         start = self.main.index('<section class="panel" id="chat-login">')
         panel = plain(self.main[start:self.main.index("</section>", start)])
-        for words in ("Discord id, username and display name", "three things only", "shows the name that you pick", "for nothing else", "no email address", "no avatar", "keeps no Discord access token", "kept for up to 7 days", "only while they are among the newest 200 lines", "with the id and the name that wrote them",
+        for words in ("Discord id, username and display name", "four things only", "if you have set one, your profile picture", "shows the name that you pick and shows your picture", "for nothing else", "no email address and no list of friends or servers", "keeps no Discord access token", "kept for up to 7 days", "only while they are among the newest 200 lines", "with the id and the name that wrote them",
                       "Moderators also see your username next to a display name", "moderators", "deleted for good", "ban or a mute is kept by Discord id",
-                      "__Host-ants_oauth", "10 minutes at most", "__Host-ants_hub", "30 days", "Log out", "Forget me", "deletes your chat lines", "removes your username and display name", "a ban or a mute, if there is one, stays",
+                      "__Host-ants_oauth", "10 minutes at most", "__Host-ants_hub", "30 days", "Log out", "Forget me", "deletes your chat lines", "removes your username, display name and the copy of your picture", "a ban or a mute, if there is one, stays, and so does the operator's hiding of your picture, kept as one entry under the same kind of code, with no id and no name",
                       "Reading the chat and playing need no login",
+                      "fetches one small copy of your Discord profile picture from Discord, once, and keeps it on its own server", "shown to everyone who opens the front page, logged in or not, in the round image next to your name",
+                      "unless you switch off Show my Discord picture in the menu of your name or the site's operator hides it", "served by this site under a random address that is new every time the site fetches your picture and holds nothing of your Discord id",
+                      "other people's browsers do not contact Discord for it", "keeps the copy only while you have a login", "Switching it off, logging out of your last login, or Forget me deletes the copy from the server at once, and so does a kick or a ban",
+                      "when your last login runs out the copy stops being served at once", "Its address can still answer for up to five minutes", "may keep its own copy for up to a day",
+                      "Your choice to switch the picture off is remembered, by a code made from your Discord id with a secret key and not by the id", "Forget me deletes that too",
+                      "If you change your picture at Discord, the site shows the new one after your next login", "When the operator hides a picture on the server, that is written down in the same way",
                       "hold a moderator or administrator role in the project's Discord server", "the site asks Discord, with the project's bot", "The answers are kept in memory only", "writes down who did it, to which account, what it was and when",
                       "made from the Discord id with a secret key", "so the log itself does not hold the id", "kept for 30 days, at most 10,000 entries", "read only by the operator on the server", "not shown on the site",
                       "A kick or a ban is also shown to everyone in the chat as a line with the person's name, without the moderator's", "Forget me does not remove these entries, nor the line that said you were kicked or banned; that goes with the other lines within 7 days", "The site also asks Discord about any account that a moderator acts on, in the chat or not",
                       "the name you play under", "Games and Players lists", "the match history, which keeps results and names for good, and into the replay files", "for 30 days on the site, and for ever in a file that someone has downloaded", "Forget me does not remove it", "whether they are looking around, waiting in a room or playing",
                       "The voice button in the chat uses your browser's speech recognition", "Your browser may send the audio to its maker's speech service (Chrome, Edge and Safari do)", "this site receives no audio and keeps nothing of it"):
             self.assertIn(words, panel, words)
-        self.assertLessEqual(len(panel.split()), 620)                                                           # (230 until the display name: the third thing that the site gets, the name that is shown, and what moderators see; 252 words, then 90 more for the name that is played under and the Players list; 351 words, then: the newest 200 lines, 9 words more; raised from 352 to 390 on purpose for the voice button's sentence, 35 words: who hears the voice and that the site gets no audio, 386 words, then raised from 390 to 590 on purpose for the two sentences of the roles and of the moderators' log, which the people in the chat are told about: who may moderate and how it is asked of Discord, what is written down about an action and for how long, that the log holds a code and not the id, and that Forget me does not remove it, 185 words, 571; then raised from 590 to 620 on purpose for two clauses: that Forget me does not remove the line that said a person was kicked or banned, and that Discord is asked about an account when a moderator acts on it, in the chat or not, 37 words, 608 now)
-        self.assertEqual(re.findall(r"<strong>(.*?)</strong>", self.main[start:self.main.index("</section>", start)]), ["id", "username", "display name", "Log out", "Forget me"])
+        self.assertLessEqual(len(panel.split()), 930)                                                           # (230 until the display name: the third thing that the site gets, the name that is shown, and what moderators see; 252 words, then 90 more for the name that is played under and the Players list; 351 words, then: the newest 200 lines, 9 words more; raised from 352 to 390 on purpose for the voice button's sentence, 35 words: who hears the voice and that the site gets no audio, 386 words, then raised from 390 to 590 on purpose for the two sentences of the roles and of the moderators' log, which the people in the chat are told about: who may moderate and how it is asked of Discord, what is written down about an action and for how long, that the log holds a code and not the id, and that Forget me does not remove it, 185 words, 571; then raised from 590 to 620 on purpose for two clauses: that Forget me does not remove the line that said a person was kicked or banned, and that Discord is asked about an account when a moderator acts on it, in the chat or not, 37 words, 608 now) (raised from 620 to 930 on purpose for the pictures: the fourth thing that the site gets, the paragraph about the small copy of the Discord picture (what is fetched and when, who sees it, how long it is kept and what ends it, the cache, the switch and the operator's hiding), and what Forget me removes of it and what stays)
+        self.assertEqual(re.findall(r"<strong>(.*?)</strong>", self.main[start:self.main.index("</section>", start)]), ["id", "username", "display name", "profile picture", "Show my Discord picture", "Log out", "Forget me"])
         self.assertNotIn("two things only", panel)
+        self.assertNotIn("three things only", panel)
+        self.assertNotIn("no avatar", panel)
         self.assertNotRegex(self.main[start:self.main.index("</section>", start)], r"href=|src=|<script|<img")        # (the panel loads nothing and links nothing)
 
     def test_it_links_the_licence_the_third_party_notices_and_the_issues_page_of_the_repository(self):
