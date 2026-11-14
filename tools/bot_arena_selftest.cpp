@@ -1020,6 +1020,12 @@ int selftest() {
                     apply_tune(hm, "homemines", 0, tune_err) && !hm.home_on_route && !hm.home_first && apply_tune(hm, "homeonroute", 1, tune_err) && hm.home_on_route && !hm.home_first &&
                     apply_tune(hm, "homefirst", 1, tune_err) && hm.home_first && apply_tune(hm, "homelane", 20, tune_err) && hm.home_route_lane == 20 && !apply_tune(hm, "homelan", 1, tune_err),
                 "the keys homemines, homeonroute, homefirst and homelane switch the home-mine batch of the mines at home (off at every level) and set the lane of its mines (60 cost units at Hard, 20 at Medium); a misspelt key is refused");
+        ai::LevelPlan og = ai::plan_for(ai::Level::Hard);
+        t.check(og.own_ground_counters && ai::plan_for(ai::Level::Medium).own_ground_counters && !ai::plan_for(ai::Level::Easy).own_ground_counters && apply_tune(og, "ownground", 0, tune_err) && !og.own_ground_counters &&
+                    apply_tune(og, "ownground", 1, tune_err) && og.own_ground_counters && apply_tune(og, "grhome", 8, tune_err) && og.counter_home_radius == 8 && apply_tune(og, "grclaim", 120, tune_err) && og.counter_claim_percent == 120 &&
+                    apply_tune(og, "grwork", 2, tune_err) && og.counter_work_tiles == 2 && apply_tune(og, "grleash", 9, tune_err) && og.counter_keeper_leash == 9 && apply_tune(og, "grhp", 3, tune_err) && og.counter_bomber_hp == 3 && og.counter_rival_yard == 10 && apply_tune(og, "grrival", 0, tune_err) && og.counter_rival_yard == 0 &&
+                    !apply_tune(og, "ownground2", 1, tune_err),
+                "the keys ownground, grhome, grclaim, grwork, grrival, grleash and grhp switch the counters on the own ground (on at Medium and Hard) and set its numbers; a misspelt key is refused");
         ai::LevelPlan fl = ai::plan_for(ai::Level::Hard);
         const auto rules = [&fl]() {                                                                     // the five flower rules of the plan, as five digits: sides, fire, recover, recall, watch
             const bool on[5] = {fl.flower_sides, fl.flower_fire, fl.flower_recover, fl.flower_recall, fl.flower_watch};
