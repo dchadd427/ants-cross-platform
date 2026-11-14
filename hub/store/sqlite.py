@@ -157,11 +157,25 @@ class Store(StoreBase):
         with self.transaction():
             if self.db.execute("SELECT 1 FROM lines WHERE id = ? AND deleted = 0", (line_id,)).fetchone() is None:
                 return False
-            self.db.execute("UPDATE meta SET v = v + 1 WHERE k = 'del_seq'")
-            seq = self.last_deletion()
-            self.db.execute("UPDATE lines SET deleted = 1, del_seq = ?, del_by = ? WHERE id = ?", (seq, by, line_id))
+            self.mark_deleted(line_id, by)
             self.write_note(note)
             return True
+
+    def mark_deleted(self, line_id, by):
+        """Inside a transaction: the line is deleted, with the next number of the deletion counter."""
+        self.db.execute("UPDATE meta SET v = v + 1 WHERE k = 'del_seq'")
+        seq = self.last_deletion()
+        self.db.execute("UPDATE lines SET deleted = 1, del_seq = ?, del_by = ? WHERE id = ?", (seq, by, line_id))
+
+    def delete_lines_since(self, account, since, by, note=None):
+        """Mark deleted every line of the account that is not deleted and was written at or after `since`, each with its own number of the deletion counter (so the hub's look at the deletions finds them all); returns how many."""
+        with self.transaction():
+            ids = [r[0] for r in self.db.execute("SELECT id FROM lines WHERE account = ? AND deleted = 0 AND at >= ? ORDER BY id", (account, int(since)))]
+            for line_id in ids:
+                self.mark_deleted(line_id, by)
+            if ids:
+                self.write_note(note)
+            return len(ids)
 
     def deletions_since(self, seq):
         """[(del_seq, id)] of the lines deleted after `seq`, in order."""
