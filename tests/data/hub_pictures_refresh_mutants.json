@@ -1,0 +1,204 @@
+{
+ "note": "Mutants of the refresh of a logged-in person's Discord picture (hub/pictures.py refresh, want, absent, ask, lookup, settle; hub/roles.py hand-over and spare_turn; hub/discord.py user and avatar_code), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'; docs/HUB_PICTURES.md, 'Refreshing'): each breaks one rule on purpose, and a test of tests/scripts/test_hub_pictures_refresh.py must notice. Run from the checkout: python3 tools/mutate.py tests/data/hub_pictures_refresh_mutants.json --keep-going --jobs 1 --baseline-every 40.",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_hub_pictures_refresh"
+ },
+ "mutants": [
+  {
+   "id": "refresh_ignores_a_changed_code",
+   "file": "hub/pictures.py",
+   "old": "        return not (have and self.codes.get(key) == self.mark(avatar))",
+   "new": "        return not have",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheRolesCheckRefreshes"
+  },
+  {
+   "id": "refresh_fetches_the_same_code_again",
+   "file": "hub/pictures.py",
+   "old": "        return not (have and self.codes.get(key) == self.mark(avatar))",
+   "new": "        return True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheRolesCheckRefreshes"
+  },
+  {
+   "id": "refresh_does_not_look_at_the_switch_or_a_ban",
+   "file": "hub/pictures.py",
+   "old": "        if self.store.picture_state(account) != SHOW_ON or self.store.is_banned(account):\n            return False\n        have = ",
+   "new": "        if False:\n            return False\n        have = ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheEndsStopTheFetch"
+  },
+  {
+   "id": "no_picture_at_discord_keeps_the_copy",
+   "file": "hub/pictures.py",
+   "old": "                self.store.clear_picture(account)\n                self.log.event(\"picture\", kind=\"none\")\n                self.sync()\n            return False",
+   "new": "                pass\n            return False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheRolesCheckRefreshes"
+  },
+  {
+   "id": "roles_do_not_hand_the_code_over",
+   "file": "hub/roles.py",
+   "old": "                    self.on_avatar(account, code)",
+   "new": "                    pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheRolesCheckRefreshes"
+  },
+  {
+   "id": "roles_do_not_say_who_is_absent",
+   "file": "hub/roles.py",
+   "old": "                self.on_absent(account)",
+   "new": "                pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheProfileLookup"
+  },
+  {
+   "id": "a_bad_code_is_believed",
+   "file": "hub/discord.py",
+   "old": "        if isinstance(value, str) and AVATAR.match(value):\n            return True, value",
+   "new": "        if isinstance(value, str):\n            return True, value",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheRolesCheckRefreshes"
+  },
+  {
+   "id": "lookup_without_the_day",
+   "file": "hub/pictures.py",
+   "old": "        if last is not None and now - last < self.limits.picture_lookup_seconds:\n            return\n",
+   "new": "        if False:\n            return\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheProfileLookup"
+  },
+  {
+   "id": "lookup_for_a_member_when_roles_are_on",
+   "file": "hub/pictures.py",
+   "old": "            if getattr(roles, \"on\", False) is True and not (roles.owner and account == roles.owner):\n                return\n",
+   "new": "            pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheRolesCheckRefreshes"
+  },
+  {
+   "id": "lookup_without_a_token",
+   "file": "hub/pictures.py",
+   "old": "        if not self.token or self.stopping:\n            return\n        key, now",
+   "new": "        if self.stopping:\n            return\n        key, now",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheTokenIsNotSet"
+  },
+  {
+   "id": "lookup_for_a_stopped_account",
+   "file": "hub/pictures.py",
+   "old": "        if self.store.picture_state(account) != SHOW_ON or self.store.is_banned(account):\n            return\n        self.enqueue(account, LOOKUP",
+   "new": "        self.enqueue(account, LOOKUP",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheEndsStopTheFetch"
+  },
+  {
+   "id": "login_copy_is_not_a_look",
+   "file": "hub/pictures.py",
+   "old": "        if last is None and key in self.codes and self.store.has_picture(account):\n            return self.note_look(key)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheProfileLookup"
+  },
+  {
+   "id": "mark_is_the_code_itself",
+   "file": "hub/pictures.py",
+   "old": "        self.codes[key] = self.mark(avatar)",
+   "new": "        self.codes[key] = avatar",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheMarkAndTheSchema"
+  },
+  {
+   "id": "mark_not_kept_after_a_fetch",
+   "file": "hub/pictures.py",
+   "old": "        if kept and key is not None:\n            self.remember(key, avatar)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheRolesCheckRefreshes"
+  },
+  {
+   "id": "marks_outlive_the_copy",
+   "file": "hub/pictures.py",
+   "old": "        for ref in [ref for ref in self.codes if ref not in names]:\n            del self.codes[ref]",
+   "new": "        for ref in []:\n            del self.codes[ref]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheEndsStopTheFetch"
+  },
+  {
+   "id": "memory_of_marks_not_bounded",
+   "file": "hub/pictures.py",
+   "old": "        while len(self.codes) > self.limits.pictures_rows_max:\n            del self.codes[next(iter(self.codes))]",
+   "new": "        while False:\n            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheMarkAndTheSchema"
+  },
+  {
+   "id": "memory_of_looks_not_bounded",
+   "file": "hub/pictures.py",
+   "old": "        while len(self.looked) > self.limits.pictures_rows_max:\n            del self.looked[next(iter(self.looked))]",
+   "new": "        while False:\n            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheMarkAndTheSchema"
+  },
+  {
+   "id": "profile_of_another_account_believed",
+   "file": "hub/pictures.py",
+   "old": " and data.get(\"id\") == account else (False, None)",
+   "new": " else (False, None)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheLookupFails"
+  },
+  {
+   "id": "refused_token_does_not_stop_lookups",
+   "file": "hub/pictures.py",
+   "old": "            self.hold_until = max(self.hold_until, now + 600.0)",
+   "new": "            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheLookupFails"
+  },
+  {
+   "id": "a_wait_does_not_stop_lookups",
+   "file": "hub/pictures.py",
+   "old": "            self.hold_until = max(self.hold_until, now + min(max(rl.get(\"retry_after\", 5.0), 0.5), 60.0))",
+   "new": "            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheLookupFails"
+  },
+  {
+   "id": "lookups_do_not_use_the_roles_turns",
+   "file": "hub/pictures.py",
+   "old": "taken = self.roles.spare_turn() if getattr(self.roles, \"on\", False) is True else self.users.take(self.clock())",
+   "new": "taken = self.users.take(self.clock())",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheRolesOnlyLendTurns"
+  },
+  {
+   "id": "lookups_have_no_pace_of_their_own",
+   "file": "hub/pictures.py",
+   "old": "else self.users.take(self.clock())",
+   "new": "else True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheRolesAreOff"
+  },
+  {
+   "id": "roles_stop_does_not_stop_lookups",
+   "file": "hub/roles.py",
+   "old": "        if not self.on or now < self.pause_until or now < self.hold_until:\n            return None\n        return self.bucket.take(now)",
+   "new": "        if not self.on:\n            return None\n        return self.bucket.take(now)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheRolesOnlyLendTurns"
+  },
+  {
+   "id": "roles_turn_not_spent",
+   "file": "hub/roles.py",
+   "old": "        return self.bucket.take(now)\n\n    def next_urgent",
+   "new": "        return self.bucket.ready(now)\n\n    def next_urgent",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheRolesOnlyLendTurns"
+  },
+  {
+   "id": "lookup_failure_logs_the_reference",
+   "file": "hub/pictures.py",
+   "old": "        except discordmod.DiscordError:\n            self.log.event(\"picture\", kind=\"down\")\n            return False, None\n        now",
+   "new": "        except discordmod.DiscordError:\n            self.log.event(\"picture\", kind=\"down\", ref=pseudo.reference(self.store.secret(), account))\n            return False, None\n        now",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheLookupFails"
+  },
+  {
+   "id": "a_failed_lookup_is_counted_as_a_look",
+   "file": "hub/pictures.py",
+   "old": "                ok, avatar = await self.lookup(account)\n                if not ok:\n                    return\n                self.note_look(key)",
+   "new": "                ok, avatar = await self.lookup(account)\n                self.note_look(key)\n                if not ok:\n                    return",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheLookupFails"
+  },
+  {
+   "id": "the_hubs_roles_not_hooked_to_pictures",
+   "file": "hub/login.py",
+   "old": "        hub.chat.roles.on_avatar, hub.chat.roles.on_absent = self.pictures.refresh, self.pictures.absent",
+   "new": "        pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheRolesCheckRefreshes"
+  },
+  {
+   "id": "connect_does_not_ask_for_a_profile",
+   "file": "hub/chat.py",
+   "old": "                self.pictures.want(you.account_id) ",
+   "new": "                pass ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheRolesAreOff"
+  }
+ ]
+}

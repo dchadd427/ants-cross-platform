@@ -158,6 +158,8 @@ class Chat:
         you = peer.identity
         if you is not None:
             self.roles.want(you.account_id)                       # (its role is asked at the front of the queue; the welcome says the last answer, and a `you` frame follows a new one)
+            if self.pictures is not None:
+                self.pictures.want(you.account_id)                # (where the roles' check does not say what the picture is, its profile is asked for when that is due)
         lines = self.recent()
         names = self.usernames([l.account for l in lines]) if you is not None and self.is_mod(you.account_id) else None        # (only a moderator's welcome has the usernames)
         welcome = {"t": "welcome", "v": PROTOCOL, "you": self.you_of(you) if you else None, "login": bool(self.login), "presence": True,

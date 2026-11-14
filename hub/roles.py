@@ -20,6 +20,8 @@ share of its own, `roles_urgent_burst` and one more a second, so that a moderato
 in time, for any reason, refuses the action (`role`), and no role that is merely believed is ever enough. An urgent lookup is a lookup like another: the Discord id of the person is in the request
 and nowhere else.
 
+The same answer carries the person's picture code, which is handed to hub/pictures.py (`on_avatar`; a person who is not in the server is `on_absent`) and kept here no more than the role's other fields are written down: not at all. The pictures take their lookups' turns from this bucket (`spare_turn`).
+
 Nothing in a log line, an error or a frame holds the token, the server's id, a role's id or an account: the log says a kind and a status. The token is read once, from the settings.
 """
 import asyncio
@@ -82,6 +84,8 @@ class Roles:
         self.entries = Entries()                # account -> Entry, for the accounts that have a socket open (and, for one grace, those that had)
         self.connected = lambda: ()             # the accounts that have a socket open (the chat sets it)
         self.changed = lambda account: None     # called when the role that an account's pages should show changed (the chat sets it)
+        self.on_avatar = lambda account, avatar: None      # called with the picture's short code (or None) that Discord's member answer says (hub/pictures.py `refresh`; the code is never kept here)
+        self.on_absent = lambda account: None   # called when Discord says the person is not in the server (hub/pictures.py `lookup`)
         self.bucket = TokenBucket(limits.roles_burst, limits.roles_refill_seconds, clock())
         self.pause_until = float("-inf")        # no call before this (a refused token, server or access)
         self.hold_until = float("-inf")         # no call before this (Discord said wait)
@@ -160,6 +164,14 @@ class Roles:
             return False
         bucket.tokens -= count
         return True
+
+    def spare_turn(self):
+        """A turn of the bucket of the lookups for a call that is not a role's (the picture of a person who is not in the server, hub/pictures.py): None when the lookups are stopped (Discord refused or said wait),
+        True when a turn was taken, False when there is none now. The pace is the same one, two a second for all of them together."""
+        now = self.clock()
+        if not self.on or now < self.pause_until or now < self.hold_until:
+            return None
+        return self.bucket.take(now)
 
     def next_urgent(self):
         """The account of an action that waits for a lookup, first come first served (futures that were cancelled, by an action that gave up, are dropped)."""
@@ -327,10 +339,12 @@ class Roles:
         code = data.get("code")
         if type(code) is not int:
             code = None
+        absent = False
         if status == 200:
             role = self.role_in(data, account)
         elif status == 404 and code in (NOT_A_MEMBER, UNKNOWN_USER):
             role = NONE
+            absent = code == NOT_A_MEMBER
         elif status == 404 and code == UNKNOWN_GUILD:
             self.refused("guild", status, now)
             return False
@@ -358,7 +372,22 @@ class Roles:
         if self.down:
             self.down = False
             self.log.event("roles_up")
+        if entry is not None:
+            self.tell_pictures(account, data if status == 200 and role is not None else None, absent)
         return entry is not None
+
+    def tell_pictures(self, account, data, absent):
+        """What the answer says of the picture, handed on (a member's picture code, or that the person is not in the server): the pictures decide, and nothing here keeps it or can fail the check."""
+        try:
+            if absent:
+                self.on_absent(account)
+            user = data.get("user") if data is not None else None
+            if isinstance(user, dict) and "avatar" in user:
+                valid, code = discordmod.Discord.avatar_code(user["avatar"])
+                if valid:
+                    self.on_avatar(account, code)
+        except Exception as e:
+            self.trouble(e, "pictures")
 
     def role_in(self, data, account):
         """The role that a member object says (`admin`, `mod` or `none`), or None when it is not the shape of a member: roles that are a list of at most 250 ids, and a user, if there is one,

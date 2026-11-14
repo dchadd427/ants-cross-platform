@@ -147,8 +147,8 @@
   {
    "id": "fetch_trouble_fails_the_login",
    "file": "hub/pictures.py",
-   "old": "        except Exception as e:                                # (a bug or a refusing database costs one picture, never the login)\n            self.log.event(\"picture\", kind=\"bug\", error=type(e).__name__)\n\n    def drop",
-   "new": "        except ZeroDivisionError as e:\n            self.log.event(\"picture\", kind=\"bug\", error=type(e).__name__)\n\n    def drop",
+   "old": "        except Exception as e:                                # (a bug or a refusing database costs one picture, never the login)\n            self.log.event(\"picture\", kind=\"bug\", error=type(e).__name__)\n\n    def enqueue",
+   "new": "        except ZeroDivisionError as e:\n            self.log.event(\"picture\", kind=\"bug\", error=type(e).__name__)\n\n    def enqueue",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheStoreAndTheHub"
   },
   {
@@ -175,8 +175,8 @@
   {
    "id": "a_404_keeps_the_old_copy",
    "file": "hub/pictures.py",
-   "old": "        if status == 404:\n            self.store.clear_picture(account)\n",
-   "new": "        if status == 404:\n",
+   "old": "        if status == 404:\n            self.codes.pop(key, None)\n            self.store.clear_picture(account)\n",
+   "new": "        if status == 404:\n            self.codes.pop(key, None)\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheLoginWithAPicture"
   },
   {
@@ -539,8 +539,8 @@
   {
    "id": "one_account_may_have_two_fetches_at_a_time",
    "file": "hub/pictures.py",
-   "old": "            if key in self.queued or len(self.waiting) >= self.limits.picture_waiting:",
-   "new": "            if len(self.waiting) >= self.limits.picture_waiting:",
+   "old": "        if key in self.queued or len(self.waiting) >= self.limits.picture_waiting:",
+   "new": "        if len(self.waiting) >= self.limits.picture_waiting:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheLoginWithAPicture"
   },
   {
@@ -784,8 +784,8 @@
   {
    "id": "a_login_during_the_stop_is_fetched",
    "file": "hub/pictures.py",
-   "old": "            if self.stopping:\n                return\n",
-   "new": "",
+   "old": "            if self.stopping:\n                return\n            if self.store.picture_state(account, touch=True) != SHOW_ON:",
+   "new": "            if self.store.picture_state(account, touch=True) != SHOW_ON:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheStop"
   },
   {
