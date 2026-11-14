@@ -290,17 +290,18 @@ class TheStyle(unittest.TestCase):
         self.assertIn("@media (max-width: 359px) { .gc-head { gap: 6px; } .gc-title { font-size: 19px; white-space: nowrap; } .gc-online { gap: 6px; font-size: 13px; } }", self.css, "the heading and the count on one line at 320 px")
         self.assertIn("@media (max-height: 700px) { .gc-guest { display: none; } }", self.css, "in a short window the guest line gives its place to the log")
 
-    def test_the_script_and_the_style_sheets_agree_on_what_a_phone_upright_is_and_how_tall_the_box_grows(self):
-        """a number that two programs must agree on (the one place where this file reads the style as text): the media query and the sizes that chat.js uses to set the text area's height are the ones that talk.css and chat.css draw"""
+    def test_the_script_and_the_style_sheets_agree_on_how_tall_the_box_grows(self):
+        """a number that two programs must agree on (the one place where this file reads the style as text): the sizes that chat.js uses to set the text area's height are the ones that talk.css draws, in every window; a wide window and a low one cap it lower"""
         js = read("web", "home", "chat.js")
-        query = re.search(r"var UPRIGHT = '([^']+)', ROW = (\d+), LINE = (\d+);", js)
+        query = re.search(r"var ROW = (\d+), LINE = (\d+);", js)
         self.assertIsNotNone(query)
+        self.assertNotIn("matchMedia", js, "one composer in every window: the script asks no query")
         talk = read("web", "home", "talk.css")
-        self.assertIn("@media " + query.group(1) + " {", talk, "the box's own media query")
-        self.assertIn("@media " + query.group(1) + " {", self.css, "the smaller page's media query")
-        row, line = int(query.group(2)), int(query.group(3))
+        row, line = int(query.group(1)), int(query.group(2))
         self.assertIn("min-height: %dpx;" % row, talk)
-        self.assertIn("max-height: %dpx;" % (row + 3 * line), talk, "one row, and three more lines of the same height: four lines")
+        self.assertIn("@media (max-width: 700px) and (min-height: 501px) {       /* (a phone held upright: four lines of words, and the off field is small and wraps) */\n    .gt-on textarea.gc-input { max-height: %dpx; }" % (row + 3 * line), talk, "one row, and three more lines of the same height: four lines on a phone held upright")
+        self.assertIn("height: %dpx; min-height: %dpx; max-height: %dpx;" % (row, row, row + line), talk, "a wide window: two lines")
+        self.assertIn(".gt-on textarea.gc-input { max-height: %dpx; }" % row, talk, "a low window: one row")
         self.assertIn("line-height: %dpx;" % line, talk)
 
     def test_the_input_is_16_px_so_that_a_phone_does_not_zoom_into_it(self):
