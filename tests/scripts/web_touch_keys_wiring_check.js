@@ -134,5 +134,27 @@ function runFunction(name, vars) {
     }
 }
 
+// A change of the picture's shape (Automatic on a turn of the phone, a pick) lays the hotkey buttons out again: antsSetAspect asks for a forced relayout(), and the page's relayout() refreshes the
+// buttons (rail or row) BEFORE it measures the chrome and fits the picture, so the fit leaves out the stage's padding that the new layout has. Both functions are RUN as the page writes them.
+{
+    const body = (name) => { const from = text.indexOf('function ' + name + '('); if (from < 0) { failed++; console.log('FAIL the page has no ' + name); return null; } let d = 0; for (let i = text.indexOf('{', from); i < text.length; i++) { if (text[i] === '{') d++; else if (text[i] === '}' && --d === 0) return text.slice(from, i + 1); } return null; };
+    const relayoutSrc = body('relayout'), setSrc = body('antsSetAspect');
+    if (relayoutSrc && setSrc) {
+        const log = [];
+        const touch = { refresh: (quiet) => log.push('touch.refresh(' + quiet + ')') };
+        const code = 'var antsTouchKeys = touch, ANTS_ASPECT = "16:9", ANTS_ARGS = [], stageElement = {}; ' + relayoutSrc + '\n' + setSrc + '\nreturn { set: antsSetAspect, relayout: relayout };';
+        const api = new Function('touch', 'log', 'window', 'ANTS_PAGE', 'antsShowShape', 'antsSyncAspect', 'antsShowPickers', 'antsAddress', 'antsAspectOption', 'measureChrome', 'layoutBox',
+            code)(touch, log, {}, { parseAspect: (v) => v }, () => log.push('show'), () => {}, () => {}, () => {}, () => -1, () => log.push('measure'), (f) => log.push('layoutBox(' + f + ')'));
+        api.relayout(false);
+        expect('relayout: the buttons are laid out first, then the chrome is measured, then the picture is fitted', log, ['touch.refresh(true)', 'measure', 'layoutBox(false)']);
+        log.length = 0;
+        api.set('20:9', false);
+        expect('a new shape (Automatic on a turn of the phone): shown, then a forced relayout that lays the buttons out again', log, ['show', 'touch.refresh(true)', 'measure', 'layoutBox(true)']);
+        log.length = 0;
+        api.set('20:9', false);
+        expect('the same shape again: nothing is laid out again', log, []);
+    }
+}
+
 console.log('web touch keys wiring: ' + checks + ' checks, ' + failed + ' failures');
 process.exit(failed ? 1 : 0);
