@@ -15,7 +15,7 @@ profile, its own port; nothing of yours is touched) and looks at what only a bro
   * the page at desktop sizes (1280 x 720, 1920 x 1080, 1440 x 900, a 21:9 window, a small one, a very narrow one) and on a phone, at device ratios 1, 2 and 3: the canvas the game
     makes has EXACTLY the shape of the picture (16:9, 4:3 for the classic picture, 3:2, 16:10, 20:9, 21:9 or 32:9), fills the game's box, the box fits the window (no scrolling to see the whole picture and the bar
     under it) and is the largest that fits, the page has no sideways scroll;
-  * the address and the dropdown: `?aspect=` and each of the seven names, a bad value, the choice in the Picture dropdown (made with the browser's own keys: ArrowDown and ArrowUp on the focused select; it changes the picture AT ONCE, with no reload: remembered under `ants.aspect.v2`, put in the address, the game's canvas and picture probes follow, the page centred with black around it in 16:10 and 21:9), the tag "fills your screen" under the shape nearest to the screen, a portrait phone gets the 16:9 picture like every other device (and a remembered 4:3 still wins there);
+  * the address and the dropdown: `?aspect=` and each of the seven names, a bad value, the choice in the Picture dropdown (made with the browser's own keys: ArrowDown and ArrowUp on the focused select; it changes the picture AT ONCE, with no reload: remembered under `ants.aspect.v3` for the way the phone is held, put in the address, the game's canvas and picture probes follow, the page centred with black around it in 16:10 and 21:9), the tag "fills your screen" under the shape nearest to the screen, a portrait phone gets the 16:9 picture like every other device (and a remembered 4:3 still wins there);
     a Classic 4:3 that the first versions of the pages remembered under `ants.aspect` is not read any more (every browser starts with the first visit's shape once), on the game page and on web/lobby.html (the pages' own code
     runs on a table of such values without a browser in tests/scripts/web_aspect_key_check.js, which ./run_tests.sh --fast runs);
   * the picture follows the window when it is resized, and fullscreen (the browser's, and the page's own where there is no Fullscreen API: an iPhone) enters and leaves with the
@@ -151,10 +151,18 @@ SHAPE_ORDER = ["4:3", "3:2", "16:10", "16:9", "20:9", "21:9", "32:9"]
 SHAPE_ENTRIES = [[name, ("Classic 4:3" if name == "4:3" else name) + " \u00b7 %d x %d" % SHAPE_CANVAS[name]] for name in SHAPE_ORDER]
 
 
+KEY = "ants.aspect.v3"
+
+
+def pick(shape, way="sideways"):
+    """What the page stores for a hand pick: one shape for each way the device is held (the text that JSON.stringify makes of it)."""
+    return json.dumps({way: shape}, separators=(",", ":"))
+
+
 def first_visit_of(screen_w, screen_h, window_w, window_h):
-    """The shape that a first visit starts in, worked out here on its own (an oracle for AntsShapes.firstVisit, from SHAPE_STEPS): the device's screen taken long over short, the shape with the
-    smallest ratio of ratios (the narrower on a tie); a device held upright (screen and window both taller than wide) starts in 16:9."""
-    if not (screen_w >= screen_h or window_w > window_h):
+    """The shape that Automatic gives, worked out here on its own (an oracle for AntsShapes.automatic, from SHAPE_STEPS): the device's screen taken long over short, the shape with the
+    smallest ratio of ratios (the narrower on a tie); a device held upright starts in 16:9. The emulated browser's screen orientation is landscape when its window is wider than tall."""
+    if not window_w > window_h:
         return "16:9"
     ratio = max(screen_w, screen_h) / min(screen_w, screen_h)
     off = lambda shape: max(SHAPE_STEPS[shape][0] / SHAPE_STEPS[shape][1] / ratio, ratio * SHAPE_STEPS[shape][1] / SHAPE_STEPS[shape][0])
@@ -450,7 +458,7 @@ def choose_shape(tab, shape, select="gm-picture"):
     until it is on the shape, and Enter chooses it (the picture changes at once, the menu stays open; then Resume). The pointer's way is click_shape."""
     open_picture_row(tab)
     now = tab.ev("[].findIndex.call(document.querySelectorAll('#%s-list [role=option]'), function (o) { return o.getAttribute('aria-selected') === 'true'; })" % select)
-    want = SHAPE_ORDER.index(shape)
+    want = 0 if shape == "auto" else SHAPE_ORDER.index(shape) + 1                        # (Automatic is the list's first entry)
     tab.ev("document.getElementById('%s').focus(); 1" % select)
     tab.key("Enter")
     time.sleep(0.15)
@@ -469,7 +477,7 @@ def click_shape(tab, shape, select="gm-picture"):
     x, y = spot(select)
     tab.click(x, y)
     time.sleep(0.2)
-    x, y = spot("%s-o%d" % (select, SHAPE_ORDER.index(shape)))
+    x, y = spot("%s-oauto" % select if shape == "auto" else "%s-o%d" % (select, SHAPE_ORDER.index(shape)))
     tab.click(x, y)
     time.sleep(0.2)
     close_menu(tab)
@@ -565,10 +573,12 @@ class Browser:
 
 
 class Tab:
-    def __init__(self, browser):
+    def __init__(self, browser, buttons=True):
         self.dt = browser.devtools
         self.target, self.session = self.dt.new_tab("")
         self.dt.call("Emulation.setFocusEmulationEnabled", {"enabled": True}, session=self.session)
+        if not buttons:                                             # (a mouse-driven check: the touch buttons (ants.touchkeys) are off before the page starts, whatever the tab says about hovering)
+            self.dt.call("Page.addScriptToEvaluateOnNewDocument", {"source": "try { localStorage.setItem('ants.touchkeys', 'off'); } catch (e) {}"}, session=self.session)
 
     def call(self, method, params=None):
         return self.dt.call(method, params or {}, session=self.session)
@@ -576,8 +586,13 @@ class Tab:
     def ev(self, expression):
         return self.dt.evaluate(self.session, expression)
 
-    def emulate(self, width, height, dpr, mobile=False, touch=True):
-        self.call("Emulation.setDeviceMetricsOverride", {"width": width, "height": height, "deviceScaleFactor": dpr, "mobile": mobile, "screenWidth": width, "screenHeight": height})
+    def emulate(self, width, height, dpr, mobile=False, touch=True, screen=None, held=None):
+        """The window `width` x `height`; `screen` the device's own screen numbers (default: the window's: a phone that swaps them on a turn, as Android does; an iPhone keeps (390, 844) in both
+        ways); `held` is "sideways" or "upright" (default: sideways when the window is wider than tall): what screen.orientation says."""
+        sideways = (held == "sideways") if held else width > height
+        screen = screen or (width, height)
+        self.call("Emulation.setDeviceMetricsOverride", {"width": width, "height": height, "deviceScaleFactor": dpr, "mobile": mobile, "screenWidth": screen[0], "screenHeight": screen[1],
+                                                       "screenOrientation": {"type": "landscapePrimary" if sideways else "portraitPrimary", "angle": 90 if sideways else 0}})
         if touch:                                                   # (a second "touch emulation off" makes Chromium report `hover: none` for the tab: the tag's test leaves the call out)
             self.call("Emulation.setTouchEmulationEnabled", {"enabled": bool(mobile), "maxTouchPoints": 5})
 
@@ -698,6 +713,7 @@ def main():
     ap.add_argument("--logic-only", action="store_true", help="only the page's own logic (ANTS_PAGE): no game, no layout")
     ap.add_argument("--runs-only", action="store_true", help="only the cold-cache runs of the game page (with --downloads N)")
     ap.add_argument("--downloads-only", action="store_true", help="only the page's logic and the data download's faults (retry, failure for good)")
+    ap.add_argument("--auto-only", action="store_true", help="only Automatic: a phone turned both ways in a match, with the screen's numbers swapped (Android-like) and kept (iPhone-like)")
     ap.add_argument("--pointer", action="store_true", help="also the exactness of the game's pointer at six layouts (the full run does it too; --pointer-only does nothing else)")
     ap.add_argument("--pointer-only", action="store_true", help="only the exactness of the game's pointer (the game's START button's edges, found with the mouse, at six layouts)")
     ap.add_argument("--wheel", action="store_true", help="also the wheel and the pinch: cancelled over the canvas only, and the game zooms (the full run does it too; --wheel-only does nothing else)")
@@ -730,7 +746,7 @@ def main():
     browser = None
     try:
         browser = Browser(path)
-        tab = Tab(browser)
+        tab = Tab(browser, buttons=False)
 
         print("[web aspect] the page's own logic (ANTS_PAGE) in %s" % os.path.basename(path))
         tab.emulate(1280, 720, 1)
@@ -740,7 +756,7 @@ def main():
             for run in range(args.downloads):
                 fresh = Browser(path)                                           # a browser of its own: nothing is cached
                 try:
-                    t = Tab(fresh)
+                    t = Tab(fresh, buttons=False)
                     t.emulate(1500, 900, 1)
                     t.call("Page.navigate", {"url": web + "?map=tiny"})
                     deadline = time.time() + 120
@@ -1493,6 +1509,76 @@ def main():
             check(bx[0] >= -0.5 and bx[0] + bx[2] <= g["inner"][0] + 0.5, "%s: the box is inside the window's width" % label)
             check(g["scroll"][0] <= g["scroll"][1] + 1, "%s: no sideways scroll (%d of %d)" % (label, g["scroll"][0], g["scroll"][1]))
 
+        def auto_turn_checks():
+            # AUTOMATIC: a phone turned both ways in a running match. An Android-like phone's screen numbers swap on a turn (setDeviceMetricsOverride with the screen swapped and the new screenOrientation), an
+            # iPhone-like one's stay (390 x 844 whatever way it is held); the page asks the orientation and never the numbers, so both go 16:9 -> 20:9 -> 16:9 and the match goes on (its roster is the witness:
+            # the game exposes no state hash to the page).
+            print("[web aspect] Automatic: a phone turned both ways in a match, with the screen's numbers swapped (Android-like) and kept (iPhone-like)")
+            for kind, upright, sideways, screens in (("Android-like", (412, 800), (915, 340), ((412, 915), (915, 412))), ("iPhone-like", (390, 664), (844, 340), ((390, 844), (390, 844)))):
+                tab.emulate(upright[0], upright[1], 2, True, screen=screens[0], held="upright")
+                tab.open(web, settle=0.5)
+                tab.ev("try { localStorage.removeItem('ants.aspect.v3'); } catch (e) {} 1")
+                tab.open(web, settle=2.5)
+                g = tab.geometry()
+                check(g["aspect"] == "16:9" and tab.ev("screen.orientation.type") == "portrait-primary" and tab.ev("screen.width") == screens[0][0], "%s held upright: Automatic gives 16:9 (%s; the screen says %s x %s)" % (kind, g["aspect"], tab.ev("screen.width"), tab.ev("screen.height")))
+                qx, qy = quick_help_start((960, 540))
+                sx, sy = screen_of_canvas(g, qx, qy, 960, 540)
+                tab.tap(sx, sy)                                                              # (a phone: touches)
+                time.sleep(2.0)
+                sx, sy = screen_of_canvas(g, 895, 512, 960, 540)
+                tab.tap(sx, sy)
+                deadline = time.time() + 15
+                while time.time() < deadline and tab.ev("Module._ants_match_running()") != 1:
+                    time.sleep(0.5)
+                check(tab.ev("Module._ants_match_running()") == 1, "%s: a match is running" % kind)
+                roster = tab.ev("Module._ants_probe(20)")
+                tab.ev("window.antsMarker = 777; 1")
+                tab.emulate(sideways[0], sideways[1], 2, True, screen=screens[1], held="sideways")
+                time.sleep(1.5)
+                g = tab.geometry()
+                check(g["aspect"] == "20:9" and tab.ev("screen.orientation.type") == "landscape-primary" and (tab.ev("screen.width") > tab.ev("screen.height")) == (kind == "Android-like"),
+                      "%s turned sideways: Automatic gives 20:9 (%s; the screen says %s x %s)" % (kind, g["aspect"], tab.ev("screen.width"), tab.ev("screen.height")))
+                layout_checks("%s turned sideways" % kind, g, "20:9")
+                check(tab.ev("Module._ants_probe(40)") == 1200 and tab.ev("Module._ants_probe(41)") == 540, "%s turned sideways: the game's canvas is 1200 x 540" % kind)
+                check(tab.ev("Module._ants_match_running()") == 1 and tab.ev("Module._ants_probe(20)") == roster and tab.ev("window.antsMarker") == 777, "%s turned sideways: the match goes on with its players, the page was not reloaded" % kind)
+                check(tab.ev("localStorage.getItem('ants.aspect.v3')") is None and tab.ev("location.search") == "", "%s turned sideways: Automatic wrote neither the key nor the address (%s)" % (kind, tab.ev("location.search")))
+                tab.save_shot(args.shots, "auto_%s_sideways" % kind.split("-")[0].lower())
+                # a change of height alone (the browser's bar): the shape stays and the box follows
+                box_before = tab.geometry()["box"]
+                tab.emulate(sideways[0], sideways[1] - 40, 2, True, screen=screens[1], held="sideways")
+                time.sleep(1.2)
+                g = tab.geometry()
+                check(g["aspect"] == "20:9" and tab.ev("Module._ants_probe(42)") == SHAPE_ORDER.index("20:9") and g["box"][3] < box_before[3] + 0.5, "%s: a change of height alone keeps the shape (%s) and the box follows (%.0f -> %.0f px high)" % (kind, g["aspect"], box_before[3], g["box"][3]))
+                tab.emulate(upright[0], upright[1], 2, True, screen=screens[0], held="upright")
+                time.sleep(1.5)
+                g = tab.geometry()
+                check(g["aspect"] == "16:9" and tab.ev("Module._ants_probe(40)") == 960 and tab.ev("Module._ants_probe(20)") == roster, "%s turned back upright: 16:9 and the same match (%s)" % (kind, g["aspect"]))
+                layout_checks("%s turned back upright" % kind, g, "16:9")
+                # a hand pick holds for the way it was made in: 4:3 picked sideways is gone upright and back sideways
+                tab.emulate(sideways[0], sideways[1], 2, True, screen=screens[1], held="sideways")
+                time.sleep(1.5)
+                tab.ev("antsPickShape('4:3'); 1")                      # (what the settings list's row calls: the list itself is run by web_game_menu_check.py)
+                time.sleep(1.2)
+                check(tab.geometry()["aspect"] == "4:3" and tab.ev("localStorage.getItem('ants.aspect.v3')") == pick("4:3", "sideways") and tab.ev("location.search") == "?aspect=4:3", "%s: 4:3 picked sideways is shown, stored for sideways and in the address" % kind)
+                tab.emulate(upright[0], upright[1], 2, True, screen=screens[0], held="upright")
+                time.sleep(1.5)
+                g = tab.geometry()
+                check(g["aspect"] == "16:9" and tab.ev("localStorage.getItem('ants.aspect.v3')") == pick("4:3", "sideways") and tab.ev("location.search") == "", "%s: held upright the pick does not hold (%s), it is still stored, and the address lost it" % (kind, g["aspect"]))
+                tab.emulate(sideways[0], sideways[1], 2, True, screen=screens[1], held="sideways")
+                time.sleep(1.5)
+                check(tab.geometry()["aspect"] == "4:3" and tab.ev("Module._ants_probe(20)") == roster, "%s: held sideways again the pick is back, in the same match" % kind)
+                # the list's Automatic entry clears the pick and picks at once
+                tab.ev("antsPickShape('auto'); 1")
+                time.sleep(1.2)
+                check(tab.geometry()["aspect"] == "20:9" and tab.ev("localStorage.getItem('ants.aspect.v3')") is None and tab.ev("location.search") == "", "%s: the Automatic entry forgets the pick and the address, and gives 20:9 at once" % kind)
+                tab.ev("localStorage.removeItem('ants.aspect.v3'); 1")
+
+        if args.auto_only:
+            auto_turn_checks()
+            tab.close()
+            print("[web aspect] %d checks, %d failed" % (count[0], len(failures)))
+            return 1 if failures else 0
+
         print("[web aspect] the page at several sizes (the shape nearest the screen unless the address or the remembered choice says otherwise: a phone held upright gets 16:9)")
         sizes = [("1280x720@1", 1280, 720, 1, False), ("phone portrait 390x844@3", 390, 844, 3, True), ("phone landscape 844x390@3", 844, 390, 3, True)]
         if not args.quick:
@@ -1508,7 +1594,7 @@ def main():
             g = tab.geometry()
             want = first_visit_of(w, h, w, h)                       # (the emulated screen is the window: the shape nearest it, 16:9 for a device held upright)
             check(g["aspect"] == want and g["args"][-2:] == ["--aspect", want] and g["checked"] == checked_of(want), "%s: a first visit starts in %s (%s, %s)" % (label, want, g["aspect"], g["checked"]))
-            check(tab.ev("localStorage.getItem('ants.aspect.v2')") is None, "%s: the first visit's shape is not stored" % label)
+            check(tab.ev("localStorage.getItem('ants.aspect.v3')") is None, "%s: the first visit's shape is not stored" % label)
             layout_checks(label, g, want)
             tab.save_shot(args.shots, "page_" + label.replace(" ", "_").replace("(", "").replace(")", "").replace("@", "_dpr"))
 
@@ -1527,10 +1613,10 @@ def main():
             diff = sum(1 for i in range(0, len(before[3]), before[2] * 97) if abs(before[3][i] - after[3][i]) > 40)
             check(diff > 60, "%s: a tap on the quick help's START button leaves the quick help (%d sampled pixels changed)" % (label, diff))
 
-        # a phone held upright gets the 16:9 picture (no exception for phones: the whole picture is visible, no sideways scroll), keeps it when it is turned to landscape (the box follows and
-        # is bigger), and a remembered 4:3 still wins on a portrait phone
+        # a phone held upright gets the 16:9 picture (no exception for phones: the whole picture is visible, no sideways scroll), Automatic gives it 20:9 when it is turned to landscape (the box
+        # follows and is bigger), and a pick of 4:3 made upright still wins on a portrait phone
         tab.emulate(390, 844, 3, True)
-        tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {} 1")
+        tab.ev("try { localStorage.removeItem('ants.aspect.v3'); } catch (e) {} 1")
         tab.open(web, settle=1.0)
         g = tab.geometry()
         check(g["aspect"] == "16:9" and g["args"][-2:] == ["--aspect", "16:9"] and g["checked"] == checked_of("16:9"), "a phone held upright: the 16:9 picture (%s, %s)" % (g["aspect"], g["checked"]))
@@ -1540,17 +1626,18 @@ def main():
         tab.emulate(844, 390, 3, True)
         time.sleep(1.5)
         g = tab.geometry()
-        layout_checks("the phone turned to landscape", g, "16:9")
-        check(g["aspect"] == "16:9" and g["box"][2] > portrait_box, "turned to landscape the picture stays 16:9 and the box is bigger (%.0f px, upright %.0f px)" % (g["box"][2], portrait_box))
+        layout_checks("the phone turned to landscape", g, "20:9")
+        check(g["aspect"] == "20:9" and g["box"][2] > portrait_box, "turned to landscape Automatic gives 20:9 and the box is bigger (%.0f px, upright %.0f px)" % (g["box"][2], portrait_box))
+        check(tab.ev("localStorage.getItem('ants.aspect.v3')") is None and tab.ev("location.search") == "", "... and Automatic wrote neither the key nor the address")
         tab.save_shot(args.shots, "phone_turned_to_landscape")
         tab.emulate(390, 844, 3, True)
         tab.open(web, settle=0.5)                                                         # (the page's own origin: its local storage is what the selector writes)
-        tab.ev("try { localStorage.setItem('ants.aspect.v2', '4:3'); } catch (e) {} 1")
+        tab.ev("try { localStorage.setItem('ants.aspect.v3', %s); } catch (e) {} 1" % json.dumps(pick("4:3", "upright")))
         tab.open(web, settle=1.0)
         g = tab.geometry()
-        check(g["aspect"] == "4:3" and g["checked"] == checked_of("4:3"), "a portrait phone with a remembered 4:3 keeps the classic picture (%s)" % g["aspect"])
+        check(g["aspect"] == "4:3" and g["checked"] == checked_of("4:3"), "a portrait phone with a pick of 4:3 made upright keeps the classic picture (%s)" % g["aspect"])
         layout_checks("the phone held upright, classic picture remembered", g, "4:3")
-        tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {} 1")
+        tab.ev("try { localStorage.removeItem('ants.aspect.v3'); } catch (e) {} 1")
         tab.save_shot(args.shots, "phone_portrait_remembered_classic")
 
         print("[web aspect] the address and the selector")
@@ -1566,13 +1653,13 @@ def main():
             check(bw * SHAPE_STEPS[want][1] == bh * SHAPE_STEPS[want][0], "%s: the canvas is exactly %s (%d x %d)" % (query, want, bw, bh))
             check(tab.ev("Module._ants_probe(40)") == SHAPE_CANVAS[want][0] and tab.ev("Module._ants_probe(41)") == SHAPE_CANVAS[want][1], "%s: the game's canvas is %d x %d" % (query, SHAPE_CANVAS[want][0], SHAPE_CANVAS[want][1]))
         # the selector (a fresh profile has nothing remembered): a press changes the picture AT ONCE, in the running game, with no reload
-        tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {} 1")
+        tab.ev("try { localStorage.removeItem('ants.aspect.v3'); } catch (e) {} 1")
         tab.open(web)
         open_picture_row(tab)
         tab.ev("document.getElementById('gm-picture').click(); 1")                               # (the menu's list, open: its entries are what the table has)
         time.sleep(0.2)
         g = tab.geometry()
-        check(g["checked"] == checked_of("16:9") and g["entries"] == SHAPE_ENTRIES, "the dropdown shows 16:9 and has one entry for each shape of the table, the shape and its canvas (%s, %s)" % (g["checked"], g["entries"]))
+        check(g["checked"] == checked_of("16:9") and g["entries"][1:] == SHAPE_ENTRIES and g["entries"][0] == ["auto", "Automatic (now 16:9)"], "the dropdown has Automatic first, then one entry for each shape of the table, the shape and its canvas (%s, %s)" % (g["checked"], g["entries"]))
         close_menu(tab)
         tab.ev("window.antsMarker = 12345; 1")                                                    # (a reload would lose it)
         for shape in ("4:3", "3:2", "16:10", "20:9", "21:9", "32:9", "16:9", "32:9", "21:9"):
@@ -1585,7 +1672,7 @@ def main():
             layout_checks(label, g, shape)
             check(tab.ev("window.antsMarker") == 12345 and tab.ev("window.isReadyToPlay") is True, "%s: the page was not reloaded and the game runs on" % label)
             check(tab.ev("location.search") == "?aspect=" + shape, "%s: the address says ?aspect=%s (%s)" % (label, shape, tab.ev("location.search")))
-            check(tab.ev("localStorage.getItem('ants.aspect.v2')") == shape, "%s: the browser remembered the choice" % label)
+            check(tab.ev("localStorage.getItem('ants.aspect.v3')") == pick(shape), "%s: the browser remembered the choice" % label)
             check(tab.ev("Module._ants_probe(40)") == cw and tab.ev("Module._ants_probe(41)") == ch and tab.ev("Module._ants_probe(42)") == SHAPE_ORDER.index(shape),
                   "%s: the game's canvas is %d x %d, shape number %d (%s x %s, %s)" % (label, cw, ch, SHAPE_ORDER.index(shape), tab.ev("Module._ants_probe(40)"), tab.ev("Module._ants_probe(41)"), tab.ev("Module._ants_probe(42)")))
             picture = [tab.ev("Module._ants_probe(%d)" % k) for k in (43, 44, 45, 46)]
@@ -1603,7 +1690,7 @@ def main():
             time.sleep(1.0)
             g = tab.geometry()
             check(g["aspect"] == shape and g["checked"] == shape, "the mouse's choice of %s: the picture shows it (%s)" % (shape, g["aspect"]))
-            check(tab.ev("localStorage.getItem('ants.aspect.v2')") == shape, "the mouse's choice of %s: the choice is remembered" % shape)
+            check(tab.ev("localStorage.getItem('ants.aspect.v3')") == pick(shape), "the mouse's choice of %s: the choice is remembered" % shape)
         open_picture_row(tab)
         x0, y0 = json.loads(tab.ev("JSON.stringify((function () { var r = document.getElementById('gm-picture').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })())"))
         tab.click(x0, y0)
@@ -1614,20 +1701,20 @@ def main():
         time.sleep(0.2)
         check(tab.ev("document.getElementById('gm-picture-list').hidden") is True and tab.geometry()["aspect"] == "16:9", "a click elsewhere closes the list and chooses nothing")
         close_menu(tab)
-        tab.ev("localStorage.setItem('ants.aspect.v2', '21:9'); 1")
+        tab.ev("localStorage.setItem('ants.aspect.v3', %s); 1" % json.dumps(pick("21:9")))
         tab.open(web)                                                 # no parameter: the remembered choice
         g = tab.geometry()
         check(g["aspect"] == "21:9" and tab.ev("Module._ants_probe(40)") == 1260, "a visit without a parameter uses the remembered choice: the game starts in 21:9 (%s)" % g["aspect"])
-        tab.ev("localStorage.setItem('ants.aspect.v2', '4:3'); 1")
+        tab.ev("localStorage.setItem('ants.aspect.v3', %s); 1" % json.dumps(pick("4:3")))
         tab.open(web)
         check(tab.geometry()["aspect"] == "4:3", "a visit without a parameter uses the remembered 4:3")
         tab.open(web + "?aspect=16:9")
         g = tab.geometry()
-        check(g["aspect"] == "16:9" and tab.ev("localStorage.getItem('ants.aspect.v2')") == "4:3", "the address beats the remembered choice and does not change it")
-        tab.ev("localStorage.setItem('ants.aspect.v2', 'junk'); 1")
+        check(g["aspect"] == "16:9" and tab.ev("localStorage.getItem('ants.aspect.v3')") == pick("4:3"), "the address beats the remembered choice and does not change it")
+        tab.ev("localStorage.setItem('ants.aspect.v3', 'junk'); 1")
         tab.open(web)
         check(tab.geometry()["aspect"] == "16:9", "a remembered value that is no shape is ignored")
-        tab.ev("localStorage.removeItem('ants.aspect.v2'); 1")
+        tab.ev("localStorage.removeItem('ants.aspect.v3'); 1")
         # the key of the first versions of the pages ('ants.aspect') is not read any more: a Classic 4:3 that a browser remembered under it is forgotten once, and the address still asks for 4:3
         tab.ev("try { localStorage.setItem('ants.aspect', '4:3'); } catch (e) {} 1")
         tab.open(web)
@@ -1654,7 +1741,7 @@ def main():
 
         # "fills your screen": the quiet line under the dropdown names the shape nearest to the computer's screen (the headless browser's screen is what the emulation says), on every screen, a phone's too
         print("[web aspect] the line under the menu's Picture shape dropdown that names the shape that fills the screen")
-        tag_tab = Tab(browser)
+        tag_tab = Tab(browser, buttons=False)
         fits = "(function () { var n = document.querySelector('.gm-fits'); return n ? n.textContent : ''; })()"
         for w, h, want in ((1280, 720, "16:9"), (1440, 900, "16:10"), (2560, 1080, "21:9"), (1280, 1024, "4:3"), (3840, 1080, "32:9"), (2736, 1824, "3:2"), (1100, 1100, None)):
             tag_tab.emulate(w, h, 1, touch=False)
@@ -1683,28 +1770,28 @@ def main():
             label = "a %d x %d %s" % (w, h, "phone" if mobile else "screen")
             tab.emulate(w, h, dpr, mobile)
             tab.open(web, settle=0.5)
-            tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {} 1")
+            tab.ev("try { localStorage.removeItem('ants.aspect.v3'); } catch (e) {} 1")
             tab.open(web, settle=1.0)
             g = tab.geometry()
             check(g["aspect"] == want and g["checked"] == checked_of(want) and tab.ev("Module._ants_probe(40)") == SHAPE_CANVAS[want][0], "%s, the game page: the first visit starts in %s (%s)" % (label, want, g["aspect"]))
-            check(tab.ev("localStorage.getItem('ants.aspect.v2')") is None, "%s, the game page: nothing was stored by loading" % label)
+            check(tab.ev("localStorage.getItem('ants.aspect.v3')") is None, "%s, the game page: nothing was stored by loading" % label)
             tab.open(site, wait=False)                                                      # (the front page has no game: nothing to wait for)
             time.sleep(2.0)
-            check(tab.ev("localStorage.getItem('ants.aspect.v2')") is None, "%s, the front page: nothing stored (it has no shape of its own)" % label)
+            check(tab.ev("localStorage.getItem('ants.aspect.v3')") is None, "%s, the front page: nothing stored (it has no shape of its own)" % label)
         tab.emulate(1440, 900, 1)
         tab.open(web, settle=0.5)
-        tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {} 1")
+        tab.ev("try { localStorage.removeItem('ants.aspect.v3'); } catch (e) {} 1")
         tab.open(web, settle=1.0)
         choose_shape(tab, "16:9")                                                              # (the shape that is shown is 16:10: a dropdown says nothing when its shown entry is chosen again, so the pick is another entry, and back)
         time.sleep(0.8)
-        check(tab.ev("localStorage.getItem('ants.aspect.v2')") == "16:9", "a choice in the dropdown is stored")
+        check(tab.ev("localStorage.getItem('ants.aspect.v3')") == pick("16:9"), "a choice in the dropdown is stored")
         choose_shape(tab, "16:10")
         time.sleep(0.8)
-        check(tab.ev("localStorage.getItem('ants.aspect.v2')") == "16:10", "... and so is the choice of the shape that the first visit started in, once it is chosen again")
+        check(tab.ev("localStorage.getItem('ants.aspect.v3')") == pick("16:10"), "... and so is the choice of the shape that the first visit started in, once it is chosen again")
         tab.emulate(1920, 1080, 1)
         tab.open(web, settle=1.0)
         check(tab.geometry()["aspect"] == "16:10", "... and the next visit, on a 16:9 screen, keeps it: a pick ends the default")
-        tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {} 1")
+        tab.ev("try { localStorage.removeItem('ants.aspect.v3'); } catch (e) {} 1")
         tab.emulate(1280, 720, 1)
 
         # the selector in a running match: no question, no reload; the match goes on
@@ -1760,7 +1847,9 @@ def main():
             tab.save_shot(args.shots, "match_" + shape.replace(":", "x"))
         check(len(dialogs) == 0, "no question was asked in the whole run")
         tab.dt.handlers.remove(on_dialog)
-        tab.ev("localStorage.removeItem('ants.aspect.v2'); 1")
+        tab.ev("localStorage.removeItem('ants.aspect.v3'); 1")
+
+        auto_turn_checks()
 
         print("[web aspect] resizing, fullscreen and the pointer (1280 x 720)")
         tab.emulate(1280, 720, 1)

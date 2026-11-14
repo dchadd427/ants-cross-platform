@@ -1082,14 +1082,14 @@
     {
       "id": "picture_dropdown_no_pick_handler",
       "file": "web/game_menu.js",
-      "old": "onPick: function (name) { own.write(name); picker.set(own.read()); } });",
-      "new": "onPick: function (name) { picker.set(own.read()); } });",
+      "old": "onPick: function (name) { own.write(name); picker.set(own.read(), auto()); } });",
+      "new": "onPick: function (name) { picker.set(own.read(), auto()); } });",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
       "id": "picture_dropdown_not_marked_after_write",
       "file": "web/game_menu.js",
-      "old": "onPick: function (name) { own.write(name); picker.set(own.read()); } });",
+      "old": "onPick: function (name) { own.write(name); picker.set(own.read(), auto()); } });",
       "new": "onPick: function (name) { own.write(name); } });",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
@@ -1117,8 +1117,8 @@
     {
       "id": "picture_dropdown_without_the_menus_look",
       "file": "web/game_menu.js",
-      "old": "className: 'gm-select', value:",
-      "new": "value:",
+      "old": "className: 'gm-select', automatic:",
+      "new": "automatic:",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {

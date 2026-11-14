@@ -1,0 +1,404 @@
+{
+  "note": "Mutants of Automatic picture shape (web/shapes.js's wayOf, automatic, picks and watch; web/shell.html's switch and pick functions; the Automatic row of web/shape_picker.js, web/game_menu.js and web/lobby.html) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: tools/mutate.py tests/data/auto_shape_mutants.json --keep-going --jobs 1; every mutant must be caught by the node check named in it (web_auto_shape_check.js, web_aspect_key_check.js, web_shape_picker_check.js, web_game_menu_check.js).",
+  "mutants": [
+    {
+      "id": "auto_no_wait",
+      "file": "web/shapes.js",
+      "old": "ms === undefined ? WAIT_MS : ms",
+      "new": "0",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_wait_not_restarted",
+      "file": "web/shapes.js",
+      "old": "function bump() { if (timer !== null) win.clearTimeout(timer); timer = win.setTimeout(again, ms === undefined ? WAIT_MS : ms); }",
+      "new": "function bump() { if (timer === null) timer = win.setTimeout(again, ms === undefined ? WAIT_MS : ms); }",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_height_counted",
+      "file": "web/shapes.js",
+      "old": "function state() { return win.innerWidth + '|' + wayOf(win) + '|' + full(); }",
+      "new": "function state() { return win.innerWidth + 'x' + win.innerHeight + '|' + wayOf(win) + '|' + full(); }",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_way_not_counted",
+      "file": "web/shapes.js",
+      "old": "function state() { return win.innerWidth + '|' + wayOf(win) + '|' + full(); }",
+      "new": "function state() { return win.innerWidth + '|' + full(); }",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_fullscreen_not_counted",
+      "file": "web/shapes.js",
+      "old": "function state() { return win.innerWidth + '|' + wayOf(win) + '|' + full(); }",
+      "new": "function state() { return win.innerWidth + '|' + wayOf(win); }",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_width_not_counted",
+      "file": "web/shapes.js",
+      "old": "function state() { return win.innerWidth + '|' + wayOf(win) + '|' + full(); }",
+      "new": "function state() { return wayOf(win) + '|' + full(); }",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_screen_not_sorted",
+      "file": "web/shapes.js",
+      "old": "closest(Math.max(screenW, screenH) / Math.min(screenW, screenH)).row.name",
+      "new": "closest(screenW / screenH).row.name",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_way_from_screen_numbers",
+      "file": "web/shapes.js",
+      "old": "if (wayOf(win) !== 'sideways') return FALLBACK;",
+      "new": "if (!(win.screen.width >= win.screen.height)) return FALLBACK;",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_upright_not_asked",
+      "file": "web/shapes.js",
+      "old": "if (wayOf(win) !== 'sideways') return FALLBACK;\n",
+      "new": "",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_orientation_type_inverted",
+      "file": "web/shapes.js",
+      "old": "return type.indexOf('portrait') === 0 ? 'upright' : 'sideways';",
+      "new": "return type.indexOf('portrait') === 0 ? 'sideways' : 'upright';",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_orientation_type_not_asked",
+      "file": "web/shapes.js",
+      "old": "if (typeof type === 'string' && /^(portrait|landscape)/.test(type)) return",
+      "new": "if (false) return",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_legacy_orientation_not_asked",
+      "file": "web/shapes.js",
+      "old": "try { if (typeof win.orientation === 'number') return Math.abs(win.orientation) === 90 ? 'sideways' : 'upright'; } catch (e) { /* none */ }",
+      "new": "",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_media_query_not_asked",
+      "file": "web/shapes.js",
+      "old": "try { if (typeof win.matchMedia === 'function') return win.matchMedia('(orientation: landscape)').matches ? 'sideways' : 'upright'; } catch (e) { /* none */ }",
+      "new": "",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_legacy_minus_90_not_sideways",
+      "file": "web/shapes.js",
+      "old": "Math.abs(win.orientation) === 90",
+      "new": "win.orientation === 90",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_pick_ignores_the_way",
+      "file": "web/shapes.js",
+      "old": "function pickFor(text, way) { return picks(text)[way] || null; }",
+      "new": "function pickFor(text, way) { return picks(text).sideways || picks(text).upright || null; }",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_pick_forgets_the_other_way",
+      "file": "web/shapes.js",
+      "old": "        var found = picks(text);\n        if (name) found[way] = name;",
+      "new": "        var found = {};\n        if (name) found[way] = name;",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_pick_that_is_no_shape_counts",
+      "file": "web/shapes.js",
+      "old": "var name = parse(data[way]); if (name) found[way] = name;",
+      "new": "var name = data[way]; if (name) found[way] = name;",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_stop_leaves_listeners",
+      "file": "web/shapes.js",
+      "old": "ends.forEach(function (end) { end(); }); ends = [];",
+      "new": "ends = [];",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_event_not_heard_resize",
+      "file": "web/shapes.js",
+      "old": "on(win, 'resize'); ",
+      "new": "",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_event_not_heard_orientationchange",
+      "file": "web/shapes.js",
+      "old": "on(win, 'orientationchange'); ",
+      "new": "",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_event_not_heard_screen_orientation",
+      "file": "web/shapes.js",
+      "old": "on(win.screen && win.screen.orientation, 'change');",
+      "new": "",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_event_not_heard_fullscreenchange",
+      "file": "web/shapes.js",
+      "old": "on(doc, 'fullscreenchange'); ",
+      "new": "",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_event_not_heard_webkitfullscreenchange",
+      "file": "web/shapes.js",
+      "old": "on(doc, 'webkitfullscreenchange'); ",
+      "new": "",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_event_not_heard_visual_viewport",
+      "file": "web/shapes.js",
+      "old": "on(win.visualViewport, 'resize');",
+      "new": "",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_same_shape_switched_again",
+      "file": "web/shapes.js",
+      "old": "if (now !== last) { last = now; settled(); }",
+      "new": "last = now; settled();",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_hand_pick_ignored_by_events",
+      "file": "web/shell.html",
+      "old": "var next = held || AntsShapes.automatic(window);",
+      "new": "var next = AntsShapes.automatic(window);",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_address_shape_loses_to_events",
+      "file": "web/shell.html",
+      "old": "if (ANTS_ASPECT_SOURCE === 'address') return;\n            var held",
+      "new": "var held",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_switch_writes_the_address",
+      "file": "web/shell.html",
+      "old": "antsSetAspect(next, false);",
+      "new": "antsSetAspect(next);",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_switch_writes_the_key",
+      "file": "web/shell.html",
+      "old": "if (ANTS_ADDRESS_OWN && ANTS_ADDRESS_OWN !== next) antsAddress(null, false);",
+      "new": "try { window.localStorage.setItem(ANTS_ASPECT_KEY, AntsShapes.withPick(null, AntsShapes.wayOf(window), next)); } catch (e) { /* none */ }\n            if (ANTS_ADDRESS_OWN && ANTS_ADDRESS_OWN !== next) antsAddress(null, false);",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_pick_of_the_other_way_stays_in_the_address",
+      "file": "web/shell.html",
+      "old": "if (ANTS_ADDRESS_OWN && ANTS_ADDRESS_OWN !== next) antsAddress(null, false);",
+      "new": "",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_entry_keeps_the_pick",
+      "file": "web/shell.html",
+      "old": "var left = AntsShapes.withPick(stored, way, null);",
+      "new": "var left = stored;",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_entry_keeps_the_address",
+      "file": "web/shell.html",
+      "old": "                ANTS_ASPECT_SOURCE = 'default';\n                antsAddress(null, false);\n",
+      "new": "                ANTS_ASPECT_SOURCE = 'default';\n",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_entry_does_not_pick_at_once",
+      "file": "web/shell.html",
+      "old": "                antsSetAspect(AntsShapes.automatic(window), false);\n                return;",
+      "new": "                return;",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_pick_of_the_shown_shape_is_not_pinned",
+      "file": "web/shell.html",
+      "old": "            if (shape !== ANTS_ASPECT) {\n                ANTS_ASPECT = shape;",
+      "new": "            if (shape === ANTS_ASPECT) return;\n            if (shape !== ANTS_ASPECT) {\n                ANTS_ASPECT = shape;",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_pick_stored_for_the_wrong_way",
+      "file": "web/shell.html",
+      "old": "AntsShapes.withPick(stored, way, value)",
+      "new": "AntsShapes.withPick(stored, 'sideways', value)",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_pick_leaves_the_source_automatic",
+      "file": "web/shell.html",
+      "old": "            ANTS_ASPECT_SOURCE = 'remembered';\n            antsSetAspect(value);",
+      "new": "            antsSetAspect(value);",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_earlier_picks_are_read",
+      "file": "web/shell.html",
+      "old": "try { remembered = AntsShapes.pickFor(window.localStorage.getItem(ANTS_ASPECT_KEY), AntsShapes.wayOf(window)); } catch (e) { /* private window: nothing was remembered */ }",
+      "new": "try { remembered = AntsShapes.pickFor(window.localStorage.getItem('ants.aspect.v2') ? AntsShapes.withPick(null, 'sideways', window.localStorage.getItem('ants.aspect.v2')) : window.localStorage.getItem(ANTS_ASPECT_KEY), AntsShapes.wayOf(window)); } catch (e) { /* private window: nothing was remembered */ }",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_load_pick_ignores_the_way",
+      "file": "web/shell.html",
+      "old": "try { remembered = AntsShapes.pickFor(window.localStorage.getItem(ANTS_ASPECT_KEY), AntsShapes.wayOf(window)); } catch (e) { /* private window: nothing was remembered */ }",
+      "new": "try { remembered = AntsShapes.pickFor(window.localStorage.getItem(ANTS_ASPECT_KEY), 'sideways'); } catch (e) { /* private window: nothing was remembered */ }",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_pickers_not_told_automatic",
+      "file": "web/shell.html",
+      "old": "picker.set(ANTS_ASPECT, ANTS_ASPECT_SOURCE === 'default')",
+      "new": "picker.set(ANTS_ASPECT, false)",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_list_has_no_automatic_for_the_replay_window",
+      "file": "web/shell.html",
+      "old": "automatic: antsAutomatic, auto: ANTS_ASPECT_SOURCE === 'default', value: ANTS_ASPECT, onPick: antsPickShape }",
+      "new": "value: ANTS_ASPECT, onPick: antsPickShape }",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_lobby_pick_ignores_the_way",
+      "file": "web/lobby.html",
+      "old": "AntsShapes.pickFor(recall(ASPECT_KEY), AntsShapes.wayOf(window))",
+      "new": "AntsShapes.pickFor(recall(ASPECT_KEY), 'sideways')",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "auto_lobby_reads_the_earlier_key",
+      "file": "web/lobby.html",
+      "old": "var ASPECT_KEY = 'ants.aspect.v3';",
+      "new": "var ASPECT_KEY = 'ants.aspect.v2';",
+      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
+    },
+    {
+      "id": "auto_picker_has_no_automatic_row",
+      "file": "web/shape_picker.js",
+      "old": "if (autoNow) ROWS.unshift({ name: AUTO, text: '', place: 'auto' });",
+      "new": "",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "auto_picker_automatic_row_not_marked_in_use",
+      "file": "web/shape_picker.js",
+      "old": "current = auto && autoNow ? 0 : indexOf(name);",
+      "new": "current = indexOf(name);",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "auto_picker_now_not_refreshed_on_open",
+      "file": "web/shape_picker.js",
+      "old": "            words();\n            place();",
+      "new": "            place();",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "auto_picker_automatic_row_says_the_wrong_shape",
+      "file": "web/shape_picker.js",
+      "old": "(named ? named.label : now) + ')';",
+      "new": "(named ? current : now) + ')';",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "auto_picker_automatic_row_named_like_a_shape",
+      "file": "web/shape_picker.js",
+      "old": "var AUTO = shapes.AUTO;",
+      "new": "var AUTO = '4:3';",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    },
+    {
+      "id": "auto_menu_gives_no_automatic_row",
+      "file": "web/game_menu.js",
+      "old": "automatic: page.automatic, auto: auto(),",
+      "new": "auto: auto(),",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "auto_menu_does_not_say_automatic_in_use",
+      "file": "web/game_menu.js",
+      "old": "function auto() { return !!(page.isAutomatic && page.isAutomatic()); }",
+      "new": "function auto() { return false; }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "auto_address_own_pick_is_a_link",
+      "file": "web/shell.html",
+      "old": "chosen.source === 'address' && chosen.aspect === remembered",
+      "new": "false",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_address_own_pick_not_taken_out_again",
+      "file": "web/shell.html",
+      "old": "{ chosen.source = 'remembered'; ANTS_ADDRESS_OWN = chosen.aspect; }",
+      "new": "{ chosen.source = 'remembered'; }",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_entry_clears_the_wrong_way",
+      "file": "web/shell.html",
+      "old": "var left = AntsShapes.withPick(stored, way, null);",
+      "new": "var left = AntsShapes.withPick(stored, 'sideways', null);",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_page_tells_nobody_of_a_shape",
+      "file": "web/shell.html",
+      "old": "antsShapeWatchers.slice().forEach(function (fn) {",
+      "new": "[].forEach(function (fn) {",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_page_watcher_cannot_let_go",
+      "file": "web/shell.html",
+      "old": "if (at !== -1) antsShapeWatchers.splice(at, 1);",
+      "new": "",
+      "test": "node tests/scripts/web_auto_shape_check.js web/shell.html"
+    },
+    {
+      "id": "auto_menu_picker_does_not_follow_the_page",
+      "file": "web/game_menu.js",
+      "old": "if (page.onShape) removers.push(page.onShape(function () { picker.set(own.read(), auto()); }));",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "auto_menu_picker_follows_without_automatic",
+      "file": "web/game_menu.js",
+      "old": "page.onShape(function () { picker.set(own.read(), auto()); })",
+      "new": "page.onShape(function () { picker.set(own.read()); })",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "auto_picker_says_the_name_not_the_row",
+      "file": "web/shape_picker.js",
+      "old": "(named ? named.label : now)",
+      "new": "now",
+      "test": "node tests/scripts/web_shape_picker_check.js web/shape_picker.js"
+    }
+  ]
+}
