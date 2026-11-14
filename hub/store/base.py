@@ -137,6 +137,10 @@ class StoreBase:
         """Whether a picture is kept for the account now."""
         raise NotImplementedError
 
+    def has_login(self, account):
+        """Whether the account has a login that has not run out (no login, no picture: hub/pictures.py looks at Discord only for such an account)."""
+        raise NotImplementedError
+
     def picture(self, name):
         """The bytes kept under the public `name`, or None for a name that is not 32 lower-case hex digits, is not known, or whose account is not shown (switched off or blocked) or whose login has run out."""
         raise NotImplementedError

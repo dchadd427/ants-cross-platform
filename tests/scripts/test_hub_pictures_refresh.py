@@ -12,6 +12,7 @@ answer carries; hub/discord.py `user()`; docs/HUB_PICTURES.md "Refreshing"; run 
   - what is remembered to tell a changed code is a keyed mark in memory: the schema is where it was, and no id, code, mark, reference or token is in any log line.
 """
 import hashlib
+import json
 import os
 import sqlite3
 import sys
@@ -174,6 +175,71 @@ class TheRolesCheckRefreshes(RefreshTest):
         self.until(lambda: self.png() == PNG1, "the picture")
 
 
+class TheBackOff(RefreshTest):
+    def test_a_picture_that_is_not_one_is_not_asked_for_again_at_every_check_and_a_new_code_is(self):
+        self.fake.picture = b"this is not a picture"
+        v = self.login()
+        self.member()
+        self.connect(v)
+        self.until(lambda: len(self.asked()) >= 1, "a fetch")
+        self.checks(4, len(self.fake.member_ids))
+        self.assertEqual(len(self.asked()), 1)
+        self.assertEqual(T.kinds_of(self.log()), ["none", "shape"])
+        self.fake.picture = PNG1
+        self.member(AVATAR2)
+        self.until(lambda: self.png() == PNG1, "the picture of the new code")
+        self.assertEqual(len(self.asked()), 2)
+
+    def test_a_picture_that_is_gone_at_the_image_host_is_not_asked_for_again_at_every_check(self):
+        v = self.login()
+        self.member()
+        self.fake.cdn_mode = "404"
+        self.connect(v)
+        self.until(lambda: len(self.asked()) >= 1, "a fetch")
+        self.checks(4, len(self.fake.member_ids))
+        self.assertEqual(len(self.asked()), 1)
+
+    def test_an_account_that_discord_does_not_know_is_not_looked_up_at_every_check(self):
+        v = self.login()
+        self.connect(v)
+        self.until(lambda: len(self.fake.user_ids) >= 1, "a lookup")
+        self.checks(4, len(self.fake.member_ids))
+        self.assertEqual(self.fake.user_ids, [ACCOUNT])
+
+    def test_a_wait_that_discord_asks_for_on_the_profiles_holds_the_roles_lookups_too(self):
+        self.fake.user_mode = "rate:30"
+        v = self.login()
+        self.connect(v)
+        self.until(lambda: len(self.fake.user_ids) >= 1, "a lookup")
+        time.sleep(0.3)
+        roles = self.rig.hub.chat.roles
+        self.assertGreater(roles.hold_until, roles.clock() + 10)
+
+    def test_the_marks_of_a_look_and_of_a_failure_go_with_the_copy_and_with_the_day(self):
+        self.fake.avatar = AVATAR
+        self.login()
+        self.until(lambda: self.png() == PNG1, "the picture")
+        p = self.pictures()
+        self.rig.call(p.ask, ACCOUNT)
+        self.assertEqual(len(self.rig.call(lambda: dict(p.looked))), 1)
+        self.store("ban", ACCOUNT, "command line", "maple.leaf")
+        self.until(lambda: self.rig.call(lambda: (p.looked, p.codes)) == ({}, {}), "the marks gone with the copy")
+
+        def aged():
+            p.note_look("r1")
+            p.failed["r2"] = ("m", p.clock())
+            p.forget_idle(p.clock() + p.limits.picture_lookup_seconds + 1)
+            return p.looked, p.failed
+        self.assertEqual(self.rig.call(aged), ({}, {}))
+
+        def young():
+            p.note_look("r1")
+            p.failed["r2"] = ("m", p.clock())
+            p.forget_idle(p.clock() + 10)
+            return sorted(p.looked), sorted(p.failed)
+        self.assertEqual(self.rig.call(young), (["r1"], ["r2"]))
+
+
 class TheEndsStopTheFetch(RefreshTest):
     def refresh(self, avatar=AVATAR):
         self.rig.call(self.pictures().refresh, ACCOUNT, avatar)
@@ -211,10 +277,31 @@ class TheEndsStopTheFetch(RefreshTest):
         time.sleep(0.8)
         self.assertEqual((self.fake.user_ids, self.kept()), ([], []))
 
-    def test_an_account_with_no_login_is_fetched_for_and_nothing_is_kept(self):
+    def test_an_account_with_no_login_is_not_fetched_for_and_not_looked_up_and_nothing_is_kept(self):
+        self.fake.profiles[ACCOUNT] = AVATAR
+        self.assertFalse(self.rig.call(self.rig.store.has_login, ACCOUNT))
         self.refresh()
-        self.assertEqual(self.kept(), [])
-        self.assertEqual(self.pictures().codes, {})
+        self.rig.call(self.pictures().absent, ACCOUNT)
+        self.rig.call(self.pictures().want, ACCOUNT)
+        time.sleep(0.6)
+        self.assertEqual((self.asked(), self.fake.user_ids, self.kept()), ([], [], []))
+        self.assertEqual((self.pictures().codes, self.pictures().looked), ({}, {}))
+        self.login()
+        self.assertTrue(self.rig.call(self.rig.store.has_login, ACCOUNT))
+
+    def test_a_person_whose_login_is_over_is_not_fetched_for_or_looked_up(self):
+        self.fake.avatar = AVATAR
+        v = self.login()
+        self.until(lambda: self.png() == PNG1, "the picture")
+        self.fake.profiles[ACCOUNT] = AVATAR2
+        self.fake.picture = PNG2
+        self.assertEqual(v.call("POST", "/hub/logout").status, 200)
+        self.until(lambda: self.kept() == [], "the copy gone with the login")
+        self.assertFalse(self.rig.call(self.rig.store.has_login, ACCOUNT))
+        self.rig.call(self.pictures().absent, ACCOUNT)
+        self.refresh(AVATAR2)
+        time.sleep(0.5)
+        self.assertEqual((len(self.asked()), self.fake.user_ids, self.kept()), (1, [], []))
 
     def test_a_fetch_that_ends_after_the_switch_keeps_nothing_and_no_mark(self):
         self.login()
@@ -233,6 +320,78 @@ class TheEndsStopTheFetch(RefreshTest):
         self.assertEqual(len(self.pictures().codes), 1)
         self.store("ban", ACCOUNT, "command line", "maple.leaf")
         self.until(lambda: self.pictures().codes == {} and self.kept() == [], "the mark and the copy gone")
+
+
+class TheQueueIsLookedAtAgain(RefreshTest):
+    """A request that waited in the queue is not made when the picture went off, was hidden, the person was banned or logged out while it waited."""
+
+    def hold(self):
+        p = self.pictures()
+        self.rig.call(lambda: setattr(p, "inflight", p.limits.picture_inflight))
+
+    def release(self):
+        p = self.pictures()
+
+        def go():
+            p.inflight = 0
+            p.pump()
+        self.rig.call(go)
+        time.sleep(1.0)
+
+    def stop(self, how):
+        if how == "off":
+            self.store("set_picture_show", ACCOUNT, base.SHOW_OFF)
+        elif how == "hidden":
+            self.store("set_picture_show", ACCOUNT, base.SHOW_BLOCKED, True)
+        else:
+            self.store("ban", ACCOUNT, "command line", "maple.leaf")
+
+    def test_a_lookup_that_waited_is_not_made_after_the_picture_went_off_or_was_hidden_or_the_person_was_banned(self):
+        for how in ("off", "hidden", "banned"):
+            with self.subTest(how=how):
+                self.restart(**FAST)
+                self.login()
+                self.fake.profiles[ACCOUNT] = AVATAR
+                self.hold()
+                self.rig.call(self.pictures().ask, ACCOUNT)
+                self.assertEqual(self.rig.call(lambda: len(self.pictures().waiting)), 1)
+                self.stop(how)
+                self.release()
+                self.assertEqual((self.fake.user_ids, self.kept()), ([], []))
+
+    def test_a_fetch_that_waited_is_not_made_after_the_picture_went_off_or_was_hidden_or_the_person_was_banned(self):
+        for how in ("off", "hidden", "banned"):
+            with self.subTest(how=how):
+                self.restart(**FAST)
+                self.login()
+                self.hold()
+                self.rig.call(self.pictures().refresh, ACCOUNT, AVATAR)
+                self.assertEqual(self.rig.call(lambda: len(self.pictures().waiting)), 1)
+                self.stop(how)
+                self.release()
+                self.assertEqual((self.asked(), self.kept()), ([], []))
+
+    def test_a_fetch_of_a_login_that_waited_is_not_made_after_the_picture_went_off(self):
+        self.fake.avatar = AVATAR
+        self.hold()
+        self.login()
+        self.assertEqual(self.rig.call(lambda: len(self.pictures().waiting)), 1)
+        self.stop("off")
+        self.release()
+        self.assertEqual((self.asked(), self.kept()), ([], []))
+
+    def test_a_fetch_that_waited_for_its_turn_is_not_made_after_the_person_was_banned(self):
+        self.restart(picture_burst=1, picture_refill_seconds=3.0, **FAST)
+        self.fake.avatar = AVATAR
+        self.login()
+        self.until(lambda: self.png() == PNG1, "the first picture")
+        other = self.login((OTHER, "other.one"))
+        self.until(lambda: len(self.asked()) >= 1, "the first fetch")
+        self.rig.call(self.pictures().refresh, ACCOUNT, AVATAR2)
+        time.sleep(0.3)
+        self.store("ban", ACCOUNT, "command line", "maple.leaf")
+        time.sleep(4.0)
+        self.assertNotIn("/%s.png" % AVATAR2, "".join(r[1] for r in self.asked()))
 
 
 class TheProfileLookup(RefreshTest):
@@ -303,6 +462,37 @@ class TheProfileLookup(RefreshTest):
         self.assertTrue(headers["user-agent"].startswith("DiscordBot"))
 
 
+class TheSwitchComesBack(RefreshTest):
+    env = TOKEN_ONLY
+
+    def test_a_picture_switched_off_and_on_again_is_asked_for_at_once_and_not_after_a_day(self):
+        v = self.login()
+        self.fake.profiles[ACCOUNT] = AVATAR
+        c = self.connect(v)
+        self.until(lambda: self.png() == PNG1, "the picture")
+        self.assertEqual(self.fake.user_ids, [ACCOUNT])
+        c.send(hc.frame(1, json.dumps({"t": "pics", "on": False}).encode("utf-8")))
+        self.until(lambda: self.kept() == [], "the copy gone")
+        self.fake.picture = PNG2
+        self.fake.profiles[ACCOUNT] = AVATAR2
+        c.send(hc.frame(1, json.dumps({"t": "pics", "on": True}).encode("utf-8")))
+        self.until(lambda: self.png() == PNG2, "the picture again")
+        self.assertEqual(len(self.fake.user_ids), 2)
+
+    def test_a_hidden_picture_that_is_lifted_and_switched_on_comes_back(self):
+        v = self.login()
+        self.fake.profiles[ACCOUNT] = AVATAR
+        c = self.connect(v)
+        self.until(lambda: self.png() == PNG1, "the picture")
+        self.store("set_picture_show", ACCOUNT, base.SHOW_BLOCKED, True)
+        self.rig.call(self.pictures().sync)
+        self.assertEqual(self.kept(), [])
+        self.store("set_picture_show", ACCOUNT, base.SHOW_OFF, True)           # (the lift: off until the person says on)
+        self.rig.call(self.pictures().sync)
+        c.send(hc.frame(1, json.dumps({"t": "pics", "on": True}).encode("utf-8")))
+        self.until(lambda: self.png() == PNG1, "the picture again")
+
+
 class TheLookupFails(RefreshTest):
     def test_every_failure_of_the_lookup_keeps_the_copy_and_the_log_says_a_kind_only(self):
         for mode in ("status:500", "err:401", "err:403", "rate:3", "close", "notjson", "array", "redirect", "partial", "huge", "shape:{\"id\":\"1\",\"avatar\":\"%s\"}" % AVATAR2,
@@ -334,7 +524,7 @@ class TheLookupFails(RefreshTest):
                 self.assertEqual(len(self.fake.user_ids), 1)
                 self.assertEqual(self.kept(), [])
 
-    def test_a_lookup_that_failed_is_asked_again_at_the_next_connect(self):
+    def test_a_lookup_that_failed_is_asked_again_at_the_next_connect_not_at_every_check_of_the_roles(self):
         self.restart(picture_lookup_seconds=60.0, **FAST)
         self.fake.user_mode = "status:500"
         self.fake.profiles[ACCOUNT] = AVATAR
@@ -359,6 +549,22 @@ class TheRolesAreOff(RefreshTest):
         self.assertEqual((self.fake.user_ids, self.fake.member_ids), ([ACCOUNT], []))
         time.sleep(1.5)
         self.assertEqual(self.fake.user_ids, [ACCOUNT])
+
+    def test_a_refused_token_or_a_wait_stops_the_lookups_where_the_roles_are_off(self):
+        for mode in ("err:401", "err:403", "status:429", "rate:30"):
+            with self.subTest(mode=mode):
+                self.restart(**FAST)
+                self.fake.user_mode = mode
+                self.fake.profiles[ACCOUNT] = AVATAR
+                v = self.login()
+                self.connect(v)
+                self.until(lambda: len(self.fake.user_ids) >= 1, "a lookup")
+                time.sleep(0.3)
+                self.connect(v)
+                self.connect(v)
+                time.sleep(0.8)
+                self.assertEqual(len(self.fake.user_ids), 1)
+                self.assertEqual(self.kept(), [])
 
     def test_the_lookups_of_a_crowd_go_at_the_pace_of_the_pictures(self):
         self.restart(picture_burst=1, picture_refill_seconds=0.5, **FAST)

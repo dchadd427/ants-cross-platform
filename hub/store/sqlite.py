@@ -479,6 +479,9 @@ class Store(StoreBase):
                 self.db.execute("UPDATE pictures SET at = ? WHERE ref = ?", (int(self.clock()), ref))
         return row[0]
 
+    def has_login(self, account):
+        return self.db.execute("SELECT 1 FROM sessions WHERE account = ? AND expires > ?", (account, int(self.clock()))).fetchone() is not None
+
     def has_picture(self, account):
         return self.db.execute("SELECT 1 FROM pictures WHERE ref = ? AND png IS NOT NULL", (self.ref(account),)).fetchone() is not None
 

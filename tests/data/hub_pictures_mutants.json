@@ -266,8 +266,8 @@
   {
    "id": "error_of_the_fetch_in_the_log",
    "file": "hub/pictures.py",
-   "old": "        except discordmod.DiscordError as e:\n            return self.log.event(\"picture\", kind=\"big\" if e.kind == \"big\" else \"down\")",
-   "new": "        except discordmod.DiscordError as e:\n            return self.log.event(\"picture\", kind=\"big\" if e.kind == \"big\" else \"down\", status=account)",
+   "old": "        except discordmod.DiscordError as e:\n            if e.kind == \"big\":\n                self.give_up(key, avatar)\n            return self.log.event(\"picture\", kind=\"big\" if e.kind == \"big\" else \"down\")",
+   "new": "        except discordmod.DiscordError as e:\n            if e.kind == \"big\":\n                self.give_up(key, avatar)\n            return self.log.event(\"picture\", kind=\"big\" if e.kind == \"big\" else \"down\", status=account)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheLog"
   },
   {
@@ -1065,8 +1065,8 @@
   {
    "id": "a_switch_whose_look_fails_is_still_answered_with_a_you",
    "file": "hub/chat.py",
-   "old": "        except StoreError as e:\n            return self.trouble(peer, e, PICS_REFUSED)\n        if state == before:",
-   "new": "        except StoreError as e:\n            self.trouble(peer, e, PICS_REFUSED)\n        if state == before:",
+   "old": "        except StoreError as e:\n            return self.trouble(peer, e, PICS_REFUSED)\n        if on and state == SHOW_ON",
+   "new": "        except StoreError as e:\n            self.trouble(peer, e, PICS_REFUSED)\n        if on and state == SHOW_ON",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheStoreRefusing"
   },
   {

@@ -354,6 +354,8 @@ class Chat:
             self.pictures.sync()
         except StoreError as e:
             return self.trouble(peer, e, PICS_REFUSED)
+        if on and state == SHOW_ON and before != SHOW_ON and self.pictures is not None:
+            self.pictures.want(who.account_id)                                  # (switched on: where the roles' check will not say what the picture is, it is asked for now)
         if state == before:                                                     # (nothing changed: no frame goes to the account, so the asking socket is answered all the same, and a page's box never waits for nothing)
             peer.send_text(dumps({"t": "you", "you": self.you_of(who)}))
 

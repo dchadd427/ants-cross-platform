@@ -136,6 +136,7 @@ class Pictures:
         self.codes = {}                                      # {reference: keyed mark of the code} of the copies made, in memory only (see the top of this file)
         self.looked = {}                                     # {reference: when Discord was last looked at for the account's picture (a member answer or a profile)}
         self.users = limitmod.TokenBucket(limits.picture_burst, limits.picture_refill_seconds, clock())      # the turns of the lookups where the roles' bucket is not there to lend them
+        self.failed = {}                                     # {reference: (mark of a code, when)}: a copy of that code that could not be made for good reason (a 404, not a PNG, too big): not tried again within `picture_lookup_seconds`
         self.hold_until = float("-inf")                      # no lookup before this (Discord said wait, or refused the token)
         self.waiting = collections.deque()                   # (account id, picture code) of the fetches that wait for their turn: in memory only, at most `picture_waiting`
         self.inflight = 0
@@ -192,7 +193,6 @@ class Pictures:
             if self.stopping:
                 return
             key = pseudo.reference(self.store.secret(), account)
-            self.note_look(key)
             if self.settle(account, avatar, key):
                 self.enqueue(account, avatar, key, quiet=True)
         except Exception as e:
@@ -219,7 +219,7 @@ class Pictures:
     def ask(self, account):
         """Queue a lookup of the person's profile when it is due: no look at Discord was made for the account within `picture_lookup_seconds` (one a day), there is a bot token, nothing is stopped (the picture
         switched off, hidden, banned) and none is queued. An account whose copy was made just now, from a login, counts as looked at."""
-        if not self.token or self.stopping:
+        if not self.token or self.stopping or not self.allowed(account):
             return
         key, now = pseudo.reference(self.store.secret(), account), self.clock()
         last = self.looked.get(key)
@@ -227,15 +227,19 @@ class Pictures:
             return self.note_look(key)
         if last is not None and now - last < self.limits.picture_lookup_seconds:
             return
-        if self.store.picture_state(account) != SHOW_ON or self.store.is_banned(account):
-            return
         self.enqueue(account, LOOKUP, key, quiet=True)
+
+    def allowed(self, account):
+        """Whether Discord may be looked at, or a copy made, for the account now: its picture is on (not switched off, not hidden by the operator), it is not banned and it has a login (no login, no picture:
+        a person who is not logged in is never looked up, whatever asked). Asked again right before every call to Discord, because the request may have waited."""
+        return self.store.picture_state(account) == SHOW_ON and not self.store.is_banned(account) and self.store.has_login(account)
 
     def settle(self, account, avatar, key):
         """Whether a fetch is needed for the code that Discord says (None: none), and what is done at once when none is wanted: nothing for a person whose picture is off, hidden or banned; the copy deleted
         for a person who has no picture now."""
-        if self.store.picture_state(account) != SHOW_ON or self.store.is_banned(account):
+        if not self.allowed(account):
             return False
+        self.note_look(key)
         have = self.store.has_picture(account)
         if avatar is None:
             self.codes.pop(key, None)
@@ -244,7 +248,18 @@ class Pictures:
                 self.log.event("picture", kind="none")
                 self.sync()
             return False
-        return not (have and self.codes.get(key) == self.mark(avatar))
+        mark, failed = self.mark(avatar), self.failed.get(key)
+        if failed is not None and failed[0] == mark and self.clock() - failed[1] < self.limits.picture_lookup_seconds:
+            return False                                      # (this very picture could not be made a short while ago: it is asked for again after a day, or when the code changes)
+        return not (have and self.codes.get(key) == mark)
+
+    def give_up(self, key, avatar):
+        """A copy of this code could not be made, for a reason that will not change by asking again at once (not a picture, too big, gone): not tried again for a day."""
+        if key is not None:
+            self.failed.pop(key, None)
+            self.failed[key] = (self.mark(avatar), self.clock())
+            while len(self.failed) > self.limits.pictures_rows_max:
+                del self.failed[next(iter(self.failed))]
 
     def mark(self, avatar):
         return pseudo.keyed(self.store.secret(), "picture-code", avatar)
@@ -256,6 +271,7 @@ class Pictures:
             del self.looked[next(iter(self.looked))]
 
     def remember(self, key, avatar):
+        self.failed.pop(key, None)
         self.codes.pop(key, None)
         self.codes[key] = self.mark(avatar)
         while len(self.codes) > self.limits.pictures_rows_max:
@@ -274,10 +290,10 @@ class Pictures:
             await asyncio.sleep(0.25)
         return False
 
-    async def lookup(self, account):
+    async def lookup(self, account, key):
         """(True, code or None) of the person's profile at Discord, or (False, None) when there is no answer to believe; one line of the log when there is not, and the token's refusal or a "wait" stops lookups."""
-        if not await self.turn():
-            return False, None
+        if not await self.turn() or not self.allowed(account):
+            return False, None                                   # (no turn; or the picture was switched off, hidden, the person banned or logged out while the request waited: no call)
         try:
             status, data, rl = await self.discord.user(account, self.token)
         except discordmod.DiscordError:
@@ -288,7 +304,12 @@ class Pictures:
         if remaining is not None and remaining < 1 and reset is not None:
             self.hold_until = max(self.hold_until, now + min(reset, 60.0))
         if status == 429:
-            self.hold_until = max(self.hold_until, now + min(max(rl.get("retry_after", 5.0), 0.5), 60.0))
+            wait = min(max(rl.get("retry_after", 5.0), 0.5), 60.0)
+            self.hold_until = max(self.hold_until, now + wait)
+            if getattr(self.roles, "on", False) is True:
+                self.roles.hold_until = max(self.roles.hold_until, now + wait)          # (the roles' lookups wait too: a limit of the whole bot is meant for all of them)
+        elif status == 404 and data.get("code") == 10013:
+            self.note_look(key)                                  # (Discord does not know the account: nothing to change, and not asked again for a day)
         elif status in (401, 403):
             self.hold_until = max(self.hold_until, now + 600.0)
         valid, code = discordmod.Discord.avatar_code(data.get("avatar")) if status == 200 and "avatar" in data and data.get("id") == account else (False, None)
@@ -319,13 +340,14 @@ class Pictures:
     async def work(self, account, avatar, key):
         try:
             if avatar is LOOKUP:
-                ok, avatar = await self.lookup(account)
+                ok, avatar = await self.lookup(account, key)
                 if not ok:
                     return
-                self.note_look(key)
                 if not self.settle(account, avatar, key):
                     return
             await self.pace()
+            if not self.allowed(account):
+                return                                           # (the turn was long: nothing is asked of Discord's image host for a picture that went off, a banned or a logged out person)
             await self.fetch(account, avatar, key)
         except asyncio.CancelledError:
             raise
@@ -346,21 +368,27 @@ class Pictures:
         try:
             status, content_type, body = await self.discord.picture(account, avatar)
         except discordmod.DiscordError as e:
+            if e.kind == "big":
+                self.give_up(key, avatar)
             return self.log.event("picture", kind="big" if e.kind == "big" else "down")
         if status == 404:
             self.codes.pop(key, None)
             self.store.clear_picture(account)
             self.sync()
+            self.give_up(key, avatar)                                # (after the look at the pictures: it forgets what it held for an account whose copy went)
             return self.log.event("picture", kind="none")
         if status != 200:
             return self.log.event("picture", kind="down")
         if content_type != "image/png":
+            self.give_up(key, avatar)
             return self.log.event("picture", kind="type")
         if len(body) > self.limits.picture_bytes_max:
+            self.give_up(key, avatar)
             return self.log.event("picture", kind="big")
         try:
             png = rewrite(body)
         except ShapeError:
+            self.give_up(key, avatar)
             return self.log.event("picture", kind="shape")
         kept = self.store.set_picture(account, png, secrets.token_hex(16), self.store.clock() + self.limits.session_seconds, self.limits.pictures_rows_max, self.limits.pictures_bytes_max)
         if kept and key is not None:
@@ -369,6 +397,9 @@ class Pictures:
         self.sync()
 
     def forget_idle(self, now):
+        for table in (self.looked, self.failed):
+            for ref in [ref for ref, entry in table.items() if now - (entry[1] if isinstance(entry, tuple) else entry) >= self.limits.picture_lookup_seconds]:
+                del table[ref]                                    # (a day old: it no longer holds anything back)
         self.rate.forget_idle(now)
         self.tell_drops(now)
 
@@ -392,6 +423,9 @@ class Pictures:
         changed = {ref for ref in set(self.cache) | set(names) if self.cache.get(ref) != names.get(ref)} | {ref for ref in set(self.marks) | set(marks) if self.marks.get(ref) != marks.get(ref)}
         first = self.seen is None and not self.guessed            # (a page was answered "no pictures, on" before the first look: this look tells the sockets what is true)
         self.guessed = False
+        for ref in [ref for ref in self.cache if ref not in names] + [ref for ref in set(self.marks) | set(marks) if self.marks.get(ref) != marks.get(ref)]:
+            self.looked.pop(ref, None)                            # (a copy that went, or a switch or a hide that changed: the account is asked again at the next check)
+            self.failed.pop(ref, None)
         self.seen, self.cache, self.marks, self.ends = number, names, marks, ends
         for ref in [ref for ref in self.codes if ref not in names]:
             del self.codes[ref]                                   # (no copy to tell a change of: Forget me, a log out, a switch, a block and the like leave no mark)

@@ -7,22 +7,22 @@
   {
    "id": "refresh_ignores_a_changed_code",
    "file": "hub/pictures.py",
-   "old": "        return not (have and self.codes.get(key) == self.mark(avatar))",
+   "old": "        return not (have and self.codes.get(key) == mark)",
    "new": "        return not have",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheRolesCheckRefreshes"
   },
   {
    "id": "refresh_fetches_the_same_code_again",
    "file": "hub/pictures.py",
-   "old": "        return not (have and self.codes.get(key) == self.mark(avatar))",
+   "old": "        return not (have and self.codes.get(key) == mark)",
    "new": "        return True",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheRolesCheckRefreshes"
   },
   {
    "id": "refresh_does_not_look_at_the_switch_or_a_ban",
    "file": "hub/pictures.py",
-   "old": "        if self.store.picture_state(account) != SHOW_ON or self.store.is_banned(account):\n            return False\n        have = ",
-   "new": "        if False:\n            return False\n        have = ",
+   "old": "        if not self.allowed(account):\n            return False\n        self.note_look(key)",
+   "new": "        self.note_look(key)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheEndsStopTheFetch"
   },
   {
@@ -70,15 +70,15 @@
   {
    "id": "lookup_without_a_token",
    "file": "hub/pictures.py",
-   "old": "        if not self.token or self.stopping:\n            return\n        key, now",
-   "new": "        if self.stopping:\n            return\n        key, now",
+   "old": "        if not self.token or self.stopping or not self.allowed(account):",
+   "new": "        if self.stopping or not self.allowed(account):",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheTokenIsNotSet"
   },
   {
    "id": "lookup_for_a_stopped_account",
    "file": "hub/pictures.py",
-   "old": "        if self.store.picture_state(account) != SHOW_ON or self.store.is_banned(account):\n            return\n        self.enqueue(account, LOOKUP",
-   "new": "        self.enqueue(account, LOOKUP",
+   "old": "        if not self.token or self.stopping or not self.allowed(account):",
+   "new": "        if not self.token or self.stopping:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheEndsStopTheFetch"
   },
   {
@@ -135,14 +135,14 @@
    "file": "hub/pictures.py",
    "old": "            self.hold_until = max(self.hold_until, now + 600.0)",
    "new": "            pass",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheLookupFails"
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheLookupFails tests.scripts.test_hub_pictures_refresh.TheRolesAreOff"
   },
   {
    "id": "a_wait_does_not_stop_lookups",
    "file": "hub/pictures.py",
-   "old": "            self.hold_until = max(self.hold_until, now + min(max(rl.get(\"retry_after\", 5.0), 0.5), 60.0))",
-   "new": "            pass",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheLookupFails"
+   "old": "            wait = min(max(rl.get(\"retry_after\", 5.0), 0.5), 60.0)\n            self.hold_until = max(self.hold_until, now + wait)\n",
+   "new": "            wait = min(max(rl.get(\"retry_after\", 5.0), 0.5), 60.0)\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheLookupFails tests.scripts.test_hub_pictures_refresh.TheRolesAreOff"
   },
   {
    "id": "lookups_do_not_use_the_roles_turns",
@@ -182,8 +182,8 @@
   {
    "id": "a_failed_lookup_is_counted_as_a_look",
    "file": "hub/pictures.py",
-   "old": "                ok, avatar = await self.lookup(account)\n                if not ok:\n                    return\n                self.note_look(key)",
-   "new": "                ok, avatar = await self.lookup(account)\n                self.note_look(key)\n                if not ok:\n                    return",
+   "old": "                ok, avatar = await self.lookup(account, key)\n                if not ok:\n                    return\n",
+   "new": "                ok, avatar = await self.lookup(account, key)\n                self.note_look(key)\n                if not ok:\n                    return\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheLookupFails"
   },
   {
@@ -199,6 +199,97 @@
    "old": "                self.pictures.want(you.account_id) ",
    "new": "                pass ",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheRolesAreOff"
+  },
+  {
+   "id": "allowed_ignores_the_switch_and_the_hide",
+   "file": "hub/pictures.py",
+   "old": "        return self.store.picture_state(account) == SHOW_ON and not",
+   "new": "        return not",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheEndsStopTheFetch"
+  },
+  {
+   "id": "allowed_ignores_a_ban",
+   "file": "hub/pictures.py",
+   "old": " and not self.store.is_banned(account) and self.store.has_login(account)",
+   "new": " and self.store.has_login(account)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheEndsStopTheFetch"
+  },
+  {
+   "id": "allowed_ignores_the_login",
+   "file": "hub/pictures.py",
+   "old": " and not self.store.is_banned(account) and self.store.has_login(account)",
+   "new": " and not self.store.is_banned(account)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheEndsStopTheFetch"
+  },
+  {
+   "id": "lookup_not_rechecked_after_its_turn",
+   "file": "hub/pictures.py",
+   "old": "        if not await self.turn() or not self.allowed(account):",
+   "new": "        if not await self.turn():",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheQueueIsLookedAtAgain"
+  },
+  {
+   "id": "fetch_not_rechecked_after_its_pace",
+   "file": "hub/pictures.py",
+   "old": "            if not self.allowed(account):\n                return                                           # (the turn was long: nothing is asked of Discord's image host for a picture that went off, a banned or a logged out person)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheQueueIsLookedAtAgain"
+  },
+  {
+   "id": "a_picture_that_is_not_one_is_asked_for_at_every_check",
+   "file": "hub/pictures.py",
+   "old": "        if failed is not None and failed[0] == mark and self.clock() - failed[1] < self.limits.picture_lookup_seconds:\n            return False",
+   "new": "        if False:\n            return False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheBackOff"
+  },
+  {
+   "id": "a_failure_is_not_remembered",
+   "file": "hub/pictures.py",
+   "old": "        if key is not None:\n            self.failed.pop(key, None)\n            self.failed[key] = (self.mark(avatar), self.clock())",
+   "new": "        if False:\n            self.failed.pop(key, None)\n            self.failed[key] = (self.mark(avatar), self.clock())",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheBackOff"
+  },
+  {
+   "id": "an_unknown_account_is_asked_at_every_check",
+   "file": "hub/pictures.py",
+   "old": "            self.note_look(key)                                  # (Discord does not know the account: nothing to change, and not asked again for a day)",
+   "new": "            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheBackOff"
+  },
+  {
+   "id": "a_wait_on_the_profiles_does_not_hold_the_roles",
+   "file": "hub/pictures.py",
+   "old": "            if getattr(self.roles, \"on\", False) is True:\n                self.roles.hold_until = max(self.roles.hold_until, now + wait)",
+   "new": "            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheBackOff"
+  },
+  {
+   "id": "looks_stay_when_the_copy_goes",
+   "file": "hub/pictures.py",
+   "old": "            self.looked.pop(ref, None)                            # (a copy that went",
+   "new": "            pass                                                  # (a copy that went",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheBackOff"
+  },
+  {
+   "id": "looks_do_not_age_out",
+   "file": "hub/pictures.py",
+   "old": "        for table in (self.looked, self.failed):\n            for ref in [ref for ref, entry in table.items() if now - (entry[1] if isinstance(entry, tuple) else entry) >= self.limits.picture_lookup_seconds]:",
+   "new": "        for table in (self.looked, self.failed):\n            for ref in []:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheBackOff"
+  },
+  {
+   "id": "the_switch_on_does_not_ask",
+   "file": "hub/chat.py",
+   "old": "        if on and state == SHOW_ON and before != SHOW_ON and self.pictures is not None:\n            self.pictures.want(who.account_id) ",
+   "new": "        if False:\n            self.pictures.want(who.account_id) ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheSwitchComesBack"
+  },
+  {
+   "id": "a_look_is_not_cleared_by_a_switch",
+   "file": "hub/pictures.py",
+   "old": "        for ref in [ref for ref in self.cache if ref not in names] + [ref for ref in set(self.marks) | set(marks) if self.marks.get(ref) != marks.get(ref)]:",
+   "new": "        for ref in [ref for ref in self.cache if ref not in names]:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheSwitchComesBack"
   }
  ]
 }
