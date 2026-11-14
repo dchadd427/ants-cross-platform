@@ -61,6 +61,27 @@ Never relied on: an edge swipe (the system's back gesture on Android and iOS).
 A native build has no page, so a lift that is never delivered can still make the game ignore the fingers after a finger that is not spent, until the focus is lost. `SDL_GetNumTouchFingers` does not
 help: SDL's list is built from the same events as the model's, so it keeps the finger too (and SDL already turns a repeated finger id into its own lift first).
 
+## The hotkey buttons
+
+A phone has no Ctrl+A, so the game page (`web/touch_keys.js` and `web/touch_keys.css`, called by `web/shell.html`) makes a few real buttons for the game's own keys. They are the page's: the game, the simulation, the recordings and the network are not touched, and a recording holds exactly what the key would have made.
+
+| Button | Key it sends | What the game does with it |
+|---|---|---|
+| **All ants** (first, about twice as wide) | `Ctrl + A` | selects all your ants |
+| **Stop** | `Ctrl + S` | stops the selected ants (the selection stays) |
+| **Home** | `Ctrl + H` | selects the home hill |
+| **Next** | `Ctrl + N` | selects the next ant and shows it |
+| **None** | `Esc` | deselects (see below) |
+| **More** | none: opens a list | **Previous ant** `Ctrl + P`, **Health marks** `Ctrl + L`, **Quick help** `F1`, **Quick chat 1 - 4** `F9` - `F12`; the list closes after a choice, on a tap elsewhere and when the buttons hide |
+
+- **A press is a keyboard's key events on the game's canvas, in a keyboard's order, and nothing else.** A chord is `keydown` Control, `keydown` the letter (with `ctrlKey`), `keyup` the letter, `keyup` Control; a single key is `keydown` then `keyup`. Each event has `key`, `code`, `keyCode` and `which`, is never a repeat, and bubbles through the document (the settings panel's key guard sees it as it sees a real key) to the window, where the game's window system listens. The game reads the Ctrl from the Control key that went down before the letter, which is why a chord has all four events. A button acts on `click`: a finger that rests sends nothing, and a second tap is a second key.
+- **A finger on a button is never a tap on the game.** The buttons are outside the picture's box; the mouse events that follow a touch stop at the buttons (the touch events themselves are the page's and are left alone, so the sound still unlocks), and a button never takes or lets go of the mouse lock.
+- **When they show.** Only when the primary input cannot hover (the rule the settings menu already uses for a touch screen; a laptop's touch screen with a mouse as the primary input gets none) and a match that this player plays is running. They are hidden, and a press sends nothing, while the setting is off, the game is not ready, a recording or a live match is watched, the game has no match screen (the room, the loading, the results), a dialog, a vote, a lost link or the catch-up screen waits for its answer, the countdown card is up, the settings panel is open or the chat's phone keyboard has the focus. A press asks again before it sends.
+- **None.** Esc deselects what is picked; with nothing picked it opens the settings menu, as on a keyboard. The page asks the game what is picked (`ants_probe` 50), so **None** is dimmed (`aria-disabled`, no key) while nothing is picked, and live when the game cannot say. (A pedestal that is latched with nothing picked is not in that answer.)
+- **Where.** Upright (the window taller than wide): one row directly under the picture, above the tip, in the room that the page leaves under the picture, so the picture keeps its size (checked at 390 x 844, 360 x 640 and 320 x 568; where the row is too narrow for six targets of 44 px, **All ants** has a row of its own). In fullscreen the row is the bottom of the stage and the fit leaves its height out. Sideways: a rail along the left edge of the stage, outside the picture, in the page and in fullscreen (the stage is the element that goes fullscreen, and the page's own fullscreen on an iPhone); the stage's padding is what the page's own fit leaves out, so the picture's box is fitted beside the rail with exact pixels as ever, and the phone's safe areas (`env(safe-area-inset-*)`) are kept. On a stage shorter than 306 px the rail has two columns. The placement is one class on the stage (`tk-up`, `tk-side`, `tk-page`, `tk-full`) and its rules are in `web/touch_keys.css`.
+- **Every target** is a real `<button>` of the site's look, at least 44 x 44 CSS pixels with 6 px between, named for a screen reader ("Select all ants").
+- **The setting.** The settings menu has a **Touch buttons** row, On or Off, in Video after Fullscreen mouse, on a touch screen only; it is remembered in the browser under `ants.touchkeys` (only `off` turns them off; a browser that cannot store keeps them on).
+
 ## The chat box and the on-screen keyboard
 
 A phone has no keyboard that the game hears, and a browser opens its own only for a text field that a tap focuses. So `web/shell.html` keeps one (`#chat-keys`, the block ANTS_CHAT_BEGIN ... END): a real
@@ -85,6 +106,8 @@ upright or sideways the typed line may be hidden behind the keyboard: the text i
 picture first. The field is not moved above the keyboard and the page does not scroll (`preventScroll`), so opening it moves nothing.
 
 ## What is verified, and what is not
+
+The hotkey buttons: `tests/scripts/web_touch_keys_check.js` runs the script with fakes (each button's events in order, one press one key, every case that hides them, None's dimming, More, the setting, the placement; `test_web_touch_keys.py`), `tests/scripts/web_touch_keys_wiring_check.js` runs the page's call as the page writes it, and `tests/data/touch_keys_mutants.json` holds the mutants. The opt-in `tests/scripts/test_web_touch_keys.sh` drives a real game in a phone-sized browser (All ants picks the ants, None clears, Home picks the hill, Next moves the view, a tap on a button is no tap on the map, the fullscreen rail, turning upright). **Not verified, and to be checked on a phone:** that Safari on an iPhone, and Firefox, hand a page-made key to the game's window system as Chromium does (this check was made in Chromium only).
 
 Verified by tests: the model (`test_touch_model`, suite 3.25: every rule, a soak of random sessions, the feedback's geometry), the application (`test_touch_app`, suite 3.26: synthetic finger events through
 the real event loop against the mouse's click, band and right click, point by point), the page's block run with fakes (`tests/scripts/web_touch_check.js`) and its style, script, guide and exports

@@ -221,6 +221,10 @@ COPY web/map_files.js /usr/share/nginx/html/map_files.js
 # The countdown's Fullscreen button (docs/MATCH_COUNTDOWN.md): the game page lays it over the card that opens a match of two or more people (countdown_button.js)
 COPY web/countdown_button.js /usr/share/nginx/html/countdown_button.js
 
+# The touch buttons for the game's hotkeys (docs/TOUCH.md "The hotkey buttons"): the game page makes them on a touch screen during a match (touch_keys.js, touch_keys.css)
+COPY web/touch_keys.js /usr/share/nginx/html/touch_keys.js
+COPY web/touch_keys.css /usr/share/nginx/html/touch_keys.css
+
 # The settings menu (docs/GAME_MENU.md): the panel that Esc opens over the game, its script and its style, fetched by the game page once the game runs (game_menu.js, game_menu.css)
 COPY web/game_menu.js /usr/share/nginx/html/game_menu.js
 COPY web/game_menu.css /usr/share/nginx/html/game_menu.css

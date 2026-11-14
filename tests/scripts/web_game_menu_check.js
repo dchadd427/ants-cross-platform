@@ -232,19 +232,21 @@ function makePage(opts) {
     win.innerHeight = 900;
     const lockState = { on: true };                                                       // (the page's object `lock`: the pointer lock's setting, what the Fullscreen mouse row reads and writes)
     const lock = opts.noLock ? undefined : { available: () => true, get: () => lockState.on, set: (on) => { lockState.on = !!on; game.calls.push(['lock', on ? 'on' : 'off']); } };
+    const touchState = { on: true, sets: [] };                                           // (the page's object `touchKeys`: the hotkey buttons' setting, what the Touch buttons row reads and writes)
+    const touchKeys = opts.touchKeys ? { available: () => opts.touchKeys !== 'no', get: () => touchState.on, set: (on) => { touchState.on = !!on; touchState.sets.push(!!on); } } : undefined;
     const rbar = make('div', 'rbar'), picwrap = make('div', 'picwrap', rbar);
     const toast = make('div', 'toast');
     toast.hidden = true;
     const asked = [], intervals = [], state = { fullscreen: false, locked: false, ready: true, locks: [], enters: 0, leaves: 0 };
     const page = {
-        doc, win, shapes: AntsShapes, picker: (o) => AntsShapePicker.create(AntsShapes, o), pickShape, lock, stage, canvas, toast, module: () => (opts.noModule ? null : game.module), ready: () => state.ready, replay: !!opts.watch, live: !!opts.live, version: 'v0.12.111', query: '?v=7',
+        doc, win, shapes: AntsShapes, picker: (o) => AntsShapePicker.create(AntsShapes, o), pickShape, lock, touchKeys, stage, canvas, toast, module: () => (opts.noModule ? null : game.module), ready: () => state.ready, replay: !!opts.watch, live: !!opts.live, version: 'v0.12.111', query: '?v=7',
         isFullscreen: () => state.fullscreen, enter: () => { state.enters++; state.fullscreen = true; }, leave: () => { state.leaves++; state.fullscreen = false; },
         isLocked: () => state.locked, releaseLock: () => { state.locks.push('release'); state.locked = false; }, requestLock: () => { state.locks.push('request'); state.locked = true; },
         every: (fn, ms) => { intervals.push({ fn, ms }); return intervals.length; },
         cancelsKey: opts.noCancel ? undefined : (e) => { asked.push(e.key + (e.ctrlKey ? '+ctrl' : '')); return !!(e.ctrlKey ? 'ahlnopqs'.indexOf(e.key) >= 0 : /^F[123]$/.test(e.key)); },       // (the page's ANTS_PAGE.cancelsBrowserKey, in the cases that matter here)
     };
     const menu = Menu.forPage(page);
-    const p = { asked, doc, win, game, state, page, menu, stage, canvas, header, menuBtn, picwrap, rbar, toast, chat, shapes, lockState, intervals, box };
+    const p = { asked, doc, win, game, state, page, menu, stage, canvas, header, menuBtn, picwrap, rbar, toast, chat, shapes, lockState, touchState, intervals, box };
     p.styleLoaded = () => { doc.links.forEach((l) => { if (l.onload) l.onload(); }); };
     p.poll = () => intervals.forEach((i) => i.fn());
     p.ready = () => { p.styleLoaded(); p.poll(); return p; };
@@ -364,6 +366,29 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     p.tab('video');
     ok('...and no Fullscreen mouse row (a finger never locks)', p.rows().map((r) => r.name).indexOf('Fullscreen mouse') < 0 && p.rows().length === names(MATCH_ROWS, 'video').length - 1);
     expect('the tabs are a row there', p.q('[role=tablist]').getAttribute('aria-orientation'), 'horizontal');
+}
+{
+    // the hotkey buttons' own row (web/touch_keys.js): a row of the page, not of the game's table, in Video right after the Fullscreen mouse row, on a touch screen only
+    const t = makePage({ touch: true, touchKeys: true }).ready();
+    t.open();
+    t.tab('video');
+    const videoNow = t.rows().map((r) => r.name);
+    expect('a touch screen with the hotkey buttons has a Touch buttons row at the end of the Video rows that it shows', videoNow, names(MATCH_ROWS, 'video').filter((n) => n !== 'Fullscreen mouse').slice(0, 2).concat(['Touch buttons'], names(MATCH_ROWS, 'video').slice(3)));
+    const seg = t.qa('.gm-k-touchkeys .gm-opt');
+    expect('...On and Off, On marked (the default)', [seg.map((b) => b.textContent), seg.map((b) => b.getAttribute('aria-checked'))], [['On', 'Off'], ['true', 'false']]);
+    seg[1].click();
+    expect('...Off is stored through the page\'s object and marked', [t.touchState.sets, t.qa('.gm-k-touchkeys .gm-opt').map((b) => b.getAttribute('aria-checked'))], [[false], ['false', 'true']]);
+    t.qa('.gm-k-touchkeys .gm-opt')[0].click();
+    expect('...and On again', [t.touchState.sets, t.touchState.on], [[false, true], true]);
+    t.menu.close();
+    const n = makePage({ touch: true, touchKeys: 'no' }).ready();
+    n.open();
+    n.tab('video');
+    ok('a page whose buttons are not available (not a touch screen) has no Touch buttons row', n.rows().map((r) => r.name).indexOf('Touch buttons') < 0);
+    const w = makePage({ touch: true }).ready();
+    w.open();
+    w.tab('video');
+    ok('a page without the hotkey buttons has no Touch buttons row', w.rows().map((r) => r.name).indexOf('Touch buttons') < 0);
 }
 {
     const p = makePage({ noLock: true }).ready();

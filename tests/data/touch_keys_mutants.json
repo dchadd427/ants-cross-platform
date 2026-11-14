@@ -1,0 +1,180 @@
+{
+ "note": "Mutants of the hotkey buttons (web/touch_keys.js: which key a button sends, when the buttons show, one key for one press, the remembered setting, None's dimming, the list under More), of the page's call that hands them the game (web/shell.html) and of the settings menu's Touch buttons row (web/game_menu.js), for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: tools/mutate.py tests/data/touch_keys_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_touch_keys.py runs them on copies.",
+ "mutants": [
+  {
+   "id": "button_sends_another_key",
+   "file": "web/touch_keys.js",
+   "old": "k: letter('a'), ctrl: true }",
+   "new": "k: letter('s'), ctrl: true }",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "chord_without_the_control_key",
+   "file": "web/touch_keys.js",
+   "old": "return [['keydown', CTRL, true], ['keydown', def.k, true],",
+   "new": "return [['keydown', def.k, true],",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "key_sent_while_the_panel_is_up",
+   "file": "web/touch_keys.js",
+   "old": "            if (doc.getElementById('game-menu')) return 'settings';\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shown_to_a_watcher",
+   "file": "web/touch_keys.js",
+   "old": "            if (page.watching()) return 'watching';\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shown_to_a_mouse",
+   "file": "web/touch_keys.js",
+   "old": "            if (!page.touch()) return 'pointer';\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shown_over_a_dialog",
+   "file": "web/touch_keys.js",
+   "old": "            if (menu(101) !== 0) return 'dialog';\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shown_over_the_countdown_card",
+   "file": "web/touch_keys.js",
+   "old": "            if (ask(60) >= 0 || ask(5) !== 0) return 'card';\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shown_over_the_chat_keyboard",
+   "file": "web/touch_keys.js",
+   "old": "            if (a && a.id === 'chat-keys') return 'chat';\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shown_outside_a_match_screen",
+   "file": "web/touch_keys.js",
+   "old": "            if (menu(100) !== 0) return 'screen';\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "two_keys_for_one_press",
+   "file": "web/touch_keys.js",
+   "old": "b.addEventListener('click', function () { press(def, b); });",
+   "new": "b.addEventListener('click', function () { press(def, b); press(def, b); });",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "a_press_does_not_ask_again",
+   "file": "web/touch_keys.js",
+   "old": "            if (why()) { refresh(); return false; }\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "stored_off_ignored",
+   "file": "web/touch_keys.js",
+   "old": "on = setting(st ? st.getItem(KEY) : null);",
+   "new": "on = setting(null);",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "choice_not_remembered",
+   "file": "web/touch_keys.js",
+   "old": "if (s) s.setItem(KEY, on ? 'on' : 'off');",
+   "new": "if (s) s.setItem(KEY, 'on');",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "none_live_with_nothing_picked",
+   "file": "web/touch_keys.js",
+   "old": "            if (def.id === 'none' && ask(50) === 0) return false;",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "more_list_stays_open_after_a_choice",
+   "file": "web/touch_keys.js",
+   "old": "            if (open && b.className.indexOf('tk-item') !== -1) toggle(false);\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "key_press_is_a_repeat",
+   "file": "web/touch_keys.js",
+   "old": "ctrlKey: ctrl, repeat: false,",
+   "new": "ctrlKey: ctrl, repeat: true,",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "key_event_does_not_bubble",
+   "file": "web/touch_keys.js",
+   "old": "new win.KeyboardEvent(type, { bubbles: true,",
+   "new": "new win.KeyboardEvent(type, { bubbles: false,",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "mouse_events_of_a_touch_reach_the_game",
+   "file": "web/touch_keys.js",
+   "old": "['mousedown', 'mouseup', 'mousemove', 'mouseover', 'mouseout', 'dblclick'].forEach",
+   "new": "[].forEach",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "list_stays_when_the_buttons_hide",
+   "file": "web/touch_keys.js",
+   "old": "                if (!visible) toggle(false);\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "page_gives_a_mouse_the_buttons",
+   "file": "web/shell.html",
+   "old": "touch: function () { return !!window.antsFinger || !!(window.matchMedia && window.matchMedia('(hover: none)').matches); },",
+   "new": "touch: function () { return true; },",
+   "test": "node tests/scripts/web_touch_keys_wiring_check.js web/shell.html"
+  },
+  {
+   "id": "page_shows_the_buttons_to_a_watcher",
+   "file": "web/shell.html",
+   "old": "watching: function () { return ANTS_REPLAY_MODE; },",
+   "new": "watching: function () { return false; },",
+   "test": "node tests/scripts/web_touch_keys_wiring_check.js web/shell.html"
+  },
+  {
+   "id": "page_takes_any_match_for_running",
+   "file": "web/shell.html",
+   "old": "try { return !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (err) { return false; } },\n                ask:",
+   "new": "try { return true; } catch (err) { return false; } },\n                ask:",
+   "test": "node tests/scripts/web_touch_keys_wiring_check.js web/shell.html"
+  },
+  {
+   "id": "page_does_not_hand_the_menu_the_buttons",
+   "file": "web/shell.html",
+   "old": "touchKeys: antsTouchKeys, cancelsKey: ANTS_PAGE.cancelsBrowserKey });",
+   "new": "cancelsKey: ANTS_PAGE.cancelsBrowserKey });",
+   "test": "node tests/scripts/web_touch_keys_wiring_check.js web/shell.html"
+  },
+  {
+   "id": "touch_row_offered_to_a_mouse",
+   "file": "web/game_menu.js",
+   "old": "has: function () { return !!page.touchKeys && page.touchKeys.available(); },",
+   "new": "has: function () { return !!page.touchKeys; },",
+   "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+  },
+  {
+   "id": "touch_row_writes_the_other_way",
+   "file": "web/game_menu.js",
+   "old": "write: function (i) { page.touchKeys.set(i === 0); }",
+   "new": "write: function (i) { page.touchKeys.set(i !== 0); }",
+   "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+  }
+ ]
+}
