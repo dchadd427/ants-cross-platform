@@ -601,8 +601,39 @@ for (const [what, me] of [['a hub where nobody is logged in', 'guest'], ['a site
     env.roomBar('leave').click();
     options.me = MAYA;
     env.home('mine').click();
-    check('... a login in another tab is not this page\'s (its chat stays a reader too): a guest is not asked again, and the next room is a guest\'s, under the same guest name', env.meFetches.length === asked && helloName(env.last().open().sent[0]) === GUEST);
+    check('... a login that came without a reload (in another tab) is asked for at the next room: the room is the login\'s, not the cached guest\'s', env.meFetches.length === asked + 1 && helloName(env.last().open().sent[0]) === 'maya');
 }
+{   // the page opened while nobody was logged in, the person logged in without a reload (the chat says so): the next room (Quick host and My room make it) is the login's, never the cached guest's
+    const options = { me: 'guest', stayHome: true };
+    const env = runLobby('', {}, options);
+    env.home('mine').click();
+    same('the first room of a guest is a guest\'s', helloName(env.last().open().sent[0]), GUEST);
+    env.roomBar('leave').click();
+    options.me = MAYA;
+    env.home('mine').click();
+    check('the person logged in meanwhile: the next room asks the hub again and plays under the login\'s name', env.sockets.length === 2 && helloName(env.last().open().sent[0]) === 'maya');
+}
+{   // a page that is shown again (back-forward cache, a tab that was hidden) asks the hub again, and a slow hub does not leave a guest name behind
+    const options = { me: 'guest', stayHome: true };
+    const env = runLobby('', {}, options);
+    const asked = env.meFetches.length;
+    (env.win.listeners.pageshow || []).forEach((fn) => fn({ persisted: false }));
+    check('a page that is loaded anew is not asked about again by pageshow', env.meFetches.length === asked);
+    options.me = MAYA;
+    (env.win.listeners.pageshow || []).forEach((fn) => fn({ persisted: true }));
+    check('a page that comes back from the browser\'s memory asks the hub again', env.meFetches.length === asked + 1);
+    env.doc.hidden = true;
+    (env.doc.listeners.visibilitychange || []).forEach((fn) => fn());
+    check('a page that is hidden asks nothing', env.meFetches.length === asked + 1);
+    env.doc.hidden = false;
+    (env.doc.listeners.visibilitychange || []).forEach((fn) => fn());
+    check('a page that is visible again asks the hub again', env.meFetches.length === asked + 2);
+    await afterIt();
+    env.home('mine').click();
+    await afterIt();
+    check('... and the room it makes is the login\'s', helloName(env.last().open().sent[0]) === 'maya');
+}
+check('takeBack plays under the login\'s name when the person is logged in now, and under the saved seat name only for a guest (the question is asked first)', /function takeBack\(\) \{[\s\S]{0,700}person\.ready\(function \(own, kind\) \{[\s\S]{0,300}name: kind !== 'login' && s && s\.name \? s\.name : own/.test(lobbyScript));
 {   // a seat that is held keeps its name: a reload of the tab takes it back under the name that the room showed, and does not ask for a login first
     const entry = { 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: 'Sam', o: 1 }) };
     const env = runLobby('', {}, { me: MAYA, session: entry });
@@ -1227,7 +1258,7 @@ async function codeBox(env) {
     }
     {   // another tab that changes the storage: the match may have ended meanwhile; a page that comes back from the browser's memory (Back) is loaded again
         const env = runLobby('', { 'ants.rejoin.r-1.1': entry(1000) });
-        same('the page listens for its return, for the storage, and for its visibility (the client\'s wake and the line of numbers\' own)', [(env.win.listeners.pageshow || []).length, (env.win.listeners.storage || []).length, (env.doc.listeners.visibilitychange || []).length], [1, 1, 2]);
+        same('the page listens for its return, for the storage, and for its visibility (the client\'s wake and the line of numbers\' own)', [(env.win.listeners.pageshow || []).length, (env.win.listeners.storage || []).length, (env.doc.listeners.visibilitychange || []).length], [2, 1, 3]);
         env.win.listeners.pageshow.forEach((fn) => fn({ persisted: false }));
         check('a page that is loaded anew is not loaded again by pageshow', env.reloads === 0 && rejoinView(env).hidden === false);
         env.win.listeners.pageshow.forEach((fn) => fn({ persisted: true }));
@@ -1325,7 +1356,7 @@ for (const [label, table] of [['/stats answers 404 and /busy 200', { '/stats': 4
     const env = runLobby('', {}, { fetch: (url) => answers({ '/stats': now })(url) });
     await settle();
     const wake = () => (env.doc.listeners.visibilitychange || []).forEach((fn) => fn());
-    check('the page listens for its visibility (the client\'s wake and the line of numbers\' own look)', (env.doc.listeners.visibilitychange || []).length === 2);
+    check('the page listens for its visibility (the client\'s wake and the line of numbers\' own look)', (env.doc.listeners.visibilitychange || []).length === 3);
     const before = env.fetches.length;
     env.doc.hidden = true;
     wake();

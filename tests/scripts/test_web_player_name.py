@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """The name that a person plays under on the web (web/front/player_name.js; run by ./run_tests.sh --fast and by the CI). Nobody types a name on the front page or on the game page any more: a person
 who is logged in with Discord plays under the login's name, made to fit the game's name rules, and everybody else under a guest name that this browser keeps. The page asks the site's own
-`GET /hub/me` when it opens and again at every seat while the answer was a login, so a log out in the chat (which leaves the page where it is) is known at the next room.
+`GET /hub/me` when it opens and again at every seat (and when the page is shown again), so a log in or a log out in the chat (which leaves the page where it is) is known at the next room.
 
   - the script is read from the file: a plain ES5 script with no dependency, that asks the one page /hub/me with the cookie of this site (never a socket, never another page of the hub), keeps
     one key in localStorage (ants.guest) and nothing in the tab, writes no markup and touches no element;
   - the code RUNS in node (tests/scripts/web_player_name_check.js): the fitting of a login's name on a table (accents, full-width and fancy letters, emoji and other scripts, controls, blanks, 2 to 32
     characters, a computer player's name), what the answer of /hub/me says in the shape of today and in the shape with an other name, the guest name (six digits, the whole range, valid and invalid
-    stored values, a browser that refuses its storage), and the person: one question shared by everybody who waits, a login asked again at every seat, a guest and a site with no login never asked
-    again, a failed question asked again at the next seat only, the limit of the wait and the answers that come late;
+    stored values, a browser that refuses its storage), and the person: one question shared by everybody who waits, a login and a guest asked again at every seat, a site with no login never asked
+    again, a page that is shown again (refresh), a failed question asked again at the next seat only, the limit of the wait and the answers that come late;
   - tests/data/player_name_mutants.json changes one thing at a time in a COPY of the files: the checks must then fail. The whole list is run by tools/mutate.py (`--keep-going --jobs 1`); this file runs
     a spread of it in the quick tier (one or more for every rule) and keeps the whole list well made (each text is in its file exactly once).
 The node checks need node; without it these tests are skipped and say so.
@@ -108,7 +108,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     FILES = ("tools/size_limits.py", "web/front/player_name.js", "web/lobby.html", "web/rejoin_key.js", "web/shell.html", "web/front/lobby_rules.js", "web/front/lobby_net.js", "web/front/lobby_chat.js", "web/front/rematch.js", "web/front/game_modes.js", "web/front/game_type.js",
              "web/shapes.js", "web/home/home.js", "web/home/games.js", "tests/scripts/web_player_name_check.js", "tests/scripts/web_name_check.js", "tests/scripts/web_page_harness.js")
     QUICK = ("fit_without_nfkd", "fit_keeps_non_ascii", "fit_cuts_a_long_name", "fit_ignores_the_checker", "me_prefers_the_other_name", "me_guest_is_failed", "guest_five_digits", "guest_not_kept_in_storage",
-             "login_not_asked_again", "guest_asked_again", "question_not_shared", "known_for_a_login", "no_limit_on_the_wait", "late_answer_is_heard", "not_found_is_a_failure", "request_without_the_cookie", "clock_called_as_a_method",
+             "login_not_asked_again", "guest_answer_cached_again", "refresh_does_nothing", "take_back_keeps_the_guest_name", "question_not_shared", "known_for_a_login", "no_limit_on_the_wait", "late_answer_is_heard", "not_found_is_a_failure", "request_without_the_cookie", "clock_called_as_a_method",
              "page_seat_connects_without_the_name", "page_name_of_a_new_seat_is_the_rooms", "page_connect_skips_open", "page_rejoin_with_a_name", "page_card_not_read_only", "name_block_lobby_goes_on_without_the_button",
              "name_block_lobby_hands_on_what_was_typed", "shell_gate_gives_no_name_to_the_game")
 

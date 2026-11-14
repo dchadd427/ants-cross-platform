@@ -284,29 +284,15 @@
   {
    "id": "login_not_asked_again",
    "file": "web/front/player_name.js",
-   "old": "function again(result) { return result.kind === 'login' || result.kind === 'failed'; }",
-   "new": "function again(result) { return result.kind === 'failed'; }",
+   "old": "function again(result) { return result.kind !== 'none'; }",
+   "new": "function again(result) { return result.kind !== 'none' && result.kind !== 'login'; }",
    "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
   },
   {
    "id": "failed_not_asked_again",
    "file": "web/front/player_name.js",
-   "old": "function again(result) { return result.kind === 'login' || result.kind === 'failed'; }",
-   "new": "function again(result) { return result.kind === 'login'; }",
-   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
-  },
-  {
-   "id": "guest_asked_again",
-   "file": "web/front/player_name.js",
-   "old": "function again(result) { return result.kind === 'login' || result.kind === 'failed'; }",
-   "new": "function again(result) { return true; }",
-   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
-  },
-  {
-   "id": "none_asked_again",
-   "file": "web/front/player_name.js",
-   "old": "function again(result) { return result.kind === 'login' || result.kind === 'failed'; }",
-   "new": "function again(result) { return result.kind !== 'guest'; }",
+   "old": "function again(result) { return result.kind !== 'none'; }",
+   "new": "function again(result) { return result.kind !== 'none' && result.kind !== 'failed'; }",
    "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
   },
   {
@@ -1177,6 +1163,69 @@
    "file": "web/shell.html",
    "old": "var PN = window.AntsPlayerName, own = !asks && ANTS_OWN_NAME;",
    "new": "var PN = window.AntsPlayerName, own = ANTS_OWN_NAME;",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "guest_answer_cached_again",
+   "file": "web/front/player_name.js",
+   "old": "function again(result) { return result.kind !== 'none'; }",
+   "new": "function again(result) { return result.kind === 'login' || result.kind === 'failed'; }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "none_answer_asked_again",
+   "file": "web/front/player_name.js",
+   "old": "function again(result) { return result.kind !== 'none'; }",
+   "new": "function again(result) { return true; }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "refresh_does_nothing",
+   "file": "web/front/player_name.js",
+   "old": "        function refresh() {\n            if (last && !again(last)) return;",
+   "new": "        function refresh() {\n            return;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "refresh_keeps_the_old_question",
+   "file": "web/front/player_name.js",
+   "old": "                round++; flying = false;\n            }\n            ask();",
+   "new": "                round++;\n            }\n            ask();",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "refresh_asks_a_site_without_login",
+   "file": "web/front/player_name.js",
+   "old": "            if (last && !again(last)) return;\n            if (flying) {",
+   "new": "            if (flying) {",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "no_refresh_on_pageshow",
+   "file": "web/lobby.html",
+   "old": "if (e && e.persisted) person.refresh();",
+   "new": "if (e && e.persisted) { }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "no_refresh_on_visible",
+   "file": "web/lobby.html",
+   "old": "if (!document.hidden) person.refresh();",
+   "new": "if (false) person.refresh();",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "refresh_on_pageshow_not_persisted",
+   "file": "web/lobby.html",
+   "old": "if (e && e.persisted) person.refresh();",
+   "new": "person.refresh();",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "take_back_keeps_the_guest_name",
+   "file": "web/lobby.html",
+   "old": "name: kind !== 'login' && s && s.name ? s.name : own,",
+   "new": "name: s && s.name ? s.name : own,",
    "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   }
  ]
