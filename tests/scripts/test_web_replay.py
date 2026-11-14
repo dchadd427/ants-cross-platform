@@ -512,10 +512,10 @@ class TheFiles(unittest.TestCase):
         for name in ("replay_page.js", "history_page.js", "match_stats.js", "death_map.js", "matches.css", "match_stats.css", "death_map.css", "replay_stats.css"):
             self.assertIn("COPY web/%s " % name, dockerfile, name)
             self.assertIn(name, build, name)
-        for name in ("matches", "match", "live"):
+        for name in ("matches", "match"):
             self.assertRegex(dockerfile, r"COPY --from=builder /src/%s\.html [^\n]*%s\.html" % (name, name))
-        self.assertIn("for PAGE in matches match live legal; do", build)
-        self.assertRegex(ci, r"ls -l index\.html play\.html lobby\.html matches\.html match\.html live\.html matches\.css history_page\.js replay_stats\.css replay_page\.js")
+        self.assertIn("for PAGE in matches match legal; do", build)
+        self.assertRegex(ci, r"ls -l index\.html play\.html lobby\.html matches\.html match\.html matches\.css history_page\.js replay_stats\.css replay_page\.js")
         self.assertIn("index.data match_stats.js match_stats.css countdown_button.js", ci)                 # (the stats sections of the match page are in the image too)
         self.assertNotIn("watch.html", dockerfile + build + ci)                                              # (the list of the recordings is gone: the pages of the match history replace it)
 

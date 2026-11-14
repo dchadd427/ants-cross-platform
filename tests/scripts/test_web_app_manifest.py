@@ -190,7 +190,7 @@ class TheHeadLines(unittest.TestCase):
     def test_every_page_but_the_admin_page_has_the_same_four_lines_once(self):
         pages = {name: read(*name.split("/")) for name in PAGES}
         pages["the changelog page"] = changelog_page()
-        self.assertEqual(len(pages), 9)
+        self.assertEqual(len(pages), 8)
         for name, text in pages.items():
             self.assertEqual(head_lines(text), WANT_HEAD, name)
 

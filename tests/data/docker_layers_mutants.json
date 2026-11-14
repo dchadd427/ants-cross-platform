@@ -996,8 +996,8 @@
   {
    "id": "stamp_loop_of_the_bar_pages_forgets_legal",
    "file": "Dockerfile",
-   "old": "for BARRED in matches match live legal mapmaker",
-   "new": "for BARRED in matches match live mapmaker",
+   "old": "for BARRED in matches match legal mapmaker",
+   "new": "for BARRED in matches match mapmaker",
    "test": "python3 tests/scripts/test_web_without_docker.py",
    "expect": "test_a_page_with_a_bar_at_the_top_that_lacks_a_stamp_stops_the_build"
   },
