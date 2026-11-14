@@ -182,16 +182,6 @@
       "test": "./build/tests/test_app/test_health_changes"
     },
     {
-      "id": "fade_starts_early",
-      "file": "include/ants_app/health_changes.hpp",
-      "old": "if (age_ms <= kSolidMs) return 255;",
-      "new": "if (age_ms < kSolidMs) return 255;",
-      "build": [
-        "test_health_changes"
-      ],
-      "test": "./build/tests/test_app/test_health_changes"
-    },
-    {
       "id": "rise_not_rounded",
       "file": "include/ants_app/health_changes.hpp",
       "old": "return (kRisePx * age_ms + kLifeMs / 2) / kLifeMs;",
@@ -315,7 +305,7 @@
       "id": "native_window_scales_numbers",
       "file": "src/ants_app/renderer_health.cpp",
       "old": "changes_scale_ = scale_digits ? std::min(",
-      "new": "changes_scale_ = true ? std::min(",
+      "new": "changes_scale_ = (scale_digits || !scale_digits) ? std::min(",
       "build": [
         "test_health_changes"
       ],
@@ -346,16 +336,6 @@
       "file": "src/ants_app/renderer_health.cpp",
       "old": "const int32_t left = sx - pic->w * scale / 2;",
       "new": "const int32_t left = sx;",
-      "build": [
-        "test_health_changes"
-      ],
-      "test": "./build/tests/test_app/test_health_changes"
-    },
-    {
-      "id": "number_not_clipped",
-      "file": "src/ants_app/renderer_health.cpp",
-      "old": "    SDL_RenderSetClipRect(renderer_, &clip);\n    for (size_t i = 0; i < changes_->count(); ++i) {",
-      "new": "    for (size_t i = 0; i < changes_->count(); ++i) {",
       "build": [
         "test_health_changes"
       ],

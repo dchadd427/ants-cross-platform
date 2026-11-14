@@ -218,7 +218,7 @@ const Renderer::ChangePicture* Renderer::change_picture(const std::string& text)
 }
 
 // The numbers of the frame, over the ants: one size at every zoom (the health numbers' rule on a small canvas, to twice at most), centred on the ant's drawn sprite, the glyphs' bottom 2 pixels over where the health
-// bar's top would be (31 world pixels over the sprite, scaled by the zoom), rising 8 pixels at an even pace and fading in the last part of their life. Clipped to the part of the view that is already the clip.
+// bar's top would be (31 world pixels over the sprite, scaled by the zoom), rising 8 pixels at an even pace and fading in the last part of their life. Clipped by the clip that the world pass has set (the map's part of the view), as the bars are.
 void Renderer::draw_health_changes() {
     if (changes_ == nullptr || !renderer_) return;
     changes_->expire(changes_now_ms_);
@@ -227,13 +227,6 @@ void Renderer::draw_health_changes() {
     const int32_t scale = changes_scale_;
     const LayoutRect view = layout_.view();
     const health::Rect screen{view.x, view.y, view.w, view.h};
-    const SDL_bool was_clipped = SDL_RenderIsClipEnabled(renderer_);
-    SDL_Rect kept{};
-    if (was_clipped) SDL_RenderGetClipRect(renderer_, &kept);
-    const SDL_Rect view_rect = placed(view.x, view.y, view.w, view.h);
-    SDL_Rect clip = view_rect;
-    if (was_clipped && !SDL_IntersectRect(&kept, &view_rect, &clip)) clip = SDL_Rect{0, 0, 0, 0};
-    SDL_RenderSetClipRect(renderer_, &clip);
     for (size_t i = 0; i < changes_->count(); ++i) {
         const health::Number& num = changes_->at(i);
         const int32_t age = static_cast<int32_t>(changes_now_ms_ - num.start_ms);
@@ -256,8 +249,6 @@ void Renderer::draw_health_changes() {
         const SDL_Rect dst = placed(left, top, pic->w * scale, pic->h * scale);
         SDL_RenderCopy(renderer_, pic->texture, nullptr, &dst);
     }
-    if (was_clipped) SDL_RenderSetClipRect(renderer_, &kept);
-    else SDL_RenderSetClipRect(renderer_, nullptr);
 }
 
 }  // namespace ants::app
