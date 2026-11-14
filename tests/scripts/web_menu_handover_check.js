@@ -1,5 +1,5 @@
 // What the game page hands the settings menu (web/shell.html: the call of AntsGameMenu.forPage in antsLoadGameMenu), RUN as the page writes it, with every name that it uses made a marker: the menu's two rows that are the
-// page's own, the Picture shape row and the Fullscreen mouse row, work only through `pickShape` and `lock`, so the call must hand over the page's own antsPickShape and antsLock (not a copy, not nothing), and what the menu
+// page's own, the Picture shape row and the Fullscreen mouse row, work only through `pickShape` and `lock` (and the small form's keys through `cancelsKey`), so the call must hand over the page's own antsPickShape and antsLock (not a copy, not nothing), and what the menu
 // asks of the page must be there: the stage, the canvas, the module, the fullscreen calls. A page that stops handing one of them leaves its row out of the menu without a word (no other control has them any more).
 // usage: node web_menu_handover_check.js <web/shell.html>     (exit 0: every row holds)
 'use strict';
@@ -23,7 +23,7 @@ const marker = (name) => (markers[name] = markers[name] || Object.assign(functio
 let captured = null;
 const fakeWindow = { AntsGameMenu: { forPage(page) { captured = page; } }, AntsShapes: marker('AntsShapes'), AntsShapePicker: { create() { return null; } } };
 const fakeDocument = { getElementById() { return { textContent: 'v0.0.0' }; } };
-const scope = new Proxy({}, { has: () => true, get: (target, name) => (name === Symbol.unscopables ? undefined : name === 'window' ? fakeWindow : name === 'document' ? fakeDocument : name === 'undefined' ? undefined : marker(String(name))) });
+const scope = new Proxy({}, { has: () => true, get: (target, name) => (name === Symbol.unscopables ? undefined : name === 'window' ? fakeWindow : name === 'document' ? fakeDocument : name === 'undefined' ? undefined : name === 'ANTS_PAGE' ? { cancelsBrowserKey: marker('cancelsBrowserKey') } : marker(String(name))) });
 try {
     new Function('scope', 'with (scope) { ' + call.replace(/^AntsGameMenu/, 'window.AntsGameMenu') + '; }')(scope);
 } catch (e) { failed++; console.log('FAIL the call does not run: ' + e.message); }
@@ -31,6 +31,7 @@ if (!captured) { console.log('FAIL nothing was handed over'); process.exit(1); }
 
 expect('the Picture shape row: the page\'s own function antsPickShape is handed over', captured.pickShape && captured.pickShape.marker, 'antsPickShape');
 expect('the Fullscreen mouse row: the page\'s own object antsLock is handed over', captured.lock && captured.lock.marker, 'antsLock');
+expect('the small form keeps the game from every key through the page\'s own canceller of the browser\'s keys, handed over (a page that stops handing it leaves Ctrl+S and F1 to the browser)', captured.cancelsKey && captured.cancelsKey.marker, 'cancelsBrowserKey');
 expect('the stage, the canvas and the toast are the page\'s', [captured.stage && captured.stage.marker, captured.canvas && captured.canvas.marker, captured.toast && captured.toast.marker], ['stageElement', 'canvas', 'toast']);
 expect('the fullscreen and pointer calls are the page\'s', ['enter', 'leave', 'isFullscreen', 'isLocked', 'releaseLock', 'requestLock'].map((k) => captured[k] && captured[k].marker), ['enterFullscreen', 'leaveFullscreen', 'isFullscreen', 'isLocked', 'releaseLock', 'requestLock']);
 expect('the menu can make the picture\'s picker from the page\'s table', [typeof captured.picker, typeof captured.shapes], ['function', 'function']);

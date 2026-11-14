@@ -472,13 +472,13 @@ class TheFooter(PageCase):
     def test_the_links_are_the_front_pages_and_the_menu_comes_first(self):
         nav = re.search(r'<nav aria-label="Footer links">(.*?)</nav>', self.page, re.S).group(1)
         found = re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', nav)
-        self.assertEqual([(href, text) for href, _, text in found], [("/", "Menu"), ("/matches", "Matches"), ("/live-now", "Live now"), ("/asset_catalog/", "Sprites and sounds"), ("/changelog", "Changelog"), (GITHUB, "GitHub"), (GITHUB + "/issues", "Feedback"), ("/legal", "Legal")])
+        self.assertEqual([(href, text) for href, _, text in found], [("/", "Menu"), ("/matches", "Matches"), ("/asset_catalog/", "Sprites and sounds"), ("/changelog", "Changelog"), (GITHUB, "GitHub"), (GITHUB + "/issues", "Feedback"), ("/legal", "Legal")])
         self.assertIn('id="menu-link"', found[0][1])
         self.assertNotIn("target=", found[0][1])
         self.assertIn('id="watch-link"', found[1][1])                                                           # (a new tab: a match that is being played here goes on; test_web_replay.py)
         self.assertIn('target="_blank"', found[1][1])
         lobby_nav = re.search(r'<nav aria-label="Footer links">(.*?)</nav>', self.lobby, re.S).group(1)
-        self.assertEqual([text for _, _, text in re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', lobby_nav)], [text for _, _, text in found[1:]])     # (the same links: "Matches" and "Live now", test_web_replay.py)
+        self.assertEqual([text for _, _, text in re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', lobby_nav)], [text for _, _, text in found[1:]])     # (the same links: "Matches", test_web_replay.py)
 
 
 class TheGamePageHasNoFrameModeButTheMatchPages(PageCase):

@@ -13,7 +13,7 @@
 //                          away this long in all; "max_pause_seconds" 60 .. 86400 (default 1800): the match's total pause is capped, at the cap every seat that is not present is dropped;
 //                          "max_catch_up_seconds" 10 .. 3600 (default 300): one absence may spend this long catching up in all, over all its attempts; "resume_countdown_seconds" 0 .. 60
 //                          (default 10, 0 = none): after a pause of 3 s or more the match is held this long before it goes on; "countdown_seconds" 0 .. 60 (protocol 21; what the server was started
-//                          with, --start-countdown-seconds, unless the body says; 0 = none): a room with two or more people holds the first turn this long, with the chat open, instead of the 5 s dialog; "record" (default true): the match is kept as a replay when the server keeps
+//                          with, --start-countdown-seconds, unless the body says; 0 = none): a room with two or more people holds the first turn this long, with the chat open, instead of the 5 s dialog; "solo_countdown_seconds" 0 .. 60 (default as --solo-countdown-seconds, 0 = the 5 s dialog): a room of exactly one person holds it min(this, countdown_seconds); "record" (default true): the match is kept as a replay when the server keeps
 //                          replays; false: this room's match is not)
 //   GET    /rooms/<code>   -> 200 the room's status; 404
 //   GET    /rooms          -> 200 {"rooms": [status, ...]}

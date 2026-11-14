@@ -113,6 +113,44 @@ void Application::begin_net_countdown(uint8_t seconds) {
     tick_net_countdown();
 }
 
+// The countdown card of a game on this computer (--start-card-seconds): the same card as a room's, the people who play come from the roster and the computer players from --bot. It is counted in the 50 ms steps
+// of the dialog's clock (update_simulation), so what it says is the real time that the simulation waits, and it closes itself at 0: tick 0 runs on the step after, as it does after the plain dialog.
+void Application::begin_local_countdown(uint8_t roster, uint32_t seconds) {
+    std::array<CountdownSeat, 4> seats{};
+    const std::array<std::string, 4> names = local_team_names();
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        seats[seat].plays = (roster & (1u << seat)) != 0;
+        seats[seat].name = seat == local_player_id_ && !player_name_.empty() ? player_name_ : names[seat];     // your own row shows the name you typed
+        for (const ai::BotSpec& bot : config_.bots) seats[seat].computer = seats[seat].computer || (seats[seat].plays && bot.seat == seat);
+    }
+    local_countdown_ms_ = static_cast<int64_t>(seconds) * 1000;
+    countdown_status_shown_ = -1;
+    hud_.start_match_countdown(local_countdown_ms_, seats);
+    tick_local_countdown();
+}
+
+void Application::tick_local_countdown() {
+    if (local_countdown_ms_ < 0) return;
+    if (!hud_.is_match_countdown_active()) {                 // the match was left, or the card was closed
+        local_countdown_ms_ = -1;
+        countdown_status_shown_ = -1;
+        return;
+    }
+    const int32_t shown = countdown_seconds_shown(local_countdown_ms_);
+    hud_.set_match_countdown_left_ms(local_countdown_ms_);
+    if (shown != countdown_status_shown_) {
+        countdown_status_shown_ = shown;
+        hud_.post_status(shown > 0 ? "Match starts in " + std::to_string(shown) + " s" : std::string("Starting..."));
+    }
+    if (local_countdown_ms_ == 0) {                          // the last step has been shown: the card closes and the first tick runs on the next step
+        hud_.dismiss_match_start_modal();
+        local_countdown_ms_ = -1;
+        countdown_status_shown_ = -1;
+        return;
+    }
+    local_countdown_ms_ = std::max<int64_t>(0, local_countdown_ms_ - static_cast<int64_t>(sim::TICK_MS));
+}
+
 void Application::tick_net_countdown() {
     if (countdown_deadline_ms_ < 0.0) return;
     if (!hud_.is_match_countdown_active()) {                 // the first turn has run, a seat was lost (the pause closes the dialog for good), or the match is left

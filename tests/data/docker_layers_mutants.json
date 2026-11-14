@@ -60,8 +60,8 @@
   {
    "id": "web_stamps_go_into_the_template",
    "file": "Dockerfile",
-   "old": "build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/live.html web/legal.html web/mapmaker.html && \\\n    ! grep -q '@@GAME_VERSION@@'",
-   "new": "web/shell.html web/lobby.html web/matches.html web/match.html web/live.html web/legal.html web/mapmaker.html && \\\n    ! grep -q '@@GAME_VERSION@@'",
+   "old": "build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/legal.html web/mapmaker.html && \\\n    ! grep -q '@@GAME_VERSION@@'",
+   "new": "web/shell.html web/lobby.html web/matches.html web/match.html web/legal.html web/mapmaker.html && \\\n    ! grep -q '@@GAME_VERSION@@'",
    "test": "python3 tests/scripts/test_docker_layers.py",
    "expect": "test_the_stamps_go_into_the_game_page_that_the_link_made_not_into_the_template"
   },
@@ -108,8 +108,8 @@
   {
    "id": "web_runner_copies_another_builder_output",
    "file": "Dockerfile",
-   "old": "COPY --from=builder /src/live.html /usr/share/nginx/html/live.html",
-   "new": "COPY --from=builder /src/live.html /usr/share/nginx/html/live.html\nCOPY --from=builder /src/VERSION /usr/share/nginx/html/VERSION",
+   "old": "COPY --from=builder /src/match.html /usr/share/nginx/html/match.html",
+   "new": "COPY --from=builder /src/match.html /usr/share/nginx/html/match.html\nCOPY --from=builder /src/VERSION /usr/share/nginx/html/VERSION",
    "test": "python3 tests/scripts/test_docker_layers.py",
    "expect": "test_the_runner_stage_copies_the_same_builder_outputs_and_runs_as_before"
   },
@@ -980,15 +980,15 @@
   {
    "id": "stamp_check_for_the_version_forgets_a_page",
    "file": "Dockerfile",
-   "old": "! grep -q '@@GAME_VERSION@@' build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/live.html web/legal.html web/mapmaker.html",
-   "new": "! grep -q '@@GAME_VERSION@@' build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/live.html web/legal.html",
+   "old": "! grep -q '@@GAME_VERSION@@' build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/legal.html web/mapmaker.html",
+   "new": "! grep -q '@@GAME_VERSION@@' build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/legal.html",
    "test": "python3 tests/scripts/test_web_without_docker.py",
    "expect": "test_the_seds_and_the_checks_after_them_name_the_same_pages"
   },
   {
    "id": "stamp_check_for_the_build_is_gone",
    "file": "Dockerfile",
-   "old": "    ! grep -q '@@BUILD_' \"$PAGE\" /src/web/lobby.html /src/web/matches.html /src/web/match.html /src/web/live.html /src/web/legal.html /src/web/mapmaker.html && \\\n",
+   "old": "    ! grep -q '@@BUILD_' \"$PAGE\" /src/web/lobby.html /src/web/matches.html /src/web/match.html /src/web/legal.html /src/web/mapmaker.html && \\\n",
    "new": "",
    "test": "python3 tests/scripts/test_web_without_docker.py",
    "expect": "test_a_placeholder_of_the_build_that_is_left_in_a_page_stops_the_build"
@@ -996,8 +996,8 @@
   {
    "id": "stamp_loop_of_the_bar_pages_forgets_legal",
    "file": "Dockerfile",
-   "old": "for BARRED in matches match live legal mapmaker",
-   "new": "for BARRED in matches match live mapmaker",
+   "old": "for BARRED in matches match legal mapmaker",
+   "new": "for BARRED in matches match mapmaker",
    "test": "python3 tests/scripts/test_web_without_docker.py",
    "expect": "test_a_page_with_a_bar_at_the_top_that_lacks_a_stamp_stops_the_build"
   },
@@ -1016,6 +1016,22 @@
    "new": "# syntax=docker/dockerfile:1\n# =============================================================================\n# The dedicated game server",
    "test": "python3 tests/scripts/test_docker_layers.py",
    "expect": "test_the_compiles_have_the_cache_mount_and_ccache_is_installed"
+  },
+  {
+   "id": "relink_does_not_fix_the_order_of_the_ports",
+   "file": "tools/relink_outputs.sh",
+   "old": "sed 's/^\\( *\\)dfs(unsorted.pop())$/",
+   "new": "sed 's/^\\( *\\)NOT_A_LINE$/",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_relink_makes_emscripten_take_its_ports_by_name_and_stops_when_the_line_is_not_there"
+  },
+  {
+   "id": "relink_goes_on_without_the_line_to_change",
+   "file": "tools/relink_outputs.sh",
+   "old": "[ \"$(grep -c '^ *dfs(unsorted.pop())$' \"$ports\")\" = 1 ]",
+   "new": "[ \"$(grep -c '^ *dfs(unsorted.pop())$' \"$ports\")\" -ge 0 ]",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_relink_makes_emscripten_take_its_ports_by_name_and_stops_when_the_line_is_not_there"
   }
  ]
 }

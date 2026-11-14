@@ -379,8 +379,8 @@ LIVE_ROWS = [
     ("the old list of recordings", "GET", "/watch.html", (), 302, "plain"),
     ("a match", "GET", "/match?id=x", (), 200, "page"),
     ("a match, old address", "GET", "/match.html?id=x", (), 302, "plain"),
-    ("the matches that run now", "GET", "/live-now", (), 200, "page"),
-    ("the matches that run now, old address", "GET", "/live.html", (), 302, "plain"),
+    ("the page of the matches that run now, which is gone", "GET", "/live-now", (), 302, "plain"),
+    ("the page of the matches that run now, old file address", "GET", "/live.html", (), 302, "plain"),
     ("the legal page", "GET", "/legal", (), 200, "page"),
     ("the legal page, old file, no redirect", "GET", "/legal.html", (), 200, "page"),
     ("the changelog page", "GET", "/changelog", (), 200, "page"),
@@ -463,7 +463,7 @@ DEAD_ROWS = [
 def docroot_files():
     page = "<!doctype html><html><head><title>%s</title></head><body>" + "<p>a stand-in page of the site, long enough to be compressed on its way</p>" * 40 + "</body></html>\n"
     big = (b"ANTS " + bytes(range(32, 120))) * 4000
-    files = {name: page % name for name in ("lobby.html", "index.html", "play.html", "matches.html", "match.html", "live.html", "legal.html", "changelog.html", "mapmaker.html", "admin.html", "asset_catalog/index.html")}
+    files = {name: page % name for name in ("lobby.html", "index.html", "play.html", "matches.html", "match.html", "legal.html", "changelog.html", "mapmaker.html", "admin.html", "asset_catalog/index.html")}
     files.update({"front/classic.css": "body { color: #222; }\n" * 80, "front/big.css": ".a { color: red; }\n" * 400, "shapes.js": "var shapes = 1;\n" * 80, "home/home.js": "var home = 1;\n" * 80, "asset_catalog/catalog_data.js": "var data = 1;\n" * 80,
                   "front/logo.png": "\x89PNG stand-in", "manifest.webmanifest": stats.read("web", "manifest.webmanifest"), "app/icon-192.png": "\x89PNG stand-in", "app/apple-touch-icon.png": "\x89PNG stand-in", "favicon.png": "\x89PNG stand-in", "favicon.ico": "ico stand-in", "front/click.wav": "RIFF stand-in", "mapmaker_atlas/atlas.json": '{"v":1}', "mapmaker_atlas/ground.png": "\x89PNG stand-in",
                   "asset_catalog/sprites/s1.png": "\x89PNG stand-in", "asset_catalog/sounds/a.wav": "RIFF stand-in", "lvl_core.wasm": "\0asm stand-in", "index.js": big[:50000], "index.wasm": big[:120000], "index.data": big})
@@ -619,7 +619,7 @@ class TheFileRuns(unittest.TestCase):
         self.check("the login over its limit", over[0], "hubpage")
 
     def test_the_policy_of_a_page_is_read_directive_by_directive(self):
-        for path in ("/", "/matches", "/asset_catalog/", "/legal", "/live-now", "/match?id=x", "/changelog"):
+        for path in ("/", "/matches", "/asset_catalog/", "/legal", "/match?id=x", "/changelog"):
             self.assertEqual(parse_csp(fetch(self.live.port, path).get("content-security-policy")), page_policy(SITE), path)
         for path in ("/play", "/play?live=x", "/?join=/ws&room=x"):
             self.assertEqual(parse_csp(fetch(self.live.port, path).get("content-security-policy")), game_policy(SITE), path)

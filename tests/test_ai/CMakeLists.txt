@@ -43,6 +43,7 @@ add_executable(test_ai
     test_ai_gang2.cpp
     test_ai_group.cpp
     test_ai_homemines.cpp
+    test_ai_ownground.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/bot_watch_people.cpp
 )
 

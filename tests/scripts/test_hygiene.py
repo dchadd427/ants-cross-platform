@@ -551,10 +551,10 @@ class Spelling(Tree):
         self.assertEqual(ch.check_spelling(self.root, self.files()), [])
         self.put("src/ants_server/control_history.cpp", "bool x = q.%s == 1;\n" % uk)       # a property is not kept here (only the quoted name and the parameter)
         self.put("src/ants_server/history_record.cpp", 'o.set("%s", x);\n// and %s=blue\n' % (uk, uk))   # nor is the parameter in the record's writer
-        for rel in ("web/match.html", "web/matches.html", "web/live.html", "web/replay_page.js", "src/ants_net/x.cpp"):    # the readers that now say color
+        for rel in ("web/match.html", "web/matches.html", "web/replay_page.js", "src/ants_net/x.cpp"):    # the readers that now say color
             self.put(rel, "\n".join(page_forms) + "\n")
         out = ch.check_spelling(self.root, self.files())
-        self.assertEqual(len(out), 2 + 5 * len(page_forms))
+        self.assertEqual(len(out), 2 + 4 * len(page_forms))
         self.assertTrue(all(o.split(":")[0] != "web/history_page.js" for o in out))
 
     def test_only_the_lower_case_forms_are_kept(self):
