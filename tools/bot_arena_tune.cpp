@@ -88,6 +88,13 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "securek") { p.secure_kinds = static_cast<uint8_t>(v); return true; }
     if (key == "counters") return flag(p.counters);
     if (key == "bhit") return flag(p.bomb_hit);
+    if (key == "ownground") return flag(p.own_ground_counters);                      // the counters clear an enemy's bomb or fire wall on the own ground or beside a pile with a claim only (0: wherever it is near the hill or a pile, as before)
+    if (key == "grhome") { p.counter_home_radius = static_cast<int32_t>(v); return true; }
+    if (key == "grclaim") { p.counter_claim_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "grwork") { p.counter_work_tiles = static_cast<int32_t>(v); return true; }
+    if (key == "grrival") { p.counter_rival_yard = static_cast<int32_t>(v); return true; }
+    if (key == "grleash") { p.counter_keeper_leash = static_cast<int32_t>(v); return true; }
+    if (key == "grhp") { p.counter_bomber_hp = static_cast<uint32_t>(v); return true; }
     if (key == "chv") return flag(p.combat_harvests);
     if (key == "walls") { p.wall_trigger = v == 0 ? ai::WallTrigger::Never : v == 1 ? ai::WallTrigger::ThiefSeen : v == 2 ? ai::WallTrigger::ThiefPossible : ai::WallTrigger::Early; return true; }
     if (key == "renew") { p.renew_lead_ticks = static_cast<uint32_t>(v); return true; }
