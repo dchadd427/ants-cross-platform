@@ -41,6 +41,7 @@ void Application::render_frame() {
         const auto& world = view.get_world_state();
         sync_game_menu_settings();                           // (Ctrl+L flipped the health marks: remembered)
         renderer_->set_health_marks(hud_.ant_health(), hud_.ant_health().when == health::When::Off ? 1.0 : canvas_density().per_css, kPhoneDigits);
+        renderer_->set_health_changes(menu_settings_.health_changes ? &health_changes_ : nullptr, static_cast<int64_t>(health_clock_ms_), canvas_density().per_css, kPhoneDigits);
         renderer_->render_world(world, view.grid(), static_cast<int32_t>(hud_.get_selected_ant_id()),
                                 hud_.get_selected_ant_ids(), false, show_tile_grid_,
                                 mouse_screen_x_, mouse_screen_y_,

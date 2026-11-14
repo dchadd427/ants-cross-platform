@@ -2341,6 +2341,73 @@ int main(int argc, char* argv[]) {
         v.app.shutdown();
     } TEST_END();
 
+    TEST_CASE("RA10.3 The damage and heal numbers are only a picture: the same recording watched with them On and with them Off, the renderer drawing every frame, has the same state hash after every tick, Off makes and keeps nothing, and On has numbers over the fight") {
+        ASSERT_FALSE(bot_match().bytes.empty());
+        Viewer on(bot_match().bytes);
+        Viewer off(bot_match().bytes);
+        ASSERT_TRUE(on.ok && off.ok);
+        ASSERT_EQ(on.app.game_menu_get(game_menu::kHealthChanges), 1);                      // (On is the default)
+        ASSERT_TRUE(off.app.game_menu_set(game_menu::kHealthChanges, 0));
+        ASSERT_EQ(off.app.game_menu_get(game_menu::kHealthChanges), 0);
+        size_t ticks = 0, differing = 0, frames_with_numbers = 0, most_live = 0, off_live = 0;
+        size_t damage = 0, heal = 0;
+        bool paused_tested = false, still_there = false;
+        int64_t last_tick = -1;
+        const int32_t cw = on.app.renderer().canvas_w(), ch = on.app.renderer().canvas_h();
+        (void)cw;
+        (void)ch;
+        for (int frame = 0; frame < 2500; ++frame) {
+            on.frames(1);
+            off.frames(1);
+            on.app.render_frame();
+            off.app.render_frame();
+            const int64_t tick = static_cast<int64_t>(on.app.sim().current_tick());
+            if (tick != last_tick) ++ticks;
+            last_tick = tick;
+            if (on.app.sim().current_tick() != off.app.sim().current_tick() || on.app.sim().state_hash().total != off.app.sim().state_hash().total) ++differing;
+            const health::ChangeTracker& t = on.app.health_changes();
+            most_live = std::max(most_live, t.count());
+            frames_with_numbers += t.count() > 0 ? 1u : 0u;
+            for (size_t i = 0; i < t.count(); ++i) (t.at(i).heal ? heal : damage) += 1u;
+            off_live = std::max(off_live, off.app.health_changes().count());
+            if (on.state() != ReplayState::Playing) break;
+            if (!paused_tested && t.count() > 0) {                                           // (a paused recording stops the numbers' clock: they stay where they are until it plays again)
+                paused_tested = true;
+                on.app.replay_control(ReplayControl::SetPaused, 1);
+                const size_t waiting = t.count();
+                for (int i = 0; i < 60; ++i) {                                               // (3 s of the frames' time)
+                    on.frames(1);
+                    on.app.render_frame();
+                }
+                still_there = t.count() == waiting;
+                on.app.replay_control(ReplayControl::SetPaused, 0);
+            }
+        }
+        ASSERT_GT(ticks, 1000u);                                                             // (a real stretch of the match was played)
+        ASSERT_EQ(differing, 0u);                                                            // (the state hash is the same after every tick, with the numbers On and Off)
+        ASSERT_EQ(off_live, 0u);                                                             // (Off makes no number and keeps none)
+        ASSERT_GT(frames_with_numbers, 5u);                                                  // (On has numbers over the fight)
+        ASSERT_GT(damage, 0u);
+        ASSERT_TRUE(still_there);
+        ASSERT_EQ(on.app.sim().state_hash().total, off.app.sim().state_hash().total);
+        {   // a jump of the recording (a seek far ahead) shows nothing for the turns that it skipped, and the match is the same on both sides
+            const int target = on.value(ReplayValue::Turn) + 400;
+            on.app.replay_control(ReplayControl::Seek, target);
+            off.app.replay_control(ReplayControl::Seek, target);
+            for (int i = 0; i < 200 && (on.value(ReplayValue::Turn) < target || on.state() == ReplayState::Jumping); ++i) {
+                on.frames(1);
+                off.frames(1);
+                on.app.render_frame();
+                off.app.render_frame();
+            }
+            ASSERT_GE(on.value(ReplayValue::Turn), target);
+            ASSERT_EQ(on.app.health_changes().count(), 0u);                                  // (the turns of the jump made no number)
+            ASSERT_EQ(on.app.sim().current_tick(), off.app.sim().current_tick());
+            ASSERT_EQ(on.app.sim().state_hash().total, off.app.sim().state_hash().total);
+        }
+        std::cout << "(" << ticks << " ticks, numbers on " << frames_with_numbers << " frames, at most " << most_live << " live, " << damage << " damage and " << heal << " heal numbers seen)\n";
+    } TEST_END();
+
     std::cout << "\nreplay application tests: " << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";
     return g_test_failures == 0 ? 0 : 1;
 }

@@ -38,6 +38,7 @@ The small form has the three rows with `page: 1` that the page serves. The rows 
 | Video | Picture shape | the page (`ants.aspect.v2`, the address) | the page's picker (`web/shape_picker.js`, made from the page's table, `web/shapes.js`: the shape and its canvas, a quiet line under it names the shape that fills the screen); a choice calls the page's one function (the address and the stored choice follow); the row's range and words (their number) are made from the game's shape table (`kAspectTable`) |
 | Video | Fullscreen mouse | the page (`ants.pointerlock`) | Locked / Free; not on a touch screen |
 | Video | **Ant health** (new: Hurt ants, All ants, Off) and **Show health as** (new: Bar, Number) | `ant_health=` and `ant_health_style=` (Ctrl+L flips Off and the last choice that was on); [what they draw](VIEW_AND_HUD.md#ant-health-marks) | at once |
+| Video | **Damage & heal numbers** (new: On, Off) | `health_changes=on` / `off` (On when the key is absent or says anything else; no key on the keyboard); [what it draws](VIEW_AND_HUD.md#damage-and-heal-numbers) | at once; Off draws nothing and keeps nothing; also while a recording or a live match is watched |
 | Video | Map scroll speed | the original's `Scroll Speed` | at the release |
 | Controls | the mouse (or the fingers) and the keys | none: a list to read, in `web/game_menu.js` | |
 | Game | Participate in chat, Show quick help at startup | the original's names | at once |

@@ -360,6 +360,10 @@ void Renderer::shutdown() {
         if (glyph) SDL_DestroyTexture(glyph);
         glyph = nullptr;
     }
+    for (ChangePicture& pic : change_pictures_) {
+        if (pic.texture) SDL_DestroyTexture(pic.texture);
+    }
+    change_pictures_.clear();
     if (texture_cache_) {
         texture_cache_->clear();
         texture_cache_.reset();

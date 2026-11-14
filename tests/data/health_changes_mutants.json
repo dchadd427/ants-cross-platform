@@ -1,0 +1,475 @@
+{
+  "note": "Mutants of the damage and heal numbers for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the tracker's rules and constants in include/ants_app/health_changes.hpp (what a loss and a heal are, the merge window, the fog gate, the jump, the caps, the fade and the rise), their drawing in src/ants_app/renderer_health.cpp and renderer_units.cpp (color, place, size, z-order, clip, the number that follows its ant), the setting in application_sim.cpp, game_menu.cpp and application_game_menu.cpp, against tests/test_app/test_health_changes.cpp (the tracker on made-up snapshots and on the real engine, the pixels), RA10.3 of test_replay_app (a recording with the numbers On and Off, the clock while paused) and test_game_menu (the setting's row and storage). Run from the checkout: tools/mutate.py tests/data/health_changes_mutants.json --keep-going --jobs 1; every mutant must be caught.",
+  "mutants": [
+    {
+      "id": "damage_zero_shown",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "            if (a.hp < s.hp) {",
+      "new": "            if (a.hp <= s.hp) {",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "damage_made_a_heal",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "if (shown) add(a.id, false, static_cast<int32_t>(s.hp - a.hp), now_ms, a.px, a.py);",
+      "new": "if (shown) add(a.id, true, static_cast<int32_t>(s.hp - a.hp), now_ms, a.px, a.py);",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "heal_shown_in_the_hill",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "if (s.held > 0 && a.state != ants::sim::UnitState::EnteringBase) {",
+      "new": "if (s.held > 0) {",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "heal_not_summed",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "s.held = static_cast<uint16_t>(s.held + (a.hp - s.hp));",
+      "new": "s.held = static_cast<uint16_t>(a.hp - s.hp);",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "merge_window_doubled",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "now_ms - n.start_ms <= kMergeMs",
+      "new": "now_ms - n.start_ms <= 2 * kMergeMs",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "merge_window_exclusive",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "now_ms - n.start_ms <= kMergeMs",
+      "new": "now_ms - n.start_ms < kMergeMs",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "merge_clock_not_restarted",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "                    n.amount += amount;\n                    n.start_ms = now_ms;\n",
+      "new": "                    n.amount += amount;\n",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "heal_and_damage_merge",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "        if (!heal) {\n            for (size_t i = 0; i < count_; ++i) {\n                Number& n = items_[i];\n                if (n.id == id && !n.heal && now_ms",
+      "new": "        {\n            for (size_t i = 0; i < count_; ++i) {\n                Number& n = items_[i];\n                if (n.id == id && now_ms",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "new_ant_shows_its_first_loss",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "s = Seen{a.hp, 0, true};\n                continue;",
+      "new": "s = Seen{10, 0, true};\n                continue;",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "fog_gate_open",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "return !(world.fog_of_war_enabled && a.player_id != team && !allied && !world.is_tile_revealed(a.tile_x, a.tile_y));",
+      "new": "return !(false && a.player_id != team && !allied && !world.is_tile_revealed(a.tile_x, a.tile_y));",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "fog_hides_own_ants",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "world.fog_of_war_enabled && a.player_id != team && !allied &&",
+      "new": "world.fog_of_war_enabled && !allied &&",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "fog_hides_allies",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "a.player_id != team && !allied &&",
+      "new": "a.player_id != team && (!allied || allied) &&",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "jump_does_not_reset",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "if (jump) reset();",
+      "new": "if (jump && false) reset();",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "jump_edge_off_by_one",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "tick - last_tick_ > kJumpTicks",
+      "new": "tick - last_tick_ >= kJumpTicks",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "third_number_per_sign",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "if (same_sign >= kMaxPerSign) remove(oldest_same);",
+      "new": "if (same_sign > kMaxPerSign) remove(oldest_same);",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "screen_cap_raised",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "constexpr int32_t kMaxLive = 48;",
+      "new": "constexpr int32_t kMaxLive = 64;",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "newest_goes_first",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "if (items_[i].start_ms < items_[oldest].start_ms) oldest = i;",
+      "new": "if (items_[i].start_ms > items_[oldest].start_ms) oldest = i;",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "numbers_not_stacked",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "if (items_[i].id == id && items_[i].level == level) free_line = false;",
+      "new": "if (false) free_line = false;",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "fade_starts_early",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "if (age_ms <= kSolidMs) return 255;",
+      "new": "if (age_ms < kSolidMs) return 255;",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "rise_not_rounded",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "return (kRisePx * age_ms + kLifeMs / 2) / kLifeMs;",
+      "new": "return kRisePx * age_ms / kLifeMs;",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "life_includes_its_end",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "if (now_ms - items_[i].start_ms < kLifeMs) items_[keep++] = items_[i];",
+      "new": "if (now_ms - items_[i].start_ms <= kLifeMs) items_[keep++] = items_[i];",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "damage_not_white",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "constexpr Color kDamageColor{255, 255, 255};",
+      "new": "constexpr Color kDamageColor{255, 230, 230};",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "heal_color_changed",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "constexpr Color kHealColor{132, 236, 120};",
+      "new": "constexpr Color kHealColor{132, 200, 120};",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "outline_opaque",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "constexpr uint8_t kOutlineAlpha = 217;",
+      "new": "constexpr uint8_t kOutlineAlpha = 255;",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "gap_over_the_bar",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "constexpr int32_t kAboveBar = 2;",
+      "new": "constexpr int32_t kAboveBar = 3;",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "line_height",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "constexpr int32_t kLineHeight = 12;",
+      "new": "constexpr int32_t kLineHeight = 10;",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "rise_distance",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "constexpr int32_t kRisePx = 8;",
+      "new": "constexpr int32_t kRisePx = 6;",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "glyph_advance",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "constexpr int32_t kGlyphAdvance = 7;",
+      "new": "constexpr int32_t kGlyphAdvance = 8;",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "numbers_under_the_bars",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "    draw_deferred_digits();\n    draw_bars();\n    draw_health_changes();",
+      "new": "    draw_deferred_digits();\n    draw_health_changes();\n    draw_bars();",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "heal_drawn_white",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "const health::Color c = num.heal ? health::kHealColor : health::kDamageColor;",
+      "new": "const health::Color c = health::kDamageColor;",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "small_canvas_scale_uncapped",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "std::min(health::kChangeScaleMax, health::digit_scale(picture_px_per_css))",
+      "new": "health::digit_scale(picture_px_per_css)",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "native_window_scales_numbers",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "changes_scale_ = scale_digits ? std::min(",
+      "new": "changes_scale_ = true ? std::min(",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "place_ignores_the_canvas_bar",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "changes_thick_ = health::thick_for(picture_px_per_css);",
+      "new": "changes_thick_ = false;",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "number_does_not_rise",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "const int32_t rise = health::rise_at(age) * scale + ",
+      "new": "const int32_t rise = 0 * scale + ",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "number_not_centred",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "const int32_t left = sx - pic->w * scale / 2;",
+      "new": "const int32_t left = sx;",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "number_not_clipped",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "    SDL_RenderSetClipRect(renderer_, &clip);\n    for (size_t i = 0; i < changes_->count(); ++i) {",
+      "new": "    for (size_t i = 0; i < changes_->count(); ++i) {",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "plus_is_a_minus",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "{\".......\", \".......\", \".......\", \"...X...\", \"...X...\", \".XXXXX.\", \"...X...\", \"...X...\", \".......\", \".......\"},   // + (new art",
+      "new": "{\".......\", \".......\", \".......\", \".......\", \".......\", \".XXXXX.\", \".......\", \".......\", \".......\", \".......\"},   // + (new art",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "number_does_not_follow_its_ant",
+      "file": "src/ants_app/renderer_units.cpp",
+      "old": "if (changes_ != nullptr && changes_->count() > 0) changes_->note_position(a.id, a.px + pred.dx, a.py + pred.dy);",
+      "new": "",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "off_still_makes_numbers",
+      "file": "src/ants_app/application_sim.cpp",
+      "old": "if (!menu_settings_.health_changes || replayed || catch_up_screen_active()) {",
+      "new": "if (replayed || catch_up_screen_active()) {",
+      "build": [
+        "test_replay_app"
+      ],
+      "test": "./build/tests/test_app/test_replay_app"
+    },
+    {
+      "id": "clock_runs_while_paused",
+      "file": "src/ants_app/application_sim.cpp",
+      "old": "!(replay_mode_ && replay_paused_) && ",
+      "new": "",
+      "build": [
+        "test_replay_app"
+      ],
+      "test": "./build/tests/test_app/test_replay_app"
+    },
+    {
+      "id": "setting_reads_off_when_unknown",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "store.get_string(key(kHealthChanges), \"on\", 8) != \"off\"",
+      "new": "store.get_string(key(kHealthChanges), \"on\", 8) == \"on\"",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "setting_row_default_off",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "{kHealthChanges, \"health_changes\", Section::Video, Kind::Switch, 0, 1, 1,",
+      "new": "{kHealthChanges, \"health_changes\", Section::Video, Kind::Switch, 0, 1, 0,",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "setting_row_in_game_section",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "{kHealthChanges, \"health_changes\", Section::Video,",
+      "new": "{kHealthChanges, \"health_changes\", Section::Game,",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "setting_key_renamed",
+      "file": "src/ants_app/game_menu.cpp",
+      "old": "case kHealthChanges: return \"health_changes\";",
+      "new": "case kHealthChanges: return \"hp_changes\";",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "setting_not_stored",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "            menu_settings_.health_changes = value != 0;\n            menu_settings_.write(config_store_, id);",
+      "new": "            menu_settings_.health_changes = value != 0;",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "setting_not_applied",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "menu_settings_.health_changes = value != 0;",
+      "new": "menu_settings_.health_changes = true;",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    },
+    {
+      "id": "setting_takes_any_word",
+      "file": "src/ants_app/application_game_menu.cpp",
+      "old": "            if (value != 0 && value != 1) return false;                                  // (an On / Off word that the row does not have)\n",
+      "new": "",
+      "build": [
+        "test_game_menu"
+      ],
+      "test": "./build/tests/test_app/test_game_menu"
+    }
+  ]
+}
