@@ -168,11 +168,10 @@ const GEOM = () => {
                 const { context, page } = await open(origin, w, h, touch);
                 if (w <= 700) { await page.click('.htab.t-games').catch(() => {}); }
                 await sleep(1500);
-                const g = await page.evaluate(() => ({ rows: document.querySelectorAll('.gdock .glive').length, box: Array.from(document.querySelectorAll('.glivebox')).some((b) => b.getClientRects().length), none: (document.querySelector('.gnolive') || {}).textContent,
+                const g = await page.evaluate(() => ({ rows: document.querySelectorAll('.gdock .glive').length, box: Array.from(document.querySelectorAll('.glivebox')).some((b) => b.getClientRects().length),
                     cards: document.querySelectorAll('.gdock .glist:not(.glivelist) .gitem').length, note: !!document.querySelector('.gpnote') && !document.querySelector('.gpnote').hidden, toast: !!document.querySelector('.gtoast') && !document.querySelector('.gtoast').hidden, head: document.querySelector('.gdock .gpcount').textContent }));
                 check(name + '/' + mode + ': no row, and the open rooms stay', g.rows === 0 && g.cards === 3, JSON.stringify(g));
-                if (mode === 'none') check(name + '/none: the box says "No games in progress."', g.box && g.none === 'No games in progress.' && g.head === '3 open, 0 in progress', JSON.stringify(g));
-                else check(name + '/' + mode + ': the section is not there, with no notice, no toast and the head as before', !g.box && !g.note && !g.toast && /^3 waiting/.test(g.head), JSON.stringify(g));
+                check(name + '/' + mode + ': the section is not there, with no notice, no toast and the head as before', !g.box && !g.note && !g.toast && /^3 waiting/.test(g.head), JSON.stringify(g));
                 await shot(page, name + '_' + mode);
                 await context.close();
             }
