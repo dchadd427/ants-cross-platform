@@ -1585,10 +1585,9 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
 {   // the source of the dock names no role and no command in a selector or in markup (a name or an argument is text)
     check('the dock never builds markup or a selector from what a person types or what the hub says: no innerHTML, no querySelector, no "new Function"', !/innerHTML|outerHTML|insertAdjacentHTML|querySelector|new Function|\beval\b/.test(chatSource.replace(/\/\/.*/g, '')));
 }
-{   // the field is a text area: it grows with its words on a phone held upright, Enter sends, a line break is never kept, a press on Send keeps the focus
-    const mk = (upright) => {
+{   // the field is a text area: it grows with its words in every window, Enter sends, a line break is never kept, a press on Send keeps the focus
+    const mk = () => {
         const r = rig({ width: 390, height: 844 });
-        r.win.matchMedia = () => ({ matches: upright });
         r.live(W({ you: YOU }));
         const f = r.field();
         Object.defineProperty(f, 'scrollHeight', { get() { return this.zero ? 0 : 22 + 22 * Math.max(1, Math.ceil(this.value.length / 20)); } });       // (a stand-in for the browser's: the padding and 22 px for each line of 20 characters)
@@ -1597,17 +1596,12 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
         const key = (k, o) => { let stopped = false; f.fire('keydown', Object.assign({ key: k, preventDefault() { stopped = true; } }, o)); return stopped; };
         return { r, f, type, key };
     };
-    check('the field is a text area of one row that says which way its text runs', mk(true).f.tagName === 'textarea' && mk(true).f.getAttribute('rows') === '1' && mk(true).f.getAttribute('dir') === 'auto');
-    const up = mk(true);
-    same('a phone upright: one line is 44 px, each line adds 22, four lines (110 px) are the most, then the words scroll', [0, 20, 21, 41, 60, 61, 200].map((n) => { up.type('x'.repeat(n)); return up.f.style.height; }), ['44px', '44px', '66px', '88px', '88px', '110px', '110px']);
+    check('the field is a text area of one row that says which way its text runs', mk().f.tagName === 'textarea' && mk().f.getAttribute('rows') === '1' && mk().f.getAttribute('dir') === 'auto');
+    const up = mk();
+    same('one line is 44 px, each line adds 22, four lines (110 px) are the most, then the words scroll', [0, 20, 21, 41, 60, 61, 200].map((n) => { up.type('x'.repeat(n)); return up.f.style.height; }), ['44px', '44px', '66px', '88px', '88px', '110px', '110px']);
     check('... and the words are scrolled to the caret', (up.type('x'.repeat(200)), up.f.scrollTop === up.f.scrollHeight));
-    const wide = mk(false);
-    wide.type('x'.repeat(200));
-    check('a window that is not a phone upright: the style sheet\'s own height (none is set here)', wide.f.style.height === '');
-    const nomq = rig({ width: 390, height: 844 });
-    nomq.live(W({ you: YOU })); nomq.field().value = 'x'; nomq.field().fire('input', {});
-    check('a page without matchMedia sets no height and breaks nothing', nomq.field().style.height === '' && nomq.errors.length === 0);
-    const e1 = mk(true);
+    check('the box grows in a window whose script has no matchMedia (the style sheet caps it in a wide or a low window; no query is read here)', up.r.win.matchMedia === undefined && (up.type('x'.repeat(30)), up.f.style.height === '66px') && up.r.errors.length === 0);
+    const e1 = mk();
     e1.type('x'.repeat(100));
     const prevented = e1.key('Enter');
     check('Enter sends the line, empties the field, and the box is one line again', prevented && eq(e1.r.said().map((m) => m.text), ['x'.repeat(100)]) && e1.f.value === '' && e1.f.style.height === '44px');
@@ -1622,15 +1616,15 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     check('typing a letter through beforeinput is left alone', broke === 0 && e1.r.said().length === 2);
     e1.f.fire('beforeinput', { inputType: 'insertLineBreak', preventDefault() { broke++; } });
     check('a phone keyboard whose Enter arrives as a line break sends, and the break is not made', broke === 1 && e1.r.said().length === 3 && e1.r.said()[2].text === 'half typed' && e1.f.value === '');
-    const viaForm = mk(true);
+    const viaForm = mk();
     let submits = 0;
     viaForm.r.form().requestSubmit = () => { submits++; viaForm.r.form().fire('submit', { preventDefault() {} }); };
     viaForm.type('through the form'); viaForm.key('Enter');
     check('where the form can be submitted by script, Enter goes through its submit event (the emoji and voice buttons hear it) and sends once', submits === 1 && viaForm.r.said().length === 1);
-    const paste = mk(true);
+    const paste = mk();
     paste.f.value = 'one\r\ntwo\n' + 'x'.repeat(30); paste.f.selectionStart = 4; paste.f.fire('input', {});
     check('a pasted line break becomes one space, the caret stays, the box grows', paste.f.value === 'one two ' + 'x'.repeat(30) && paste.f.selectionStart === 4 && paste.f.style.height === '66px');
-    const press = mk(true);
+    const press = mk();
     const sendBtn = byClass(press.r.form(), 'gc-send').filter((b) => cls(b).indexOf('gc-login') === -1)[0];
     let kept = 0;
     sendBtn.fire('pointerdown', { preventDefault() { kept++; } });
@@ -1638,40 +1632,40 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     press.f.focus();
     sendBtn.fire('pointerdown', { preventDefault() { kept++; } });
     check('a press on Send while the field has the focus keeps it there (the phone\'s keyboard stays up)', kept === 1);
-    const back = mk(true);
+    const back = mk();
     back.type('draft words that are long'); back.r.clock.advance(3000);
     back.r.dock.say('draft words that are long'); back.f.value = '';
     back.r.s().recv({ t: 'err', code: 'bad' });
     check('a refused line comes back into the field and the box grows to hold it', back.f.value === 'draft words that are long' && back.f.style.height === '66px');
-    const turn = mk(true);
+    const turn = mk();
     turn.f.value = 'x'.repeat(30); turn.r.win.listeners.resize.forEach((fn) => fn({}));
-    check('turning the phone makes the box as tall as its words again', turn.f.style.height === '66px');
-    const ime = mk(true);
+    check('turning the window makes the box as tall as its words again', turn.f.style.height === '66px');
+    const ime = mk();
     ime.type('half typed');
     check('the Enter that confirms a composition in Safari (keyCode 229, no isComposing) sends nothing and is left alone', !ime.key('Enter', { keyCode: 229, isComposing: false }) && ime.r.said().length === 0 && ime.f.value === 'half typed');
     check('Ctrl+Enter and Meta+Enter send too (the one-line field did not, nobody minds)', ime.key('Enter', { ctrlKey: true }) && ime.r.said().length === 1);
-    const para = mk(true);
+    const para = mk();
     let madePara = 0;
     para.type('a paragraph break');
     para.f.fire('beforeinput', { inputType: 'insertParagraph', preventDefault() { madePara++; } });
     check('a keyboard that says insertParagraph sends and makes no break', madePara === 1 && para.r.said().length === 1 && para.f.value === '');
-    const run = mk(true);
+    const run = mk();
     run.f.value = 'ab\n\n\ncd'; run.f.selectionStart = 6; run.f.fire('input', {});
     check('a pasted run of line breaks is one space and the caret stays after the same letter ("ab cd", the caret after the c, not after the d)', run.f.value === 'ab cd' && run.f.selectionStart === 4, run.f.selectionStart);
-    const gone = mk(true);
+    const gone = mk();
     gone.type('x'.repeat(30));
     gone.f.zero = true; gone.type('x'.repeat(100));
     check('a view that is not shown (the field has no height) keeps the box as it was and is measured when it comes', gone.f.style.height === '66px');
     gone.f.zero = false; gone.r.dock.grow();
     check('... the chat asks again when the view comes (the dock paints, or the window turns)', gone.f.style.height === '110px');
-    const fol = mk(true);
+    const fol = mk();
     const lg = fol.r.log();
     lg.scrollHeight = 1000; lg.clientHeight = 300; lg.scrollTop = 700;
     fol.type('x'.repeat(30));
     check('a log that is read at its end follows to its end when the box grows', lg.scrollTop === 1000, lg.scrollTop);
     lg.scrollTop = 100; fol.type('x'.repeat(100));
     check('a log that was scrolled up is left where it is', lg.scrollTop === 100);
-    const nosub = mk(true);
+    const nosub = mk();
     nosub.r.form().dispatchEvent = (ev) => nosub.r.form().fire(ev.type, ev);
     nosub.r.win.Event = function (type, o) { this.type = type; this.cancelable = !!(o && o.cancelable); this.preventDefault = () => {}; };
     let heard = 0;
@@ -1679,7 +1673,7 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     nosub.type('no requestSubmit');
     nosub.key('Enter');
     check('where the form has no requestSubmit (iOS 15) Enter sends a cancelable submit event to it, which the other buttons hear, and the line goes once', heard === 1 && nosub.r.said().length === 1 && nosub.r.said()[0].text === 'no requestSubmit');
-    check('the field has a hint that is read with its name: "Enter sends the message."', mk(true).f.getAttribute('aria-describedby') === 'gchat-hint' && one(mk(true).r.root, 'gc-hint') !== null && one(mk(true).r.root, 'gc-hint').id === 'gchat-hint' && one(mk(true).r.root, 'gc-hint').textContent === 'Enter sends the message.');
+    check('the field has a hint that is read with its name: "Enter sends the message."', mk().f.getAttribute('aria-describedby') === 'gchat-hint' && one(mk().r.root, 'gc-hint') !== null && one(mk().r.root, 'gc-hint').id === 'gchat-hint' && one(mk().r.root, 'gc-hint').textContent === 'Enter sends the message.');
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

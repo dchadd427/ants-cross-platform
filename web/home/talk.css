@@ -1,48 +1,45 @@
-/* The emoji button, the microphone button and the emoji picker of the chat (web/home/talk.js, docs/HOME_SCREEN.md "Emoji and voice"): the buttons stand between the chat's field and Send, or in a row of their own under the
-   field where the field's row is narrow; the picker lies over the log, right above the form (its height is set by the script to the room there is), and the line of words is the form's own first row: nothing covers the field or Send. */
-.gc-form.gt-on { position: relative; grid-template-columns: minmax(0, 1fr) auto auto; }
+/* The composer of the chat, in every window (web/home/talk.js, docs/HOME_SCREEN.md "The chat dock" and "Emoji and voice"): one rounded box as in a chat app: the words on top over the whole width (one line, growing to four,
+   then they scroll; two in a wide window, one in a low one), the emoji and microphone buttons small and quiet under them at the left and Send at the right. In a low window (a phone held sideways) the box is one row:
+   the field, the two buttons, Send. The picker lies over the log, right above the form (its height is set by the script to the room there is); so does the line of words, a bubble that takes no room: nothing covers the field or Send. */
+.gc-form.gt-on { position: relative; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "f f f" "t . s"; gap: 0 8px; margin-top: 6px; padding: 4px 6px 6px; background: #0b1117; border: 2px solid var(--frame); border-radius: 22px; box-shadow: 0 0 0 2px var(--edge); }
+.gc-form.gt-on:focus-within { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), 0 0 0 3px var(--edge); }
+.gt-on textarea.gc-input { grid-area: f; height: 44px; min-height: 44px; max-height: 66px; padding: 11px 10px; border: 0; border-radius: 14px; box-shadow: none; outline: none; scrollbar-width: none; line-height: 22px; white-space: pre-wrap; overflow-wrap: anywhere; overflow-y: auto; background: none; }
+.gt-on .gt-tools { grid-area: t; gap: 2px; }
+.gt-on .btn.gt-btn { min-width: 44px; min-height: 44px; color: #a8cfc0; background: none; border-color: transparent; border-radius: 50%; box-shadow: none; text-shadow: none; }
+.gt-on .btn.gt-btn:active { transform: none; background: #14232b; }
+.gt-on .btn.gt-btn[aria-expanded="true"] { color: var(--gold); background: #14232b; }
+.gt-on .btn.gt-btn.gt-hot { color: #fff; background: #a32f2f; }
+.gt-on .gt-ico { width: 23px; height: 23px; }
+.gt-on .gc-send { grid-area: s; min-height: 44px; min-width: 76px; padding: 0 18px; border-radius: 22px; box-shadow: var(--bevel-sm); }
+.gt-on .gc-send:active:not([disabled]) { transform: none; box-shadow: var(--bevel-dn); }
+.gc-form.gt-on:has(.gc-input:disabled) { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "f s"; padding: 4px 6px 4px 4px; }       /* (nobody is named: the field is off and Log in stands where Send does: one row) */
+@media (max-width: 700px) and (min-height: 501px) {       /* (a phone held upright: four lines of words, and the off field is small and wraps) */
+    .gt-on textarea.gc-input { max-height: 110px; }
+    .gt-on textarea.gc-input:disabled { padding: 6px 8px; font-size: 14px; line-height: 16px; white-space: normal; overflow: hidden; }
+    .gt-on textarea.gc-input:disabled::placeholder { font-size: 14px; }
+}
+@media (min-width: 400px) and (max-width: 700px) and (min-height: 501px) { .gt-on textarea.gc-input:disabled { padding: 14px 8px; white-space: pre; } }
+@media (max-height: 500px) {       /* (a low window, a phone held sideways: the box is one row, so that the log keeps its room) */
+    .gc-form.gt-on, .gc-form.gt-on:has(.gc-input:disabled) { grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "f t s"; align-items: center; margin-top: 6px; padding: 0 6px 0 4px; }
+    .gc-form.gt-on:has(.gc-input:disabled) { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "f s"; }
+    .gt-on textarea.gc-input { max-height: 44px; }
+}
+
 .gt-tools { display: flex; gap: 6px; }
 .gt-tools[hidden], .gt-pick[hidden], .gt-say[hidden] { display: none; }
-.gt-btn { min-width: 48px; min-height: 48px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.gt-btn { min-width: 44px; min-height: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 .gt-ico { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .gt-ico .gt-eye { fill: currentColor; stroke: none; }
 .gt-hot .gt-cap { fill: currentColor; }
 .btn.gt-hot, .btn.gt-hot:hover, .btn.gt-hot:active { background: #8a2c2c; animation: gt-beat 1.2s ease-in-out infinite; }
 @keyframes gt-beat { 50% { opacity: .65; } }
-.gt-say { grid-column: 1 / -1; margin: 0; font-size: 15px; line-height: 1.35; color: #f2c48c; }
-.gt-pick { position: absolute; left: 0; right: 0; bottom: 100%; z-index: 2; box-sizing: border-box; max-height: 150px; overflow-y: auto; overscroll-behavior: contain; margin-bottom: 6px; padding: 6px 8px; background: #0b1117; border: 2px solid var(--edge); border-radius: 4px; box-shadow: 0 0 0 2px #000; }
+.gt-say { position: absolute; bottom: 100%; left: 0; right: 0; z-index: 3; margin: 0 0 8px; padding: 7px 10px; font-size: 14px; line-height: 1.3; color: #f2c48c; background: #10161d; border: 1px solid #6b5a22; border-radius: 12px; box-shadow: 0 0 0 2px rgba(0, 0, 0, .7); }
+.gt-pick { position: absolute; left: 0; right: 0; bottom: 100%; z-index: 2; box-sizing: border-box; max-height: 150px; overflow-y: auto; overscroll-behavior: contain; margin-bottom: 8px; padding: 6px 8px; background: #0b1117; border: 2px solid var(--edge); border-radius: 14px; box-shadow: 0 0 0 2px #000; }
 .gt-row { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
 .gt-name { flex: 0 0 100%; margin-top: 4px; font-size: 13px; line-height: 1.3; color: #a8cfc0; }
 .gt-e { min-width: 44px; min-height: 44px; padding: 0; font-size: 24px; line-height: 1; color: var(--cream); background: transparent; border: 2px solid transparent; border-radius: 6px; cursor: pointer; }
 .gt-e:hover { background: #1b2a34; }
 .gt-e:focus-visible, .gt-btn:focus-visible { outline: 3px solid var(--gold, #f6d058); outline-offset: 1px; }
-/* the middle widths of a window that is not low, where the account line takes the rest of the row: the field and Send share the first row, the two buttons have the row under it */
-@media (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) {
-    .gc-form.gt-on { grid-template-columns: minmax(0, 1fr) auto; }
-    .gt-on .gc-input { order: 1; } .gt-on .gc-send { order: 2; } .gt-on .gc-login { order: 2; }
-    .gt-on .gt-tools { order: 3; grid-column: 1 / -1; }
-}
-/* a phone held upright: one rounded box as in a chat app: the words on top over the whole width (one line, growing to four, then they scroll), the two buttons small and quiet under them at the left and Send at the right;
-   the line of words is a bubble over the last lines of the log (it takes no room, nothing moves when it comes and goes) */
-@media (max-width: 700px) and (min-height: 501px) {
-    .gc-form.gt-on { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "f f f" "t . s"; gap: 0 8px; margin-top: 6px; padding: 4px 6px 6px; background: #0b1117; border: 2px solid var(--frame); border-radius: 22px; box-shadow: 0 0 0 2px var(--edge); }
-    .gc-form.gt-on:focus-within { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), 0 0 0 3px var(--edge); }
-    .gt-on textarea.gc-input { grid-area: f; order: 0; height: 44px; min-height: 44px; max-height: 110px; padding: 11px 10px; border: 0; border-radius: 14px; box-shadow: none; outline: none; scrollbar-width: none; line-height: 22px; white-space: pre-wrap; overflow-wrap: anywhere; overflow-y: auto; background: none; }
-    .gt-on .gt-tools { grid-area: t; order: 0; gap: 2px; }
-    .gt-on .btn.gt-btn { min-width: 44px; min-height: 44px; color: #a8cfc0; background: none; border-color: transparent; border-radius: 50%; box-shadow: none; text-shadow: none; }
-    .gt-on .btn.gt-btn:active { transform: none; background: #14232b; }
-    .gt-on .btn.gt-btn[aria-expanded="true"] { color: var(--gold); background: #14232b; }
-    .gt-on .btn.gt-btn.gt-hot { color: #fff; background: #a32f2f; }
-    .gt-on .gt-ico { width: 23px; height: 23px; }
-    .gt-on .gc-send { grid-area: s; order: 0; min-height: 44px; min-width: 76px; padding: 0 18px; border-radius: 22px; box-shadow: var(--bevel-sm); }
-    .gt-on .gc-send:active:not([disabled]) { transform: none; box-shadow: var(--bevel-dn); }
-    .gt-on .gt-say { bottom: 100%; position: absolute; left: 0; right: 0; z-index: 3; margin: 0 0 8px; padding: 7px 10px; font-size: 14px; line-height: 1.3; background: #10161d; border: 1px solid #6b5a22; border-radius: 12px; box-shadow: 0 0 0 2px rgba(0, 0, 0, .7); }
-    .gt-on .gt-pick { margin-bottom: 8px; border-radius: 14px; }
-    .gc-form.gt-on:has(.gc-input:disabled) { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "f s"; padding: 4px 6px 4px 4px; }       /* (nobody is named: the field is off and Log in stands where Send does: one row) */
-    .gt-on textarea.gc-input:disabled { padding: 6px 8px; font-size: 14px; line-height: 16px; white-space: normal; overflow: hidden; }
-    .gt-on textarea.gc-input:disabled::placeholder { font-size: 14px; }
-}
-@media (min-width: 400px) and (max-width: 700px) and (min-height: 501px) { .gt-on textarea.gc-input:disabled { padding: 14px 8px; white-space: pre; } }
 @media (forced-colors: active) { .gt-on .btn.gt-btn { border-color: ButtonText; } .gt-on textarea.gc-input:focus-visible { outline: 2px solid Highlight; } }
-@media (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) { .gc[data-open="true"]:has(.gc-form.gt-on) { height: clamp(240px, 38vh, 320px); } }       /* (the dock is taller by the row of the buttons, so that the log keeps its room) */
+@media (min-width: 701px) and (min-height: 501px) { .gc[data-open="true"]:has(.gc-form.gt-on) { height: clamp(240px, 34vh, 300px); } }       /* (a wide window: the dock is taller by the row of the buttons, so that the log keeps its room) */
 @media (prefers-reduced-motion: reduce) { .btn.gt-hot { animation: none; } }
