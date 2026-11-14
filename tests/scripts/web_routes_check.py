@@ -203,7 +203,7 @@ def main():
     check(bool(GAME.search(get("/?join=/ws&room=abc")[3])), "a link that was shared before (/?join=/ws&room=...) still opens the game page")
     check(bool(LOBBY.search(get("/?room=k7m2xq")[3])), "a room link (/?room=...) still opens the front page")
     print("[web routes] the page of the matches that run now is gone: its old addresses are a temporary redirect (302) to the front page with no query")
-    for old in ("/live-now", "/live-now/", "/live.html", "/live-now?x=1", "/live.html?join=/ws&room=k7m2xq&replay=a.antsrep", "/live-now/?room=k7m2xq"):
+    for old in ("/live-now", "/live-now/", "/live.html", "/live-now?x=1", "/live.html?join=/ws&room=k7m2xq&replay=a.antsrep", "/live-now/?room=k7m2xq", "/LIVE-NOW", "/Live.html"):
         status, headers, names, body = get(old)
         check(status == 302 and headers.get("location") == "/" and "cache-control" not in headers, "%s answers 302 to / and drops the query (%s %s)" % (old, status, headers.get("location")))
         check(get(old, method="HEAD")[1].get("location") == "/", "HEAD %s is the same redirect" % old)

@@ -5,7 +5,7 @@
 //   2. the bar's visible buttons are 44 px tall or more and do not overlap each other;
 //   3. a phone (under 720 px): Home and the Menu are shown, the row of pages is not; from 720 px: the row of four is shown (Home, Matches, Map maker, Discord) and the phone's Home is not;
 //   4. the page that is open is marked aria-current in the row (Matches for Matches and Match, Map maker), and in the Menu for Legal, Changelog and Sprites and sounds;
-//   5. the live mark, at every width: with two live it says "2 live", is named "2 matches live, see them on the front page" and links to "/" (on Matches and Match, which ask when they open); with none it is hidden;
+//   5. the live mark, at every width: with two live it says "2 live", is named "2 live: see them on the front page" and links to "/" (on Matches and Match, which ask when they open); with none it is hidden;
 //   6. nothing moves when the count arrives (the Home button, the row and the Menu button keep their places);
 //   6b. the bar draws no logo (no picture in it), a link to the front page is shown, and the first button starts at the page's left edge (no gap where the logo was);
 //   7. the Menu: opens with every link (the four and the five small ones), Escape closes it and the focus goes back to its button, a press outside closes it too.
@@ -141,7 +141,7 @@ async function main() {
                     }
                     check(tag + ': the page that is open is marked in the row', JSON.stringify(m.current) === JSON.stringify(rowMark ? [rowMark] : []), JSON.stringify(m.current));
                     const expectLive = live && ['matches', 'match'].indexOf(pname) !== -1;
-                    check(tag + ': the live mark (shown only while a match runs, at every width), its name and its link', expectLive ? m.live && m.liveText === '2 live' && m.liveName === '2 matches live, see them on the front page' && m.liveHref === '/' : !m.live, JSON.stringify([m.live, m.liveText, m.liveName, m.liveHref]));
+                    check(tag + ': the live mark (shown only while a match runs, at every width), its name and its link', expectLive ? m.live && m.liveText === '2 live' && m.liveName === '2 live: see them on the front page' && m.liveHref === '/' : !m.live, JSON.stringify([m.live, m.liveText, m.liveName, m.liveHref]));
                     seen[live] = m;
                     // the Menu
                     const open = await page.evaluate(() => { document.querySelector('.sb .sbtn').click(); const box = document.getElementById('sbm'); return box && !box.hidden ? { n: box.querySelectorAll('a').length, expanded: document.querySelector('.sb .sbtn').getAttribute('aria-expanded'), cur: [...box.querySelectorAll('[aria-current]')].map((a) => a.textContent.replace(/\d+$/, '')), inside: (() => { const r = box.getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth && r.bottom <= window.innerHeight + 1; })() } : null; });
@@ -168,6 +168,36 @@ async function main() {
                 check(pname + ' ' + sname + ': nothing moves when the live count arrives (the first button, the Menu button and the bar)', still(a.parts[0], b.parts[0]) && still(a.menu, b.menu) && still(a.bar, b.bar), JSON.stringify([a.parts[0], b.parts[0], a.menu, b.menu]));
                 if (wide) check(pname + ' ' + sname + ': ... nor the row\'s buttons', a.parts.filter((p) => !/sblive/i.test(p.cls)).every((p) => b.parts.some((q) => q.name === p.name && still(p, q))), '');
             }
+        }
+    }
+    // the mark follows the count when the tab comes back to the front, and its dot is drawn in forced colors too
+    if (CHECKS) {
+        for (const [width, height] of [[390, 844], [1280, 800]]) {
+            const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
+            const page = await context.newPage();
+            const tag = 'matches ' + width + ' tab back';
+            const state = (v) => page.evaluate((v) => { Object.defineProperty(document, 'visibilityState', { get: () => v, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); }, v);
+            const text = () => page.evaluate(() => { const m = document.querySelector('.sb .sblive'); return m.hidden ? '' : m.textContent; });
+            liveCount = 2;
+            await page.goto(base + '/matches', { waitUntil: 'load' });
+            await page.waitForTimeout(500);
+            check(tag + ': the mark says 2 live when the page opens', (await text()) === '2 live');
+            liveCount = 0; await state('hidden'); await page.waitForTimeout(300);
+            check(tag + ': going to the back does not change it', (await text()) === '2 live');
+            await state('visible'); await page.waitForTimeout(500);
+            check(tag + ': back in front with no match live the mark is gone', (await text()) === '');
+            liveCount = 3; await state('hidden'); await state('visible'); await page.waitForTimeout(500);
+            check(tag + ': back in front with three live the mark says 3 live', (await text()) === '3 live');
+            await context.close();
+            const forced = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, forcedColors: 'active' });
+            const fpage = await forced.newPage();
+            liveCount = 2;
+            await fpage.goto(base + '/matches', { waitUntil: 'load' });
+            await fpage.waitForTimeout(500);
+            const dot = await fpage.evaluate(() => { const m = document.querySelector('.sb .sblive'), a = getComputedStyle(m, '::before'), b = getComputedStyle(m); return { dot: a.backgroundColor, bar: b.backgroundColor, w: a.width, shown: !m.hidden }; });
+            check(tag + ': in forced colors the dot is drawn in a color other than the button\'s', dot.shown && dot.dot !== dot.bar && dot.dot !== 'rgba(0, 0, 0, 0)' && dot.w === '9px', JSON.stringify(dot));
+            if (SHOTS) await fpage.screenshot({ path: path.join(SHOTS, PREFIX + '_matches_' + width + '_forced_live2.png') });
+            await forced.close();
         }
     }
     // the Map maker's own screens (the page's own state is set: My maps is the #mine section shown with the editor's row and body hidden, as web/front/mapmaker_app.js does; Crop to fit is the #crop section shown with the editor hidden)

@@ -221,22 +221,50 @@
   {
    "id": "old_live_address_goes_to_the_matches_list",
    "file": "docker/nginx.conf",
-   "old": "    location = /live-now {\n        return 302 /;",
-   "new": "    location = /live-now {\n        return 302 /matches;",
+   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /;",
+   "new": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /matches;",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
    "id": "old_live_file_address_keeps_the_query",
    "file": "docker/nginx.conf",
-   "old": "    location = /live.html {\n        return 302 /;",
-   "new": "    location = /live.html {\n        return 302 /$is_args$args;",
+   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /;",
+   "new": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /$is_args$args;",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
    "id": "old_live_address_is_a_permanent_redirect",
    "file": "docker/nginx.conf",
-   "old": "    location = /live-now {\n        return 302 /;",
-   "new": "    location = /live-now {\n        return 301 /;",
+   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /;",
+   "new": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 301 /;",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "old_live_addresses_are_case_sensitive",
+   "file": "docker/nginx.conf",
+   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /;",
+   "new": "location ~ \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /;",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "old_live_addresses_redirect_names_that_start_like_them",
+   "file": "docker/nginx.conf",
+   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /;",
+   "new": "location ~* \"^/live(?:-now/?|\\.html)\" {\n        return 302 /;",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "old_live_addresses_lose_the_file_address",
+   "file": "docker/nginx.conf",
+   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /;",
+   "new": "location ~* \"^/live(?:-now/?)\\z\" {\n        return 302 /;",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "old_live_addresses_lose_the_slash_one",
+   "file": "docker/nginx.conf",
+   "old": "location ~* \"^/live(?:-now/?|\\.html)\\z\" {\n        return 302 /;",
+   "new": "location ~* \"^/live(?:-now|\\.html)\\z\" {\n        return 302 /;",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   }
  ]
