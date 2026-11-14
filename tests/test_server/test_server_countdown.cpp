@@ -303,6 +303,14 @@ void run_countdown_tests() {
         solo_too_long.solo_countdown_s = net::kMaxCountdownSeconds + 1;
         const CreateResult solo_refused = mgr.create_room(solo_too_long, 5000);
         ASSERT_TRUE(!solo_refused.ok && solo_refused.http_status == 400 && solo_refused.error == "solo_countdown_seconds must be 0 to 60");
+        {   // the list of rooms keeps its size: every room's countdown is in its own status, the solo one is not repeated in the list (a thousand rooms must fit the answer's cap)
+            ctl::HttpRequest lq;
+            lq.method = "GET";
+            lq.path = "/rooms";
+            const ctl::HttpResponse listed = handle_control(mgr, lq, 5000);
+            ASSERT_EQ(listed.status, 200);
+            ASSERT_TRUE(listed.body.find("\"countdown_seconds\"") != std::string::npos && listed.body.find("solo_countdown_seconds") == std::string::npos);
+        }
         RoomManager plain{MapStore(maps_dir())};                                          // a manager with the library's limits: no countdown for a room that does not ask
         r = handle_control(plain, [&]() { ctl::HttpRequest rq; rq.method = "POST"; rq.path = "/rooms"; rq.body = R"({"map":"TINY.LVL","code":"CS-5"})"; return rq; }(), 5000);
         ASSERT_EQ(r.status, 201);

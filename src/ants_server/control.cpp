@@ -100,7 +100,7 @@ JsonValue status_to_json(const RoomStatus& s, bool in_list) {
     o.set("max_catch_up_seconds", JsonValue::make_int(s.max_catch_up_ms / 1000));
     o.set("resume_countdown_seconds", JsonValue::make_int(s.resume_countdown_ms / 1000));
     o.set("countdown_seconds", JsonValue::make_int(s.countdown_s));
-    o.set("solo_countdown_seconds", JsonValue::make_int(s.solo_countdown_s));
+    if (!in_list) o.set("solo_countdown_seconds", JsonValue::make_int(s.solo_countdown_s));      // (not in the list: a list of a thousand rooms must stay under the answer's cap)
     o.set("paused", JsonValue::make_bool(s.paused));
     o.set("resume_seconds", JsonValue::make_int(s.resume_s));
     JsonValue absent = JsonValue::make_array();
