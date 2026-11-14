@@ -2,6 +2,7 @@
 """The admin page's door (hub/admindoor.py, hub/admin.py `resolve`, docs/HUB.md "The admin page's door"): who may use it, the pass that the site's nginx hands on, and the hub's side of what the page does.
 
   TheRule          the one rule: nobody / no role / moderator / administrator / the operator's account, each with a fresh answer, an old one and a Discord that is down; no key, a short key, a key with a blank
+  TheFreshCheck    an action asks Discord again and a visit does not
   ThePass          `v1.<payload>.<mac>`: the mac holds with the key and with nothing else, the expiry is a minute from now, the payload says a reference, a name and a role and never an id
   TheGate          what the gate is and is not: GET only, no body in or out, no CORS, a limit for each address
   TheFences        the page's calls: the same-origin rules, the JSON type, the token (none, wrong, another login's), the shape of the body, the size of the body
@@ -220,7 +221,7 @@ class TheRule(DoorTest):
             self.assertEqual(self.fake.member_ids.count(MOD), 2, "a person that no answer is known of makes the hub ask a burst and then waits")
 
     def test_the_door_is_shut_for_everybody_without_a_good_key(self):
-        for secret in (None, "", "x" * 31, "a b" * 20, "café-" * 8):
+        for secret in (None, "", "x" * 31, "a b" * 20, "caf\u00e9-" * 8):
             with self.subTest(secret=len(secret or "")):
                 env = {"ANTS_HUB_ADMIN_GATE_SECRET": secret} if secret is not None else {}
                 with hub_rig.Rig(member_fake=self.fake, owner=OWNER, recheck=1, env=env, **OPTIONS) as rig:
@@ -288,6 +289,40 @@ class ThePass(DoorTest):
             self.assertIsNone(r.get("x-ants-admin-pass"), name)
 
 
+class TheFreshCheck(DoorTest):
+    """An action needs an answer of Discord that is a minute old at the most; a visit of the page needs only the hub's usual rule. Here the minute is a fifth of a second and the usual rule's grace is long."""
+
+    options = dict(roles_action_fresh_seconds=0.2, roles_grace_seconds=30.0)
+
+    def test_a_role_that_is_believed_costs_no_call_even_when_it_is_older_than_an_actions_minute(self):
+        self.assertEqual(self.gate(ADMIN).status, 204)
+        self.assertEqual(self.fake.member_ids.count(ADMIN), 1)
+        time.sleep(0.5)
+        for _ in range(3):
+            self.assertEqual(self.gate(ADMIN).status, 204)
+        self.assertEqual(self.fake.member_ids.count(ADMIN), 1)
+
+    def test_an_action_asks_again_and_the_answer_that_says_the_role_went_stops_it(self):
+        self.token(ADMIN)
+        self.fake.members[ADMIN] = []
+        time.sleep(0.5)
+        self.assertEqual(self.gate(ADMIN).status, 204, "the page's visit is let in by an answer that is believed")
+        r = self.post("ban", {"account": NAMES[TARGET]})
+        self.assertEqual((r.status, r.json()), (403, {"error": "admin"}))
+        self.assertFalse(self.rig.call(self.rig.store.is_banned, TARGET))
+        self.assertEqual(self.modlog(), [])
+        self.assertEqual(self.fake.member_ids.count(ADMIN), 2, "the action asked Discord again")
+
+    def test_an_action_on_a_person_whose_answer_is_old_asks_for_it(self):
+        self.token(ADMIN)
+        self.assertEqual(self.post("mute", {"account": NAMES[TARGET], "minutes": 5}).status, 200)
+        asked = self.fake.member_ids.count(TARGET)
+        self.assertGreaterEqual(asked, 1)
+        time.sleep(0.5)
+        self.assertEqual(self.post("unmute", {"account": NAMES[TARGET]}).status, 200)
+        self.assertEqual(self.fake.member_ids.count(TARGET), asked + 1)
+
+
 class TheGate(DoorTest):
     options = dict(admin_burst=6, admin_refill_seconds=60.0)
 
@@ -307,7 +342,7 @@ class TheGate(DoorTest):
             self.assertEqual(r.status, 405, method)
             self.assertIsNone(r.get("x-ants-admin-pass"))
             self.assertFalse([n for n, _ in r.headers if n.startswith("access-control")])
-        r = self.call("GET", "/hub/admin/gate", OWNER, raw=b"{}", extra=[("Content-Length", "2")], address="203.0.113.4", site=None)
+        r = self.call("GET", "/hub/admin/gate", OWNER, raw=b"{}", address="203.0.113.4", site=None)
         self.assertEqual(r.status, 400, "a body is refused")
         r = self.call("GET", "/hub/admin/gate", OWNER, extra=[("Transfer-Encoding", "chunked")], address="203.0.113.5")
         self.assertEqual(r.status, 400)
@@ -412,8 +447,10 @@ class TheFences(DoorTest):
         r = hc.request(self.rig.port, "POST", "/hub/admin/api/ban", [("Sec-Fetch-Site", "same-origin"), ("Origin", hc.SITE), ("Content-Type", "application/json"), ("X-Ants-Csrf", self.token(ADMIN)),
                                                                      self.login_header(ADMIN)], body=b'{"account":"x"}', send_length=False)
         self.assertEqual(r.status, 400)
-        r = self.call("GET", "/hub/admin/api/me", ADMIN, raw=b"{}", extra=[("Content-Length", "2")])
-        self.assertEqual(r.status, 400)
+        r = self.call("GET", "/hub/admin/api/me", ADMIN, raw=b"{}")
+        self.assertEqual(r.status, 400, "a GET with a body")
+        r = self.call("GET", "/hub/admin/api/me", ADMIN, extra=[("Content-Length", "0")], raw=None)
+        self.assertEqual(r.status, 200, "and one that says 0 is a GET")
         self.untouched()
 
     def test_a_body_that_is_shorter_than_it_says_is_a_400_and_costs_nothing_else(self):
@@ -444,6 +481,8 @@ class TheFences(DoorTest):
 
 
 class TheChanges(DoorTest):
+    options = dict(deletions_seconds=600.0)                          # (the clock's look at the deletions is far off: the screens are told by the change itself)
+
     def row(self, action):
         return [r for r in self.modlog() if r.action == action]
 
@@ -549,6 +588,13 @@ class TheChanges(DoorTest):
         self.assertEqual(self.modlog(), [])
         self.assertEqual(self.post("ban", {"account": "@" + NAMES[TARGET]}).status, 200, "@name is a username too")
 
+    def test_no_command_takes_an_id(self):
+        for who in (TARGET, "@" + TARGET):
+            for name, body in (("ban", {}), ("unban", {}), ("mute", {"minutes": 5}), ("unmute", {}), ("nopic", {}), ("pic", {})):
+                r = self.post(name, dict(body, account=who))
+                self.assertEqual((r.status, r.json()), (404, {"error": "who"}), (name, who))
+        self.assertEqual(self.modlog(), [])
+
     def test_a_username_of_digits_is_written_with_an_at_sign_and_is_not_an_id(self):
         self.rig.call(self.rig.store.set_profile, AWAY, "123456789012", "", 1000)
         self.assertEqual(self.post("ban", {"account": "123456789012"}).status, 404)
@@ -573,6 +619,15 @@ class TheChanges(DoorTest):
         self.assertEqual(self.post("ban", {"account": NAMES[PLAIN]}).status, 200)
         self.assertFalse(self.rig.call(s.is_banned, OWNER))
         self.assertTrue(self.rig.call(s.is_banned, ADMIN2))
+
+    def test_nobody_acts_on_the_operators_account_whatever_the_roles_say_of_it(self):
+        self.token(ADMIN)
+        roles = self.rig.hub.chat.roles
+        self.rig.call(setattr, roles, "owner", "")                    # (the roles do not know the account as the operator's now: only the setting does, and Discord says it holds no role)
+        for name, body in (("ban", {}), ("mute", {"minutes": 5}), ("nopic", {})):
+            r = self.post(name, dict(body, account=NAMES[OWNER]))
+            self.assertEqual((r.status, r.json()), (403, {"error": "power"}), name)
+        self.assertEqual(self.modlog(), [])
 
     def test_a_line_of_an_administrator_is_theirs_to_delete_and_not_another_administrators(self):
         line_id = self.line(ADMIN2)
@@ -807,7 +862,7 @@ class TheKey(unittest.TestCase):
     def test_a_key_of_thirty_two_printable_characters_or_more_opens_the_door(self):
         for key in ("k" * 32, "k" * 256, "a1!~" * 10):
             self.assertTrue(self.load(ANTS_HUB_ADMIN_GATE_SECRET=key).admin_gate_on, len(key))
-        for key in ("", "k" * 31, "k" * 257, "k" * 16 + " " + "k" * 16, "café" * 10, "tab\t" * 10):
+        for key in ("", "k" * 31, "k" * 257, "k" * 16 + " " + "k" * 16, "caf\u00e9" * 10, "tab\t" * 10):
             cfg = self.load(ANTS_HUB_ADMIN_GATE_SECRET=key)
             self.assertFalse(cfg.admin_gate_on, repr(len(key)))
             self.assertEqual(cfg.admin_gate_secret, "")
