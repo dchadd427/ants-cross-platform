@@ -116,7 +116,7 @@
   {
    "id": "shortcut_to_nowhere",
    "file": "web/manifest.webmanifest",
-   "old": "\"url\": \"/live-now\"",
+   "old": "\"url\": \"/matches\"",
    "new": "\"url\": \"/live\"",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },

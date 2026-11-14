@@ -184,7 +184,7 @@ class ThePlayer(unittest.TestCase):
         lacks(self, "' ' + [name, seconds", script)
 
     def test_only_these_places_of_a_page_of_the_site_know_the_address_local(self):
-        for name in ("lobby.html", "match.html", "live.html"):
+        for name in ("lobby.html", "match.html"):
             self.assertNotIn("local=", read("web", name), name)
 
 
@@ -232,7 +232,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     with nothing changed must pass"""
     FILES = ("web/replay_page.js", "web/matches.html", "web/matches.css", "web/shell.html", "web/map_files.js", "docs/REPLAYS.md", "docs/ARCHITECTURE.md", "tools/check_hygiene.py", ".gitattributes",
              "include/ants_replay/replay.hpp", "src/ants_replay/player.cpp", "src/ants_sim/movement_tables_data.inc",
-             "web/live.html", "web/lobby.html", "web/match.html",
+             "web/lobby.html", "web/match.html",
              "tests/scripts/web_replay_open_check.js", "tests/scripts/web_map_files_check.js", "tests/scripts/replay_file_tools.js", "tests/scripts/test_web_replay_open.py",
              "tests/data/replay_bots_tiny.antsrep", "tests/data/replay_head.hex", "tests/data/replay_tmap.hex", "Community-Maps/eze jungal.lvl") + tuple("Original-Ants/Maps/%s.LVL" % m for m in ("TINY", "SMALL", "MEDIUM", "GAUNTLET", "TREASURE", "ISLANDS")) + tuple("Community-Maps/" + n for n in sorted(os.listdir(os.path.join(REPO, "Community-Maps"))) if n.lower().endswith(".lvl") and n != "eze jungal.lvl")       # (the library, for the check that no map of it is refused)
 

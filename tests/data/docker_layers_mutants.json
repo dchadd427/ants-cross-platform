@@ -60,8 +60,8 @@
   {
    "id": "web_stamps_go_into_the_template",
    "file": "Dockerfile",
-   "old": "build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/live.html web/legal.html web/mapmaker.html && \\\n    ! grep -q '@@GAME_VERSION@@'",
-   "new": "web/shell.html web/lobby.html web/matches.html web/match.html web/live.html web/legal.html web/mapmaker.html && \\\n    ! grep -q '@@GAME_VERSION@@'",
+   "old": "build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/legal.html web/mapmaker.html && \\\n    ! grep -q '@@GAME_VERSION@@'",
+   "new": "web/shell.html web/lobby.html web/matches.html web/match.html web/legal.html web/mapmaker.html && \\\n    ! grep -q '@@GAME_VERSION@@'",
    "test": "python3 tests/scripts/test_docker_layers.py",
    "expect": "test_the_stamps_go_into_the_game_page_that_the_link_made_not_into_the_template"
   },
@@ -108,8 +108,8 @@
   {
    "id": "web_runner_copies_another_builder_output",
    "file": "Dockerfile",
-   "old": "COPY --from=builder /src/live.html /usr/share/nginx/html/live.html",
-   "new": "COPY --from=builder /src/live.html /usr/share/nginx/html/live.html\nCOPY --from=builder /src/VERSION /usr/share/nginx/html/VERSION",
+   "old": "COPY --from=builder /src/match.html /usr/share/nginx/html/match.html",
+   "new": "COPY --from=builder /src/match.html /usr/share/nginx/html/match.html\nCOPY --from=builder /src/VERSION /usr/share/nginx/html/VERSION",
    "test": "python3 tests/scripts/test_docker_layers.py",
    "expect": "test_the_runner_stage_copies_the_same_builder_outputs_and_runs_as_before"
   },
@@ -980,15 +980,15 @@
   {
    "id": "stamp_check_for_the_version_forgets_a_page",
    "file": "Dockerfile",
-   "old": "! grep -q '@@GAME_VERSION@@' build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/live.html web/legal.html web/mapmaker.html",
-   "new": "! grep -q '@@GAME_VERSION@@' build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/live.html web/legal.html",
+   "old": "! grep -q '@@GAME_VERSION@@' build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/legal.html web/mapmaker.html",
+   "new": "! grep -q '@@GAME_VERSION@@' build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/legal.html",
    "test": "python3 tests/scripts/test_web_without_docker.py",
    "expect": "test_the_seds_and_the_checks_after_them_name_the_same_pages"
   },
   {
    "id": "stamp_check_for_the_build_is_gone",
    "file": "Dockerfile",
-   "old": "    ! grep -q '@@BUILD_' \"$PAGE\" /src/web/lobby.html /src/web/matches.html /src/web/match.html /src/web/live.html /src/web/legal.html /src/web/mapmaker.html && \\\n",
+   "old": "    ! grep -q '@@BUILD_' \"$PAGE\" /src/web/lobby.html /src/web/matches.html /src/web/match.html /src/web/legal.html /src/web/mapmaker.html && \\\n",
    "new": "",
    "test": "python3 tests/scripts/test_web_without_docker.py",
    "expect": "test_a_placeholder_of_the_build_that_is_left_in_a_page_stops_the_build"

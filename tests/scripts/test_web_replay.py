@@ -4,7 +4,7 @@ play.html?replay=<file>) and in live mode (play.html?live=<id>) and the code tha
 
   - the shared code is RUN (node, when it is installed): the address of a replay or of a live match, the day and the time in the visitor's zone, the length, the maps, the players, the chips, the
     live tag and the verdict on an answer of the live door (tests/scripts/web_replay_check.js);
-  - what needs no browser is read from the files: the one place of the "Matches" and "Live now" links on each page (and the Matches button in the header of the front page and of the game page), the pieces of the player that the game's glue looks for by id,
+  - what needs no browser is read from the files: the one place of the "Matches" link on each page (and the Matches button in the header of the front page and of the game page), the pieces of the player that the game's glue looks for by id,
     the live glue (the id's shape check, the doors it asks, the controls it calls, the words of its notes), nothing made from text that a recording or the door carries (a name is text), the file's name
     shape shared by the page, the nginx rules and the store, and that the image, the CI and the local web build carry the new files.
 """
@@ -43,42 +43,40 @@ def footer_links(page):
 
 
 class TheLink(unittest.TestCase):
-    """The way to the matches: "Matches" (the list of every match) and "Live now" (the matches that are being played) in the footer of the front page and the game page, in the bar at the top of the three pages
+    """The way to the matches: "Matches" (the list of every match) in the footer of the front page and the game page, in the bar at the top of the two pages
     of the match history (they have no footer), and a "Matches" button in the header of the front page and of the game page (docs/REPLAYS.md "The match pages"). It was one link, "Watch matches", to one list of the recordings."""
 
     PAGES = (("the game page", "shell.html", "Menu"), ("the front page", "lobby.html", "How it works"))
-    HISTORY = ("matches.html", "match.html", "live.html")
+    HISTORY = ("matches.html", "match.html")
 
-    def test_every_page_with_the_footer_links_has_matches_then_live_now_once_each(self):
+    def test_every_page_with_the_footer_links_has_matches_once_and_no_link_to_the_live_page(self):
         for name, file, before in self.PAGES:
             found = footer_links(read("web", file))
             texts = [f[2] for f in found]
-            self.assertEqual((texts.count("Matches"), texts.count("Live now")), (1, 1), name)
+            self.assertEqual((texts.count("Matches"), texts.count("Live now")), (1, 0), name)
             at = texts.index("Matches")
             self.assertEqual(at, texts.index(before) + 1 if before in texts else 0, name)                    # (after the Menu link, or after "How it works" on the front page; the first on the pages of the history)
-            self.assertEqual(texts[at + 1], "Live now", name)
             self.assertEqual({f[2]: f[0] for f in found}["Matches"], "/matches", name)
-            self.assertEqual({f[2]: f[0] for f in found}["Live now"], "/live-now", name)
             if file in ("shell.html", "lobby.html"):
                 self.assertIn('id="watch-link"', [f for f in found if f[2] == "Matches"][0][1], name)
             self.assertFalse({"Watch matches", "Watch live", "Watch replays"} & set(texts), name)               # (the old names are gone)
-        for file, label in (("matches.html", "Matches"), ("match.html", "Matches"), ("live.html", "Live now")):
+        for file, label in (("matches.html", "Matches"), ("match.html", "Matches")):
             page = read("web", file)
             row = re.search(r'<nav aria-label="Pages">(.*?)</nav>', page, re.S).group(1)
             links = re.findall(r'<a class="btn[a-z ]*" href="([^"]+)"([^>]*)>(?:<span>)?([^<]+)', row)
-            self.assertEqual([l[2] for l in links][1:3], ["Matches", "Live now"], file)                  # (the bar's row: Home, Matches, Live now, ...)
+            self.assertEqual([l[2] for l in links][1:3], ["Matches", "Map maker"], file)                  # (the bar's row: Home, Matches, Map maker, ...)
             self.assertIn('aria-current="page"', [l for l in links if l[2] == label][0][1], file)       # (a page marks its own place)
         self.assertIn("$('watch-link').setAttribute('aria-current', 'page');", read("web", "shell.html"))     # (the game page in replay or live mode says where the player is)
-        for file, title in (("matches.html", "Matches"), ("match.html", "Match"), ("live.html", "Live now")):
+        for file, title in (("matches.html", "Matches"), ("match.html", "Match")):
             self.assertIn("<title>%s \u2014 Ants (1998)@@SITE_TITLE@@</title>" % title, read("web", file))     # (the tab's title agrees with the link)
 
     def test_the_site_own_tab_on_the_front_page_and_the_history_and_a_new_tab_on_the_game_page(self):
         for name, file, _ in self.PAGES[1:]:
-            for text in ("Matches", "Live now"):
+            for text in ("Matches",):
                 link = [f for f in footer_links(read("web", file)) if f[2] == text][0]
                 self.assertNotIn("target=", link[1], name)                                                  # (the site's own page: this tab)
         game = read("web", "shell.html")
-        for text in ("Matches", "Live now"):
+        for text in ("Matches",):
             link = [f for f in footer_links(game) if f[2] == text][0]
             self.assertIn('target="_blank"', link[1])                                                       # (a match that is being played here goes on: the way back to the menu asks first, this link does not leave)
             self.assertIn('rel="noopener noreferrer"', link[1])
@@ -121,7 +119,7 @@ class TheLink(unittest.TestCase):
         self.assertIn("body.replay .header-actions:not(.rep-only)", game)                                   # (and the ordinary header is not shown there)
 
     def test_the_words_on_the_screens_say_player_never_friend(self):
-        for path in (("web", "matches.html"), ("web", "match.html"), ("web", "live.html"), ("web", "history_page.js"), ("web", "replay_page.js")):
+        for path in (("web", "matches.html"), ("web", "match.html"), ("web", "history_page.js"), ("web", "replay_page.js")):
             self.assertNotRegex(read(*path), r"(?i)friend", path[-1])
         shell = read("web", "shell.html")
         start = shell.index("<!-- BEGIN replay glue")
@@ -257,7 +255,7 @@ class TheLiveGlue(unittest.TestCase):
     def test_the_words_of_the_notes_and_the_cards_are_the_approved_ones(self):
         for words in ("The live feed stopped. Trying again…", "The match is over. It is now in the list as a replay.", "The match is over.", "This match is over", "Watch the replay",
                       "The match you were watching has ended. It is kept in the list for 30 days, and you can watch all of it.", "That match isn’t live",
-                      "It has ended without being kept (a match that ran 30 seconds or more is kept for 30 days), or the link is not right. The matches that are being played now are on the Live now page."):
+                      "It has ended without being kept (a match that ran 30 seconds or more is kept for 30 days), or the link is not right. The matches that are being played now are listed on the front page."):
             self.assertIn(words, self.glue, words)
 
     def test_a_match_that_became_a_replay_has_the_address_of_the_replay(self):

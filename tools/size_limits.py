@@ -62,11 +62,11 @@ VP_BUDGET, VP_GZIP_BUDGET = 4_200, 1_900            # vp.js: the screen numbers 
 CHAT_BUDGET, CHAT_GZIP_BUDGET = 56_500, 18_000
 TALK_BUDGET, TALK_GZIP_BUDGET = 28_500, 9_800
 SCRIPT_BUDGET, SCRIPT_GZIP_BUDGET = 13_000, 4_500       # player_name.js
-# the installable web app (web/app/, web/manifest.webmanifest): the four icons together (measured 4,260 bytes), and the manifest (measured 1,331, revalidated on every visit)
+# the installable web app (web/app/, web/manifest.webmanifest): the four icons together (measured 4,260 bytes), and the manifest (measured 1,166, revalidated on every visit)
 APP_ICONS_BUDGET = 4_700
 # the browser-tab icon (web/favicon.png 285 bytes + web/favicon.ico 1,212 bytes)
 FAVICON_BUDGET = 1_650
-APP_MANIFEST_BUDGET = 1_500
+APP_MANIFEST_BUDGET = 1_300
 # the bar at the top of every page (web/site_nav.css, web/site_nav.js)
-NAV_CSS_BUDGET, NAV_CSS_GZIP_BUDGET = 5_800, 1_900
-NAV_JS_BUDGET, NAV_JS_GZIP_BUDGET = 5_300, 2_100
+NAV_CSS_BUDGET, NAV_CSS_GZIP_BUDGET = 4_900, 1_700
+NAV_JS_BUDGET, NAV_JS_GZIP_BUDGET = 5_000, 2_000

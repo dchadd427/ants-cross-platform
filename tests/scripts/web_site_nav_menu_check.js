@@ -1,6 +1,8 @@
 // Runs the real web/site_nav.js on the real markup of pages in node, with a small fake of the DOM (a parser for the page's tags, a few selectors, the Menu's button), and prints what the opened Menu holds as
 // JSON. Used by tests/scripts/test_web_site_nav.py (the Menu's last line, the links, the pages' footers). Usage: node web_site_nav_menu_check.js MANIFEST.json, where the manifest is
-// [{"name": ..., "path": ...}, ...] (the page files, stamped or not, as the test made them); the answer is {name: {footers, versionIds, items: [{tag, cls, text, href}], hrefs, fetched, hidden}}.
+// [{"name": ..., "path": ..., "live": ...}, ...] (the page files, stamped or not, as the test made them; "live" is what a fake /live does: {"count": N}, "fail" (the request is rejected), "status" (a 500),
+// "never" (it does not answer), "notlist" (an answer that is not a list) or absent (an empty list)); the answer is {name: {footers, versionIds, items: [{tag, cls, text, href}], hrefs, fetched, hidden, mark}},
+// where mark is the bar's live mark after the answer: {there, hidden, text, label, href}.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -9,7 +11,9 @@ const SOURCE = fs.readFileSync(path.join(__dirname, '..', '..', 'web', 'site_nav
 const VOID = new Set(['img', 'br', 'hr', 'input', 'meta', 'link', 'source', 'path']);
 
 class El {
-    constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.attrs = {}; this.style = {}; this.hidden = false; this.parentNode = null; this.listeners = {}; this.own = ''; }
+    constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.attrs = {}; this.style = {}; this.parentNode = null; this.listeners = {}; this.own = ''; }
+    get hidden() { return this.hasAttribute('hidden'); }
+    set hidden(v) { if (v) this.attrs.hidden = ''; else delete this.attrs.hidden; }
     get firstChild() { return this.children[0] || null; }
     get className() { return this.attrs['class'] || ''; }
     set className(v) { this.attrs['class'] = String(v); }
@@ -72,7 +76,7 @@ function parse(html) {
     return root;
 }
 
-function run(file) {
+async function run(file, live) {
     const root = parse(fs.readFileSync(file, 'utf8')), body = root.querySelector('body') || root, fetched = [];
     const listeners = {};
     const document = {
@@ -80,16 +84,28 @@ function run(file) {
         querySelector: (s) => root.querySelector(s), addEventListener: (t, f) => { (listeners[t] = listeners[t] || []).push(f); },
     };
     const window = { innerHeight: 800, addEventListener() {} };
-    const fetchFake = (url) => { fetched.push(url); return Promise.resolve({ ok: true, json: () => ({ live: [] }) }); };
+    const fetchFake = (url) => {
+        fetched.push(url);
+        if (live === 'fail') return Promise.reject(new Error('offline'));
+        if (live === 'never') return new Promise(() => {});
+        if (live === 'status') return Promise.resolve({ ok: false, json: () => ({ live: [{}] }) });
+        if (live === 'notlist') return Promise.resolve({ ok: true, json: () => ({ live: 'x', count: 3 }) });
+        const n = live && live.count ? live.count : 0;
+        return Promise.resolve({ ok: true, json: () => ({ live: Array.from({ length: n }, (_, i) => ({ id: 'M-20260101-00000' + (i % 10) + 'Z' })) }) });
+    };
     new Function('document', 'window', 'fetch', SOURCE)(document, window, fetchFake);
     const button = root.querySelector('.sb .sbtn');
     (button.listeners.click || []).forEach((f) => f({ target: button }));
-    const box = body.children.filter((c) => c.id === 'sbm')[0];
+    for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));          // (the answer of the fake /live, and what the bar does with it)
+    const box = body.children.filter((c) => c.id === 'sbm')[0], top = root.querySelector('.sb .sblive');
     const items = box ? box.children.map((c) => ({ tag: c.tagName, cls: c.className, text: c.textContent, href: c.getAttribute('href'), links: c.querySelectorAll('a').map((a) => a.getAttribute('href')) })) : [];
     const hrefs = box ? box.querySelectorAll('a').map((a) => a.getAttribute('href')) : [];
-    return { footers: root.querySelectorAll('footer').length, versionIds: ['game-version-line', 'game-version', 'game-build', 'game-build-id', 'game-build-date'].filter((i) => root.querySelector('#' + i)), items, hrefs, fetched, hidden: box ? box.hidden : null };
+    return { footers: root.querySelectorAll('footer').length, versionIds: ['game-version-line', 'game-version', 'game-build', 'game-build-id', 'game-build-date'].filter((i) => root.querySelector('#' + i)), items, hrefs, fetched, hidden: box ? box.hidden : null,
+             mark: { there: !!top, hidden: top ? top.hidden : null, text: top ? top.textContent : null, label: top ? top.getAttribute('aria-label') : null, href: top ? top.getAttribute('href') : null } };
 }
 
-const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')), out = {};
-for (const page of manifest) out[page.name] = run(page.path);
-process.stdout.write(JSON.stringify(out));
+(async () => {
+    const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')), out = {};
+    for (const page of manifest) out[page.name] = await run(page.path, page.live);
+    process.stdout.write(JSON.stringify(out));
+})();

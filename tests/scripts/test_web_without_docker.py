@@ -386,7 +386,7 @@ class TheRealDockerfileReplayed(Scratch):
                 text = self.page("plain", name)
                 self.assertNotIn("@@SITE_", text, name)
                 self.assertRegex(text, r'<span><span class="ver" id="game-version-line">', name)            # (the footers of the game page and the front page)
-        for name in ("matches.html", "match.html", "live.html", "legal.html", "mapmaker.html"):          # (the pages with the bar at the top: no footer, the three stamps are on the bar for its Menu)
+        for name in ("matches.html", "match.html", "legal.html", "mapmaker.html"):          # (the pages with the bar at the top: no footer, the three stamps are on the bar for its Menu)
             text = self.page("plain", name)
             self.assertNotIn("@@", text, name)
             self.assertNotIn("<footer", text, name)
