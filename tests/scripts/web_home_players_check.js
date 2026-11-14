@@ -132,7 +132,7 @@ function rig(o) {
 {
     const P = Pure;
     const rowOf = (raw) => P.rowOf(raw, Chat, Rules);
-    same('a plain row: the name, where, no mark, no details', rowOf({ i: 4, name: 'sage', at: 'look' }), { id: 4, name: 'sage', at: 'look', mod: false, pub: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' });
+    same('a plain row: the name, where, no mark, no details', rowOf({ i: 4, name: 'sage', at: 'look' }), { id: 4, name: 'sage', at: 'look', mod: false, role: 'none', pic: '', pub: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' });
     same('the mark of a moderator is exactly true (a string or a number is none)', [rowOf(row(1, 'a1', 'look', { mod: true })).mod, rowOf(row(1, 'a1', 'look', { mod: 'true' })).mod, rowOf(row(1, 'a1', 'look', { mod: 1 })).mod], [true, false, false]);
     same('a name loses the invisible and bidirectional characters and is cut at 32 code points', [rowOf(row(1, '‮alice​⁦')).name, rowOf(row(1, 'x'.repeat(40))).name], ['alice', 'x'.repeat(32) + '…']);
     same('markup in a name stays text', rowOf(row(1, '<img src=x onerror=1>')).name, '<img src=x onerror=1>');
@@ -312,7 +312,7 @@ function rig(o) {
     check('a name that is nothing after the cleaning is nobody', r.sent.length === 1 && r.sent[0].t === 'who');
     const mod = rig();
     mod.live(W({ you: { name: 'moddy', mod: true } })); mod.who(FULL([row(1, 'moddy', 'look', { mod: true })], { n: 1 }));
-    check('a moderator sees the mark on its own row', texts(mod.panel(), 'pl-badge').join() === 'mod' && texts(mod.panel(), 'pl-tag').join() === 'you');
+    check('a moderator\'s own row has the role of a moderator (the class for yellow, the word in the accessible name and the title) and no tag but "you"', texts(mod.panel(), 'pl-badge').length === 0 && cls(one(mod.panel(), 'pl-card')).indexOf('r-mod') !== -1 && texts(one(one(mod.panel(), 'pl-card'), 'pl-name'), 'pl-sr').join() === 'moderator ' && one(one(mod.panel(), 'pl-card'), 'pl-nm').getAttribute('title') === 'moderator' && texts(mod.panel(), 'pl-tag').join() === 'you');
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -326,10 +326,10 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     r.live(); r.who(FULL(CROWD, { n: 13, g: 4 }));
     same('the groups in their order with their counts, each by name; the visitor is not among them', r.groups(), [
         { g: 'mod', n: '1', names: ['tess'] }, { g: 'look', n: '3', names: ['basil', 'fern', 'sage'] }, { g: 'wait', n: '2', names: ['clover', 'juniper'] }, { g: 'play', n: '2', names: ['hazel', 'pebble'] }]);
-    same('the headings of the groups', texts(r.panel(), 'pl-gh').map((t) => t.replace(/\d+$/, '')), ['Moderators', 'Looking', 'Waiting', 'Playing']);
+    same('the headings of the groups', texts(r.panel(), 'pl-gh').map((t) => t.replace(/\d+$/, '')), ['Staff', 'Looking', 'Waiting', 'Playing']);
     check('the visitor is first, apart, as "you" with the line that says where', one(r.panel(), 'pl-you') && texts(one(r.panel(), 'pl-you'), 'pl-nm').join() === 'maple' && texts(one(r.panel(), 'pl-you'), 'pl-tag').join() === 'you' && texts(one(r.panel(), 'pl-you'), 'pl-meta').join().indexOf('Looking') !== -1);
     same('the lines under the names: a moderator is told where, those who look are not, a room by its map and seats, "In a room" for a room that the hub says nothing of, a match by its map and players', ['tess', 'sage', 'clover', 'juniper', 'pebble', 'hazel'].map((n) => r.metaOf(n)), ['Looking: Looking', null, 'Treasure · 2 of 4', 'In a room', 'Islands · 3 players', 'Gauntlet · 2 players']);
-    same('the mark of a moderator is before the name, and only there', [texts(r.panel(), 'pl-badge'), one(byClass(r.panel(), 'pl-card').find((c) => one(c, 'pl-nm').textContent === 'tess'), 'pl-badge') !== null], [['mod'], true]);
+    same('the role of a moderator is on the name (class, word, title) of its card, and only there: nobody else has one, and no tag is drawn', [texts(r.panel(), 'pl-badge').length, (() => { const c = byClass(r.panel(), 'pl-card').find((x) => one(x, 'pl-nm').textContent === 'tess'); return [cls(c).indexOf('r-mod') !== -1, one(c, 'pl-sr').textContent, one(c, 'pl-nm').getAttribute('title')]; })(), byClass(r.panel(), 'pl-card').filter((c) => cls(c).indexOf('r-mod') !== -1).length], [0, [true, 'moderator ', 'moderator'], 1]);
     same('"+ 4 guests, not logged in", twice (in the list for a short window, under it otherwise: the style shows one)', texts(r.panel(), 'pl-guests'), ['…+ 4 guestsnot logged in', '…+ 4 guestsnot logged in']);
     same('each card says its status for the style (the dot of its circle)', byClass(r.panel(), 'pl-card').map((c) => c.getAttribute('data-s')), ['look', 'look', 'look', 'look', 'look', 'wait', 'wait', 'play', 'play'].slice(0, 0).concat(['look', 'look', 'look', 'look', 'look', 'wait', 'wait', 'play', 'play']));
     same('a Join on the row of a public room that waits (and no other), named for the room', [r.joins().length, r.joins()[0].getAttribute('aria-label'), r.joins()[0].getAttribute('data-code'), r.joins()[0].textContent], [1, 'Join clover’s room, Treasure · 2 of 4', 'c1v3rr', 'Join']);
@@ -647,6 +647,120 @@ function bringPlayers(env) {
     check('it never names the hub\'s door (the dock\'s script alone knows it)', !/\/hub\b/.test(code));
     same('it makes only these kinds of element', [...new Set([...code.matchAll(/\bel\('(\w+)'/g)].map((m) => m[1]).concat([...code.matchAll(/\bbutton\('/g)].length ? ['button'] : []))].sort(), ['bdi', 'button', 'div', 'h2', 'h3', 'hr', 'i', 'li', 'p', 'section', 'span', 'ul']);
 }
+
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 9. The roles: the role of a name, red or yellow, with the word in the accessible name (the hub's `mod` is true for both; `role` says which), and the visitor's own row that follows a live change
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const P = Pure;
+    same('a row\'s role is the hub\'s `role` where `mod` is true: admin, mod; a row that says admin and not mod, a word that is neither, or no role is mod or none',
+        [P.rowOf({ i: 1, name: 'a', at: 'look', mod: true, role: 'admin' }, Chat, Rules).role, P.rowOf({ i: 1, name: 'a', at: 'look', mod: true, role: 'mod' }, Chat, Rules).role, P.rowOf({ i: 1, name: 'a', at: 'look', mod: true }, Chat, Rules).role, P.rowOf({ i: 1, name: 'a', at: 'look', mod: true, role: 'root' }, Chat, Rules).role,
+         P.rowOf({ i: 1, name: 'a', at: 'look', mod: false, role: 'admin' }, Chat, Rules).role, P.rowOf({ i: 1, name: 'a', at: 'look', mod: 'true', role: 'admin' }, Chat, Rules).role], ['admin', 'mod', 'mod', 'mod', 'none', 'none']);
+    const r = rig();
+    r.live(W({ you: { name: 'maple', mod: false, role: 'none' } }));
+    r.who(FULL([row(2, 'zed', 'look', { mod: true, role: 'mod' }), row(3, 'boss', 'look', { mod: true, role: 'admin' }), row(4, 'amy', 'look', { mod: true }), row(5, 'sage')], { n: 5 }));
+    const cardOf = (name) => byClass(r.panel(), 'pl-card').find((c) => one(c, 'pl-nm').textContent === name);
+    const markOf = (card) => card ? [cls(card).filter((c) => c === 'r-admin' || c === 'r-mod').join(''), one(one(card, 'pl-name'), 'pl-sr') ? one(one(card, 'pl-name'), 'pl-sr').textContent : '', one(card, 'pl-nm').getAttribute('title')] : null;
+    const badgeOf = (name) => markOf(cardOf(name));
+    same('the Staff group has both, the admins first, then by name; each name has its role (red for the admin, yellow for the moderator, the word in the accessible name and the title), and a person with no role has none', [r.groups()[0].names, badgeOf('boss'), badgeOf('amy'), badgeOf('zed'), badgeOf('sage')],
+        [['boss', 'amy', 'zed'], ['r-admin', 'administrator ', 'administrator'], ['r-mod', 'moderator ', 'moderator'], ['r-mod', 'moderator ', 'moderator'], ['', '', null]]);
+    const heading = (q) => texts(q.panel(), 'pl-gh').map((t) => t.replace(/\d+$/, ''));
+    const only = (rows) => { const q = rig(); q.live(W({ you: { name: 'maple', mod: false, role: 'none' } })); q.who(FULL(rows, { n: rows.length + 1 })); return q; };
+    same('the group of the staff is titled "Staff" whoever is in it: both roles, only administrators, only moderators; a person with no role is never in it, and with none of the staff there is no such group', [heading(r)[0], heading(only([row(3, 'boss', 'look', { mod: true, role: 'admin' })]))[0], heading(only([row(2, 'zed', 'look', { mod: true, role: 'mod' })]))[0], heading(only([row(5, 'sage')])).join(), only([row(2, 'zed', 'look', { mod: true }), row(5, 'sage')]).groups().map((g) => g.g + ':' + g.names.join('+')).join()],
+        ['Staff', 'Staff', 'Staff', 'Looking', 'mod:zed,look:sage']);
+    check('... and no group says moderators any more (the title is the page\'s word, and the accessible name of the group is that title)', texts(r.panel(), 'pl-gh').every((t) => !/moderators/i.test(t)) && byClass(r.panel(), 'pl-group').every((g) => one(g, 'pl-gh') !== null));
+    r.who({ t: 'who', full: false, n: 5, g: 0, more: 0, rows: [row(2, 'zed', 'look', { mod: true, role: 'admin' })], gone: [] });
+    same('a change that makes a moderator an administrator is drawn at once (the role, the place in the group)', [r.groups()[0].names, badgeOf('zed')], [['boss', 'zed', 'amy'], ['r-admin', 'administrator ', 'administrator']]);
+    const inPlace = rig(); inPlace.live(W({ you: { name: 'maple', mod: false, role: 'none' } }));
+    inPlace.who(FULL([row(3, 'boss', 'look', { mod: true, role: 'admin' }), row(2, 'zed', 'look', { mod: true, role: 'mod' })], { n: 3 }));
+    inPlace.who({ t: 'who', full: false, n: 3, g: 0, more: 0, rows: [row(2, 'zed', 'look', { mod: true, role: 'admin' })], gone: [] });
+    const zed = byClass(inPlace.panel(), 'pl-card').find((c) => one(c, 'pl-nm').textContent === 'zed');
+    same('... also where nothing moves (a moderator who is in place becomes an administrator: the class and the word change)', [inPlace.groups()[0].names, markOf(zed)], [['boss', 'zed'], ['r-admin', 'administrator ', 'administrator']]);
+    r.emit('you', { t: 'you', you: { name: 'maple', mod: true, role: 'admin' } });
+    const own = () => markOf(one(r.panel(), 'pl-you') && one(one(r.panel(), 'pl-you'), 'pl-card'));
+    same('the visitor\'s own row follows a live `you` at once: red, then yellow, then nothing', [own(), (r.emit('you', { t: 'you', you: { name: 'maple', mod: true, role: 'mod' } }), own()), (r.emit('you', { t: 'you', you: { name: 'maple', mod: false, role: 'none' } }), own())],
+        [['r-admin', 'administrator ', 'administrator'], ['r-mod', 'moderator ', 'moderator'], ['', '', null]]);
+    r.emit('you', { t: 'you', you: { name: 'maple', mod: true, role: 'admin' } });
+    r.emit('you', { t: 'you' }); r.emit('you', { t: 'you', you: 'admin' }); r.emit('you', null);
+    check('a `you` that is not a visitor changes nothing and throws nothing', own()[0] === 'r-admin' && r.errors.length === 0);
+    const reader = rig(); reader.live(W({ you: null })); reader.who(FULL([row(2, 'zed', 'look', { mod: true })], { n: 2 })); reader.emit('you', { t: 'you', you: { name: 'maple', mod: true, role: 'admin' } });
+    check('a reader that is told a `you` is still a reader (no own row)', one(reader.panel(), 'pl-you') === null && reader.errors.length === 0);
+    const old = rig(); old.live(W({ you: { name: 'moddy', mod: true } })); old.who(FULL([], { n: 1 }));
+    check('a hub that says `mod` only: the visitor is a moderator (yellow)', markOf(one(old.panel(), 'pl-card'))[0] === 'r-mod');
+    const flag = rig(); flag.live(W({ you: { name: 'odd', mod: true, role: 'none' } })); flag.who(FULL([], { n: 1 })); flag.emit('you', { t: 'you', you: { name: 'odd', mod: true, role: 'none' } });
+    check('a `you` that says role none and mod true is nobody on the list as it is in the chat (one rule for both)', markOf(one(flag.panel(), 'pl-card'))[0] === '');
+    const adm = rig(); adm.live(W({ you: { name: 'boss', mod: true, role: 'admin' } })); adm.who(FULL([], { n: 1 }));
+    check('a welcome that says admin: the own row is red at once', markOf(one(adm.panel(), 'pl-card'))[0] === 'r-admin');
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 10. The pictures: an img over the letter in the circle of a row and of the visitor's own card, made only from a checked 32-character name
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const NAME = 'a1b2c3d4e5f60718293a4b5c6d7e8f90', OTHER = '0123456789abcdef0123456789abcdef';
+    const circleOf = (q, name) => { const c = byClass(q.panel(), 'pl-card').find((x) => one(x, 'pl-nm').textContent === name); return c ? one(c, 'pl-av') : null; };
+    const imgsOf = (circle) => circle.children.filter((c) => c.tagName === 'img');
+    const q = rig();
+    q.live(W({ you: { name: 'maple', mod: false, role: 'none', pics: 'on', pic: OTHER } }));
+    q.who(FULL([row(2, 'sage', 'look', { pic: NAME }), row(3, 'tess')], { n: 4 }));
+    const sage = circleOf(q, 'sage'), img = imgsOf(sage)[0];
+    same('a row with a valid picture name has one img in its circle, with the address made of the name and the attributes the page sets', [imgsOf(sage).length, img && img.attributes],
+        [1, { src: '/hub/pic/' + NAME + '.png', alt: '', width: '32', height: '32', loading: 'lazy', decoding: 'async', draggable: 'false' }]);
+    same('the letter is still in the circle, and a row with no picture has no img', [sage.textContent, imgsOf(circleOf(q, 'tess')).length], ['s', 0]);
+    check('the visitor\'s own card has the visitor\'s picture', imgsOf(one(one(q.panel(), 'pl-you'), 'pl-av')).length === 1 && imgsOf(one(one(q.panel(), 'pl-you'), 'pl-av'))[0].attributes.src === '/hub/pic/' + OTHER + '.png');
+    check('the letter is not hidden before the picture has loaded', sage.getAttribute('data-pic') === null);
+    img.fire('load');
+    check('a picture that loaded hides the letter (the circle says so)', sage.getAttribute('data-pic') === 'on');
+    const GONE = 'cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd', FRESH = '5656565656565656565656565656abab';
+    q.who({ t: 'who', full: false, n: 4, g: 0, more: 0, rows: [row(3, 'tess', 'look', { pic: GONE })], gone: [] });
+    const tess = circleOf(q, 'tess');
+    check('a row that gains a picture is drawn again with it', imgsOf(tess).length === 1 && imgsOf(tess)[0].attributes.src === '/hub/pic/' + GONE + '.png');
+    imgsOf(tess)[0].fire('error');
+    same('a picture that fails to load is taken away and the letter is still there, not hidden', [imgsOf(tess).length, tess.textContent, tess.getAttribute('data-pic')], [0, 't', null]);
+    // the list is made again at every change: a picture that failed is not asked for again, one that loaded and a new one are as before
+    let failedAgain = 0, drawn = 0;
+    for (let i = 0; i < 12; i++) {
+        q.who({ t: 'who', full: false, n: 4, g: 0, more: 0, rows: [row(5, 'wade', i % 2 ? 'look' : 'wait', { pic: GONE })], gone: [] });
+        failedAgain += q.panel().findAll((e) => e.tagName === 'img' && e.attributes.src === '/hub/pic/' + GONE + '.png').length;
+        drawn += q.panel().findAll((e) => e.tagName === 'img' && e.attributes.src === '/hub/pic/' + NAME + '.png').length;
+    }
+    same('after a picture failed, 12 repaints of the list (the failed name in two rows) make no img for it; the one that loaded is made as before', [failedAgain, drawn], [0, 12]);
+    q.who({ t: 'who', full: false, n: 4, g: 0, more: 0, rows: [row(6, 'xena', 'look', { pic: FRESH })], gone: [5] });
+    same('a new name is asked for as before', imgsOf(circleOf(q, 'xena')).map((i) => i.attributes.src), ['/hub/pic/' + FRESH + '.png']);
+    // a row that loses its picture is drawn again with the letter
+    q.who({ t: 'who', full: false, n: 4, g: 0, more: 0, rows: [row(2, 'sage', 'look')], gone: [] });
+    const lost = circleOf(q, 'sage');
+    same('a row that loses `pic` is drawn again: no img, the letter, nothing hidden', [imgsOf(lost).length, lost.textContent, lost.getAttribute('data-pic')], [0, 's', null]);
+    q.who({ t: 'who', full: false, n: 4, g: 0, more: 0, rows: [row(2, 'sage', 'look', { pic: OTHER })], gone: [] });
+    same('a row that gains one is drawn again with it, and one that changes it has the new address', [imgsOf(circleOf(q, 'sage')).map((i) => i.attributes.src)], [['/hub/pic/' + OTHER + '.png']]);
+    // the visitor's own picture follows a live `you`
+    q.emit('you', { t: 'you', you: { name: 'maple', mod: false, role: 'none' } });
+    check('a `you` without `pic` takes the own card\'s picture away', imgsOf(one(one(q.panel(), 'pl-you'), 'pl-av')).length === 0);
+    q.emit('you', { t: 'you', you: { name: 'maple', mod: false, role: 'none', pics: 'on', pic: NAME } });
+    check('a `you` with one puts it on', imgsOf(one(one(q.panel(), 'pl-you'), 'pl-av')).map((i) => i.attributes.src).join() === '/hub/pic/' + NAME + '.png');
+    for (const pics of ['off', 'blocked', undefined, 'maybe']) {
+        q.emit('you', { t: 'you', you: { name: 'maple', mod: false, role: 'none', pics, pic: NAME } });
+        check('a `you` that carries a name but whose `pics` is ' + JSON.stringify(pics) + ' shows no picture on the own card (the picture is shown only where the switch says on)', imgsOf(one(one(q.panel(), 'pl-you'), 'pl-av')).length === 0);
+    }
+    q.emit('you', { t: 'you', you: { name: 'maple', mod: false, role: 'none', pics: 'on', pic: NAME } });
+    q.lost(); q.live(W({ you: { name: 'maple', mod: false, role: 'none', pics: 'on' } })); q.who(FULL([row(2, 'sage')], { n: 3 }));
+    check('after the link is closed and made again, the welcome says who the visitor is now: a welcome without `pic` leaves the own card with its letter', imgsOf(one(one(q.panel(), 'pl-you'), 'pl-av')).length === 0 && one(one(q.panel(), 'pl-you'), 'pl-av').textContent === 'm');
+    q.lost(); q.live(W({ you: null })); q.who(FULL([row(2, 'sage')], { n: 2 }));
+    check('... and a welcome for a guest has no own card at all', one(q.panel(), 'pl-you') === null || byClass(q.panel(), 'pl-you').length === 0 || one(one(q.panel(), 'pl-you'), 'pl-av') === null);
+    // names that are not a picture's
+    const bad = ['A1B2C3D4E5F60718293A4B5C6D7E8F90', NAME.slice(0, 31), NAME + '0', '../' + NAME.slice(3), 'https://x.example/' + NAME + '.png', '/hub/pic/' + NAME + '.png', 12345678901234567890123456789012, { toString: () => NAME }, [NAME], null, true, '', ' ' + NAME.slice(1), NAME + '\n', NAME.slice(0, 31) + 'g', NAME.slice(0, 31) + '\u0661'];
+    const odd = rig();
+    odd.live(W({ you: { name: 'maple', mod: false, role: 'none', pic: bad[0] } }));
+    odd.who(FULL(bad.map((b, i) => row(10 + i, 'p' + i, 'look', { pic: b })), { n: bad.length + 1 }));
+    check('every name that is not 32 lower-case hex characters makes no img (capitals, 31, 33, a path, an address, a number, an object, null, a line end), in rows and in the own card',
+        odd.panel().findAll((e) => e.tagName === 'img').length === 0 && byClass(odd.panel(), 'pl-card').length === bad.length + 1 && odd.errors.length === 0 && odd.env.innerHTMLWrites.length === 0);
+    const named = rig(); named.live(W({ you: { name: NAME, mod: false, role: 'none' } })); named.who(FULL([row(5, OTHER), row(6, 'x', 'look', { map: NAME, code: NAME })], { n: 3 }));
+    check('a picture comes only from the `pic` field: a person whose name (or map, or code) looks like a picture name has none', named.panel().findAll((e) => e.tagName === 'img').length === 0 && byClass(named.panel(), 'pl-card').length === 3);
+    same('the row keeps the name only when it is one', [Pure.rowOf({ i: 1, name: 'a', at: 'look', pic: NAME }, Chat, Rules).pic, Pure.rowOf({ i: 1, name: 'a', at: 'look', pic: NAME.toUpperCase() }, Chat, Rules).pic], [NAME, '']);
+    check('no picture was written as markup', q.env.innerHTMLWrites.length === 0 && q.errors.length === 0);
+}
+
 
 console.log('players list: ' + checks + ' checks, ' + failures + ' failed');
 process.exit(failures === 0 ? 0 : 1);

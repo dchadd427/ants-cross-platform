@@ -30,13 +30,18 @@
 .pl-card { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 5px 6px 5px 8px; background: #0a1016; border: 1px solid #17382f; border-radius: 6px; }
 .pl-card.has-sub { min-height: 48px; }
 .pl-av { flex: none; position: relative; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; font-size: 17px; line-height: 1; color: var(--gold); background: #0b1a17; border: 2px solid #1c4a3b; border-radius: 50%; }
+.pl-av img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }       /* (over the letter, inside the ring; the status dot below stays on top) */
 .pl-av::after { content: ""; position: absolute; right: -3px; bottom: -3px; width: 11px; height: 11px; border-radius: 50%; background: #44e08a; box-shadow: 0 0 0 2px #0a1016; }
 .pl-card[data-s="wait"] .pl-av::after { background: var(--gold); }
 .pl-card[data-s="play"] .pl-av::after { background: #ff8a52; }
 .pl-who { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
 .pl-name { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; line-height: 1.25; color: #9fe0b8; }
 .pl-meta { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 1.25; color: #a8cfc0; }
-.pl-badge, .pl-tag { display: inline-block; margin-right: 6px; padding: 0 5px; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 2px; color: #1a1405; background: var(--gold); border-radius: 3px; }
+.pl-tag { display: inline-block; margin-right: 6px; padding: 0 5px; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 2px; color: #1a1405; background: var(--gold); border-radius: 3px; }
+.pl-card.r-admin .pl-nm { color: #ff5f66; }       /* (the role is the color of the NAME: red for an administrator, yellow for a moderator; the word is in the accessible name; the red is measured in tests/scripts/test_web_home_chat.py) */
+.pl-card.r-mod .pl-nm { color: var(--gold); }
+.pl-card.r-admin .pl-av { color: #ff5f66; border-color: #ff5f66; }
+.pl-card.r-mod .pl-av { border-color: var(--gold); }
 .pl-tag { margin: 0 0 0 6px; padding: 0 6px; }
 .pl-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .pl-join { flex: none; min-height: 44px; min-width: 60px; padding: 6px 12px; font-size: 15px; }
@@ -52,4 +57,5 @@
 .pl-note p { margin: 0 0 12px; font-size: 17px; line-height: 1.35; color: var(--cream); }
 .pl-note p.small { font-size: 14px; color: #a8cfc0; }
 
+.pl-card .pl-av[data-pic="on"] { color: transparent; }       /* (after the role colors: a picture hides the letter whatever its ring) */
 @media (max-height: 500px) and (orientation: landscape) { .pl-head { min-height: 52px; } .pl-card { min-height: 44px; } .pl-card.has-sub { min-height: 48px; } .pl-you .pl-card { min-height: 46px; } .pl-div { margin: 6px 2px 0; } .pl-gh { margin: 8px 0 4px; } .pl-guests { min-height: 40px; margin-top: 4px; padding-top: 6px; } .pl-guests.in-list { display: flex; } .pl-guests.pinned { display: none; } }

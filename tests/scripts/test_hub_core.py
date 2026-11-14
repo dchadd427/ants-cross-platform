@@ -19,7 +19,9 @@ from unittest import mock
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
-from hub import admin, chat as chatmod, config, limits as limitmod, log as logmod, session, store as storemod  # noqa: E402
+sys.path.insert(0, os.path.join(REPO, "tests", "scripts"))
+import hub_rig  # noqa: E402  (FakeRoles: the roles without Discord)
+from hub import admin, chat as chatmod, config, limits as limitmod, log as logmod, pseudo, session, store as storemod  # noqa: E402
 
 LIMITS = limitmod.Limits()
 ALICE = session.Identity("1001", "alice", False)
@@ -76,10 +78,10 @@ class World:
         self.clock = Clock()
         self.wall = Clock(1_800_000_000.0)
         self.limits = limits
-        self.mods = frozenset(mods)
+        self.roles = hub_rig.FakeRoles({a: "mod" for a in mods})
         self.login = login
         self.store = storemod.Store(self.db, clock=self.wall, retention_days=limits.retention_days, max_lines=10 ** 9)
-        self.chat = chatmod.Chat(self.store, self.mods, limits, self.clock, login)
+        self.chat = chatmod.Chat(self.store, self.roles, limits, self.clock, login)
 
     def join(self, identity=None):
         peer = FakePeer(identity)
@@ -108,9 +110,9 @@ class TheWelcome(WorldTest):
     def test_shape_for_a_reader_a_member_and_a_moderator(self):
         reader = self.w.chat.welcome(self.reader)
         self.assertEqual(reader, {"t": "welcome", "v": 1, "you": None, "login": True, "presence": True, "online": 3, "history": []})
-        self.assertEqual(self.w.chat.welcome(self.alice)["you"], {"name": "alice", "mod": False, "k": self.w.chat.key_of("1001")})
+        self.assertEqual(self.w.chat.welcome(self.alice)["you"], {"name": "alice", "mod": False, "role": "none", "k": self.w.chat.key_of("1001")})
         mod = self.w.join(MOD)
-        self.assertEqual(self.w.chat.welcome(mod)["you"], {"name": "moddy", "mod": True, "k": self.w.chat.key_of("9001")})
+        self.assertEqual(self.w.chat.welcome(mod)["you"], {"name": "moddy", "mod": True, "role": "mod", "k": self.w.chat.key_of("9001")})
 
     def test_login_false_when_the_hub_has_no_login(self):
         w = World(login=False)
@@ -159,7 +161,7 @@ class TheWelcome(WorldTest):
             self.w.clock.now += 3
             self.w.say(self.alice, "line %d" % n)
         self.w.store.delete_line(3, "test")
-        again = chatmod.Chat(self.w.store, self.w.mods, LIMITS, self.w.clock, True)
+        again = chatmod.Chat(self.w.store, self.w.roles, LIMITS, self.w.clock, True)
         self.assertEqual([l.text for l in again.ring], ["line 0", "line 1", "line 3", "line 4"])
 
 
@@ -473,7 +475,7 @@ class TheModerators(WorldTest):
         first, second = self.w.join(session.Identity("1010", "sam", False)), self.w.join(session.Identity("1011", "sam", False))
         self.w.say(first, "hi")
         self.w.say(self.mod, "/mute sam 5")
-        self.assertEqual(self.mod.codes(), ["bad"])
+        self.assertEqual(self.mod.codes(), ["who"])
         self.assertEqual(self.w.store.mutes(), [])
         self.w.chat.peers.discard(second)                               # with one of them gone it is clear who is meant
         self.w.say(self.mod, "/mute sam 5")
@@ -491,8 +493,8 @@ class TheModerators(WorldTest):
         self.assertIs(self.w.chat.welcome(impostor)["you"]["mod"], False)
         self.w.say(self.alice, "hi")
         self.w.say(impostor, "/mute alice 5")
-        line = self.reader.kinds("line")[-1]
-        self.assertEqual((line["text"], line["mod"]), ("/mute alice 5", False))        # text, from someone who is not one
+        self.assertEqual([m["text"] for m in self.reader.kinds("line")], ["hi"])           # (the command is not posted for everybody to read: it is refused)
+        self.assertEqual(impostor.codes(), ["bad"])
         self.assertEqual(self.w.store.mutes(), [])
 
     def test_deleting_goes_on_working_after_old_lines_were_purged(self):
@@ -586,11 +588,12 @@ class TheModerators(WorldTest):
 
     def test_the_minutes_and_the_arguments_are_checked(self):
         self.w.say(self.alice, "hi")
-        for command in ("/mute alice", "/mute alice 0", "/mute alice -5", "/mute alice 10081", "/mute alice x", "/mute alice 5 6", "/mute nobody 5", "/mute", "/mute alice 1.5",
-                        "/mute alice 99999999999", "/ban alice", "/del", "/del x", "/del 1 2", "/del 99", "/mute moddy 5", "/"):
+        for command, code in (("/mute alice", "bad"), ("/mute alice 0", "bad"), ("/mute alice -5", "bad"), ("/mute alice 10081", "bad"), ("/mute alice x", "bad"), ("/mute alice 5 6", "bad"),
+                              ("/mute nobody 5", "who"), ("/mute", "bad"), ("/mute alice 1.5", "bad"), ("/mute alice 99999999999", "bad"), ("/ban alice", "power"), ("/del", "bad"),
+                              ("/del x", "bad"), ("/del 1 2", "bad"), ("/del 99", "bad"), ("/mute moddy 5", "power"), ("/", "bad")):
             before = len(self.mod.codes())
             self.w.say(self.mod, command)
-            self.assertEqual(self.mod.codes()[before:], ["bad"], command)
+            self.assertEqual(self.mod.codes()[before:], [code], command)
         self.assertEqual(self.w.store.mutes(), [])
         self.w.say(self.mod, "/mute alice 10080")
         self.assertEqual(len(self.w.store.mutes()), 1)
@@ -602,7 +605,7 @@ class TheModerators(WorldTest):
         a, b = w.join(MOD), w.join(other)
         w.say(b, "hi")
         w.say(a, "/mute other.mod 5")
-        self.assertEqual(a.codes(), ["bad"])
+        self.assertEqual(a.codes(), ["power"])
         self.assertEqual(w.store.mutes(), [])
 
     def test_del_takes_the_line_off_every_screen_and_out_of_the_history(self):
@@ -652,11 +655,13 @@ class TheModerators(WorldTest):
     def test_the_commands_are_for_moderators_only(self):
         self.w.say(self.alice, "hi")
         self.w.clock.now += 3
-        self.w.say(self.bob, "/mute alice 5")                       # for anybody else it is a line of text
+        self.w.say(self.bob, "/mute alice 5")                       # for anybody else it is refused, privately, and never a line that names the person
         self.w.clock.now += 3
         self.w.say(self.bob, "/del 1")
-        self.assertEqual(self.bob.codes(), [])
-        self.assertEqual([m["text"] for m in self.reader.kinds("line")], ["hi", "/mute alice 5", "/del 1"])
+        self.w.clock.now += 3
+        self.w.say(self.bob, "/shrug")                              # (any other line that starts with a slash is text)
+        self.assertEqual(self.bob.codes(), ["bad", "bad"])
+        self.assertEqual([m["text"] for m in self.reader.kinds("line")], ["hi", "/shrug"])
         self.assertEqual(self.w.store.mutes(), [])
         self.assertEqual(self.reader.kinds("del"), [])
 
@@ -695,7 +700,7 @@ class TheNamesAreNotKeys(WorldTest):
 
     def test_a_key_is_twelve_hex_digits_that_name_nobody_after_a_restart(self):
         started = self.w.chat.key_of("1101")                    # (the salt of this start)
-        again = chatmod.Chat(self.w.store, self.w.mods, LIMITS, self.w.clock, True)
+        again = chatmod.Chat(self.w.store, self.w.roles, LIMITS, self.w.clock, True)
         self.assertNotEqual(started, again.key_of("1101"))      # (two starts make two salts: the same key at every start would name one account across starts)
         self.w.chat.salt = b"test-salt-0"                       # (a fixed salt from here: the key is then one value, and "does not show the id" is a check of that value; with a random salt a key of hex digits
         key = self.w.chat.key_of("1101")                        # could by chance hold the four digits of the id, which says nothing of whether the id can be read out of it)
@@ -735,19 +740,19 @@ class TheNamesAreNotKeys(WorldTest):
         for command in ("/mute Maple 5", "/mute maple 5", "/mute maple.leaf 5", "/mute Maple_Leaf 5", "/mute 1101 5"):
             before = len(self.mod.codes())
             self.w.say(self.mod, command)
-            self.assertEqual(self.mod.codes()[before:], ["bad"], command)
+            self.assertEqual(self.mod.codes()[before:], ["who"], command)
         self.assertEqual(self.w.store.mutes(), [])
 
     def test_two_accounts_here_with_one_username_and_two_profiles_with_one_are_no_target(self):
         first, second = self.w.join(session.Identity("1301", "sam", False)), self.w.join(session.Identity("1302", "sam", False))
         self.w.say(self.mod, "/mute sam 5")
-        self.assertEqual((self.mod.codes(), self.w.store.mutes()), (["bad"], []))
+        self.assertEqual((self.mod.codes(), self.w.store.mutes()), (["who"], []))
         self.w.chat.peers.discard(first)
         self.w.chat.peers.discard(second)
         self.w.store.set_profile("1301", "sam", "", 100)
         self.w.store.set_profile("1302", "sam", "", 100)                                         # (a name that was given up and taken: each profile is as old as its last login)
         self.w.say(self.mod, "/mute sam 5")
-        self.assertEqual((self.mod.codes(), self.w.store.mutes()), (["bad", "bad"], []))
+        self.assertEqual((self.mod.codes(), self.w.store.mutes()), (["who", "who"], []))
 
     def test_the_username_is_in_a_moderators_copy_of_a_line_and_in_the_bytes_of_nobody_else(self):
         self.w.say(self.a, "hello")
@@ -782,7 +787,7 @@ class TheNamesAreNotKeys(WorldTest):
         self.w.store.add_line("1402", "Nameless", "from one that no profile knows", False)
         self.w.store.add_line("1403", "dddd.four", "from one that shows its username", False)
         self.w.store.set_profile("1403", "dddd.four", "", 100)
-        again = chatmod.Chat(self.w.store, self.w.mods, LIMITS, self.w.clock, True)
+        again = chatmod.Chat(self.w.store, self.w.roles, LIMITS, self.w.clock, True)
         mod = FakePeer(MOD)
         again.peers.add(mod)
         history = again.welcome(mod)["history"]
@@ -808,10 +813,10 @@ class TheNamesAreNotKeys(WorldTest):
         self.assertEqual(self.w.chat.usernames(["1103"]), {})                                      # (a socket that is closed is nobody, and this account has no profile)
 
     def test_the_welcome_and_me_carry_the_switch_only_where_there_is_one(self):
-        self.assertEqual(self.w.chat.you_of(MAPLE_A), {"name": "Maple Leaf", "mod": False, "k": self.w.chat.key_of("1101"), "pick": "display", "other": "aaa.one"})
+        self.assertEqual(self.w.chat.you_of(MAPLE_A), {"name": "Maple Leaf", "mod": False, "role": "none", "k": self.w.chat.key_of("1101"), "pick": "display", "other": "aaa.one"})
         shows_username = session.Identity("1101", "aaa.one", False, None, 0, "aaa.one", "username", "Maple Leaf")
-        self.assertEqual(self.w.chat.you_of(shows_username), {"name": "aaa.one", "mod": False, "k": self.w.chat.key_of("1101"), "pick": "username", "other": "Maple Leaf"})
-        self.assertEqual(set(self.w.chat.you_of(ALICE)), {"name", "mod", "k"})                   # (no display name: no switch: no `pick`, no `other`)
+        self.assertEqual(self.w.chat.you_of(shows_username), {"name": "aaa.one", "mod": False, "role": "none", "k": self.w.chat.key_of("1101"), "pick": "username", "other": "Maple Leaf"})
+        self.assertEqual(set(self.w.chat.you_of(ALICE)), {"name", "mod", "role", "k"})                   # (no display name: no switch: no `pick`, no `other`)
         self.assertEqual(self.w.chat.welcome(self.a)["you"], self.w.chat.you_of(MAPLE_A))
 
 
@@ -1306,7 +1311,7 @@ class TheStore(unittest.TestCase):
 class TheSettings(unittest.TestCase):
     def test_defaults_are_a_hub_nobody_can_reach_and_nobody_can_write_to(self):
         cfg = config.load({})
-        self.assertEqual((cfg.origin, cfg.mods, cfg.test_login, cfg.port, cfg.host), ("", frozenset(), False, 4040, "127.0.0.1"))
+        self.assertEqual((cfg.origin, cfg.roles_on, cfg.owner, cfg.test_login, cfg.port, cfg.host), ("", False, "", False, 4040, "127.0.0.1"))
         self.assertIsInstance(session.make(cfg), session.NoLogin)
         self.assertFalse(session.make(cfg).login)
 
@@ -1317,15 +1322,6 @@ class TheSettings(unittest.TestCase):
         for bad in ("beta.example.org", "ftp://x.org", "https://x.org/path", "https://x.org?q=1", "https://user:pw@x.org", "https://", "javascript:alert(1)", "https://x.org#f"):
             with self.assertRaises(config.ConfigError, msg=bad):
                 config.parse_origin(bad)
-
-    def test_moderators(self):
-        self.assertEqual(config.parse_mods("1001, 1002 ,1003"), frozenset(("1001", "1002", "1003")))
-        self.assertEqual(config.parse_mods(""), frozenset())
-        self.assertEqual(config.parse_mods("  "), frozenset())
-        for bad in ("abc", "1001,x", "-1", "1" * 21, "1001;1002", "10 01x"):
-            with self.assertRaises(config.ConfigError, msg=bad) as caught:
-                config.parse_mods(bad)
-            self.assertNotIn(bad.replace(" ", ""), str(caught.exception) if len(bad) > 3 else "never")      # (the message names the place, not the value)
 
     def test_a_wrong_address_of_the_site_is_a_message_and_not_a_traceback(self):
         for bad in ("https://host:abc", "http://[::1", "https://host:99999", "https://host:-1", "https://[::1]:x"):
@@ -1340,7 +1336,7 @@ class TheSettings(unittest.TestCase):
         for bad in ("", "0", "00012", "01", "1" * 21, "12a", " 12", "12\n"):
             self.assertFalse(config.ACCOUNT_ID.match(bad), repr(bad))
         with self.assertRaises(config.ConfigError):
-            config.parse_mods("1001,0123")
+            config.load({"ANTS_HUB_OWNER": "0123"})
 
     def test_the_port(self):
         self.assertEqual(config.load({"ANTS_HUB_PORT": "0"}).port, 0)
@@ -1359,12 +1355,12 @@ class TheSettings(unittest.TestCase):
         self.assertFalse(config.load({"ANTS_HUB_HOST": "0.0.0.0"}).test_login)
 
     def test_a_secret_is_never_in_the_summary_or_the_text_of_the_settings(self):
-        secret, client, mod = "canary-secret-8c1d5e", "4242424242420077", "7777777777"
-        cfg = config.load({"ANTS_HUB_DISCORD_CLIENT_SECRET": secret, "ANTS_HUB_DISCORD_CLIENT_ID": client, "ANTS_HUB_MODS": mod, "ANTS_HUB_PUBLIC_URL": "https://x.example.org"})
+        secret, client, owner = "canary-secret-8c1d5e", "4242424242420077", "7777777777"
+        cfg = config.load({"ANTS_HUB_DISCORD_CLIENT_SECRET": secret, "ANTS_HUB_DISCORD_CLIENT_ID": client, "ANTS_HUB_OWNER": owner, "ANTS_HUB_PUBLIC_URL": "https://x.example.org"})
         for text in (repr(cfg), str(cfg), json.dumps(cfg.summary())):
-            for canary in (secret, client, mod):
+            for canary in (secret, client, owner):
                 self.assertNotIn(canary, text)
-        self.assertEqual(cfg.summary()["mods"], 1)
+        self.assertEqual(cfg.summary()["owner"], 1)
         self.assertEqual(cfg.login_client_secret, secret)             # (it is read: the Discord login needs it)
 
 
@@ -1484,6 +1480,13 @@ class TheCommandLine(unittest.TestCase):
         self.store.set_profile("2002", "12345", "", 100)
         self.store.close()
 
+    def ref(self, account):
+        store = storemod.Store(self.db)
+        try:
+            return pseudo.reference(store.secret(), account)
+        finally:
+            store.close()
+
     def run_admin(self, *args):
         out, err = io.StringIO(), io.StringIO()
         status = admin.run(["--db", self.db] + list(args), out, err)
@@ -1492,7 +1495,7 @@ class TheCommandLine(unittest.TestCase):
     def test_mute_ban_unban_by_id_and_by_name(self):
         status, out, _ = self.run_admin("mute", "alice", "30")
         self.assertEqual(status, 0)
-        self.assertIn("1001 muted until", out)
+        self.assertIn("%s muted until" % self.ref("1001"), out)
         store = storemod.Store(self.db)
         self.addCleanup(store.close)
         self.assertGreater(store.muted_until("1001"), 0)
@@ -1518,7 +1521,7 @@ class TheCommandLine(unittest.TestCase):
     def test_unknown_names_and_bad_arguments(self):
         status, _, err = self.run_admin("mute", "nobody", "5")
         self.assertEqual(status, 1)
-        self.assertIn("account id", err)
+        self.assertIn("reference", err)
         self.assertEqual(self.run_admin("mute", "Bad Name!", "5")[0], 1)
         self.assertEqual(self.run_admin("mute", "alice", "-1")[0], 2)
         self.assertEqual(self.run_admin("mute", "alice", "525601")[0], 2)
@@ -1567,7 +1570,7 @@ class TheCommandLine(unittest.TestCase):
         for command in (("list",), ("ban", "1001"), ("del", "1"), ("mute", "1001", "5")):
             out, err = io.StringIO(), io.StringIO()
             self.assertEqual(admin.run(["--db", path] + list(command), out, err), 1, command)
-            self.assertRegex(err.getvalue(), r"^hub\.admin: the database refused it \(\w+\)\n$", command)
+            self.assertRegex(err.getvalue(), r"^hub\.admin: the database (refused it|cannot be opened) \(\w+\)\n$", command)
 
     def test_del(self):
         status, out, _ = self.run_admin("del", "1")
@@ -1584,8 +1587,8 @@ class TheCommandLine(unittest.TestCase):
         self.run_admin("del", "2")
         status, out, _ = self.run_admin("list")
         self.assertEqual(status, 0)
-        self.assertIn("1001 alice since", out)
-        self.assertIn("2002 12345 until", out)
+        self.assertIn("%s alice since" % self.ref("1001"), out)
+        self.assertIn("%s 12345 until" % self.ref("2002"), out)
         self.assertIn("1  ", out)
         self.assertIn("2x ", out)                                     # deleted lines are marked
         self.assertIn("alice: hello there", out)
@@ -1606,9 +1609,9 @@ class TheCommandLine(unittest.TestCase):
     def test_the_module_runs_as_a_program_and_reads_its_database_from_the_environment(self):
         env = dict(os.environ, ANTS_HUB_DB=self.db, PYTHONDONTWRITEBYTECODE="1")
         done = subprocess.run([sys.executable, "-m", "hub.admin", "ban", "alice"], cwd=REPO, env=env, capture_output=True, text=True)
-        self.assertEqual((done.returncode, done.stdout), (0, "1001 banned\n"), done.stderr)
+        self.assertEqual((done.returncode, done.stdout), (0, "%s banned\n" % self.ref("1001")), done.stderr)
         done = subprocess.run([sys.executable, "-m", "hub.admin", "list"], cwd=REPO, env=env, capture_output=True, text=True)
-        self.assertIn("1001 alice since", done.stdout)
+        self.assertIn("%s alice since" % self.ref("1001"), done.stdout)
 
     def test_a_name_is_a_username_and_never_a_name_that_was_shown(self):
         store = storemod.Store(self.db)
@@ -1638,7 +1641,7 @@ class TheCommandLine(unittest.TestCase):
         store.add_line("5005", "ghost", "from before profiles were kept", False)
         status, _, err = self.run_admin("mute", "ghost", "5")
         self.assertEqual(status, 1)
-        self.assertIn("account id", err)
+        self.assertIn("reference", err)
         self.assertEqual(self.run_admin("mute", "5005", "5")[0], 0)
         self.assertEqual([tuple(m)[:2] for m in store.mutes()], [("5005", "ghost")])
 
@@ -1658,9 +1661,9 @@ class TheCommandLine(unittest.TestCase):
         store.add_line("3003", "carol", "a line of the username", False)
         status, out, _ = self.run_admin("list")
         self.assertEqual(status, 0)
-        self.assertIn("3003 Carol C (carol): a line of a display name", out)
-        self.assertIn("3003 carol: a line of the username", out)
-        self.assertIn("1001 alice: hello there", out)
+        self.assertIn("%s Carol C (carol): a line of a display name" % self.ref("3003"), out)
+        self.assertIn("%s carol: a line of the username" % self.ref("3003"), out)
+        self.assertIn("%s alice: hello there" % self.ref("1001"), out)
 
 
 if __name__ == "__main__":

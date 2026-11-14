@@ -23,6 +23,9 @@ class Identity(collections.namedtuple("Identity", "account_id name young session
     def __new__(cls, account_id, name, young, session=None, expires=0, username=None, pick="", other=""):
         return super().__new__(cls, account_id, name, young, session, expires, name if username is None else username, pick, other)
 
+    def __repr__(self):
+        return "<Identity>"             # (the default shows the account id and the session's key: the id is like a password, and is in no representation)
+
 
 class Sessions:
     login = False                       # whether this hub offers a login at all (the welcome's `login`)

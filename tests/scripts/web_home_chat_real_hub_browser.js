@@ -53,7 +53,7 @@ async function main() {
     const [hubPort, sitePort] = [await freePort(), await freePort()];
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ants_hub_browser.'));
     const origin = 'http://127.0.0.1:' + sitePort;
-    const hub = spawn('python3', ['-m', 'hub'], { cwd: ROOT, env: Object.assign({}, process.env, { ANTS_HUB_PORT: String(hubPort), ANTS_HUB_HOST: '127.0.0.1', ANTS_HUB_DB: path.join(dir, 'hub.db'), ANTS_HUB_PUBLIC_URL: origin, ANTS_HUB_MODS: '200', ANTS_HUB_TEST_LOGIN: '1' }), stdio: ['ignore', 'pipe', 'pipe'] });
+    const hub = spawn('python3', ['-m', 'hub'], { cwd: ROOT, env: Object.assign({}, process.env, { ANTS_HUB_PORT: String(hubPort), ANTS_HUB_HOST: '127.0.0.1', ANTS_HUB_DB: path.join(dir, 'hub.db'), ANTS_HUB_PUBLIC_URL: origin, ANTS_HUB_OWNER: '200', ANTS_HUB_TEST_LOGIN: '1' }), stdio: ['ignore', 'pipe', 'pipe'] });
     let hubLog = '';
     hub.stdout.on('data', (d) => { hubLog += d; });
     hub.stderr.on('data', (d) => { hubLog += d; });
