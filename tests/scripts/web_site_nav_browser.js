@@ -1,14 +1,14 @@
 // OPT-IN, not part of ./run_tests.sh: the bar at the top of every page (web/site_nav.css, web/site_nav.js; docs/SITE_NAV.md) in a REAL browser (Chromium through Playwright), on a small static
-// server of the repository's own files (the pages with their clean addresses, /live and /history answered with made-up lists). For each page (Matches, Match, Live now, Legal, Changelog, Map maker,
+// server of the repository's own files (the pages with their clean addresses, /live and /history answered with made-up lists). For each page (Matches, Match, Legal, Changelog, Map maker,
 // Sprites and sounds), each size (320, 390, 450, 721, 768, 1280 wide and a phone held sideways, 667 x 375) and with no match live and two live, it checks:
 //   1. the page does not scroll sideways, and nothing in the bar is wider than the window;
 //   2. the bar's visible buttons are 44 px tall or more and do not overlap each other;
-//   3. a phone (under 720 px): Home and the Menu are shown, the row of pages is not; from 720 px: the row of five is shown (Home, Matches, Live now, Map maker, Discord), Home and the live button of the phone are not;
-//   4. the page that is open is marked aria-current in the row (Matches for Matches and Match, Live now, Map maker), and in the Menu for Legal, Changelog and Sprites and sounds;
-//   5. the live count: with two live the phone's red button says "2 live" (never on Live now itself, which lists them) and the row's Live now carries 2; with none the button is hidden;
+//   3. a phone (under 720 px): Home and the Menu are shown, the row of pages is not; from 720 px: the row of four is shown (Home, Matches, Map maker, Discord) and the phone's Home is not;
+//   4. the page that is open is marked aria-current in the row (Matches for Matches and Match, Map maker), and in the Menu for Legal, Changelog and Sprites and sounds;
+//   5. the live mark, at every width: with two live it says "2 live", is named "2 matches live, see them on the front page" and links to "/" (on Matches and Match, which ask when they open); with none it is hidden;
 //   6. nothing moves when the count arrives (the Home button, the row and the Menu button keep their places);
 //   6b. the bar draws no logo (no picture in it), a link to the front page is shown, and the first button starts at the page's left edge (no gap where the logo was);
-//   7. the Menu: opens with every link (the five and the five small ones), Escape closes it and the focus goes back to its button, a press outside closes it too.
+//   7. the Menu: opens with every link (the four and the five small ones), Escape closes it and the focus goes back to its button, a press outside closes it too.
 //   --shots DIR takes a picture of every page at every size (PREFIX_page_size_liveN.png); --root DIR names the tree to serve (default: this repository); --prefix names the pictures; --no-checks takes
 //   pictures only (for a tree from before the bar).
 //
@@ -33,7 +33,7 @@ const PREFIX = arg('--prefix') || 'after';
 const CHECKS = process.argv.indexOf('--no-checks') === -1;
 const SIZES = [['320', 320, 640], ['390', 390, 844], ['450', 450, 800], ['721', 721, 900], ['768', 768, 900], ['1280', 1280, 800], ['667x375', 667, 375]];
 const PAGES = [   // name, address, what the row marks (null: in the Menu), the Menu's mark
-    ['matches', '/matches', 'Matches', null], ['match', '/match?id=ants-TINY-20261015-051557Z', 'Matches', null], ['live', '/live-now', 'Live now', null],
+    ['matches', '/matches', 'Matches', null], ['match', '/match?id=ants-TINY-20261015-051557Z', 'Matches', null],
     ['legal', '/legal', null, 'Legal'], ['changelog', '/changelog', null, 'Changelog'], ['mapmaker', '/mapmaker', 'Map maker', null], ['catalog', '/asset_catalog/', null, 'Sprites and sounds'],
 ];
 let checks = 0;
@@ -71,7 +71,6 @@ const server = http.createServer((req, res) => {
     const p = url.pathname;
     if (p === '/matches') return send(200, TYPES['.html'], pageText('web/matches.html'));
     if (p === '/match') return send(200, TYPES['.html'], pageText('web/match.html'));
-    if (p === '/live-now') return send(200, TYPES['.html'], pageText('web/live.html'));
     if (p === '/legal') return send(200, TYPES['.html'], fs.readFileSync(path.join(ROOT, 'web/legal.html')));
     if (p === '/mapmaker') return send(200, TYPES['.html'], fs.readFileSync(path.join(ROOT, 'web/mapmaker.html')));
     if (p === '/changelog') return send(200, TYPES['.html'], fs.readFileSync(CHANGELOG));
@@ -95,7 +94,7 @@ const measure = () => {       // runs in the page: where the bar's parts are
     return {
         parts, scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth, bodyScrollW: document.body.scrollWidth,
         navShown: shown(nav), home: shown(bar.querySelector('.sbhome')), live: shown(bar.querySelector('.sblive')), liveText: bar.querySelector('.sblive').textContent,
-        current: [...bar.querySelectorAll('nav [aria-current]')].map((a) => a.textContent.trim().replace(/\d+$/, '')), lvN: bar.querySelector('.sblv .sbn').textContent,
+        current: [...bar.querySelectorAll('nav [aria-current]')].map((a) => a.textContent.trim().replace(/\d+$/, '')), liveName: bar.querySelector('.sblive').getAttribute('aria-label'), liveHref: bar.querySelector('.sblive').getAttribute('href'),
         pictures: document.querySelectorAll('.sb img').length, wayHome: [...bar.querySelectorAll('a[href="/"]')].filter(shown).map(box), pad: parseFloat(getComputedStyle(bar).paddingLeft) || 0, menu: box(bar.querySelector('.sbtn')), bar: box(bar),
     };
 };
@@ -135,19 +134,18 @@ async function main() {
                     }
                     check(tag + ': nothing in the bar overlaps', overlap === null, JSON.stringify(overlap));
                     check(tag + ': the bar draws no picture, a link to the front page is shown (44 px tall, inside the window), and the first button starts at the left edge of the bar itself', m.pictures === 0 && m.wayHome.length >= 1 && m.wayHome.every((h) => h.h >= 44 && h.x >= 0) && m.parts[0].x - m.bar.x - m.pad <= 2, JSON.stringify([m.pictures, m.wayHome, m.parts[0], m.bar]));
-                    check(tag + ': ' + (wide ? 'the row of pages is shown and the phone\'s Home and live buttons are not' : 'the phone\'s Home is shown and the row of pages is not'), wide ? m.navShown && !m.home && !m.live : m.home && !m.navShown);
+                    check(tag + ': ' + (wide ? 'the row of pages is shown and the phone\'s Home is not' : 'the phone\'s Home is shown and the row of pages is not'), wide ? m.navShown && !m.home : m.home && !m.navShown);
                     if (wide) {
-                        const names = m.parts.map((p) => p.name);
-                        check(tag + ': the row is Home, Matches, Live now, Map maker, Discord', JSON.stringify(names.filter((n) => n !== 'Menu' && n.length)) === JSON.stringify(['Home', 'Matches', 'Live now' + (live && pname !== 'live' ? '2' : ''), 'Map maker', 'Discord server']) || names.slice(0, 7).join('|').indexOf('Home|Matches|Live now') !== -1, names.join('|'));
+                        const names = m.parts.filter((p) => !/sblive/.test(p.cls)).map((p) => p.name);
+                        check(tag + ': the row is Home, Matches, Map maker, Discord', JSON.stringify(names.filter((n) => n !== 'Menu' && n.length)) === JSON.stringify(['Home', 'Matches', 'Map maker', 'Discord server']), names.join('|'));
                     }
                     check(tag + ': the page that is open is marked in the row', JSON.stringify(m.current) === JSON.stringify(rowMark ? [rowMark] : []), JSON.stringify(m.current));
-                    const expectLive = live && pname !== 'live' && ['matches', 'match'].indexOf(pname) !== -1;
-                    if (!wide) check(tag + ': the phone\'s live button', expectLive ? m.live && m.liveText === '2 live' : !m.live, JSON.stringify([m.live, m.liveText]));
-                    if (wide && expectLive) check(tag + ': the row\'s Live now says 2', m.lvN === '2', m.lvN);
+                    const expectLive = live && ['matches', 'match'].indexOf(pname) !== -1;
+                    check(tag + ': the live mark (shown only while a match runs, at every width), its name and its link', expectLive ? m.live && m.liveText === '2 live' && m.liveName === '2 matches live, see them on the front page' && m.liveHref === '/' : !m.live, JSON.stringify([m.live, m.liveText, m.liveName, m.liveHref]));
                     seen[live] = m;
                     // the Menu
                     const open = await page.evaluate(() => { document.querySelector('.sb .sbtn').click(); const box = document.getElementById('sbm'); return box && !box.hidden ? { n: box.querySelectorAll('a').length, expanded: document.querySelector('.sb .sbtn').getAttribute('aria-expanded'), cur: [...box.querySelectorAll('[aria-current]')].map((a) => a.textContent.replace(/\d+$/, '')), inside: (() => { const r = box.getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth && r.bottom <= window.innerHeight + 1; })() } : null; });
-                    check(tag + ': the Menu opens with the five links and the five small ones', !!open && open.n === 10 && open.expanded === 'true', JSON.stringify(open));
+                    check(tag + ': the Menu opens with the four links and the five small ones', !!open && open.n === 9 && open.expanded === 'true', JSON.stringify(open));
                     if (open) {
                         check(tag + ': the Menu marks the page that is open', JSON.stringify(open.cur) === JSON.stringify(menuMark ? [menuMark] : rowMark ? [rowMark] : []), JSON.stringify(open.cur));
                         check(tag + ': the Menu is inside the window', open.inside);
@@ -168,7 +166,7 @@ async function main() {
                 const still = (a, b) => Math.abs(a.x - b.x) < 0.6 && Math.abs(a.y - b.y) < 0.6 && Math.abs(a.w - b.w) < 0.6 && Math.abs(a.h - b.h) < 0.6;
                 const a = seen[0], b = seen[2];
                 check(pname + ' ' + sname + ': nothing moves when the live count arrives (the first button, the Menu button and the bar)', still(a.parts[0], b.parts[0]) && still(a.menu, b.menu) && still(a.bar, b.bar), JSON.stringify([a.parts[0], b.parts[0], a.menu, b.menu]));
-                if (wide) check(pname + ' ' + sname + ': ... nor the row\'s buttons', a.parts.filter((p) => !/sblive/i.test(p.cls)).every((p) => b.parts.some((q) => q.name.replace(/\d+$/, '') === p.name.replace(/\d+$/, '') && still(p, q))), '');
+                if (wide) check(pname + ' ' + sname + ': ... nor the row\'s buttons', a.parts.filter((p) => !/sblive/i.test(p.cls)).every((p) => b.parts.some((q) => q.name === p.name && still(p, q))), '');
             }
         }
     }

@@ -35,8 +35,8 @@ from size_limits import APP_ICONS_BUDGET, APP_MANIFEST_BUDGET, FAVICON_BUDGET  #
 
 THEME = "#2b5f43"                  # the outermost line of the pages' green frame (web/lobby.html)
 BACKGROUND = "#db4b13"             # the orange of the game's menus (web/front/clay.png is this with a little noise)
-PAGES = ["web/shell.html", "web/lobby.html", "web/matches.html", "web/match.html", "web/live.html", "web/legal.html", "web/mapmaker.html", "asset_catalog/index.html"]   # (and the changelog page, made by a tool)
-SHORTCUT_PAGES = {"/matches": "web/matches.html", "/live-now": "web/live.html", "/mapmaker": "web/mapmaker.html", "/?vp": "web/lobby.html"}
+PAGES = ["web/shell.html", "web/lobby.html", "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "asset_catalog/index.html"]   # (and the changelog page, made by a tool)
+SHORTCUT_PAGES = {"/matches": "web/matches.html", "/mapmaker": "web/mapmaker.html", "/?vp": "web/lobby.html"}
 ICON_FILES = {"icon-192.png": 192, "icon-512.png": 512, "icon-maskable-512.png": 512, "apple-touch-icon.png": 180}
 
 
@@ -190,7 +190,7 @@ class TheHeadLines(unittest.TestCase):
     def test_every_page_but_the_admin_page_has_the_same_four_lines_once(self):
         pages = {name: read(*name.split("/")) for name in PAGES}
         pages["the changelog page"] = changelog_page()
-        self.assertEqual(len(pages), 9)
+        self.assertEqual(len(pages), 8)
         for name, text in pages.items():
             self.assertEqual(head_lines(text), WANT_HEAD, name)
 
@@ -228,7 +228,7 @@ class TheFavicon(unittest.TestCase):
                 self.assertEqual(version, digits("web" + path), "%s: %s has stale digits (or none)" % (name, path))
             self.assertEqual(len(re.findall(r'rel="(?:shortcut )?icon"', text)), len(FAVICON_LINKS.findall(text)), "%s: an icon link that is not /favicon.png or /favicon.ico with ?v=" % name)
         self.assertGreaterEqual(linked, 9)
-        for name in ("web/shell.html", "web/match.html", "web/matches.html", "web/live.html"):
+        for name in ("web/shell.html", "web/match.html", "web/matches.html"):
             self.assertEqual([p for p, v in FAVICON_LINKS.findall(pages[name])], ["/favicon.png", "/favicon.ico"], name)
 
     def test_the_image_copies_the_favicons_and_the_icons(self):

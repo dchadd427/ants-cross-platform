@@ -34,7 +34,6 @@ STAMPED = {                                                                     
     HTML + "lobby.html": (DATE,),
     HTML + "matches.html": (BAR,),
     HTML + "match.html": (BAR,),
-    HTML + "live.html": (BAR,),
     HTML + "legal.html": (BAR,),
     HTML + "mapmaker.html": (BAR,),
     HTML + "changelog.html": (BAR,),

@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the clean addresses of the pages and of the web server that names no version (docker/nginx.conf and the pages' own links), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/nginx_clean_urls_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_clean_urls.py: each breaks one rule - a page's exact location and the file it serves, the page of the matches that run now not taking the name of the game server's list, the one map of old addresses and its redirect that keeps the query (temporary, so no browser keeps it; the three files that an earlier redirect led to stay out of the map; paths only, the slash form only for the pages' names), /index.html and /lobby.html going to the front page, no header of a page's own, server_tokens off in the http part and in the server block, and no page of the site building an address with .html.",
+ "note": "Mutants of the clean addresses of the pages and of the web server that names no version (docker/nginx.conf and the pages' own links), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/nginx_clean_urls_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_clean_urls.py: each breaks one rule - a page's exact location and the file it serves, the old addresses of the page of the matches that run now (a temporary redirect to the front page, with no query), the one map of old addresses and its redirect that keeps the query (temporary, so no browser keeps it; the three files that an earlier redirect led to stay out of the map; paths only, the slash form only for the pages' names), /index.html and /lobby.html going to the front page, no header of a page's own, server_tokens off in the http part and in the server block, and no page of the site building an address with .html.",
  "mutants": [
   {
    "id": "play_serves_the_wrong_file",
@@ -13,13 +13,6 @@
    "file": "docker/nginx.conf",
    "old": "rewrite ^ /matches.html last;",
    "new": "rewrite ^ /match.html last;",
-   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
-  },
-  {
-   "id": "live_page_back_on_the_servers_name",
-   "file": "docker/nginx.conf",
-   "old": "    location = /live-now {\n        rewrite ^ /live.html last;",
-   "new": "    location = /live {\n        rewrite ^ /live.html last;",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
@@ -79,13 +72,6 @@
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
-   "id": "old_live_address_goes_to_the_servers_list",
-   "file": "docker/nginx.conf",
-   "old": "    /live.html /live-now;\n",
-   "new": "    /live.html /live;\n",
-   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
-  },
-  {
    "id": "old_index_address_goes_to_the_game",
    "file": "docker/nginx.conf",
    "old": "    /index.html /;\n",
@@ -102,14 +88,14 @@
   {
    "id": "slash_form_may_catch_the_servers_path",
    "file": "docker/nginx.conf",
-   "old": "play|matches|match|live-now|legal|changelog|mapmaker)/\\z",
-   "new": "play|matches|match|live|live-now|legal|changelog|mapmaker)/\\z",
+   "old": "play|matches|match|legal|changelog|mapmaker)/\\z",
+   "new": "play|matches|match|live|legal|changelog|mapmaker)/\\z",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
    "id": "slash_form_may_catch_the_history",
    "file": "docker/nginx.conf",
-   "old": "play|matches|match|live-now|legal|changelog|mapmaker)/\\z",
+   "old": "play|matches|match|legal|changelog|mapmaker)/\\z",
    "new": "play|matches|match|live-now|history|legal|changelog|mapmaker)/\\z",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
@@ -160,13 +146,6 @@
    "file": "docker/nginx.conf",
    "old": "    server_tokens off;\n",
    "new": "    server_tokens build;\n",
-   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
-  },
-  {
-   "id": "matches_bar_link_with_html",
-   "file": "web/matches.html",
-   "old": "<a class=\"btn sblv\" href=\"/live-now\">",
-   "new": "<a class=\"btn sblv\" href=\"/live.html\">",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
@@ -237,6 +216,27 @@
    "file": "docker/nginx.conf",
    "old": "    absolute_redirect off;\n",
    "new": "    absolute_redirect off;\n    add_header Cache-Control \"max-age=86400\" always;\n",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "old_live_address_goes_to_the_matches_list",
+   "file": "docker/nginx.conf",
+   "old": "    location = /live-now {\n        return 302 /;",
+   "new": "    location = /live-now {\n        return 302 /matches;",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "old_live_file_address_keeps_the_query",
+   "file": "docker/nginx.conf",
+   "old": "    location = /live.html {\n        return 302 /;",
+   "new": "    location = /live.html {\n        return 302 /$is_args$args;",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "old_live_address_is_a_permanent_redirect",
+   "file": "docker/nginx.conf",
+   "old": "    location = /live-now {\n        return 302 /;",
+   "new": "    location = /live-now {\n        return 301 /;",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   }
  ]
