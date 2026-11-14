@@ -1316,6 +1316,7 @@ void run_b41_tests() {
         {
             sim::SimulationEngine sim;
             const auto ids = build(sim, 1, bomb_tile, false, 10);
+            for (int i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{18 + i, 12});          // (more ants than the last ones, which stay out of the chore: Tactics::reserve_of)
             Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(peace_plan(Level::Medium)), 4, 4);
             rig.run(500);
             const StandardBot& bot = rig.as<StandardBot>();
@@ -1380,21 +1381,28 @@ void run_b41_tests() {
         }
         // (e) a bomb that nothing reaches (shut in by rocks): the order is given once, the ant stands idle again, the bomb is left alone for 300 ticks and tried again after
         {
+            const TileCoord shut{8, 9};                                                                    // (within 6 tiles of the hill: the own ground whatever the walk says; farther out a bomb that no walk reaches is left alone from the start)
             sim::SimulationEngine sim;
-            build(sim, 1, bomb_tile, false, 10);
+            build(sim, 1, shut, false, 10);
+            for (int i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{18 + i, 12});          // (more ants than the last ones, which stay out of the chore: Tactics::reserve_of)
             for (int dy = -1; dy <= 1; ++dy) {
                 for (int dx = -1; dx <= 1; ++dx) {
-                    if (dx != 0 || dy != 0) sim.set_terrain(bomb_tile.x + dx, bomb_tile.y + dy, sim::TERRAIN_OBSTACLE);
+                    if (dx != 0 || dy != 0) sim.set_terrain(shut.x + dx, shut.y + dy, sim::TERRAIN_OBSTACLE);
                 }
             }
+            const auto clicks_onto = [&](const Rig& r) {                                                    // the clicks onto the bomb's tile (the other ants have their own moves)
+                size_t n = 0;
+                for (const auto& e : r.proposed) n += e.second.type == CommandType::GroupMove && e.second.tile_x == shut.x && e.second.tile_y == shut.y ? 1u : 0u;
+                return n;
+            };
             Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(peace_plan(Level::Medium)), 4, 4);
             rig.run(250);
             const StandardBot& bot = rig.as<StandardBot>();
             ASSERT_EQ(bot.bombs().failures(), 1u);
-            ASSERT_EQ(rig.proposed_count(CommandType::GroupMove), 1u);
+            ASSERT_EQ(clicks_onto(rig), 1u);
             rig.run(250);                                                                                  // 500 ticks in: the 300 of the blacklist are over (it started at about tick 170)
-            ASSERT_TRUE(rig.proposed_count(CommandType::GroupMove) >= 2);
-            ASSERT_TRUE(sim.grid().has_bomb_at(bomb_tile));
+            ASSERT_TRUE(clicks_onto(rig) >= 2);
+            ASSERT_TRUE(sim.grid().has_bomb_at(shut));
         }
     } TEST_END();
 

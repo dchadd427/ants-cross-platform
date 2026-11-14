@@ -149,6 +149,13 @@ struct Counters {
     uint64_t walls_pre_thief{0};              // ... of the home ones, begun before any enemy Thief was seen anywhere
     uint64_t outs_started{0};                 // fires put out
     uint64_t outs_home{0};
+    uint64_t defuses_started{0};              // bombs begun to be defused by the seat's ants
+    uint64_t defuses_foreign{0};              // ... of them, on ground that lies nearer another team's hill than the seat's own (an ant of the seat's team or ally excepted)
+    uint64_t outs_foreign{0};                 // fires begun to be put out on such ground
+    uint64_t blasts_foreign{0};               // own ants blown up on such ground
+    std::array<uint64_t, 4> defuses_at{};     // the defuses and the fires put out on another team's ground, by the team whose hill is the nearest (index = team)
+    std::array<uint64_t, 4> outs_at{};
+    std::array<uint64_t, 4> blasts_at{};
     uint64_t drown_kills{0};                  // enemy ants that drowned with this team the last to damage them (any cause: a punch, a bomb, the quick kill)
     uint64_t drown_own{0};                    // own ants that drowned
     uint64_t bomb_victims{0};                 // own ants blown up
@@ -279,6 +286,24 @@ bool knock_landing(const sim::Grid& grid, sim::TileCoord victim, sim::TileCoord 
 }
 
 int32_t cheb(sim::TileCoord a, sim::TileCoord b) { return std::max(std::abs(a.x - b.x), std::abs(a.y - b.y)); }
+
+// The team whose ground a tile is: the owner of the hill that is nearest to it (in tiles, the larger of the two distances) when that is another team than the seat, the seat's ally
+// excepted and a tie going to the seat; 255 when the tile is on the seat's own ground
+uint8_t foreign_owner(const sim::Grid& grid, uint8_t seat, uint8_t ally, sim::TileCoord tile) {
+    int32_t best = 1 << 20;
+    for (const assets::AnthillSpawn& h : grid.anthills()) {
+        if (h.team_id == seat) best = std::min(best, cheb(tile, sim::TileCoord{h.x, h.y}));
+    }
+    uint8_t owner = 255;
+    for (const assets::AnthillSpawn& h : grid.anthills()) {
+        const int32_t d = cheb(tile, sim::TileCoord{h.x, h.y});
+        if (h.team_id != seat && h.team_id != ally && d < best) {
+            best = d;
+            owner = h.team_id;
+        }
+    }
+    return owner;
+}
 
 void Observer::tick(const sim::SimulationEngine& engine) {
     const uint64_t now = engine.current_tick();
@@ -474,6 +499,11 @@ void Observer::tick(const sim::SimulationEngine& engine) {
         }
         if (s.state == sim::UnitState::ExtinguishingFire && m.state != sim::UnitState::ExtinguishingFire) {
             ++c.outs_started;
+            const uint8_t on = foreign_owner(grid, seat, ws.player_alliances[seat], here);
+            if (on < 4) {
+                ++c.outs_foreign;
+                ++c.outs_at[on];
+            }
             for (const assets::AnthillSpawn& h : grid.anthills()) {
                 if (h.team_id == seat && cheb(here, sim::TileCoord{h.x, h.y}) <= 6) {
                     ++c.outs_home;
@@ -481,8 +511,23 @@ void Observer::tick(const sim::SimulationEngine& engine) {
                 }
             }
         }
+        if (s.state == sim::UnitState::DefusingBomb && m.state != sim::UnitState::DefusingBomb) {
+            ++c.defuses_started;
+            const uint8_t on = foreign_owner(grid, seat, ws.player_alliances[seat], here);
+            if (on < 4) {
+                ++c.defuses_foreign;
+                ++c.defuses_at[on];
+            }
+        }
         // bomb victims and fire hits
-        if (u.loco_action == sim::AntUnit::kActionBlast && m.action != sim::AntUnit::kActionBlast) ++c.bomb_victims;
+        if (u.loco_action == sim::AntUnit::kActionBlast && m.action != sim::AntUnit::kActionBlast) {
+            ++c.bomb_victims;
+            const uint8_t on = foreign_owner(grid, seat, ws.player_alliances[seat], here);
+            if (on < 4) {
+                ++c.blasts_foreign;
+                ++c.blasts_at[on];
+            }
+        }
         if (s.hp < m.hp && grid.has_fire_at(here) && s.type != sim::AntType::Fire) ++c.fire_hits;
         // deaths
         if ((s.hp == 0 || u.loco_action == sim::AntUnit::kActionDeath || u.loco_action == sim::AntUnit::kActionDrown) && !m.dying) {
@@ -1018,9 +1063,12 @@ void write_counters(std::ostringstream& o, const Counters& c) {
       << ",\"idle_held_ticks\":" << c.idle_held_ticks << ",\"carry_idle_ticks\":" << c.carry_idle_ticks << ",\"stuck_ticks\":" << c.stuck_ticks << ",\"stuck_ants\":" << c.stuck_ants
       << ",\"cantgo_ticks\":" << c.cantgo_ticks << ",\"contact_idle_ticks\":" << c.contact_idle_ticks << ",\"fire_chore_ticks\":" << c.fire_chore_ticks << ",\"fire_ant_ticks\":" << c.fire_ant_ticks
       << ",\"fire_ant_idle_ticks\":" << c.fire_ant_idle_ticks << ",\"walls_started\":" << c.walls_started << ",\"walls_home\":" << c.walls_home << ",\"walls_enemy\":" << c.walls_enemy
-      << ",\"walls_pre_thief\":" << c.walls_pre_thief << ",\"outs_started\":" << c.outs_started << ",\"outs_home\":" << c.outs_home << ",\"drown_kills\":" << c.drown_kills
+      << ",\"walls_pre_thief\":" << c.walls_pre_thief << ",\"outs_started\":" << c.outs_started << ",\"outs_home\":" << c.outs_home << ",\"defuses_started\":" << c.defuses_started << ",\"defuses_foreign\":" << c.defuses_foreign << ",\"outs_foreign\":" << c.outs_foreign << ",\"blasts_foreign\":" << c.blasts_foreign << ",\"drown_kills\":" << c.drown_kills
       << ",\"drown_own\":" << c.drown_own << ",\"bomb_victims\":" << c.bomb_victims << ",\"fire_hits\":" << c.fire_hits << ",\"ant_deaths\":" << c.ant_deaths << ",\"carrier_deaths\":" << c.carrier_deaths
       << ",\"lone_deaths\":" << c.lone_deaths << ",\"outnumbered_deaths\":" << c.outnumbered_deaths << ",\"water_conv\":" << c.water_conv;
+    arr("defuses_at", c.defuses_at, 4);
+    arr("outs_at", c.outs_at, 4);
+    arr("blasts_at", c.blasts_at, 4);
     arr("ep", c.ep, kKinds);
     arr("ep_near", c.ep_near, kKinds);
     arr("ep_att", c.ep_att, kKinds);
