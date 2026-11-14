@@ -67,7 +67,7 @@ class ThePageAndTheOtherPages(unittest.TestCase):
                 if re.search(r"/hub/ws", text):
                     naming_the_socket.add(rel)
         self.assertEqual(sorted(naming_the_list), ["web/home/home.js", "web/home/players.css", "web/home/players.js"], "only the front page's own script asks for the list (the two files name themselves)")
-        self.assertEqual(sorted(naming_the_socket), ["web/home/chat.js"], "the list opens no socket of its own: it speaks through the dock's (the one other script that names the hub asks its one page, GET /hub/me, for the name to play under)")
+        self.assertEqual(sorted(naming_the_socket), ["web/home/chat.js", "web/hub_here.js"], "the list opens no socket of its own: it speaks through the dock's (the game page's small socket, web/hub_here.js, says only where its visitor is; the one other script that names the hub asks its one page, GET /hub/me, for the name to play under)")
 
     def test_the_game_server_and_the_game_never_hear_of_it(self):
         for rel in (("web", "shell.html"), ("web", "front", "lobby_net.js"), ("web", "front", "lobby_chat.js"), ("web", "front", "lobby_rules.js")):
@@ -127,7 +127,9 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertEqual(made, ["bdi", "button", "div", "h2", "h3", "hr", "i", "li", "p", "section", "span", "ul"], "text and boxes: no a, img, script, iframe, style or link")
 
     def test_it_keeps_nothing_in_the_browser_and_opens_no_socket_of_its_own(self):
-        self.assertNotRegex(self.code, r"localStorage|sessionStorage|indexedDB|document\.cookie|new WebSocket|WebSocket\(|XMLHttpRequest|fetch\(|sendBeacon")
+        self.assertNotRegex(self.code, r"localStorage|indexedDB|document\.cookie|new WebSocket|WebSocket\(|XMLHttpRequest|fetch\(|sendBeacon")
+        self.assertEqual(self.code.count("win.sessionStorage"), 1, "the one thing it keeps, in this tab only, is the hand-over note for the game page")
+        self.assertIn("'ants.here'", self.code)
         self.assertNotRegex(self.code, r"/hub\b", "the dock's script alone knows the hub's address")
 
     def test_it_reuses_the_docks_rules_for_text_and_the_pages_rules_for_a_map(self):
@@ -237,7 +239,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_players_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.css", "web/home/players.js", "web/home/players.css",
+    FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.css", "web/hub_here.js", "web/home/players.js", "web/home/players.css",
               "tests/scripts/test_web_home_players.py", "tests/scripts/web_home_players_check.js", "tests/scripts/web_home_chat_check.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
               "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html", "docs/HOME_SCREEN.md"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])
