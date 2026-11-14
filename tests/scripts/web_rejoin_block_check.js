@@ -151,7 +151,7 @@ same('a server with an escaped quote and backslash is read as the text it holds'
     check('... and nothing was written, removed or changed', one.storage.calls.setItem.length === 0 && one.storage.calls.removeItem.length === 0 && one.storage.data.size === 1);
 }
 check('an empty storage offers nothing', offer({}).got === null);
-check('a storage with only other items offers nothing (the settings, the name, the picture)', offer({ 'ants.name': 'Ann', 'ants.aspect.v2': '16:9', 'ants-four-map': 'small', 'other': entryText(NOW) }).got === null);
+check('a storage with only other items offers nothing (the settings, the name, the picture)', offer({ 'ants.name': 'Ann', 'ants.aspect.v3': '{"sideways":"16:9"}', 'ants-four-map': 'small', 'other': entryText(NOW) }).got === null);
 
 // the age
 {

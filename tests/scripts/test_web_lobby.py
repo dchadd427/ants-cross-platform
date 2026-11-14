@@ -330,7 +330,7 @@ class TheFrontPageMarkup(PageCase):
         for gone in ("CARD_KEY", "CARD_ROOM_KEY", "hostSeatsText", "cardParse", "cardFromOld"):
             self.assertNotIn(gone, self.page, gone)
         self.assertNotIn("ants.name", self.page, "nobody types a name any more: the page keeps none")
-        self.assertIn("var ASPECT_KEY = 'ants.aspect.v2';", self.page)
+        self.assertIn("var ASPECT_KEY = 'ants.aspect.v3';", self.page)
         self.assertEqual(len(re.findall(r"localStorage\.removeItem|localStorage\.clear|sessionStorage\.clear", self.page)), 0)
 
     def test_the_footer_links_the_name_card_and_the_test_room_buttons_are_there(self):
@@ -489,7 +489,7 @@ class TheGamePage(PageCase):
         self.assertIn("function antsLeaveMatch() {", selector)                                                    # (inside the block that node runs)
         self.assertIn("if (isReadyToPlay && typeof Module !== 'undefined' && Module._ants_leave_match) Module._ants_leave_match();", selector)
         # (the picture selector changes the picture in place: it neither asks nor leaves nor reloads, in a joined match or any other)
-        switch = selector[selector.index("function antsSetAspect(value) {"):]
+        switch = selector[selector.index("function antsSetAspect(value, pin) {"):]
         self.assertNotIn("antsLeaveMatch", switch)
         self.assertNotIn("confirm", switch)
         self.assertNotIn("location.assign", switch)

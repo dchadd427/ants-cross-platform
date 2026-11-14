@@ -1826,18 +1826,19 @@
             Object.keys(vars).forEach(function (name) { document.body.style.setProperty(name, vars[name]); });
         }
         // The shape of this page's picture, passed on to the game as --aspect (the game validates it too); the selector changes it while the game runs (antsSetAspect below). The stage's data-aspect names the shape (tests and the settings menu read it), and the slot's CSS takes its ratio from custom properties of <body> (antsShowShape, from web/shapes.js's rows).
-        // What a pick remembers lives under ANTS_ASPECT_KEY, and only a pick (the settings menu's Picture shape row, a recording's Picture window) writes it (web/lobby.html only reads the same key). The key of the first versions of the page was
-        // 'ants.aspect': it is NOT read any more, so that a Classic 4:3 that a browser once remembered (anybody who tried it stayed on 4:3 for good) is forgotten once: every browser starts
-        // with the first-visit picture until its player picks a shape again (the shape nearest to the screen, AntsShapes.firstVisit; never stored). ?aspect=4:3 (or any other shape of the table) in the address works as ever.
-        var ANTS_ASPECT_KEY = 'ants.aspect.v2';
+        // What a pick remembers lives under ANTS_ASPECT_KEY (one shape for each way the device is held: AntsShapes.pickFor), and only a pick (the settings menu's Picture shape row, a recording's Picture window) writes it (web/lobby.html only reads
+        // the same key). The earlier keys ('ants.aspect', 'ants.aspect.v2') are NOT read any more, so that the picks that browsers remembered are forgotten once: every browser starts on Automatic (AntsShapes.automatic; never stored)
+        // until its player picks a shape again. ?aspect=4:3 (or any other shape of the table) in the address works as ever, for that tab.
+        var ANTS_ASPECT_KEY = 'ants.aspect.v3';
         var ANTS_ASPECT = '16:9';
         var ANTS_ASPECT_SOURCE = 'default';
+        var ANTS_ADDRESS_OWN = '';                                             // (the shape of an ?aspect= that this page wrote in the address for a pick: it is taken out again when another shape is shown without a pick)
         (function () {
             var fromAddress = null;
             var remembered = null;
             try { fromAddress = new URLSearchParams(window.location.search).get('aspect'); } catch (e) { /* no address to read */ }
-            try { remembered = window.localStorage.getItem(ANTS_ASPECT_KEY); } catch (e) { /* private window: nothing was remembered */ }
-            var chosen = ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.firstVisit(window));
+            try { remembered = AntsShapes.pickFor(window.localStorage.getItem(ANTS_ASPECT_KEY), AntsShapes.wayOf(window)); } catch (e) { /* private window: nothing was remembered */ }
+            var chosen = ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.automatic(window));
             ANTS_ASPECT = chosen.aspect;
             ANTS_ASPECT_SOURCE = chosen.source;
             ANTS_ARGS.push('--aspect', ANTS_ASPECT);
@@ -2659,30 +2660,65 @@
         }
         // Change the shape of the picture: the page's own state (the stage's shape in CSS, the pressed button, the arguments of a game that has not started, the address), the game's picture, and the
         // box (which tells the game's window system, with a `resize`, the pixels of the new box: the game's canvas has exactly the shape of its picture, so no black bar of its own shows).
-        function antsSetAspect(value) {
-            var shape = ANTS_PAGE.parseAspect(value);
-            if (!shape || shape === ANTS_ASPECT) return;
-            ANTS_ASPECT = shape;
-            var at = antsAspectOption();
-            if (at !== -1) ANTS_ARGS[at + 1] = shape;
-            antsShowShape(stageElement, shape);
-            antsPickers.forEach(function (picker) { picker.set(shape); });
-            antsSyncAspect();
-            relayout(true);
+        // The address says the shape only for a pick (a hand pick writes ?aspect=, Automatic's own switches never do: `own` false); `own` is also what Automatic takes out again.
+        function antsAddress(shape, own) {
             try {
                 var url = new URL(window.location.href);
-                url.searchParams.set('aspect', shape);
-                url.search = url.search.replace('aspect=' + encodeURIComponent(shape), 'aspect=' + shape);       // (the colon needs no escape in a query)
+                if (shape) {
+                    url.searchParams.set('aspect', shape);
+                    url.search = url.search.replace('aspect=' + encodeURIComponent(shape), 'aspect=' + shape);       // (the colon needs no escape in a query)
+                } else url.searchParams.delete('aspect');
                 window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+                ANTS_ADDRESS_OWN = own ? shape : '';
             } catch (e) { /* the address stays as it is: the browser remembers the choice */ }
         }
-        var antsPickers = [];               // (the page's dropdowns, made below: each shows the shape that the picture has)
-        // A pick of the dropdowns (and of the settings menu's, which calls this): remembered, then the change itself
+        function antsSetAspect(value, pin) {
+            var shape = ANTS_PAGE.parseAspect(value);
+            if (!shape) return;
+            if (shape !== ANTS_ASPECT) {
+                ANTS_ASPECT = shape;
+                var at = antsAspectOption();
+                if (at !== -1) ANTS_ARGS[at + 1] = shape;
+                antsShowShape(stageElement, shape);
+                antsSyncAspect();
+                relayout(true);
+            }
+            antsShowPickers();
+            if (pin !== false) antsAddress(shape, true);
+        }
+        function antsAutomatic() { return AntsShapes.automatic(window); }
+        var antsPickers = [];               // (the page's dropdowns, made below: each shows the shape that the picture has, and whether Automatic gave it)
+        function antsShowPickers() { antsPickers.forEach(function (picker) { picker.set(ANTS_ASPECT, ANTS_ASPECT_SOURCE === 'default'); }); }
+        // A pick of the dropdowns (and of the settings menu's, which calls this): remembered for the way the device is held now, then the change itself. 'auto' is the Automatic row: it forgets this way's pick and
+        // the address's shape, and the picture is Automatic's at once.
         function antsPickShape(value) {
+            var way = AntsShapes.wayOf(window), stored = null;
+            try { stored = window.localStorage.getItem(ANTS_ASPECT_KEY); } catch (e) { /* private window: nothing was remembered */ }
+            if (value === AntsShapes.AUTO) {
+                var left = AntsShapes.withPick(stored, way, null);
+                try { if (left) window.localStorage.setItem(ANTS_ASPECT_KEY, left); else window.localStorage.removeItem(ANTS_ASPECT_KEY); } catch (e) { /* private window */ }
+                ANTS_ASPECT_SOURCE = 'default';
+                antsAddress(null, false);
+                antsSetAspect(AntsShapes.automatic(window), false);
+                return;
+            }
             if (!ANTS_PAGE.parseAspect(value)) return;
-            try { window.localStorage.setItem(ANTS_ASPECT_KEY, value); } catch (e) { /* private window: not remembered */ }
+            try { window.localStorage.setItem(ANTS_ASPECT_KEY, AntsShapes.withPick(stored, way, value)); } catch (e) { /* private window: not remembered */ }
+            ANTS_ASPECT_SOURCE = 'remembered';
             antsSetAspect(value);
         }
+        // The way the device is held, its width or the fullscreen changed and stayed so (AntsShapes.watch): Automatic, or the pick that this way has, takes over; a shape that the address named (a link) stays. Nothing is
+        // written: the address loses only what this page wrote for a pick of the other way.
+        function antsAutoSettle() {
+            if (ANTS_ASPECT_SOURCE === 'address') return;
+            var held = null;
+            try { held = AntsShapes.pickFor(window.localStorage.getItem(ANTS_ASPECT_KEY), AntsShapes.wayOf(window)); } catch (e) { /* private window: no pick */ }
+            var next = held || AntsShapes.automatic(window);
+            ANTS_ASPECT_SOURCE = held ? 'remembered' : 'default';
+            if (ANTS_ADDRESS_OWN && ANTS_ADDRESS_OWN !== next) antsAddress(null, false);
+            antsSetAspect(next, false);
+        }
+        AntsShapes.watch(window, antsAutoSettle);
         (function () {
             // the quiet line under each dropdown: the shape that fills the computer's screen (AntsShapes.fillsLine; none when no shape does)
             var line = '';
@@ -2693,7 +2729,7 @@
             // the dropdown of the recording's Picture window (the settings menu makes its own): a picker (web/shape_picker.js) with one entry for each row of the table
             [['pic-pick', 'picpop-h', 'pic-note', 'pic-select', 'The shape of the picture']].forEach(function (c) {
                 var host = document.getElementById(c[0]);
-                if (host) antsPickers.push(AntsShapePicker.create(AntsShapes, { doc: document, host: host, id: c[3], labelledBy: c[1], describedBy: c[2], title: c[4], value: ANTS_ASPECT, onPick: antsPickShape }));
+                if (host) antsPickers.push(AntsShapePicker.create(AntsShapes, { doc: document, host: host, id: c[3], labelledBy: c[1], describedBy: c[2], title: c[4], automatic: antsAutomatic, auto: ANTS_ASPECT_SOURCE === 'default', value: ANTS_ASPECT, onPick: antsPickShape }));
             });
         })();
         // ANTS_SELECTOR_END
@@ -3033,7 +3069,7 @@
         function antsLoadGameMenu(again) {
             var script = document.createElement('script'), toast = document.getElementById('toast');
             script.src = 'game_menu.js?v=' + ANTS_BUILD_VER;
-            script.onload = function () { window.AntsGameMenu.forPage({ doc: document, win: window, shapes: window.AntsShapes, picker: function (opts) { return window.AntsShapePicker.create(window.AntsShapes, opts); }, pickShape: antsPickShape, lock: antsLock, stage: stageElement, canvas: canvas, toast: toast, query: '?v=' + ANTS_BUILD_VER, module: function () { return Module; }, ready: function () { return isReadyToPlay; }, replay: ANTS_REPLAY_MODE, live: ANTS_LIVE_MODE, version: document.getElementById('game-version').textContent, isFullscreen: isFullscreen, enter: enterFullscreen, leave: leaveFullscreen, isLocked: isLocked, releaseLock: releaseLock, requestLock: requestLock, cancelsKey: ANTS_PAGE.cancelsBrowserKey }); };
+            script.onload = function () { window.AntsGameMenu.forPage({ doc: document, win: window, shapes: window.AntsShapes, picker: function (opts) { return window.AntsShapePicker.create(window.AntsShapes, opts); }, isAutomatic: function () { return ANTS_ASPECT_SOURCE === 'default'; }, automatic: antsAutomatic, pickShape: antsPickShape, lock: antsLock, stage: stageElement, canvas: canvas, toast: toast, query: '?v=' + ANTS_BUILD_VER, module: function () { return Module; }, ready: function () { return isReadyToPlay; }, replay: ANTS_REPLAY_MODE, live: ANTS_LIVE_MODE, version: document.getElementById('game-version').textContent, isFullscreen: isFullscreen, enter: enterFullscreen, leave: leaveFullscreen, isLocked: isLocked, releaseLock: releaseLock, requestLock: requestLock, cancelsKey: ANTS_PAGE.cancelsBrowserKey }); };
             script.onerror = function () { script.remove(); if (again) { toast.textContent = 'The settings menu could not load. Press Reset to try again.'; toast.hidden = false; } else setTimeout(function () { antsLoadGameMenu(true); }, 2500); };
             document.head.appendChild(script);
         }

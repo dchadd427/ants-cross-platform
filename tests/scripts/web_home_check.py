@@ -760,20 +760,20 @@ def main():
 
             # the picture's shape is a row of the game's settings menu, not of the room: the room hands on the shape that the address or the browser holds, and nothing on a first visit
             def shape_now():
-                return json.loads(value("JSON.stringify([pickedShape, localStorage.getItem('ants.aspect.v2')])"))
+                return json.loads(value("JSON.stringify([pickedShape, localStorage.getItem('ants.aspect.v3')])"))
 
             check(info["picked"] == "", "the room has no shape of its own on a first visit: nothing is handed on to the game (%r)" % (info["picked"],))
             sw, sh = info["screenSize"]
             for held in ("4:3", "16:9"):                       # what the game page remembered (its settings menu writes the key): the room hands it on, and the next visit has it
-                tab.ev("localStorage.setItem('ants.aspect.v2', %r); 1" % held)
+                tab.ev("localStorage.setItem('ants.aspect.v3', %r); 1" % aspect.pick(held))
                 tab.open(web, wait=False)
                 time.sleep(1.5)
                 check(shape_now()[0] == held, "a shape that the browser remembers (%s) is what the room hands on (%s)" % (held, shape_now()))
-            tab.ev("localStorage.setItem('ants.aspect.v2', 'junk'); 1")
+            tab.ev("localStorage.setItem('ants.aspect.v3', 'junk'); 1")
             tab.open(web, wait=False)
             time.sleep(1.5)
             check(shape_now()[0] == "", "a remembered value that is no shape is ignored: nothing is handed on")
-            tab.ev("localStorage.removeItem('ants.aspect.v2'); localStorage.setItem('ants.aspect', '4:3'); 1")
+            tab.ev("localStorage.removeItem('ants.aspect.v3'); localStorage.setItem('ants.aspect', '4:3'); 1")
             tab.open(web, wait=False)
             time.sleep(1.5)
             check(shape_now()[0] == "", "a 4:3 that the old key 'ants.aspect' remembers is not read: nothing is handed on")
@@ -785,7 +785,7 @@ def main():
             tab.open(web + "?aspect=5:4", wait=False)
             time.sleep(1.5)
             check(shape_now()[0] == "", "?aspect=5:4 is not a shape the page offers: ignored")
-            tab.ev("localStorage.removeItem('ants.aspect.v2'); localStorage.removeItem('ants.aspect'); 1")
+            tab.ev("localStorage.removeItem('ants.aspect.v3'); localStorage.removeItem('ants.aspect'); 1")
 
             # a new tab makes a new room each time: the codes are letters and numbers
             for _ in range(7):
@@ -1450,7 +1450,7 @@ def main():
             load(web, settle=1.5)
             front_ready()
             rename_by_pencil(tab, "Bob")
-            tab.ev("localStorage.setItem('ants.aspect.v2', '4:3'); 1")                     # (what the game page's settings menu remembers: the room hands it on)
+            tab.ev("localStorage.setItem('ants.aspect.v3', %r); 1" % aspect.pick("4:3"))                     # (what the game page's settings menu remembers: the room hands it on)
             load(web, settle=1.5)
             front_ready()
             set_modes(tab, {"red": "nobody", "blue": "nobody", "black": "nobody"})
@@ -1855,8 +1855,8 @@ def main():
             tab.ev("window.antsMarker = 7; 1")
             aspect.choose_shape(tab, "4:3")
             time.sleep(1.0)
-            chosen = json.loads(value("JSON.stringify([localStorage.getItem('ants.aspect.v2'), document.getElementById('game-stage').getAttribute('data-aspect'), window.antsMarker, location.search.indexOf('aspect=4:3') !== -1])"))
-            check(chosen == ["4:3", "4:3", 7, True], "Classic 4:3 chosen in the menu's Picture shape row: the picture changes at once (no reload), the browser remembers it, the address has it (%s)" % (chosen,))
+            chosen = json.loads(value("JSON.stringify([localStorage.getItem('ants.aspect.v3'), document.getElementById('game-stage').getAttribute('data-aspect'), window.antsMarker, location.search.indexOf('aspect=4:3') !== -1])"))
+            check(chosen == [aspect.pick("4:3"), "4:3", 7, True], "Classic 4:3 chosen in the menu's Picture shape row: the picture changes at once (no reload), the browser remembers it, the address has it (%s)" % (chosen,))
             shot("game_classic_1440")
             clear_storage()
 

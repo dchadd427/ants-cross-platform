@@ -1183,7 +1183,7 @@ async function codeBox(env) {
         check('... with no key in the address, no create block (the seat is already in the room: the game finds its key by itself), nothing opened in another window, and nothing written to the storage', env.assigned[0].indexOf(RKEY) === -1 && noBlockOf(env, env.assigned[0]) && env.opened.length === 0 && env.storage.data['ants.rejoin.k7m2xq.1'] === stored['ants.rejoin.k7m2xq.1'] && keysOf(env).length === 1);
     }
     {
-        const env = runLobby('', { 'ants.rejoin.r-1.3': entry(1000), 'ants.name': 'Maya', 'ants.aspect.v2': '4:3' });
+        const env = runLobby('', { 'ants.rejoin.r-1.3': entry(1000), 'ants.name': 'Maya', 'ants.aspect.v3': '{"sideways":"4:3"}' });
         env.$('rejoin-go').click();
         same('the remembered shape goes with it, and no name (a name that this browser remembers from earlier typing is ignored: the key takes the seat, which the room has named)', env.assigned, ['https://play.test/?join=/ws&room=r-1&seat=3&name=&aspect=4:3']);
     }

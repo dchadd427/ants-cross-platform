@@ -5,12 +5,13 @@
 //     The front page keeps its native dropdown (web/lobby.html: never fullscreen).
 //   * create(shapes, opts): `shapes` is AntsShapes (the table). opts: doc, win (default: the document's), host (the element that gets the button and the list), id (the button's; the list's and the rows' follow it),
 //     labelledBy (the id of the words that name it), describedBy (the id of the quiet line), className (more classes for the button), title, value (the shape shown), onPick(name) (called for a row that is not the
-//     shown shape: the page changes the picture and calls set() with what it has now), now (a clock, for tests). It gives back { button, list, set(name), shape(), open(), close(refocus), isOpen(), destroy() }.
+//     shown row: the page changes the picture and calls set() with what it has now), now (a clock, for tests); automatic (a function that says the shape that Automatic gives now: the list then has the first row
+//     "Automatic (now 20:9)", whose name in onPick is shapes.AUTO, and `auto` says that it is the row in use). It gives back { button, list, set(name, auto), shape(), open(), close(refocus), isOpen(), destroy() }.
 //   * Keys, on the button: Enter, Space, ArrowDown, ArrowUp and Alt+ArrowDown open the list (the shown shape is the marked row; nothing on a closed button changes the picture, on every browser alike); in the open list ArrowDown /
 //     ArrowUp / Home / End move the mark, Enter and Space choose the marked row, a letter or a number marks the next row that starts with what was typed, Esc closes the list ALONE (the Picture window or the settings menu
 //     stays: the key is taken in the window's capture phase, ahead of theirs), Tab closes it and moves on. A click elsewhere and a scroll close it; a resize puts it by its button again. The focus stays on the button
 //     (aria-activedescendant names the marked row) and goes back to it when the list closes by a choice or by Esc. The pointer marks the row it is over (pointermove, which the replay bar's synthetic cursor makes too).
-//   * Choosing the shape that is shown calls nothing (the page stores nothing: only a different shape is a choice, docs/PLAY_IN_BROWSER.md "Which shape").
+//   * Choosing the row that is in use calls nothing. With Automatic in use, choosing the shape it shows is a choice (the page keeps that shape from then on: docs/PLAY_IN_BROWSER.md "Which shape").
 // ES5, no module system: a page gets the global AntsShapePicker, node gets module.exports (tests/scripts/web_shape_picker_check.js runs it on a fake of the DOM).
 (function (root, factory) {
     var api = factory();
@@ -26,9 +27,11 @@
     function inside(node, root) { for (var n = node; n; n = n.parentNode) if (n === root) return true; return false; }
 
     function create(shapes, opts) {
-        var ROWS = shapes.rows, doc = opts.doc, win = opts.win || doc.defaultView, host = opts.host, id = opts.id;
+        var AUTO = shapes.AUTO;          // the name that the Automatic row has in onPick (no shape is called so)
+        var ROWS = shapes.rows.map(function (row) { return { name: row.name, text: row.text, place: row.place }; }), doc = opts.doc, win = opts.win || doc.defaultView, host = opts.host, id = opts.id;
         var shown = false, mark = -1, current = -1, typed = '', typedAt = 0, taken = {}, clock = opts.now || function () { return Date.now(); };
-        var button = doc.createElement('button'), list = doc.createElement('ul'), options = [];
+        var button = doc.createElement('button'), list = doc.createElement('ul'), options = [], autoNow = opts.automatic;
+        if (autoNow) ROWS.unshift({ name: AUTO, text: '', place: 'auto' });
         button.type = 'button';
         button.id = id;
         button.className = 'pick-select' + (opts.className ? ' ' + opts.className : '');
@@ -47,23 +50,33 @@
         ROWS.forEach(function (row) {
             var item = doc.createElement('li');
             item.id = id + '-o' + row.place;
+            item.textContent = row.text;
             item.className = 'pick-opt';
             item.setAttribute('role', 'option');
             item.setAttribute('data-shape', row.name);
             item.setAttribute('aria-selected', 'false');
-            item.textContent = row.text;
             list.appendChild(item);
             options.push(item);
         });
         host.insertBefore(button, host.firstChild);
         host.insertBefore(list, button.nextSibling);
 
-        // what the page has now: the button says it and its row is the selected one
-        function set(name) {
-            current = shapes.placeOf(name);
+        // the words of Automatic's row: the shape that it gives now
+        function words() {
+            if (!autoNow) return;
+            var now = ''; try { now = autoNow(); } catch (e) { /* no shape to name */ }
+            ROWS[0].text = 'Automatic (now ' + now + ')';
+            options[0].textContent = ROWS[0].text;
+        }
+        // what the page has now: the button says it and its row is the selected one (`auto`: Automatic is in use, and `name` is the shape that it shows)
+        function set(name, auto) {
+            words();
+            current = auto && autoNow ? 0 : indexOf(name);
             button.textContent = current < 0 ? '' : ROWS[current].text;
             options.forEach(function (item, i) { item.setAttribute('aria-selected', i === current ? 'true' : 'false'); });
         }
+
+        function indexOf(name) { for (var i = 0; i < ROWS.length; i++) if (ROWS[i].name === name) return i; return -1; }
 
         // the marked row is scrolled into the list's own view (scrollIntoView would scroll the bar and the page too: they are outside the list's box, and a scroll closes the list)
         function reveal(item) {
@@ -114,6 +127,7 @@
             shown = true;
             list.hidden = false;
             button.setAttribute('aria-expanded', 'true');
+            words();
             place();
             setMark(current >= 0 ? current : 0);
             listen(true);
@@ -188,7 +202,7 @@
             if (button.parentNode) button.parentNode.removeChild(button);
             if (list.parentNode) list.parentNode.removeChild(list);
         }
-        set(opts.value);
+        set(opts.value, opts.auto);
         return { button: button, list: list, set: set, shape: function () { return current < 0 ? null : ROWS[current].name; }, open: open, close: close, isOpen: function () { return shown; }, destroy: destroy };
     }
 

@@ -304,22 +304,22 @@
     {
       "id": "js_first_visit_upright_is_asked",
       "file": "web/shapes.js",
-      "old": "if (!sideways) return FALLBACK;\n",
+      "old": "if (wayOf(win) !== 'sideways') return FALLBACK;\n",
       "new": "",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
       "id": "js_first_visit_window_ignored",
       "file": "web/shapes.js",
-      "old": "var sideways = screenW >= screenH || (!(win.parent && win.parent !== win) && win.innerWidth > win.innerHeight);",
-      "new": "var sideways = screenW >= screenH;",
+      "old": "if (wayOf(win) !== 'sideways') return FALLBACK;",
+      "new": "if (!(win.screen.width >= win.screen.height)) return FALLBACK;",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
       "id": "js_first_visit_sideways_window_only",
       "file": "web/shapes.js",
-      "old": "var sideways = screenW >= screenH || (!(win.parent && win.parent !== win) && win.innerWidth > win.innerHeight);",
-      "new": "var sideways = win.innerWidth > win.innerHeight;",
+      "old": "if (wayOf(win) !== 'sideways') return FALLBACK;",
+      "new": "if (!(win.innerWidth > win.innerHeight)) return FALLBACK;",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
@@ -353,14 +353,14 @@
     {
       "id": "js_first_visit_zero_size_asked",
       "file": "web/shapes.js",
-      "old": "            if (!isSize(screenW, screenH)) return FALLBACK;\n            var sideways",
-      "new": "            var sideways",
+      "old": "            if (!isSize(screenW, screenH)) return FALLBACK;\n            return closest",
+      "new": "            return closest",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
       "id": "page_shell_first_visit_ignores_the_screen",
       "file": "web/shell.html",
-      "old": "ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.firstVisit(window))",
+      "old": "ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.automatic(window))",
       "new": "ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.FALLBACK)",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
@@ -411,13 +411,6 @@
       "file": "web/lobby.html",
       "old": "function aspectQuery(shape) { return isShape(shape) ? '&aspect=' + shape : ''; }",
       "new": "function aspectQuery(shape) { return '&aspect=' + (isShape(shape) ? shape : '16:9'); }",
-      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
-    },
-    {
-      "id": "js_first_visit_frame_window_counts",
-      "file": "web/shapes.js",
-      "old": "(!(win.parent && win.parent !== win) && win.innerWidth > win.innerHeight)",
-      "new": "(win.innerWidth > win.innerHeight)",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
@@ -514,14 +507,14 @@
     {
       "id": "page_shell_pick_not_remembered",
       "file": "web/shell.html",
-      "old": "window.localStorage.setItem(ANTS_ASPECT_KEY, value); } catch (e) { /* private window: not remembered */ }\n            antsSetAspect(value);",
-      "new": "window.localStorage.setItem(ANTS_ASPECT_KEY + 'x', value); } catch (e) { /* private window: not remembered */ }\n            antsSetAspect(value);",
+      "old": "window.localStorage.setItem(ANTS_ASPECT_KEY, AntsShapes.withPick(stored, way, value));",
+      "new": "window.localStorage.setItem(ANTS_ASPECT_KEY + 'x', AntsShapes.withPick(stored, way, value));",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
       "id": "page_shell_second_dropdown_not_followed",
       "file": "web/shell.html",
-      "old": "            antsPickers.forEach(function (picker) { picker.set(shape); });\n",
+      "old": "            antsShowPickers();\n",
       "new": "",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
@@ -577,7 +570,7 @@
     {
       "id": "menu_dropdown_follows_not",
       "file": "web/game_menu.js",
-      "old": "onPick: function (name) { own.write(name); picker.set(own.read()); } });",
+      "old": "onPick: function (name) { own.write(name); picker.set(own.read(), auto()); } });",
       "new": "onPick: function (name) { own.write(name); } });",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },

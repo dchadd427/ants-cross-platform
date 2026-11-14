@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""A first visit starts in the shape NEAREST the player's screen (run by ./run_tests.sh --fast and by the CI). A visit is a first one when nothing under the key `ants.aspect.v2` names a shape and the
-address has no ?aspect= that does: then both pages (the game page, which a replay and a live match are too, and the front page) start in the shape nearest the device's screen by landscape ratio, with no
-cutoff (the 8% cutoff stays only for the "fills your screen" tag), a phone held upright and a screen that cannot be asked in 16:9, and never store that shape: only a press of a selector writes the key, so
-a visitor who never pressed one follows the screen at every visit and anyone who picked a shape (16:9 included) keeps it. The old key `ants.aspect` is not read.
+"""A first visit starts in the shape NEAREST the player's screen (run by ./run_tests.sh --fast and by the CI). A visit is a first one when nothing under the key `ants.aspect.v3` names a shape for the way
+the device is held now and the address has no ?aspect= that does: then both pages (the game page, which a replay and a live match are too, and the front page) start in the shape nearest the device's screen by landscape ratio, with no
+cutoff (the 8% cutoff stays only for the "fills your screen" tag), a phone held upright and a screen that cannot be asked in 16:9 (which way a device is held is asked of its orientation, never of the screen's numbers), and never store that shape: only a press of a selector writes the key, so
+a visitor who never pressed one follows the screen at every visit and anyone who picked a shape (16:9 included) keeps it for the way it was picked in. The earlier keys are not read.
 
   - the pages' own code is RUN (node, when it is installed) on a table of screens, addresses and what a browser had stored, among them an old `ants.aspect` = 4:3 that must not give 4:3, a stored
     16:9 on a 16:10 laptop that must stay 16:9, the middles between two shapes (both sides), phones held upright and sideways, and a table with extra rows (the shape table grows: every row is
     considered with no other change), and the selectors' clicks, which must write the key and nothing else (tests/scripts/web_aspect_key_check.js). The front page's selector: a pick keeps the match, changes
     the page at once and the hand-off address to the game carries the shape (the page has no game open, so a pick never asks and never reloads);
   - what needs no browser is read from the files: the key is the one constant of each page and no call reads or writes the old key; the one place that stores a pick is the selectors' own handler; both
-    pages ask `AntsShapes.firstVisit(window)` and nothing else for the third answer; the markup of both pages starts in the 16:9 picture until that script runs (the game page's box, and the dropdowns,
+    pages ask `AntsShapes.automatic(window)` and nothing else for the third answer; the markup of both pages starts in the 16:9 picture until that script runs (the game page's box, and the dropdowns,
     which are empty until the page fills them from the table); the front page's hand-offs to the game (START, Rejoin, a game for one) pass the player's pick on (and nothing before a pick); the nearest shape computed here, from
     the game's own table (kAspectTable) and by the rule in the docs, is the one the page's code gives.
 The same cases in a real browser: tests/scripts/web_aspect_check.py (opt-in, against a running page).
@@ -26,7 +26,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SHELL = os.path.join(REPO, "web", "shell.html")
 LOBBY = os.path.join(REPO, "web", "lobby.html")
 CHECK_JS = os.path.join(REPO, "tests", "scripts", "web_aspect_key_check.js")
-NEW_KEY = "ants.aspect.v2"
+NEW_KEY = "ants.aspect.v3"
 
 
 def read(path):
@@ -44,7 +44,7 @@ class PagesMarkupStartsIn16x9AndTheScriptPicks(unittest.TestCase):
         self.assertIn("var ANTS_ASPECT = '16:9';", page)
         self.assertIn("function resolveAspect(fromAddress, remembered, firstVisit) {", page)
         self.assertIn("return { aspect: AntsShapes.parse(firstVisit) || AntsShapes.FALLBACK, source: 'default' };", page)     # nothing says otherwise: the first visit's shape, never a stored one
-        self.assertIn("ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.firstVisit(window))", page)
+        self.assertIn("ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.automatic(window))", page)
         self.assertEqual(page.count("source: 'default' }"), 1)                                                   # (one place answers 'default', and it asks the table)
 
     def test_the_one_host_of_the_picker_left_on_the_game_page_is_the_recordings_window(self):
@@ -110,7 +110,7 @@ class TheChoiceLivesUnderTheNewKey(unittest.TestCase):
         self.assertIn("var ANTS_ASPECT_KEY = '" + NEW_KEY + "';", read(SHELL))
         self.assertIn("var ASPECT_KEY = '" + NEW_KEY + "';", read(LOBBY))
         browser = read(os.path.join(REPO, "tests", "scripts", "web_aspect_check.py"))
-        self.assertIn("localStorage.setItem('" + NEW_KEY + "', '4:3')", browser)
+        self.assertIn("ants.aspect.v3", browser)
         self.assertIn("localStorage.setItem('ants.aspect', '4:3')", browser)                  # (the old key is set on purpose: it must not give 4:3)
 
 
@@ -118,20 +118,20 @@ class TheFirstVisitStartsNearTheScreen(unittest.TestCase):
     """What is read from the files: how the third answer is asked, and that nothing but a selector stores. What the pages DO is run in web_aspect_key_check.js."""
 
     def test_both_pages_ask_the_one_function_once(self):
-        self.assertEqual(read(SHELL).count("AntsShapes.firstVisit("), 1)
-        self.assertEqual(read(LOBBY).count("AntsShapes.firstVisit("), 0)                                  # (the front page has no picture of its own to start: the game page works out the first visit's shape when it loads)
-        self.assertNotIn("firstVisit", read(os.path.join(REPO, "web", "game_menu.js")))                  # (the settings menu only follows the page's shape)
+        self.assertIn("AntsShapes.automatic(window))", read(SHELL))
+        self.assertEqual(read(LOBBY).count("AntsShapes.automatic("), 0)                                  # (the front page has no picture of its own to start: the game page works out the first visit's shape when it loads)
+        self.assertNotIn("automatic(window", read(os.path.join(REPO, "web", "game_menu.js")))                  # (the settings menu only follows the page's shape)
 
     def test_only_a_press_of_a_selector_stores_the_choice(self):
         """A shape that is only the first visit's must never become a stored choice by itself: the key is written in one place of each page, and that place is the selector's handler."""
         shell, lobby = read(SHELL), read(LOBBY)
         block = shell[shell.index("ANTS_SELECTOR_BEGIN"):shell.index("ANTS_SELECTOR_END")]
-        self.assertEqual(len(re.findall(r"setItem\(\s*ANTS_ASPECT_KEY\b", shell)), 1)
-        self.assertEqual(len(re.findall(r"setItem\(\s*ANTS_ASPECT_KEY\b", block)), 1)
+        self.assertEqual(len(re.findall(r"setItem\(\s*ANTS_ASPECT_KEY\b", shell)), len(re.findall(r"setItem\(\s*ANTS_ASPECT_KEY\b", block)))      # (all of them in the selector's block: a pick, and Automatic's forgetting of the pick)
+        self.assertEqual(len(re.findall(r"removeItem\(\s*ANTS_ASPECT_KEY\b", shell)), len(re.findall(r"removeItem\(\s*ANTS_ASPECT_KEY\b", block)))
         self.assertEqual(shell.count("function antsPickShape(value) {"), 1)                                  # (the one function that a choice calls: the dropdowns' change and the settings menu)
         self.assertEqual(len(re.findall(r"antsPickShape\(", block)), 1)                                       # (its definition: the dropdowns are handed the function itself, nothing else writes the key)
         self.assertEqual(len(re.findall(r"onPick: antsPickShape\b", block)), 1)                              # (... as the one `onPick` of the picker that both dropdowns are made with)
-        self.assertNotRegex(lobby, r"(remember|setItem)\(\s*ASPECT_KEY\b")                              # (the front page has no control for the shape: it never writes the key)
+        self.assertNotRegex(lobby, r"(remember|setItem|removeItem)\(\s*ASPECT_KEY\b")                              # (the front page has no control for the shape: it never writes the key)
         shape_block = lobby[lobby.index("// SHAPE_BEGIN"):lobby.index("// SHAPE_END")]
         self.assertNotIn("remember(", shape_block)                                                       # (the block that picks the first visit's shape only reads)
         self.assertNotIn("setItem", shape_block)
@@ -153,10 +153,10 @@ class TheFirstVisitStartsNearTheScreen(unittest.TestCase):
         self.assertGreaterEqual(len(rows), 7)
         shapes = [(name, (w // math.gcd(w, h)) / (h // math.gcd(w, h))) for name, w, h in rows]
 
-        def nearest(w, h, inner):
+        def nearest(w, h, way):
             if not (w > 0 and h > 0 and math.isfinite(w) and math.isfinite(h)):
                 return "16:9"
-            if not (w >= h or (inner is not None and inner[0] > inner[1])):
+            if way == "portrait":                                                                          # (the device's own word for how it is held: the screen's numbers say nothing)
                 return "16:9"
             ratio = max(w, h) / min(w, h)
             best, best_off = None, math.inf
@@ -166,16 +166,16 @@ class TheFirstVisitStartsNearTheScreen(unittest.TestCase):
                     best, best_off = name, off
             return best
 
-        screens = [(1000 + 3 * i, 1000, None) for i in range(0, 1100)]                                   # ratios 1.0 .. 4.3
-        screens += [(1920, 1080, None), (1366, 768, None), (1440, 900, None), (3440, 1440, None), (5120, 1440, None), (1280, 1024, None), (844, 390, None), (915, 412, None), (2736, 1824, None), (3840, 1080, None)]
-        screens += [(390, 844, (390, 664)), (768, 1024, (768, 900)), (390, 844, (844, 340)), (1080, 1920, (1080, 1700)), (0, 0, None), (1920, -5, None), (float("nan"), 1080, None)]
+        screens = [(1000 + 3 * i, 1000, "landscape") for i in range(0, 1100)]                            # ratios 1.0 .. 4.3
+        screens += [(1920, 1080, "landscape"), (1366, 768, "landscape"), (1440, 900, "landscape"), (3440, 1440, "landscape"), (5120, 1440, "landscape"), (1280, 1024, "landscape"), (844, 390, "landscape"), (915, 412, "landscape"), (2736, 1824, "landscape"), (3840, 1080, "landscape")]
+        screens += [(390, 844, "portrait"), (768, 1024, "portrait"), (390, 844, "landscape"), (844, 390, "portrait"), (1080, 1920, "portrait"), (0, 0, "landscape"), (1920, -5, "landscape"), (float("nan"), 1080, "landscape")]
         script = ("const S = require(process.argv[1]); const input = JSON.parse(process.argv[2]);"
-                  "console.log(JSON.stringify(input.map(([w, h, inner]) => S.firstVisit({ screen: { width: w === null ? NaN : w, height: h }, innerWidth: inner ? inner[0] : undefined, innerHeight: inner ? inner[1] : undefined }))));")
-        payload = json.dumps([[None if (isinstance(w, float) and math.isnan(w)) else w, h, inner] for w, h, inner in screens])
+                  "console.log(JSON.stringify(input.map(([w, h, way]) => S.automatic({ screen: { width: w === null ? NaN : w, height: h, orientation: { type: way + '-primary' } } }))));")
+        payload = json.dumps([[None if (isinstance(w, float) and math.isnan(w)) else w, h, way] for w, h, way in screens])
         done = subprocess.run([shutil.which("node"), "-e", script, os.path.join(REPO, "web", "shapes.js"), payload], capture_output=True, text=True, timeout=60)
         self.assertEqual(done.returncode, 0, done.stderr)
         got = json.loads(done.stdout)
-        want = [nearest(w, h, inner) for w, h, inner in screens]
+        want = [nearest(w, h, way) for w, h, way in screens]
         self.assertEqual([(s, g) for s, g, x in zip(screens, got, want) if g != x], [])
         self.assertEqual(len(set(want) - {"16:9"}) + 1, len(rows))                                         # (the sweep reaches every shape)
 
@@ -239,6 +239,13 @@ class TheQuickHelpStartThatTheBrowserCheckTaps(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the pages' own code for the picture's shape was NOT run (tests/scripts/web_aspect_key_check.js)")
 class ThePagesOwnCode(unittest.TestCase):
+    def test_automatic_on_two_phones_with_a_fake_clock(self):
+        """tests/scripts/web_auto_shape_check.js: the page's own code on an Android-like phone (its screen numbers swap on a turn) and an iPhone-like one (they do not), the events, the 300 ms wait, a
+        change of height alone, the hand pick of each way, the earlier keys, the Automatic entry and spectators."""
+        done = subprocess.run([shutil.which("node"), os.path.join(REPO, "tests", "scripts", "web_auto_shape_check.js"), SHELL], capture_output=True, text=True, timeout=120)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("0 failures", done.stdout)
+
     def test_a_table_of_addresses_and_stored_values_and_the_selectors(self):
         done = subprocess.run([shutil.which("node"), CHECK_JS, SHELL, LOBBY], capture_output=True, text=True, timeout=120)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
