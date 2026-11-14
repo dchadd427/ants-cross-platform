@@ -336,7 +336,7 @@ async function main() {
     // ---- no other page of the site opens a hub socket ----
     {
         const before = hub.upgrades;
-        for (const name of ['matches.html', 'live.html', 'legal.html', 'mapmaker.html', 'match.html']) {
+        for (const name of ['matches.html', 'legal.html', 'mapmaker.html', 'match.html']) {
             const { page, context } = await open([800, 600], '/' + name, { wait: false });
             await sleep(700);
             check(name + ' opens no hub socket and loads no chat file', (await page.evaluate(() => !document.getElementById('gchat') && !performance.getEntriesByType('resource').some((r) => /chat\.js|hub/.test(r.name)))));

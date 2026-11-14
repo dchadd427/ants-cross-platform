@@ -1,6 +1,6 @@
 /* The Menu and the live count of the bar at the top of every page (web/site_nav.css; the same links, in the same order, as the Menu of the front page, web/home/home.js: a test keeps the two lists
    the same). The bar's markup is in each page; this file builds the Menu from the bar's own <nav> and the small links below, and asks /live for the count of live matches: when the page opens
-   (data-live="now"), or when the Menu is first opened (data-live="menu"), or never (the live page itself). The last line of the Menu is the stamped version and build
+   (data-live="now"), or when the Menu is first opened (data-live="menu"), or never. The last line of the Menu is the stamped version and build
    of the site (data-version, data-build, data-built on the bar, text only; the build stamps them in; a page nobody stamped shows no site line) and, on the map maker, its own version (data-maker). */
 (function () {
     'use strict';
@@ -24,10 +24,11 @@
         return out.join(' - ');
     }
     function paint() {
-        var n = count > 0 ? String(count) : '', lv = bar.querySelector('.sblv'), top = bar.querySelector('.sblive'), inbox = box && box.querySelector('.sbn');
-        if (lv) { lv.querySelector('.sbn').textContent = n; lv.classList.toggle('on', count > 0); }
-        if (top) { top.textContent = n + ' live'; top.hidden = count < 1; }
-        if (inbox) inbox.textContent = n;
+        var top = bar.querySelector('.sblive');
+        if (!top) return;
+        top.textContent = count + ' live';
+        top.setAttribute('aria-label', count + (count === 1 ? ' match' : ' matches') + ' live, see them on the front page');
+        top.hidden = count < 1;
     }
     function look() {
         if (asked || typeof fetch !== 'function') return;
@@ -41,7 +42,6 @@
         box = make('nav', 'sbm'); box.id = 'sbm'; box.setAttribute('aria-label', 'Menu'); box.hidden = true;
         [].forEach.call(bar.querySelectorAll('nav a'), function (a) {
             var t = a.getAttribute('aria-label') || (a.querySelector('span') || a).textContent, m = item(t, a.getAttribute('href'), a.hasAttribute('aria-current'));
-            if (a.classList.contains('sblv')) m.appendChild(make('span', 'sbn'));
             box.appendChild(m);
         });
         var small = make('p', 'sbsmall');

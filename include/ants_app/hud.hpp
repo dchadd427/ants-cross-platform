@@ -456,6 +456,7 @@ public:
     bool is_match_countdown_active() const noexcept { return show_match_start_modal_ && match_countdown_; }
     void set_match_countdown_left_ms(int64_t ms_left) noexcept { match_countdown_left_ms_ = ms_left; }
     int64_t match_countdown_left_ms() const noexcept { return match_countdown_left_ms_; }
+    const std::array<CountdownSeat, 4>& countdown_seats() const noexcept { return countdown_seats_; }       // who the card lists (its rows, and so its line)
     /// Where the Fullscreen button is (the picture's pixels): the page's button is laid over this place on the web (ants_probe 61 - 64), the native game draws its own there and calls the function that
     /// set_on_fullscreen gave when it is clicked
     LayoutRect countdown_button_rect() const noexcept { return countdown_card_layout(layout_.view()).button; }

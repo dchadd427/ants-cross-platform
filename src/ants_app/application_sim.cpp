@@ -84,6 +84,7 @@ void Application::update_simulation(float dt) {
                 // runs on the step after the dialog's last one, the match's clock shows its full time behind the dialog, and the whole time of the match is playable (the original runs the clock
                 // behind the dialog: a deliberate deviation, sim_engine.hpp)
                 hud_.update(sim_.get_world_state(), 1);
+                tick_local_countdown();
             } else if (!sim_.is_match_over()) {
                 if (!local_match_reported_ && !network_active()) {              // the first tick of a game on this computer: told once (the web page has the server count it)
                     local_match_reported_ = true;

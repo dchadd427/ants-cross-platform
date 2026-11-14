@@ -208,6 +208,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.water_hunt = true;
             p.vicinity_hunt = true;
             p.smart_counters = true;
+            p.own_ground_counters = true;            // the counters clear an enemy's bomb or fire wall on the own ground or beside a pile with a claim, not on another hill's ground (docs/BOT_FIGHT.md)
             break;
         case Level::Hard:
             p.assault = true;
@@ -240,6 +241,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.water_hunt = true;
             p.vicinity_hunt = true;
             p.smart_counters = true;
+            p.own_ground_counters = true;            // the counters clear an enemy's bomb or fire wall on the own ground or beside a pile with a claim, not on another hill's ground (docs/BOT_FIGHT.md)
             p.opportunity = true;                    // the kill batch (docs/BOT_FIGHT.md): Hard strikes the kill that one blow gives, and starts no fight that no walk reaches
             p.opportunity_still = 20;                // ... only at an enemy that has stood on its tile for a second: the ones that stop for a moment are gone when the striker comes (7 in 10 jobs)
             p.opportunity_skip_guard = true;         // ... and not at a Combat Ant at rest (its reflex meets the striker on the way)
@@ -850,6 +852,83 @@ bool harmless_lone_fire(const BotView& view, const HillInfo& hill, sim::TileCoor
         if (w.tile != tile && w.tile.chebyshev_dist(tile) <= 2) return false;
     }
     return open_ground(view.grid(), tile);
+}
+
+namespace {
+
+// The walking cost of a team's hill to a tile or to one of the tiles next to it (the tile of a bomb or a fire wall may be one that the static analysis calls blocked); -1 when it reaches none of them
+int32_t cost_next_to(const MapInfo& map, uint8_t team, sim::TileCoord tile) noexcept {
+    int32_t best = -1;
+    for (int32_t dy = -1; dy <= 1; ++dy) {
+        for (int32_t dx = -1; dx <= 1; ++dx) {
+            const int32_t c = map.walking_cost(team, sim::TileCoord{tile.x + dx, tile.y + dy});
+            if (c >= 0 && (best < 0 || c < best)) best = c;
+        }
+    }
+    return best;
+}
+
+// A team whose hill claims ground of its own against `subject`: it plays, is neither the subject nor its friend (the ally of the seat, or the seat when the subject is its ally), and has not dropped out
+bool rival_of(const BotView& view, const MapInfo& map, uint8_t team, uint8_t subject, uint8_t friend_team) noexcept {
+    if (team == subject || (friend_team < sim::MAX_PLAYERS && team == friend_team) || !map.hill(team).present) return false;
+    return !view.rows()[team].dropped;
+}
+
+// Whose ground `tile` is for the hill of `subject`; `works` lets the own ants of the seat make a pile theirs (only for the seat itself: the ants of an ally are not in the view)
+HazardGround ground_of(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile, uint8_t subject, uint8_t friend_team, bool works) noexcept {
+    // the three tiles in front of another hill's thief hole and its gate ring are that hill's own whatever the distances say
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+        if (!rival_of(view, map, t, subject, friend_team)) continue;
+        const HillInfo& other = map.hill(t);
+        for (const sim::TileCoord& e : east_tiles(other)) {
+            if (e == tile) return HazardGround::Foreign;
+        }
+        if (on_gate_ring(other, tile)) return HazardGround::Foreign;
+    }
+    const HillInfo& hill = map.hill(subject);
+    if (hill.present && tile.chebyshev_dist(hill.origin) <= plan.counter_home_radius) return HazardGround::Own;
+    const int32_t mine = cost_next_to(map, subject, tile);
+    if (mine >= 0) {
+        bool nearer_elsewhere = false;
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS && !nearer_elsewhere; ++t) {
+            if (!rival_of(view, map, t, subject, friend_team)) continue;
+            const int32_t other = cost_next_to(map, t, tile);
+            nearer_elsewhere = other >= 0 && other < mine;
+        }
+        if (!nearer_elsewhere) return HazardGround::Own;
+    }
+    // work claims do not reach into a rival's yard: within plan.counter_rival_yard tiles of a rival's hill only the claim by walking cost counts (0: no such limit)
+    bool rival_yard = false;
+    if (plan.counter_rival_yard > 0) {
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS && !rival_yard; ++t) {
+            rival_yard = rival_of(view, map, t, subject, friend_team) && tile.chebyshev_dist(map.hill(t).origin) <= plan.counter_rival_yard;
+        }
+    }
+    for (const PileView& p : view.piles()) {
+        const PileInfo* info = map.pile(p.index);
+        if (info == nullptr || !info->approach[subject].reachable() || tile.chebyshev_dist(p.anchor) > plan.counter_pile_radius + 1) continue;
+        int64_t cheapest = info->approach[subject].cost;
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+            if (rival_of(view, map, t, subject, friend_team) && info->approach[t].reachable()) cheapest = std::min<int64_t>(cheapest, info->approach[t].cost);
+        }
+        if (static_cast<int64_t>(info->approach[subject].cost) * 100 <= cheapest * static_cast<int64_t>(plan.counter_claim_percent)) return HazardGround::Claimed;
+        if (!works || rival_yard) continue;
+        for (const AntView& a : view.mine()) {
+            if ((a.holding || a.carried_points > 0 || a.state == sim::UnitState::HarvestingFood) && a.tile.chebyshev_dist(p.anchor) <= plan.counter_work_tiles) return HazardGround::Claimed;
+        }
+    }
+    return HazardGround::Foreign;
+}
+
+}  // namespace
+
+HazardGround hazard_ground(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile) noexcept {
+    return ground_of(view, map, plan, tile, view.seat(), view.ally(), true);
+}
+
+HazardGround ally_hazard_ground(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile) noexcept {
+    if (view.ally() >= sim::MAX_PLAYERS) return HazardGround::Foreign;
+    return ground_of(view, map, plan, tile, view.ally(), view.seat(), false);
 }
 
 bool harmless_stray_bomb(const BotView& view, const MapInfo& map, const HillInfo& hill, sim::TileCoord tile) noexcept {
