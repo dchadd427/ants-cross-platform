@@ -222,6 +222,17 @@ try {
     same('the level is read in any case and comes out as the lower case word', local('?map=small&bots=HARD').slice(3), bots('hard'));
     same('bots with no map: the setup screen with those bots (the player chooses the map there)', local('?bots=easy'), bots('easy'));
 
+    // the countdown card of a game on this computer: 10 seconds, for every game that runs here, a map named in the address or the setup screen; never for a room, a rejoin, a recording or a live view
+    {
+        const card = ['--start-card-seconds', '10'];
+        same('a game on this computer from the front page (a map): the card', P.startCardArguments(local('?map=tiny&name=Bob')), card);
+        same('... with bots, a map of the players and a test game too', [P.startCardArguments(local('?map=small&bots=hard')), P.startCardArguments(local('?mapfile=' + encodeURIComponent('Bomb Island.lvl'))), P.startCardArguments(local('?testmap=k7m2xq9abc12&seats=ymnn'))], [card, card, card]);
+        same('the setup screen (no map: no --play; START there begins a game on this computer) has the card too', [P.startCardArguments(local('')), P.startCardArguments(local('?bots=easy')), P.startCardArguments(local('?name=Bob'))], [card, card, card]);
+        const joined = (search) => P.joinArguments(search, true, 'example.test').args;
+        same('a room, a rejoin (a seat of a room) and a room with a map of its own have none', [P.startCardArguments(joined('?join=/ws&room=abc-def&name=Bob')), P.startCardArguments(joined('?join=/ws&room=abc-def&seat=1&name=Bob')), P.startCardArguments([...joined('?join=/ws&room=abc-def&name=Bob'), '--play'])], [[], [], []]);
+        same('a recording and a live view have none', [P.startCardArguments(['--replay', 'x.antsrep', '--aspect', '16:9']), P.startCardArguments(['--replay', 'x.antsrep', '--replay-live'])], [[], []]);
+    }
+
     // a map of the players (?mapfile=): its file in the game's maps folder (the page fetches it first), played as a game for one like an original
     const COMMUNITY = 'Bomb Island.lvl';
     same('a map of the players alone: its file in the maps folder, the start, --alone (a game for one) and the name', local('?mapfile=' + encodeURIComponent(COMMUNITY) + '&name=Bob'), ['--map', 'Original-Ants/Maps/' + COMMUNITY, '--play', '--alone', '--name', 'Bob']);

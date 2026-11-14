@@ -94,8 +94,8 @@ inline constexpr uint16_t kProtocolVersion = 23;         // 2: the Room message 
 /// A host with a seat (a game on the local network) and a dedicated server's room both do it; the simulation does not run on any machine before that first turn.
 inline constexpr uint32_t kMatchStartDelayMs = sim::kMatchStartDialogMs;
 /// Protocol 21: the COUNTDOWN. A dedicated server's room with at least kCountdownMinPeople people holds the first turn this long (30 s) instead of kMatchStartDelayMs, so that the people in it can
-/// say hello, find out who plays, and go fullscreen before the match starts; Begin carries the seconds, every machine counts them down from Begin and keeps the chat open. A game on the local network and a game on
-/// this computer keep the 5 s "Get ready" dialog (Begin carries 0). A room of exactly one person (with or without computer players) holds the first turn the shorter of the room's countdown and its own solo
+/// say hello, find out who plays, and go fullscreen before the match starts; Begin carries the seconds, every machine counts them down from Begin and keeps the chat open. A game on the local network keeps the 5 s "Get ready" dialog (Begin carries 0), and a game on this
+/// computer opens the same card only with the game's own --start-card-seconds (no Begin: ApplicationConfig::start_card_seconds). A room of exactly one person (with or without computer players) holds the first turn the shorter of the room's countdown and its own solo
 /// countdown (the server's --solo-countdown-seconds, kSoloCountdownSeconds by default; 0: the 5 s dialog); that setting is not on the wire, the Begin only carries the seconds. The simulation is untouched: no turn exists before the first one.
 inline constexpr uint32_t kMatchCountdownSeconds = 30;
 inline constexpr uint32_t kSoloCountdownSeconds = 10;
