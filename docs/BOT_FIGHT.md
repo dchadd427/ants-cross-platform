@@ -54,7 +54,7 @@ Medium and Hard now ask where a hazard lies (`hazard_ground`, `src/ants_ai/tacti
 
 The bot clears a hazard only where the old rule found it in the way and `hazard_ground` says own or claimed. A bomb that no team owns (the map's own bombs of the walled maps) is not asked where it lies (it has no yard), but the rest of the rule below holds for it too. A bot that helps its ally (Medium, Defensive style) asks the same question for the ally's hill: the ally's own ground and the piles the ally has a claim to by walking cost are answered, a third team's yard never. The rest of the rule:
 
-- an ant goes to a bomb or a fire wall only with at least 5 hit points (two blasts take 4, and the way there may cross a second bomb): the Bomber, and the Fire Ant that keeps the walls (it is chosen as keeper with 3, for the walls of its own hole, but answers an enemy wall only with 5); a worker that sets a bomb off needs 8, as before;
+- a Bomber goes for a bomb with at least 5 hit points (two blasts take 4, and the way there may cross a second bomb); a worker that sets a bomb off needs 8, as before; the Fire Ant that keeps the walls is chosen with 3 hit points and answers an enemy wall with the same 3, because a fire wall burns the ant that walks into it and does not throw it onto a second bomb (a rule of 5 for it was measured on Ghetto and cost points, so it is not made);
 - a worker sets a bomb off on purpose only on the bot's own ground and never as one of the last ants (`Tactics::reserve_of`); the Bomber and the Fire Ant do not go to a hazard beside a pile, off the own ground, when only the last ants are left;
 - while the walls of its own thief hole are wanted, the Fire Ant that keeps them goes for no enemy wall farther than 12 tiles from the bot's hill.
 

@@ -12,7 +12,7 @@
 //   AI40.7  the bench bot turtle on TREASURE against three Hard bots: before, every bot goes into its base now and then to defuse or put out fire; after, none does
 //   AI40.8  the claim by walking cost stops short of a pile twice as far as a rival's, the keeper's leash holds at 14 tiles, a team that dropped out is no rival
 //   AI40.9  a bot that helps its ally answers a bomb in the ally's yard but not one in a third team's yard
-//   AI40.10 a Fire Ant with three hit points (what a keeper is chosen with) does not go to an enemy wall, with five it does (the same rule as the Bomber's)
+//   AI40.10 the keeper of the walls is chosen with three hit points and answers an enemy wall on the own ground with three, with two it is no keeper (the same rule as the Bomber's)
 // AI40.1 is a pin of the plans; the others play scenes.
 #include <algorithm>
 #include <cstdint>
@@ -431,9 +431,9 @@ void run_ownground_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI40.10 A Fire Ant With Three Hit Points Does Not Go To An Enemy Wall (Two Blasts Would Kill It), With Five It Does: The Keeper Is Chosen With Three, For The Walls Of Its Own Hole") {
+    TEST_CASE("AI40.10 The Keeper Of The Walls Is Chosen With Three Hit Points And Answers An Enemy Wall On The Own Ground With Three (A Wall Burns, It Does Not Throw); With Two It Is Not The Keeper") {
         const TileCoord home{10, 6};
-        for (const uint16_t hp : std::initializer_list<uint16_t>{3, 5}) {
+        for (const uint16_t hp : std::initializer_list<uint16_t>{2, 3, 5}) {
             for (const bool rule : {false, true}) {
                 sim::SimulationEngine sim;
                 close_field(sim, TileCoord{50, 4});
@@ -444,7 +444,7 @@ void run_ownground_tests() {
                 sim.set_fire_at(home, 3500);
                 LevelPlan plan = scene_plan(rule);
                 plan.wall_trigger = WallTrigger::Never;
-                ASSERT_EQ(play(sim, plan, home, 100) >= 1, !rule || hp == 5);                              // (an ant heals a hit point every few hundred ticks: the first 100 are the question)
+                ASSERT_EQ(play(sim, plan, home, 100) >= 1, hp >= 3);                                       // (an ant heals a hit point every few hundred ticks: the first 100 are the question)
             }
         }
     } TEST_END();

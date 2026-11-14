@@ -132,7 +132,7 @@ struct LevelPlan {
     int32_t counter_work_tiles{4};       // ... or when an own ant that carries food or harvests is within this many tiles of the pile (not within counter_rival_yard of another hill, see below)
     int32_t counter_rival_yard{10};      // a pile within this many tiles of another team's hill is not made the bot's by work alone, whatever its ants do there (0: no such limit); a team that dropped out is no rival
     int32_t counter_keeper_leash{12};    // while walls are wanted the Fire Ant that keeps them goes for no enemy wall farther than this from the own hill (a trip to a far pile waits until it is free)
-    uint32_t counter_bomber_hp{5};       // an ant that goes to an enemy's bomb or fire wall (a Bomber, the Fire Ant that keeps the walls, a worker that sets a bomb off: that one needs 8) has at least this many hit points: one more than two blasts take away (the way there may cross a second bomb)
+    uint32_t counter_bomber_hp{5};       // a Bomber goes for a bomb with at least this many hit points: one more than two blasts take away (the way there may cross a second bomb); a worker that sets a bomb off needs 8, the Fire Ant that keeps the walls 3 (a wall burns, it does not throw)
     // power-ups, raids, guards (Medium and Hard)
     bool combat_when_attacked{true};     // Combat Ants are taken only once the enemy fights (a blow, an enemy Combat Ant or Thief in sight), not at the start of the match ...
     bool combat_when_idle{true};         // ... or when the economy has workers that stand idle with nothing to harvest (they cost nothing)

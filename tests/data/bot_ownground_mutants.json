@@ -224,10 +224,10 @@
    "expect": "AI40.9"
   },
   {
-   "id": "fire_ant_two_blasts_goes",
+   "id": "keeper_chosen_with_five",
    "file": "src/ants_ai/standard_tasks_build.cpp",
-   "old": "if (plan.own_ground_counters && keeper->hp < plan.counter_bomber_hp) continue;",
-   "new": "if (false) continue;",
+   "old": "if (a.type == sim::AntType::Fire && a.hp >= 3) {",
+   "new": "if (a.type == sim::AntType::Fire && a.hp >= 5) {",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
    "expect": "AI40.10"
   },
