@@ -28,7 +28,6 @@ LOBBY_PAGE = '<!DOCTYPE html><html><head><title>Ants (1998)</title></head><body>
 CLASSIC_PAGE = '<!DOCTYPE html><html><head><title>a stand-in page</title><link rel="stylesheet" href="/front/classic.css"></head><body><p>a stand-in page of the site</p></body></html>\n'
 MATCHES_PAGE = '<!DOCTYPE html><html><head><title>Matches - stand-in</title></head><body><div id="list-panel"></div></body></html>\n'
 MATCH_PAGE = '<!DOCTYPE html><html><head><title>Match - stand-in</title></head><body><div id="sections"></div></body></html>\n'
-LIVE_PAGE = '<!DOCTYPE html><html><head><title>Live now - stand-in</title></head><body><div id="live-h"></div></body></html>\n'
 MAPMAKER_PAGE = '<!DOCTYPE html><html><head><title>Map maker - stand-in</title></head><body><div id="mapmaker-root"></div></body></html>\n'
 GAME_PAGE = '<!DOCTYPE html><html><head><title>Ants (1998) - game</title></head><body><div id="game-stage" data-aspect="16:9"></div><p>the stand-in game page</p></body></html>\n'
 
@@ -77,8 +76,8 @@ class TheFile(unittest.TestCase):
         self.assertEqual([b.split() for b in blocks], [["return", "302", "/matches$is_args$args;"]])
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", self.conf, re.M)
         self.assertEqual([l for l in locations if "matches" in l or "watch" in l], ["= /matches", "= /watch.html"])      # (no other location could catch them: the pages themselves are files of the html location)
-        for page in ("live", "matches", "match"):
-            self.assertNotIn("location = /%s.html" % page, self.conf)            # (/live and /history are the game server's own JSON routes: the page of the matches that run now is /live-now; the .html addresses are the map's redirects)
+        for page in ("matches", "match"):
+            self.assertNotIn("location = /%s.html" % page, self.conf)            # (/live and /history are the game server's own JSON routes: the old page of the matches that run now has a redirect of its own; the .html addresses are the map's redirects)
 
     def test_the_game_page_has_no_route_of_its_own_it_is_a_file_play_html(self):
         self.assertNotIn("location = /play.html", self.conf)                               # (a file of the image: index.html copied, see the Dockerfile)
@@ -108,7 +107,7 @@ class TheRoutesRun(unittest.TestCase):
         os.makedirs(html)
         os.makedirs(os.path.join(html, "front"))
         os.makedirs(os.path.join(html, "asset_catalog"))
-        for name, text in (("lobby.html", LOBBY_PAGE), ("matches.html", MATCHES_PAGE), ("match.html", MATCH_PAGE), ("live.html", LIVE_PAGE), ("matches.css", ":root { --won: #f6d058; }\n"), ("replay_stats.css", "body.embed { padding-top: 10px; }\n"), ("replay_page.js", "window.AntsReplay = {};\n"),
+        for name, text in (("lobby.html", LOBBY_PAGE), ("matches.html", MATCHES_PAGE), ("match.html", MATCH_PAGE), ("matches.css", ":root { --won: #f6d058; }\n"), ("replay_stats.css", "body.embed { padding-top: 10px; }\n"), ("replay_page.js", "window.AntsReplay = {};\n"),
                            ("history_page.js", "window.AntsHistory = {};\n"), ("match_stats.js", "window.AntsMatchStats = {};\n"), ("match_stats.css", ".chips { display: grid; }\n"), ("death_map.js", "window.AntsDeathMap = {};\n"), ("death_map.css", ".dm-stage { position: relative; }\n"), ("index.html", GAME_PAGE), ("play.html", GAME_PAGE), ("changelog.html", CLASSIC_PAGE), ("legal.html", CLASSIC_PAGE), ("mapmaker.html", MAPMAKER_PAGE),
                            (os.path.join("asset_catalog", "index.html"), CLASSIC_PAGE), (os.path.join("front", "classic.css"), ":root { --clay: #db4b13; }\n")):
             with open(os.path.join(html, name), "w", encoding="utf-8") as f:

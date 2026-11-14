@@ -453,9 +453,11 @@ bool Room::start_lobby(uint32_t now_ms, uint8_t roster, const std::vector<std::p
         bot_specs_.push_back(bot);
         fill_seats_ = static_cast<uint8_t>(fill_seats_ | (1u << bot.seat));
     }
-    // Protocol 21: the people who play decide whether the first turn waits for a countdown (the Begin of this start tells the same seconds that the session holds the turn for)
+    // Protocol 21: the people who play decide whether the first turn waits for a countdown (the Begin of this start tells the same seconds that the session holds the turn for): two or more people
+    // hold it the room's countdown, exactly one person the shorter of that and the solo countdown (0 there: the plain 5 s dialog), nobody (the server's own match of computer players) none
     const uint32_t people = static_cast<uint32_t>(lobby_.humans());
-    const uint32_t countdown = people >= net::kCountdownMinPeople ? std::min(spec_.countdown_s, net::kMaxCountdownSeconds) : 0u;
+    const uint32_t room_countdown = std::min(spec_.countdown_s, net::kMaxCountdownSeconds);
+    const uint32_t countdown = people >= net::kCountdownMinPeople ? room_countdown : people == 1 ? std::min(spec_.solo_countdown_s, room_countdown) : 0u;
     lobby_.set_countdown_seconds(countdown);
     begin_delay_ms_ = countdown != 0 ? countdown * 1000u : net::kMatchStartDelayMs;
     if (seated && lobby_.start(seed_, map_.hash, now_ms, teams)) {
@@ -1235,6 +1237,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.max_catch_up_ms = spec_.max_catch_up_ms;
     s.resume_countdown_ms = spec_.resume_countdown_ms;
     s.countdown_s = spec_.countdown_s;
+    s.solo_countdown_s = spec_.solo_countdown_s;
     s.connections = static_cast<uint32_t>(connections_.size());
     const bool stale = !stale_path_.empty() && restart_store_ != nullptr && restart_store_->is_stale(stale_path_);
     s.record_kept = record_ != nullptr || stale;                // (a file that is still there is a record that a restart would use: never "not kept" while it is)

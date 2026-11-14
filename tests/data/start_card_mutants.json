@@ -1,0 +1,175 @@
+{
+ "note": "Mutants of the start card of a room of one person for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): who counts as a person, the shorter of the room's and the solo count, 0 meaning the 5 s dialog, the session holding what the Begin says, the setting's default, key, range and status against test_server S3.192, S3.193 and S3.264, the command line against tests/scripts/test_ants_server.sh --part options, and the card's own words against test_hud_layout. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/start_card_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "people_count_bots",
+   "file": "src/ants_server/room.cpp",
+   "old": "const uint32_t people = static_cast<uint32_t>(lobby_.humans());",
+   "new": "const uint32_t people = static_cast<uint32_t>(lobby_.players());",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.192 timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.192"
+  },
+  {
+   "id": "nobody_gets_the_card",
+   "file": "src/ants_server/room.cpp",
+   "old": "people == 1 ? std::min(",
+   "new": "people <= 1 ? std::min(",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.192 timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.192"
+  },
+  {
+   "id": "solo_ignores_the_room_countdown",
+   "file": "src/ants_server/room.cpp",
+   "old": "std::min(spec_.solo_countdown_s, room_countdown)",
+   "new": "spec_.solo_countdown_s",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.192 timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.192"
+  },
+  {
+   "id": "solo_zero_follows_the_room",
+   "file": "src/ants_server/room.cpp",
+   "old": "people == 1 ? std::min(spec_.solo_countdown_s, room_countdown)",
+   "new": "people == 1 ? (spec_.solo_countdown_s == 0 ? room_countdown : std::min(spec_.solo_countdown_s, room_countdown))",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.192 timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.192"
+  },
+  {
+   "id": "one_person_gets_no_card",
+   "file": "src/ants_server/room.cpp",
+   "old": "people == 1 ? std::min(spec_.solo_countdown_s, room_countdown) : 0u",
+   "new": "0u",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.192 timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.192"
+  },
+  {
+   "id": "session_holds_5s_for_one_person",
+   "file": "src/ants_server/room.cpp",
+   "old": "begin_delay_ms_ = countdown != 0 ? countdown * 1000u : net::kMatchStartDelayMs;",
+   "new": "begin_delay_ms_ = countdown != 0 && people >= net::kCountdownMinPeople ? countdown * 1000u : net::kMatchStartDelayMs;",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.192 timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.192"
+  },
+  {
+   "id": "session_holds_the_room_countdown",
+   "file": "src/ants_server/room.cpp",
+   "old": "begin_delay_ms_ = countdown != 0 ? countdown * 1000u : net::kMatchStartDelayMs;",
+   "new": "begin_delay_ms_ = countdown != 0 ? room_countdown * 1000u : net::kMatchStartDelayMs;",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.192 timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.192"
+  },
+  {
+   "id": "begin_tells_the_room_countdown",
+   "file": "src/ants_server/room.cpp",
+   "old": "lobby_.set_countdown_seconds(countdown);",
+   "new": "lobby_.set_countdown_seconds(room_countdown);",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.192 timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.192"
+  },
+  {
+   "id": "wait_leaks_into_the_turns",
+   "file": "src/ants_server/room.cpp",
+   "old": "begin_delay_ms_ = countdown != 0 ? countdown * 1000u : net::kMatchStartDelayMs;",
+   "new": "begin_delay_ms_ = countdown != 0 ? countdown * 1000u : net::kMatchStartDelayMs; if (countdown == 10) begin_delay_ms_ += 30u;",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.264 timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.264"
+  },
+  {
+   "id": "default_spec_drops_the_solo_setting",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "    spec.solo_countdown_s = limits_.solo_countdown_s;\n",
+   "new": "",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.193 timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.193"
+  },
+  {
+   "id": "control_key_ignored",
+   "file": "src/ants_server/control.cpp",
+   "old": "    spec.solo_countdown_s = static_cast<uint32_t>(solo_countdown_s);\n",
+   "new": "",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.193 timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.193"
+  },
+  {
+   "id": "control_key_range_too_wide",
+   "file": "src/ants_server/control.cpp",
+   "old": "number(\"solo_countdown_seconds\", 0, net::kMaxCountdownSeconds, solo_countdown_s)",
+   "new": "number(\"solo_countdown_seconds\", 0, net::kMaxCountdownSeconds + 1, solo_countdown_s)",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.193 timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.193"
+  },
+  {
+   "id": "manager_accepts_a_long_solo_setting",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "if (spec.solo_countdown_s > net::kMaxCountdownSeconds)",
+   "new": "if (spec.solo_countdown_s > net::kMaxCountdownSeconds + 1)",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.193 timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.193"
+  },
+  {
+   "id": "status_hides_the_solo_setting",
+   "file": "src/ants_server/room.cpp",
+   "old": "    s.solo_countdown_s = spec_.solo_countdown_s;\n",
+   "new": "",
+   "build": "test_server",
+   "test": "ANTS_TEST_FILTER=S3.193 timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.193"
+  },
+  {
+   "id": "option_range_too_wide",
+   "file": "src/ants_server/main.cpp",
+   "old": "{ lo = 0; hi = 60; target = &o.solo_countdown_s; }",
+   "new": "{ lo = 0; hi = 61; target = &o.solo_countdown_s; }",
+   "build": [
+    "ants_server"
+   ],
+   "test": "BUILD_DIR=build timeout 600 ./tests/scripts/test_ants_server.sh --part options"
+  },
+  {
+   "id": "option_default_is_off",
+   "file": "src/ants_server/main.cpp",
+   "old": "long solo_countdown_s{static_cast<long>(ants::net::kSoloCountdownSeconds)};",
+   "new": "long solo_countdown_s{0};",
+   "build": [
+    "ants_server"
+   ],
+   "test": "BUILD_DIR=build timeout 600 ./tests/scripts/test_ants_server.sh --part options"
+  },
+  {
+   "id": "card_alone_counts_computers",
+   "file": "src/ants_app/hud_match_start.cpp",
+   "old": "who.plays && !who.computer ? 1u : 0u",
+   "new": "who.plays ? 1u : 0u",
+   "build": "test_hud_layout",
+   "test": "timeout 600 ./build/tests/test_app/test_hud_layout"
+  },
+  {
+   "id": "card_alone_never",
+   "file": "src/ants_app/hud_match_start.cpp",
+   "old": "people_in <= 1 ?",
+   "new": "people_in < 1 ?",
+   "build": "test_hud_layout",
+   "test": "timeout 600 ./build/tests/test_app/test_hud_layout"
+  },
+  {
+   "id": "card_alone_for_two",
+   "file": "src/ants_app/hud_match_start.cpp",
+   "old": "people_in <= 1 ?",
+   "new": "people_in <= 2 ?",
+   "build": "test_hud_layout",
+   "test": "timeout 600 ./build/tests/test_app/test_hud_layout"
+  }
+ ]
+}

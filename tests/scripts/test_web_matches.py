@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""The pages of the match history (run by ./run_tests.sh --fast and by the CI): the list of every match (web/matches.html), one match with its stats and replay (web/match.html), the matches that run now
-(web/live.html), the code that they share (web/history_page.js), their stylesheet (web/matches.css), and the stats and the frame mode of the game page (web/shell.html, web/replay_stats.css).
+"""The pages of the match history (run by ./run_tests.sh --fast and by the CI): the list of every match (web/matches.html), one match with its stats and replay (web/match.html), the code that they share (web/history_page.js), their stylesheet (web/matches.css), and the stats and the frame mode of the game page (web/shell.html, web/replay_stats.css).
 docs/REPLAYS.md "The match pages" says what they do; the way to them from the other pages is tests/scripts/test_web_replay.py.
 
   - the shared code is RUN (node, when it is installed): the ids, the names of the seats, the sides of a record, the numbers of a seat, the state of the list and the words that it asks the server for (every
@@ -21,7 +20,7 @@ import unittest
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 HELPERS_JS = os.path.join(REPO, "tests", "scripts", "web_history_check.js")
 PICTURES_JS = os.path.join(REPO, "tests", "scripts", "web_history_pictures_check.js")
-PAGES = ("matches.html", "match.html", "live.html")
+PAGES = ("matches.html", "match.html")
 
 
 def read(*parts):
@@ -160,7 +159,7 @@ class TheListPage(unittest.TestCase):
 
     def test_the_list_and_the_phone_have_what_the_pictures_show(self):
         css = read("web", "matches.css")
-        for needle in (".m::after { content: \"\\203a\";", ".tools.open .r2 .sel:not(.sort) { display: grid; }", ".m.liveentry { grid-template-areas:", ".pager .pg.num { display: none; }", ".tbl { display: none; }", ".seatcards { display: grid;"):
+        for needle in (".m::after { content: \"\\203a\";", ".tools.open .r2 .sel:not(.sort) { display: grid; }", ".pager .pg.num { display: none; }", ".tbl { display: none; }", ".seatcards { display: grid;"):
             self.assertIn(needle, css, needle)
 
 
@@ -215,21 +214,6 @@ class TheMatchPage(unittest.TestCase):
             self.assertIn(words, self.page + read("web", "history_page.js"), words)
         self.assertIn("r.data.error === 'no such match'", self.page)                                         # (the server's own words for an id that is not in the history)
         self.assertIn("if (!id) {", self.page)                                                               # (an address that is no id asks for nothing)
-
-
-class TheLivePage(unittest.TestCase):
-    page = read("web", "live.html")
-
-    def test_it_looks_at_the_door_every_ten_seconds_and_says_what_the_picture_shows(self):
-        self.assertIn("fetch('/live', { cache: 'no-store', credentials: 'omit'", self.page)
-        self.assertIn("LIVE_EVERY = 10000", self.page)
-        self.assertIn("document.hidden", self.page)                                                          # (a page that is out of sight does not ask)
-        self.assertIn("R.liveEntriesOf(", self.page)                                                         # (the door's answer goes through the shared code that keeps only what is well formed)
-        self.assertIn("'/play?live=' + encodeURIComponent(e.id)", self.page)
-        for words in ("Matches being played right now.", "No match is on right now.", "Watch live", "so far", "See all matches", "This server doesn’t show matches that are being played.",
-                      "A match shows up here after its first 30 seconds, and this list updates by itself. The picture is about ' + R.LIVE_LAG + ' seconds behind the players."):
-            self.assertIn(words, self.page, words)
-        self.assertNotIn("/history", self.page)                                                              # (a running match has no stats: the page does not ask for any)
 
 
 class TheGamePagesStats(unittest.TestCase):
@@ -345,9 +329,7 @@ class ThePictures(unittest.TestCase):
 
     def test_every_box_that_is_built_again_forgets_its_old_squares(self):
         self.assertIn("pics.forget('list');", read("web", "matches.html"))
-        self.assertIn("pics.forget('live');", read("web", "live.html"))
         self.assertIn("pics.node(rec.map, 'list')", read("web", "matches.html"))
-        self.assertIn("pics.node(e.map, 'live')", read("web", "live.html"))
         self.assertIn("pics.node(rec.map, 'page')", read("web", "match.html"))
 
     def test_the_check_can_fail(self):
@@ -380,7 +362,7 @@ class TheDocument(unittest.TestCase):
     def test_the_replays_page_describes_the_pages_the_stats_and_what_a_later_section_reads(self):
         text = read("docs", "REPLAYS.md")
         self.assertIn("## The match pages", text)
-        for needle in ("web/matches.html", "web/match.html", "web/live.html", "web/history_page.js", "embed=1", "details", "Show replay", "/matches", "/live-now"):
+        for needle in ("web/matches.html", "web/match.html", "web/history_page.js", "embed=1", "details", "Show replay", "/matches"):
             self.assertIn(needle, text, needle)
         self.assertNotIn("web/watch.html", text)                                                             # (the old list is gone: one home for the topic)
 

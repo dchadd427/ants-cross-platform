@@ -61,7 +61,7 @@ class TheText(unittest.TestCase):
         self.assertEqual(len(re.findall(r"location\s+= /lobbies\s*\{", CONF)), 1)
         self.assertEqual(len(re.findall(r"location\s+@lobbies_off\s*\{", CONF)), 1)
         self.assertNotRegex(CONF, r"location\s+(\^~|~\*?)\s+[^\n]*lobbies")
-        self.assertEqual([l for l in locations if "live" in l or "replays" in l], ["= /live-now", "= /replays", "^~ /replays/", "= /live", "^~ /live/", "@replays_off"])      # (the neighbours are as they were)
+        self.assertEqual([l for l in locations if "live" in l or "replays" in l], ["= /live-now", "= /live-now/", "= /live.html", "= /replays", "^~ /replays/", "= /live", "^~ /live/", "@replays_off"])      # (the neighbours are as they were)
 
     def test_only_a_plain_get_without_a_query_goes_through_and_the_checks_come_first(self):
         self.assertIn("if ($request_method != GET) { return 405; }", BLOCK)

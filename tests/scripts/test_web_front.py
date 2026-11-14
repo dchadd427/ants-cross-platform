@@ -392,7 +392,7 @@ class TheWayIntoTheImage(unittest.TestCase):
 
     def test_the_ci_looks_for_the_pictures_the_font_the_scripts_and_the_stylesheet_in_the_image(self):
         ci = read(".github", "workflows", "ci.yml")
-        self.assertRegex(ci, r"ls -l index\.html play\.html lobby\.html matches\.html match\.html live\.html matches\.css history_page\.js replay_stats\.css replay_page\.js [^\n]*front/logo\.png front/LibreFranklin-Medium\.ttf front/ants\.png front/lobby_rules\.js front/lobby_net\.js front/lobby_chat\.js front/lobby_chat\.css front/map_picker\.css front/classic\.css")
+        self.assertRegex(ci, r"ls -l index\.html play\.html lobby\.html matches\.html match\.html matches\.css history_page\.js replay_stats\.css replay_page\.js [^\n]*front/logo\.png front/LibreFranklin-Medium\.ttf front/ants\.png front/lobby_rules\.js front/lobby_net\.js front/lobby_chat\.js front/lobby_chat\.css front/map_picker\.css front/classic\.css")
 
     def test_git_does_not_ignore_the_pictures(self):
         ignore = read(".gitignore")

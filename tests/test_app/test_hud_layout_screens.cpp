@@ -1125,6 +1125,46 @@ void test_countdown_card(const assets::AssetArchive& arc) {
         const auto* mine = find(rr, "Maple (you)");
         check(mine != nullptr && mine->y >= l.seat[2].y && mine->y < l.seat[2].bottom() && mine->x > l.seat[2].x && mine->x < l.seat[2].right(), "countdown: the player's own name is in its color's box (Blue is the third)");
     }
+    // one person alone (a computer player beside, or nobody): the same card, the count and the Fullscreen button, the colors that play, and a line of its own where two or more people are told to say hello
+    {
+        const std::array<CountdownSeat, 4> alone = {CountdownSeat{true, false, "Juniper"}, CountdownSeat{true, true, "Pip (bot, Hard)"}, CountdownSeat{}, CountdownSeat{}};
+        const auto line_at_hint = [&](bool chat, const std::array<CountdownSeat, 4>& who, uint8_t me, const CountdownCardLayout& expect_l, bool& found_card) {
+            RecordingRenderer rr(arc);
+            sim::WorldState world;
+            HUD hud;
+            hud.init(me);
+            hud.options().chat = chat;
+            hud.start_match_countdown(10000, who);
+            ViewportCamera camera;
+            hud.render(rr, arc, world, camera);
+            const CountdownCardLayout l = countdown_card_layout(hud.layout().view());
+            found_card = l.card.x == expect_l.card.x && find(rr, "10") != nullptr && find(rr, "seconds to the start") != nullptr && find(rr, "Fullscreen") != nullptr;
+            for (const auto& t : rr.texts) {
+                if (t.y == l.hint_y && t.size == FontSize::Px18) return t.text;
+            }
+            return std::string();
+        };
+        HUD probe;
+        probe.init(0);
+        const CountdownCardLayout pl = countdown_card_layout(probe.layout().view());
+        bool card_alone = false;
+        bool card_group_chat = false;
+        bool card_group_quiet = false;
+        const std::string solo_on = line_at_hint(true, alone, 0, pl, card_alone);
+        const std::string solo_off = line_at_hint(false, alone, 0, pl, card_alone);
+        const std::string group_on = line_at_hint(true, seats, 2, pl, card_group_chat);
+        const std::string group_off = line_at_hint(false, seats, 2, pl, card_group_quiet);
+        check(card_alone && card_group_chat && card_group_quiet, "countdown alone: the card has the count and the Fullscreen button, as with two or more people");
+        check(!solo_on.empty() && solo_on == solo_off, "countdown alone: one line under the colors, the same whether the chat is on or off");
+        check(!group_on.empty() && !group_off.empty() && group_on != group_off && solo_on != group_on && solo_on != group_off, "countdown alone: that line is not the invitation to the chat (or the soon line) that two or more people get");
+        // a card whose only people are one (the others computer players) and one with nobody listed are both 'alone'
+        const std::array<CountdownSeat, 4> two_bots = {CountdownSeat{true, false, "Juniper"}, CountdownSeat{true, true, "Pip (bot, Hard)"}, CountdownSeat{true, true, "Moss (bot, Easy)"}, CountdownSeat{}};
+        bool card_bots = false;
+        check(line_at_hint(true, two_bots, 0, pl, card_bots) == solo_on, "countdown alone: one person among several computer players is alone");
+        const std::array<CountdownSeat, 4> two_people = {CountdownSeat{true, false, "Juniper"}, CountdownSeat{true, false, "Sam"}, CountdownSeat{}, CountdownSeat{}};
+        bool card_two = false;
+        check(line_at_hint(true, two_people, 0, pl, card_two) == group_on, "countdown alone: two people are two people, whatever else plays");
+    }
     // the count follows what the application hands over every frame; the end says so
     for (const auto& step : std::vector<std::pair<int64_t, std::pair<std::string, std::string>>>{{30000, {"30", "seconds to the start"}}, {1001, {"2", "seconds to the start"}}, {1, {"1", "seconds to the start"}},
                                                                                               {0, {"0", "starting..."}}, {-300, {"0", "starting..."}}}) {

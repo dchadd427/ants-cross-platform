@@ -78,7 +78,7 @@ RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web \
 RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n -k "$f" && test -s "$f.gz" || exit 1; done
 
 # The pages of web/ (the front page, the pages of the match history, the legal page, the map maker), and the stamps of the build that the compile does not read: the build timestamp (JS, WASM and data bundles share lockstep versioning) and the game's version text
-# (the file VERSION) go into the game page that the link made from shell.html (its footer; the same sed puts the placeholders of lobby.html, the front page: its footer, and of the pages that have the bar at the top, matches.html, match.html, live.html,
+# (the file VERSION) go into the game page that the link made from shell.html (its footer; the same sed puts the placeholders of lobby.html, the front page: its footer, and of the pages that have the bar at the top, matches.html, match.html,
 # legal.html and mapmaker.html: the data attributes of the bar, which the Menu shows as its last line), and the map maker's own version (web/MAPMAKER_VERSION) is checked against web/mapmaker.html
 COPY web/ ./web/
 RUN BUILD_TIME=$(date +%s) && \
@@ -87,8 +87,8 @@ RUN BUILD_TIME=$(date +%s) && \
     case "${GAME_VERSION}" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "VERSION is not MAJOR.MINOR.PATCH: ${GAME_VERSION}" >&2; exit 1 ;; esac && \
     case "${MAPMAKER_VERSION}" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "MAPMAKER_VERSION is not MAJOR.MINOR.PATCH: ${MAPMAKER_VERSION}" >&2; exit 1 ;; esac && \
     grep -q "data-maker=\"${MAPMAKER_VERSION}\"" web/mapmaker.html && \
-    sed -i "s/@@BUILD_TIMESTAMP@@/${BUILD_TIME}/g; s/@@GAME_VERSION@@/${GAME_VERSION}/g" build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/live.html web/legal.html web/mapmaker.html && \
-    ! grep -q '@@GAME_VERSION@@' build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/live.html web/legal.html web/mapmaker.html
+    sed -i "s/@@BUILD_TIMESTAMP@@/${BUILD_TIME}/g; s/@@GAME_VERSION@@/${GAME_VERSION}/g" build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/legal.html web/mapmaker.html && \
+    ! grep -q '@@GAME_VERSION@@' build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/legal.html web/mapmaker.html
 
 # Append dynamic build cache-buster to the index.js script tag (only a <script> tag: the page adds the ?v= to its own script address itself, and a sed over every `src=index.js`
 # gave that one a second ?v=) to prevent stale browser caching, and write the exact size of index.data into the page (the page refuses a download of another size: a captive portal's
@@ -116,19 +116,19 @@ RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitin
     echo "${BUILD_ID}" > /src/build_id.txt && \
     echo "${BUILD_DATE}" > /src/build_date.txt && \
     PAGE=/src/build_web/src/ants_app/index.html && \
-    sed -i "s/@@BUILD_ID@@/${BUILD_ID}/g; s/@@BUILD_DATE@@/${BUILD_DATE}/g" "$PAGE" /src/web/lobby.html /src/web/matches.html /src/web/match.html /src/web/live.html /src/web/legal.html /src/web/mapmaker.html && \
-    ! grep -q '@@BUILD_' "$PAGE" /src/web/lobby.html /src/web/matches.html /src/web/match.html /src/web/live.html /src/web/legal.html /src/web/mapmaker.html && \
+    sed -i "s/@@BUILD_ID@@/${BUILD_ID}/g; s/@@BUILD_DATE@@/${BUILD_DATE}/g" "$PAGE" /src/web/lobby.html /src/web/matches.html /src/web/match.html /src/web/legal.html /src/web/mapmaker.html && \
+    ! grep -q '@@BUILD_' "$PAGE" /src/web/lobby.html /src/web/matches.html /src/web/match.html /src/web/legal.html /src/web/mapmaker.html && \
     grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" "$PAGE" && \
     grep -Eq "id=\"?game-build-date\"?>\\(${BUILD_DATE}\\)<" "$PAGE" && \
     grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" /src/web/lobby.html && grep -Eq "id=\"?game-build-date\"?>\\(${BUILD_DATE}\\)<" /src/web/lobby.html && \
-    for BARRED in matches match live legal mapmaker; do \
+    for BARRED in matches match legal mapmaker; do \
         grep -Eq "data-build=\"${BUILD_ID}\"" /src/web/${BARRED}.html && grep -Eq "data-built=\"${BUILD_DATE}\"" /src/web/${BARRED}.html || exit 1; \
     done
 
 # The pages carry two placeholders for a site label, which the production site does not use: they become nothing (the same layer as the build id: the compile layers above do not depend on it).
 RUN cp /src/web/lobby.html /src/lobby.html && \
-    cp /src/web/matches.html /src/matches.html && cp /src/web/match.html /src/match.html && cp /src/web/live.html /src/live.html && cp /src/web/legal.html /src/legal.html && if [ -f /src/web/mapmaker.html ]; then cp /src/web/mapmaker.html /src/mapmaker.html; fi && \
-    for PAGE in /src/build_web/src/ants_app/index.html /src/lobby.html /src/matches.html /src/match.html /src/live.html; do \
+    cp /src/web/matches.html /src/matches.html && cp /src/web/match.html /src/match.html && cp /src/web/legal.html /src/legal.html && if [ -f /src/web/mapmaker.html ]; then cp /src/web/mapmaker.html /src/mapmaker.html; fi && \
+    for PAGE in /src/build_web/src/ants_app/index.html /src/lobby.html /src/matches.html /src/match.html; do \
         sed -i "s|@@SITE_TITLE@@||g; s|@@SITE_FOOTER@@||g" "$PAGE" || exit 1; \
         if grep -q '@@SITE_' "$PAGE"; then echo "a site placeholder is left in $PAGE" >&2; exit 1; fi; \
     done
@@ -191,12 +191,11 @@ COPY Community-Maps/previews/ /srv/community-maps/previews/
 COPY Community-Maps/*.lvl Community-Maps/*.LVL /srv/community-maps/files/
 COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/
 
-# The match history and the replays (docs/REPLAYS.md "The match pages", "Watching a replay"): the list of every match (matches.html), one match (match.html) and the matches that run now (live.html), linked from
+# The match history and the replays (docs/REPLAYS.md "The match pages", "Watching a replay"): the list of every match (matches.html) and one match (match.html), linked from
 # the header of the front page and the footers (with the site label, the version and the build put in), their stylesheet (matches.css), the stats sections of the match page (match_stats.js and match_stats.css), the map of deaths (death_map.js and death_map.css, also on the game page in replay mode) and the helpers
 # that they share with the game page (replay_page.js, history_page.js, and replay_stats.css for the stats and the frame mode of the game page). The game page plays a recording as play?replay=<file> (and in the frame of match.html as play?replay=<file>&embed=1).
 COPY --from=builder /src/matches.html /usr/share/nginx/html/matches.html
 COPY --from=builder /src/match.html /usr/share/nginx/html/match.html
-COPY --from=builder /src/live.html /usr/share/nginx/html/live.html
 COPY web/matches.css /usr/share/nginx/html/matches.css
 COPY web/site_nav.css /usr/share/nginx/html/site_nav.css
 COPY web/site_nav.js /usr/share/nginx/html/site_nav.js
