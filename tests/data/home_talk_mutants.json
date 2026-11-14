@@ -292,10 +292,38 @@
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
   {
-   "id": "the_low_window_gets_the_row_and_the_taller_dock",
+   "id": "the_buttons_leave_the_box_in_a_wide_window",
    "file": "web/home/talk.css",
-   "old": "(min-width: 701px) and (max-width: 1000px) and (min-height: 501px) { .gc[data-open",
-   "new": "(min-width: 701px) and (max-width: 1000px) { .gc[data-open",
+   "old": "grid-template-areas: \"f f f\" \"t . s\"; gap: 0 8px;",
+   "new": "grid-template-areas: \"f t s\"; gap: 0 8px;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "a_wide_window_lets_the_box_grow_to_four_lines",
+   "file": "web/home/talk.css",
+   "old": "max-height: 66px; padding: 11px 10px;",
+   "new": "max-height: 110px; padding: 11px 10px;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "a_low_window_lets_the_box_grow",
+   "file": "web/home/talk.css",
+   "old": "    .gt-on textarea.gc-input { max-height: 44px; }",
+   "new": "    .gt-on textarea.gc-input { max-height: 110px; }",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "a_low_window_stacks_the_buttons_under_the_field",
+   "file": "web/home/talk.css",
+   "old": "grid-template-areas: \"f t s\"; align-items: center;",
+   "new": "grid-template-areas: \"f f f\" \"t . s\"; align-items: center;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_low_window_gets_the_taller_dock",
+   "file": "web/home/talk.css",
+   "old": "(min-width: 701px) and (min-height: 501px) { .gc[data-open",
+   "new": "(min-width: 701px) { .gc[data-open",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
   {
