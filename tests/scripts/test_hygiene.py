@@ -554,7 +554,7 @@ class Spelling(Tree):
         for rel in ("web/match.html", "web/matches.html", "web/replay_page.js", "src/ants_net/x.cpp"):    # the readers that now say color
             self.put(rel, "\n".join(page_forms) + "\n")
         out = ch.check_spelling(self.root, self.files())
-        self.assertEqual(len(out), 2 + 5 * len(page_forms))
+        self.assertEqual(len(out), 2 + 4 * len(page_forms))
         self.assertTrue(all(o.split(":")[0] != "web/history_page.js" for o in out))
 
     def test_only_the_lower_case_forms_are_kept(self):

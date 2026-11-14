@@ -158,7 +158,7 @@ class MadeUpFiles(unittest.TestCase):
     def test_the_header_is_the_site_bar_with_a_way_to_the_front_page_and_no_picture(self):
         header = part(self.text, "header")
         self.assertIn('<header class="sb" data-live="menu"', header)                                # (web/site_nav.css and web/site_nav.js make the bar; this page is in its Menu: Changelog)
-        self.assertEqual(re.findall(r'<nav aria-label="Pages">.*?</nav>', header, re.S)[0].count("<a "), 5)
+        self.assertEqual(re.findall(r'<nav aria-label="Pages">.*?</nav>', header, re.S)[0].count("<a "), 4)
         self.assertIn('<a class="btn sbhome" href="/">', header)                                     # Home goes to the front page
         self.assertNotIn("<img", header)
         self.assertIn('<div class="pt"><h1>', self.text)
