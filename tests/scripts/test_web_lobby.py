@@ -334,14 +334,14 @@ class TheFrontPageMarkup(PageCase):
         self.assertEqual(len(re.findall(r"localStorage\.removeItem|localStorage\.clear|sessionStorage\.clear", self.page)), 0)
 
     def test_the_footer_links_the_name_card_and_the_test_room_buttons_are_there(self):
-        self.assertEqual(self.page.count("<nav "), 1, "the header is the logo, the tagline and the one button of Matches: the other links are in the footer")
-        self.assertIn('<header class="mast"><h1><img src="front/logo.png" alt="Ants!" width="581" height="218"></h1>', self.markup)
+        self.assertEqual(self.page.count("<nav "), 1, "the header is the name, the tagline and the one button of Matches: the other links are in the footer")
+        self.assertIn('<header class="mast"><h1>Ants!</h1>', self.markup)
         self.assertIn('<a class="btn sm" href="/matches" id="watch-top"', self.markup)                  # (the one button of the header, the right of the row: test_web_replay.py)
         nav = self.page[self.page.index('<nav aria-label="Footer links">'):]
         nav = nav[:nav.index("</nav>")]
-        self.assertEqual(re.findall(r">(How it works|Matches|Live now|Sprites and sounds|Changelog|GitHub|Feedback|Legal)</(?:a|button)>", nav),
-                         ["How it works", "Matches", "Live now", "Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal"])
-        for needle in ('href="/matches" id="watch-link"', 'href="/live-now"', 'href="/asset_catalog/"', 'href="/changelog"', 'href="https://github.com/dchadd427/ants-cross-platform"',
+        self.assertEqual(re.findall(r">(How it works|Matches|Sprites and sounds|Changelog|GitHub|Feedback|Legal)</(?:a|button)>", nav),
+                         ["How it works", "Matches", "Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal"])
+        for needle in ('href="/matches" id="watch-link"', 'href="/asset_catalog/"', 'href="/changelog"', 'href="https://github.com/dchadd427/ants-cross-platform"',
                        'href="https://github.com/dchadd427/ants-cross-platform/issues"', 'href="/legal"'):
             self.assertIn(needle, nav, needle)
         self.assertIn('id="game-version"', self.page)
@@ -371,7 +371,7 @@ class TheFrontPageMarkup(PageCase):
         self.assertIsNotNone(found, "the Discord link is the last thing of the header, right after Matches")
         self.assertEqual(hashlib.sha256(found.group(2).encode()).hexdigest(), DISCORD_MARK_SHA256, "the mark is Discord's own glyph (Simple Icons, CC0), as it is, not redrawn")
         self.assertEqual(header.count('id="discord-top"'), 1)
-        self.assertEqual(len(re.findall(r"<img", header)), 1, "the logo is the header's only picture: the mark is inline")
+        self.assertEqual(len(re.findall(r"<img", header)), 0, "the header has no picture: the mark is inline")
         self.assertEqual(self.page.count("discord.gg"), 1)
 
     def test_nothing_opens_a_new_tab_but_the_links_that_leave_the_game_and_the_explicit_windows(self):
@@ -462,9 +462,6 @@ class TheGamePage(PageCase):
         header = re.search(r'<a href="/" id="menu-btn"([^>]*)>Menu</a>', self.page)
         self.assertIsNotNone(header)
         self.assertNotIn("target=", header.group(1))
-        logo = re.search(r'<a href="/" id="logo-link"([^>]*)>\s*<img src="front/logo\.png"', self.page)                  # (the logo is the Menu's twin: the way back too)
-        self.assertIsNotNone(logo)
-        self.assertNotIn("target=", logo.group(1))
         footer = re.search(r'<a href="/" id="menu-link"([^>]*)>Menu</a>', self.page)
         self.assertIsNotNone(footer)
         self.assertNotIn("target=", footer.group(1))
@@ -472,10 +469,10 @@ class TheGamePage(PageCase):
         self.assertNotIn(">Play online<", self.page)
 
     def test_it_asks_before_it_leaves_a_game_that_runs_or_a_room_that_is_joined(self):
-        self.assertEqual(self.page.count("window.confirm('Leave the game and go back to the menu?')"), 1)           # (one question for the logo, the Menu button and the footer's link)
+        self.assertEqual(self.page.count("window.confirm('Leave the game and go back to the menu?')"), 1)           # (one question for the Menu button, the recording's Home button and the footer's link)
         block = self.page[self.page.index("THE WAY BACK TO THE MENU"):]
         block = block[:block.index("// The fullscreen mouse: Locked")]
-        self.assertIn("['logo-link', 'menu-btn', 'menu-link'].forEach(function (id) {", block)
+        self.assertIn("['menu-btn', 'home-btn', 'menu-link'].forEach(function (id) {", block)
         self.assertIn("ANTS_ARGS.indexOf('--join-url') !== -1", block)
         self.assertIn("Module._ants_match_running() === 1", block)
         self.assertIn("e.preventDefault()", block)
@@ -556,7 +553,7 @@ class TheImageAndTheCi(PageCase):
         self.assertIn("COPY --from=builder /src/lobby.html /usr/share/nginx/html/lobby.html", dockerfile)
         self.assertIn("RUN cp /usr/share/nginx/html/index.html /usr/share/nginx/html/play.html", dockerfile)
         self.assertFalse("/src/four.html" in dockerfile or "web/four.html" in dockerfile, "the Dockerfile still builds the old page")
-        self.assertIn("web/shell.html web/lobby.html", dockerfile)                           # the version goes into both pages
+        self.assertIn("build_web/src/ants_app/index.html web/lobby.html", dockerfile)                           # the version goes into both pages (the game page that the link made, and the lobby)
         self.assertIn('"$PAGE" /src/web/lobby.html', dockerfile)                             # and the build id
         self.assertIn("cp /src/web/lobby.html /src/lobby.html", dockerfile)                  # the site placeholder step runs on the lobby
 

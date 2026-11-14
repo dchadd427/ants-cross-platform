@@ -173,7 +173,7 @@ const LAYOUT = () => {
     const R = (e) => { if (!e || !e.getClientRects().length) return null; const q = e.getBoundingClientRect(); return { l: q.left, t: q.top, r: q.right, b: q.bottom }; };
     const meet = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b - 0.5 && b.t < a.b - 0.5;
     const panel = document.getElementById('players'), phone = innerWidth <= 700;
-    const pl = R(panel), dock = R(document.querySelector('.gdock')), chat = R(document.getElementById('gchat')), main = R(document.getElementById('hmain')), logo = R(document.querySelector('.hbar .hlogo')), tabs = R(document.querySelector('.htabs'));
+    const pl = R(panel), dock = R(document.querySelector('.gdock')), chat = R(document.getElementById('gchat')), main = R(document.getElementById('hmain')), tabs = R(document.querySelector('.htabs'));
     const iw = innerWidth, ih = innerHeight, out = [];
     [['panel', pl], ['games', dock], ['chat', chat], ['strip', tabs]].forEach(([n, q]) => { if (q && (q.l < -0.5 || q.t < -0.5 || q.r > iw + 0.5 || q.b > ih + 0.5)) out.push(n + ' outside the window ' + JSON.stringify(q)); });
     if (document.documentElement.scrollWidth > iw) out.push('sideways scroll');

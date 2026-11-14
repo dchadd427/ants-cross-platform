@@ -1,6 +1,6 @@
 # Hard bots: the quick kill, fights that can be reached, and chores that are worth it
 
-The Hard computer player ([BOTS.md](BOTS.md)) took too few chances to kill an ant, and stood around on many maps. This page says what was found, what the Hard player does now, and what was measured. Easy and Medium are not changed.
+The Hard computer player ([BOTS.md](BOTS.md)) took too few chances to kill an ant, and stood around on many maps. This page says what was found, what the Hard player does now, and what was measured. Easy and Medium are not changed (except for the counters of the section on hazards on another hill's ground, which Medium shares).
 
 ## What the engine does with a blow
 
@@ -41,6 +41,63 @@ A fight ends, and none starts, while the seat has no more ants than a reserve (`
 ## Fire walls only when they are worth it (`chore_worth`)
 
 The ring of fire round an enemy gate (the sabotage, `SabotageTask`) is lit only while that team has food to bank: a pile its hill reaches, or an ant that carries food. Without the rule the ring was lit round hills that had nothing to gain from the gate; measured, switching the whole sabotage off changed the points of a Hard player by +9 (plus or minus 40) over 300 matches. The walls of the player's own hill (`WallTask`) are not touched: they are worth a lot (on TREASURE 1,808 points).
+
+## Hazards on another hill's ground (`own_ground_counters`)
+
+The counters (BOTS.md, "Defence") put out an enemy's fire wall with the bot's Fire Ant and defuse an enemy's bomb with its Bomber, or set it off with a worker, wherever it lies within 10 tiles of the bot's own hill or within 4 tiles of a pile's tile (the pile radius 3, plus one) that its hill reaches. They did not ask whose ground that was. A bomb hurts only the ant that steps on it, a fire wall only the ant that walks into it, and neither changes any score: a hazard in another team's base costs the bot nothing until the bot walks there. Trips into such a base cost ants (the walk crosses the other bombs of the yard) and took the Fire Ant that keeps the walls of the bot's own thief hole away from home. A team that shut its hole with fire and mined its yard had the Fire Ant and the Bomber of every other bot walking across the map to it.
+
+Medium and Hard now ask where a hazard lies (`hazard_ground`, `src/ants_ai/tactics.cpp`). It is
+
+- **own** within 6 tiles of the bot's hill, and on any tile that no other hill walks to for less than the bot's hill does (the walking costs of the map analysis; the ally's hill and the hill of a team that dropped out are not other hills);
+- **claimed** beside a pile with food (within 4 tiles of the pile's tile) that the bot has a claim to: its walk there costs at most 170 percent of the cheapest walk of any hill, or one of its ants carries food or harvests within 4 tiles of the pile. The work does not count within 10 tiles of another team's hill (`counter_rival_yard`): there only the walking cost makes a pile the bot's, so a bot that harvests the pile beside a rival's hill does not send its Bomber into that yard;
+- **foreign** everywhere else, and always on the three tiles in front of another team's thief hole and on the ring round its gate. A team that dropped out is no rival: its yard is nobody's.
+
+The bot clears a hazard only where the old rule found it in the way and `hazard_ground` says own or claimed. A bomb that no team owns (the map's own bombs of the walled maps) is not asked where it lies (it has no yard), but the rest of the rule below holds for it too. A bot that helps its ally (Medium, Defensive style) asks the same question for the ally's hill: the ally's own ground and the piles the ally has a claim to by walking cost are answered, a third team's yard never. The rest of the rule:
+
+- a Bomber goes for a bomb with at least 5 hit points (two blasts take 4, and the way there may cross a second bomb); a worker that sets a bomb off needs 8, as before; the Fire Ant that keeps the walls is chosen with 3 hit points and answers an enemy wall with the same 3, because a fire wall burns the ant that walks into it and does not throw it onto a second bomb (a rule of 5 for it was measured on Ghetto and cost points, so it is not made);
+- a worker sets a bomb off on purpose only on the bot's own ground and never as one of the last ants (`Tactics::reserve_of`); the Bomber and the Fire Ant do not go to a hazard beside a pile, off the own ground, when only the last ants are left;
+- while the walls of its own thief hole are wanted, the Fire Ant that keeps them goes for no enemy wall farther than 12 tiles from the bot's hill. The leash and the rule of the last ants hold for a hazard in the ally's yard as well (that yard is not the bot's own ground).
+
+The numbers are in `LevelPlan` (`counter_home_radius` 6, `counter_claim_percent` 170, `counter_work_tiles` 4, `counter_rival_yard` 10, `counter_keeper_leash` 12, `counter_bomber_hp` 5). Easy keeps the old counters. `bot_arena --tune ownground=0` plays the old counters exactly (the same state hash in every match); `grhome=`, `grclaim=`, `grwork=`, `grrival=` (0: the work claim reaches everywhere), `grleash=` and `grhp=` set the numbers.
+
+**The bench bot `turtle`** (`tools/bench_turtle.hpp`, a seat for `bot_arena` and `bot_watch`, not a bot of the game) is the standard bot of Hard with every task switched off that sends an ant out of its own part of the map, and the mines round the hill on: it takes the Bomber and Fire power-ups of its side, keeps fire walls on its three hole tiles, lays bombs five to nine tiles round its hill, harvests its nearest piles, and never clears, raids or fights. `bot_watch` counts, for every seat, the defusals begun and the fires put out on ground that lies nearer another team's hill than its own, and the own ants that were blown up there (`defuses_at`, `outs_at`, `blasts_at`, by the team whose hill is nearest).
+
+### What was measured for the counters
+
+`bot_arena` (the old counters are `--tune ownground=0`: the same state hash as the build before the change in 192 matches). Four Hard bots of the same plan play each map (seeds 1 to 60; 1 to 180 on TREASURE); the table gives the mean score of a seat with its standard error, the scores of the four seats added (new minus old, per match, with the standard error over the matches), and the seats that ended under 800 points.
+
+| four Hard bots | matches | score of a seat, old | new | four seats added, new minus old | seats under 800, old / new |
+|---|---|---|---|---|---|
+| TINY | 60 | 1189 (6) | 1189 (6) | +0 (0) | 0 / 0 of 240 |
+| SMALL | 60 | 974 (9) | 976 (8) | +8 (17) | 17 / 14 of 240 |
+| MEDIUM | 60 | 1127 (25) | 1133 (24) | +25 (21) | 40 / 42 of 240 |
+| GAUNTLET | 60 | 268 (16) | 266 (15) | -9 (24) | 227 / 231 of 240 |
+| ISLANDS | 60 | 1401 (9) | 1401 (9) | +0 (0) | 0 / 0 of 240 |
+| TREASURE | 180 | 1950 (19) | 2026 (16) | +303 (70) | 34 / 11 of 720 |
+| Dustbin | 60 | 190 (13) | 187 (14) | -12 (57) | 234 / 232 of 240 |
+| Ghetto | 60 | 763 (72) | 955 (87) | +768 (269) | 153 / 146 of 240 |
+| all eight maps | 600 | 1176 (16) | 1218 (17) | +169 (36) | 705 / 676 of 2400 |
+
+On TINY and ISLANDS every match is the same as before. Nothing got worse: the two maps that lose a little (GAUNTLET, Dustbin) are inside one standard error. Ghetto and Dustbin are two of the walled maps ([BOT_GATES.md](BOT_GATES.md)); the map's own bombs there are asked as before. Four Medium bots (60 seeds each):
+
+| four Medium bots | matches | score of a seat, old | new | four seats added, new minus old | seats under 800, old / new |
+|---|---|---|---|---|---|
+| TREASURE | 60 | 1995 (25) | 2045 (21) | +201 (73) | 5 / 3 of 240 |
+| SMALL | 60 | 942 (10) | 942 (10) | +0 (7) | 53 / 51 of 240 |
+| MEDIUM | 60 | 1195 (13) | 1194 (13) | -4 (6) | 4 / 4 of 240 |
+| all three maps | 180 | 1377 (19) | 1394 (20) | +66 (25) | 62 / 58 of 720 |
+
+Two new seats and two old seats in one match (every arrangement of the four over the seats, TREASURE, SMALL and MEDIUM, 30 seeds each, Hard): one of the two new seats wins 0.511 (standard error 0.021; TREASURE 0.544, SMALL 0.489, MEDIUM 0.500), the four scores of a seat pair 36 (standard error 18) points higher for the new seats of the 540 matches (even is 0.500). The same with Medium bots (15 seeds each, 270 matches): 0.498 (0.030; TREASURE 0.539, SMALL 0.478, MEDIUM 0.478), 40 (18) points higher.
+
+The bench bot `turtle` on seat 0 against three Hard bots (100 seeds a map; per bot and match; `bot_watch`):
+
+| turtle against three Hard bots | seeds | trips into the turtle's base (defusals and fires put out, old -> new) | own ants blown up in its yard | ants lost | score of a bot | bots under 800 |
+|---|---|---|---|---|---|---|
+| TREASURE | 100 | 3.15 (0.22) -> 0.02 (0.01) | 2.02 (0.12) -> 2.11 (0.13) | 1.84 (0.07) -> 1.74 (0.07) | 1841 (26) -> 1988 (20) | 11 -> 0 of 300 |
+| SMALL | 100 | 0.02 (0.01) -> 0.01 (0.01) | 0.11 (0.03) -> 0.08 (0.02) | 1.20 (0.06) -> 1.21 (0.05) | 1038 (8) -> 1045 (8) | 10 -> 5 of 300 |
+| MEDIUM | 100 | 0.06 (0.02) -> 0.02 (0.01) | 0.31 (0.07) -> 0.21 (0.06) | 3.03 (0.09) -> 3.01 (0.09) | 1230 (21) -> 1235 (21) | 19 -> 20 of 300 |
+
+On TREASURE the turtle's hill lies in reach of every bot and each of the three went into its base about three times a match; with the rule none does (one trip in 50 bot-matches). The ants of the bots that are blown up in the turtle's yard are as many as before: this rule does not change where they walk.
 
 ## Switches and measuring
 

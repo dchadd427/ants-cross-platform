@@ -1,4 +1,4 @@
-/* The small helpers that the pages of the replays share (docs/REPLAYS.md "Watching a replay"): the pages of the match history (live.html, matches.html, match.html) and the game page in replay mode (play?replay=<file>, web/shell.html),
+/* The small helpers that the pages of the replays share (docs/REPLAYS.md "Watching a replay"): the pages of the match history (matches.html, match.html) and the game page in replay mode (play?replay=<file>, web/shell.html),
    which also watches a match that is still being played (play?live=<id>). Plain functions with no page in them, so that tests/scripts/web_replay_check.js runs them on a table.
    Everything that comes from a recording or from the server's list of live matches (a name that a player typed, a map, an id) is TEXT: the pages put it in with textContent and never as markup. */
 (function (root) {
@@ -120,25 +120,6 @@
         if (o.at) return 'about ' + LIVE_LAG + ' s behind';
         return o.speed + ' \u00b7 ' + behind;
     }
-    // The matches of the list's answer (`{ live: [{ id, map, started, turns, seconds, players }], count }`) as the page shows them, and only those: a match whose id has the shape above, at most 50
-    // of them, newest first as the server sends them; a number that is not one is 0 (seconds from the turns when only they are there), a player that is not a string is dropped, at most four of them.
-    function liveEntriesOf(data) {
-        var list = data && typeof data === 'object' && Array.isArray(data.live) ? data.live : [];
-        var out = [];
-        list.forEach(function (e) {
-            if (out.length >= 50 || !e || typeof e !== 'object' || typeof e.id !== 'string' || !LIVE_RE.test(e.id)) return;
-            var seconds = typeof e.seconds === 'number' && isFinite(e.seconds) ? e.seconds : typeof e.turns === 'number' && isFinite(e.turns) ? e.turns / 20 : 0;
-            out.push({
-                id: e.id,
-                map: typeof e.map === 'string' ? e.map : liveMap(e.id),
-                started: typeof e.started === 'number' && isFinite(e.started) ? e.started : startedOf(e.id),
-                seconds: Math.max(0, Math.floor(seconds)),
-                players: (Array.isArray(e.players) ? e.players : []).filter(function (p) { return typeof p === 'string'; }).slice(0, 4)
-            });
-        });
-        return out;
-    }
-
     // A player as the list gives it: "Green (Mika)" is the color word and, after the first " (", what the player typed (or "Bot (Medium)" for a computer player); a bare "Green" typed nothing
     function parsePlayer(text) {
         var s = typeof text === 'string' ? text : '';
@@ -863,7 +844,7 @@
     }
 
     var api = { barPointer: barPointer, barZone: barZone, ZONE_PX: ZONE_PX, ZONE_GAP: ZONE_GAP, gapOf: gapOf, ZONE_REST_PX: ZONE_REST_PX, ZONE_DWELL_MS: ZONE_DWELL_MS, ZONE_LEAVE_MS: ZONE_LEAVE_MS, REWIND_SECONDS: REWIND_SECONDS, rewindTurn: rewindTurn, rewindControl: rewindControl, CAM_KEY: CAM_KEY, CAM_NOTE_MS: CAM_NOTE_MS, camLoad: camLoad, camSave: camSave, camLabel: camLabel, camTitle: camTitle, camNoteDue: camNoteDue, cameraControl: cameraControl, FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
-                lengthText: lengthText, mapKey: mapKey, mapTitle: mapTitle, speedText: speedText, liveVerdict: liveVerdict, atLive: atLive, liveTag: liveTag, liveEntriesOf: liveEntriesOf, parsePlayer: parsePlayer, playersOf: playersOf, chipsOf: chipsOf,
+                lengthText: lengthText, mapKey: mapKey, mapTitle: mapTitle, speedText: speedText, liveVerdict: liveVerdict, atLive: atLive, liveTag: liveTag, parsePlayer: parsePlayer, playersOf: playersOf, chipsOf: chipsOf,
                 LOCAL_MAX_BYTES: LOCAL_MAX_BYTES, HEAD_MAX_BYTES: HEAD_MAX_BYTES, crc32: crc32, localSizeOk: localSizeOk, localCheck: localCheck, ownName: ownName, sizeText: sizeText,
                 OWN_KEEP_MS: OWN_KEEP_MS, ownIdOf: ownIdOf, ownRandomId: ownRandomId, ownStore: ownStore, ownStoreOf: ownStoreOf, ownOpen: ownOpen,
                 refusalWords: refusalWords, opener: opener, ownPage: ownPage, ownPageOf: ownPageOf };

@@ -184,7 +184,7 @@ class TheStyle(unittest.TestCase):
         for selector, _body in self.rules:
             for part in selector.split(","):
                 part = part.strip()
-                if re.search(r"\.(gdock|hbar|hright|hbrand|hlogo|yard|gc|gpop|gitem|ylabel)\b", part):
+                if re.search(r"\.(gdock|hbar|hright|hbrand|yard|gc|gpop|gitem|ylabel)\b", part):
                     self.assertTrue(part.startswith(".pl-on "), "%r reaches a part of Home and is not under the class that the list puts on Home" % part)
         self.assertIn("host.classList.add('pl-on')", self.js)
         self.assertIn("host.classList.remove('pl-on')", self.js)
@@ -239,7 +239,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     copy with nothing changed must pass"""
     FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.css", "web/home/players.js", "web/home/players.css",
               "tests/scripts/test_web_home_players.py", "tests/scripts/web_home_players_check.js", "tests/scripts/web_home_chat_check.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
-              "web/matches.html", "web/live.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html", "docs/HOME_SCREEN.md"]
+              "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html", "docs/HOME_SCREEN.md"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])
 
     @classmethod

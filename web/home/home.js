@@ -13,17 +13,16 @@
     var MENU_MIN_HEIGHT = 120, MENU_GAP = 10;            // px: the Menu keeps this much at least, and this much of the window below it
     var HASH = '#room';                                  // the address of the Room screen
     var STATE_KEY = 'ants';                              // history.state.ants: 'home' or 'room' (the entries that this script made or marked)
-    var LOGO = { src: 'front/logo.png', width: 581, height: 218 };      // (the page's own picture: front/logo.png, the size of its file)
     var CHAT = { script: 'home/chat.js', style: 'home/chat.css' };       // the chat dock: loaded once, after the first paint, when Home is first shown
     var OPENING_MS = 15000, GIVE_UP_MS = 60000;          // a hand-off that is still here after the first has been slow: Home takes presses again, and says so; after the second the page says that it did not come
     var GAMES = 'home/games';                            // the Games list, Quick host and the Room's switch (games.js, games.css): loaded once, after the first paint
     var TEXT = {
-        quickHost: 'Quick host', quickJoin: 'Quick join', mine: 'My room', games: 'Games', menu: 'Menu', login: 'Log in', home: 'Home', leave: 'Leave room', opening: 'Opening the game…',
+        name: 'Ants!', quickHost: 'Quick host', quickJoin: 'Quick join', mine: 'My room', games: 'Games', menu: 'Menu', login: 'Log in', home: 'Home', leave: 'Leave room', opening: 'Opening the game…',
         slow: 'The game is slow to open. Reload this page to get your seat back.', failed: 'The game did not open. Reload this page to get your seat back.',
         players: 'Players', chat: 'Chat', views: 'Home views'
     };
     // The Menu's links: the footer's and the header's (test_web_home_screen.py keeps them equal), and the page's How it works (no address)
-    var MENU_MAIN = [['Home', '/'], ['Matches', '/matches'], ['Live now', '/live-now'], ['Map maker', '/mapmaker'], ['How it works', ''], ['Discord server', 'https://discord.gg/WaWrXQnKPj']];
+    var MENU_MAIN = [['Home', '/'], ['Matches', '/matches'], ['Map maker', '/mapmaker'], ['How it works', ''], ['Discord server', 'https://discord.gg/WaWrXQnKPj']];
     var MENU_SMALL = [['Sprites and sounds', '/asset_catalog/'], ['Changelog', '/changelog'], ['GitHub', 'https://github.com/dchadd427/ants-cross-platform'], ['Feedback', 'https://github.com/dchadd427/ants-cross-platform/issues'], ['Legal', '/legal']];
     var TABS = [['games', 'Games'], ['players', 'Players'], ['chat', 'Chat']];      // the phone's strip (a window up to 700 px wide): one view at a time
     var PHONE = '(max-width: 700px)';
@@ -96,7 +95,7 @@
     // returns { start, sync, opening, show, screen, inert, menu, dock }
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, page = env.page;
-        var fitting = null, screen = 'home', menuOpen = false, menuFor = null, menuBox = null, liveN = null, factsBox = null, going = false, held = false, stalled = false, goingTimer = null, failTimer = null, said = '', dock = null, asked = false, games = null, askedGames = false, players = null, askedPlayers = false, askedTalk = false;
+        var fitting = null, screen = 'home', menuOpen = false, menuFor = null, menuBox = null, factsBox = null, going = false, held = false, stalled = false, goingTimer = null, failTimer = null, said = '', dock = null, asked = false, games = null, askedGames = false, players = null, askedPlayers = false, askedTalk = false;
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -111,12 +110,7 @@
             return b;
         }
         function stub(cls, text) { var b = button(cls, text); b.disabled = true; b.setAttribute('aria-disabled', 'true'); return b; }     // (a button that a later piece lights: it takes no press)
-        function logo() {                                   // the page's heading: the logo (its words are the picture's alt), in the bar of the screen that shows
-            var h = el('h1', 'hbrand'), img = el('img', 'hlogo');
-            img.src = LOGO.src; img.alt = 'Ants!'; img.setAttribute('width', String(LOGO.width)); img.setAttribute('height', String(LOGO.height));
-            h.appendChild(img);
-            return h;
-        }
+        function heading() { return el('h1', 'hbrand', TEXT.name); }       // the page's heading, in the bar of the screen that shows: words for a screen reader, nothing drawn
         function menuButton() {
             var b = button('hmenu', '', function () { toggleMenu(b); });
             b.setAttribute('aria-label', TEXT.menu); b.setAttribute('aria-expanded', 'false');
@@ -135,7 +129,7 @@
         var right = el('div', 'hright'), login = button('hlogin', TEXT.login); login.hidden = true;       // (the login chip: the chat dock fills it and shows it where the hub offers a login)
         var menuHome = menuButton();
         right.appendChild(login); right.appendChild(menuHome);
-        [logo(), quickHost, quickJoin, mine, gamesBtn, right].forEach(function (n) { bar.appendChild(n); });
+        [heading(), quickHost, quickJoin, mine, gamesBtn, right].forEach(function (n) { bar.appendChild(n); });
         var main = el('main', 'hmain'); main.id = 'hmain';       // the games list and the players list mount here, side by side; the chat dock comes after it
         var tabs = el('nav', 'htabs'), tab = 'games', tabBtns = {}; tabs.setAttribute('aria-label', TEXT.views);
         TABS.forEach(function (t) {
@@ -152,7 +146,7 @@
         homeBtn.appendChild(chev); homeBtn.appendChild(el('span', '', TEXT.home));
         var leave = button('leave', TEXT.leave, function () { if (stalled) return; var go = function () { page.leave(); show('home', 'push'); }; if (!asking(go)) go(); });
         var menuRoom = menuButton();
-        [homeBtn, logo(), el('span', 'grow'), leave, menuRoom].forEach(function (n) { rbar.appendChild(n); });
+        [homeBtn, heading(), el('span', 'grow'), leave, menuRoom].forEach(function (n) { rbar.appendChild(n); });
         env.lobby.parentNode.insertBefore(rbar, env.lobby);
 
         // ---- the Menu: one box for both bars ----
@@ -170,7 +164,6 @@
                 if (m[1]) item = link(m[0], m[1], 'mitem');
                 else { item = el('button', 'mitem', m[0]); item.type = 'button'; item.addEventListener('click', function () { var back = menuFor; closeMenu(); if (back && back.focus) back.focus(); page.how(); }); }      // (the page's list gives the focus back to what had it: the Menu's button)
                 if (m[1] === '/') { item.setAttribute('aria-current', 'page'); item.addEventListener('click', function (e) { e.preventDefault(); show('home', 'push'); }); }      // (this page: the Room's Home goes back to the front page's own screen)
-                if (m[1] === '/live-now') { liveN = el('span', 'mn'); item.appendChild(liveN); }
                 menuBox.appendChild(item);
             });
             var small = el('p', 'msmall');
@@ -197,8 +190,6 @@
             menuFor = btn; menuOpen = true;
             var lines = facts();
             factsBox.textContent = lines.join('\n'); factsBox.hidden = !lines.length;
-            var sl = doc.getElementById('stats-live'), nl = sl && /^[1-9]\d*/.exec(sl.textContent);      // the count of live matches that the footer's line already has
-            liveN.textContent = nl ? nl[0] : '';
             menuBox.hidden = false;
             placeMenu();
             btn.setAttribute('aria-expanded', 'true');

@@ -59,8 +59,9 @@ same('the address of the Room is the hash #room', Home.HASH, '#room');
     const matches = /<a class="btn sm" href="([^"]+)" id="watch-top"/.exec(header)[1];
     const mapMaker = /link\.href = '([^']+)'/.exec(fs.readFileSync(path.join(lobbyDir, 'front', 'map_maker_link.js'), 'utf8'))[1];
     const want = (text) => links.filter((l) => l[0] === text).map((l) => l[1])[0];
-    same('the Menu has the links of the header and the footer, in the order of the picture: Home, Matches, Live now, Map maker, How it works (a button), Discord server',
-        Home.MENU_MAIN, [['Home', '/'], ['Matches', matches], ['Live now', want('Live')], ['Map maker', mapMaker], ['How it works', ''], ['Discord server', discord]].map((m) => (m[0] === 'Live now' ? ['Live now', want('Live now')] : m)));
+    same('the Menu has the links of the header and the footer, in the order of the picture: Home, Matches, Map maker, How it works (a button), Discord server',
+        Home.MENU_MAIN, [['Home', '/'], ['Matches', matches], ['Map maker', mapMaker], ['How it works', ''], ['Discord server', discord]]);
+    check('... and none of them is the page of the matches that run now (the front page lists them itself)', !links.some((l) => l[1].indexOf('live-now') !== -1) && !Home.MENU_MAIN.some((m) => m[1].indexOf('live-now') !== -1));
     same('... and the small links are the footer\'s own, in its order', Home.MENU_SMALL, ['Sprites and sounds', 'Changelog', 'GitHub', 'Feedback', 'Legal'].map((t) => [t, want(t)]));
     check('... and the footer has a button for How it works (the Menu opens the page\'s own list)', /<button class="lnk" type="button" id="how-open">How it works<\/button>/.test(footer));
 }
@@ -87,7 +88,7 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     check('... and writes nothing to the history (the address stays what it is until a button is pressed), and moves nothing (no scroll, no focus: the first look is not a press)', env.pushed.length === 0 && env.replaced.length === 0 && env.marked.length === 0 && env.entries.length === 1 && env.scrolled.length === 0 && env.focused === null);
     const bar = env.$('home').children[0];
     same('Home is a top bar, the body (the games and the players), the card that says that the game is opening and the phone\'s strip, in that order (the chat dock comes after them, when it loads)', env.$('home').children.map((c) => c.tagName + '#' + (c.id || classes(c)[0])), ['header#hbar', 'main#hmain', 'div#hopen', 'nav#htabs']);
-    same('the bar has the logo (in the page\'s heading), Quick host, Quick join, My room, Games and the right-hand group (the login chip and the Menu)', bar.children.map((c) => classes(c).slice(0, 2).join(' ')), ['hbrand', 'btn quick', 'btn quick', 'btn hchip', 'btn hchip', 'hright']);
+    same('the bar has the page\'s heading (words, no picture), Quick host, Quick join, My room, Games and the right-hand group (the login chip and the Menu)', bar.children.map((c) => classes(c).slice(0, 2).join(' ')), ['hbrand', 'btn quick', 'btn quick', 'btn hchip', 'btn hchip', 'hright']);
     const quickHost = env.home('host'), quickJoin = env.home('join'), mine = env.home('mine'), games = env.home('games');
     same('the words of the buttons are the picture\'s', [quickHost.textContent, quickJoin.textContent, mine.children[0].textContent, games.textContent], ['Quick host', 'Quick join', 'My room', 'Games']);
     check('Quick host, Quick join and Games are drawn and take no press until the pieces that light them are in (disabled, and said so to a screen reader)', [quickHost, quickJoin, games].every((b) => b.disabled === true && b.getAttribute('aria-disabled') === 'true'));
@@ -98,8 +99,7 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     const login = env.home('hlogin');
     check('the login chip is made for the piece that comes later, and is not shown', !!login && login.hidden === true);
     check('every button that Home makes is a plain button (type="button": nothing submits), and Home put no markup into the page', buttonsOf(env).concat(env.roomBar('rhome'), env.roomBar('leave')).every((b) => b.getAttribute('type') === 'button' || b.type === 'button') && env.innerHTMLWrites.length === 0);
-    const logo = env.$('home').findAll((e) => e.tagName === 'img')[0];
-    check('the logo is the page\'s own picture, at the size of its file, with its words', logo.src === 'front/logo.png' && logo.getAttribute('width') === '581' && logo.getAttribute('height') === '218' && logo.alt === 'Ants!');
+    check('Home draws no picture: the page\'s name is the words of its heading', env.$('home').findAll((e) => e.tagName === 'img').length === 0 && bar.children[0].textContent === 'Ants!');
     const main = env.$('home').children[1];
     check('the body\'s container is #hmain, and it is empty until the pieces that fill it are in (the Games list docks into it when games.js has loaded: tests/scripts/web_home_games_check.js; the players list when players.js has): no Yard, no stand-in, no words, nothing that prints a size', main.id === 'hmain' && classes(main).join() === 'hmain'
           && main.children.length === 0 && main.textContent === '' && !env.$('yard') && !/Yard will live|reserved: /.test(env.dumpAll()));
@@ -111,11 +111,11 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     check('the Games button of the bar shows the Games view, whichever view was shown (the list is the thing that it is about)', env.$('home').getAttribute('data-tab') === 'games' && strip.children[0].getAttribute('aria-pressed') === 'true' && strip.children[1].getAttribute('aria-pressed') === 'false');
     const opening = env.$('home').children[2];
     check('the card that says that the game is opening is there and not shown, as a status', opening.hidden === true && opening.getAttribute('role') === 'status' && opening.textContent === 'Opening the game…');
-    // the Room's slim bar: Home, the logo, Leave room, Menu, before the page's own room card
+    // the Room's slim bar: Home, the heading, Leave room, Menu, before the page's own room card
     const rbar = env.root.children.filter((c) => classes(c).indexOf('rbar') !== -1)[0];
-    same('the Room has a slim bar before its card: Home, the logo, a spacer, Leave room, Menu', rbar.children.map((c) => c.tagName + ':' + (c.textContent || c.getAttribute('aria-label') || classes(c)[0])), ['button:‹Home', 'h1:hbrand', 'span:grow', 'button:Leave room', 'button:Menu']);
+    same('the Room has a slim bar before its card: Home, the heading, a spacer, Leave room, Menu', rbar.children.map((c) => c.tagName + ':' + (c.textContent || c.getAttribute('aria-label') || classes(c)[0])), ['button:‹Home', 'h1:Ants!', 'span:grow', 'button:Leave room', 'button:Menu']);
     check('... and the Menu button has its name and says whether it is open (it promises no other kind of popup)', rbar.children[4].getAttribute('aria-label') === 'Menu' && rbar.children[4].getAttribute('aria-haspopup') === null && rbar.children[4].getAttribute('aria-expanded') === 'false');
-    check('each bar has the page\'s heading, an h1 around the logo (the screen that shows has one), and the chevron of the Home button is not read out', [bar, rbar].every((b) => b.children[b === bar ? 0 : 1].tagName === 'h1' && b.children[b === bar ? 0 : 1].children[0].tagName === 'img') && rbar.children[0].children[0].getAttribute('aria-hidden') === 'true');
+    check('each bar has the page\'s heading, an h1 that says Ants! (the screen that shows has one), and the chevron of the Home button is not read out', [bar, rbar].every((b) => b.children[b === bar ? 0 : 1].tagName === 'h1' && b.children[b === bar ? 0 : 1].textContent === 'Ants!') && rbar.children[0].children[0].getAttribute('aria-hidden') === 'true');
 }
 {   // a page with a site label in its footer (the test site's build) has the same Home: the label changes nothing of it
     const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, label: 'staging' });
@@ -304,14 +304,12 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     menuButton.click();
     const box = env.body.findAll((e) => classes(e).indexOf('hmenubox') !== -1)[0];
     check('the Menu opens under the bar, as a list of links named Menu, and the button says that it is open', !!box && box.hidden === false && menuButton.getAttribute('aria-expanded') === 'true' && box.getAttribute('aria-label') === 'Menu');
-    same('... Home, Matches, Live now (with the count of live matches), Map maker, How it works, Discord server, then the small links', box.children.slice(0, 6).map((c) => c.textContent).concat(box.children[6].children.map((c) => c.textContent)),
-        ['Home', 'Matches', 'Live now3', 'Map maker', 'How it works', 'Discord server', 'Sprites and sounds', 'Changelog', 'GitHub', 'Feedback', 'Legal']);
-    same('... then the live numbers and the version, as the footer has them', box.children[7].textContent, '3 matches being played · 7 players online\nVersion v0.12.150');
-    check('the links of the Menu that leave the site open in a new tab without handing over the page; the ones of the site do not', box.children[5].getAttribute('target') === '_blank' && box.children[5].getAttribute('rel') === 'noopener noreferrer' && box.children[1].getAttribute('target') === null);
-    check('Home is the first item and marks the page it is on; Live now carries the number of live matches that the footer has (3), and a count of none leaves the pill empty',
-        box.children[0].getAttribute('aria-current') === 'page' && box.children[1].getAttribute('aria-current') === null && box.children[2].children[0].textContent === '3');
-    env.$('stats-live').textContent = '0 matches being played \u00b7 7 players online'; menuButton.click(); menuButton.click();
-    check('... and none live: no number', box.children[2].children[0].textContent === '');
+    same('... Home, Matches, Map maker, How it works, Discord server, then the small links', box.children.slice(0, 5).map((c) => c.textContent).concat(box.children[5].children.map((c) => c.textContent)),
+        ['Home', 'Matches', 'Map maker', 'How it works', 'Discord server', 'Sprites and sounds', 'Changelog', 'GitHub', 'Feedback', 'Legal']);
+    same('... then the live numbers and the version, as the footer has them', box.children[6].textContent, '3 matches being played · 7 players online\nVersion v0.12.150');
+    check('the links of the Menu that leave the site open in a new tab without handing over the page; the ones of the site do not', box.children[4].getAttribute('target') === '_blank' && box.children[4].getAttribute('rel') === 'noopener noreferrer' && box.children[1].getAttribute('target') === null);
+    check('Home is the first item and marks the page it is on; no item carries a count of live matches (the games list shows them)',
+        box.children[0].getAttribute('aria-current') === 'page' && box.children[1].getAttribute('aria-current') === null && box.children.slice(0, 5).every((c) => c.children.length === 0));
     env.$('stats-live').textContent = '3 matches being played \u00b7 7 players online'; menuButton.click(); menuButton.click();
     env.doc.listeners.keydown.forEach((fn) => fn({ key: 'Escape' }));
     check('Escape puts the Menu away and the focus goes back to its button', box.hidden === true && menuButton.getAttribute('aria-expanded') === 'false' && env.focused === menuButton);
@@ -324,7 +322,7 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     box.children[1].click();
     check('a link of the Menu closes it', box.hidden === true);
     menuButton.click();
-    box.children[4].click();
+    box.children[3].click();
     check('How it works closes the Menu and opens the page\'s own list', box.hidden === true && env.$('how').hidden === false);
     const behind = () => ['banner', 'rejoin', 'lobby', 'footer-bar'].map((id) => env.$(id)).concat([env.home('hbar')], env.root.children.filter((c) => classes(c).indexOf('rbar') !== -1));
     check('... and it is a dialog: while it is open the page behind it takes no key or tap (Home\'s bar, the Room\'s bar and the Room, the strips, the footer), as behind the map list', behind().length === 6 && behind().every((n) => n.hasAttribute('inert')) && !env.$('how').hasAttribute('inert'));
@@ -334,7 +332,7 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     const bare = runLobby('', {}, { stayHome: true });
     bare.$('home').findAll((e) => classes(e).indexOf('hmenu') !== -1)[0].click();
     const bareBox = bare.body.findAll((e) => classes(e).indexOf('hmenubox') !== -1)[0];
-    check('a page that has no numbers yet (and no build) says nothing under the links', bareBox.children[7].hidden === true && bareBox.children[7].textContent === '');
+    check('a page that has no numbers yet (and no build) says nothing under the links', bareBox.children[6].hidden === true && bareBox.children[6].textContent === '');
     // from the Room the Menu is the same box under the Room's bar
     const room = runLobby('', {});
     room.roomBar('hmenu').click();

@@ -293,8 +293,8 @@ class TheWiring(unittest.TestCase):
     def test_the_web_job_builds_and_starts_the_image_and_there_is_no_job_for_it(self):
         workflow = read(os.path.join(REPO, ".github", "workflows", "ci.yml"))
         jobs = re.findall(r"(?m)^  ([a-z0-9_-]+):\s*$", workflow[workflow.index("\njobs:"):])
-        self.assertEqual(jobs, ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows_tests", "windows_2022", "windows_2026", "web_image", "web_stack", "web"])
-        web = workflow[workflow.index("\n  web_stack:"):]
+        self.assertEqual(jobs, ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows_tests", "windows_2022", "windows_2026", "web_image", "web_stack", "web", "image_files"])
+        web = workflow[workflow.index("\n  web_stack:"):workflow.index("\n  image_files:")]
         step = web[web.index("- name: Build the chat hub image"):]
         step = step[:step.index("\n      # The stack file")]
         for needle in ("docker buildx build --load -f Dockerfile.hub -t ants-hub .", "--read-only", "--cap-drop ALL", "--security-opt no-new-privileges", "--pids-limit 32", "--memory 192m", "--tmpfs /tmp",

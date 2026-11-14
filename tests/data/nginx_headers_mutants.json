@@ -1241,10 +1241,10 @@
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
-   "id": "image_copies_are_made_before_the_build",
+   "id": "image_copies_are_made_before_the_link",
    "file": "Dockerfile",
-   "old": "RUN cmake --build build_web -j$(nproc)\n\n# The three big files",
-   "new": "# The three big files",
+   "old": "# The real version, template of the game page and data package:",
+   "new": "RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n -k \"$f\" && test -s \"$f.gz\" || exit 1; done\n\n# The real version, template of the game page and data package:",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {

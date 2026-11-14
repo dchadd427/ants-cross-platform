@@ -112,12 +112,7 @@ def nginx_binary():
     return shutil.which("nginx") or ("/usr/sbin/nginx" if os.path.exists("/usr/sbin/nginx") else "")
 
 
-def free_port():
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
+free_port = quick_http.free_port    # (every test takes its port from the one range that quick_http hands out)
 
 
 class Stand(quick_http.QuickThreadingHTTPServer):

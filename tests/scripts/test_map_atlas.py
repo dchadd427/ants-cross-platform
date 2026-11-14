@@ -394,7 +394,7 @@ class ThePlacesThatCarryIt(unittest.TestCase):
     def test_the_dockerfile_makes_the_atlas_after_the_compile_layers_and_the_image_copies_it(self):
         text = read("Dockerfile")
         make = text.index("RUN python3 tools/map_atlas.py mapmaker_atlas")
-        self.assertGreater(make, text.index("RUN cmake --build build_web"), "after the game is compiled, so that it does not rebuild it")
+        self.assertGreater(make, text.rindex("cmake --build build_web"), "after the game is compiled and linked, so that it does not rebuild it")
         self.assertLess(make, text.index("FROM nginx:alpine AS runner"))
         for line in ("COPY asset_catalog/sprites/ /src/asset_catalog/sprites/", "COPY asset_catalog/catalog_data.js /src/asset_catalog/catalog_data.js", "COPY tools/map_atlas.py /src/tools/map_atlas.py",
                      "COPY --from=builder /src/mapmaker_atlas/ /usr/share/nginx/html/mapmaker_atlas/"):

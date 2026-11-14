@@ -7,7 +7,7 @@
 # with its one colony), Leave game (the results' button and the quit dialog's Yes go back to the front page, in each shape of the picture and in a room, where the seat is dropped), two people in a match
 # (the host's room, a friend through the link, the match starts by itself, the state hashes agree), the old addresses (/?join=..., /four.html?room=..., /play; the addresses of the test page that
 # "More ways to play" opened, /?map=..., /?embed=1, are the front page like any other), and the game page in the front page's look (part game: the loading screen and its failure card, 19 widths from 320 to 1600 px, the header with
-# "More", the logo that goes back like Menu, the pairs under the game, the name step, the contrast of every text).
+# "More", Menu that goes back, the pairs under the game, the name step, the contrast of every text).
 # No automated test reaches the logic of web/lobby.html and web/shell.html with a layout, nginx's routes and the real game: this starts throwaway headless browsers (their own profile and port)
 # against the web image and reads what the page and the GAME believe (the address, the game's arguments, `ants_probe`, the pixels of the scores, the game server's own status of the room).
 #

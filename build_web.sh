@@ -47,7 +47,7 @@ BUILD_DATE="$(TZ=PST8PDT,M3.2.0,M11.1.0 date '+%Y-%m-%d %H:%M PT')"
 sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" -e "s/@@SITE_TITLE@@//g" -e "s/@@SITE_FOOTER@@//g" "${BUILD_DIR}/src/ants_app/index.html" > "${DIST_DIR}/index.html"
 cp -f "${DIST_DIR}/index.html" "${DIST_DIR}/play.html"            # the game page at its own path (the games on this computer), as the image has it
 sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" -e "s/@@SITE_TITLE@@//g" -e "s/@@SITE_FOOTER@@//g" "${SCRIPT_DIR}/web/lobby.html" > "${DIST_DIR}/lobby.html"
-for PAGE in matches match live legal; do                         # the pages of the match history (the list, one match, the matches that run now) and the Legal page
+for PAGE in matches match legal; do                              # the pages of the match history (the list, one match) and the Legal page
     sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" -e "s/@@SITE_TITLE@@//g" -e "s/@@SITE_FOOTER@@//g" "${SCRIPT_DIR}/web/${PAGE}.html" > "${DIST_DIR}/${PAGE}.html"
 done
 cp -f "${SCRIPT_DIR}/web/matches.css" "${DIST_DIR}/"                                                                                                                                                # ... their stylesheet
@@ -87,5 +87,5 @@ echo " Build Succeeded! Web distribution ready in: ${DIST_DIR}"
 echo " To test locally in your browser:"
 echo "   python3 -m http.server 8080 -d dist"
 echo " Then navigate to: http://localhost:8080/lobby.html (the front page; the image's nginx serves it at /, python's server serves the game page there)"
-echo " (the clean page addresses /play, /matches, /match, /live-now, /legal, /changelog and /mapmaker are docker/nginx.conf's: python's server knows the .html files only; tools/web_without_docker.py serves the site with nginx)"
+echo " (the clean page addresses /play, /matches, /match, /legal, /changelog and /mapmaker are docker/nginx.conf's: python's server knows the .html files only; tools/web_without_docker.py serves the site with nginx)"
 echo "========================================================"

@@ -2,7 +2,7 @@
 """The bar at the top of every page of the site (web/site_nav.css, web/site_nav.js; docs/SITE_NAV.md): run by ./run_tests.sh --fast and by the CI.
 
 What this holds the bar to, without a browser (tests/scripts/web_site_nav_browser.js, opt-in, runs it in Chromium at 320 to 1280 px):
-  - the same five links, in the same order, on every page (Home, Matches, Live now, Map maker, Discord), the page that is open marked aria-current, and the same Menu on Home (web/home/home.js) as in
+  - the same four links, in the same order, on every page (Home, Matches, Map maker, Discord), no link to the page of the matches that run now anywhere on the site, the page that is open marked aria-current, and the same Menu on Home (web/home/home.js) as in
     web/site_nav.js (one list: the two files name the same links);
   - the files are in the image (the Dockerfile copies each once), are plain ES5 and CSS, carry no copy of the colors, and the pages put no inline style or script into the bar (the CSP of /admin
     has none, and the other pages keep to it);
@@ -22,7 +22,7 @@ import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DISCORD = "https://discord.gg/WaWrXQnKPj"
-ROW = ["/", "/matches", "/live-now", "/mapmaker", DISCORD]
+ROW = ["/", "/matches", "/mapmaker", DISCORD]
 SMALL = [("Sprites and sounds", "/asset_catalog/"), ("Changelog", "/changelog"), ("GitHub", "https://github.com/dchadd427/ants-cross-platform"),
          ("Feedback", "https://github.com/dchadd427/ants-cross-platform/issues"), ("Legal", "/legal")]
 sys.path.insert(0, os.path.join(REPO, "tools"))
@@ -47,7 +47,6 @@ def changelog_page():
 PAGES = {
     "matches": (read("web", "matches.html"), "/matches", "now"),
     "match": (read("web", "match.html"), "/matches", "now"),
-    "live": (read("web", "live.html"), "/live-now", ""),
     "legal": (read("web", "legal.html"), None, "menu"),
     "changelog": (changelog_page(), None, "menu"),
     "mapmaker": (read("web", "mapmaker.html"), "/mapmaker", "menu"),
@@ -62,13 +61,13 @@ def bar_of(page):
 
 
 class ThePages(unittest.TestCase):
-    def test_every_page_has_one_bar_with_the_same_five_links_in_the_same_order(self):
+    def test_every_page_has_one_bar_with_the_same_four_links_in_the_same_order(self):
         for name, (page, marked, live) in PAGES.items():
             self.assertEqual(len(re.findall(r'<header class="sb"', page)), 1, name)
             bar = bar_of(page)
             nav = re.search(r'<nav aria-label="Pages">(.*?)</nav>', bar.group(2), re.S).group(1)
             self.assertEqual(re.findall(r'<a class="btn[a-z ]*" href="([^"]*)"', nav), ROW, name)
-            self.assertEqual(re.findall(r'<a class="btn[a-z ]*" href="([^"]*)"', bar.group(2))[:2], ["/", "/"], name + ": Home, then the logo, are the phone's two links to the front page")
+            self.assertEqual(re.findall(r'<a class="btn[a-z ]*" href="([^"]*)"', bar.group(2))[:2], ["/", "/"], name + ": the phone's Home button and the row's Home are the two links to the front page")
             self.assertEqual(re.findall(r'data-live="([^"]*)"', bar.group(1)), [live] if live else [], name)
 
     def test_the_page_that_is_open_is_marked_in_the_row_and_no_other(self):
@@ -81,11 +80,10 @@ class ThePages(unittest.TestCase):
         for name, (page, marked, live) in PAGES.items():
             bar = bar_of(page).group(2)
             self.assertIn('<a class="btn sbhome" href="/"><span class="sbchev" aria-hidden="true">&lsaquo;</span>Home</a>', bar, name)
-            self.assertRegex(bar, r'<a class="sblogo" href="/"><img src="/?front/logo\.png" alt="ants! - Home" width="581" height="218"></a>', name)
-            self.assertIn('<a class="btn sblive" href="/live-now" hidden></a>', bar, name)                  # (hidden until the count is known and above none)
+            self.assertIn('<a class="btn sblive" href="/" hidden></a>', bar, name)                          # (the live mark: it goes to the front page, and is hidden until the count is known and above none)
             self.assertIn('<button class="btn sbtn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="sbm"><i class="sbbars"></i></button>', bar, name)
-            self.assertIn('<span>Live now</span><span class="sbn"></span>', bar, name)                       # (the count's place is kept, so that the row does not move when it arrives)
-            self.assertEqual(len(re.findall(r"<img", bar)), 1, name)
+            self.assertEqual(bar.count("sblive"), 1, name)                                                    # (one mark: not a second one in the row)
+            self.assertEqual(len(re.findall(r"<img", bar)), 0, name + ": the bar has no picture, so no page downloads one for it")
             self.assertNotIn("style=", bar, name)                                                             # (no inline style: the CSP of the admin page has none, the rest keeps to it)
             self.assertNotIn("onclick", bar, name)
             self.assertNotIn("<script", bar, name)
@@ -139,7 +137,7 @@ class TheHomeMenu(unittest.TestCase):
 
     def test_the_main_links_are_the_row_and_the_small_ones_are_the_same_list(self):
         main, small = self.home_lists()
-        self.assertEqual([m for m in main if m[1]], [("Home", "/"), ("Matches", "/matches"), ("Live now", "/live-now"), ("Map maker", "/mapmaker"), ("Discord server", DISCORD)])
+        self.assertEqual([m for m in main if m[1]], [("Home", "/"), ("Matches", "/matches"), ("Map maker", "/mapmaker"), ("Discord server", DISCORD)])
         self.assertEqual([m[1] for m in main if m[1]], ROW)
         self.assertEqual(small, SMALL)
         js_small = re.search(r"var SMALL = \[(.*?)\];", JS).group(1)
@@ -147,17 +145,15 @@ class TheHomeMenu(unittest.TestCase):
         for name, (page, marked, live) in PAGES.items():
             nav = re.search(r'<nav aria-label="Pages">(.*?)</nav>', bar_of(page).group(2), re.S).group(1)
             labels = [re.sub(r"<[^>]*>", "", x).strip() or "Discord server" for x in re.findall(r"<a [^>]*>(.*?)</a>", nav, re.S)]
-            self.assertEqual(labels, ["Home", "Matches", "Live now", "Map maker", "Discord server"], name)
+            self.assertEqual(labels, ["Home", "Matches", "Map maker", "Discord server"], name)
         self.assertEqual([m[0] for m in main if m[1]][:1], ["Home"], "Home is the first item")
 
-    def test_home_marks_itself_and_shows_the_live_count_on_live_now_from_the_footers_line(self):
+    def test_home_marks_itself_and_its_menu_has_no_live_entry(self):
         text = read("web", "home", "home.js")
         self.assertIn("item.setAttribute('aria-current', 'page')", text)
-        self.assertIn("doc.getElementById('stats-live')", text)
-        self.assertIn("/^[1-9]\\d*/.exec(sl.textContent)", text)
         css = read("web", "home", "home.css")
         self.assertIn(".hmenubox a[aria-current] { color: var(--gold); }", css)
-        self.assertIn(".hmenubox .mn:empty { display: none; }", css)
+        self.assertNotIn("live-now", text)                                                                    # (the front page lists the matches that run now itself: its Menu has no entry for them, and no mark)
 
 
 class TheFiles(unittest.TestCase):
@@ -192,7 +188,6 @@ class TheFiles(unittest.TestCase):
         self.assertIn("@media (min-width: 720px)", CSS)
         self.assertIn(".sb nav { display: none; }", CSS)
         self.assertIn(".sb .btn { min-height: 44px;", CSS)                                                      # (a 44 px target)
-        self.assertIn(".sb .sblogo { display: flex; align-items: center; min-height: 44px;", CSS)
         self.assertIn("@media (forced-colors: active)", CSS)
         self.assertIn("outline: 3px solid Highlight", CSS)
         self.assertNotIn("transition", CSS)                                                                     # (no motion)
@@ -206,7 +201,7 @@ class TheFiles(unittest.TestCase):
         self.assertIn(".sb nav .btn.sbdc { padding: 6px 12px; }", CSS)
 
     def test_the_live_count_is_asked_for_at_the_first_opening_only_where_the_bar_says_menu(self):
-        self.assertIn("if (bar.getAttribute('data-live') === 'menu') look();", JS)                              # (Live now has no attribute: its own list is the count)
+        self.assertIn("if (bar.getAttribute('data-live') === 'menu') look();", JS)                              # (a page with no attribute does not ask)
 
     def test_the_old_headers_rules_are_gone_from_the_stylesheets(self):
         matches = read("web", "matches.css")
@@ -218,8 +213,8 @@ class TheFiles(unittest.TestCase):
 
 
 STAMPS = {"@@GAME_VERSION@@": "v9.8.7", "@@BUILD_ID@@": "abc1234", "@@BUILD_DATE@@": "2026-01-02 09:30 PT"}
-LINKS_OF_THE_OLD_FOOTERS = ["/", "/matches", "/live-now", "/asset_catalog/", "/changelog", "https://github.com/dchadd427/ants-cross-platform", "https://github.com/dchadd427/ants-cross-platform/issues", "/legal"]
-BAR_PAGES = ("matches", "match", "live", "legal", "mapmaker")
+LINKS_OF_THE_OLD_FOOTERS = ["/", "/matches", "/asset_catalog/", "/changelog", "https://github.com/dchadd427/ants-cross-platform", "https://github.com/dchadd427/ants-cross-platform/issues", "/legal"]
+BAR_PAGES = ("matches", "match", "legal", "mapmaker")
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the Menu is not run here")
@@ -324,6 +319,101 @@ class TheMenusLastLine(unittest.TestCase):
         for name in ("lobby.html", "shell.html"):
             page = read("web", name)
             self.assertEqual(len(re.findall(r"<footer\b", page)), 1, name)
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed: the live mark is not run here")
+class TheLiveMark(unittest.TestCase):
+    """The small red mark of the bar (docs/SITE_NAV.md "The live mark"), run with the real web/site_nav.js on the real markup of the pages, against a fake /live: shown only while at least one match
+    runs, named for a screen reader, linked to the front page; not there for none, for an answer that is no list, a failure, an error status or an answer that never comes."""
+
+    PAGE_NAMES = ("matches", "legal", "mapmaker", "changelog", "catalog")        # (data-live "now" on the first, "menu" on the others: both ask for the count)
+    CASES = [("one", {"count": 1}), ("twelve", {"count": 12}), ("none", None), ("fail", "fail"), ("status", "status"), ("never", "never"), ("notlist", "notlist")]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="site_nav_mark_")
+        manifest = []
+        for name, (page, marked, live) in PAGES.items():
+            if name not in cls.PAGE_NAMES:
+                continue
+            path = os.path.join(cls.tmp, name + ".html")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(page)
+            for case, behavior in cls.CASES:
+                manifest.append({"name": "%s:%s" % (name, case), "path": path, "live": behavior})
+        with open(os.path.join(cls.tmp, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump(manifest, f)
+        done = subprocess.run(["node", os.path.join(REPO, "tests", "scripts", "web_site_nav_menu_check.js"), os.path.join(cls.tmp, "manifest.json")], capture_output=True, text=True, timeout=120)
+        if done.returncode != 0:
+            raise AssertionError("the live mark check did not run: " + done.stderr[-1500:])
+        cls.found = json.loads(done.stdout)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def mark(self, page, case):
+        return self.found["%s:%s" % (page, case)]["mark"]
+
+    def test_with_one_match_the_mark_is_shown_says_1_live_and_names_the_front_page(self):
+        for page in self.PAGE_NAMES:
+            mark = self.mark(page, "one")
+            self.assertEqual((mark["there"], mark["hidden"]), (True, False), page)
+            self.assertEqual(mark["text"], "1 live", page)
+            self.assertEqual(mark["label"], "1 match live, see them on the front page", page)
+            self.assertEqual(mark["href"], "/", page)
+
+    def test_with_twelve_matches_the_mark_says_12_live_and_names_the_count(self):
+        for page in self.PAGE_NAMES:
+            mark = self.mark(page, "twelve")
+            self.assertEqual((mark["hidden"], mark["text"], mark["href"]), (False, "12 live", "/"), page)
+            self.assertEqual(mark["label"], "12 matches live, see them on the front page", page)
+
+    def test_with_no_match_the_mark_is_not_shown(self):
+        for page in self.PAGE_NAMES:
+            self.assertTrue(self.mark(page, "none")["hidden"], page)
+
+    def test_when_the_count_is_unknown_the_mark_is_not_shown(self):
+        for case in ("fail", "status", "never", "notlist"):                       # (the request fails, answers an error, does not answer, or answers something that is no list)
+            for page in self.PAGE_NAMES:
+                self.assertTrue(self.mark(page, case)["hidden"], "%s %s" % (page, case))
+
+    def test_the_bar_asks_for_the_count_once_and_only_at_the_address_of_the_servers_list(self):
+        for page in self.PAGE_NAMES:
+            self.assertEqual(self.found["%s:one" % page]["fetched"], ["/live"], page)
+
+    def test_the_menu_has_no_live_entry_and_no_count(self):
+        for page in self.PAGE_NAMES:
+            result = self.found["%s:twelve" % page]
+            self.assertNotIn("/live-now", result["hrefs"], page)
+            self.assertEqual([i["cls"] for i in result["items"] if "12" in i["text"]], [], page)
+
+    def test_the_front_page_has_no_mark_and_no_bar_script_and_the_game_page_neither(self):
+        for name in ("lobby.html", "shell.html"):
+            page = read("web", name)
+            self.assertNotIn("sblive", page, name)
+            self.assertNotIn("site_nav.js", page, name)
+
+
+class TheOldPageIsNotLinked(unittest.TestCase):
+    """No page, script or tool of the site names the address of the page of the matches that run now: a link left behind would end at a redirect. (A text search, because the places that build links are
+    markup, scripts and a tool's template that no single run reaches; the redirect itself is run in tests/scripts/test_nginx_clean_urls.py.)"""
+
+    def test_no_file_of_the_site_names_live_now_or_live_html(self):
+        roots = [os.path.join(REPO, "web"), os.path.join(REPO, "asset_catalog"), os.path.join(REPO, "src", "ants_app")]
+        bad = []
+        for root in roots:
+            for base, _dirs, files in os.walk(root):
+                for name in files:
+                    if not name.endswith((".html", ".js", ".css", ".webmanifest", ".cpp", ".hpp", ".json")):
+                        continue
+                    with open(os.path.join(base, name), encoding="utf-8", errors="replace") as f:
+                        text = f.read()
+                    if re.search(r"live-now|/live\.html", text):
+                        bad.append(os.path.relpath(os.path.join(base, name), REPO))
+        self.assertEqual(bad, [])
+        self.assertNotIn("live-now", changelog_page())
+        self.assertNotIn("live-now", read("tools", "changelog_to_html.py"))
 
 
 if __name__ == "__main__":
