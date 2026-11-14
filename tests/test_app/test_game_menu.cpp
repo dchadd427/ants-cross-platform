@@ -119,14 +119,16 @@ void test_table() {
     std::printf("[table] the one list of rows\n");
     size_t count = 0;
     const gm::Row* rows = gm::rows(count);
-    check(count == 15, "fifteen rows");
+    check(count == 16, "sixteen rows");
     for (size_t i = 0; i < count; ++i) {
         const gm::Row& row = rows[i];
         check(gm::find_row(row.id) == &row, std::string("row ") + row.key + " is found by its id");
         for (size_t j = i + 1; j < count; ++j) check(row.id != rows[j].id && std::string(row.key) != rows[j].key, std::string("the row ") + row.key + " has an id and a name of its own");
         for (const char* p = row.key; *p != '\0'; ++p) check((*p >= 'a' && *p <= 'z') || *p == '_', std::string("the name ") + row.key + " is lower case letters and _");
         const std::string text = std::string(row.label) + row.hint + row.words;
-        check(text.find('<') == std::string::npos && text.find('>') == std::string::npos && text.find('&') == std::string::npos, std::string("the words of ") + row.key + " carry no markup");
+        bool entity = false;                                   // (every skin puts the words in as text, so a lone "&" is only a word: what begins an entity is markup)
+        for (size_t at = text.find('&'); at != std::string::npos; at = text.find('&', at + 1)) entity = entity || (at + 1 < text.size() && text[at + 1] != ' ');
+        check(text.find('<') == std::string::npos && text.find('>') == std::string::npos && !entity, std::string("the words of ") + row.key + " carry no markup");
         for (const char c : text) check(static_cast<unsigned char>(c) >= 0x20 && static_cast<unsigned char>(c) < 0x7f, std::string("the words of ") + row.key + " are plain ASCII");
         if (row.kind == gm::Kind::Slider) check(row.min == 0 && row.max == 99 && row.def >= row.min, std::string("the slider ") + row.key + " runs 0 to 99, as the original's");
         if (row.kind == gm::Kind::Switch) check(std::string(row.words) == "On|Off", std::string("the switch ") + row.key + " says On and Off");
@@ -139,9 +141,23 @@ void test_table() {
               "the picture row has one word for each row of the shape table, in its order, and the web's default shape as its default");
         check(picture != nullptr && std::string(picture->hint) == "The shape of the picture; the match goes on", "the picture row's hint says what the dropdown does (the page lists the shapes, from its own copy of the table)");
     }
-    check(gm::find_row(0) == nullptr && gm::find_row(16) == nullptr && gm::find_row(-1) == nullptr, "no other id is a row");
+    check(gm::find_row(0) == nullptr && gm::find_row(17) == nullptr && gm::find_row(-1) == nullptr, "no other id is a row");
     check(gm::find_row(gm::kMaster)->def == 100 && gm::find_row(gm::kMusic)->def == 65 && gm::find_row(gm::kEffects)->def == 100 && gm::find_row(gm::kScroll)->def == 50, "the defaults are the original's (Master 100: nothing changes)");
-    check((gm::find_row(gm::kMaster)->show & gm::kShowNew) && (gm::find_row(gm::kMute)->show & gm::kShowNew) && (gm::find_row(gm::kAntHealth)->show & gm::kShowNew) && (gm::find_row(gm::kHealthStyle)->show & gm::kShowNew) && !(gm::find_row(gm::kMusic)->show & gm::kShowNew), "exactly the four new rows carry the new tag");
+    check((gm::find_row(gm::kMaster)->show & gm::kShowNew) && (gm::find_row(gm::kMute)->show & gm::kShowNew) && (gm::find_row(gm::kAntHealth)->show & gm::kShowNew) && (gm::find_row(gm::kHealthStyle)->show & gm::kShowNew) && (gm::find_row(gm::kHealthChanges)->show & gm::kShowNew) && !(gm::find_row(gm::kMusic)->show & gm::kShowNew), "exactly the five new rows carry the new tag");
+    {   // Damage & heal numbers: one On / Off row in Video right after "Show health as", on by default, in a match and while watching, in both skins
+        const gm::Row* row = gm::find_row(gm::kHealthChanges);
+        check(row != nullptr && std::string(row->key) == "health_changes" && std::string(row->label) == "Damage & heal numbers" && row->section == gm::Section::Video && row->kind == gm::Kind::Switch &&
+                  row->def == 1 && row->min == 0 && row->max == 1 && std::string(row->words) == "On|Off" && (row->show & gm::kShowWatch) && (row->show & gm::kShowWeb) && (row->show & gm::kShowDesktop),
+              "the Damage & heal numbers row: a switch in Video, On by default, in both skins and in a recording");
+        size_t n_rows = 0;
+        const gm::Row* all = gm::rows(n_rows);
+        size_t style_at = n_rows, row_at = n_rows;
+        for (size_t i = 0; i < n_rows; ++i) {
+            if (all[i].id == gm::kHealthStyle) style_at = i;
+            if (all[i].id == gm::kHealthChanges) row_at = i;
+        }
+        check(style_at < n_rows && row_at == style_at + 1, "...right after Show health as");
+    }
     check((gm::find_row(gm::kMaster)->show & gm::kShowLive) && !(gm::find_row(gm::kMusic)->show & gm::kShowLive), "Master volume acts while it is dragged, the original's sliders at the release");
 
     for (const bool watching : {false, true}) {
@@ -149,7 +165,7 @@ void test_table() {
             const std::string json = gm::describe_json(watching, web);
             Json reader(json);
             check(reader.valid(), std::string("the JSON is valid (watching ") + (watching ? "yes" : "no") + ", " + (web ? "web" : "desktop") + ")");
-            check(has(json, "\"key\":\"master\"") && has(json, "\"key\":\"mute\"") && has(json, "\"key\":\"ant_health\"") && has(json, "\"key\":\"ant_health_style\"") && !has(json, "hp_numbers") && has(json, "\"key\":\"scroll\""), "the sound and video rows are there");
+            check(has(json, "\"key\":\"master\"") && has(json, "\"key\":\"mute\"") && has(json, "\"key\":\"ant_health\"") && has(json, "\"key\":\"ant_health_style\"") && has(json, "\"key\":\"health_changes\"") && !has(json, "hp_numbers") && has(json, "\"key\":\"scroll\""), "the sound and video rows are there");
             check(has(json, "\"id\":\"controls\"") && has(json, "\"id\":\"sound\"") && has(json, "\"id\":\"video\""), "the Sound, Video and Controls sections are there");
             check(has(json, "\"key\":\"chat\"") == !watching && has(json, "\"id\":\"game\"") == !watching && has(json, "\"key\":\"version\"") == !watching, "the Game section is in a match and not in a recording");
             check(has(json, "\"key\":\"picture\"") == web && has(json, "\"key\":\"lockmouse\"") == web, "the picture's shape and the fullscreen mouse are the browser's rows");
@@ -209,18 +225,39 @@ void test_settings() {
     defaults.load(store);
     check(defaults.master == 100 && !defaults.mute && defaults.ant_health == health::Setting{When::Hurt, Style::Bar}, "an empty file: Master 100, not muted, a bar on hurt ants");
     check(defaults.gain() == 1.0f, "which is the mix as it was");
+    check(defaults.health_changes, "the damage and heal numbers are on when the file says nothing");
     gm::MenuSettings s;
     s.master = 37;
     s.mute = true;
     s.ant_health = health::Setting{When::All, Style::Number};
-    for (const int id : {gm::kMaster, gm::kMute, gm::kAntHealth, gm::kHealthStyle}) s.write(store, id);
+    s.health_changes = false;
+    for (const int id : {gm::kMaster, gm::kMute, gm::kAntHealth, gm::kHealthStyle, gm::kHealthChanges}) s.write(store, id);
     check(store.get_string("master", "", 8) == "37" && store.get_string("mute", "", 8) == "on" && store.get_string("ant_health", "", 8) == "all" && store.get_string("ant_health_style", "", 8) == "number",
           "written as master=37, mute=on, ant_health=all, ant_health_style=number");
+    check(store.get_string("health_changes", "", 8) == "off", "...and health_changes=off");
     s.write(store, gm::kMusic);
-    check(!store.has("Music Volume") && !store.has("music"), "a row that is not one of the four writes nothing");
+    check(!store.has("Music Volume") && !store.has("music"), "a row that is not one of the five writes nothing");
     gm::MenuSettings back;
     back.load(store);
-    check(back.master == 37 && back.mute && back.ant_health == health::Setting{When::All, Style::Number}, "and read back");
+    check(back.master == 37 && back.mute && back.ant_health == health::Setting{When::All, Style::Number} && !back.health_changes, "and read back");
+    for (const bool on : {true, false}) {
+        ConfigStore each;
+        gm::MenuSettings out;
+        out.health_changes = on;
+        out.write(each, gm::kHealthChanges);
+        gm::MenuSettings in;
+        in.health_changes = !on;
+        in.load(each);
+        check(in.health_changes == on && each.get_string("health_changes", "", 8) == (on ? "on" : "off"), std::string("round trip of health_changes=") + (on ? "on" : "off"));
+    }
+    for (const std::string odd : {"maybe", "OFF", "0", "", "off "}) {
+        ConfigStore each;
+        each.set_string("health_changes", odd);
+        gm::MenuSettings m;
+        m.health_changes = false;
+        m.load(each);
+        check(m.health_changes, "a value that is not exactly off reads as on: '" + odd + "'");
+    }
     for (const When w : {When::Hurt, When::All, When::Off}) {
         for (const Style st : {Style::Bar, Style::Number}) {
             ConfigStore each;
@@ -234,7 +271,7 @@ void test_settings() {
         }
     }
     check(std::string(gm::MenuSettings::key(gm::kMaster)) == "master" && std::string(gm::MenuSettings::key(gm::kAntHealth)) == "ant_health" && std::string(gm::MenuSettings::key(gm::kHealthStyle)) == "ant_health_style" &&
-              std::string(gm::MenuSettings::key(gm::kMusic)).empty(), "the names");
+              std::string(gm::MenuSettings::key(gm::kHealthChanges)) == "health_changes" && std::string(gm::MenuSettings::key(gm::kMusic)).empty(), "the names");
     for (const std::string bad : {"abc", "-5", "101", "1e2", ""}) {
         ConfigStore broken;
         broken.set_string("master", bad);
@@ -413,6 +450,10 @@ void test_values() {
         check(!app.game_menu_set(gm::kAntHealth, 3) && !app.game_menu_set(gm::kAntHealth, -1) && !app.game_menu_set(gm::kHealthStyle, 2) && app.game_menu_get(gm::kAntHealth) == 2 && app.game_menu_get(gm::kHealthStyle) == 1,
               "a word that the row does not have is refused, and nothing changes");
         check(has(read_file(file), "ant_health=off\n") && has(read_file(file), "ant_health_style=number\n"), "both are written at once");
+        check(app.game_menu_get(gm::kHealthChanges) == 1 && app.menu_settings().health_changes, "the damage and heal numbers start On");
+        check(app.game_menu_set(gm::kHealthChanges, 0) && app.game_menu_get(gm::kHealthChanges) == 0 && !app.menu_settings().health_changes && has(read_file(file), "health_changes=off\n"), "...go off, and that is written");
+        check(!app.game_menu_set(gm::kHealthChanges, 2) && !app.game_menu_set(gm::kHealthChanges, -1) && app.game_menu_get(gm::kHealthChanges) == 0, "a word that the row does not have is refused");
+        check(app.hud().ant_health().when == health::When::Off && app.game_menu_get(gm::kAntHealth) == 2, "the health marks are their own setting: the numbers do not touch them");
         check(!app.game_menu_set(gm::kFullscreen, 1) && !app.game_menu_set(gm::kVersion, 1) && !app.game_menu_set(77, 1), "what is not the game's is refused");
         app.hud().open_options();
         check(app.hud().options_screen().slider(0).value() == ScreenSlider(188, 179, 77).value() && app.hud().options_screen().slider(1).value() == ScreenSlider(188, 216, 30).value() &&
@@ -427,8 +468,8 @@ void test_values() {
         app.run_frame_with_delta(0.016f);
         check(app.menu_settings().ant_health.when == health::When::Off, "...and off");
         const std::string saved = read_file(file);
-        check(has(saved, "master=41\n") && has(saved, "mute=on\n") && has(saved, "ant_health=off\n") && has(saved, "ant_health_style=number\n") && !has(saved, "hp_numbers"),
-              "the file has master=41, mute=on, ant_health=off, ant_health_style=number, and no old key");
+        check(has(saved, "master=41\n") && has(saved, "mute=on\n") && has(saved, "ant_health=off\n") && has(saved, "ant_health_style=number\n") && has(saved, "health_changes=off\n") && !has(saved, "hp_numbers"),
+              "the file has master=41, mute=on, ant_health=off, ant_health_style=number, health_changes=off, and no old key");
         check(has(saved, "Music Volume=30\n") && has(saved, "Sound Volume=77\n") && has(saved, "Scroll Speed=12\n") && has(saved, "Participate In Chat=0\n") && has(saved, "Show Quick Help at Startup=0\n"), "the original's keep their own names");
     }
     {
@@ -438,6 +479,7 @@ void test_values() {
             Application& app = again.app;
             check(app.game_menu_get(gm::kMaster) == 41 && app.game_menu_get(gm::kMute) == 1 && app.game_menu_get(gm::kAntHealth) == 2 && app.game_menu_get(gm::kHealthStyle) == 1 &&
                       app.hud().ant_health() == health::Setting{health::When::Off, health::Style::Number}, "Master, Mute and the health marks come back");
+            check(app.game_menu_get(gm::kHealthChanges) == 0, "...and so does the switch of the damage and heal numbers");
             check(app.game_menu_get(gm::kMusic) == 30 && app.game_menu_get(gm::kScroll) == 12, "and the original's");
         }
     }

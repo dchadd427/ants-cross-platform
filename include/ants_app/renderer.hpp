@@ -30,6 +30,7 @@
   #endif
 #endif
 
+#include "ants_app/health_changes.hpp"
 #include "ants_app/health_marks.hpp"
 #include "ants_app/screen_layout.hpp"
 #include "ants_app/view_zoom.hpp"
@@ -477,6 +478,9 @@ public:
     /// `scale_digits` false (the native build) keeps the number the original's whatever the density: only the bars follow it
     void set_health_marks(health::Setting setting, double picture_px_per_css = 1.0, bool scale_digits = true);
     health::Setting health_marks() const noexcept { return health_; }
+    /// The damage and heal numbers (health_changes.hpp; renderer_health.cpp). `tracker` null is the setting Off: nothing is read, nothing is drawn. `now_ms` is the numbers' own clock (it stops while the match is
+    /// paused), `picture_px_per_css` and `scale_digits` are set_health_marks' (a canvas shown small, the browser only): the numbers grow with the same rule, to twice their size at most.
+    void set_health_changes(health::ChangeTracker* tracker, int64_t now_ms, double picture_px_per_css = 1.0, bool scale_digits = true);
     /// The numbers' font, the original's fixed system font (the 8 x 15 raster "Fixedsys"): a cell is `kFixedCellW` x `kFixedCellH` pixels; only digits and '-' have glyphs (nothing else is drawn)
     /// `scale` makes every font pixel `scale` x `scale` (the cell grows right and down from (x, y)); `outline` first draws the glyph in black one scaled pixel round (the phone look, health_marks.hpp: digit_scale)
     void draw_fixed_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, int32_t scale = 1, bool outline = false);
@@ -615,7 +619,7 @@ private:
 
     SDL_Renderer* renderer_{nullptr};
     SDL_Texture* rgba_texture_{nullptr};   // streaming texture for draw_rgba_image
-    std::array<SDL_Texture*, 11> fixed_glyphs_{};   // draw_fixed_text: '0' .. '9' and '-', built on first use
+    std::array<SDL_Texture*, 12> fixed_glyphs_{};   // draw_fixed_text: '0' .. '9', '-' and '+', built on first use
     int32_t rgba_texture_w_{0};
     int32_t rgba_texture_h_{0};
     const ants::assets::AssetArchive* archive_{nullptr};
@@ -717,7 +721,8 @@ private:
     };
     std::vector<HealthMark> health_marks_;
     void note_health_mark(const ants::sim::AntSnapshot& ant, int32_t sprite_x, int32_t sprite_y);
-    void draw_health_marks();       // (the bars, and the numbers that a zoomed pass kept for the copy)
+    void draw_health_marks();       // (the bars, the numbers that a zoomed pass kept for the copy, and the damage and heal numbers)
+    void draw_bars();
     /// The original's hit point numbers (Show health as: Number) of a zoomed pass: text, not world art, so they are drawn after the copy, at one size, top left at the screen position of the sprite
     struct DeferredDigits {
         std::string text;
@@ -726,6 +731,20 @@ private:
     };
     std::vector<DeferredDigits> deferred_digits_;
     void draw_deferred_digits();
+    /// The damage and heal numbers: the tracker (null = Off), its clock and the size they are drawn at. The pictures of "-12" and "+7" are made once (outlined, white, 7 x 10 pixel glyphs) and tinted
+    health::ChangeTracker* changes_{nullptr};
+    int64_t changes_now_ms_{0};
+    int32_t changes_scale_{1};
+    bool changes_thick_{false};
+    struct ChangePicture {
+        std::string text;
+        SDL_Texture* texture{nullptr};
+        int32_t w{0};
+        int32_t h{0};
+    };
+    std::vector<ChangePicture> change_pictures_;
+    const ChangePicture* change_picture(const std::string& text);
+    void draw_health_changes();
     void draw_ant_number(const ants::sim::AntSnapshot& ant, int32_t sprite_x, int32_t sprite_y);
     std::vector<TransientEffect> transient_effects_{};
     uint32_t sub_tick_ms_{0};

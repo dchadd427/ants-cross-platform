@@ -26,9 +26,11 @@
     // SHAPE_TABLE_END
 
     // Two questions about a screen, asked of every row of the table (a row added later counts with no other change): forScreen, the selector's "fills your screen" tag, which has a cutoff
-    // (the nearest shape counts when it is within 8 per cent of the screen's shape), and firstVisit, the shape a first visit starts in, which has none.
+    // (the nearest shape counts when it is within 8 per cent of the screen's shape), and automatic, the shape that Automatic shows, which has none.
     var FILLS_WITHIN = 0.08;
     var FALLBACK = '16:9';
+    var AUTO = 'auto';                       // the name that the settings list gives its Automatic row (no shape is called so)
+    var WAIT_MS = 300;                       // the quiet that a change of the window's size or way needs before the picture is picked again
 
     function gcd(a, b) { return b === 0 ? a : gcd(b, a % b); }
 
@@ -88,21 +90,65 @@
         return name ? rowOf(name).label + ' fills your screen' : '';
     }
 
-    // The shape a first visit (nothing stored, no ?aspect=) starts in, for the page's `win`: the closest shape to the device's own screen (window.screen, CSS pixels: only the ratio counts), long
-    // over short, no cutoff. An upright device (screen and window both taller than wide; a frame's own window says nothing), a screen that cannot be asked and a size that is none give FALLBACK. Never stored: only a selector's
-    // press stores a shape (docs/PLAY_IN_BROWSER.md, "Which shape").
-    function firstVisit(win) {
+    // Which way the device is held: 'sideways' or 'upright'. Asked of the screen's orientation (screen.orientation.type: Android, desktops, iPhone Safari 16.4 and later), else window.orientation (90 and -90 are
+    // sideways: older iPhones and an installed iPhone app), else the media query (orientation: landscape), else sideways. NEVER from screen.width against screen.height: Android swaps them on a turn, an iPhone does not.
+    function wayOf(win) {
         try {
+            var type = win.screen && win.screen.orientation && win.screen.orientation.type;
+            if (typeof type === 'string' && /^(portrait|landscape)/.test(type)) return type.indexOf('portrait') === 0 ? 'upright' : 'sideways';
+        } catch (e) { /* no orientation of the screen */ }
+        try { if (typeof win.orientation === 'number') return Math.abs(win.orientation) === 90 ? 'sideways' : 'upright'; } catch (e) { /* none */ }
+        try { if (typeof win.matchMedia === 'function') return win.matchMedia('(orientation: landscape)').matches ? 'sideways' : 'upright'; } catch (e) { /* none */ }
+        return 'sideways';
+    }
+
+    // The shape that Automatic shows for the page's `win` (never stored, never in the address). Held sideways: the closest shape to the screen's own ratio, the long side over the short one (so that a screen whose
+    // numbers swap on a turn and one whose numbers do not give the same), no cutoff. Held upright: FALLBACK (until the tall shapes). A screen that cannot be asked or has a size that is none gives FALLBACK.
+    function automatic(win) {
+        try {
+            if (wayOf(win) !== 'sideways') return FALLBACK;
             var screenW = win.screen.width;
             var screenH = win.screen.height;
             if (!isSize(screenW, screenH)) return FALLBACK;
-            var sideways = screenW >= screenH || (!(win.parent && win.parent !== win) && win.innerWidth > win.innerHeight);
-            if (!sideways) return FALLBACK;
             return closest(Math.max(screenW, screenH) / Math.min(screenW, screenH)).row.name;
         } catch (e) {
             return FALLBACK;
         }
     }
 
-    return { rows: ROWS, names: names, rowOf: rowOf, parse: parse, placeOf: placeOf, forScreen: forScreen, fillsLine: fillsLine, firstVisit: firstVisit, closest: closest, FILLS_WITHIN: FILLS_WITHIN, FALLBACK: FALLBACK };
+    // The player's hand picks, one for each way the device is held (a pick holds only for the way it was made in). What the browser stores is the text '{"sideways":"4:3","upright":"16:9"}' (either part may be missing).
+    function picks(text) {
+        var found = {};
+        try {
+            var data = JSON.parse(text);
+            ['sideways', 'upright'].forEach(function (way) { var name = parse(data[way]); if (name) found[way] = name; });
+        } catch (e) { /* nothing was stored, or not this */ }
+        return found;
+    }
+    // The shape picked for `way`, or null
+    function pickFor(text, way) { return picks(text)[way] || null; }
+    // The stored text after `name` is picked for `way` (name null: that way's pick is forgotten); '' when nothing is left
+    function withPick(text, way, name) {
+        var found = picks(text);
+        if (name) found[way] = name; else delete found[way];
+        return found.sideways || found.upright ? JSON.stringify(found) : '';
+    }
+
+    // Watch for a change of the way the device is held, in the page's `win`: each event restarts a wait (WAIT_MS), and when nothing has come for that long `settled()` is called, once, if the width, the way or the
+    // fullscreen state differs from what it was at the last call (a change of height alone is the address bar coming and going: the picture's box follows it by itself). A window being dragged gives one call at its end.
+    // Events: resize and orientationchange of the window, change of screen.orientation, fullscreenchange and webkitfullscreenchange of the document, resize of visualViewport. Gives back stop().
+    function watch(win, settled, ms) {
+        var doc = win.document, timer = null, ends = [];
+        function full() { try { return !!(doc && (doc.fullscreenElement || doc.webkitFullscreenElement)); } catch (e) { return false; } }
+        function state() { return win.innerWidth + '|' + wayOf(win) + '|' + full(); }
+        var last = state();
+        function again() { timer = null; var now = state(); if (now !== last) { last = now; settled(); } }
+        function bump() { if (timer !== null) win.clearTimeout(timer); timer = win.setTimeout(again, ms === undefined ? WAIT_MS : ms); }
+        function on(target, type) { if (target && target.addEventListener) { target.addEventListener(type, bump); ends.push(function () { target.removeEventListener(type, bump); }); } }
+        on(win, 'resize'); on(win, 'orientationchange'); on(win.screen && win.screen.orientation, 'change');
+        on(doc, 'fullscreenchange'); on(doc, 'webkitfullscreenchange'); on(win.visualViewport, 'resize');
+        return { stop: function () { if (timer !== null) win.clearTimeout(timer); timer = null; ends.forEach(function (end) { end(); }); ends = []; } };
+    }
+
+    return { rows: ROWS, names: names, rowOf: rowOf, parse: parse, placeOf: placeOf, forScreen: forScreen, fillsLine: fillsLine, wayOf: wayOf, automatic: automatic, picks: picks, pickFor: pickFor, withPick: withPick, watch: watch, closest: closest, FILLS_WITHIN: FILLS_WITHIN, FALLBACK: FALLBACK, WAIT_MS: WAIT_MS, AUTO: AUTO };
 });

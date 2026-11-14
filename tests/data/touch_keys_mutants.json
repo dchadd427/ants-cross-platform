@@ -483,6 +483,13 @@
    "old": ".tk-shield { position: fixed;",
    "new": ".tk-shield { position: absolute;",
    "test": "node tests/scripts/web_touch_keys_shield_check.js web/touch_keys.js web/touch_keys.css"
+  },
+  {
+   "id": "relayout_leaves_the_buttons_for_later",
+   "file": "web/shell.html",
+   "old": "            if (antsTouchKeys) antsTouchKeys.refresh(true);\n            measureChrome();",
+   "new": "            measureChrome();\n            if (antsTouchKeys) antsTouchKeys.refresh(true);",
+   "test": "node tests/scripts/web_touch_keys_wiring_check.js web/shell.html"
   }
  ]
 }
