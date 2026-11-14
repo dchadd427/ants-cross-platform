@@ -76,7 +76,7 @@ class TheTokensAgree(unittest.TestCase):
         lit = tuple(round(c * 0.97 + 255 * 0.03) for c in hi)
         self.assertGreaterEqual(ratio(hexrgb("#f4ece2"), lit), 4.5)
         self.assertGreaterEqual(ratio(hexrgb("#f4ece2"), hi), 4.9)
-        for page in ("web/live.html", "web/match.html", "web/matches.html"):
+        for page in ("web/match.html", "web/matches.html"):
             self.assertIn("--teal-hi: %s;" % token(read("web/lobby.html"), "teal-hi"), read(page), page)
 
 

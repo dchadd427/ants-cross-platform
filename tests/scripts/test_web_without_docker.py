@@ -386,7 +386,7 @@ class TheRealDockerfileReplayed(Scratch):
                 text = self.page("plain", name)
                 self.assertNotIn("@@SITE_", text, name)
                 self.assertRegex(text, r'<span><span class="ver" id="game-version-line">', name)            # (the footers of the game page and the front page)
-        for name in ("matches.html", "match.html", "live.html", "legal.html", "mapmaker.html"):          # (the pages with the bar at the top: no footer, the three stamps are on the bar for its Menu)
+        for name in ("matches.html", "match.html", "legal.html", "mapmaker.html"):          # (the pages with the bar at the top: no footer, the three stamps are on the bar for its Menu)
             text = self.page("plain", name)
             self.assertNotIn("@@", text, name)
             self.assertNotIn("<footer", text, name)
@@ -466,14 +466,14 @@ class TheStampChecksOfTheRealDockerfile(unittest.TestCase):
         self.assertIsNone(self.replay())
 
     def test_a_placeholder_of_the_build_that_is_left_in_a_page_stops_the_build(self):
-        for page in ("legal", "mapmaker", "matches", "match", "live", "lobby"):
+        for page in ("legal", "mapmaker", "matches", "match", "lobby"):
             with self.subTest(page):
                 error = self.replay(**{page: lambda text: text.replace("</body>", "<p>@@BUILD_NOTE@@</p></body>")})
                 self.assertIsNotNone(error)
                 self.assertIn("RUN failed", error)
 
     def test_a_page_with_a_bar_at_the_top_that_lacks_a_stamp_stops_the_build(self):
-        for page in ("matches", "match", "live", "legal", "mapmaker"):
+        for page in ("matches", "match", "legal", "mapmaker"):
             for attribute in ("data-build", "data-built"):
                 with self.subTest(page=page, attribute=attribute):
                     error = self.replay(**{page: lambda text: text.replace(' %s="@@' % attribute, ' %s-x="@@' % attribute, 1)})

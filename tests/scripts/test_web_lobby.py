@@ -339,9 +339,9 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn('<a class="btn sm" href="/matches" id="watch-top"', self.markup)                  # (the one button of the header, the right of the row: test_web_replay.py)
         nav = self.page[self.page.index('<nav aria-label="Footer links">'):]
         nav = nav[:nav.index("</nav>")]
-        self.assertEqual(re.findall(r">(How it works|Matches|Live now|Sprites and sounds|Changelog|GitHub|Feedback|Legal)</(?:a|button)>", nav),
-                         ["How it works", "Matches", "Live now", "Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal"])
-        for needle in ('href="/matches" id="watch-link"', 'href="/live-now"', 'href="/asset_catalog/"', 'href="/changelog"', 'href="https://github.com/dchadd427/ants-cross-platform"',
+        self.assertEqual(re.findall(r">(How it works|Matches|Sprites and sounds|Changelog|GitHub|Feedback|Legal)</(?:a|button)>", nav),
+                         ["How it works", "Matches", "Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal"])
+        for needle in ('href="/matches" id="watch-link"', 'href="/asset_catalog/"', 'href="/changelog"', 'href="https://github.com/dchadd427/ants-cross-platform"',
                        'href="https://github.com/dchadd427/ants-cross-platform/issues"', 'href="/legal"'):
             self.assertIn(needle, nav, needle)
         self.assertIn('id="game-version"', self.page)

@@ -1605,13 +1605,6 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "live_page_opens_the_hub",
-   "file": "web/live.html",
-   "old": "</body>",
-   "new": "<script>new WebSocket(\"wss://\" + location.host + \"/hub/ws\");</script></body>",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
    "id": "legal_page_loads_the_dock",
    "file": "web/legal.html",
    "old": "</body>",
