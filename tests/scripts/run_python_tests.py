@@ -47,6 +47,8 @@ COSTS = {
     "test_nginx_stats.TheRealServerBehindTheFile": 7, "test_web_without_docker.TheRealDockerfileReplayed": 7, "test_ci_light.Decision": 6, "test_community_maps.TheList": 6,
     "test_mutate_tool.Project": 6, "test_nginx_stats.TheBlocksRun": 6, "test_run_tests.ParallelRunner": 6, "test_web_map_maker_link.TheChecksAreNotVacuous": 6,
     "test_web_shapes.TheMutantsOfThePicker": 6, "test_cmake_version.CcacheSupport": 5,
+    "test_hub_roles.TheLiveRoles": 30, "test_hub_roles.TheLookup": 6, "test_hub_roles.TheSecrets": 5,
+    "test_hub_powers.TheLiveHub": 45, "test_hub_powers.TheRealProcess": 31, "test_hub_powers.TheFreshCheck": 6, "test_hub_powers.TheIdIsLikeAPassword": 5,
 }
 
 # The mutation classes that run as several units (the groups of this table, `NAME[K/N]`, K from 1): each unit gets the environment variable SHARD_ENV, "K/N", and the class (through
@@ -100,7 +102,7 @@ def units(directory, package):
         module = os.path.splitext(os.path.basename(path))[0]
         with open(path, encoding="utf-8") as f:
             tree = ast.parse(f.read(), path)
-        classes = [n.name for n in tree.body if isinstance(n, ast.ClassDef) and any(isinstance(b, ast.FunctionDef) and b.name.startswith("test") for b in n.body)]
+        classes = [n.name for n in tree.body if isinstance(n, ast.ClassDef) and any(isinstance(b, (ast.FunctionDef, ast.AsyncFunctionDef)) and b.name.startswith("test") for b in n.body)]
         if classes:
             for c in classes:
                 label = "%s.%s" % (module, c)

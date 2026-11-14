@@ -44,7 +44,7 @@ class TheText(unittest.TestCase):
     def test_it_is_an_exact_location_and_the_only_one_of_its_name(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
         self.assertEqual([l for l in locations if "hub" in l].count("= /hub/ws"), 1)
-        self.assertEqual(sorted(l for l in locations if "hub" in l),                       # (the pages of the login are tests/scripts/test_nginx_hub_login.py)
+        self.assertEqual(sorted(l for l in locations if "hub" in l and "/hub/pic" not in l),                       # (the pages of the login are tests/scripts/test_nginx_hub_login.py, the pictures' door test_nginx_hub_pic.py)
                          sorted(["= /hub/ws", "@hub_off", "= /hub/login", "= /hub/callback", "= /hub/me", "= /hub/logout", "= /hub/forget", "@hub_page_off", "@hub_page_limit", "@hub_page_site"]))
         self.assertTrue(HUB and OFF)
 
@@ -223,7 +223,7 @@ class TheBlockRuns(unittest.TestCase):
         a = self.connect(headers={"Cookie": COOKIE})
         self.assertEqual(a.status, "HTTP/1.1 101 Switching Protocols")
         welcome = a.recv_json()
-        self.assertEqual({k: v for k, v in welcome["you"].items() if k != "k"}, {"name": "alice", "mod": False})
+        self.assertEqual({k: v for k, v in welcome["you"].items() if k != "k"}, {"name": "alice", "mod": False, "role": "none"})
         self.assertRegex(welcome["you"]["k"], r"^[0-9a-f]{12}$")                       # (the key of the account: the hub's, through nginx as it is)
         b = self.connect()
         self.assertEqual(b.recv_json()["you"], None)

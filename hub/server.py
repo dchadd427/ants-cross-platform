@@ -10,10 +10,11 @@ import signal
 import sys
 import time
 
-from . import chat as chatmod, config as configmod, http, limits as limitmod, session as sessionmod, store as storemod, text as textrules, ws
+from . import chat as chatmod, config as configmod, http, limits as limitmod, roles as rolesmod, session as sessionmod, store as storemod, text as textrules, ws
 from .log import Log
 
 WS_PATH = "/hub/ws"
+PICTURE_PREFIX = "/hub/pic/"                          # the pictures (hub/pictures.py): one route for every path under it, which shapes the name itself
 HEALTH_PATH = "/hub/healthz"
 
 
@@ -102,18 +103,22 @@ class Peer:
 
 
 class Hub:
-    def __init__(self, cfg, store, sessions, log, limits=None, clock=time.monotonic):
+    def __init__(self, cfg, store, sessions, log, limits=None, clock=time.monotonic, roles=None):
         self.cfg = cfg
         self.store = store
         self.sessions = sessions
         self.log = log
         self.limits = limits or limitmod.Limits()
         self.clock = clock
-        self.chat = chatmod.Chat(store, cfg.mods, self.limits, clock, sessions.login)
+        self.chat = chatmod.Chat(store, roles or rolesmod.Roles(cfg, self.limits, clock, log), self.limits, clock, sessions.login)
         self.chat.on_store_error = self.store_trouble
+        self.chat.on_command_error = self.command_trouble
         self.chat.end_logins = self.end_logins            # (a switch of the shown name closes the account's sockets with the call that a logout uses)
         self.next_trouble_log = float("-inf")
         self.next_presence_log = float("-inf")
+        self.next_roles_log = float("-inf")
+        self.next_command_log = float("-inf")
+        self.next_pictures_log = float("-inf")
         self.per_address = limitmod.PerAddress(self.limits.sockets_per_address)
         self.pending = 0
         self.server = None
@@ -131,11 +136,17 @@ class Hub:
         self.server = await asyncio.start_server(self.handle, host, port, limit=8192, backlog=128)
         self.port = self.server.sockets[0].getsockname()[1]
         self.ticker = asyncio.ensure_future(self.tick())
+        self.chat.roles.start()
         return self.port
 
     async def stop(self):
         if self.ticker:
             self.ticker.cancel()
+        self.chat.roles.stop()
+        if getattr(self.sessions, "pictures", None) is not None:
+            self.sessions.pictures.stop()
+        for task in list(self.chat.busy.values()):
+            task.cancel()
         if self.server:
             self.server.close()
         for peer in list(self.chat.peers):
@@ -161,6 +172,8 @@ class Hub:
             if request.path == HEALTH_PATH and request.method == "GET":
                 return writer.write(http.response(200, {"ok": True}))
             route = self.routes.get(request.split()[0])
+            if route is None and request.split()[0].startswith(PICTURE_PREFIX):
+                route = getattr(self.sessions, "picture_route", None)
             if route is not None:
                 self.pending -= 1                                     # (the place of a connection that has not finished its handshake: this one has, and may wait for Discord)
                 pending = False
@@ -254,6 +267,25 @@ class Hub:
             self.next_presence_log = now + 10.0
             self.log.event("error", kind=type(error).__name__, where="presence")
 
+    def command_trouble(self, error):
+        """A moderator's command that waited for a lookup failed for a bug: one line in the log every ten seconds at the most (the class of the error, never its text)."""
+        now = self.clock()
+        if now >= self.next_command_log:
+            self.next_command_log = now + 10.0
+            self.log.event("error", kind=type(error).__name__, where="command")
+
+    def pictures_trouble(self, now, error):
+        """The pictures' look in the clock failed (the database refused): one line in the log every ten seconds at the most (the class of the error, never its text)."""
+        if now >= self.next_pictures_log:
+            self.next_pictures_log = now + 10.0
+            self.log.event("error", kind=type(error).__name__, where="pictures")
+
+    def roles_trouble(self, now, error):
+        """The roles' work in the clock failed: one line in the log every ten seconds at the most (the class of the error, never its text)."""
+        if now >= self.next_roles_log:
+            self.next_roles_log = now + 10.0
+            self.log.event("error", kind=type(error).__name__, where="roles")
+
     def end_logins(self, session=None, account=None):
         """The sockets of a login that was ended (its session key), or of every login of an account, are closed: a socket never outlives the login that it was let in with. The page
         connects again, as a reader."""
@@ -304,6 +336,16 @@ class Hub:
             elif now - peer.last_ping >= self.limits.ping_seconds:
                 peer.last_ping = now
                 peer.write(ws.encode_frame(ws.PING))
+        try:                                             # (the roles that ran out are told to the pages, and the people who left are forgotten)
+            self.chat.roles.on_tick(now)
+        except Exception as e:
+            self.roles_trouble(now, e)
+        pictures = getattr(self.sessions, "pictures", None)
+        if pictures is not None:
+            try:                                         # (the pictures are read again once a tick when something changed, here or in the command line: the pages of an account whose picture changed are told, and the list's rows read this)
+                pictures.sync()
+            except Exception as e:
+                self.pictures_trouble(now, e)
         try:                                             # (the count of people and the list of the front page, on their own: a bug in them never stops the retention below, and a failing purge never stops them)
             count = self.chat.presence.people()
             if count != self.online_shown and now - self.online_at >= self.limits.online_seconds:
@@ -319,6 +361,9 @@ class Hub:
             self.next_forget = now + 60.0
             self.chat.account_limits.forget_idle(now)
             self.chat.pick_limits.forget_idle(now)
+            self.chat.pics_limits.forget_idle(now)
+            self.chat.wait_limits.forget_idle(now)
+            self.chat.named_limits.forget_idle(now)
             if hasattr(self.sessions, "forget_idle"):
                 self.sessions.forget_idle(now, wall)
         if now >= self.next_purge:
@@ -352,12 +397,20 @@ class Hub:
                 self.log.event("crowded", sockets=biggest, groups=len(self.per_address.counts))      # (no address: see docs/HUB.md, "Behind a reverse proxy")
 
 
+def scrubbed_error(log, context):
+    """What the event loop reports of a task or a callback that failed without anybody reading it (asyncio's own report holds the text of the error and its traceback, and a text can hold an
+    id): the class of the error, in the log, and nothing else."""
+    error = context.get("exception")
+    log.event("error", kind=type(error).__name__ if error is not None else "none", where="loop")
+
+
 async def serve(cfg, store, sessions, log):
     hub = Hub(cfg, store, sessions, log)
     port = await hub.start(cfg.host, cfg.port)
     log.event("listening", port=port)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
+    loop.set_exception_handler(lambda _loop, context: scrubbed_error(log, context))
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop.set)
     await stop.wait()
@@ -380,6 +433,10 @@ def main(env=None):
         log.event("warning", what="a_fake_discord_is_on")
     if (cfg.login_client_id or cfg.login_client_secret) and not cfg.login_on:
         log.event("warning", what="discord_login_off_needs_id_secret_and_site_address")
+    if cfg.roles_partial:
+        log.event("warning", what="discord_roles_off_needs_token_server_and_a_role")
+    if (os.environ if env is None else env).get("ANTS_HUB_MODS", "").strip():
+        log.event("warning", what="ANTS_HUB_MODS_is_no_longer_read_roles_come_from_discord")
     store = storemod.Store(cfg.db, busy_ms=300)                      # (the one thread of the hub waits at most this long for another process's write)
     try:
         store.checkpoint()                  # (what a crash left in the log file)

@@ -87,3 +87,14 @@ def response(status, body=None, headers=None, page=None):
             raise ValueError("a header that is not safe to write")
     lines += ["%s: %s" % kv for kv in pairs]
     return ("\r\n".join(lines) + "\r\n\r\n").encode("latin-1") + payload
+
+
+PICTURE_HEADERS = (("Content-Type", "image/png"), ("X-Content-Type-Options", "nosniff"), ("Content-Security-Policy", "default-src 'none'; sandbox"), ("Cross-Origin-Resource-Policy", "same-origin"),
+                   ("Cache-Control", "private, max-age=86400, immutable"))
+
+
+def picture(png):
+    """The answer that carries a picture's bytes (hub/pictures.py): the same headers every time, all written here and none taken from the bytes or from anywhere else. It is only ever an image/png with
+    nosniff and a policy that lets it run nothing; a name never changes its bytes, so a browser may keep it for a day (`private`: a caching proxy in front keeps no copy)."""
+    head = ["HTTP/1.1 200 OK", "Content-Length: %d" % len(png), "Connection: close"] + ["%s: %s" % kv for kv in PICTURE_HEADERS]
+    return ("\r\n".join(head) + "\r\n\r\n").encode("latin-1") + png

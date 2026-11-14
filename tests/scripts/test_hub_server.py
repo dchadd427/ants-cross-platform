@@ -144,7 +144,7 @@ class TheHandshake(RigTest):
         self.assertNotIn("sec-websocket-extensions", client.reply_headers)
         self.assertNotIn("sec-websocket-protocol", client.reply_headers)
         message = client.recv_json()
-        self.assertEqual((message["t"], message["v"], message["login"], without_the_key(message["you"])), ("welcome", 1, True, {"name": "alice", "mod": False}))
+        self.assertEqual((message["t"], message["v"], message["login"], without_the_key(message["you"])), ("welcome", 1, True, {"name": "alice", "mod": False, "role": "none"}))
 
     def test_the_origin_must_be_the_site_exactly(self):
         for origin in (None, "null", "", "https://evil.example", "http://chat.example.org", "https://chat.example.org:8443", "https://chat.example.org.evil.example", "https://evil.example/https://chat.example.org",
@@ -689,7 +689,7 @@ class TheBadIdentity(RigTest):
         c = hc.Client(self.rig.port)
         self.clients.append(c)
         you = c.recv_json()["you"]
-        self.assertEqual(({k: v for k, v in you.items() if k != "k"}, len(you["k"])), ({"name": "alice", "mod": False}, 12))
+        self.assertEqual(({k: v for k, v in you.items() if k != "k"}, len(you["k"])), ({"name": "alice", "mod": False, "role": "none"}, 12))
 
 
 class TheShownNameIsCheckedToo(RigTest):
@@ -715,7 +715,7 @@ class TheShownNameIsCheckedToo(RigTest):
                           (I("1001", "alice", False, None, 0, "alice", "username", "\u7530\u4e2d\u592a\u90ce"), "alice")):
             you = self.serve(who)
             self.assertEqual(you["name"], name, who)
-            self.assertEqual(sorted(you), ["k", "mod", "name"] if not who.other else ["k", "mod", "name", "other", "pick"])
+            self.assertEqual(sorted(you), ["k", "mod", "name", "role"] if not who.other else ["k", "mod", "name", "other", "pick", "role"])
 
     def test_anything_else_is_a_reader(self):
         I = sessionmod.Identity
@@ -892,13 +892,14 @@ class TheHubTidiesTheLimits(unittest.TestCase):
 
     def test_the_idle_buckets_of_the_switch_and_of_the_lines_go_at_the_minute(self):
         self.hub.chat.pick_limits.take("111111111111111111", 0.0)
+        self.hub.chat.pics_limits.take("111111111111111111", 0.0)
         self.hub.chat.account_limits.check("111111111111111111", "hello", 0.0)
         self.hub.next_forget = float("-inf")
         self.hub.on_tick(10.0)                                        # (not yet full again: they stay)
-        self.assertEqual((len(self.hub.chat.pick_limits.buckets), len(self.hub.chat.account_limits.accounts)), (1, 1))
+        self.assertEqual((len(self.hub.chat.pick_limits.buckets), len(self.hub.chat.pics_limits.buckets), len(self.hub.chat.account_limits.accounts)), (1, 1, 1))
         self.hub.next_forget = float("-inf")
         self.hub.on_tick(400.0)
-        self.assertEqual((len(self.hub.chat.pick_limits.buckets), len(self.hub.chat.account_limits.accounts)), (0, 0))
+        self.assertEqual((len(self.hub.chat.pick_limits.buckets), len(self.hub.chat.pics_limits.buckets), len(self.hub.chat.account_limits.accounts)), (0, 0, 0))
         self.assertEqual(self.hub.next_forget, 460.0)                 # (and the next look is a minute on)
 
 
@@ -1290,7 +1291,8 @@ def wait_for_port(proc, log_path, timeout=10):
 class TheProcess(unittest.TestCase):
     """`python -m hub` as the image runs it, and `python -m hub.admin` against the same database."""
 
-    MODS = "5551234567,5559876543"
+    OWNER = "5551234567"                         # (always an administrator: the roles' lookup against a fake Discord is tests/scripts/test_hub_roles.py)
+    OLD = "5559876543"                           # (a value that the setting of the hand list used to take: it does nothing now)
     COOKIE = "ants_hub=canary-cookie-6d2b"
 
     def setUp(self):
@@ -1328,14 +1330,17 @@ class TheProcess(unittest.TestCase):
         c.close()
 
     def test_everything_end_to_end_and_the_log_holds_no_secret(self):
-        extra = {"ANTS_HUB_TEST_LOGIN": "1", "ANTS_HUB_MODS": self.MODS}                # (the Discord settings and their canaries: tests/scripts/test_hub_login.py, which runs the process with them)
+        extra = {"ANTS_HUB_TEST_LOGIN": "1", "ANTS_HUB_OWNER": self.OWNER, "ANTS_HUB_MODS": self.OLD}                # (the Discord settings and their canaries: tests/scripts/test_hub_login.py, which runs the process with them)
         proc, port, folder, log_path, env = self.run_hub(extra)
         db = env["ANTS_HUB_DB"]
         headers = {"X-Client-Address": "203.0.113.77", "Cookie": self.COOKIE}
         alice = self.client(port, login="710200300400:alice", headers=headers)
-        self.assertEqual(without_the_key(alice.recv_json()["you"]), {"name": "alice", "mod": False})
+        self.assertEqual(without_the_key(alice.recv_json()["you"]), {"name": "alice", "mod": False, "role": "none"})
         mod = self.client(port, login="5551234567:moddy", headers=headers)
-        self.assertEqual(without_the_key(mod.recv_json()["you"]), {"name": "moddy", "mod": True})
+        self.assertEqual(without_the_key(mod.recv_json()["you"]), {"name": "moddy", "mod": True, "role": "admin"})
+        old = self.client(port, login=self.OLD + ":oldmod", headers=headers)
+        self.assertEqual(without_the_key(old.recv_json()["you"]), {"name": "oldmod", "mod": False, "role": "none"})              # (a leftover hand list gives nobody a role)
+        old.close()
         chat_text = "canary chat text 41b7"
         alice.say(chat_text)
         line = mod.wait_line()
@@ -1372,12 +1377,13 @@ class TheProcess(unittest.TestCase):
         self.assertEqual(again.wait_line()["text"], "hello again")
         proc2.send_signal(signal.SIGTERM)
         proc2.wait(10)
+        self.assertIn(" warning what=ANTS_HUB_MODS_is_no_longer_read", read_text(log_path))
         for path in (log_path, log2):
             text = read_text(path)
             self.assertIn(" note what=sockets_are_counted_for_each_X-Client-Address", text)          # (the dependence on the proxy setting is said at every start)
             self.assertIn(" listening port=", text)
             self.assertIn(" open ", text)
-            for canary in ("5551234567", "5559876543", self.COOKIE, "canary-cookie", chat_text, "hello again", "203.0.113.77", "127.0.0.1", "710200300400", "alice", "moddy",
+            for canary in ("5551234567", self.OLD, self.COOKIE, "canary-cookie", chat_text, "hello again", "203.0.113.77", "127.0.0.1", "710200300400", "alice", "moddy",
                            "X-Hub-Test-Login", "Traceback", folder):
                 self.assertNotIn(canary, text, "the log shows " + canary)
             for line in text.splitlines():
@@ -1409,7 +1415,7 @@ class TheProcess(unittest.TestCase):
         self.assertNotIn("listening", text)
 
     def test_wrong_settings_stop_the_start_without_echoing_the_value(self):
-        for key, value in (("ANTS_HUB_MODS", "not-a-number-canary"), ("ANTS_HUB_PUBLIC_URL", "https://x.example.org/canary-path"), ("ANTS_HUB_PORT", "canary")):
+        for key, value in (("ANTS_HUB_ROLE_ADMIN", "not-a-number-canary"), ("ANTS_HUB_DISCORD_BOT_TOKEN", "short canary token"), ("ANTS_HUB_OWNER", "canary-owner"), ("ANTS_HUB_PUBLIC_URL", "https://x.example.org/canary-path"), ("ANTS_HUB_PORT", "canary")):
             proc, folder, log_path, env = start_process({key: value})
             self.procs.append(proc)
             self.assertEqual(proc.wait(10), 2, key)
