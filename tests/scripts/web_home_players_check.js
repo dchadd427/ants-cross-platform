@@ -89,6 +89,8 @@ function rig(o) {
     env.doc = doc;
     const state = { client: o.client || null, count: o.count || null, handing: !!o.handing };
     const win = { innerWidth: o.width || 1280, innerHeight: o.height || 800, listeners: {}, addEventListener(t, fn) { (win.listeners[t] = win.listeners[t] || []).push(fn); }, AntsHomeChat: Chat, AntsLobbyRules: Rules, AntsHome: Object.assign({}, Home, { countOf: () => state.count }) };
+    const store = { items: {}, getItem(k) { return Object.prototype.hasOwnProperty.call(store.items, k) ? store.items[k] : null; }, setItem(k, v) { store.items[k] = String(v); }, removeItem(k) { delete store.items[k]; } };
+    win.sessionStorage = store;
     const host = new El(env, 'div', 'home'), yard = new El(env, 'main', 'yard'), right = new El(env, 'div'), quick = new El(env, 'button'), gamesButton = new El(env, 'button');
     right.className = 'hright'; right.appendChild(new El(env, 'button')); quick.disabled = !!o.noQuick;
     host.appendChild(yard);
@@ -99,7 +101,7 @@ function rig(o) {
     const dock = { tap(fn) { taps.push(fn); }, send(obj) { if (!link.open) return false; sent.push(JSON.parse(JSON.stringify(obj))); return true; } };
     const page = { client: () => state.client, info: () => ({ client: !!state.client, model: null }), handing: () => state.handing };
     const list = Players.mount({ doc, win, host, dock, page, yard, quickHost: quick, games: gamesButton, now: clock.now, error: (e) => errors.push(e) });
-    const r = { env, clock, Players, doc, win, host, yard, right, quick, games: gamesButton, list, dock, sent, taps, errors, state, pressed, found, link };
+    const r = { store, env, clock, Players, doc, win, host, yard, right, quick, games: gamesButton, list, dock, sent, taps, errors, state, pressed, found, link };
     r.emit = (kind, m) => taps.forEach((fn) => fn(kind, m));
     r.live = (welcome) => { r.link.open = true; r.emit('live', welcome || W({})); return r; };
     r.who = (frame) => { r.emit('who', frame); return r; };
@@ -132,7 +134,7 @@ function rig(o) {
 {
     const P = Pure;
     const rowOf = (raw) => P.rowOf(raw, Chat, Rules);
-    same('a plain row: the name, where, no mark, no details', rowOf({ i: 4, name: 'sage', at: 'look' }), { id: 4, name: 'sage', at: 'look', mod: false, role: 'none', pic: '', pub: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' });
+    same('a plain row: the name, where, no mark, no details', rowOf({ i: 4, name: 'sage', at: 'look' }), { id: 4, name: 'sage', at: 'look', mod: false, role: 'none', pic: '', pub: false, priv: false, solo: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' });
     same('the mark of a moderator is exactly true (a string or a number is none)', [rowOf(row(1, 'a1', 'look', { mod: true })).mod, rowOf(row(1, 'a1', 'look', { mod: 'true' })).mod, rowOf(row(1, 'a1', 'look', { mod: 1 })).mod], [true, false, false]);
     same('a name loses the invisible and bidirectional characters and is cut at 32 code points', [rowOf(row(1, '‮alice​⁦')).name, rowOf(row(1, 'x'.repeat(40))).name], ['alice', 'x'.repeat(32) + '…']);
     same('markup in a name stays text', rowOf(row(1, '<img src=x onerror=1>')).name, '<img src=x onerror=1>');
@@ -181,14 +183,14 @@ function rig(o) {
 
     const say = P.announceOf;
     same('no room: looking', [say(null, null, false), say({}, null, false), say({ room: null }, null, false)], [{ at: 'look' }, { at: 'look' }, { at: 'look' }]);
-    same('a private room that waits says only that: no map, no seats, no code', say(CLIENT(ROOM({ isPublic: false })), { people: 2, size: 4 }, false), { at: 'wait' });
+    same('a private room that waits says only that: no map, no seats, no code', say(CLIENT(ROOM({ isPublic: false })), { people: 2, size: 4 }, false), { at: 'wait', pub: false });
     same('a public room that waits says its map, seats and code', say(CLIENT(ROOM({ isPublic: true })), { people: 2, size: 4 }, false), { at: 'wait', pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr' });
     same('a guest of a public room says its map and seats and not the code (the host\'s row has the Join)', say(CLIENT(ROOM({ isPublic: true }), 'c1v3rr', true), { people: 2, size: 4 }, false), { at: 'wait', pub: true, map: 'TREASURE.LVL', n: 2, of: 4 });
     same('a client that cannot say whether it leads says no code', say({ room: ROOM({ isPublic: true }), code: 'c1v3rr' }, null, false), { at: 'wait', pub: true, map: 'TREASURE.LVL' });
     same('a public room whose seats are not known yet (or are more than the room) says the rest', [say(CLIENT(ROOM({ isPublic: true })), null, false), say(CLIENT(ROOM({ isPublic: true })), { people: 5, size: 4 }, false)], [{ at: 'wait', pub: true, map: 'TREASURE.LVL', code: 'c1v3rr' }, { at: 'wait', pub: true, map: 'TREASURE.LVL', code: 'c1v3rr' }]);
     same('a match that is starting, a page on its way to a game, a room that a game made: playing; a match has no code, a private one says nothing', [
         say(CLIENT(ROOM({ isPublic: true, starting: true })), { people: 3, size: 4 }, false), say(CLIENT(ROOM({ isPublic: true })), { people: 3, size: 4 }, true), say(CLIENT(ROOM({ lobby: false })), null, false), say(CLIENT(ROOM({ starting: true })), { people: 3, size: 4 }, false)],
-        [{ at: 'play', pub: true, map: 'TREASURE.LVL', n: 3, of: 4 }, { at: 'play', pub: true, map: 'TREASURE.LVL', n: 3, of: 4 }, { at: 'play' }, { at: 'play' }]);
+        [{ at: 'play', pub: true, map: 'TREASURE.LVL', n: 3, of: 4 }, { at: 'play', pub: true, map: 'TREASURE.LVL', n: 3, of: 4 }, { at: 'play', pub: false }, { at: 'play', pub: false }]);
     same('a code that is not the shape of one is not said', say({ room: ROOM({ isPublic: true }), code: 'ABC DEF', isLeader: () => true }, null, false), { at: 'wait', pub: true, map: 'TREASURE.LVL' });
 }
 
@@ -280,7 +282,7 @@ function rig(o) {
     check('nothing is said while nothing changes', r.sent.length === n);
     r.lost(); r.state.client = CLIENT(ROOM({ isPublic: false }), 'k7m2xq');
     r.live();
-    same('a new socket is told everything again at once (what the visitor is doing now, and the ask), without waiting', r.sent.slice(n), [{ t: 'here', at: 'wait' }, { t: 'who' }]);
+    same('a new socket is told everything again at once (what the visitor is doing now, and the ask), without waiting', r.sent.slice(n), [{ t: 'here', at: 'wait', pub: false }, { t: 'who' }]);
     r.state.client = null; to(61000); to(64100);
     const m = r.sent.length; to(90000);
     check('(and the next change is told as always, then nothing more)', r.hereFrames().slice(-1)[0].at === 'look' && r.sent.length === m);
@@ -643,7 +645,7 @@ function bringPlayers(env) {
     const code = playersSource.replace(/\/\/.*/g, '');
     check('no markup is made from text, nothing is evaluated', !/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|srcdoc|createContextualFragment|DOMParser|setTimeout\(\s*['"]/.test(code));
     check('no link, no picture, no address: the list sets no href or src', !/\.href\b|\.src\b|setAttribute\(\s*['"](href|src|style|on\w+|srcdoc)/.test(code));
-    check('nothing is kept in the browser and no socket is opened by the list itself', !/localStorage|sessionStorage|indexedDB|document\.cookie|new WebSocket|WebSocket\(|XMLHttpRequest|fetch\(|navigator\.sendBeacon/.test(code));
+    check('the only thing kept in the browser is the hand-over note of this tab (ants.here), and no socket is opened by the list itself', (code.match(/win\.sessionStorage/g) || []).length === 1 && /'ants\.here'/.test(code) && !/localStorage|indexedDB|document\.cookie|new WebSocket|WebSocket\(|XMLHttpRequest|fetch\(|navigator\.sendBeacon/.test(code));
     check('it never names the hub\'s door (the dock\'s script alone knows it)', !/\/hub\b/.test(code));
     same('it makes only these kinds of element', [...new Set([...code.matchAll(/\bel\('(\w+)'/g)].map((m) => m[1]).concat([...code.matchAll(/\bbutton\('/g)].length ? ['button'] : []))].sort(), ['bdi', 'button', 'div', 'h2', 'h3', 'hr', 'i', 'li', 'p', 'section', 'span', 'ul']);
 }
@@ -761,6 +763,70 @@ function bringPlayers(env) {
     check('no picture was written as markup', q.env.innerHTMLWrites.length === 0 && q.errors.length === 0);
 }
 
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 9. Who is playing: a private mark, a game against the computer, the visitor's own card, and the hand-over note
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const P = Pure, rules = Rules;
+    const got = (raw) => P.rowOf(raw, Chat, rules);
+    const base = { i: 5, name: 'ivy' };
+    check('a private room or match keeps the mark and nothing else', (() => {
+        const a = got(Object.assign({ at: 'wait', priv: true, map: 'SECRET.LVL', n: 2, of: 4, code: 'c0d3' }, base)), b = got(Object.assign({ at: 'play', priv: true, map: 'TREASURE.LVL', n: 2 }, base));
+        return a.priv && b.priv && !a.pub && !b.pub && a.map === '' && b.map === '' && a.code === '' && a.n === -1 && b.n === -1 && !a.solo && !b.solo;
+    })());
+    check('the mark is for a room or a match, never for a visitor who looks, and a public row is not private', !got(Object.assign({ at: 'look', priv: true }, base)).priv && !got(Object.assign({ at: 'play', priv: true, pub: true, map: 'ISLANDS.LVL' }, base)).priv && !got(Object.assign({ at: 'play', priv: 'yes' }, base)).priv);
+    const solo = got(Object.assign({ at: 'play', solo: true, map: 'TREASURE.LVL', n: 3, code: 'x1' }, base));
+    check('a game against the computer: solo, an original\'s name, no seats, no code', solo.solo && solo.mapName === 'Treasure' && solo.n === -1 && solo.code === '' && !solo.pub && !solo.priv);
+    check('solo is for a match only, and an odd map is no name', !got(Object.assign({ at: 'wait', solo: true }, base)).solo && !got(Object.assign({ at: 'look', solo: true }, base)).solo && got(Object.assign({ at: 'play', solo: true, map: '../x.lvl' }, base)).map === '' && got(Object.assign({ at: 'play', solo: true, map: 'MY MAP.lvl' }, base)).mapName === '');
+    same('the lines: a private room, a private game, a game against the computer by an original\'s name or by itself', [
+        P.metaOf(got(Object.assign({ at: 'wait', priv: true }, base)), false), P.metaOf(got(Object.assign({ at: 'play', priv: true }, base)), false),
+        P.metaOf(got(Object.assign({ at: 'play', solo: true, map: 'TREASURE.LVL' }, base)), false), P.metaOf(got(Object.assign({ at: 'play', solo: true }, base)), false), P.metaOf(got(Object.assign({ at: 'play', solo: true, map: 'MY MAP.lvl' }, base)), false)],
+    ['Private room', 'Private game', 'Treasure · vs computer', 'vs computer', 'vs computer']);
+    const r = rig();
+    r.live(W({ me: 1 })).who(FULL([row(1, 'maple'), row(2, 'pat', 'wait', { priv: true }), row(3, 'quinn', 'play', { priv: true }), row(4, 'rex', 'play', { solo: true, map: 'TREASURE.LVL' }), row(5, 'sky', 'play', { pub: true, map: 'ISLANDS.LVL', n: 3 }), row(6, 'tom', 'play')]));
+    same('the list: Waiting and Playing rows say what each is', ['pat', 'quinn', 'rex', 'sky', 'tom'].map((n) => r.metaOf(n)), ['Private room', 'Private game', 'Treasure · vs computer', 'Islands · 3 players', 'In a game']);
+    const lockOf = (n) => { const c = byClass(r.panel(), 'pl-card').find((x) => one(x, 'pl-nm').textContent === n); return c ? byClass(c, 'pl-lock').length : -1; };
+    same('a lock only on the private rows, and no Join or button anywhere on them', [lockOf('pat'), lockOf('quinn'), lockOf('rex'), lockOf('sky'), r.joins().length, r.panel().findAll((e) => e.tagName === 'button').length], [1, 1, 0, 0, 0, 0]);
+    same('the hub is told a private room is private, and nothing else of it', (() => {
+        const q = rig({ client: CLIENT(ROOM({ isPublic: false }), 'k7m2xq'), count: { people: 2, size: 4 } });
+        q.live(W({})); q.tick(0);
+        return q.hereFrames();
+    })(), [{ t: 'here', at: 'wait', pub: false }]);
+}
+{   // the visitor's own card: another tab in a match makes it Playing
+    const r = rig();
+    r.live(W({ me: 1 })).who(FULL([row(1, 'maple', 'play', { pub: true, map: 'ISLANDS.LVL', n: 3 })]));
+    r.tick(1000);
+    same('another tab plays: the visitor\'s card says Playing, with the match', [r.metaOf('maple')], ['Playing: Islands · 3 players']);
+    r.who({ t: 'who', full: false, n: 2, g: 0, more: 0, rows: [row(1, 'maple', 'look')], gone: [] }); r.tick(1000);
+    same('and says Looking again when the hub says so', [r.metaOf('maple')], ['Looking: Looking']);
+    const q = rig({ client: CLIENT(ROOM({ isPublic: false }), 'k7m2xq'), count: { people: 2, size: 4 } });
+    q.live(W({ me: 1 })).who(FULL([row(1, 'maple', 'play', { priv: true })])); q.tick(1000);
+    same('a room of this page that waits is the visitor\'s own word, but a match in another tab wins', [q.metaOf('maple')], ['Playing: Private game']);
+}
+{   // the note for the game page
+    const r = rig({ client: CLIENT(ROOM({ isPublic: true }), 'c1v3rr'), count: { people: 2, size: 4 } });
+    r.live(W({})); r.tick(1000);
+    const note = JSON.parse(r.store.getItem('ants.here'));
+    same('a room that waits: the note is the details that the front page tells the hub, and no code, no name', note, { v: 1, named: 1, r: Pure.hashOf('c1v3rr'), pub: true, map: 'TREASURE.LVL', n: 2, of: 4 });
+    check('no code, no name and no account in the note', JSON.stringify(note).indexOf('c1v3rr') === -1 && JSON.stringify(note).indexOf('maple') === -1);
+    r.state.handing = true; r.state.count = { people: 3, size: 4 }; r.tick(1000);
+    same('on the way to the game it is the latest details', JSON.parse(r.store.getItem('ants.here')).n, 3);
+    r.state.client = null; r.state.handing = false; r.tick(1000);
+    check('no room: no note', r.store.getItem('ants.here') === null);
+    const p = rig({ client: CLIENT(ROOM({ isPublic: false, map: 'SECRET.LVL' }), 'zzz999'), count: { people: 2, size: 4 } });
+    p.live(W({})); p.tick(1000);
+    same('a private room: the note says private and nothing more', JSON.parse(p.store.getItem('ants.here')), { v: 1, named: 1, r: Pure.hashOf('zzz999'), pub: false });
+    const g = rig({ client: CLIENT(ROOM({ isPublic: true }), 'c1v3rr'), count: { people: 1, size: 4 } });
+    g.live(W({ you: null, me: undefined })); g.tick(1000);
+    check('a guest: the note says so (the game page opens no socket)', JSON.parse(g.store.getItem('ants.here')).named === 0);
+    const off = rig({ client: CLIENT(ROOM({ isPublic: true }), 'c1v3rr'), count: { people: 2, size: 4 } });
+    off.tick(1000);
+    check('no hub, no note', off.store.getItem('ants.here') === null);
+}
+same('a note of a private room is only that, whatever it is given; no room, or one that is not a code: none', [Pure.noteOf({ at: 'play', pub: false, map: 'SECRET.LVL', n: 2, of: 3 }, true, 'k7m2xq'), Pure.noteOf({ at: 'look' }, true, 'k7m2xq'), Pure.noteOf({ at: 'wait', pub: true }, true, 'A B'), Pure.noteOf(null, true, 'k7m2xq')], [{ v: 1, named: 1, r: Pure.hashOf('k7m2xq'), pub: false }, null, null, null]);
+check('the hash of the note is the game page\'s own', ['c1v3rr', 'a', 'k7m2xq', 'zzz999'].every((c) => Pure.hashOf(c) === require(path.join(lobbyDir, 'hub_here.js')).hashOf(c)));
 
 console.log('players list: ' + checks + ' checks, ' + failures + ' failed');
 process.exit(failures === 0 ? 0 : 1);

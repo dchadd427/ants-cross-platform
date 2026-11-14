@@ -20,7 +20,7 @@
     var GROUPS = [['mod', 'Staff'], ['look', 'Looking'], ['wait', 'Waiting'], ['play', 'Playing']];
     var WORD = { look: 'Looking', wait: 'Waiting', play: 'Playing' };
     var TEXT = {
-        title: 'Players', here: ' here now', you: 'you', moderator: 'moderator', administrator: 'administrator', privateRoom: 'Private room', privateGame: 'Private game', publicRoom: 'Public room', inRoom: 'In a room', inGame: 'In a game', join: 'Join', gone: 'That game is not open any more.',
+        title: 'Players', here: ' here now', you: 'you', moderator: 'moderator', administrator: 'administrator', privateRoom: 'Private room', privateGame: 'Private game', vsComputer: 'vs computer', publicRoom: 'Public room', inRoom: 'In a room', inGame: 'In a game', join: 'Join', gone: 'That game is not open any more.',
         guest: ' guest', guests: ' guests', notIn: 'not logged in', more: ' more', and: 'and ', many: '500+', player: ' player', players: ' players', of: ' of ',
         off: 'Players list is off right now', offNote: 'The chat hub is not answering. Games and rooms work as always; this list comes back by itself.'
     };
@@ -34,13 +34,20 @@
     }
     function fresh() { return { rows: Object.create(null), n: 0, g: 0, more: 0 }; }
     function roleOf(raw, mod) { return mod !== true ? 'none' : raw === 'admin' ? 'admin' : 'mod'; }       // (the hub's `mod` is true for both roles; `role` says which, where the hub says it: nothing else makes an admin)
-    // One row of the hub's list, cleaned: { id, name, at, mod, role, pic (a checked picture name or ''), pub, map, mapName, guess, n, of, code }, or null when it is not a row. A room's details are kept for a public room only, a code for a room that waits only.
+    // One row of the hub's list, cleaned: { id, name, at, mod, role, pic (a checked picture name or ''), pub, priv (a private room or match), solo (a game against the computer; its map is an original's name only), map, mapName, guess, n, of, code }, or null when it is not a row. A room's details are kept for a public room only, a code for a room that waits only.
     // mapName is an original's name (the page's own table); guess is what a community map would be called, which is drawn only where the Games list shows the same room under the same name (the hub's words are not drawn).
     function rowOf(raw, Chat, rules) {
         if (!raw || typeof raw !== 'object' || !whole(raw.i, 0, LIMIT.ids) || typeof raw.name !== 'string' || STATUS.indexOf(raw.at) === -1) return null;
         var name = Chat.clip(Chat.plain(raw.name.slice(0, LIMIT.name * 4), true), LIMIT.name);
         if (!name) return null;
-        var row = { id: raw.i, name: name, at: raw.at, mod: raw.mod === true, role: roleOf(raw.role, raw.mod), pic: Chat.picOf(raw.pic), pub: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' };
+        var row = { id: raw.i, name: name, at: raw.at, mod: raw.mod === true, role: roleOf(raw.role, raw.mod), pic: Chat.picOf(raw.pic), pub: false, priv: false, solo: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' };
+        if (raw.pub !== true && raw.at !== 'look') {                       // a private room or match is a fact (no map, seats or code are kept); a game against the computer is a match with a map at most
+            if (raw.priv === true) row.priv = true;
+            else if (raw.solo === true && raw.at === 'play') {
+                row.solo = true;
+                if (typeof raw.map === 'string' && rules.validMapFile(raw.map)) { var own = rules.mapOfFile(raw.map); row.map = raw.map; row.mapName = own ? own.name : ''; }
+            }
+        }
         if (raw.pub === true) {
             row.pub = true;
             if (typeof raw.map === 'string' && rules.validMapFile(raw.map)) {
@@ -82,15 +89,17 @@
         return parts.join(' · ');
     }
     // The line under a name: where the person is. A person who looks has none (the group says it), except where `label` is set (the visitor's own row, a moderator's: no group says it there). A room without details
-    // is "In a room", not private: the hub keeps none of an account that may not chat either; the visitor's own row (`own`) knows.
+    // is "In a room": the hub keeps none of an account that may not chat either (a private room or match is still a fact for an account that may not chat); the visitor's own row (`own`) knows.
     function metaOf(row, label, own) {
         if (row.at === 'look') return label ? WORD.look : '';
-        if (row.at === 'wait') return row.pub ? seatsText(row) || TEXT.publicRoom : own ? TEXT.privateRoom : TEXT.inRoom;
+        if (row.at === 'wait') return row.pub ? seatsText(row) || TEXT.publicRoom : row.priv || own ? TEXT.privateRoom : TEXT.inRoom;
+        if (row.priv) return TEXT.privateGame;
+        if (row.solo) return [row.mapName, TEXT.vsComputer].filter(Boolean).join(' · ');
         if (!row.pub) return own ? TEXT.privateGame : TEXT.inGame;
         return [row.mapName, row.n >= 0 ? row.n + (row.n === 1 ? TEXT.player : TEXT.players) : ''].filter(Boolean).join(' · ') || TEXT.inGame;
     }
     // What this page tells the hub it is doing, from its own room (client: the page's LobbyClient or null; count: Home's { people, size } of the room or null; handing: the page is on its way to a game).
-    // Looking: no room. Waiting: a room that has not started. Playing: it has (or the page is on its way to it). A public room adds its map and seats, and its code if the visitor is its host; a private one adds nothing.
+    // Looking: no room. Waiting: a room that has not started. Playing: it has (or the page is on its way to it). A public room adds its map and seats, and its code if the visitor is its host; a private one says `pub`:false and nothing more.
     function announceOf(client, count, handing) {
         var room = client && client.room;
         if (!room) return { at: 'look' };
@@ -100,8 +109,22 @@
             if (typeof room.map === 'string' && room.map) say.map = room.map;
             if (count && count.size >= 1 && count.people <= count.size) { say.n = count.people; say.of = count.size; }
             if (say.at === 'wait' && typeof client.code === 'string' && ROOM.test(client.code) && client.isLeader && client.isLeader()) say.code = client.code;      // (the host's row has the Join, not each guest's)
-        }
+        } else say.pub = false;                                          // (a private room says only that: the hub keeps a mark, never a map, seats or a code)
         return say;
+    }
+
+    // The note that the game page reads when this page hands the visitor over (web/hub_here.js; sessionStorage `ants.here`, this tab only): { v: 1, named, r, pub, map, n, of } and nothing else: `named` is 1 for a person who is logged in,
+    // `r` eight hex digits of a plain hash of the room's code (it only tells the game page that the note is this room's: the code itself is never kept here), a private room says `pub`:false and no more. null where there is no room.
+    function hashOf(code) {
+        var h = 0x811c9dc5, i;
+        for (i = 0; i < code.length; i++) { h ^= code.charCodeAt(i) & 255; h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0; }
+        return ('00000000' + h.toString(16)).slice(-8);
+    }
+    function noteOf(said, named, code) {
+        if (!said || (said.at !== 'wait' && said.at !== 'play') || typeof code !== 'string' || !ROOM.test(code)) return null;
+        var note = { v: 1, named: named ? 1 : 0, r: hashOf(code), pub: said.pub === true };
+        if (note.pub) { if (said.map) note.map = said.map; if (said.n !== undefined) { note.n = said.n; note.of = said.of; } }
+        return note;
     }
 
     // ---- the list ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -113,7 +136,7 @@
         var now = env.now || function () { return Date.now(); };
         var yard = env.yard || host;
         var phase = 'none', supported = null, live = false, asked = false, you = null, model = fresh();      // phase: 'none' (nothing shows), 'off' (the hub is not there), 'on'
-        var me = null, doing = null, sentSig = null, lastSent = null, painted = '', joins = [], timers = { poll: 0, note: 0 };
+        var me = null, doing = null, sentSig = null, lastSent = null, painted = '', joins = [], kept = '', timers = { poll: 0, note: 0 };
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -169,6 +192,7 @@
             who.appendChild(name);
             if (meta) {
                 var line = el('span', 'pl-meta');
+                if (row.priv) { var lock = el('i', 'pl-lock'); lock.setAttribute('aria-hidden', 'true'); line.appendChild(lock); }       // (a small lock: drawn by the style, the words say it too)
                 if (o.label) line.appendChild(el('span', 'pl-sr', WORD[row.at] + ': '));
                 line.appendChild(el('span', '', meta));
                 who.appendChild(line); li.className += ' has-sub';
@@ -194,18 +218,22 @@
             put(text, [el('span', '', '+ ' + n + (n === 1 ? TEXT.guest : TEXT.guests)), el('span', 'pl-gsub', TEXT.notIn)]);
             return put(g, [av, text]);
         }
+        function playingElsewhere() {                                    // the hub's row of this account says Playing (another tab is in a match) while this page is not: the visitor's card says Playing too
+            var mine = me !== null ? model.rows[me] : null;
+            return mine && mine.at === 'play' && !(doing && doing.at === 'play') ? mine : null;
+        }
         function paintBody() {                                           // the part under the header: made again only when what it shows changed (the scroll and the focus stay where they were)
             var own = ownCode(), shown = listOf(model, me), people = 0;
             GROUPS.forEach(function (x) { shown[x[0]] = shown[x[0]].map(named); people += shown[x[0]].length; });
-            var empty = model.n <= 1 && model.more === 0 && people === 0, mine = you ? { name: you.name, mod: you.mod, role: you.role, pic: you.pic, doing: doing } : null;
-            var sig = JSON.stringify([phase, mine, own, model.n, model.g, model.more, GROUPS.map(function (x) { return shown[x[0]].map(function (r) { return [r.id, r.name, r.at, r.mod, r.role, r.pic, r.pub, r.mapName, r.n, r.of, r.code, r.listed]; }); })]);
+            var empty = model.n <= 1 && model.more === 0 && people === 0, mine = you ? { name: you.name, mod: you.mod, role: you.role, pic: you.pic, doing: doing, elsewhere: playingElsewhere() } : null;
+            var sig = JSON.stringify([phase, mine, own, model.n, model.g, model.more, GROUPS.map(function (x) { return shown[x[0]].map(function (r) { return [r.id, r.name, r.at, r.mod, r.role, r.pic, r.pub, r.priv, r.solo, r.mapName, r.n, r.of, r.code, r.listed]; }); })]);
             if (sig === painted) return;
             var active = doc.activeElement, focused = active && active.getAttribute ? active.getAttribute('data-code') : null, scroll = list.scrollTop;
             painted = sig;
             clear(body); clear(list); clear(youList); clear(offBox); joins = [];
             if (phase === 'off') { put(offBox, [el('p', '', TEXT.off), el('p', 'small', TEXT.offNote)]); body.appendChild(offBox); return; }
             if (you) {                                                   // the visitor, first, as the page knows it (not as the hub last said)
-                var row = rowOf({ i: 0, name: you.name, at: doing ? doing.at : 'look', mod: you.mod, role: you.role, pic: you.pic, pub: !!(doing && doing.pub), map: doing && doing.map, n: doing && doing.n, of: doing && doing.of }, Chat, rules);
+                var away = playingElsewhere(), row = rowOf(away ? { i: 0, name: you.name, at: 'play', mod: you.mod, role: you.role, pic: you.pic, pub: away.pub, priv: away.priv, solo: away.solo, map: away.map, n: away.n, of: away.of } : { i: 0, name: you.name, at: doing ? doing.at : 'look', mod: you.mod, role: you.role, pic: you.pic, pub: !!(doing && doing.pub), map: doing && doing.map, n: doing && doing.n, of: doing && doing.of }, Chat, rules);
                 if (row) { row.mapName = row.mapName || row.guess; youList.appendChild(card(row, { you: true, label: true, join: false })); put(body, [youBox, rule]); }       // (the page's own room: its map's name is its own word)
             }
             body.appendChild(status);
@@ -257,10 +285,20 @@
             for (var k in said) frame[k] = said[k];
             if (dock.send(frame)) { sentSig = sig; lastSent = now(); }
         }
+        function keep() {                                                // the note for the game page: what this page says of its room, kept in this tab while it waits or plays (a page that goes to the game cannot write it at that moment), gone when there is no room
+            if (!live || !supported) return;
+            var note = doing ? noteOf(doing, !!you, ownCode()) : null, text = note ? JSON.stringify(note) : '', store = env.session;
+            if (text === kept) return;
+            try {
+                store = store || win.sessionStorage;
+                if (text) store.setItem('ants.here', text); else store.removeItem('ants.here');
+                kept = text;
+            } catch (e) { /* no storage: the game page asks the public list instead */ }
+        }
         function ask() { if (live && supported && !asked && dock.send({ t: 'who' })) asked = true; }
         function sync() {                                                // once a second: the visitor's own row follows the page's room at once, the hub is told
             doing = look();
-            tell(); ask();
+            keep(); tell(); ask();
             if (phase !== 'none') paint();
         }
         function clock() { timers.poll = setTimeout(guard(function () { timers.poll = 0; sync(); clock(); }), MS.poll); }
@@ -270,7 +308,7 @@
                 me = whole(m && m.me, 0, LIMIT.ids) ? m.me : null;
                 var yo = Chat.youOf(m && m.you);                   // (the dock's one rule for who the visitor is and what role they hold)
                 you = yo ? { name: yo.name, mod: yo.mod, role: yo.role, pic: yo.pic } : null;
-                if (!supported) phase = 'none'; else { doing = look(); tell(); ask(); }
+                if (!supported) phase = 'none'; else { doing = look(); keep(); tell(); ask(); }
             } else if (kind === 'you') {                                   // the role changed (the chat dock's `you` frame): the visitor's own row follows at once
                 var y = m && m.you && typeof m.you === 'object' ? m.you : null;
                 if (!you || !y) return;
@@ -292,5 +330,5 @@
         return { root: root, state: function () { return phase; }, model: function () { return model; }, sync: guard(sync) };
     }
 
-    return { LIMIT: LIMIT, MS: MS, TEXT: TEXT, GROUPS: GROUPS, rowOf: rowOf, apply: apply, listOf: listOf, metaOf: metaOf, seatsText: seatsText, announceOf: announceOf, possessive: possessive, roleOf: roleOf, mount: mount };
+    return { LIMIT: LIMIT, MS: MS, TEXT: TEXT, GROUPS: GROUPS, rowOf: rowOf, apply: apply, listOf: listOf, metaOf: metaOf, seatsText: seatsText, announceOf: announceOf, noteOf: noteOf, hashOf: hashOf, possessive: possessive, roleOf: roleOf, mount: mount };
 });

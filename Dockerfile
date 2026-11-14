@@ -209,6 +209,8 @@ COPY web/replay_stats.css /usr/share/nginx/html/replay_stats.css
 
 # The keys of the seats that this browser holds, read in one place for the front page's Rejoin strip and the game page's name step (rejoin_key.js)
 COPY web/rejoin_key.js /usr/share/nginx/html/rejoin_key.js
+# What the game page tells the chat hub about its visitor in a match, for the players list of Home (hub_here.js)
+COPY web/hub_here.js /usr/share/nginx/html/hub_here.js
 # The shapes of the picture, one table for the game page, the front page and the settings menu (docs/PLAY_IN_BROWSER.md "Four shapes"; shapes.js)
 COPY web/shapes.js /usr/share/nginx/html/shapes.js
 # ... and the control that the game page and the settings menu choose a shape with (a button and a list made by the page: a native list does not open under the fullscreen mouse lock; shape_picker.js)

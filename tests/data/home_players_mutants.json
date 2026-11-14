@@ -56,8 +56,8 @@
   {
    "id": "a_map_is_not_checked",
    "file": "web/home/players.js",
-   "old": "if (typeof raw.map === 'string' && rules.validMapFile(raw.map)) {",
-   "new": "if (typeof raw.map === 'string') {",
+   "old": "if (typeof raw.map === 'string' && rules.validMapFile(raw.map)) {\n                var known",
+   "new": "if (typeof raw.map === 'string') {\n                var known",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -189,8 +189,8 @@
   {
    "id": "the_visitor_asks_before_it_says",
    "file": "web/home/players.js",
-   "old": "else { doing = look(); tell(); ask(); }",
-   "new": "else { doing = look(); ask(); tell(); }",
+   "old": "else { doing = look(); keep(); tell(); ask(); }",
+   "new": "else { doing = look(); keep(); ask(); tell(); }",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -231,8 +231,8 @@
   {
    "id": "the_welcome_shows_the_list",
    "file": "web/home/players.js",
-   "old": "if (!supported) phase = 'none'; else { doing = look(); tell(); ask(); }",
-   "new": "if (!supported) phase = 'none'; else { phase = 'on'; doing = look(); tell(); ask(); }",
+   "old": "if (!supported) phase = 'none'; else { doing = look(); keep(); tell(); ask(); }",
+   "new": "if (!supported) phase = 'none'; else { phase = 'on'; doing = look(); keep(); tell(); ask(); }",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -553,7 +553,7 @@
   {
    "id": "a_room_with_no_details_is_private_for_the_others",
    "file": "web/home/players.js",
-   "old": "return row.pub ? seatsText(row) || TEXT.publicRoom : own ? TEXT.privateRoom : TEXT.inRoom;",
+   "old": "return row.pub ? seatsText(row) || TEXT.publicRoom : row.priv || own ? TEXT.privateRoom : TEXT.inRoom;",
    "new": "return row.pub ? seatsText(row) || TEXT.publicRoom : TEXT.privateRoom;",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -567,7 +567,7 @@
   {
    "id": "the_visitors_own_private_room_is_not_told_private",
    "file": "web/home/players.js",
-   "old": "return row.pub ? seatsText(row) || TEXT.publicRoom : own ? TEXT.privateRoom : TEXT.inRoom;",
+   "old": "return row.pub ? seatsText(row) || TEXT.publicRoom : row.priv || own ? TEXT.privateRoom : TEXT.inRoom;",
    "new": "return row.pub ? seatsText(row) || TEXT.publicRoom : TEXT.inRoom;",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -672,8 +672,8 @@
   {
    "id": "the_own_row_is_not_made_again_for_a_role",
    "file": "web/home/players.js",
-   "old": "mine = you ? { name: you.name, mod: you.mod, role: you.role, pic: you.pic, doing: doing }",
-   "new": "mine = you ? { name: you.name, mod: you.mod, pic: you.pic, doing: doing }",
+   "old": "mine = you ? { name: you.name, mod: you.mod, role: you.role, pic: you.pic, doing: doing, elsewhere",
+   "new": "mine = you ? { name: you.name, mod: you.mod, pic: you.pic, doing: doing, elsewhere",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -735,8 +735,8 @@
   {
    "id": "players_own_pic_not_in_the_signature",
    "file": "web/home/players.js",
-   "old": "role: you.role, pic: you.pic, doing: doing }",
-   "new": "role: you.role, doing: doing }",
+   "old": "role: you.role, pic: you.pic, doing: doing, elsewhere",
+   "new": "role: you.role, doing: doing, elsewhere",
    "test": "node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -766,6 +766,69 @@
    "old": "you.pic = yn.pic;",
    "new": "",
    "test": "node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_private_mark_is_dropped",
+   "file": "web/home/players.js",
+   "old": "if (raw.priv === true) row.priv = true;",
+   "new": "if (false) row.priv = true;",
+   "test": "node tests/scripts/web_home_players_check.js web/lobby.html"
+  },
+  {
+   "id": "a_private_room_says_nothing_of_it",
+   "file": "web/home/players.js",
+   "old": "} else say.pub = false;",
+   "new": "} else say.pub = undefined;",
+   "test": "node tests/scripts/web_home_players_check.js web/lobby.html"
+  },
+  {
+   "id": "the_visitors_card_ignores_another_tab_that_plays",
+   "file": "web/home/players.js",
+   "old": "return mine && mine.at === 'play' && !(doing && doing.at === 'play') ? mine : null;",
+   "new": "return null;",
+   "test": "node tests/scripts/web_home_players_check.js web/lobby.html"
+  },
+  {
+   "id": "the_note_carries_the_rooms_code",
+   "file": "web/home/players.js",
+   "old": "r: hashOf(code), pub: said.pub === true };",
+   "new": "r: hashOf(code), pub: said.pub === true, c: code };",
+   "test": "node tests/scripts/web_home_players_check.js web/lobby.html"
+  },
+  {
+   "id": "the_note_never_says_guest",
+   "file": "web/home/players.js",
+   "old": "named: named ? 1 : 0,",
+   "new": "named: 1,",
+   "test": "node tests/scripts/web_home_players_check.js web/lobby.html"
+  },
+  {
+   "id": "the_note_stays_when_there_is_no_room",
+   "file": "web/home/players.js",
+   "old": "if (text) store.setItem('ants.here', text); else store.removeItem('ants.here');",
+   "new": "if (text) store.setItem('ants.here', text);",
+   "test": "node tests/scripts/web_home_players_check.js web/lobby.html"
+  },
+  {
+   "id": "a_private_note_keeps_its_map",
+   "file": "web/home/players.js",
+   "old": "if (note.pub) { if (said.map) note.map = said.map;",
+   "new": "if (said.map) { note.map = said.map;",
+   "test": "node tests/scripts/web_home_players_check.js web/lobby.html"
+  },
+  {
+   "id": "a_community_map_of_a_solo_game_is_named",
+   "file": "web/home/players.js",
+   "old": "row.map = raw.map; row.mapName = own ? own.name : ''; }",
+   "new": "row.map = raw.map; row.mapName = own ? own.name : rules.communityName(raw.map); }",
+   "test": "node tests/scripts/web_home_players_check.js web/lobby.html"
+  },
+  {
+   "id": "solo_is_read_for_a_room_that_waits",
+   "file": "web/home/players.js",
+   "old": "else if (raw.solo === true && raw.at === 'play') {",
+   "new": "else if (raw.solo === true) {",
+   "test": "node tests/scripts/web_home_players_check.js web/lobby.html"
   }
  ]
 }

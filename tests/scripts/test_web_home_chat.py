@@ -78,8 +78,8 @@ class ThePageAndTheOtherPages(unittest.TestCase):
                 if re.search(r"/hub/ws", text):
                     naming_the_socket.add(rel)
         self.assertEqual(sorted(naming_the_dock), ["web/home/chat.css", "web/home/chat.js", "web/home/home.js"], "the front page's own script asks for the dock; no other page does")
-        self.assertEqual(sorted(naming_the_socket), ["web/home/chat.js"], "only the dock's script knows the address of the hub's socket: a page that opens a socket to it is a page that has a chat")
-        self.assertEqual(sorted(naming_the_door), ["web/front/player_name.js", "web/home/chat.js"], "the one other script that names the hub is the one that asks for the name to play under: its one page, GET /hub/me (tests/scripts/test_web_player_name.py)")
+        self.assertEqual(sorted(naming_the_socket), ["web/home/chat.js", "web/hub_here.js"], "only the dock's script knows the address of the hub's socket: a page that opens a socket to it is a page that has a chat")
+        self.assertEqual(sorted(naming_the_door), ["web/front/player_name.js", "web/home/chat.js", "web/hub_here.js"], "the one other script that names the hub is the one that asks for the name to play under: its one page, GET /hub/me (tests/scripts/test_web_player_name.py)")
 
     def test_the_game_server_and_the_game_never_open_the_hub(self):
         for rel in (("web", "shell.html"), ("web", "front", "lobby_net.js"), ("web", "front", "lobby_chat.js")):
@@ -548,7 +548,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_chat_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/talk.css", "web/home/players.css", "web/home/players.js", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
+    FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/hub_here.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/talk.css", "web/home/players.css", "web/home/players.js", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
               "tests/scripts/web_home_chat_hub_check.js", "tests/scripts/web_page_harness.js", "tests/scripts/fake_hub.js", "tests/scripts/mini_websocket.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
               "docs/HOME_SCREEN.md", "hub/__init__.py", "hub/text.py", "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])

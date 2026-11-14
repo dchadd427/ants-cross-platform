@@ -53,6 +53,7 @@
 }
 @media (forced-colors: active) {
     .sb .btn, .sb .sblive { border: 2px solid ButtonText; }
+    .sb .sblive::before { background: ButtonText; box-shadow: none; }
     .sb nav [aria-current], .sb .sbtn[aria-expanded="true"] { outline: 3px solid Highlight; }
     .sbm { border: 2px solid CanvasText; }
     .sb .sbbars, .sb .sbbars::before, .sb .sbbars::after { background: ButtonText; }

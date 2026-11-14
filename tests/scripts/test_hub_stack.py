@@ -104,7 +104,8 @@ class TheImage(unittest.TestCase):
 
     def test_the_other_images_do_not_copy_the_hub(self):
         for name in ("Dockerfile", "Dockerfile.server"):
-            self.assertNotIn("hub", " ".join(re.findall(r"(?m)^COPY (.*)$", read(os.path.join(REPO, name)))), name)
+            copied = " ".join(re.findall(r"(?m)^COPY (.*)$", read(os.path.join(REPO, name))))
+            self.assertNotIn("hub", copied.replace("web/hub_here.js /usr/share/nginx/html/hub_here.js", ""), name)       # (the game page's small script that talks to the hub is a page file, not the hub)
 
 
 class TheServices(unittest.TestCase):

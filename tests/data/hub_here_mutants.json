@@ -1,0 +1,141 @@
+{
+ "note": "Mutants of the game page's hub socket (web/hub_here.js; docs/HOME_SCREEN.md 'What the page tells the hub') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_hub_here_check.js (a fake socket, clock and page): a socket for a guest or a recording, a private note that keeps details, another room's note, no stop for a visitor who is not logged in or after a bye, a try again after them, no wait at the match over, a private match over that is public, no backoff, a backoff that starts again at once, no pace between two words, a room that is not in the public list taken as public, credentials sent with the list, a map of the players named, a socket that outlives its page, a list that is waited for for ever; every one must be caught (tools/mutate.py tests/data/hub_here_mutants.json --keep-going --jobs 1).",
+ "baseline": {
+  "test": "python3 tests/scripts/test_web_hub_here.py ThePageAndTheImage TheCodeRuns && node tests/scripts/web_hub_here_check.js web/hub_here.js"
+ },
+ "mutants": [
+  {
+   "id": "a_guest_of_the_note_opens_a_socket",
+   "file": "web/hub_here.js",
+   "old": "if (note && note.named === 0) return null;",
+   "new": "if (false) return null;",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  },
+  {
+   "id": "a_welcome_with_no_login_does_not_stop",
+   "file": "web/hub_here.js",
+   "old": "if (m.v !== VERSION || !m.you || typeof m.you !== 'object') { stop(); return; }",
+   "new": "if (m.v !== VERSION) { stop(); return; }",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  },
+  {
+   "id": "a_guest_is_tried_again",
+   "file": "web/hub_here.js",
+   "old": "{ stop(); return; }       // (no login or another kind of hub",
+   "new": "{ lost(); return; }       // (no login or another kind of hub",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  },
+  {
+   "id": "a_bye_is_tried_again",
+   "file": "web/hub_here.js",
+   "old": "if (m.t === 'bye') { stop(); return; }",
+   "new": "if (m.t === 'bye') { lost(); return; }",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  },
+  {
+   "id": "a_private_note_keeps_its_details",
+   "file": "web/hub_here.js",
+   "old": "        if (m.pub) {\n            if (validMap(m.map))",
+   "new": "        if (true) {\n            if (validMap(m.map))",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  },
+  {
+   "id": "a_note_of_another_room_is_taken",
+   "file": "web/hub_here.js",
+   "old": " || m.r !== hashOf(code)",
+   "new": "",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  },
+  {
+   "id": "the_match_over_says_nothing",
+   "file": "web/hub_here.js",
+   "old": "        if (mode.kind === 'room') {                                      // the match over",
+   "new": "        if (false) {                                      // the match over",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  },
+  {
+   "id": "a_private_match_over_is_public",
+   "file": "web/hub_here.js",
+   "old": "f.pub = details.pub === true;",
+   "new": "f.pub = true;",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  },
+  {
+   "id": "a_recording_opens_a_socket",
+   "file": "web/hub_here.js",
+   "old": "if (replay || test || !Array.isArray(args)) return null;",
+   "new": "if (test || !Array.isArray(args)) return null;",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  },
+  {
+   "id": "a_test_map_opens_a_socket",
+   "file": "web/hub_here.js",
+   "old": "if (replay || test || !Array.isArray(args)) return null;",
+   "new": "if (replay || !Array.isArray(args)) return null;",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  },
+  {
+   "id": "a_game_with_no_computer_player_opens_a_socket",
+   "file": "web/hub_here.js",
+   "old": "if (args.indexOf('--bot') === -1) return null;",
+   "new": "",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  },
+  {
+   "id": "no_backoff",
+   "file": "web/hub_here.js",
+   "old": "timers.retry = later(guard(go), delayOf(attempt, rnd()));",
+   "new": "timers.retry = later(guard(go), 1000);",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  },
+  {
+   "id": "the_backoff_starts_again_at_the_welcome",
+   "file": "web/hub_here.js",
+   "old": "timers.stable = later(guard(function () { timers.stable = 0; attempt = 0; }), MS.stable);",
+   "new": "attempt = 0;",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  },
+  {
+   "id": "no_pace_between_two_words",
+   "file": "web/hub_here.js",
+   "old": "if (wait > 0) { timers.tell = later(guard(flush), wait); return; }",
+   "new": "",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  },
+  {
+   "id": "a_room_that_is_not_listed_is_public",
+   "file": "web/hub_here.js",
+   "old": "var out = { pub: false }, rows",
+   "new": "var out = { pub: true }, rows",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  },
+  {
+   "id": "the_list_is_read_with_credentials",
+   "file": "web/hub_here.js",
+   "old": "credentials: 'omit'",
+   "new": "credentials: 'include'",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  },
+  {
+   "id": "a_community_map_of_a_solo_game_is_named",
+   "file": "web/hub_here.js",
+   "old": "ORIGINALS[file] === 1 ? file : ''",
+   "new": "file",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  },
+  {
+   "id": "a_leaving_page_keeps_the_socket",
+   "file": "web/hub_here.js",
+   "old": "        if (win.addEventListener) win.addEventListener('pagehide', guard(stop));\n",
+   "new": "",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  },
+  {
+   "id": "a_list_that_does_not_answer_is_waited_for",
+   "file": "web/hub_here.js",
+   "old": "timers.lobbies = later(guard(function () { timers.lobbies = 0; known({ pub: false }); }), MS.lobbies);",
+   "new": "",
+   "test": "node tests/scripts/web_hub_here_check.js web/hub_here.js"
+  }
+ ]
+}
