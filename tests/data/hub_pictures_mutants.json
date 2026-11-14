@@ -903,9 +903,10 @@
   {
    "id": "nopic_prints_the_account",
    "file": "hub/admin.py",
-   "old": "            whom = ref(store, account)\n            return change_picture(",
-   "new": "            whom = account\n            return change_picture(",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheOperator"
+   "old": "        out.write(\"%s picture blocked\\n\" % whom)",
+   "new": "        out.write(\"%s picture blocked\\n\" % (store.account_of_reference(whom) or whom))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheOperator",
+   "expect": "a command printed an id"
   },
   {
    "id": "pic_of_an_account_that_is_not_blocked_is_done",

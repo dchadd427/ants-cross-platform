@@ -147,8 +147,9 @@ class TheFolderAndTheScript(unittest.TestCase):
 
     def test_nothing_that_the_hub_says_becomes_markup_a_link_or_code(self):
         self.assertNotRegex(self.code, r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|srcdoc|createContextualFragment|DOMParser|setTimeout\(\s*['\"]")
-        picture_address = "img.setAttribute('src', PICDIR + ok + PICEXT);"       # (the one address the page sets; the node rig checks by behavior that it is made of a checked name only)
-        self.assertNotRegex(self.code.replace(picture_address, ""), r"\.href\b|\.src\b|setAttribute\(\s*['\"](href|src|style|on\w+|srcdoc)")
+        picture_address = re.compile(r"\w+\.setAttribute\(\s*'src',\s*PICDIR\s*\+\s*\w+\s*\+\s*PICEXT\s*\);")       # (the one address the page sets: a fixed folder, a name, a fixed ending; the node rig checks by behavior that the name is a checked one only)
+        self.assertEqual(len(picture_address.findall(self.code)), 1, "one statement sets an address, and it is made of the two constants and a name")
+        self.assertNotRegex(picture_address.sub("", self.code), r"\.href\b|\.src\b|setAttribute\(\s*['\"](href|src|style|on\w+|srcdoc)")
         made = sorted(set(re.findall(r"\bel\('(\w+)'", self.code)))
         self.assertEqual(made, ["bdi", "button", "div", "form", "h2", "i", "input", "label", "p", "section", "span", "textarea"], "no a, script, iframe, style or link: the dock makes text, boxes and the switch (the picture's img is made by one helper)")
         self.assertEqual(sorted(set(re.findall(r"\bmake\('(\w+)'", self.code))), ["img"])

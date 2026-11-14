@@ -375,7 +375,9 @@ class TheStoreRefusing(FrameTest):
 
     def test_a_kick_whose_look_is_refused_is_done_and_has_its_line_and_its_answer(self):
         self.member(user=(OTHER, "other.one"))
+        before = len(T.kinds_of(self.log()))
         mod = self.socket(self.login((MOD, "mod.one")))
+        self.settle(1, before)                                                          # (the moderator's own fetch is over: its end is a look too, and must not take the refusal meant for the command's look)
         self.refuse_the_next_look()
         mod.send(hc.say("/kick other.one"))
         frames = R.wait_frames(mod, "ok", 0.4, 10.0)
@@ -387,7 +389,9 @@ class TheStoreRefusing(FrameTest):
 
     def test_a_ban_whose_look_is_refused_is_done_and_has_its_line_and_its_answer(self):
         self.member(user=(OTHER, "other.one"))
+        before = len(T.kinds_of(self.log()))
         boss = self.socket(self.login((ADMIN, "admin.one")))
+        self.settle(1, before)                                                          # (as above: the administrator's own fetch is over before the refusal is armed)
         self.refuse_the_next_look()
         boss.send(hc.say("/ban other.one"))
         frames = R.wait_frames(boss, "ok", 0.4, 10.0)

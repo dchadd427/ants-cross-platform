@@ -3301,7 +3301,7 @@
   {
    "id": "pic_drawn_with_no_name",
    "file": "web/home/chat.js",
-   "old": "        if (!ok || FAILED[ok]) return;\n        var img",
+   "old": "        if (!ok || hasFailed(ok)) return;\n        var img",
    "new": "        var img",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -3427,7 +3427,7 @@
   {
    "id": "pic_failed_names_not_consulted",
    "file": "web/home/chat.js",
-   "old": "if (!ok || FAILED[ok]) return;",
+   "old": "if (!ok || hasFailed(ok)) return;",
    "new": "if (!ok) return;",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -3513,6 +3513,34 @@
    "file": "web/home/chat.js",
    "old": "!(swRow.hidden && (list[i] === swBox || list[i] === swAgain))",
    "new": "true",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_failed_name_never_expires",
+   "file": "web/home/chat.js",
+   "old": "if (d >= 0 && d < FAILED_MS) return true;",
+   "new": "return true;",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_failed_name_expires_too_soon",
+   "file": "web/home/chat.js",
+   "old": "FAILED_MS = 600000;",
+   "new": "FAILED_MS = 1000;",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_failed_names_table_holds_199",
+   "file": "web/home/chat.js",
+   "old": "FAILED_MAX = 200,",
+   "new": "FAILED_MAX = 199,",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_a_block_takes_the_focus_from_wherever_it_is",
+   "file": "web/home/chat.js",
+   "old": "if (pp === 'blocked' && doc.activeElement === swBox && outBtn.focus) outBtn.focus();",
+   "new": "if (pp === 'blocked' && outBtn.focus) outBtn.focus();",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]

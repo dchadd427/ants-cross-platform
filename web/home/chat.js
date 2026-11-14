@@ -95,14 +95,22 @@
     var PICNAME = /^[0-9a-f]{32}$/, PICDIR = '/hub/pic/', PICEXT = '.png';
     function picOf(v) { return typeof v === 'string' && PICNAME.test(v) ? v : ''; }       // the name of a picture in a frame of the hub (`pic` of `you` and of a players row), or '' (the one place that reads it)
     function picsOf(v) { return v === 'on' || v === 'off' || v === 'blocked' ? v : ''; }       // the switch's state in `you.pics`, or '' (no switch: a guest, a hub without the Discord login)
-    var FAILED = Object.create(null), FAILED_ORDER = [], FAILED_MAX = 200;       // the names of pictures that did not load (a 404, a refusal, not a picture): kept for the life of the page, the last 200, so that no circle asks for one again
-    function failed(name) { if (FAILED[name]) return; FAILED[name] = true; FAILED_ORDER.push(name); if (FAILED_ORDER.length > FAILED_MAX) delete FAILED[FAILED_ORDER.shift()]; }
+    var FAILED = Object.create(null), FAILED_ORDER = [], FAILED_MAX = 200, FAILED_MS = 600000;       // the names of pictures that did not load (a 404, a refusal, not a picture) and when: a circle drawn for one of them within ten minutes asks for nothing, so that no repaint makes a request; after ten minutes the name is asked for once more, the next time a circle is drawn for it (no timer); at most 200 names
+    function failed(name) { if (FAILED[name] !== undefined) return; FAILED[name] = Date.now(); FAILED_ORDER.push(name); if (FAILED_ORDER.length > FAILED_MAX) delete FAILED[FAILED_ORDER.shift()]; }
+    function hasFailed(name) {                                           // true while the name failed less than ten minutes ago; a name that is older is forgotten (and asked for again by the circle that is drawn now)
+        var at = FAILED[name], d;
+        if (at === undefined) return false;
+        d = Date.now() - at;
+        if (d >= 0 && d < FAILED_MS) return true;
+        delete FAILED[name]; FAILED_ORDER.splice(FAILED_ORDER.indexOf(name), 1);
+        return false;
+    }
     function picture(make, circle, name, size) {                          // the picture of a circle: an img over the letter (made with `make`, the page's element maker); the same name again changes nothing, another or none takes the old one away
         var ok = picOf(name), now = circle.picState || null;
         if (now && now.name === ok) return;
         if (now && now.img.parentNode) now.img.parentNode.removeChild(now.img);
         circle.picState = null; circle.removeAttribute('data-pic');
-        if (!ok || FAILED[ok]) return;
+        if (!ok || hasFailed(ok)) return;
         var img = make('img');
         img.setAttribute('src', PICDIR + ok + PICEXT);
         img.setAttribute('alt', ''); img.setAttribute('width', String(size)); img.setAttribute('height', String(size)); img.setAttribute('loading', 'lazy'); img.setAttribute('decoding', 'async'); img.setAttribute('draggable', 'false');

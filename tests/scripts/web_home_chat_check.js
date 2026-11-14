@@ -978,7 +978,7 @@ function bring(env) {                                     // the two files arriv
 // 7. The source of the script
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
-    const code = chatSource.replace(/\/\/.*/g, '').replace("img.setAttribute('src', PICDIR + ok + PICEXT);", '');       // (the one address of a picture: made of a checked name and two constants, checked in section 11)
+    const code = chatSource.replace(/\/\/.*/g, '').replace(/\bimg\.setAttribute\(\s*'src',\s*PICDIR\s*\+\s*\w+\s*\+\s*PICEXT\s*\);/, '');       // (the one address of a picture: made of a checked name and two constants, checked in section 11)
     check('chat.js builds nothing from markup, runs nothing from text, keeps nothing in the browser and makes no link', !/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|srcdoc|localStorage|sessionStorage|indexedDB|document\.cookie|createElement\(['"]a['"]\)|setAttribute\(['"](href|src|style|on)/.test(code));
     check('chat.js names no other site (no http:// or https:// address at all) and loads nothing', !/https?:\/\//.test(code) && !/XMLHttpRequest|importScripts|\bimport\b/.test(code));
     check('the one thing that it asks for is a POST of the page itself to the two pages of the login (/hub/logout, /hub/forget): `fetch` is in one line, and it is that one', (code.match(/\bfetch\b/g) || []).length === 2 && code.indexOf('var f = env.fetch || win.fetch;') !== -1
@@ -1754,6 +1754,39 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     for (let i = 0; i < 205; i++) { const c = mk('span'); P.picture(mk, c, ('0000000000000000000000000000' + (1000 + i)).slice(-32), 28); imgsOf(c)[0].fire('error'); }
     const old = mk('span'); P.picture(mk, old, F, 28);
     check('the table of failed names is bounded: after 200 later failures the oldest is forgotten (it is asked for once more)', imgsOf(old).length === 1);
+    {   // the table keeps 200 names, no fewer, and a name that failed is asked for once more after ten minutes (a fake clock; nothing runs by itself)
+        const realNow = Date.now; let t = realNow();
+        Date.now = () => t;
+        try {
+            let made = 0;
+            const count = (m) => (tag) => { if (tag === 'img') made++; return m(tag); };
+            const draw = (name) => { const c = mk('span'); P.picture(count(mk), c, name, 28); return c; };
+            const nameOf = (i) => ('0000000000000000000000000000' + (5000 + i)).slice(-32);
+            for (let i = 0; i < 200; i++) imgsOf(draw(nameOf(i))).forEach((e) => e.fire('error'));
+            made = 0; draw(nameOf(0)); draw(nameOf(1)); draw(nameOf(199));
+            check('the table holds 200 names: after exactly 200 failures the oldest of them is still remembered (no request for it)', made === 0, made);
+            imgsOf(draw(nameOf(200))).forEach((e) => e.fire('error'));
+            made = 0; draw(nameOf(0));
+            check('... and the 201st failure makes it forget the oldest (one request for it), no more', made === 1, made);
+            t += 700000;       // (every name of the table is now older than ten minutes)
+            const X = '7777777777777777777777777777777f';
+            imgsOf(draw(X)).forEach((e) => e.fire('error'));
+            made = 0;
+            for (let i = 0; i < 12; i++) { t += 49000; draw(X); }       // (12 repaints in the next 588 s)
+            check('a name that failed is not asked for in 12 repaints over the next ten minutes (no request)', made === 0, made);
+            t += 12000;       // (ten minutes after the failure)
+            const again = draw(X);
+            check('ten minutes after the failure the next circle drawn for the name asks for it once, with its address', made === 1 && imgsOf(again)[0].attributes.src === '/hub/pic/' + X + '.png', made);
+            imgsOf(again).forEach((e) => e.fire('error'));
+            made = 0;
+            for (let i = 0; i < 12; i++) { t += 49000; draw(X); }
+            check('... and when it fails again it is left alone for the next ten minutes (no request in 12 repaints)', made === 0, made);
+            t += 12000; made = 0; draw(X);
+            check('... then asked for once more, and so on: one request per ten minutes, never a loop', made === 1, made);
+            made = 0; t += 1; for (let i = 0; i < 3; i++) draw('8888888888888888888888888888888a');
+            check('a name that never failed is asked for as always', made === 3, made);
+        } finally { Date.now = realNow; }
+    }
 }
 {   // the switch
     const NAME = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
@@ -1848,6 +1881,10 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     box(focusBlocked).focus(); box(focusBlocked).checked = true; box(focusBlocked).fire('change');
     focusBlocked.s().recv({ t: 'you', you: asYou({ pics: 'blocked' }) });
     check('when the wait ends in blocked the focus goes to Log out (a disabled box cannot keep it), not to the page', focusBlocked.env.doc.activeElement === one(focusBlocked.dock.slot, 'gc-out'));
+    const elsewhere = open({ pics: 'off' });
+    elsewhere.dock.field.focus();
+    elsewhere.s().recv({ t: 'you', you: asYou({ pics: 'blocked' }) }); elsewhere.s().recv({ t: 'you', you: asYou({ pics: 'blocked' }) });
+    check('a `blocked` that arrives while the focus is elsewhere (the chat field) does not pull it to Log out, however often it is repeated', elsewhere.env.doc.activeElement === elsewhere.dock.field && box(elsewhere).disabled === true);
     // where the focus is when the menu opens: the first control that can be used, so that a Tab forward meets the switch
     const withPick = open({ pics: 'off', pick: 'display', other: 'maple.leaf' });
     check('the menu opens on the name choice where there is one (the switch is next in the order)', withPick.env.doc.activeElement === one(withPick.dock.slot, 'gc-pick'));
