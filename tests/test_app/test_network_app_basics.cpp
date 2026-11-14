@@ -1775,6 +1775,25 @@ void run_guest_tests() {
         bob.net.freeze();
     } TEST_END();
 
+    TEST_CASE("N5.101 Command Line: --start-card-seconds takes a whole number from 0 to 60 (the countdown card of a game on this computer; 0 and no option: the 5 s dialog), anything else stops the game at the start") {
+        std::vector<std::string> args;
+        std::vector<char*> st;
+        args = {"ants", "--headless"};
+        ASSERT_EQ(Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st)).start_card_seconds, 0u);
+        for (const auto& good : std::vector<std::pair<const char*, uint32_t>>{{"0", 0}, {"1", 1}, {"10", 10}, {"60", 60}}) {
+            args = {"ants", "--play", "--start-card-seconds", good.first};
+            const ApplicationConfig c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+            ASSERT_TRUE(c.startup_error.empty() && c.start_card_seconds == good.second);
+        }
+        for (const char* bad : {"61", "-1", "ten", "", "5x", "1.5", "99999999999999999999"}) {
+            args = {"ants", "--start-card-seconds", bad};
+            const ApplicationConfig c = Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st));
+            ASSERT_TRUE(!c.startup_error.empty() && c.start_card_seconds == 0u);
+        }
+        args = {"ants", "--start-card-seconds"};
+        ASSERT_FALSE(Application::parse_arguments(static_cast<int>(args.size()), argv_of(args, st)).startup_error.empty());
+    } TEST_END();
+
     TEST_CASE("N5.100 Protocol 21, A Room Of One Person With A Computer Player Opens The Countdown Card With The Solo Count: The Card Counts 10 s Down From The Begin, Keeps The Map Out Of Reach And The Chat In It, Marks The Computer Player, And Is Gone With The First Executed Turn") {
         Server srv;
         ASSERT_TRUE(srv.listener != nullptr);

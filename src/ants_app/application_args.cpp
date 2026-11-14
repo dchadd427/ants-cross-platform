@@ -278,6 +278,16 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             mode_given = direct_match = true;
         } else if (std::strcmp(argv[i], "--replay-live") == 0) {               // the file of --replay is a copy of a match that is still going on (ApplicationConfig::replay_live)
             cfg.replay_live = true;
+        } else if (std::strcmp(argv[i], "--start-card-seconds") == 0) {        // the countdown card of a game on this computer, in whole seconds (ApplicationConfig::start_card_seconds)
+            char* end = nullptr;
+            const long n = i + 1 < argc ? std::strtol(argv[i + 1], &end, 10) : -1;
+            if (i + 1 >= argc || end == argv[i + 1] || *end != '\0' || n < 0 || n > 60) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--start-card-seconds needs a whole number from 0 to 60";
+                if (i + 1 < argc) ++i;
+            } else {
+                cfg.start_card_seconds = static_cast<uint32_t>(n);
+                ++i;
+            }
         } else if (std::strcmp(argv[i], "--play") == 0) {                      // the setup screen's own START at its first visit (ApplicationConfig::play_at_once)
             cfg.play_at_once = true;
             mode_given = true;

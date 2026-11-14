@@ -109,6 +109,10 @@ struct ApplicationConfig {
     /// setup screen after a match is the setup screen), and only for a game of this machine without the start menu: --host, --join, --join-url and the menu leave it alone. parse_arguments
     /// gives a game that names its map with --map the setup screen's way (start_in_map_select).
     bool play_at_once{false};
+    /// --start-card-seconds N (0 - 60, default 0): a game on this computer opens the countdown card (the card of a room, see docs/MATCH_COUNTDOWN.md) for N seconds, counted in the 50 ms steps of
+    /// the "Get ready" dialog, instead of that dialog's 5 s; the simulation waits for it as it waits for the dialog. 0 keeps the dialog. Only a game that starts a match here (a game of a room,
+    /// a rejoin and a recording have no such start).
+    uint32_t start_card_seconds{0};
     bool skip_intro{false};
     std::string screenshot_path{""};
     int screenshot_frames{5};
@@ -848,6 +852,8 @@ private:
     void poll_map_fetch();                                // once a frame of a room: the room's map is asked for ahead of the Start, and a Start that waits for its map is carried on or failed
     void net_begin_match(bool rejoin = false, uint8_t countdown_seconds = 0);   // everybody loaded: the match runs on this machine (a rejoin: it was given a match that runs, see NetGame::Event::rejoin; `countdown_seconds`: protocol 21, the Begin said the first turn is held that long)
     void begin_net_countdown(uint8_t seconds);            // the countdown card of a room with two or more people: the count, the colors, the chat (hud.hpp start_match_countdown)
+    void begin_local_countdown(uint8_t roster, uint32_t seconds);   // a game on this computer with --start-card-seconds: the countdown card, counted in the dialog's own 50 ms steps (tick_local_countdown), closed at 0
+    void tick_local_countdown();                          // one step of the dialog's clock while the card is up
     void tick_net_countdown();                            // once a frame while the card is up: what is left of the count, the status line, and the end of it when the first turn (or a pause) has closed the dialog
     void net_end_session(const std::string& notice);      // leave the room / the match and return to the local setup screen
     void net_start_from_setup(const std::string& map_path);
@@ -954,6 +960,7 @@ private:
     int headless_frame_count_{0};
     float tick_accumulator_{0.0f};
     double countdown_deadline_ms_{-1.0};   // protocol 21: net_time_ms_ at which the countdown ends (-1: no countdown card is up)
+    int64_t local_countdown_ms_{-1};       // a game on this computer: what the card still has to count (-1: no such card is up)
     int32_t countdown_status_shown_{-1};   // ... the second that the status line says now
     double start_dialog_clock_ms_{0.0};  // a match of the network: the real milliseconds of the "Get ready" dialog that are not handed to the HUD yet (its portrait moves in real time while it waits for the first turn)
     float input_accumulator_{0.0f};     // the 50 ms input task (edge scrolling, minimap drag)
