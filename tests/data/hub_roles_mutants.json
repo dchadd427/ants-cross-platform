@@ -273,8 +273,8 @@
   {
    "id": "a_client_can_say_its_role",
    "file": "hub/chat.py",
-   "old": "        elif kind == \"pick\":\n            self.on_pick(peer, msg)\n        else:",
-   "new": "        elif kind == \"pick\":\n            self.on_pick(peer, msg)\n        elif kind == \"you\" and peer.identity is not None:\n            self.roles.owner = peer.identity.account_id\n        else:",
+   "old": "        elif kind == \"pics\" and self.pictures is not None:\n            self.on_pics(peer, msg)\n        else:",
+   "new": "        elif kind == \"pics\" and self.pictures is not None:\n            self.on_pics(peer, msg)\n        elif kind == \"you\" and peer.identity is not None:\n            self.roles.owner = peer.identity.account_id\n        else:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheMapping"
   },
   {

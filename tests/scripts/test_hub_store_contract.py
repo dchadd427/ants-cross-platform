@@ -782,6 +782,381 @@ class Contract(unittest.TestCase):
             self.assertNotIn("9901", text)
         self.assertEqual(line.account, "73110000000000009901")
 
+    # ---- pictures ----
+
+    def login(self, account="1001", seconds=30 * DAY):
+        """A login of the account, if it has none: a picture is kept only for an account that has one."""
+        if self.store.logins(account) == 0:
+            self.store.add_session("k-" + account, account, "alice", seconds, 10, 1000)
+
+    def keep(self, account="1001", name=None, png=b"\x89PNG-one", until=None, rows=100, size=10 ** 6):
+        self.login(account)
+        name = name or ("%032x" % (abs(hash((account, png))) % 16 ** 32))
+        return name, self.store.set_picture(account, png, name, self.clock.now + DAY if until is None else until, rows, size)
+
+    def test_a_picture_is_kept_under_its_name_and_a_new_one_takes_the_place_of_the_old(self):
+        first, kept = self.keep(name="a" * 32, png=b"one")
+        self.assertTrue(kept)
+        self.assertEqual((self.store.picture(first), self.store.has_picture("1001"), self.store.picture_state("1001")), (b"one", True, base.SHOW_ON))
+        second, kept = self.keep(name="b" * 32, png=b"two")
+        self.assertTrue(kept)
+        self.assertEqual((self.store.picture(first), self.store.picture(second), self.store.picture_usage()), (None, b"two", (1, 3)))
+        self.assertEqual(list(self.store.picture_names().values()), [second])
+
+    def test_a_name_that_is_not_the_shape_of_one_finds_nothing_and_a_picture_with_a_bad_name_is_not_kept(self):
+        name, _ = self.keep(name="c" * 32)
+        for odd in ("c" * 31, "c" * 33, "C" * 32, "c" * 31 + "%", "c" * 32 + "\n", "", None, 5, b"c" * 32, "../" + "c" * 29):
+            self.assertIsNone(self.store.picture(odd), repr(odd))
+        for odd in ("d" * 31, "D" * 32, "", None, "x" * 32):
+            self.assertFalse(self.store.set_picture("1002", b"x", odd, self.clock.now + DAY, 100, 1000), repr(odd))
+        self.assertFalse(self.store.has_picture("1002"))
+        self.assertEqual(self.store.picture(name), b"\x89PNG-one")
+
+    def test_the_picture_of_an_account_is_one_row_with_no_account_id_in_it(self):
+        if not hasattr(self.store, "db"):
+            self.skipTest("a backend that is not a file")
+        self.keep(account="73110000000000009901", name="e" * 32)
+        rows = self.store.db.execute("SELECT * FROM pictures").fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertNotIn("7311", " ".join(str(c) for c in rows[0] if not isinstance(c, bytes)))
+        from hub.pseudo import reference
+        self.assertEqual(rows[0][0], reference(self.store.secret(), "73110000000000009901"))
+        self.assertEqual(self.store.picture_names(), {rows[0][0]: "e" * 32})
+
+    def test_a_picture_is_not_given_past_its_time_and_the_purge_deletes_it(self):
+        name, _ = self.keep(until=self.clock.now + 100)
+        self.assertEqual(self.store.picture(name), b"\x89PNG-one")
+        self.clock.now += 100
+        self.assertIsNone(self.store.picture(name))
+        self.assertEqual(self.store.picture_names(), {})
+        self.assertEqual(self.store.picture_usage(), (1, 8))
+        self.store.purge()
+        self.assertEqual(self.store.picture_usage(), (0, 0))
+        self.assertFalse(self.store.has_picture("1001"))
+
+    def test_switching_it_off_deletes_the_copy_and_it_is_not_kept_while_it_is_off(self):
+        name, _ = self.keep()
+        self.assertEqual(self.store.set_picture_show("1001", base.SHOW_OFF), base.SHOW_OFF)
+        self.assertEqual((self.store.picture(name), self.store.has_picture("1001"), self.store.picture_usage(), self.store.picture_state("1001")), (None, False, (0, 0), base.SHOW_OFF))
+        self.assertFalse(self.keep(name="f" * 32)[1])
+        self.assertEqual(self.store.picture_usage(), (0, 0))
+        self.assertEqual(self.store.set_picture_show("1001", base.SHOW_ON), base.SHOW_ON)
+        self.assertEqual(self.store.picture_state("1001"), base.SHOW_ON)
+        self.assertTrue(self.keep(name="f" * 32)[1])
+
+    def test_a_block_is_lifted_by_the_operator_only_and_it_deletes_the_copy(self):
+        name, _ = self.keep()
+        self.assertEqual(self.store.set_picture_show("1001", base.SHOW_BLOCKED, operator=True), base.SHOW_BLOCKED)
+        self.assertIsNone(self.store.picture(name))
+        for wanted in (base.SHOW_ON, base.SHOW_OFF):
+            self.assertEqual(self.store.set_picture_show("1001", wanted), base.SHOW_BLOCKED)
+        self.assertEqual(self.store.picture_state("1001"), base.SHOW_BLOCKED)
+        self.assertFalse(self.keep(name="a1" * 16)[1])
+        self.assertEqual(self.store.set_picture_show("1001", base.SHOW_ON, operator=True), base.SHOW_ON)
+        self.assertEqual(self.store.picture_state("1001"), base.SHOW_ON)
+        with self.assertRaises(ValueError):
+            self.store.set_picture_show("1001", 3)
+
+    def test_clearing_deletes_the_bytes_and_the_name_and_keeps_a_switch(self):
+        name, _ = self.keep()
+        self.assertTrue(self.store.clear_picture("1001"))
+        self.assertFalse(self.store.clear_picture("1001"))
+        self.assertIsNone(self.store.picture(name))
+        self.store.set_picture_show("1002", base.SHOW_OFF)
+        self.assertFalse(self.store.clear_picture("1002"))
+        self.assertEqual(self.store.picture_state("1002"), base.SHOW_OFF)
+
+    def test_forget_me_deletes_the_picture_and_a_block_stays(self):
+        name, _ = self.keep()
+        self.store.set_picture_show("1002", base.SHOW_BLOCKED, operator=True)
+        self.store.set_picture_show("1003", base.SHOW_OFF)
+        self.store.forget("1001")
+        self.store.forget("1002")
+        self.store.forget("1003")
+        self.assertEqual((self.store.picture(name), self.store.picture_usage()), (None, (0, 0)))
+        self.assertEqual((self.store.picture_state("1001"), self.store.picture_state("1002"), self.store.picture_state("1003")), (base.SHOW_ON, base.SHOW_BLOCKED, base.SHOW_ON))
+
+    def test_a_kick_deletes_the_picture_with_the_logins_and_another_accounts_is_left(self):
+        mine, _ = self.keep()
+        other, _ = self.keep(account="1002", name="9" * 32, png=b"other")
+        self.store.add_session("k1", "1001", "alice", 60, 10, 100)
+        self.store.end_sessions("1001")
+        self.assertEqual((self.store.picture(mine), self.store.picture(other)), (None, b"other"))
+
+    def test_the_caps_take_the_pictures_fetched_longest_ago_first(self):
+        for n in range(5):
+            self.clock.now += 1
+            self.keep(account="10%02d" % n, name="%032x" % (n + 1), png=b"p" * 10, rows=4, size=10 ** 6)
+        self.assertEqual(self.store.picture_usage(), (4, 40))
+        self.assertEqual(sorted(self.store.picture_names().values()), ["%032x" % n for n in (2, 3, 4, 5)])
+        for n in range(5, 8):
+            self.clock.now += 1
+            self.keep(account="10%02d" % n, name="%032x" % (n + 1), png=b"p" * 10, rows=100, size=40)
+        self.assertEqual(self.store.picture_usage(), (4, 40))
+        self.assertEqual(sorted(self.store.picture_names().values()), ["%032x" % n for n in (5, 6, 7, 8)])
+        self.assertFalse(self.keep(account="1099", name="e" * 32, png=b"q" * 41, size=40)[1])               # (a picture over the byte cap is not kept at all)
+        self.assertFalse(self.keep(account="1099", name="e" * 32, png=b"", size=40)[1])
+        self.assertEqual(self.store.picture_usage(), (4, 40))
+
+    def test_a_picture_of_a_new_login_that_does_not_fit_never_takes_its_own_room_away(self):
+        self.keep(account="1001", name="a" * 32, png=b"x" * 30, size=40)
+        self.clock.now += 1
+        name, kept = self.keep(account="1002", name="b" * 32, png=b"y" * 30, size=40)
+        self.assertTrue(kept)
+        self.assertEqual((self.store.picture_usage(), list(self.store.picture_names().values())), ((1, 30), [name]))
+
+    def test_the_marks_of_a_switch_are_capped_and_the_oldest_go_and_an_off_is_remembered_for_four_hundred_days(self):
+        self.store.max_picture_marks = 3
+        for n in range(5):
+            self.clock.now += 1
+            self.store.set_picture_show("20%02d" % n, base.SHOW_OFF)
+        self.assertEqual([self.store.picture_state("20%02d" % n) for n in range(5)], [base.SHOW_ON, base.SHOW_ON, base.SHOW_OFF, base.SHOW_OFF, base.SHOW_OFF])
+        self.store.max_picture_marks = 100000
+        self.store.set_picture_show("2900", base.SHOW_BLOCKED, operator=True)
+        self.clock.now += base.PICTURE_DAYS * DAY - 10
+        self.assertEqual(self.store.picture_state("2002", touch=True), base.SHOW_OFF)              # (a login of an account that is off: it is remembered from now)
+        self.clock.now += 20
+        self.store.purge()
+        self.assertEqual([self.store.picture_state("20%02d" % n) for n in (2, 3, 4)], [base.SHOW_OFF, base.SHOW_ON, base.SHOW_ON])
+        self.assertEqual(self.store.picture_state("2900"), base.SHOW_BLOCKED)                      # (a block stays: like a ban)
+
+    def test_the_number_of_the_last_change_goes_up_with_every_change_and_with_none_other(self):
+        seen = [self.store.last_picture_change()]
+
+        def moved():
+            seen.append(self.store.last_picture_change())
+            return seen[-1] > seen[-2]
+        self.keep(name="a" * 32)
+        self.assertTrue(moved())
+        self.store.picture("a" * 32)
+        self.store.picture_names()
+        self.store.picture_state("1001")
+        self.assertFalse(moved())
+        self.store.set_picture_show("1001", base.SHOW_OFF)
+        self.assertTrue(moved())
+        self.store.clear_picture("1001")
+        self.assertFalse(moved())                                                                  # (nothing was there)
+        self.keep(account="1002", name="b" * 32)
+        self.store.clear_picture("1002")
+        self.assertEqual([moved(), moved()], [True, False])
+
+    def test_the_logins_of_an_account_are_counted_and_the_ones_that_ran_out_are_not(self):
+        self.assertEqual(self.store.logins("1001"), 0)
+        self.store.add_session("k1", "1001", "alice", 60, 10, 100)
+        self.store.add_session("k2", "1001", "alice", 120, 10, 100)
+        self.store.add_session("k3", "1002", "bob", 60, 10, 100)
+        self.assertEqual((self.store.logins("1001"), self.store.logins("1002")), (2, 1))
+        self.clock.now += 90
+        self.assertEqual(self.store.logins("1001"), 1)
+        self.store.delete_session("k2")
+        self.assertEqual(self.store.logins("1001"), 0)
+
+    def test_a_picture_is_not_kept_for_an_account_with_no_login_or_with_a_ban_and_never_outlives_the_last_login(self):
+        self.assertFalse(self.store.set_picture("1001", b"x", "a" * 32, self.clock.now + DAY, 10, 1000))             # (no login: a fetch that ended after Forget me or the last log out)
+        self.store.add_session("k1", "1001", "alice", 100, 10, 100)
+        self.clock.now += 100                                                                                    # (a login that ran out)
+        self.assertFalse(self.store.set_picture("1001", b"x", "a" * 32, self.clock.now + DAY, 10, 1000))
+        self.store.add_session("k2", "1001", "alice", 500, 10, 100)
+        self.store.ban("1001", "me", "alice")
+        self.assertFalse(self.store.set_picture("1001", b"x", "a" * 32, self.clock.now + DAY, 10, 1000))
+        self.assertEqual((self.store.picture_usage(), self.store.has_picture("1001")), ((0, 0), False))
+        self.assertTrue(self.store.unban("1001"))
+        self.assertTrue(self.store.set_picture("1001", b"x", "a" * 32, self.clock.now + 99 * DAY, 10, 1000))
+        self.clock.now += 499
+        self.assertEqual(self.store.picture("a" * 32), b"x")
+        self.clock.now += 1
+        self.assertIsNone(self.store.picture("a" * 32))
+
+    def test_the_last_login_to_go_takes_the_picture_by_any_way_it_goes(self):
+        name, _ = self.keep(name="a" * 32)
+        self.store.add_session("k2", "1001", "alice", 60, 10, 100)
+        self.store.delete_session("k-1001")
+        self.assertEqual(self.store.picture(name), b"\x89PNG-one")                                              # (another login is left)
+        self.store.delete_session("k2")
+        self.assertIsNone(self.store.picture(name))                                                              # (the last one went)
+        self.assertEqual(self.store.picture_usage(), (0, 0))
+
+    def test_the_purge_takes_the_picture_of_an_account_whose_last_login_ran_out_and_leaves_the_others(self):
+        self.login("1001", 100)
+        self.store.add_session("k3", "1001", "alice", 10 * DAY, 10, 100)        # (the account's newer login: the picture, fetched for it, runs as long as it does)
+        mine, _ = self.keep(name="a" * 32)
+        other, _ = self.keep(account="1002", name="b" * 32, png=b"other")
+        self.store.delete_session("k3")                                         # (the newer one is logged out: the older is left, and the picture with it)
+        self.assertEqual(self.store.picture(mine), b"\x89PNG-one")
+        self.clock.now += 100                                                   # (the older one runs out: the picture's own time is far off, and it must go all the same)
+        self.store.purge()
+        self.assertEqual((self.store.picture(mine), self.store.picture(other)), (None, b"other"))
+
+    def test_a_login_pushed_out_by_the_cap_of_all_logins_takes_its_accounts_picture_when_it_was_the_last(self):
+        self.store.add_session("k1", "1001", "alice", 60, 10, 2)
+        name, _ = self.keep(name="a" * 32)
+        self.clock.now += 1
+        self.store.add_session("k2", "1002", "bob", 60, 10, 2)
+        self.assertEqual(self.store.picture(name), b"\x89PNG-one")
+        self.clock.now += 1
+        self.store.add_session("k3", "1003", "carol", 60, 10, 2)                 # (the oldest login of all goes)
+        self.assertIsNone(self.store.picture(name))
+        self.assertEqual(self.store.picture_usage(), (0, 0))
+
+    def test_a_picture_is_not_served_after_the_last_login_has_run_out_whatever_logins_ended_before_it_and_with_no_purge(self):
+        self.store.add_session("old", "1001", "alice", 100, 10, 100)
+        self.store.add_session("new", "1001", "alice", 1000, 10, 100)
+        name, kept = self.keep(name="a" * 32, until=self.clock.now + 5000)
+        self.assertTrue(kept)
+        self.clock.now += 50
+        self.store.delete_session("new")                                          # (the newer login is logged out: the older one is the last, and ends at 100)
+        self.clock.now += 49
+        self.assertEqual((self.store.picture(name), list(self.store.picture_names().values())), (b"\x89PNG-one", [name]))
+        self.clock.now += 1                                                       # (the older one has run out: no purge has run)
+        self.assertEqual((self.store.logins("1001"), self.store.picture(name), self.store.picture_names()), (0, None, {}))
+
+    def test_a_picture_lasts_as_long_as_the_latest_login_and_no_longer_than_it_was(self):
+        self.store.add_session("a", "1001", "alice", 100, 10, 100)
+        self.store.add_session("b", "1001", "alice", 700, 10, 100)
+        self.store.add_session("c", "1001", "alice", 300, 10, 100)
+        name, _ = self.keep(name="a" * 32, until=self.clock.now + 5000)
+        self.store.delete_session("c")                                            # (a login ends and two are left: the picture's time is the latest of them)
+        self.clock.now += 650
+        self.assertEqual(self.store.picture(name), b"\x89PNG-one")                  # (the time was cut to the latest login's end, 700, not to the earliest or the newest)
+        self.clock.now += 49
+        self.assertEqual(self.store.picture(name), b"\x89PNG-one")
+        self.clock.now += 1
+        self.assertIsNone(self.store.picture(name))
+        name2, _ = self.keep(account="1002", name="b" * 32, png=b"two", until=self.clock.now + 50)        # (an end that is nearer than the logins' is kept)
+        self.store.add_session("x", "1002", "bob", 1000, 10, 100)
+        self.store.add_session("y", "1002", "bob", 1000, 10, 100)
+        self.store.delete_session("y")
+        self.clock.now += 49
+        self.assertEqual(self.store.picture(name2), b"two")
+        self.clock.now += 1
+        self.assertIsNone(self.store.picture(name2))
+
+    def test_a_login_that_ran_out_and_is_not_purged_yet_is_not_a_login_left(self):
+        self.store.add_session("short", "1001", "alice", 60, 10, 100)
+        self.store.add_session("long", "1001", "alice", 1000, 10, 100)
+        name, _ = self.keep(name="a" * 32)
+        self.clock.now += 61                                                      # ("short" has run out and is still in the table)
+        self.store.delete_session("long")
+        self.assertIsNone(self.store.picture(name))
+        self.assertEqual(self.store.picture_usage(), (0, 0))
+
+    def test_the_purge_and_the_cap_leave_the_picture_of_an_account_that_still_has_a_login(self):
+        self.store.add_session("short", "1001", "alice", 60, 10, 3)
+        self.store.add_session("long", "1001", "alice", 1000, 10, 3)
+        name, _ = self.keep(name="a" * 32)
+        self.clock.now += 61
+        self.store.purge()                                                        # ("short" runs out and goes: "long" is left)
+        self.assertEqual(self.store.picture(name), b"\x89PNG-one")
+        self.store.add_session("k2", "1002", "bob", 1000, 10, 3)
+        self.store.add_session("k3", "1003", "carol", 1000, 10, 3)
+        self.store.add_session("k4", "1004", "dan", 1000, 10, 3)                   # (the cap of 3 pushes the oldest, "long", out: the account has no login now)
+        self.assertIsNone(self.store.picture(name))
+
+    def test_the_cap_of_all_logins_leaves_the_picture_of_an_account_whose_other_login_stays(self):
+        self.store.add_session("a1", "1001", "alice", 1000, 10, 3)
+        self.clock.now += 1
+        self.store.add_session("a2", "1001", "alice", 1000, 10, 3)
+        name, _ = self.keep(name="a" * 32)
+        self.clock.now += 1
+        self.store.add_session("k2", "1002", "bob", 1000, 10, 3)
+        self.clock.now += 1
+        self.store.add_session("k3", "1003", "carol", 1000, 10, 3)                 # (the cap of 3 pushes "a1" out: "a2" is left)
+        self.assertEqual((self.store.session("a1"), self.store.picture(name)), (None, b"\x89PNG-one"))
+
+    def test_a_ban_of_one_account_stops_no_other_accounts_picture(self):
+        self.store.ban("1009", "me", "mallory")
+        self.assertTrue(self.keep(account="1001", name="a" * 32)[1])
+
+    def test_a_ban_takes_the_picture_and_a_switch_or_block_that_was_made_stays(self):
+        name, _ = self.keep(name="a" * 32)
+        self.store.set_picture_show("1002", base.SHOW_OFF)
+        self.store.ban("1001", "me", "alice")
+        self.store.ban("1002", "me", "bob")
+        self.assertEqual((self.store.picture(name), self.store.picture_usage()), (None, (0, 0)))
+        self.assertEqual(self.store.picture_state("1002"), base.SHOW_OFF)
+
+    def test_the_marks_are_the_accounts_that_are_off_or_blocked_and_nobody_else(self):
+        self.assertEqual(self.store.picture_marks(), {})
+        self.keep(account="1001", name="a" * 32)
+        self.store.set_picture_show("1002", base.SHOW_OFF)
+        self.store.set_picture_show("1003", base.SHOW_BLOCKED, True)
+        self.store.set_picture_show("1004", base.SHOW_OFF)
+        self.store.set_picture_show("1004", base.SHOW_ON)
+        marks = self.store.picture_marks()
+        self.assertEqual(sorted(marks.values()), [base.SHOW_OFF, base.SHOW_BLOCKED])
+        self.assertEqual(len(marks), 2)
+
+    def test_the_end_is_the_soonest_end_of_a_picture_that_may_be_shown_and_none_for_none(self):
+        self.assertIsNone(self.store.picture_end())
+        self.store.add_session("a", "1001", "alice", 1000, 10, 100)
+        self.store.add_session("b", "1002", "bob", 500, 10, 100)
+        self.store.add_session("c", "1003", "carol", 100, 10, 100)
+        self.keep(account="1001", name="a" * 32, until=self.clock.now + 900)
+        self.keep(account="1002", name="b" * 32, png=b"two", until=self.clock.now + 400)
+        self.keep(account="1003", name="c" * 32, png=b"three", until=self.clock.now + 50)
+        self.assertEqual(self.store.picture_end(), self.clock.now + 50)
+        self.store.set_picture_show("1003", base.SHOW_OFF)                              # (a picture that is not shown has no end that matters)
+        self.assertEqual(self.store.picture_end(), self.clock.now + 400)
+        self.clock.now += 400                                                             # (nor has one that has run out)
+        self.assertEqual(self.store.picture_end(), self.clock.now + 500)
+
+    def test_a_look_is_the_counter_the_names_the_marks_and_the_end_together(self):
+        name, _ = self.keep(name="a" * 32)
+        self.store.set_picture_show("1002", base.SHOW_OFF)
+        number, names, marks, end = self.store.picture_look()
+        self.assertEqual((number, names, marks, end), (self.store.last_picture_change(), self.store.picture_names(), self.store.picture_marks(), self.store.picture_end()))
+        self.assertEqual(len(names), 1)
+
+    def test_the_note_of_a_switch_goes_into_the_log_only_when_the_state_changed(self):
+        ref = "0123456789abcdef"
+        note = (base.TERMINAL, "nopic", ref, "")
+        self.store.set_picture_show("1001", base.SHOW_BLOCKED, True, note=note)
+        self.store.set_picture_show("1001", base.SHOW_BLOCKED, True, note=note)         # (the same state: nothing changed, nothing written)
+        self.store.set_picture_show("1001", base.SHOW_ON, True, note=(base.TERMINAL, "pic", ref, ""))
+        self.assertEqual([(a.actor, a.action, a.target) for a in self.store.actions()], [(base.TERMINAL, "pic", ref), (base.TERMINAL, "nopic", ref)])
+        with self.assertRaises(ValueError):
+            self.store.set_picture_show("1001", base.SHOW_BLOCKED, True, note=(base.TERMINAL, "nopic", "1001", ""))      # (an id is no reference: refused)
+
+    def test_a_block_is_found_and_changed_by_its_reference_when_the_account_has_no_other_row(self):
+        from hub.pseudo import reference
+        ref = reference(self.store.secret(), "1001")
+        self.assertIsNone(self.store.picture_state_by_reference(ref))
+        self.assertIsNone(self.store.set_picture_show_by_reference(ref, base.SHOW_ON, True))
+        self.store.set_picture_show("1001", base.SHOW_BLOCKED, True)
+        self.store.forget("1001")
+        self.assertEqual(self.store.picture_state_by_reference(ref), base.SHOW_BLOCKED)
+        self.assertEqual(self.store.set_picture_show_by_reference(ref, base.SHOW_ON, False), base.SHOW_BLOCKED)    # (not the person's to lift)
+        self.assertEqual(self.store.set_picture_show_by_reference(ref, base.SHOW_ON, True, note=(base.TERMINAL, "pic", ref, "")), base.SHOW_ON)
+        self.assertEqual((self.store.picture_state("1001"), self.store.picture_state_by_reference(ref)), (base.SHOW_ON, None))
+        self.assertEqual([a.action for a in self.store.actions()], ["pic"])
+
+    def test_the_number_of_the_last_change_goes_up_when_a_pictures_time_is_cut_and_when_the_purge_takes_a_mark(self):
+        self.store.add_session("old", "1001", "alice", 100, 10, 100)
+        self.store.add_session("new", "1001", "alice", 1000, 10, 100)
+        self.keep(name="a" * 32, until=self.clock.now + 5000)
+        before = self.store.last_picture_change()
+        self.store.delete_session("new")                                                  # (the picture's time is cut to the older login's end)
+        self.assertGreater(self.store.last_picture_change(), before)
+
+    def test_the_number_of_the_last_change_goes_up_when_the_purge_takes_an_old_mark_and_nothing_else_goes(self):
+        self.store.set_picture_show("1002", base.SHOW_OFF)
+        before = self.store.last_picture_change()
+        self.clock.now += base.PICTURE_DAYS * DAY + 10                                    # (no login, no picture: the mark is all that the purge finds)
+        self.store.purge()
+        self.assertGreater(self.store.last_picture_change(), before)
+        self.assertEqual(self.store.picture_marks(), {})
+
+    def test_a_refused_write_of_a_picture_is_a_store_error_and_leaves_the_picture_as_it_was(self):
+        name, _ = self.keep()
+        writes = (lambda: self.keep(name="b" * 32, png=b"new"), lambda: self.store.clear_picture("1001"), lambda: self.store.set_picture_show("1001", base.SHOW_OFF),
+                  lambda: self.store.set_picture_show("1002", base.SHOW_OFF))
+        with self.refusing_writes(self.store):
+            for write in writes:
+                with self.assertRaises(base.StoreError):
+                    write()
+        self.assertEqual(self.store.picture(name), b"\x89PNG-one")
+        self.assertEqual(self.store.picture_state("1002"), base.SHOW_ON)
+
 
 class SqliteContract(Contract):
     """The default backend: one file."""
@@ -822,6 +1197,57 @@ class SqliteContract(Contract):
         other.mute("1002", 0, "command line")
         self.assertGreater(self.store.last_restriction(), second)
         self.assertEqual(self.store.last_restriction(), other.last_restriction())
+
+    def test_the_pictures_are_an_additive_table_the_schema_stays_and_a_file_without_the_table_gets_it(self):
+        self.assertEqual(self.store.db.execute("PRAGMA user_version").fetchone()[0], 4)
+        self.assertEqual(storemod.SCHEMA, 4)
+        self.login()
+        self.store.set_picture("1001", b"png-bytes", "a" * 32, self.clock.now + DAY, 10, 1000)
+        self.store.close()
+        old = sqlite3.connect(self.path, isolation_level=None)                      # (the file as a hub of the version before the pictures left it: no such table)
+        old.execute("DROP TABLE pictures")
+        old.execute("DELETE FROM meta WHERE k = 'pic_seq'")
+        self.assertEqual(old.execute("PRAGMA user_version").fetchone()[0], 4)
+        old.close()
+        self.store = storemod.Store(self.path, clock=self.clock, busy_ms=50)
+        self.assertEqual(self.store.db.execute("PRAGMA user_version").fetchone()[0], 4)
+        self.assertEqual((self.store.picture_usage(), self.store.picture_state("1001"), self.store.last_picture_change()), ((0, 0), base.SHOW_ON, 0))
+        self.assertTrue(self.store.set_picture("1001", b"png-bytes", "a" * 32, self.clock.now + DAY, 10, 1000))          # (the login is in the file: the older hub's data is the same)
+        self.assertEqual(self.store.picture("a" * 32), b"png-bytes")
+
+    def test_a_row_that_holds_bytes_with_the_picture_off_or_blocked_is_not_given_and_not_listed(self):
+        # (the store never writes such a row; this is the check that a file that was edited by hand, or a bug, cannot make a hidden picture visible)
+        self.login()
+        self.store.set_picture("1001", b"png-bytes", "a" * 32, self.clock.now + DAY, 10, 1000)
+        for show in (base.SHOW_OFF, base.SHOW_BLOCKED):
+            self.store.db.execute("UPDATE pictures SET show = ?", (show,))
+            self.assertEqual((self.store.picture("a" * 32), self.store.picture_names()), (None, {}), show)
+        self.store.db.execute("UPDATE pictures SET show = 1")
+        self.assertEqual(self.store.picture("a" * 32), b"png-bytes")
+
+    def test_a_deleted_picture_is_in_neither_file_once_the_log_file_is_cut(self):
+        marker = b"canary-picture-bytes-" + b"7f3a" * 30
+        self.login()
+        self.store.set_picture("1001", marker, "a" * 32, self.clock.now + DAY, 10, 10 ** 6)
+        self.store.checkpoint()
+        with open(self.path, "rb") as f:
+            self.assertIn(marker, f.read())                                           # (the check below can find it: it is in the file)
+        self.store.clear_picture("1001")
+        self.assertTrue(self.store.unsettled)                                         # (the hub's clock cuts the log file at its next look)
+        self.assertTrue(self.store.checkpoint())
+        for path in (self.path, self.path + "-wal"):
+            if os.path.exists(path):
+                with open(path, "rb") as f:
+                    self.assertNotIn(marker, f.read(), path)
+
+    def test_another_connection_sees_the_number_of_the_last_change_and_the_picture(self):
+        other = storemod.Store(self.path, clock=self.clock, busy_ms=50)               # (the command line)
+        self.addCleanup(other.close)
+        start = self.store.last_picture_change()
+        other.set_picture_show("1001", base.SHOW_BLOCKED, operator=True)
+        self.assertGreater(self.store.last_picture_change(), start)
+        self.assertEqual(self.store.picture_state("1001"), base.SHOW_BLOCKED)
+        self.assertEqual(self.store.last_picture_change(), other.last_picture_change())
 
     def test_a_file_without_the_counter_reads_as_nothing_changed_yet_and_makes_it_at_the_first_change(self):
         self.store.db.execute("DELETE FROM meta WHERE k = 'restrict_seq'")        # (a file that an older hub made: its `meta` has the deletions' counter only)

@@ -1,6 +1,7 @@
 """Discord, the two calls that the login needs (docs/HUB.md, "Login"): the code that Discord handed the browser is exchanged for an access token (`POST /oauth2/token`), and the token is
 used once, to ask who it belongs to (`GET /users/@me`). The id, the username and the display name (`global_name`, which the one scope `identify` includes, and which is null for a person who set none)
-are all that is looked at and kept; the token is a local variable of one function and is gone when it returns (no refresh token is asked for or looked at, no email, no avatar).
+are all that is kept; the token is a local variable of one function and is gone when it returns (no refresh token is asked for or looked at, no email). The picture's short code (`avatar`) is
+read, checked for its shape and used once, for the one fetch of the picture (`picture()`, hub/pictures.py): it is never kept.
 
 A small HTTP client of its own, because the answer of another service is data and not a thing to trust: https only (the one exception is the fake Discord of the tests, on a loopback
 address, which hub/config.py allows only to a hub that listens on one), the certificate and the name checked, short timeouts for the connection and for the whole call, no redirect
@@ -25,6 +26,9 @@ USER_AGENT = "AntsHub/1 (+https://github.com/dchadd427/ants-cross-platform)"    
 BOT_USER_AGENT = "DiscordBot (https://github.com/dchadd427/ants-cross-platform, 1)"  # (the form that Discord asks of a client that speaks with a bot's token)
 NUMBER = re.compile(r"[0-9]{1,4}(?:\.[0-9]{1,6})?\Z")           # a rate-limit header or field: a small plain number
 TOKEN = re.compile(r"[A-Za-z0-9._~+/=-]{1,512}\Z")           # an access token is a plain word: one that is not is not Discord's, and is never put in a header
+AVATAR = re.compile(r"(?:a_)?[0-9a-f]{32}\Z")                      # the short code of a profile picture: 32 hex digits, and `a_` before them for an animated one (its .png is the still picture)
+CDN = "https://cdn.discordapp.com"                           # where the pictures are (a different name from the API's)
+PICTURE_SIZE = 64                                            # pixels: the biggest circle of the pages is 32 CSS pixels, so this is sharp on a screen of twice the density
 STATUS_LINE = re.compile(r"HTTP/1\.[01] ([0-9]{3})(?: [^\r\n]*)?\Z")
 HEADER = re.compile(r"([!#$%&'*+.^_`|~0-9A-Za-z-]+):[ \t]*([\t\x20-\x7e]*?)[ \t]*\Z")
 CHUNK_SIZE = re.compile(r"([0-9a-fA-F]{1,8})(?:;[^\r\n]*)?\Z")
@@ -48,6 +52,7 @@ class Discord:
         self.test = bool(base)                                   # (a fake Discord on a loopback address: plain http is allowed there and nowhere else)
         self.authorize_base = base + "/oauth2/authorize" if base else AUTHORIZE
         self.api = base + "/api/v10" if base else API
+        self.cdn = base + "/cdn" if base else CDN
         self.limits = limits
         self.ssl = ssl_context or ssl.create_default_context()
         self.inflight = 0
@@ -58,7 +63,7 @@ class Discord:
         return self.authorize_base + "?" + "&".join("%s=%s" % (k, urllib.parse.quote(v, safe="")) for k, v in pairs)
 
     async def who(self, code):
-        """(id, username, display name) of the account that `code` was handed to, or a DiscordError. The display name is whatever Discord said of it (null, or text of any kind and size: it is
+        """(id, username, display name, picture code) of the account that `code` was handed to, or a DiscordError. The picture code is None when the account has none or when what Discord said is not the shape of one. The display name is whatever Discord said of it (null, or text of any kind and size: it is
         untrusted, and hub/text.py clean_shown() decides what becomes of it; a bad one is never a failed login). At most `login_inflight` of these run at a time: the next one is `busy` at once."""
         if self.inflight >= self.limits.login_inflight:
             raise DiscordError("busy")
@@ -92,7 +97,8 @@ class Discord:
         account, name = data.get("id"), data.get("username")
         if not isinstance(account, str) or not config.ACCOUNT_ID.match(account) or not isinstance(name, str):
             raise DiscordError("down", status)
-        return account, name, data.get("global_name")
+        avatar = data.get("avatar")
+        return account, name, data.get("global_name"), avatar if isinstance(avatar, str) and AVATAR.match(avatar) else None
 
     async def member(self, guild, user, token):
         """(status, data, rate limits) of `GET /guilds/<guild>/members/<user>` with the bot's token: the member's roles, or a status that says why not (404 and code 10007: not in the server). A
@@ -127,25 +133,7 @@ class Discord:
         raise DiscordError("down")
 
     async def exchange(self, method, url, headers, body):
-        parts = urllib.parse.urlsplit(url)
-        secure = parts.scheme == "https"
-        if not secure and not (self.test and parts.scheme == "http"):
-            raise DiscordError("down")
-        host, port = parts.hostname, parts.port or (443 if secure else 80)
-        reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port, ssl=self.ssl if secure else None, server_hostname=host if secure else None, limit=65536),
-                                                self.limits.discord_connect_seconds)
-        try:
-            lines = ["%s %s HTTP/1.1" % (method, parts.path), "Host: " + parts.netloc, "User-Agent: " + headers.get("User-Agent", USER_AGENT), "Accept: application/json", "Accept-Encoding: identity", "Connection: close"]
-            lines += ["%s: %s" % kv for kv in headers.items() if kv[0] != "User-Agent"]
-            if method == "POST":
-                lines.append("Content-Length: %d" % len(body))
-            writer.write(("\r\n".join(lines) + "\r\n\r\n").encode("ascii") + body)
-            await writer.drain()
-            status, answer, fields = await self.read_answer(reader)
-        finally:
-            writer.transport.abort()                              # (at once: a polite TLS shutdown of a server that does not answer would wait)
-        if 300 <= status < 400:
-            raise DiscordError("down", status)                    # (a redirect is never followed)
+        status, answer, fields = await self.raw_exchange(method, url, headers, body, self.limits.discord_body_max)
         try:
             data = json.loads(answer.decode("utf-8"), parse_constant=self.refuse_constant) if answer else None
         except ValueError:
@@ -155,6 +143,46 @@ class Discord:
                 raise DiscordError("down", status)
             data = {}                                             # (an error that is not JSON still has its status)
         return status, data, self.rate_limits(fields, data)
+
+    async def raw_exchange(self, method, url, headers, body, cap, over="down"):
+        """(status, body bytes, header fields) of one call, whatever the body is; at most `cap` bytes are read in all (more is a DiscordError of the kind `over`). A redirect is a failure."""
+        parts = urllib.parse.urlsplit(url)
+        secure = parts.scheme == "https"
+        if not secure and not (self.test and parts.scheme == "http"):
+            raise DiscordError("down")
+        host, port = parts.hostname, parts.port or (443 if secure else 80)
+        reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port, ssl=self.ssl if secure else None, server_hostname=host if secure else None, limit=65536),
+                                                self.limits.discord_connect_seconds)
+        try:
+            lines = ["%s %s HTTP/1.1" % (method, parts.path + ("?" + parts.query if parts.query else "")), "Host: " + parts.netloc, "User-Agent: " + headers.get("User-Agent", USER_AGENT),
+                     "Accept: " + headers.get("Accept", "application/json"), "Accept-Encoding: identity", "Connection: close"]
+            lines += ["%s: %s" % kv for kv in headers.items() if kv[0] not in ("User-Agent", "Accept")]
+            if method == "POST":
+                lines.append("Content-Length: %d" % len(body))
+            writer.write(("\r\n".join(lines) + "\r\n\r\n").encode("ascii") + body)
+            await writer.drain()
+            status, answer, fields = await self.read_answer(reader, cap, over)
+        finally:
+            writer.transport.abort()                              # (at once: a polite TLS shutdown of a server that does not answer would wait)
+        if 300 <= status < 400:
+            raise DiscordError("down", status)                    # (a redirect is never followed)
+        return status, answer, fields
+
+    async def picture(self, account, avatar):
+        """(status, content type, body) of the small copy of an account's profile picture, from Discord's image host; a DiscordError (kind `down`, or `big` for more than the cap) when there was no usable answer. The
+        address is made here and nowhere else, from constants and the two parts, each checked for its shape right here: a part that is not the shape of an id or of a picture code makes no request at all. Nothing
+        is kept of the address: an error carries no cause, because a request line holds the id and the code."""
+        if not (isinstance(account, str) and config.ACCOUNT_ID.match(account) and isinstance(avatar, str) and AVATAR.match(avatar)):
+            raise DiscordError("down")
+        url = "%s/avatars/%s/%s.png?size=%d" % (self.cdn, account, avatar, PICTURE_SIZE)
+        try:
+            status, body, fields = await asyncio.wait_for(self.raw_exchange("GET", url, {"Accept": "image/png"}, b"", self.limits.picture_read_max, "big"), self.limits.discord_seconds)
+            return status, fields.get("content-type", ""), body
+        except DiscordError:
+            raise
+        except (asyncio.TimeoutError, OSError, ssl.SSLError, ValueError, EOFError, UnicodeError, RecursionError):
+            pass                                                  # (raised below, outside the handler: what the cause said can hold the address)
+        raise DiscordError("down")
 
     @staticmethod
     def rate_limits(fields, data):
@@ -179,9 +207,9 @@ class Discord:
     def refuse_constant(name):
         raise ValueError(name)
 
-    async def read_answer(self, reader):
-        """(status, body bytes, header fields with lower-case names) of the answer on `reader`, reading no more than `discord_body_max` bytes in all."""
-        room = self.limits.discord_body_max
+    async def read_answer(self, reader, cap, over="down"):
+        """(status, body bytes, header fields with lower-case names) of the answer on `reader`, reading no more than `cap` bytes in all (more is a DiscordError of the kind `over`)."""
+        room = cap
         buffer = bytearray()
 
         async def more():
@@ -191,7 +219,7 @@ class Discord:
                 raise EOFError("the answer ended")
             room -= len(data)
             if room < 0:
-                raise DiscordError("down")                         # (too much: not what Discord sends)
+                raise DiscordError(over)                           # (too much: not what Discord sends)
             buffer.extend(data)
 
         async def until(marker):
@@ -240,8 +268,10 @@ class Discord:
                 if await exactly(2) != b"\r\n":
                     raise DiscordError("down", status)
         if "content-length" in fields:
-            if not re.match(r"[0-9]{1,9}\Z", fields["content-length"]) or int(fields["content-length"]) > room + len(buffer):
+            if not re.match(r"[0-9]{1,9}\Z", fields["content-length"]):
                 raise DiscordError("down", status)
+            if int(fields["content-length"]) > room + len(buffer):
+                raise DiscordError(over, status)
             return status, await exactly(int(fields["content-length"])), fields
         while True:                                               # (no length: the answer ends when the connection does)
             try:

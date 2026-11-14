@@ -77,11 +77,11 @@ def pick_frame(word):
 
 
 def you_without_the_key(you):
-    """The welcome's `you` (or the one of /hub/me) without its key, which is a new one at every start of the hub: only its shape is checked here."""
+    """The welcome's `you` (or the one of /hub/me) without its key, which is a new one at every start of the hub (only its shape is checked here), and without the picture's `pics` and `pic`."""
     if you is None:
         return None
     assert re.fullmatch(r"[0-9a-f]{12}", you["k"]), you
-    return {k: v for k, v in you.items() if k != "k"}
+    return {k: v for k, v in you.items() if k not in ("k", "pics", "pic")}          # (the picture's two fields are tests/scripts/test_hub_pictures_frames.py's)
 
 
 class LoginTest(unittest.TestCase):
@@ -1770,7 +1770,7 @@ class TheDiscordClient(unittest.TestCase):
         code = "c0de"
         with self.fake.lock:
             self.fake.codes[code] = self.fake.user
-        self.assertEqual(self.run_call(client, code), (OLD, "maple.leaf", None))                 # (the id, the username and the display name that Discord says: none, for a person who set none)
+        self.assertEqual(self.run_call(client, code), (OLD, "maple.leaf", None, None))           # (the id, the username, the display name that Discord says (none, for a person who set none) and the picture code (none: the fake says one that is not the shape of one))
         token = next(iter(self.fake.tokens))
         for obj in (client, client.limits, client.ssl):
             self.assertNotIn(token, repr(getattr(obj, "__dict__", {})), type(obj).__name__)

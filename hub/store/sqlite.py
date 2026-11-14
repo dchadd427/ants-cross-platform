@@ -11,10 +11,11 @@ import os
 import sqlite3
 import time
 
-from .base import MAX_LINES, PICKS, PROFILE_DAYS, PUBLIC, Action, Line, Profile, StoreBase, StoreError, Usage, check_note
+from .base import MAX_LINES, PICKS, PICTURE_DAYS, PICTURE_NAME, PROFILE_DAYS, PUBLIC, SHOW_BLOCKED, SHOW_OFF, SHOW_ON, Action, Line, Profile, StoreBase, StoreError, Usage, check_note
 from ..pseudo import reference
 
 SCHEMA = 4
+PICTURE_MARKS = 100000                              # the rows of a person's `off` that are kept in all (the ones written longest ago go first)
 TRIM_ROWS = 8                                       # the most lines that a new line takes out: one is the rule, a few make up for a limit that was lowered
 
 
@@ -105,6 +106,14 @@ class Store(StoreBase):
                 CREATE INDEX IF NOT EXISTS profiles_updated ON profiles (updated);
                 COMMIT;""")
 
+        # (the pictures are an additive table too, the same way: no version of the schema came with it, so an older hub never looks at it; docs/HUB.md, "Data")
+        if self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'pictures'").fetchone() is None:
+            self.db.executescript("""
+                BEGIN;
+                CREATE TABLE IF NOT EXISTS pictures (ref TEXT PRIMARY KEY, show INTEGER NOT NULL DEFAULT 1, name TEXT UNIQUE, png BLOB, until INTEGER NOT NULL DEFAULT 0, at INTEGER NOT NULL);
+                CREATE INDEX IF NOT EXISTS pictures_at ON pictures (at);
+                COMMIT;""")
+
     def close(self):
         self.db.close()
 
@@ -181,8 +190,13 @@ class Store(StoreBase):
                 gone += self.db.execute("DELETE FROM lines WHERE id IN (SELECT id FROM lines WHERE id <= (SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?) LIMIT ?)",
                                         (self.max_lines, chunk - gone)).rowcount
             self.db.execute("DELETE FROM mutes WHERE until <= ?", (now,))
+            ended = [r[0] for r in self.db.execute("SELECT DISTINCT account FROM sessions WHERE expires <= ?", (now,))]
             self.db.execute("DELETE FROM sessions WHERE expires <= ?", (now,))
+            self.drop_pictures_without_login(ended, now)
             self.db.execute("DELETE FROM profiles WHERE updated < ?", (now - PROFILE_DAYS * 86400,))
+            gone_pictures = self.db.execute("DELETE FROM pictures WHERE (show = ? AND until <= ?) OR (show = ? AND at < ?)", (SHOW_ON, now, SHOW_OFF, now - PICTURE_DAYS * 86400)).rowcount
+            if gone_pictures:
+                self.count_picture_change()
             self.db.execute("DELETE FROM modlog WHERE at < ?", (now - int(self.modlog_days * 86400),))
             self.db.execute("DELETE FROM modlog WHERE id IN (SELECT id FROM modlog ORDER BY id DESC LIMIT -1 OFFSET ?)", (self.max_modlog,))
         self.checkpoint()
@@ -259,7 +273,10 @@ class Store(StoreBase):
         with self.transaction():
             self.db.execute("INSERT INTO sessions (id, account, name, created, expires) VALUES (?, ?, ?, ?, ?)", (key, account, name, now, now + int(seconds)))
             over = self.db.execute("DELETE FROM sessions WHERE account = ? AND id NOT IN (SELECT id FROM sessions WHERE account = ? ORDER BY created DESC, rowid DESC LIMIT ?)", (account, account, keep)).rowcount
-            over += self.db.execute("DELETE FROM sessions WHERE rowid IN (SELECT rowid FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)", (total,)).rowcount
+            cut = self.db.execute("SELECT rowid, account FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?", (total,)).fetchall()
+            self.db.executemany("DELETE FROM sessions WHERE rowid = ?", [(r[0],) for r in cut])
+            over += len(cut)
+            self.drop_pictures_without_login({r[1] for r in cut}, now)
         if over:
             self.unsettled = True                   # (the logins that went over the caps are in the log file until it is cut)
 
@@ -272,7 +289,10 @@ class Store(StoreBase):
         """End one login. What was deleted is still in the log file until it is cut: `unsettled` asks the hub's clock to cut it at its next look (within ten seconds, and many logins ending
         at once cost one cut), so that the hash of the login does not stay in a file for the hour that is the pause between two purges."""
         with self.transaction():
+            row = self.db.execute("SELECT account FROM sessions WHERE id = ?", (key,)).fetchone()
             gone = self.db.execute("DELETE FROM sessions WHERE id = ?", (key,)).rowcount == 1
+            if row is not None:
+                self.drop_pictures_without_login([row[0]], int(self.clock()))          # (the account's last login: its picture goes with it)
         self.unsettled = True
         return gone
 
@@ -280,6 +300,7 @@ class Store(StoreBase):
         """End every login of the account: what was deleted is in the log file until the hub's clock cuts it (`unsettled`), as for one login."""
         with self.transaction():
             gone = self.db.execute("DELETE FROM sessions WHERE account = ?", (account,)).rowcount
+            self.drop_picture(self.ref(account))                        # (a picture lives as long as a login: the account's copy goes with its logins)
             self.write_note(note)
         self.unsettled = True
         return gone
@@ -294,6 +315,8 @@ class Store(StoreBase):
             ids = [r[0] for r in self.db.execute("SELECT id FROM lines WHERE account = ? AND (deleted = 0 OR del_seq > ?)", (account, int(since)))]
             self.db.execute("DELETE FROM sessions WHERE account = ?", (account,))
             self.db.execute("DELETE FROM profiles WHERE account = ?", (account,))
+            if self.db.execute("DELETE FROM pictures WHERE ref = ? AND show != ?", (self.ref(account), SHOW_BLOCKED)).rowcount:      # (a block stays, as a ban does, and holds no picture)
+                self.count_picture_change()
             self.db.execute("DELETE FROM lines WHERE account = ?", (account,))
             self.db.execute("UPDATE mutes SET name = '' WHERE account = ?", (account,))
             self.db.execute("UPDATE bans SET name = '' WHERE account = ?", (account,))
@@ -342,6 +365,148 @@ class Store(StoreBase):
         rows = self.db.execute("SELECT account FROM profiles WHERE username = ? LIMIT 2", (username,)).fetchall()
         return rows[0][0] if len(rows) == 1 else None
 
+    # ---- pictures -------------------------------------------------------------------------------------------------------------------------
+
+    max_picture_marks = PICTURE_MARKS
+
+    def ref(self, account):
+        return reference(self.secret(), account)
+
+    def count_picture_change(self):
+        """Inside a transaction that changed a picture, its switch or its name: one more on the counter that last_picture_change() reads (a row of `meta`, as the bans' is)."""
+        self.db.execute("INSERT OR IGNORE INTO meta (k, v) VALUES ('pic_seq', 0)")
+        self.db.execute("UPDATE meta SET v = v + 1 WHERE k = 'pic_seq'")
+
+    def drop_picture(self, ref):
+        """Inside a transaction: the picture and the name of the account with this reference are deleted (the row of a switch stays, the row of a default is deleted). True when there was a picture."""
+        row = self.db.execute("SELECT show, png IS NOT NULL FROM pictures WHERE ref = ?", (ref,)).fetchone()
+        if row is None:
+            return False
+        if row[0] == SHOW_ON:
+            self.db.execute("DELETE FROM pictures WHERE ref = ?", (ref,))
+        else:
+            self.db.execute("UPDATE pictures SET name = NULL, png = NULL, until = 0 WHERE ref = ?", (ref,))
+        if row[1]:
+            self.count_picture_change()
+            self.unsettled = True                     # (the bytes that went are in the log file until the hub's clock cuts it)
+        return bool(row[1])
+
+    def drop_pictures_without_login(self, accounts, now):
+        """Inside a transaction that ended logins: the picture of each of these accounts goes when it has no login left (no login, no picture), and when one is left the picture's time is cut to the
+        latest end of the logins that are left (never made later), so that it is never served after the account's last login has run out."""
+        for account in accounts:
+            live = self.db.execute("SELECT MAX(expires) FROM sessions WHERE account = ? AND expires > ?", (account, now)).fetchone()[0]
+            if live is None:
+                self.drop_picture(self.ref(account))
+            elif self.db.execute("UPDATE pictures SET until = ? WHERE ref = ? AND until > ?", (live, self.ref(account), live)).rowcount:
+                self.count_picture_change()
+
+    def set_picture(self, account, png, name, until, rows_max, bytes_max):
+        if not (isinstance(png, bytes) and 0 < len(png) <= bytes_max and isinstance(name, str) and PICTURE_NAME.match(name)):
+            return False
+        ref, now = self.ref(account), int(self.clock())
+        with self.transaction():
+            row = self.db.execute("SELECT show FROM pictures WHERE ref = ?", (ref,)).fetchone()
+            if row is not None and row[0] != SHOW_ON:
+                return False
+            live = self.db.execute("SELECT MAX(expires) FROM sessions WHERE account = ? AND expires > ?", (account, now)).fetchone()[0]
+            if live is None or self.db.execute("SELECT 1 FROM bans WHERE account = ?", (account,)).fetchone() is not None:
+                return False                                           # (no login, or a ban: a fetch that ended after Forget me, the last log out, a kick or a ban keeps nothing)
+            until = min(int(until), live)                              # (a picture never outlives the last login of its account)
+            self.db.execute("INSERT INTO pictures (ref, show, name, png, until, at) VALUES (?, 1, ?, ?, ?, ?) ON CONFLICT (ref) DO UPDATE SET name = excluded.name, png = excluded.png, until = excluded.until, at = excluded.at",
+                            (ref, name, png, until, now))
+            while True:
+                rows, size = self.db.execute("SELECT COUNT(*), COALESCE(SUM(LENGTH(png)), 0) FROM pictures WHERE png IS NOT NULL").fetchone()
+                if rows <= rows_max and size <= bytes_max:
+                    break
+                if not self.db.execute("DELETE FROM pictures WHERE ref IN (SELECT ref FROM pictures WHERE png IS NOT NULL AND ref != ? ORDER BY at, rowid LIMIT 1)", (ref,)).rowcount:
+                    break
+            self.count_picture_change()
+        self.unsettled = True
+        return True
+
+    def clear_picture(self, account):
+        with self.transaction():
+            return self.drop_picture(self.ref(account))
+
+    def set_picture_show(self, account, show, operator=False, note=None):
+        return self.set_show(self.ref(account), show, operator, note)
+
+    def set_picture_show_by_reference(self, reference, show, operator=False, note=None):
+        if self.picture_state_by_reference(reference) is None:
+            return None
+        return self.set_show(reference, show, operator, note)
+
+    def picture_state_by_reference(self, reference):
+        row = self.db.execute("SELECT show FROM pictures WHERE ref = ?", (reference,)).fetchone()
+        return row[0] if row else None
+
+    def picture_look(self):
+        self.db.execute("BEGIN")
+        try:
+            return self.last_picture_change(), self.picture_names(), self.picture_marks(), self.picture_end()
+        finally:
+            self.db.execute("COMMIT")
+
+    def set_show(self, ref, show, operator, note):
+        if show not in (SHOW_ON, SHOW_OFF, SHOW_BLOCKED):
+            raise ValueError("not a state of a picture")
+        now = int(self.clock())
+        with self.transaction():
+            row = self.db.execute("SELECT show FROM pictures WHERE ref = ?", (ref,)).fetchone()
+            now_in = row[0] if row else SHOW_ON
+            if now_in == SHOW_BLOCKED and show != SHOW_BLOCKED and not operator:
+                return SHOW_BLOCKED
+            if show == now_in:
+                return show
+            self.drop_picture(ref)
+            if show == SHOW_ON:
+                self.db.execute("DELETE FROM pictures WHERE ref = ?", (ref,))
+            else:
+                self.db.execute("INSERT INTO pictures (ref, show, name, png, until, at) VALUES (?, ?, NULL, NULL, 0, ?) ON CONFLICT (ref) DO UPDATE SET show = excluded.show, at = excluded.at", (ref, show, now))
+                self.db.execute("DELETE FROM pictures WHERE rowid IN (SELECT rowid FROM pictures WHERE show = ? ORDER BY at DESC, rowid DESC LIMIT -1 OFFSET ?)", (SHOW_OFF, self.max_picture_marks))
+            self.count_picture_change()
+            self.write_note(note)
+            return show
+
+    def picture_state(self, account, touch=False):
+        ref = self.ref(account)
+        row = self.db.execute("SELECT show FROM pictures WHERE ref = ?", (ref,)).fetchone()
+        if row is None:
+            return SHOW_ON
+        if touch and row[0] == SHOW_OFF:
+            with self.transaction():
+                self.db.execute("UPDATE pictures SET at = ? WHERE ref = ?", (int(self.clock()), ref))
+        return row[0]
+
+    def has_picture(self, account):
+        return self.db.execute("SELECT 1 FROM pictures WHERE ref = ? AND png IS NOT NULL", (self.ref(account),)).fetchone() is not None
+
+    def picture(self, name):
+        if not isinstance(name, str) or not PICTURE_NAME.match(name):
+            return None
+        row = self.db.execute("SELECT png FROM pictures WHERE name = ? AND show = ? AND until > ? AND png IS NOT NULL", (name, SHOW_ON, int(self.clock()))).fetchone()
+        return bytes(row[0]) if row else None
+
+    def picture_names(self):
+        return {ref: name for ref, name in self.db.execute("SELECT ref, name FROM pictures WHERE show = ? AND until > ? AND png IS NOT NULL", (SHOW_ON, int(self.clock())))}
+
+    def picture_marks(self):
+        return {ref: show for ref, show in self.db.execute("SELECT ref, show FROM pictures WHERE show != ?", (SHOW_ON,))}
+
+    def picture_end(self):
+        return self.db.execute("SELECT MIN(until) FROM pictures WHERE show = ? AND until > ? AND png IS NOT NULL", (SHOW_ON, int(self.clock()))).fetchone()[0]
+
+    def last_picture_change(self):
+        row = self.db.execute("SELECT v FROM meta WHERE k = 'pic_seq'").fetchone()
+        return row[0] if row else 0
+
+    def picture_usage(self):
+        return tuple(self.db.execute("SELECT COUNT(*), COALESCE(SUM(LENGTH(png)), 0) FROM pictures WHERE png IS NOT NULL").fetchone())
+
+    def logins(self, account):
+        return self.db.execute("SELECT COUNT(*) FROM sessions WHERE account = ? AND expires > ?", (account, int(self.clock()))).fetchone()[0]
+
     # ---- mutes and bans -------------------------------------------------------------------------------------------------------------------
 
     def mute(self, account, minutes, by, name="", note=None):
@@ -367,6 +532,7 @@ class Store(StoreBase):
         with self.transaction():
             self.count_restriction()
             self.db.execute("INSERT OR REPLACE INTO bans (account, at, by, name) VALUES (?, ?, ?, ?)", (account, int(self.clock()), by, name))
+            self.drop_picture(self.ref(account))                    # (a banned account is a guest in the list: it shows no picture, and none is fetched while the ban stands)
             self.write_note(note)
 
     def unban(self, account, note=None):

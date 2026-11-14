@@ -892,13 +892,14 @@ class TheHubTidiesTheLimits(unittest.TestCase):
 
     def test_the_idle_buckets_of_the_switch_and_of_the_lines_go_at_the_minute(self):
         self.hub.chat.pick_limits.take("111111111111111111", 0.0)
+        self.hub.chat.pics_limits.take("111111111111111111", 0.0)
         self.hub.chat.account_limits.check("111111111111111111", "hello", 0.0)
         self.hub.next_forget = float("-inf")
         self.hub.on_tick(10.0)                                        # (not yet full again: they stay)
-        self.assertEqual((len(self.hub.chat.pick_limits.buckets), len(self.hub.chat.account_limits.accounts)), (1, 1))
+        self.assertEqual((len(self.hub.chat.pick_limits.buckets), len(self.hub.chat.pics_limits.buckets), len(self.hub.chat.account_limits.accounts)), (1, 1, 1))
         self.hub.next_forget = float("-inf")
         self.hub.on_tick(400.0)
-        self.assertEqual((len(self.hub.chat.pick_limits.buckets), len(self.hub.chat.account_limits.accounts)), (0, 0))
+        self.assertEqual((len(self.hub.chat.pick_limits.buckets), len(self.hub.chat.pics_limits.buckets), len(self.hub.chat.account_limits.accounts)), (0, 0, 0))
         self.assertEqual(self.hub.next_forget, 460.0)                 # (and the next look is a minute on)
 
 

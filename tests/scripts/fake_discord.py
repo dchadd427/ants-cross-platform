@@ -18,9 +18,11 @@ code 10004) and goes wrong by `member_mode` like the others, and more: `err:401`
 import json
 import secrets
 import socketserver
+import struct
 import threading
 import time
 import urllib.parse
+import zlib
 
 CLIENT_ID = "4242424242420001"
 CLIENT_SECRET = "canary-client-secret-9d41c7e2b8"
@@ -30,6 +32,30 @@ ROLE_ADMIN = "700000000000000002"
 ROLE_MOD = "700000000000000003"
 ROLE_OTHER = "700000000000000004"
 EPOCH_MS = 1420070400000
+AVATAR = "0123456789abcdef0123456789abcdef"      # a made-up picture code of the shape that Discord's are (the fake `me` says it when `avatar` is set to it)
+
+
+def chunk(kind, body):
+    """One PNG chunk: the length, the four letters, the bytes and the CRC."""
+    return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xffffffff)
+
+
+def make_png(width=64, height=64, before=(), after=(), color=2, depth=8, interlace=0):
+    """A real PNG (8 bit RGB by default) of the size asked for, with the chunks of `before` between the header and the data and the ones of `after` between the data and the end: (letters, bytes) pairs."""
+    channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color]
+    row = b"\x00" + bytes((x * 7 + 3) % 256 for x in range(-(-width * channels * depth // 8)))
+    raw = row * height
+    if interlace:                                    # (the rows of the seven passes: each has a filter byte and its pixels to a whole byte)
+        raw = b""
+        for x0, y0, dx, dy in ((0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2)):
+            columns, rows = -(-(width - x0) // dx), -(-(height - y0) // dy)
+            if columns > 0 and rows > 0:
+                raw += (b"\x00" + b"\x55" * -(-columns * channels * depth // 8)) * rows
+    head = chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, depth, color, 0, 0, interlace))
+    mid = b"".join(chunk(k, b) for k, b in before)
+    if color == 3:
+        mid = chunk(b"PLTE", bytes(range(256))[:3 * 16]) + mid
+    return b"\x89PNG\r\n\x1a\n" + head + mid + chunk(b"IDAT", zlib.compress(raw)) + b"".join(chunk(k, b) for k, b in after) + chunk(b"IEND", b"")
 
 
 def snowflake(age_days, now=None, worker=7):
@@ -57,6 +83,10 @@ class FakeDiscord:
         self.member_times = []                           # time.monotonic() of every member lookup
         self.member_ids = []                             # the account that each one asked about
         self.sent = 0                                    # the bytes that the last "huge" answer got out before the hub hung up on it
+        self.avatar = "canary-avatar-hash"               # what `me` says is the picture's code (not of the shape of one: no picture is fetched); set to AVATAR (or None for none) by the tests of the pictures
+        self.cdn_mode = "ok"                             # the picture host (/cdn/avatars/<id>/<code>.png): ok, 404, 500, status:<n>, slow:<s>, hang, close, partial, drip, huge, huge_stream, huge_chunked, redirect, type:<content type>, notype
+        self.picture = make_png()                        # the bytes that it sends
+        self.cdn_inflight = self.cdn_peak = 0            # requests that the picture host is answering now, and the most there were at one time
         self.lock = threading.Lock()
         fake = self
 
@@ -104,6 +134,15 @@ class FakeDiscord:
         path, _, query = target.partition("?")
         with self.lock:
             self.requests.append((method, path, query, headers, body))
+        if path.startswith("/cdn/"):
+            with self.lock:
+                self.cdn_inflight += 1
+                self.cdn_peak = max(self.cdn_peak, self.cdn_inflight)
+            try:
+                return self.serve_cdn(h, method, path)
+            finally:
+                with self.lock:
+                    self.cdn_inflight -= 1
         if path == "/oauth2/authorize":
             return self.authorize(h, query)
         if path == "/api/v10/oauth2/token" and method == "POST":
@@ -117,6 +156,59 @@ class FakeDiscord:
                 self.member_ids.append(parts[6])
             return self.answer(h, self.member_mode, lambda: self.member(headers.get("authorization", ""), parts[4], parts[6]))
         h.wfile.write(raw(404, {"error": "not found"}))
+
+    def serve_cdn(self, h, method, path):
+        """The picture host: GET /cdn/avatars/<id>/<code>.png (the query is ignored); `cdn_mode` makes it go wrong in the ways a real host can."""
+        mode, body = self.cdn_mode, self.picture
+        parts = path.split("/")
+        if method != "GET" or len(parts) != 5 or parts[:3] != ["", "cdn", "avatars"] or not parts[4].endswith(".png"):
+            return h.wfile.write(raw(404, {"error": "not found"}))
+        png = ("HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: %d\r\nConnection: close\r\n\r\n" % len(body)).encode() + body
+        if mode == "ok":
+            return h.wfile.write(png)
+        if mode == "404":
+            return h.wfile.write(raw(404, {"message": "404: Not Found", "code": 0}))
+        if mode == "500":
+            return h.wfile.write(raw(500, {"message": "canary-error-body"}))
+        if mode.startswith("status:"):
+            return h.wfile.write(raw(int(mode[7:]), {"message": "canary-error-body"}))
+        if mode.startswith("slow:"):
+            time.sleep(float(mode[5:]))
+            return h.wfile.write(png)
+        if mode == "hang":
+            time.sleep(30)
+            return None
+        if mode == "close":
+            return None
+        if mode == "partial":
+            return h.wfile.write(png[:len(png) // 2])
+        if mode == "drip":
+            h.wfile.write(png[:png.index(b"\r\n\r\n") + 4])
+            for b in body:
+                h.wfile.write(bytes([b]))
+                h.wfile.flush()
+                time.sleep(0.2)
+            return None
+        if mode in ("huge", "huge_stream", "huge_chunked"):
+            self.sent = 0
+            heads = {"huge": b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: 100000000\r\n\r\n", "huge_stream": b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nConnection: close\r\n\r\n",
+                     "huge_chunked": b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nTransfer-Encoding: chunked\r\n\r\n"}
+            piece = b"1000\r\n" + b"x" * 4096 + b"\r\n" if mode == "huge_chunked" else b"x" * 65536
+            try:
+                h.wfile.write(heads[mode])
+                for _ in range(1500):
+                    h.wfile.write(piece)
+                    self.sent += len(piece)
+            except OSError:
+                pass
+            return None
+        if mode == "redirect":
+            return h.wfile.write(raw(302, None, {"Location": self.url + "/cdn/followed.png"}))        # (an address of this fake: a hub that followed it would be seen asking for it)
+        if mode.startswith("type:"):
+            return h.wfile.write(png.replace(b"Content-Type: image/png", b"Content-Type: " + mode[5:].encode(), 1))
+        if mode == "notype":
+            return h.wfile.write(png.replace(b"Content-Type: image/png\r\n", b"", 1))
+        raise AssertionError("no such mode: " + mode)
 
     def member(self, authorization, guild, account):
         if authorization != "Bot " + self.bot_token:
@@ -165,7 +257,7 @@ class FakeDiscord:
         user = self.tokens.get(authorization[len("Bearer "):]) if authorization.startswith("Bearer ") else None
         if user is None:
             return 401, {"message": "401: Unauthorized", "code": 0}
-        return 200, {"id": user[0], "username": user[1], "discriminator": "0", "global_name": user[2] if len(user) > 2 else None, "avatar": "canary-avatar-hash", "email": "canary-email@example.org", "verified": True}
+        return 200, {"id": user[0], "username": user[1], "discriminator": "0", "global_name": user[2] if len(user) > 2 else None, "avatar": self.avatar, "email": "canary-email@example.org", "verified": True}
 
     def answer(self, h, mode, make):
         status, data = make()

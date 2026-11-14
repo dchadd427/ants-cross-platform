@@ -23,7 +23,7 @@
     var LOGIN = '/hub/login?next=', LOGOUT = '/hub/logout', FORGET = '/hub/forget';      // the hub's pages (nginx passes them; the cookie goes along with a request of this page only)
     var LIMIT = { name: 32, line: 200, feed: 100, history: 50, frame: 120000, bad: 30, field: 400, count: 1e9, here: 500, said: 2 };       // (the hub's own: names 32, lines 200 code points, history 50; the rest is this page's)
     var UPRIGHT = '(max-width: 700px) and (min-height: 501px)', ROW = 44, LINE = 22;       // (a phone held upright, as chat.css says it; the box's one row and the height of one more line of words: four lines at most)
-    var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, flood: 3000, pending: 8000 };       // (pending: the hub answers a line at once: one that has no answer after this long is not waited for)
+    var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, pics: 8000, flood: 3000, pending: 8000 };       // (pending: the hub answers a line at once: one that has no answer after this long is not waited for)
     var BACKOFF = { min: 1000, max: 60000, low: 0.5, high: 1.5 };      // the wait is spread from half to one and a half times the step (never under a second or over a minute): many pages that lost one hub do not come back together
     var PACE = { burst: 2, every: 2500, same: 31000 };                  // this page's own limit, below the hub's (3 at once, one every 2 s, the same text twice within 30 s)
     var TEXT = {
@@ -31,6 +31,7 @@
         offline: 'Chat is offline', readonly: 'Chat is read-only for now', guest: 'You can read as a guest. Playing and watching stay anonymous.', field: 'Say something to everyone', hint: 'Enter sends the message.', send: 'Send',
         fold: 'Fold chat', open: 'Open chat', log: 'Chat messages', unread: ' unread', generic: 'That did not go through', more: ' more messages', one: 'One more message', many: '500+',
         login: 'Log in', loginWith: 'Log in with Discord', chatting: 'Chatting as ', logout: 'Log out', forget: 'Forget me', sure: 'Are you sure? Press again', forgetNote: 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.',
+        picShow: 'Show my Discord picture', picNote: 'Everyone on the front page sees it next to your name.', picNone: 'Your picture is loaded when you log in.', picAgain: 'Log in again', picBlocked: 'Your picture is hidden on this site.',
         shows: 'Chat shows your ', names: ['display name', 'username'], use: 'Show my ',
         administrator: 'administrator', moderator: 'moderator', only: 'Only you', youAre: { mod: 'You are a moderator', admin: 'You are an administrator' }, number: 'line number',
         helpHead: 'Commands you can use. Only you can see this.', helpNone: 'There are no chat commands for you.', cmdBad: 'That command is not right. Type /help to see the commands.', cmdRate: 'You are going too fast, try again in a moment', bansHead: 'People who are banned', bansNone: 'Nobody is banned.', noName: '(no name)',
@@ -90,13 +91,42 @@
     }
     function count(n) { return typeof n === 'number' && n >= 0 && n <= LIMIT.count && n === Math.floor(n) ? n : null; }
     function nameOf(s) { return typeof s === 'string' ? clip(plain(s.slice(0, LIMIT.name * 4), true), LIMIT.name) : ''; }       // (a name of the hub, or its key of an account)
+    // The pictures (docs/HOME_SCREEN.md, "Pictures"): the hub names a picture by 32 lower-case hex characters; that name is checked here and is the only thing an address is made from (with two constants)
+    var PICNAME = /^[0-9a-f]{32}$/, PICDIR = '/hub/pic/', PICEXT = '.png';
+    function picOf(v) { return typeof v === 'string' && PICNAME.test(v) ? v : ''; }       // the name of a picture in a frame of the hub (`pic` of `you` and of a players row), or '' (the one place that reads it)
+    function picsOf(v) { return v === 'on' || v === 'off' || v === 'blocked' ? v : ''; }       // the switch's state in `you.pics`, or '' (no switch: a guest, a hub without the Discord login)
+    var FAILED = Object.create(null), FAILED_ORDER = [], FAILED_MAX = 200, FAILED_MS = 600000;       // the names of pictures that did not load (a 404, a refusal, not a picture) and when: a circle drawn for one of them within ten minutes asks for nothing, so that no repaint makes a request; after ten minutes the name is asked for once more, the next time a circle is drawn for it (no timer); at most 200 names
+    function failed(name) { if (FAILED[name] !== undefined) return; FAILED[name] = Date.now(); FAILED_ORDER.push(name); if (FAILED_ORDER.length > FAILED_MAX) delete FAILED[FAILED_ORDER.shift()]; }
+    function hasFailed(name) {                                           // true while the name failed less than ten minutes ago; a name that is older is forgotten (and asked for again by the circle that is drawn now)
+        var at = FAILED[name], d;
+        if (at === undefined) return false;
+        d = Date.now() - at;
+        if (d >= 0 && d < FAILED_MS) return true;
+        delete FAILED[name]; FAILED_ORDER.splice(FAILED_ORDER.indexOf(name), 1);
+        return false;
+    }
+    function picture(make, circle, name, size) {                          // the picture of a circle: an img over the letter (made with `make`, the page's element maker); the same name again changes nothing, another or none takes the old one away
+        var ok = picOf(name), now = circle.picState || null;
+        if (now && now.name === ok) return;
+        if (now && now.img.parentNode) now.img.parentNode.removeChild(now.img);
+        circle.picState = null; circle.removeAttribute('data-pic');
+        if (!ok || hasFailed(ok)) return;
+        var img = make('img');
+        img.setAttribute('src', PICDIR + ok + PICEXT);
+        img.setAttribute('alt', ''); img.setAttribute('width', String(size)); img.setAttribute('height', String(size)); img.setAttribute('loading', 'lazy'); img.setAttribute('decoding', 'async'); img.setAttribute('draggable', 'false');
+        img.addEventListener('load', function () { if (circle.picState && circle.picState.img === img) circle.setAttribute('data-pic', 'on'); });       // (the letter is hidden only once there is a picture over it)
+        img.addEventListener('error', function () { failed(ok); if (img.parentNode) img.parentNode.removeChild(img); if (circle.picState && circle.picState.img === img) circle.picState = null; });       // (the letter is simply still there; the name is not asked for again, by this circle or by another)
+        circle.picState = { name: ok, img: img };
+        circle.appendChild(img);
+        if (img.complete && img.naturalWidth > 0) circle.setAttribute('data-pic', 'on');       // (a picture that the page already has, as when the list is drawn again: no frame with the letter in between)
+    }
     function roleOf(role, mod) {                                         // the role that the hub's flags say: `admin` or `mod` only where the hub says moderator (`mod`: true for both roles, which is all that an older hub says), else `none`; nothing else is a role
         return mod !== true ? 'none' : role === 'admin' ? 'admin' : 'mod';
     }
-    function youOf(y) {                                                  // the visitor, as the hub's `you` says (a welcome, or the frame that changes it), or null when it names nobody: { name, mod, role, k, pick, other }
+    function youOf(y) {                                                  // the visitor, as the hub's `you` says (a welcome, or the frame that changes it), or null when it names nobody: { name, mod, role, k, pick, other, pic (a checked name or ''), pics ('on', 'off', 'blocked' or '') }
         if (!y || typeof y !== 'object') return null;
         var name = nameOf(y.name), role = y.role === 'admin' || y.role === 'mod' || y.role === 'none' ? y.role : y.mod === true ? 'mod' : 'none';       // (`role` where the hub says it; an older hub says `mod` only)
-        return name ? { name: name, mod: role !== 'none', role: role, k: nameOf(y.k), pick: y.pick, other: y.pick === 'display' || y.pick === 'username' ? nameOf(y.other) : '' } : null;
+        return name ? { name: name, mod: role !== 'none', role: role, k: nameOf(y.k), pick: y.pick, other: y.pick === 'display' || y.pick === 'username' ? nameOf(y.other) : '', pic: picsOf(y.pics) === 'on' ? picOf(y.pic) : '', pics: picsOf(y.pics) } : null;       // (a picture only where the switch says `on`, whatever else a frame holds)
     }
     function lineOf(m) {                                                 // one line of the hub (history or live), cleaned: { id, who, text, mod, role, sys (a line of the hub's own: only its flag says so), k (its author's key), u (its author's username: only a moderator's copy has it; drawn for a moderator only) }, or null when it is not a line
         if (!m || typeof m !== 'object' || typeof m.who !== 'string' || typeof m.text !== 'string' || count(m.id) === null) return null;
@@ -146,7 +176,8 @@
         var visit = env.go || function (url) { win.location.assign(url); };
         var now = env.now || function () { return Date.now(); }, rnd = env.random || Math.random, Socket = env.WebSocket || win.WebSocket;
         var feed = [], you = null, login = false, people = null, state = 'connecting', welcomed = false, ever = false, lastId = -1, bad = 0, attempt = 0, liveSince = null, lastTry = 0;
-        var sock = null, stopped = false, isHome = false, stale = true, notice = '', unanswered = [], stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0 };       // (unanswered: lines and commands sent and not answered yet, oldest first)
+        var sock = null, stopped = false, isHome = false, stale = true, notice = '', unanswered = [], stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0, pics: 0 };       // (unanswered: lines and commands sent and not answered yet, oldest first)
+        var picWait = false, picWant = false, picFailed = false;                  // (the switch: a press waits for the `you` frame; a refusal or 8 s of silence puts it back)
         var busy = false, menuOn = false, forgetSure = false, refocus = false, forgetAt = 0;                                       // (a POST of the login is on its way; the chip's dropdown of the account is open)
         var tokens = PACE.burst, tokensAt = now(), said = Object.create(null), heard = 0, skipped = 0, muted = { repaint: false, flood: false };       // (said: the texts that were sent in the last 31 s, as the hub remembers them)
         var open = (win.innerWidth || 0) >= 701 && (win.innerHeight || 0) >= 601;       // a window of 701 x 601 or more opens with the panel out, a smaller one with the folded header (home.css and home.js have the same limits)
@@ -190,10 +221,13 @@
         // the account's dropdown (the chip opens it): who the visitor is (the hub's welcome says), the choice of the name, Log out, and Forget me. It stands next to the chip in the bar, not in the panel (which a phone hides on its Games and Players views)
         var slot = el('div', 'gc-slot'); slot.id = 'gchat-login-slot'; slot.setAttribute('data-slot', 'login'); slot.hidden = true;
         var acct = el('div', 'gc-acct'), acctName = el('bdi', 'gc-an'), outBtn = el('button', 'btn gc-out', TEXT.logout), forgetBtn = el('button', 'gc-forget', TEXT.forget), pickNote = el('p', 'gc-pn'), pickBtn = el('button', 'btn gc-pick');
+        var swRow = el('div', 'gc-sw'), swLabel = el('label', 'gc-swl'), swBox = el('input', 'gc-swb'), swNote = el('p', 'gc-swn'), swAgain = el('button', 'btn gc-again', TEXT.picAgain);
+        swBox.type = 'checkbox'; swNote.id = 'gchat-pics-note'; swBox.setAttribute('aria-describedby', swNote.id); swAgain.type = 'button'; swRow.hidden = true;
+        put(swLabel, [swBox, el('span', 'gc-swt', TEXT.picShow)]); put(swRow, [swLabel, swNote, swAgain]);
         outBtn.type = 'button'; forgetBtn.type = 'button'; pickBtn.type = 'button';
         put(acct, [el('i', 'gc-dc'), el('span', 'gc-as', TEXT.chatting), acctName]);
         var yr = el('p', 'gc-yr'); yr.hidden = true;       // (the role, in words, in the dropdown of the account)
-        put(slot, [acct, yr, pickNote, pickBtn, outBtn, el('p', 'gc-mnote', TEXT.forgetNote), forgetBtn]);
+        put(slot, [acct, yr, pickNote, pickBtn, swRow, outBtn, el('p', 'gc-mnote', TEXT.forgetNote), forgetBtn]);
         var chipMark = null, chipAv = null, chipName = null;                   // the bar's chip (home.js makes the button and hides it): Log in, or who the visitor is
         if (chip) { chipMark = el('i', 'gc-dc'); chipAv = el('span', 'gc-av'); chipName = el('span', 'gc-cn'); chip.textContent = ''; put(chip, [chipMark, chipAv, chipName]); }
         var hint = el('p', 'gc-hint gc-news', TEXT.hint); hint.id = 'gchat-hint';       // (read with the field's name, drawn nowhere: a text area is "multi-line" to a screen reader, and this says that Enter sends)
@@ -282,6 +316,15 @@
             outBtn.disabled = forgetBtn.disabled = busy;
             pickNote.hidden = pickBtn.hidden = !(you && you.other);
             if (you && you.other) { var a = you.pick === 'display' ? 0 : 1; pickNote.textContent = TEXT.shows + TEXT.names[a] + '.'; pickBtn.textContent = TEXT.use + TEXT.names[1 - a] + ': ' + you.other; }
+            swRow.hidden = !(you && you.pics);
+            if (you && you.pics) {
+                var pp = you.pics, gone = pp === 'on' && !you.pic;
+                if (pp === 'blocked' && doc.activeElement === swBox && outBtn.focus) outBtn.focus();       // (a box that is turned off gives up the focus: it goes to Log out, not to the page)
+                swBox.checked = picWait ? picWant : pp === 'on'; swBox.disabled = pp === 'blocked';       // (while it waits the box is not `disabled`, so that the focus stays on it: it says aria-disabled and ignores presses)
+                if (picWait) swBox.setAttribute('aria-disabled', 'true'); else swBox.removeAttribute('aria-disabled');
+                swNote.textContent = picFailed ? ERR.failed : pp === 'blocked' ? TEXT.picBlocked : gone && !picWait ? TEXT.picNone : TEXT.picNote;
+                swAgain.hidden = !(gone && !picWait && !picFailed);
+            }
             if (!slot.hidden) place();
             if (!slot.hidden && refocus) { refocus = false; var back = pickBtn.hidden ? outBtn : pickBtn; if (back.focus) back.focus(); }       // (it is back: the focus is where it was, on the button of the name)
             if (!menuOn) refocus = false;
@@ -290,7 +333,10 @@
             if (chip) {                                                         // (the bar: Log in where a login is offered, the visitor's name where they are named; nothing while the hub is not there)
                 chip.hidden = !(live && login);
                 chipAv.hidden = !you; chipMark.hidden = !!you;
-                chipAv.textContent = you ? initial(you.name) : ''; chipName.textContent = you ? you.name : TEXT.login;
+                var letter = you ? initial(you.name) : '';
+                if (chipAv.textContent !== letter) { chipAv.textContent = letter; chipAv.picState = null; chipAv.removeAttribute('data-pic'); }       // (a new letter wipes the circle: the picture is put back below)
+                picture(el, chipAv, you ? you.pic : '', 28);
+                chipName.textContent = you ? you.name : TEXT.login;
                 var has = !!you && you.role !== 'none', rc = roleClass(you ? you.role : 'none');
                 chipName.className = 'gc-cn' + rc; chipAv.className = 'gc-av' + rc; if (has) chipName.setAttribute('title', wordOfRole(you.role)); else chipName.removeAttribute('title');       // (the name is red or yellow; the word is in the label and the title too)
                 chip.setAttribute('aria-label', you ? TEXT.chatting + you.name + (has ? ', ' + wordOfRole(you.role) : '') : TEXT.loginWith);
@@ -315,7 +361,7 @@
         function drop() {                                                        // let go of the socket: its timers stop, its handlers are cleared, it is closed
             var s = sock;
             sock = null;
-            ['connect', 'ping', 'answer', 'retry', 'notice'].forEach(stop); notice = ''; unanswered = [];
+            ['connect', 'ping', 'answer', 'retry', 'notice'].forEach(stop); notice = ''; unanswered = []; picPending(false);
             if (s) { try { s.onopen = s.onmessage = s.onerror = s.onclose = null; s.close(); } catch (e) { /* it is gone */ } }
         }
         function lost() {                                                        // the socket is gone (closed, failed, silent, or it sent what no hub sends): say so, and try again later
@@ -372,7 +418,7 @@
         function onWelcome(m) {
             if (welcomed) return;                                                // (one welcome for each socket)
             if (m.v !== VERSION || (m.history !== undefined && !Array.isArray(m.history))) { lost(); return; }       // (a hub that speaks another version is no hub for this page)
-            you = youOf(m.you);
+            you = youOf(m.you); picPending(false);
             if ((removed === 'kicked' && you) || (removed === 'banned' && !you)) removed = '';       // (a person who is somebody else now, or nobody, is not the one that was removed)
             login = m.login === true; people = count(m.online);
             var before = lastId;
@@ -408,11 +454,14 @@
             }
             render();
         }
+        function picPending(on) { picWait = !!on; stop('pics'); if (!on) picFailed = false; }
+        function failPic(guest) { picWait = false; stop('pics'); picFailed = true; if (guest && you) you.pics = ''; render(); }       // (a refused press: nothing is sent again; `login` says that this socket is a guest: no switch)       // (the box goes back to what the hub last said, with "That did not work, try again")
         function onYou(m) {                                                      // the role changed (a promotion, a removal, a role that ran out): the marks and the commands follow at once; who the visitor is does not change on a socket
             var next = you ? youOf(m.you) : null;
             if (!next) return;
             var was = tools();
-            you.role = next.role; you.mod = next.mod;
+            you.role = next.role; you.mod = next.mod; you.pic = next.pic; you.pics = next.pics;       // (the picture and the switch follow the hub's whole `you` at once, whenever it comes)
+            if (!picWait || next.pics === 'blocked' || next.pics === (picWant ? 'on' : 'off')) picPending(false);       // (a `you` that says what was asked for answers a press of the switch, and so does one that follows a refusal; another `you` meanwhile does not)
             if (was !== tools()) { stale = true; hold = seen(); }                                   // (the numbers and the usernames come or go with the role: the log is made again)
             render();
             tapped('you', m);
@@ -447,6 +496,7 @@
             else if (m.t === 'bye') onBye(m);
             else if (m.t === 'online') { people = count(m.n); render(); }
             else if (m.t === 'who') tapped('who', m);
+            else if (m.t === 'err' && picWait && (m.code === 'pics' || m.code === 'login')) failPic(m.code === 'login');
             else if (m.t === 'err' && (SAID.indexOf(m.code) !== -1 || ABOUT.indexOf(m.code) !== -1)) refuse(m.code);
             else if (m.t === 'err' && m.code === 'pick') tell('failed');
         }                                                                        // (any other kind is ignored)
@@ -507,11 +557,25 @@
         function out(obj) { if (!sock || sock.readyState !== 1 || !welcomed) return false; try { sock.send(JSON.stringify(obj)); return true; } catch (e) { lost(); return false; } }
         enter.addEventListener('click', guard(startLogin));
         pickBtn.addEventListener('click', guard(function () { if (you && you.other && !out({ t: 'pick', pick: you.pick === 'display' ? 'username' : 'display' })) tell('failed'); }));       // (the hub closes the account's sockets; the page connects again and reads the new name)
+        swBox.addEventListener('change', guard(function () {                   // the switch: send what the box now says, and wait for the hub's `you` (the box is off while it waits)
+            if (picWait || !you || !you.pics || you.pics === 'blocked') { render(); return; }
+            picWant = !!swBox.checked; picFailed = false;
+            if (!out({ t: 'pics', on: picWant })) { failPic(); return; }
+            picWait = true; timers.pics = setTimeout(guard(function () { timers.pics = 0; if (picWait) failPic(); }), MS.pics);
+            render();
+        }));
+        swBox.addEventListener('click', guard(function (e) { if (picWait && e && e.preventDefault) e.preventDefault(); }));       // (a press while the box waits does nothing: the box stays as asked)
+        swAgain.addEventListener('click', guard(startLogin));
         outBtn.addEventListener('click', guard(function () { leave(LOGOUT); }));
         function sure(on) { forgetSure = !!on; forgetBtn.textContent = on ? TEXT.sure : TEXT.forget; forgetBtn.setAttribute('data-sure', on ? 'true' : 'false'); }       // (Forget me asks once more: the second press does it; another place, Escape or the dropdown going away puts the question back)
         forgetBtn.addEventListener('click', guard(function () { if (!forgetSure) { forgetAt = now(); sure(true); return; } if (now() - forgetAt < 400) return; sure(false); leave(FORGET); }));       // (a double press is one press: the answer to the question comes after a moment)
         forgetBtn.addEventListener('blur', guard(function () { sure(false); }));
-        if (chip) chip.addEventListener('click', guard(function () { if (!you) { startLogin(); return; } setMenu(!menuOn); if (menuOn && outBtn.focus) outBtn.focus(); }));       // (the chip opens the dropdown and puts the focus on Log out; a second press closes it)
+        function firstControl() {                                               // the first control of the open menu that can be used: the name choice, the switch (its box, or its button), Log out
+            var list = [pickBtn, swBox, swAgain, outBtn], i;
+            for (i = 0; i < list.length; i++) if (!list[i].hidden && !list[i].disabled && !(swRow.hidden && (list[i] === swBox || list[i] === swAgain))) return list[i];
+            return outBtn;
+        }
+        if (chip) chip.addEventListener('click', guard(function () { if (!you) { startLogin(); return; } setMenu(!menuOn); if (menuOn) { var first = firstControl(); if (first.focus) first.focus(); } }));       // (the chip opens the dropdown and puts the focus on its first control, so that a Tab forward meets the rest; a second press closes it)
         doc.addEventListener('click', guard(function (e) { var t = e && e.target; if (menuOn && !(t && ((slot.contains && slot.contains(t)) || (chip && chip.contains && chip.contains(t))))) setMenu(false); }));       // (a press anywhere else puts it away)
         win.addEventListener('resize', guard(function () { if (menuOn) render(); }));
         doc.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Escape' && menuOn) { setMenu(false); if (chip && chip.focus) chip.focus(); } }));       // (Escape closes it, wherever the focus is, and the focus goes back to the chip)
@@ -562,5 +626,5 @@
         };
     }
 
-    return { PATH: PATH, LIMIT: LIMIT, MS: MS, PACE: PACE, TEXT: TEXT, ERR: ERR, plain: plain, points: points, clip: clip, parse: parse, count: count, lineOf: lineOf, youOf: youOf, roleOf: roleOf, wordOfRole: wordOfRole, helpOf: helpOf, bansOf: bansOf, wordOfCommand: wordOfCommand, wordOf: wordOf, delayOf: delayOf, addressOf: addressOf, mount: mount };
+    return { PATH: PATH, LIMIT: LIMIT, MS: MS, PACE: PACE, TEXT: TEXT, ERR: ERR, plain: plain, points: points, clip: clip, parse: parse, count: count, lineOf: lineOf, youOf: youOf, picOf: picOf, picture: picture, roleOf: roleOf, wordOfRole: wordOfRole, helpOf: helpOf, bansOf: bansOf, wordOfCommand: wordOfCommand, wordOf: wordOf, delayOf: delayOf, addressOf: addressOf, mount: mount };
 });

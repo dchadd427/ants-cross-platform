@@ -4,6 +4,8 @@
     docker exec ants-hub python -m hub.admin mute ACCOUNT MINUTES        (0 lifts a mute)
     docker exec ants-hub python -m hub.admin ban ACCOUNT
     docker exec ants-hub python -m hub.admin unban ACCOUNT
+    docker exec ants-hub python -m hub.admin nopic ACCOUNT               (block the account's Discord picture on this site; it survives logins, the person's switch and Forget me)
+    docker exec ants-hub python -m hub.admin pic ACCOUNT                 (lift that block: the picture then stays off until the person turns it on)
     docker exec ants-hub python -m hub.admin del LINE_ID
     docker exec ants-hub python -m hub.admin log [--days N] [--lines N]
     docker exec ants-hub python -m hub.admin status
@@ -28,7 +30,7 @@ import sys
 import time
 
 from . import config, limits as limitmod, pseudo, store as storemod, text
-from .store.base import TERMINAL
+from .store.base import SHOW_BLOCKED, SHOW_OFF, TERMINAL
 
 BY = "command line"
 MAX_MINUTES = 525600                    # a year
@@ -116,6 +118,31 @@ def show_usage(store, limit, out):
         "; at the limit (the log file counts): no new line is kept" if used.bytes + used.log >= limit else ""))
 
 
+def change_picture(store, command, whom, state, setter, out, err):
+    """`nopic` and `pic`: `whom` is the account's reference (never its id), `state` the picture's state now and `setter(show, note)` the store's call that changes it, by the account or by the reference."""
+    if command == "nopic":
+        if state == SHOW_BLOCKED:
+            err.write("hub.admin: the picture of %s is blocked already\n" % whom)
+            return 1
+        setter(SHOW_BLOCKED, (TERMINAL, "nopic", whom, ""))
+        out.write("%s picture blocked\n" % whom)
+        return 0
+    if state != SHOW_BLOCKED:
+        err.write("hub.admin: the picture of %s was not blocked\n" % whom)
+        return 1
+    setter(SHOW_OFF, (TERMINAL, "pic", whom, ""))
+    out.write("%s picture is no longer blocked; after a lift the picture stays off until the person turns it on\n" % whom)
+    return 0
+
+
+def show_pictures(store, limits, out):
+    """The pictures' line of `status`: how many copies are kept and their bytes, of the two limits, and how many accounts have their picture switched off and blocked."""
+    count, size = store.picture_usage()
+    marks = list(store.picture_marks().values())
+    out.write("pictures: %s of %s kept, %s of %s; %s switched off, %s blocked\n" % (format(count, ","), format(limits.pictures_rows_max, ","), megabytes(size), megabytes(limits.pictures_bytes_max),
+                                                                                        format(marks.count(SHOW_OFF), ","), format(marks.count(SHOW_BLOCKED), ",")))
+
+
 def purge(store, limits, keep_lines, out, err, sleep=time.sleep):
     """Delete the oldest lines a chunk at a time, with a pause between two chunks so that the hub's own writes go on: down to the hub's lower mark, or all but the newest `keep_lines`."""
     target, keep = (limits.prune_to_bytes, limits.keep_lines) if keep_lines is None else (0, keep_lines)
@@ -156,6 +183,8 @@ def run(argv, out=None, err=None, env=None):
     p.add_argument("minutes", type=int)
     sub.add_parser("ban", help="ban an account until it is unbanned").add_argument("account")
     sub.add_parser("unban", help="lift a ban").add_argument("account")
+    sub.add_parser("nopic", help="block an account's Discord picture").add_argument("account")
+    sub.add_parser("pic", help="lift the block of an account's Discord picture").add_argument("account")
     sub.add_parser("del", help="delete a chat line by its id").add_argument("line_id", type=int)
     p = sub.add_parser("log", help="the moderators' log")
     p.add_argument("--days", type=int, default=30)
@@ -193,6 +222,7 @@ def run(argv, out=None, err=None, env=None):
             return 0
         if args.command == "status":
             show_usage(store, limitmod.Limits().db_max_bytes, out)
+            show_pictures(store, limitmod.Limits(), out)
             return 0
         if args.command == "purge":
             return purge(store, limitmod.Limits(), args.keep_lines, out, err)
@@ -203,10 +233,16 @@ def run(argv, out=None, err=None, env=None):
                 return 1
             out.write("line %d deleted\n" % args.line_id)
             return 0
+        if args.command in ("nopic", "pic") and pseudo.REFERENCE.match(args.account) and store.picture_state_by_reference(args.account) is not None:
+            return change_picture(store, args.command, args.account, store.picture_state_by_reference(args.account),
+                                  lambda show, note: store.set_picture_show_by_reference(args.account, show, operator=True, note=note), out, err)      # (the pictures' own row has the reference: a block is lifted by it after Forget me)
         account, name = resolve(store, args.account)
         if account is None:
             err.write("hub.admin: %s\n" % name)
             return 1
+        if args.command in ("nopic", "pic"):
+            whom = ref(store, account)
+            return change_picture(store, args.command, whom, store.picture_state(account), lambda show, note: store.set_picture_show(account, show, operator=True, note=note), out, err)
         if args.command == "mute":
             whom = ref(store, account)
             until = store.mute(account, args.minutes, BY, name, note=(TERMINAL, "mute" if args.minutes else "unmute", whom, str(args.minutes) if args.minutes else ""))

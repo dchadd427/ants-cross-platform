@@ -4,7 +4,8 @@
 #   docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 32 --memory 192m --tmpfs /tmp -v ants-hub-data:/data \
 #       -e ANTS_HUB_PUBLIC_URL=https://beta.playants.org ants-hub
 # It listens on port 4040 inside the container and is NOT published: the site's nginx reaches it over the network of the stack (wss://<site>/hub/ws and the pages /hub/login, /hub/callback,
-# /hub/me, /hub/logout and /hub/forget, docker/nginx.conf). For the login the container needs outbound https to discord.com and to nothing else.
+# /hub/me, /hub/logout and /hub/forget, docker/nginx.conf). For the login the container needs outbound https to discord.com and to cdn.discordapp.com (the one small picture of a login) and to nothing else.
+# /hub/pic/<name>.png serves that picture (docker/nginx.conf).
 # The settings are environment variables only: ANTS_HUB_PUBLIC_URL (the site's address; the one Origin a socket may come from), ANTS_HUB_DISCORD_BOT_TOKEN, ANTS_HUB_DISCORD_GUILD, ANTS_HUB_ROLE_ADMIN, ANTS_HUB_ROLE_MOD, ANTS_HUB_ROLE_RECHECK_SECONDS and ANTS_HUB_OWNER (who may moderate: the roles come from the
 # site's Discord server),
 # ANTS_HUB_DISCORD_CLIENT_ID and ANTS_HUB_DISCORD_CLIENT_SECRET (the Discord application of the login: without both, and the site's address, the chat is read-only for everybody),

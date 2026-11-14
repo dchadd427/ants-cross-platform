@@ -135,7 +135,7 @@ services:
   # The global chat (docs/HUB.md): wss://<site>/hub/ws, passed by the page's nginx over the network above (port 4040, not published on the host). The site starts and works without it (nginx finds it by name
   # when a request comes; "Chat is offline" until it is there). Its database (the chat lines of the last 7 days, mutes and bans) is the volume ants-hub-data: keep it. No ANTS_BUILD_ID: a deploy that
   # changes nothing in hub/ builds the same image, and the chat is not restarted. Reading is open to everybody; writing needs the Discord login, which is on only where the two settings of the application
-  # are given (the hub then also needs to reach discord.com over https: the network below lets it out).
+  # are given (the hub then also needs to reach discord.com and cdn.discordapp.com over https: the network below lets it out).
   ants-hub:
     build:
       context: .

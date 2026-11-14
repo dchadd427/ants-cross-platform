@@ -34,13 +34,13 @@
     }
     function fresh() { return { rows: Object.create(null), n: 0, g: 0, more: 0 }; }
     function roleOf(raw, mod) { return mod !== true ? 'none' : raw === 'admin' ? 'admin' : 'mod'; }       // (the hub's `mod` is true for both roles; `role` says which, where the hub says it: nothing else makes an admin)
-    // One row of the hub's list, cleaned: { id, name, at, mod, role, pub, map, mapName, guess, n, of, code }, or null when it is not a row. A room's details are kept for a public room only, a code for a room that waits only.
+    // One row of the hub's list, cleaned: { id, name, at, mod, role, pic (a checked picture name or ''), pub, map, mapName, guess, n, of, code }, or null when it is not a row. A room's details are kept for a public room only, a code for a room that waits only.
     // mapName is an original's name (the page's own table); guess is what a community map would be called, which is drawn only where the Games list shows the same room under the same name (the hub's words are not drawn).
     function rowOf(raw, Chat, rules) {
         if (!raw || typeof raw !== 'object' || !whole(raw.i, 0, LIMIT.ids) || typeof raw.name !== 'string' || STATUS.indexOf(raw.at) === -1) return null;
         var name = Chat.clip(Chat.plain(raw.name.slice(0, LIMIT.name * 4), true), LIMIT.name);
         if (!name) return null;
-        var row = { id: raw.i, name: name, at: raw.at, mod: raw.mod === true, role: roleOf(raw.role, raw.mod), pub: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' };
+        var row = { id: raw.i, name: name, at: raw.at, mod: raw.mod === true, role: roleOf(raw.role, raw.mod), pic: Chat.picOf(raw.pic), pub: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' };
         if (raw.pub === true) {
             row.pub = true;
             if (typeof raw.map === 'string' && rules.validMapFile(raw.map)) {
@@ -161,7 +161,7 @@
         function card(row, o) {                                          // o: { you: the visitor's own row, label: say where the person is under the name, join: a Join button (a public room that waits) }
             var li = el('li', 'pl-card'), who = el('span', 'pl-who'), name = el('span', 'pl-name'), av = el('span', 'pl-av', initial(row.name, Chat)), meta = metaOf(row, o.label, o.you);
             li.setAttribute('data-s', row.at);
-            av.setAttribute('aria-hidden', 'true');
+            av.setAttribute('aria-hidden', 'true'); Chat.picture(el, av, row.pic, 32);
             var nm = el('bdi', 'pl-nm', row.name), word = row.role === 'admin' ? TEXT.administrator : TEXT.moderator;
             if (row.mod) { li.className += row.role === 'admin' ? ' r-admin' : ' r-mod'; nm.setAttribute('title', word); name.appendChild(el('span', 'pl-sr', word + ' ')); }       // (the name is red or yellow: the word is in the accessible name and the title as well, so that color is never the only sign)
             name.appendChild(nm);
@@ -197,15 +197,15 @@
         function paintBody() {                                           // the part under the header: made again only when what it shows changed (the scroll and the focus stay where they were)
             var own = ownCode(), shown = listOf(model, me), people = 0;
             GROUPS.forEach(function (x) { shown[x[0]] = shown[x[0]].map(named); people += shown[x[0]].length; });
-            var empty = model.n <= 1 && model.more === 0 && people === 0, mine = you ? { name: you.name, mod: you.mod, role: you.role, doing: doing } : null;
-            var sig = JSON.stringify([phase, mine, own, model.n, model.g, model.more, GROUPS.map(function (x) { return shown[x[0]].map(function (r) { return [r.id, r.name, r.at, r.mod, r.role, r.pub, r.mapName, r.n, r.of, r.code, r.listed]; }); })]);
+            var empty = model.n <= 1 && model.more === 0 && people === 0, mine = you ? { name: you.name, mod: you.mod, role: you.role, pic: you.pic, doing: doing } : null;
+            var sig = JSON.stringify([phase, mine, own, model.n, model.g, model.more, GROUPS.map(function (x) { return shown[x[0]].map(function (r) { return [r.id, r.name, r.at, r.mod, r.role, r.pic, r.pub, r.mapName, r.n, r.of, r.code, r.listed]; }); })]);
             if (sig === painted) return;
             var active = doc.activeElement, focused = active && active.getAttribute ? active.getAttribute('data-code') : null, scroll = list.scrollTop;
             painted = sig;
             clear(body); clear(list); clear(youList); clear(offBox); joins = [];
             if (phase === 'off') { put(offBox, [el('p', '', TEXT.off), el('p', 'small', TEXT.offNote)]); body.appendChild(offBox); return; }
             if (you) {                                                   // the visitor, first, as the page knows it (not as the hub last said)
-                var row = rowOf({ i: 0, name: you.name, at: doing ? doing.at : 'look', mod: you.mod, role: you.role, pub: !!(doing && doing.pub), map: doing && doing.map, n: doing && doing.n, of: doing && doing.of }, Chat, rules);
+                var row = rowOf({ i: 0, name: you.name, at: doing ? doing.at : 'look', mod: you.mod, role: you.role, pic: you.pic, pub: !!(doing && doing.pub), map: doing && doing.map, n: doing && doing.n, of: doing && doing.of }, Chat, rules);
                 if (row) { row.mapName = row.mapName || row.guess; youList.appendChild(card(row, { you: true, label: true, join: false })); put(body, [youBox, rule]); }       // (the page's own room: its map's name is its own word)
             }
             body.appendChild(status);
@@ -269,14 +269,14 @@
                 supported = !!m && m.presence === true; live = true; asked = false; sentSig = null; lastSent = null; model = fresh();
                 me = whole(m && m.me, 0, LIMIT.ids) ? m.me : null;
                 var yo = Chat.youOf(m && m.you);                   // (the dock's one rule for who the visitor is and what role they hold)
-                you = yo ? { name: yo.name, mod: yo.mod, role: yo.role } : null;
+                you = yo ? { name: yo.name, mod: yo.mod, role: yo.role, pic: yo.pic } : null;
                 if (!supported) phase = 'none'; else { doing = look(); tell(); ask(); }
             } else if (kind === 'you') {                                   // the role changed (the chat dock's `you` frame): the visitor's own row follows at once
                 var y = m && m.you && typeof m.you === 'object' ? m.you : null;
                 if (!you || !y) return;
                 var yn = Chat.youOf(y);
                 if (!yn) return;
-                you.role = yn.role; you.mod = yn.mod;
+                you.role = yn.role; you.mod = yn.mod; you.pic = yn.pic;
             } else if (kind === 'who') {
                 var next = live && supported ? apply(model, m, Chat, rules) : null;
                 if (!next) return;

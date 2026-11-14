@@ -800,7 +800,7 @@ class TheHubsClock(unittest.TestCase):
             room.store.add_line("1000", "user0", "line %d %s" % (n, "x" * 100), False)
             n += 1
         self.assertLess(room.store.used_bytes(), room.limits.prune_from_bytes)         # (a few pages of lines)
-        self.assertGreater(room.store.log_bytes(), room.limits.prune_from_bytes - 20_000)       # (and a log file that is the whole of the store, but the pages of the tables that a new file has: the secret's and the moderators' log's)
+        self.assertGreater(room.store.log_bytes(), room.limits.prune_from_bytes - 40_000)       # (and a log file that is the whole of the store, but the pages of the tables that a new file has: the secret's, the moderators' log's and the pictures')
         who = room.person(1)
         room.say(who, "hello")
         self.assertEqual(who.codes(), ["rate"])
@@ -881,12 +881,12 @@ class TheStaffTool(unittest.TestCase):
     def test_status_says_how_full_the_database_is(self):
         status, out, err = self.run_admin("status")
         self.assertEqual((status, err), (0, ""))
-        self.assertRegex(out, r"^database: 0\.\d MB of 64\.0 MB used \(0%\), log file 0\.\d MB; 0\.0 MB free to reuse; no lines\n$")
+        self.assertRegex(out, r"^database: 0\.\d MB of 64\.0 MB used \(0%\), log file 0\.\d MB; 0\.0 MB free to reuse; no lines\npictures: 0 of 2,000 kept, 0\.0 MB of 8\.0 MB; 0 switched off, 0 blocked\n$")
         fill(self.store, 5000)
         self.store.checkpoint()
         status, out, err = self.run_admin("status")
         self.assertEqual((status, err), (0, ""))
-        self.assertRegex(out, r"^database: 1\.\d MB of 64\.0 MB used \(1%\), log file 0\.0 MB; 0\.0 MB free to reuse; 5,000 lines, the oldest from 2027-01-15 \d\d:\d\d:\d\dZ\n$")
+        self.assertRegex(out, r"^database: 1\.\d MB of 64\.0 MB used \(1%\), log file 0\.0 MB; 0\.0 MB free to reuse; 5,000 lines, the oldest from 2027-01-15 \d\d:\d\d:\d\dZ\npictures: 0 of 2,000 kept, 0\.0 MB of 8\.0 MB; 0 switched off, 0 blocked\n$")
 
     def test_purge_frees_pages_down_to_the_hubs_lower_mark_and_says_so(self):
         limits = dataclasses.replace(limitmod.Limits(), **CLI)
@@ -943,7 +943,7 @@ class TheStaffTool(unittest.TestCase):
                 admin.megabytes(used.bytes), used.bytes * 100 // limits.db_max_bytes, admin.megabytes(used.log), admin.megabytes(used.free), format(used.lines, ","), admin.when(used.oldest)))
             status, shown, err = self.run_admin("status")                              # (the status line tells the pages and the log file apart, and that the guard holds)
             self.assertEqual((status, err), (0, ""))
-            self.assertEqual(shown, out.splitlines()[-1] + "\n")
+            self.assertEqual(shown.splitlines()[0], out.splitlines()[-1])                   # (the first line of the status; the second is the pictures')
             reader.execute("COMMIT")
             status, out, err = self.run_admin("purge")                                 # (the reader let go: the cut works, and the lines go down to the mark)
             self.assertEqual((status, err), (0, ""))

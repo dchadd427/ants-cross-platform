@@ -978,7 +978,7 @@ function bring(env) {                                     // the two files arriv
 // 7. The source of the script
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
-    const code = chatSource.replace(/\/\/.*/g, '');
+    const code = chatSource.replace(/\/\/.*/g, '').replace(/\bimg\.setAttribute\(\s*'src',\s*PICDIR\s*\+\s*\w+\s*\+\s*PICEXT\s*\);/, '');       // (the one address of a picture: made of a checked name and two constants, checked in section 11)
     check('chat.js builds nothing from markup, runs nothing from text, keeps nothing in the browser and makes no link', !/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|srcdoc|localStorage|sessionStorage|indexedDB|document\.cookie|createElement\(['"]a['"]\)|setAttribute\(['"](href|src|style|on)/.test(code));
     check('chat.js names no other site (no http:// or https:// address at all) and loads nothing', !/https?:\/\//.test(code) && !/XMLHttpRequest|importScripts|\bimport\b/.test(code));
     check('the one thing that it asks for is a POST of the page itself to the two pages of the login (/hub/logout, /hub/forget): `fetch` is in one line, and it is that one', (code.match(/\bfetch\b/g) || []).length === 2 && code.indexOf('var f = env.fetch || win.fetch;') !== -1
@@ -1680,6 +1680,253 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     nosub.key('Enter');
     check('where the form has no requestSubmit (iOS 15) Enter sends a cancelable submit event to it, which the other buttons hear, and the line goes once', heard === 1 && nosub.r.said().length === 1 && nosub.r.said()[0].text === 'no requestSubmit');
     check('the field has a hint that is read with its name: "Enter sends the message."', mk(true).f.getAttribute('aria-describedby') === 'gchat-hint' && one(mk(true).r.root, 'gc-hint') !== null && one(mk(true).r.root, 'gc-hint').id === 'gchat-hint' && one(mk(true).r.root, 'gc-hint').textContent === 'Enter sends the message.');
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 11. The pictures: the account chip's circle, the switch in the dropdown and its four states (the Players list's circles are in web_home_players_check.js)
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const NAME = 'a1b2c3d4e5f60718293a4b5c6d7e8f90', OTHER = '0123456789abcdef0123456789abcdef';
+    const P = Pure;
+    same('picOf: exactly 32 lower-case hex characters is a name; nothing else is (capitals, 31, 33, a path, an address, a number, an object, null, a line end)',
+        [NAME, OTHER, NAME.toUpperCase(), NAME.slice(1), NAME + '0', '../' + NAME.slice(3), 'https://x.example/' + NAME, 5, {}, [NAME], null, undefined, NAME + '\n', NAME.slice(0, 31) + 'g'].map((v) => P.picOf(v)), [NAME, OTHER].concat(Array(12).fill('')));
+    same('youOf reads `pic` (a checked name) and `pics` (on, off or blocked) and nothing else of them', [P.youOf({ name: 'a', pic: NAME, pics: 'on' }), P.youOf({ name: 'a', pic: 'x', pics: 'maybe' }), P.youOf({ name: 'a', pic: '../' + NAME, pics: 'on' }), P.youOf({ name: 'a', pic: NAME, pics: 'off' })].map((y) => [y.pic, y.pics]), [[NAME, 'on'], ['', ''], ['', 'on'], ['', 'off']]);
+
+    const withYou = (extra) => Object.assign({}, YOU, extra);
+    const imgsOf = (circle) => circle.children.filter((c) => c.tagName === 'img');
+    const circle = (r) => one(r.chip, 'gc-av');
+    const r = rig({ chip: true });
+    r.live(W({ login: true, you: withYou({ pic: NAME, pics: 'on' }) }));
+    const img = imgsOf(circle(r))[0];
+    same('a visitor with a picture: one img in the chip\'s circle, the address from the name only, the attributes set', [imgsOf(circle(r)).length, img && img.attributes],
+        [1, { src: '/hub/pic/' + NAME + '.png', alt: '', width: '28', height: '28', loading: 'lazy', decoding: 'async', draggable: 'false' }]);
+    check('the letter is in the circle and not hidden before the picture has loaded', circle(r).textContent === 'm' && circle(r).getAttribute('data-pic') === null);
+    img.fire('load');
+    check('a loaded picture hides the letter', circle(r).getAttribute('data-pic') === 'on');
+    r.s().recv({ t: 'online', n: 9 }); r.chip.click(); r.chip.click();
+    check('painting again does not make the picture again (the same img stays)', imgsOf(circle(r)).length === 1 && imgsOf(circle(r))[0] === img && circle(r).getAttribute('data-pic') === 'on');
+    r.s().recv({ t: 'you', you: withYou({ pics: 'on' }) });
+    same('a `you` without `pic` takes the chip\'s picture away and brings the letter back', [imgsOf(circle(r)).length, circle(r).textContent, circle(r).getAttribute('data-pic')], [0, 'm', null]);
+    r.s().recv({ t: 'you', you: withYou({ pic: OTHER, pics: 'on' }) });
+    same('a `you` with one puts it on (a new name is a new address)', imgsOf(circle(r)).map((i) => i.attributes.src), ['/hub/pic/' + OTHER + '.png']);
+    imgsOf(circle(r))[0].fire('error');
+    same('a picture that fails to load is removed: the letter is exactly as without a picture, no broken image', [imgsOf(circle(r)).length, circle(r).textContent, circle(r).getAttribute('data-pic')], [0, 'm', null]);
+    r.s().recv({ t: 'online', n: 3 });
+    check('... and a failed name is not asked for again at the next paint', imgsOf(circle(r)).length === 0);
+    r.s().recv({ t: 'you', you: withYou({ pic: NAME, pics: 'on' }) });
+    check('... a different name is', imgsOf(circle(r)).length === 1);
+    const odd = ['A1B2C3D4E5F60718293A4B5C6D7E8F90', NAME.slice(0, 31), NAME + '0', '../' + NAME.slice(3), 'https://x.example/' + NAME + '.png', 12345, { a: 1 }, null, ''];
+    odd.forEach((v) => {
+        const q = rig({ chip: true });
+        q.live(W({ login: true, you: withYou({ pic: v, pics: 'on' }) }));
+        check('a `pic` of ' + JSON.stringify(v) + ' makes no img', q.chip.findAll((e) => e.tagName === 'img').length === 0 && q.errors.length === 0);
+    });
+    {   // the helper itself checks the name too: the odd names go straight in, with no filter before it
+        const hp = rig({ chip: true }), mk0 = (t) => hp.env.doc.createElement(t);
+        odd.forEach((v) => { const c = mk0('span'); Pure.picture(mk0, c, v, 28); check('the helper given ' + JSON.stringify(v) + ' makes no img', c.children.filter((e) => e.tagName === 'img').length === 0 && c.picState === null); });
+    }
+    const lookalike = rig({ chip: true }); lookalike.live(W({ login: true, you: { name: NAME, mod: false, k: OTHER, pick: 'display', other: NAME, pics: 'on' } }));
+    check('a picture comes only from the `pic` field: a name, a key or another name that looks like a picture name draws none', lookalike.chip.findAll((e) => e.tagName === 'img').length === 0);
+    const nobody = rig({ chip: true });
+    nobody.live(W({ login: true, you: null }));
+    check('nobody named: no picture on the chip', nobody.chip.findAll((e) => e.tagName === 'img').length === 0);
+    check('no picture was written as markup', r.env.innerHTMLWrites.length === 0 && r.errors.length === 0);
+    // the helper alone: a picture that is taken away while it loads, a finished img that is no picture, the names that failed
+    const mk = (t) => r.env.doc.createElement(t);
+    const N1 = '11111111111111111111111111111111', N2 = '22222222222222222222222222222222', N3 = '33333333333333333333333333333333';
+    const c1 = mk('span'); P.picture(mk, c1, N1, 28);
+    const slow = imgsOf(c1)[0];
+    P.picture(mk, c1, '', 28);
+    slow.fire('load');
+    check('a picture that is taken away while it loads and then loads leaves the letter (no mark on a circle with no picture)', imgsOf(c1).length === 0 && c1.getAttribute('data-pic') === null);
+    P.picture(mk, c1, N1, 28); const first = imgsOf(c1)[0];
+    P.picture(mk, c1, N2, 28);
+    first.fire('load');
+    check('... and a picture that another name has taken the place of does not mark the circle either', imgsOf(c1).length === 1 && imgsOf(c1)[0].attributes.src === '/hub/pic/' + N2 + '.png' && c1.getAttribute('data-pic') === null);
+    const finished = (w) => (t) => { const e = mk(t); if (t === 'img') { e.complete = true; e.naturalWidth = w; } return e; };
+    const c2 = mk('span'), c3 = mk('span');
+    P.picture(finished(0), c2, N3, 28); P.picture(finished(28), c3, N3, 28);
+    same('an img that is finished with no width is no picture (the letter stays); one with a width is (the letter goes)', [c2.getAttribute('data-pic'), c3.getAttribute('data-pic')], [null, 'on']);
+    const F = 'fedcba9876543210fedcba9876543210', L = 'abcdefabcdefabcdefabcdefabcdefab';
+    const f1 = mk('span'); P.picture(mk, f1, F, 28); imgsOf(f1)[0].fire('error');
+    const l1 = mk('span'); P.picture(mk, l1, L, 28); imgsOf(l1)[0].fire('load');
+    let again = 0, loadedAgain = 0, fresh = 0;
+    for (let i = 0; i < 12; i++) { const c = mk('span'); P.picture(mk, c, F, 28); again += imgsOf(c).length; }
+    for (let i = 0; i < 12; i++) { const c = mk('span'); P.picture(mk, c, L, 28); loadedAgain += imgsOf(c).length; }
+    const nw = mk('span'); P.picture(mk, nw, '0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f', 28); fresh = imgsOf(nw).length;
+    same('a name that failed makes no img in any new circle, 12 times over (a list that is made again asks for nothing); a loaded name and a new name are asked for as before', [again, loadedAgain, fresh], [0, 12, 1]);
+    for (let i = 0; i < 205; i++) { const c = mk('span'); P.picture(mk, c, ('0000000000000000000000000000' + (1000 + i)).slice(-32), 28); imgsOf(c)[0].fire('error'); }
+    const old = mk('span'); P.picture(mk, old, F, 28);
+    check('the table of failed names is bounded: after 200 later failures the oldest is forgotten (it is asked for once more)', imgsOf(old).length === 1);
+    {   // the table keeps 200 names, no fewer, and a name that failed is asked for once more after ten minutes (a fake clock; nothing runs by itself)
+        const realNow = Date.now; let t = realNow();
+        Date.now = () => t;
+        try {
+            let made = 0;
+            const count = (m) => (tag) => { if (tag === 'img') made++; return m(tag); };
+            const draw = (name) => { const c = mk('span'); P.picture(count(mk), c, name, 28); return c; };
+            const nameOf = (i) => ('0000000000000000000000000000' + (5000 + i)).slice(-32);
+            for (let i = 0; i < 200; i++) imgsOf(draw(nameOf(i))).forEach((e) => e.fire('error'));
+            made = 0; draw(nameOf(0)); draw(nameOf(1)); draw(nameOf(199));
+            check('the table holds 200 names: after exactly 200 failures the oldest of them is still remembered (no request for it)', made === 0, made);
+            imgsOf(draw(nameOf(200))).forEach((e) => e.fire('error'));
+            made = 0; draw(nameOf(0));
+            check('... and the 201st failure makes it forget the oldest (one request for it), no more', made === 1, made);
+            t += 700000;       // (every name of the table is now older than ten minutes)
+            const X = '7777777777777777777777777777777f';
+            imgsOf(draw(X)).forEach((e) => e.fire('error'));
+            made = 0;
+            for (let i = 0; i < 12; i++) { t += 49000; draw(X); }       // (12 repaints in the next 588 s)
+            check('a name that failed is not asked for in 12 repaints over the next ten minutes (no request)', made === 0, made);
+            t += 12000;       // (ten minutes after the failure)
+            const again = draw(X);
+            check('ten minutes after the failure the next circle drawn for the name asks for it once, with its address', made === 1 && imgsOf(again)[0].attributes.src === '/hub/pic/' + X + '.png', made);
+            imgsOf(again).forEach((e) => e.fire('error'));
+            made = 0;
+            for (let i = 0; i < 12; i++) { t += 49000; draw(X); }
+            check('... and when it fails again it is left alone for the next ten minutes (no request in 12 repaints)', made === 0, made);
+            t += 12000; made = 0; draw(X);
+            check('... then asked for once more, and so on: one request per ten minutes, never a loop', made === 1, made);
+            {   // ONE circle that is kept and painted again with the same name, as the account chip's is
+                const K = '6666666666666666666666666666666e', kept = mk('span');
+                made = 0; P.picture(count(mk), kept, K, 28); imgsOf(kept).forEach((e) => e.fire('error'));
+                made = 0;
+                for (let i = 0; i < 12; i++) { t += 49000; P.picture(count(mk), kept, K, 28); }
+                check('a kept circle whose name failed asks for nothing in 12 paints inside ten minutes', made === 0, made);
+                t += 12000; P.picture(count(mk), kept, K, 28);
+                check('... and the same kept circle asks exactly once after ten minutes', made === 1, made);
+            }
+            {   // the clock set back: the name is asked for once (a negative age is not "recent")
+                const B = '5555555555555555555555555555555d';
+                imgsOf(draw(B)).forEach((e) => e.fire('error'));
+                t -= 3600000; made = 0; draw(B);
+                check('the clock set back an hour: a name that failed is asked for exactly once', made === 1, made);
+            }
+            made = 0; t += 1; for (let i = 0; i < 3; i++) draw('8888888888888888888888888888888a');
+            check('a name that never failed is asked for as always', made === 3, made);
+        } finally { Date.now = realNow; }
+    }
+}
+{   // the switch
+    const NAME = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
+    const open = (extra, o) => { const r = rig(Object.assign({ chip: true }, o)); r.live(W({ login: true, you: Object.assign({}, YOU, extra) })); r.chip.click(); return r; };
+    const box = (r) => one(r.dock.slot, 'gc-swb'), note = (r) => one(r.dock.slot, 'gc-swn'), again = (r) => one(r.dock.slot, 'gc-again');
+    const sent = (r) => r.sockets.reduce((all, s) => all.concat(s.sent.map((x) => JSON.parse(x)).filter((m) => m.t === 'pics')), []);
+    const state = (r) => ({ shown: shows(box(r)), on: box(r).checked, off: box(r).disabled, note: note(r).textContent, again: shows(again(r)) });
+    const NOTE = 'Everyone on the front page sees it next to your name.';
+    const waits = (r) => box(r).getAttribute('aria-disabled') === 'true';       // (a box that waits keeps the focus: it is not `disabled`, it says aria-disabled and ignores presses)
+    const none = open({});
+    check('on a hub that sends no `pics` the switch is not shown at all', shows(box(none)) === false && shows(note(none)) === false && shows(again(none)) === false && sent(none).length === 0);
+    const guest = rig({ chip: true }); guest.live(W({ login: true, you: null }));
+    check('a guest has no switch', shows(box(guest)) === false);
+    same('on, with a picture', state(open({ pics: 'on', pic: NAME })), { shown: true, on: true, off: false, note: NOTE, again: false });
+    same('on, with no picture yet: the note says it is loaded at login, and the button is there', state(open({ pics: 'on' })), { shown: true, on: true, off: false, note: 'Your picture is loaded when you log in.', again: true });
+    same('off', state(open({ pics: 'off' })), { shown: true, on: false, off: false, note: NOTE, again: false });
+    same('blocked: the box is off and cannot be pressed, and the note says it is hidden on this site', state(open({ pics: 'blocked' })), { shown: true, on: false, off: true, note: 'Your picture is hidden on this site.', again: false });
+    const look = open({ pics: 'off' });
+    check('the box is a real checkbox with a label that says "Show my Discord picture", tied to its note', box(look).type === 'checkbox' && box(look).parent.tagName === 'label' && box(look).parent.textContent === 'Show my Discord picture' && box(look).getAttribute('aria-describedby') === note(look).id && !!note(look).id);
+
+    // a press
+    const r = open({ pics: 'off' });
+    box(r).focus();
+    box(r).checked = true; box(r).fire('change');
+    same('switching on sends {t:"pics",on:true} once, and the box waits for the hub, showing what was pressed', [sent(r), waits(r), box(r).disabled, box(r).checked], [[{ t: 'pics', on: true }], true, false, true]);
+    check('the focus stays on the box while it waits (it does not fall to the page)', r.env.doc.activeElement === box(r));
+    let prevented = 0;
+    box(r).fire('click', { preventDefault() { prevented++; } });
+    box(r).checked = false; box(r).fire('change');
+    check('a press while it waits sends nothing more, and its click is turned away', sent(r).length === 1 && prevented === 1);
+    same('... and the box still shows what was asked', [box(r).checked, waits(r)], [true, true]);
+    r.s().recv({ t: 'err', code: 'rate' });
+    check('an `err` of another code (a refused chat line) does not end the wait', waits(r) && box(r).checked === true && note(r).textContent === NOTE);
+    r.s().recv({ t: 'you', you: Object.assign({}, YOU, { pics: 'on', pic: NAME }) });
+    check('the wait is over: the box is not waiting, and the focus is on it (a keyboard user keeps the place)', !waits(r) && r.env.doc.activeElement === box(r));
+    same('the hub\'s `you` ends the wait and the box shows what the hub says', [box(r).disabled, box(r).checked, note(r).textContent], [false, true, NOTE]);
+    r.clock.advance(20000);
+    check('... and the timer of the wait is gone (nothing comes back later)', note(r).textContent === NOTE && box(r).checked === true);
+    box(r).checked = false; box(r).fire('change');
+    same('switching off sends {t:"pics",on:false}', sent(r).slice(1), [{ t: 'pics', on: false }]);
+    r.s().recv({ t: 'err', code: 'pics' });
+    same('a refusal puts the box back to what the hub last said, enabled, with "That did not work, try again"', [box(r).checked, box(r).disabled, note(r).textContent], [true, false, 'That did not work, try again']);
+    box(r).checked = false; box(r).fire('change');
+    check('it can be pressed again after a refusal, and the old words go', sent(r).length === 3 && note(r).textContent === NOTE);
+    r.clock.advance(7999);
+    check('7.9 seconds of silence is still waiting', waits(r) && box(r).checked === false);
+    r.clock.advance(2);
+    same('8 seconds of silence puts the box back, enabled, with the same words', [box(r).checked, box(r).disabled, note(r).textContent], [true, false, 'That did not work, try again']);
+    r.s().recv({ t: 'you', you: Object.assign({}, YOU, { pics: 'off' }) });
+    same('a later `you` (the hub answered late, or a picture came) shows its state and drops the words', [box(r).checked, note(r).textContent], [false, NOTE]);
+    const dead = open({ pics: 'off' });
+    dead.s().readyState = 3;
+    box(dead).checked = true; box(dead).fire('change');
+    same('where the socket cannot send, the box comes back at once with the words', [sent(dead).length, box(dead).checked, box(dead).disabled, note(dead).textContent], [0, false, false, 'That did not work, try again']);
+    const blocked = open({ pics: 'blocked' });
+    box(blocked).checked = true; box(blocked).fire('change');
+    same('a blocked account sends nothing, whatever is pressed, and the box stays off', [sent(blocked).length, box(blocked).checked], [0, false]);
+    const login = open({ pics: 'on' });
+    again(login).click();
+    same('"Log in again" is the login navigation of the page, once, and nothing is sent', [login.went, sent(login).length], [['/hub/login?next=home'], 0]);
+    const guestSays = open({ pics: 'off' });
+    box(guestSays).checked = true; box(guestSays).fire('change');
+    guestSays.s().recv({ t: 'err', code: 'login' });
+    check('a refusal "login" says that this socket is a guest: the switch is gone, and nothing is sent again', shows(box(guestSays)) === false && sent(guestSays).length === 1);
+    // the contract of the hub's frames (docs/HUB_PICTURES.md)
+    const asYou = (extra) => Object.assign({}, YOU, extra);
+    const second = open({ pics: 'off' });
+    box(second).checked = true; box(second).fire('change');
+    second.s().recv({ t: 'you', you: asYou({ pics: 'off', role: 'none' }) });
+    same('a `you` that does not say what was asked (another change, a role change) does not end the wait: the box keeps waiting for the state it asked for', [waits(second), box(second).checked], [true, true]);
+    second.s().recv({ t: 'you', you: asYou({ pics: 'on' }) });
+    same('... the `you` that says it ends the wait', [waits(second) || box(second).disabled, box(second).checked, note(second).textContent], [false, true, 'Your picture is loaded when you log in.']);
+    second.s().recv({ t: 'you', you: asYou({ pics: 'on', pic: NAME }) });
+    check('a `you` WITH `pic` that follows by itself (the fetch finished after the switch) is taken: the chip has its picture and the note is the plain one', second.chip.findAll((e) => e.tagName === 'img').length === 1 && note(second).textContent === NOTE && shows(again(second)) === false);
+    second.s().recv({ t: 'you', you: asYou({ pics: 'on', pic: NAME }) });
+    check('the same `you` again, unasked, changes nothing (one img, the same one)', second.chip.findAll((e) => e.tagName === 'img').length === 1);
+    second.s().recv({ t: 'you', you: asYou({ pics: 'off', pic: NAME }) });
+    check('a `you` that says off but carries a name is not shown (a second guard: only where `pics` is on)', second.chip.findAll((e) => e.tagName === 'img').length === 0 && box(second).checked === false);
+    const raced = open({ pics: 'off' });
+    box(raced).checked = true; box(raced).fire('change');
+    raced.s().recv({ t: 'err', code: 'pics' });
+    same('a refusal puts the box back with its line', [box(raced).checked, box(raced).disabled, note(raced).textContent], [false, false, 'That did not work, try again']);
+    raced.s().recv({ t: 'you', you: asYou({ pics: 'on' }) });
+    same('a `you` that follows the refusal wins: the box shows the state of the account and the line is gone', [box(raced).checked, box(raced).disabled, note(raced).textContent], [true, false, 'Your picture is loaded when you log in.']);
+    raced.clock.advance(60000);
+    check('nothing was sent again by the page, by a refusal, a `you` or the passing of a minute', sent(raced).length === 1);
+    const blockedMeanwhile = open({ pics: 'off' });
+    box(blockedMeanwhile).checked = true; box(blockedMeanwhile).fire('change');
+    blockedMeanwhile.s().recv({ t: 'you', you: asYou({ pics: 'blocked' }) });
+    same('a `you` that says blocked ends the wait: the box is off and disabled', [box(blockedMeanwhile).checked, box(blockedMeanwhile).disabled, waits(blockedMeanwhile)], [false, true, false]);
+    const focusBlocked = open({ pics: 'off' });
+    box(focusBlocked).focus(); box(focusBlocked).checked = true; box(focusBlocked).fire('change');
+    focusBlocked.s().recv({ t: 'you', you: asYou({ pics: 'blocked' }) });
+    check('when the wait ends in blocked the focus goes to Log out (a disabled box cannot keep it), not to the page', focusBlocked.env.doc.activeElement === one(focusBlocked.dock.slot, 'gc-out'));
+    const elsewhere = open({ pics: 'off' });
+    elsewhere.dock.field.focus();
+    elsewhere.s().recv({ t: 'you', you: asYou({ pics: 'blocked' }) }); elsewhere.s().recv({ t: 'you', you: asYou({ pics: 'blocked' }) });
+    check('a `blocked` that arrives while the focus is elsewhere (the chat field) does not pull it to Log out, however often it is repeated', elsewhere.env.doc.activeElement === elsewhere.dock.field && box(elsewhere).disabled === true);
+    // where the focus is when the menu opens: the first control that can be used, so that a Tab forward meets the switch
+    const withPick = open({ pics: 'off', pick: 'display', other: 'maple.leaf' });
+    check('the menu opens on the name choice where there is one (the switch is next in the order)', withPick.env.doc.activeElement === one(withPick.dock.slot, 'gc-pick'));
+    const sw1 = open({ pics: 'off' });
+    check('... on the switch where there is no name choice (a Tab forward goes on to Log out)', sw1.env.doc.activeElement === box(sw1));
+    const sw2 = open({ pics: 'on' });
+    check('... on the switch when it is on and has no picture yet', sw2.env.doc.activeElement === box(sw2));
+    const sw3 = open({ pics: 'blocked' });
+    check('... on Log out where the switch cannot be used', sw3.env.doc.activeElement === one(sw3.dock.slot, 'gc-out'));
+    const sw4 = open({});
+    check('... on Log out where there is no switch (as before)', sw4.env.doc.activeElement === one(sw4.dock.slot, 'gc-out'));
+    // the socket is closed and made again (the last logout, a kick, a ban, Forget me, a name switch): the welcome says who the visitor is now
+    const gone = open({ pics: 'on', pic: NAME });
+    check('(a visitor with a picture)', gone.chip.findAll((e) => e.tagName === 'img').length === 1);
+    gone.s().fail(); gone.clock.advance(3000);
+    gone.live(W({ login: true, you: asYou({ pics: 'on' }) }));
+    check('after the socket is closed and the new welcome has no `pic`, the chip has the letter and no picture', gone.chip.findAll((e) => e.tagName === 'img').length === 0 && one(gone.chip, 'gc-av').textContent === 'm' && one(gone.chip, 'gc-av').getAttribute('data-pic') === null);
+    gone.s().fail(); gone.clock.advance(3000);
+    gone.live(W({ login: true, you: null }));
+    check('... and a welcome for a guest has no picture and no switch', gone.chip.findAll((e) => e.tagName === 'img').length === 0 && shows(box(gone)) === false);
+    const kids = r.dock.slot.children, at = (c) => kids.indexOf(one(r.dock.slot, c));
+    check('the switch stands between the name choice and Log out', at('gc-pick') < at('gc-sw') && at('gc-sw') < at('gc-out') && at('gc-pick') >= 0);
+    check('nothing of the switch was written as markup or threw', [r, none, dead, blocked, login].every((q) => q.env.innerHTMLWrites.length === 0 && q.errors.length === 0));
 }
 
 console.log('home chat: ' + checks + ' checks, ' + failures + ' failed');

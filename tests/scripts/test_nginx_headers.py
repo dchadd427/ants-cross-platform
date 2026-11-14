@@ -505,7 +505,7 @@ class TheFileRuns(unittest.TestCase):
     def start(cls, name, upstream):
         port = free_port()
         folder = os.path.join(cls.tmp, name)
-        for sub in ("tmp", "cache_stats", "cache_history"):
+        for sub in ("tmp", "cache_stats", "cache_history", "cache_hub_pics"):
             os.makedirs(os.path.join(folder, sub), exist_ok=True)
         log = os.path.join(folder, "access.log")
         text = RAW
@@ -513,7 +513,7 @@ class TheFileRuns(unittest.TestCase):
             assert text.count(old) == count, old
             text = text.replace(old, new)
         text = text.replace("/usr/share/nginx/html", cls.docroot).replace("/srv/community-maps", cls.maps)
-        text = text.replace("/var/cache/nginx/ants_stats", folder + "/cache_stats").replace("/var/cache/nginx/ants_history", folder + "/cache_history")
+        text = text.replace("/var/cache/nginx/ants_stats", folder + "/cache_stats").replace("/var/cache/nginx/ants_history", folder + "/cache_history").replace("/var/cache/nginx/ants_hub_pics", folder + "/cache_hub_pics")
         text, n = re.subn(r"set \$(\w+) [a-z-]+:\d+;", lambda m: "set $%s 127.0.0.1:%d;" % (m.group(1), upstream), text)
         assert n >= 10, n
         assert text.count("access_log /dev/stdout ants_noquery;") >= 5

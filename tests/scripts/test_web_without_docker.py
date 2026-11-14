@@ -572,6 +572,7 @@ class TheSiteConfiguration(Scratch):
         self.assertIn("alias /w/fs/usr/share/nginx/html/asset_catalog/sprites/;", text)
         self.assertIn("proxy_cache_path /w/cache/ants_stats ", text)
         self.assertIn("proxy_cache_path /w/cache/ants_history ", text)
+        self.assertIn("proxy_cache_path /w/cache/ants_hub_pics ", text)
         self.assertNotIn("/usr/share/nginx", text.replace("/w/fs/usr/share/nginx/html", ""))
         self.assertNotIn("/var/cache/nginx", text)
         self.assertIn("location = /busy", text, "the rest of the file is as it was")
@@ -579,7 +580,7 @@ class TheSiteConfiguration(Scratch):
         self.assertIn("log_format ants_noquery ", text, "but the log format stays, a location that is left would not know it")
         self.assertGreater(text.count("resolver 127.0.0.11"), 10)
         self.assertEqual(text.count("resolver_timeout 1s;"), text.count("resolver 127.0.0.11"), "a game server that is not there is not waited for for 30 seconds where Docker's resolver is not")
-        self.assertEqual(text.count("access_log off;"), 15)          # (the server block, which logs every path to the image's output, and the four paths that say so again: the submissions, their single ids, the admin API and the test maps; and the hub's door and its answer for a hub that is not there, which have none of their own; and the five pages of the hub's login with the three answers that they share, which log nothing at all: their addresses hold a code)
+        self.assertEqual(text.count("access_log off;"), 16)          # (the server block, which logs every path to the image's output, and the four paths that say so again: the submissions, their single ids, the admin API and the test maps; and the hub's door and its answer for a hub that is not there, which have none of their own; and the five pages of the hub's login with the three answers that they share, which log nothing at all: their addresses hold a code; and the hub's pictures, whose door logs nothing: a log of who fetched which name would say who looked at whom)
 
     def test_the_list_of_maps_is_answered_from_a_file_and_the_rest_of_the_conf_is_as_it_was(self):
         plain = wd.site_config(read("docker", "nginx.conf"), "/w/fs", "/w/cache", 1234)

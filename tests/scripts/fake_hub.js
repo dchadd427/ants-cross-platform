@@ -79,6 +79,22 @@ function startHub(options) {
         hub.received.push(m);
         if (m.t === 'ping') { hub.send(peer, { t: 'online', n: o.online }); return; }
         if (m.t === 'who' || m.t === 'here') { if (m.t === 'who' && o.who) hub.send(peer, o.who); return; }       // (the players list: o.who is the frame that answers a `who`; a `here` is taken and not answered)
+        if (m.t === 'pics') {                          // the picture switch (docs/HUB_PICTURES.md), as the hub answers it: a guest gets `err` `login`; a wrong or blocked or too-often request gets `err` `pics` (a burst of 3, then one every 30 s, for the ACCOUNT across all its sockets: hub.picTokens); an unchanged state is answered with one whole `you` to the asking socket; a done switch sends `you` to every socket, with `pics` and no `pic` (o.picAfterOn: a `you` with that `pic` follows by itself after that many ms, the fetch finishing; o.picsMode 'silent' says nothing, 'busy' refuses and sends the `you` of the new state a moment later)
+            const y = o.you;
+            if (!y) { hub.send(peer, { t: 'err', code: 'login' }); return; }
+            const now = Date.now(), t = hub.picTokens || (hub.picTokens = { n: 3, at: now });
+            t.n = Math.min(3, t.n + (now - t.at) / 30000); t.at = now;
+            if (!y.pics || y.pics === 'blocked' || typeof m.on !== 'boolean' || o.picsMode === 'refuse') { hub.send(peer, { t: 'err', code: 'pics' }); return; }
+            if (t.n < 1) { hub.send(peer, { t: 'err', code: 'pics' }); return; }
+            t.n -= 1;
+            if (o.picsMode === 'silent') return;
+            const want = m.on ? 'on' : 'off', change = () => { o.you = Object.assign({}, o.you, { pics: want }); delete o.you.pic; hub.broadcast({ t: 'you', you: o.you }); };
+            if (o.picsMode === 'busy') { hub.send(peer, { t: 'err', code: 'pics' }); setTimeout(change, 100); return; }
+            if (y.pics === want) { hub.send(peer, { t: 'you', you: y }); return; }
+            change();
+            if (want === 'on' && o.picAfterOn) setTimeout(() => { o.you = Object.assign({}, o.you, { pic: o.picAfterOnName }); hub.broadcast({ t: 'you', you: o.you }); }, o.picAfterOn);
+            return;
+        }
         if (m.t === 'pick') {
             const y = o.you;
             if (!y || !y.other || (m.pick !== 'display' && m.pick !== 'username')) { hub.send(peer, { t: 'err', code: 'pick' }); return; }

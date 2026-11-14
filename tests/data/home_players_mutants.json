@@ -672,29 +672,29 @@
   {
    "id": "the_own_row_is_not_made_again_for_a_role",
    "file": "web/home/players.js",
-   "old": "mine = you ? { name: you.name, mod: you.mod, role: you.role, doing: doing }",
-   "new": "mine = you ? { name: you.name, mod: you.mod, doing: doing }",
+   "old": "mine = you ? { name: you.name, mod: you.mod, role: you.role, pic: you.pic, doing: doing }",
+   "new": "mine = you ? { name: you.name, mod: you.mod, pic: you.pic, doing: doing }",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "a_rows_role_does_not_make_the_list_again",
    "file": "web/home/players.js",
-   "old": "return [r.id, r.name, r.at, r.mod, r.role, r.pub,",
-   "new": "return [r.id, r.name, r.at, r.mod, r.pub,",
+   "old": "return [r.id, r.name, r.at, r.mod, r.role, r.pic, r.pub,",
+   "new": "return [r.id, r.name, r.at, r.mod, r.pic, r.pub,",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "the_welcomes_role_is_not_read",
    "file": "web/home/players.js",
-   "old": "you = yo ? { name: yo.name, mod: yo.mod, role: yo.role } : null;",
-   "new": "you = yo ? { name: yo.name, mod: yo.mod, role: yo.mod ? 'mod' : 'none' } : null;",
+   "old": "you = yo ? { name: yo.name, mod: yo.mod, role: yo.role, pic: yo.pic } : null;",
+   "new": "you = yo ? { name: yo.name, mod: yo.mod, role: yo.mod ? 'mod' : 'none', pic: yo.pic } : null;",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "the_own_row_has_no_role",
    "file": "web/home/players.js",
-   "old": "at: doing ? doing.at : 'look', mod: you.mod, role: you.role, pub:",
-   "new": "at: doing ? doing.at : 'look', mod: you.mod, pub:",
+   "old": "at: doing ? doing.at : 'look', mod: you.mod, role: you.role, pic: you.pic, pub:",
+   "new": "at: doing ? doing.at : 'look', mod: you.mod, pic: you.pic, pub:",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -724,6 +724,48 @@
    "old": "out[row.mod ? 'mod' : row.at].push(row);",
    "new": "out[row.mod || row.role === 'none' ? 'mod' : row.at].push(row);",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "players_pic_not_in_the_row_signature",
+   "file": "web/home/players.js",
+   "old": "r.role, r.pic, r.pub,",
+   "new": "r.role, r.pub,",
+   "test": "node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "players_own_pic_not_in_the_signature",
+   "file": "web/home/players.js",
+   "old": "role: you.role, pic: you.pic, doing: doing }",
+   "new": "role: you.role, doing: doing }",
+   "test": "node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "players_circle_gets_no_picture",
+   "file": "web/home/players.js",
+   "old": "Chat.picture(el, av, row.pic, 32);",
+   "new": "",
+   "test": "node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "players_row_pic_taken_unchecked",
+   "file": "web/home/players.js",
+   "old": "pic: Chat.picOf(raw.pic),",
+   "new": "pic: typeof raw.pic === 'string' ? raw.pic : '',",
+   "test": "node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "players_row_pic_read_from_the_name",
+   "file": "web/home/players.js",
+   "old": "pic: Chat.picOf(raw.pic),",
+   "new": "pic: Chat.picOf(raw.name),",
+   "test": "node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "players_own_pic_not_followed_from_a_you",
+   "file": "web/home/players.js",
+   "old": "you.pic = yn.pic;",
+   "new": "",
+   "test": "node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]
 }
