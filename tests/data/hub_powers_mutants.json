@@ -252,7 +252,7 @@
   {
    "id": "an_unban_needs_the_profile",
    "file": "hub/chat.py",
-   "old": "self.account_named(word) or (self.ban_named(word) if name == \"unban\" else None), None",
+   "old": "self.account_named(word) or (self.ban_named(word) if name == \"unban\" else self.mute_named(word) if name == \"unmute\" else None), None",
    "new": "self.account_named(word), None",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
   },
@@ -875,22 +875,22 @@
   {
    "id": "a_plain_ban_deletes_the_lines_too",
    "file": "hub/chat.py",
-   "old": "            if minutes:\n                self.store.delete_lines_since",
-   "new": "            if True:\n                self.store.delete_lines_since",
+   "old": "            if minutes:\n                try:",
+   "new": "            if True:\n                try:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLineAndRowTargets tests.scripts.test_hub_powers.TheMutesList tests.scripts.test_hub_powers.TheBanAndPurge tests.scripts.test_hub_powers.TheNewCommandsKeepTheIdOut tests.scripts.test_hub_store_contract"
   },
   {
    "id": "a_ban_with_purge_deletes_nothing",
    "file": "hub/chat.py",
-   "old": "            if minutes:\n                self.store.delete_lines_since",
-   "new": "            if not minutes:\n                self.store.delete_lines_since",
+   "old": "            if minutes:\n                try:",
+   "new": "            if not minutes:\n                try:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLineAndRowTargets tests.scripts.test_hub_powers.TheMutesList tests.scripts.test_hub_powers.TheBanAndPurge tests.scripts.test_hub_powers.TheNewCommandsKeepTheIdOut tests.scripts.test_hub_store_contract"
   },
   {
    "id": "the_purged_lines_stay_on_the_screens",
    "file": "hub/chat.py",
-   "old": "                self.sync_deletions()                              # (the same path as /del: a bounded number of `del` frames, see drop_lines)",
-   "new": "                pass",
+   "old": "                    self.sync_deletions()                          # (the same path as /del: a bounded number of `del` frames, see drop_lines)",
+   "new": "                    pass",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLineAndRowTargets tests.scripts.test_hub_powers.TheMutesList tests.scripts.test_hub_powers.TheBanAndPurge tests.scripts.test_hub_powers.TheNewCommandsKeepTheIdOut tests.scripts.test_hub_store_contract"
   },
   {
@@ -920,6 +920,34 @@
    "old": "            if ids:\n                self.write_note(note)",
    "new": "            self.write_note(note)",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLineAndRowTargets tests.scripts.test_hub_powers.TheMutesList tests.scripts.test_hub_powers.TheBanAndPurge tests.scripts.test_hub_powers.TheNewCommandsKeepTheIdOut tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_line_or_row_target_has_no_lookup_of_its_role",
+   "file": "hub/chat.py",
+   "old": "        return ([me.account_id] if target == me.account_id and name == \"del\" else [me.account_id, target]), target, None",
+   "new": "        return ([me.account_id] if (target == me.account_id and name == \"del\") or (isinstance(arg, str) and arg[:1] in \"#r\") else [me.account_id, target]), target, None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheckOfLineAndRowTargets tests.scripts.test_hub_powers.TheBanAndPurge tests.scripts.test_hub_powers.TheLineAndRowTargets"
+  },
+  {
+   "id": "a_failed_purge_leaves_the_person_connected",
+   "file": "hub/chat.py",
+   "old": "                except StoreError as e:\n                    if self.on_store_error:\n                        self.on_store_error(e)                     # (the ban is done",
+   "new": "                except ZeroDivisionError as e:\n                    if self.on_store_error:\n                        self.on_store_error(e)                     # (the ban is done",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheckOfLineAndRowTargets tests.scripts.test_hub_powers.TheBanAndPurge tests.scripts.test_hub_powers.TheLineAndRowTargets"
+  },
+  {
+   "id": "a_person_with_no_profile_is_kept_under_no_name",
+   "file": "hub/chat.py",
+   "old": "self.usernames([target]).get(target) or self.ref(target)",
+   "new": "self.usernames([target]).get(target) or \"\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheckOfLineAndRowTargets tests.scripts.test_hub_powers.TheBanAndPurge tests.scripts.test_hub_powers.TheLineAndRowTargets"
+  },
+  {
+   "id": "an_unmute_by_the_kept_name_is_not_found",
+   "file": "hub/chat.py",
+   "old": "self.mute_named(word) if name == \"unmute\" else None",
+   "new": "None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheckOfLineAndRowTargets tests.scripts.test_hub_powers.TheBanAndPurge tests.scripts.test_hub_powers.TheLineAndRowTargets"
   }
  ]
 }

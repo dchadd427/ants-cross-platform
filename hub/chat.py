@@ -451,14 +451,14 @@ class Chat:
             number = int(word[4:])
             found = [a for a, i in self.presence.ids.items() if i == number and self.sockets_of(a)]
             return (found[0] if len(found) == 1 else None), None
-        return self.account_named(word) or (self.ban_named(word) if name == "unban" else None), None
+        return self.account_named(word) or (self.ban_named(word) if name == "unban" else self.mute_named(word) if name == "unmute" else None), None
 
     def label_of(self, target, word):
-        """The name that a mute or a ban is kept under (what /bans, /mutes and /unban show): the word that was typed when it is a username, else the person's username (else the name shown, else nothing):
-        never the `#n` or `row:n` text, never an id."""
+        """The name that a mute or a ban is kept under (what /bans, /mutes, /unban and /unmute show): the word that was typed when it is a username, else the person's username, else (nobody here, no profile) their
+        pseudonymous reference (hub/pseudo.py), which those commands take as a name: never the `#n` or `row:n` text, never an id."""
         if not (LINE_WORD.match(word) or ROW_WORD.match(word)):
             return word
-        return self.usernames([target]).get(target) or self.shown_name(target) or ""
+        return self.usernames([target]).get(target) or self.ref(target)
 
     def carry_out(self, peer, job):
         """Do the command, now: the accounts' roles are fresh (else `role`), the table of the powers says yes (else `power`), and what is asked is true of the person (else `bad`: not muted, not banned, already
@@ -514,8 +514,12 @@ class Chat:
             shown = self.shown_name(target) or label or "Someone"
             self.store.ban(target, by, label, note=(by, "ban", whom, ""))
             if minutes:
-                self.store.delete_lines_since(target, int(self.store.clock()) - minutes * 60, by, note=(by, "del", whom, "purge"))
-                self.sync_deletions()                              # (the same path as /del: a bounded number of `del` frames, see drop_lines)
+                try:
+                    self.store.delete_lines_since(target, int(self.store.clock()) - minutes * 60, by, note=(by, "del", whom, "purge"))
+                    self.sync_deletions()                          # (the same path as /del: a bounded number of `del` frames, see drop_lines)
+                except StoreError as e:
+                    if self.on_store_error:
+                        self.on_store_error(e)                     # (the ban is done and stays: the person is removed and the answer is `ok`; the lines can be taken off with /del)
             self.remove(self.sockets_of(target), "banned")
             self.sync_pictures()
             self.announce("%s was banned." % shown, me)
@@ -560,6 +564,13 @@ class Chat:
         if not textrules.valid_name(username):
             return None
         found = [account for account, name, _, _ in self.store.bans() if name == username]
+        return found[0] if len(found) == 1 else None
+
+    def mute_named(self, name):
+        """The account that is muted under this name (a username, or the reference that a mute of a person with no profile is kept under), when exactly one is."""
+        if not textrules.valid_name(name):
+            return None
+        found = [account for account, stored, _, _ in self.store.mutes() if stored == name]
         return found[0] if len(found) == 1 else None
 
     def account_named(self, username):

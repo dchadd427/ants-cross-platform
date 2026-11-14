@@ -740,9 +740,40 @@ class TheBanAndPurge(Powers):
         self.assertFalse(self.w.store.is_banned("1001"))
         self.assertEqual(self.reader.kinds("del"), [])
         self.say(self.admin, "/ban boss.two purge")
+        self.assertEqual(self.admin.codes(), ["power"])                  # (nobody acts on an administrator, purge or not)
+        self.assertEqual((self.reader.kinds("del"), self.w.store.is_banned("9102")), ([], False))
         self.say(self.admin, "/ban #%d purge" % self.mod_line)       # (an administrator may act on a moderator)
         self.assertEqual(self.admin.codes(), ["power"])
         self.assertEqual(sorted(m["id"] for m in self.reader.kinds("del")), [self.mod_line])
+
+    def test_a_store_that_fails_in_the_purge_leaves_the_ban_done_the_person_removed_and_the_answer_ok(self):
+        errors = []
+        self.w.chat.on_store_error = errors.append
+        with mock.patch.object(self.w.store, "delete_lines_since", side_effect=storemod.StoreError("busy")):
+            self.say(self.admin, "/ban bob purge")
+        self.assertEqual((self.admin.codes(), [m["c"] for m in self.admin.kinds("ok")]), ([], ["ban"]))
+        self.assertTrue(self.w.store.is_banned("1002"))
+        self.assertEqual(self.bob.closed, (1000, "banned"))
+        self.assertEqual(len(system(self.reader)), 1)
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(self.reader.kinds("del"), [])                                 # (the lines stay: /del takes them off one by one)
+
+    def test_a_person_with_no_socket_and_no_profile_is_kept_under_their_reference_and_that_name_works(self):
+        line = self.mine[0]
+        self.w.chat.peers.discard(self.bob)
+        ref = self.w.chat.ref("1002")
+        self.say(self.admin, "/ban #%d" % line)
+        self.say(self.admin, "/bans")
+        self.assertEqual(self.admin.kinds("bans")[-1]["rows"], [{"u": ref, "at": int(self.w.wall())}])
+        self.say(self.admin, "/unban %s" % ref)
+        self.assertFalse(self.w.store.is_banned("1002"))
+        self.say(self.mod, "/mute #%d 5" % line)
+        self.say(self.mod, "/mutes")
+        self.assertEqual([r["u"] for r in self.mod.kinds("mutes")[-1]["rows"]], [ref])
+        self.say(self.mod, "/unmute %s" % ref)
+        self.assertEqual((self.mod.codes(), self.admin.codes(), self.w.store.mutes()), ([], [], []))
+        for peer in (self.admin, self.mod, self.reader):
+            assert_no_id(self, b"".join(peer.raw).decode("utf-8"), "a frame")
 
     def test_a_person_who_is_banned_already_is_refused_and_nothing_is_deleted(self):
         self.w.store.ban("1002", "x", "bob")
@@ -1136,6 +1167,55 @@ class TheFreshCheck(FreshBase):
         self.assertEqual(self.w.chat.busy, {})                                                     # (the socket may send another command)
         self.w.say(self.mod, "/mute bob 5")
         self.assertEqual(self.mod.codes()[-1:], [])
+
+
+class TheFreshCheckOfLineAndRowTargets(FreshBase):
+    """`#n` and `row:n` need the same look at both people's roles as a username does."""
+
+    def forms(self):
+        self.w.clock.now += 3
+        self.w.say(self.bob, "a line")
+        line = self.w.store.lines(1)[0][0]
+        return "#%d" % line, "row:%d" % self.w.chat.presence.row_id("1002")
+
+    async def test_a_command_by_line_or_row_waits_for_the_lookup_of_both(self):
+        for word in self.forms():
+            self.age()
+            self.stub.calls.clear()
+            self.w.say(self.mod, "/mute %s 5" % word)
+            self.assertEqual(self.w.store.muted_until("1002"), 0)                  # (it waits)
+            await self.settle()
+            self.assertTrue({"1002", "9001"} <= set(self.asked()), word)
+            self.assertGreater(self.w.store.muted_until("1002"), 0)
+            self.w.store.mute("1002", 0, "x")
+        self.age()
+        self.stub.calls.clear()
+        self.w.say(self.mod, "/kick %s" % self.forms()[1])
+        await self.settle()
+        self.assertTrue({"1002", "9001"} <= set(self.asked()))
+        self.assertEqual((self.bob.closed, self.mod.codes()), ((1000, "kicked"), []))
+
+    async def test_a_discord_that_fails_refuses_both_forms_with_role(self):
+        for word in self.forms():
+            self.mode = lambda account: (500, {"message": "x"}, {})
+            self.age()
+            self.w.say(self.mod, "/kick %s" % word)
+            await self.settle()
+            self.assertEqual(self.mod.codes()[-1], "role", word)
+            self.assertEqual((self.bob.closed, self.w.store.actions()), (None, []))
+            self.mode = None
+            self.roles.pause_until = self.roles.hold_until = float("-inf")
+            self.grant("9001", "mod")
+            self.grant("1002", "none")
+
+    async def test_a_target_promoted_during_the_wait_is_power_by_either_form(self):
+        for word in self.forms():
+            self.age()
+            self.members["1002"] = [ADMIN]
+            self.w.say(self.mod, "/mute %s 5" % word)
+            await self.settle()
+            self.assertEqual((self.mod.codes()[-1], self.w.store.mutes()), ("power", []), word)
+            self.members["1002"] = []
 
 
 class Slow(Stub):
