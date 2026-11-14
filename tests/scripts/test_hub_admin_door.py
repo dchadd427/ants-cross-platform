@@ -2,7 +2,9 @@
 """The admin page's door (hub/admindoor.py, hub/admin.py `resolve`, docs/HUB.md "The admin page's door"): who may use it, the pass that the site's nginx hands on, and the hub's side of what the page does.
 
   TheRule          the one rule: nobody / no role / moderator / administrator / the operator's account, each with a fresh answer, an old one and a Discord that is down; no key, a short key, a key with a blank
-  TheFreshCheck    an action asks Discord again and a visit does not
+  TheFreshCheck    the door wants an answer a minute old for an administrator; an action asks for both
+  TheDoorsOwnShare the door's lookups come from its own share, not the moderators' actions'
+  TheRequestsThatAreNotWhatTheDoorIsFor   no address at the gate, a body promised by somebody who is not let in, an empty query, a key twice, an id-shaped name in an old row
   ThePass          `v1.<payload>.<mac>`: the mac holds with the key and with nothing else, the expiry is a minute from now, the payload says a reference, a name and a role and never an id
   TheGate          what the gate is and is not: GET only, no body in or out, no CORS, a limit for each address
   TheFences        the page's calls: the same-origin rules, the JSON type, the token (none, wrong, another login's), the shape of the body, the size of the body
@@ -19,6 +21,7 @@ import hmac
 import json
 import os
 import re
+import socket
 import sys
 import tempfile
 import time
@@ -62,7 +65,8 @@ def verify(header, key, now):
     m = PASS_FORM.match(header or "")
     if not m:
         return None
-    good = hmac.new(key.encode(), ("v1." + m.group(1)).encode(), hashlib.sha256).hexdigest()
+    pass_key = hmac.new(key.encode(), b"ants-admin-pass-v1", hashlib.sha256).digest()        # (the key of the pass is derived from the secret, as docs/HUB.md says)
+    good = hmac.new(pass_key, ("v1." + m.group(1)).encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(good, m.group(2)):
         return None
     payload = json.loads(b64decode(m.group(1)))
@@ -101,7 +105,7 @@ class DoorTest(unittest.TestCase):
     def call(self, method, path, account=None, body=None, site="same-origin", origin="default", ctype="default", csrf="default", extra=(), address=None, raw=None):
         """One request as the admin page makes it (or not): the test login of `account`, Sec-Fetch-Site, the Origin of a POST, a JSON type and the token of /me."""
         self.count += 1
-        pairs = [("X-Client-Address", address or "198.51.100.%d" % (self.count % 200 + 1))]
+        pairs = [] if address == "" else [("X-Client-Address", address or "198.51.100.%d" % (self.count % 200 + 1))]       # (address="" leaves the header out)
         if account:
             pairs.append(self.login_header(account))
         if site is not None:
@@ -290,47 +294,52 @@ class ThePass(DoorTest):
 
 
 class TheFreshCheck(DoorTest):
-    """An action needs an answer of Discord that is a minute old at the most; a visit of the page needs only the hub's usual rule. Here the minute is a fifth of a second and the usual rule's grace is long."""
+    """The door wants an answer of Discord that is a minute old at the most for an administrator (a pass is believed by the game server for a minute), as an action does. Here the minute is a fifth of a
+    second and the hub's usual belief in a role (its grace) is long, so that only the door's own rule decides."""
 
     options = dict(roles_action_fresh_seconds=0.2, roles_grace_seconds=30.0)
 
-    def test_a_role_that_is_believed_costs_no_call_even_when_it_is_older_than_an_actions_minute(self):
+    def test_an_answer_that_is_young_costs_no_call_and_an_old_one_is_asked_for_again(self):
         self.assertEqual(self.gate(ADMIN).status, 204)
         self.assertEqual(self.fake.member_ids.count(ADMIN), 1)
+        self.assertEqual(self.gate(ADMIN).status, 204)
+        self.assertEqual(self.fake.member_ids.count(ADMIN), 1, "a fresh answer is believed")
         time.sleep(0.5)
-        for _ in range(3):
-            self.assertEqual(self.gate(ADMIN).status, 204)
-        self.assertEqual(self.fake.member_ids.count(ADMIN), 1)
+        self.assertEqual(self.gate(ADMIN).status, 204)
+        self.assertEqual(self.fake.member_ids.count(ADMIN), 2, "an answer that is old is asked for again")
 
-    def test_an_action_asks_again_and_the_answer_that_says_the_role_went_stops_it(self):
+    def test_a_role_that_went_closes_the_gate_and_the_reads_at_once_not_after_the_hubs_grace(self):
         self.token(ADMIN)
         self.fake.members[ADMIN] = []
         time.sleep(0.5)
-        self.assertEqual(self.gate(ADMIN).status, 204, "the page's visit is let in by an answer that is believed")
-        r = self.post("ban", {"account": NAMES[TARGET]})
-        self.assertEqual((r.status, r.json()), (403, {"error": "admin"}))
-        self.assertFalse(self.rig.call(self.rig.store.is_banned, TARGET))
-        self.assertEqual(self.modlog(), [])
-        self.assertEqual(self.fake.member_ids.count(ADMIN), 2, "the action asked Discord again")
+        for r in (self.gate(ADMIN), self.get("bans"), self.get("modlog"), self.get("status")):
+            self.assertEqual(r.status, 403)
+        self.assertIsNone(self.gate(ADMIN).get("x-ants-admin-pass"))
+
+    def test_an_old_answer_and_a_discord_that_does_not_answer_close_the_door_even_inside_the_grace(self):
+        self.token(ADMIN)
+        self.fake.member_mode = "status:500"
+        time.sleep(0.5)
+        self.assertEqual(self.gate(ADMIN).status, 403, "believed by the roles, not young enough for the door")
+        self.assertEqual(self.gate(OWNER).status, 204, "the operator's account needs no answer")
+        self.fake.member_mode = "ok"
+        time.sleep(0.2)
+        self.assertEqual(self.gate(ADMIN).status, 204)
 
     def test_an_action_needs_the_fresh_check_of_both_and_a_discord_that_is_down_refuses_it(self):
-        self.token(ADMIN)                                            # (the actor's role is known and believed for 30 seconds: the door lets it in whatever the runner's speed)
+        self.token(ADMIN)                                            # (the actor is young enough for the door now)
         self.fake.member_mode = "status:500"
         r = self.post("ban", {"account": NAMES[TARGET]})            # (the person acted on has no answer at all: the action must ask, and Discord does not answer)
         self.assertEqual((r.status, r.json()), (503, {"error": "role"}))
         self.assertFalse(self.rig.call(self.rig.store.is_banned, TARGET))
         self.assertEqual(self.modlog(), [])
 
-    def test_an_actor_whose_role_ran_out_while_discord_is_down_is_refused_by_the_door_first(self):
+    def test_an_actor_whose_answer_is_old_while_discord_is_down_is_refused_by_the_door_before_any_action(self):
         self.token(ADMIN)
         self.fake.member_mode = "status:500"
-        time.sleep(0.5)                                              # (past the 0.2 second an action allows an answer; the door's own belief lasts 30 seconds, so it still lets the actor in)
-        self.assertEqual(self.gate(ADMIN).status, 204)
+        time.sleep(0.5)
         r = self.post("ban", {"account": NAMES[TARGET]})
-        self.assertEqual((r.status, r.json()), (503, {"error": "role"}))
-        self.rig.call(setattr, self.rig.hub.chat.roles.entries[ADMIN], "ok_at", self.rig.hub.clock() - 100.0)      # (the belief itself has run out)
-        r = self.post("ban", {"account": NAMES[TARGET]})
-        self.assertEqual((r.status, r.json()), (403, {"error": "admin"}), "stale and unconfirmable: the door says no, before any action")
+        self.assertEqual((r.status, r.json()), (403, {"error": "admin"}))
         self.assertFalse(self.rig.call(self.rig.store.is_banned, TARGET))
 
     def test_an_action_on_a_person_whose_answer_is_old_asks_for_it(self):
@@ -341,6 +350,121 @@ class TheFreshCheck(DoorTest):
         time.sleep(0.5)
         self.assertEqual(self.post("unmute", {"account": NAMES[TARGET]}).status, 200)
         self.assertEqual(self.fake.member_ids.count(TARGET), asked + 1)
+
+
+class TheDoorsOwnShare(DoorTest):
+    """The door's lookups are paid from its own small share: the moderators' commands live on the actions' share (hub/roles.py `afford`), and a crowd of people with no role at the door does not touch it."""
+
+    options = dict(admin_burst=1000, roles_urgent_burst=3, roles_urgent_refill_seconds=600.0, roles_grace_seconds=30.0, admin_door_burst=100, admin_lookups_burst=100)
+
+    def test_many_logged_in_people_with_no_role_at_the_gate_do_not_use_up_what_a_mute_needs(self):
+        extras = ["92%014d" % n for n in range(1, 31)]
+        for account in extras:
+            self.fake.members[account] = []
+            NAMES[account] = "visitor.%d" % int(account[-5:])
+        try:
+            for account in extras:
+                self.assertEqual(self.gate(account).status, 403)
+            self.assertGreaterEqual(len(self.fake.member_ids), 30, "each one was looked up (by the door's own share)")
+            before = len(self.fake.member_ids)
+            self.token(ADMIN)
+            r = self.post("mute", {"account": NAMES[TARGET], "minutes": 5})
+            self.assertEqual((r.status, r.json().get("error")), (200, None), "the actions' share is whole")
+            self.assertGreater(len(self.fake.member_ids), before)
+        finally:
+            for account in extras:
+                del NAMES[account]
+
+    def test_the_door_has_a_share_of_its_own_and_it_runs_out(self):
+        with hub_rig.Rig(member_fake=self.fake, owner=OWNER, recheck=1, env={"ANTS_HUB_ADMIN_GATE_SECRET": SECRET},
+                         **dict(OPTIONS, admin_burst=1000, admin_door_burst=2, admin_door_refill_seconds=600.0, admin_lookups_burst=100)) as rig:
+            seen = 0
+            for account in (ADMIN, ADMIN2, MOD, PLAIN):
+                r = hc.request(rig.port, "GET", "/hub/admin/gate", [("X-Client-Address", "198.51.100.40"), ("X-Hub-Test-Login", "%s:%s" % (account, NAMES[account]))])
+                seen += r.status == 204
+            self.assertEqual(seen, 2, "the door's share is two lookups: the third and the fourth person are not let in, whoever they are")
+            self.assertEqual(len(self.fake.member_ids), 2)
+
+
+class TheRequestsThatAreNotWhatTheDoorIsFor(DoorTest):
+    options = dict(handshake_seconds=1.5)
+
+    def head(self, account=None, length=100, extra=()):
+        lines = ["POST /hub/admin/api/ban HTTP/1.1", "Host: chat.example.org", "X-Client-Address: 198.51.100.61", "Sec-Fetch-Site: same-origin", "Origin: " + hc.SITE,
+                 "Content-Type: application/json", "Content-Length: %d" % length, "X-Ants-Csrf: " + (self.token(account) if account else "0" * 64)]
+        if account:
+            lines.append("%s: %s" % self.login_header(account))
+        lines += ["%s: %s" % kv for kv in extra]
+        return ("\r\n".join(lines) + "\r\n\r\n").encode("latin-1")
+
+    def answer_at(self, sock, seconds):
+        sock.settimeout(seconds)
+        try:
+            return sock.recv(4096)
+        except socket.timeout:
+            return None
+
+    def test_a_gate_asked_with_no_address_of_the_visitor_is_a_400_and_one_line_of_the_log(self):
+        for _ in range(3):
+            r = self.call("GET", "/hub/admin/gate", OWNER, address="")
+            self.assertEqual((r.status, r.get("x-ants-admin-pass")), (400, None))
+        r = hc.request(self.rig.port, "GET", "/hub/admin/gate", [("X-Client-Address", "not an address"), self.login_header(OWNER)])
+        self.assertEqual(r.status, 400)
+        self.assertEqual(self.rig.log_text.getvalue().count("admin_gate_asked_without_x_client_address"), 1)
+        for _ in range(70):
+            self.call("GET", "/hub/admin/gate", None, address="")                      # (a crowd with no address cannot use up a bucket that the operator needs)
+        self.assertEqual(self.gate(OWNER, address="203.0.113.5").status, 204)
+        self.assertEqual(self.get("me", OWNER).status, 200)
+
+    def test_a_client_that_is_not_logged_in_and_promises_a_body_is_told_no_at_once_and_never_waited_for(self):
+        with socket.create_connection(("127.0.0.1", self.rig.port), timeout=5) as sock:
+            sock.sendall(self.head(None))
+            data = self.answer_at(sock, 1.0)
+            self.assertIsNotNone(data, "no answer within a second: the hub waited for the body")
+            self.assertTrue(data.startswith(b"HTTP/1.1 401 "), data[:40])
+
+    def test_a_client_that_is_let_in_and_promises_a_body_holds_its_place_until_the_body_is_read_or_given_up(self):
+        base = self.rig.call(lambda: self.rig.hub.pending)
+        with socket.create_connection(("127.0.0.1", self.rig.port), timeout=5) as sock:
+            sock.sendall(self.head(ADMIN))
+            time.sleep(0.5)
+            self.assertEqual(self.rig.call(lambda: self.rig.hub.pending), base + 1, "the place of the connection is kept while it waits for the body")
+            data = self.answer_at(sock, 5.0)
+            self.assertTrue(data and data.startswith(b"HTTP/1.1 400 "), data)
+        time.sleep(0.2)
+        self.assertEqual(self.rig.call(lambda: self.rig.hub.pending), base)
+
+    def test_an_empty_query_is_a_query_too(self):
+        for path in ("/hub/admin/gate?", "/hub/admin/api/me?", "/hub/admin/api/ban?"):
+            r = self.call("GET", path, OWNER)
+            self.assertEqual(r.status, 404, path)
+
+    def test_a_key_that_comes_twice_in_the_body_is_refused(self):
+        r = self.call("POST", "/hub/admin/api/ban", ADMIN, raw=b'{"account":"%s","account":"%s"}' % (NAMES[TARGET].encode(), NAMES[PLAIN].encode()))
+        self.assertEqual(r.status, 400)
+        self.assertEqual(self.modlog(), [])
+
+    def test_the_pass_and_the_token_have_keys_of_their_own(self):
+        raw = SECRET.encode()
+        message = b"csrf1\0\0" + self.ref(ADMIN).encode()
+        token = self.token(ADMIN)                                    # (the test login has no session: the key of the login is empty)
+        self.assertNotEqual(token, hmac.new(raw, message, hashlib.sha256).hexdigest(), "not the secret itself")
+        self.assertNotEqual(token, hmac.new(hmac.new(raw, b"ants-admin-pass-v1", hashlib.sha256).digest(), message, hashlib.sha256).hexdigest(), "not the pass's key")
+        self.assertEqual(token, hmac.new(hmac.new(raw, b"ants-admin-csrf-v1", hashlib.sha256).digest(), message, hashlib.sha256).hexdigest())
+        header = self.gate(ADMIN).get("x-ants-admin-pass")
+        body = header.rsplit(".", 1)[0]
+        self.assertNotEqual(header.rsplit(".", 1)[1], hmac.new(raw, body.encode(), hashlib.sha256).hexdigest(), "the pass is not signed with the secret itself")
+
+    def test_a_name_that_is_the_shape_of_an_id_in_an_old_row_is_not_told(self):
+        planted = "12345678901234567"
+        self.rig.call(self.rig.store.ban, AWAY, "terminal", planted)
+        self.rig.call(self.rig.store.mute, AWAY, 5, "terminal", planted)
+        for name, field in (("bans", "bans"), ("mutes", "mutes")):
+            r = self.get(name)
+            self.assertNotIn(planted, r.text())
+            self.assertEqual([row["name"] for row in r.json()[field]], [""])
+        self.rig.call(self.rig.store.ban, PLAIN, "terminal", "plain.name")
+        self.assertIn("pat.plain", self.get("bans").text(), "a name that is a name is told (the profile's)")
 
 
 class TheGate(DoorTest):
@@ -877,13 +1001,15 @@ class TheKey(unittest.TestCase):
         return configmod.load(dict(ANTS_HUB_PORT="0", **env))
 
     def test_a_key_of_thirty_two_printable_characters_or_more_opens_the_door(self):
-        for key in ("k" * 32, "k" * 256, "a1!~" * 10):
+        for key in ("abcdefgh" * 4, "abcdefgh" * 32, "a1!~xyzw" * 5, "kjhgfedc" + "k" * 24):
             self.assertTrue(self.load(ANTS_HUB_ADMIN_GATE_SECRET=key).admin_gate_on, len(key))
-        for key in ("", "k" * 31, "k" * 257, "k" * 16 + " " + "k" * 16, "caf\u00e9" * 10, "tab\t" * 10):
+        for key in ("", "k" * 40, "ab" * 20, "abcdefg" * 6, "abcdefgh" * 3 + "a" * 7, "abcdefgh" * 32 + "x", "k" * 31, "k" * 257, "k" * 16 + " " + "k" * 16, "caf\u00e9" * 10, "tab\t" * 10):
             cfg = self.load(ANTS_HUB_ADMIN_GATE_SECRET=key)
             self.assertFalse(cfg.admin_gate_on, repr(len(key)))
             self.assertEqual(cfg.admin_gate_secret, "")
         self.assertFalse(self.load().admin_gate_on)
+        cfg = self.load(ANTS_HUB_ADMIN_GATE_SECRET="  " + "abcdefgh" * 4 + "\n")
+        self.assertEqual(cfg.admin_gate_secret, "abcdefgh" * 4, "surrounding whitespace is cut: the game server must cut it too (docs/HUB.md)")
 
     def test_a_malformed_key_never_stops_the_load_and_the_key_is_in_no_text(self):
         cfg = self.load(ANTS_HUB_ADMIN_GATE_SECRET=SECRET)
@@ -931,7 +1057,7 @@ class TheStart(unittest.TestCase):
                 if key is not None:
                     extra["ANTS_HUB_ADMIN_GATE_SECRET"] = key
                 port, log_path = self.run_hub(extra)
-                r = hc.request(port, "GET", "/hub/admin/gate", [("X-Hub-Test-Login", "%s:%s" % (OWNER, NAMES[OWNER]))])
+                r = hc.request(port, "GET", "/hub/admin/gate", [("X-Client-Address", "198.51.100.9"), ("X-Hub-Test-Login", "%s:%s" % (OWNER, NAMES[OWNER]))])
                 self.assertEqual(r.status, 403)
                 r = hc.request(port, "GET", "/hub/healthz")
                 self.assertEqual(r.status, 200)
@@ -942,7 +1068,7 @@ class TheStart(unittest.TestCase):
 
     def test_a_hub_with_a_good_key_opens_the_door_for_the_operator_and_says_nothing(self):
         port, log_path = self.run_hub({"ANTS_HUB_TEST_LOGIN": "1", "ANTS_HUB_OWNER": OWNER, "ANTS_HUB_ADMIN_GATE_SECRET": SECRET})
-        r = hc.request(port, "GET", "/hub/admin/gate", [("X-Hub-Test-Login", "%s:%s" % (OWNER, NAMES[OWNER]))])
+        r = hc.request(port, "GET", "/hub/admin/gate", [("X-Client-Address", "198.51.100.9"), ("X-Hub-Test-Login", "%s:%s" % (OWNER, NAMES[OWNER]))])
         self.assertEqual(r.status, 204)
         self.assertEqual(verify(r.get("x-ants-admin-pass"), SECRET, time.time())["role"], "owner")
         text = read_text(log_path)

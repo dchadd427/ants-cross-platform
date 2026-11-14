@@ -172,9 +172,7 @@ class Hub:
             request = http.parse_head(head)
             if request.path == HEALTH_PATH and request.method == "GET":
                 return writer.write(http.response(200, {"ok": True}))
-            if request.split()[0].startswith(admindoor.ROUTE_PREFIX):
-                self.pending -= 1                                     # (as for a page of the login: the handshake is over, and this one may wait for Discord)
-                pending = False
+            if request.split()[0].startswith(admindoor.ROUTE_PREFIX):             # (the place of the connection is kept until it is answered: a body that is promised and not sent holds a place, not a free one)
                 return await self.admin_page(request, reader, writer)
             route = self.routes.get(request.split()[0])
             if route is None and request.split()[0].startswith(PICTURE_PREFIX):

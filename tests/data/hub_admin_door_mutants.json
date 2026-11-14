@@ -7,8 +7,8 @@
   {
    "id": "a_moderator_is_let_in",
    "file": "hub/admindoor.py",
-   "old": "return (\"ok\", who, \"admin\") if role == rolesmod.ADMIN else (\"no\", who, None)",
-   "new": "return (\"ok\", who, \"admin\") if role in (rolesmod.ADMIN, rolesmod.MOD) else (\"no\", who, None)",
+   "old": "        if roles.role_of(account) == rolesmod.ADMIN and roles.fresh([account]):\n            return \"ok\", who, \"admin\"",
+   "new": "        if roles.role_of(account) in (rolesmod.ADMIN, rolesmod.MOD) and roles.fresh([account]):\n            return \"ok\", who, \"admin\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   },
   {
@@ -21,22 +21,15 @@
   {
    "id": "an_unknown_role_is_not_looked_up",
    "file": "hub/admindoor.py",
-   "old": "                await roles.confirm([who.account_id])                # (one urgent lookup",
-   "new": "                pass                                                  # (one urgent lookup",
-   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
-  },
-  {
-   "id": "every_call_looks_up_again",
-   "file": "hub/admindoor.py",
-   "old": "if role != rolesmod.ADMIN and self.lookups.take(self.hub.chat.key_of(who.account_id), self.hub.clock()):",
-   "new": "if self.lookups.take(self.hub.chat.key_of(who.account_id), self.hub.clock()):",
+   "old": "            await self.look(roles, account, key)",
+   "new": "            pass",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   },
   {
    "id": "the_lookups_of_one_account_are_not_limited",
    "file": "hub/admindoor.py",
-   "old": "if role != rolesmod.ADMIN and self.lookups.take(self.hub.chat.key_of(who.account_id), self.hub.clock()):",
-   "new": "if role != rolesmod.ADMIN:",
+   "old": "if not self.lookups.take(key, self.hub.clock()) or not self.budget.take(self.hub.clock()):",
+   "new": "if not self.budget.take(self.hub.clock()):",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   },
   {
@@ -49,8 +42,8 @@
   {
    "id": "a_failed_lookup_is_an_administrator",
    "file": "hub/admindoor.py",
-   "old": "return (\"ok\", who, \"admin\") if role == rolesmod.ADMIN else (\"no\", who, None)",
-   "new": "return (\"ok\", who, \"admin\")",
+   "old": "        return \"no\", who, None",
+   "new": "        return \"ok\", who, \"admin\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   },
   {
@@ -175,8 +168,8 @@
   {
    "id": "a_get_may_have_a_body",
    "file": "hub/admindoor.py",
-   "old": "            if length != \"0\":\n                raise Refused(self.fail(400, \"body\"))\n            return None",
-   "new": "            return None",
+   "old": "        if not post:\n            if length != \"0\":\n                raise Refused(self.fail(400, \"body\"))\n            return 0",
+   "new": "        if not post:\n            return 0",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   },
   {
@@ -378,8 +371,8 @@
   {
    "id": "the_list_of_bans_gives_the_id",
    "file": "hub/admindoor.py",
-   "old": "out = [{\"ref\": chat.ref(a), \"name\": names.get(chat.ref(a), n), \"at\": at, \"by\"",
-   "new": "out = [{\"ref\": a, \"name\": names.get(chat.ref(a), n), \"at\": at, \"by\"",
+   "old": "out = [{\"ref\": chat.ref(a), \"name\": untyped_id(names.get(chat.ref(a), n)), \"at\": at,",
+   "new": "out = [{\"ref\": a, \"name\": untyped_id(names.get(chat.ref(a), n)), \"at\": at,",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   },
   {
@@ -413,7 +406,7 @@
   {
    "id": "a_bad_key_stops_the_hub",
    "file": "hub/config.py",
-   "old": "    cfg.admin_gate_secret = gate if GATE_SECRET.match(gate) else \"\"",
+   "old": "    cfg.admin_gate_secret = gate if GATE_SECRET.match(gate) and len(set(gate)) >= GATE_DISTINCT else \"\"",
    "new": "    if gate and not GATE_SECRET.match(gate):\n        raise ConfigError(\"ANTS_HUB_ADMIN_GATE_SECRET is not good\")\n    cfg.admin_gate_secret = gate",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   },
@@ -450,6 +443,104 @@
    "file": "hub/admin.py",
    "old": "    if not ids:\n        return None, \"a number is not an account here",
    "new": "    if False:\n        return None, \"a number is not an account here",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_door_believes_the_roles_grace_and_not_a_minute",
+   "file": "hub/admindoor.py",
+   "old": "        if not (roles.role_of(account) == rolesmod.ADMIN and roles.fresh([account])):\n            await self.look(roles, account, key)                     # (the usual belief of the roles is not enough here: a pass is believed by the game server for a minute, so the answer must be a minute old at the most)\n        if roles.role_of(account) == rolesmod.ADMIN and roles.fresh([account]):\n            return \"ok\", who, \"admin\"",
+   "new": "        if roles.role_of(account) != rolesmod.ADMIN:\n            await self.look(roles, account, key)\n        if roles.role_of(account) == rolesmod.ADMIN:\n            return \"ok\", who, \"admin\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "an_answer_that_is_old_is_not_asked_for_again",
+   "file": "hub/admindoor.py",
+   "old": "        if not (roles.role_of(account) == rolesmod.ADMIN and roles.fresh([account])):",
+   "new": "        if roles.role_of(account) != rolesmod.ADMIN:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_door_has_no_share_of_its_own",
+   "file": "hub/admindoor.py",
+   "old": "if not self.lookups.take(key, self.hub.clock()) or not self.budget.take(self.hub.clock()):",
+   "new": "if not self.lookups.take(key, self.hub.clock()):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_door_spends_the_actions_share",
+   "file": "hub/admindoor.py",
+   "old": "            future = asyncio.get_running_loop().create_future()\n            roles.urgent.setdefault(account, []).append(future)\n            if roles.wake is not None:\n                roles.wake.set()\n            done, pending = await asyncio.wait([future], timeout=self.hub.limits.roles_urgent_seconds)\n            for f in pending:\n                f.cancel()",
+   "new": "            await roles.confirm([account])",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "one_repeated_character_is_a_key",
+   "file": "hub/config.py",
+   "old": "len(set(gate)) >= GATE_DISTINCT",
+   "new": "len(set(gate)) >= 1",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_pass_is_signed_with_the_secret_itself",
+   "file": "hub/admindoor.py",
+   "old": "self.key = hmac.new(secret, b\"ants-admin-pass-v1\", hashlib.sha256).digest() if secret else None",
+   "new": "self.key = secret",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_token_has_the_passs_key",
+   "file": "hub/admindoor.py",
+   "old": "self.csrf_key = hmac.new(secret, b\"ants-admin-csrf-v1\", hashlib.sha256).digest() if secret else None",
+   "new": "self.csrf_key = self.key",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_gate_without_an_address_is_answered",
+   "file": "hub/admindoor.py",
+   "old": "if path == GATE_PATH and limitmod.address_key(",
+   "new": "if False and path == GATE_PATH and limitmod.address_key(",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_gate_without_an_address_is_said_every_time",
+   "file": "hub/admindoor.py",
+   "old": "        if now >= self.next_address_log:",
+   "new": "        if True:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_body_is_read_before_the_login",
+   "file": "hub/admindoor.py",
+   "old": "        if not self.same_origin(request, post):\n            return self.fail(403, \"origin\")",
+   "new": "        if post:\n            await asyncio.wait_for(reader.readexactly(length), self.hub.limits.handshake_seconds)\n        if not self.same_origin(request, post):\n            return self.fail(403, \"origin\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_place_is_given_back_before_the_body",
+   "file": "hub/server.py",
+   "old": "                return await self.admin_page(request, reader, writer)",
+   "new": "                self.pending -= 1\n                pending = False\n                return await self.admin_page(request, reader, writer)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "an_empty_query_is_no_query",
+   "file": "hub/admindoor.py",
+   "old": "if \"?\" in request.path:",
+   "new": "if request.split()[1]:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_key_twice_in_the_body_is_taken",
+   "file": "hub/admindoor.py",
+   "old": ", object_pairs_hook=no_duplicates",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "an_id_shaped_name_is_told",
+   "file": "hub/admindoor.py",
+   "old": "return \"\" if ID_SHAPED.match(name or \"\") else name",
+   "new": "return name",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   }
  ]

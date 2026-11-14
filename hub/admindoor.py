@@ -10,9 +10,11 @@ THE rule (`Door.decide`, used by every one of the above): the visitor's hub logi
 once, urgently, and a lookup that does not answer means no). A moderator may not. Unknown, stale, failed: not allowed. The door is shut for everybody when `ANTS_HUB_ADMIN_GATE_SECRET` is
 absent, shorter than 32 characters or not printable (the hub still starts; the start line says so).
 
+The key of the pass is HMAC-SHA-256(secret, "ants-admin-pass-v1") and the key of the page's token is HMAC-SHA-256(secret, "ants-admin-csrf-v1") (the secret with surrounding whitespace removed), so the two never share a key.
+
 The pass: `v1.<payload>.<mac>`; payload = base64url (no padding) of the JSON `{"exp", "name", "nonce", "ref", "role"}` (exp: seconds since 1970, 60 seconds after it was made; name: the Discord
-username; nonce: 16 hex characters; ref: the account's reference, hub/pseudo.py; role: `admin` or `owner`); mac = hex HMAC-SHA-256, under the secret, of the ASCII text `v1.<payload>`. The game
-server holds the same secret as ANTS_ADMIN_GATE_SECRET and checks the mac, then exp, then role. The token of the page's POSTs is the hex HMAC-SHA-256, under the same secret, of
+username; nonce: 16 hex characters; ref: the account's reference, hub/pseudo.py; role: `admin` or `owner`); mac = hex HMAC-SHA-256, under the pass key, of the ASCII text `v1.<payload>`. The game
+server holds the same secret as ANTS_ADMIN_GATE_SECRET and checks the mac, then exp, then role. The token of the page's POSTs is the hex HMAC-SHA-256, under the token's key, of
 `csrf1`, the login's key and the account's reference: it changes with every login and is never in a URL.
 
 An account is addressed by username or reference only (never an id: `admin.resolve(..., ids=False)`), every change is written to the moderators' log with the actor's reference, an action needs the fresh
@@ -48,6 +50,7 @@ WRITES = frozenset(("ban", "unban", "mute", "unmute", "nopic", "pic", "del"))
 TABLE_WORD = {"nopic": "ban", "pic": "unban"}      # (the table of the chat's powers has the commands of the chat: a picture's block and its lift need what a ban and its lift need)
 ACCOUNT_ARGUMENT = re.compile(r"[!-~]{1,40}\Z")
 DIGITS = re.compile(r"[0-9]{1,18}\Z")
+ID_SHAPED = re.compile(r"[0-9]{15,20}\Z")
 
 
 def b64(raw):
@@ -64,6 +67,19 @@ def warn(cfg, log):
     """One line at the start when the door is shut for want of a good key (never the key, nor how long it is)."""
     if not cfg.admin_gate_on:
         log.event("warning", what="admin_page_door_shut_" + ("secret_too_short_or_not_printable" if cfg.admin_gate_given else "no_secret_set"))
+
+
+def no_duplicates(pairs):
+    """A JSON object whose key comes twice is not one that the hub reads (another reader of the same text may take the first)."""
+    keys = [k for k, _ in pairs]
+    if len(set(keys)) != len(keys):
+        raise ValueError("duplicate key")
+    return dict(pairs)
+
+
+def untyped_id(name):
+    """The name of a row as an answer says it: a row of an older version or of the terminal may hold any text, and a text that is all digits and as long as an id is not told."""
+    return "" if ID_SHAPED.match(name or "") else name
 
 
 def by_name(store, by):
@@ -83,9 +99,13 @@ class Refused(Exception):
 class Door:
     def __init__(self, hub):
         self.hub = hub
-        self.key = hub.cfg.admin_gate_secret.encode("ascii") if hub.cfg.admin_gate_on else None
+        secret = hub.cfg.admin_gate_secret.encode("ascii") if hub.cfg.admin_gate_on else None
+        self.key = hmac.new(secret, b"ants-admin-pass-v1", hashlib.sha256).digest() if secret else None
+        self.csrf_key = hmac.new(secret, b"ants-admin-csrf-v1", hashlib.sha256).digest() if secret else None
         self.rate = limitmod.RateByAddress(hub.limits.admin_burst, hub.limits.admin_refill_seconds)
         self.lookups = limitmod.RateByAccount(hub.limits.admin_lookups_burst, hub.limits.admin_lookups_refill_seconds)
+        self.budget = limitmod.TokenBucket(hub.limits.admin_door_burst, hub.limits.admin_door_refill_seconds, hub.clock())      # (the door's own share of the lookups: the actions' share is not touched)
+        self.next_address_log = float("-inf")
 
     def forget_idle(self, now):
         self.rate.forget_idle(now)
@@ -106,20 +126,42 @@ class Door:
             return "login", None, None
         if self.is_owner(who.account_id):
             return "ok", who, "owner"
-        roles = self.hub.chat.roles
-        role = roles.role_of(who.account_id)
-        if role != rolesmod.ADMIN and self.lookups.take(self.hub.chat.key_of(who.account_id), self.hub.clock()):
-            try:
-                await roles.confirm([who.account_id])                # (one urgent lookup, for a role that is not known or ran out; what it says is read again below, from the answer itself)
-            except Exception as e:
-                self.hub.log.event("error", kind=type(e).__name__, where="admin")
-            role = roles.role_of(who.account_id)
-        return ("ok", who, "admin") if role == rolesmod.ADMIN else ("no", who, None)
+        roles, account = self.hub.chat.roles, who.account_id
+        key = self.hub.chat.key_of(account)
+        if not (roles.role_of(account) == rolesmod.ADMIN and roles.fresh([account])):
+            await self.look(roles, account, key)                     # (the usual belief of the roles is not enough here: a pass is believed by the game server for a minute, so the answer must be a minute old at the most)
+        if roles.role_of(account) == rolesmod.ADMIN and roles.fresh([account]):
+            return "ok", who, "admin"
+        return "no", who, None
+
+    async def look(self, roles, account, key):
+        """One urgent lookup of the account's role, from the door's own share (never the actions' `afford`, which the moderators' commands live on), once in a while for each account and for the door
+        as a whole. An answer that is a minute old at the most is not asked for again (it says what it says). A lookup that does not answer in time says nothing: the account is then not let in."""
+        if roles.fresh([account]) and getattr(roles, "on", False):
+            return
+        if not self.lookups.take(key, self.hub.clock()) or not self.budget.take(self.hub.clock()):
+            return
+        try:
+            if getattr(roles, "task", None) is None or roles.clock() < roles.pause_until:
+                return
+            if account not in roles.entries:
+                if len(roles.entries) >= roles.limits.roles_entries_max and not roles.evict():
+                    return
+                roles.entries[account] = rolesmod.Entry(roles.clock())
+            future = asyncio.get_running_loop().create_future()
+            roles.urgent.setdefault(account, []).append(future)
+            if roles.wake is not None:
+                roles.wake.set()
+            done, pending = await asyncio.wait([future], timeout=self.hub.limits.roles_urgent_seconds)
+            for f in pending:
+                f.cancel()
+        except Exception as e:
+            self.hub.log.event("error", kind=type(e).__name__, where="admin")
 
     def token(self, who):
         """The token of the page's POSTs for this login."""
         message = b"csrf1\0" + (who.session or "").encode("ascii") + b"\0" + self.hub.chat.ref(who.account_id).encode("ascii")
-        return hmac.new(self.key, message, hashlib.sha256).hexdigest()
+        return hmac.new(self.csrf_key, message, hashlib.sha256).hexdigest()
 
     # ---- one request -------------------------------------------------------------------------------------------------------------------------
 
@@ -134,8 +176,11 @@ class Door:
             path = request.split()[0]
             if path != GATE_PATH and not (path.startswith(API_PREFIX) and path[len(API_PREFIX):] in READS | WRITES):
                 return self.fail(404, "not_found")
-            if request.split()[1]:
+            if "?" in request.path:                                  # (no query at all: not even an empty one)
                 return self.fail(404, "not_found")
+            if path == GATE_PATH and limitmod.address_key(request.headers.get("x-client-address"), "") == "unknown":
+                self.address_missing()                              # (the gate is asked once for every request of the page: with no address of the visitor all of them would share one bucket)
+                return self.fail(400, "address")
             if not self.rate.take(address, self.hub.clock()):
                 return self.fail(429, "rate", {"Retry-After": "5"})
             if path == GATE_PATH:
@@ -144,8 +189,8 @@ class Door:
             post = name in WRITES
             if request.method != ("POST" if post else "GET"):
                 return self.fail(405, "method", {"Allow": "POST" if post else "GET"})
-            body = await self.body(request, reader, post)
-            return await self.api(request, name, body)
+            length = self.framing(request, post)
+            return await self.api(request, name, reader, length)
         except Refused as e:
             return e.answer
         except (asyncio.IncompleteReadError, asyncio.TimeoutError):
@@ -157,8 +202,15 @@ class Door:
             self.hub.log.event("error", kind=type(e).__name__, where="admin")
             return self.fail(500, "error")
 
-    async def body(self, request, reader, post):
-        """The body of a POST (JSON text), None for a GET; Refused when the framing is wrong: a GET has no body, a POST has a Content-Length of 1 to MAX_BODY and no Transfer-Encoding."""
+    def address_missing(self):
+        """The gate was asked with no address of the visitor (X-Client-Address): one line in the log a minute at the most."""
+        now = self.hub.clock()
+        if now >= self.next_address_log:
+            self.next_address_log = now + 60.0
+            self.hub.log.event("warning", what="admin_gate_asked_without_x_client_address")
+
+    def framing(self, request, post):
+        """The length of the body that a request promises: 0 for a GET, which has none; for a POST 1 to MAX_BODY, with no Transfer-Encoding. Refused (Refused) otherwise. Nothing is read."""
         h = request.headers
         if "transfer-encoding" in h:
             raise Refused(self.fail(400, "body"))
@@ -166,12 +218,12 @@ class Door:
         if not post:
             if length != "0":
                 raise Refused(self.fail(400, "body"))
-            return None
+            return 0
         if not DIGITS.match(length) or int(length) < 1:
             raise Refused(self.fail(400, "body"))
         if int(length) > MAX_BODY:
             raise Refused(self.fail(413, "body"))
-        return await asyncio.wait_for(reader.readexactly(int(length)), self.hub.limits.handshake_seconds)
+        return int(length)
 
     async def gate(self, request):
         if request.method != "GET":
@@ -197,7 +249,8 @@ class Door:
             return origin == self.hub.cfg.origin and bool(origin) and site == "same-origin"
         return (origin is None or (origin == self.hub.cfg.origin and bool(origin))) and site == "same-origin"
 
-    async def api(self, request, name, body):
+    async def api(self, request, name, reader, length):
+        """The cheap checks first (the site, the type, the login, the token), and the body of a POST is read only then, so that nobody who is not let in can make the hub wait for one."""
         post = name in WRITES
         h = request.headers
         if not self.same_origin(request, post):
@@ -212,6 +265,7 @@ class Door:
         if post and not (h.get(CSRF_HEADER) and hmac.compare_digest(h[CSRF_HEADER].encode("latin-1"), self.token(who).encode("ascii"))):
             return self.fail(403, "csrf")
         if post:
+            body = await asyncio.wait_for(reader.readexactly(length), self.hub.limits.handshake_seconds)
             return await self.act(who, role, name, body)
         return self.read(who, role, name)
 
@@ -227,12 +281,12 @@ class Door:
         if name == "bans":
             rows = list(reversed(store.bans()))
             names = store.usernames_by_reference({chat.ref(a) for a, _, _, _ in rows})
-            out = [{"ref": chat.ref(a), "name": names.get(chat.ref(a), n), "at": at, "by": by_name(store, by)} for a, n, at, by in rows]
+            out = [{"ref": chat.ref(a), "name": untyped_id(names.get(chat.ref(a), n)), "at": at, "by": by_name(store, by)} for a, n, at, by in rows]
             return http.response(200, {"bans": out, "untrusted": True, "untrusted_fields": ["name"]})
         if name == "mutes":
             rows = store.mutes()
             names = store.usernames_by_reference({chat.ref(a) for a, _, _, _ in rows})
-            out = [{"ref": chat.ref(a), "name": names.get(chat.ref(a), n), "until": until, "by": by_name(store, by)} for a, n, until, by in rows]
+            out = [{"ref": chat.ref(a), "name": untyped_id(names.get(chat.ref(a), n)), "until": until, "by": by_name(store, by)} for a, n, until, by in rows]
             return http.response(200, {"mutes": out, "untrusted": True, "untrusted_fields": ["name"]})
         if name == "hidden":
             blocked = sorted(r for r, state in store.picture_marks().items() if state == SHOW_BLOCKED)
@@ -260,7 +314,7 @@ class Door:
     def arguments(self, name, body):
         """The checked arguments of a change: (account text, minutes, line id), or None for a body that is not what the change takes (an object with exactly the right fields of the right types)."""
         try:
-            data = json.loads(body.decode("utf-8"), parse_constant=chatmod.Chat.refuse_constant)
+            data = json.loads(body.decode("utf-8"), parse_constant=chatmod.Chat.refuse_constant, object_pairs_hook=no_duplicates)
         except (ValueError, UnicodeDecodeError, RecursionError):
             return None
         if not isinstance(data, dict):
