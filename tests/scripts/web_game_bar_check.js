@@ -201,7 +201,7 @@ const active = (p) => p.evaluate(() => { const a = document.activeElement; retur
             expect('Esc closes the Menu', await menuOpen(p), false);
             await p.keyboard.up('Escape');
             expect('Esc: the game never hears it, down or up', (await log(p)).keys, []);
-            expect('Esc: the focus goes back to the Menu\'s button', await active(p), 'BUTTON');
+            expect('Esc: the focus goes to the game', await active(p), 'canvas');
             await reset(p);
             await focusGame(p);
             await p.keyboard.press('Escape');
@@ -319,6 +319,22 @@ const active = (p) => p.evaluate(() => { const a = document.activeElement; retur
             expect('a recording or a live view: Reload page reloads at once even if the game says it runs', [(await log(p)).reloads, await p.evaluate(() => !!document.querySelector('.gb-ask'))], [1, false]);
             await context.close();
         }
+        // ---- the Menu or the question closed any way: the game has its keys at once ----
+        {
+            const { context, p } = await open(browser, 1280, 800);
+            const game = async (label) => { await reset(p); await p.keyboard.press('k'); expect(label + ': the game has its keys, the focus is on the picture', [(await log(p)).keys, await active(p)], [['keydown:k', 'keypress:k', 'keyup:k'], 'canvas']); await reset(p); };
+            await openMenu(p); await p.click('.sbtn'); await game('the Menu closed by its own button');
+            await openMenu(p); await p.keyboard.press('Escape'); await game('the Menu closed by Esc');
+            await openMenu(p); await p.click('#canvas'); await game('the Menu closed by a press outside');
+            await openMenu(p); await p.keyboard.press('Tab'); await p.focus('.sbtn'); await p.keyboard.press('Enter'); await game('the Menu closed from the keyboard (Enter on its button)');
+            await p.evaluate(() => { window.__running = true; });
+            const card = async () => { await openMenu(p); await p.click('#sbm .gb-reload'); };
+            await card(); await p.click('.gb-ask .btn >> text=Cancel'); await game('the question closed by a press on Cancel');
+            await card(); await p.keyboard.press('Enter'); await game('the question closed by Enter on Cancel');
+            await card(); await p.keyboard.press('Escape'); await game('the question closed by Esc');
+            await card(); await p.mouse.click(5, 5); await game('the question closed by a press outside');
+            await context.close();
+        }
         // ---- the open Menu and a resize ----
         {
             const { context, p } = await open(browser, 390, 844);
@@ -328,6 +344,9 @@ const active = (p) => p.evaluate(() => { const a = document.activeElement; retur
             expect('a change of height alone (a phone\'s address bar) leaves the Menu open', await menuOpen(p), true);
             await p.evaluate(() => window.dispatchEvent(new Event('resize')));
             expect('the page\'s own resize leaves it open', await menuOpen(p), true);
+            await p.setViewportSize({ width: 390, height: 420 });
+            await p.waitForTimeout(300);
+            expect('a shorter window refits the Menu: its bottom is inside it', await p.evaluate(() => document.getElementById('sbm').getBoundingClientRect().bottom <= innerHeight), true);
             await p.setViewportSize({ width: 844, height: 390 });
             await p.waitForTimeout(300);
             expect('a new width (turning the phone) closes it', await menuOpen(p), false);

@@ -1,5 +1,4 @@
-/* The game page's rules for the bar at the top (web/site_nav.css is the site's; web/game_bar.js is the page's part of its script; docs/SITE_NAV.md "The game page"). The bar is as high as the header it replaces
-   (44 px buttons and the same room under it), so the picture, the touch buttons and the countdown button keep their places. */
+/* The game page's rules for the bar at the top (docs/SITE_NAV.md "The game page"): as high as the header it replaced, so the picture keeps its place. */
 header.sb { width: 100%; max-width: 1280px; min-height: 44px; margin: 0 0 18px; justify-content: flex-start; }
 @media (max-width: 700px) { header.sb { margin-bottom: 16px; } }
 @media (min-width: 701px) and (max-height: 520px) { header.sb { margin-bottom: 14px; } }
@@ -7,7 +6,7 @@ header.sb { width: 100%; max-width: 1280px; min-height: 44px; margin: 0 0 18px; 
 .sb .btn-text-short { display: none; }
 @media (max-width: 440px) { .sb .btn-text { display: none; } .sb .btn-text-short { display: inline; } }
 .sb [hidden] { display: none !important; }
-/* a recording or a live view: Home and All matches, the title, the tools, Fullscreen, Menu (the row of pages is not here). The buttons keep the sizes that this page's header had, so the picture keeps its size */
+/* a recording or a live view: the buttons keep the sizes that the header had */
 body.replay header.sb { min-height: 0; }
 body.replay header.sb nav, body.replay header.sb .sblive, body.replay header.sb .sbgrow { display: none; }
 body.replay header.sb .sbhome { display: inline-flex; }

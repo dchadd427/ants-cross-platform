@@ -1,90 +1,66 @@
-/* The game page's part of the bar at the top (the site's bar: web/site_nav.js builds the Menu, web/game_bar.css has the game page's own rules; docs/SITE_NAV.md "The game page"). Three jobs:
-   1. The links. While a match runs on this page or a room is joined, no link of the bar or of its Menu may lose it: Home asks first (the page's question) and Yes leaves the seat; every other link opens in a new
-      tab. Otherwise the links act as on any page.
-   2. The keys. The game takes every key (Enter is START on its setup screen). While the Menu is open or the focus is in the bar, the keys are the bar's: they are stopped at the document before the game sees
-      them, a key whose press the bar kept stays the bar's until its lift (a held key goes on repeating after the Menu has closed), Esc closes the Menu and does nothing in the game, Enter and Space press the
-      focused control, and a bare Shift, Ctrl, Alt or Meta goes on to the game (its window system counts what is held). A press with the pointer gives the focus back to the game.
-   3. The Menu's own lines, made each time it opens: a line that says what the links do while a match runs, "Copy link", "Download" and "Open another file" at the top for a recording on a narrow window (their
-      buttons are in the bar from 701 px up), and "Reload page" last among the small links.
-   4. "Reload page" asks first while a game is being played (a match on this device or online; not before a match, not in a recording or a live view): a small question in the site's style with Cancel focused.
-   The page calls AntsGameBar.start({ doc, win, busy, running, leave, ask, focus }) once: busy() says whether a match runs here or a room is joined, running() whether a match is being played, leave() lets go of the
-   seat, ask() is the question (true: leave), focus() gives the focus to the game. */
+/* The game page's part of the bar at the top (docs/SITE_NAV.md "The game page"; site_nav.js builds the Menu, game_bar.css has the rules). The page calls AntsGameBar.start({ doc, win, busy, running, leave, ask, focus }):
+   busy() is true while a match runs here or a room is joined, running() while a match is played, leave() lets go of the seat, ask() is the question (true: leave), focus() gives the focus to the game.
+   Links: while busy, Home asks first and every other link opens a new tab. Keys: while the Menu or the question is open or the focus is in the bar, no key reaches the game (a held key stays the bar's until its lift);
+   a closed Menu or question gives the focus back to the game. Menu lines: the note, a recording's tools, "Reload page" (it asks first while a game is played). */
 (function (root) {
     'use strict';
     var MODIFIER = /^(Shift|Control|Alt|AltGraph|Meta|OS|CapsLock|NumLock|ScrollLock|Fn)$/;
     function start(page) {
-        var d = page.doc, w = page.win, bar = d.querySelector('.sb'), btn = bar && bar.querySelector('.sbtn');
+        var d = page.doc, w = page.win, bar = d.querySelector('.sb'), btn = bar && bar.querySelector('.sbtn'), kept = {}, dialog = null;
         if (!btn) return null;
-        var kept = {}, dialog = null;
         function box() { return d.getElementById('sbm'); }
         function menuOpen() { var b = box(); return !!b && !b.hidden; }
         function inBar(n) { var b = box(); return !!n && n !== d.body && (bar.contains(n) || (!!b && b.contains(n))); }
         function mine() { return !!dialog || menuOpen() || inBar(d.activeElement); }
-        function own(e) { return !!e.target && e.target.id === 'settings-btn' && (e.key === 'Enter' || e.key === ' '); }      // (the gear presses itself: web/game_menu.js)
         function busy() { try { return !!page.busy(); } catch (err) { return false; } }
+        function playing() { try { return !d.body.classList.contains('replay') && !!page.running && !!page.running(); } catch (err) { return false; } }
         function focusGame() { try { if (page.focus) page.focus(); } catch (err) { /* nothing to focus */ } }
+        function make(tag, cls, text) { var n = d.createElement(tag); n.className = cls; n.textContent = text; return n; }
+        function closeAsk() { if (!dialog) return; dialog.parentNode.removeChild(dialog); dialog = null; focusGame(); }
 
-        // ---- the keys ----
         function onKey(e) {
-            var id = e.code || e.key;
+            var id = e.code || e.key, keys, at;
             if (kept[id] && !e.repeat) delete kept[id];                      // (a fresh press: the lift of the one before was lost)
-            else if (kept[id]) {                                              // (a repeat of a key that the bar kept: the game would take it for a new press, and a browser presses a focused button again)
-                e.stopPropagation();
-                if (e.key === 'Enter' || e.key === ' ') e.preventDefault();
-                return;
-            }
-            if (!mine() || MODIFIER.test(e.key) || own(e)) return;
+            else if (kept[id]) { e.stopPropagation(); if (e.key === 'Enter' || e.key === ' ') e.preventDefault(); return; }      // (a repeat: the game would take it for a press, a browser presses a focused button again)
+            if (!mine() || MODIFIER.test(e.key) || (e.target && e.target.id === 'settings-btn' && (e.key === 'Enter' || e.key === ' '))) return;      // (the gear presses itself: web/game_menu.js)
             if (!e.repeat) kept[id] = true;
             e.stopPropagation();
-            if (e.key === 'Escape') { e.preventDefault(); if (!e.repeat && dialog) closeAsk(true); else if (!e.repeat && menuOpen()) btn.click(); }
+            if (e.key === 'Escape') { e.preventDefault(); if (!e.repeat && dialog) closeAsk(); else if (!e.repeat && menuOpen()) btn.click(); }
             else if (e.key === 'Tab' && dialog) {                              // (the question keeps the focus between its two buttons)
-                var keys = dialog.querySelectorAll('button'), at = d.activeElement;
-                if (e.shiftKey && at === keys[0]) { e.preventDefault(); keys[keys.length - 1].focus(); } else if (!e.shiftKey && at === keys[keys.length - 1]) { e.preventDefault(); keys[0].focus(); }
+                keys = dialog.querySelectorAll('button'); at = d.activeElement;
+                if (e.shiftKey && at === keys[0]) { e.preventDefault(); keys[1].focus(); } else if (!e.shiftKey && at === keys[1]) { e.preventDefault(); keys[0].focus(); }
             }
         }
-        function onPress(e) { if (kept[e.code || e.key]) e.stopPropagation(); }
-        function onLift(e) {
+        d.addEventListener('keydown', onKey, true);
+        d.addEventListener('keypress', function (e) { if (kept[e.code || e.key]) e.stopPropagation(); }, true);
+        d.addEventListener('keyup', function (e) {
             var id = e.code || e.key;
             if (!kept[id]) return;
             delete kept[id];
             e.stopPropagation();                                               // (the game would cancel the lift, and a browser presses a focused button at Space's lift)
-        }
-        d.addEventListener('keydown', onKey, true);
-        d.addEventListener('keypress', onPress, true);
-        d.addEventListener('keyup', onLift, true);
+        }, true);
 
-        // ---- the links ----
-        d.addEventListener('click', function (e) {
-            var a = e.target && e.target.closest ? e.target.closest('a') : null, b = box();
-            if (!a || !(bar.contains(a) || (b && b.contains(a)))) return;
-            var href = a.getAttribute('href');
-            if (!href || href.charAt(0) === '#' || !busy()) return;
-            if (href === '/') {                                              // Home (the mark of live matches goes to the front page too)
-                if (!page.ask()) e.preventDefault();
-                else if (!(e.ctrlKey || e.metaKey || e.shiftKey || e.altKey)) page.leave();      // (a click that opens another tab leaves this one as it is)
-                return;
-            }
-            if (a.getAttribute('target') === '_blank' || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button) return;
+        d.addEventListener('click', function (e) {                             // the links
+            var a = e.target && e.target.closest ? e.target.closest('a') : null, b = box(), href = a && a.getAttribute('href'), modified = e.ctrlKey || e.metaKey || e.shiftKey || e.altKey;
+            if (!a || !(bar.contains(a) || (b && b.contains(a))) || !href || href.charAt(0) === '#' || !busy()) return;
+            if (href === '/') { if (!page.ask()) e.preventDefault(); else if (!modified) page.leave(); return; }      // (Home, and the mark of live matches: a click for another tab keeps the seat)
+            if (a.getAttribute('target') === '_blank' || modified || e.button) return;
             e.preventDefault();
             try { w.open(href, '_blank', 'noopener,noreferrer'); } catch (err) { /* a blocked window: nothing opens, the match goes on */ }
         }, true);
-
-        // A press with the pointer gives the focus back to the game (a key on a focused button would be the bar's). The Menu's button keeps it (the Menu is open and has it); the gear gives it back itself.
-        d.addEventListener('click', function (e) {
-            if (!(e.detail > 0) || !e.target || !e.target.closest) return;
-            var c = e.target.closest('.sb button, .sb a');
-            if (c && c !== btn && !(c.classList && c.classList.contains('gm-top'))) focusGame();
+        d.addEventListener('click', function (e) {                             // a press with the pointer gives the focus back to the game (the Menu's button and the gear see to themselves)
+            var c = e.detail > 0 && e.target && e.target.closest ? e.target.closest('.sb button, .sb a') : null;
+            if (c && c !== btn && !c.classList.contains('gm-top')) focusGame();
         });
 
-        // ---- the Menu's own lines ----
-        function make(tag, cls, text) { var n = d.createElement(tag); n.className = cls; n.textContent = text; return n; }
-        function playing() { try { return !d.body.classList.contains('replay') && !!page.running && !!page.running(); } catch (err) { return false; } }
-        function closeAsk(toBar) {
-            if (!dialog) return;
-            dialog.parentNode.removeChild(dialog);
-            dialog = null;
-            if (toBar) btn.focus(); else focusGame();
+        function action(cls, text, run) {
+            var a = make('a', 'gb-x ' + cls, text);
+            a.setAttribute('href', '#');
+            a.setAttribute('role', 'button');
+            a.addEventListener('click', function (e) { e.preventDefault(); if (menuOpen()) btn.click(); run(); });
+            return a;
         }
+        function press(id) { return function () { var n = id === 'dl' ? bar.querySelector('[data-dl]') : d.getElementById(id); if (n) n.click(); }; }
         function askReload() {
             var card = make('div', 'gb-card', ''), row = make('div', 'gb-btns', ''), no = make('button', 'btn', 'Cancel'), yes = make('button', 'btn', 'Reload');
             dialog = make('div', 'gb-ask', '');
@@ -93,9 +69,9 @@
             dialog.setAttribute('aria-label', 'Reload the page?');
             card.appendChild(make('p', '', 'Reload the page? A game against the computer on this device will end; an online match comes back by itself.'));
             no.type = yes.type = 'button';
-            no.addEventListener('click', function (e) { closeAsk(!(e.detail > 0)); });
-            yes.addEventListener('click', function () { closeAsk(true); w.location.reload(); });
-            dialog.addEventListener('click', function (e) { if (e.target === dialog) closeAsk(false); });
+            no.addEventListener('click', closeAsk);
+            yes.addEventListener('click', function () { closeAsk(); w.location.reload(); });
+            dialog.addEventListener('click', function (e) { if (e.target === dialog) closeAsk(); });
             row.appendChild(no);
             row.appendChild(yes);
             card.appendChild(row);
@@ -103,37 +79,21 @@
             d.body.appendChild(dialog);
             no.focus();
         }
-        function action(cls, text, run) {
-            var a = make('a', 'gb-x ' + cls, text);
-            a.setAttribute('href', '#');
-            a.setAttribute('role', 'button');
-            a.addEventListener('click', function (e) {
-                e.preventDefault();
-                if (menuOpen()) btn.click();
-                run();
-                if (e.detail > 0 && !dialog) focusGame();      // (a question that the line asked has the focus)
-            });
-            return a;
-        }
-        function press(find) { return function () { var n = find(); if (n) n.click(); }; }
-        function lines() {
-            var b = box();
-            if (!b) return;
+        btn.addEventListener('click', function () {                            // the Menu's own lines, made at each opening
+            var b = box(), top = [], small, all, ref, i;
+            if (!menuOpen()) { focusGame(); return; }
             [].slice.call(b.querySelectorAll('.gb-x')).forEach(function (n) { n.parentNode.removeChild(n); });
-            var top = [];
             if (busy()) top.push(make('p', 'gb-x gb-note', 'A match is running here. Home asks first; the other links open in a new tab.'));
-            top.push(action('gb-own gb-copy', 'Copy link', press(function () { return d.getElementById('copy-btn'); })));
-            top.push(action('gb-own gb-dl', 'Download', press(function () { return bar.querySelector('[data-dl]'); })));
-            if (d.getElementById('own-more')) top.push(action('gb-own gb-file', 'Open another file', press(function () { return d.getElementById('own-more'); })));
-            var ref = b.firstChild;
+            top.push(action('gb-own gb-copy', 'Copy link', press('copy-btn')));
+            top.push(action('gb-own gb-dl', 'Download', press('dl')));
+            if (d.getElementById('own-more')) top.push(action('gb-own gb-file', 'Open another file', press('own-more')));
+            ref = b.firstChild;
             top.forEach(function (n) { b.insertBefore(n, ref); });
-            var small = b.querySelector('.sbsmall');
+            small = b.querySelector('.sbsmall');
             if (small) small.appendChild(action('gb-reload', 'Reload page', function () { if (playing()) askReload(); else w.location.reload(); }));
-            var all = b.querySelectorAll('a');
-            for (var i = 0; i < all.length; i++) if (all[i].offsetParent !== null) { all[i].focus(); break; }      // (the first line that shows: it may be the note, which takes no focus, or a line of a recording's)
-        }
-        btn.addEventListener('click', function () { if (menuOpen()) lines(); });
-        return { menuOpen: menuOpen };
+            all = b.querySelectorAll('a');
+            for (i = 0; i < all.length; i++) if (all[i].offsetParent !== null) { all[i].focus(); break; }      // (the first line that shows: the note takes no focus)
+        });
     }
     root.AntsGameBar = { start: start };
 })(window);

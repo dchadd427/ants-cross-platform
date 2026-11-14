@@ -52,12 +52,15 @@
         d.body.appendChild(box);
         paint();
     }
-    function open() {
-        if (!box) build();
-        if (bar.getAttribute('data-live') === 'menu') look();
+    function fit() {
         var top = Math.round(bar.getBoundingClientRect().bottom + 6);
         box.style.top = top + 'px';
         box.style.maxHeight = Math.max(160, (window.innerHeight || 0) - top - 10) + 'px';
+    }
+    function open() {
+        if (!box) build();
+        if (bar.getAttribute('data-live') === 'menu') look();
+        fit();
         box.hidden = false;
         openWidth = window.innerWidth;
         btn.setAttribute('aria-expanded', 'true');
@@ -72,7 +75,9 @@
     btn.addEventListener('click', function () { if (box && !box.hidden) close(true); else open(); });
     d.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(true); });
     d.addEventListener('click', function (e) { if (box && !box.hidden && !box.contains(e.target) && !btn.contains(e.target)) close(false); });
-    window.addEventListener('resize', function () { if (box && !box.hidden && window.innerWidth !== openWidth) close(false); });      // (a new width or a turn closes it; a change of height alone, as a phone's address bar makes, or the game page's own resize, does not)
+    window.addEventListener('resize', function () {      // (a new width or a turn closes it; a change of height alone, as a phone's address bar makes, or the game page's own resize, only fits it to the window again)
+        if (box && !box.hidden) { if (window.innerWidth !== openWidth) close(false); else fit(); }
+    });
     d.addEventListener('visibilitychange', function () { if (asked && d.visibilityState === 'visible') look(true); });
     box = null;
     if (bar.getAttribute('data-live') === 'now') look();
