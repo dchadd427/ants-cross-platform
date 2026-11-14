@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.16.5 - 2026-11-13 - A countdown card for solo play, computer players stay out of your base, Settings anywhere and no Live now page
+
+**For players:**
+- **A countdown card with a Fullscreen button when you play alone against computer players.** A server room with one person in it (with or without computer players) opens with the "Get ready. Fullscreen is one press away." card for 10 seconds, and a game on this computer does the same, showing the name you typed. Rooms with two or more people keep the 30-second countdown; recordings, live views and rejoins get no card. A server setting, --solo-countdown-seconds (default 10), sets the one-person time.
+- **Computer players leave your base alone.** They no longer walk into another player's base to defuse bombs or put out fire walls: a player's own walls and bombs at home are left to that player, an ally's hazards follow the same rule, and the last ants of a computer player stay home.
+- **The game's Settings work before a match too.** The gear opens a small panel with Fullscreen, Picture shape and Fullscreen mouse on the game's own screens. This corrects the v0.16.4 note: outside a match the gear was greyed out (its tip said "Not now"), and now it works anywhere. Held keys no longer reach the game when the panel is open.
+- **The Live now page is gone.** Running matches are listed on the front page with a Watch button; /live-now and /live.html lead there. While matches run, the top bar shows a small red "N live" mark that leads to the front page. The installed app's Live now shortcut is gone too.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.4 page or game still joins. Under the hood: several tests are steadier.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/fb6cf52c...12455ae5)
+
 ## v0.16.4 - 2026-11-13 - The phone chat box, Settings rows in the game, a new icon, no logo and faster site updates
 
 **For players:**
@@ -490,17 +502,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b9a0ab04...c66cf43e)
 
-## v0.12.123 - 2026-10-24 - The Map Maker draws each tile the way the game does
+## Older versions (v0.12.123 and before)
 
-**For players:**
-- **The Map Maker now draws each tile the way the game does.** A map keeps a list of names for its tiles, and the game draws the picture that the name says; the editor used to draw the picture of the tile's number. So a pile of jacks showed as a pink eraser and a purple ring as a yellow one on EatClanMap, and the same shift is in 121 library maps. They now look as they do in the game.
-- **A tile whose name is "." is not drawn, as in the game:** the ground there is black, and the flowers, grass and objects of such tiles are not in the picture (about 6,100 cells of 187 library maps). Only the picture changes: the maps, their files and the game are as they were.
-- The see-through picture of a tile you are about to put or a thing you pick up, and the before and after pictures of Fix edges, follow the same rule. Map Maker v1.5.6.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ac6454fd...b9a0ab04)
-
-## Older versions (v0.12.122 and before)
-
-Every release before v0.12.123, and the long notes of v0.12.122 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.124, and the long notes of v0.12.123 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
