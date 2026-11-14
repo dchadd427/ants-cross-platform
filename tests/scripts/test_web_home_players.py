@@ -159,6 +159,11 @@ class TheStyle(unittest.TestCase):
     def rule(self, selector):
         return next(body for sel, body in self.rules if sel.strip() == selector)
 
+    def test_the_role_is_the_color_of_the_name_red_for_an_administrator_yellow_for_a_moderator(self):
+        self.assertIn("color: #ff5f66;", self.rule(".pl-card.r-admin .pl-nm"))
+        self.assertIn("color: var(--gold);", self.rule(".pl-card.r-mod .pl-nm"))
+        self.assertNotIn("pl-badge", self.css)
+
     def test_the_panel_is_always_docked_a_column_of_homes_grid_or_the_phones_view(self):
         for name in ("WIDE", "docked(", "data-sheet", "pl-scrim", "pl-btn", "pl-bar", "pl-close", "tabbable"):
             self.assertNotIn(name, self.js, "there is no sheet, drawer or button to open the panel: " + name)
