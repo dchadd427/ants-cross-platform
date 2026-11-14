@@ -392,7 +392,7 @@ class TheWayIntoTheImage(unittest.TestCase):
 
     def test_the_ci_looks_for_the_pictures_the_font_the_scripts_and_the_stylesheet_in_the_image(self):
         ci = read(".github", "workflows", "ci.yml")
-        self.assertRegex(ci, r"ls -l index\.html play\.html lobby\.html matches\.html match\.html live\.html matches\.css history_page\.js replay_stats\.css replay_page\.js [^\n]*front/logo\.png front/LibreFranklin-Medium\.ttf front/ants\.png front/lobby_rules\.js front/lobby_net\.js front/lobby_chat\.js front/lobby_chat\.css front/map_picker\.css front/classic\.css")
+        self.assertRegex(ci, r"ls -l index\.html play\.html lobby\.html matches\.html match\.html matches\.css history_page\.js replay_stats\.css replay_page\.js [^\n]*front/logo\.png front/LibreFranklin-Medium\.ttf front/ants\.png front/lobby_rules\.js front/lobby_net\.js front/lobby_chat\.js front/lobby_chat\.css front/map_picker\.css front/classic\.css")
 
     def test_git_does_not_ignore_the_pictures(self):
         ignore = read(".gitignore")
@@ -757,7 +757,7 @@ class ThePageUsesTheArt(unittest.TestCase):
     def test_every_picture_that_the_page_names_is_in_the_folder_and_every_picture_is_used(self):
         named = set(re.findall(r"front/([\w.-]+\.(?:png|ttf))", self.page))                 # the markup and the style name them; the script builds preview_<map>.png from a map's key
         previews = set("preview_%s.png" % key for key in MAP_KEYS)
-        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt"} - set(STYLE_FILES) - set(LOBBY_STYLES) - set(SCRIPT_FILES) - set(UNLOADED_SCRIPTS) - set(MAPMAKER_FILES) - set(MAPMAKER_LAZY) - set(SUBMIT_LAZY) - set(PLAY_LAZY) - set(CONVERT_LAZY) - set(ANTS_LAZY) - set(PICKUP_LAZY) - set(GAME_SCRIPTS)         # (the stylesheet is the other pages': tests/scripts/test_web_pages_classic.py; the lobby's own are tested with the pieces that they style; the scripts are not pictures)
+        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt", "logo.png"} - set(STYLE_FILES) - set(LOBBY_STYLES) - set(SCRIPT_FILES) - set(UNLOADED_SCRIPTS) - set(MAPMAKER_FILES) - set(MAPMAKER_LAZY) - set(SUBMIT_LAZY) - set(PLAY_LAZY) - set(CONVERT_LAZY) - set(ANTS_LAZY) - set(PICKUP_LAZY) - set(GAME_SCRIPTS)         # (the stylesheet is the other pages': tests/scripts/test_web_pages_classic.py; the lobby's own are tested with the pieces that they style; the scripts are not pictures)
         self.assertEqual(named - in_folder, set(), "named but not in web/front/")
         self.assertEqual(in_folder - named - previews, set(), "in web/front/ but not used by the page")
         self.assertIn("'front/preview_' + side.mapKey + '.png'", self.page)
@@ -765,7 +765,7 @@ class ThePageUsesTheArt(unittest.TestCase):
     def test_every_img_has_the_size_of_its_file(self):
         tags = [tag for tag in re.findall(r"<img [^>]*>", self.page) if COFFEE_IMAGE not in tag]               # (the pictures of web/front/; the coffee button is checked with the links that leave the page)
         sources = sorted(re.search(r'src="front/([^"?]+)', tag).group(1) for tag in tags)
-        self.assertEqual(sources, ["logo.png", "preview_treasure.png", "qh_power.png", "qh_quickhelp.png"])      # (the logo, the map's picture and the two help sheets; the ants are not <img>: the style draws them from ants.png, TheRosterAnts)
+        self.assertEqual(sources, ["preview_treasure.png", "qh_power.png", "qh_quickhelp.png"])      # (no logo: the page draws none; the map's picture and the two help sheets; the ants are not <img>: the style draws them from ants.png, TheRosterAnts)
         for tag in tags:
             source = re.search(r'src="front/([^"?]+)"', tag).group(1)                      # (no ?v= on these: a picture that changes is a new file name or a new page)
             width = int(re.search(r'width="(\d+)"', tag).group(1))
@@ -834,7 +834,7 @@ class ThePageUsesTheArt(unittest.TestCase):
         lazy = set(re.search(r'src="front/([^"]+)"', t).group(1) for t in tags if 'loading="lazy"' in t)
         at_once = set(re.search(r'src="front/([^"]+)"', t).group(1) for t in tags if 'loading="lazy"' not in t)
         self.assertEqual(lazy, {"qh_quickhelp.png", "qh_power.png"})                       # the two help sheets (behind "How it works")
-        self.assertEqual(at_once, {"logo.png", "preview_treasure.png"})                    # the logo and the map are on the screen at once
+        self.assertEqual(at_once, {"preview_treasure.png"})                    # the map is on the screen at once, and the page downloads no logo
         for tag in tags:
             if 'loading="lazy"' in tag:
                 self.assertIn('decoding="async"', tag)

@@ -88,6 +88,7 @@ bool Application::start_game(const std::string& map_path) {
     if (!load_match(map_path, config_.random_seed, roster, map_select_.is_fog_of_war_enabled(), config_.game_mode)) return false;
     apply_team_names(config_.bots.empty() ? config_.team_names : local_team_names(), roster);
     enter_match();
+    if (config_.start_card_seconds > 0 && !network_active() && !replay_mode_) begin_local_countdown(roster, config_.start_card_seconds);
     const bool teams_made = form_start_teams();                       // --teams: the teams are made before the first tick (the dialog of the start is up)
     use_local_sink();
     begin_local_recording(config_.random_seed, teams_made);
@@ -165,6 +166,7 @@ void Application::enter_match(bool rejoin) {
     tick_accumulator_ = 0.0f;                                               // the dialog and the match are counted from now
     start_dialog_clock_ms_ = 0.0;
     countdown_deadline_ms_ = -1.0;                                           // (net_begin_match starts the countdown card after this)
+    local_countdown_ms_ = -1;                                                // (so does start_game, for a game on this computer)
     countdown_status_shown_ = -1;
     scorecard_.hide();
     match_over_handled_ = false;

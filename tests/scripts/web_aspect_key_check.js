@@ -419,7 +419,7 @@ try {
         const plain = runShell(shellPath, '', {}, { ready: false, module: () => ({ _ants_set_aspect() { return 1; } }) });
         plain.args.unshift('./this.program');
         plain.press('4:3');
-        expect('shell.html selector, the program name in front of the arguments: the option still gets the new shape', plain.args.join(' ').slice(-24), './this.program --aspect 4:3'.slice(-24));
+        expect('shell.html selector, the program name in front of the arguments: the option still gets the new shape', plain.args.join(' '), './this.program --start-card-seconds 10 --aspect 4:3');       // (an address with nothing in it is the game's setup screen: a game on this computer, which has the card's seconds)
     }
     for (const [what, module] of [['a game without the export', () => ({})], ['a game whose export throws', () => ({ _ants_set_aspect() { throw new Error('the game is gone'); } })], ['no Module at all', () => undefined]]) {
         const r = runShell(shellPath, '?join=/ws&room=abc&seat=1', {}, { ready: true, module });

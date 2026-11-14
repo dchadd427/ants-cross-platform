@@ -541,14 +541,15 @@ jobs:
       - uses: actions/checkout@v7
 
       # The Docker layer cache: a buildx builder of its own (the default builder cannot keep a cache in a folder) with the cache in a folder that actions/cache keeps. The key is a hash of the files that
-      # the Dockerfile copies before the compile (a run with the same files finds the cache and has nothing to save; another one starts from the latest older cache and saves its own). The image is
-      # the same as `docker build` makes: only layers whose inputs are the same are taken from the cache.
+      # the compile layers read (the Dockerfile, the build files and the sources; a change of the pages, VERSION, web/shell.html or Original-Ants/ does not change it, because the Dockerfile copies them
+      # after the compile). A run with the same files finds the cache and has nothing to save; another one starts from the latest older cache and saves its own. The BuildKit cache mounts of the
+      # Dockerfile (ccache) are not part of this cache: they are empty in every run here. The image is the same as `docker build` makes: only layers whose inputs are the same are taken from the cache.
       # The builder image is pinned to a release (the default is a moving tag).
       - name: Restore the Docker layer cache of the web image
         uses: actions/cache@v6
         with:
           path: /tmp/docker-cache/web
-          key: docker-web-${{ hashFiles('Dockerfile', '.dockerignore', 'CMakeLists.txt', 'VERSION', 'cmake/**', 'include/**', 'src/**', 'web/**', 'Original-Ants/**') }}
+          key: docker-web-${{ hashFiles('Dockerfile', '.dockerignore', 'docker/emsdk_warm.cpp', 'CMakeLists.txt', 'cmake/**', 'include/**', 'src/**') }}
           restore-keys: docker-web-
 
       - name: Create the buildx builder
@@ -565,8 +566,8 @@ jobs:
       - name: Check the image (nginx accepts its configuration, the game's files are in it, the page names the version and the build)
         run: |
           docker run --rm ants-beta nginx -t
-          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html play.html lobby.html matches.html match.html live.html matches.css history_page.js replay_stats.css replay_page.js map_files.js index.js index.wasm index.data match_stats.js match_stats.css countdown_button.js changelog.html site_nav.css site_nav.js rejoin_key.js death_map.js death_map.css front/logo.png front/LibreFranklin-Medium.ttf front/ants.png front/lobby_rules.js front/lobby_net.js front/lobby_chat.js front/lobby_chat.css front/map_picker.css front/classic.css front/rematch.js front/rematch.css front/game_modes.js front/game_type.js front/game_type.css mapmaker.html front/mapmaker.css front/mapmaker_file.js front/mapmaker_tiles.js front/mapmaker_solid.js front/mapmaker_palette.js front/mapmaker_edit.js front/mapmaker_blocks.js front/mapmaker_objects.js front/mapmaker_view.js front/mapmaker_sizes.js front/mapmaker_checks.js front/mapmaker_dialog.js front/mapmaker_props.js front/mapmaker_crop.js front/mapmaker_convert.js front/mapmaker_minimap.js front/mapmaker_canvas.js front/mapmaker_tools.js front/mapmaker_app.js front/mapmaker_ground.js front/mapmaker_sprites.js front/mapmaker_edges.js front/mapmaker_ants.js front/mapmaker_ants.css front/mapmaker_pickup.js front/mapmaker_pickup.css front/mapmaker_play.js front/mapmaker_play.css front/mapmaker_store.js front/mapmaker_mine.js front/mapmaker_submit.js front/test_game.js manifest.webmanifest app/icon-192.png app/icon-512.png app/icon-maskable-512.png app/apple-touch-icon.png home/home.js home/home.css home/chat.js home/chat.css home/games.js home/games.css home/players.js home/players.css home/talk.js home/talk.css home/vp.js mapmaker_atlas/atlas.json mapmaker_atlas/ground.png mapmaker_atlas/objects.png asset_catalog/sprites/sprite_0726.png lvl_core.js lvl_core.wasm lvl_core_api.js shapes.js shape_picker.js admin.html admin.css admin_page.js game_menu.js game_menu.css && cmp index.html play.html'
-          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && for page in index.html play.html lobby.html; do grep -Eo "id=.?game-version.?>[^<]*<" $page && grep -Eo "id=.?game-build-id.?>[^<]*<" $page && grep -Eo "id=.?game-build-date.?>[^<]*<" $page && ! grep -q "@@" $page || exit 1; done; for page in matches.html match.html live.html legal.html mapmaker.html changelog.html; do grep -Eo "data-version=.v[0-9][^ >]*" $page && grep -Eo "data-build=.[^ >]*" $page && grep -Eo "data-built=.[^>]*PT" $page && ! grep -q "@@" $page || exit 1; done'
+          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html play.html lobby.html matches.html match.html matches.css history_page.js replay_stats.css replay_page.js map_files.js index.js index.wasm index.data match_stats.js match_stats.css countdown_button.js changelog.html site_nav.css site_nav.js rejoin_key.js death_map.js death_map.css front/logo.png front/LibreFranklin-Medium.ttf front/ants.png front/lobby_rules.js front/lobby_net.js front/lobby_chat.js front/lobby_chat.css front/map_picker.css front/classic.css front/rematch.js front/rematch.css front/game_modes.js front/game_type.js front/game_type.css mapmaker.html front/mapmaker.css front/mapmaker_file.js front/mapmaker_tiles.js front/mapmaker_solid.js front/mapmaker_palette.js front/mapmaker_edit.js front/mapmaker_blocks.js front/mapmaker_objects.js front/mapmaker_view.js front/mapmaker_sizes.js front/mapmaker_checks.js front/mapmaker_dialog.js front/mapmaker_props.js front/mapmaker_crop.js front/mapmaker_convert.js front/mapmaker_minimap.js front/mapmaker_canvas.js front/mapmaker_tools.js front/mapmaker_app.js front/mapmaker_ground.js front/mapmaker_sprites.js front/mapmaker_edges.js front/mapmaker_ants.js front/mapmaker_ants.css front/mapmaker_pickup.js front/mapmaker_pickup.css front/mapmaker_play.js front/mapmaker_play.css front/mapmaker_store.js front/mapmaker_mine.js front/mapmaker_submit.js front/test_game.js manifest.webmanifest app/icon-192.png app/icon-512.png app/icon-maskable-512.png app/apple-touch-icon.png home/home.js home/home.css home/chat.js home/chat.css home/games.js home/games.css home/players.js home/players.css home/talk.js home/talk.css home/vp.js mapmaker_atlas/atlas.json mapmaker_atlas/ground.png mapmaker_atlas/objects.png asset_catalog/sprites/sprite_0726.png lvl_core.js lvl_core.wasm lvl_core_api.js shapes.js shape_picker.js admin.html admin.css admin_page.js game_menu.js game_menu.css && cmp index.html play.html'
+          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && for page in index.html play.html lobby.html; do grep -Eo "id=.?game-version.?>[^<]*<" $page && grep -Eo "id=.?game-build-id.?>[^<]*<" $page && grep -Eo "id=.?game-build-date.?>[^<]*<" $page && ! grep -q "@@" $page || exit 1; done; for page in matches.html match.html legal.html mapmaker.html changelog.html; do grep -Eo "data-version=.v[0-9][^ >]*" $page && grep -Eo "data-build=.[^ >]*" $page && grep -Eo "data-built=.[^>]*PT" $page && ! grep -q "@@" $page || exit 1; done'
 
       # The map core's module (docs/MAP_FORMAT.md, "In the browser"), taken out of the image that was just built and run in node on the library's maps: its answers are the native core's, byte
       # for byte (tests/scripts/lvl_core_check.js; --require makes a missing module a failure). The sizes are in the log.
@@ -583,7 +584,7 @@ jobs:
           node tests/scripts/web_mapmaker_play_check.js --module lvl_core_from_image --require
           node tests/scripts/web_mapmaker_pickup_check.js --module lvl_core_from_image --require
 
-      # The routes of the site: "/" is the front page (the lobby) unless the address is a game's (?join=), /four.html redirects to "/" for good, /play is the game page, every page is asked for without .html (the old address is a 301 that keeps the query; /live-now is the matches page because /live is the server's list), and every html answer has
+      # The routes of the site: "/" is the front page (the lobby) unless the address is a game's (?join=), /four.html redirects to "/" for good, /play is the game page, every page is asked for without .html (the old address is a 301 that keeps the query; /live-now and /live.html are a 302 to "/"), and every html answer has
       # the revalidation headers (tests/scripts/web_routes_check.py). The game server is not needed: nginx starts without it.
       - name: Check the routes of the site (the front page, the game page's addresses, the redirect of the old Play online address, the six original maps)
         run: |
@@ -605,14 +606,15 @@ jobs:
       - uses: actions/checkout@v7
 
       # The Docker layer cache: a buildx builder of its own (the default builder cannot keep a cache in a folder) with the cache in a folder that actions/cache keeps. The key is a hash of the files that
-      # the Dockerfile copies before the compile (a run with the same files finds the cache and has nothing to save; another one starts from the latest older cache and saves its own). The image is
-      # the same as `docker build` makes: only layers whose inputs are the same are taken from the cache.
+      # the compile layers read (the Dockerfile, the build files, the sources and third_party/; a change of VERSION or of tools/ does not change it: the Dockerfile copies VERSION after the first compile and
+      # not tools/ at all, and the image has no page). A run with the same files finds the cache and has nothing to save; another one starts from the latest older cache and saves its own. The BuildKit cache mounts of the
+      # Dockerfile (ccache) are not part of this cache: they are empty in every run here. The image is the same as `docker build` makes: only layers whose inputs are the same are taken from the cache.
       # The builder image is pinned to a release (the default is a moving tag).
       - name: Restore the Docker layer cache of the server image
         uses: actions/cache@v6
         with:
           path: /tmp/docker-cache/server
-          key: docker-server-${{ hashFiles('Dockerfile.server', '.dockerignore', 'CMakeLists.txt', 'VERSION', 'cmake/**', 'include/**', 'src/**', 'third_party/**', 'tools/**') }}
+          key: docker-server-${{ hashFiles('Dockerfile.server', '.dockerignore', 'CMakeLists.txt', 'cmake/**', 'include/**', 'src/**', 'third_party/**') }}
           restore-keys: docker-server-
 
       - name: Create the buildx builder
@@ -670,3 +672,40 @@ jobs:
           echo "the job that decides what runs: $CHANGES; the web image job: $IMAGE; the server, hub and stack job: $STACK"
           [ "$CHANGES" = success ] || { echo "the job that decides what runs did not succeed: this check fails"; exit 1; }
           [ "$IMAGE" = success ] && [ "$STACK" = success ] || { echo "a web job failed, was cancelled or did not run: this check fails"; exit 1; }
+
+  # Not one of the five required checks: it runs for a pull request that changes a Dockerfile or this check, and proves that the images did not change with it (tools/image_files_diff.sh builds the web image and the
+  # game server's image from the pull request's base Dockerfiles and from this tree's, with one build context and one build id, and compares every file and the image's configuration, and for the web image what its
+  # link reads; about 25 minutes). It is behind no required name, on purpose: a pull request that adds a COPY line (a new page file) changes the images by design and would turn the name red, and the small
+  # job of a name can say "skipped is fine" only for all the jobs behind it together, never for one of them.
+  image_files:
+    name: Image files unchanged by a Dockerfile change
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Did a Dockerfile or this check change?
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          run=false
+          case "$EVENT" in
+            pull_request)
+              changed=$(git diff --name-only "$PR_BASE_SHA" HEAD -- Dockerfile Dockerfile.server docker/emsdk_warm.cpp tools/image_files_diff.sh tools/image_manifest.py tools/link_inputs.py tools/relink_outputs.sh)
+              echo "the files of the images and of this check that the pull request changed: ${changed:-none}"
+              [ -z "$changed" ] || run=true
+              ;;
+          esac
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "compare the images: $run"
+
+      - name: Build the images from the pull request's base Dockerfiles and from this tree's, and compare their files
+        if: steps.decide.outputs.run == 'true'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash tools/image_files_diff.sh --base "$PR_BASE_SHA" --diagnose

@@ -39,7 +39,7 @@ headless browser (its own profile and port; nothing of yours is touched), the pa
              are the front page like any other, with a room of its own and no name card;
   * game     the GAME PAGE in the front page's look (web/shell.html at /play): the clay, the frame, the font and the logo; the loading screen (the logo, a teal bar in a black box) and its failure card; 19 widths
              from 320 to 1600 px with no sideways scroll, the header's eight controls (one row with "More" up to 700 px: the six other links, over the picture), the picture, the bar and the guide inside the frame, a phone
-             on its side; the logo goes back to the front page as Menu does (it asks first while a match runs or a room is joined: No stays); the two pairs under the game (the chosen one is pressed in; the clicks keep their
+             on its side; Menu goes back to the front page (it asks first while a match runs or a room is joined: No stays); the two pairs under the game (the chosen one is pressed in; the clicks keep their
              ids and what they remember); the name step of a shared link, with that line; the contrast of every text (4.5:1) in each of these states.
 Exit status 0: every check passed; 1: a check failed; 3: the check could not be made because the environment is not there (no browser, nothing answers at the page's address, and for the parts that open the front page
 or play no game server of this tree or a site whose /ws does not lead to it).
@@ -160,7 +160,7 @@ STATE_JS = """(function () {
 # The layout of the lobby at the width of the window: the sideways scroll, the columns, the places of the four cards (in the order of the markup), whatever sticks out of a card or out of the window, the grip's dots against the
 # names and the drop-down, START and the line under it, the link and its buttons, and the widest map name against the room that the map's drop-down leaves it
 MAST_JS = """(function () {
-  var m = document.querySelector('header.mast'), img = m.querySelector('img'), b = document.getElementById('watch-top'), p = m.querySelector('p');
+  var m = document.querySelector('header.mast'), img = m.querySelector('h1'), b = document.getElementById('watch-top'), p = m.querySelector('p');
   function r(e) { var x = e.getBoundingClientRect(); return [x.left, x.top, x.right, x.bottom]; }
   return JSON.stringify({ header: r(m), logo: r(img), btn: r(b), text: getComputedStyle(p).display === 'none' ? null : r(p), inner: document.documentElement.clientWidth });
 })()"""
@@ -592,7 +592,7 @@ def main():
             st = lobby()
             codes.append(code_of(st))
             info = json.loads(value("""JSON.stringify({title: document.title, path: location.pathname, h1: document.querySelectorAll('h1').length,
-                logo: (function () { var i = document.querySelector('header.mast img'); return i ? [i.complete && i.naturalWidth === 581, i.getAttribute('alt'), i.getBoundingClientRect().width] : null; })(),
+                logo: (function () { var i = document.querySelector('header.mast h1'); return i ? [document.querySelectorAll('header.mast img').length === 0, i.textContent] : null; })(),
                 tag: document.querySelector('.mast .tag').textContent, sub: document.querySelector('.mast .sub').textContent,
                 head: [document.getElementById('room-h').textContent, document.querySelector('.code').textContent],
                 link: [document.getElementById('link').value, document.getElementById('link').readOnly, document.getElementById('link').getAttribute('aria-label')],
@@ -604,8 +604,8 @@ def main():
                 nav: Array.prototype.map.call(document.querySelectorAll('footer nav > *'), function (a) { return [a.tagName, a.textContent.trim(), a.getAttribute('href'), a.getAttribute('target'), a.id]; }),
                 version: [document.getElementById('game-version').textContent, document.getElementById('game-build-id').textContent], scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth})"""))
             check(info["title"].startswith("Ants (1998)") and info["path"] == "/" and info["h1"] == 1, "the front page is at / and is titled Ants (1998) (%r)" % info["title"])
-            check(info["logo"] is not None and info["logo"][0] and info["logo"][1] == "Ants!" and 100 <= info["logo"][2] <= 200 and info["tag"] == "Four colonies, one picnic." and info["sub"] == "The 1998 ant war game, rebuilt for your browser.",
-                  "the mast has the logo (loaded, %s px wide) and the two lines under it, and nothing else: no header bar of links (%r)" % (info["logo"] and round(info["logo"][2]), info["tag"]))
+            check(info["logo"] is not None and info["logo"][0] and info["logo"][1] == "Ants!" and info["tag"] == "Four colonies, one picnic." and info["sub"] == "The 1998 ant war game, rebuilt for your browser.",
+                  "the mast has the name as words (no picture) and the two lines under it, and nothing else: no header bar of links (%r)" % (info["tag"],))
             check(bool(info["font"]), "the game's own font, Libre Franklin, is loaded from the site")
             code = code_of(st)
             check(re.match(r"^[%s]{6}$" % CODE_ALPHABET, code) is not None and st["code"] == code[:3] + " " + code[3:] and info["head"] == ["Your room", "Room code " + st["code"]],
@@ -745,11 +745,11 @@ def main():
             check("Version" in info["footer"] and "@@" not in info["footer"] and "build" in info["footer"] and re.match(r"^\d+\.\d+\.\d+", info["version"][0]) is not None and info["version"][1] != "",
                   "the footer names the version and the build (%r)" % re.sub(r"\s+", " ", info["footer"]).strip()[:80])
             hrefs = {n[1]: (n[0], n[2], n[3]) for n in info["nav"]}
-            check([n[1] for n in info["nav"]] == ["How it works", "Matches", "Live now", "Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal"] and hrefs["How it works"][0] == "BUTTON" and hrefs["Matches"][1] == "/matches" and hrefs["Live now"][1] == "/live-now"
+            check([n[1] for n in info["nav"]] == ["How it works", "Matches", "Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal"] and hrefs["How it works"][0] == "BUTTON" and hrefs["Matches"][1] == "/matches"
                   and hrefs["Sprites and sounds"][1] == "/asset_catalog/" and hrefs["Changelog"][1] == "/changelog" and "github.com" in hrefs["GitHub"][1] and "issues" not in hrefs["GitHub"][1] and hrefs["Feedback"][1].endswith("/issues")
                   and hrefs["Legal"][1] == "/legal",
-                  "the footer links: How it works, Matches, Live now, Sprites and sounds, Changelog, GitHub, Feedback, Legal (%s)" % [n[1] for n in info["nav"]])
-            check(all(hrefs[k][2] == "_blank" for k in ("Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal")) and hrefs["Matches"][2] is None and hrefs["Live now"][2] is None, "the links that leave the front page keep their new tab, the ones to the match pages do not")
+                  "the footer links: How it works, Matches, Sprites and sounds, Changelog, GitHub, Feedback, Legal (%s)" % [n[1] for n in info["nav"]])
+            check(all(hrefs[k][2] == "_blank" for k in ("Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal")) and hrefs["Matches"][2] is None, "the links that leave the front page keep their new tab, the ones to the match pages do not")
             top = json.loads(value("(function () { var b = document.getElementById('watch-top'), m = document.querySelector('header.mast'), r = b && b.getBoundingClientRect(), h = m.getBoundingClientRect(), l = m.querySelector('img').getBoundingClientRect(); return JSON.stringify({text: b && b.textContent.trim(), href: b && b.getAttribute('href'), target: b && b.getAttribute('target'), inHeader: !!b && m.contains(b), right: r && Math.round(h.right - r.right), after: r && r.left > l.right, vis: !!r && r.width > 0 && getComputedStyle(b).visibility === 'visible'}); })()"))
             check(top["text"] == "Matches" and top["href"] == "/matches" and top["target"] is None and top["inHeader"] and top["vis"] and top["after"] and 0 <= top["right"] <= 4, "the header has the one button, Matches, at the right of the row, in this tab (%s)" % top)
             check(info["notice"] == LOBBY_NOTICE and info["noticeShown"], "the footer says that online matches are recorded, the recordings kept for 30 days, the results and names kept for good and public (%r)" % info["notice"])
@@ -923,7 +923,7 @@ def main():
             for width in (1280, 390, 320):
                 tab.emulate(width, 900, 1, width <= 480)
                 time.sleep(0.15)
-                m = json.loads(value("(function () { var a = document.getElementById('mapmaker-top'), b = document.getElementById('watch-top'), l = document.querySelector('header.mast img'), h = document.querySelector('header.mast'); if (!a) return 'null'; var r = a.getBoundingClientRect(), q = b.getBoundingClientRect(), g = l.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, hit = function (px, py) { return document.elementFromPoint(px, py) === a; }; "
+                m = json.loads(value("(function () { var a = document.getElementById('mapmaker-top'), b = document.getElementById('watch-top'), l = document.querySelector('header.mast h1'), h = document.querySelector('header.mast'); if (!a) return 'null'; var r = a.getBoundingClientRect(), q = b.getBoundingClientRect(), g = l.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, hit = function (px, py) { return document.elementFromPoint(px, py) === a; }; "
                                      "return JSON.stringify({href: a.getAttribute('href'), text: a.textContent.trim(), n: document.querySelectorAll('#mapmaker-top').length, before: r.right <= q.left + 0.5, gap: Math.round(q.left - r.right), h: r.height, hitAbove: hit(x, y - 21.5), hitBelow: hit(x, y + 21.5), hitLeft: hit(r.left - 1.5, y), hitRight: hit(r.right + 1.5, y), farAbove: !hit(x, y - 30), overLogo: r.left < g.right, scroll: document.documentElement.scrollWidth > innerWidth, inside: r.left >= h.getBoundingClientRect().left - 0.5 && q.right <= h.getBoundingClientRect().right + 4.5, row: innerWidth > 720 || r.top < g.bottom}); })()"))
                 if m is None or m["href"] != "/mapmaker" or m["text"] != "Map maker" or m["n"] != 1 or not m["before"] or m["gap"] < 6 or abs(m["h"] - 38) > 1 or not (m["hitAbove"] and m["hitBelow"] and m["hitLeft"] and m["hitRight"]) or not m["farAbove"] or m["overLogo"] or m["scroll"] or not m["inside"] or not m["row"]:
                     bad.append((width, m))
@@ -1814,7 +1814,7 @@ def main():
                 if m["scroll"][0] > m["inner"][0]:
                     wrong["scroll"].append((width, m["scroll"][0], m["inner"][0]))
                 texts = [c["text"] for c in m["controls"]]
-                want = (["", "Menu", "", "Full" if width <= 440 else "Fullscreen", "More"] if narrow else ["", "Menu", "Settings" if width >= 1140 else ""] + (["Matches"] if width >= 1140 else []) + ["Sprites and sounds", "Changelog", "Reset", "Fullscreen", "GitHub"] + ([] if 920 <= width <= 1045 else ["Feedback"]))
+                want = (["Menu", "", "Full" if width <= 440 else "Fullscreen", "More"] if narrow else ["Menu", "Settings" if width >= 1140 else ""] + (["Matches"] if width >= 1140 else []) + ["Sprites and sounds", "Changelog", "Reset", "Fullscreen", "GitHub"] + ([] if 920 <= width <= 1045 else ["Feedback"]))
                 height = m["header"][3] - m["header"][1]
                 if texts != want or m["more"] != narrow or ((narrow or width >= 1024) and height > 60):
                     wrong["header"].append((width, texts, "More" if m["more"] else "no More", round(height)))
@@ -1822,7 +1822,7 @@ def main():
                     for b in m["controls"][i + 1:]:
                         same_row = min(a["rect"][3], b["rect"][3]) - max(a["rect"][1], b["rect"][1]) > 0.5 * (a["rect"][3] - a["rect"][1])
                         if same_row and min(a["rect"][2], b["rect"][2]) - max(a["rect"][0], b["rect"][0]) > 0.5:
-                            wrong["overlap"].append((width, a["text"] or "logo", b["text"] or "logo"))
+                            wrong["overlap"].append((width, a["text"] or "(icon)", b["text"] or "(icon)"))
                 if any(c["rect"][0] < 10 or c["rect"][2] > m["inner"][0] - 10 for c in m["controls"]) or any(s[0] < 10 or s[2] > m["inner"][0] - 10 for s in m["seg"]) or m["panel"][0] < 10 or m["panel"][2] > m["inner"][0] - 10:
                     wrong["frame"].append((width, [round(v) for v in m["panel"]]))
                 ring, shadow = (5, 3) if narrow else (8, 4)
@@ -1832,8 +1832,8 @@ def main():
                 if abs(m["bar"][0]) > 0.5 or abs(m["bar"][2] - m["inner"][0]) > 0.5:
                     wrong["foot"].append((width, [round(v, 1) for v in m["bar"]]))
             check(not wrong["scroll"], "no sideways scroll from 320 to 1600 px (wrong: %s)" % (wrong["scroll"],))
-            check(not wrong["header"], "the header: up to 700 px one row of the logo, Menu, Fullscreen (Full up to 440 px) and More; above it the logo and the controls in their order (the seven it had, and Matches after Menu from 1140 px, where the eight fit one row; one row from 1024 px) (wrong: %s)" % (wrong["header"],))
-            check(not wrong["overlap"], "no control of the header lies over another or over the logo, in one row or two, at every width (wrong: %s)" % (wrong["overlap"][:6],))
+            check(not wrong["header"], "the header: up to 700 px one row of Menu, Settings, Fullscreen (Full up to 440 px) and More, with no logo; above it the controls in their order (the seven it had, and Matches after Menu from 1140 px, where the eight fit one row; one row from 1024 px) (wrong: %s)" % (wrong["header"],))
+            check(not wrong["overlap"], "no control of the header lies over another, in one row or two, at every width (wrong: %s)" % (wrong["overlap"][:6],))
             check(not wrong["frame"], "the header's controls, the pair buttons and the guide stay inside the thin green frame at every width (wrong: %s)" % (wrong["frame"],))
             check(not wrong["picture"], "the picture with its ring and shadow is centred and inside the frame at every width (wrong: %s)" % (wrong["picture"],))
             check(not wrong["foot"], "the footer's bar spans the window at every width (wrong: %s)" % (wrong["foot"],))
@@ -1896,26 +1896,26 @@ def main():
             shot("game_844")
             tab.emulate(1440, 900, 1)
 
-            # --- the logo is the way back to the front page, as Menu is: it asks while a match runs or a room is joined (No stays), and does not ask at the setup screen
+            # --- Menu is the way back to the front page (the header has no logo): it asks while a match runs or a room is joined (No stays), and does not ask at the setup screen
             clear_storage()
             load(play, ready=True, settle=1.0)
             before = pages()
             dialogs.clear()
-            tab.ev("document.getElementById('logo-link').click(); 1")
+            tab.ev("document.getElementById('menu-btn').click(); 1")
             back = wait_for(lambda: tab.ev("location.pathname") == "/" and bool(tab.ev("document.getElementById('slots') ? 1 : 0")), 20)
-            check(back and not dialogs and pages() == before, "the logo at the setup screen (no match): back to the front page in this tab, nothing asked (%s)" % dialogs)
+            check(back and not dialogs and pages() == before, "Menu at the setup screen (no match): back to the front page in this tab, nothing asked (%s)" % dialogs)
             tab.emulate(1440, 900, 1)
             tab.open(play + "?map=treasure&bots=medium&name=Ann", settle=2.0)
             if start_by_enter():
                 dialogs.clear()
                 answer["accept"] = False
-                tab.ev("document.getElementById('logo-link').click(); 1")
+                tab.ev("document.getElementById('menu-btn').click(); 1")
                 time.sleep(0.8)
                 check(len(dialogs) == 1 and "Leave the game and go back to the menu?" in dialogs[0] and tab.ev("location.pathname") == "/play",
-                      "the logo while a match runs asks \"Leave the game and go back to the menu?\" (%s) and No stays in the game" % dialogs)
+                      "Menu while a match runs asks \"Leave the game and go back to the menu?\" (%s) and No stays in the game" % dialogs)
                 check(tab.ev("Module._ants_match_running()") == 1, "... the match goes on")
                 answer["accept"] = True
-                tab.ev("document.getElementById('logo-link').click(); 1")
+                tab.ev("document.getElementById('menu-btn').click(); 1")
                 back = wait_for(lambda: tab.ev("location.pathname") == "/" and bool(tab.ev("document.getElementById('slots') ? 1 : 0")), 20)
                 check(back and pages() == before, "... and Yes goes back to the front page in the same tab (no new tab)")
             else:
@@ -1925,9 +1925,9 @@ def main():
             tab.open(play + "?join=/ws&room=k7m2xq&roommap=small&roomseats=2&name=Ann&aspect=16:9", wait=False)
             time.sleep(2.0)
             answer["accept"] = False
-            tab.ev("document.getElementById('logo-link').click(); 1")
+            tab.ev("document.getElementById('menu-btn').click(); 1")
             time.sleep(0.8)
-            check(len(dialogs) == 1 and "menu" in dialogs[0].lower() and tab.ev("location.pathname") == "/play", "the logo in a joined room asks too, and No stays (%s)" % dialogs)
+            check(len(dialogs) == 1 and "menu" in dialogs[0].lower() and tab.ev("location.pathname") == "/play", "Menu in a joined room asks too, and No stays (%s)" % dialogs)
             answer["accept"] = True
             dialogs.clear()
 
