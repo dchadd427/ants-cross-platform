@@ -66,6 +66,12 @@ def warn(cfg, log):
         log.event("warning", what="admin_page_door_shut_" + ("secret_too_short_or_not_printable" if cfg.admin_gate_given else "no_secret_set"))
 
 
+def by_name(store, by):
+    """Who made a ban or a mute, as the page is told: the reference that the row holds (16 hex characters, which may happen to be all digits, and are not then an id to be hashed again), else what
+    the command line prints (`command line`, or a reference made of an id that an older row holds)."""
+    return by if pseudo.REFERENCE.match(by) else adminmod.by_of(store, by)
+
+
 class Refused(Exception):
     """A request that is turned away before anything is asked of Discord: `answer` is the bytes of the response."""
 
@@ -221,12 +227,12 @@ class Door:
         if name == "bans":
             rows = list(reversed(store.bans()))
             names = store.usernames_by_reference({chat.ref(a) for a, _, _, _ in rows})
-            out = [{"ref": chat.ref(a), "name": names.get(chat.ref(a), n), "at": at, "by": adminmod.by_of(store, by)} for a, n, at, by in rows]
+            out = [{"ref": chat.ref(a), "name": names.get(chat.ref(a), n), "at": at, "by": by_name(store, by)} for a, n, at, by in rows]
             return http.response(200, {"bans": out, "untrusted": True, "untrusted_fields": ["name"]})
         if name == "mutes":
             rows = store.mutes()
             names = store.usernames_by_reference({chat.ref(a) for a, _, _, _ in rows})
-            out = [{"ref": chat.ref(a), "name": names.get(chat.ref(a), n), "until": until, "by": adminmod.by_of(store, by)} for a, n, until, by in rows]
+            out = [{"ref": chat.ref(a), "name": names.get(chat.ref(a), n), "until": until, "by": by_name(store, by)} for a, n, until, by in rows]
             return http.response(200, {"mutes": out, "untrusted": True, "untrusted_fields": ["name"]})
         if name == "hidden":
             blocked = sorted(r for r, state in store.picture_marks().items() if state == SHOW_BLOCKED)

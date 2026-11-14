@@ -562,6 +562,13 @@ class TheChanges(DoorTest):
         target.say("hello")
         self.assertEqual(target.recv_reply(), {"t": "err", "code": "muted"})
 
+    def test_a_reference_of_digits_only_is_still_a_reference_in_the_lists(self):
+        digits = "1234567890123456"                                  # (a reference that happens to be all digits: one in about two thousand is)
+        self.rig.call(self.rig.store.ban, TARGET, digits, NAMES[TARGET])
+        self.rig.call(self.rig.store.mute, ADMIN2, 5, digits, NAMES[ADMIN2])
+        self.assertEqual([b["by"] for b in self.get("bans").json()["bans"]], [digits])
+        self.assertEqual([b["by"] for b in self.get("mutes").json()["mutes"]], [digits])
+
     def test_nopic_and_pic_block_and_lift_a_picture_and_the_list_shows_the_block(self):
         self.assertEqual(self.post("nopic", {"account": NAMES[TARGET]}).status, 200)
         rows = self.get("hidden").json()
