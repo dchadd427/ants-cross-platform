@@ -381,7 +381,7 @@ def computer(p, args, check):
     p.tab_to("video")
     tab.save_shot(args.shots, "menu-2-video")
     groups = json.loads(tab.ev("JSON.stringify([].map.call(document.querySelectorAll('.gm-seg'), function (g) { return [].map.call(g.children, function (b) { return b.textContent; }); }))"))
-    check(groups == [["Locked", "Free"], ["Hurt ants", "All ants", "Off"], ["Bar", "Number"]], "the Video section has the mouse and the two rows of the ant health as button groups (%s)" % groups)
+    check(groups == [["Locked", "Free"], ["Hurt ants", "All ants", "Off"], ["Bar", "Number"], ["On", "Off"]], "the Video section has the mouse, the two rows of the ant health and the damage and heal numbers as button groups (%s)" % groups)
     dd = ".gm-panel .pick-select"
     list_open = lambda: tab.ev("document.querySelector('.gm-panel [role=listbox]').hidden") is False
     shown_in_menu = lambda: tab.ev("(document.querySelector('.gm-panel [role=option][aria-selected=true]') || document.body).getAttribute('data-shape')")
