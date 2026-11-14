@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="Ants!">
     <link rel="shortcut icon" href="/favicon.ico?v=e2d196f0">
     <link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
-    <link rel="stylesheet" href="replay_stats.css"><link rel="stylesheet" href="death_map.css"><link rel="stylesheet" href="front/rematch.css">
+    <link rel="stylesheet" href="replay_stats.css"><link rel="stylesheet" href="death_map.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="touch_keys.css">
     <style>
         /* The look of the front page (web/lobby.html), which is the look of the 1998 game's own menus: the orange clay, the thin green frame, teal bevelled buttons with a red shadow, black
            inset boxes, the game's own font (Libre Franklin, SIL OFL) and the "ants!" logo, all from web/front/. The colors are the front page's, token for token (tests/scripts/test_web_game.py
@@ -1341,7 +1341,7 @@
 
     <div class="toast" id="toast" role="status" hidden></div>
 
-    <script src="rejoin_key.js"></script><script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
+    <script src="rejoin_key.js"></script><script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="touch_keys.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -1466,9 +1466,13 @@
             }
             // The page's own controls: a pointer over one of them is on the page and never at the game's edge (hovering a button, a link or a selector near the game must not scroll the map). `target` is
             // the element under the pointer; anything inside a control counts (the open list of the picture's dropdown is one: a page-made list lies over the page, which a native list never did).
-            var CONTROLS = 'a, button, input, select, textarea, summary, label, [role="radio"], [role="button"], [role="slider"], [role="option"], .pick-list, .rbar';
+            var CONTROLS = 'a, button, input, select, textarea, summary, label, [role="radio"], [role="button"], [role="slider"], [role="option"], .pick-list, .rbar, .tk, .tk-shield';
             function overControl(target) {
                 return !!(target && typeof target.closest === 'function' && target.closest(CONTROLS));
+            }
+            // The hotkey buttons' rail or row (touch_keys.js) and the layer under their open list: a mouse or a pen over them is on the page in fullscreen too (it never scrolls the map from the picture's edge)
+            function overTouchKeys(target) {
+                return !!(target && typeof target.closest === 'function' && target.closest('.tk, .tk-shield'));
             }
 
             // THE POINTER LOCK. While the browser holds the pointer for the game (fullscreen) it reports only how far the pointer moved (movementX / movementY, in CSS pixels, with the
@@ -1786,7 +1790,7 @@
             }
 
             return { parseAspect: AntsShapes.parse, shapeNumber: AntsShapes.placeOf, shapeForScreen: AntsShapes.forScreen, slotVars: slotVars, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, snapOffset: snapOffset, edgePixel: edgePixel, clientFor: clientFor,
-                     marginPixel: marginPixel, overControl: overControl, lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, releasesMouseLock: releasesMouseLock, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, localArguments: localArguments, startCardArguments: startCardArguments, asksForName: asksForName, codeText: codeText, withoutName: withoutName, withSeat: withSeat, cancelsBrowserKey: cancelsBrowserKey, badDownload: badDownload,
+                     marginPixel: marginPixel, overControl: overControl, overTouchKeys: overTouchKeys, lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, releasesMouseLock: releasesMouseLock, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, localArguments: localArguments, startCardArguments: startCardArguments, asksForName: asksForName, codeText: codeText, withoutName: withoutName, withSeat: withSeat, cancelsBrowserKey: cancelsBrowserKey, badDownload: badDownload,
                      downloadWithRetries: downloadWithRetries };
         })();
 
@@ -2311,8 +2315,10 @@
             snapPending = true;
             window.requestAnimationFrame(function () { snapPending = false; snapBox(); });
         }, { passive: true });
+        var antsTouchKeys = null;                                           // the hotkey buttons (touch_keys.js, made below): their row or rail is laid out first, the stage's padding is what the fit leaves out
         function relayout(force) {
             if (window.antsReplayPlaceBar) window.antsReplayPlaceBar();         // (a replay's bar lies over the picture while the page is fullscreen)
+            if (antsTouchKeys) antsTouchKeys.refresh(true);
             measureChrome();
             layoutBox(force);
         }
@@ -2444,6 +2450,10 @@
         window.addEventListener('pointermove', function (e) {
             if (handingOver || e.pointerType === 'touch' || isLocked() || !isFullscreen()) return;
             if (!stageElement.contains(e.target) || boxElement.contains(e.target)) return;
+            if (ANTS_PAGE.overTouchKeys(e.target)) {                        // (the hotkey buttons are the page's: a pointer over them is no edge of the picture)
+                if (edgeForwarded) handLeaveToGame();
+                return;
+            }
             if (quietAfterRelease) {
                 if (quietAfterRelease.x === undefined) { quietAfterRelease = { x: e.clientX, y: e.clientY }; return; }
                 if (Math.abs(e.clientX - quietAfterRelease.x) < 1 && Math.abs(e.clientY - quietAfterRelease.y) < 1) return;
@@ -3080,11 +3090,21 @@
         })();
         // ANTS_CHAT_END
         if (window.AntsCountdown) window.AntsCountdown.forPage({ doc: document, stage: stageElement, canvas: canvas, ask: function (what) { try { return Module._ants_probe ? Module._ants_probe(what) : -1; } catch (err) { return -1; } }, ready: function () { return isReadyToPlay; }, isFullscreen: isFullscreen, enter: enterFullscreen });      // the Fullscreen button of the countdown (countdown_button.js)
+        // THE HOTKEY BUTTONS (touch_keys.js and touch_keys.css, docs/TOUCH.md): a row under the picture or a rail beside it on a touch screen during a match that this player plays; a press sends the key events of a keyboard to the canvas
+        if (window.AntsTouchKeys && !ANTS_REPLAY_MODE) {
+            antsTouchKeys = window.AntsTouchKeys.forPage({ doc: document, win: window, stage: stageElement, canvas: canvas,
+                touch: function () { return !!window.antsFinger || !!(window.matchMedia && window.matchMedia('(hover: none)').matches); },           // (the settings menu's own rule for a touch screen)
+                ready: function () { return isReadyToPlay; }, watching: function () { return ANTS_REPLAY_MODE; },
+                running: function () { try { return !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (err) { return false; } },
+                ask: function (what) { try { return Module._ants_probe ? Module._ants_probe(what) : -1; } catch (err) { return -1; } },
+                menu: function (what) { try { return Module._ants_menu_get ? Module._ants_menu_get(what) : -1; } catch (err) { return -1; } },
+                isFullscreen: isFullscreen, relayout: function () { relayout(false); }, store: function () { return window.localStorage; } });
+        }
         // THE SETTINGS MENU (game_menu.js and game_menu.css, docs/GAME_MENU.md): fetched once the game runs, never in the frame of a match page; until it is here, or when it cannot be had (tried twice, then said in the toast), Esc is what it was
         function antsLoadGameMenu(again) {
             var script = document.createElement('script'), toast = document.getElementById('toast');
             script.src = 'game_menu.js?v=' + ANTS_BUILD_VER;
-            script.onload = function () { window.AntsGameMenu.forPage({ doc: document, win: window, shapes: window.AntsShapes, picker: function (opts) { return window.AntsShapePicker.create(window.AntsShapes, opts); }, isAutomatic: function () { return ANTS_ASPECT_SOURCE === 'default'; }, automatic: antsAutomatic, onShape: antsOnShape, pickShape: antsPickShape, lock: antsLock, stage: stageElement, canvas: canvas, toast: toast, query: '?v=' + ANTS_BUILD_VER, module: function () { return Module; }, ready: function () { return isReadyToPlay; }, replay: ANTS_REPLAY_MODE, live: ANTS_LIVE_MODE, version: document.getElementById('game-version').textContent, isFullscreen: isFullscreen, enter: enterFullscreen, leave: leaveFullscreen, isLocked: isLocked, releaseLock: releaseLock, requestLock: requestLock, cancelsKey: ANTS_PAGE.cancelsBrowserKey }); };
+            script.onload = function () { window.AntsGameMenu.forPage({ doc: document, win: window, shapes: window.AntsShapes, picker: function (opts) { return window.AntsShapePicker.create(window.AntsShapes, opts); }, isAutomatic: function () { return ANTS_ASPECT_SOURCE === 'default'; }, automatic: antsAutomatic, onShape: antsOnShape, pickShape: antsPickShape, lock: antsLock, stage: stageElement, canvas: canvas, toast: toast, query: '?v=' + ANTS_BUILD_VER, module: function () { return Module; }, ready: function () { return isReadyToPlay; }, replay: ANTS_REPLAY_MODE, live: ANTS_LIVE_MODE, version: document.getElementById('game-version').textContent, isFullscreen: isFullscreen, enter: enterFullscreen, leave: leaveFullscreen, isLocked: isLocked, releaseLock: releaseLock, requestLock: requestLock, touchKeys: antsTouchKeys, cancelsKey: ANTS_PAGE.cancelsBrowserKey }); };
             script.onerror = function () { script.remove(); if (again) { toast.textContent = 'The settings menu could not load. Press Reset to try again.'; toast.hidden = false; } else setTimeout(function () { antsLoadGameMenu(true); }, 2500); };
             document.head.appendChild(script);
         }

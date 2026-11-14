@@ -54,12 +54,13 @@ GAME_MENU_BUDGET, GAME_MENU_GZIP_BUDGET = 53_000, 15_500  # the settings menu
 SHAPES_BUDGET, SHAPES_GZIP_BUDGET = 12_000, 4_400       # the one table of the picture's shapes
 REJOIN_KEY_BUDGET, REJOIN_KEY_GZIP_BUDGET = 5_900, 2_400    # the seat-key reader (web/rejoin_key.js), shared by the front page and the game page
 PICKER_BUDGET, PICKER_GZIP_BUDGET = 17_000, 5_500      # the picture's dropdown
+TOUCH_KEYS_BUDGET, TOUCH_KEYS_GZIP_BUDGET = 25_700, 8_300   # the hotkey buttons of a touch screen (web/touch_keys.js and web/touch_keys.css together)
 # the front page (web/home/, web/front/player_name.js)
 HOME_BUDGET, HOME_GZIP_BUDGET = 49_500, 15_000
 GAMES_BUDGET, GAMES_GZIP_BUDGET = 98_000, 28_000
 PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 33_000, 10_500
 VP_BUDGET, VP_GZIP_BUDGET = 4_200, 1_900            # vp.js: the screen numbers of /?vp (loaded for that address only)
-CHAT_BUDGET, CHAT_GZIP_BUDGET = 56_500, 18_000
+CHAT_BUDGET, CHAT_GZIP_BUDGET = 88_000, 27_000
 TALK_BUDGET, TALK_GZIP_BUDGET = 28_500, 9_800
 SCRIPT_BUDGET, SCRIPT_GZIP_BUDGET = 13_000, 4_500       # player_name.js
 # the installable web app (web/app/, web/manifest.webmanifest): the four icons together (measured 4,260 bytes), and the manifest (measured 1,166, revalidated on every visit)

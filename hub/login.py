@@ -1,6 +1,6 @@
 """The Discord login of the chat hub (docs/HUB.md, "Login"): who a visitor is, from one cookie and the one scope `identify`.
 
-The pages (nginx passes these five and /hub/ws to the hub, docker/nginx.conf):
+The pages (nginx passes these five, /hub/pic/<name>.png and /hub/ws to the hub, docker/nginx.conf):
   GET  /hub/login?next=home|room   a random state (128 bits, one use, 10 minutes) is kept here and in a short cookie, and the visitor is sent to Discord
   GET  /hub/callback               Discord sends the visitor back with a code: the state of the cookie, of the address and of this hub must be one, the code is exchanged (hub/discord.py),
                                    the id, the username and the display name are kept (a login: the SHA-256 of a random cookie value, the id, the username, 30 days; and the account's
@@ -9,6 +9,7 @@ The pages (nginx passes these five and /hub/ws to the hub, docker/nginx.conf):
   GET  /hub/me                     who the cookie says the visitor is: what the welcome's `you` says (same origin only)
   POST /hub/logout                 ends this login (same origin only: the Origin and Sec-Fetch-Site of a page of the site)
   POST /hub/forget                 ends every login of the account and deletes its chat lines (same origin only); a ban or a mute stays, by id, whatever the account does
+  GET  /hub/pic/<name>.png         the small copy of a Discord picture that hub/pictures.py kept (it is fetched after the callback has answered, never before; a login does not wait for it)
 and, for a WebSocket, identify(): the login's cookie in the handshake is who the socket is for its whole life.
 
 Rules that the tests hold (tests/scripts/test_hub_login.py): the return address is one of two fixed words and never what the visitor wrote; a state is good for one callback whatever it
@@ -23,7 +24,7 @@ import re
 import secrets
 import urllib.parse
 
-from . import config, discord as discordmod, http, limits as limitmod, session, text
+from . import config, discord as discordmod, http, limits as limitmod, pictures as picturesmod, session, text
 from .store import StoreError
 
 COOKIE = "__Host-ants_hub"                  # the login: a random 128-bit value, Path=/, Secure, HttpOnly, SameSite=Strict (only its SHA-256 is kept)
@@ -98,22 +99,34 @@ class DiscordLogin(session.Sessions):
 
     def __init__(self, cfg):
         self.cfg = cfg
-        self.hub = self.store = self.limits = self.log = self.discord = None        # (attach() has them)
+        self.hub = self.store = self.limits = self.log = self.discord = self.pictures = self.picture_route = None        # (attach() has them)
         self.states = collections.OrderedDict()                     # SHA-256 of a state -> (when it runs out, the word for where the visitor goes back to); in order of time
         self.routes = {"/hub/login": self.start, "/hub/callback": self.callback, "/hub/me": self.me, "/hub/logout": self.logout, "/hub/forget": self.forget}
 
     def attach(self, hub):
         self.hub, self.store, self.limits, self.log = hub, hub.store, hub.limits, hub.log
         self.discord = discordmod.Discord(self.cfg, self.limits)
+        self.pictures = picturesmod.Pictures(self.store, self.discord, self.limits, self.log, hub.clock)
+        self.picture_route = self.pictures.serve             # (GET /hub/pic/<name>.png: the hub asks for it by its prefix)
+        self.pictures.on_change = hub.chat.picture_changed    # (the chat tells the sockets of an account whose picture arrived, went or was switched)
+        hub.chat.pictures = self.pictures
         self.rate_login = limitmod.RateByAddress(self.limits.login_burst, self.limits.login_refill_seconds)
         self.rate_callback = limitmod.RateByAddress(self.limits.login_burst, self.limits.login_refill_seconds)
         self.rate_session = limitmod.RateByAddress(self.limits.session_burst, self.limits.session_refill_seconds)
+
+    def sync_pictures(self):
+        """The pictures are read again after something here ended a login (the pages of the account are told at once); a database that refuses leaves it to the hub's clock, one tick later."""
+        try:
+            self.pictures.sync()
+        except StoreError:
+            pass
 
     def forget_idle(self, now, wall):
         """Called by the hub's clock once a minute: the buckets that are full again, and the logins that were started and never finished."""
         for rate in (self.rate_login, self.rate_callback, self.rate_session):
             rate.forget_idle(now)
         self.sweep(wall)
+        self.pictures.forget_idle(now)
 
     def sweep(self, wall):
         while self.states and next(iter(self.states.values()))[0] <= wall:
@@ -230,7 +243,7 @@ class DiscordLogin(session.Sessions):
         if not isinstance(code, str) or not CODE.match(code):
             return self.page("expired", back, gone)
         try:
-            account, name, shown = await self.discord.who(code)
+            account, name, shown, avatar = await self.discord.who(code)
         except discordmod.DiscordError as e:
             self.log.event("login_failed", kind=e.kind, status=e.status, tag=self.log.tag(address))
             return self.page("rejected" if e.kind == "rejected" else "unavailable", back, gone)
@@ -249,10 +262,12 @@ class DiscordLogin(session.Sessions):
             if old and VALUE.match(old):                                      # (a login that this browser had is over: a new one never takes over the value of an old one)
                 self.store.delete_session(digest(old))
                 self.hub.end_logins(session=digest(old))
+                self.sync_pictures()                                          # (the old login may have been another account's last: its picture went with it)
         except StoreError as e:
             self.log.event("login_failed", kind="database", error=type(e).__name__)
             return self.page("unavailable", back, gone)
         self.log.event("login", tag=self.log.tag(address))
+        self.pictures.offer(account, avatar)                                 # (the picture is fetched after this answer, in the background: it never delays or fails a login)
         return http.response(302, headers=[("Location", NEXT[back]), ("Referrer-Policy", "no-referrer"), ("Set-Cookie", cookie_line(COOKIE, value, int(self.limits.session_seconds), "Strict")),
                                            ("Set-Cookie", gone[0])])
 
@@ -299,6 +314,7 @@ class DiscordLogin(session.Sessions):
             if value and VALUE.match(value):
                 self.store.delete_session(digest(value))
                 self.hub.end_logins(session=digest(value))
+                self.sync_pictures()                                          # (the store took the picture with the account's last login: the pages are told)
         except StoreError:
             return self.fail(503, "busy")
         self.log.event("logout", tag=self.log.tag(address))
@@ -316,6 +332,7 @@ class DiscordLogin(session.Sessions):
         except StoreError:
             return self.fail(503, "busy")
         self.hub.end_logins(account=who.account_id)
+        self.sync_pictures()
         self.hub.chat.drop_lines(lines)
         self.log.event("forget", tag=self.log.tag(address), lines=len(lines))
         return http.response(200, {"ok": True}, [("Set-Cookie", cookie_line(COOKIE, "", 0, "Strict"))])

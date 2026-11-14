@@ -52,7 +52,7 @@ async function main() {
         const hub = await startHub({ login: false, you: null, history: HISTORY, online: 7 });
         const v = dockFor(hub);
         check('the dock opens one socket to /hub/ws of the page\'s own host', await until(() => hub.upgrades === 1 && v.dock.state() === 'live'));
-        check('the welcome is shown: the history as "name: text", the mod marked, the count, the read-only words, and no field', JSON.stringify(v.rows()) === JSON.stringify(['pebble: anyone up for Islands?', 'mod clover: I have a room open', 'juniper: joining!']) && v.on() === '7 here now'
+        check('the welcome is shown: the history as "name: text", the mod marked, the count, the read-only words, and no field', JSON.stringify(v.rows()) === JSON.stringify(['pebble: anyone up for Islands?', 'moderator clover: I have a room open', 'juniper: joining!']) && v.on() === '7 here now'
               && v.note() === 'Chat is read-only for now' && v.form().hidden === true && hub.received.length === 0);
         hub.say('pebble', 'a new line'); hub.say('x'.repeat(40), 'long name');
         check('a line that the hub sends is a line, a long name is cut', await until(() => v.rows().length === 5) && v.rows()[3] === 'pebble: a new line' && v.rows()[4] === 'x'.repeat(32) + '…: long name');
@@ -134,6 +134,53 @@ async function main() {
         check('an account that cannot choose has no button, and a pick that is made anyway is refused by the hub without closing anything (the hub says err pick; the dock says that it did not work)', one(w.dock.slot, 'gc-pick').hidden === true
               && (plain.send(plain.peers[0], { t: 'err', code: 'pick' }), await until(() => w.note() === 'That did not work, try again')) && plain.upgrades === 1 && w.dock.state() === 'live');
         await plain.close();
+    }
+    {   // the roles on a real socket: the hub's commands, its private answers, its own line, a live change of the role, and being removed
+        const ME = { name: 'maple.leaf', k: 'aaaaaaaaaaaa' };
+        const hub = await startHub({ login: true, you: Object.assign({ mod: true, role: 'mod' }, ME), history: HISTORY, people: { bob: 'none', modo: 'mod', boss: 'admin' }, bans: [{ u: 'carol', at: 1700000000 }] });
+        const v = dockFor(hub);
+        const answers = () => v.log.children.slice(1).filter((r) => cls(r).indexOf('gc-private') !== -1).map((r) => r.children.slice(1).map((c) => c.textContent).join('\n'));
+        const say = (text) => { one(v.dock.root, 'gc-input').value = text; one(v.dock.root, 'gc-form').fire('submit', { preventDefault() {} }); };
+        check('a moderator\'s welcome: the field is on', await until(() => v.dock.state() === 'live') && one(v.dock.root, 'gc-input').disabled === false && v.dock.root.getAttribute('data-role') === 'mod');
+        say('/help');
+        check('/help is answered by the page and the hub is told nothing', answers().length === 1 && hub.received.filter((m) => m.t === 'say').length === 0);
+        say('/kick bob');
+        check('a good /kick: ok, and everybody is shown the hub\'s own line, as a quiet line with no author', await until(() => answers().length === 2) && answers()[1] === 'Done: the person was removed.' && await until(() => v.rows().indexOf('bob was kicked.') !== -1) && cls(v.log.children[v.log.children.length - 1]).indexOf('gc-event') !== -1);
+        say('/ban bob');
+        check('a moderator\'s /ban: the hub says power, and the page says it in words, privately', await until(() => answers().length === 3) && answers()[2] === 'You are not allowed to do that');
+        const before = v.rows().length;
+        await sleep(2600); say('/kick nobody');
+        await sleep(2600); say('/kick boss');
+        await sleep(2600); say('/kick');
+        check('a name that is nobody\'s (who), an admin (power) and a command that is not right (bad): each in its words; nothing is posted for anybody', await until(() => answers().length === 6, 6000) && answers().slice(3).join('|') === 'Nobody by that name is here|You are not allowed to do that|That command is not right. Type /help to see the commands.' && v.rows().length === before + 3 && hub.commands.length === 5);
+        hub.you(Object.assign({ mod: true, role: 'admin' }, ME));
+        check('the hub makes the visitor an admin (a `you` frame): the data-role follows, no reload, the socket stays', await until(() => v.dock.root.getAttribute('data-role') === 'admin') && hub.upgrades === 1);
+        await sleep(2600); say('/bans');
+        check('/bans, an admin\'s: the private list', await until(() => answers().length === 7) && answers()[6] === 'People who are banned\ncarol 2023-11-14');
+        hub.set({ roleDown: true }); await sleep(2600); say('/mute bob 5');
+        check('a role that Discord could not confirm: the hub says role, the page says so', await until(() => answers().length === 8) && answers()[7] === 'Could not confirm your role, try again in a moment');
+        hub.you(Object.assign({ mod: false, role: 'none' }, ME));
+        check('the hub takes the role away: the commands go (a command word is not sent, "you are not allowed")', await until(() => v.dock.root.getAttribute('data-role') === 'none') && (await sleep(2600), say('/mute bob 5'), answers()[8] === 'You are not allowed to do that') && hub.commands.length === 7);
+        check('and the page threw nothing', v.errors.length === 0);
+        await hub.close();
+    }
+    {   // removed: a kick ends the login (the next welcome names nobody), a ban does not (the visitor reads on); the page connects again once, after its wait
+        const ME = { name: 'maple.leaf', k: 'aaaaaaaaaaaa', mod: false, role: 'none' };
+        const hub = await startHub({ login: true, you: ME, history: HISTORY });
+        const v = dockFor(hub);
+        check('a visitor', await until(() => v.dock.state() === 'live') && one(v.dock.root, 'gc-input').disabled === false);
+        hub.bye('kicked');
+        check('kicked: the plain notice, the field off, the Log in button, and the page reads again (one more socket, after its wait of about a second, no loop)', await until(() => v.note() === 'A moderator removed you from the chat. You can log in again.' && v.dock.state() === 'offline' || v.dock.state() === 'live')
+              && await until(() => hub.upgrades === 2 && v.dock.state() === 'live', 4000) && one(v.dock.root, 'gc-input').disabled === true && one(v.dock.root, 'gc-login').hidden === false && v.note() === 'A moderator removed you from the chat. You can log in again.');
+        await sleep(1500);
+        check('... and it stays there: no third socket', hub.upgrades === 2 && v.errors.length === 0);
+        hub.set({ you: ME });
+        hub.bye('banned');
+        check('banned: the notice says that the person can still read; the page connects again, the history is shown, the field is off and says why, and Send and Log in are gone', await until(() => hub.upgrades === 3 && v.dock.state() === 'live', 5000) && v.note() === 'You are banned from the chat. You can still read it.' && one(v.dock.root, 'gc-input').disabled === true
+              && one(v.dock.root, 'gc-input').getAttribute('placeholder') === 'You are banned from the chat' && one(v.dock.root, 'gc-send').hidden === true && one(v.dock.root, 'gc-login').hidden === true && v.rows().length === 3);
+        await sleep(1500);
+        check('... and no more sockets', hub.upgrades === 3 && v.errors.length === 0);
+        await hub.close();
     }
     {   // a site with no such door (404), a hub that is not there (503 with the JSON of nginx), a hub that says nothing
         const nodoor = await startHub({ path: '/elsewhere' });

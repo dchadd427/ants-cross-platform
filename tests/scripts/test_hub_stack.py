@@ -17,7 +17,7 @@ import unittest
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from hub import limits as limitmod  # noqa: E402
+from hub import limits as limitmod, store as storemod  # noqa: E402
 
 STACK = os.path.join(REPO, "docker-compose.stack.yml")
 
@@ -93,7 +93,7 @@ class TheImage(unittest.TestCase):
         self.assertIn("EXPOSE 4040", self.code)
 
     def test_nothing_secret_or_test_only_is_in_the_image(self):
-        for word in ("SECRET", "TOKEN", "PASSWORD", "ANTS_HUB_TEST_LOGIN", "ANTS_HUB_MODS", "DISCORD"):
+        for word in ("SECRET", "TOKEN", "PASSWORD", "ANTS_HUB_TEST_LOGIN", "ANTS_HUB_MODS", "ANTS_HUB_OWNER", "DISCORD"):
             self.assertNotIn(word, self.code, word)
 
     def test_the_context_keeps_bytecode_out(self):
@@ -127,7 +127,7 @@ class TheServices(unittest.TestCase):
             self.assertNotIn("ANTS_BUILD_ID", hub, name)
             self.assertNotIn("expose:", hub, name)
 
-    def test_its_log_is_kept_small_in_both_stacks(self):
+    def test_its_log_is_kept_small_in_the_stack(self):
         for name, text in self.files.items():
             hub = service(text, "ants-hub")
             self.assertRegex(hub, r"logging:\s*\n\s+driver: json-file\s*\n\s+options:\s*\n\s+max-size: \"\d+m\"\s*\n\s+max-file: \"\d+\"", name)
@@ -143,8 +143,16 @@ class TheServices(unittest.TestCase):
     def test_the_settings_it_is_given(self):
         for name, text in self.files.items():
             hub = service(text, "ants-hub")
-            self.assertEqual(sorted(re.findall(r"(?m)^      (ANTS_[A-Z_]+):", hub)), ["ANTS_HUB_DISCORD_CLIENT_ID", "ANTS_HUB_DISCORD_CLIENT_SECRET", "ANTS_HUB_MIN_ACCOUNT_DAYS", "ANTS_HUB_MODS",
-                                                                                     "ANTS_HUB_PUBLIC_URL"], name)
+            self.assertEqual(sorted(re.findall(r"(?m)^      (ANTS_[A-Z_]+):", hub)), ["ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_CLIENT_ID", "ANTS_HUB_DISCORD_CLIENT_SECRET",
+                                                                                     "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_MIN_ACCOUNT_DAYS", "ANTS_HUB_OWNER", "ANTS_HUB_PUBLIC_URL",
+                                                                                     "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_ROLE_RECHECK_SECONDS"], name)
+            for secret in ("ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_OWNER"):
+                self.assertIn("%s: ${%s:-}\n" % (secret, secret), hub + "\n", name)                  # (the bot's token, the server and the roles: from the stack's environment only, no value in the file)
+            self.assertIn("ANTS_HUB_ROLE_RECHECK_SECONDS: ${ANTS_HUB_ROLE_RECHECK_SECONDS:-180}\n", hub + "\n", name)
+            self.assertNotIn("ANTS_HUB_MODS", hub, name)
+            for other in ("ants-server", "ants-beta"):                                              # (the roles' settings are the hub's alone)
+                if re.search(r"(?m)^  %s:" % other, text):
+                    self.assertNotRegex(service(text, other), r"ANTS_HUB_(?:DISCORD|ROLE|OWNER)", "%s: %s" % (name, other))
             self.assertIn("ANTS_HUB_DISCORD_CLIENT_ID: ${ANTS_HUB_DISCORD_CLIENT_ID:-}\n", hub + "\n", name)           # (from the stack's environment, and nothing in the file: no default, no value)
             self.assertIn("ANTS_HUB_DISCORD_CLIENT_SECRET: ${ANTS_HUB_DISCORD_CLIENT_SECRET:-}\n", hub + "\n", name)
             self.assertIn("ANTS_HUB_MIN_ACCOUNT_DAYS: ${ANTS_HUB_MIN_ACCOUNT_DAYS:-7}\n", hub + "\n", name)
@@ -231,7 +239,7 @@ class TheCode(unittest.TestCase):
 
     def test_the_sources_hold_no_invisible_or_look_alike_character(self):
         # a bidirectional control or a zero-width character in a source file could make the code read differently from what it does; the tricks are written as escapes (\\u202e) and the files are ASCII
-        names = ["Dockerfile.hub", os.path.join("docs", "HUB.md")] + [os.path.join("hub", n) for n in os.listdir(os.path.join(REPO, "hub")) if n.endswith(".py")]
+        names = ["Dockerfile.hub", os.path.join("docs", "HUB.md"), os.path.join("docs", "HUB_PICTURES.md")] + [os.path.join("hub", n) for n in os.listdir(os.path.join(REPO, "hub")) if n.endswith(".py")]
         names += [os.path.join("tests", "scripts", n) for n in os.listdir(os.path.join(REPO, "tests", "scripts")) if n.startswith(("test_hub_", "hub_")) or n == "test_nginx_hub.py"]
         for name in names:
             with open(os.path.join(REPO, name), "rb") as f:
@@ -265,6 +273,20 @@ class TheCode(unittest.TestCase):
                           defaults.duplicate_seconds, defaults.violations, defaults.violation_window, defaults.sockets_per_address, defaults.sockets_total, defaults.ping_seconds,
                           defaults.silence_seconds, defaults.write_buffer_max),
                          (2048, 200, 800, 50, 7, 3, 2.0, 30.0, 20, 60.0, 8, 500, 25.0, 60.0, 131072))
+
+    def test_the_documented_limits_of_the_pictures_are_the_ones_in_the_code(self):
+        doc = read(os.path.join(REPO, "docs", "HUB_PICTURES.md"))
+        defaults = limitmod.Limits()
+        for needle in ("one fetch at a time for an account, 2 at a time and 32 waiting, a burst of 5 and then one a second for the hub", "3 seconds to connect and 6 in all", "49,152 bytes read and 32,768 kept",
+                       "2,000 pictures and 8 MiB", "20 a second for an address (a burst of 240, in nginx and in the hub)", "remembered 400 days",
+                       "a burst of 3, then one every 30 seconds, for an account across all its tabs"):
+            self.assertIn(needle, doc, needle)
+        self.assertEqual((defaults.picture_inflight, defaults.picture_waiting, defaults.picture_burst, defaults.picture_refill_seconds, defaults.discord_connect_seconds,
+                          defaults.discord_seconds, defaults.picture_read_max, defaults.picture_bytes_max, defaults.pictures_rows_max, defaults.pictures_bytes_max, defaults.picture_serve_burst,
+                          defaults.picture_serve_refill_seconds),
+                         (2, 32, 5, 1.0, 3.0, 6.0, 49152, 32768, 2000, 8 * 1024 * 1024, 240, 0.05))
+        self.assertEqual((defaults.pics_burst, defaults.pics_refill_seconds, defaults.pick_burst, defaults.pick_refill_seconds), (3, 30.0, 3, 30.0))
+        self.assertEqual(storemod.PICTURE_DAYS, 400)
 
 
 class TheWiring(unittest.TestCase):

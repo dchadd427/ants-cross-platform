@@ -57,7 +57,14 @@
         function describe() {
             var m = mod();
             if (!m || typeof m._ants_menu_describe !== 'function' || typeof m.UTF8ToString !== 'function') return null;
-            try { var text = m.UTF8ToString(m._ants_menu_describe()); return text ? JSON.parse(text) : null; } catch (e) { return null; }
+            try { var text = m.UTF8ToString(m._ants_menu_describe()), d = text ? JSON.parse(text) : null; if (d) withTouchRow(d); return d; } catch (e) { return null; }
+        }
+        // The page's own row that the game's table does not hold: Touch buttons (the hotkey buttons of web/touch_keys.js), on a touch screen, in Video after the Fullscreen mouse row
+        function withTouchRow(d) {
+            if (!page.touchKeys || !d.rows) return;
+            var at = -1, found = false, i;
+            for (i = 0; i < d.rows.length; i++) { if (d.rows[i].key === 'touchkeys') return; if (d.rows[i].sec === 'video' && !found) { at = i; found = d.rows[i].key === 'lockmouse'; } }
+            if (at >= 0) d.rows.splice(at + 1, 0, { id: -1, key: 'touchkeys', sec: 'video', kind: 'choice', label: 'Touch buttons', hint: 'Buttons for the game keys during a match', words: ['On', 'Off'], page: 1 });
         }
         function ready() { return !!(page.ready ? page.ready() : true); }
 
@@ -80,6 +87,11 @@
                 has: function () { return typeof page.pickShape === 'function'; },
                 read: shapeNow,
                 write: function (name) { page.pickShape(name); }
+            },
+            touchkeys: {
+                has: function () { return !!page.touchKeys && page.touchKeys.available(); },
+                read: function () { return page.touchKeys.get() ? 0 : 1; },
+                write: function (i) { page.touchKeys.set(i === 0); }
             },
             lockmouse: {
                 has: function () { return !!page.lock && page.lock.available() && !touchy(); },
@@ -277,6 +289,7 @@
         function fillSmall() {
             var n = 0, last = '';
             info.rows.forEach(function (row) {
+                if (row.key === 'touchkeys') return; // (the hotkey buttons' row is for the full menu: it changes nothing outside a match)
                 if (!row.page || !(PAGE_ROWS[row.key] || row.key === 'fullscreen')) return;
                 var line = rowOf(row, ++n);
                 if (!line) return;

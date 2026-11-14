@@ -62,10 +62,41 @@ class Limits:
     profiles_total: int = 100000        # profiles (the username and the display name of an account, from its last login) that the hub keeps in all: the ones refreshed longest ago go first
     pick_burst: int = 3                 # switches between the display name and the username that an account may make at once (across all its tabs: a switch makes every page of the account connect again) ...
     pick_refill_seconds: float = 30.0   # ... then one in this long
+    pics_burst: int = 3                 # switches of the picture (`pics`) that an account may make at once (across all its tabs) ...
+    pics_refill_seconds: float = 30.0   # ... then one in this long (the same numbers as the switch of the name)
     discord_connect_seconds: float = 3.0        # to Discord: the connection ...
     discord_seconds: float = 6.0                # ... a whole call, from the first byte sent to the last byte read ...
     discord_total_seconds: float = 10.0         # ... and the two calls of a login together (nginx waits 15 seconds for the hub's answer)
+    roles_burst: int = 5                # the roles' lookups (hub/roles.py): a burst of 5, then one every half second (two a second), one at a time, however many people are here ...
+    roles_refill_seconds: float = 0.5
+    roles_grace_seconds: float = 60.0   # ... a role is believed for the re-check interval, a tenth of it (the jitter) and this long more, then it is `none` until Discord has said it again
+    roles_pause_seconds: float = 600.0  # a token, a server or an access that Discord refuses: no call at all for this long, then one to try again
+    roles_jitter: float = 0.1           # the next check of a person is the interval plus or minus this part of it, so that a crowd that came together does not stay together
+    roles_retry_seconds: float = 15.0   # a check that failed is tried again after this, then double, up to the next number, then at the normal pace
+    roles_retry_max_seconds: float = 60.0
+    roles_hold_max_seconds: float = 60.0        # the longest that one answer of Discord ("wait this long") can stop the lookups
+    roles_log_seconds: float = 600.0    # a line in the log for a Discord that does not answer: this seldom at the most
+    roles_action_fresh_seconds: float = 60.0    # a moderator's action needs the answer of Discord about the one who acts and the one acted on to be no older than this, else an urgent lookup of both is made first ...
+    roles_urgent_seconds: float = 3.0           # ... and waited for this long at the most (an action whose lookups did not answer in time is refused)
+    roles_urgent_burst: int = 10                # the lookups that actions may ask for at once, and then one every `roles_urgent_refill_seconds` for the whole hub: an action that cannot have its lookups is refused (`role`), so that a moderator who asks for many ...
+    roles_urgent_refill_seconds: float = 1.0    # ... cannot use the whole of the two lookups a second, which everybody's role holds on to (half of them are the people's own)
+    roles_urgent_actor_burst: int = 3           # the commands of one moderator (across all its sockets) that may wait for lookups at once, and then one every `roles_urgent_actor_refill_seconds`: what a moderator may ask of the hub's share ...
+    roles_urgent_actor_refill_seconds: float = 5.0      # ... so that one moderator cannot spend the share that every moderator's actions use
+    named_lines_burst: int = 5          # the lines "<name> was kicked." and "<name> was banned." that one moderator may have made at once (each is a line for everybody), and then one every `named_lines_refill_seconds`; a kick or a ban over it is done all the same, and only its line is not made
+    named_lines_refill_seconds: float = 10.0
+    roles_entries_max: int = 2000       # people whose role is kept in memory: those with a socket open and a few that left (at most `sockets_total` are open)
     discord_body_max: int = 32768       # what is read of an answer of Discord (the head and the body together); more is an answer that is not Discord's
+    picture_bytes_max: int = 32768      # a profile picture's copy: the PNG that Discord sends is kept only up to this (64 pixels square is 4 to 12 KB)
+    picture_read_max: int = 49152       # what is read of the answer of Discord's image host (the head and the body together); more is not a picture
+    pictures_rows_max: int = 2000       # pictures kept in all ...
+    pictures_bytes_max: int = 8388608   # ... and their bytes (8 MiB, an eighth of db_max_bytes): a new one that does not fit takes the room of the ones fetched longest ago
+    picture_inflight: int = 2           # fetches at one time ...
+    picture_waiting: int = 32           # ... and waiting for their turn (more are dropped: the letters stay; one account has one fetch waiting or running at a time, and a new login always gets its fetch once that one is done)
+    picture_dropped_log_seconds: float = 10.0   # a fetch that was dropped (the queue was full, or the account's fetch was still waiting) is counted, and a line says how many, this seldom at the most
+    picture_burst: int = 5              # fetches for the whole hub: a burst of 5, then one every `picture_refill_seconds`
+    picture_refill_seconds: float = 1.0
+    picture_serve_burst: int = 240      # /hub/pic/ answers for one client address: a burst of 240 (one whole list of the front page), then twenty a second (nginx has the same numbers in front)
+    picture_serve_refill_seconds: float = 0.05
 
     @property
     def prune_from_bytes(self):
@@ -181,7 +212,7 @@ class RateByAddress:
 
 
 class RateByAccount(RateByAddress):
-    """The same table of token buckets, one for each account id (the key is the id, not an address): what an account may do however many tabs it has open. A bucket that is full again is
+    """The same table of token buckets, one for each account (the key is whatever the caller names the account by: the account id for the switch of the name, the hub's own key of the account, never the id, for the moderators' budgets): what an account may do however many tabs it has open. A bucket that is full again is
     forgotten by forget_idle()."""
 
 

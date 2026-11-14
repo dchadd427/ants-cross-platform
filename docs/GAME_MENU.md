@@ -44,6 +44,8 @@ The small form has the three rows with `page: 1` that the page serves. The rows 
 | Game | Quick help (F1), Original options window (Ctrl+O) | none | close the panel and open the original's window |
 | Game | Version | none | |
 
+**One row is the page's alone and is not in the game's table: Touch buttons** (On or Off, in Video after Fullscreen mouse, on a touch screen only, in the full menu; `web/game_menu.js` adds it to the table that the game describes when the page has the hotkey buttons, [`TOUCH.md`](TOUCH.md#the-hotkey-buttons)). It is remembered in the browser under `ants.touchkeys` and calls nothing in the game.
+
 Master volume and the three that are the original's use the same numbers as the original's options window (0 to 99 on the slider; the stored 100 reads as 99), and the panel and the window show the same state, so they always agree. The values are the player's own: **Clear Cache & Update** erases the settings file and they come back to their defaults. The original's options window, Ctrl+O and the top bar's buttons are unchanged.
 
 ## Leave game

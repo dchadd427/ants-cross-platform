@@ -462,14 +462,14 @@
   {
    "id": "logout_keeps_the_login",
    "file": "hub/login.py",
-   "old": "self.store.delete_session(digest(value))\n                self.hub.end_logins(session=digest(value))\n        except StoreError:\n            return self.fail(503, \"busy\")",
+   "old": "self.store.delete_session(digest(value))\n                self.hub.end_logins(session=digest(value))\n                self.sync_pictures()                                          # (the store took the picture with the account's last login: the pages are told)\n        except StoreError:\n            return self.fail(503, \"busy\")",
    "new": "pass\n        except StoreError:\n            return self.fail(503, \"busy\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout"
   },
   {
    "id": "logout_keeps_the_sockets",
    "file": "hub/login.py",
-   "old": "                self.hub.end_logins(session=digest(value))\n        except StoreError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
+   "old": "                self.hub.end_logins(session=digest(value))\n                self.sync_pictures()                                          # (the store took the picture with the account's last login: the pages are told)\n        except StoreError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
    "new": "                pass\n        except StoreError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout"
   },
@@ -532,15 +532,15 @@
   {
    "id": "forget_keeps_the_logins",
    "file": "hub/store/sqlite.py",
-   "old": "self.db.execute(\"DELETE FROM sessions WHERE account = ?\", (account,))",
-   "new": "self.db.execute(\"SELECT 1\")",
+   "old": "            self.db.execute(\"DELETE FROM sessions WHERE account = ?\", (account,))\n            self.db.execute(\"DELETE FROM profiles",
+   "new": "            self.db.execute(\"SELECT 1\")\n            self.db.execute(\"DELETE FROM profiles",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
   },
   {
    "id": "forget_ends_every_login",
    "file": "hub/store/sqlite.py",
-   "old": "self.db.execute(\"DELETE FROM sessions WHERE account = ?\", (account,))",
-   "new": "self.db.execute(\"DELETE FROM sessions WHERE account = ? OR 1\", (account,))",
+   "old": "            self.db.execute(\"DELETE FROM sessions WHERE account = ?\", (account,))\n            self.db.execute(\"DELETE FROM profiles",
+   "new": "            self.db.execute(\"DELETE FROM sessions WHERE account = ? OR 1\", (account,))\n            self.db.execute(\"DELETE FROM profiles",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
   },
   {
@@ -637,7 +637,7 @@
   {
    "id": "discord_answer_not_capped",
    "file": "hub/discord.py",
-   "old": "room = self.limits.discord_body_max",
+   "old": "room = cap",
    "new": "room = 10 ** 12",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDiscordClient"
   },
@@ -679,15 +679,15 @@
   {
    "id": "login_total_cap_removed",
    "file": "hub/store/sqlite.py",
-   "old": "self.db.execute(\"DELETE FROM sessions WHERE rowid IN (SELECT rowid FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)\", (total,))",
+   "old": "self.db.executemany(\"DELETE FROM sessions WHERE rowid = ?\", [(r[0],) for r in cut])",
    "new": "self.db.execute(\"SELECT ?\", (total,))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsInAll"
   },
   {
    "id": "login_total_cap_keeps_the_oldest",
    "file": "hub/store/sqlite.py",
-   "old": "FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)",
-   "new": "FROM sessions ORDER BY created ASC, rowid ASC LIMIT -1 OFFSET ?)",
+   "old": "FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?\", (total,)).fetchall()",
+   "new": "FROM sessions ORDER BY created ASC, rowid ASC LIMIT -1 OFFSET ?\", (total,)).fetchall()",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsInAll"
   },
   {
@@ -1092,8 +1092,8 @@
   {
    "id": "line_write_error_cuts_the_socket",
    "file": "hub/chat.py",
-   "old": "        try:\n            entry = self.store.add_line(who.account_id, who.name, line, mod)\n        except StoreError as e:",
-   "new": "        try:\n            entry = self.store.add_line(who.account_id, who.name, line, mod)\n        except ZeroDivisionError as e:",
+   "old": "        try:\n            entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0))       # (the role that the author has now: what the line will say of it)\n        except StoreError as e:",
+   "new": "        try:\n            entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0))       # (the role that the author has now: what the line will say of it)\n        except ZeroDivisionError as e:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
   },
   {
@@ -1113,8 +1113,8 @@
   {
    "id": "failed_line_is_a_mistake",
    "file": "hub/chat.py",
-   "old": "        self.mistake(peer, code, count=False)\n\n    def on_say",
-   "new": "        self.mistake(peer, code)\n\n    def on_say",
+   "old": "        self.mistake(peer, code, count=False)\n\n    def ref(self, account):",
+   "new": "        self.mistake(peer, code)\n\n    def ref(self, account):",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
   },
   {
@@ -1407,7 +1407,7 @@
   {
    "id": "legal_forgets_to_say_what_is_kept",
    "file": "web/legal.html",
-   "old": "They are kept so that the site knows who you are and shows the name that you pick, and for nothing else.",
+   "old": "They are kept so that the site knows who you are, shows the name that you pick and shows your picture, and for nothing else.",
    "new": "They are used.",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   },
@@ -1428,7 +1428,7 @@
   {
    "id": "legal_forgets_to_say_how_to_forget",
    "file": "web/legal.html",
-   "old": "<strong>Forget me</strong> ends every login of your account, deletes your chat lines that are still kept and removes your username and display name from the site&rsquo;s records; a ban or a mute, if there is one, stays.",
+   "old": "<strong>Forget me</strong> ends every login of your account, deletes your chat lines that are still kept and removes your username, display name and the copy of your picture from the site&rsquo;s records; a ban or a mute, if there is one, stays, and so does the operator&rsquo;s hiding of your picture, kept as one entry under the same kind of code, with no id and no name.",
    "new": "Ask us.",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   },
@@ -1505,8 +1505,8 @@
   {
    "id": "logout_does_not_ask_for_the_cut",
    "file": "hub/store/sqlite.py",
-   "old": "            gone = self.db.execute(\"DELETE FROM sessions WHERE id = ?\", (key,)).rowcount == 1\n        self.unsettled = True\n        return gone\n",
-   "new": "            gone = self.db.execute(\"DELETE FROM sessions WHERE id = ?\", (key,)).rowcount == 1\n        return gone\n",
+   "old": "            gone = self.db.execute(\"DELETE FROM sessions WHERE id = ?\", (key,)).rowcount == 1\n            if row is not None:\n                self.drop_pictures_without_login([row[0]], int(self.clock()))          # (the account's last login: its picture goes with it)\n        self.unsettled = True\n        return gone\n",
+   "new": "            gone = self.db.execute(\"DELETE FROM sessions WHERE id = ?\", (key,)).rowcount == 1\n            if row is not None:\n                self.drop_pictures_without_login([row[0]], int(self.clock()))          # (the account's last login: its picture goes with it)\n        return gone\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheLogFileIsCutWhenSomethingIsForgotten"
   },
   {
@@ -1624,8 +1624,8 @@
   {
    "id": "nginx_login_lets_a_sibling_site_in",
    "file": "docker/nginx.conf",
-   "old": "$http_sec_fetch_site ~ \"^(cross-site|same-site)$\"",
-   "new": "$http_sec_fetch_site ~ \"^cross-site$\"",
+   "old": "$http_sec_fetch_site ~ \"^(cross-site|same-site)$\") { return 403; }          # (a link or an image",
+   "new": "$http_sec_fetch_site ~ \"^cross-site$\") { return 403; }          # (a link or an image",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
   },
   {
@@ -1793,14 +1793,14 @@
    "id": "me_says_no_key",
    "file": "hub/login.py",
    "old": "\"you\": self.hub.chat.you_of(who) if who else None",
-   "new": "\"you\": {\"name\": who.name, \"mod\": who.account_id in self.hub.chat.mods} if who else None",
+   "new": "\"you\": {\"name\": who.name, \"mod\": False} if who else None",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDisplayName tests.scripts.test_hub_login.TheTwoNamesAndTheModerators tests.scripts.test_hub_login.ThePickOnTheWire"
   },
   {
    "id": "legal_forgets_the_display_name",
    "file": "web/legal.html",
-   "old": "<strong>display name</strong>. They are kept",
-   "new": "<strong>name</strong>. They are kept",
+   "old": "<strong>display name</strong> and, if you have set one",
+   "new": "<strong>name</strong> and, if you have set one",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   },
   {
@@ -1813,7 +1813,7 @@
   {
    "id": "legal_says_two_things_only",
    "file": "web/legal.html",
-   "old": "three things only",
+   "old": "four things only",
    "new": "two things only",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   },
@@ -1830,6 +1830,69 @@
    "old": "profiles_total: int = 100000",
    "new": "profiles_total: int = 1000000000",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfProfiles tests.scripts.test_hub_login.TheLimitsAreWhatTheDocsSay"
+  },
+  {
+   "id": "legal_forgets_that_a_picture_is_fetched_once",
+   "file": "web/legal.html",
+   "old": "fetches one small copy of your Discord profile picture from Discord, once, and keeps it on its own server",
+   "new": "fetches your Discord profile picture",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_says_other_browsers_ask_discord",
+   "file": "web/legal.html",
+   "old": "other people&rsquo;s browsers do not contact Discord for it",
+   "new": "other people&rsquo;s browsers ask Discord for it",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_forgets_the_thirty_days_of_a_picture",
+   "file": "web/legal.html",
+   "old": "for at most 30 days after the login that fetched it",
+   "new": "for ever",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_says_the_copy_stays_when_switched_off",
+   "file": "web/legal.html",
+   "old": "deletes the copy from the server at once, and so does a kick or a ban",
+   "new": "keeps the copy on the server",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_forgets_the_cache_of_a_picture",
+   "file": "web/legal.html",
+   "old": "Its address can still answer for up to five minutes, and",
+   "new": "The browser",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_forgets_the_remembered_off",
+   "file": "web/legal.html",
+   "old": "for 400 days after your last login; Forget me deletes that too",
+   "new": "for ever",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_forgets_that_the_operator_may_hide_a_picture",
+   "file": "web/legal.html",
+   "old": " or the site&rsquo;s operator hides it",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_forgets_that_a_block_stays_after_forget_me",
+   "file": "web/legal.html",
+   "old": ", and so does the operator&rsquo;s hiding of your picture, kept as one entry under the same kind of code, with no id and no name",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_says_the_picture_is_shown_to_members_only",
+   "file": "web/legal.html",
+   "old": "shown to everyone who opens the front page, logged in or not,",
+   "new": "shown to people who are logged in,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   }
  ]
 }
