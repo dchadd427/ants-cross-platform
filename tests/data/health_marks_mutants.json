@@ -334,8 +334,8 @@
     {
       "id": "fog_culling_dropped",
       "file": "src/ants_app/renderer_units.cpp",
-      "old": "if (!health::ant_drawn(world, hud_team_id_, a)) continue;",
-      "new": "",
+      "old": "if (!health::ant_drawn(world, hud_team_id_, a)) {",
+      "new": "if (false) {",
       "build": [
         "test_health_marks"
       ],

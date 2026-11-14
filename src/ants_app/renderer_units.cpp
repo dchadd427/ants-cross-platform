@@ -218,7 +218,10 @@ void Renderer::draw_anthill_selection_brackets(int32_t cx, int32_t cy, uint32_t 
 void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
     for (const auto& a : world.ants) {
         // The original shows the local player's and the allies' ants always (0x101aa0d); every other ant only on explored ground
-        if (!health::ant_drawn(world, hud_team_id_, a)) continue;     // Concealed enemy ant under fog of war
+        if (!health::ant_drawn(world, hud_team_id_, a)) {              // Concealed enemy ant under fog of war
+            if (changes_ != nullptr && changes_->count() > 0) changes_->note_hidden(a.id);       // (and no damage or heal number over it)
+            continue;
+        }
         RenderItem item{};
         // The sort key is the sprite's y: a thrown ant's key jumps with its position at the end of the first flight frame
         const AntClipPrediction pred = predict_ant_clip(a, ant_loco_sequence(a));

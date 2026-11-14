@@ -231,7 +231,7 @@ void Renderer::draw_health_changes() {
         const health::Number& num = changes_->at(i);
         const int32_t age = static_cast<int32_t>(changes_now_ms_ - num.start_ms);
         const int32_t alpha = health::alpha_at(age);
-        if (alpha <= 0) continue;
+        if (alpha <= 0 || num.hidden) continue;
         const ChangePicture* pic = change_picture(std::string(num.heal ? "+" : "-") + std::to_string(std::min<int32_t>(num.amount, 9999)));
         if (pic == nullptr) continue;
         int32_t sx = 0;

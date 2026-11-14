@@ -64,6 +64,7 @@ struct Number {
     int32_t wx{0};              // where the ant's sprite stands, in world pixels (the picture of the ant moves it, the last place is kept for a dying ant)
     int32_t wy{0};
     uint8_t level{0};           // 0 for the first number of an ant, 1 one line above it, and so on
+    bool hidden{false};         // the ant is in the game but the picture does not draw it this frame (fog): its number is not drawn either, whatever the tracker believed
 };
 
 class ChangeTracker {
@@ -120,7 +121,16 @@ public:
             if (items_[i].id == id) {
                 items_[i].wx = wx;
                 items_[i].wy = wy;
+                items_[i].hidden = false;
             }
+        }
+    }
+
+    /// The ant `id` is in the game and the picture does not draw it this frame: its number is not drawn (a safety net behind the gate of on_tick: a number can never show where a hidden ant is). An ant that is gone from the
+    /// game is neither noted here nor by note_position: its number plays out where it was last drawn.
+    void note_hidden(uint32_t id) noexcept {
+        for (size_t i = 0; i < count_; ++i) {
+            if (items_[i].id == id) items_[i].hidden = true;
         }
     }
 

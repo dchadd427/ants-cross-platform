@@ -537,6 +537,26 @@ void test_drawing(const assets::AssetArchive& arc) {
         check(gone.n > 30 && gone.x0 == mx - 7 && gone.y0 == my - 47 - 1, "an ant that is gone leaves its number where it was last drawn (the rise is 1 at 0.1 s)");
         rig.world.ants = {sprite_less(1, 0, 600, 500, 9)};
     }
+    {   // a safety net behind the tracker's gate: the ant is still in the game but the picture does not draw it (fog), so its number is not drawn either, and one that is drawn or gone is as before
+        rig.look(500.0, 400.0, 1.0f);
+        hc::ChangeTracker t = with_number(1, 600, 500, 1, false);
+        rig.world.fog_of_war_enabled = true;
+        rig.world.fog_revealed.assign(static_cast<size_t>(rig.world.width) * rig.world.height, 0);
+        rig.world.ants = {sprite_less(1, 1, 600, 500, 9)};                      // (an enemy of team 0 on ground that is not explored)
+        const Picture fogged_none = shoot(rig, nullptr, 0);
+        check(delta(fogged_none, shoot(rig, &t, 0)).n == 0, "an ant that the fog hides has no number drawn, though the tracker holds one for it");
+        rig.world.fog_revealed.assign(static_cast<size_t>(rig.world.width) * rig.world.height, 1);
+        const Picture seen_none = shoot(rig, nullptr, 0);
+        check(delta(seen_none, shoot(rig, &t, 0)).n > 30, "...and the same ant on explored ground has it (the hiding is only for a frame in which the ant is not drawn)");
+        rig.world.fog_revealed.assign(static_cast<size_t>(rig.world.width) * rig.world.height, 0);
+        shoot(rig, nullptr, 0);
+        shoot(rig, &t, 0);                                                      // (hidden again: noted)
+        rig.world.ants.clear();
+        const Picture gone_none = shoot(rig, nullptr, 0);
+        check(delta(gone_none, shoot(rig, &t, 100)).n == 0, "an ant that was hidden and is now gone shows nothing either (its last place was a hidden one)");
+        rig.world.fog_of_war_enabled = false;
+        rig.world.ants = {sprite_less(1, 0, 600, 500, 9)};
+    }
     {   // it is clipped to the view: an ant at the top edge, its number would stand over the HUD's part of the canvas (at the zoom 1 and in a zoomed pass)
         struct Edge { float zoom; float under; };                              // (how many screen pixels under the view's top edge the ant stands: the number's box reaches over it)
         for (const Edge& e : {Edge{1.0f, 40.0f}, Edge{2.0f, 75.0f}, Edge{0.5f, 25.0f}}) {

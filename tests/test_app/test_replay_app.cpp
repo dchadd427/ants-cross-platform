@@ -2408,6 +2408,115 @@ int main(int argc, char* argv[]) {
         std::cout << "(" << ticks << " ticks, numbers on " << frames_with_numbers << " frames, at most " << most_live << " live, " << damage << " damage and " << heal << " heal numbers seen)\n";
     } TEST_END();
 
+    TEST_CASE("RA10.4 Fog of War in a running game, seen from seat 2: a number is made for an ant of the viewer's own seat or on explored ground, never for an enemy on ground that is not explored (checked every frame), and the hit that made none was a real one") {
+        Application app;
+        ApplicationConfig cfg = local_config(0x00);
+        cfg.play_at_once = false;
+        cfg.local_player_id = 2;                                                           // (not seat 0: the tracker is given the viewer's seat, not the first one)
+        ASSERT_TRUE(app.init(cfg));
+        click_fog(app, true);
+        ASSERT_TRUE(app.start_game(cfg.default_map_path));
+        ASSERT_EQ(app.local_player_id(), 2);
+        app.hud().dismiss_match_start_modal();
+        const auto frame = [&]() {
+            app.update_simulation(0.05f);
+            app.render_frame();
+        };
+        for (int i = 0; i < 5; ++i) frame();
+        sim::SimulationEngine& e = app.sim();
+        const sim::WorldState& w0 = e.get_world_state();
+        ASSERT_TRUE(w0.fog_of_war_enabled);
+        // two tiles side by side that are explored and two that are not (the explored ones are the viewer's start; seat 0 is an enemy that the viewer cannot see)
+        const auto pair_at = [&](bool explored, int32_t min_y, int32_t& px, int32_t& py) {
+            for (int32_t y = min_y; y + 3 < static_cast<int32_t>(w0.height); ++y) {
+                for (int32_t x = 3; x + 3 < static_cast<int32_t>(w0.width); ++x) {
+                    if (w0.is_tile_revealed(x, y) == explored && w0.is_tile_revealed(x + 1, y) == explored && w0.is_tile_revealed(x + 2, y) == explored) {
+                        px = x;
+                        py = y;
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        int32_t hx = 0, hy = 0, sx = 0, sy = 0;
+        ASSERT_TRUE(pair_at(false, 3, hx, hy));
+        ASSERT_TRUE(pair_at(true, 3, sx, sy));
+        int32_t ox = 0, oy = 0;
+        ASSERT_TRUE(pair_at(true, sy + 2, ox, oy));
+        const uint32_t hidden_victim = e.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{hx + 1, hy});
+        const uint32_t hidden_attacker = e.spawn_unit(1, sim::AntType::Worker, sim::TileCoord{hx, hy});
+        const uint32_t seen_victim = e.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{sx + 1, sy});
+        const uint32_t seen_attacker = e.spawn_unit(1, sim::AntType::Worker, sim::TileCoord{sx, sy});
+        const uint32_t own_victim = e.spawn_unit(2, sim::AntType::Worker, sim::TileCoord{ox + 1, oy});          // (an own ant: a number)
+        const uint32_t own_attacker = e.spawn_unit(1, sim::AntType::Worker, sim::TileCoord{ox, oy});
+        for (int i = 0; i < 3; ++i) frame();                                               // (the tracker sees each of them once, at its full hit points)
+        ASSERT_TRUE(!e.get_world_state().is_tile_revealed(e.get_unit(hidden_victim).pos.x, e.get_unit(hidden_victim).pos.y));
+        ASSERT_TRUE(e.get_world_state().is_tile_revealed(e.get_unit(seen_victim).pos.x, e.get_unit(seen_victim).pos.y));
+        e.execute_melee_attack(hidden_attacker, hidden_victim);
+        e.execute_melee_attack(seen_attacker, seen_victim);
+        e.execute_melee_attack(own_attacker, own_victim);
+        ASSERT_TRUE(e.get_unit(hidden_victim).hp < 10u && e.get_unit(seen_victim).hp < 10u && e.get_unit(own_victim).hp < 10u);
+        bool hidden_numbered = false, seen_numbered = false, own_numbered = false;
+        for (int i = 0; i < 30; ++i) {
+            frame();
+            const sim::WorldState& w = e.get_world_state();
+            const health::ChangeTracker& t = app.health_changes();
+            for (size_t k = 0; k < t.count(); ++k) {
+                const uint32_t id = t.at(k).id;
+                hidden_numbered = hidden_numbered || id == hidden_victim;
+                seen_numbered = seen_numbered || id == seen_victim;
+                own_numbered = own_numbered || id == own_victim;
+                for (const sim::AntSnapshot& a : w.ants) {                                 // (the rule, every frame, for every number that is live)
+                    if (a.id != id) continue;
+                    ASSERT_TRUE(a.player_id == 2 || w.is_tile_revealed(a.tile_x, a.tile_y));
+                }
+            }
+        }
+        ASSERT_TRUE(seen_numbered);                                                        // (an enemy on explored ground: a number)
+        ASSERT_TRUE(own_numbered);                                                         // (an own ant: a number)
+        ASSERT_FALSE(hidden_numbered);                                                     // (an enemy on ground that is not explored: none, though it was hit)
+        app.shutdown();
+    } TEST_END();
+
+    TEST_CASE("RA10.5 A match that is played and recorded is the same with the damage and heal numbers On and Off: the same state hash after every tick, the same file at the end, and On had numbers") {
+        const int kFrames = 2000;
+        Application on;
+        Application off;
+        ApplicationConfig cfg = local_config(0x0E);                                        // (three computer players against the seat of the HUD: the same seed, so the same match)
+        cfg.default_map_path = maps_dir() + "/TREASURE.LVL";
+        for (ants::ai::BotSpec& bot : cfg.bots) bot.level = ants::ai::Level::Hard;
+        ASSERT_TRUE(on.init(cfg));
+        ASSERT_TRUE(off.init(cfg));
+        ASSERT_TRUE(off.game_menu_set(game_menu::kHealthChanges, 0));
+        ASSERT_EQ(on.game_menu_get(game_menu::kHealthChanges), 1);
+        on.hud().dismiss_match_start_modal();
+        off.hud().dismiss_match_start_modal();
+        size_t differing = 0, frames_with_numbers = 0, off_live = 0;
+        for (int i = 0; i < kFrames; ++i) {
+            on.update_simulation(0.05f);
+            off.update_simulation(0.05f);
+            on.render_frame();
+            off.render_frame();
+            if (on.sim().current_tick() != off.sim().current_tick() || on.sim().state_hash().total != off.sim().state_hash().total) ++differing;
+            frames_with_numbers += on.health_changes().count() > 0 ? 1u : 0u;
+            off_live = std::max(off_live, off.health_changes().count());
+            if (on.sim().is_match_over() || off.sim().is_match_over()) break;
+        }
+        ASSERT_GT(on.sim().current_tick(), 1000u);
+        ASSERT_EQ(differing, 0u);
+        ASSERT_EQ(off_live, 0u);
+        std::cout << "(numbers on " << frames_with_numbers << " frames of " << on.sim().current_tick() << ")\n";
+        ASSERT_GT(frames_with_numbers, 0u);
+        on.return_to_map_select();                                                         // (the match is left after a minute and more: its file is kept)
+        off.return_to_map_select();
+        ASSERT_FALSE(on.last_replay().empty());
+        ASSERT_TRUE(on.last_replay() == off.last_replay());                                // (the recording's bytes are equal)
+        std::cout << "(" << on.sim().current_tick() << " ticks played, numbers on " << frames_with_numbers << " frames, file " << on.last_replay().size() << " bytes)\n";
+        on.shutdown();
+        off.shutdown();
+    } TEST_END();
+
     std::cout << "\nreplay application tests: " << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";
     return g_test_failures == 0 ? 0 : 1;
 }
