@@ -68,7 +68,7 @@ class TheMutants(unittest.TestCase):
     def test_the_check_fails_on_every_broken_copy(self):
         """tests/data/game_bar_mutants.json: each mutant on a copy of its file, noticed by the browser check"""
         spec = json.loads(read(MUTANTS))
-        self.assertGreaterEqual(len(spec["mutants"]), 25)
+        self.assertGreaterEqual(len(spec["mutants"]), 40)
         with tempfile.TemporaryDirectory() as tmp:
             for m in spec["mutants"]:
                 with self.subTest(m["id"]):

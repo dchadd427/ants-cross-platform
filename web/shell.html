@@ -2556,6 +2556,7 @@
                 return ANTS_ARGS.indexOf('--join-url') !== -1 || playing;
             },
             ask: function () { return window.confirm('Leave the game and go back to the menu?'); },
+            running: function () { try { return typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (err) { return false; } },
             leave: antsLeaveMatch,
             focus: function () { canvas.focus(); }
         });

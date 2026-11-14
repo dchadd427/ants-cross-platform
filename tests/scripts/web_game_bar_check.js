@@ -6,6 +6,8 @@
 //   keys:   with the focus on the game a key reaches it; with the focus in the bar or the Menu open no key reaches it (down, press, up), a key kept stays kept until its lift (repeats too), a key that was down
 //           before keeps its lift, a bare Shift goes on, Enter presses the focused control, Esc closes the Menu and the game never hears it, a fresh press ends the keeping of the one before;
 //   focus:  a press with the pointer gives the focus back to the game, except on the Menu's button, which has opened the Menu;
+//   reload: "Reload page" reloads at once with no game playing, and while a game is played (not in a recording or a live view) asks first, Cancel focused, the keys the question's, Esc and Cancel stay;
+//   resize: the open Menu stays through a change of height alone and the page's own resize, and closes at a new width;
 //   Menu:   the lines the page adds each time it opens (the note while a match runs, "Reload page" last of the small links, a recording's Copy link, Download and Open another file on a narrow window only and
 //           not for a file of your own or a live view, each one pressing the button of the bar that it stands for).
 // usage: node web_game_bar_check.js game_bar.js game_bar.css [shell.html [site_nav.js site_nav.css]]     (exit 0: every check holds; 1: one fails; 3: no browser to run it in)
@@ -41,12 +43,13 @@ const HTML = '<!doctype html><meta name="viewport" content="width=device-width">
 const SETUP = () => {
     window.__log = { keys: [], asks: 0, leaves: 0, opens: [], reloads: 0, focus: 0, clicks: [], answer: true };
     window.__busy = false;
+    window.__running = false;
     for (const type of ['keydown', 'keypress', 'keyup']) document.addEventListener(type, (e) => window.__log.keys.push(type + ':' + e.key), false);       // (the game: it listens at the document, in the bubble phase)
     document.addEventListener('click', (e) => { const a = e.target.closest && e.target.closest('a, button'); if (a) { window.__log.clicks.push({ id: a.id || a.textContent.trim(), prevented: e.defaultPrevented }); if (a.tagName === 'A') e.preventDefault(); } }, false);      // (what a click did, and no real navigation)
     AntsGameBar.start({
         doc: document,
         win: { open: (href, target, features) => { window.__log.opens.push([href, target, features]); return {}; }, location: { reload: () => { window.__log.reloads++; } } },
-        busy: () => window.__busy, ask: () => { window.__log.asks++; return window.__log.answer; }, leave: () => { window.__log.leaves++; },
+        busy: () => window.__busy, running: () => window.__running, ask: () => { window.__log.asks++; return window.__log.answer; }, leave: () => { window.__log.leaves++; },
         focus: () => { window.__log.focus++; document.getElementById('canvas').focus(); },
     });
 };
@@ -270,6 +273,64 @@ const active = (p) => p.evaluate(() => { const a = document.activeElement; retur
             await p.click('#sbm .gb-dl');
             const ids = (await log(p)).clicks.map((c) => c.id);
             expect('Copy link and Download of the Menu press the bar\'s own buttons', [ids.includes('copy-pressed'), ids.includes('download-pressed')], [true, true]);
+            await context.close();
+        }
+        // ---- Reload page asks while a game is played ----
+        {
+            const { context, p } = await open(browser, 390, 844);
+            const ask = () => p.evaluate(() => { const a = document.querySelector('.gb-ask'); return a ? [a.textContent.replace(/\s+/g, ' ').trim(), document.activeElement.textContent] : null; });
+            await openMenu(p);
+            await p.click('#sbm .gb-reload');
+            expect('no game: Reload page reloads at once and asks nothing', [(await log(p)).reloads, await ask()], [1, null]);
+            await p.evaluate(() => { window.__running = true; });
+            await reset(p);
+            await openMenu(p);
+            await p.click('#sbm .gb-reload');
+            expect('a game played: Reload page asks first, with Cancel focused, and has not reloaded', [(await ask()), (await log(p)).reloads, await menuOpen(p)], [['Reload the page? A game against the computer on this device will end; an online match comes back by itself.CancelReload', 'Cancel'], 0, false]);
+            await p.keyboard.press('x');
+            expect('the question open: no key reaches the game', (await log(p)).keys, []);
+            await p.keyboard.press('Tab');
+            expect('Tab goes to Reload and round again to Cancel', [await p.evaluate(() => document.activeElement.textContent), await (async () => { await p.keyboard.press('Tab'); return p.evaluate(() => document.activeElement.textContent); })()], ['Reload', 'Cancel']);
+            await p.keyboard.press('Escape');
+            expect('Esc cancels: the question is gone, nothing reloaded, the game never heard Esc', [await ask(), (await log(p)).reloads, (await log(p)).keys], [null, 0, []]);
+            await openMenu(p);
+            await p.click('#sbm .gb-reload');
+            await p.keyboard.press('Enter');
+            expect('Enter on Cancel cancels', [await ask(), (await log(p)).reloads], [null, 0]);
+            await openMenu(p);
+            await p.click('#sbm .gb-reload');
+            await p.click('.gb-ask .btn >> text=Cancel');
+            expect('a press on Cancel cancels and gives the focus to the game', [await ask(), (await log(p)).reloads, await active(p)], [null, 0, 'canvas']);
+            await openMenu(p);
+            await p.click('#sbm .gb-reload');
+            await p.mouse.click(5, 5);
+            expect('a press outside the card cancels', [await ask(), (await log(p)).reloads], [null, 0]);
+            await openMenu(p);
+            await p.click('#sbm .gb-reload');
+            await p.click('.gb-ask .btn >> text=Reload');
+            expect('Reload reloads', [await ask(), (await log(p)).reloads], [null, 1]);
+            await context.close();
+        }
+        {
+            const { context, p } = await open(browser, 390, 844, 'replay');
+            await p.evaluate(() => { window.__running = true; });
+            await openMenu(p);
+            await p.click('#sbm .gb-reload');
+            expect('a recording or a live view: Reload page reloads at once even if the game says it runs', [(await log(p)).reloads, await p.evaluate(() => !!document.querySelector('.gb-ask'))], [1, false]);
+            await context.close();
+        }
+        // ---- the open Menu and a resize ----
+        {
+            const { context, p } = await open(browser, 390, 844);
+            await openMenu(p);
+            await p.setViewportSize({ width: 390, height: 700 });
+            await p.waitForTimeout(300);
+            expect('a change of height alone (a phone\'s address bar) leaves the Menu open', await menuOpen(p), true);
+            await p.evaluate(() => window.dispatchEvent(new Event('resize')));
+            expect('the page\'s own resize leaves it open', await menuOpen(p), true);
+            await p.setViewportSize({ width: 844, height: 390 });
+            await p.waitForTimeout(300);
+            expect('a new width (turning the phone) closes it', await menuOpen(p), false);
             await context.close();
         }
         // ---- the bar's height: the same as the header it replaced, so the picture keeps its size ----

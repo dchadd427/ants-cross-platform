@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the game page's part of the bar (web/game_bar.js and web/game_bar.css: the links that ask or open a new tab during a match, the keys that are the bar's, the focus after a press, the Menu's own lines, the room under the bar, the pointer on the bar's blank parts) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: tools/mutate.py tests/data/game_bar_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_game_bar.py runs them on copies.",
+ "note": "Mutants of the game page's part of the bar (web/game_bar.js and web/game_bar.css: the links that ask or open a new tab during a match, the keys that are the bar's, the focus after a press, the Menu's own lines, the question that Reload page asks, the Menu through a resize, the room under the bar, the pointer on the bar's blank parts) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: tools/mutate.py tests/data/game_bar_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_game_bar.py runs them on copies.",
  "mutants": [
   {
    "id": "home_goes_without_asking",
@@ -53,15 +53,15 @@
   {
    "id": "keys_in_the_bar_reach_the_game",
    "file": "web/game_bar.js",
-   "old": "function mine() { return menuOpen() || inBar(d.activeElement); }",
-   "new": "function mine() { return menuOpen(); }",
+   "old": "function mine() { return !!dialog || menuOpen() || inBar(d.activeElement); }",
+   "new": "function mine() { return !!dialog || menuOpen(); }",
    "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
   },
   {
    "id": "keys_with_the_menu_open_reach_the_game",
    "file": "web/game_bar.js",
-   "old": "function mine() { return menuOpen() || inBar(d.activeElement); }",
-   "new": "function mine() { return inBar(d.activeElement); }",
+   "old": "function mine() { return !!dialog || menuOpen() || inBar(d.activeElement); }",
+   "new": "function mine() { return !!dialog || inBar(d.activeElement); }",
    "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
   },
   {
@@ -144,15 +144,15 @@
   {
    "id": "reload_page_is_first_of_the_small_links",
    "file": "web/game_bar.js",
-   "old": "if (small) small.appendChild(action('gb-reload', 'Reload page', function () { w.location.reload(); }));",
-   "new": "if (small) small.insertBefore(action('gb-reload', 'Reload page', function () { w.location.reload(); }), small.firstChild);",
+   "old": "small.appendChild(action('gb-reload', 'Reload page', function () { if (playing()) askReload(); else w.location.reload(); }));",
+   "new": "small.insertBefore(action('gb-reload', 'Reload page', function () { if (playing()) askReload(); else w.location.reload(); }), small.firstChild);",
    "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
   },
   {
    "id": "reload_page_does_not_reload",
    "file": "web/game_bar.js",
-   "old": "function () { w.location.reload(); }));",
-   "new": "function () { }));",
+   "old": "else w.location.reload(); }));",
+   "new": "}));",
    "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
   },
   {
@@ -210,6 +210,90 @@
    "old": ".pick-list, .rbar, .sb, .sbm, .tk, .tk-shield';",
    "new": ".pick-list, .rbar, .tk, .tk-shield';",
    "test": "node tests/scripts/web_edge_check.js web/shell.html"
+  },
+  {
+   "id": "reload_asks_with_no_game",
+   "file": "web/game_bar.js",
+   "old": "if (playing()) askReload(); else",
+   "new": "if (true) askReload(); else",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "reload_never_asks",
+   "file": "web/game_bar.js",
+   "old": "if (playing()) askReload(); else",
+   "new": "if (false) askReload(); else",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "reload_asks_in_a_recording",
+   "file": "web/game_bar.js",
+   "old": "return !d.body.classList.contains('replay') && !!page.running",
+   "new": "return !!page.running",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "cancel_is_not_focused",
+   "file": "web/game_bar.js",
+   "old": "            no.focus();\n",
+   "new": "            yes.focus();\n",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "cancel_reloads",
+   "file": "web/game_bar.js",
+   "old": "no.addEventListener('click', function (e) { closeAsk(!(e.detail > 0)); });",
+   "new": "no.addEventListener('click', function (e) { closeAsk(!(e.detail > 0)); w.location.reload(); });",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "reload_does_not_reload",
+   "file": "web/game_bar.js",
+   "old": "closeAsk(true); w.location.reload(); });",
+   "new": "closeAsk(true); });",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "keys_reach_the_game_under_the_question",
+   "file": "web/game_bar.js",
+   "old": "function mine() { return !!dialog || menuOpen()",
+   "new": "function mine() { return menuOpen()",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "esc_does_not_cancel_the_question",
+   "file": "web/game_bar.js",
+   "old": "if (!e.repeat && dialog) closeAsk(true); else if",
+   "new": "if (false) closeAsk(true); else if",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "tab_leaves_the_question",
+   "file": "web/game_bar.js",
+   "old": "else if (e.key === 'Tab' && dialog) {",
+   "new": "else if (false) {",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "the_question_keeps_the_pointer_focus_from_cancel",
+   "file": "web/game_bar.js",
+   "old": "if (e.detail > 0 && !dialog) focusGame();",
+   "new": "if (e.detail > 0) focusGame();",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "the_menu_closes_at_a_change_of_height",
+   "file": "web/site_nav.js",
+   "old": "window.innerWidth !== openWidth) close(false);",
+   "new": "true) close(false);",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "the_menu_stays_at_a_new_width",
+   "file": "web/site_nav.js",
+   "old": "window.innerWidth !== openWidth) close(false);",
+   "new": "false) close(false);",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
   }
  ]
 }

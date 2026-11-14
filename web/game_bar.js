@@ -6,19 +6,20 @@
       focused control, and a bare Shift, Ctrl, Alt or Meta goes on to the game (its window system counts what is held). A press with the pointer gives the focus back to the game.
    3. The Menu's own lines, made each time it opens: a line that says what the links do while a match runs, "Copy link", "Download" and "Open another file" at the top for a recording on a narrow window (their
       buttons are in the bar from 701 px up), and "Reload page" last among the small links.
-   The page calls AntsGameBar.start({ doc, win, busy, leave, ask, focus }) once: busy() says whether a match runs here or a room is joined, leave() lets go of the seat, ask() is the question (true: leave), focus()
-   gives the focus to the game. */
+   4. "Reload page" asks first while a game is being played (a match on this device or online; not before a match, not in a recording or a live view): a small question in the site's style with Cancel focused.
+   The page calls AntsGameBar.start({ doc, win, busy, running, leave, ask, focus }) once: busy() says whether a match runs here or a room is joined, running() whether a match is being played, leave() lets go of the
+   seat, ask() is the question (true: leave), focus() gives the focus to the game. */
 (function (root) {
     'use strict';
     var MODIFIER = /^(Shift|Control|Alt|AltGraph|Meta|OS|CapsLock|NumLock|ScrollLock|Fn)$/;
     function start(page) {
         var d = page.doc, w = page.win, bar = d.querySelector('.sb'), btn = bar && bar.querySelector('.sbtn');
         if (!btn) return null;
-        var kept = {};
+        var kept = {}, dialog = null;
         function box() { return d.getElementById('sbm'); }
         function menuOpen() { var b = box(); return !!b && !b.hidden; }
         function inBar(n) { var b = box(); return !!n && n !== d.body && (bar.contains(n) || (!!b && b.contains(n))); }
-        function mine() { return menuOpen() || inBar(d.activeElement); }
+        function mine() { return !!dialog || menuOpen() || inBar(d.activeElement); }
         function own(e) { return !!e.target && e.target.id === 'settings-btn' && (e.key === 'Enter' || e.key === ' '); }      // (the gear presses itself: web/game_menu.js)
         function busy() { try { return !!page.busy(); } catch (err) { return false; } }
         function focusGame() { try { if (page.focus) page.focus(); } catch (err) { /* nothing to focus */ } }
@@ -35,7 +36,11 @@
             if (!mine() || MODIFIER.test(e.key) || own(e)) return;
             if (!e.repeat) kept[id] = true;
             e.stopPropagation();
-            if (e.key === 'Escape') { e.preventDefault(); if (!e.repeat && menuOpen()) btn.click(); }
+            if (e.key === 'Escape') { e.preventDefault(); if (!e.repeat && dialog) closeAsk(true); else if (!e.repeat && menuOpen()) btn.click(); }
+            else if (e.key === 'Tab' && dialog) {                              // (the question keeps the focus between its two buttons)
+                var keys = dialog.querySelectorAll('button'), at = d.activeElement;
+                if (e.shiftKey && at === keys[0]) { e.preventDefault(); keys[keys.length - 1].focus(); } else if (!e.shiftKey && at === keys[keys.length - 1]) { e.preventDefault(); keys[0].focus(); }
+            }
         }
         function onPress(e) { if (kept[e.code || e.key]) e.stopPropagation(); }
         function onLift(e) {
@@ -73,6 +78,31 @@
 
         // ---- the Menu's own lines ----
         function make(tag, cls, text) { var n = d.createElement(tag); n.className = cls; n.textContent = text; return n; }
+        function playing() { try { return !d.body.classList.contains('replay') && !!page.running && !!page.running(); } catch (err) { return false; } }
+        function closeAsk(toBar) {
+            if (!dialog) return;
+            dialog.parentNode.removeChild(dialog);
+            dialog = null;
+            if (toBar) btn.focus(); else focusGame();
+        }
+        function askReload() {
+            var card = make('div', 'gb-card', ''), row = make('div', 'gb-btns', ''), no = make('button', 'btn', 'Cancel'), yes = make('button', 'btn', 'Reload');
+            dialog = make('div', 'gb-ask', '');
+            dialog.setAttribute('role', 'dialog');
+            dialog.setAttribute('aria-modal', 'true');
+            dialog.setAttribute('aria-label', 'Reload the page?');
+            card.appendChild(make('p', '', 'Reload the page? A game against the computer on this device will end; an online match comes back by itself.'));
+            no.type = yes.type = 'button';
+            no.addEventListener('click', function (e) { closeAsk(!(e.detail > 0)); });
+            yes.addEventListener('click', function () { closeAsk(true); w.location.reload(); });
+            dialog.addEventListener('click', function (e) { if (e.target === dialog) closeAsk(false); });
+            row.appendChild(no);
+            row.appendChild(yes);
+            card.appendChild(row);
+            dialog.appendChild(card);
+            d.body.appendChild(dialog);
+            no.focus();
+        }
         function action(cls, text, run) {
             var a = make('a', 'gb-x ' + cls, text);
             a.setAttribute('href', '#');
@@ -81,7 +111,7 @@
                 e.preventDefault();
                 if (menuOpen()) btn.click();
                 run();
-                if (e.detail > 0) focusGame();
+                if (e.detail > 0 && !dialog) focusGame();      // (a question that the line asked has the focus)
             });
             return a;
         }
@@ -98,7 +128,7 @@
             var ref = b.firstChild;
             top.forEach(function (n) { b.insertBefore(n, ref); });
             var small = b.querySelector('.sbsmall');
-            if (small) small.appendChild(action('gb-reload', 'Reload page', function () { w.location.reload(); }));
+            if (small) small.appendChild(action('gb-reload', 'Reload page', function () { if (playing()) askReload(); else w.location.reload(); }));
             var all = b.querySelectorAll('a');
             for (var i = 0; i < all.length; i++) if (all[i].offsetParent !== null) { all[i].focus(); break; }      // (the first line that shows: it may be the note, which takes no focus, or a line of a recording's)
         }
