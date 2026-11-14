@@ -601,8 +601,30 @@ for (const [what, me] of [['a hub where nobody is logged in', 'guest'], ['a site
     env.roomBar('leave').click();
     options.me = MAYA;
     env.home('mine').click();
-    check('... a login in another tab is not this page\'s (its chat stays a reader too): a guest is not asked again, and the next room is a guest\'s, under the same guest name', env.meFetches.length === asked && helloName(env.last().open().sent[0]) === GUEST);
+    check('... a login that came without a reload (in another tab) is asked for at the next room: the room is the login\'s, not the cached guest\'s', env.meFetches.length === asked + 1 && helloName(env.last().open().sent[0]) === 'maya');
 }
+{   // the page opened while nobody was logged in, the person logged in without a reload (the chat says so): the next room (Quick host and My room make it) is the login's, never the cached guest's
+    const options = { me: 'guest', stayHome: true };
+    const env = runLobby('', {}, options);
+    env.home('mine').click();
+    same('the first room of a guest is a guest\'s', helloName(env.last().open().sent[0]), GUEST);
+    env.roomBar('leave').click();
+    options.me = MAYA;
+    env.home('mine').click();
+    check('the person logged in meanwhile: the next room asks the hub again and plays under the login\'s name', env.sockets.length === 2 && helloName(env.last().open().sent[0]) === 'maya');
+}
+{   // a page that comes back from the browser's memory is loaded again (its own pageshow), which asks the hub anew; a seat asks the hub at every room
+    const options = { me: 'guest', stayHome: true };
+    const env = runLobby('', {}, options);
+    check('pageshow persisted reloads the page (the one listener; nothing else asks for it)', (env.win.listeners.pageshow || []).length === 1);
+    env.win.listeners.pageshow.forEach((fn) => fn({ persisted: true }));
+    check('... the reload is what asks the hub anew', env.reloads === 1);
+    options.me = MAYA;
+    env.home('mine').click();
+    await afterIt();
+    check('a room made after a long idle is the login\'s', helloName(env.last().open().sent[0]) === 'maya');
+}
+check('takeBack plays under the login\'s name when the person is logged in now, and under the saved seat name only for a guest (the question is asked first)', /function takeBack\(\) \{[\s\S]{0,700}person\.ready\(function \(own, kind\) \{[\s\S]{0,300}name: kind !== 'login' && s && s\.name \? s\.name : own/.test(lobbyScript));
 {   // a seat that is held keeps its name: a reload of the tab takes it back under the name that the room showed, and does not ask for a login first
     const entry = { 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: 'Sam', o: 1 }) };
     const env = runLobby('', {}, { me: MAYA, session: entry });
