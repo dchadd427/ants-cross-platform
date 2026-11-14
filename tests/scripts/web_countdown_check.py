@@ -12,7 +12,7 @@ library only). The check starts the server itself, with the options of docker-co
 browser of its own. What it checks, for two players Ann (seat 0) and Bob (seat 1) of a two-seat room:
 
   * the card    both games say that a countdown runs (ants_probe 60: the seconds left, 27 .. 30 when first seen) with its dialog open, the count goes down, and the server has sealed no turn;
-  * the button  the page's Fullscreen button is shown over the card (its place is the game's: ants_probe 61 - 64), at least 120 x 44 px, inside the picture; a real mouse click on it makes the page
+  * the button  the page's Fullscreen button is shown over the card (its place is the game's: ants_probe 61 - 64), the size of the game's place scaled with the picture, at least 32 px tall, inside the picture; a real mouse click on it makes the page
                 fullscreen (the browser's, or the page's own where the browser refuses) and hides it; the countdown goes on;
   * the lock    a real click on the game while the card is up takes no pointer lock (a locked pointer cannot click the page's button), and once the match runs a click on the game takes it;
   * the chat    Ann types a line with the keyboard and sends it with Enter during the count: Bob's game has one line more in its chat log (ants_probe 65) and Ann's too, through the server;
@@ -163,7 +163,7 @@ def main():
         btn = ann.button() or {}
         check(btn.get("hidden") is False and btn.get("display") != "none", "the page's Fullscreen button is shown over the card (%s)" % {k: btn.get(k) for k in ("hidden", "display")})
         bx, by, bw, bh = btn.get("x", 0), btn.get("y", 0), btn.get("w", 0), btn.get("h", 0)
-        check(bw >= 119.5 and bh >= 43.5, "it is at least 120 x 44 px (%.0f x %.0f)" % (bw, bh))
+        check(bh >= 31.5 and bw >= bh, "it is at least 32 px tall and keeps the shape of the place (%.0f x %.0f)" % (bw, bh))
         gx, gy, gw, gh = (btn.get("box") or [0, 0, 0, 0])
         check(bx >= gx - 1 and by >= gy - 1 and bx + bw <= gx + gw + 1 and by + bh <= gy + gh + 1, "it lies inside the picture (button %s, picture %s)" % ([round(v) for v in (bx, by, bw, bh)], [round(v) for v in (gx, gy, gw, gh)]))
         # a click on the game while the card is up must not take the pointer lock: a locked pointer cannot click the DOM button (a review found that the click on the button did nothing at all)

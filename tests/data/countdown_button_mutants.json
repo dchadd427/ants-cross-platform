@@ -1,0 +1,54 @@
+{
+ "note": "Mutants of the countdown card's Fullscreen button (web/countdown_button.js, docs/PLAY_IN_BROWSER.md 'The countdown') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_countdown_check.js (the button's box for a phone held sideways and a desktop window) and tests/scripts/test_web_countdown.py: the old 44 px minimum height, no floor on the height, the text not scaled with the button, the page's own minimum height and padding left on the button, a button wider than the card; every one must be caught (tools/mutate.py tests/data/countdown_button_mutants.json --keep-going --jobs 1).",
+ "mutants": [
+  {
+   "id": "old_min_height_44",
+   "file": "web/countdown_button.js",
+   "old": "var MIN_H = 32; ",
+   "new": "var MIN_H = 44; ",
+   "test": "python3 tests/scripts/test_web_countdown.py && node tests/scripts/web_countdown_check.js web/countdown_button.js"
+  },
+  {
+   "id": "no_floor_on_the_height",
+   "file": "web/countdown_button.js",
+   "old": "var h = Math.max(MIN_H, slotH), w = slotW * h / slotH;",
+   "new": "var h = slotH, w = slotW * h / slotH;",
+   "test": "python3 tests/scripts/test_web_countdown.py && node tests/scripts/web_countdown_check.js web/countdown_button.js"
+  },
+  {
+   "id": "font_not_scaled",
+   "file": "web/countdown_button.js",
+   "old": "Math.max(12, Math.round(h * 0.5 * 10) / 10) + 'px'",
+   "new": "'16px'",
+   "test": "python3 tests/scripts/test_web_countdown.py && node tests/scripts/web_countdown_check.js web/countdown_button.js"
+  },
+  {
+   "id": "page_min_height_kept",
+   "file": "web/countdown_button.js",
+   "old": "button.style.minHeight = '0px';",
+   "new": "button.style.minHeight = '44px';",
+   "test": "python3 tests/scripts/test_web_countdown.py && node tests/scripts/web_countdown_check.js web/countdown_button.js"
+  },
+  {
+   "id": "page_padding_kept",
+   "file": "web/countdown_button.js",
+   "old": "button.style.padding = '0px';",
+   "new": "button.style.padding = '8px 18px';",
+   "test": "python3 tests/scripts/test_web_countdown.py && node tests/scripts/web_countdown_check.js web/countdown_button.js"
+  },
+  {
+   "id": "wider_than_the_card",
+   "file": "web/countdown_button.js",
+   "old": "w = Math.min(w, CARD_W * fx, rect.width);",
+   "new": "w = Math.min(w, rect.width);",
+   "test": "python3 tests/scripts/test_web_countdown.py && node tests/scripts/web_countdown_check.js web/countdown_button.js"
+  },
+  {
+   "id": "width_not_in_shape",
+   "file": "web/countdown_button.js",
+   "old": "var h = Math.max(MIN_H, slotH), w = slotW * h / slotH;",
+   "new": "var h = Math.max(MIN_H, slotH), w = slotW;",
+   "test": "python3 tests/scripts/test_web_countdown.py && node tests/scripts/web_countdown_check.js web/countdown_button.js"
+  }
+ ]
+}
