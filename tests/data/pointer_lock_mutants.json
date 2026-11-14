@@ -42,6 +42,13 @@
       "old": "pickShape: antsPickShape, lock: antsLock, stage: stageElement,",
       "new": "pickShape: antsPickShape, lock: { available: antsLock.available, get: antsLock.get, set: antsLock.set }, stage: stageElement,",
       "test": "node tests/scripts/web_menu_handover_check.js web/shell.html"
+    },
+    {
+      "id": "handover_without_the_key_canceller",
+      "file": "web/shell.html",
+      "old": ", cancelsKey: ANTS_PAGE.cancelsBrowserKey });",
+      "new": " });",
+      "test": "node tests/scripts/web_menu_handover_check.js web/shell.html"
     }
   ]
 }
