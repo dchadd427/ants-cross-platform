@@ -1,0 +1,215 @@
+{
+ "note": "Mutants of the game page's part of the bar (web/game_bar.js and web/game_bar.css: the links that ask or open a new tab during a match, the keys that are the bar's, the focus after a press, the Menu's own lines, the room under the bar, the pointer on the bar's blank parts) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: tools/mutate.py tests/data/game_bar_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_game_bar.py runs them on copies.",
+ "mutants": [
+  {
+   "id": "home_goes_without_asking",
+   "file": "web/game_bar.js",
+   "old": "if (!page.ask()) e.preventDefault();",
+   "new": "if (false) e.preventDefault();",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "yes_does_not_let_go_of_the_seat",
+   "file": "web/game_bar.js",
+   "old": "else if (!(e.ctrlKey || e.metaKey || e.shiftKey || e.altKey)) page.leave();",
+   "new": "else if (false) page.leave();",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "a_click_for_another_tab_lets_go_of_the_seat",
+   "file": "web/game_bar.js",
+   "old": "else if (!(e.ctrlKey || e.metaKey || e.shiftKey || e.altKey)) page.leave();",
+   "new": "else page.leave();",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "other_link_takes_the_tab_of_the_match",
+   "file": "web/game_bar.js",
+   "old": "            e.preventDefault();\n            try { w.open(href",
+   "new": "            try { w.open(href",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "a_link_that_is_a_new_tab_anyway_opens_twice",
+   "file": "web/game_bar.js",
+   "old": "if (a.getAttribute('target') === '_blank' || e.ctrlKey",
+   "new": "if (e.ctrlKey",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "links_act_as_usual_during_a_match",
+   "file": "web/game_bar.js",
+   "old": "if (!href || href.charAt(0) === '#' || !busy()) return;",
+   "new": "if (!href || href.charAt(0) === '#' || true) return;",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "links_ask_with_no_match",
+   "file": "web/game_bar.js",
+   "old": "if (!href || href.charAt(0) === '#' || !busy()) return;",
+   "new": "if (!href || href.charAt(0) === '#') return;",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "keys_in_the_bar_reach_the_game",
+   "file": "web/game_bar.js",
+   "old": "function mine() { return menuOpen() || inBar(d.activeElement); }",
+   "new": "function mine() { return menuOpen(); }",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "keys_with_the_menu_open_reach_the_game",
+   "file": "web/game_bar.js",
+   "old": "function mine() { return menuOpen() || inBar(d.activeElement); }",
+   "new": "function mine() { return inBar(d.activeElement); }",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "the_lift_of_a_kept_key_reaches_the_game",
+   "file": "web/game_bar.js",
+   "old": "            if (!kept[id]) return;\n            delete kept[id];\n            e.stopPropagation();",
+   "new": "            return;",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "a_press_is_not_kept",
+   "file": "web/game_bar.js",
+   "old": "            if (!e.repeat) kept[id] = true;\n",
+   "new": "",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "a_repeat_of_a_kept_key_reaches_the_game",
+   "file": "web/game_bar.js",
+   "old": "            else if (kept[id]) {                                              // (a repeat of a key that the bar kept: the game would take it for a new press, and a browser presses a focused button again)\n                e.stopPropagation();",
+   "new": "            else if (kept[id]) {\n                return;",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "a_bare_shift_is_stopped",
+   "file": "web/game_bar.js",
+   "old": "if (!mine() || MODIFIER.test(e.key) || own(e)) return;",
+   "new": "if (!mine() || own(e)) return;",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "the_gear_cannot_press_itself",
+   "file": "web/game_bar.js",
+   "old": "if (!mine() || MODIFIER.test(e.key) || own(e)) return;",
+   "new": "if (!mine() || MODIFIER.test(e.key)) return;",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "esc_does_not_close_the_menu",
+   "file": "web/game_bar.js",
+   "old": "if (!e.repeat && menuOpen()) btn.click();",
+   "new": "",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "esc_reaches_the_game_from_the_menu",
+   "file": "web/game_bar.js",
+   "old": "            e.stopPropagation();\n            if (e.key === 'Escape') {",
+   "new": "            if (e.key !== 'Escape') e.stopPropagation();\n            if (e.key === 'Escape') {",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "enter_and_space_are_cancelled_in_the_bar",
+   "file": "web/game_bar.js",
+   "old": "            if (!e.repeat) kept[id] = true;\n            e.stopPropagation();\n",
+   "new": "            if (!e.repeat) kept[id] = true;\n            e.stopPropagation();\n            e.preventDefault();\n",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "a_pointer_press_leaves_the_focus_on_the_button",
+   "file": "web/game_bar.js",
+   "old": "if (c && c !== btn && !(c.classList && c.classList.contains('gm-top'))) focusGame();",
+   "new": "if (false) focusGame();",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "a_pointer_press_on_the_menu_button_takes_the_focus_from_the_menu",
+   "file": "web/game_bar.js",
+   "old": "if (c && c !== btn && !(c.classList",
+   "new": "if (c && !(c.classList",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "no_note_during_a_match",
+   "file": "web/game_bar.js",
+   "old": "if (busy()) top.push(make('p', 'gb-x gb-note',",
+   "new": "if (false) top.push(make('p', 'gb-x gb-note',",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "reload_page_is_first_of_the_small_links",
+   "file": "web/game_bar.js",
+   "old": "if (small) small.appendChild(action('gb-reload', 'Reload page', function () { w.location.reload(); }));",
+   "new": "if (small) small.insertBefore(action('gb-reload', 'Reload page', function () { w.location.reload(); }), small.firstChild);",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "reload_page_does_not_reload",
+   "file": "web/game_bar.js",
+   "old": "function () { w.location.reload(); }));",
+   "new": "function () { }));",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "the_menus_lines_are_made_again_on_every_opening",
+   "file": "web/game_bar.js",
+   "old": "            [].slice.call(b.querySelectorAll('.gb-x')).forEach(function (n) { n.parentNode.removeChild(n); });\n",
+   "new": "",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "a_live_view_offers_a_download",
+   "file": "web/game_bar.css",
+   "old": "body.live .sbm a.gb-dl, body.nodl",
+   "new": "body.nodl",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "a_wide_window_repeats_the_bars_buttons_in_the_menu",
+   "file": "web/game_bar.css",
+   "old": "@media (min-width: 701px) { body.replay .sbm a.gb-copy, body.replay .sbm a.gb-dl, body.replay .sbm a.gb-file { display: none; } }",
+   "new": "",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "a_file_of_your_own_offers_copy_link",
+   "file": "web/game_bar.css",
+   "old": "body.ownfile .sbm a.gb-dl, body.ownfile .sbm a.gb-copy { display: none; }",
+   "new": "body.ownfile .sbm a.gb-dl { display: none; }",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "the_bar_leaves_less_room_than_the_header_did",
+   "file": "web/game_bar.css",
+   "old": "min-height: 44px; margin: 0 0 18px;",
+   "new": "min-height: 44px; margin: 0 0 6px;",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "a_phones_bar_leaves_less_room_than_the_header_did",
+   "file": "web/game_bar.css",
+   "old": "@media (max-width: 700px) { header.sb { margin-bottom: 16px; } }",
+   "new": "@media (max-width: 700px) { header.sb { margin-bottom: 6px; } }",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "a_sideways_bar_leaves_less_room_than_the_header_did",
+   "file": "web/game_bar.css",
+   "old": "header.sb { margin-bottom: 14px; } }",
+   "new": "header.sb { margin-bottom: 6px; } }",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "the_bar_and_its_menu_are_not_controls_of_the_page",
+   "file": "web/shell.html",
+   "old": ".pick-list, .rbar, .sb, .sbm, .tk, .tk-shield';",
+   "new": ".pick-list, .rbar, .tk, .tk-shield';",
+   "test": "node tests/scripts/web_edge_check.js web/shell.html"
+  }
+ ]
+}

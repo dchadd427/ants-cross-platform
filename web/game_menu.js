@@ -71,8 +71,6 @@
         function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
         function touchy() { return !!win.antsFinger || !!(win.matchMedia && win.matchMedia('(hover: none)').matches); }
         function listen(target, type, fn, capture) { target.addEventListener(type, fn, !!capture); removers.push(function () { target.removeEventListener(type, fn, !!capture); }); }
-        function indexOf(list, item) { for (var i = 0; i < list.length; i++) if (list[i] === item) return i; return -1; }
-        function insertAfter(node, ref) { var parent = ref.parentNode, kids = parent.children; parent.insertBefore(node, kids[indexOf(kids, ref) + 1] || null); }
 
         // ---- what the game says now ----
         function where() { return get(100); } // -1: no match screen, 0: a match, 1: watched
@@ -107,7 +105,7 @@
         function show(node, on) { node.hidden = !on; node.style.display = on ? '' : 'none'; } // (the page's .btn has a display of its own, which hidden alone does not beat)
         function makeButton(cls, id) {
             var b = el('button', 'btn sm gm-btn ' + cls);
-            b.appendChild(el('span', 'gm-txt', 'Settings'));      // (the word goes where the header is narrow: the gear stays, and the name for a screen reader)
+            b.appendChild(el('span', 'gm-txt', 'Settings'));      // (the word goes where the bar is narrow: the gear stays, and the name for a screen reader)
             b.type = 'button';
             b.setAttribute('aria-label', 'Settings');
             b.id = id;
@@ -124,12 +122,12 @@
             return b;
         }
         function placeButtons() {
-            var menu = doc.getElementById('menu-btn'), picwrap = doc.getElementById('picwrap');
+            var fullscreen = doc.getElementById('fullscreen-btn'), picwrap = doc.getElementById('picwrap');
             if (page.replay) {
                 if (picwrap && picwrap.parentNode) picwrap.parentNode.insertBefore(makeButton('gm-bar', 'settings-btn-bar'), picwrap);
                 return;
             }
-            if (menu && menu.parentNode) insertAfter(makeButton('gm-top', 'settings-btn'), menu);
+            if (fullscreen && fullscreen.parentNode) fullscreen.parentNode.insertBefore(makeButton('gm-top', 'settings-btn'), fullscreen);      // (in the bar, before Fullscreen)
         }
 
         function refresh() {
@@ -559,7 +557,7 @@
             link.onerror = function () {
                 if (link.parentNode) link.parentNode.removeChild(link);
                 if (++styleFailed < 2) setTimeout(loadStyle, 2000);
-                else say('The settings menu could not load its style. Press Reset to try again.');
+                else say('The settings menu could not load its style. Open the Menu and press Reload page to try again.');
             };
             doc.head.appendChild(link);
         }

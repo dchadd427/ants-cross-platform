@@ -136,10 +136,10 @@ class ThePlayer(unittest.TestCase):
         self.assertIn("ANTS_OWN_MODE ? R.ownPageOf(window, ", self.glue)
 
     def test_a_file_of_your_own_has_no_copy_link_no_stats_and_no_download(self):
-        has(self, "body.ownfile [data-dl], body.ownfile #copy-btn, body.ownfile #copy-more, body.ownfile #stats-btn { display: none !important; }", self.page)
-        for ident in ("copy-btn", "copy-more", "stats-btn"):
+        has(self, "body.ownfile [data-dl], body.ownfile #copy-btn, body.ownfile #stats-btn { display: none !important; }", self.page)
+        for ident in ("copy-btn", "stats-btn"):
             self.assertEqual(len(re.findall(r'\bid="%s"' % ident, self.page)), 1, ident)
-        self.assertEqual(len(re.findall(r'data-dl=""', self.page)), 2)                                    # (the two Downloads: the header's and More's)
+        self.assertEqual(len(re.findall(r'data-dl=""', self.page)), 1)                                    # (the one Download: the bar's; the Menu's line presses it)
         has(self, ".pill.own {", self.page)
 
     def test_the_words_of_the_cards_come_from_one_place_and_the_glue_takes_them_whole(self):

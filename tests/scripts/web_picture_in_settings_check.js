@@ -3,7 +3,7 @@
 // stand-in is the Module's menu calls (the rows of tests/data/game_menu_match.json) and the page's own postRun hook, which is what the game's start calls:
 //   * there is no strip under the game: the box takes the window's height that the strip had, and the WHOLE framed box (its border and red shadow too) is inside the window with at least the page's side margin
 //     under it, as large as that allows (1280 x 800 and 844 x 390: the height decides; 390 x 844, 360 x 740 and 448 x 998: the picture is as wide as the page);
-//   * the header has ONE Settings button after Menu at 360, 390, 844 and 1280 px, 44 x 44 or more, named "Settings", and the header stays one row on a 360 px phone (Menu, Fullscreen, Settings, More);
+//   * the header has ONE Settings button before Fullscreen at 360, 390, 844 and 1280 px, 44 x 44 or more, named "Settings", and the header stays one row on a 360 px phone (Home, Settings, Fullscreen, Menu);
 //   * a tap on it (390 px, touch) opens the menu, Video has a Picture shape row, and a choice changes the page's shape at once, is remembered under ants.aspect.v3 (for the way the phone is held) and put in the address;
 //   * on a computer the Fullscreen mouse row switches Locked / Free and the choice is remembered under ants.pointerlock; on a touch screen the row is not there;
 //   * the game's own call for Esc (the stand-in has no game to press the key in) and the button open the same menu;
@@ -93,11 +93,11 @@ async function open(browser, port, w, h, touch, query) {
 }
 const geometry = (page) => page.evaluate(() => {
     const rect = (e) => { const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height }; };
-    const stage = document.getElementById('game-stage'), header = document.querySelector('header'), actions = document.querySelector('.header-actions'), box = document.getElementById('game-container');
+    const stage = document.getElementById('game-stage'), header = document.querySelector('header'), box = document.getElementById('game-container');
     // how far the box's shadows reach below it: the largest of (offset down + blur + spread) of the box-shadow
     const reach = (getComputedStyle(box).boxShadow.match(/-?[\d.]+px -?[\d.]+px -?[\d.]+px -?[\d.]+px/g) || []).map((t) => { const n = t.match(/-?[\d.]+/g).map(Number); return n[1] + n[2] + n[3]; }).reduce((a, b) => Math.max(a, b), 0);
     const button = document.getElementById('settings-btn'), pad = parseFloat(getComputedStyle(document.body).paddingBottom) || 0;
-    return { box: rect(box), reach, side: parseFloat(getComputedStyle(document.body).paddingLeft) || 0, scrollY: window.scrollY, stage: rect(stage), header: rect(header), actions: rect(actions), button: rect(button), name: button.getAttribute('aria-label'), pad, innerW: innerWidth, innerH: innerHeight, scrollW: document.documentElement.scrollWidth,
+    return { box: rect(box), reach, side: parseFloat(getComputedStyle(document.body).paddingLeft) || 0, scrollY: window.scrollY, stage: rect(stage), header: rect(header), button: rect(button), name: button.getAttribute('aria-label'), pad, innerW: innerWidth, innerH: innerHeight, scrollW: document.documentElement.scrollWidth,
              buttonsInHeader: Array.prototype.map.call(document.querySelectorAll('.gm-btn'), (b) => b.id), strip: !!document.getElementById('view-bar') || !!document.getElementById('aspect-select') || !!document.getElementById('lock-on') };
 });
 
@@ -120,7 +120,7 @@ server.listen(0, async () => {
             else ok(at + ': as large as that allows: the picture is as wide as the page (' + g.box.w.toFixed(1) + ' of ' + (g.innerW - 2 * g.side) + ')', Math.abs(g.box.w - (g.innerW - 2 * g.side)) <= 8);
             await context.close();
         }
-        // one Settings button, after Menu, big enough and named, and the header on one row
+        // one Settings button, before Fullscreen, big enough and named, and the bar on one row
         for (const [w, h, touch] of [[360, 740, true], [390, 844, true], [844, 390, true], [1280, 800, false]]) {
             const { context, page } = await open(browser, port, w, h, touch);
             const g = await geometry(page);
@@ -131,10 +131,10 @@ server.listen(0, async () => {
             ok(at + ': it is in the header, in the row of Menu', g.button.y >= g.header.y - 1 && g.button.y + g.button.h <= g.header.y + g.header.h + 1);
             if (w <= 700 || h <= 520) ok(at + ': the header is one row (' + g.header.h.toFixed(0) + ' px)', g.header.h <= 50);
             ok(at + ': no sideways scroll', g.scrollW <= g.innerW);
-            const nextTo = await page.evaluate(() => document.getElementById('settings-btn').previousElementSibling.id);
-            check(at + ': right after Menu', nextTo, 'menu-btn');
+            const nextTo = await page.evaluate(() => document.getElementById('settings-btn').nextElementSibling.id);
+            check(at + ': right before Fullscreen', nextTo, 'fullscreen-btn');
             // the header draws no logo: Menu is the way to the front page, it starts at the header's left edge (no gap where a logo was), and the page's heading is still there for a screen reader
-            const head = await page.evaluate(() => { const h = document.querySelector('header'), m = document.getElementById('menu-btn'), r = (e) => e.getBoundingClientRect(); return { pictures: h.querySelectorAll('img').length, href: m.getAttribute('href'), gap: r(m).left - r(h).left, shown: r(m).width > 0, h1: [...document.querySelectorAll('h1')].map((e) => e.textContent) }; });
+            const head = await page.evaluate(() => { const h = document.querySelector('header'), m = innerWidth >= 720 ? h.querySelector('nav a') : document.getElementById('menu-btn'), r = (e) => e.getBoundingClientRect(); return { pictures: h.querySelectorAll('img').length, href: m.getAttribute('href'), gap: r(m).left - r(h).left, shown: r(m).width > 0, h1: [...document.querySelectorAll('h1')].map((e) => e.textContent) }; });
             ok(at + ': the header has no picture, Menu leads to the front page and starts at the header\'s left edge, and the h1 names the page (' + JSON.stringify(head) + ')', head.pictures === 0 && head.href === '/' && head.shown && head.gap <= 1 && head.h1.length === 1 && /Ants/.test(head.h1[0]));
             await context.close();
         }
@@ -214,25 +214,25 @@ server.listen(0, async () => {
             check(label + ': a choice changes the shape at once and is remembered', after, { shape: '32:9', kept: '32:9' });
             await context.close();
         }
-        // a recording, a live view or a file of one's own: the header's Menu is not there, so a Home button is first in the row and the first Tab stop, in the window, and in the plain page it is not drawn
+        // a recording, a live view or a file of one's own: Home is first in the row and the first Tab stop, in the window (in the plain page of 720 px and more the row's own Home is the first)
         for (const [w, h, touch] of [[1280, 800, false], [1000, 700, false], [844, 390, true], [390, 844, true], [360, 740, true], [320, 568, true]]) {
             for (const query of ['?replay=x.antsrep', '?live=x']) {
                 const { context, page } = await open(browser, port, w, h, touch, query);
                 const at = w + ' x ' + h + ' ' + query;
                 const g = await page.evaluate(() => {
-                    const b = document.getElementById('home-btn'), r = b.getBoundingClientRect(), others = [...document.querySelectorAll('header .btn')].filter((e) => e !== b && e.getClientRects().length && e.getBoundingClientRect().width > 0).map((e) => e.getBoundingClientRect());
+                    const b = document.getElementById('menu-btn'), r = b.getBoundingClientRect(), others = [...document.querySelectorAll('header .btn')].filter((e) => e !== b && e.getClientRects().length && e.getBoundingClientRect().width > 0).map((e) => e.getBoundingClientRect());
                     return { shown: b.getClientRects().length > 0 && getComputedStyle(b).visibility !== 'hidden', href: b.getAttribute('href'), x: r.left, y: r.top, r: r.right, b: r.bottom, h: r.height, w: r.width, innerW: innerWidth, innerH: innerHeight, scrollW: document.documentElement.scrollWidth,
                         focus: ([...document.querySelectorAll('a[href], button, summary, input, select, textarea, [tabindex]')].find((e) => e.tabIndex >= 0 && !e.disabled && e.checkVisibility({ visibilityProperty: true }) && !e.closest('[inert]')) || {}).id, sameHeight: Math.abs(r.height - document.getElementById('all-btn').getBoundingClientRect().height) < 1, menuShown: !!document.getElementById('menu-btn').getClientRects().length,
                         overlaps: others.filter((o) => o.left < r.right - 0.5 && r.left < o.right - 0.5 && o.top < r.bottom - 0.5 && r.top < o.bottom - 0.5).length, others: others.filter((o) => o.right > innerWidth + 0.5).length };
                 });
                 ok(at + ': Home is drawn, to "/", inside the window (' + JSON.stringify([Math.round(g.x), Math.round(g.y), Math.round(g.r), Math.round(g.b)]) + '), as high as All matches, over no other button, and the header scrolls nowhere sideways ' + JSON.stringify(g), g.shown && g.href === '/' && g.x >= 0 && g.r <= g.innerW && g.y >= 0 && g.b <= g.innerH && g.sameHeight && g.overlaps === 0 && g.others === 0 && g.scrollW <= g.innerW);
-                check(at + ': it is first in the Tab order of the page (the header\'s Menu is not drawn here)', [g.focus, g.menuShown], ['home-btn', false]);
+                check(at + ': it is first in the Tab order of the page', g.focus, 'menu-btn');
                 await context.close();
             }
         }
         {
             const { context, page } = await open(browser, port, 1280, 800, false);
-            ok('1280 x 800, the plain page: the recording\'s Home button is not drawn (Menu is)', await page.evaluate(() => document.getElementById('home-btn').getClientRects().length === 0 && document.getElementById('menu-btn').getClientRects().length > 0));
+            ok('1280 x 800, the plain page: the phone\'s Home button is not drawn (the row\'s Home is)', await page.evaluate(() => document.getElementById('menu-btn').getClientRects().length === 0 && document.querySelector('header nav a').getClientRects().length > 0));
             await context.close();
         }
         // the header stays one row where Feedback leaves it (a window of 1000 px, a phone on its side at 780 px)

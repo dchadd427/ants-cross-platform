@@ -38,7 +38,7 @@ headless browser (its own profile and port; nothing of yours is touched), the pa
              nothing is the game page's own setup screen (no argument but the picture's shape), and the addresses of the test page that "More ways to play" opened (/?map=...&players=1, /?map=...&play=here, /?embed=1)
              are the front page like any other, with a room of its own and no name card;
   * game     the GAME PAGE in the front page's look (web/shell.html at /play): the clay, the frame, the font and the logo; the loading screen (the logo, a teal bar in a black box) and its failure card; 19 widths
-             from 320 to 1600 px with no sideways scroll, the header's eight controls (one row with "More" up to 700 px: the six other links, over the picture), the picture, the bar and the guide inside the frame, a phone
+             from 320 to 1600 px with no sideways scroll, the bar's controls (one row up to 719 px; its Menu over the picture), the picture and the guide inside the frame, a phone
              on its side; Menu goes back to the front page (it asks first while a match runs or a room is joined: No stays); the two pairs under the game (the chosen one is pressed in; the clicks keep their
              ids and what they remember); the name step of a shared link, with that line; the contrast of every text (4.5:1) in each of these states.
 Exit status 0: every check passed; 1: a check failed; 3: the check could not be made because the environment is not there (no browser, nothing answers at the page's address, and for the parts that open the front page
@@ -1692,7 +1692,7 @@ def main():
             fresh_tab()
 
             def contrast_of(where, at_least, prepare="", restore=""):
-                """Every visible text of the game page is at least 4.5:1 (`prepare` shows what is closed: the guide's panels, the More list; `restore` closes it again)."""
+                """Every visible text of the game page is at least 4.5:1 (`prepare` shows what is closed: the guide's panels, the Menu; `restore` closes it again)."""
                 found = json.loads(value(prepare + "; var found = " + CONTRAST_JS + "; " + restore + "; found"))
                 check(found["texts"] >= at_least and found["lowest"][0][0] >= 4.5, "%s: the text contrast is at least 4.5:1 for all %d texts (lowest: %s)" % (where, found["texts"], found["lowest"]))
 
@@ -1758,17 +1758,17 @@ def main():
                 check(inside is True, "the loading screen of a phone (390 px): the logo and the message fit the small picture's box")
                 shot("game_loading_390")
                 contrast_of("the loading screen at 390 px", 20)
-                # More opened while the loading screen is up: its list is above the loading screen (the picture's box keeps that screen's layer to itself)
-                x, y = centre_xy("header .more summary")
+                # the Menu opened while the loading screen is up: its box is above the loading screen (the picture's box keeps that screen's layer to itself)
+                x, y = centre_xy("header .sbtn")
                 tab.click(x, y)
                 time.sleep(0.4)
-                over = json.loads(value("""JSON.stringify((function () { var list = document.querySelector('.more-list'), r = list.getBoundingClientRect(), splash = document.getElementById('splash-overlay'), o = splash.getBoundingClientRect(), was = splash.style.pointerEvents;
+                over = json.loads(value("""JSON.stringify((function () { var list = document.getElementById('sbm'), r = list.getBoundingClientRect(), splash = document.getElementById('splash-overlay'), o = splash.getBoundingClientRect(), was = splash.style.pointerEvents;
                     splash.style.pointerEvents = 'auto';                                 // (the loading screen takes no pointer: let it, so that the point's topmost element is what is painted there)
                     var x = (r.left + r.right) / 2, y = (r.top + r.bottom) / 2, mid = document.elementFromPoint(x, y);
                     splash.style.pointerEvents = was;
-                    return { open: document.querySelector('header .more').open, above: !!(mid && mid.closest('.more-list')), over: x >= o.left && x <= o.right && y >= o.top && y <= o.bottom }; })())"""))
-                check(over["open"] and over["above"] and over["over"], "More opened over the loading screen: its list is on top of it, not under it (%s)" % over)
-                shot("game_loading_390_more")
+                    return { open: !list.hidden, above: !!(mid && mid.closest('#sbm')), over: x >= o.left && x <= o.right && y >= o.top && y <= o.bottom }; })())"""))
+                check(over["open"] and over["above"] and over["over"], "the Menu opened over the loading screen: its box is on top of it, not under it (%s)" % over)
+                shot("game_loading_390_menu")
                 tab.click(x, y)
                 time.sleep(0.3)
                 # the watchdog (2.5 s here) puts the failure card up: the front page's notice with the teal button, no logo (the card needs the room)
@@ -1798,14 +1798,14 @@ def main():
             LAYOUT = """JSON.stringify((function () {
                 var de = document.documentElement, rect = function (e) { var b = e.getBoundingClientRect(); return [b.left, b.top, b.right, b.bottom]; };
                 var shown = function (e) { return !!e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0 && (!e.checkVisibility || e.checkVisibility()); };
-                var controls = Array.prototype.filter.call(document.querySelectorAll('header a, header button, header summary'), shown).map(function (e) { return { text: e.innerText.trim(), rect: rect(e) }; });
-                return { inner: [de.clientWidth, window.innerHeight], scroll: [de.scrollWidth, de.scrollHeight], controls: controls, box: rect(document.getElementById('game-container')), bar: rect(document.querySelector('footer.bar')),
-                         panel: rect(document.getElementById('info-panel')), header: rect(document.querySelector('header')), more: shown(document.querySelector('header .more')), view: rect(document.getElementById('game-container')),
+                var controls = Array.prototype.filter.call(document.querySelectorAll('header a, header button, header summary'), shown).map(function (e) { return { text: e.innerText.replace(/[\\u2039\\s]+/g, ' ').trim(), rect: rect(e) }; });
+                return { inner: [de.clientWidth, window.innerHeight], scroll: [de.scrollWidth, de.scrollHeight], controls: controls, box: rect(document.getElementById('game-container')),
+                         panel: rect(document.getElementById('info-panel')), header: rect(document.querySelector('header')), view: rect(document.getElementById('game-container')),
                          seg: Array.prototype.filter.call(document.querySelectorAll('.seg button'), shown).map(rect) };
             })())"""
             clear_storage()
             load(play + "?aspect=16:9", ready=True, settle=1.5)
-            wrong = {"scroll": [], "header": [], "overlap": [], "frame": [], "picture": [], "foot": []}
+            wrong = {"scroll": [], "header": [], "overlap": [], "frame": [], "picture": []}
             for width in (320, 360, 375, 390, 414, 440, 441, 480, 600, 699, 700, 701, 768, 900, 1024, 1100, 1139, 1140, 1280, 1440, 1600):
                 tab.emulate(width, 900, 1)
                 time.sleep(0.5)
@@ -1814,10 +1814,10 @@ def main():
                 if m["scroll"][0] > m["inner"][0]:
                     wrong["scroll"].append((width, m["scroll"][0], m["inner"][0]))
                 texts = [c["text"] for c in m["controls"]]
-                want = (["Menu", "", "Full" if width <= 440 else "Fullscreen", "More"] if narrow else ["Menu", "Settings" if width >= 1140 else ""] + (["Matches"] if width >= 1140 else []) + ["Sprites and sounds", "Changelog", "Reset", "Fullscreen", "GitHub"] + ([] if 920 <= width <= 1045 else ["Feedback"]))
+                want = (["Home", "", "Full" if width <= 440 else "Fullscreen", ""] if width < 720 else ["Home", "Matches", "Map maker", "", "Settings" if width >= 1140 else "", "Fullscreen", ""])
                 height = m["header"][3] - m["header"][1]
-                if texts != want or m["more"] != narrow or ((narrow or width >= 1024) and height > 60):
-                    wrong["header"].append((width, texts, "More" if m["more"] else "no More", round(height)))
+                if texts != want or abs(height - 44) > 0.5:
+                    wrong["header"].append((width, texts, round(height)))
                 for i, a in enumerate(m["controls"]):
                     for b in m["controls"][i + 1:]:
                         same_row = min(a["rect"][3], b["rect"][3]) - max(a["rect"][1], b["rect"][1]) > 0.5 * (a["rect"][3] - a["rect"][1])
@@ -1829,26 +1829,24 @@ def main():
                 box = m["box"]
                 if box[0] - ring < 10 or box[2] + ring + shadow > m["inner"][0] - 10 or box[2] - box[0] < 16 or abs((box[0] + box[2]) / 2 - m["inner"][0] / 2) > 1.5:
                     wrong["picture"].append((width, [round(v, 1) for v in box]))
-                if abs(m["bar"][0]) > 0.5 or abs(m["bar"][2] - m["inner"][0]) > 0.5:
-                    wrong["foot"].append((width, [round(v, 1) for v in m["bar"]]))
             check(not wrong["scroll"], "no sideways scroll from 320 to 1600 px (wrong: %s)" % (wrong["scroll"],))
-            check(not wrong["header"], "the header: up to 700 px one row of Menu, Settings, Fullscreen (Full up to 440 px) and More, with no logo; above it the controls in their order (the seven it had, and Matches after Menu from 1140 px, where the eight fit one row; one row from 1024 px) (wrong: %s)" % (wrong["header"],))
+            check(not wrong["header"], "the bar: up to 719 px one row of Home, Settings, Fullscreen (Full up to 440 px) and the Menu button, with no logo; from 720 px the row of four links, the gear (with its word from 1140 px), Fullscreen and the Menu button; 44 px high at every width, as the header it replaced (wrong: %s)" % (wrong["header"],))
             check(not wrong["overlap"], "no control of the header lies over another, in one row or two, at every width (wrong: %s)" % (wrong["overlap"][:6],))
             check(not wrong["frame"], "the header's controls, the pair buttons and the guide stay inside the thin green frame at every width (wrong: %s)" % (wrong["frame"],))
             check(not wrong["picture"], "the picture with its ring and shadow is centred and inside the frame at every width (wrong: %s)" % (wrong["picture"],))
-            check(not wrong["foot"], "the footer's bar spans the window at every width (wrong: %s)" % (wrong["foot"],))
 
             # --- 1440 px: the page that is up, in every part
             fresh_tab()
             load(play + "?aspect=16:9", ready=True, settle=1.5)
             shot("game_1440")
-            footer = json.loads(value("""JSON.stringify({text: document.querySelector('footer').innerText.replace(/\\s+/g, ' '), ids: [!!document.getElementById('game-version'), !!document.getElementById('game-build-id')],
-                links: Array.prototype.map.call(document.querySelectorAll('footer nav a'), function (a) { return a.innerText; }), bg: getComputedStyle(document.querySelector('footer')).backgroundImage})"""))
-            check("Version" in footer["text"] and "build" in footer["text"] and "@@" not in footer["text"] and footer["ids"] == [True, True] and "linear-gradient" in footer["bg"] and footer["links"] == ["Menu", "Matches", "Live now", "Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal"],
-                  "the footer is the front page's emerald bar with the version, the build and the links (%r)" % footer["text"][:90])
-            head = json.loads(value("JSON.stringify(Array.prototype.map.call(document.querySelectorAll('header .header-actions:not(.rep-only) > a, header .header-actions:not(.rep-only) > button'), function (a) { var r = a.getBoundingClientRect(); return [a.textContent.trim(), a.getAttribute('target'), r.width > 0]; }))"))
-            check([h[0] for h in head][:3] == ["Menu", "Matches", "Sprites and sounds"] and head[1][1] == "_blank" and all(h[2] for h in head),
-                  "the header of the game page has Matches right after Menu, in a new tab (a match that is being played goes on), and every button is shown at 1440 px (%s)" % [h[0] for h in head])
+            check(value("document.querySelector('footer') === null") is True and value("[!!document.getElementById('game-version'), !!document.getElementById('game-build-id')].join()") == "true,true", "the game page has no footer, and keeps the hidden stamp that the image build reads")
+            tab.click(*centre_xy("header .sbtn"))
+            time.sleep(0.4)
+            menu = json.loads(value("JSON.stringify({last: document.querySelector('#sbm .sbver').textContent, links: Array.prototype.map.call(document.querySelectorAll('#sbm > a, #sbm .sbsmall a'), function (a) { return a.textContent.trim(); }), rows: Array.prototype.map.call(document.querySelectorAll('header nav a'), function (a) { var r = a.getBoundingClientRect(); return [a.getAttribute('aria-label') || a.textContent.trim(), a.getAttribute('target'), r.width > 0]; })})"))
+            check("Version" in menu["last"] and "build" in menu["last"] and "@@" not in menu["last"] and menu["links"][-1] == "Reload page" and menu["links"][:4] == ["Home", "Matches", "Map maker", "Discord server"],
+                  "the Menu of the game page: the four links, the small links with Reload page last, and the version and the build as its last line (%r)" % menu["last"][:70])
+            check([r[0] for r in menu["rows"]] == ["Home", "Matches", "Map maker", "Discord server"] and menu["rows"][3][1] == "_blank" and all(r[2] for r in menu["rows"]), "the bar's row of four links is shown at 1440 px, Discord in a new tab (%s)" % [r[0] for r in menu["rows"]])
+            tab.click(*centre_xy("header .sbtn"))
             contrast_of("the game page at 1440 px", 60, "document.querySelectorAll('#info-panel details').forEach(function (d) { d.open = true; })")
 
             # --- the picture's shape is a row of the settings menu: a choice there changes the picture at once (no reload), the browser remembers it, the address has it
@@ -1866,33 +1864,33 @@ def main():
             m = json.loads(value(LAYOUT))
             tip = value("getComputedStyle(document.getElementById('mobile-tip-banner')).display")
             panels = value("Array.prototype.map.call(document.querySelectorAll('#info-panel details'), function (d) { return d.open ? 1 : 0; }).reduce(function (a, b) { return a + b; }, 0)")
-            check(m["scroll"][0] <= m["inner"][0] and tip == "flex" and panels == 1 and m["more"] is True, "a phone held upright (390 px): no sideways scroll, the tip is shown, one panel of the guide is open, More is there (%s, %s, %d)" % (m["scroll"][0], tip, panels))
+            check(m["scroll"][0] <= m["inner"][0] and tip == "flex" and panels == 1, "a phone held upright (390 px): no sideways scroll, the tip is shown, one panel of the guide is open (%s, %s, %d)" % (m["scroll"][0], tip, panels))
             shot("game_390")
             contrast_of("the game page at 390 px", 40, "document.querySelectorAll('#info-panel details').forEach(function (d) { d.open = true; })",
                         "document.querySelectorAll('#info-panel details').forEach(function (d, i) { d.open = i === 0; })")
-            # More: a <details>, no script: closed at first, it opens over the picture with the other six links, whole and in the window, and closes again
-            check(value("document.querySelector('header .more').open") is False, "More is closed at first")
-            x, y = centre_xy("header .more summary")
+            # the Menu: closed at first, it opens over the picture with every link, whole and in the window, and closes again with the same click
+            check(value("!document.getElementById('sbm') || document.getElementById('sbm').hidden") is True, "the Menu is closed at first")
+            x, y = centre_xy("header .sbtn")
             tab.click(x, y)
             time.sleep(0.4)
             more = json.loads(value("""JSON.stringify((function () {
-                var list = document.querySelector('.more-list'), r = list.getBoundingClientRect(), items = Array.prototype.map.call(list.querySelectorAll('a, button'), function (e) { var b = e.getBoundingClientRect(); return [e.innerText.trim(), b.left, b.right, b.top, b.bottom]; });
+                var list = document.getElementById('sbm'), r = list.getBoundingClientRect(), items = Array.prototype.map.call(list.querySelectorAll('a'), function (e) { var b = e.getBoundingClientRect(); return [e.innerText.trim(), b.left, b.right, b.top, b.bottom]; });
                 var mid = document.elementFromPoint((r.left + r.right) / 2, r.top + 8), picture = document.getElementById('game-container').getBoundingClientRect();
-                return { open: document.querySelector('header .more').open, items: items, list: [r.left, r.right, r.top, r.bottom], above: !!(mid && mid.closest('.more-list')), overPicture: r.top < picture.bottom && r.bottom > picture.top && r.left < picture.right };
+                return { open: !list.hidden, items: items, list: [r.left, r.right, r.top, r.bottom], above: !!(mid && mid.closest('#sbm')), overPicture: r.top < picture.bottom && r.bottom > picture.top && r.left < picture.right };
             })())"""))
-            check(more["open"] and [i[0] for i in more["items"]] == ["Matches", "Sprites and sounds", "Changelog", "Reset", "GitHub", "Feedback"] and more["list"][0] >= 10 and more["list"][1] <= 390 - 10 and all(i[1] >= 10 and i[2] <= 380 for i in more["items"]),
-                  "More opens the other six links (Matches first), whole and inside the window (%s)" % ([i[0] for i in more["items"]],))
+            check(more["open"] and [i[0] for i in more["items"]] == ["Home", "Matches", "Map maker", "Discord server", "Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal", "Reload page"] and more["list"][0] >= 10 and more["list"][1] <= 390 - 10 and all(i[1] >= 10 and i[2] <= 380 for i in more["items"]),
+                  "the Menu opens every link (Reload page last), whole and inside the window (%s)" % ([i[0] for i in more["items"]],))
             check(more["above"] and more["overPicture"], "... over the picture and above it (the loading screen's layer does not cover it)")
-            shot("game_390_more")
-            contrast_of("the More list", 5)
+            shot("game_390_menu")
+            contrast_of("the Menu", 5)
             tab.click(x, y)
             time.sleep(0.3)
-            check(value("document.querySelector('header .more').open") is False, "... and closes with the same click")
+            check(value("document.getElementById('sbm').hidden") is True, "... and closes with the same click")
             tab.emulate(844, 390, 2, mobile=True)
             tab.open(play + "?aspect=16:9", settle=1.5)
             m = json.loads(value(LAYOUT))
-            check(m["scroll"][0] <= m["inner"][0] and m["view"][3] + 14 <= m["inner"][1] and m["header"][3] - m["header"][1] <= 60 and not m["more"],
-                  "a phone on its side (844 x 390): the header is one slim row, the whole picture with its ring fits the window, no sideways scroll (the box ends at %.0f of %d)" % (m["view"][3], m["inner"][1]))
+            check(m["scroll"][0] <= m["inner"][0] and m["view"][3] + 14 <= m["inner"][1] and m["header"][3] - m["header"][1] <= 60,
+                  "a phone on its side (844 x 390): the bar is one slim row, the whole picture with its ring fits the window, no sideways scroll (the box ends at %.0f of %d)" % (m["view"][3], m["inner"][1]))
             shot("game_844")
             tab.emulate(1440, 900, 1)
 

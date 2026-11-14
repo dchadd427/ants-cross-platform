@@ -291,7 +291,7 @@ def desktop(p, check, args):
 
     # fullscreen: only the icon is left
     p.pause(True)
-    p.tab.ev("document.getElementById('fullscreen-btn-r').click(); 1")
+    p.tab.ev("document.getElementById('fullscreen-btn').click(); 1")
     time.sleep(2.5)
     s = p.bar()
     check(s["over"] and s["labelWidth"] == 0 and s["cam"][2] < 80 and s["cam"][2] > 20 and rect_inside(s["cam"], s["bar"]), "in fullscreen the bar floats over the picture and the button is an icon (%d px wide)" % s["cam"][2])
@@ -319,7 +319,7 @@ def widths(p, check, args):
         if live:
             p.tab.ev("var b = document.getElementById('rbar'); b.classList.add('islive'); document.getElementById('livenow').hidden = false; 1")
         if fs:
-            p.tab.ev("document.getElementById('fullscreen-btn-r').click(); 1")
+            p.tab.ev("document.getElementById('fullscreen-btn').click(); 1")
             time.sleep(2.0)
         for pop in (False, True):
             if pop:
@@ -389,7 +389,7 @@ def phone(p, check, args):
     check(s["game"][0] == 1 and s["mode"] == "auto" and s["pref"] == "auto", "a tap on the button returns to Auto and remembers it")
     # fullscreen of a phone: the icon in the second row
     p.pause(True)
-    p.tab.ev("document.getElementById('fullscreen-btn-r').click(); 1")
+    p.tab.ev("document.getElementById('fullscreen-btn').click(); 1")
     time.sleep(2.5)
     s = p.bar()
     if s["over"]:

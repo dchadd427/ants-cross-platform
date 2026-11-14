@@ -239,8 +239,7 @@ class TheFooterLinks(unittest.TestCase):
     def test_the_pages_with_a_footer_are_the_ones_this_test_knows(self):
         names = sorted(self.pages)
         self.assertIn("lobby.html", names)
-        self.assertIn("shell.html", names)
-        self.assertEqual(names, ["lobby.html", "shell.html"])
+        self.assertEqual(names, ["lobby.html"])                                                                    # (the game page has the bar: its Menu has the Legal link, tests/scripts/test_web_site_nav.py)
 
     def test_every_footer_ends_with_the_legal_link_in_a_new_tab(self):
         for name, page in sorted(self.pages.items()):
@@ -256,10 +255,11 @@ class TheFooterLinks(unittest.TestCase):
         for name, page in sorted(self.pages.items()):
             self.assertEqual(page.count('<a href="/legal" target="_blank" rel="noopener noreferrer">Legal</a>'), 1, name)
 
-    def test_the_header_buttons_of_the_game_page_do_not_have_it(self):
+    def test_the_bar_of_the_game_page_has_it_in_its_menu_only(self):
         game = read("web", "shell.html")
-        header = game[game.index("<header>"):game.index("</header>")]
+        header = game[game.index('<header class="sb"'):game.index("</header>")]
         self.assertNotIn("legal", header.lower())
+        self.assertIn("['Legal', '/legal']", read("web", "site_nav.js"))
 
 
 class TheRouteAndTheImage(unittest.TestCase):

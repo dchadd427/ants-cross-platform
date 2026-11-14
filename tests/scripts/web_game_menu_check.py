@@ -293,8 +293,8 @@ def computer(p, args, check):
     b = p.buttons()
     check(b.get("settings-btn", {}).get("shown") and not b["settings-btn"]["disabled"] and "settings-btn-fs" not in b and "settings-btn-narrow" not in b,
           "the Settings button is in the header and on, and there is none over the picture or under it (%s)" % {k: v["shown"] for k, v in b.items()})
-    header = tab.ev("document.getElementById('settings-btn').previousElementSibling.id")
-    check(header == "menu-btn", "the header button stands right after Menu (%s)" % header)
+    header = tab.ev("document.getElementById('settings-btn').nextElementSibling.id")
+    check(header == "fullscreen-btn", "the bar's button stands right before Fullscreen (%s)" % header)
     tab.ev("document.getElementById('canvas').focus(); 1")
     p.type("abc")
     check(p.state()["chat"] == 3, "(the control: three letters typed with the panel closed are in the game's chat line: %s)" % p.state()["chat"])

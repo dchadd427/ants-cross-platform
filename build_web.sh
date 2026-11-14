@@ -53,6 +53,7 @@ done
 cp -f "${SCRIPT_DIR}/web/matches.css" "${DIST_DIR}/"                                                                                                                                                # ... their stylesheet
 cp -f "${SCRIPT_DIR}/web/site_nav.css" "${DIST_DIR}/"                                                                                                                                              # the bar at the top of every page (its style and its Menu)
 cp -f "${SCRIPT_DIR}/web/site_nav.js" "${DIST_DIR}/"
+cp -f "${SCRIPT_DIR}/web/game_bar.css" "${SCRIPT_DIR}/web/game_bar.js" "${DIST_DIR}/"                                                                                    # the game page's part of the bar (its rules, the links that ask first, the keys)
 cp -f "${SCRIPT_DIR}/web/replay_page.js" "${DIST_DIR}/"                                                                                                                                             # ... and the helpers they share with the game page
 cp -f "${SCRIPT_DIR}/web/history_page.js" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/match_stats.js" "${DIST_DIR}/"
