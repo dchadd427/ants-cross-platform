@@ -115,7 +115,7 @@
         img.setAttribute('src', PICDIR + ok + PICEXT);
         img.setAttribute('alt', ''); img.setAttribute('width', String(size)); img.setAttribute('height', String(size)); img.setAttribute('loading', 'lazy'); img.setAttribute('decoding', 'async'); img.setAttribute('draggable', 'false');
         img.addEventListener('load', function () { if (circle.picState && circle.picState.img === img) circle.setAttribute('data-pic', 'on'); });       // (the letter is hidden only once there is a picture over it)
-        img.addEventListener('error', function () { failed(ok); if (img.parentNode) img.parentNode.removeChild(img); });       // (the letter is simply still there; the name is not asked for again, by this circle or by another)
+        img.addEventListener('error', function () { failed(ok); if (img.parentNode) img.parentNode.removeChild(img); if (circle.picState && circle.picState.img === img) circle.picState = null; });       // (the letter is simply still there; the name is not asked for again, by this circle or by another)
         circle.picState = { name: ok, img: img };
         circle.appendChild(img);
         if (img.complete && img.naturalWidth > 0) circle.setAttribute('data-pic', 'on');       // (a picture that the page already has, as when the list is drawn again: no frame with the letter in between)

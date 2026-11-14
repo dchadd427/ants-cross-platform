@@ -3294,8 +3294,8 @@
   {
    "id": "pic_kept_after_an_error",
    "file": "web/home/chat.js",
-   "old": "img.addEventListener('error', function () { failed(ok); if (img.parentNode) img.parentNode.removeChild(img); });",
-   "new": "img.addEventListener('error', function () { failed(ok); });",
+   "old": "img.addEventListener('error', function () { failed(ok); if (img.parentNode) img.parentNode.removeChild(img);",
+   "new": "img.addEventListener('error', function () { failed(ok);",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -3520,6 +3520,27 @@
    "file": "web/home/chat.js",
    "old": "if (d >= 0 && d < FAILED_MS) return true;",
    "new": "return true;",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_failed_name_kept_circle_never_asks_again",
+   "file": "web/home/chat.js",
+   "old": " if (circle.picState && circle.picState.img === img) circle.picState = null; });",
+   "new": " });",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_failed_name_clock_set_back_is_recent",
+   "file": "web/home/chat.js",
+   "old": "if (d >= 0 && d < FAILED_MS) return true;",
+   "new": "if (d < FAILED_MS) return true;",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_helper_checks_no_name",
+   "file": "web/home/chat.js",
+   "old": "if (!ok || hasFailed(ok)) return;",
+   "new": "if (!name || hasFailed(ok)) return;",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {

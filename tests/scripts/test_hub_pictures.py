@@ -6,7 +6,7 @@ by the CI), against a FAKE Discord with a fake picture host (tests/scripts/fake_
   - the call to the picture host: the address is made from constants and two checked parts, so an odd id or code makes no request at all; no redirect is followed; no more than the cap is read;
   - a login with a picture ends with the picture served at a name, and the login does not wait for it; every way the picture host goes wrong leaves the letter and an older copy as it was
     (a 404 deletes the older copy), and the login's answer is the same;
-  - the name is new at every login and two accounts never share one; the copy goes with the last login, Forget me, a kick, the switch, a block, a ban, and is not served past its time;
+  - the name is new at every fetch and two accounts never share one; the copy goes with the last login, Forget me, a kick, the switch, a block, a ban, and is not served past its time;
   - the door: the fixed headers on an answer and on a refusal, a name of any other shape, the limit;
   - no id, picture code, name or reference in the hub's log (in this process and in the real one).
 """

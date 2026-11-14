@@ -8,7 +8,7 @@ What Discord sends is data, not a thing to trust. It is kept only when it is a P
 and a legal depth and color, that ends with IEND and has nothing after it, and whose data is a whole zlib stream that inflates to exactly the rows that the header says (never inflated past that). The hub then writes its own copy, which holds only the header, the palette, the transparency, the picture data and
 the end: every other chunk (text, EXIF, color profiles, the animation chunks of an APNG) is dropped. The copy is what is kept and served; its pixels are not decoded here.
 
-The copy is kept under a random 128-bit name that is new at every login (`secrets.token_hex(16)`; nothing in it comes from the id, the reference, the code or the bytes), by the account's keyed
+The copy is kept under a random 128-bit name that is new at every fetch (`secrets.token_hex(16)`; nothing in it comes from the id, the reference, the code or the bytes), by the account's keyed
 reference (hub/pseudo.py) and never by its id. It is served at /hub/pic/<name>.png with fixed headers (hub/http.py `picture()`). It is deleted with the login's end, a kick, Forget me, the person's
 switch, a ban, a block, or when the login runs out (the store's rule: no login, no picture); a fetch that ends after any of these keeps nothing; a name that is not known, is not shown or is past its time answers 404.
 
@@ -277,7 +277,7 @@ class Pictures:
 
     async def serve(self, request, address):
         """GET /hub/pic/<name>.png: the picture kept under the name, or 404 (no name of this shape, no such name, a picture that is not shown or whose login has run out). Anyone who has the address may
-        fetch it: the name cannot be guessed and is new at every login."""
+        fetch it: the name cannot be guessed and is new at every fetch."""
         if request.method != "GET":
             return http.response(405, {"error": "method"}, {"Allow": "GET"})
         path = request.split()[0]

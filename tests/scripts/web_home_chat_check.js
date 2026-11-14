@@ -1721,6 +1721,10 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
         q.live(W({ login: true, you: withYou({ pic: v, pics: 'on' }) }));
         check('a `pic` of ' + JSON.stringify(v) + ' makes no img', q.chip.findAll((e) => e.tagName === 'img').length === 0 && q.errors.length === 0);
     });
+    {   // the helper itself checks the name too: the odd names go straight in, with no filter before it
+        const hp = rig({ chip: true }), mk0 = (t) => hp.env.doc.createElement(t);
+        odd.forEach((v) => { const c = mk0('span'); Pure.picture(mk0, c, v, 28); check('the helper given ' + JSON.stringify(v) + ' makes no img', c.children.filter((e) => e.tagName === 'img').length === 0 && c.picState === null); });
+    }
     const lookalike = rig({ chip: true }); lookalike.live(W({ login: true, you: { name: NAME, mod: false, k: OTHER, pick: 'display', other: NAME, pics: 'on' } }));
     check('a picture comes only from the `pic` field: a name, a key or another name that looks like a picture name draws none', lookalike.chip.findAll((e) => e.tagName === 'img').length === 0);
     const nobody = rig({ chip: true });
@@ -1783,6 +1787,21 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
             check('... and when it fails again it is left alone for the next ten minutes (no request in 12 repaints)', made === 0, made);
             t += 12000; made = 0; draw(X);
             check('... then asked for once more, and so on: one request per ten minutes, never a loop', made === 1, made);
+            {   // ONE circle that is kept and painted again with the same name, as the account chip's is
+                const K = '6666666666666666666666666666666e', kept = mk('span');
+                made = 0; P.picture(count(mk), kept, K, 28); imgsOf(kept).forEach((e) => e.fire('error'));
+                made = 0;
+                for (let i = 0; i < 12; i++) { t += 49000; P.picture(count(mk), kept, K, 28); }
+                check('a kept circle whose name failed asks for nothing in 12 paints inside ten minutes', made === 0, made);
+                t += 12000; P.picture(count(mk), kept, K, 28);
+                check('... and the same kept circle asks exactly once after ten minutes', made === 1, made);
+            }
+            {   // the clock set back: the name is asked for once (a negative age is not "recent")
+                const B = '5555555555555555555555555555555d';
+                imgsOf(draw(B)).forEach((e) => e.fire('error'));
+                t -= 3600000; made = 0; draw(B);
+                check('the clock set back an hour: a name that failed is asked for exactly once', made === 1, made);
+            }
             made = 0; t += 1; for (let i = 0; i < 3; i++) draw('8888888888888888888888888888888a');
             check('a name that never failed is asked for as always', made === 3, made);
         } finally { Date.now = realNow; }
