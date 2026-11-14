@@ -481,8 +481,6 @@ class TheFences(DoorTest):
 
 
 class TheChanges(DoorTest):
-    options = dict(deletions_seconds=600.0)                          # (the clock's look at the deletions is far off: the screens are told by the change itself)
-
     def row(self, action):
         return [r for r in self.modlog() if r.action == action]
 
@@ -566,6 +564,7 @@ class TheChanges(DoorTest):
     def test_del_deletes_a_line_tells_the_screens_and_writes_the_log(self):
         watcher = self.socket(PLAIN)
         line_id = self.line()
+        self.rig.call(setattr, self.rig.hub, "next_deletions", float("inf"))        # (the clock's own look at the deletions never comes: the screens are told by the change itself)
         r = self.post("del", {"line": line_id})
         self.assertEqual((r.status, r.json()), (200, {"ok": True}))
         deadline = time.monotonic() + 5
