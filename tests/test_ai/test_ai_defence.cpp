@@ -558,6 +558,7 @@ void run_defence_tests() {
             const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{21, 30});
             LevelPlan plan = defence_plan(Level::Hard);
             plan.reach_fights = reach;
+            plan.reach_guard = reach;                                    // (the guard of AI48 is the same walk check at the end of the look)
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(3);
             Seen seen;

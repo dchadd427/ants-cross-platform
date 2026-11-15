@@ -45,6 +45,8 @@ public:
     const char* name() const noexcept override { return "fight"; }
     void step(TaskContext& context) override;
     void on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) override;
+    /// The reach guard took an attack order out (no walk takes its ants to the target): the fight of those ants ends at the next look and the target is left alone, as for an attack that was refused
+    void unreachable(const sim::Command& command);
 
     // ---- for the tests and the reports ----
     size_t fights() const noexcept { return fights_.size(); }
@@ -106,6 +108,7 @@ private:
         uint64_t last_hurt{0};               // the last look at which the target had lost hit points
         uint8_t seen_hp{0};                  // the target's hit points at the last look
         std::map<uint32_t, Defender> defenders;
+        bool dead_end{false};                // the reach guard took an attack of this fight out (no walk takes the ants to the target): the fight ends and the target is left alone, as for a refused attack
     };
 
     void start_fights(TaskContext& context);

@@ -30,6 +30,7 @@ add_executable(test_ai
     test_ai_power_up_cap.cpp
     test_ai_merge.cpp
     test_ai_cantgo.cpp
+    test_ai_reach.cpp
     test_ai_flowers.cpp
     test_ai_war.cpp
     test_ai_stand.cpp
