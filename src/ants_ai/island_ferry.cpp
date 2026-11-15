@@ -128,7 +128,9 @@ void FerryTask::step(TaskContext& c) {
         // record) as well as a free one. After rescue_after ticks it is sent to the hill's entrance, which banks the food
         if (a.holding && a.idle()) {
             const auto it = carrying_.emplace(a.id, now).first;
-            if (now >= it->second + params_.rescue_after && c.map.hill(c.seat).present) {
+            const auto own = recs_.find(a.id);
+            const bool hurt = params_.reorder_hurt && own != recs_.end() && a.hp < own->second.hp;     // (a blast or a blow cleared its walk home)
+            if (now >= it->second + (hurt ? params_.reorder_hurt_ticks : params_.rescue_after) && c.map.hill(c.seat).present) {
                 c.orders.move({a.id}, c.map.hill(c.seat).entrance);
                 it->second = now;
                 ++rescues_;
@@ -153,6 +155,11 @@ void FerryTask::step(TaskContext& c) {
                 excluded_[std::make_pair(a.id, r.pile)] = now + params_.blacklist_ticks;
                 c.ledger.release(a.id, id());
                 recs_.erase(a.id);
+            } else if (params_.reorder_hurt && a.idle() && !a.holding && a.hp < r.hp && now >= r.decided + 10u) {   // thrown and stopped by a blast or a blow: sent again at once
+                ++ended_;
+                c.ledger.release(a.id, id());
+                recs_.erase(a.id);
+                continue;
             } else if (params_.reorder_ended && a.idle() && !a.holding && late) {                // its loop ended away from where it was sent from
                 const auto since = idle_since_.emplace(a.id, now).first;
                 if (now >= since->second + params_.fail_after) {
@@ -207,6 +214,7 @@ void FerryTask::step(TaskContext& c) {
             r.decided = now;
             r.origin = a->tile;
             r.click = k.click;
+            r.hp = a->hp;
             recs_[a->id] = r;
             c.orders.move({a->id}, k.click);
             ++k.load;

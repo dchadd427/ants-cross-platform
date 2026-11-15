@@ -40,6 +40,7 @@ void Renderer::note_health_mark(const ants::sim::AntSnapshot& ant, int32_t sprit
 }
 
 void Renderer::draw_health_marks() {
+    draw_deferred_scores();
     draw_deferred_digits();
     draw_bars();
     draw_health_changes();
@@ -80,7 +81,7 @@ void Renderer::draw_bars() {
 // in the ant's place in the draw order; at a zoom it is text, not world art, so it waits for the copy (draw_deferred_digits) and keeps its one size.
 void Renderer::draw_ant_number(const ants::sim::AntSnapshot& ant, int32_t sprite_x, int32_t sprite_y) {
     if (health_.style != health::Style::Number || !health::shown_number(health_.when, ant.hp, ant.max_hp, ant.frozen)) return;
-    if (in_world_target_ && pass_.camera.zoom != zoom::kNormal) {
+    if (font_numbers() || (in_world_target_ && pass_.camera.zoom != zoom::kNormal)) {
         deferred_digits_.push_back(DeferredDigits{std::to_string(ant.hp), sprite_x, sprite_y});
     } else {
         const LayoutRect view = world_view();
@@ -92,6 +93,10 @@ void Renderer::draw_ant_number(const ants::sim::AntSnapshot& ant, int32_t sprite
 void Renderer::draw_deferred_digits() {
     const LayoutRect view = layout_.view();
     const double z = static_cast<double>(camera_.zoom);
+    if (font_numbers()) {                                              // (the font's digits, white with an outline, the same place and size: renderer_numbers.cpp)
+        draw_font_digits(view, z);
+        return;
+    }
     for (const DeferredDigits& d : deferred_digits_) {
         const int32_t sx = view.x + static_cast<int32_t>(std::floor((static_cast<double>(d.wx) - static_cast<double>(camera_.x)) * z));
         const int32_t sy = view.y + static_cast<int32_t>(std::floor((static_cast<double>(d.wy) - static_cast<double>(camera_.y)) * z));
@@ -221,6 +226,10 @@ void Renderer::draw_health_changes() {
     if (changes_ == nullptr || !renderer_) return;
     changes_->expire(changes_now_ms_);
     if (changes_->count() == 0) return;
+    if (font_numbers()) {
+        draw_font_changes();
+        return;
+    }
     const double zoom = static_cast<double>(camera_.zoom);
     const LayoutRect view = layout_.view();
     const health::Rect screen{view.x, view.y, view.w, view.h};

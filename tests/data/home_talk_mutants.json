@@ -294,7 +294,7 @@
   {
    "id": "the_buttons_leave_the_box_in_a_wide_window",
    "file": "web/home/talk.css",
-   "old": "grid-template-areas: \"f f f\" \"t . s\"; gap: 0 8px;",
+   "old": "grid-template-areas: \"f f f\" \". t s\"; gap: 0 8px;",
    "new": "grid-template-areas: \"f t s\"; gap: 0 8px;",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
@@ -308,15 +308,15 @@
   {
    "id": "a_low_window_lets_the_box_grow",
    "file": "web/home/talk.css",
-   "old": "    .gt-on textarea.gc-input { max-height: 44px; }",
-   "new": "    .gt-on textarea.gc-input { max-height: 110px; }",
+   "old": "    .gt-on textarea.gc-input, .gt-tall.gt-on textarea.gc-input { max-height: 44px; }",
+   "new": "    .gt-on textarea.gc-input, .gt-tall.gt-on textarea.gc-input { max-height: 110px; }",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
   {
    "id": "a_low_window_stacks_the_buttons_under_the_field",
    "file": "web/home/talk.css",
-   "old": "grid-template-areas: \"f t s\"; align-items: center;",
-   "new": "grid-template-areas: \"f f f\" \"t . s\"; align-items: center;",
+   "old": "grid-template-areas: \"f t s\"; align-items: center; gap: 0 4px; margin-top: 6px; padding: 0 6px 0 4px;",
+   "new": "grid-template-areas: \"f f f\" \". t s\"; align-items: center; gap: 0 4px; margin-top: 6px; padding: 0 6px 0 4px;",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
   {
@@ -478,6 +478,55 @@
    "file": "web/home/talk.js",
    "old": "close(false); note(''); });",
    "new": "close(false); });",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_box_starts_with_two_rows",
+   "file": "web/home/talk.css",
+   "old": "grid-template-areas: \"f t s\"; align-items: center; gap: 0 4px; margin-top: 6px; padding: 4px 6px;",
+   "new": "grid-template-areas: \"f f f\" \". t s\"; align-items: center; gap: 0 4px; margin-top: 6px; padding: 4px 6px;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_dock_is_taller_with_one_row",
+   "file": "web/home/talk.css",
+   "old": "has(.gc-form.gt-on.gt-tall) {",
+   "new": "has(.gc-form.gt-on) {",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_tall_class_is_never_set",
+   "file": "web/home/talk.js",
+   "old": "form.classList.add('gt-tall'); s.height = 'auto'; h = field.scrollHeight;",
+   "new": "s.height = 'auto';",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_tall_class_is_never_cleared",
+   "file": "web/home/talk.js",
+   "old": "form.classList.remove('gt-tall'); s.height = 'auto'; h = field.scrollHeight;",
+   "new": "s.height = 'auto'; h = field.scrollHeight;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_words_are_measured_at_the_wide_width",
+   "file": "web/home/talk.js",
+   "old": "form.classList.remove('gt-tall'); s.height = 'auto'; h = field.scrollHeight;\n            if (!field.disabled && field.value !== '' && h > ROW) { form.classList.add('gt-tall'); s.height = 'auto'; h = field.scrollHeight; }",
+   "new": "s.height = 'auto'; h = field.scrollHeight; form.classList.toggle('gt-tall', !field.disabled && field.value !== '' && h > ROW);",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "a_field_that_is_off_gets_two_rows",
+   "file": "web/home/talk.js",
+   "old": "!field.disabled && field.value !== ''",
+   "new": "field.value !== ''",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "an_empty_field_with_a_wrapping_hint_gets_two_rows",
+   "file": "web/home/talk.js",
+   "old": "!field.disabled && field.value !== ''",
+   "new": "!field.disabled",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   }
  ]

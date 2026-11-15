@@ -44,6 +44,7 @@
 #include "ants_ai/island_expedition.hpp"
 #include "ants_ai/island_ferry.hpp"
 #include "ants_ai/island_tasks.hpp"
+#include "ants_ai/miner_flight_task.hpp"
 #include "ants_ai/opportunity_task.hpp"
 #include "ants_ai/standard_tasks.hpp"
 #include "ants_ai/tactics.hpp"
@@ -88,9 +89,11 @@ private:
           field_(kField, tactics_),
           brawl_(kBrawl, plan.brawl),
           opportunity_(kOpportunity, tactics_),
+          miner_flight_(kMinerFlight, tactics_),
           heal_(kHeal, tactics_) {
         island_.attach(&harvest_);
         expedition_.attach(&island_);
+        miner_flight_.attach(&island_, &expedition_);
     }
 
 public:
@@ -125,6 +128,7 @@ public:
     const GateGoalTask& gate_goals() const noexcept { return gate_goals_; }
     const FieldTask& field() const noexcept { return field_; }
     const OpportunityTask& opportunity() const noexcept { return opportunity_; }
+    const MinerFlightTask& miner_flight() const noexcept { return miner_flight_; }
     const HealTask& heal() const noexcept { return heal_; }
     /// Whether the bot plays the gate goals on this map (Medium and Hard, a walled map that the island play does not own; known after the first look)
     bool gate_map() const noexcept { return tactics_.gate_map; }
@@ -172,6 +176,7 @@ public:
     static constexpr TaskId kField = 20;
     static constexpr TaskId kBrawl = 21;
     static constexpr TaskId kOpportunity = 22;
+    static constexpr TaskId kMinerFlight = 24;
     static constexpr TaskId kHeal = kHealTaskId;                  // (23: tasks.hpp names it for the tasks that leave a carrier to it)
 
 private:
@@ -235,6 +240,7 @@ private:
     static FerryTask::Params ferry_params(const LevelPlan& plan) {
         FerryTask::Params p;
         p.per_pile = plan.island_ferry_per_pile;
+        p.reorder_hurt = plan.island_ferry_reorder;
         return p;
     }
     static HarvestTask::Params harvest_params(const LevelPlan& plan) {
@@ -307,6 +313,7 @@ private:
     FieldTask field_;
     BrawlTask brawl_;
     OpportunityTask opportunity_;
+    MinerFlightTask miner_flight_;
     HealTask heal_;
     void note_repeat(const sim::Command& command, uint64_t tick);
     void update_progress(const BotView& view);

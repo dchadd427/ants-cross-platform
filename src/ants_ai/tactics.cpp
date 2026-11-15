@@ -148,6 +148,10 @@ LevelPlan plan_for(Level level) noexcept {
             p.islands = true;
             p.island_expedition = true;
             p.island_timed_row = true;
+            p.island_fly_miner = true;
+            p.island_mines = true;
+            p.island_ferry_reorder = true;
+            p.island_ferry_per_pile = 3;             // three Swimmers a pile (two lose 24 points a match to three, 40 matches; docs/BOTS.md)
             p.island_ferry = true;
             p.island_swimmers = 3;
             p.island_builders = 0;

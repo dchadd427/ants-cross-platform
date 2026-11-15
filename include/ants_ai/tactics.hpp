@@ -285,6 +285,13 @@ struct LevelPlan {
     bool island_expedition{false};       // the expedition is on (ExpeditionTask: a crew is flown to the Swimmers that lie beyond water, bomb by bomb); the tests of the island task switch it off
     bool island_ferry{false};            // the Swimmers that dig no bridge carry food across the water (FerryTask)
     uint32_t island_ferry_per_pile{2};   // Swimmers of the ferry at one pile
+    bool island_fly_miner{false};        // (Hard) once the expedition is over a free Bomber is flown to the island of the ring pile on bombs of its own (MinerFlightTask; `--tune iflym=0`: off)
+    uint32_t island_miners{1};           // ... Bombers that are kept on the islands with food
+    uint32_t island_mine_from{2400};     // ... not before this tick
+    bool island_mines{false};            // (Hard) a Bomber on an island with a pile that no walker of the seat reaches lays mines round the pile (MineTask::collect_island_targets; `--tune imine=0`: off)
+    uint32_t island_mine_count{10};      // ... mines that stand at a pile at a time
+    uint32_t island_mine_apart{2};       // ... tiles between two of them (the seat's own Swimmers walk round a mine of the seat: the way stays open)
+    bool island_ferry_reorder{false};    // a Swimmer that a blast or a blow stopped (its hit points fell, it stands idle) is sent to a pile again at once, a hit carrier is sent home soon (FerryTask::reorder_hurt; `--tune ireorder=0`: off)
     bool island_timed_row{false};        // (Hard) the crew takes a Swimmer behind the Fire hats of a corner row with timed clicks, one ant for every Swimmer (`--tune itimed=0`: one ant for every hat, as before)
     bool island_fly_on{true};            // the Bomber of an expedition's leg flies on after the crew (`--tune ifly=0`: it stays behind and every island of the route needs a Bomber to take, as before; the quicker hops stay)
     // the gate goals (docs/reverse_engineering/bomb_gates.md, "Gate goals"): where walls (fire, bombs, rock) shut every pile off from the hill (HELLRAISER, POPcOrN) the bot gets the right ant first (a Fire ant to

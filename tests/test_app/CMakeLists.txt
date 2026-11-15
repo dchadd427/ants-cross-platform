@@ -1223,6 +1223,40 @@ target_link_libraries(test_health_changes PRIVATE ants_test_paths)
 add_test(NAME test_health_changes COMMAND test_health_changes)
 set_tests_properties(test_health_changes PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# The numbers in the game's font: the sizes against the classic drawing, the shrink, the output's pixels, the cache and the fallback
+add_executable(test_font_numbers
+    test_font_numbers.cpp
+)
+
+target_include_directories(test_font_numbers PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_font_numbers PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_font_numbers PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_font_numbers PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_font_numbers PRIVATE ants_test_paths)
+
+add_test(NAME test_font_numbers COMMAND test_font_numbers)
+set_tests_properties(test_font_numbers PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # Replays in the application: a headless application plays a game on this computer and a match of the network (the other machine is a bare NetGame over loopback sockets); the file that it keeps
 # of each is played again by the replay player on the engine alone and must reach the state in which the match ended
 add_executable(test_replay_app

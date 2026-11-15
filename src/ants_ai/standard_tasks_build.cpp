@@ -552,6 +552,89 @@ void MineTask::collect_pile_targets(TaskContext& c, std::vector<Target>& out) co
     }
 }
 
+// The mines at a pile on an island that no walker of the seat reaches (the ring pile of ISLANDS, which the Swimmers of the hills carry from): a free Bomber stands on its island (MinerFlightTask
+// flew it there), and the tiles two or three steps from a cell of the pile are mined, `plan.island_mine_apart` tiles from each other, `plan.island_mine_count` at a time. A mine hurts the ant of
+// any other team that steps on it (it loses two hit points and is thrown four tiles back, and its walk ends); the path finder of the seat's own ants goes round the seat's own mines (R7), so with
+// the mines apart the way to the pile stays open for them, and the tiles next to the pile are left free.
+void MineTask::collect_island_targets(TaskContext& c, std::vector<Target>& out) const {
+    const BotView& v = c.view;
+    const LevelPlan& plan = tactics_.plan;
+    const sim::Grid& grid = v.grid();
+    const uint64_t now = v.tick();
+    if (!plan.island_mines || plan.island_mine_count == 0) return;
+    const HillInfo& own_hill = c.map.hill(c.seat);
+    for (const PileView& p : v.piles()) {
+        if (p.lunchbox || p.remaining < plan.mine_min_units) continue;
+        const PileInfo* info = c.map.pile(p.index);
+        if (info == nullptr || info->approach[c.seat].reachable() || info->cells.empty()) continue;
+        // the island of the pile that a free Bomber of the seat stands on
+        int32_t comp = -1;
+        for (const AntView& a : v.mine()) {
+            if (a.type != sim::AntType::Bomber || a.hp < 5 || !a.takes_orders()) continue;
+            const TaskId owner = c.ledger.owner(a.id);
+            if (owner != kNoTask && owner != id() && c.ledger.rank(owner) > 1) continue;
+            const int32_t here = c.map.ant_component(c.seat, a.tile);
+            if (here < 0) continue;
+            for (const sim::TileCoord& cell : info->cells) {
+                for (int32_t dy = -1; dy <= 1 && comp < 0; ++dy) {
+                    for (int32_t dx = -1; dx <= 1; ++dx) {
+                        if (c.map.component(c.seat, sim::TileCoord{cell.x + dx, cell.y + dy}) == here) comp = here;
+                    }
+                }
+            }
+            if (comp >= 0) break;
+        }
+        if (comp < 0) continue;
+        const auto by_pile = [&](sim::TileCoord t) {
+            for (const sim::TileCoord& q : info->cells) {
+                if (q.chebyshev_dist(t) <= 3) return true;
+            }
+            return false;
+        };
+        uint32_t standing = 0;
+        for (const BombView& b : v.bombs()) standing += b.owner == c.seat && by_pile(b.tile) ? 1u : 0u;
+        for (const auto& j : jobs_) standing += by_pile(j.second.tile) ? 1u : 0u;
+        if (standing >= plan.island_mine_count) continue;
+        std::vector<Target> here;
+        std::set<int64_t> seen;
+        for (const sim::TileCoord& cell : info->cells) {
+            for (int32_t dy = -3; dy <= 3; ++dy) {
+                for (int32_t dx = -3; dx <= 3; ++dx) {
+                    const sim::TileCoord t{cell.x + dx, cell.y + dy};
+                    if (!grid.in_bounds(t) || !seen.insert(key_of(t)).second) continue;
+                    int32_t ring = 9;
+                    for (const sim::TileCoord& q : info->cells) ring = std::min(ring, q.chebyshev_dist(t));
+                    if (ring < 2 || ring > 3) continue;
+                    if (c.map.component(c.seat, t) != comp) continue;
+                    if (!grid.get_cell(t).can_place_bomb() || v.powerup_at(t) != nullptr || occupied(v, t)) continue;
+                    const auto cl = cool_.find(key_of(t));
+                    if (cl != cool_.end() && cl->second > now) continue;
+                    if (own_hill.present && t.chebyshev_dist(own_hill.origin) <= 6) continue;
+                    bool crowded = false;
+                    for (const BombView& b : v.bombs()) crowded = crowded || b.tile.chebyshev_dist(t) < static_cast<int32_t>(plan.island_mine_apart);
+                    for (const auto& j : jobs_) crowded = crowded || j.second.tile.chebyshev_dist(t) < static_cast<int32_t>(plan.island_mine_apart);
+                    if (crowded) continue;
+                    Target target;
+                    target.tile = t;
+                    target.score = 100 - 20 * (ring - 2);
+                    target.comp = comp;
+                    here.push_back(target);
+                }
+            }
+        }
+        std::stable_sort(here.begin(), here.end(), [](const Target& x, const Target& y) { return x.score > y.score; });
+        const uint32_t need = plan.island_mine_count - standing;
+        std::vector<Target> chosen;
+        for (const Target& t : here) {
+            if (chosen.size() >= need) break;
+            bool apart = true;
+            for (const Target& o : chosen) apart = apart && o.tile.chebyshev_dist(t.tile) >= static_cast<int32_t>(plan.island_mine_apart);
+            if (apart) chosen.push_back(t);
+        }
+        for (const Target& t : chosen) out.push_back(t);
+    }
+}
+
 // With no pile to mine: the ring round the gate of the best opponent (the tiles that SabotageTask lights), plan.mine_gate mines at a time.
 void MineTask::collect_gate_targets(TaskContext& c, std::vector<Target>& out) const {
     const BotView& v = c.view;
@@ -722,6 +805,7 @@ void MineTask::step(TaskContext& c) {
         } else if (mines.count(key_of(j.tile)) != 0) {
             ++planted_;
             home_planted_ += j.home ? 1u : 0u;
+            island_planted_ += j.island ? 1u : 0u;
             over = true;
         } else if (j.sent != kPending && ((now >= j.sent + 200u && a->idle()) || now >= j.sent + 700u)) {
             cool_[key_of(j.tile)] = now + 300u;                                          // it did not get there (or did nothing): the tile is left alone for a while
@@ -744,6 +828,7 @@ void MineTask::step(TaskContext& c) {
     const bool home_turn = home_mine_turn(plan, home_planted_, planted_ - home_planted_);   // (plan.home_first: a home mine before a pile mine while fewer have been laid than the pile mines earn)
     if (home_turn) collect_home_targets(c, targets);
     if (targets.empty() && free_to_mine) collect_pile_targets(c, targets);
+    if (targets.empty() && free_to_mine) collect_island_targets(c, targets);
     if (targets.empty() && !home_turn) collect_home_targets(c, targets);                // (a few mines round the own hill: the Bomber has nothing else to do for them)
     if (targets.empty() && free_to_mine) collect_gate_targets(c, targets);
     if (targets.empty()) return;
@@ -754,6 +839,7 @@ void MineTask::step(TaskContext& c) {
         int32_t actor_d = 0;
         for (const AntView& a : v.mine()) {
             if (a.type != sim::AntType::Bomber || a.hp < 5 || a.holding || a.carried_points > 0 || !a.takes_orders() || a.state == sim::UnitState::Stunned || jobs_.count(a.id) != 0) continue;
+            if (targets[i].comp >= 0 && c.map.ant_component(c.seat, a.tile) != targets[i].comp) continue;      // (a mine on an island is laid by a Bomber that stands on it)
             const TaskId owner = c.ledger.owner(a.id);
             if (owner != kNoTask && owner != id() && c.ledger.rank(owner) > 1) continue;                  // (only an ant of the economy: the Bombers of the expedition, the power-up trips and the walls are theirs)
             const int32_t d = a.tile.chebyshev_dist(tile);
@@ -778,6 +864,7 @@ void MineTask::step(TaskContext& c) {
         j.tile = tile;
         j.decided = now;
         j.home = targets[i].home;
+        j.island = targets[i].comp >= 0;
         jobs_[actor->id] = j;
         return;
     }
