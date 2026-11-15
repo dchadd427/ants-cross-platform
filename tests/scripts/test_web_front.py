@@ -475,7 +475,7 @@ class TheClay(unittest.TestCase):
         # docker/nginx.conf lets a browser keep a .png for a week without asking again, so a tile that changes under the same address stays the clean one for everybody who has been here: its address ends in
         # ?v= and the first 8 hex digits of the file's sha256, in the places that name it (a new tile fails this until they say so)
         version = hashlib.sha256(read_bytes("web", "front", "clay.png")).hexdigest()[:8]
-        for parts, count in ((("web", "lobby.html"), 1), (("web", "matches.css"), 1), (("web", "shell.html"), 4), (("web", "front", "classic.css"), 1)):
+        for parts, count in ((("web", "lobby.html"), 1), (("web", "matches.css"), 1), (("web", "shell.html"), 3), (("web", "front", "classic.css"), 1)):
             text = read(*parts)
             self.assertEqual(len(re.findall(r"clay\.png", text)), count, "%s names the tile %d time(s)" % (parts[-1], count))
             self.assertEqual(len(re.findall(r'url\("(?:front/)?clay\.png\?v=%s"\)' % version, text)), count, "%s: the tile's address ends in ?v=%s" % (parts[-1], version))

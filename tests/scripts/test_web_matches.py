@@ -229,12 +229,12 @@ class TheGamePagesStats(unittest.TestCase):
         self.assertLess(self.page.index('<script src="history_page.js"></script>'), self.page.index("var ANTS_REPLAY_MODE"))
 
     def test_the_pieces_are_there_once_and_closed_at_first(self):
-        for ident, markup in (("stats-btn", r'<button id="stats-btn" type="button" class="btn sm wide-only"[^>]*aria-expanded="false" aria-controls="mstats" hidden>Stats</button>'),
+        for ident, markup in (("stats-btn", r'<button id="stats-btn" type="button" class="btn rep-only wide-only"[^>]*aria-expanded="false" aria-controls="mstats" hidden>Stats</button>'),
                               ("mstats-flow", r'<section class="mstats flow rep-only" id="mstats-flow" aria-label="Match stats" hidden></section>'),
                               ("mstats", r'<aside class="mstats pop rep-only" id="mstats" role="dialog" aria-label="Match stats" hidden></aside>')):
             self.assertEqual(len(re.findall(r'\bid="%s"' % ident, self.page)), 1, ident)
             self.assertRegex(self.page, markup, ident)
-        self.assertLess(self.page.index('id="stats-btn"'), self.page.index('id="fullscreen-btn-r"'))        # (in the replay's header, before Fullscreen)
+        self.assertLess(self.page.index('id="stats-btn"'), self.page.index('id="fullscreen-btn"'))        # (in the bar, before Fullscreen)
         self.assertLess(self.page.index('id="rbar"'), self.page.index('id="mstats-flow"'))                  # (a phone's row is under the controls)
         css = read("web", "replay_stats.css")
         self.assertIn("@media (max-width: 700px) { .mstats.pop { display: none !important; } }", css)         # (the page's own phone breakpoint: the panel over the picture is for the wide screens)

@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="Ants!">
     <link rel="shortcut icon" href="/favicon.ico?v=e2d196f0">
     <link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
-    <link rel="stylesheet" href="replay_stats.css"><link rel="stylesheet" href="death_map.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="touch_keys.css">
+    <link rel="stylesheet" href="site_nav.css"><link rel="stylesheet" href="game_bar.css"><link rel="stylesheet" href="replay_stats.css"><link rel="stylesheet" href="death_map.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="touch_keys.css">
     <style>
         /* The look of the front page (web/lobby.html), which is the look of the 1998 game's own menus: the orange clay, the thin green frame, teal bevelled buttons with a red shadow, black
            inset boxes, the game's own font (Libre Franklin, SIL OFL) and the "ants!" logo, all from web/front/. The colors are the front page's, token for token (tests/scripts/test_web_game.py
@@ -152,76 +152,9 @@
             box-shadow: var(--bevel), 3px 4px 0 var(--shadow);
         }
 
-        /* the header: the controls; on a narrow window one row, with "More" (see the narrow rules below) */
-        header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px 16px;
-            width: 100%;
-            max-width: 1280px;
-            margin-bottom: 18px;
-        }
-
-        .header-actions {
-            display: flex;
-            flex: 1 1 0;
-            min-width: 0;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: flex-start;
-            gap: 10px 14px;
-        }
-
+        /* the bar at the top (the site's: site_nav.css, and game_bar.css for what is the game page's own); the buttons of its tools show a short word on a narrow window */
         .btn-text-short {
             display: none;
-        }
-
-        /* "More" holds the other links of a narrow window: a <details>, no script; a wide window shows the links themselves and not this */
-        .more {
-            display: none;
-            position: relative;
-        }
-
-        .more summary {
-            display: inline-flex;
-            list-style: none;
-            cursor: pointer;
-            touch-action: manipulation;
-            border-radius: 8px;                    /* (the keyboard focus ring is the summary's: it follows the corners of the button inside) */
-        }
-
-        .more summary::-webkit-details-marker {
-            display: none;
-        }
-
-        .more summary .btn {
-            pointer-events: none;
-        }
-
-        .more summary .btn::after {
-            content: "\25B8";
-            font-size: 12px;
-        }
-
-        .more[open] summary .btn::after {
-            content: "\25BE";
-        }
-
-        .more[open] .more-list {
-            display: flex;
-            flex-direction: column;
-            align-items: stretch;
-            gap: 12px;
-            position: absolute;
-            right: 0;
-            top: calc(100% + 12px);
-            z-index: 30;
-            min-width: 200px;
-            padding: 14px;
-            background: var(--clay) url("front/clay.png?v=ef1e7ee6");
-            border: 3px solid var(--edge);
-            box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px var(--edge), 4px 6px 0 5px var(--shadow);
         }
 
         /* The picture starts in 16:9 here and the script picks Automatic's shape, the one nearest to the screen for the way it is held (the game's 16:9 canvas is 960 x 540; "Classic 4:3" is the original's 640 x 480 and is chosen with ?aspect=4:3 or the Picture shape row of the settings menu).
@@ -293,7 +226,7 @@
             background: #000;
             box-shadow: 0 0 0 3px var(--edge), 0 0 0 6px var(--frame), 0 0 0 8px var(--edge), 4px 6px 0 8px var(--shadow);
             overflow: hidden;
-            isolation: isolate;                         /* (the loading screen's z-index stays in here: the header's "More" list is above the picture) */
+            isolation: isolate;                         /* (the loading screen's z-index stays in here: the bar's Menu is above the picture) */
         }
 
         /* Fullscreen (the browser's, on the stage) and the page's own fullscreen where the browser has none (an iPhone): the stage fills the screen, black, and the script
@@ -716,61 +649,6 @@
             white-space: nowrap;
         }
 
-        /* the emerald bar of the match screen, as at the foot of the front page (the version and the build are the Dockerfile's and the CI's to find: ids game-version, game-build-id) */
-        footer.bar {
-            align-self: stretch;
-            margin: auto calc(-1 * max(var(--side), env(safe-area-inset-right))) 0 calc(-1 * max(var(--side), env(safe-area-inset-left)));
-            padding: 16px max(var(--side), env(safe-area-inset-right)) 18px max(var(--side), env(safe-area-inset-left));
-            color: var(--cream);
-            font-size: 14px;
-            line-height: 1.5;
-            background: linear-gradient(180deg, #2b685f, #2b6b4f);
-            border-top: 3px solid var(--frame-hi);
-            box-shadow: inset 0 3px 0 var(--frame-lo);
-        }
-
-        .bar-in {
-            max-width: 1280px;
-            margin: 0 auto;
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 8px 22px;
-        }
-
-        .bar .ver {
-            font-variant-numeric: tabular-nums;
-            background: var(--edge);
-            padding: 3px 12px;
-            border-radius: 2px;
-            color: #fff;
-        }
-
-        .bar strong {
-            font-weight: 500;
-            color: #fff;
-            margin-right: 10px;
-        }
-
-        .bar .grow {
-            flex: 1 1 280px;
-        }
-
-        .bar nav {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px 18px;
-        }
-
-        .bar a {
-            text-decoration: none;
-            padding: 2px 4px;
-        }
-
-        .bar a:hover {
-            text-decoration: underline;
-        }
-
         /* Mobile specific layout: the guide's panels are folded; the first one is open */
         @media (max-width: 640px) {
             button.guide-toggle-btn {
@@ -832,7 +710,7 @@
             }
         }
 
-        /* A narrow window (a phone held upright): the header is one row, Menu, Fullscreen and a "More" that opens the other links, and the ring of the picture is thinner */
+        /* A narrow window (a phone held upright): the bar is one row (game_bar.css), and the ring of the picture is thinner */
         @media (max-width: 700px) {
             :root {
                 --side: 20px;
@@ -841,24 +719,6 @@
 
             body {
                 padding-top: max(14px, env(safe-area-inset-top));
-            }
-
-            header {
-                gap: 8px;
-                margin-bottom: 16px;
-            }
-
-            .header-actions {
-                flex-wrap: nowrap;
-                gap: 8px 10px;
-            }
-
-            .wide-only {
-                display: none;
-            }
-
-            .more {
-                display: block;
             }
 
             .btn.sm {
@@ -873,14 +733,6 @@
             .info-panel-title {
                 font-size: 20px;
             }
-
-            footer.bar {
-                padding-top: 14px;
-            }
-
-            .bar nav {
-                gap: 4px 10px;
-            }
         }
 
         @media (max-width: 440px) {
@@ -890,24 +742,10 @@
         }
 
         @media (max-width: 380px) {
-            .header-actions { gap: 8px 6px; }
             .btn.sm { padding: 6px 8px; }
         }
 
-        /* Between 701 and 1139 px the header keeps the seven links it had, and Matches is the footer's (the Settings button is in the row, a gear without its word). Feedback goes too only where that saves a row, at limits that were measured when the row also held a logo (the logo is gone and the limits are as they were):
-           about 930 to 1040 px in a window taller than 520 px and about 740 to 830 px in a short one (a phone on its side); elsewhere the row is one row, or two rows with or without it. The footer has both links. */
-        @media (min-width: 701px) and (max-width: 1139px) {
-            #watch-btn {
-                display: none;
-            }
-        }
-        @media (min-width: 920px) and (max-width: 1045px) and (min-height: 521px), (min-width: 736px) and (max-width: 836px) and (max-height: 520px) {
-            #feedback-btn {
-                display: none;
-            }
-        }
-
-        /* A window that is wide and short (a phone on its side): one slim row of header buttons and a small bar, so that the picture gets the height */
+        /* A window that is wide and short (a phone on its side): small buttons, so that the picture gets the height */
         @media (min-width: 701px) and (max-height: 520px) {
             body {
                 padding-top: max(8px, env(safe-area-inset-top));
@@ -915,15 +753,6 @@
 
             body::after {
                 box-shadow: inset 0 0 0 4px #2b5f43, inset 0 0 0 6px var(--frame-lo);
-            }
-
-            header {
-                margin-bottom: 14px;
-                gap: 6px 12px;
-            }
-
-            .header-actions {
-                gap: 6px 10px;
             }
 
             .btn.sm {
@@ -950,13 +779,10 @@
            are the new part. The page puts `replay` on <body> (the first line of the body) and the pieces that belong to the other mode are hidden here. ================= */
         :root { --muted: #8fb3a6; --c-green: #79bf93; --c-red: #d4707f; --c-blue: #8f8fd6; --c-black: #b3afb9; }
         body:not(.replay) .rep-only { display: none !important; }
-        body.replay .header-actions:not(.rep-only), body.replay .info-panel-wrapper { display: none !important; }
+        body.replay .info-panel-wrapper { display: none !important; }
         .rtag[hidden], .endnote[hidden], .veil[hidden], .rbar[hidden], .rm-modal[hidden], .toast[hidden], .livenow[hidden], .jtl[hidden], .rew[hidden], .redge[hidden], .rhandle[hidden], .rnote[hidden] { display: none !important; }
 
-        /* the header: what is playing, and a few buttons (the other links of the header are in the footer, as they are) */
-        body.replay header { align-items: center; }
-        body.replay .header-actions.rep-only { flex: 0 0 auto; flex-wrap: nowrap; }
-        @media (max-width: 340px) { body.replay .header-actions.rep-only { gap: 8px 4px; } body.replay .header-actions.rep-only .btn.sm { padding: 6px 5px; } }       /* (a 320 px phone: Home, All matches, Full and More share one row) */
+        /* the bar: what is playing, and a few buttons (game_bar.css has the bar's own rules) */
         .rhead { flex: 1 1 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; line-height: 1.15; align-content: center; }
         .rhead h2 { font-size: 26px; font-weight: 500; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 14px; color: var(--ink); overflow-wrap: anywhere; }
         .rhead h2 small { font-size: 15px; font-weight: 500; }
@@ -1032,7 +858,6 @@
         .rm-btns { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
         .rm-btns .btn { flex: 1 1 auto; }
         .toast { position: fixed; left: 50%; bottom: 74px; transform: translateX(-50%); z-index: 1100; background: #0b1117; color: var(--cream); border: 3px solid var(--gold); border-radius: 6px; padding: 10px 18px; max-width: min(520px, 92vw); text-align: center; box-shadow: 0 8px 20px rgba(0, 0, 0, .5); }
-        footer.bar a[aria-current] { color: var(--gold); text-decoration: underline; text-underline-offset: 4px; }
 
         /* fullscreen: the bar lies over the bottom of the picture (the page moves it into the picture's box) and goes away by itself while the pointer rests */
         .rbar.over { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(94%, 1180px); min-width: 0; margin: 0; padding: 8px 16px; color: var(--cream); background: rgba(7, 11, 15, .9); border: 3px solid var(--frame); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); z-index: 60; transition: opacity .25s ease, transform .2s ease; }
@@ -1084,7 +909,7 @@
         .pill.lv { color: #ffc3bd; background: #3a0d11; border: 1px solid #9d0d17; letter-spacing: .1em; }
         .pill.lv::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 6px rgba(255, 90, 79, .9); }
         .rhead h2 .pill.lv { font-size: 13px; vertical-align: 3px; }
-        body.live [data-dl], body.nodl [data-dl], body.ownfile [data-dl], body.ownfile #copy-btn, body.ownfile #copy-more, body.ownfile #stats-btn { display: none !important; }
+        body.live [data-dl], body.nodl [data-dl], body.ownfile [data-dl], body.ownfile #copy-btn, body.ownfile #stats-btn { display: none !important; }
         .rtag.lv b { color: #ff8c84; }
         .rtag.lv b::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 6px rgba(255, 90, 79, .9); }
         .tl .edge { display: none; position: absolute; right: 0; top: 0; bottom: 0; width: 6px; background: #ff5a4f; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 -3px 0 #9d0d17; }
@@ -1121,45 +946,20 @@
 <body>
     <script>if (/(^|[?&])(replay|live|local)=/.test(window.location.search)) document.body.className += ' replay'; if (/(^|[?&])replay=/.test(window.location.search) && /(^|[?&])embed=1(&|$)/.test(window.location.search)) document.body.className += ' embed'; if (/(^|[?&])local=/.test(window.location.search) && !/(^|[?&])replay=/.test(window.location.search)) document.body.className += ' ownfile';</script>
 
-    <header>
+    <header class="sb" data-live="menu" data-version="@@GAME_VERSION@@" data-build="@@BUILD_ID@@" data-built="@@BUILD_DATE@@">
         <h1 class="sr">Ants (1998)</h1>
+        <a class="btn sbhome" href="/" id="menu-btn" title="Home: play on this computer, host a match or join one"><span class="sbchev" aria-hidden="true">&lsaquo;</span>Home</a>
+        <nav aria-label="Pages"><a class="btn" href="/">Home</a><a class="btn" href="/matches">Matches</a><a class="btn" href="/mapmaker">Map maker</a><a class="btn sbdc" href="https://discord.gg/WaWrXQnKPj" target="_blank" rel="noopener noreferrer" aria-label="Discord server"><svg class="dc" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a></nav>
+        <a href="/matches" id="all-btn" class="btn rep-only" title="Back to the list of matches">&lsaquo; All matches</a>
         <div class="rhead rep-only"><h2 id="r-title"></h2><div id="r-meta"></div></div>
-        <div class="header-actions">
-            <a href="/" id="menu-btn" class="btn sm" title="Back to the menu (in this tab): play on this computer, host a match or join one">Menu</a>
-            <a href="/matches" target="_blank" rel="noopener noreferrer" id="watch-btn" class="btn sm wide-only" title="Matches: every match played here, with its stats and replay (opens in a new tab: a match that is being played here goes on)">Matches</a>
-            <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer" class="btn sm wide-only" title="View 1998 Sprites, Animations &amp; Audio SFX">Sprites and sounds</a>
-            <a href="/changelog" target="_blank" rel="noopener noreferrer" class="btn sm wide-only" title="What changed in each version">Changelog</a>
-            <button id="reset-btn" type="button" class="btn sm wide-only" onclick="window.location.reload()" title="Reset Game / Reload Page">Reset</button>
-            <button id="fullscreen-btn" type="button" class="btn sm" title="Toggle Fullscreen"><span class="btn-text">Fullscreen</span><span class="btn-text-short">Full</span></button>
-            <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer" class="btn sm wide-only" title="View Source Code on GitHub">GitHub</a>
-            <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer" id="feedback-btn" class="btn sm wide-only" title="Give Feedback or Report Issues">Feedback</a>
-            <details class="more">
-                <summary><span class="btn sm">More</span></summary>
-                <div class="more-list">
-                    <a href="/matches" target="_blank" rel="noopener noreferrer" class="btn sm" title="Matches: every match played here, with its stats and replay (opens in a new tab: a match that is being played here goes on)">Matches</a>
-                    <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer" class="btn sm" title="View 1998 Sprites, Animations &amp; Audio SFX">Sprites and sounds</a>
-                    <a href="/changelog" target="_blank" rel="noopener noreferrer" class="btn sm" title="What changed in each version">Changelog</a>
-                    <button type="button" class="btn sm" onclick="window.location.reload()" title="Reset Game / Reload Page">Reset</button>
-                    <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer" class="btn sm" title="View Source Code on GitHub">GitHub</a>
-                    <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer" class="btn sm" title="Give Feedback or Report Issues">Feedback</a>
-                </div>
-            </details>
-        </div>
-        <div class="header-actions rep-only">
-            <a href="/" id="home-btn" class="btn sm" title="Back to the menu (in this tab): play on this computer, host a match or join one">Home</a>
-            <a href="/matches" id="all-btn" class="btn sm" title="Back to the list of matches">&lsaquo; All matches</a>
-            <button id="copy-btn" type="button" class="btn sm wide-only" title="Copy the link to this match">Copy link</button>
-            <button id="stats-btn" type="button" class="btn sm wide-only" title="The stats of this match" aria-expanded="false" aria-controls="mstats" hidden>Stats</button>
-            <a href="#" data-dl="" class="btn sm wide-only" title="Download the recording (.antsrep)">Download</a>
-            <button id="fullscreen-btn-r" type="button" class="btn sm" title="Toggle Fullscreen"><span class="btn-text">Fullscreen</span><span class="btn-text-short">Full</span></button>
-            <details class="more">
-                <summary><span class="btn sm">More</span></summary>
-                <div class="more-list">
-                    <button id="copy-more" type="button" class="btn sm">Copy link</button>
-                    <a href="#" data-dl="" class="btn sm">Download</a>
-                </div>
-            </details>
-        </div>
+        <span class="sbgrow"></span><a class="btn sblive" href="/" hidden></a>
+        <button id="copy-btn" type="button" class="btn rep-only wide-only" title="Copy the link to this match">Copy link</button>
+        <button id="stats-btn" type="button" class="btn rep-only wide-only" title="The stats of this match" aria-expanded="false" aria-controls="mstats" hidden>Stats</button>
+        <a href="#" data-dl="" class="btn rep-only wide-only" title="Download the recording (.antsrep)">Download</a>
+        <button id="fullscreen-btn" type="button" class="btn" title="Toggle Fullscreen"><span class="btn-text">Fullscreen</span><span class="btn-text-short">Full</span></button>
+        <button class="btn sbtn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="sbm"><i class="sbbars"></i></button>
+        <span id="own-hold" hidden></span>
+        <span class="ver" id="game-version-line" hidden>Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span>&#8197;<span id="game-build-date">(@@BUILD_DATE@@)</span></span></span>
     </header>
 
     <div id="game-stage" data-aspect="16:9">
@@ -1244,7 +1044,7 @@
                         <li><strong>Goal:</strong>&#8197;get the most points by getting&#8197;<strong>food</strong>. Send your ants to food: they pick it up and carry it home to your anthill, one piece at a time.</li>
                         <li><strong>Score:</strong>&#8197;yours is at the top of the screen, the other players' at the bottom. When the clock reaches 0:00 the highest score wins.</li>
                         <li><strong>Power-ups</strong>&#8197;dropped by special flowers give an ant a special power (see below); an ant holds one at a time.</li>
-                        <li><strong>Opponents:</strong>&#8197;the Menu button starts a game on this computer against Easy, Medium or Hard bots, each base at its own level, with you and one bot as a team if you like, or alone as in the original; there you can also host or join a match on the game server to play against friends.</li>
+                        <li><strong>Opponents:</strong>&#8197;Home starts a game on this computer against Easy, Medium or Hard bots, each base at its own level, with you and one bot as a team if you like, or alone as in the original; there you can also host or join a match on the game server to play against friends.</li>
                         <li><strong>Help:</strong>&#8197;<kbd>F1</kbd>&#8197;or the Help button shows the original's quick help.</li>
                         <li><strong>Picture:</strong>&#8197;Automatic (the default) gives the shape nearest to your screen for the way you hold it;&#8197;<em>Classic 4:3</em>&#8197;is the original's picture, and the other shapes suit tablets, laptops, phones held sideways and wide monitors (a wider or taller picture shows more of the map). Choose a shape in the Picture shape row of Settings (the gear in the header, on any screen of the game, or Esc in a match), under Video: the picture changes at once and the match goes on. Or add&#8197;<kbd>?aspect=16:10</kbd>&#8197;(or another shape of the list) to the address.&#8197;The Fullscreen button makes the picture as big as your screen allows.</li>
                     </ul>
@@ -1322,26 +1122,11 @@
         </div>
     </div>
 
-    <footer class="bar">
-        <div class="bar-in">
-            <span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span>&#8197;<span id="game-build-date">(@@BUILD_DATE@@)</span></span></span></span>
-            <span class="grow">Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2</span>
-            <nav aria-label="Footer links">
-                <a href="/" id="menu-link">Menu</a>
-                <a href="/matches" target="_blank" rel="noopener noreferrer" id="watch-link">Matches</a>
-                <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a>
-                <a href="/changelog" target="_blank" rel="noopener noreferrer">Changelog</a>
-                <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a>
-                <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a> <a href="/legal" target="_blank" rel="noopener noreferrer">Legal</a>
-            </nav>
-        </div>
-    </footer>
-
     <aside class="mstats pop rep-only" id="mstats" role="dialog" aria-label="Match stats" hidden></aside>
 
     <div class="toast" id="toast" role="status" hidden></div>
 
-    <script src="rejoin_key.js"></script><script src="hub_here.js"></script><script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="touch_keys.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
+    <script src="site_nav.js"></script><script src="game_bar.js"></script><script src="rejoin_key.js"></script><script src="hub_here.js"></script><script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="touch_keys.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -1466,7 +1251,7 @@
             }
             // The page's own controls: a pointer over one of them is on the page and never at the game's edge (hovering a button, a link or a selector near the game must not scroll the map). `target` is
             // the element under the pointer; anything inside a control counts (the open list of the picture's dropdown is one: a page-made list lies over the page, which a native list never did).
-            var CONTROLS = 'a, button, input, select, textarea, summary, label, [role="radio"], [role="button"], [role="slider"], [role="option"], .pick-list, .rbar, .tk, .tk-shield';
+            var CONTROLS = 'a, button, input, select, textarea, summary, label, [role="radio"], [role="button"], [role="slider"], [role="option"], .pick-list, .rbar, .sb, .sbm, .tk, .tk-shield';
             function overControl(target) {
                 return !!(target && typeof target.closest === 'function' && target.closest(CONTROLS));
             }
@@ -2653,7 +2438,7 @@
         // shape: its canvas, its screens, its view; the simulation is not touched). The choice is remembered by the browser (under ANTS_ASPECT_KEY: nothing else writes it) and put in the address
         // (?aspect=, without a new entry in the history), so that a reload or a link has it; the rest of the address (the room of a match, the seat) stays.
         // ANTS_SELECTOR_BEGIN (tests/scripts/web_aspect_key_check.js clicks the buttons of this block and sees what it stores and where it goes)
-        // The player leaves a joined match ON PURPOSE (the Menu button and the footer's Menu link, once the player has said yes): the game tells the server (Leave: the seat is dropped at once, the others do
+        // The player leaves a joined match ON PURPOSE (the Home link of the bar, once the player has said yes): the game tells the server (Leave: the seat is dropped at once, the others do
         // not wait for it) and lets go of the key, and the page navigates in the same breath. A closed tab and a reload do not come here: their seat is held and their key kept, which is how they come
         // back. Only once the game runs (index.js binds an export at its first call: a call while the program is still compiled leaves it undefined for good).
         function antsLeaveMatch() {
@@ -2760,22 +2545,22 @@
         })();
         // ANTS_SELECTOR_END
 
-        // THE WAY BACK TO THE MENU: the front page (lobby.html, at "/"). The header's Menu button (Home, in a recording or a live view) and the footer's link go there in THIS tab (requested: nothing opens a new tab by default). The game that is running
+        // THE WAY BACK TO THE MENU: the front page (lobby.html, at "/"): Home in the bar (web/game_bar.js; the bar's Menu has it too, and so has the mark of live matches). It goes there in THIS tab (requested: nothing opens a new tab by default). The game that is running
         // here is left, and a room that is joined is left for good, so a click asks first while a match is being played here or a room is joined (ants_match_running, and
-        // --join-url among the arguments), and No stays; Yes tells the server (antsLeaveMatch: the seat is dropped at once and the key is let go of; a closed tab would have held it).
-        (function () {
-            ['menu-btn', 'home-btn', 'menu-link'].forEach(function (id) {
-                var link = document.getElementById(id);
-                if (!link) return;
-                link.addEventListener('click', function (e) {
-                    var joined = ANTS_ARGS.indexOf('--join-url') !== -1;
-                    var playing = false;
-                    try { playing = typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (err) { /* the game does not answer: it is not running a match */ }
-                    if ((joined || playing) && !window.confirm('Leave the game and go back to the menu?')) e.preventDefault();
-                    else if ((joined || playing) && !(e.ctrlKey || e.metaKey || e.shiftKey || e.altKey)) antsLeaveMatch();      // (a click that opens another tab leaves this one as it is)
-                });
-            });
-        })();
+        // --join-url among the arguments), and No stays; Yes tells the server (antsLeaveMatch: the seat is dropped at once and the key is let go of; a closed tab would have held it). While that is so every other link of the bar
+        // opens in a new tab, and the bar's keys are the bar's, not the game's (game_bar.js).
+        window.AntsGameBar.start({
+            doc: document, win: window,
+            busy: function () {
+                var playing = false;
+                try { playing = typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (err) { /* the game does not answer: it is not running a match */ }
+                return ANTS_ARGS.indexOf('--join-url') !== -1 || playing;
+            },
+            ask: function () { return window.confirm('Leave the game and go back to the menu?'); },
+            running: function () { try { return typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (err) { return false; } },
+            leave: antsLeaveMatch,
+            focus: function () { canvas.focus(); }
+        });
 
         // The fullscreen mouse: Locked (the default) or Free, a row of the settings menu (Video; web/game_menu.js calls antsLock). The browser remembers the choice under ANTS_LOCK_KEY (nothing else writes it; only
         // "off" turns the lock off, see ANTS_PAGE.lockSetting); the pointer lock above reads ANTS_POINTER_LOCK. A browser without a pointer lock (an iPhone) has no such row.
@@ -3106,7 +2891,7 @@
             var script = document.createElement('script'), toast = document.getElementById('toast');
             script.src = 'game_menu.js?v=' + ANTS_BUILD_VER;
             script.onload = function () { window.AntsGameMenu.forPage({ doc: document, win: window, shapes: window.AntsShapes, picker: function (opts) { return window.AntsShapePicker.create(window.AntsShapes, opts); }, isAutomatic: function () { return ANTS_ASPECT_SOURCE === 'default'; }, automatic: antsAutomatic, onShape: antsOnShape, pickShape: antsPickShape, lock: antsLock, stage: stageElement, canvas: canvas, toast: toast, query: '?v=' + ANTS_BUILD_VER, module: function () { return Module; }, ready: function () { return isReadyToPlay; }, replay: ANTS_REPLAY_MODE, live: ANTS_LIVE_MODE, version: document.getElementById('game-version').textContent, isFullscreen: isFullscreen, enter: enterFullscreen, leave: leaveFullscreen, isLocked: isLocked, releaseLock: releaseLock, requestLock: requestLock, touchKeys: antsTouchKeys, cancelsKey: ANTS_PAGE.cancelsBrowserKey }); };
-            script.onerror = function () { script.remove(); if (again) { toast.textContent = 'The settings menu could not load. Press Reset to try again.'; toast.hidden = false; } else setTimeout(function () { antsLoadGameMenu(true); }, 2500); };
+            script.onerror = function () { script.remove(); if (again) { toast.textContent = 'The settings menu could not load. Open the Menu and press Reload page to try again.'; toast.hidden = false; } else setTimeout(function () { antsLoadGameMenu(true); }, 2500); };
             document.head.appendChild(script);
         }
 
@@ -3519,8 +3304,6 @@
                 window.prompt('Copy the link to this match:', url);
             };
             $('copy-btn').addEventListener('click', copy);
-            $('copy-more').addEventListener('click', copy);
-            $('fullscreen-btn-r').addEventListener('click', function () { $('fullscreen-btn').click(); });
             $('b-fsx').addEventListener('click', function () { $('fullscreen-btn').click(); });
             // PICTURE_POPOVER_BEGIN (tests/scripts/web_picture_popover_check.js runs this block on a page of fakes)
             // The Picture button: the small window with the dropdown of the shapes opens above the bar and closes with a second press, a click elsewhere, Esc (focus goes back to the button) or the focus leaving it. The
@@ -3775,8 +3558,7 @@
             });
             setHeader();
             liveClasses();
-            $('watch-link').setAttribute('aria-current', 'page');   // (the footer says where the player is: the list of matches)
-            $('watch-link').removeAttribute('target'); $('watch-link').removeAttribute('rel');   // (and nothing is being played here, so it goes in this tab, like "All matches")
+            document.querySelector('.sb nav a[href="/matches"]').setAttribute('aria-current', 'page');   // (the Menu says where the player is: the list of matches)
             window.antsReplayPlaceBar(); if (OWN) OWN.chrome();
             setInterval(tick, 100);
             tick();

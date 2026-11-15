@@ -99,6 +99,7 @@ class Limits:
     picture_inflight: int = 2           # fetches at one time ...
     picture_waiting: int = 32           # ... and waiting for their turn (more are dropped: the letters stay; one account has one fetch waiting or running at a time, and a new login always gets its fetch once that one is done)
     picture_dropped_log_seconds: float = 10.0   # a fetch that was dropped (the queue was full, or the account's fetch was still waiting) is counted, and a line says how many, this seldom at the most
+    picture_lookup_seconds: float = 86400.0     # a person's profile is asked for (a person not in the server, or roles off) at most this often, one a day; the roles' check gives a member's picture code every re-check
     picture_burst: int = 5              # fetches for the whole hub: a burst of 5, then one every `picture_refill_seconds`
     picture_refill_seconds: float = 1.0
     picture_serve_burst: int = 240      # /hub/pic/ answers for one client address: a burst of 240 (one whole list of the front page), then twenty a second (nginx has the same numbers in front)

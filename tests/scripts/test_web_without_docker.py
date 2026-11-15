@@ -385,7 +385,12 @@ class TheRealDockerfileReplayed(Scratch):
             if os.path.exists(self.html("plain", name)):
                 text = self.page("plain", name)
                 self.assertNotIn("@@SITE_", text, name)
-                self.assertRegex(text, r'<span><span class="ver" id="game-version-line">', name)            # (the footers of the game page and the front page)
+                if name == "lobby.html":
+                    self.assertRegex(text, r'<span><span class="ver" id="game-version-line">', name)        # (the footer of the front page)
+                else:
+                    self.assertNotIn("<footer", text, name)                                                   # (the game page has the bar: its stamp is hidden, and the bar's Menu shows it)
+                    self.assertRegex(text, r'<span class="ver" id="game-version-line" hidden>', name)
+                    self.assertRegex(text, r'<header class="sb"[^>]* data-version="%s" data-build="abc1234" data-built="\d{4}-\d{2}-\d{2} \d{2}:\d{2} PT"' % re.escape("v" + read("VERSION").strip()), name)
         for name in ("matches.html", "match.html", "legal.html", "mapmaker.html"):          # (the pages with the bar at the top: no footer, the three stamps are on the bar for its Menu)
             text = self.page("plain", name)
             self.assertNotIn("@@", text, name)

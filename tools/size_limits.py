@@ -68,6 +68,8 @@ APP_ICONS_BUDGET = 4_700
 # the browser-tab icon (web/favicon.png 285 bytes + web/favicon.ico 1,212 bytes)
 FAVICON_BUDGET = 1_650
 APP_MANIFEST_BUDGET = 1_300
+# the game page's part of the bar (web/game_bar.js and web/game_bar.css together)
+GAME_BAR_BUDGET, GAME_BAR_GZIP_BUDGET = 12_800, 4_250
 # the bar at the top of every page (web/site_nav.css, web/site_nav.js)
 NAV_CSS_BUDGET, NAV_CSS_GZIP_BUDGET = 4_900, 1_700
-NAV_JS_BUDGET, NAV_JS_GZIP_BUDGET = 5_000, 2_000
+NAV_JS_BUDGET, NAV_JS_GZIP_BUDGET = 5_700, 2_200

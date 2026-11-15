@@ -352,7 +352,7 @@ async function partHand(browser, shot) {
         check('and the record that was there still plays', (await stubSha(page, '/replay.antsrep')) === sha256(FIXTURE));
         await ctx.close();
     }
-    // 7. a phone: the same, and More has a way to open another file
+    // 7. a phone: the same, and the Menu has a way to open another file
     {
         const { ctx, page } = await newPage(browser, PHONE, report);
         await openMatches(site, page);
@@ -361,13 +361,13 @@ async function partHand(browser, shot) {
         await page.waitForURL(LOCAL_URL); await stubStarted(page); await sleep(300);
         await shot(page, 'built_d_phone_player');
         check('a phone plays the same bytes', (await stubSha(page, '/replay.antsrep')) === sha256(FIXTURE));
-        await page.click('.header-actions.rep-only summary');
-        const more = await page.$$eval('.header-actions.rep-only .more-list > *', (n) => n.filter((x) => x.getClientRects().length > 0).map((x) => x.textContent));
-        check('More holds one thing on a phone: Open another file', more.length === 1 && more[0] === 'Open another file', JSON.stringify(more));
+        await page.click('header.sb .sbtn');
+        const more = await page.$$eval('#sbm .gb-own', (n) => n.filter((x) => x.getClientRects().length > 0).map((x) => x.textContent));
+        check('the Menu leads with one thing on a phone: Open another file', more.length === 1 && more[0] === 'Open another file', JSON.stringify(more));
         const url = page.url();
-        await chooseFile(page, '#own-more', asFile('other.antsrep', FIXTURE));
+        await chooseFile(page, '#sbm .gb-own', asFile('other.antsrep', FIXTURE));
         await page.waitForFunction((u) => location.href !== u, url);
-        check('another file from More goes to the player at its own address', LOCAL_URL.test(page.url()));
+        check('another file from the Menu goes to the player at its own address', LOCAL_URL.test(page.url()));
         await ctx.close();
     }
     // 8. the site is down: the strip and the player do not need it

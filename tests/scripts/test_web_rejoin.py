@@ -341,7 +341,7 @@ class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
         for needle in ("kDemoMaxPauseMs", "kDemoAbandonedMs", "`ants_leave_match()`", "`kRejoinMaxAgeMs`", "never makes a room and never replaces an ended one", "`window.antsSeatKnown(seat)`",
                        "none older than three hours", "`--no-reconnect` has no keys", "`ANTS_PAGE.cancelsBrowserKey`", "`resolve_host`", "**The crash-loop guard**", "`record_sync_ms`", "**The native door is not encrypted**", "**The review of phase 2**", "L8 and L9 in the known limits"):
             self.assertIn(needle, doc, needle)
-        for needle in ("for three hours", "(10 in a demo room)", "leaving through the web page's Menu button"):
+        for needle in ("for three hours", "(10 in a demo room)", "leaving through the web page's Home link"):
             self.assertIn(needle, pages, needle)
         for stale in ("none older than 24 hours", "(24 hours, removed when read)", "not older than 24 hours or more than a minute ahead", "An entry older than a day is removed", "the next is told `Full`;"):
             self.assertNotIn(stale, doc, stale)
