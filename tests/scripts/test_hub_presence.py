@@ -24,6 +24,7 @@ whole list once and then the changes, at most every two seconds. What this file 
     anything else (the socket is closed).
 tests/data/hub_presence_mutants.json breaks the rules one at a time for tools/mutate.py (every one must be caught).
 """
+import dataclasses
 import json
 import os
 import random
@@ -44,7 +45,7 @@ import hub_rig  # noqa: E402
 import test_hub_server as ths  # noqa: E402  (its helpers start the real process and read its log)
 from hub import chat as chatmod, limits as limitmod, presence, session, store as storemod  # noqa: E402
 
-LIMITS = limitmod.Limits()
+LIMITS = limitmod.Limits(away_seconds=0.0)       # (the tests of the list that is not Away: a closed socket is gone one send later; TheAwayRows has the default)
 MODS = ("9001",)
 
 
@@ -72,6 +73,9 @@ class FakePeer:
     def send_text(self, data):
         self.sizes.append(len(data))
         self.sent.append(json.loads(data.decode("utf-8")))
+
+    def close(self, code, reason=""):
+        self.closed = True
 
     def strike(self):
         self.strikes += 1
@@ -1416,7 +1420,7 @@ def send_json(client, **message):
 
 
 class OnTheWire(ths.RigTest):
-    rig_args = dict(tick_seconds=0.05, online_seconds=0.2, who_seconds=0.2, who_resend_seconds=1.0, mods="1002", frame_burst=1000, frame_refill_seconds=0.001)
+    rig_args = dict(tick_seconds=0.05, online_seconds=0.2, who_seconds=0.2, who_resend_seconds=1.0, mods="1002", frame_burst=1000, frame_refill_seconds=0.001, away_seconds=0.0)
 
     def login(self, login):
         c = hc.Client(self.rig.port, login=login)
@@ -1538,6 +1542,258 @@ class TheProcessLogHoldsNothingOfTheList(unittest.TestCase):
             if proc.poll() is None:
                 proc.kill()
             proc.wait(5)
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# a person whose last socket closed stays in the list as Away for `away_seconds` (memory only)
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+class TheAwayRows(unittest.TestCase):
+    def make(self, **limits):
+        self.w = World(limits=dataclasses.replace(LIMITS, away_seconds=600.0, **limits), mods=("9001", "9005"))
+        self.addCleanup(self.w.close)
+        self.watcher = self.w.watch(self.w.join(MOD))
+        return self.w
+
+    def rows(self):
+        self.w.advance(2.5)
+        return {r["name"]: r for r in self.watcher.update().rows.values()}
+
+    def test_the_default_is_ten_minutes_and_a_table_of_500(self):
+        limits = limitmod.Limits()
+        self.assertEqual((limits.away_seconds, limits.away_max), (600.0, 500))
+        self.assertEqual(presence.AWAY, "away")
+        self.assertNotIn("away", presence.AT, "a page cannot say it: only the hub does")
+
+    def test_a_closed_last_socket_is_an_away_row_for_600_seconds_and_then_gone(self):
+        w = self.make()
+        a = w.join(person(1, "alice"))
+        w.here(a, "wait", pub=True, map="TREASURE.LVL", n=1, of=4, code="c1v3rr")
+        self.assertEqual(self.rows()["alice"]["at"], "wait")
+        w.leave(a)
+        row = self.rows()["alice"]
+        self.assertEqual(row, {"i": row["i"], "name": "alice", "at": "away"}, "the name and the word: nothing of the room")
+        w.advance(590)
+        self.assertEqual(self.rows()["alice"]["at"], "away", "still there just before the time")
+        w.advance(20)
+        self.assertNotIn("alice", self.rows())
+        self.assertEqual((w.presence.away, w.presence.known.keys() - {MOD.account_id}), ({}, set()), "and nothing is kept")
+
+    def test_the_count_of_people_is_the_sockets_that_are_open_and_not_the_away_rows(self):
+        w = self.make()
+        a = w.join(person(1, "alice"))
+        w.advance(2.5)
+        self.assertEqual(w.presence.people(), 2)
+        w.leave(a)
+        self.rows()
+        self.assertEqual((w.presence.people(), self.watcher.n), (1, 1))
+
+    def test_a_socket_of_the_account_within_the_time_takes_the_row_back_with_the_same_number(self):
+        w = self.make()
+        a = w.join(person(1, "alice"))
+        w.here(a, "play")
+        first = self.rows()["alice"]["i"]
+        w.leave(a)
+        self.assertEqual(self.rows()["alice"]["at"], "away")
+        b = w.join(person(1, "alice"))
+        self.assertEqual(w.chat.welcome(b)["me"], first, "the welcome says the same number")
+        rows = self.rows()
+        self.assertEqual((rows["alice"]["i"], rows["alice"]["at"]), (first, "look"), "one row, looking, the same number")
+        self.assertEqual(len(self.watcher.rows), 2)
+        w.advance(700)
+        self.assertEqual(self.rows()["alice"]["at"], "look", "the old Away time ran out and took nothing of the live row")
+
+    def test_a_row_that_is_back_is_one_row_even_before_the_clock_has_looked(self):
+        w = self.make()
+        a = w.join(person(1, "alice"))
+        self.rows()
+        w.leave(a)
+        self.rows()
+        w.join(person(1, "alice"))
+        view = w.presence.view()
+        self.assertEqual(sorted(r["name"] for r in view["rows"].values()), ["alice", "moddy"])
+        self.assertEqual({r["name"]: r["at"] for r in view["rows"].values()}["alice"], "look")
+
+    def test_an_account_with_another_socket_open_is_not_away(self):
+        w = self.make()
+        a, b = w.join(person(1, "alice")), w.join(person(1, "alice"))
+        self.rows()
+        w.leave(a)
+        self.assertEqual(self.rows()["alice"]["at"], "look")
+        self.assertEqual(w.presence.away, {})
+
+    def test_a_guest_is_not_kept(self):
+        w = self.make()
+        g = w.join(None)
+        self.rows()
+        self.assertEqual(self.watcher.g, 1)
+        w.leave(g)
+        self.rows()
+        self.assertEqual((self.watcher.g, w.presence.away), (0, {}))
+
+    def test_a_moderator_that_is_away_keeps_the_role_and_a_banned_account_is_not_shown(self):
+        w = self.make()
+        m = w.join(session.Identity("9005", "modette", False))
+        self.rows()
+        w.leave(m)
+        rows = self.rows()
+        self.assertEqual((rows["modette"]["at"], rows["modette"].get("mod")), ("away", True), "a moderator's row keeps the mark")
+        a = w.join(person(1, "alice"))
+        self.rows()
+        w.leave(a)
+        self.assertEqual(self.rows()["alice"]["at"], "away")
+        w.store.ban("1001", "9001", "alice")
+        self.assertNotIn("alice", self.rows(), "banned while away: gone, and not counted as a guest")
+        self.assertEqual(self.watcher.g, 0)
+
+    def test_an_account_that_is_banned_when_its_last_socket_closes_is_not_kept(self):
+        w = self.make()
+        a = w.join(person(1, "alice"))
+        self.rows()
+        w.store.ban("1001", "9001", "alice")
+        w.advance(2.5)
+        w.leave(a)
+        self.assertNotIn("alice", self.rows())
+        self.assertEqual(w.presence.away, {})
+
+    def test_a_kick_or_a_ban_by_a_moderator_or_a_logout_takes_the_row_at_once(self):
+        w = self.make()
+        a, b, c = w.join(person(1, "alice")), w.join(person(2, "bob")), w.join(person(3, "carol"))
+        self.rows()
+        w.chat.remove([a], "kicked")
+        w.shut(a)
+        w.chat.remove([b], "banned")
+        w.shut(b)
+        w.shut(c)
+        w.presence.forget("1003")
+        rows = self.rows()
+        self.assertEqual(sorted(rows), ["moddy"], "nobody who was removed is Away")
+        self.assertEqual(w.presence.away, {})
+
+    def test_a_forget_after_the_row_became_away_takes_it_at_once(self):
+        w = self.make()
+        a = w.join(person(1, "alice"))
+        self.rows()
+        w.leave(a)
+        self.assertEqual(self.rows()["alice"]["at"], "away")
+        w.presence.forget("1001")
+        self.assertNotIn("alice", self.rows())
+
+    def test_away_rows_come_last_and_the_cap_of_rows_counts_them(self):
+        w = self.make(who_rows_max=3)
+        a, b = w.join(person(1, "alice")), w.join(person(2, "bob"))
+        self.rows()
+        w.leave(a)
+        w.advance(2.5)
+        rows = [(r["name"], r["at"]) for r in sorted(self.watcher.update().rows.values(), key=lambda r: r["i"])]
+        self.assertIn(("alice", "away"), rows)
+        c, d = w.join(person(3, "carol")), w.join(person(4, "dave"))
+        self.rows()
+        names = sorted(r["name"] for r in self.watcher.update().rows.values())
+        self.assertNotIn("alice", names, "with more people than rows the Away one is left out first")
+        self.assertEqual(self.watcher.more, 2)
+
+    def test_a_flood_of_accounts_that_come_and_go_never_grows_the_table_past_the_cap(self):
+        w = self.make(away_max=20)
+        for n in range(200):
+            p = w.join(person(n, "n%d" % n))
+            w.advance(0.5)
+            w.leave(p)
+            w.advance(0.5)
+            self.assertLessEqual(len(w.presence.away), 20)
+        self.assertEqual(len(w.presence.away), 20)
+        self.assertEqual(list(w.presence.away)[0], person(180).account_id, "the oldest went first")
+        self.assertLessEqual(len(w.presence.ids), 20 + 1 + len(w.chat.peers), "and the numbers of the rows are not kept for more")
+
+    def test_one_account_that_flaps_is_one_entry(self):
+        w = self.make()
+        for _ in range(300):
+            p = w.join(person(1, "alice"))
+            w.advance(1)
+            w.leave(p)
+            w.advance(1)
+        self.assertEqual(len(w.presence.away), 1)
+
+    def test_the_row_of_a_muted_account_that_is_away_says_nothing_more_than_the_word(self):
+        w = self.make()
+        a = w.join(person(1, "alice"))
+        w.here(a, "wait", pub=True, map="TREASURE.LVL", n=1, of=4, code="c1v3rr")
+        w.store.mute("1001", 10, "9001", "alice")
+        self.rows()
+        w.leave(a)
+        self.assertEqual(self.rows()["alice"], {"i": self.rows()["alice"]["i"], "name": "alice", "at": "away"})
+        self.assertNotIn("c1v3rr", json.dumps(self.watcher.peer.sent))
+
+    def test_a_change_of_a_row_to_away_is_one_small_change_and_never_sooner_than_the_sends(self):
+        w = self.make()
+        a = w.join(person(1, "alice"))
+        self.rows()
+        before = len(self.watcher.peer.frames())
+        w.leave(a)
+        w.advance(0.5)
+        self.assertEqual(len(self.watcher.peer.frames()), before, "the send holds to its 2 seconds")
+        w.advance(2.5)
+        self.assertEqual(len(self.watcher.peer.frames()), before + 1)
+        self.assertFalse(self.watcher.peer.frames()[-1]["full"])
+
+    def test_a_restart_starts_with_nobody_away(self):
+        w = self.make()
+        a = w.join(person(1, "alice"))
+        self.rows()
+        w.leave(a)
+        self.rows()
+        fresh = World(limits=w.limits)
+        self.addCleanup(fresh.close)
+        self.assertEqual(fresh.presence.away, {})
+
+    def test_the_log_and_the_database_never_hold_it(self):
+        w = self.make()
+        db = sqlite3.connect(w.db)
+        tables = {r[0] for r in db.execute("select name from sqlite_master")}
+        a = w.join(person(1, "alice"))
+        self.rows()
+        w.leave(a)
+        self.rows()
+        self.assertEqual({r[0] for r in db.execute("select name from sqlite_master")}, tables)
+        db.close()
+
+
+class AwayOnTheWire(ths.RigTest):
+    rig_args = dict(tick_seconds=0.05, online_seconds=0.2, who_seconds=0.2, who_resend_seconds=1.0, mods="1002", frame_burst=1000, frame_refill_seconds=0.001, away_seconds=1.5)
+
+    def login(self, login):
+        c = hc.Client(self.rig.port, login=login)
+        self.assertTrue(c.ok, c.status)
+        self.clients.append(c)
+        return c, c.recv_json()
+
+    def test_a_closed_socket_is_away_then_gone_and_a_new_one_takes_the_row_back_and_a_logout_takes_it_at_once(self):
+        watcher, _ = self.login("1002:bob")
+        send_json(watcher, t="who")
+        sees = Model()
+        sees.take(who_frames(watcher))
+        alice, welcome = self.login("1001:alice")
+        send_json(alice, t="here", at="wait", pub=True, map="TREASURE.LVL", n=1, of=4, code="c1v3rr")
+        sees.take(who_frames(watcher, 1.0))
+        self.assertEqual(sees.rows[welcome["me"]]["at"], "wait")
+        alice.close()
+        sees.take(who_frames(watcher, 0.8))
+        self.assertEqual(sees.rows[welcome["me"]], {"i": welcome["me"], "name": "alice", "at": "away"})
+        again, welcome2 = self.login("1001:alice")
+        self.assertEqual(welcome2["me"], welcome["me"], "the same number")
+        sees.take(who_frames(watcher, 0.8))
+        self.assertEqual(sees.rows[welcome["me"]]["at"], "look")
+        again.close()
+        sees.take(who_frames(watcher, 0.8))
+        self.assertEqual(sees.rows[welcome["me"]]["at"], "away")
+        sees.take(who_frames(watcher, 2.5))
+        self.assertNotIn(welcome["me"], sees.rows, "after the time it is gone as it always was")
+        carol, w3 = self.login("1003:carol")
+        sees.take(who_frames(watcher, 1.0))
+        self.assertEqual(sees.rows[w3["me"]]["at"], "look")
+        self.rig.loop.call_soon_threadsafe(lambda: self.rig.hub.end_logins(account="1003"))
+        sees.take(who_frames(watcher, 0.6))
+        self.assertNotIn(w3["me"], sees.rows, "a logout (or a forget-me) is not kept")
 
 
 if __name__ == "__main__":

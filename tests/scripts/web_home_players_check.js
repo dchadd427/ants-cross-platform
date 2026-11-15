@@ -139,7 +139,8 @@ function rig(o) {
     same('a name loses the invisible and bidirectional characters and is cut at 32 code points', [rowOf(row(1, '‮alice​⁦')).name, rowOf(row(1, 'x'.repeat(40))).name], ['alice', 'x'.repeat(32) + '…']);
     same('markup in a name stays text', rowOf(row(1, '<img src=x onerror=1>')).name, '<img src=x onerror=1>');
     same('a name that is nothing after the cleaning, or no name, is no row', [rowOf(row(1, '​‮')), rowOf(row(1, '')), rowOf({ i: 1, at: 'look' }), rowOf({ i: 1, name: 7, at: 'look' })], [null, null, null, null]);
-    same('a status that is not one of the three is no row (also one that is a name of Object)', [rowOf(row(1, 'ab', 'away')), rowOf(row(1, 'ab', 'constructor')), rowOf(row(1, 'ab', '__proto__')), rowOf({ i: 1, name: 'ab', at: ['wait'] }), rowOf({ i: 1, name: 'ab' })], [null, null, null, null, null]);
+    same('a status that is not one of the four is no row (also one that is a name of Object)', [rowOf(row(1, 'ab', 'asleep')), rowOf(row(1, 'ab', 'constructor')), rowOf(row(1, 'ab', '__proto__')), rowOf({ i: 1, name: 'ab', at: ['wait'] }), rowOf({ i: 1, name: 'ab' })], [null, null, null, null, null]);
+    same('an Away row is the name and the word and nothing of a room, whatever the frame holds', (() => { const r = rowOf(row(1, 'ab', 'away', { pub: true, priv: true, solo: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr' })); return [r.at, r.pub, r.priv, r.solo, r.map, r.n, r.of, r.code]; })(), ['away', false, false, false, '', -1, -1, '']);
     same('a number that is not a whole number from 0 is no row', [rowOf(row(-1, 'ab')), rowOf(row(1.5, 'ab')), rowOf(row('1', 'ab')), rowOf(row(1e12, 'ab')), rowOf(row(NaN, 'ab')), rowOf(null), rowOf('row'), rowOf([])], [null, null, null, null, null, null, null, null]);
     const pub = rowOf(row(5, 'clover', 'wait', { pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr' }));
     same('a public room that waits: the map (by the page\'s own name for it: an original\'s), the seats and the code', [pub.pub, pub.map, pub.mapName, pub.guess, pub.n, pub.of, pub.code], [true, 'TREASURE.LVL', 'Treasure', '', 2, 4, 'c1v3rr']);
@@ -165,7 +166,7 @@ function rig(o) {
     check('a frame of more rows than the hub sends is no frame, whatever the rows are (250 of them that are none)', apply(FULL(Array.from({ length: 250 }, () => null))) === null && apply(FULL(Array.from({ length: 200 }, () => null))) !== null);
     check('a frame with a count of zero is a frame (guests 0 and more 0 are numbers)', apply(FULL([], { n: 0, g: 0, more: 0 })) !== null);
     check('a frame whose change would make more than 200 rows is no frame', apply({ t: 'who', n: 1, g: 0, more: 0, rows: Array.from({ length: 5 }, (_, i) => row(1000 + i, 'q' + i)) }, apply(FULL(Array.from({ length: 198 }, (_, i) => row(i, 'p' + i))))) === null);
-    same('rows that are not rows are left out of a frame, the others stay', rowsOf(apply(FULL([row(1, 'a1'), { i: 2 }, null, 'x', row(3, 'c3', 'away'), row(4, 'd4')]))), ['a1', 'd4']);
+    same('rows that are not rows are left out of a frame, the others stay', rowsOf(apply(FULL([row(1, 'a1'), { i: 2 }, null, 'x', row(3, 'c3', 'asleep'), row(4, 'd4')]))), ['a1', 'd4']);
 
     const model = apply(FULL([row(1, 'zed', 'wait'), row(2, 'amy'), row(3, 'moddy', 'play', { mod: true }), row(4, 'bob', 'play'), row(5, 'maple'), row(6, 'cat')]));
     const groups = P.listOf(model, 5);
@@ -335,6 +336,17 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     same('"+ 4 guests, not logged in", twice (in the list for a short window, under it otherwise: the style shows one)', texts(r.panel(), 'pl-guests'), ['…+ 4 guestsnot logged in', '…+ 4 guestsnot logged in']);
     same('each card says its status for the style (the dot of its circle)', byClass(r.panel(), 'pl-card').map((c) => c.getAttribute('data-s')), ['look', 'look', 'look', 'look', 'look', 'wait', 'wait', 'play', 'play'].slice(0, 0).concat(['look', 'look', 'look', 'look', 'look', 'wait', 'wait', 'play', 'play']));
     same('a Join on the row of a public room that waits (and no other), named for the room', [r.joins().length, r.joins()[0].getAttribute('aria-label'), r.joins()[0].getAttribute('data-code'), r.joins()[0].textContent], [1, 'Join clover’s room, Treasure · 2 of 4', 'c1v3rr', 'Join']);
+    {
+        // Away: the hub's own word for a person whose last socket closed a short while ago (docs/HUB.md "Away"): a name and the word, in a group of their own at the bottom, a moderator's row stays among the moderators, dimmed by the style; no Join, whatever else the frame holds
+        const a = rig();
+        a.listed('c1v3rr', 'Treasure');
+        a.live();
+        a.who(FULL([row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 'sage'), row(4, 'moss', 'away'), row(5, 'dawn', 'away', { pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr', priv: true }), row(6, 'staffer', 'away', { mod: true, role: 'mod' })], { n: 3, g: 0 }));
+        same('the Away group is last, by name; a moderator who is away stays with the moderators', a.groups(), [{ g: 'mod', n: '2', names: ['staffer', 'tess'] }, { g: 'look', n: '1', names: ['sage'] }, { g: 'away', n: '2', names: ['dawn', 'moss'] }]);
+        same('the card of an Away row says its status for the style, has the word where no group says it (a moderator) and nothing else, and no Join even where the frame names a room that the Games list has', [byClass(a.panel(), 'pl-card').filter((c) => c.getAttribute('data-s') === 'away').length, texts(byClass(a.panel(), 'pl-card').find((c) => one(c, 'pl-nm').textContent === 'staffer'), 'pl-meta').join(), a.joins().length, texts(byClass(a.panel(), 'pl-card').find((c) => one(c, 'pl-nm').textContent === 'dawn'), 'pl-meta').length], [3, 'Away: Away', 0, 0]);
+        a.who({ t: 'who', full: false, n: 3, g: 0, more: 0, rows: [row(4, 'moss')], gone: [] });
+        same('a row that is back is Looking again (a change of its word)', a.groups().map((g) => g.g + ':' + g.names.join('+')), ['mod:staffer+tess', 'look:moss+sage', 'away:dawn']);
+    }
     const keep = byClass(r.panel(), 'pl-group')[0];
     r.who({ t: 'who', full: false, n: 13, g: 4, more: 0, rows: [], gone: [] });
     check('a change that changes nothing draws nothing again (the same elements)', byClass(r.panel(), 'pl-group')[0] === keep);

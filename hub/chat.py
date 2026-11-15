@@ -574,6 +574,8 @@ class Chat:
         for peer in sockets:
             peer.send_text(dumps({"t": "bye", "why": why}))
             peer.close(1000, why)
+            if peer.identity is not None:
+                self.presence.forget(peer.identity.account_id)       # (a person who was kicked or banned is not kept as Away)
 
     def shown_name(self, account):
         """The name that the account is shown by: its open socket's, else its profile's (the display name where that is the pick), else None."""

@@ -302,6 +302,7 @@ class Hub:
             who = peer.identity
             if who is not None and not peer.closed and ((session is not None and who.session == session) or (account is not None and who.account_id == account)):
                 peer.close(1000, "logged out")
+                self.chat.presence.forget(who.account_id)               # (a login that ended is not kept as Away)
 
     @staticmethod
     def believable(who):
@@ -340,6 +341,7 @@ class Hub:
                     peer.writer.transport.abort()                     # (a closed socket whose reader never takes the rest of the output would stay for ever)
             elif peer.identity is not None and peer.identity.expires and wall >= peer.identity.expires:
                 peer.close(1000, "the login ran out")                  # (a login of 30 days, and a socket that is older than that)
+                self.chat.presence.forget(peer.identity.account_id)
             elif now - peer.last_rx >= self.limits.silence_seconds:
                 peer.close(1001, "silent")
             elif now - peer.last_ping >= self.limits.ping_seconds:
