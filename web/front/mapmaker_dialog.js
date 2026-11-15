@@ -21,6 +21,14 @@
 
         function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
 
+        function onBackdrop(node, close) {         // a press that starts and ends on the backdrop itself closes the box as its Cancel does (a drag from inside the box, a text selection or a scroll does not)
+            var down = false, hit = false;
+            node.addEventListener('pointerdown', function (e) { down = e.target === node; hit = false; });
+            node.addEventListener('pointerup', function (e) { hit = down && e.target === node; down = false; });
+            node.addEventListener('pointercancel', function () { down = hit = false; });
+            node.addEventListener('click', function (e) { var h = hit; hit = false; if (h && e.target === node) close(); });
+        }
+
         function closeCurrent() { if (current) current.close(); }
 
         // spec: {title (a heading) or label (no heading), cls, build(body, ctl), buttons: [{id, text, ghost, disabled, keepOpen, onClick(ctl)}], focus (a selector), onClose}
@@ -62,7 +70,7 @@
             box.appendChild(inner);
             box.appendChild(foot);
             scrim.appendChild(box);
-            scrim.addEventListener('click', function (e) { if (e && e.target === scrim) ctl.close(); });
+            onBackdrop(scrim, ctl.close);
             // The keys are heard on the document while the dialog is open: a click on plain text moves the focus to the page's body, and Escape must still close it
             function onKey(e) {
                 if (e.key === 'Escape') { e.stopPropagation(); ctl.close(); return; }

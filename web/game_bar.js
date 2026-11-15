@@ -16,6 +16,13 @@
         function playing() { try { return !d.body.classList.contains('replay') && !!page.running && !!page.running(); } catch (err) { return false; } }
         function focusGame() { try { if (page.focus) page.focus(); } catch (err) { /* nothing to focus */ } }
         function make(tag, cls, text) { var n = d.createElement(tag); n.className = cls; n.textContent = text; return n; }
+        function onBackdrop(node, close) {         // a press that starts and ends on the backdrop itself closes the box as its Cancel does (a drag from inside the box, a text selection or a scroll does not)
+            var down = false, hit = false;
+            node.addEventListener('pointerdown', function (e) { down = e.target === node; hit = false; });
+            node.addEventListener('pointerup', function (e) { hit = down && e.target === node; down = false; });
+            node.addEventListener('pointercancel', function () { down = hit = false; });
+            node.addEventListener('click', function (e) { var h = hit; hit = false; if (h && e.target === node) close(); });
+        }
         function closeAsk() { if (!dialog) return; dialog.parentNode.removeChild(dialog); dialog = null; focusGame(); }
 
         function onKey(e) {
@@ -71,7 +78,7 @@
             no.type = yes.type = 'button';
             no.addEventListener('click', closeAsk);
             yes.addEventListener('click', function () { closeAsk(); w.location.reload(); });
-            dialog.addEventListener('click', function (e) { if (e.target === dialog) closeAsk(); });
+            onBackdrop(dialog, closeAsk);
             row.appendChild(no);
             row.appendChild(yes);
             card.appendChild(row);
