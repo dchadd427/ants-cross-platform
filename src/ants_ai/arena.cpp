@@ -301,6 +301,18 @@ ExpeditionResult read_expedition(const ExpeditionTask& e) noexcept {
     return r;
 }
 
+MinerFlightResult read_miner_flight(const MinerFlightTask& m) noexcept {
+    MinerFlightResult r;
+    r.started = m.started();
+    r.planted = m.planted();
+    r.hops = m.hops();
+    r.landed = m.landed();
+    r.gave_up = m.gave_up();
+    r.first_start = m.first_start();
+    r.first_landing = m.first_landing();
+    return r;
+}
+
 void read_seat_result(const sim::SimulationEngine& sim, uint8_t seat, ArenaSeatResult& out) {
     out.score = sim.get_player_score(seat);
     out.shown_score = sim.get_display_score(seat);
@@ -417,6 +429,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
             r.rush_ticks = static_cast<uint32_t>(sb->rush().rush_ticks());
             r.rush_attacks = sb->rush().attacks_ordered();
             r.expedition = read_expedition(sb->expedition());
+            r.miner_flight = read_miner_flight(sb->miner_flight());
         }
         read_seat_result(sim, b.seat, r);
         r.banked = ledger.banked(b.seat);

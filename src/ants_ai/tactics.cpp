@@ -151,6 +151,8 @@ LevelPlan plan_for(Level level) noexcept {
             p.island_fly_miner = true;
             p.island_mines = true;
             p.island_ferry_reorder = true;
+            p.island_mine_reach = true;              // a Bomber lays no mine on ground it cannot walk to, so it is free to fly to the ring pile
+            p.island_mine_from = 600;                // the flight starts as soon as the expedition is over (the clock only keeps it from the first minutes)
             p.island_flower_link = true;             // a Swimmer digs the tile from the ring half to a flower strip, an idle ant of the crew walks over and takes the drops (docs/BOTS.md, "The flower link")
             p.island_flower_swimmers = 2;            // up to five Swimmers (three of the row, two of the flower)
             p.island_flower_thief = true;            // a Thief drop is taken as well and held (nothing uses it yet)

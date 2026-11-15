@@ -55,7 +55,10 @@ void MinerFlightTask::finish(AntLedger& ledger) {
 
 void MinerFlightTask::end_job(TaskContext& c, bool landed) {
     c.ledger.release(job_.ant, id());
-    if (landed) ++landed_;
+    if (landed) {
+        ++landed_;
+        if (first_landing_ == 0) first_landing_ = c.view.tick();
+    }
     else {
         ++gave_up_;
         shunned_[job_.ant] = c.view.tick() + 1200u;
@@ -108,6 +111,7 @@ bool MinerFlightTask::begin(TaskContext& c) {
     job_.here = c.map.ant_component(c.seat, best->tile);
     job_.begun = now;
     ++started_;
+    if (first_start_ == 0) first_start_ = now;
     return true;
 }
 
