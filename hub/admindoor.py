@@ -10,10 +10,12 @@ THE rule (`Door.decide`, used by every one of the above): the visitor's hub logi
 once, urgently, and a lookup that does not answer means no). A moderator may not. Unknown, stale, failed: not allowed. The door is shut for everybody when `ANTS_HUB_ADMIN_GATE_SECRET` is
 absent, shorter than 32 characters or not printable (the hub still starts; the start line says so).
 
-The key of the pass is HMAC-SHA-256(secret, "ants-admin-pass-v1") and the key of the page's token is HMAC-SHA-256(secret, "ants-admin-csrf-v1") (the secret with surrounding whitespace removed), so the two never share a key.
+The keys: the secret is the setting's text with the characters that Python's str.strip() cuts removed from both ends (in practice ASCII space, tab, CR and LF; the secret is printable ASCII), taken as ASCII bytes. The key of the pass is
+the RAW 32-byte digest (not its hex text) of HMAC-SHA-256 with the secret as the KEY and the label `ants-admin-pass-v1` as the MESSAGE; the key of the page's token is the same with the label `ants-admin-csrf-v1`, so the two never share a key. (Known answer: the secret
+`canary-gate-key-5d8f0c1e7a9b4263-q` gives the pass key 13be5dab7dcbeb06e979f0fa5e5f817d178fa6b40da7c92bc02588e80ae3dd25 and the token key 03a2b6b94fabcf8ae018852e8e6c0b1ec691375286a0263168238796556e3018, as hex of the 32 bytes.)
 
 The pass: `v1.<payload>.<mac>`; payload = base64url (no padding) of the JSON `{"exp", "name", "nonce", "ref", "role"}` (exp: seconds since 1970, 60 seconds after it was made; name: the Discord
-username; nonce: 16 hex characters; ref: the account's reference, hub/pseudo.py; role: `admin` or `owner`); mac = hex HMAC-SHA-256, under the pass key, of the ASCII text `v1.<payload>`. The game
+username; nonce: 16 hex characters; ref: the account's reference, hub/pseudo.py; role: `admin` or `owner`); mac = hex (64 characters) HMAC-SHA-256, under the raw pass key, of the ASCII text `v1.<payload>`. The game
 server holds the same secret as ANTS_ADMIN_GATE_SECRET and checks the mac, then exp, then role. The token of the page's POSTs is the hex HMAC-SHA-256, under the token's key, of
 `csrf1`, the login's key and the account's reference: it changes with every login and is never in a URL.
 
@@ -45,6 +47,7 @@ MAX_BODY = 512                                   # a body of the page's POSTs is
 MAX_MUTE_MINUTES = 10080
 MODLOG_DAYS = 30
 MODLOG_SHOWN = 500
+STAFF_MAX = 1000                                 # (accounts that the door remembers as having held a role: a handful in practice)
 READS = frozenset(("me", "bans", "mutes", "hidden", "modlog", "status"))
 WRITES = frozenset(("ban", "unban", "mute", "unmute", "nopic", "pic", "del"))
 TABLE_WORD = {"nopic": "ban", "pic": "unban"}      # (the table of the chat's powers has the commands of the chat: a picture's block and its lift need what a ban and its lift need)
@@ -105,7 +108,11 @@ class Door:
         self.rate = limitmod.RateByAddress(hub.limits.admin_burst, hub.limits.admin_refill_seconds)
         self.lookups = limitmod.RateByAccount(hub.limits.admin_lookups_burst, hub.limits.admin_lookups_refill_seconds)
         self.budget = limitmod.TokenBucket(hub.limits.admin_door_burst, hub.limits.admin_door_refill_seconds, hub.clock())      # (the door's own share of the lookups: the actions' share is not touched)
+        self.new_budget = limitmod.TokenBucket(hub.limits.admin_door_new_burst, hub.limits.admin_door_new_refill_seconds, hub.clock())      # (the small share of the accounts never known to hold a role)
+        self.staff = {}                                  # the hub's key of every account that was seen with a role (at most STAFF_MAX; the oldest is dropped first): these use the door's whole share
+        self.flights = {}                                # the hub's key of an account -> the lookup in flight for it, which every parallel request waits for
         self.next_address_log = float("-inf")
+        self.next_budget_log = float("-inf")
 
     def forget_idle(self, now):
         self.rate.forget_idle(now)
@@ -130,16 +137,54 @@ class Door:
         key = self.hub.chat.key_of(account)
         if not (roles.role_of(account) == rolesmod.ADMIN and roles.fresh([account])):
             await self.look(roles, account, key)                     # (the usual belief of the roles is not enough here: a pass is believed by the game server for a minute, so the answer must be a minute old at the most)
+        if roles.role_of(account) != rolesmod.NONE:
+            self.remember_staff(key)
         if roles.role_of(account) == rolesmod.ADMIN and roles.fresh([account]):
             return "ok", who, "admin"
         return "no", who, None
 
+    def remember_staff(self, key):
+        self.staff.pop(key, None)
+        self.staff[key] = True
+        while len(self.staff) > STAFF_MAX:
+            del self.staff[next(iter(self.staff))]
+
+    def is_staff(self, roles, account, key):
+        """Whether the account holds a role now or was seen with one (the entry of the roles, or the door's own short list)."""
+        entry = roles.entries.get(account)
+        return key in self.staff or (entry is not None and entry.role != rolesmod.NONE)
+
+    def budget_empty(self):
+        """One line in the log a minute at the most when a share of the door's lookups is used up (no account in it)."""
+        now = self.hub.clock()
+        if now >= self.next_budget_log:
+            self.next_budget_log = now + 60.0
+            self.hub.log.event("warning", what="admin_door_lookup_budget_empty")
+
     async def look(self, roles, account, key):
-        """One urgent lookup of the account's role, from the door's own share (never the actions' `afford`, which the moderators' commands live on), once in a while for each account and for the door
-        as a whole. An answer that is a minute old at the most is not asked for again (it says what it says). A lookup that does not answer in time says nothing: the account is then not let in."""
+        """One urgent lookup of the account's role, for all the requests of that account that ask while it is in flight: the first one makes it (from the door's own share, never the actions' `afford`,
+        which the moderators' commands live on, once in a while for each account and for the door as a whole) and the others wait for the same answer and spend nothing. An answer that is a minute old
+        at the most is not asked for again (it says what it says). A lookup that does not answer in time says nothing: the account is then not let in."""
         if roles.fresh([account]) and getattr(roles, "on", False):
             return
-        if not self.lookups.take(key, self.hub.clock()) or not self.budget.take(self.hub.clock()):
+        flight = self.flights.get(key)
+        if flight is not None:
+            await asyncio.wait([flight], timeout=self.hub.limits.roles_urgent_seconds + 1.0)
+            return
+        flight = asyncio.get_running_loop().create_future()
+        self.flights[key] = flight
+        try:
+            await self.lookup(roles, account, key)
+        finally:
+            del self.flights[key]
+            flight.set_result(None)
+
+    async def lookup(self, roles, account, key):
+        budget = self.budget if self.is_staff(roles, account, key) else self.new_budget       # (an account never known to hold a role has a small share of its own)
+        if not self.lookups.take(key, self.hub.clock()):
+            return
+        if not budget.take(self.hub.clock()):
+            self.budget_empty()
             return
         try:
             if getattr(roles, "task", None) is None or roles.clock() < roles.pause_until:

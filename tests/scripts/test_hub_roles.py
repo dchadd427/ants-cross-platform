@@ -1017,17 +1017,45 @@ class TheLiveRoles(LiveTest):
             time.sleep(0.05)
         return what()
 
+
+class TheLiveLoop(LiveTest):
+    """The event loop stays free while a lookup waits for a slow Discord: a lookup that starts AFTER the chat lines began, and the delay of every line while it is pending."""
+
+    options = dict(LiveTest.options, discord_seconds=5.0, discord_connect_seconds=5.0, burst=100, refill_seconds=0.01)
+
+    @staticmethod
+    def wait_for(what, seconds):
+        end = time.monotonic() + seconds
+        while not what() and time.monotonic() < end:
+            time.sleep(0.05)
+        return what()
+
+    def line_delay(self, sender, receiver, text):
+        """Seconds from the sending of a line until the other socket has it."""
+        start = time.monotonic()
+        sender.say(text)
+        while time.monotonic() - start < 6.0:
+            m = receiver.recv_json(6.0)
+            if m["t"] == "line" and m.get("text") == text:
+                return time.monotonic() - start
+        self.fail("the line %r did not arrive" % text)
+
     def test_the_event_loop_is_not_held_by_a_slow_discord(self):
-        self.fake.members = {"1001": [MOD]}
-        self.fake.member_mode = "slow:0.9"
+        self.fake.members = {"1001": [MOD], "1003": []}
         a, _ = self.connect("1001:alice")
         b, _ = self.connect("1002:bob")
-        for n in range(5):
-            a.say("line %d" % n)
-            time.sleep(0.05)
-        got = [m for m in b.drain(0.6) if m["t"] == "line"]
-        self.assertGreaterEqual(len(got), 2)                                     # (lines go through while a lookup waits: a loop that a lookup held, each one 0.9 s, would have none within the 0.6 s that are waited for. No bound on the whole test's wall time: it measured the runner, and a slow one took 1.51 s)
-        self.assertGreaterEqual(len(self.fake.member_times), 1)                  # (and the slow lookup did run)
+        self.assertTrue(self.wait_for(lambda: len(self.fake.member_times) >= 2, 8.0))
+        time.sleep(0.3)
+        self.fake.member_mode = "slow:3"
+        self.assertLess(self.line_delay(a, b, "first"), 1.0)                     # (the lines have begun)
+        before = len(self.fake.member_times)
+        c, _ = self.connect("1003:carol")                                        # (a new person: a lookup that starts only now, and takes three seconds)
+        delays = []
+        for n in range(12):
+            delays.append(self.line_delay(a, b, "line %d" % n))
+            time.sleep(0.1)
+        self.assertGreater(len(self.fake.member_times), before, "the slow lookup began while the lines were going")
+        self.assertLess(max(delays), 1.0, delays)                                # (generous: a loop held by that lookup would delay a line for seconds; the lookup was still pending for the first lines)
 
 
 class TheLiveOwner(LiveTest):

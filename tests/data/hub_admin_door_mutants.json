@@ -28,8 +28,8 @@
   {
    "id": "the_lookups_of_one_account_are_not_limited",
    "file": "hub/admindoor.py",
-   "old": "if not self.lookups.take(key, self.hub.clock()) or not self.budget.take(self.hub.clock()):",
-   "new": "if not self.budget.take(self.hub.clock()):",
+   "old": "        if not self.lookups.take(key, self.hub.clock()):",
+   "new": "        if False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   },
   {
@@ -441,8 +441,8 @@
   {
    "id": "the_door_believes_the_roles_grace_and_not_a_minute",
    "file": "hub/admindoor.py",
-   "old": "        if not (roles.role_of(account) == rolesmod.ADMIN and roles.fresh([account])):\n            await self.look(roles, account, key)                     # (the usual belief of the roles is not enough here: a pass is believed by the game server for a minute, so the answer must be a minute old at the most)\n        if roles.role_of(account) == rolesmod.ADMIN and roles.fresh([account]):\n            return \"ok\", who, \"admin\"",
-   "new": "        if roles.role_of(account) != rolesmod.ADMIN:\n            await self.look(roles, account, key)\n        if roles.role_of(account) == rolesmod.ADMIN:\n            return \"ok\", who, \"admin\"",
+   "old": "        if not (roles.role_of(account) == rolesmod.ADMIN and roles.fresh([account])):\n            await self.look(roles, account, key)                     # (the usual belief of the roles is not enough here: a pass is believed by the game server for a minute, so the answer must be a minute old at the most)\n        if roles.role_of(account) != rolesmod.NONE:\n            self.remember_staff(key)\n        if roles.role_of(account) == rolesmod.ADMIN and roles.fresh([account]):\n            return \"ok\", who, \"admin\"",
+   "new": "        if roles.role_of(account) != rolesmod.ADMIN:\n            await self.look(roles, account, key)\n        if roles.role_of(account) != rolesmod.NONE:\n            self.remember_staff(key)\n        if roles.role_of(account) == rolesmod.ADMIN:\n            return \"ok\", who, \"admin\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   },
   {
@@ -455,8 +455,8 @@
   {
    "id": "the_door_has_no_share_of_its_own",
    "file": "hub/admindoor.py",
-   "old": "if not self.lookups.take(key, self.hub.clock()) or not self.budget.take(self.hub.clock()):",
-   "new": "if not self.lookups.take(key, self.hub.clock()):",
+   "old": "        if not budget.take(self.hub.clock()):",
+   "new": "        if False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   },
   {
@@ -534,6 +534,34 @@
    "file": "hub/admindoor.py",
    "old": "return \"\" if ID_SHAPED.match(name or \"\") else name",
    "new": "return name",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "parallel_calls_each_take_a_lookup",
+   "file": "hub/admindoor.py",
+   "old": "        flight = self.flights.get(key)\n        if flight is not None:",
+   "new": "        flight = None\n        if flight is not None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "one_door_share_for_staff_and_plain_accounts",
+   "file": "hub/admindoor.py",
+   "old": "budget = self.budget if self.is_staff(roles, account, key) else self.new_budget",
+   "new": "budget = self.budget",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_staff_use_the_small_share",
+   "file": "hub/admindoor.py",
+   "old": "budget = self.budget if self.is_staff(roles, account, key) else self.new_budget",
+   "new": "budget = self.new_budget",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "an_empty_door_share_is_not_said",
+   "file": "hub/admindoor.py",
+   "old": "            self.hub.log.event(\"warning\", what=\"admin_door_lookup_budget_empty\")",
+   "new": "            pass",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   }
  ]

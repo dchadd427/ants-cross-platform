@@ -3,7 +3,9 @@
 
   TheRule          the one rule: nobody / no role / moderator / administrator / the operator's account, each with a fresh answer, an old one and a Discord that is down; no key, a short key, a key with a blank
   TheFreshCheck    the door wants an answer a minute old for an administrator; an action asks for both
+  TheLookupInFlight  requests of one account that come together wait for one lookup and share its answer
   TheDoorsOwnShare the door's lookups come from its own share, not the moderators' actions'
+  TheStaffShare    accounts never seen with a role have a small share of their own
   TheRequestsThatAreNotWhatTheDoorIsFor   no address at the gate, a body promised by somebody who is not let in, an empty query, a key twice, an id-shaped name in an old row
   ThePass          `v1.<payload>.<mac>`: the mac holds with the key and with nothing else, the expiry is a minute from now, the payload says a reference, a name and a role and never an id
   TheGate          what the gate is and is not: GET only, no body in or out, no CORS, a limit for each address
@@ -24,6 +26,7 @@ import re
 import socket
 import sys
 import tempfile
+import threading
 import time
 import unittest
 
@@ -217,7 +220,7 @@ class TheRule(DoorTest):
                 r = hc.request(rig.port, "GET", "/hub/admin/gate", [("X-Client-Address", "198.51.100.77"), ("X-Hub-Test-Login", "%s:%s" % (account, NAMES[account]))])
                 self.assertEqual(r.status, 403)
         with hub_rig.Rig(member_fake=self.fake, owner=OWNER, recheck=1, env={"ANTS_HUB_ADMIN_GATE_SECRET": SECRET},
-                         **dict(OPTIONS, admin_lookups_burst=2, admin_lookups_refill_seconds=60.0, roles_grace_seconds=30.0)) as rig:
+                         **dict(OPTIONS, admin_lookups_burst=2, admin_lookups_refill_seconds=60.0, roles_grace_seconds=30.0, admin_door_new_burst=10)) as rig:
             ask(rig, PLAIN, 10)
             self.assertEqual(self.fake.member_ids.count(PLAIN), 1, "an answer of `none` is an answer, and a fresh one is believed")
             self.fake.member_mode = "status:500"
@@ -352,10 +355,45 @@ class TheFreshCheck(DoorTest):
         self.assertEqual(self.fake.member_ids.count(TARGET), asked + 1)
 
 
+class TheLookupInFlight(DoorTest):
+    """Requests of one account that come while its answer is being asked for wait for that lookup and share the result: the page makes several calls at once. The share of each account (3, no refill)
+    is smaller than the crowd, so a request that took a share of its own would be refused."""
+
+    options = dict(roles_action_fresh_seconds=0.2, roles_grace_seconds=30.0, admin_lookups_burst=3, admin_lookups_refill_seconds=600.0, admin_burst=1000)
+
+    def together(self, account, times=8):
+        found = []
+
+        def one(n):
+            r = hc.request(self.rig.port, "GET", "/hub/admin/gate", [("X-Client-Address", "198.51.100.%d" % (n + 10)), self.login_header(account)])
+            found.append(r.status)
+        threads = [threading.Thread(target=one, args=(n,)) for n in range(times)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(20)
+        return found
+
+    def test_parallel_calls_for_an_administrator_whose_answer_is_old_are_all_let_in_on_one_lookup(self):
+        self.assertEqual(self.gate(ADMIN).status, 204)
+        self.assertEqual(self.fake.member_ids.count(ADMIN), 1)
+        time.sleep(0.5)
+        self.fake.member_mode = "slow:0.4"
+        self.assertEqual(self.together(ADMIN), [204] * 8)
+        self.assertEqual(self.fake.member_ids.count(ADMIN), 2, "one lookup for all eight")
+
+    def test_parallel_calls_while_the_lookup_fails_are_all_refused_on_one_lookup(self):
+        self.assertEqual(self.gate(ADMIN).status, 204)
+        time.sleep(0.5)
+        self.fake.member_mode = "hang"
+        self.assertEqual(self.together(ADMIN), [403] * 8)
+        self.assertEqual(self.fake.member_ids.count(ADMIN), 2, "one lookup for all eight")
+
+
 class TheDoorsOwnShare(DoorTest):
     """The door's lookups are paid from its own small share: the moderators' commands live on the actions' share (hub/roles.py `afford`), and a crowd of people with no role at the door does not touch it."""
 
-    options = dict(admin_burst=1000, roles_urgent_burst=3, roles_urgent_refill_seconds=600.0, roles_grace_seconds=30.0, admin_door_burst=100, admin_lookups_burst=100)
+    options = dict(admin_burst=1000, roles_urgent_burst=3, roles_urgent_refill_seconds=600.0, roles_grace_seconds=30.0, admin_door_burst=100, admin_door_new_burst=100, admin_lookups_burst=100)
 
     def test_many_logged_in_people_with_no_role_at_the_gate_do_not_use_up_what_a_mute_needs(self):
         extras = ["92%014d" % n for n in range(1, 31)]
@@ -377,13 +415,46 @@ class TheDoorsOwnShare(DoorTest):
 
     def test_the_door_has_a_share_of_its_own_and_it_runs_out(self):
         with hub_rig.Rig(member_fake=self.fake, owner=OWNER, recheck=1, env={"ANTS_HUB_ADMIN_GATE_SECRET": SECRET},
-                         **dict(OPTIONS, admin_burst=1000, admin_door_burst=2, admin_door_refill_seconds=600.0, admin_lookups_burst=100)) as rig:
+                         **dict(OPTIONS, admin_burst=1000, admin_door_burst=2, admin_door_refill_seconds=600.0, admin_door_new_burst=2, admin_door_new_refill_seconds=600.0, admin_lookups_burst=100)) as rig:
             seen = 0
             for account in (ADMIN, ADMIN2, MOD, PLAIN):
                 r = hc.request(rig.port, "GET", "/hub/admin/gate", [("X-Client-Address", "198.51.100.40"), ("X-Hub-Test-Login", "%s:%s" % (account, NAMES[account]))])
                 seen += r.status == 204
             self.assertEqual(seen, 2, "the door's share is two lookups: the third and the fourth person are not let in, whoever they are")
             self.assertEqual(len(self.fake.member_ids), 2)
+
+
+class TheStaffShare(DoorTest):
+    """An account that was never seen with a role has a small share of lookups of its own, so that plain accounts cannot use up the share of the staff."""
+
+    options = dict(roles_action_fresh_seconds=0.2, roles_grace_seconds=30.0, admin_burst=1000, admin_lookups_burst=100, admin_door_burst=5, admin_door_refill_seconds=600.0,
+                   admin_door_new_burst=2, admin_door_new_refill_seconds=600.0)
+
+    def test_plain_accounts_that_spend_their_share_do_not_stop_an_administrators_pass(self):
+        self.assertEqual(self.gate(ADMIN).status, 204)                  # (first seen with a role)
+        extras = ["93%014d" % n for n in range(1, 11)]
+        for account in extras:
+            self.fake.members[account] = []
+            NAMES[account] = "visitor.%d" % int(account[-5:])
+        try:
+            for account in extras:
+                self.assertEqual(self.gate(account).status, 403)
+            looked = [a for a in self.fake.member_ids if a in extras]
+            self.assertEqual(len(looked), 1, "the small share held two lookups, one of which the administrator's first visit used")
+            time.sleep(0.5)                                              # (the administrator's answer is old again)
+            self.assertEqual(self.gate(ADMIN).status, 204)
+            self.assertEqual(self.fake.member_ids.count(ADMIN), 2)
+        finally:
+            for account in extras:
+                del NAMES[account]
+
+    def test_a_share_that_is_used_up_is_one_line_in_the_log_and_names_no_account(self):
+        for account in (PLAIN, TARGET, AWAY, MOD):
+            self.gate(account)
+        text = self.rig.log_text.getvalue()
+        self.assertEqual(text.count("admin_door_lookup_budget_empty"), 1)
+        for account in EVERY_ID:
+            self.assertNotIn(account, text)
 
 
 class TheRequestsThatAreNotWhatTheDoorIsFor(DoorTest):
@@ -454,6 +525,17 @@ class TheRequestsThatAreNotWhatTheDoorIsFor(DoorTest):
         header = self.gate(ADMIN).get("x-ants-admin-pass")
         body = header.rsplit(".", 1)[0]
         self.assertNotEqual(header.rsplit(".", 1)[1], hmac.new(raw, body.encode(), hashlib.sha256).hexdigest(), "the pass is not signed with the secret itself")
+
+    def test_the_keys_are_the_raw_digests_of_the_secret_as_the_key_and_the_label_as_the_message_known_answer(self):
+        pass_key = hmac.new(SECRET.encode("ascii"), b"ants-admin-pass-v1", hashlib.sha256).digest()
+        csrf_key = hmac.new(SECRET.encode("ascii"), b"ants-admin-csrf-v1", hashlib.sha256).digest()
+        self.assertEqual(len(pass_key), 32)
+        self.assertEqual(pass_key.hex(), "13be5dab7dcbeb06e979f0fa5e5f817d178fa6b40da7c92bc02588e80ae3dd25")
+        self.assertEqual(csrf_key.hex(), "03a2b6b94fabcf8ae018852e8e6c0b1ec691375286a0263168238796556e3018")
+        header = self.gate(ADMIN).get("x-ants-admin-pass")
+        body, mac = header.rsplit(".", 1)
+        self.assertEqual(mac, hmac.new(pass_key, body.encode("ascii"), hashlib.sha256).hexdigest(), "the hub signs with exactly this key")
+        self.assertEqual(self.token(ADMIN), hmac.new(csrf_key, b"csrf1\0\0" + self.ref(ADMIN).encode(), hashlib.sha256).hexdigest())
 
     def test_a_name_that_is_the_shape_of_an_id_in_an_old_row_is_not_told(self):
         planted = "12345678901234567"
