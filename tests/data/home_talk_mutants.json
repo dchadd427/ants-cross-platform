@@ -294,7 +294,7 @@
   {
    "id": "the_buttons_leave_the_box_in_a_wide_window",
    "file": "web/home/talk.css",
-   "old": "grid-template-areas: \"f f f\" \"t . s\"; gap: 0 8px;",
+   "old": "grid-template-areas: \"f f f\" \". t s\"; gap: 0 8px;",
    "new": "grid-template-areas: \"f t s\"; gap: 0 8px;",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
@@ -315,8 +315,8 @@
   {
    "id": "a_low_window_stacks_the_buttons_under_the_field",
    "file": "web/home/talk.css",
-   "old": "grid-template-areas: \"t f s\"; align-items: center; gap: 0 4px; margin-top: 6px; padding: 0 6px 0 4px;",
-   "new": "grid-template-areas: \"f f f\" \"t . s\"; align-items: center; gap: 0 4px; margin-top: 6px; padding: 0 6px 0 4px;",
+   "old": "grid-template-areas: \"f t s\"; align-items: center; gap: 0 4px; margin-top: 6px; padding: 0 6px 0 4px;",
+   "new": "grid-template-areas: \"f f f\" \". t s\"; align-items: center; gap: 0 4px; margin-top: 6px; padding: 0 6px 0 4px;",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
   {
@@ -483,8 +483,8 @@
   {
    "id": "the_box_starts_with_two_rows",
    "file": "web/home/talk.css",
-   "old": "grid-template-areas: \"t f s\"; align-items: center; gap: 0 4px; margin-top: 6px; padding: 4px 6px;",
-   "new": "grid-template-areas: \"f f f\" \"t . s\"; align-items: center; gap: 0 4px; margin-top: 6px; padding: 4px 6px;",
+   "old": "grid-template-areas: \"f t s\"; align-items: center; gap: 0 4px; margin-top: 6px; padding: 4px 6px;",
+   "new": "grid-template-areas: \"f f f\" \". t s\"; align-items: center; gap: 0 4px; margin-top: 6px; padding: 4px 6px;",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
   {

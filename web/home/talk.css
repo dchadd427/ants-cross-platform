@@ -1,9 +1,9 @@
 /* The composer of the chat, in every window (web/home/talk.js, docs/HOME_SCREEN.md "The chat dock" and "Emoji and voice"): one rounded box as in a chat app. It starts as ONE row, in every window: the emoji and microphone buttons
-   (small and quiet) at the left, the field, Send at the right. When the words wrap past one line the script (talk.js, asked by chat.js grow()) sets the class gt-tall on the form and the box has two rows: the words on top over the whole width
-   (growing to four lines, then they scroll; two in a wide window), the buttons under them at the left and Send at the right; the class goes away when the words fit on one line again. A low window (a phone held sideways) is one row
+   the field, then the buttons (small and quiet) and Send, all at the right, for a right hand. When the words wrap past one line the script (talk.js, asked by chat.js grow()) sets the class gt-tall on the form and the box has two rows: the words on top over the whole width
+   (growing to four lines, then they scroll; two in a wide window), the buttons and Send under them, at the right, with the room at the left empty; the class goes away when the words fit on one line again. A low window (a phone held sideways) is one row
    always. The picker lies over the log, right above the form (its height is set by the script to the room there is); so does the line of words, a bubble that takes no room: nothing covers the field or Send. */
-.gc-form.gt-on { position: relative; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "t f s"; align-items: center; gap: 0 4px; margin-top: 6px; padding: 4px 6px; background: #0b1117; border: 2px solid var(--frame); border-radius: 22px; box-shadow: 0 0 0 2px var(--edge); }
-.gc-form.gt-on.gt-tall { grid-template-areas: "f f f" "t . s"; gap: 0 8px; padding: 4px 6px 6px; }       /* (set by the script when the words need more than one line) */
+.gc-form.gt-on { position: relative; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "f t s"; align-items: center; gap: 0 4px; margin-top: 6px; padding: 4px 6px; background: #0b1117; border: 2px solid var(--frame); border-radius: 22px; box-shadow: 0 0 0 2px var(--edge); }
+.gc-form.gt-on.gt-tall { grid-template-areas: "f f f" ". t s"; gap: 0 8px; padding: 4px 6px 6px; }       /* (set by the script when the words need more than one line) */
 .gc-form.gt-on:focus-within { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), 0 0 0 3px var(--edge); }
 .gt-on textarea.gc-input { grid-area: f; height: 44px; min-height: 44px; max-height: 66px; padding: 11px 10px; border: 0; border-radius: 14px; box-shadow: none; outline: none; scrollbar-width: none; line-height: 22px; white-space: pre-wrap; overflow-wrap: anywhere; overflow-y: auto; background: none; }
 .gt-on textarea.gc-input::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }       /* (the hint stays on one line in the narrow one-row field: it must not make the box two rows) */
@@ -24,7 +24,7 @@
 @media (max-width: 360px) { .gt-on .gc-send { min-width: 64px; padding: 0 12px; } }       /* (the narrowest phones: the one-row field keeps room to type) */
 @media (min-width: 400px) and (max-width: 700px) and (min-height: 501px) { .gt-on textarea.gc-input:disabled { padding: 14px 8px; white-space: pre; } }
 @media (max-height: 500px) {       /* (a low window, a phone held sideways: the box is one row, so that the log keeps its room) */
-    .gc-form.gt-on, .gc-form.gt-on.gt-tall, .gc-form.gt-on:has(.gc-input:disabled) { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "t f s"; align-items: center; gap: 0 4px; margin-top: 6px; padding: 0 6px 0 4px; }
+    .gc-form.gt-on, .gc-form.gt-on.gt-tall, .gc-form.gt-on:has(.gc-input:disabled) { grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "f t s"; align-items: center; gap: 0 4px; margin-top: 6px; padding: 0 6px 0 4px; }
     .gc-form.gt-on:has(.gc-input:disabled) { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "f s"; }
     .gt-on textarea.gc-input, .gt-tall.gt-on textarea.gc-input { max-height: 44px; }
 }

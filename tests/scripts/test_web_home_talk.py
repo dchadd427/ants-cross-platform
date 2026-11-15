@@ -243,17 +243,17 @@ class TheStyle(unittest.TestCase):
             self.assertIn(part, self.rule(".gt-say"), "the line of words is a bubble over the log: it takes no room")
         self.assertNotRegex(self.css, r"position: *fixed")
         self.assertEqual(self.css.count("z-index"), 2, "two layers over the log: the picker's (2) and the voice line's (3, so that \"The message is full.\" shows over the open picker)")
-        self.assertIn("grid-template-columns: auto minmax(0, 1fr) auto;", self.css)
+        self.assertIn("grid-template-columns: minmax(0, 1fr) auto auto;", self.css)
         self.assertIn("pick.style.maxHeight = Math.max(72, Math.min(180, ", read("web", "home", "talk.js"), "the script sets its height to the room above the form")
 
     def test_one_composer_in_every_window_one_row_with_the_buttons_at_the_left_and_two_rows_when_the_words_need_them(self):
-        self.assertIn('grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "t f s";', self.rule(".gc-form.gt-on"), "one row at first: the buttons, the field, Send")
-        self.assertIn('grid-template-areas: "f f f" "t . s";', self.rule(".gc-form.gt-on.gt-tall"), "the class that the script sets: the field on top over the whole width, the buttons at the left and Send at the right")
+        self.assertIn('grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "f t s";', self.rule(".gc-form.gt-on"), "one row at first: the field, the buttons at the right, Send")
+        self.assertIn('grid-template-areas: "f f f" ". t s";', self.rule(".gc-form.gt-on.gt-tall"), "the class that the script sets: the field on top over the whole width, the buttons and Send under it, at the right")
         self.assertNotIn('"f f f"', self.rule(".gc-form.gt-on"), "the two-row grid is not the box's own")
         self.assertIn("max-height: 66px;", self.rule(".gt-on textarea.gc-input"), "two lines in a wide window")
         self.assertIn('grid-template-areas: "f s"; padding: 4px 6px 4px 4px;', self.rule(".gc-form.gt-on:has(.gc-input:disabled)"), "the off field is one row, with the class or without it")
         low = self.css[self.css.index("@media (max-height: 500px) {"):]
-        self.assertIn('grid-template-areas: "t f s";', low, "a low window: one row, the buttons, the field, Send")
+        self.assertIn('grid-template-areas: "f t s";', low, "a low window: one row, the field, the buttons, Send")
         self.assertIn(".gc-form.gt-on.gt-tall", low.split("{")[1], "a low window: the class changes nothing")
         self.assertIn(".gt-on textarea.gc-input, .gt-tall.gt-on textarea.gc-input { max-height: 44px; }", low)
         self.assertNotIn("(min-width: 701px) and (max-width: 1000px)", self.css.replace("@media (min-width: 701px) and (min-height: 501px)", ""), "no composer of its own for the middle widths")
