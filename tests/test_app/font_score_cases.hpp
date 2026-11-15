@@ -2,7 +2,7 @@
 // in the two places that draw a team's score besides the score pop-ups:
 //   * the HUD's score boxes (the local team's in the top bar, the others' in the bottom strip): the number goes to Renderer::draw_number_text, right aligned in the box, white, 10 pixels of ink,
 //     and no digit sprite is drawn for it; a team that is absent or has dropped out shows no number; without the face the old digit sprites are drawn;
-//   * the results page: the score column of every row (not the other three columns): the label's color, from the column's left edge; without the face the old squeezed label is drawn.
+//   * the results page: the four number columns of every row (the three of the 187 page): the label's color, from the column's left edge; without the face the old squeezed label is drawn.
 // And that a number fits its box at every output size (1:1, a 1280 x 800 window, a phone at 2.1x and a 3x screen): what is drawn stays inside the box, squeezed when it is wider (the draw_text_squeezed rule).
 #pragma once
 
@@ -151,41 +151,58 @@ void test_hud(const assets::AssetArchive& arc) {
 }
 
 void test_results(const assets::AssetArchive& arc) {
-    std::printf("[results] the score column\n");
-    for (bool wide : {false, true}) {
-        const std::string at = std::string(wide ? "wide page" : "classic page") + ": ";
-        sim::MatchResult mr{};
-        mr.is_over = true;
-        mr.present_mask = 0x0F;
-        for (size_t p = 0; p < 4; ++p) {
-            mr.ally[p] = sim::ALLIANCE_NONE;
-            mr.stats[p].score = static_cast<int32_t>(1250 + 111 * p);
-            mr.stats[p].friendly_lost = static_cast<uint32_t>(7 + p);
-            mr.stats[p].enemy_killed = static_cast<uint32_t>(30 + p);
-            mr.stats[p].new_hatched = 3;
+    std::printf("[results] the four number columns (the three of the 187 page)\n");
+    for (const sim::GameMode mode : {sim::GameMode::HighestScore, sim::GameMode::Kills187}) {
+        const bool is_187 = mode == sim::GameMode::Kills187;
+        for (bool wide : {false, true}) {
+            const std::string at = std::string(is_187 ? "187, " : "") + (wide ? "wide page: " : "classic page: ");
+            sim::MatchResult mr{};
+            mr.is_over = true;
+            mr.present_mask = 0x0F;
+            for (size_t p = 0; p < 4; ++p) {
+                mr.ally[p] = sim::ALLIANCE_NONE;
+                mr.stats[p].score = static_cast<int32_t>(1250 + 111 * p);
+                mr.stats[p].friendly_lost = static_cast<uint32_t>(7 + p);
+                mr.stats[p].enemy_killed = static_cast<uint32_t>(30 + p);
+                mr.stats[p].new_hatched = 3;
+                mr.ants_left[p] = static_cast<uint32_t>(2 + p);
+            }
+            mr.decide_winners();
+            ScorecardModal card;
+            card.set_wide_layout(wide);
+            card.set_player_names({"Juniper", "Odile", "Marta", "Theo"});
+            card.show(mr, 0, mode);
+            card.update(0.3f);
+            const ResultsLayout& l = ResultsLayout::of(wide);
+            const size_t columns = is_187 ? 3 : 4;
+            Spy with(true);
+            card.render(with, arc);
+            check(with.numbers.size() == 4 * columns, at + std::to_string(4 * columns) + " numbers in the numbers' face: four rows of " + std::to_string(columns) + " (" + std::to_string(with.numbers.size()) + ")");
+            // every number is where its column is: from the column's left edge (+1), no wider than the column, 12 pixels of ink, left aligned, in the label's color
+            bool placed = true, colored = true;
+            for (const Spy::Num& n : with.numbers) {
+                bool in_a_column = false;
+                for (size_t c = 0; c < columns; ++c) {
+                    const int32_t cx = is_187 ? l.numbers187_x[c] : l.column_x[c];
+                    const int32_t cw = is_187 ? l.numbers187_w[c] : l.column_w[c];
+                    in_a_column = in_a_column || (n.x == cx + 1 && n.w == cw - 1);
+                }
+                placed = placed && in_a_column && !n.right && n.h == 12;
+                colored = colored && n.color.r == 239 && n.color.g == 231 && n.color.b == 223;
+            }
+            check(placed, at + "each starts at its column's left edge, no wider than the column, 12 pixels of ink");
+            check(colored, at + "in the label's color");
+            for (const char* t : {"1250", "1361", "7", "10", "3"}) {
+                bool found = false;
+                for (const Spy::Num& n : with.numbers) found = found || n.text == t;
+                if (!is_187 || std::string(t) != "3") check(found, at + "the number " + t + " is drawn in the numbers' face");
+            }
+            check(!with.has_text("1250") && !with.has_text("7"), at + "and not as a label as well");
+            check(with.has_text("Juniper") && with.has_text("Odile"), at + "the names stay labels");
+            Spy without(false);
+            card.render(without, arc);
+            check(without.numbers.empty() && without.has_text("1250") && without.has_text("7") && without.has_text("1361"), at + "without the face every number is the old squeezed label");
         }
-        mr.decide_winners();
-        ScorecardModal card;
-        card.set_wide_layout(wide);
-        card.set_player_names({"Juniper", "Odile", "Marta", "Theo"});
-        card.show(mr, 0, sim::GameMode::HighestScore);
-        card.update(0.3f);
-        const ResultsLayout& l = ResultsLayout::of(wide);
-        Spy with(true);
-        card.render(with, arc);
-        check(with.numbers.size() == 4, at + "four rows: four score numbers (" + std::to_string(with.numbers.size()) + ")");
-        bool columns = true, others = true;
-        for (const Spy::Num& n : with.numbers) {
-            columns = columns && n.x == l.column_x[0] + 1 && n.w == l.column_w[0] - 1 && !n.right && n.h == 12;
-        }
-        check(columns, at + "each starts at the score column's left edge, no wider than the column, 12 pixels of ink");
-        check(with.numbers.size() == 4 && with.numbers[0].color.r == 239 && with.numbers[0].color.g == 231 && with.numbers[0].color.b == 223, at + "in the label's color");
-        for (const char* other : {"7", "30", "3"}) others = others && with.has_text(other);
-        check(others, at + "the other columns (ants lost, ants killed, hatched) stay in the label's font");
-        check(!with.has_text("1250") && !with.has_text("1361"), at + "the scores are not drawn as labels as well");
-        Spy without(false);
-        card.render(without, arc);
-        check(without.numbers.empty() && without.has_text("1250") && without.has_text("1361"), at + "without the face the scores are the old squeezed labels");
     }
 }
 
@@ -221,7 +238,10 @@ void test_fit(const assets::AssetArchive& arc) {
     struct Case { const char* text; int x, y, w, h; bool right; const char* name; };
     // the HUD's box: right edge 52 into a 54 pixel box, 51 wide; the results column: 49 wide, from its left edge
     const Case cases[] = {{"999999", 402 + 52, 100, 51, 10, true, "HUD box, 999999"}, {"1250", 402 + 52, 100, 51, 10, true, "HUD box, 1250"}, {"0", 402 + 52, 100, 51, 10, true, "HUD box, 0"},
-                          {"999999", 485 + 1, 100, 48, 12, false, "results column, 999999"}, {"1250", 485 + 1, 100, 48, 12, false, "results column, 1250"}};
+                          {"999999", 485 + 1, 100, 48, 12, false, "results column 1, 999999"}, {"1250", 485 + 1, 100, 48, 12, false, "results column 1, 1250"},
+                          {"99999", 534 + 1, 100, 46, 12, false, "results column 2, 99999"}, {"99999", 555 + 1, 100, 48, 12, false, "results column 3, 99999"}, {"9999", 576 + 1, 100, 47, 12, false, "results column 4, 9999"},
+                          {"7", 534 + 1, 100, 46, 12, false, "results column 2, 7"},
+                          {"99", 534 + 1, 100, 18, 12, false, "classic page column 2 (19 wide), 99"}, {"999", 555 + 1, 100, 20, 12, false, "classic page column 3 (21 wide), 999"}, {"99", 576 + 1, 100, 19, 12, false, "classic page column 4 (20 wide), 99"}};
     for (const Size& sz : sizes) {
         SDL_SetWindowSize(rig.win, sz.w, sz.h);
         rig.renderer.refit_canvas();

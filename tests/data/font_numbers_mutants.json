@@ -222,7 +222,7 @@
       "test": "./build/tests/test_app/test_font_numbers"
     },
     {
-      "id": "results_score_is_the_label",
+      "id": "results_counters_are_the_labels",
       "file": "src/ants_app/scorecard.cpp",
       "old": "    if (!renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, false, kLabelColor)) {",
       "new": "    if (false && !renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, false, kLabelColor)) {",
@@ -276,6 +276,26 @@
       "file": "src/ants_app/renderer_numbers.cpp",
       "old": "        if (p.used <= cutoff && dropped < drop) {\n            if (p.texture) SDL_DestroyTexture(p.texture);",
       "new": "        if (p.used > cutoff && dropped < drop) {\n            if (p.texture) SDL_DestroyTexture(p.texture);",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "results_counter_ignores_its_column",
+      "file": "src/ants_app/scorecard.cpp",
+      "old": "    if (!renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, false, kLabelColor)) {",
+      "new": "    if (!renderer.draw_number_text(text, x + 1, y + 3, 500, 12, false, kLabelColor)) {",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "results_narrow_columns_are_labels",
+      "file": "src/ants_app/scorecard.cpp",
+      "old": "    if (!renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, false, kLabelColor)) {",
+      "new": "    if (box_w > 30 ? !renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, false, kLabelColor) : true) {",
       "build": [
         "test_font_numbers"
       ],

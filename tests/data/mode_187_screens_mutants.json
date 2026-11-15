@@ -132,8 +132,8 @@
   {
    "id": "results_187_shows_four_numbers",
    "file": "src/ants_app/scorecard.cpp",
-   "old": "for (size_t c = 0; c < 3; ++c) (c == 0 ? draw_score_counter : draw_counter)(renderer, row.numbers[c], layout.numbers187_x[c]",
-   "new": "for (size_t c = 0; c < 2; ++c) (c == 0 ? draw_score_counter : draw_counter)(renderer, row.numbers[c], layout.numbers187_x[c]",
+   "old": "for (size_t c = 0; c < 3; ++c) draw_counter(renderer, row.numbers[c], layout.numbers187_x[c]",
+   "new": "for (size_t c = 0; c < 2; ++c) draw_counter(renderer, row.numbers[c], layout.numbers187_x[c]",
    "build": "test_results_187",
    "test": "timeout 600 ./build/tests/test_app/test_results_187"
   },
