@@ -95,7 +95,7 @@
     // returns { start, sync, opening, show, screen, inert, menu, dock }
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, page = env.page;
-        var fitting = null, screen = 'home', menuOpen = false, menuFor = null, menuBox = null, factsBox = null, going = false, held = false, stalled = false, goingTimer = null, failTimer = null, said = '', dock = null, asked = false, games = null, askedGames = false, players = null, askedPlayers = false, askedTalk = false;
+        var fitting = null, screen = 'home', menuOpen = false, menuFor = null, menuBox = null, factsBox = null, going = false, held = false, stalled = false, goingTimer = null, failTimer = null, said = '', dock = null, asked = false, games = null, askedGames = false, players = null, askedPlayers = false, askedTalk = false, split = null;
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -305,6 +305,7 @@
         // The page decided what it connects to: link (a link or a test room: the Room), seat (it holds a room of this tab). Called once, before the page connects.
         function start(link, seat) {
             show(firstScreen(!!link, !!seat, win.location.hash), 'first');
+            wantSplit();
             wantGames();
             win.addEventListener('popstate', function (e) { show(screenOf(e && e.state, win.location.hash, !!page.info().client), 'pop'); });
             fitting = heightGuard(win, doc, function () { return screen === 'home'; });
@@ -351,6 +352,10 @@
             if (askedPlayers || !dock) return;
             askedPlayers = true;
             lazy('home/players', function () { if (win.AntsHomePlayers) players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: main, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); inert(held); var c = players && players.root.querySelector ? players.root.querySelector('.pl-count') : null; if (c) mirror(c, tabBtns.players.pill); });
+        }
+
+        function wantSplit() {                              // the two drag handles (split.js, split.css): sizes kept in this browser, put on Home before the lists come
+            lazy('home/split', function () { if (win.AntsHomeSplit) split = win.AntsHomeSplit.mount({ doc: doc, win: win, host: host, main: main }); });
         }
 
         function wantTalk() {                               // the emoji and microphone buttons (talk.js, talk.css), after the dock: they stand in its form

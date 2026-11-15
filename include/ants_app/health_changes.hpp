@@ -35,8 +35,7 @@ constexpr int32_t kMaxPerSign = 2;          // for one ant
 constexpr uint32_t kJumpTicks = 10;         // more ticks than this between two looks is a jump: nothing is shown for it
 constexpr int32_t kGlyphAdvance = 7;        // a sign and a digit take 7 pixels each (the font's cell is 8 wide)
 constexpr int32_t kGlyphHeight = 10;
-constexpr int32_t kAboveBar = 2;            // the glyphs' bottom stands this far above where the health bar's top would be
-constexpr int32_t kChangeScaleMax = 2;       // on a canvas that is shown small (a phone) the numbers grow with the health numbers' rule, but not beyond this
+constexpr int32_t kBodyCentreAbove = 8;     // the middle of the ant's body is this many world pixels above its sprite position (scaled by the zoom); the number starts centred there
 constexpr uint8_t kOutlineAlpha = 217;      // the outline's near black at about 85 %
 
 constexpr Color kDamageColor{255, 255, 255};     // the color of the original's Ctrl+L numbers
@@ -53,6 +52,15 @@ constexpr int32_t rise_at(int32_t age_ms) noexcept {
     if (age_ms <= 0) return 0;
     if (age_ms >= kLifeMs) return kRisePx;
     return (kRisePx * age_ms + kLifeMs / 2) / kLifeMs;
+}
+
+/// The size of a number of this age, as a fraction of its full size, in the font's drawing: 1 at birth, `kEndScale` at the end of its life, on an ease-out curve (it shrinks fast at first, then settles)
+constexpr double kEndScale = 0.70;
+constexpr double scale_at(int32_t age_ms) noexcept {
+    if (age_ms <= 0) return 1.0;
+    if (age_ms >= kLifeMs) return kEndScale;
+    const double left = 1.0 - static_cast<double>(age_ms) / static_cast<double>(kLifeMs);
+    return 1.0 - (1.0 - kEndScale) * (1.0 - left * left);
 }
 
 /// One live number

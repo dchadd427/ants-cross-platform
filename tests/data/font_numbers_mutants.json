@@ -1,0 +1,165 @@
+{
+  "note": "Mutants of the numbers in the game's font for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the output-resolution drawing in src/ants_app/renderer_numbers.cpp (SDL's logical size and the clip put back, the size of what shows against the old ink, the outline, the score number's width, the shrink about the number's middle, the bounds of the cache) and the shrink curve in include/ants_app/health_changes.hpp, against tests/test_app/test_font_numbers.cpp. Run from the checkout: tools/mutate.py tests/data/font_numbers_mutants.json --keep-going --jobs 1; every mutant must be caught.",
+  "mutants": [
+    {
+      "id": "native_logical_size_not_restored",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "    SDL_RenderSetLogicalSize(renderer_, canvas_w_, canvas_h_);\n    SDL_RenderSetClipRect(renderer_, f.clipped ? &f.clip : nullptr);",
+      "new": "    SDL_RenderSetClipRect(renderer_, f.clipped ? &f.clip : nullptr);",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "native_clip_not_restored",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "    SDL_RenderSetClipRect(renderer_, f.clipped ? &f.clip : nullptr);\n}",
+      "new": "}",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "native_clip_not_converted",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "        const int32_t x0 = f.x + static_cast<int32_t>(std::lround(static_cast<double>(f.clip.x) * f.scale));",
+      "new": "        const int32_t x0 = f.x + f.clip.x;",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "size_is_the_cell_not_the_ink",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "    const int32_t digit_px = std::max(2, height_px - 2 * o);",
+      "new": "    const int32_t digit_px = std::max(2, height_px - 2 * o + 4);",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "score_height_wrong",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "        const int32_t ink_h = zero.valid ? std::max(1, zero.y1 - zero.y0) : 10;",
+      "new": "        const int32_t ink_h = zero.valid ? std::max(1, zero.y1 - zero.y0) + 3 : 10;",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "score_width_not_matched",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "draw_number_box(f, *pic, at.x, at.y, true, true, health::Color{255, 255, 255}, 255, want_w);",
+      "new": "draw_number_box(f, *pic, at.x, at.y, true, true, health::Color{255, 255, 255}, 255, 0);",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "no_outline",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "        TTF_SetFontOutline(edge, o);",
+      "new": "        TTF_SetFontOutline(edge, 0);",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "outline_not_dark",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "                        const uint32_t a = (row[x] >> 24) * health::kOutlineAlpha / 255u;\n                        row[x] = a << 24;",
+      "new": "                        const uint32_t a = (row[x] >> 24) * health::kOutlineAlpha / 255u;\n                        row[x] = (a << 24) | 0x00FFFFFFu;",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "no_shrink",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "        const double shrink = health::scale_at(age);",
+      "new": "        const double shrink = 1.0;",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "shrink_about_the_corner",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "        draw_number_box(f, *pic, at.x, at.y, true, true, num.heal ?",
+      "new": "        draw_number_box(f, *pic, at.x, at.y, false, false, num.heal ?",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "shrink_not_eased",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "    return 1.0 - (1.0 - kEndScale) * (1.0 - left * left);",
+      "new": "    return 1.0 - (1.0 - kEndScale) * (1.0 - left);",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "shrink_ends_at_half",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "constexpr double kEndScale = 0.70;",
+      "new": "constexpr double kEndScale = 0.50;",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "cache_unbounded",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "    if (number_pictures_.size() >= kMaxNumberPictures) clear_number_pictures();",
+      "new": "    if (false) clear_number_pictures();",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "font_cache_unbounded",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "        if (digit_fonts_.size() >= kMaxNumberFonts) clear_number_pictures();",
+      "new": "        if (false) clear_number_pictures();",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "no_fallback_without_face",
+      "file": "include/ants_app/renderer.hpp",
+      "old": "    bool font_numbers() const noexcept { return !classic_numbers_ && !ttf_path_.empty(); }",
+      "new": "    bool font_numbers() const noexcept { return !classic_numbers_; }",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "font_hp_always_deferred_off",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "    if (font_numbers() || (in_world_target_ && pass_.camera.zoom != zoom::kNormal)) {",
+      "new": "    if (in_world_target_ && pass_.camera.zoom != zoom::kNormal) {",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    }
+  ]
+}

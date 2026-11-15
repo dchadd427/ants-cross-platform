@@ -316,6 +316,7 @@ bool Renderer::init(SDL_Window* window,
                     ok = fonts_[i] != nullptr;
                 }
                 if (ok) {
+                    ttf_path_ = path;
                     std::cout << "[Renderer] High-quality TrueType font loaded: " << path << std::endl;
                     break;
                 }
@@ -339,6 +340,7 @@ void Renderer::shutdown() {
         }
     }
     text_cache_.clear();
+    clear_number_pictures();
     for (auto& font : fonts_) {
         if (font) TTF_CloseFont(font);
         font = nullptr;
@@ -364,6 +366,7 @@ void Renderer::shutdown() {
         if (pic.texture) SDL_DestroyTexture(pic.texture);
     }
     change_pictures_.clear();
+    clear_number_pictures();
     if (texture_cache_) {
         texture_cache_->clear();
         texture_cache_.reset();
@@ -802,7 +805,7 @@ void Renderer::render_world(const ants::sim::WorldState& world,
     sub_tick_ms_ = static_cast<uint32_t>(std::clamp(sub_tick_time, 0.0f, 0.0499f) * 1000.0f);
     render_queue_.clear();
     overlay_queue_.clear();
-    health_marks_.clear(), deferred_digits_.clear();
+    health_marks_.clear(), deferred_digits_.clear(), deferred_scores_.clear();
 
     // At a zoom the world is drawn into the offscreen target (begin_world_target); at the zoom 1 straight into the view, exactly as it always was. A renderer that cannot make the target
     // (none that SDL has: every one supports targets) draws the zoom 1 picture of the same origin instead of a broken one.
