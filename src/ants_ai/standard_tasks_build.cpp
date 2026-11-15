@@ -11,8 +11,27 @@ namespace ants::ai {
 
 using standard_detail::find_ant;
 using standard_detail::occupied;
+using standard_detail::tile_index;
 
 namespace {
+
+// Whether an ant that stands on `from` can walk to `to` on the map as it is now (bridges and all): a Fire Ant that was left on another island (a corner row of ISLANDS) cannot, and an order that names
+// a tile it cannot walk to ends in "Can't go there." again and again (plan.fire_home_only)
+bool walks_to(const BotView& v, uint8_t seat, sim::TileCoord from, sim::TileCoord to) {
+    const sim::Grid& grid = v.grid();
+    if (!grid.in_bounds(from) || !grid.in_bounds(to)) return false;
+    const std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, seat, v.walk_context());
+    std::vector<sim::TileCoord> sources;                                                  // the ant walks to a tile next to the target (the target itself may be a wall of fire)
+    for (int32_t dy = -1; dy <= 1; ++dy) {
+        for (int32_t dx = -1; dx <= 1; ++dx) {
+            const sim::TileCoord n{to.x + dx, to.y + dy};
+            if ((dx != 0 || dy != 0) && grid.in_bounds(n) && mask[tile_index(grid, n)] != 0) sources.push_back(n);
+        }
+    }
+    if (sources.empty()) return false;
+    const std::vector<int32_t> field = MapInfo::cost_field(grid, mask, sources);
+    return !field.empty() && field[tile_index(grid, from)] >= 0;
+}
 
 // A free tile next to `tile` for the ant that stands on it to step to (the ant is the one that is to order a special order onto the tile: a click on a tile with an ant on it, the ordering
 // ant included, is no special order; a person moves the ant aside first): walkable, no ant, no power-up, no fire wall; {-1, -1} when there is none
@@ -72,6 +91,7 @@ void WallTask::step(TaskContext& c) {
     const HillInfo& hill = c.map.hill(c.seat);
     if (!hill.present || !v.has_grid()) return;
     const sim::Grid& grid = v.grid();
+    const bool check_walk = plan.fire_home_only && !tactics_.gate_map && !tactics_.field_map;     // (a keeper that was left on another island cannot walk to its walls; a walled map's keeper is judged by its goals)
     // the walls of the ring round the own gate wait for the fighters to deal with the Fire Ant that lit them (fired_in_wall), but not for ever
     bool ring_lit = false;
     for (const sim::TileCoord& r : SabotageTask::ring_of(hill)) ring_lit = ring_lit || (grid.in_bounds(r) && grid.has_fire_at(r));
@@ -141,7 +161,8 @@ void WallTask::step(TaskContext& c) {
     // 3. is there work? an open tile to build on (the nearest to the ant first), or a wall to renew at a calm moment
     int pick = -1;
     int32_t best_d = 0;
-    if (tactics_.wall_demand) {
+    const bool opening = now < open_until_;                                              // (the thief trap: one wall is put out and no wall is lit until the window closes)
+    if (tactics_.wall_demand && !opening) {
         for (int i = 0; i < 3; ++i) {
             if (st.tile[static_cast<size_t>(i)] != EastTile::Open) continue;
             const auto f = failed_until_.find(i);
@@ -165,6 +186,17 @@ void WallTask::step(TaskContext& c) {
             if (seen == 0 || now + plan.renew_lead_ticks + travel < seen + sim::LIFETIME_180S_TICKS) continue;
             if (seen + sim::LIFETIME_180S_TICKS >= now + v.ticks_left()) continue;        // it outlives the match (the engine arms the burn-out timer only while more than 180 s remain)
             renew = i;
+        }
+    }
+    if (opening && renew < 0 && jobs_.empty()) {                                          // the wall nearest to the keeper goes out
+        int32_t best_open = 0;
+        for (int i = 0; i < 3; ++i) {
+            if (st.tile[static_cast<size_t>(i)] != EastTile::Wall) continue;
+            const int32_t d = keeper->tile.chebyshev_dist(tiles[static_cast<size_t>(i)]);
+            if (renew < 0 || d < best_open) {
+                renew = i;
+                best_open = d;
+            }
         }
     }
     // an enemy wall in the way of the economy that this ant could put out (the walls in front of the own thief hole and of the ally's are not enemy walls)
@@ -229,6 +261,12 @@ void WallTask::step(TaskContext& c) {
             failed_until_[pick] = now + 40u;
             return;
         }
+        if (check_walk && !walks_to(v, c.seat, keeper->tile, target)) {          // the keeper cannot walk to the hole (it stands on another island): no order, and the ant is the economy's
+            failed_until_[pick] = now + 600u;
+            ++unreachable_;
+            c.ledger.release(keeper_, id());
+            return;
+        }
         c.orders.special(keeper_, target, Priority::Normal);
         Job j;
         j.tile = target;
@@ -259,6 +297,11 @@ void WallTask::step(TaskContext& c) {
             counter_black_[static_cast<int64_t>(counter_tile.y) * 4096 + counter_tile.x] = now + 100u;
             return;
         }
+        if (check_walk && !walks_to(v, c.seat, keeper->tile, counter_tile)) {
+            counter_black_[static_cast<int64_t>(counter_tile.y) * 4096 + counter_tile.x] = now + 600u;
+            ++unreachable_;
+            return;
+        }
         c.orders.special(keeper_, counter_tile, Priority::Normal);
         counter_job_.tile = counter_tile;
         counter_job_.decided = now;
@@ -280,6 +323,10 @@ void WallTask::step(TaskContext& c) {
             return;
         }
         if (occupied(v, tiles[static_cast<size_t>(renew)]) || v.predict_ack(probe) == 0) return;
+        if (check_walk && !walks_to(v, c.seat, keeper->tile, tiles[static_cast<size_t>(renew)])) {
+            ++unreachable_;
+            return;
+        }
         c.orders.special(keeper_, tiles[static_cast<size_t>(renew)], Priority::Normal);
         Job j;
         j.tile = tiles[static_cast<size_t>(renew)];

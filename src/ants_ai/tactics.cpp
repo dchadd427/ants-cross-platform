@@ -262,6 +262,15 @@ LevelPlan plan_for(Level level) noexcept {
             p.chore_worth = true;
             break;
     }
+    // The thief batch (docs/BOTS.md, "Thieves: the answer to a raid"): Medium and Hard look at a hole again while a thief walks to it, meet an enemy Thief with fighters, trap one that the own walls shut in,
+    // and do not take a Fire power-up that the ant could not carry home. `--tune thief_batch=0` is the bot before it.
+    if (level != Level::Easy) {
+        p.raid_recheck = true;
+        p.thief_guard = true;
+        p.thief_trap = true;
+        p.fire_home_only = true;
+        p.thief_guard_force = level == Level::Hard ? 2u : 1u;
+    }
     return p;
 }
 
@@ -276,6 +285,13 @@ void without_stand_batch(LevelPlan& p) noexcept {
 }
 
 void without_home_mines(LevelPlan& p) noexcept { p.home_on_route = p.home_first = false; }
+
+void without_thief_batch(LevelPlan& p) noexcept {
+    p.raid_recheck = false;
+    p.thief_guard = false;
+    p.thief_trap = false;
+    p.fire_home_only = false;
+}
 
 void without_kill_batch(LevelPlan& p) noexcept {
     p.opportunity = false;

@@ -47,6 +47,7 @@
 #include "ants_ai/island_tasks.hpp"
 #include "ants_ai/miner_flight_task.hpp"
 #include "ants_ai/opportunity_task.hpp"
+#include "ants_ai/thief_guard.hpp"
 #include "ants_ai/standard_tasks.hpp"
 #include "ants_ai/tactics.hpp"
 #include "ants_ai/tasks.hpp"
@@ -92,7 +93,9 @@ private:
           opportunity_(kOpportunity, tactics_),
           miner_flight_(kMinerFlight, tactics_),
           heal_(kHeal, tactics_),
-          flower_link_(kFlowerLink, tactics_) {
+          flower_link_(kFlowerLink, tactics_),
+          thief_guard_(kThiefGuard, tactics_) {
+        thief_guard_.attach(&walls_);
         island_.attach(&harvest_);
         expedition_.attach(&island_);
         miner_flight_.attach(&island_, &expedition_);
@@ -131,6 +134,7 @@ public:
     const GateGoalTask& gate_goals() const noexcept { return gate_goals_; }
     const FieldTask& field() const noexcept { return field_; }
     const OpportunityTask& opportunity() const noexcept { return opportunity_; }
+    const ThiefGuardTask& thief_guard() const noexcept { return thief_guard_; }
     const MinerFlightTask& miner_flight() const noexcept { return miner_flight_; }
     const FlowerLinkTask& flower_link() const noexcept { return flower_link_; }
     const HealTask& heal() const noexcept { return heal_; }
@@ -182,6 +186,7 @@ public:
     static constexpr TaskId kOpportunity = 22;
     static constexpr TaskId kMinerFlight = 24;
     static constexpr TaskId kFlowerLink = 25;
+    static constexpr TaskId kThiefGuard = 26;
     static constexpr TaskId kHeal = kHealTaskId;                  // (23: tasks.hpp names it for the tasks that leave a carrier to it)
 
 private:
@@ -322,6 +327,7 @@ private:
     MinerFlightTask miner_flight_;
     HealTask heal_;
     FlowerLinkTask flower_link_;
+    ThiefGuardTask thief_guard_;
     void note_repeat(const sim::Command& command, uint64_t tick);
     void update_progress(const BotView& view);
     bool detect_stall(const BotView& view);

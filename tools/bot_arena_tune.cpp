@@ -229,6 +229,25 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "aschase") { p.assault_chase = static_cast<int32_t>(v); return true; }
     if (key == "asticks") { p.assault_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "asafter") { p.assault_after = static_cast<uint32_t>(v); return true; }
+    if (key == "thief_batch") {                                                       // the thief batch of docs/BOTS.md, "Thieves: the answer to a raid" (0: the bot as it was before it; 1: its rules on)
+        if (v == 0) ai::without_thief_batch(p);
+        else p.raid_recheck = p.thief_guard = p.thief_trap = p.fire_home_only = true;
+        return true;
+    }
+    if (key == "rr") return flag(p.raid_recheck);
+    if (key == "rrblack") { p.raid_recheck_black = static_cast<uint32_t>(v); return true; }
+    if (key == "tguard") return flag(p.thief_guard);
+    if (key == "tgrad") { p.thief_guard_radius = static_cast<int32_t>(v); return true; }
+    if (key == "tgforce") { p.thief_guard_force = static_cast<uint32_t>(v); return true; }
+    if (key == "tgblock") { p.thief_guard_block = static_cast<uint32_t>(v); return true; }
+    if (key == "tgnoblock") return flag(p.thief_guard_no_block);
+    if (key == "tgkill") { p.thief_guard_kill_after = static_cast<uint32_t>(v); return true; }
+    if (key == "tgrest") { p.thief_guard_rest = static_cast<uint32_t>(v); return true; }
+    if (key == "tgticks") { p.thief_guard_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "tgreach") { p.thief_guard_reach = static_cast<uint32_t>(v); return true; }
+    if (key == "ttrap") return flag(p.thief_trap);
+    if (key == "ttrapwait") { p.thief_trap_wait = static_cast<uint32_t>(v); return true; }
+    if (key == "fhome") return flag(p.fire_home_only);
     if (key == "kill") {                                                              // the kill batch of docs/BOT_FIGHT.md (0: the bot as it was before it; 1: the plan that ships)
         if (v == 0) ai::without_kill_batch(p);
         else p.opportunity = p.reach_fights = p.idle_hunt = p.chore_worth = true;

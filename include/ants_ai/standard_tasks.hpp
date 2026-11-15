@@ -186,6 +186,8 @@ public:
     uint32_t taken() const noexcept { return taken_; }
     uint32_t failed() const noexcept { return failed_; }
     uint32_t contested() const noexcept { return contested_; }
+    /// Trips not made because the ant could not have walked home from the power-up (plan.fire_home_only)
+    uint32_t stranded_skips() const noexcept { return stranded_skips_; }
     uint32_t called_back() const noexcept { return called_back_; }
     /// The walking-cost searches made (a field that was not cached): a look at a gate map makes at most `gate_candidates(cells)` for each kind that it takes
     uint64_t searches() const noexcept { return searches_; }
@@ -255,6 +257,7 @@ private:
     uint32_t taken_{0};
     uint32_t failed_{0};
     uint32_t contested_{0};
+    uint32_t stranded_skips_{0};
     uint32_t called_back_{0};
     uint64_t searches_{0};
 };
@@ -281,6 +284,10 @@ public:
     uint32_t walls_ordered() const noexcept { return walls_ordered_; }
     uint32_t renewals() const noexcept { return renewals_; }
     uint32_t failures() const noexcept { return failures_; }
+    /// The thief trap (ThiefGuardTask): the wall nearest to the keeper is put out, and no wall is lit again before tick `until`
+    void request_open(uint64_t until) noexcept { open_until_ = until; }
+    /// Wall orders that were dropped because the keeper cannot walk to the tile (plan.fire_home_only)
+    uint32_t unreachable() const noexcept { return unreachable_; }
 
 private:
     static constexpr uint64_t kPending = ~uint64_t{0};
@@ -291,6 +298,8 @@ private:
         bool extinguish{false};
     };
     Tactics& tactics_;
+    uint32_t unreachable_{0};
+    uint64_t open_until_{0};
     uint32_t keeper_{0};
     std::map<int, Job> jobs_;                      // by east tile index
     std::map<int, uint64_t> failed_until_;
@@ -473,6 +482,9 @@ public:
     uint32_t ambushes() const noexcept { return ambushes_; }
     size_t waiting() const noexcept { return waiting_.size(); }
     uint32_t unjams() const noexcept { return unjams_; }
+    /// Raids on their way that were called off at a look because the hole had been shut meanwhile (plan.raid_recheck), and of those the ones that went to another hill
+    uint32_t rechecks() const noexcept { return rechecks_; }
+    uint32_t retargets() const noexcept { return retargets_; }
     int last_target() const noexcept { return last_target_; }
     bool black(uint8_t team, uint64_t tick) const noexcept;
     const Params& params() const noexcept { return params_; }
@@ -484,8 +496,16 @@ private:
         uint64_t decided{0};
         uint64_t sent{kPending};
         sim::TileCoord origin{};
+        uint64_t next_path{0};               // the tick of the next look at the walk (plan.raid_recheck)
     };
     bool launch(TaskContext& context, const AntView& thief);
+    /// Whether the hole of `team` cannot be raided now by the thief `thief`: no hill, fewer free tiles in front of it than the plan asks, an ant on its raid tile, an own thief on it
+    bool hole_shut(TaskContext& context, uint8_t team, uint32_t thief) const;
+    /// The least that a hill's score box must show for a raid now (the tiers of the catch-up lower it)
+    uint32_t min_loot_now() const noexcept;
+    /// (plan.raid_recheck) A thief that walks to a hole looks at it again: when the hole is shut, the box shows too little or no walk reaches it any more, the raid is called off and the thief goes to the best other
+    /// hill, or stops (the economy has it again). True when the thief's raid ended here
+    bool recheck(TaskContext& context, const AntView& thief, std::map<uint32_t, Raid>::iterator it);
     void unjam(TaskContext& context);
     bool ambush(TaskContext& context, const AntView& thief);
     struct Waiting {
@@ -502,6 +522,8 @@ private:
     std::map<uint32_t, Raid> raids_;
     std::map<uint32_t, uint64_t> aside_;           // the ants that were sent aside to let a thief out of a hole (the tick): not sent to a raid again for a while
     uint32_t unjams_{0};
+    uint32_t rechecks_{0};
+    uint32_t retargets_{0};
     std::map<uint8_t, uint64_t> black_;
     uint32_t raids_ordered_{0};
     uint32_t failures_{0};
