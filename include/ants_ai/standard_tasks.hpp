@@ -169,6 +169,7 @@ public:
                                              // shipped maps fits (the most: 80 of one kind on a map of 961 cells), a map of 65,536 cells gets 7 ...
         uint32_t gate_min_candidates{4};     // ... and never fewer than this many
         uint32_t call_back_tiles{3};         // an ant nearer than this to a power-up that changed kind takes it anyway
+        uint32_t link_trip_ticks{1500};      // the watcher of a flower strip that the flower link opens (island_link.hpp) walks at most this long to its place
     };
     PowerUpTask(TaskId id, Tactics& tactics) : PowerUpTask(id, tactics, Params{}) {}
     PowerUpTask(TaskId id, Tactics& tactics, const Params& params) : Task(id), tactics_(tactics), params_(params) {}
@@ -215,6 +216,10 @@ private:
     const std::vector<int32_t>& field_for(TaskContext& context, sim::TileCoord tile);
     bool try_start(TaskContext& context, sim::AntType kind);
     void watch(TaskContext& context);
+    void watch_link(TaskContext& context);
+    sim::TileCoord free_spot(TaskContext& context, sim::TileCoord drop, const std::vector<int32_t>& field, sim::TileCoord from, uint32_t self) const;
+    bool is_link_flower(sim::TileCoord drop) const noexcept;
+    size_t extra_want(sim::AntType kind) const noexcept;
     void step_off(TaskContext& context);
 
     struct Watch {
@@ -223,6 +228,7 @@ private:
         sim::TileCoord spot{};                       // the tile beside it where the ant stands
         uint64_t ordered{0};                         // the tick of the last order to walk to the spot (0: none yet)
         uint8_t hp{0};                               // its hit points when it was sent: fewer later mean that it was hit
+        bool fire_ok{false};                         // the watcher of a flower link may be a Fire Ant (a Fire Ant of the ring has nothing to light there; it takes the Swimmer's hat and leaves its own)
     };
     struct StepOff {
         uint32_t ant{0};

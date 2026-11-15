@@ -50,6 +50,7 @@ void StandardBot::start(const BotContext& context) {
     ledger_.set_rank(kOpportunity, kRankFight);                   // (the kill that one blow gives: an ant is taken from the chores and the economy, never from a pick-up, a raid or a fight)
     ledger_.set_rank(kMinerFlight, kRankPowerUps);                // (a free Bomber on its way to the island of the ring pile)
     ledger_.set_rank(kHeal, kRankFight);                          // (the same rank as a fight: it takes the ants of the ranks below, never one that a fight, a rush or a gate goal holds, and a fight never takes an ant that it holds)
+    ledger_.set_rank(kFlowerLink, kRankPowerUps);                 // (the Swimmer that digs the tiles to a flower strip: taken from the ferry, which has the lower rank)
     ledger_.set_rank(kFerry, kRankGuard);                         // (the Swimmers that carry food: the island task takes one when a bridge is wanted)
 }
 
@@ -178,6 +179,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     if (plan.islands) island_.step(context);                                                // (idle where nothing lies beyond water; it wants a Swimmer, so it comes before the power-up task)
     if (plan.islands && plan.island_expedition) expedition_.step(context);                  // (idle while a Swimmer lies within a walk, or the bot has the Swimmers it wants)
     if (plan.islands && plan.island_fly_miner) miner_flight_.step(context);                 // (after the expedition: a free Bomber flies to the island of the ring pile)
+    if (plan.islands && plan.island_flower_link) flower_link_.step(context);                // (before the ferry: it takes a Swimmer of the ferry for the dig, and the tiles it finds are read by the power-up task)
     if ((plan.islands && plan.island_ferry && island_.active()) || tactics_.gate_map) ferry_.step(context);  // (only where food lies beyond water; idle without a Swimmer that the island task does not hold)
     if (tactics_.gate_map && !fallback) gate_goals_.step(context);                          // (Medium and Hard on a walled map: the right ant for a wall of fire or bombs, wanted before the power-up task chooses its trips)
     if (tactics_.field_map && !fallback) field_.step(context);                              // (a pile behind a field: one ant opens it)
@@ -360,6 +362,7 @@ void StandardBot::on_command(const sim::Command& command, Fate fate, uint64_t ti
     island_.on_command(command, fate, tick);
     expedition_.on_command(command, fate, tick);
     ferry_.on_command(command, fate, tick);
+    flower_link_.on_command(command, fate, tick);
     gate_goals_.on_command(command, fate, tick);
     field_.on_command(command, fate, tick);
     brawl_.on_command(command, fate, tick);
