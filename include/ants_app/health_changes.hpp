@@ -35,8 +35,7 @@ constexpr int32_t kMaxPerSign = 2;          // for one ant
 constexpr uint32_t kJumpTicks = 10;         // more ticks than this between two looks is a jump: nothing is shown for it
 constexpr int32_t kGlyphAdvance = 7;        // a sign and a digit take 7 pixels each (the font's cell is 8 wide)
 constexpr int32_t kGlyphHeight = 10;
-constexpr int32_t kAboveBar = 2;            // the glyphs' bottom stands this far above where the health bar's top would be
-constexpr int32_t kChangeScaleMax = 2;       // on a canvas that is shown small (a phone) the numbers grow with the health numbers' rule, but not beyond this
+constexpr int32_t kBodyCentreAbove = 8;     // the middle of the ant's body is this many world pixels above its sprite position (scaled by the zoom); the number starts centred there
 constexpr uint8_t kOutlineAlpha = 217;      // the outline's near black at about 85 %
 
 constexpr Color kDamageColor{255, 255, 255};     // the color of the original's Ctrl+L numbers

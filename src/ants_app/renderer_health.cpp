@@ -28,11 +28,9 @@ void Renderer::set_health_marks(health::Setting setting, double picture_px_per_c
     digit_outline_ = scale_digits && health::digit_outlined(picture_px_per_css);
 }
 
-void Renderer::set_health_changes(health::ChangeTracker* tracker, int64_t now_ms, double picture_px_per_css, bool scale_digits) {
+void Renderer::set_health_changes(health::ChangeTracker* tracker, int64_t now_ms) {
     changes_ = tracker;
     changes_now_ms_ = now_ms;
-    changes_thick_ = health::thick_for(picture_px_per_css);            // (the place does not depend on whether the bars are shown: the bar that would stand there is the one of this size)
-    changes_scale_ = scale_digits ? std::min(health::kChangeScaleMax, health::digit_scale(picture_px_per_css)) : 1;
 }
 
 // (the sprite's own, predicted position: the bar follows the ant the way its ears do)
@@ -217,14 +215,13 @@ const Renderer::ChangePicture* Renderer::change_picture(const std::string& text)
     return tex != nullptr ? &change_pictures_.back() : nullptr;
 }
 
-// The numbers of the frame, over the ants: one size at every zoom (the health numbers' rule on a small canvas, to twice at most), centred on the ant's drawn sprite, the glyphs' bottom 2 pixels over where the health
-// bar's top would be (31 world pixels over the sprite, scaled by the zoom), rising 8 pixels at an even pace and fading in the last part of their life. Clipped by the clip that the world pass has set (the map's part of the view), as the bars are.
+// The numbers of the frame, over the ants: one size at every zoom and on every canvas (the font's own 1x), centred on the middle of the ant's drawn body (8 world pixels over the sprite position, scaled by the zoom),
+// rising 8 pixels at an even pace and fading in the last part of their life. Clipped by the clip that the world pass has set (the map's part of the view), as the bars are.
 void Renderer::draw_health_changes() {
     if (changes_ == nullptr || !renderer_) return;
     changes_->expire(changes_now_ms_);
     if (changes_->count() == 0) return;
     const double zoom = static_cast<double>(camera_.zoom);
-    const int32_t scale = changes_scale_;
     const LayoutRect view = layout_.view();
     const health::Rect screen{view.x, view.y, view.w, view.h};
     for (size_t i = 0; i < changes_->count(); ++i) {
@@ -237,16 +234,15 @@ void Renderer::draw_health_changes() {
         int32_t sx = 0;
         int32_t sy = 0;
         camera_.world_to_screen(num.wx, num.wy, sx, sy);
-        const int32_t bar_top = sy + static_cast<int32_t>(std::lround(static_cast<double>(-health::kHeadAbove) * zoom)) - health::bar_height(zoom, changes_thick_);
-        const int32_t glyph_bottom = bar_top - health::kAboveBar * scale;
-        const int32_t rise = health::rise_at(age) * scale + static_cast<int32_t>(num.level) * health::kLineHeight * scale;
-        const int32_t top = glyph_bottom - health::kGlyphHeight * scale - scale - rise;       // (the outline's row is one more over the glyph)
-        const int32_t left = sx - pic->w * scale / 2;
-        if (!health::overlaps(health::Rect{left, top, pic->w * scale, pic->h * scale}, screen)) continue;
+        const int32_t centre = sy - static_cast<int32_t>(std::lround(static_cast<double>(health::kBodyCentreAbove) * zoom));
+        const int32_t rise = health::rise_at(age) + static_cast<int32_t>(num.level) * health::kLineHeight;
+        const int32_t top = centre - pic->h / 2 - rise;                  // (the picture is the glyphs with a one pixel outline round them)
+        const int32_t left = sx - pic->w / 2;
+        if (!health::overlaps(health::Rect{left, top, pic->w, pic->h}, screen)) continue;
         const health::Color c = num.heal ? health::kHealColor : health::kDamageColor;
         SDL_SetTextureColorMod(pic->texture, c.r, c.g, c.b);
         SDL_SetTextureAlphaMod(pic->texture, static_cast<uint8_t>(alpha));
-        const SDL_Rect dst = placed(left, top, pic->w * scale, pic->h * scale);
+        const SDL_Rect dst = placed(left, top, pic->w, pic->h);
         SDL_RenderCopy(renderer_, pic->texture, nullptr, &dst);
     }
 }
