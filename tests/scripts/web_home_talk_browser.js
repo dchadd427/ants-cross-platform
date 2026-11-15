@@ -1,7 +1,7 @@
 // OPT-IN, not part of ./run_tests.sh: the emoji picker and the voice button of the chat (web/home/talk.js, talk.css, docs/HOME_SCREEN.md "Emoji and voice") in a REAL browser (Chromium through Playwright), on the real front
 // page (web/lobby.html with web/home/) and the FAKE hub (tests/scripts/fake_hub.js) that shares the page's address. The speech recognition is a FAKE (an init script puts a class in its place: no microphone, no sound).
 // For every size (1280 x 800, 701 x 800, a phone 390 x 844, 320 x 640 and a phone held sideways 568 x 320) it checks, with a writer in the chat:
-//   1. the composer is one box in every window: the field on top over the whole width, the buttons and Send in the row under it (a window under 501 px high: one row, the field, the buttons, Send), each at least 44 x 44 px, inside the window, the page does not scroll sideways, and the field keeps room to type (at least 90 px);
+//   1. the composer is one box in every window, ONE row when it is empty (the field, the buttons, Send), each at least 44 x 44 px; a long line makes two rows (the field on top over the whole width, the buttons and Send under it; a window under 501 px high stays one row), and Send or a deleted line brings the one row back; the dock is not taller for one row; inside the window, the page does not scroll sideways, and the field keeps room to type (at least 90 px);
 //   2. the picker opens above the field inside the dock, never over the field or Send, inside the window, with a scroll of its own; a pick goes in at the caret; the dock is still open; Escape closes it and the focus
 //      is back in the field;
 //   3. the voice: a press starts the (fake) recognition, the words come into the field, the button looks pressed, a second press stops it, an error is a plain line, and nothing is sent until Send is pressed;
@@ -102,16 +102,15 @@ async function main() {
         check(name + 'both buttons and Send are shown', !!emoji && !!mic && !!send && !!input, JSON.stringify([emoji, mic, send, input]));
         if (!emoji || !mic || !send || !input) { await context.close(); continue; }
         check(name + 'each button is at least 44 x 44 and inside the window', [emoji, mic, send].every((r) => r.w >= 44 && r.h >= 44 && r.x >= 0 && r.right <= w && r.y >= 0 && r.bottom <= h), JSON.stringify([emoji, mic, send]));
-        const under = emoji.y >= input.bottom - 2;       // (a narrow form: the field and Send share the first row and the two buttons have the row under it)
-        const boxed = under && Math.abs((emoji.y + emoji.h / 2) - (send.y + send.h / 2)) <= 12;       // (a phone upright: one box, the field on top over the whole width, the two buttons and Send in the row under it)
         const dockBox = await rect(page, '#gchat');
-        check(name + 'the buttons are ' + (boxed ? 'in the box, under the field, with Send at the right' : under ? 'in a row under the field and Send' : 'between the field and Send') + ', in order, without overlap, and inside the dock', (boxed ? input.w >= send.right - emoji.x - 8 && emoji.right <= mic.x + 1 && mic.right <= send.x + 1 && emoji.x <= input.x + 12 && send.right <= input.right + 12
-            : under ? emoji.x >= input.x - 1 && emoji.right <= mic.x + 1 && mic.right <= send.right + 1 && Math.abs((input.y + input.h / 2) - (send.y + send.h / 2)) < 12
-            : input.right <= emoji.x + 1 && emoji.right <= mic.x + 1 && mic.right <= send.x + 1 && Math.abs((emoji.y + emoji.h / 2) - (input.y + input.h / 2)) <= 12) && emoji.bottom <= dockBox.bottom + 1 && mic.bottom <= dockBox.bottom + 1 && send.bottom <= dockBox.bottom + 1, JSON.stringify([input, emoji, mic, send, dockBox]));
+        const formBox = await rect(page, '#gchat .gc-form');
+        const oneRow = (e, m, i, sd) => i.right <= e.x + 1 && e.right <= m.x + 1 && m.right <= sd.x + 1 && [e, m, sd].every((q) => Math.abs((q.y + q.h / 2) - (i.y + i.h / 2)) <= 3);
+        check(name + 'the box starts as ONE row, empty: the field, then the two buttons and Send at its right, the field one line high (44 px), without the class of two rows', oneRow(emoji, mic, input, send) && input.h === 44 && formBox.h <= 60 && !(await page.evaluate(() => document.querySelector('#gchat .gc-form').classList.contains('gt-tall'))), JSON.stringify([emoji, mic, input, send, formBox]));
+        check(name + 'the buttons and Send are inside the dock', emoji.bottom <= dockBox.bottom + 1 && mic.bottom <= dockBox.bottom + 1 && send.bottom <= dockBox.bottom + 1, JSON.stringify([emoji, mic, send, dockBox]));
         const logBox = await rect(page, '.gc-log');
         console.log('   ' + size + ': log ' + (logBox && logBox.h) + ' px, dock ' + (dockBox && dockBox.h) + ' px');
         check(name + 'the log keeps room to be read (at least 60 px high, 30 px in a window under 500 px high)', !!logBox && logBox.h >= (h < 500 ? 30 : 60), JSON.stringify(logBox));
-        console.log('   ' + size + ': ' + (boxed ? 'box' : under ? 'row under' : 'beside') + ', field ' + input.w + ' px');
+        console.log('   ' + size + ': one row, field ' + input.w + ' px');
         check(name + 'the field keeps room to type (90 px at least)', input.w >= 90, input.w);
         const fieldLook = await page.evaluate(() => { const f = document.querySelector('.gc-input'), c = getComputedStyle(f); return { font: parseFloat(c.fontSize), h: f.getBoundingClientRect().height }; });
         check(name + 'the field\'s text is 16 px or more (an iPhone does not zoom into it) and the field is 44 px high or more', fieldLook.font >= 16 && fieldLook.h >= 44, JSON.stringify(fieldLook));
@@ -119,6 +118,50 @@ async function main() {
         const labels = await page.evaluate(() => [...document.querySelectorAll('.gt-btn')].map((b) => [b.getAttribute('aria-label'), b.title]));
         check(name + 'the labels and tooltips', JSON.stringify(labels) === JSON.stringify([['Emoji', 'Emoji'], ['Voice to text: your browser\'s speech service hears you', 'Voice to text: your browser\'s speech service hears you']]), JSON.stringify(labels));
         await shot(page, 'idle', size);
+
+        // one row until the words need more: a short line, a long line, one line at a time, Send, a deleted line
+        const emptyDock = await rect(page, '#gchat'), emptyLog = await rect(page, '.gc-log');
+        const rows = async () => {
+            const e = await rect(page, '.gt-emoji'), m = await rect(page, '.gt-mic'), i = await rect(page, '.gc-input'), sd = await rect(page, '.gc-form .gc-send:not(.gc-login)');
+            const one = oneRow(e, m, i, sd), two = e.y >= i.bottom - 2 && sd.y >= i.bottom - 2 && e.right <= m.x + 1 && m.right <= sd.x + 1 && e.x >= i.x + 0.25 * i.w && sd.right <= i.right + 12;
+            return { one, two, field: i.h };
+        };
+        await page.fill('.gc-input', 'hi there');
+        await shot(page, 'short', size);
+        let st = await rows();
+        check(name + 'a short line: still one row, the field 44 px high', st.one && st.field === 44, JSON.stringify(st));
+        await page.fill('.gc-input', 'This is a long message that wraps onto more than one line, so the box gets a second row for the buttons and Send. '.repeat(2).slice(0, 199));
+        await sleep(100);
+        await shot(page, 'long', size);
+        st = await rows();
+        const longDock = await rect(page, '#gchat'), longLog = await rect(page, '.gc-log');
+        if (h <= 500) check(name + 'a low window: a long line is still one row (the field scrolls inside its 44 px)', st.one && st.field === 44, JSON.stringify(st));
+        else {
+            check(name + 'a long line: two rows (the field on top over the whole width, the buttons and Send under it at the right), the field taller than 44 px', st.two && !st.one && st.field > 44, JSON.stringify(st));
+            if (w > 700) check(name + 'two rows: the dock is taller than with one row, and the log keeps room (60 px at least)', longDock.h > emptyDock.h && longLog.h >= 60, JSON.stringify([emptyDock, longDock, emptyLog, longLog]));
+        }
+        const sweep = await page.evaluate(() => {      // (one letter more, then one less, each measured three times: the class never flips by itself, and it comes and goes at one length)
+            const f = document.querySelector('.gc-input'), form = f.form, tall = () => form.classList.contains('gt-tall'), up = [], down = [], steady = [];
+            const at = (n) => { f.value = 'x'.repeat(n); const a = []; for (let k = 0; k < 3; k++) { f.dispatchEvent(new Event('input', { bubbles: true })); a.push(tall()); } steady.push(a[0] === a[1] && a[1] === a[2]); return a[2]; };
+            for (let n = 1; n <= 150; n++) up.push(at(n));
+            for (let n = 150; n >= 1; n--) down.push(at(n));
+            const first = up.indexOf(true), back = down.indexOf(false);
+            return { steady: steady.every(Boolean), once: first > 0 && up.slice(first).every(Boolean) && up.slice(0, first).every((x) => !x), downOnce: back > 0 && down.slice(back).every((x) => !x) && down.slice(0, back).every(Boolean), at: first + 1, goes: 150 - back + 1 };
+        });
+        if (h > 500) check(name + 'no toggling on the keys: a length is the same on every measure, one change going up and one going down, at the same length', sweep.steady && sweep.once && sweep.downOnce && sweep.at === sweep.goes, JSON.stringify(sweep));
+        await page.fill('.gc-input', 'y'.repeat(120));
+        await page.focus('.gc-input');
+        await page.keyboard.press('Enter');
+        await sleep(150);
+        st = await rows();
+        check(name + 'after Send: the field is empty and the box is one row again', (await field(page)) === '' && st.one && st.field === 44, JSON.stringify([await field(page), st]));
+        hub.received.length = 0;       // (the line that was sent above is not the voice's)
+        await page.fill('.gc-input', 'z'.repeat(120));
+        await page.fill('.gc-input', '');
+        st = await rows();
+        check(name + 'the words deleted: one row again', st.one && st.field === 44, JSON.stringify(st));
+        const backDock = await rect(page, '#gchat');
+        check(name + 'one row again: the dock is as low as it was empty', backDock.h === emptyDock.h, JSON.stringify([emptyDock, backDock]));
 
         // the picker
         await page.fill('.gc-input', 'hi ');
@@ -178,7 +221,7 @@ async function main() {
         check(name + 'Enter on an emoji adds it (at the caret: after the "a")', (await field(page)).length === 3 && (await field(page)).startsWith('a'), JSON.stringify(await field(page)));
         await page.keyboard.press('Escape');
 
-        if (h < 500 && w > 700) check(name + 'a low window keeps the dock at its own height (no taller than 200 px) and the buttons beside the field', dockBox.h <= 200 && !under, JSON.stringify([dockBox, under]));
+        if (h < 500 && w > 700) check(name + 'a low window keeps the dock at its own height (no taller than 200 px) and the buttons beside the field', dockBox.h <= 200, JSON.stringify(dockBox));
         if (size === 'w900' || size === 'w1000') {
             await page.click('#gchat .gc-fold');
             await sleep(250);
@@ -217,6 +260,8 @@ async function main() {
         await page.goto(site.url + '/', { waitUntil: 'load' });
         await sleep(1500);
         check('a chat that is read only: neither button is shown', (await rect(page, '.gt-emoji')) === null && (await rect(page, '.gt-mic')) === null);
+        const off = await page.evaluate(() => { const f = document.querySelector('#gchat .gc-form'), i = document.querySelector('.gc-input').getBoundingClientRect(), b = f.getBoundingClientRect(); return { disabled: document.querySelector('.gc-input').disabled, tall: f.classList.contains('gt-tall'), form: Math.round(b.height), field: Math.round(i.height) }; });
+        check('a chat that is read only (the field is off, Log in stands where Send does): one row', off.disabled && !off.tall && off.form <= 60, JSON.stringify(off));
         await context.close();
     }
     check('the page\'s own errors: none', errors.length === 0, errors.join(' | '));

@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.16.10 - 2026-11-15 - Chat box on one row, computer players take back power-ups and contest the ISLANDS ring
+
+**For players:**
+- **The chat box starts as one row.** On the front page the field, the emoji and microphone buttons and Send are on one row in every window. When your words need a second line, the field takes the top row and the buttons and Send move to a row under it at the right; it goes back to one row when the words fit again. The box has the same rounded corners as the site's buttons.
+- **Computer players take back power-ups.** Medium and Hard computer players now pick up a power-up that was dropped by an ant of a kind their team has lost, such as a Combat or Swimmer power-up. Hard also goes for dropped Fire, Bomber and Thief power-ups of other sides. Easy plays as before.
+- **Hard computer players on ISLANDS contest the ring.** One of their Bombers flies to the island of a ring pile and lays mines on the way to it, so a rival's Swimmers are thrown back. A Swimmer that was hit is sent back to work, each ring pile gets three Swimmers, and the crew digs the one tile that links the ring to the flower strip beside it so that Swimmer power-ups can be fetched. Easy, Medium and the other maps are unchanged.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.9 page or game still joins. Under the hood: the game server and the web pages are rebuilt; the chat server is unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/491ca15c...c52809d1)
+
 ## v0.16.9 - 2026-11-14 - Numbers in the game's font, chat links and times, Discord server nicknames, a resizable front page
 
 **For players:**
@@ -475,17 +486,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/99261f5d...85c01ad8), [the warning](docs/MAP_SUBMISSIONS.md#older-games-and-big-maps)
 
-## v0.12.130 - 2026-10-25 - Map Maker: hold Shift or Ctrl to paint a straight line
+## Older versions (v0.12.130 and before)
 
-**For players:**
-- **Map Maker: hold Shift or Ctrl while you paint and the stroke stays on one straight line.** It works for Ground (with Auto edges), Objects (rocks and power-ups) and Erase, with the mouse. The line goes straight across or straight down through the square where you pressed, whichever way your first move away from that square goes farther (exactly diagonal goes across), and it stays that way until you let go of the mouse button. Until you leave the first square only that square is painted, and a line that runs off the map ends at the edge.
-- **Let go of the key in the middle of a stroke and you paint freely again** from where the line ended; press it again and the square you are on starts a new line. Press the key before the mouse button and the line starts where you press. On a Mac use Shift, because Ctrl-click is a right click there.
-- Painting with no key is exactly as before, a finger on a touch screen is unchanged, and tools that put a whole thing with a tap, Fill, Pan, Pick up and the Ants box do not change. Map Maker v1.5.8.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the web page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/99261f5d...24364af2)
-
-## Older versions (v0.12.129 and before)
-
-Every release before v0.12.130, and the long notes of v0.12.129 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.131, and the long notes of v0.12.130 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

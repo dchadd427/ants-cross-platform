@@ -1,0 +1,68 @@
+{
+ "note": "Mutants of the mines at the ring pile and the ferry re-order (include/ants_ai/miner_flight_task.hpp, src/ants_ai/miner_flight_task.cpp, src/ants_ai/standard_tasks_build.cpp, src/ants_ai/island_ferry.cpp, docs/BOTS.md 'Islands') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_ring_mines_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs all the cases of the batch (AI43).",
+ "defaults": {
+  "build": "test_ai"
+ },
+ "baseline": {
+  "build": "test_ai",
+  "test": "timeout 900 env ANTS_TEST_FILTER='AI43.' ./build/tests/test_ai/test_ai"
+ },
+ "mutants": [
+  {
+   "id": "mines_not_apart",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "for (const BombView& b : v.bombs()) crowded = crowded || b.tile.chebyshev_dist(t) < static_cast<int32_t>(plan.island_mine_apart);",
+   "new": "for (const BombView& b : v.bombs()) crowded = crowded || b.tile.chebyshev_dist(t) < 0;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI43.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI43.2"
+  },
+  {
+   "id": "mines_switch_ignored",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (!plan.island_mines || plan.island_mine_count == 0) return;",
+   "new": "if (plan.island_mine_count == 0) return;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI43.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI43.3"
+  },
+  {
+   "id": "flight_clock_ignored",
+   "file": "src/ants_ai/miner_flight_task.cpp",
+   "old": "if (now < plan.island_mine_from || v.ticks_left() < 3600",
+   "new": "if (v.ticks_left() < 3600",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI43.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI43.4"
+  },
+  {
+   "id": "reorder_switch_ignored",
+   "file": "src/ants_ai/island_ferry.cpp",
+   "old": "} else if (params_.reorder_hurt && a.idle() && !a.holding && a.hp < r.hp",
+   "new": "} else if (a.idle() && !a.holding && a.hp < r.hp",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI43.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI43.5"
+  },
+  {
+   "id": "easy_flies_a_miner",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.island_fly_on = false;",
+   "new": "            p.island_fly_on = false;\n            p.island_fly_miner = true;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI43.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI43.6"
+  },
+  {
+   "id": "hard_two_swimmers_a_pile",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "p.island_ferry_per_pile = 3;",
+   "new": "p.island_ferry_per_pile = 2;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI43.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI43.6"
+  },
+  {
+   "id": "miners_two",
+   "file": "include/ants_ai/tactics.hpp",
+   "old": "uint32_t island_miners{1};",
+   "new": "uint32_t island_miners{2};",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI43.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI43.6"
+  }
+ ]
+}

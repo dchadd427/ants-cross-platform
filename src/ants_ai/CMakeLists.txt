@@ -13,6 +13,7 @@ add_library(ants_ai STATIC
     island_tasks.cpp
     island_expedition.cpp
     island_ferry.cpp
+    island_link.cpp
     bot_controller.cpp
     tasks.cpp
     tactics.cpp
@@ -28,6 +29,7 @@ add_library(ants_ai STATIC
     knock.cpp
     chore_worth.cpp
     opportunity_task.cpp
+    miner_flight_task.cpp
     standard_bot.cpp
     brawl_task.cpp
     team_up.cpp

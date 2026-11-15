@@ -43,7 +43,9 @@
 #include "ants_ai/heal_task.hpp"
 #include "ants_ai/island_expedition.hpp"
 #include "ants_ai/island_ferry.hpp"
+#include "ants_ai/island_link.hpp"
 #include "ants_ai/island_tasks.hpp"
+#include "ants_ai/miner_flight_task.hpp"
 #include "ants_ai/opportunity_task.hpp"
 #include "ants_ai/standard_tasks.hpp"
 #include "ants_ai/tactics.hpp"
@@ -88,9 +90,13 @@ private:
           field_(kField, tactics_),
           brawl_(kBrawl, plan.brawl),
           opportunity_(kOpportunity, tactics_),
-          heal_(kHeal, tactics_) {
+          miner_flight_(kMinerFlight, tactics_),
+          heal_(kHeal, tactics_),
+          flower_link_(kFlowerLink, tactics_) {
         island_.attach(&harvest_);
         expedition_.attach(&island_);
+        miner_flight_.attach(&island_, &expedition_);
+        flower_link_.attach(&island_);
     }
 
 public:
@@ -125,6 +131,8 @@ public:
     const GateGoalTask& gate_goals() const noexcept { return gate_goals_; }
     const FieldTask& field() const noexcept { return field_; }
     const OpportunityTask& opportunity() const noexcept { return opportunity_; }
+    const MinerFlightTask& miner_flight() const noexcept { return miner_flight_; }
+    const FlowerLinkTask& flower_link() const noexcept { return flower_link_; }
     const HealTask& heal() const noexcept { return heal_; }
     /// Whether the bot plays the gate goals on this map (Medium and Hard, a walled map that the island play does not own; known after the first look)
     bool gate_map() const noexcept { return tactics_.gate_map; }
@@ -172,6 +180,8 @@ public:
     static constexpr TaskId kField = 20;
     static constexpr TaskId kBrawl = 21;
     static constexpr TaskId kOpportunity = 22;
+    static constexpr TaskId kMinerFlight = 24;
+    static constexpr TaskId kFlowerLink = 25;
     static constexpr TaskId kHeal = kHealTaskId;                  // (23: tasks.hpp names it for the tasks that leave a carrier to it)
 
 private:
@@ -230,11 +240,13 @@ private:
         ExpeditionTask::Params p;
         p.fly_on = plan.island_fly_on;
         p.timed_row = plan.island_timed_row;
+        p.crew_spare = plan.island_crew_spare;
         return p;
     }
     static FerryTask::Params ferry_params(const LevelPlan& plan) {
         FerryTask::Params p;
         p.per_pile = plan.island_ferry_per_pile;
+        p.reorder_hurt = plan.island_ferry_reorder;
         return p;
     }
     static HarvestTask::Params harvest_params(const LevelPlan& plan) {
@@ -307,7 +319,9 @@ private:
     FieldTask field_;
     BrawlTask brawl_;
     OpportunityTask opportunity_;
+    MinerFlightTask miner_flight_;
     HealTask heal_;
+    FlowerLinkTask flower_link_;
     void note_repeat(const sim::Command& command, uint64_t tick);
     void update_progress(const BotView& view);
     bool detect_stall(const BotView& view);
@@ -325,6 +339,7 @@ private:
     uint64_t fallback_until_{0};                     // the plain economy runs until this tick (0: normal play)
     uint32_t stalls_{0};
     std::array<uint32_t, 4> war_ticks_{};     // the ticks spent at every war tier (war_ticks)
+    std::array<uint64_t, 6> kind_seen_{};     // by sim::AntType: the tick at which an own ant of the kind was last seen (0: never; the dropped power-ups of the plan: a kind that was seen and is gone is lost)
     uint64_t last_look_{0};                   // the tick of the last look that counted
     uint64_t progress_tick_{0};                      // the look at which the score last rose (the first look to begin with)
     int32_t last_score_{0};

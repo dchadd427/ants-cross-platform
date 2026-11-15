@@ -16,6 +16,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
+    var ROW = 44;                                              // px: the box's one row (chat.js has the same)
     var BUBBLE = 6000;                                         // ms that the line of words stays
     var LIMIT = 200;                                           // code points of a chat line (the hub's own, and the dock's)
     var TEXT = {
@@ -114,6 +115,12 @@
             if (gone) { clearTimeout(gone); gone = 0; }
             if (text && text !== TEXT.asking && text !== TEXT.listening) gone = setTimeout(function () { gone = 0; if (said === text) note(''); }, BUBBLE);
         }
+        field.gtFit = function () {                            // (called by the chat's grow(): the box is ONE row; words that need a second line in the narrow one-row field make it two rows, the class gt-tall; the wide field of two rows then gives the height. The narrow field is always the measure, so the class never flips on a key. An empty field and an off one are one row)
+            var s = field.style, h;
+            form.classList.remove('gt-tall'); s.height = 'auto'; h = field.scrollHeight;
+            if (!field.disabled && field.value !== '' && h > ROW) { form.classList.add('gt-tall'); s.height = 'auto'; h = field.scrollHeight; }
+            return h;
+        };
         function grown() { if (dock.grow) dock.grow(); }       // (the field is a text area: the chat makes it as tall as its words)
         function sync() { tools.hidden = !!field.disabled; if (field.disabled || form.hidden) { drop(); close(false); } }
         function fit() {                                       // the picker lies over the log, above the form: no taller than the room above the form (72 to 180 px): up to the top of the dock's body where the dock clips what is outside it (a phone), else up to the window's top

@@ -550,6 +550,31 @@ function bring(env, file, name) {
     check('words that are heard grow the box', r.field.style.height === '88px');
     rec.onend({});
 }
+{   // the box is one row until the words need a second line; the rule is the one-row (narrow) field's, so a line between the two widths does not flip on each key
+    const r = rig();
+    const tall = () => cls(r.form).indexOf('gt-tall') !== -1;
+    // the fake field wraps at 25 letters in the one-row box and at 40 in the two-row box (its wider field)
+    Object.defineProperty(r.field, 'scrollHeight', { get() { const per = tall() ? 40 : 25; return 22 + 22 * Math.max(1, Math.ceil(this.value.length / per)); }, configurable: true });
+    const typed = (v) => { r.field.value = v; r.field.fire('input', {}); return { tall: tall(), h: r.field.style.height }; };
+    r.dock.grow();
+    same('empty: one row, 44 px', [tall(), r.field.style.height], [false, '44px']);
+    same('a short line: one row', typed('hello'), { tall: false, h: '44px' });
+    same('exactly one line in the one-row field: still one row', typed('x'.repeat(25)), { tall: false, h: '44px' });
+    same('a line that needs a second line in the one-row field: two rows (the wider field makes it one line high)', typed('x'.repeat(26)), { tall: true, h: '44px' });
+    const seen = []; for (let i = 0; i < 4; i++) { r.dock.grow(); seen.push(tall()); }
+    same('a line that fits only in the wide field stays two rows on every measure and key (no flip-flop)', seen, [true, true, true, true]);
+    same('...and on each letter around the boundary', [typed('x'.repeat(30)).tall, typed('x'.repeat(31)).tall, typed('x'.repeat(30)).tall, typed('x'.repeat(40)).tall], [true, true, true, true]);
+    same('a long line: two rows, as high as its lines in the wide field', typed('x'.repeat(100)), { tall: true, h: '88px' });
+    same('the words are deleted back to one narrow line: one row again', typed('x'.repeat(25)), { tall: false, h: '44px' });
+    typed('x'.repeat(100)); r.field.value = 'x'.repeat(100);
+    r.form.fire('submit', { preventDefault() {} }); r.dock.grow();
+    same('Send clears the field: one row again', [r.field.value, tall(), r.field.style.height], ['', false, '44px']);
+    Object.defineProperty(r.field, 'scrollHeight', { get() { return this.value === '' ? 66 : 88; }, configurable: true });       // (a hint that wraps in the narrow field: an empty box is one row all the same)
+    r.field.value = ''; r.dock.grow();
+    check('an empty field whose hint wraps is still one row', !tall());
+    r.field.disabled = true; r.field.value = 'x'.repeat(100); r.dock.grow();
+    check('a field that is off stays one row', !tall());
+}
 
 console.log(failures === 0 ? 'OK: ' + checks + ' checks' : failures + ' of ' + checks + ' checks FAILED');
 process.exit(failures === 0 ? 0 : 1);
