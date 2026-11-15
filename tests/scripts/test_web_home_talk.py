@@ -246,12 +246,16 @@ class TheStyle(unittest.TestCase):
         self.assertIn("grid-template-columns: auto minmax(0, 1fr) auto;", self.css)
         self.assertIn("pick.style.maxHeight = Math.max(72, Math.min(180, ", read("web", "home", "talk.js"), "the script sets its height to the room above the form")
 
-    def test_one_composer_in_every_window_the_buttons_under_the_field_and_in_a_low_window_beside_it(self):
-        self.assertIn('grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "f f f" "t . s";', self.rule(".gc-form.gt-on"), "the field on top over the whole width, the buttons at the left and Send at the right")
+    def test_one_composer_in_every_window_one_row_with_the_buttons_at_the_left_and_two_rows_when_the_words_need_them(self):
+        self.assertIn('grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "t f s";', self.rule(".gc-form.gt-on"), "one row at first: the buttons, the field, Send")
+        self.assertIn('grid-template-areas: "f f f" "t . s";', self.rule(".gc-form.gt-on.gt-tall"), "the class that the script sets: the field on top over the whole width, the buttons at the left and Send at the right")
+        self.assertNotIn('"f f f"', self.rule(".gc-form.gt-on"), "the two-row grid is not the box's own")
         self.assertIn("max-height: 66px;", self.rule(".gt-on textarea.gc-input"), "two lines in a wide window")
+        self.assertIn('grid-template-areas: "f s"; padding: 4px 6px 4px 4px;', self.rule(".gc-form.gt-on:has(.gc-input:disabled)"), "the off field is one row, with the class or without it")
         low = self.css[self.css.index("@media (max-height: 500px) {"):]
-        self.assertIn('grid-template-areas: "f t s";', low, "a low window: one row, the field, the buttons, Send")
-        self.assertIn(".gt-on textarea.gc-input { max-height: 44px; }", low)
+        self.assertIn('grid-template-areas: "t f s";', low, "a low window: one row, the buttons, the field, Send")
+        self.assertIn(".gc-form.gt-on.gt-tall", low.split("{")[1], "a low window: the class changes nothing")
+        self.assertIn(".gt-on textarea.gc-input, .gt-tall.gt-on textarea.gc-input { max-height: 44px; }", low)
         self.assertNotIn("(min-width: 701px) and (max-width: 1000px)", self.css.replace("@media (min-width: 701px) and (min-height: 501px)", ""), "no composer of its own for the middle widths")
         self.assertNotIn("order: 3", self.css, "no button row that is placed by order: the grid areas place everything")
         for part in (".gt-on .btn.gt-btn", ".gt-on .gc-send"):
@@ -272,8 +276,8 @@ class TheStyle(unittest.TestCase):
         self.assertIn("overflow-y: auto", self.rule(".gt-pick"))
         self.assertIn("max-height: 150px;", self.rule(".gt-pick"), "without the script's measure (a page that cannot measure) it is 150 px")
 
-    def test_the_dock_is_taller_where_the_buttons_have_a_row_of_their_own(self):
-        self.assertIn("@media (min-width: 701px) and (min-height: 501px) { .gc[data-open=\"true\"]:has(.gc-form.gt-on) { height: clamp(240px, 34vh, 300px); } }", self.css, "a wide window: the dock is 240 to 300 px (its own is 160 to 260 px), so that the log keeps its room")
+    def test_the_dock_is_taller_only_while_the_box_has_two_rows(self):
+        self.assertIn("@media (min-width: 701px) and (min-height: 501px) { .gc[data-open=\"true\"]:has(.gc-form.gt-on.gt-tall) { height: clamp(240px, 34vh, 300px); } }", self.css, "a wide window: the dock is 240 to 300 px (its own is 160 to 260 px), so that the log keeps its room")
 
     def test_the_two_pictures_are_inline_svg_in_the_buttons_own_color_and_the_listening_microphone_is_solid(self):
         self.assertIn("stroke: currentColor;", self.rule(".gt-ico"))
