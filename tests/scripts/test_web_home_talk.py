@@ -246,6 +246,19 @@ class TheStyle(unittest.TestCase):
         self.assertIn("grid-template-columns: minmax(0, 1fr) auto auto;", self.css)
         self.assertIn("pick.style.maxHeight = Math.max(72, Math.min(180, ", read("web", "home", "talk.js"), "the script sets its height to the room above the form")
 
+    def test_the_corners_are_the_sites_not_a_pill(self):
+        classic = read("web", "front", "classic.css")
+        site = re.search(r"\.btn, \.banner \{[^}]*?border-radius: (\d+px);", classic).group(1)
+        self.assertEqual(site, "8px", "the site's button radius")
+        radius = lambda sel: re.search(r"border-radius: ([^;]+);", self.rule(sel))
+        self.assertEqual(radius(".gc-form.gt-on").group(1), site, "the box has the radius of the site's buttons")
+        self.assertIsNone(radius(".gt-on .gc-send"), "Send keeps the site's .btn radius: no override of its own")
+        self.assertEqual(radius(".gt-on .btn.gt-btn").group(1), site, "the emoji and microphone buttons are squares with the site's corners")
+        for sel in (".gt-pick", ".gt-say"):
+            self.assertEqual(radius(sel).group(1), site, sel)
+        self.assertNotRegex(self.css, r"border-radius: *50%", "no circles")
+        self.assertNotRegex(self.css, r"border-radius: (?:1[0-9]|[2-9][0-9])px", "no pill")
+
     def test_one_composer_in_every_window_one_row_with_the_buttons_at_the_left_and_two_rows_when_the_words_need_them(self):
         self.assertIn('grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "f t s";', self.rule(".gc-form.gt-on"), "one row at first: the field, the buttons at the right, Send")
         self.assertIn('grid-template-areas: "f f f" ". t s";', self.rule(".gc-form.gt-on.gt-tall"), "the class that the script sets: the field on top over the whole width, the buttons and Send under it, at the right")
@@ -336,7 +349,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
               "tests/scripts/test_web_home_talk.py", "tests/scripts/web_home_talk_check.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
               "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html", "docs/HOME_SCREEN.md",
               "hub/__init__.py", "hub/text.py", "hub/limits.py"]
-             + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])
+             + ["web/front/" + n for n in ("classic.css", "lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])
 
     @classmethod
     def setUpClass(cls):

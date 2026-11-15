@@ -24,6 +24,7 @@ add_executable(test_ai
     test_ai_island_expedition.cpp
     test_ai_island_ferry.cpp
     test_ai_ring_mines.cpp
+    test_ai_flower_link.cpp
     test_ai_island_small.cpp
     test_ai_token_groups.cpp
     test_ai_power_up_cap.cpp
@@ -45,7 +46,9 @@ add_executable(test_ai
     test_ai_group.cpp
     test_ai_homemines.cpp
     test_ai_ownground.cpp
+    test_ai_drops.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/bot_watch_people.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/bot_arena_tune.cpp
 )
 
 target_link_libraries(test_ai PRIVATE

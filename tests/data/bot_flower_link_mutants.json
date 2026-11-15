@@ -1,0 +1,76 @@
+{
+ "note": "Mutants of the flower link (include/ants_ai/island_link.hpp, src/ants_ai/island_link.cpp, PowerUpTask::watch_link in src/ants_ai/standard_tasks_powerup.cpp, docs/BOTS.md 'Islands') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_flower_link_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs all the cases of the batch (AI44).",
+ "defaults": {
+  "build": "test_ai"
+ },
+ "baseline": {
+  "build": "test_ai",
+  "test": "timeout 900 env ANTS_TEST_FILTER='AI44.' ./build/tests/test_ai/test_ai"
+ },
+ "mutants": [
+  {
+   "id": "link_for_satellites",
+   "file": "src/ants_ai/island_link.cpp",
+   "old": "if (worth < params_.min_pile_worth) continue;",
+   "new": "if (worth < 0u) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI44.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI44.1"
+  },
+  {
+   "id": "link_dug_for_nobody",
+   "file": "src/ants_ai/island_link.cpp",
+   "old": "for (size_t i = 0; i < tactics_.flower_links.size() && lacking; ++i) {",
+   "new": "for (size_t i = 0; i < tactics_.flower_links.size(); ++i) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI44.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI44.6"
+  },
+  {
+   "id": "link_never_dug_again",
+   "file": "src/ants_ai/island_link.cpp",
+   "old": "if (life_left(l) >= params_.min_life) continue;",
+   "new": "if (life_left(l) >= 0) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI44.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI44.2"
+  },
+  {
+   "id": "link_wants_any_ant",
+   "file": "src/ants_ai/island_link.cpp",
+   "old": "if ((a.type != v.default_ant_type() && a.type != sim::AntType::Fire) || a.holding || a.carried_points > 0 || a.hp < 5 || !a.takes_orders()) continue;\n            if (c.map.ant_component(c.seat, a.tile) != l.ring) continue;",
+   "new": "if (a.holding || a.carried_points > 0 || a.hp < 5 || !a.takes_orders()) continue;\n            if (c.map.ant_component(c.seat, a.tile) != l.ring && c.map.ant_component(c.seat, a.tile) != c.map.hill_component(c.seat)) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI44.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI44.3"
+  },
+  {
+   "id": "watch_no_fire",
+   "file": "src/ants_ai/standard_tasks_powerup.cpp",
+   "old": "if (!usable_for_powerup(v, a, true) || (takes_.count(a.id) != 0 && a.id != watch_.ant) || !grid.in_bounds(a.tile)) continue;",
+   "new": "if (!usable_for_powerup(v, a, false) || (takes_.count(a.id) != 0 && a.id != watch_.ant) || !grid.in_bounds(a.tile)) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI44.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI44.5"
+  },
+  {
+   "id": "thief_of_the_strip_taken",
+   "file": "src/ants_ai/standard_tasks_powerup.cpp",
+   "old": "if (kind == sim::AntType::Thief && !tactics_.plan.island_flower_thief && is_link_flower(p.tile)) continue;",
+   "new": "if (false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI44.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI44.5"
+  },
+  {
+   "id": "no_extra_swimmers",
+   "file": "src/ants_ai/standard_tasks_powerup.cpp",
+   "old": "    return tactics_.plan.island_flower_swimmers;\n}",
+   "new": "    return 0;\n}",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI44.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI44.4"
+  },
+  {
+   "id": "strip_contest_kept",
+   "file": "src/ants_ai/standard_tasks_powerup.cpp",
+   "old": "if (skip_contest || link_drop || e.holding",
+   "new": "if (skip_contest || e.holding",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI44.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI44.7"
+  }
+ ]
+}

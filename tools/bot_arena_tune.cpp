@@ -16,6 +16,11 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "frecover") return flag(p.flower_recover);
     if (key == "frecall") return flag(p.flower_recall);
     if (key == "fwatch") return flag(p.flower_watch);
+    if (key == "drops") { p.drop_retake = p.drop_contest = v != 0; return true; }       // the dropped power-ups of docs/BOTS.md, "Dropped power-ups" (0: the bot as it was): both rules at once
+    if (key == "dretake") return flag(p.drop_retake);
+    if (key == "dcontest") return flag(p.drop_contest);
+    if (key == "dkinds") { p.drop_retake_kinds = static_cast<uint8_t>(v); return true; }
+    if (key == "dmem") { p.drop_memory_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "cg") return flag(p.cantgo_aware);                                    // the can't-go fixes of docs/BOTS.md, "The can't-go loop" (0: the bot as it was before them)
     if (key == "gatebombs") return flag(p.gate_spare_map_bombs);                     // the counters leave a gate map's own bombs alone (0: they counter them, as before)
     if (key == "field") return flag(p.gate_field);                                   // the field breach (0: the gate goals' shore breach, as before)
@@ -339,6 +344,10 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "ibuild") { p.island_builders = static_cast<uint32_t>(v); return true; }
     if (key == "ibridge") { p.island_bridge_ants = static_cast<uint32_t>(v); return true; }
     if (key == "iguard") return flag(p.island_guard);
+    if (key == "iflink") return flag(p.island_flower_link);
+    if (key == "iflower") { p.island_flower_swimmers = static_cast<uint32_t>(v); return true; }
+    if (key == "ifthief") return flag(p.island_flower_thief);
+    if (key == "icrew") { p.island_crew_spare = static_cast<uint32_t>(v); return true; }
     if (key == "iferrypile") { p.island_ferry_per_pile = static_cast<uint32_t>(v); return true; }
     err = "unknown tuning key '" + key + "' (the keys are those of apply_tune in tools/bot_arena_tune.cpp)";
     return false;

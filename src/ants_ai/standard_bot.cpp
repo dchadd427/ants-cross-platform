@@ -50,6 +50,7 @@ void StandardBot::start(const BotContext& context) {
     ledger_.set_rank(kOpportunity, kRankFight);                   // (the kill that one blow gives: an ant is taken from the chores and the economy, never from a pick-up, a raid or a fight)
     ledger_.set_rank(kMinerFlight, kRankPowerUps);                // (a free Bomber on its way to the island of the ring pile)
     ledger_.set_rank(kHeal, kRankFight);                          // (the same rank as a fight: it takes the ants of the ranks below, never one that a fight, a rush or a gate goal holds, and a fight never takes an ant that it holds)
+    ledger_.set_rank(kFlowerLink, kRankPowerUps);                 // (the Swimmer that digs the tiles to a flower strip: taken from the ferry, which has the lower rank)
     ledger_.set_rank(kFerry, kRankGuard);                         // (the Swimmers that carry food: the island task takes one when a bridge is wanted)
 }
 
@@ -128,6 +129,21 @@ void StandardBot::think(const BotView& view, Orders& orders) {
             if (plan.flower_fire && p.kind == sim::AntType::Fire && flower->approach[seat_].reachable()) want = std::max<uint8_t>(want, 1);
         }
     }
+    for (const AntView& a : view.mine()) {                      // the kinds that the team has (the dropped power-ups)
+        if (a.type != view.default_ant_type() && static_cast<size_t>(a.type) < kind_seen_.size()) kind_seen_[static_cast<size_t>(a.type)] = now;
+    }
+    if ((plan.drop_retake || plan.drop_contest) && !gate_breaching) {   // a power-up that lies loose (a dead ant's: not one of the start and not a flower's): the kind the team lost, and for Hard the secured kinds it has none of
+        for (const PowerUpView& p : view.powerups()) {
+            if (map->flower_at(p.tile) != nullptr) continue;
+            bool at_start = false;
+            for (const PowerUpInfo& s : map->powerups()) at_start = at_start || (s.tile == p.tile && s.type == p.kind);
+            if (at_start) continue;
+            const size_t k = static_cast<size_t>(p.kind);
+            const bool lost = plan.drop_retake && ((plan.drop_retake_kinds >> static_cast<unsigned>(p.kind)) & 1u) != 0 && k < kind_seen_.size() && kind_seen_[k] != 0 && now <= kind_seen_[k] + plan.drop_memory_ticks && kind_seen_[k] != now;
+            const bool secured = plan.drop_contest && ((plan.secure_kinds >> static_cast<unsigned>(p.kind)) & 1u) != 0;
+            if (lost || secured) tactics_.wants[k] = std::max<uint8_t>(tactics_.wants[k], 1);
+        }
+    }
     bool enemy_plays = false;
     for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
         const TeamRow& row = view.rows()[t];
@@ -163,6 +179,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     if (plan.islands) island_.step(context);                                                // (idle where nothing lies beyond water; it wants a Swimmer, so it comes before the power-up task)
     if (plan.islands && plan.island_expedition) expedition_.step(context);                  // (idle while a Swimmer lies within a walk, or the bot has the Swimmers it wants)
     if (plan.islands && plan.island_fly_miner) miner_flight_.step(context);                 // (after the expedition: a free Bomber flies to the island of the ring pile)
+    if (plan.islands && plan.island_flower_link) flower_link_.step(context);                // (before the ferry: it takes a Swimmer of the ferry for the dig, and the tiles it finds are read by the power-up task)
     if ((plan.islands && plan.island_ferry && island_.active()) || tactics_.gate_map) ferry_.step(context);  // (only where food lies beyond water; idle without a Swimmer that the island task does not hold)
     if (tactics_.gate_map && !fallback) gate_goals_.step(context);                          // (Medium and Hard on a walled map: the right ant for a wall of fire or bombs, wanted before the power-up task chooses its trips)
     if (tactics_.field_map && !fallback) field_.step(context);                              // (a pile behind a field: one ant opens it)
@@ -345,6 +362,7 @@ void StandardBot::on_command(const sim::Command& command, Fate fate, uint64_t ti
     island_.on_command(command, fate, tick);
     expedition_.on_command(command, fate, tick);
     ferry_.on_command(command, fate, tick);
+    flower_link_.on_command(command, fate, tick);
     gate_goals_.on_command(command, fate, tick);
     field_.on_command(command, fate, tick);
     brawl_.on_command(command, fate, tick);
