@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <iterator>
 
+#include "ants_ai/bomb_detour.hpp"
 #include "ants_ai/island_info.hpp"
 #include "ants_sim/movement_tables.hpp"
 
@@ -355,12 +356,35 @@ void BombTask::step(TaskContext& c) {
             black_[key_of(target_)] = now + 300u;                           // it did not get there (or did nothing): the bomb is left alone for a while
             ++failures_;
             over = true;
+        } else if (walking_) {
+            // (plan.bomb_route) the Bomber is on its way to the tile beside the bomb: from there the defuse is the one step the engine takes itself, over no other bomb
+            if (a->tile == side_ || (a->idle() && a->tile.chebyshev_dist(side_) <= 1)) {
+                sim::Command probe;
+                probe.type = sim::CommandType::GroupSpecial;
+                probe.tile_x = static_cast<int16_t>(target_.x);
+                probe.tile_y = static_cast<int16_t>(target_.y);
+                probe.ants = {actor_};
+                if (occupied(v, target_) || v.predict_ack(probe) == 0) {
+                    black_[key_of(target_)] = now + 100u;
+                    over = true;
+                } else {
+                    c.orders.special(actor_, target_, Priority::Normal);
+                    walking_ = false;
+                    decided_ = now;
+                    sent_ = kPending;
+                }
+            } else if (now > decided_ + 400u || (a->idle() && now > decided_ + 80u)) {
+                black_[key_of(target_)] = now + 300u;                       // it did not get there: the bomb is left alone for a while
+                ++failures_;
+                over = true;
+            }
         } else if (sent_ == kPending && now > decided_ + 200u) {
             over = true;
         }
         if (over) {
             c.ledger.release(actor_, id());
             actor_ = 0;
+            walking_ = false;
         } else {
             return;
         }
@@ -391,12 +415,124 @@ void BombTask::step(TaskContext& c) {
             pick_ground = ground;
         }
     }
+    // (plan.bomb_route) the Bomber chooses: of the bombs that harm the seat (the own economy first, the ally's next, then the bombs that shut a busy route) the one it reaches soonest without crossing
+    // another bomb of another team, and it walks to a tile beside it that holds no bomb before it defuses
+    const AntView* routed_actor = nullptr;
+    const BombView* routed_pick = nullptr;
+    sim::TileCoord routed_side{-1, -1};
+    if (plan.bomb_route && v.has_grid()) {
+        const sim::Grid& grid = v.grid();
+        const int gw = static_cast<int>(grid.width());
+        const auto at = [&](sim::TileCoord t) { return static_cast<size_t>(t.y) * static_cast<size_t>(gw) + static_cast<size_t>(t.x); };
+        std::vector<uint8_t> open = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
+        std::vector<uint8_t> safe = open;
+        const uint8_t ally = v.ally();
+        for (const BombView& b : v.bombs()) {
+            if (grid.in_bounds(b.tile) && b.owner != c.seat && !(ally < sim::MAX_PLAYERS && b.owner == ally)) safe[at(b.tile)] = 0;
+        }
+        struct Cand {
+            const BombView* bomb;
+            int harm;
+        };
+        std::vector<Cand> cands;
+        for (const BombView& b : v.bombs()) {
+            if (b.owner == c.seat || (ally < sim::MAX_PLAYERS && b.owner == ally) || (plan.gate_spare_map_bombs && tactics_.gate_goals_live && b.owner >= sim::MAX_PLAYERS)) continue;
+            const auto bl = black_.find(key_of(b.tile));
+            if (bl != black_.end() && bl->second > now) continue;
+            const int harm = harm_to(v, c.map, plan, b.tile, b.owner >= sim::MAX_PLAYERS);
+            if (harm == 0) continue;
+            if (plan.own_ground_counters && b.owner < sim::MAX_PLAYERS && few_ants && (harm == 2 || hazard_ground(v, c.map, plan, b.tile) != HazardGround::Own)) continue;
+            cands.push_back(Cand{&b, harm});
+        }
+        if (cands.empty() && !v.bombs().empty()) {                                                       // no bomb harms the hill or a pile: the bombs that shut a busy route (every 60 looks' worth of ticks, the walk is measured)
+            if (route_tick_ == 0 || now >= route_tick_ + 60u) {
+                route_tick_ = now;
+                find_route_bombs(v, c.map, open);
+            }
+            for (const BombView& b : v.bombs()) {
+                if (b.owner == c.seat || (ally < sim::MAX_PLAYERS && b.owner == ally)) continue;
+                const auto bl = black_.find(key_of(b.tile));
+                if (bl != black_.end() && bl->second > now) continue;
+                if (std::find(route_bombs_.begin(), route_bombs_.end(), b.tile) != route_bombs_.end()) cands.push_back(Cand{&b, 3});
+            }
+        }
+        if (!cands.empty()) {
+            int rt_harm = 99;
+            int32_t rt_cost = 0;
+            for (const AntView& a : v.mine()) {
+                if (a.type != sim::AntType::Bomber || a.hp < (plan.own_ground_counters ? plan.counter_bomber_hp : 3u) || a.holding || a.carried_points > 0 || !a.takes_orders() || a.state == sim::UnitState::Stunned) continue;
+                const TaskId owner = c.ledger.owner(a.id);
+                if (owner != kNoTask && owner != id() && c.ledger.rank(owner) >= c.ledger.rank(id())) continue;
+                if (!grid.in_bounds(a.tile)) continue;
+                std::vector<int32_t> field;                                                              // (the Bomber's walks over no bomb of another team: made when it is first needed)
+                for (const Cand& k : cands) {
+                    if (k.harm > rt_harm) continue;
+                    sim::TileCoord side{-1, -1};
+                    int32_t side_cost = -1;
+                    static const int kSideX[4] = {0, 0, -1, 1};
+                    static const int kSideY[4] = {-1, 1, 0, 0};
+                    for (int s4 = 0; s4 < 4; ++s4) {
+                        const sim::TileCoord n{k.bomb->tile.x + kSideX[s4], k.bomb->tile.y + kSideY[s4]};
+                        if (n == a.tile) {
+                            side = n;
+                            side_cost = 0;
+                            break;
+                        }
+                        if (!grid.in_bounds(n) || safe[at(n)] == 0 || occupied(v, n)) continue;
+                        if (field.empty()) field = MapInfo::cost_field(grid, safe, a.tile);
+                        const int32_t d = field[at(n)];
+                        if (d >= 0 && (side_cost < 0 || d < side_cost)) {
+                            side = n;
+                            side_cost = d;
+                        }
+                    }
+                    if (side_cost < 0) continue;
+                    if (k.harm < rt_harm || side_cost < rt_cost) {
+                        rt_harm = k.harm;
+                        rt_cost = side_cost;
+                        routed_actor = &a;
+                        routed_pick = k.bomb;
+                        routed_side = side;
+                    }
+                }
+            }
+        }
+    }
+    if (plan.bomb_route && routed_actor != nullptr) {
+        sim::Command probe;
+        probe.type = sim::CommandType::GroupSpecial;
+        probe.tile_x = static_cast<int16_t>(routed_pick->tile.x);
+        probe.tile_y = static_cast<int16_t>(routed_pick->tile.y);
+        probe.ants = {routed_actor->id};
+        if (occupied(v, routed_pick->tile) || v.predict_ack(probe) == 0) {
+            black_[key_of(routed_pick->tile)] = now + 100u;
+            return;
+        }
+        if (!c.ledger.take(routed_actor->id, id())) return;
+        const bool beside = routed_side == routed_actor->tile || !BombDetour::approach_crosses(v, *routed_actor, routed_pick->tile);       // (the engine's own walk to the bomb crosses no other: the order goes as it was)
+        if (beside) {
+            c.orders.special(routed_actor->id, routed_pick->tile, Priority::Normal);
+        } else {
+            c.orders.move({routed_actor->id}, routed_side, Priority::Normal);
+            walking_ = true;
+            side_ = routed_side;
+            ++side_walks_;
+        }
+        if (std::find(route_bombs_.begin(), route_bombs_.end(), routed_pick->tile) != route_bombs_.end()) ++routed_;
+        actor_ = routed_actor->id;
+        target_ = routed_pick->tile;
+        defuse_ = true;
+        decided_ = now;
+        sent_ = kPending;
+        return;
+    }
     if (pick == nullptr) return;
     // a Bomber defuses it; without one a healthy idle worker sets it off
     const AntView* actor = nullptr;
     bool defuse = false;
     int32_t actor_d = 0;
     for (const AntView& a : v.mine()) {
+        if (plan.bomb_route) break;                                                                      // (the Bomber's choice is made above: one that reaches no bomb over a clear walk stays out)
         if (a.type != sim::AntType::Bomber || a.hp < (plan.own_ground_counters ? plan.counter_bomber_hp : 3u) || a.holding || a.carried_points > 0 || !a.takes_orders() || a.state == sim::UnitState::Stunned) continue;
         const TaskId owner = c.ledger.owner(a.id);
         if (owner != kNoTask && owner != id() && c.ledger.rank(owner) >= c.ledger.rank(id())) continue;
@@ -440,6 +576,74 @@ void BombTask::step(TaskContext& c) {
     defuse_ = defuse;
     decided_ = now;
     sent_ = kPending;
+}
+
+// The bombs of other teams that shut a route the seat works (plan.bomb_route): for the piles nearest to the hill, the walk from the hill's queue row to the pile as the engine takes it (bombs of other teams
+// are walked over) and the walk that goes round them; when there is none, or it is more than a quarter longer, the bombs on the first walk are what is in the way (the first three of them).
+void BombTask::find_route_bombs(const BotView& view, const MapInfo& map, const std::vector<uint8_t>& open_mask) {
+    route_bombs_.clear();
+    const HillInfo& hill = map.hill(view.seat());
+    if (!hill.present || hill.starts.empty() || !view.has_grid()) return;
+    const sim::Grid& grid = view.grid();
+    const int w = static_cast<int>(grid.width());
+    const auto at = [&](sim::TileCoord t) { return static_cast<size_t>(t.y) * static_cast<size_t>(w) + static_cast<size_t>(t.x); };
+    std::vector<uint8_t> safe = open_mask;
+    std::vector<uint8_t> bomb(open_mask.size(), 0);
+    const uint8_t ally = view.ally();
+    for (const BombView& b : view.bombs()) {
+        if (!grid.in_bounds(b.tile) || b.owner == view.seat() || (ally < sim::MAX_PLAYERS && b.owner == ally)) continue;
+        safe[at(b.tile)] = 0;
+        bomb[at(b.tile)] = 1;
+    }
+    const std::vector<int32_t> all = MapInfo::cost_field(grid, open_mask, hill.starts);
+    const std::vector<int32_t> round = MapInfo::cost_field(grid, safe, hill.starts);
+    std::vector<std::pair<int32_t, const PileView*>> piles;
+    for (const PileView& p : view.piles()) {
+        const PileInfo* info = map.pile(p.index);
+        if (info == nullptr || !info->approach[view.seat()].reachable() || p.remaining == 0) continue;
+        piles.emplace_back(info->approach[view.seat()].cost, &p);
+    }
+    std::sort(piles.begin(), piles.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    if (piles.size() > 4) piles.resize(4);
+    static const int kDx[8] = {-1, 0, 1, -1, 1, -1, 0, 1};
+    static const int kDy[8] = {-1, -1, -1, 0, 0, 1, 1, 1};
+    for (const auto& entry : piles) {
+        const PileInfo* info = map.pile(entry.second->index);
+        sim::TileCoord start{-1, -1};
+        int32_t cost_all = -1;
+        int32_t cost_round = -1;
+        for (const sim::TileCoord& cell : info->cells) {
+            for (int k = 0; k < 8; ++k) {
+                const sim::TileCoord n{cell.x + kDx[k], cell.y + kDy[k]};
+                if (!grid.in_bounds(n)) continue;
+                const int32_t step = static_cast<int32_t>(MapInfo::step_cost(grid, n, cell));
+                if (all[at(n)] >= 0 && (cost_all < 0 || all[at(n)] + step < cost_all)) {
+                    cost_all = all[at(n)] + step;
+                    start = n;
+                }
+                if (round[at(n)] >= 0 && (cost_round < 0 || round[at(n)] + step < cost_round)) cost_round = round[at(n)] + step;
+            }
+        }
+        if (cost_all < 0 || start.x < 0) continue;
+        const bool shut = cost_round < 0 || cost_round > cost_all + cost_all / 4 + 40;
+        if (!shut) continue;
+        sim::TileCoord cur = start;                                                                        // down the field of the engine's walk to the hill: the bombs on the way
+        for (int guard = 0; guard < 4096 && all[at(cur)] > 0 && route_bombs_.size() < 3; ++guard) {
+            sim::TileCoord next = cur;
+            int32_t best = all[at(cur)];
+            for (int k = 0; k < 8; ++k) {
+                const sim::TileCoord n{cur.x + kDx[k], cur.y + kDy[k]};
+                if (!grid.in_bounds(n) || all[at(n)] < 0) continue;
+                if (all[at(n)] < best) {
+                    best = all[at(n)];
+                    next = n;
+                }
+            }
+            if (next == cur) break;
+            cur = next;
+            if (bomb[at(cur)] != 0) route_bombs_.push_back(cur);
+        }
+    }
 }
 
 // ---- MineTask -------------------------------------------------------------------------------------------------------------------------------------------

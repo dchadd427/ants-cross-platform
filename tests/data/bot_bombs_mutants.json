@@ -1,0 +1,95 @@
+{
+ "note": "Mutants of the walk round bombs, the Bomber's way and the Hopeless rule of the computer players (docs/BOTS.md, 'Bombs on the way') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the detour's levels and limits, the carrier, the Bomber's route and its side walk, the route bombs, the Hopeless piles and the plan against test_ai AI51. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_bombs_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "bomb_detour_off_in_apply",
+   "file": "src/ants_ai/bomb_detour.cpp",
+   "old": "    if (plan.bomb_detour == 0 || !view.has_grid() || view.map() == nullptr) {",
+   "new": "    if (true) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI51.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI51.1"
+  },
+  {
+   "id": "bomb_detour_swimmer_walks_round",
+   "file": "src/ants_ai/bomb_detour.cpp",
+   "old": "    if (ant == sim::AntType::Swimmer) return false;",
+   "new": "    if (false) return false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI51.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI51.3"
+  },
+  {
+   "id": "bomb_detour_thief_at_medium",
+   "file": "src/ants_ai/bomb_detour.cpp",
+   "old": "    if (plan.bomb_detour == 0 || ant == sim::AntType::Thief) return false;",
+   "new": "    if (plan.bomb_detour == 0) return false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI51.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI51.3"
+  },
+  {
+   "id": "bomb_detour_any_length",
+   "file": "src/ants_ai/bomb_detour.cpp",
+   "old": "    if (cost_safe - cost_all > std::max<int64_t>(cost_all * extra_percent / 100, 120)) return Verdict::TooLong;",
+   "new": "    if (cost_safe - cost_all > std::max<int64_t>(cost_all * extra_percent / 100, 120) * 1000000) return Verdict::TooLong;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI51.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI51.3"
+  },
+  {
+   "id": "bomb_detour_no_carriers",
+   "file": "src/ants_ai/bomb_detour.cpp",
+   "old": "    if (plan.bomb_detour >= 2 && !bombs_.empty() && view.hill_enterable()) {",
+   "new": "    if (false) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI51.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI51.4"
+  },
+  {
+   "id": "bomb_route_off",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "    if (plan.bomb_route && routed_actor != nullptr) {",
+   "new": "    if (false) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI51.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI51.5"
+  },
+  {
+   "id": "bomb_route_always_straight",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "routed_side == routed_actor->tile || !BombDetour::approach_crosses(v, *routed_actor, routed_pick->tile);",
+   "new": "true;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI51.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI51.5"
+  },
+  {
+   "id": "bomb_route_never_shut",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "        const bool shut = cost_round < 0 || cost_round > cost_all + cost_all / 4 + 40;",
+   "new": "        const bool shut = false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI51.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI51.6"
+  },
+  {
+   "id": "hopeless_piles_kept",
+   "file": "src/ants_ai/tasks.cpp",
+   "old": "            if (hopeless_out && cands[k].cls == static_cast<uint8_t>(PileClass::Hopeless)) continue;",
+   "new": "            if (hopeless_out && false && cands[k].cls == static_cast<uint8_t>(PileClass::Hopeless)) continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI51.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI51.7"
+  },
+  {
+   "id": "hard_detour_level",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.bomb_detour = 2; ",
+   "new": "            p.bomb_detour = 1; ",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI51.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI51.8"
+  }
+ ]
+}

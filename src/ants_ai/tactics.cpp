@@ -68,6 +68,9 @@ LevelPlan plan_for(Level level) noexcept {
             p.renew_lead_ticks = 200;
             p.contest_opening_ants = 1;
             p.denial_order = true;              // the denial order: contested food first, the own safe piles last (docs/BOT_FOOD.md)
+            p.skip_hopeless = true;             // a pile that a nearer enemy eats first is left alone while another pile has food (docs/BOT_FOOD.md)
+            p.bomb_detour = 1;                  // the economy, the power-up trips and the fights go round a visible bomb of another team (docs/BOTS.md, "Bombs on the way")
+            p.bomb_route = true;
             p.secure_side = true;
             p.secure_kinds = kSecureOpening;
             p.drop_retake = true;
@@ -114,6 +117,9 @@ LevelPlan plan_for(Level level) noexcept {
             p.renew_lead_ticks = 130;
             p.contest_opening_ants = 2;
             p.denial_order = true;
+            p.skip_hopeless = true;
+            p.bomb_detour = 2;                   // ... and the raids, the mine trips and the way home of a carrier
+            p.bomb_route = true;
             p.secure_side = true;
             p.secure_kinds = kSecureOpening;
             p.flower_sides = true;
