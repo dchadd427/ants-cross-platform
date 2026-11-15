@@ -1,0 +1,99 @@
+{
+ "note": "Mutants of the server nickname as the name that the chat shows (hub/roles.py tell_names, hub/chat.py names_changed and you_of, hub/session.py renamed, web/front/player_name.js), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'; docs/HUB.md, 'Names'): each breaks one rule on purpose, and a test of tests/scripts/test_hub_nickname.py (or the page's name check) must fail for it.",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_hub_nickname"
+ },
+ "mutants": [
+  {
+   "id": "nick_is_not_read",
+   "file": "hub/roles.py",
+   "old": "            entry.nick = text.clean_shown(data.get(\"nick\")) if data is not None else \"\"",
+   "new": "            entry.nick = \"\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_nickname.TheNicknameIsShown"
+  },
+  {
+   "id": "nick_is_not_cleaned",
+   "file": "hub/roles.py",
+   "old": "            entry.nick = text.clean_shown(data.get(\"nick\")) if data is not None else \"\"",
+   "new": "            entry.nick = (data.get(\"nick\") or \"\") if data is not None else \"\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_nickname.TheNicknameIsShown"
+  },
+  {
+   "id": "nick_stays_for_a_person_who_is_not_a_member",
+   "file": "hub/roles.py",
+   "old": "            entry.nick = text.clean_shown(data.get(\"nick\")) if data is not None else \"\"",
+   "new": "            entry.nick = text.clean_shown(data.get(\"nick\")) if data is not None else entry.nick",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_nickname.TheNicknameEnds"
+  },
+  {
+   "id": "display_name_comes_before_the_nickname",
+   "file": "hub/chat.py",
+   "old": "            wanted = nick or display\n",
+   "new": "            wanted = display or nick\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_nickname.TheNicknameIsShown"
+  },
+  {
+   "id": "a_removed_nickname_leaves_no_name",
+   "file": "hub/chat.py",
+   "old": "            wanted = nick or display\n",
+   "new": "            wanted = nick\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_nickname.TheNicknameChanges"
+  },
+  {
+   "id": "a_nickname_that_is_the_username_is_a_second_name",
+   "file": "hub/chat.py",
+   "old": "            if wanted == profile.username:\n                wanted = \"\"\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_nickname.TheNicknameIsShown"
+  },
+  {
+   "id": "an_answer_that_says_nothing_of_names_clears_them",
+   "file": "hub/chat.py",
+   "old": "        if display is None and not nick:\n            return ",
+   "new": "        if display is None and not nick:\n            display = \"\" ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_nickname.TheNicknameEnds"
+  },
+  {
+   "id": "the_roles_check_does_not_reach_the_chat",
+   "file": "hub/chat.py",
+   "old": "        roles.on_names = self.names_changed\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_nickname.TheNicknameIsShown"
+  },
+  {
+   "id": "the_username_pick_is_overridden",
+   "file": "hub/session.py",
+   "old": "    if pick == \"display\":\n        return who._replace(name=display, username=username, pick=\"display\"",
+   "new": "    if True:\n        return who._replace(name=display, username=username, pick=\"display\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_nickname.TheNicknameChanges"
+  },
+  {
+   "id": "the_socket_keeps_its_old_name",
+   "file": "hub/chat.py",
+   "old": "                peer.identity = now\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_nickname.TheNicknameChanges"
+  },
+  {
+   "id": "an_unchanged_name_is_sent_again",
+   "file": "hub/chat.py",
+   "old": "            if now != who:\n                peer.identity = now",
+   "new": "            if True:\n                peer.identity = now",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_nickname.TheNicknameChanges"
+  },
+  {
+   "id": "next_is_never_sent",
+   "file": "hub/chat.py",
+   "old": "                you[\"next\"] = entry.display",
+   "new": "                pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_nickname.TheNicknameIsShown"
+  },
+  {
+   "id": "the_page_does_not_try_the_display_name_before_the_username",
+   "file": "web/front/player_name.js",
+   "old": "name = shown || fit(you.next, check) || fit(you.other, check);",
+   "new": "name = shown || fit(you.other, check);",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  }
+ ]
+}

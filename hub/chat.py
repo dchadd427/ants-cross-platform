@@ -31,7 +31,7 @@ import json
 import os
 import re
 
-from . import PROTOCOL, presence as presencemod, pseudo, text as textrules
+from . import PROTOCOL, presence as presencemod, pseudo, session as sessionmod, text as textrules
 from .limits import AccountLimits, RateByAccount, TokenBucket
 from .store import PICKS, StoreError
 from .store.base import SHOW_OFF, SHOW_ON
@@ -74,6 +74,7 @@ class Chat:
         self.roles = roles                          # who is a moderator or an administrator (hub/roles.py): role_of(account) is `none`, `mod` or `admin`
         roles.connected = self.accounts
         roles.changed = self.role_changed
+        roles.on_names = self.names_changed
         self.limits = limits
         self.clock = clock
         self.login = login
@@ -126,6 +127,39 @@ class Chat:
             if who is not None and who.account_id == account and not getattr(peer, "closed", False):
                 peer.send_text(dumps({"t": "you", "you": self.you_of(who)}))
 
+    def names_changed(self, account, nick, display):
+        """The member answer of Discord says the account's server nickname (`nick`, '' for none that may be shown) and its display name (`display`, '' for none, None when the answer did not say). The
+        name that an account is shown by is the nickname if there is one, else the display name, else the username: it is kept as the profile's display name (what a login makes of it, which
+        the next login makes again), and every socket of the account that is open gets it at once, with a whole `you` frame. A person who chose the username keeps it (only the other name
+        changes). Nothing changed: nothing is written and nothing is sent. Lines that were written keep the name they were written with."""
+        if display is None and not nick:
+            return                                    # (nothing to say: the answer had no display name, and a nickname that is gone leaves what the profile had)
+        try:
+            profile = self.store.profile(account)
+            if profile is None or not textrules.valid_name(profile.username):
+                return
+            wanted = nick or display
+            if wanted == profile.username:
+                wanted = ""
+            if wanted != profile.display:
+                self.store.set_profile(account, profile.username, wanted, self.limits.profiles_total)
+                profile = self.store.profile(account)
+        except StoreError as e:
+            if self.on_store_error:
+                self.on_store_error(e)
+            return
+        if profile is None:
+            return
+        display = profile.display if textrules.valid_shown(profile.display) else ""
+        for peer in list(self.peers):
+            who = peer.identity
+            if who is None or who.account_id != account or getattr(peer, "closed", False):
+                continue
+            now = sessionmod.renamed(who, profile.username, display, profile.pick)
+            if now != who:
+                peer.identity = now
+                peer.send_text(dumps({"t": "you", "you": self.you_of(now)}))
+
     def picture_changed(self, refs):
         """The pictures of the accounts with these references arrived, went or were switched (hub/pictures.py `sync`): every socket of each gets the whole `you` again."""
         for peer in list(self.peers):
@@ -150,6 +184,9 @@ class Chat:
         you = {"name": who.name, "mod": role != "none", "role": role, "k": self.key_of(who.account_id)}
         if who.other:
             you["pick"], you["other"] = who.pick, who.other
+            entry = self.roles.entries.get(who.account_id)
+            if entry is not None and entry.nick and who.name == entry.nick and entry.display and entry.display not in (who.name, who.username):
+                you["next"] = entry.display      # (the name that comes after the server nickname: a page whose game cannot take the nickname tries it before the username)
         if self.pictures is not None:
             ref = self.ref(who.account_id)
             you["pics"] = self.pictures.state_of(ref)

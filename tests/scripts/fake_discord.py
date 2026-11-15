@@ -80,6 +80,8 @@ class FakeDiscord:
         self.guild, self.bot_token = GUILD_ID, BOT_TOKEN
         self.members = {}                                # account id -> [role ids] of the server's members
         self.member_mode = "ok"
+        self.member_nicks = {}                           # account id -> the server nickname that a member answer says (none: null)
+        self.member_globals = {}                         # account id -> the display name that a member answer's user says (not in here: the user has no `global_name` at all; None: null)
         self.member_avatars = {}                         # account id -> the picture code that a member answer says (none: null)
         self.profiles = {}                               # account id -> the picture code (or None) that `GET /users/<id>` says; an account that is not here is unknown (404, code 10013)
         self.user_mode = "ok"
@@ -228,7 +230,10 @@ class FakeDiscord:
         roles = self.members.get(account)
         if roles is None:
             return 404, {"message": "Unknown Member", "code": 10007}
-        return 200, {"user": {"id": account, "username": "canary.member", "avatar": self.member_avatars.get(account)}, "roles": list(roles), "nick": None, "joined_at": "2020-01-01T00:00:00+00:00", "flags": 0}
+        user = {"id": account, "username": "canary.member", "avatar": self.member_avatars.get(account)}
+        if account in self.member_globals:
+            user["global_name"] = self.member_globals[account]
+        return 200, {"user": user, "roles": list(roles), "nick": self.member_nicks.get(account), "joined_at": "2020-01-01T00:00:00+00:00", "flags": 0}
 
     def profile(self, authorization, account):
         if authorization != "Bot " + self.bot_token:

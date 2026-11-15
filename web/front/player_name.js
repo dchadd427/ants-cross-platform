@@ -1,6 +1,6 @@
 // The name that a person plays under on the front page and on the game page (web/lobby.html, web/shell.html): nobody types a name on the web (tests/scripts/web_player_name_check.js).
 //   * A person who is logged in with Discord (docs/HUB.md "Login") plays under the login's name made to fit the game's rules. The page asks the site's own `GET /hub/me` (same origin; the cookie is HttpOnly)
-//     when it opens, and again at every seat (a login, a guest of a site that has a login, a failed answer), so that a log in or a log out in the chat is known at the next room. `you.name` is tried first, then `you.other`; the username always fits.
+//     when it opens, and again at every seat (a login, a guest of a site that has a login, a failed answer), so that a log in or a log out in the chat is known at the next room. `you.name` is tried first, then `you.next` (the display name, when the hub shows the server nickname and says it), then `you.other`; the username always fits.
 //   * Everybody else (not logged in, no hub or no login, an answer that is late or wrong) plays under a guest name: "Guest" and six digits, made once and kept in this browser (localStorage, GUEST_KEY; a
 //     browser that refuses its storage keeps it for the page). A login and a log out never change it. It is a random number and nothing else.
 //   * ready(fn) calls fn(name, kind, canSwitch, how) once: at once when the answer cannot change (a site with no login), else when the question is answered, failed or given up (ASK_MS). how: 'other' (the
@@ -36,7 +36,7 @@
         return checked && checked.ok === true && typeof checked.name === 'string' && checked.name.length >= MIN ? checked.name : '';
     }
     // What the answer of /hub/me says: { kind, name, canSwitch }.
-    //   kind 'login'  the hub names the visitor (`you`): name is the first of you.name and you.other that fits ('' when neither does: the guest name is used then); canSwitch: the hub says an other name (a
+    //   kind 'login'  the hub names the visitor (`you`): name is the first of you.name, you.next and you.other that fits ('' when neither does: the guest name is used then); canSwitch: the hub says an other name (a
     //                 switch between the display name and the username exists); viaOther: the shown name did not fit and the other one is used
     //   kind 'guest'  the hub has a login and the visitor is not logged in (`you` is null)
     //   kind 'none'   the hub says that it has no login
@@ -48,7 +48,7 @@
         var you = body.you;
         if (you === null) return { kind: 'guest', name: '', canSwitch: false };
         if (!you || typeof you !== 'object' || Array.isArray(you)) return { kind: 'failed', name: '', canSwitch: false };
-        var shown = fit(you.name, check), name = shown || fit(you.other, check);
+        var shown = fit(you.name, check), name = shown || fit(you.next, check) || fit(you.other, check);
         return { kind: 'login', name: name, canSwitch: typeof you.other === 'string' && you.other !== '', viaOther: !shown && name !== '' };
     }
     // Six digits that make a guest name: 100000 to 999999 from `random` (a number from 0 up to, not including, 1; anything else is the first)
