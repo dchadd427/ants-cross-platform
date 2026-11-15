@@ -145,11 +145,11 @@ class FakeDiscord:
             with self.lock:
                 self.cdn_inflight += 1
                 self.cdn_peak = max(self.cdn_peak, self.cdn_inflight)
+            h.cdn_counted = True
             try:
                 return self.serve_cdn(h, method, path)
             finally:
-                with self.lock:
-                    self.cdn_inflight -= 1
+                self.cdn_done(h)
         if path == "/oauth2/authorize":
             return self.authorize(h, query)
         if path == "/api/v10/oauth2/token" and method == "POST":
@@ -169,6 +169,13 @@ class FakeDiscord:
             return self.answer(h, self.member_mode, lambda: self.member(headers.get("authorization", ""), parts[4], parts[6]))
         h.wfile.write(raw(404, {"error": "not found"}))
 
+    def cdn_done(self, h):
+        """One request of the picture host is no longer counted as running (once per request)."""
+        if getattr(h, "cdn_counted", False):
+            h.cdn_counted = False
+            with self.lock:
+                self.cdn_inflight -= 1
+
     def serve_cdn(self, h, method, path):
         """The picture host: GET /cdn/avatars/<id>/<code>.png (the query is ignored); `cdn_mode` makes it go wrong in the ways a real host can."""
         mode, body = self.cdn_mode, self.picture
@@ -186,6 +193,7 @@ class FakeDiscord:
             return h.wfile.write(raw(int(mode[7:]), {"message": "canary-error-body"}))
         if mode.startswith("slow:"):
             time.sleep(float(mode[5:]))
+            self.cdn_done(h)                                 # (the answer is ready: the hub may start its next fetch as soon as it has read it, before this thread is back)
             return h.wfile.write(png)
         if mode == "hang":
             time.sleep(30)
