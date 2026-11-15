@@ -306,6 +306,10 @@ struct LevelPlan {
     bool flower_recall{false};           // a pick-up trip whose power-up changed kind on the way is called back at any distance (the plan takes it anyway only from `call_back_tiles` away: it would take a kind it does not want)
     bool flower_watch{false};            // (Hard) an ant waits beside the drop tile of the own side's flower, arrives about `flower_watch_early` ticks before the landing that the bot has learned to expect (Memory::flower) and takes a kind that the plan lacks
     uint32_t flower_watch_early{60};     // the ticks before the expected landing at which the watcher stands beside the drop tile (3 s)
+    bool drop_retake{false};             // (Medium, Hard) a power-up that an ant of the bot's team left when it died is taken back by a worker: a kind the team had within drop_memory_ticks and has none of now is wanted when a power-up of it lies loose on the map (not one of the start, not a flower's)
+    bool drop_contest{false};            // (Hard) a loose power-up of Fire, Bomber or Thief is wanted by a team that has none of the kind, whoever's side it lies on: the trip's contest check decides who gets there first
+    uint8_t drop_retake_kinds{0x3e};     // bit t = AntType t: the kinds that drop_retake takes back (all five)
+    uint32_t drop_memory_ticks{4800};    // how long after its last ant of a kind was seen the team still counts the kind as lost
     uint32_t flower_watch_chance{150};   // the least chance in permille that the next landing is a kind the plan lacks, for the watcher to wait (every kind alike until three landings were seen)
     // the war batch (docs/BOTS.md, "The war batch"): the bots fight over the food and after it. Every field is off in a plan made by hand; `--tune war=0` switches all of them off again (the bot as it was)
     uint32_t war_bombers{0};             // Bomber Ants wanted (at least this many; the wish is the larger of this and the opening's) for the mines (the drops of the flowers and the power-ups on the map; once an enemy plays)

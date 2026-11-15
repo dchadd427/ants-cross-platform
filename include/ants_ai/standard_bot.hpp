@@ -325,6 +325,7 @@ private:
     uint64_t fallback_until_{0};                     // the plain economy runs until this tick (0: normal play)
     uint32_t stalls_{0};
     std::array<uint32_t, 4> war_ticks_{};     // the ticks spent at every war tier (war_ticks)
+    std::array<uint64_t, 6> kind_seen_{};     // by sim::AntType: the tick at which an own ant of the kind was last seen (0: never; the dropped power-ups of the plan: a kind that was seen and is gone is lost)
     uint64_t last_look_{0};                   // the tick of the last look that counted
     uint64_t progress_tick_{0};                      // the look at which the score last rose (the first look to begin with)
     int32_t last_score_{0};
