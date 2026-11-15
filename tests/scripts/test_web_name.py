@@ -97,7 +97,7 @@ class TheMarkup(unittest.TestCase):
         front = first + " Recordings are kept for 30 days. Results and names are kept for good and are public."
         self.assertEqual(read(LOBBY).count(front), 2)
         self.assertEqual(read(SHELL).count(game), 1)
-        self.assertIn('<p class="notice" id="footer-notice">' + front + "</p>", read(LOBBY))
+        self.assertIn('<p class="room-notice" id="room-notice">' + front + "</p>", read(LOBBY))
         self.assertIn('<div class="name-step-hint name-step-notice" id="who-notice">' + front + "</div>", read(LOBBY))
         self.assertIn('<div class="name-step-hint name-step-notice">' + game + "</div>", read(SHELL))
         self.assertNotIn("Anybody can watch them", read(LOBBY))                                     # (the extra sentence is the game page's only)

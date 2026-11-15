@@ -361,6 +361,7 @@
         function wantTalk() {                               // the emoji and microphone buttons (talk.js, talk.css), after the dock: they stand in its form
             if (askedTalk || !dock) return;
             askedTalk = true;
+            if (win.AntsHomeTalk) { win.AntsHomeTalk.mount({ doc: doc, win: win, dock: dock }); return; }       // (the Room's chat brought the script already)
             lazy('home/talk', function () { if (win.AntsHomeTalk) win.AntsHomeTalk.mount({ doc: doc, win: win, dock: dock }); });
         }
 

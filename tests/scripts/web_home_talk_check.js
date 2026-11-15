@@ -118,13 +118,13 @@ function rig(o) {
     const Talk = loadScript(talkSource, 'AntsHomeTalk', tclock);
     const taps = [], realTap = dock.tap;
     dock.tap = (fn) => { taps.push(fn); realTap(fn); };      // (the dock's own taps, and a way to tell the buttons what the dock tells them)
-    const talk = Talk.mount({ doc, win, dock });
+    const talk = Talk.mount({ doc, win, dock, emoji: o.emoji, limit: o.limit });
     const r = { env, doc, win, host, dock, talk, recs, sockets, clock: tclock, tell: (kind) => taps.forEach((fn) => fn(kind)) };
     r.field = dock.field;
     r.form = dock.field.parent;
-    r.emoji = one(r.form, 'gt-emoji');
+    r.emoji = o.emoji === false ? null : one(r.form, 'gt-emoji');
     r.mic = one(r.form, 'gt-mic');
-    r.pick = one(r.form, 'gt-pick');
+    r.pick = o.emoji === false ? null : one(r.form, 'gt-pick');
     r.say = one(r.form, 'gt-say');
     r.keys = () => byClass(r.pick, 'gt-e');
     r.sayText = () => (r.say.hidden ? '' : r.say.textContent);
@@ -574,6 +574,26 @@ function bring(env, file, name) {
     check('an empty field whose hint wraps is still one row', !tall());
     r.field.disabled = true; r.field.value = 'x'.repeat(100); r.dock.grow();
     check('a field that is off stays one row', !tall());
+}
+
+{   // the room's chat box (web/front/lobby_chat.js) mounts the same script with no emoji button and a limit of 100: its line is printable ASCII, and at most 100 characters
+    same('insert keeps to the limit that it is given (3 here), and to 200 where none is', [Pure.insert('ab', 2, 2, 'c', 3).value, Pure.insert('abc', 3, 3, 'd', 3), Pure.insert('a'.repeat(200), 200, 200, 'b'), Pure.insert('a'.repeat(100), 100, 100, 'b').value.length], ['abc', null, null, 101]);
+    same('speak keeps to the limit that it is given: what is heard is cut to what is left of it (less two)', [Pure.speak('', 'one two three four', '', 10).value, Pure.speak('', 'x'.repeat(50), '', 100).value.length], ['one two', 50]);
+    const room = rig({ emoji: false, limit: 100 });
+    check('no emoji button and no picker: the microphone and nothing else stand beside Send', room.emoji === null && room.pick === null && !!room.mic && room.form.children.filter((c) => (c.className || '').indexOf('gt-pick') !== -1).length === 0);
+    room.field.value = '';
+    room.start();
+    room.heard('word '.repeat(40));
+    check('what is heard never makes the line longer than 100 characters', room.field.value.length <= 100 && room.field.value.length > 50, String(room.field.value.length));
+    let off = true;
+    room.dock.off = () => off;
+    room.tell('x');
+    const tools = room.form.children.filter((c) => (c.className || '').indexOf('gt-tools') !== -1)[0];
+    check('a dock that says it is off (the room, while the link is down) hides the buttons, and shows them again when it is not', tools.hidden === true && (off = false, room.tell('x'), tools.hidden === false));
+    const full = rig({});
+    full.start();
+    full.heard('word '.repeat(60));
+    check('(the front page\'s own box keeps its 200)', full.field.value.length > 150 && full.field.value.length <= 200, String(full.field.value.length));
 }
 
 console.log(failures === 0 ? 'OK: ' + checks + ' checks' : failures + ' of ' + checks + ' checks FAILED');

@@ -20,12 +20,14 @@
 .chat-log .sys { font-size: 14px; color: #a8c2b8; }
 .chat-log .empty { margin: auto; max-width: 40ch; text-align: center; font-size: 15px; color: var(--muted); }
 
-/* The field and Send: a finger tall, 16 px (a phone does not zoom into a field below that), the field as the page's other fields. */
+/* The field and Send: the composer of the front page's box. talk.css (web/home/talk.js dresses the form: one row, the microphone and Send at the right, two rows when the words wrap) sits on the same base as the
+   front page's box, and these few lines are that base (web/home/chat.css has them for the dock, which the Room may not have loaded): a grid of the field and Send, a finger tall, 16 px (a phone does not zoom
+   into a field below that). The look of the box itself (corners, frame, row growth) is talk.css's. */
 .chat-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; margin-top: 12px; }
-.chat-form input { min-width: 0; min-height: 48px; padding: 8px 14px; font-size: 16px; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); }
-.chat-form input::placeholder { color: #7f9c92; opacity: 1; }
-.chat-form input[readonly] { opacity: .6; }              /* (a field that is shut is read-only, not disabled: it keeps the focus, so a phone's keyboard stays up through a link that drops) */
-.chat-form .btn { min-height: 48px; }
+.chat-form .gc-input { display: block; box-sizing: border-box; width: 100%; min-width: 0; height: 48px; min-height: 48px; padding: 11px 14px; font: inherit; font-size: 16px; line-height: 20px; white-space: pre; overflow: hidden; resize: none; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); }
+.chat-form .gc-input::placeholder { color: #7f9c92; opacity: 1; }
+.chat-form .gc-input[readonly] { opacity: .6; }              /* (a field that is shut is read-only, not disabled: it keeps the focus, so a phone's keyboard stays up through a link that drops) */
+.chat-form .gc-send { min-height: 48px; }
 
 /* While the link is down the box is dimmed with the cards, but the names stay readable: every color of the log keeps 4.5:1 on the dimmed log (tests/scripts/test_web_lobby_chat.py works the filter out). */
 body.offline .chat-log { filter: saturate(.5) brightness(.94); }
@@ -34,5 +36,5 @@ body.offline .chat-log { filter: saturate(.5) brightness(.94); }
     .chat .note { text-align: left; }
     .chat-log { height: 244px; padding: 8px 10px; }
     .chat-form { gap: 8px; }
-    .chat-form input { scroll-margin-bottom: 150px; }     /* a browser that scrolls the tapped field into view leaves room for the START bar that sticks to the bottom of the screen */
+    .chat-form .gc-input { scroll-margin-bottom: 150px; }     /* a browser that scrolls the tapped field into view leaves room for the START bar that sticks to the bottom of the screen */
 }

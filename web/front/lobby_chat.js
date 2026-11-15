@@ -20,6 +20,7 @@
     var MAX_LINE = 100;                          // the match's chat entry (the server's kMaxChatChars, lobby_net.js MAX_CHAT)
     var MAX_LINES = 200;                         // the room's own log keeps the last 200 (ChatLog::kMaxLines)
     var HOST = 1, CLIENT = 2;                    // lobby_net.js SLOT.Host and SLOT.Client: the states of a color that a person holds
+    var ROW = 44, LINE = 22;                     // the field's one row and one more line of words (the front page's box has the same)
     var FOLLOW = 40;                             // a box within this many pixels of its end follows the newest line
     var STICKY = 140;                            // the page's START bar (sticky at the bottom of a phone's screen) covers this much of the window: a box under it is off screen
     var TOAST_CHARS = 60;                        // a line is cut to this many characters in the toast (a stranger's line of 100 must not fill a phone's screen)
@@ -124,11 +125,13 @@
         log.setAttribute('tabindex', '0');
         var empty = el('div', 'empty');
         log.appendChild(empty);
-        var form = el('form', 'chat-form');
+        // The composer is the front page's (web/home/talk.js and talk.css, docs/HOME_SCREEN.md "Emoji and voice"): the same classes (gc-form, gc-input, gc-send), so that the same script and sheet dress it:
+        // one row, the field, the microphone and Send at the right, two rows when the words wrap. The field is a text area that behaves as a one-line field (Enter sends).
+        var form = el('form', 'chat-form gc-form');
         form.setAttribute('autocomplete', 'off');
-        var input = el('input');
+        var input = el('textarea', 'gc-input');
         input.setAttribute('id', 'chat-input');
-        input.setAttribute('type', 'text');
+        input.setAttribute('rows', '1');
         input.setAttribute('maxlength', String(MAX_LINE));
         input.setAttribute('aria-label', TEXT.field);
         input.setAttribute('aria-describedby', 'chat-hint');
@@ -138,7 +141,7 @@
         input.setAttribute('spellcheck', 'false');
         input.setAttribute('enterkeyhint', 'send');
         input.setAttribute('inputmode', 'text');
-        var send = el('button', 'btn sm', TEXT.send);
+        var send = el('button', 'btn gc-send', TEXT.send);
         send.setAttribute('type', 'submit');
         send.setAttribute('id', 'chat-send');
         form.appendChild(input);
@@ -158,9 +161,19 @@
             host.hidden = !st.shown;
             input.readOnly = !st.live;           // (not disabled: a disabled field loses the focus, and a phone's keyboard closes with it)
             send.disabled = !st.live;
+            for (var t = 0; t < tapped.length; t++) tapped[t]();
             input.placeholder = st.placeholder;
             empty.textContent = st.empty;
             if (lines.length === 0 && !hintShown) { log.appendChild(empty); hintShown = true; }
+        }
+        // the height of the words: one row (44 px) to four lines, then it scrolls (talk.js asks field.gtFit for the measure, as the front page's box does); the log keeps its end while the box grows
+        function grow() {
+            var s = input.style;
+            if (!input.scrollHeight) return;                      // (the box is not shown: it is measured when it is)
+            var was = nearBottom(), to;
+            s.height = 'auto'; to = input.gtFit ? input.gtFit() : input.scrollHeight;
+            s.height = Math.max(ROW, Math.min(ROW + 3 * LINE, to)) + 'px';
+            if (was) log.scrollTop = log.scrollHeight;
         }
         function nearBottom() { return log.scrollHeight - log.scrollTop - log.clientHeight < FOLLOW; }
         // A line of the log: { kind, seat, who, text }. A line of one's own always shows; the others follow the end only while the box is at its end (somebody who scrolled up to read is left alone).
@@ -218,7 +231,7 @@
         }
         function lose(list) {                    // the newest of the lines comes back to the field when it is empty, else the hint holds it
             lostText = list[list.length - 1].text;
-            if (input.value === '') { input.value = lostText; lostHint = TEXT.lostBack; } else lostHint = TEXT.lostSaid + ' ' + lostText;
+            if (input.value === '') { input.value = lostText; grow(); lostHint = TEXT.lostBack; } else lostHint = TEXT.lostSaid + ' ' + lostText;
             setHint(lostHint);
         }
         function loseAll() {                     // the link dropped: no echo can come for a line that was on its way
@@ -238,7 +251,7 @@
             }
             if (lostText !== null && text === lostText) {
                 if (hint.textContent === lostHint) setHint('');
-                if (input.value === lostText) input.value = '';
+                if (input.value === lostText) { input.value = ''; grow(); }
                 lostText = null;
             }
         }
@@ -249,6 +262,7 @@
             if (line === '' || !state().live) return false;
             if (opts.say(line)) {
                 input.value = '';
+                grow();
                 setHint('');
                 lostText = null;
                 pending.push({ text: line, at: now() });
@@ -263,10 +277,49 @@
             if (ev && ev.isComposing) return;     // (a predictive keyboard's or an IME's composition is not rewritten while it goes on)
             var c = cleanLine(input.value);
             if (c.dropped) { input.value = c.text; setHint(TEXT.accent); } else setHint('');
+            grow();
         }
+        // Enter sends (a keyboard that makes a line break through beforeinput does too), through the form's own submit, which the voice button hears; a line break that is pasted is a space
+        function sendNow() {
+            var win = doc.defaultView;
+            if (form.requestSubmit) form.requestSubmit();
+            else if (form.dispatchEvent && win && typeof win.Event === 'function') form.dispatchEvent(new win.Event('submit', { cancelable: true }));
+            else submit();
+        }
+        input.addEventListener('keydown', function (e) { if (e && e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) { if (e.preventDefault) e.preventDefault(); sendNow(); } });
+        input.addEventListener('beforeinput', function (e) { if (e && (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph')) { if (e.preventDefault) e.preventDefault(); sendNow(); } });
+        input.addEventListener('input', function () { if (/[\r\n]/.test(input.value)) input.value = input.value.replace(/[\r\n]+/g, ' '); });
         form.addEventListener('submit', function (ev) { if (ev && ev.preventDefault) ev.preventDefault(); submit(); });
         input.addEventListener('input', typed);
         input.addEventListener('compositionend', function () { typed(null); });
+        send.addEventListener('pointerdown', function (e) { if (e && e.preventDefault && doc.activeElement === input) e.preventDefault(); });       // (a press on Send keeps the focus in the field: a phone's keyboard stays up)
+        if (doc.defaultView && doc.defaultView.addEventListener) doc.defaultView.addEventListener('resize', grow);
+
+        // The voice button of the front page's box (talk.js, loaded after the first paint, once): the room's line is printable ASCII, so there is no emoji button (the picker's characters are not ASCII and the
+        // room would drop them); the microphone types what the person says into the field, and the line is cleaned when it is sent, as for typing. A page without the script has the field and Send only.
+        var tapped = [];
+        function mountTalk() {
+            var win = doc.defaultView;
+            if (!win || !win.AntsHomeTalk) return;
+            try {
+                win.AntsHomeTalk.mount({ doc: doc, win: win, emoji: false, limit: MAX_LINE, dock: { field: input, root: host, grow: grow, off: function () { return !state().live; }, tap: function (fn) { tapped.push(fn); } } });
+                grow();
+            } catch (e) { /* the box keeps its field and Send */ }
+        }
+        if (opts.talk !== false && doc.head && doc.defaultView && doc.defaultView.requestAnimationFrame) {
+            (function () {
+                var win = doc.defaultView;
+                function load() {
+                    if (win.AntsHomeTalk) { mountTalk(); return; }          // (the front page's dock brought it already)
+                    var have = doc.head.querySelector ? doc.head.querySelector('script[src$="home/talk.js"]') : null, css, js;
+                    if (!doc.head.querySelector || !doc.head.querySelector('link[href$="home/talk.css"]')) { css = doc.createElement('link'); css.rel = 'stylesheet'; css.href = 'home/talk.css'; doc.head.appendChild(css); }
+                    js = have || doc.createElement('script');
+                    js.addEventListener('load', mountTalk);
+                    if (!have) { js.src = 'home/talk.js'; js.async = true; doc.head.appendChild(js); }
+                }
+                win.requestAnimationFrame(function () { setTimeout(load, 0); });
+            })();
+        }
 
         function attach(c) {
             if (current !== c) {

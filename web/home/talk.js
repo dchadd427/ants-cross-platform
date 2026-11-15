@@ -44,20 +44,20 @@
         return s.slice(0, i);
     }
     // `text` into `value` between the caret's two ends: the new value and the caret after it, or null when the line would pass 200 code points
-    function insert(value, from, to, text) {
+    function insert(value, from, to, text, limit) {
         var a = typeof from === 'number' && from >= 0 && from <= value.length ? from : value.length, b = typeof to === 'number' && to >= a && to <= value.length ? to : a;
         var held = a === b;
         if (a > 0 && a < value.length && /[\udc00-\udfff]/.test(value.charAt(a)) && /[\ud800-\udbff]/.test(value.charAt(a - 1))) a--;       // (a caret between the two halves of a pair goes before it)
         if (held) b = a;
         else if (b < value.length && /[\udc00-\udfff]/.test(value.charAt(b)) && /[\ud800-\udbff]/.test(value.charAt(b - 1))) b++;
         var next = value.slice(0, a) + text + value.slice(b);
-        return points(next) > LIMIT ? null : { value: next, caret: a + text.length };
+        return points(next) > (limit || LIMIT) ? null : { value: next, caret: a + text.length };
     }
     // what is said, into the field around the place where the person was: no markup characters (the hub refuses them), one space between words, at most what is left of the 200 code points
-    function speak(before, said, after) {
+    function speak(before, said, after, limit) {
         var t = String(said).replace(/[<>]/g, ' ').replace(/\s+/g, ' ').trim();
         if (!t) return { value: before + after, caret: before.length };
-        t = head(t, Math.max(0, LIMIT - points(before + after) - 2)).replace(/\s+$/, '');
+        t = head(t, Math.max(0, (limit || LIMIT) - points(before + after) - 2)).replace(/\s+$/, '');
         if (!t) return { value: before + after, caret: before.length };       // (nothing of it fits: no spaces are added either)
         var lead = before && !/\s$/.test(before) ? ' ' : '', tail = after && !/^\s/.test(after) ? ' ' : '';
         return { value: before + lead + t + tail + after, caret: (before + lead + t).length };
@@ -79,6 +79,7 @@
     function mount(env) {
         var doc = env.doc, win = env.win, dock = env.dock, field = dock.field, form = field.parentNode;
         if (!form) return null;
+        var max = env.limit || LIMIT, withEmoji = env.emoji !== false;       // (the room's chat line is 100 printable ASCII characters: it passes no emoji and its own limit)
         function el(tag, cls, text) { var e = doc.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
         function button(cls, label, text) { var b = el('button', 'btn ' + cls, text); b.type = 'button'; b.setAttribute('aria-label', label); b.setAttribute('title', label); return b; }
         // the two pictures: inline SVG made node by node (no file, no font, no markup string), drawn in the button's own color: a smiley in a circle, and the usual microphone (a capsule, the holder under it, a stem and a base)
@@ -94,18 +95,18 @@
         for (i = 0; i < form.children.length; i++) if (String(form.children[i].className).indexOf('gc-send') !== -1) { send = form.children[i]; break; }
         var tools = el('span', 'gt-tools'), emojiBtn = button('gt-btn gt-emoji', TEXT.emoji, ''), micBtn = null;
         emojiBtn.appendChild(icon(true)); emojiBtn.setAttribute('aria-expanded', 'false'); emojiBtn.setAttribute('aria-controls', 'gt-pick');
-        tools.appendChild(emojiBtn);
+        if (withEmoji) tools.appendChild(emojiBtn);
         var Ctor = recognition(win);
         if (Ctor) { micBtn = button('gt-btn gt-mic', TEXT.voice, ''); micBtn.appendChild(icon(false)); micBtn.setAttribute('aria-pressed', 'false'); tools.appendChild(micBtn); }
         var say = el('p', 'gt-say'); say.setAttribute('role', 'status'); say.setAttribute('aria-live', 'polite'); say.hidden = true;
         var pick = el('div', 'gt-pick'); pick.id = 'gt-pick'; pick.setAttribute('role', 'group'); pick.setAttribute('aria-label', TEXT.emojiList); pick.hidden = true;
         var keys = [];
-        emoji().forEach(function (g) {
+        if (withEmoji) emoji().forEach(function (g) {
             var row = el('div', 'gt-row'); row.setAttribute('role', 'group'); row.setAttribute('aria-label', g.name); row.appendChild(el('span', 'gt-name', g.name));
             g.list.forEach(function (e) { var b = el('button', 'gt-e', e); b.type = 'button'; b.tabIndex = -1; keys.push(b); row.appendChild(b); });
             pick.appendChild(row);
         });
-        form.insertBefore(say, form.children[0] || null); form.insertBefore(pick, say.nextSibling);
+        form.insertBefore(say, form.children[0] || null); if (withEmoji) form.insertBefore(pick, say.nextSibling);
         if (send) form.insertBefore(tools, send); else form.appendChild(tools);
         form.className = String(form.className) + ' gt-on';
 
@@ -122,7 +123,7 @@
             return h;
         };
         function grown() { if (dock.grow) dock.grow(); }       // (the field is a text area: the chat makes it as tall as its words)
-        function sync() { tools.hidden = !!field.disabled; if (field.disabled || form.hidden) { drop(); close(false); } }
+        function sync() { var off = !!field.disabled || !!(dock.off && dock.off()); tools.hidden = off; if (off || form.hidden) { drop(); close(false); } }
         function fit() {                                       // the picker lies over the log, above the form: no taller than the room above the form (72 to 180 px): up to the top of the dock's body where the dock clips what is outside it (a phone), else up to the window's top
             var clips = win.getComputedStyle && dock.root && win.getComputedStyle(dock.root).overflow === 'hidden';
             var floor = clips && form.parentNode && form.parentNode.getBoundingClientRect ? form.parentNode.getBoundingClientRect().top : 8;
@@ -136,14 +137,14 @@
             fit(); if (byPointer) { at = Math.max(0, Math.min(keys.length - 1, at)); keys.forEach(function (b, k) { b.tabIndex = k === at ? 0 : -1; }); } else rove(at);
         }
         function choose(text) {
-            var r = insert(field.value, field.selectionStart, field.selectionEnd, text);
+            var r = insert(field.value, field.selectionStart, field.selectionEnd, text, max);
             if (!r) { note(TEXT.full); return; }
             note(''); field.value = r.value; grown();
             if (field.setSelectionRange) field.setSelectionRange(r.caret, r.caret);
         }
         // ---- voice
         function paint(me, words) { if (micBtn) { micBtn.setAttribute('aria-pressed', run === me && !me.over ? 'true' : 'false'); micBtn.className = 'btn gt-btn gt-mic' + (run === me && !me.over ? ' gt-hot' : ''); } note(words); }
-        function draw(me) { var r = speak(me.before, me.text, me.after); field.value = r.value; grown(); if (field.setSelectionRange) field.setSelectionRange(r.caret, r.caret); }
+        function draw(me) { var r = speak(me.before, me.text, me.after, max); field.value = r.value; grown(); if (field.setSelectionRange) field.setSelectionRange(r.caret, r.caret); }
         function drop() {                                      // away at once: nothing that the recognizer still says is heard (a send, typing, a page that goes, a field that is off)
             var me = run; if (!me) return;
             run = null; me.over = true; paint(me, '');
@@ -170,7 +171,7 @@
                     var t = '', rs = (e && e.results) || [];
                     for (var k = 0; k < rs.length; k++) if (rs[k] && rs[k][0] && typeof rs[k][0].transcript === 'string') t += rs[k][0].transcript + ' ';
                     me.text = t; draw(me);
-                    if (points(field.value) >= LIMIT - 2 && !me.over) { me.over = true; me.full = true; try { rec.stop(); } catch (x) { /* ended */ } paint(me, TEXT.full); }
+                    if (points(field.value) >= max - 2 && !me.over) { me.over = true; me.full = true; try { rec.stop(); } catch (x) { /* ended */ } paint(me, TEXT.full); }
                 };
                 rec.onerror = function (e) { if (run === me && e && e.error !== 'aborted') { me.error = String(e.error || 'failed'); note(why(me.error)); } };       // (said at once: some phones end the listening late)
                 rec.onend = function () { finish(me); };
@@ -201,7 +202,7 @@
         doc.addEventListener('pointerdown', function (e) { if (open && e && e.target && !form.contains(e.target)) close(false); });
         win.addEventListener('pagehide', function () { drop(); });
         win.addEventListener('resize', function () { if (open) fit(); });
-        dock.tap(function () { sync(); });
+        if (dock.tap) dock.tap(function () { sync(); });
         sync();
         return { root: tools, pick: pick, say: say, emoji: emojiBtn, mic: micBtn, field: field, drop: drop, close: close };
     }
