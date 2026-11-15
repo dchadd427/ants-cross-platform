@@ -57,9 +57,9 @@ def by_of(store, by):
     return ref(store, by) if by.isdigit() else by
 
 
-def resolve(store, who):
+def resolve(store, who, ids=True):
     """(account id, username) of ACCOUNT, or (None, why). A name is a username, looked up in the profiles; a reference (16 hex characters, as `list` prints it) is the account that has it; an id is an
-    account as it is; the name of an account that was given by reference or id is its username when it has a profile, else the name that it last spoke under (which, for an account with no profile, is
+    account as it is (only with `ids`: the admin page's API, hub/admindoor.py, passes False, and a number is then refused); the name of an account that was given by reference or id is its username when it has a profile, else the name that it last spoke under (which, for an account with no profile, is
     its username)."""
     if pseudo.REFERENCE.match(who):
         account = store.account_of_reference(who)
@@ -72,6 +72,8 @@ def resolve(store, who):
             return None, "not an account id or a username"
         account = store.account_of_username(name)
         return (account, name) if account else (None, "no account has that username, or more than one does (use the reference that `list` or `log` prints)")
+    if not ids:
+        return None, "a number is not an account here: write @ and the username, or give the reference"
     profile = store.profile(who)
     return who, profile.username if profile else store.last_name(who)
 

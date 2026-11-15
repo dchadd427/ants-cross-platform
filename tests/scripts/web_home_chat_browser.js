@@ -288,8 +288,8 @@ async function main() {
         check('the lines come back from the hub and are the visitor\'s own (gold name)', (await page.evaluate(() => document.querySelectorAll('#gchat .gc-me').length)) === 2);
         hub.say('<b>evil</b>', '<img src=x onerror="window.pwned=1"><script>window.pwned=1</script> ‮ rtl javascript:alert(1) http://evil.example');
         await sleep(200);
-        const untrusted = await page.evaluate(() => ({ pwned: window.pwned || 0, imgs: document.querySelectorAll('#gchat img, #gchat script, #gchat a, #gchat b, #gchat iframe').length, last: document.querySelector('#gchat .gc-log').lastElementChild.innerText }));
-        check('untrusted text in a real browser is text: no element made from it, nothing ran, no link', untrusted.pwned === 0 && untrusted.imgs === 0 && untrusted.last.indexOf('<b>evil</b>: <img src=x') === 0, JSON.stringify(untrusted));
+        const untrusted = await page.evaluate(() => ({ pwned: window.pwned || 0, imgs: document.querySelectorAll('#gchat img, #gchat script, #gchat b, #gchat iframe').length, links: [...document.querySelectorAll('#gchat a')].map((x) => x.getAttribute('href')).join('|'), last: document.querySelector('#gchat .gc-log').lastElementChild.innerText }));
+        check('untrusted text in a real browser is text: no element made from it, nothing ran, and the only link is the plain http address', untrusted.pwned === 0 && untrusted.imgs === 0 && untrusted.links === 'http://evil.example/' && untrusted.last.indexOf('<b>evil</b>: <img src=x') === 0, JSON.stringify(untrusted));
         for (let i = 0; i < 300; i++) hub.say('u' + (i % 5), 'burst ' + i);
         await sleep(400);
         check('a burst of 300 lines leaves 100 in the page', (await page.evaluate(() => document.querySelectorAll('#gchat .gc-line').length)) === 100);

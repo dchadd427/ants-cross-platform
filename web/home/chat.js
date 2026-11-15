@@ -1,7 +1,7 @@
 // The global chat dock of Home (docs/HOME_SCREEN.md, "The chat dock"): a panel along the bottom of Home (the Chat view on a phone) that reads and writes the site's chat hub, one WebSocket, JSON, version 1
 // (docs/HUB.md: up {"t":"say","text"} and {"t":"ping"}; down welcome, line, del, online, err, and for a moderator you, ok, bans, bye). Loaded by web/home/home.js after the first paint, with web/home/chat.css, and only by the front page: a plain visit of any
 // other page opens no hub socket. ES5, no module system: a page gets AntsHomeChat, node gets module.exports (tests/scripts/web_home_chat_check.js).
-//   * Everything the hub sends is text from strangers: it becomes DOM text with createElement and textContent only (never markup, never a link); names and lines are cut for display, the bidirectional and zero-width
+//   * Everything the hub sends is text from strangers: it becomes DOM text with createElement and textContent only (never markup; the one thing that becomes a link is an http or https address, or a bare www host, made as an element with attributes: see partsOf); names and lines are cut for display, the bidirectional and zero-width
 //     controls are removed, and each name and line sits in a <bdi>; a frame that is too big, is not JSON or is of a kind that is not known is ignored; at most 100 lines are kept (in memory and on the screen).
 //   * The chat never blocks Home, the Room or START: a hub that is not there, slow or garbage is "Chat is offline" and a retry (1 s, doubling to 60 s, plus jitter; a hub that opens and closes again at once does not
 //     reset it); every handler is guarded; nothing is kept in the browser (no storage), the state is in memory.
@@ -33,14 +33,14 @@
         login: 'Log in', loginWith: 'Log in with Discord', chatting: 'Chatting as ', logout: 'Log out', forget: 'Forget me', sure: 'Are you sure? Press again', forgetNote: 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.',
         picShow: 'Show my Discord picture', picNote: 'Everyone on the front page sees it next to your name.', picNone: 'Your picture is loaded when you log in.', picAgain: 'Log in again', picBlocked: 'Your picture is hidden on this site.',
         shows: 'Chat shows your ', names: ['display name', 'username'], use: 'Show my ',
-        administrator: 'administrator', moderator: 'moderator', only: 'Only you', youAre: { mod: 'You are a moderator', admin: 'You are an administrator' }, number: 'line number',
+        administrator: 'administrator', moderator: 'moderator', only: 'Only you', youAre: { mod: 'You are a moderator', admin: 'You are an administrator' }, today: 'Today', yesterday: 'Yesterday', linkMax: 5, linkCut: 48,
         helpHead: 'Commands you can use. Only you can see this.', helpNone: 'There are no chat commands for you.', cmdBad: 'That command is not right. Type /help to see the commands.', cmdRate: 'You are going too fast, try again in a moment', bansHead: 'People who are banned', bansNone: 'Nobody is banned.', noName: '(no name)',
         kicked: 'A moderator removed you from the chat. You can log in again.', banned: 'You are banned from the chat. You can still read it.', banField: 'You are banned from the chat'
     };
     var RANK = { none: 0, mod: 1, admin: 2 };                            // (the hub's own table: docs/HUB.md, "Moderation")
     var COMMANDS = [                                                     // [the word, the rank that may use it, how it is typed, what it does]: what /help lists; the hub decides what is done
         ['/mute', 1, '/mute name minutes', 'stop a person writing for 1 to 10080 minutes'], ['/unmute', 1, '/unmute name', 'allow a muted person to write again'],
-        ['/del', 1, '/del number', 'take one line off the screen of everybody (use the number beside the line)'], ['/kick', 1, '/kick name', 'remove a person from the chat (they can log in again)'],
+        ['/del', 1, '/del number', 'take one line off the screen of everybody (hold or point at the time of the line to see its number)'], ['/kick', 1, '/kick name', 'remove a person from the chat (they can log in again)'],
         ['/ban', 2, '/ban name', 'stop a person writing until the ban is lifted (they can still read)'], ['/unban', 2, '/unban name', 'lift a ban'], ['/bans', 2, '/bans', 'list the people who are banned']
     ];
     var DONE = { mute: 'Done: the person is muted.', unmute: 'Done: the person can write again.', del: 'Done: the line is gone.', kick: 'Done: the person was removed.', ban: 'Done: the person is banned.', unban: 'Done: the ban is lifted.' };
@@ -131,7 +131,38 @@
     function lineOf(m) {                                                 // one line of the hub (history or live), cleaned: { id, who, text, mod, role, sys (a line of the hub's own: only its flag says so), k (its author's key), u (its author's username: only a moderator's copy has it; drawn for a moderator only) }, or null when it is not a line
         if (!m || typeof m !== 'object' || typeof m.who !== 'string' || typeof m.text !== 'string' || count(m.id) === null) return null;
         var text = clip(plain(m.text.slice(0, LIMIT.line * 4)), LIMIT.line), sys = m.sys === true;
-        return shows(text) ? { id: m.id, who: nameOf(m.who) || '?', text: text, mod: !sys && m.mod === true, role: sys ? 'none' : roleOf(m.role, m.mod), sys: sys, k: nameOf(m.k), u: nameOf(m.u) } : null;
+        if (!shows(text)) return null;
+        var out = { id: m.id, who: nameOf(m.who) || '?', text: text, mod: !sys && m.mod === true, role: sys ? 'none' : roleOf(m.role, m.mod), sys: sys, k: nameOf(m.k), u: nameOf(m.u) };
+        if (dayOf(m.at) !== '') out.at = m.at;                           // (the hub's own time of the line, seconds since 1970; a line without one shows no time: the page never makes one up)
+        return out;
+    }
+    var LINKRE = /(^|[^\w@.\/:-])((?:https?:\/\/|www\.)[^\s<>]+)/gi;
+    function trimLink(raw) {                                             // the end of an address that is the sentence's, not the address's: . , ! ? : ; ' " and a closing bracket that has no opening one before it
+        for (;;) {
+            var c = raw.charAt(raw.length - 1), open = c === ')' ? '(' : c === ']' ? '[' : c === '}' ? '{' : '';
+            if (open ? raw.split(c).length > raw.split(open).length : '.,!?:;\'"'.indexOf(c) >= 0 && c !== '') raw = raw.slice(0, -1); else return raw;
+        }
+    }
+    function linkOf(typed) {                                             // { href, host } for an address that may be a link (http, https or a bare www host; a name, a dot, no password, no other scheme), or null
+        var u;
+        try { u = new URL(/^www\./i.test(typed) ? 'https:' + '//' + typed : typed); } catch (e) { return null; }
+        if ((u.protocol !== 'http:' && u.protocol !== 'https:') || !u.hostname || u.hostname.indexOf('.') < 1 || u.username || u.password || /\s/.test(String(u))) return null;
+        return { url: String(u), host: u.hostname };
+    }
+    function shorten(typed) { return typed.length > TEXT.linkCut ? pairs(typed.slice(0, 30)) + '\u2026' + pairs(typed.slice(-17)) : typed; }
+    function partsOf(text) {                                             // a line as [{ s } text, { s, href, host, title } link]: at most five links, the rest is text
+        var out = [], at = 0, links = 0, m, typed, k, link;
+        LINKRE.lastIndex = 0;
+        while (links < TEXT.linkMax && (m = LINKRE.exec(text))) {
+            typed = trimLink(m[2]); link = linkOf(typed); k = m.index + m[1].length;
+            if (!link) continue;
+            if (k > at) out.push({ s: text.slice(at, k) });
+            out.push({ s: shorten(typed), url: link.url, title: (/[^\x00-\x7f]/.test(typed) ? link.host + ' ' : '') + link.url });
+            at = k + typed.length; links++;
+            LINKRE.lastIndex = at;
+        }
+        if (at < text.length) out.push({ s: text.slice(at) });
+        return out;
     }
     function wordOfRole(role) { return role === 'admin' ? TEXT.administrator : TEXT.moderator; }
     function roleClass(role) { return role === 'admin' ? ' gc-r-admin' : role === 'mod' ? ' gc-r-mod' : ''; }       // (the name in red or yellow: chat.css)
@@ -192,6 +223,19 @@
             if (text !== undefined) e.textContent = text;
             return e;
         }
+        var I = env.Intl || win.Intl, fmt = {};                                  // the clock's words follow the device (Intl: its time zone and its 12 or 24 hours); one maker each, made once
+        function maker(name, opts) { if (fmt[name] === undefined) { try { fmt[name] = new I.DateTimeFormat(undefined, opts); } catch (e) { fmt[name] = null; } } return fmt[name]; }
+        function say2(d, name, opts, plain) { var f = maker(name, opts); try { return f ? f.format(d) : plain(d); } catch (e) { return plain(d); } }
+        function two(n) { return (n < 10 ? '0' : '') + n; }
+        function timeOf(at) { return say2(new Date(at * 1000), 'time', { hour: 'numeric', minute: '2-digit' }, function (d) { return two(d.getHours()) + ':' + two(d.getMinutes()); }); }
+        function fullOf(at) { return say2(new Date(at * 1000), 'full', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }, function (d) { return d.toDateString() + ' ' + timeOf(at); }); }
+        function localDay(d) { return d.getFullYear() * 10000 + d.getMonth() * 100 + d.getDate(); }
+        function dayWord(at) {                                                   // the divider's word: Today, Yesterday or a short date (the year only when it is not this one)
+            var d = new Date(at * 1000), t = new Date(now()), y = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1);
+            if (localDay(d) === localDay(t)) return TEXT.today;
+            if (localDay(d) === localDay(y)) return TEXT.yesterday;
+            return say2(d, d.getFullYear() === t.getFullYear() ? 'date' : 'dateYear', d.getFullYear() === t.getFullYear() ? { month: 'short', day: 'numeric' } : { year: 'numeric', month: 'short', day: 'numeric' }, function (x) { return x.toDateString(); });
+        }
         function put(parent, kids) { kids.forEach(function (k) { parent.appendChild(k); }); return parent; }
         function guard(fn) { return function () { try { return fn.apply(this, arguments); } catch (e) { if (env.error) env.error(e); return undefined; } }; }       // (nothing that goes wrong in here reaches the page)
         function stop(name) { if (timers[name]) { clearTimeout(timers[name]); timers[name] = 0; } }
@@ -246,15 +290,42 @@
                 e.lines.forEach(function (l) { r.appendChild(typeof l === 'string' ? el('div', 'gc-pl', l) : put(el('div', 'gc-pl'), [el('bdi', 'gc-cmd', l[0]), el('span', 'gc-pw', l[1] ? ' ' + l[1] : '')])); });
                 return r;
             }
-            if (e.sys) return put(el('div', 'gc-line gc-event'), [el('bdi', 'gc-text', e.text)]);       // (a line of the hub's own, drawn quietly; it names the person in its words, and has no author)
+            if (e.sys) { r = put(el('div', 'gc-line gc-event'), [stamp(e), el('bdi', 'gc-text', e.text)]); r.setAttribute('data-n', String(e.id)); return r; }       // (a line of the hub's own, drawn quietly; it names the person in its words, and has no author)
             r = el('div', 'gc-line' + (e.mod ? ' gc-mod' : '') + (admin ? ' gc-admin' : '') + (e.own ? ' gc-me' : ''));
+            r.setAttribute('data-n', String(e.id)); put(r, [stamp(e)]);       // (the number stays in the line as data, for the menu of a moderator; it is never shown)
             var name = el('bdi', 'gc-who', e.who);
             if (e.mod) { r.appendChild(el('span', 'gc-sr', wordOfRole(e.role) + ' ')); name.setAttribute('title', wordOfRole(e.role)); }       // (the name is red or yellow: the word is in the accessible name too, so that color is never the only sign)
             put(r, [name]);
             if (tools() && e.u) put(r, [el('bdi', 'gc-u', ' (' + e.u + ')')]);       // (a moderator is shown the username where it differs from the name; nobody else ever is)
-            put(r, [el('span', 'gc-sep', ': '), el('bdi', 'gc-text', e.text)]);
-            if (tools()) { var no = el('span', 'gc-no', ' #' + e.id); no.setAttribute('title', TEXT.number); r.appendChild(no); }       // (the number that /del takes: a moderator's only)
+            put(r, [el('span', 'gc-sep', ': '), words(e.text)]);
             return r;
+        }
+        function stamp(e) {                                                      // the time of a line, from the hub's frame: first in the line, so that it is read before the name; the title has the date, and a moderator's the number that /del takes
+            if (e.at === undefined) return el('span', 'gc-t gc-t0');
+            var t = el('span', 'gc-t', timeOf(e.at)), full = fullOf(e.at);
+            t.setAttribute('title', tools() && !e.sys ? '#' + e.id + ' ' + full : full);
+            return t;
+        }
+        function words(text) {                                                   // the words of a line: one bdi; an address in them is a link made of an element and an attribute, never markup
+            var parts = partsOf(text);
+            if (parts.length === 1 && parts[0].url === undefined) return el('bdi', 'gc-text', text);
+            return put(el('bdi', 'gc-text'), parts.map(function (p) {
+                if (p.url === undefined) return el('span', '', p.s);
+                var a = el('a', 'gc-a', p.s);
+                a.setAttribute('href', p.url); a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer nofollow ugc'); a.setAttribute('referrerpolicy', 'no-referrer'); a.setAttribute('title', p.title);
+                return a;
+            }));
+        }
+        function unrow(e) { if (e.div && e.div.parentNode) e.div.parentNode.removeChild(e.div); e.div = null; if (e.el && e.el.parentNode) e.el.parentNode.removeChild(e.el); }
+        function days() {                                                        // a small divider before the first line and wherever two neighbours are of different local days (kept in step after every change of the log)
+            var last = 0;
+            feed.forEach(function (e) {
+                if (e.priv || e.at === undefined || !e.el || !e.el.parentNode) return;
+                var d = localDay(new Date(e.at * 1000)), want = d !== last;
+                last = d;
+                if (want && !e.div) { e.div = el('div', 'gc-day', dayWord(e.at)); e.div.setAttribute('role', 'separator'); log.insertBefore(e.div, e.el); }
+                else if (!want && e.div) { e.div.parentNode.removeChild(e.div); e.div = null; }
+            });
         }
         function tools() { return !!you && you.role !== 'none'; }                // (a moderator or an administrator: the line numbers and the usernames are for them)
         function mine(e) { return !!you && (you.k ? e.k === you.k : e.who === you.name); }       // (by the hub's key; a hub that sends none: by the name)
@@ -282,8 +353,8 @@
             var keep = hold, top = log.scrollTop, bottom = atBottom(); hold = false;
             muted.repaint = true; live(); stop('quiet');
             while (log.children.length > 1) log.removeChild(log.children[log.children.length - 1]);
-            feed.forEach(function (e) { e.el = row(e); log.appendChild(e.el); });
-            stale = false;
+            feed.forEach(function (e) { e.div = null; e.el = row(e); log.appendChild(e.el); });
+            days(); stale = false;
             if (keep && !bottom && typeof top === 'number') log.scrollTop = top; else settle(true);       // (a role that changes keeps the place of a reader who is up in the log; a welcome and a tab that comes back read from the bottom)
             timers.quiet = setTimeout(guard(function () { timers.quiet = 0; muted.repaint = false; live(); }), 300);
         }
@@ -404,12 +475,12 @@
         function push(e) {
             feed.push(e);
             if (e.id !== null && e.id > lastId) lastId = e.id;
-            while (feed.length > LIMIT.feed) { var old = feed.shift(); if (seen() && !stale && old.el && old.el.parentNode) old.el.parentNode.removeChild(old.el); else stale = true; }       // (a screen that is not painted is made again when it comes back)
+            while (feed.length > LIMIT.feed) { var old = feed.shift(); if (seen() && !stale && old.el && old.el.parentNode) unrow(old); else stale = true; }       // (a screen that is not painted is made again when it comes back)
         }
         function answer(lines) {                                                // a private answer: a line of this screen, with its lines, for this visitor alone (nothing is sent, the hub keeps nothing)
             var e = { id: null, priv: true, lines: lines, mod: false, role: 'none', own: false, fresh: false };
             push(e);
-            if (seen() && !stale) { settle(true); e.el = row(e); log.appendChild(e.el); reveal(e); } else stale = true;
+            if (seen() && !stale) { settle(true); e.el = row(e); log.appendChild(e.el); days(); reveal(e); } else stale = true;
             render();
         }
         function reveal(e) {                                                     // an answer taller than the log is read from its first line, not from its last (a list of commands)
@@ -441,7 +512,7 @@
             e.own = !e.sys && mine(e); e.fresh = !e.own && !seen();
             if (e.own) { var key = nfc(e.text), at = -1, old; waiting(); for (var j = 0; j < unanswered.length && at < 0; j++) if (unanswered[j].key === key) at = j; old = oldest(false); if (at < 0 && old >= 0 && points(key) * 2 >= points(unanswered[old].key) && within(key, unanswered[old].key)) at = old; if (at >= 0) unanswered.splice(at, 1); }       // (the echo of a line: composed, or with characters taken out)
             push(e);
-            if (seen() && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); } else stale = true;
+            if (seen() && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); days(); } else stale = true;
             render();
         }
         function onDel(m) {
@@ -449,7 +520,7 @@
             for (var i = 0; i < feed.length; i++) {
                 if (feed[i].id !== m.id) continue;
                 var gone = feed.splice(i, 1)[0];
-                if (seen() && !stale && gone.el && gone.el.parentNode) gone.el.parentNode.removeChild(gone.el); else stale = true;
+                if (seen() && !stale && gone.el && gone.el.parentNode) { unrow(gone); days(); } else stale = true;
                 break;
             }
             render();
@@ -624,5 +695,5 @@
         };
     }
 
-    return { PATH: PATH, LIMIT: LIMIT, MS: MS, PACE: PACE, TEXT: TEXT, ERR: ERR, plain: plain, points: points, clip: clip, parse: parse, count: count, lineOf: lineOf, youOf: youOf, picOf: picOf, picture: picture, roleOf: roleOf, wordOfRole: wordOfRole, helpOf: helpOf, bansOf: bansOf, wordOfCommand: wordOfCommand, wordOf: wordOf, delayOf: delayOf, addressOf: addressOf, mount: mount };
+    return { PATH: PATH, LIMIT: LIMIT, MS: MS, PACE: PACE, TEXT: TEXT, ERR: ERR, plain: plain, points: points, clip: clip, parse: parse, count: count, lineOf: lineOf, partsOf: partsOf, youOf: youOf, picOf: picOf, picture: picture, roleOf: roleOf, wordOfRole: wordOfRole, helpOf: helpOf, bansOf: bansOf, wordOfCommand: wordOfCommand, wordOf: wordOf, delayOf: delayOf, addressOf: addressOf, mount: mount };
 });

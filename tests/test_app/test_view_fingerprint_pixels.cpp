@@ -46,6 +46,7 @@ struct RendererRig {
         if (!level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/" + map + ".LVL")) return;
         engine.init(level, 1337);
         if (!renderer.init(win, archive)) return;
+        renderer.set_classic_numbers(true);   // (these pictures and hashes are pinned for the classic numbers: the font numbers have test_font_numbers)
         renderer.set_level(level);
         renderer.pin_animation_clock(1500);
         renderer.set_hud_team(0);

@@ -232,10 +232,30 @@
       "test": "./build/tests/test_app/test_health_changes"
     },
     {
-      "id": "gap_over_the_bar",
+      "id": "body_centre_moved",
       "file": "include/ants_app/health_changes.hpp",
-      "old": "constexpr int32_t kAboveBar = 2;",
-      "new": "constexpr int32_t kAboveBar = 3;",
+      "old": "constexpr int32_t kBodyCentreAbove = 8;",
+      "new": "constexpr int32_t kBodyCentreAbove = 9;",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "centre_ignores_the_zoom",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "static_cast<double>(health::kBodyCentreAbove) * zoom",
+      "new": "static_cast<double>(health::kBodyCentreAbove) * (zoom > 0.0 ? 1.0 : zoom)",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "number_below_its_centre",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "const int32_t top = centre - pic->h / 2 - rise;",
+      "new": "const int32_t top = centre - pic->h - rise;",
       "build": [
         "test_health_changes"
       ],
@@ -292,40 +312,10 @@
       "test": "./build/tests/test_app/test_health_changes"
     },
     {
-      "id": "small_canvas_scale_uncapped",
-      "file": "src/ants_app/renderer_health.cpp",
-      "old": "std::min(health::kChangeScaleMax, health::digit_scale(picture_px_per_css))",
-      "new": "health::digit_scale(picture_px_per_css)",
-      "build": [
-        "test_health_changes"
-      ],
-      "test": "./build/tests/test_app/test_health_changes"
-    },
-    {
-      "id": "native_window_scales_numbers",
-      "file": "src/ants_app/renderer_health.cpp",
-      "old": "changes_scale_ = scale_digits ? std::min(",
-      "new": "changes_scale_ = (scale_digits || !scale_digits) ? std::min(",
-      "build": [
-        "test_health_changes"
-      ],
-      "test": "./build/tests/test_app/test_health_changes"
-    },
-    {
-      "id": "place_ignores_the_canvas_bar",
-      "file": "src/ants_app/renderer_health.cpp",
-      "old": "changes_thick_ = health::thick_for(picture_px_per_css);",
-      "new": "changes_thick_ = false;",
-      "build": [
-        "test_health_changes"
-      ],
-      "test": "./build/tests/test_app/test_health_changes"
-    },
-    {
       "id": "number_does_not_rise",
       "file": "src/ants_app/renderer_health.cpp",
-      "old": "const int32_t rise = health::rise_at(age) * scale + ",
-      "new": "const int32_t rise = 0 * scale + ",
+      "old": "const int32_t rise = health::rise_at(age) + ",
+      "new": "const int32_t rise = 0 + ",
       "build": [
         "test_health_changes"
       ],
@@ -334,7 +324,7 @@
     {
       "id": "number_not_centred",
       "file": "src/ants_app/renderer_health.cpp",
-      "old": "const int32_t left = sx - pic->w * scale / 2;",
+      "old": "const int32_t left = sx - pic->w / 2;",
       "new": "const int32_t left = sx;",
       "build": [
         "test_health_changes"

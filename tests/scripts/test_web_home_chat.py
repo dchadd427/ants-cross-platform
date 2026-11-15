@@ -149,9 +149,11 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertNotRegex(self.code, r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|srcdoc|createContextualFragment|DOMParser|setTimeout\(\s*['\"]")
         picture_address = re.compile(r"\w+\.setAttribute\(\s*'src',\s*PICDIR\s*\+\s*\w+\s*\+\s*PICEXT\s*\);")       # (the one address the page sets: a fixed folder, a name, a fixed ending; the node rig checks by behavior that the name is a checked one only)
         self.assertEqual(len(picture_address.findall(self.code)), 1, "one statement sets an address, and it is made of the two constants and a name")
-        self.assertNotRegex(picture_address.sub("", self.code), r"\.href\b|\.src\b|setAttribute\(\s*['\"](href|src|style|on\w+|srcdoc)")
+        link_address = re.compile(r"\ba\.setAttribute\('href', p\.url\);")       # (the one address of a link: the checked, normalized http or https address that partsOf made; tests/scripts/web_home_chat_check.js)
+        self.assertEqual(len(link_address.findall(self.code)), 1, "one statement sets a link's address")
+        self.assertNotRegex(link_address.sub("", picture_address.sub("", self.code)), r"\.href\b|\.src\b|setAttribute\(\s*['\"](href|src|style|on\w+|srcdoc)")
         made = sorted(set(re.findall(r"\bel\('(\w+)'", self.code)))
-        self.assertEqual(made, ["bdi", "button", "div", "form", "h2", "i", "input", "label", "p", "section", "span", "textarea"], "no a, script, iframe, style or link: the dock makes text, boxes and the switch (the picture's img is made by one helper)")
+        self.assertEqual(made, ["a", "bdi", "button", "div", "form", "h2", "i", "input", "label", "p", "section", "span", "textarea"], "no script, iframe, style or link element: the dock makes text, boxes, the switch and the checked links of a line (the picture's img is made by one helper)")
         self.assertEqual(sorted(set(re.findall(r"\bmake\('(\w+)'", self.code))), ["img"])
         self.assertEqual(self.code.count("createElement"), 1, "one place makes elements")
         self.assertIn("if (text !== undefined) e.textContent = text;", self.js)
@@ -444,7 +446,7 @@ class TheRoles(unittest.TestCase):
         for color in ("#f4ece2", "#a8cfc0", "#b9d9cc"):
             self.assertGreaterEqual(contrast(color, "#0e1c18"), 4.5, color + " on the private answer")
         self.assertGreaterEqual(contrast("#f4ece2", "#1c140c"), 4.5, "the notice of a removal")
-        for selector in (".gc-u", ".gc-no"):
+        for selector in (".gc-u", ".gc-t", ".gc-day"):
             self.assertGreaterEqual(contrast(re.search(r"color: (#[0-9a-f]{6})", self.rule(self.css, selector)).group(1), "#0a1016"), 4.5, selector + ": faint, and still readable")
         self.assertIn("font-style: italic;", self.rule(self.css, ".gc-event"))
         self.assertIn("border-left: 3px solid", self.rule(self.css, ".gc-private"), "a private answer is set apart by more than its color")
