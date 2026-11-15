@@ -204,7 +204,8 @@ private:
     static IslandTask::Params island_params(const LevelPlan& plan) {
         IslandTask::Params p;
         p.swimmers = plan.island_swimmers;
-        p.builders = plan.island_builders;
+        p.builders = plan.island_walker_bridge ? std::max<uint32_t>(plan.island_builders, 1u) : plan.island_builders;
+        p.walker_bridge = plan.island_walker_bridge;
         p.bridge_ants = plan.island_bridge_ants;
         p.guard = plan.island_guard;
         // the margins grow with the latency of the level (Easy looks every 100 ticks and reacts after 60): its bridges are given up earlier and its ants kept away from them longer

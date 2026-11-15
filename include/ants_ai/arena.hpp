@@ -172,6 +172,7 @@ struct ArenaSpec {
 };
 
 class ExpeditionTask;
+class MinerFlightTask;
 
 /// What a standard bot's expedition over water did (ExpeditionTask, docs/BOTS.md "Islands"); the ticks are 0 for what never happened, and everything is 0 for a seat that has no standard bot
 struct ExpeditionResult {
@@ -192,6 +193,23 @@ inline bool operator==(const ExpeditionResult& a, const ExpeditionResult& b) noe
     return a.planned == b.planned && a.given_up == b.given_up && a.planted == b.planted && a.hops == b.hops && a.landings == b.landings && a.duds == b.duds && a.taken == b.taken &&
            a.swimmers_taken == b.swimmers_taken && a.first_plant == b.first_plant && a.first_landing == b.first_landing && a.first_swimmer == b.first_swimmer;
 }
+
+/// What a standard bot's Bomber flight to the island of the ring pile did (MinerFlightTask); the ticks are 0 for what never happened
+struct MinerFlightResult {
+    uint32_t started{0};
+    uint32_t planted{0};
+    uint32_t hops{0};
+    uint32_t landed{0};
+    uint32_t gave_up{0};
+    uint64_t first_start{0};
+    uint64_t first_landing{0};
+};
+
+inline bool operator==(const MinerFlightResult& a, const MinerFlightResult& b) noexcept {
+    return a.started == b.started && a.planted == b.planted && a.hops == b.hops && a.landed == b.landed && a.gave_up == b.gave_up && a.first_start == b.first_start && a.first_landing == b.first_landing;
+}
+
+MinerFlightResult read_miner_flight(const MinerFlightTask& task) noexcept;
 
 /// The counters of an expedition as the arena reports them
 ExpeditionResult read_expedition(const ExpeditionTask& expedition) noexcept;
@@ -231,6 +249,7 @@ struct ArenaSeatResult {
     std::array<uint32_t, 6> took{};            // the power-ups that the seat's ants took, by the kind of ant they became (FlowerTally::Seat::took)
     uint32_t took_at_flowers{0};               // of them, the ones taken at a flower's drop tile
     ExpeditionResult expedition;
+    MinerFlightResult miner_flight;
     BotController::SeatStats stats;
     /// commands released per second of game time, in thousandths
     uint32_t milli_commands_per_second(uint64_t ticks) const noexcept {
