@@ -231,9 +231,9 @@
   },
   {
    "id": "the_recordings_home_button_is_hidden",
-   "file": "web/shell.html",
-   "old": "id=\"home-btn\" class=\"btn sm\"",
-   "new": "id=\"home-btn\" class=\"btn sm\" style=\"display: none\"",
+   "file": "web/game_bar.css",
+   "old": "body.replay header.sb .sbhome { display: inline-flex; }",
+   "new": "body.replay header.sb .sbhome { display: none; }",
    "test": "node tests/scripts/web_picture_in_settings_check.js web"
   },
   {

@@ -199,6 +199,9 @@ COPY --from=builder /src/match.html /usr/share/nginx/html/match.html
 COPY web/matches.css /usr/share/nginx/html/matches.css
 COPY web/site_nav.css /usr/share/nginx/html/site_nav.css
 COPY web/site_nav.js /usr/share/nginx/html/site_nav.js
+# The bar of the game page (docs/SITE_NAV.md "The game page"): the game page's own rules for the site bar and its part of the bar's script (the links that ask first during a match, the keys, the Menu's own lines)
+COPY web/game_bar.css /usr/share/nginx/html/game_bar.css
+COPY web/game_bar.js /usr/share/nginx/html/game_bar.js
 COPY web/match_stats.css /usr/share/nginx/html/match_stats.css
 COPY web/replay_page.js /usr/share/nginx/html/replay_page.js
 COPY web/history_page.js /usr/share/nginx/html/history_page.js

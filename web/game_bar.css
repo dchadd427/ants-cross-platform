@@ -1,0 +1,40 @@
+/* The game page's rules for the bar at the top (docs/SITE_NAV.md "The game page"): as high as the header it replaced, so the picture keeps its place. */
+header.sb { width: 100%; max-width: 1280px; min-height: 44px; margin: 0 0 18px; justify-content: flex-start; }
+@media (max-width: 700px) { header.sb { margin-bottom: 16px; } }
+@media (min-width: 701px) and (max-height: 520px) { header.sb { margin-bottom: 14px; } }
+.sb #fullscreen-btn { white-space: nowrap; }
+.sb .btn-text-short { display: none; }
+@media (max-width: 440px) { .sb .btn-text { display: none; } .sb .btn-text-short { display: inline; } }
+.sb [hidden] { display: none !important; }
+/* a recording or a live view: the buttons keep the sizes that the header had */
+body.replay header.sb { min-height: 0; }
+body.replay header.sb nav, body.replay header.sb .sblive, body.replay header.sb .sbgrow { display: none; }
+body.replay header.sb .sbhome { display: inline-flex; }
+body.replay header.sb .sbchev { font-size: 18px; margin-top: -2px; }
+body.replay header.sb .btn { min-height: 38px; padding: 6px 14px; font-size: 15px; }
+body.replay header.sb .sbtn { min-width: 44px; padding: 0; }
+@media (max-width: 700px) {
+    .sb .wide-only { display: none; }
+    body.replay header.sb .btn { min-height: 42px; padding: 6px 12px; }
+    body.replay header.sb .sbtn { padding: 0; }
+    body.replay header.sb #fullscreen-btn { margin-left: auto; }
+}
+@media (max-width: 440px) { body.replay header.sb .btn { padding: 6px 10px; } body.replay header.sb .sbtn { padding: 0; } }
+@media (max-width: 380px) { body.replay header.sb .btn { padding: 6px 8px; } body.replay header.sb .sbtn { padding: 0; } }
+@media (max-width: 340px) { body.replay header.sb { gap: 4px; } body.replay header.sb .btn { padding: 6px 5px; } body.replay header.sb .sbtn { padding: 0; } }
+@media (min-width: 701px) { body.replay header.sb .rhead { flex: 1 1 0; min-width: 0; } }
+@media (min-width: 701px) and (max-height: 520px) { body.replay header.sb .btn { min-height: 30px; padding: 3px 9px; font-size: 13px; } body.replay header.sb .sbtn { min-width: 40px; padding: 0; } }
+/* the question that "Reload page" asks while a game is played: a card in the Menu's look over the whole window */
+.gb-ask { position: fixed; inset: 0; z-index: 1300; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(5, 10, 8, .6); }
+.gb-card { width: min(380px, 100%); padding: 16px 18px 18px; color: var(--cream); background: #050b0e; border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+.gb-card p { margin: 0 0 14px; font-size: 17px; line-height: 1.35; }
+.gb-btns { display: flex; flex-wrap: wrap; gap: 12px; }
+.gb-btns .btn { flex: 1 1 120px; }
+@media (forced-colors: active) { .gb-card { border: 2px solid CanvasText; } }
+/* the Menu's own lines (web/game_bar.js): a recording's tools lead on a narrow window, where the bar has no room for them */
+.sbm .gb-note { margin: 8px 0 4px; padding: 8px 10px; font-size: 14px; line-height: 1.3; color: var(--cream); background: #0e1f1b; border-left: 3px solid var(--gold); }
+.sbm a.gb-own { display: none; color: var(--gold); }
+body.replay .sbm a.gb-own { display: flex; }
+body.live .sbm a.gb-dl, body.nodl .sbm a.gb-dl, body.ownfile .sbm a.gb-dl, body.ownfile .sbm a.gb-copy { display: none; }
+@media (min-width: 701px) { body.replay .sbm a.gb-copy, body.replay .sbm a.gb-dl, body.replay .sbm a.gb-file { display: none; } }
+.sbm .sbsmall a.gb-reload { cursor: pointer; }

@@ -458,24 +458,22 @@ class TheGamePage(PageCase):
     def setUp(self):
         self.page = read("web", "shell.html")
 
-    def test_the_menu_is_the_way_back_in_the_same_tab_in_the_header_and_the_footer(self):
-        header = re.search(r'<a href="/" id="menu-btn"([^>]*)>Menu</a>', self.page)
+    def test_home_is_the_way_back_in_the_same_tab_in_the_bar(self):
+        header = re.search(r'<a class="btn sbhome" href="/" id="menu-btn"([^>]*)>', self.page)
         self.assertIsNotNone(header)
         self.assertNotIn("target=", header.group(1))
-        footer = re.search(r'<a href="/" id="menu-link"([^>]*)>Menu</a>', self.page)
-        self.assertIsNotNone(footer)
-        self.assertNotIn("target=", footer.group(1))
+        self.assertNotIn("<footer", self.page)
         self.assertNotIn("four.html", self.page)
         self.assertNotIn(">Play online<", self.page)
 
     def test_it_asks_before_it_leaves_a_game_that_runs_or_a_room_that_is_joined(self):
-        self.assertEqual(self.page.count("window.confirm('Leave the game and go back to the menu?')"), 1)           # (one question for the Menu button, the recording's Home button and the footer's link)
+        self.assertEqual(self.page.count("window.confirm('Leave the game and go back to the menu?')"), 1)           # (one question, asked by web/game_bar.js for every link of the bar that goes Home)
         block = self.page[self.page.index("THE WAY BACK TO THE MENU"):]
         block = block[:block.index("// The fullscreen mouse: Locked")]
-        self.assertIn("['menu-btn', 'home-btn', 'menu-link'].forEach(function (id) {", block)
+        self.assertIn("window.AntsGameBar.start({", block)
         self.assertIn("ANTS_ARGS.indexOf('--join-url') !== -1", block)
         self.assertIn("Module._ants_match_running() === 1", block)
-        self.assertIn("e.preventDefault()", block)
+        self.assertIn("e.preventDefault()", read("web", "game_bar.js"))
 
     def test_a_yes_leaves_for_good_through_the_games_export_and_nothing_else_does(self):
         # (the review's M2: a player who leaves on purpose through the Menu button or the footer's link dropped nothing: the seat was held for the pause cap and the others waited;
@@ -483,8 +481,8 @@ class TheGamePage(PageCase):
         # asks nothing and never leaves, so the seat and the room stay)
         block = self.page[self.page.index("THE WAY BACK TO THE MENU"):]
         block = block[:block.index("// The fullscreen mouse: Locked")]
-        self.assertIn("else if ((joined || playing) && !(e.ctrlKey || e.metaKey || e.shiftKey || e.altKey)) antsLeaveMatch();", block)          # (a click that opens another tab leaves this one as it is)
-        self.assertEqual(len(re.findall(r"antsLeaveMatch\(\)", self.page)), 2)                                  # the function, the Menu handler: nothing else leaves
+        self.assertIn("leave: antsLeaveMatch,", block)                                                            # (web/game_bar.js calls it for a click that goes Home and not to another tab, tests/scripts/test_web_game_bar.py)
+        self.assertEqual(len(re.findall(r"antsLeaveMatch\(\)|leave: antsLeaveMatch,", self.page)), 2)                                      # the function, the bar's call: nothing else leaves
         selector = self.page[self.page.index("ANTS_SELECTOR_BEGIN"):self.page.index("// ANTS_SELECTOR_END")]
         self.assertIn("function antsLeaveMatch() {", selector)                                                    # (inside the block that node runs)
         self.assertIn("if (isReadyToPlay && typeof Module !== 'undefined' && Module._ants_leave_match) Module._ants_leave_match();", selector)
@@ -500,7 +498,7 @@ class TheGamePage(PageCase):
         self.assertIn("void Application::leave_network_match() {\n    if (net_) net_->leave();", read("src", "ants_app", "application_match.cpp"))
 
     def test_the_catalog_link_has_one_name_on_both_pages(self):
-        for name in ("shell.html", "lobby.html"):
+        for name in ("site_nav.js", "lobby.html"):                                                                # (the game page has the bar's Menu: its small links)
             page = read("web", name)
             self.assertIn("Sprites and sounds", page, name)
             self.assertNotIn("Asset Viewer", page, name)

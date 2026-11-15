@@ -46,7 +46,7 @@ class TheLink(unittest.TestCase):
     """The way to the matches: "Matches" (the list of every match) in the footer of the front page and the game page, in the bar at the top of the two pages
     of the match history (they have no footer), and a "Matches" button in the header of the front page and of the game page (docs/REPLAYS.md "The match pages"). It was one link, "Watch matches", to one list of the recordings."""
 
-    PAGES = (("the game page", "shell.html", "Menu"), ("the front page", "lobby.html", "How it works"))
+    PAGES = (("the front page", "lobby.html", "How it works"),)
     HISTORY = ("matches.html", "match.html")
 
     def test_every_page_with_the_footer_links_has_matches_once_and_no_link_to_the_live_page(self):
@@ -55,10 +55,9 @@ class TheLink(unittest.TestCase):
             texts = [f[2] for f in found]
             self.assertEqual((texts.count("Matches"), texts.count("Live now")), (1, 0), name)
             at = texts.index("Matches")
-            self.assertEqual(at, texts.index(before) + 1 if before in texts else 0, name)                    # (after the Menu link, or after "How it works" on the front page; the first on the pages of the history)
+            self.assertEqual(at, texts.index(before) + 1 if before in texts else 0, name)                    # (after "How it works" on the front page)
             self.assertEqual({f[2]: f[0] for f in found}["Matches"], "/matches", name)
-            if file in ("shell.html", "lobby.html"):
-                self.assertIn('id="watch-link"', [f for f in found if f[2] == "Matches"][0][1], name)
+            self.assertIn('id="watch-link"', [f for f in found if f[2] == "Matches"][0][1], name)
             self.assertFalse({"Watch matches", "Watch live", "Watch replays"} & set(texts), name)               # (the old names are gone)
         for file, label in (("matches.html", "Matches"), ("match.html", "Matches")):
             page = read("web", file)
@@ -66,24 +65,20 @@ class TheLink(unittest.TestCase):
             links = re.findall(r'<a class="btn[a-z ]*" href="([^"]+)"([^>]*)>(?:<span>)?([^<]+)', row)
             self.assertEqual([l[2] for l in links][1:3], ["Matches", "Map maker"], file)                  # (the bar's row: Home, Matches, Map maker, ...)
             self.assertIn('aria-current="page"', [l for l in links if l[2] == label][0][1], file)       # (a page marks its own place)
-        self.assertIn("$('watch-link').setAttribute('aria-current', 'page');", read("web", "shell.html"))     # (the game page in replay or live mode says where the player is)
+        game = read("web", "shell.html")
+        self.assertIn("""document.querySelector('.sb nav a[href="/matches"]').setAttribute('aria-current', 'page');""", game)     # (the game page in replay or live mode says where the player is, in the bar's Menu)
+        self.assertNotIn("<footer", game)
         for file, title in (("matches.html", "Matches"), ("match.html", "Match")):
             self.assertIn("<title>%s \u2014 Ants (1998)@@SITE_TITLE@@</title>" % title, read("web", file))     # (the tab's title agrees with the link)
 
-    def test_the_site_own_tab_on_the_front_page_and_the_history_and_a_new_tab_on_the_game_page(self):
-        for name, file, _ in self.PAGES[1:]:
-            for text in ("Matches",):
-                link = [f for f in footer_links(read("web", file)) if f[2] == text][0]
-                self.assertNotIn("target=", link[1], name)                                                  # (the site's own page: this tab)
+    def test_the_site_own_tab_on_the_front_page_and_the_history(self):
+        for name, file, _ in self.PAGES:
+            link = [f for f in footer_links(read("web", file)) if f[2] == "Matches"][0]
+            self.assertNotIn("target=", link[1], name)                                                      # (the site's own page: this tab)
         game = read("web", "shell.html")
-        for text in ("Matches",):
-            link = [f for f in footer_links(game) if f[2] == text][0]
-            self.assertIn('target="_blank"', link[1])                                                       # (a match that is being played here goes on: the way back to the menu asks first, this link does not leave)
-            self.assertIn('rel="noopener noreferrer"', link[1])
         glue = game[game.index("<!-- BEGIN replay glue"):game.index("<!-- END replay glue")]
-        self.assertIn("$('watch-link').removeAttribute('target');", glue)                                  # (a replay is watched in this tab, like "All matches": nothing is being played; only in the replay glue: a match played keeps the new tab)
-        self.assertIn("$('watch-link').removeAttribute('rel');", glue)
-        self.assertNotIn("removeAttribute('target')", game.replace(glue, ""))
+        self.assertNotIn("removeAttribute('target')", game)                                                 # (the bar's links are plain links: web/game_bar.js opens them in a new tab while a match is played, tests/scripts/test_web_game_bar.py)
+        self.assertNotIn("watch-link", glue)
 
     def test_the_header_of_the_front_page_has_the_button_at_the_right(self):
         lobby = read("web", "lobby.html")
@@ -98,25 +93,13 @@ class TheLink(unittest.TestCase):
         self.assertIn(".mast #watch-top { grid-area: btn; justify-self: end; margin-left: 0; }", phone)
         self.assertNotIn('id="live-link"', lobby)
 
-    def test_the_header_of_the_game_page_has_the_button_after_menu_and_more_has_it_first(self):
+    def test_the_bar_of_the_game_page_has_matches_once_and_a_recordings_header_keeps_all_matches(self):
         game = read("web", "shell.html")
-        actions = re.search(r'<div class="header-actions">(.*?)</header>', game, re.S).group(1)
-        links = re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', actions)
-        self.assertEqual([t for _, _, t in links][:3], ["Menu", "Matches", "Sprites and sounds"])
-        wide = links[1]
-        self.assertEqual(wide[0], "/matches")
-        self.assertIn('id="watch-btn"', wide[1])
-        self.assertIn('wide-only', wide[1])                                                                 # (a narrow window has Menu, Full and More only)
-        self.assertIn('target="_blank"', wide[1])
-        more = re.search(r'<div class="more-list">(.*?)</div>', actions, re.S).group(1)
-        first = re.findall(r'<(?:a|button)\b([^>]*)>([^<]+)</(?:a|button)>', more)[0]
-        self.assertEqual(first[1], "Matches")
-        self.assertIn('href="/matches"', first[0])
-        self.assertIn('target="_blank"', first[0])
-        self.assertNotIn("wide-only", first[0])
-        replay = re.search(r'<div class="header-actions rep-only">(.*?)</header>', game, re.S).group(1)
-        self.assertNotIn(">Matches<", replay)                                                               # (a replay's header keeps "All matches": no second way to the list)
-        self.assertIn("body.replay .header-actions:not(.rep-only)", game)                                   # (and the ordinary header is not shown there)
+        bar = game[game.index('<header class="sb"'):game.index("</header>")]
+        row = re.search(r'<nav aria-label="Pages">(.*?)</nav>', bar, re.S).group(1)
+        self.assertEqual(re.findall(r'<a class="btn" href="/matches">Matches</a>', row).__len__(), 1)
+        self.assertEqual(bar.count(">Matches<"), 1)                                                         # (a recording's bar keeps "All matches": no second way to the list)
+        self.assertIn('id="all-btn" class="btn rep-only"', bar)
 
     def test_the_words_on_the_screens_say_player_never_friend(self):
         for path in (("web", "matches.html"), ("web", "match.html"), ("web", "history_page.js"), ("web", "replay_page.js")):
@@ -131,7 +114,7 @@ class ThePlayerPage(unittest.TestCase):
     page = read("web", "shell.html")
 
     def test_the_pieces_that_the_glue_finds_by_id_are_all_there(self):
-        for ident in ("r-title", "r-meta", "all-btn", "copy-btn", "fullscreen-btn-r", "copy-more", "rtag", "endnote", "veil", "veil-t", "veil-f", "rm", "rm-title", "rm-body", "rbar", "b-play", "tl", "rail",
+        for ident in ("r-title", "r-meta", "all-btn", "copy-btn", "fullscreen-btn", "own-hold", "rtag", "endnote", "veil", "veil-t", "veil-f", "rm", "rm-title", "rm-body", "rbar", "b-play", "tl", "rail",
                       "tl-fill", "tl-ticks", "tl-thumb", "t-now", "t-all", "speed", "b-fsx", "toast", "b-tab", "redge", "rnote", "b-cam", "cam-lbl", "camnote"):
             self.assertEqual(len(re.findall(r'\bid="%s"' % ident, self.page)), 1, ident)
         self.assertEqual(len(re.findall(r'data-s="(?:0\.5|1|2|4|8)"', self.page)), 5)
@@ -231,7 +214,7 @@ class TheLiveGlue(unittest.TestCase):
     def test_the_pieces_that_only_a_live_match_uses_are_all_there_once(self):
         for ident in ("rtag-b", "livebox", "livenow", "b-live"):
             self.assertEqual(len(re.findall(r'\bid="%s"' % ident, self.page)), 1, ident)
-        self.assertIn("body.live [data-dl], body.nodl [data-dl], body.ownfile [data-dl], body.ownfile #copy-btn, body.ownfile #copy-more, body.ownfile #stats-btn { display: none !important; }", self.page)   # (no Download while there is no whole file, and none for a file of your own, which has no link to copy and no stats either)
+        self.assertIn("body.live [data-dl], body.nodl [data-dl], body.ownfile [data-dl], body.ownfile #copy-btn, body.ownfile #stats-btn { display: none !important; }", self.page)   # (no Download while there is no whole file, and none for a file of your own, which has no link to copy and no stats either)
         for words in ("Jump to live", ">Live<", ">REPLAY<"):
             self.assertIn(words, self.page, words)
 
@@ -302,7 +285,7 @@ class TheSpectatorsPicture(unittest.TestCase):
         self.assertIn("['pic-pick', 'picpop-h', 'pic-note', 'pic-select', 'The shape of the picture']", self.page)          # (the one dropdown the page makes itself, from the same picker as the settings menu's)
         self.assertIn("onPick: antsPickShape }", self.page)                                                 # (a choice is the page's own pick, the one function that the settings menu calls too)
         self.assertIn("window.localStorage.setItem(ANTS_ASPECT_KEY, AntsShapes.withPick(stored, way, value));", self.page)
-        self.assertIn("body.replay .header-actions:not(.rep-only), body.replay .info-panel-wrapper { display: none !important; }", self.page)   # (the player's header buttons stay hidden here)
+        self.assertIn("body.replay .info-panel-wrapper { display: none !important; }", self.page)
         self.assertEqual(len(re.findall(r"\n\s*\.picpop \{", self.page)), 1)
         self.assertEqual(len(re.findall(r"\n\s*\.pick-select \{", self.page)), 1)                           # (one style for the dropdown)
 
