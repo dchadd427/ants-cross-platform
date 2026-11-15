@@ -630,6 +630,133 @@ function rig(o) {
     for (let i = 0; i < 20; i++) { q.clock.advance(25000); q.s().recv({ t: 'online', n: 2 }); }
     check('twenty pings in 500 s, each answered: one socket, still live', q.sockets.length === 1 && q.pings() === 20 && q.dock.state() === 'live');
 }
+{   // a page that is hidden or was frozen keeps its link: the hub's own PING frames (the browser answers them) are its life, not the page's timers
+    const r = rig({ pong: false });
+    r.live(W({ you: YOU }));
+    r.hidden(true);
+    r.clock.advance(300000);
+    check('a hidden page sends no ping of its own and calls no missed answer lost: five minutes hidden, the socket is open and live (the hub\'s PING frames keep it)', r.pings() === 0 && r.dock.state() === 'live' && r.s().closes === 0 && r.sockets.length === 1);
+    r.hidden(false);
+    check('it comes back: it asks at once (one ping), the hub answers, still one socket', r.pings() === 1 && (r.s().recv({ t: 'online', n: 3 }), r.clock.advance(20000), r.dock.state() === 'live') && r.sockets.length === 1);
+    const q = rig({ pong: false });
+    q.live(W({ you: YOU }));
+    q.clock.advance(25000);
+    q.hidden(true);
+    q.clock.advance(31000);       // (the page was frozen or slow: the timer of its question runs late, before what the hub said is read)
+    check('a missed answer that is found while the page is hidden is given a moment more (5 s), not called lost', q.dock.state() === 'live');
+    q.s().recv({ t: 'online', n: 3 });
+    q.clock.advance(20000);
+    check('... the hub\'s word that was waiting arrives in that moment: the link is not lost', q.dock.state() === 'live' && q.sockets.length === 1);
+    const n = rig({ pong: false });
+    n.live(W({ you: YOU }));
+    n.clock.advance(25000);
+    n.hidden(true);
+    n.clock.advance(31000);
+    n.clock.advance(5001);
+    check('a hub that really said nothing, hidden, is given up after the moment', n.dock.state() === 'offline');
+    const w = rig({ pong: false });
+    w.live(W({ you: YOU }));
+    w.clock.advance(25000);
+    w.clock.advance(29999);
+    w.clock.advance(1);
+    check('a visible page does not get the moment: 30 s of silence is lost (as before)', w.dock.state() === 'offline');
+}
+{   // the browser closed the socket while the page slept: the page opens another at once, once, and says where it is again (no backoff wait)
+    const r = rig({ random: () => 1 });
+    r.live(W({ you: YOU }));
+    r.hidden(true);
+    r.clock.advance(120000);
+    (r.doc.listeners.resume || []).forEach((fn) => fn({}));
+    r.s().fail();
+    r.clock.advance(1);
+    check('the page resumes and its socket fails at once (the browser closed it): a new socket is opened with no wait', r.sockets.length === 2 && r.dock.state() !== 'live');
+    r.live(W({ you: YOU }));
+    check('... and it is welcomed: live again, which is when the list says what the visitor does again', r.dock.state() === 'live');
+    r.s().fail();
+    r.clock.advance(100);
+    check('a socket that fails again at once is on the backoff (one try with no wait for a wake, not a storm)', r.sockets.length === 2);
+    const q = rig({ random: () => 1 });
+    q.live(W({ you: YOU }));
+    q.hidden(true);
+    q.clock.advance(120000);
+    q.s().fail();
+    q.clock.advance(1);
+    const before = q.sockets.length;
+    q.hidden(false);
+    check('the socket failed before the page was told that it is back: the wake opens the new one at once (the backoff step is 1.5 s)', q.sockets.length === before + 1 || q.sockets.length === before);
+    q.clock.advance(1600);
+    check('... and in any case within the first step', q.sockets.length >= before + 1);
+    const p = rig({ random: () => 1 });
+    p.live(W({ you: YOU }));
+    p.hidden(true);
+    p.clock.advance(20000);
+    p.s().readyState = 3;       // (closed under the page without an event: the page looks when it is back)
+    p.hidden(false);
+    p.clock.advance(1);
+    check('a page that comes back to a socket that is closed (no event yet) opens another at once', p.sockets.length === 2);
+    const o = rig({ random: () => 1 });
+    o.live(W({ you: YOU }));
+    (o.win.listeners.pageshow || []).forEach((fn) => fn({ persisted: false }));
+    check('the first pageshow of a normal load is no wake: nothing is asked and nothing changes', o.pings() === 0 && o.sockets.length === 1 && o.dock.state() === 'live');
+}
+{   // a hidden page runs no timer loop; a wake starts it again; a socket that died while the page slept is let go after 5 s
+    const r = rig();
+    r.live(W({ you: YOU }));
+    r.hidden(true);
+    r.clock.advance(25001);
+    const timers = r.clock.timers.length;
+    r.clock.advance(300000);
+    check('hidden: the ping timer ran once and did not set another (no timer is left running, and nothing was sent)', r.clock.timers.length === timers && r.pings() === 0 && r.dock.state() === 'live');
+    r.hidden(false);
+    check('it is shown again: one ping at once and the loop is back', r.pings() === 1 && (r.clock.advance(25000), r.pings() === 2));
+    const q = rig();
+    q.live(W({ you: YOU }));
+    q.hidden(true);
+    (q.win.listeners.online || []).forEach((fn) => fn({}));
+    (q.doc.listeners.resume || []).forEach((fn) => fn({}));
+    check('an `online` or a `resume` of a page that is still hidden asks nothing', q.pings() === 0);
+    const d = rig({ pong: false });
+    d.live(W({ you: YOU }));
+    d.hidden(true);
+    d.clock.advance(120000);
+    d.hidden(false);
+    d.clock.advance(4999);
+    check('a socket that says nothing after a wake is waited for 5 s: still live just before', d.pings() === 1 && d.dock.state() === 'live' && d.sockets.length === 1);
+    d.clock.advance(1);
+    check('... and let go at 5 s (not 30), and a new socket is opened within the first backoff step', d.dock.state() !== 'live' && (d.clock.advance(1600), d.sockets.length === 2));
+    const a = rig({ pong: false });
+    a.live(W({ you: YOU }));
+    a.hidden(true);
+    a.clock.advance(120000);
+    a.hidden(false);
+    a.s().recv({ t: 'online', n: 3 });
+    a.clock.advance(30000);
+    check('... an answer in that time keeps the link', a.sockets.length === 1 && a.dock.state() === 'live');
+}
+{   // a Web Lock for as long as the socket is open (feature-detected: a page without locks works as before)
+    const log = [];
+    const locks = { request(name, options, fn) { const e = { name, mode: options && options.mode, released: false }; log.push(e); const p = Promise.resolve(fn()); p.then(() => { e.released = true; }); return p; } };
+    const r = rig();
+    r.win.navigator = { locks };
+    check('no lock before the welcome', log.length === 0);
+    r.live(W({ you: YOU }));
+    check('the welcome takes one shared lock', log.length === 1 && log[0].mode === 'shared' && typeof log[0].name === 'string' && log[0].released === false);
+    r.clock.advance(30000);
+    r.s().recv({ t: 'online', n: 2 });
+    check('no second lock while it is held', log.length === 1);
+    r.s().fail();
+    Promise.resolve().then(() => 0).then(() => 0).then(() => {
+        check('a socket that closes lets the lock go', log[0].released === true);
+    });
+    const n = rig();
+    n.win.navigator = { locks: { request() { throw new Error('no locks for this page'); } } };
+    n.live(W({ you: YOU }));
+    check('a lock that throws costs nothing', n.errors.length === 0 && n.dock.state() === 'live');
+    const m = rig();
+    m.win.navigator = {};
+    m.live(W({ you: YOU }));
+    check('a page without locks is the same page', m.errors.length === 0 && m.dock.state() === 'live');
+}
 {   // a lost link takes its ping with it: after three lost links there is still one ping chain
     const r = rig({ random: () => 0 });
     r.live(W({ you: YOU }));
@@ -640,8 +767,8 @@ function rig(o) {
     r.clock.advance(50000);
     check('... and once more for each 25 s after that', r.pings() - before === 3);
 }
-{   // the tab: hidden is not painted, visible is made again
-    const r = rig();
+{   // the tab: hidden is not painted, visible is made again (the page asks the hub at once when it is back: this hub says nothing here, so that the count stays what the test sent)
+    const r = rig({ pong: false });
     r.live(W({ you: YOU, history: HISTORY }));
     r.hidden(true);
     const painted = r.log().children.length;
@@ -2049,5 +2176,7 @@ process.env.TZ = 'UTC';       // (the local day and hour of these checks; one of
     same('the log made again (a role changes) has the same dividers', again.days(), ['Yesterday', 'Today']);
 }
 
-console.log('home chat: ' + checks + ' checks, ' + failures + ' failed');
-process.exit(failures ? 1 : 0);
+setImmediate(() => {       // (after the promises of the checks above, which are about locks that are let go)
+    console.log('home chat: ' + checks + ' checks, ' + failures + ' failed');
+    process.exit(failures ? 1 : 0);
+});

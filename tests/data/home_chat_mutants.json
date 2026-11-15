@@ -648,14 +648,14 @@
   {
    "id": "retry_at_once",
    "file": "web/home/chat.js",
-   "old": "setTimeout(guard(go), delayOf(attempt, rnd()))",
+   "old": "setTimeout(guard(go), soon ? 0 : delayOf(attempt, rnd()))",
    "new": "setTimeout(guard(go), 0)",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "no_retry",
    "file": "web/home/chat.js",
-   "old": "if (!stopped) { timers.retry = setTimeout(guard(go), delayOf(attempt, rnd())); attempt++; }",
+   "old": "if (!stopped) { var soon = wokeAt !== null && now() - wokeAt < MS.wake; wokeAt = null; timers.retry = setTimeout(guard(go), soon ? 0 : delayOf(attempt, rnd())); attempt++; }",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -704,8 +704,8 @@
   {
    "id": "ping_missing",
    "file": "web/home/chat.js",
-   "old": "liveSince = now(); hello = m;\n            ping();",
-   "new": "liveSince = now(); hello = m;",
+   "old": "hello = m; rx = now();\n            lock(); ping();",
+   "new": "hello = m; rx = now();\n            lock();",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -718,15 +718,15 @@
   {
    "id": "ping_never_answered_is_fine",
    "file": "web/home/chat.js",
-   "old": "timers.answer = setTimeout(guard(lost), MS.answer);",
+   "old": "timers.answer = setTimeout(guard(function () { silent(quick ? MS.grace : MS.answer); }), quick ? MS.grace : MS.answer);",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "every_ping_is_taken_for_unanswered",
    "file": "web/home/chat.js",
-   "old": "            stop('answer');\n            if (m.t === 'welcome') onWelcome(m);",
-   "new": "            if (m.t === 'welcome') onWelcome(m);",
+   "old": "            rx = now(); stop('answer');\n            if (m.t === 'welcome') onWelcome(m);",
+   "new": "            rx = now();\n            if (m.t === 'welcome') onWelcome(m);",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -739,7 +739,7 @@
   {
    "id": "tab_back_does_not_try_again",
    "file": "web/home/chat.js",
-   "old": "if (visible()) { stale = true; render(); nudge(); }",
+   "old": "if (visible()) { stale = true; render(); wake(); }",
    "new": "if (visible()) { stale = true; render(); }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -753,7 +753,7 @@
   {
    "id": "network_back_is_ignored",
    "file": "web/home/chat.js",
-   "old": "win.addEventListener('online', guard(nudge));",
+   "old": "win.addEventListener('online', guard(wake));",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -767,15 +767,15 @@
   {
    "id": "page_show_never_reconnects",
    "file": "web/home/chat.js",
-   "old": "if (e && e.persisted && stopped) { stopped = false; attempt = 0; go(); }",
-   "new": "",
+   "old": "if (stopped) { stopped = false; attempt = 0; wokeAt = now(); go(); } else wake();",
+   "new": "wake();",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "page_show_always_reconnects",
    "file": "web/home/chat.js",
-   "old": "if (e && e.persisted && stopped) { stopped = false; attempt = 0; go(); }",
-   "new": "if (stopped) { stopped = false; attempt = 0; go(); }",
+   "old": "if (!e || !e.persisted) return; if (stopped) { stopped = false;",
+   "new": "if (!e) return; if (stopped) { stopped = false;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -3343,8 +3343,8 @@
   {
    "id": "switch_silence_wait_far_too_long",
    "file": "web/home/chat.js",
-   "old": "regain: 1000, pics: 8000, flood",
-   "new": "regain: 1000, pics: 800000, flood",
+   "old": "wake: 3000, grace: 5000, pics: 8000, flood",
+   "new": "wake: 3000, grace: 5000, pics: 800000, flood",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -3793,6 +3793,41 @@
    "file": "web/home/chat.js",
    "old": "return put(el('bdi', 'gc-text'), parts.map(",
    "new": "return put(el('span', 'gc-text'), parts.map(",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_hidden_page_keeps_the_ping_timer_going",
+   "file": "web/home/chat.js",
+   "old": "                if (!visible()) return;                                          // (hidden: no timer runs on;",
+   "new": "                if (false) return;                                          // (hidden: no timer runs on;",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_wake_does_not_start_the_ping_timer_again",
+   "file": "web/home/chat.js",
+   "old": "probe(true); if (!timers.ping) ping(); }",
+   "new": "probe(true); }",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_wake_waits_the_long_answer_time",
+   "file": "web/home/chat.js",
+   "old": "else if (welcomed && sock.readyState === 1 && visible()) { probe(true);",
+   "new": "else if (welcomed && sock.readyState === 1 && visible()) { probe(false);",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_hidden_page_asks_on_a_wake_event",
+   "file": "web/home/chat.js",
+   "old": "else if (welcomed && sock.readyState === 1 && visible()) {",
+   "new": "else if (welcomed && sock.readyState === 1) {",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_first_pageshow_of_a_load_is_a_wake",
+   "file": "web/home/chat.js",
+   "old": "if (!e || !e.persisted) return; if (stopped)",
+   "new": "if (stopped)",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]

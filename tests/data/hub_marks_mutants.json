@@ -126,8 +126,8 @@
   {
    "id": "the_list_asks_the_chat_for_a_flag",
    "file": "hub/presence.py",
-   "old": "mods = {account: self.chat.roles.role_of(account) for account in best}",
-   "new": "mods = {account: (\"mod\" if self.chat.is_mod(account) else \"none\") for account in best}",
+   "old": "mods = {account: self.chat.roles.role_of(account) for account in list(best) + list(away)}",
+   "new": "mods = {account: (\"mod\" if self.chat.is_mod(account) else \"none\") for account in list(best) + list(away)}",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest -f tests.scripts.test_hub_marks tests.scripts.test_hub_store_contract"
   },
   {

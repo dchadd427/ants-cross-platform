@@ -25,6 +25,9 @@
 .pl-group[data-g="mod"] .pl-gd { background: var(--gold); border-radius: 2px; }
 .pl-group[data-g="wait"] .pl-gd { background: var(--gold); }
 .pl-group[data-g="play"] .pl-gd { background: #ff8a52; }
+.pl-group[data-g="away"] .pl-gd { background: #6f8a80; }
+.pl-card[data-s="away"] { opacity: .62; }       /* (an Away row is dimmed: the word says it too, in the group and in a moderator's line) */
+.pl-card[data-s="away"] .pl-av::after { background: #6f8a80; }
 .pl-gn { margin-left: auto; min-width: 22px; padding: 0 7px; font-size: 13px; line-height: 18px; text-align: center; letter-spacing: 0; color: var(--cream); background: #0b1a17; border: 1px solid #1f5a49; border-radius: 11px; }
 .pl-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .pl-card { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 5px 6px 5px 8px; background: #0a1016; border: 1px solid #17382f; border-radius: 6px; }

@@ -136,7 +136,7 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertIn("Chat.clip(Chat.plain(raw.name.slice(0, LIMIT.name * 4), true), LIMIT.name)", self.js, "a name is cleaned and cut as the chat's are (the invisible and bidirectional characters out, 32 code points)")
         self.assertIn("rules.validMapFile(raw.map)", self.js, "a map is a file name that the page's own rule accepts")
         self.assertIn("var STATUS = ['look', 'wait', 'play'];", self.js)
-        self.assertIn("STATUS.indexOf(raw.at) === -1", self.js, "a status is one of the three (an object's own names are none)")
+        self.assertIn("SHOWN.indexOf(raw.at) === -1", self.js, "a status is one of the four (STATUS and the hub's away) (an object's own names are none)")
 
     def test_it_asks_for_nothing_but_the_list_and_says_nothing_but_where_the_visitor_is(self):
         self.assertEqual(sorted(set(re.findall(r"dock\.send\((.*?)\)\)", self.code))), ["frame", "{ t: 'who' }"])

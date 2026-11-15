@@ -48,6 +48,8 @@ class Limits:
     who_rows_max: int = 200             # named people that the list of the front page carries (the rest are counted: `more`); moderators first, then the people who wait, who play, who look
     who_seconds: float = 2.0            # the list is sent to the pages that watch it when it changed, not sooner than this after the last send, whatever happens (changes in between are one change)
     who_resend_seconds: float = 10.0    # a socket may ask for the whole list again after this long (it gets it once, whatever it asks in between)
+    away_seconds: float = 600.0         # an account whose last socket closed stays in the list as Away for this long (memory only); a socket of the account within that time takes its row back
+    away_max: int = 500                 # the most Away rows that the hub keeps (the oldest go first)
     who_diff_max: int = 50              # a change of more rows than this is sent as the whole list: a frame is never bigger than the list's own
     login_burst: int = 10               # /hub/login and /hub/callback: for each client address a burst of 10, then one every 6 seconds (10 a minute; nginx has the same numbers in front)
     login_refill_seconds: float = 6.0
