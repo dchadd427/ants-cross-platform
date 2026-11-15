@@ -80,6 +80,11 @@ class FakeDiscord:
         self.guild, self.bot_token = GUILD_ID, BOT_TOKEN
         self.members = {}                                # account id -> [role ids] of the server's members
         self.member_mode = "ok"
+        self.member_avatars = {}                         # account id -> the picture code that a member answer says (none: null)
+        self.profiles = {}                               # account id -> the picture code (or None) that `GET /users/<id>` says; an account that is not here is unknown (404, code 10013)
+        self.user_mode = "ok"
+        self.user_times = []                             # time.monotonic() of every such call
+        self.user_ids = []                               # the account that each `GET /users/<id>` asked about
         self.member_times = []                           # time.monotonic() of every member lookup
         self.member_ids = []                             # the account that each one asked about
         self.sent = 0                                    # the bytes that the last "huge" answer got out before the hub hung up on it
@@ -150,6 +155,11 @@ class FakeDiscord:
         if path == "/api/v10/users/@me" and method == "GET":
             return self.answer(h, self.me_mode, lambda: self.me(headers.get("authorization", "")))
         parts = path.split("/")
+        if method == "GET" and len(parts) == 5 and parts[:4] == ["", "api", "v10", "users"] and parts[4] != "@me":
+            with self.lock:
+                self.user_ids.append(parts[4])
+                self.user_times.append(time.monotonic())
+            return self.answer(h, self.user_mode, lambda: self.profile(headers.get("authorization", ""), parts[4]))
         if method == "GET" and len(parts) == 7 and parts[:4] == ["", "api", "v10", "guilds"] and parts[5] == "members":
             with self.lock:
                 self.member_times.append(time.monotonic())
@@ -218,7 +228,14 @@ class FakeDiscord:
         roles = self.members.get(account)
         if roles is None:
             return 404, {"message": "Unknown Member", "code": 10007}
-        return 200, {"user": {"id": account, "username": "canary.member", "avatar": None}, "roles": list(roles), "nick": None, "joined_at": "2020-01-01T00:00:00+00:00", "flags": 0}
+        return 200, {"user": {"id": account, "username": "canary.member", "avatar": self.member_avatars.get(account)}, "roles": list(roles), "nick": None, "joined_at": "2020-01-01T00:00:00+00:00", "flags": 0}
+
+    def profile(self, authorization, account):
+        if authorization != "Bot " + self.bot_token:
+            return 401, {"message": "401: Unauthorized", "code": 0}
+        if account not in self.profiles:
+            return 404, {"message": "Unknown User", "code": 10013}
+        return 200, {"id": account, "username": "canary.user", "discriminator": "0", "global_name": None, "avatar": self.profiles[account], "bot": False}
 
     def authorize(self, h, query):
         q = dict(urllib.parse.parse_qsl(query))

@@ -1,7 +1,7 @@
 """Discord, the two calls that the login needs (docs/HUB.md, "Login"): the code that Discord handed the browser is exchanged for an access token (`POST /oauth2/token`), and the token is
 used once, to ask who it belongs to (`GET /users/@me`). The id, the username and the display name (`global_name`, which the one scope `identify` includes, and which is null for a person who set none)
 are all that is kept; the token is a local variable of one function and is gone when it returns (no refresh token is asked for or looked at, no email). The picture's short code (`avatar`) is
-read, checked for its shape and used once, for the one fetch of the picture (`picture()`, hub/pictures.py): it is never kept.
+read, checked for its shape and used for the fetch of the picture (`picture()`, hub/pictures.py): it is never kept (hub/pictures.py keeps only a keyed mark of it, in memory, to tell a changed picture). The bot's token also asks for a person's public profile (`user()`), for a picture of someone who is not in the server.
 
 A small HTTP client of its own, because the answer of another service is data and not a thing to trust: https only (the one exception is the fake Discord of the tests, on a loopback
 address, which hub/config.py allows only to a hub that listens on one), the certificate and the name checked, short timeouts for the connection and for the whole call, no redirect
@@ -105,8 +105,19 @@ class Discord:
         DiscordError when there was no usable answer. The ids and the token are checked for their shape before they go into a request line or a header."""
         if not (config.SNOWFLAKE.match(guild) and config.ACCOUNT_ID.match(user) and config.BOT_TOKEN.match(token)):
             raise DiscordError("down")
+        return await self.bot_get("/guilds/%s/members/%s" % (guild, user), token)
+
+    async def user(self, user, token):
+        """(status, data, rate limits) of `GET /users/<user>` with the bot's token: the public profile of one account (its `avatar` is the short code of its picture, null for none), for a person who is not in
+        the server. A DiscordError when there was no usable answer. The id and the token are checked for their shape before they go into a request line or a header, and an error has no cause."""
+        if not (config.ACCOUNT_ID.match(user) and config.BOT_TOKEN.match(token)):
+            raise DiscordError("down")
+        return await self.bot_get("/users/%s" % user, token)
+
+    async def bot_get(self, path, token):
+        """One GET with the bot's token (the caller has checked the shape of everything in `path` and of the token)."""
         try:
-            return await self.call("GET", "/guilds/%s/members/%s" % (guild, user), {"Authorization": "Bot " + token, "User-Agent": BOT_USER_AGENT}, b"")
+            return await self.call("GET", path, {"Authorization": "Bot " + token, "User-Agent": BOT_USER_AGENT}, b"")
         except DiscordError:
             raise
         except Exception:
@@ -183,6 +194,16 @@ class Discord:
         except (asyncio.TimeoutError, OSError, ssl.SSLError, ValueError, EOFError, UnicodeError, RecursionError):
             pass                                                  # (raised below, outside the handler: what the cause said can hold the address)
         raise DiscordError("down")
+
+    @staticmethod
+    def avatar_code(value):
+        """(True, code) for the picture's short code that a member or user object says (a string of the shape of one), (True, None) for none (null), and (False, None) for anything else (not Discord's: nothing
+        is believed of it)."""
+        if value is None:
+            return True, None
+        if isinstance(value, str) and AVATAR.match(value):
+            return True, value
+        return False, None
 
     @staticmethod
     def rate_limits(fields, data):

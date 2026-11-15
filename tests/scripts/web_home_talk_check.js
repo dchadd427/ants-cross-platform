@@ -541,7 +541,6 @@ function bring(env, file, name) {
 }
 {   // the field is a text area that the chat makes as tall as its words: after a pick and after the words that are heard
     const r = rig();
-    r.win.matchMedia = () => ({ matches: true });
     Object.defineProperty(r.field, 'scrollHeight', { get() { return 22 + 22 * Math.max(1, Math.ceil(this.value.length / 20)); } });
     r.field.value = 'x'.repeat(19); r.caret(19);
     r.emoji.click(); r.keys()[0].click();

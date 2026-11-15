@@ -639,8 +639,7 @@ async function settle() {
         w.doc = fakeDom();
         for (const id of ['r-title', 'r-meta']) w.doc.add(id);
         w.back = w.doc.add('all-btn', 'a'); w.back.textContent = '\u2039 All matches';
-        w.more = w.doc.add('more-list'); w.doc.documentElement = null;
-        const list = w.more; w.doc.querySelector = (sel) => (/more-list/.test(sel) ? list : null);
+        w.more = w.doc.add('own-hold'); w.doc.documentElement = null;
         w.said = []; w.went = []; w.reloads = 0;
         w.win = { location: { reload() { w.reloads++; } } };
         w.page = R.ownPage({ doc: w.doc, win: w.win, store: w.store, FileReader: undefined, search: '?local=' + (o && o.id !== undefined ? o.id : ID), say: (t) => w.said.push(t), go: (u) => w.went.push(u), infoOf: MAPS ? MAPS.infoOfReplay : undefined });
@@ -685,7 +684,7 @@ async function settle() {
             same('a file whose name is all controls has no name to show: the pill and the length, no empty unit', [gotn.name, kids(wn.doc.getElementById('r-title').children[1])], ['', ['span:Your file', ' ', '10:00']]);
         }
         w2.page.chrome();
-        same('the way back is Matches, and More has one thing: Open another file', [w2.back.textContent, w2.more.children.length, w2.more.children[0].textContent, w2.more.children[0].id, w2.more.children[0].attrs.type === undefined ? w2.more.children[0].type : w2.more.children[0].attrs.type], ['\u2039 Matches', 1, 'Open another file', 'own-more', 'button']);
+        same('the way back is Matches, and the bar\'s Menu has one thing made for it: Open another file', [w2.back.textContent, w2.more.children.length, w2.more.children[0].textContent, w2.more.children[0].id, w2.more.children[0].attrs.type === undefined ? w2.more.children[0].type : w2.more.children[0].attrs.type], ['\u2039 Matches', 1, 'Open another file', 'own-more', 'button']);
         const key = w2.more.children[0];
         key.fire('keydown', { key: 'Enter', repeat: false }); key.fire('keydown', { key: ' ', repeat: false }); key.fire('keydown', { key: 'a' });
         same('Enter and Space press the button here (the game takes the browser\'s press of a focused button away); another key does not; a repeat does not press again', [key.clicks], [2]);

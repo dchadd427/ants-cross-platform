@@ -57,6 +57,6 @@
 
 /* ================= EMBED MODE: play?replay=<file>&embed=1, the page inside the frame of a match page (web/match.html). Only the picture and the bar are left: no header, no tip, no footer, no frame of
    the page's own (the match page has its own), and no Stats (the match page has the stats). ================= */
-body.embed header, body.embed footer, body.embed #mobile-tip-banner, body.embed .mstats, body.embed #stats-btn { display: none !important; }
+body.embed header, body.embed #mobile-tip-banner, body.embed .mstats, body.embed #stats-btn { display: none !important; }
 body.embed::after { content: none; }
 body.embed { padding-top: 10px; padding-left: 12px; padding-right: 12px; --side: 12px; }

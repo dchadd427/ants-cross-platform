@@ -58,7 +58,7 @@ TOUCH_KEYS_BUDGET, TOUCH_KEYS_GZIP_BUDGET = 25_700, 8_300   # the hotkey buttons
 # the front page (web/home/, web/front/player_name.js)
 HOME_BUDGET, HOME_GZIP_BUDGET = 49_500, 15_000
 GAMES_BUDGET, GAMES_GZIP_BUDGET = 98_000, 28_000
-PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 33_000, 10_500
+PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 38_000, 11_800
 VP_BUDGET, VP_GZIP_BUDGET = 4_200, 1_900            # vp.js: the screen numbers of /?vp (loaded for that address only)
 CHAT_BUDGET, CHAT_GZIP_BUDGET = 88_000, 27_000
 TALK_BUDGET, TALK_GZIP_BUDGET = 28_500, 9_800
@@ -68,6 +68,8 @@ APP_ICONS_BUDGET = 4_700
 # the browser-tab icon (web/favicon.png 285 bytes + web/favicon.ico 1,212 bytes)
 FAVICON_BUDGET = 1_650
 APP_MANIFEST_BUDGET = 1_300
+# the game page's part of the bar (web/game_bar.js and web/game_bar.css together)
+GAME_BAR_BUDGET, GAME_BAR_GZIP_BUDGET = 12_800, 4_250
 # the bar at the top of every page (web/site_nav.css, web/site_nav.js)
 NAV_CSS_BUDGET, NAV_CSS_GZIP_BUDGET = 4_900, 1_700
-NAV_JS_BUDGET, NAV_JS_GZIP_BUDGET = 5_000, 2_000
+NAV_JS_BUDGET, NAV_JS_GZIP_BUDGET = 5_700, 2_200

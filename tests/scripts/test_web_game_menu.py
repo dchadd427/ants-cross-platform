@@ -68,7 +68,7 @@ class ThePage(unittest.TestCase):
 
     def test_a_script_that_fails_is_tried_once_more_and_then_said_in_the_toast(self):
         self.assertIn("setTimeout(function () { antsLoadGameMenu(true); }, 2500)", self.loader)
-        self.assertIn("if (again) { toast.textContent = 'The settings menu could not load. Press Reset to try again.'; toast.hidden = false; }", self.loader)
+        self.assertIn("if (again) { toast.textContent = 'The settings menu could not load. Open the Menu and press Reload page to try again.'; toast.hidden = false; }", self.loader)
 
     def test_it_is_called_with_the_pieces_of_the_page_that_it_needs(self):
         for part in ("stage: stageElement", "canvas: canvas", "toast: toast", "module: function () { return Module; }", "ready: function () { return isReadyToPlay; }", "replay: ANTS_REPLAY_MODE", "live: ANTS_LIVE_MODE",

@@ -263,8 +263,8 @@
   {
    "id": "mouse_over_the_rail_scrolls_the_map_in_the_page",
    "file": "web/shell.html",
-   "old": "[role=\"option\"], .pick-list, .rbar, .tk, .tk-shield';",
-   "new": "[role=\"option\"], .pick-list, .rbar';",
+   "old": "[role=\"option\"], .pick-list, .rbar, .sb, .sbm, .tk, .tk-shield';",
+   "new": "[role=\"option\"], .pick-list, .rbar, .sb, .sbm';",
    "test": "node tests/scripts/web_edge_check.js web/shell.html"
   },
   {

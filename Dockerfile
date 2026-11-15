@@ -199,6 +199,9 @@ COPY --from=builder /src/match.html /usr/share/nginx/html/match.html
 COPY web/matches.css /usr/share/nginx/html/matches.css
 COPY web/site_nav.css /usr/share/nginx/html/site_nav.css
 COPY web/site_nav.js /usr/share/nginx/html/site_nav.js
+# The bar of the game page (docs/SITE_NAV.md "The game page"): the game page's own rules for the site bar and its part of the bar's script (the links that ask first during a match, the keys, the Menu's own lines)
+COPY web/game_bar.css /usr/share/nginx/html/game_bar.css
+COPY web/game_bar.js /usr/share/nginx/html/game_bar.js
 COPY web/match_stats.css /usr/share/nginx/html/match_stats.css
 COPY web/replay_page.js /usr/share/nginx/html/replay_page.js
 COPY web/history_page.js /usr/share/nginx/html/history_page.js
@@ -209,6 +212,8 @@ COPY web/replay_stats.css /usr/share/nginx/html/replay_stats.css
 
 # The keys of the seats that this browser holds, read in one place for the front page's Rejoin strip and the game page's name step (rejoin_key.js)
 COPY web/rejoin_key.js /usr/share/nginx/html/rejoin_key.js
+# What the game page tells the chat hub about its visitor in a match, for the players list of Home (hub_here.js)
+COPY web/hub_here.js /usr/share/nginx/html/hub_here.js
 # The shapes of the picture, one table for the game page, the front page and the settings menu (docs/PLAY_IN_BROWSER.md "Four shapes"; shapes.js)
 COPY web/shapes.js /usr/share/nginx/html/shapes.js
 # ... and the control that the game page and the settings menu choose a shape with (a button and a list made by the page: a native list does not open under the fullscreen mouse lock; shape_picker.js)

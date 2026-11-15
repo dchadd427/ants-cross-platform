@@ -23,6 +23,20 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.16.8 - 2026-11-14 - Game page top bar, Playing in the Players list, one chat box, Discord pictures without a new login
+
+**For players:**
+- **The game page has the site's top bar.** A game against the computer, a joined match, a recording and a live view show the same bar as every other page: Home, the links, the Settings gear, Fullscreen and Menu. The footer is gone; the version is the last line of the Menu. During a match, Home asks first and the other links open in a new tab, and while the Menu is open the keys stay with the bar and go back to the game afterwards. Reload page, which asks first during a game, is in the Menu.
+- **The Players list shows who is Playing.** A public match shows its map and players, a private room or game shows a lock and no details, and a game against the computer reads "<map> . vs computer". The Games list no longer shows an empty "In progress" box while no match is running.
+- **One chat box everywhere.** The box with the field on top and the emoji, microphone and Send buttons under it is now used in every window; the field grows to two lines on a wide window and the chat area is a little taller.
+- **Discord pictures arrive without logging in again.** A picture is picked up while you are logged in: within a few minutes for members of the project's Discord server, otherwise about a day. The Legal page says so.
+- **Live mark.** The red "N live" mark reads "N live: see them on the front page", shows its dot in forced-colors mode and updates when you come back to the tab. The old Live now addresses lead to the front page in any letter case.
+- **Chat staff commands.** Staff can name a person by the number of the chat line or by their row in the Players list, list the mutes with /mutes, and a ban can also delete that person's lines of the last hour.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.7 page or game still joins. Under the hood: the chat server changed, so it restarts and chat reconnects by itself within seconds.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f6d76998...1b43c0b5)
+
 ## v0.16.7 - 2026-11-14 - Phone hotkey buttons, damage and heal numbers, Automatic picture shape
 
 **For players:**
@@ -460,38 +474,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/99261f5d...24364af2)
 
-## v0.12.129 - 2026-10-25 - Big selections follow the original's rules
+## Older versions (v0.12.129 and before)
 
-**For players:**
-- **A big selection is ordered with the original's rules for every ant.** Ctrl+A or a drag over any number of ants, then a right click: every selected ant gets the move, attack or Stop order (one click orders up to 1,536 ants; "Only 1536 ants ordered." beyond that). The limit of v0.12.126 for a move is gone. Ants that find no free spot near the clicked tile stop where they stand, as in the original; a move onto an enemy hill makes thieves raid and stops the other ants.
-- **Special orders stay one ant at a time:** steal, bomb, fire and bridge orders go to the first 32 selected ants at the most, as before v0.12.126, so a crowd cannot steal from one ant or drop 80 bombs on one square. Order those ants one by one.
-- A move of a whole army makes the game work hard for a moment while the ants look for a spot. One player's click on a big army costs a few to tens of milliseconds; it is only noticeable when four players' big clicks land together (about 1,500 ants each costs more than a second on a desktop, and a phone is several times slower).
-
-**Rules / network:** none; network protocol 21 is unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0ba63ac2...961523be)
-
-## v0.12.128 - 2026-10-25 - The Picture dropdown opens in fullscreen
-
-**For players:**
-- **The Picture dropdown now opens in fullscreen.** Watching a replay or a live match in fullscreen with the mouse held (the default, "Locked"), a click on the dropdown in the Picture window did nothing: the browser's own list cannot be opened by the game's held mouse. The control is now the page's own button and list, so a click or a tap opens it and a click or a tap on a shape chooses it, in fullscreen, in the settings menu (Esc), under the game and in the Picture window, on every browser. It looks as before.
-- **Keys:** Enter, Space, ArrowDown or ArrowUp open the list; the arrows, Home, End, a letter or a number ("4" for Classic 4:3) move the mark; Enter or Space chooses; Esc closes the list and only the list (the Picture window or the settings menu stays open). On a closed dropdown the arrow keys no longer change the picture (they did on Windows and Linux); they open the list, the same on every browser. The front page's Picture row is unchanged.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the web page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0ba63ac2...025710cf)
-
-## v0.12.127 - 2026-10-24 - Map Maker: the Pick up bar no longer covers the map
-
-**For players:**
-- Map Maker, Pick up: the bar with Move, Copy here, Delete and Cancel no longer covers the bottom of the map. On a desktop it has a row of its own under the map, so the map ends above it and can be panned until its last row is above the bar; a thing picked near the bottom is brought into view, and the map keeps its top row and its zoom when the bar comes and goes. A phone's bar stays at the foot of the screen, and the page can be scrolled until its last line is above it. Map Maker v1.5.7.
-
-**Fixes:**
-- On a short screen the Hide button sits on the line of the words, so the bar is lower; a map under 300 pixels high shows the smaller map of the whole map, without its caption, so that it never reaches into the bar.
-- While a thing is on its way the bar keeps the height it has had, so the map no longer grows and shrinks under the mouse near the foot; a phone that is turned with the bar open leaves room for all of it below the page, and a window that is resized while a thing is on its way logs no "ResizeObserver loop" message.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/50b7ae4b...67a05f86)
-
-## Older versions (v0.12.126 and before)
-
-Every release before v0.12.127, and the long notes of v0.12.126 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.130, and the long notes of v0.12.129 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
