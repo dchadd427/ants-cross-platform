@@ -28,6 +28,7 @@ add_library(ants_ai STATIC
     knock.cpp
     chore_worth.cpp
     opportunity_task.cpp
+    miner_flight_task.cpp
     standard_bot.cpp
     brawl_task.cpp
     team_up.cpp

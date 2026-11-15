@@ -23,6 +23,8 @@ public:
         uint32_t blacklist_ticks{900};
         uint32_t rescue_after{900};          // a Swimmer that stands idle with food this long is sent to the hill's entrance (the engine's loop ended without a deposit)
         uint32_t endgame_margin{40};         // a trip needs this many ticks more than it takes before the clock runs out
+        bool reorder_hurt{false};            // a Swimmer that lost hit points since its order (a blast or a blow threw it and cleared its walk) and stands idle is sent again at once, and a carrier that was hit is sent home after reorder_hurt_ticks, not rescue_after
+        uint32_t reorder_hurt_ticks{40};
         bool reorder_ended{false};           // a Swimmer whose loop ended away from where it was sent from (idle and empty for fail_after ticks: its walk back found no way, another ant
                                              // stood in a corridor) is free again, and the next look sends it again. On the maps of the field breach (Tactics::field_map), whose
                                              // carriers share a dug corridor
@@ -66,6 +68,7 @@ private:
         bool dropped{false};                 // the order never left (the budget, the controller's filter): the Swimmer is ordered again
         sim::TileCoord origin{};             // where the Swimmer stood
         sim::TileCoord click{};              // the cell that the order named (kept here: the search that is made every reask_ticks may choose another cell for the pile, and the fate of this order must still be known)
+        uint16_t hp{10};                     // its hit points when it was ordered
         bool rescued{false};                 // it was sent to the hill's entrance with its food (the engine's loop ended): once it has banked the food its record ends
     };
 
