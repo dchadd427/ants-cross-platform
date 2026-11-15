@@ -484,6 +484,10 @@ public:
     /// The numbers' font, the original's fixed system font (the 8 x 15 raster "Fixedsys"): a cell is `kFixedCellW` x `kFixedCellH` pixels; only digits and '-' have glyphs (nothing else is drawn)
     /// `scale` makes every font pixel `scale` x `scale` (the cell grows right and down from (x, y)); `outline` first draws the glyph in black one scaled pixel round (the phone look, health_marks.hpp: digit_scale)
     void draw_fixed_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, int32_t scale = 1, bool outline = false);
+    /// The numbers (hit points, damage and heal, score) in the game's TrueType font, white with a one pixel outline, rasterised at the real output resolution (renderer_numbers.cpp). `classic` true (the default for now)
+    /// keeps the old drawing (the 8 x 15 raster digits and the archive's digit sprites); it is also what is drawn when no font was found. A prototype switch.
+    void set_classic_numbers(bool classic) noexcept { classic_numbers_ = classic; }
+    bool classic_numbers() const noexcept { return classic_numbers_; }
     static constexpr int32_t kFixedCellW = 8;
     static constexpr int32_t kFixedCellH = 15;
     void draw_rgba_image(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) override;
@@ -742,6 +746,49 @@ private:
     };
     std::vector<ChangePicture> change_pictures_;
     const ChangePicture* change_picture(const std::string& text);
+    // The numbers in the TrueType font (renderer_numbers.cpp)
+    bool classic_numbers_{true};                   // (the prototype: the old drawing until the application asks for the font)
+    std::string ttf_path_;                         // the face that draw_text uses (empty: none was found, the classic numbers are drawn)
+    bool font_numbers() const noexcept { return !classic_numbers_ && !ttf_path_.empty(); }
+    struct NumberPicture {
+        std::string text;
+        int32_t digit_px{0};                       // the height of a digit in output pixels
+        SDL_Texture* texture{nullptr};
+        int32_t w{0}, h{0};                        // the texture, outline included
+        int32_t ink_x{0}, ink_y{0}, ink_w{0};      // the first glyph's left edge, the digits' top edge, the width of the ink, in the texture
+    };
+    std::vector<NumberPicture> number_pictures_;
+    struct DigitFont {                             // the face at the size whose digit is `digit_px` tall: the fill, and the same face with an outline (TTF_Font*, kept as void* so that this header needs no SDL_ttf)
+        int32_t digit_px{0};
+        int32_t outline{0};
+        void* fill{nullptr};
+        void* edge{nullptr};
+    };
+    std::vector<DigitFont> digit_fonts_;
+    const NumberPicture* number_picture(const std::string& text, int32_t digit_px);
+    void clear_number_pictures();
+    /// The output's own pixels: SDL's logical size is switched off while the numbers are drawn (`NativeFrame` keeps what to put back)
+    struct NativeFrame {
+        double scale{1.0};                         // output pixels per canvas pixel
+        int32_t x{0}, y{0};                        // where the canvas starts in the output
+        SDL_Rect clip{0, 0, 0, 0};
+        bool clipped{false};
+        bool on{false};
+    };
+    NativeFrame begin_native();
+    void end_native(const NativeFrame& frame);
+    /// `x`, `y` are the canvas position of the number's ink (left edge, top edge of the digits) in canvas pixels; a centred one passes the middle
+    void draw_number_ink(const NativeFrame& f, const NumberPicture& pic, double x, double y, bool centre_x, bool centre_y, health::Color color, int32_t alpha);
+    struct ScoreDigit {
+        int32_t amount{0};
+        int32_t wx{0};
+        int32_t wy{0};
+    };
+    std::vector<ScoreDigit> deferred_scores_;
+    void draw_deferred_scores();
+    void draw_font_digits(const LayoutRect& view, double zoom);
+    void draw_font_changes();
+
     void draw_health_changes();
     void draw_ant_number(const ants::sim::AntSnapshot& ant, int32_t sprite_x, int32_t sprite_y);
     std::vector<TransientEffect> transient_effects_{};

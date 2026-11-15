@@ -36,6 +36,7 @@ add_library(ants_app STATIC
     midi_player.cpp
     renderer.cpp
     renderer_health.cpp
+    renderer_numbers.cpp
     renderer_text.cpp
     renderer_terrain.cpp
     renderer_units.cpp
