@@ -889,6 +889,23 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
         j.begin_object();
         for (size_t k = 1; k < r.result.landed.size(); ++k) j.field(kind_name(k), uint64_t{r.result.landed[k]});
         j.end_object();
+        j.key("drops");                                                     // the power-ups that dead typed ants left: owner seat, kind, tile, tick seen, tick taken (0: never), seat of the taker (255: none seen)
+        j.begin_array();
+        for (const ai::DropTally::Drop& d : r.result.drops) {
+            j.begin_object();
+            j.field("owner", uint64_t{d.owner});
+            j.field("kind", kind_name(d.kind));
+            j.field_signed("x", d.x);
+            j.field_signed("y", d.y);
+            j.field("tick", d.tick);
+            j.field("taken", d.taken);
+            j.field("taker", uint64_t{d.taker});
+            j.field("others", uint64_t{d.others});
+            j.field_signed("hill_dist", d.hill_dist);
+            j.field("nearest", uint64_t{d.nearest});
+            j.end_object();
+        }
+        j.end_array();
         j.key("seats");
         j.begin_array();
         for (const ai::ArenaSeatResult& s : r.result.seats) {

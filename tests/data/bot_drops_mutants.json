@@ -1,0 +1,100 @@
+{
+ "note": "Mutants of the dropped power-ups (src/ants_ai/standard_bot.cpp 'the dropped power-ups', src/ants_ai/tactics.cpp, src/ants_ai/arena.cpp DropTally, docs/BOTS.md 'Dropped power-ups') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_drops_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs all the cases of the batch (AI47).",
+ "defaults": {
+  "build": "test_ai"
+ },
+ "baseline": {
+  "build": "test_ai",
+  "test": "timeout 900 env ANTS_TEST_FILTER='AI47.' ./build/tests/test_ai/test_ai"
+ },
+ "mutants": [
+  {
+   "id": "medium_plan_retake_off",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.secure_kinds = kSecureOpening;\n            p.drop_retake = true;\n",
+   "new": "            p.secure_kinds = kSecureOpening;\n            p.drop_retake = false;\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI47.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI47.2"
+  },
+  {
+   "id": "hard_plan_contest_off",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.drop_retake = true;\n            p.drop_contest = true;\n",
+   "new": "            p.drop_retake = true;\n            p.drop_contest = false;\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI47.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI47.5"
+  },
+  {
+   "id": "memory_window_removed",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": " && now <= kind_seen_[k] + plan.drop_memory_ticks && kind_seen_[k] != now;",
+   "new": " && kind_seen_[k] != now;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI47.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI47.3"
+  },
+  {
+   "id": "never_had_kind_taken",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "kind_seen_[k] != 0 && now <=",
+   "new": "kind_seen_[k] == 0 && now <=",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI47.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI47.3"
+  },
+  {
+   "id": "start_power_ups_are_drops",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "            if (at_start) continue;\n",
+   "new": "",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI47.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI47.4"
+  },
+  {
+   "id": "every_kind_taken_from_other_sides",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "const bool secured = plan.drop_contest && ((plan.secure_kinds >> static_cast<unsigned>(p.kind)) & 1u) != 0;",
+   "new": "const bool secured = plan.drop_contest;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI47.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI47.4"
+  },
+  {
+   "id": "kind_mask_ignored",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "const bool lost = plan.drop_retake && ((plan.drop_retake_kinds >> static_cast<unsigned>(p.kind)) & 1u) != 0 &&",
+   "new": "const bool lost = plan.drop_retake &&",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI47.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI47.3"
+  },
+  {
+   "id": "easy_plan_retakes",
+   "file": "include/ants_ai/tactics.hpp",
+   "old": "    bool drop_retake{false};",
+   "new": "    bool drop_retake{true};",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI47.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI47.1"
+  },
+  {
+   "id": "kind_seen_not_updated",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "kind_seen_[static_cast<size_t>(a.type)] = now;",
+   "new": "kind_seen_[static_cast<size_t>(a.type)] = 0;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI47.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI47.1"
+  },
+  {
+   "id": "tally_taker_ignored",
+   "file": "src/ants_ai/arena.cpp",
+   "old": "if (std::max(std::abs(a.tile_x - d.x), std::abs(a.tile_y - d.y)) <= 2) d.taker = a.player_id;",
+   "new": "if (std::max(std::abs(a.tile_x - d.x), std::abs(a.tile_y - d.y)) <= 2) d.taker = 255;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI47.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI47.1"
+  },
+  {
+   "id": "tally_owner_wrong",
+   "file": "src/ants_ai/arena.cpp",
+   "old": "                d.owner = t.team;",
+   "new": "                d.owner = static_cast<uint8_t>(t.team + 1);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI47.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI47.1"
+  }
+ ]
+}

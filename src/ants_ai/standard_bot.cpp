@@ -128,6 +128,21 @@ void StandardBot::think(const BotView& view, Orders& orders) {
             if (plan.flower_fire && p.kind == sim::AntType::Fire && flower->approach[seat_].reachable()) want = std::max<uint8_t>(want, 1);
         }
     }
+    for (const AntView& a : view.mine()) {                      // the kinds that the team has (the dropped power-ups)
+        if (a.type != view.default_ant_type() && static_cast<size_t>(a.type) < kind_seen_.size()) kind_seen_[static_cast<size_t>(a.type)] = now;
+    }
+    if ((plan.drop_retake || plan.drop_contest) && !gate_breaching) {   // a power-up that lies loose (a dead ant's: not one of the start and not a flower's): the kind the team lost, and for Hard the secured kinds it has none of
+        for (const PowerUpView& p : view.powerups()) {
+            if (map->flower_at(p.tile) != nullptr) continue;
+            bool at_start = false;
+            for (const PowerUpInfo& s : map->powerups()) at_start = at_start || (s.tile == p.tile && s.type == p.kind);
+            if (at_start) continue;
+            const size_t k = static_cast<size_t>(p.kind);
+            const bool lost = plan.drop_retake && ((plan.drop_retake_kinds >> static_cast<unsigned>(p.kind)) & 1u) != 0 && k < kind_seen_.size() && kind_seen_[k] != 0 && now <= kind_seen_[k] + plan.drop_memory_ticks && kind_seen_[k] != now;
+            const bool secured = plan.drop_contest && ((plan.secure_kinds >> static_cast<unsigned>(p.kind)) & 1u) != 0;
+            if (lost || secured) tactics_.wants[k] = std::max<uint8_t>(tactics_.wants[k], 1);
+        }
+    }
     bool enemy_plays = false;
     for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
         const TeamRow& row = view.rows()[t];
