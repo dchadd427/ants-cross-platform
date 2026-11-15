@@ -17,7 +17,7 @@
     var OPENING_MS = 15000, GIVE_UP_MS = 60000;          // a hand-off that is still here after the first has been slow: Home takes presses again, and says so; after the second the page says that it did not come
     var GAMES = 'home/games';                            // the Games list, Quick host and the Room's switch (games.js, games.css): loaded once, after the first paint
     var TEXT = {
-        name: 'Ants!', quickHost: 'Quick host', quickJoin: 'Quick join', mine: 'My room', games: 'Games', menu: 'Menu', login: 'Log in', home: 'Home', leave: 'Leave room', opening: 'Opening the game…',
+        name: 'Ants!', quickHost: 'Quick host', quickJoin: 'Quick join', mine: 'My room', games: 'Games', menu: 'Menu', login: 'Log in', home: 'Home', leave: 'Leave room', opening: 'Opening the game…', left: 'You left the room.',
         slow: 'The game is slow to open. Reload this page to get your seat back.', failed: 'The game did not open. Reload this page to get your seat back.',
         players: 'Players', chat: 'Chat', views: 'Home views'
     };
@@ -124,12 +124,15 @@
         var mine = button('hchip mine', '', function () { openRoom(); });
         var mineName = el('span', 'name', TEXT.mine), minePill = el('span', 'pill'); minePill.hidden = true;
         mine.appendChild(mineName); mine.appendChild(minePill); mine.hidden = true;       // (My room is there only while the page holds a room: sync() shows it)
-        var gamesBtn = stub('hchip games', ''), gamesPill = el('span', 'pill');
+        var mineX = button('minex', '', function () { leaveFrom(mineX); });        // the X beside My room: it leaves the room as the Room's Leave room does (a room with other people in it is asked about first)
+        mineX.setAttribute('aria-label', TEXT.leave); mineX.setAttribute('title', TEXT.leave); mineX.appendChild(el('i', 'cross'));
+        var mineBox = el('div', 'hmine'); mineBox.hidden = true; mineBox.appendChild(mine); mineBox.appendChild(mineX);
+        var gamesBtn = stub('hchip games', ''), gamesPill = el('span', 'pill');       // (no Games button in the bar: the games list is always on Home, and a phone's strip has Games. The button and its count stay as the list's own handle and are not placed in the page)
         gamesPill.hidden = true; gamesBtn.appendChild(el('span', 'name', TEXT.games)); gamesBtn.appendChild(gamesPill);
         var right = el('div', 'hright'), login = button('hlogin', TEXT.login); login.hidden = true;       // (the login chip: the chat dock fills it and shows it where the hub offers a login)
         var menuHome = menuButton();
         right.appendChild(login); right.appendChild(menuHome);
-        [heading(), quickHost, quickJoin, mine, gamesBtn, right].forEach(function (n) { bar.appendChild(n); });
+        [heading(), quickHost, quickJoin, mineBox, right].forEach(function (n) { bar.appendChild(n); });
         var main = el('main', 'hmain'); main.id = 'hmain';       // the games list and the players list mount here, side by side; the chat dock comes after it
         var tabs = el('nav', 'htabs'), tab = 'games', tabBtns = {}; tabs.setAttribute('aria-label', TEXT.views);
         TABS.forEach(function (t) {
@@ -144,7 +147,12 @@
         var homeBtn = button('rhome', '', function () { show('home', 'push'); });
         var chev = el('span', 'chev', '‹'); chev.setAttribute('aria-hidden', 'true');
         homeBtn.appendChild(chev); homeBtn.appendChild(el('span', '', TEXT.home));
-        var leave = button('leave', TEXT.leave, function () { if (stalled) return; var go = function () { page.leave(); show('home', 'push'); }; if (!asking(go)) go(); });
+        var leave = button('leave', TEXT.leave, function () { leaveFrom(leave); });
+        function leaveFrom(opener) {                        // Leave room (the Room's button and the X beside My room): at once when alone, else the list asks first; then Home says that the room was left
+            if (stalled) return;
+            var go = function () { page.leave(); show('home', 'push'); gamesCall('said', TEXT.left); if (screen === 'home' && (!doc.activeElement || doc.activeElement === doc.body || doc.activeElement === opener)) away().focus(); };
+            if (!asking(go, opener)) go();
+        }
         var menuRoom = menuButton();
         [homeBtn, heading(), el('span', 'grow'), leave, menuRoom].forEach(function (n) { rbar.appendChild(n); });
         env.lobby.parentNode.insertBefore(rbar, env.lobby);
@@ -264,11 +272,11 @@
             if (!page.info().client) page.make();
             show('room', 'push');
         }
-        function away() { return !quickHost.disabled ? quickHost : !gamesBtn.disabled ? gamesBtn : menuHome; }       // (where the focus goes when My room is not there: the first button that takes a press)
+        function away() { return !quickHost.disabled ? quickHost : menuHome; }       // (where the focus goes when My room is not there: the first button that takes a press)
         function sync() {
             var info = page.info(), n = info.client ? countOf(info.model) : null;
-            mine.hidden = !info.client;
-            if (mine.hidden && doc.activeElement === mine) away().focus();       // (the room ended under the focus: it goes to Quick host, not to nowhere)
+            mine.hidden = mineBox.hidden = !info.client;
+            if (mine.hidden && (doc.activeElement === mine || doc.activeElement === mineX)) away().focus();       // (the room ended under the focus: it goes to Quick host, not to nowhere)
             minePill.textContent = n ? n.people + '/' + n.size : '';
             minePill.hidden = !n;
             mine.setAttribute('aria-label', n ? TEXT.mine + ', ' + n.people + ' of ' + n.size : TEXT.mine);
@@ -289,7 +297,7 @@
             var afterPaint = typeof win.requestAnimationFrame === 'function' ? function (fn) { win.requestAnimationFrame(function () { setTimeout(fn, 0); }); } : function (fn) { setTimeout(fn, 0); };
             afterPaint(load);
         }
-        function asking(go) { try { return !!games && !!games.leaving(go, leave); } catch (e) { return false; } }       // (the Games list asks before a room with other people in it is left; it says whether it asks)
+        function asking(go, opener) { try { return !!games && !!games.leaving(go, opener || leave); } catch (e) { return false; } }       // (the Games list asks before a room with other people in it is left; it says whether it asks)
         function gamesCall(name, arg) { try { if (games) games[name](arg); } catch (e) { /* the list is its own */ } }
         function wantGames() {
             if (askedGames) return;
@@ -319,7 +327,7 @@
             if (failTimer !== null) clearTimeout(failTimer);
             failTimer = null;
             goingTimer = setTimeout(function () {                // not here yet: Home takes presses again, but the seat may still be the game's, so Leave room stays off, and the page says so
-                goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(held);
+                goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = mineX.disabled = true; leave.setAttribute('aria-disabled', 'true'); mineX.setAttribute('aria-disabled', 'true'); inert(held);
                 tell(TEXT.slow);
                 failTimer = setTimeout(function () { failTimer = null; tell(TEXT.failed); }, GIVE_UP_MS - OPENING_MS);
             }, OPENING_MS);

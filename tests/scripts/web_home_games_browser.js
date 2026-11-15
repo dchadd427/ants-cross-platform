@@ -126,7 +126,7 @@ async function newPage(browser, site, name, size, search, silent) {
     await page.goto(site.url + (search || '/'));
     return page;
 }
-const lit = (page) => page.waitForFunction(() => { const g = document.querySelector('.hchip.games'), q = document.querySelector('.quick.host'); return !!g && !!q && !g.disabled && !q.disabled; }, null, { timeout: 10000 });
+const lit = (page) => page.waitForFunction(() => { const g = document.querySelector('.quick.join'), q = document.querySelector('.quick.host'); return !!g && !!q && !g.disabled && !q.disabled; }, null, { timeout: 10000 });
 const screenOf = (page) => page.evaluate(() => document.body.getAttribute('data-screen'));
 const textOf = (page, selector) => page.evaluate((q) => { const e = document.querySelector(q); return e ? e.textContent : null; }, selector);
 
@@ -151,13 +151,13 @@ async function flows() {
                 }).length;
                 return { title: document.title, label: !!document.getElementById('site-label'), main: r(main), bar: r(bar), host: r(document.getElementById('home')), pop: r(pop), chat: r(chat), tabs: r(tabs), tabsShown: shown(tabs), popShown: shown(pop), chatShown: shown(chat), role: pop && pop.getAttribute('role'),
                     yard: !!document.getElementById('yard') || !!document.querySelector('.standin, .ylabel, .yant'), rows: document.querySelectorAll('.gpop .gitem').length, joins: document.querySelectorAll('.gpop .gjoin').length, covered, tab: document.getElementById('home').getAttribute('data-tab'),
-                    hasPopup: document.querySelector('.hchip.games').getAttribute('aria-haspopup'), wide: document.documentElement.scrollWidth <= window.innerWidth, mapSize: (document.querySelector('.gpop .gmap') || { getBoundingClientRect: () => ({ width: 0 }) }).getBoundingClientRect().width };
+                    bar: document.querySelectorAll('.hbar .games').length, wide: document.documentElement.scrollWidth <= window.innerWidth, mapSize: (document.querySelector('.gpop .gmap') || { getBoundingClientRect: () => ({ width: 0 }) }).getBoundingClientRect().width };
             });
             for (const size of [['desktop', 1280, 800], ['laptop', 1366, 640], ['tablet', 900, 700], ['small window', 800, 600], ['701 wide', 701, 800], ['700 wide', 700, 800], ['phone', 390, 844], ['side', 844, 390], ['small side', 568, 320]]) {
                 const plain = await newPage(browser, prod, 'Maple', size, '/', true), test = await newPage(browser, staging, 'Maple', size, '/', true);
                 await plain.waitForSelector('.gpop .gitem'); await plain.waitForSelector('.gc', { state: 'attached' }); await test.waitForSelector('.gpop .gitem'); await test.waitForSelector('.gc', { state: 'attached' }); await sleep(300);
                 const a = await look(plain), b = await look(test), at = size[0] + ' (' + size[1] + ' x ' + size[2] + ')', phone = size[1] <= 700;
-                check('Home, ' + at + ': the Games list is docked in the body (#hmain: a region, five cards with a Join each), there is no Yard and no stand-in, Games names no popup, nothing scrolls sideways', a.popShown && a.role === 'region' && a.rows === 5 && a.joins === 5 && !a.yard && a.hasPopup === null && a.wide
+                check('Home, ' + at + ': the Games list is docked in the body (#hmain: a region, five cards with a Join each), there is no Yard and no stand-in, the bar has no Games button, nothing scrolls sideways', a.popShown && a.role === 'region' && a.rows === 5 && a.joins === 5 && !a.yard && a.bar === 0 && a.wide
                     && a.main && a.pop[0] >= a.main[0] && a.pop[1] >= a.main[1] && a.pop[0] + a.pop[2] <= a.main[0] + a.main[2] + 1 && a.pop[1] + a.pop[3] <= a.main[1] + a.main[3] + 1, JSON.stringify(a));
                 if (!phone) check('... a wide window: the chat panel lies under the list along the bottom of Home, as wide as the body (no strip: the games, the players and the chat are all there), and no Join or code field of the list is under anything else ' + at,
                     a.chatShown && !a.tabsShown && a.chat[1] >= a.pop[1] + a.pop[3] && a.chat[1] + a.chat[3] <= a.host[1] + a.host[3] + 1 && a.chat[0] <= a.pop[0] && a.covered === 0, JSON.stringify(a));
@@ -171,7 +171,7 @@ async function flows() {
                         c.tab === 'chat' && c.chatShown && !c.popShown && c.chat[1] >= c.bar[1] + c.bar[3] - 1 && c.chat[1] + c.chat[3] <= c.tabs[1] + 1 && await plain.evaluate(() => document.querySelector('.gc').getAttribute('data-open') === 'true')
                         && (await plain.click('.htab.t-games'), await sleep(150), await plain.evaluate(() => document.querySelector('.gpop').getClientRects().length > 0 && document.querySelector('.gc').getClientRects().length === 0)), JSON.stringify(c));
                 } else {
-                    await plain.click('.hchip.games'); await sleep(200);
+                    await plain.evaluate(() => document.querySelector('.htab.t-games').click()); await sleep(200);
                     check('Games takes the focus into the list and the list stays ' + at, await plain.evaluate(() => !!document.activeElement.closest('.gpop')) && (await look(plain)).popShown);
                 }
                 check('... and neither page said anything wrong (no error of the page)', plain.errors.length === 0 && test.errors.length === 0, plain.errors.concat(test.errors).join('; '));
@@ -235,9 +235,9 @@ async function flows() {
         const list = await until('the real list holds the room', async () => { const r = await (await sage.request.get(live.url + '/lobbies')).json(); return r.lobbies.some((x) => x.code === code) ? r : null; }, 10000);
         const mine = list.lobbies.find((x) => x.code === code);
         check('the real /lobbies door lists the public room: its code, the host\'s name, the map (the server\'s default) and the seats (one person, three free colors)', mine.host === 'Maple' && /\.LVL$/.test(mine.map) && mine.people === 1 && mine.free === 3 && mine.size === 4);
-        await sage.click('.hchip.games');
+        await sage.evaluate(() => document.querySelector('.htab.t-games').click());
         await until('the row is in the popover', async () => (await textOf(sage, '.glist .gname')) === 'Maple', 12000);
-        check('a second browser sees the room in its Games list (the count on the button too) and joins from it', (await textOf(sage, '.hchip.games .pill')) === '1' && (await textOf(sage, '.glist .gcount')) === '1/4');
+        check('a second browser sees the room in its Games list (the count on the button too) and joins from it', (await textOf(sage, '.htab.t-games .pill')) === '1' && (await textOf(sage, '.glist .gcount')) === '1/4');
         await sage.click('.gjoin');
         await until('the guest is in the Room', async () => (await screenOf(sage)) === 'room' && (await textOf(sage, '#room-h')) === 'Maple’s room', 12000);
         check('Join in a real browser: the guest shows the Room of the host, the chip says "Public room" and there is no switch, and the notice says it', (await textOf(sage, '.vistag')) === 'Public room' && (await sage.evaluate(() => document.querySelector('.vis').hidden)) === true && (await textOf(sage, '.gtoast')).indexOf('Joined') === 0);
@@ -260,7 +260,7 @@ async function flows() {
             await b.click('#name-step-go');
             await until('Sage is in the room of Maple', async () => (await a.evaluate(() => document.getElementById('slots').textContent.indexOf('Sage') !== -1)), 10000);
             await a.click('.rhome');
-            await a.click('.hchip.games'); await a.waitForSelector('.glist .gitem');
+            await a.evaluate(() => document.querySelector('.htab.t-games').click()); await a.waitForSelector('.glist .gitem');
             await a.click('.gjoin');
             await a.waitForSelector('.gconfirm');
             await a.click('.gstay');
@@ -294,7 +294,7 @@ async function flows() {
             const code = await host.evaluate(() => new URL(document.getElementById('link').value).searchParams.get('room'));
             const guest = await newPage(browser, live, 'Sage', size); await lit(guest);
             await until('the real list holds the room', async () => (await (await guest.request.get(live.url + '/lobbies')).json()).lobbies.some((x) => x.code === code), 10000);
-            await guest.click('.hchip.games');
+            await guest.evaluate(() => document.querySelector('.htab.t-games').click());
             await guest.waitForSelector('.gjoin[data-code="' + code + '"]', { timeout: 15000 });
             await guest.dblclick('.gjoin[data-code="' + code + '"]');
             await until('the guest is in the Room of the host', async () => (await screenOf(guest)) === 'room' && (await textOf(guest, '#room-h')) === 'Maple’s room', 12000).catch(() => null);
@@ -366,11 +366,11 @@ async function flows() {
             await page.click('.quick.join');
             check('Quick join with the Rejoin offer up (a real click): "Your match is running." with Rejoin, no card, no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => document.querySelectorAll('.gconfirm').length)) === 0 && sockets.length === 0);
             await page.click('.gtoast .btn:last-child');
-            await page.click('.hchip.games'); await page.waitForSelector('.glist .gitem');
+            await page.evaluate(() => document.querySelector('.htab.t-games').click()); await page.waitForSelector('.glist .gitem');
             await page.click('.gjoin');
             check('Join in the list with the Rejoin offer up: the same words and the same Rejoin, the list stays where it is (docked in the body), no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => { const p = document.querySelector('.gpop'); return p.classList.contains('gdock') ? !p.hidden : p.hidden; })) && sockets.length === 0);
             await page.click('.gtoast .btn:last-child');
-            await page.click('.hchip.games'); await page.waitForSelector('.gcodelink'); await page.click('.gcodelink'); await page.waitForSelector('.gcode input');
+            await page.evaluate(() => document.querySelector('.htab.t-games').click()); await page.waitForSelector('.gcodelink'); await page.click('.gcodelink'); await page.waitForSelector('.gcode input');
             await page.fill('.gcode input', 'abc234');
             await page.click('.gcgo');
             check('Join by code with the Rejoin offer up: the same words, no name card, no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => document.getElementById('name-step').hidden)) && sockets.length === 0);
@@ -422,10 +422,10 @@ async function flows() {
                 const label = size[0] + ' ' + size[1] + 'x' + size[2];
                 // Home with the count, the list, the empty list, the list that is off (a fake list on the real site)
                 let p = await newPage(browser, fake, 'Maple', size); await lit(p);
-                await p.waitForFunction(() => document.querySelector('.hchip.games .pill') && !document.querySelector('.hchip.games .pill').hidden);
+                await p.waitForFunction(() => document.querySelector('.htab.t-games .pill') && !document.querySelector('.htab.t-games .pill').hidden);
                 await shot(p, 'home', size);
                 check(label + ': Home has no sideways scroll and every control is inside the window', (await p.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)) && (await reach(p)).length === 0, JSON.stringify(await reach(p)));
-                await p.click('.hchip.games'); await p.waitForSelector('.glist .gitem');
+                await p.evaluate(() => document.querySelector('.htab.t-games').click()); await p.waitForSelector('.glist .gitem');
                 await shot(p, 'games', size);
                 const best = await p.evaluate(() => { const r = document.querySelector('.glist .gitem'), n = r.querySelector('.gname').getBoundingClientRect(), m = r.querySelector('.gmapname').getBoundingClientRect(), b = r.querySelector('.gbest').getBoundingClientRect(); return { nameTop: Math.round(n.top), nameBottom: Math.round(n.bottom), mapRight: Math.round(m.right), bestTop: Math.round(b.top), bestBottom: Math.round(b.bottom), bestLeft: Math.round(b.left) }; });
                 check(label + ': the BEST tag ' + (size[0] === 'phone' ? 'wraps under the name (the row is too narrow for it, as the phone picture draws it)' : 'stands beside the name and the map\'s name, on their line (the picture draws it so)'), size[0] === 'phone' ? best.bestTop >= best.nameBottom - 1 : best.bestTop >= best.nameTop - 1 && best.bestBottom <= best.nameBottom + 1 && best.bestLeft >= best.mapRight, JSON.stringify(best));
@@ -438,12 +438,12 @@ async function flows() {
                 await p.keyboard.press('Escape');
                 await p.context().close();
                 p = await newPage(browser, emptySite, 'Maple', size); await lit(p);
-                await p.click('.hchip.games'); await p.waitForSelector('.gempty:not([hidden])');
+                await p.evaluate(() => document.querySelector('.htab.t-games').click()); await p.waitForSelector('.gempty:not([hidden])');
                 await shot(p, 'games_empty', size);
                 check(label + ': the empty list says it, with no button of its own', (await p.evaluate(() => !!document.querySelector('.gempty') && document.querySelectorAll('.gempty button').length === 0)));
                 await p.context().close();
                 p = await newPage(browser, offSite, 'Maple', size); await lit(p);
-                await p.click('.hchip.games'); await p.waitForSelector('.goff:not([hidden])');
+                await p.evaluate(() => document.querySelector('.htab.t-games').click()); await p.waitForSelector('.goff:not([hidden])');
                 await shot(p, 'games_off', size);
                 await p.context().close();
                 // the room: Maple, Sage and a computer player; private; then Quick host from Home; Sage's own view
@@ -468,7 +468,7 @@ async function flows() {
                 await shot(a, 'room_public', size);
                 await shot(b, 'room_guest', size);
                 await a.click('.rhome');
-                await a.click('.hchip.games'); await a.waitForSelector('.glist .gitem');
+                await a.evaluate(() => document.querySelector('.htab.t-games').click()); await a.waitForSelector('.glist .gitem');
                 await a.click('.gjoin');
                 await a.waitForSelector('.gconfirm');
                 await shot(a, 'confirm', size);
@@ -480,7 +480,7 @@ async function flows() {
                 await a.context().close(); await b.context().close();
                 // a refusal in plain words (a game of the fake list that the real server does not have), and a Join that works (the real list)
                 const r = await newPage(browser, fake, 'Sage', size); await lit(r);
-                await r.click('.hchip.games'); await r.waitForSelector('.glist .gitem');
+                await r.evaluate(() => document.querySelector('.htab.t-games').click()); await r.waitForSelector('.glist .gitem');
                 await r.click('.gjoin');
                 await r.waitForSelector('.gpnote:not([hidden])');
                 await shot(r, 'join_refused', size);
@@ -490,8 +490,8 @@ async function flows() {
                 await host.click('.quick.host'); await host.click('.gconfirm .gyes');       // (Quick host with no room asks Public or Private first: Public room)
                 await host.waitForSelector('.vbtn[aria-pressed="true"] >> text=Public');
                 const guest = await newPage(browser, live, 'Sage', size); await lit(guest);
-                await guest.waitForFunction(() => { const p = document.querySelector('.hchip.games .pill'); return p && p.textContent === '1'; }, null, { timeout: 12000 });
-                await guest.click('.hchip.games'); await guest.waitForSelector('.glist .gitem');
+                await guest.waitForFunction(() => { const p = document.querySelector('.htab.t-games .pill'); return p && p.textContent === '1'; }, null, { timeout: 12000 });
+                await guest.evaluate(() => document.querySelector('.htab.t-games').click()); await guest.waitForSelector('.glist .gitem');
                 await guest.click('.gjoin');
                 await guest.waitForSelector('.vistag');
                 await shot(guest, 'joined', size);
@@ -499,7 +499,7 @@ async function flows() {
                 await host.context().close(); await guest.context().close();
                 // Quick join: the cards of the approved pictures (finding: a game server that says nothing; joined: the real one; none: an empty list; confirm: another person in the own room), and the question before Leave room
                 const qf = await newPage(browser, fake, 'Maple', size, undefined, true); await lit(qf);
-                await qf.waitForFunction(() => { const p = document.querySelector('.hchip.games .pill'); return p && !p.hidden; });
+                await qf.waitForFunction(() => { const p = document.querySelector('.htab.t-games .pill'); return p && !p.hidden; });
                 await qf.click('.quick.join');
                 await qf.waitForSelector('.gconfirm .gbar');
                 await shot(qf, 'qj_finding', size);
@@ -509,7 +509,7 @@ async function flows() {
                 await qh.click('.quick.host'); await qh.click('.gconfirm .gyes');       // (Quick host with no room asks Public or Private first: Public room)
                 await qh.waitForSelector('.vbtn[aria-pressed="true"] >> text=Public');
                 const qg = await newPage(browser, live, 'Sage', size); await lit(qg);
-                await qg.waitForFunction(() => { const p = document.querySelector('.hchip.games .pill'); return p && p.textContent === '1'; }, null, { timeout: 12000 });
+                await qg.waitForFunction(() => { const p = document.querySelector('.htab.t-games .pill'); return p && p.textContent === '1'; }, null, { timeout: 12000 });
                 await qg.click('.quick.join');
                 await qg.waitForSelector('.gmark.check');
                 await shot(qg, 'qj_joined', size);
@@ -529,7 +529,7 @@ async function flows() {
                 const qb = await newPage(browser, fake, 'Sage', size, '/?room=' + qRoom);
                 await qb.click('#name-step-go');
                 await until('Sage is in', async () => (await qa.evaluate(() => document.getElementById('slots').textContent.indexOf('Sage') !== -1)), 10000);
-                await qa.waitForFunction(() => { const p = document.querySelector('.hchip.games .pill'); return p && !p.hidden; }).catch(() => null);
+                await qa.waitForFunction(() => { const p = document.querySelector('.htab.t-games .pill'); return p && !p.hidden; }).catch(() => null);
                 await qa.click('.rbar .leave');
                 await qa.waitForSelector('.gconfirm');
                 await shot(qa, 'qj_leave', size);
@@ -553,21 +553,21 @@ async function flows() {
                 await until(name + ' room is public', async () => (await p.evaluate(() => { const b = document.querySelector('.vbtn[aria-pressed="true"] b'); return b && b.textContent; })) === 'Public', 10000);
                 return p;
             };
-            const openGames = async (p) => { if (!(await p.evaluate(() => document.querySelector('.gpop') && !document.querySelector('.gpop').hidden))) await p.click('.hchip.games'); };
+            const openGames = async (p) => { if (!(await p.evaluate(() => document.querySelector('.gpop') && !document.querySelector('.gpop').hidden))) await p.evaluate(() => document.querySelector('.htab.t-games').click()); };
             const maple = await hostPublic('Maple');
             await maple.click('.rhome');
             await openGames(maple);
             await until('the own room is the one row', async () => (await rowsOf(maple)).length === 1, 12000);
             let rows = await rowsOf(maple);
             check(label + ': only the own public room is open: one row, Maple, tagged Yours, with no Join button and no button at all, no BEST', rows[0].name === 'Maple' && rows[0].yours === 'Yours' && !rows[0].join && rows[0].buttons === 0 && !rows[0].best);
-            check(label + ': ... the button counts it (1), the heading says "1 waiting · updates live", and "No open games right now." is not shown', (await textOf(maple, '.hchip.games .pill')) === '1' && (await textOf(maple, '.gpcount')) === '1 waiting · updates live' && (await maple.evaluate(() => document.querySelector('.gempty').hidden && !document.querySelector('.glist').hidden)));
+            check(label + ': ... the button counts it (1), the heading says "1 waiting · updates live", and "No open games right now." is not shown', (await textOf(maple, '.htab.t-games .pill')) === '1' && (await textOf(maple, '.gpcount')) === '1 waiting · updates live' && (await maple.evaluate(() => document.querySelector('.gempty').hidden && !document.querySelector('.glist').hidden)));
             await maple.click('.glist .gitem');
             check(label + ': ... a press on the own row changes nothing: Home, the list still open, the room still Maple\'s', (await screenOf(maple)) === 'home' && (await maple.evaluate(() => !document.querySelector('.gpop').hidden && document.querySelectorAll('.glist .gitem').length === 1)));
             const sage = await hostPublic('Sage'), tess = await hostPublic('Tess');
             await until('the list holds three rows', async () => (await rowsOf(maple)).length === 3, 14000);
             rows = await rowsOf(maple);
             check(label + ': own room and two others: Yours is the first row, BEST is on the second and on no other, only the other two have a Join', rows[0].name === 'Maple' && rows[0].yours === 'Yours' && !rows[0].best && !rows[0].join && !rows[1].yours && rows[1].best && rows[1].join && !rows[2].yours && !rows[2].best && rows[2].join, JSON.stringify(rows));
-            check(label + ': ... the button says 3 and the heading "3 waiting · updates live"', (await textOf(maple, '.hchip.games .pill')) === '3' && (await textOf(maple, '.gpcount')) === '3 waiting · updates live');
+            check(label + ': ... the button says 3 and the heading "3 waiting · updates live"', (await textOf(maple, '.htab.t-games .pill')) === '3' && (await textOf(maple, '.gpcount')) === '3 waiting · updates live');
             const bestHost = rows[1].name;
             // the own room goes private: its row is gone at the next look
             await maple.keyboard.press('Escape');
@@ -578,7 +578,7 @@ async function flows() {
             await openGames(maple);
             await until('the own row is gone', async () => (await rowsOf(maple)).length === 2, 14000);
             rows = await rowsOf(maple);
-            check(label + ': the own room goes private: its row disappears at the next look, the other two stay (BEST on the first), the button says 2', rows.every((r) => r.name !== 'Maple' && !r.yours && r.join) && rows[0].best && !rows[1].best && (await textOf(maple, '.hchip.games .pill')) === '2' && (await textOf(maple, '.gpcount')) === '2 waiting · updates live');
+            check(label + ': the own room goes private: its row disappears at the next look, the other two stay (BEST on the first), the button says 2', rows.every((r) => r.name !== 'Maple' && !r.yours && r.join) && rows[0].best && !rows[1].best && (await textOf(maple, '.htab.t-games .pill')) === '2' && (await textOf(maple, '.gpcount')) === '2 waiting · updates live');
             // public again, and Quick join: the own room is skipped by its code, the page joins the best other room
             await maple.keyboard.press('Escape');
             await maple.evaluate(() => document.querySelector('.hchip.mine').click());
@@ -604,7 +604,7 @@ async function flows() {
         {
             const WIDEST = () => {
                 const set = (q, text) => { const e = document.querySelector(q); if (e) { e.hidden = false; e.textContent = text; } };
-                (document.querySelector('.mine') || {}).hidden = false; set('.mine .pill', '4/4'); set('.games .pill', '50+');
+                (document.querySelector('.hmine') || {}).hidden = false; (document.querySelector('.mine') || {}).hidden = false; set('.mine .pill', '4/4'); set('.htab.t-games .pill', '50+');
                 const chip = document.querySelector('.hlogin');
                 if (chip) { chip.hidden = false; chip.textContent = ''; for (const [c, t] of [['gc-av', 'M'], ['gc-cn', 'Maple_Leaf_Longname_88']]) { const i = document.createElement('span'); i.className = c; i.textContent = t; chip.appendChild(i); } }
             };

@@ -170,6 +170,7 @@ const THROWS = 'THROWS';
 // env.sockets are the sockets that the page opened (env.last() the newest); env.arrive() opens the newest and plays a server's Welcome and Room.
 function runLobby(search, stored, options) {
     options = options || {};
+    const made = [];
     const env = { innerHTMLWrites: [], assigned: [], replaced: [], scrolled: [], opened: [], copied: [], commanded: [], shared: [], elements: {}, focused: null, confirms: [], reloads: 0, sockets: [], timers: [], clock: 0, nextTimer: 1 };
     env.root = new El(env, 'html', '');
     const markup = options.label ? lobbyMarkup.replace('@@SITE_FOOTER@@', '<strong id="site-label">' + options.label + '</strong>&#8197;&bull;&#8197;') : lobbyMarkup;       // (options.label: a labelled build, as the Dockerfile stamps it: the footer holds the label; none is the production site's)
@@ -190,7 +191,7 @@ function runLobby(search, stored, options) {
     const doc = {
         body: new El(env, 'body', ''),
         getElementById(id) { if (!env.elements[id]) throw new Error('the page asked for #' + id + ', which its markup does not have'); return env.elements[id]; },
-        createElement(tag) { return new El(env, tag, ''); },
+        createElement(tag) { const e = new El(env, tag, ''); made.push(e); return e; },
         querySelector(selector) { return selector === 'header.mast' ? env.mast : null; },       // (the old logo row has no id in the markup: a stand-in that the page can set an attribute on)
         createTextNode(text) { return { isText: true, textContent: String(text), parent: null }; },
         activeElement: null,
@@ -369,7 +370,8 @@ function runLobby(search, stored, options) {
     env.press = (el) => env.$('slots').fire('click', { target: el, detail: 1 });
     env.pagePlays = () => env.assigned.length > 0;
     // Home: the buttons that home.js makes (it builds its own markup), by their class
-    env.home = (cls) => env.$('home').findAll((e) => String(e.className).split(/\s+/).indexOf(cls) !== -1)[0] || null;
+    // (the games list's own handle, the button with its count, is made but not placed in the bar: Home has no Games button; a lookup that finds nothing in the tree finds it among the made elements)
+    env.home = (cls) => env.$('home').findAll((e) => String(e.className).split(/\s+/).indexOf(cls) !== -1)[0] || (cls === 'games' ? made.find((e) => String(e.className).split(/\s+/).indexOf(cls) !== -1) : null) || null;
     env.roomBar = (cls) => env.root.findAll((e) => String(e.className).split(/\s+/).indexOf('rbar') !== -1)[0].findAll((e) => String(e.className).split(/\s+/).indexOf(cls) !== -1)[0] || null;
     env.screen = () => env.body.getAttribute('data-screen');
     env.dumpAll = () => [...Object.values(env.elements), ...env.root.children, env.body].flatMap((e) => e.all()).map((e) => e.textContent + '|' + JSON.stringify(e.attributes) + '|' + e.value).join('\n') + env.innerHTMLWrites.join('') + JSON.stringify(env.replaced) + JSON.stringify(env.assigned);

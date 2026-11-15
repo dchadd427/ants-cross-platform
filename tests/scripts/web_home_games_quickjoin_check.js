@@ -569,6 +569,60 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     check('Leave room stays off on a page whose hand-off did not come (it never asks, it never leaves)', card(env) === null && leaves(own) === 0);
 }
 
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 8. The X beside My room (Home's bar)
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const none = await withRooms(ROWS);
+    check('with no room the X is not there (it hides with My room: no place in the bar)', none.home('minex').parent.hidden === true && none.home('mine').hidden === true);
+    const env = await withRooms(ROWS);
+    const sock = myRoom(env, ['Maya']);
+    env.roomBar('rhome').click();
+    const x = env.home('minex');
+    check('with a room the X shows beside My room: a button named "Leave room" (label and tooltip), not disabled', env.screen() === 'home' && x.parent.hidden === false && x.getAttribute('aria-label') === 'Leave room' && x.getAttribute('title') === 'Leave room' && x.disabled === false && x.tagName.toLowerCase() === 'button');
+    check('... it is a button of its own beside the pill, not inside My room', x.parent === env.home('mine').parent && !find(env.home('mine'), 'minex').length);
+    x.click();
+    await flush();
+    check('the X, alone in the room, leaves at once (no card): one Leave, the socket closed, no seat kept in the session, Home stays', card(env) === null && leaves(sock) === 1 && sock.closed && env.screen() === 'home' && env.session.data['ants.lobby'] === undefined);
+    check('... My room and the X are gone, and the toast says "You left the room."', env.home('mine').hidden === true && env.home('minex').parent.hidden === true && toastTextOf(env) === 'You left the room.');
+    check('... the focus is on a button that is there (not on the X that went)', env.focused !== null && env.focused !== x && !env.focused.hidden);
+}
+{
+    const env = await withRooms(ROWS);
+    const sock = myRoom(env, ['Maya', 'Sage']);
+    env.roomBar('rhome').click();
+    const x = env.home('minex');
+    x.click();
+    check('the X with another person in the room asks first, in the card of the other questions ("Leave your room?", "Sage becomes the host"); nothing was left', title(env) === 'Leave your room?' && /Sage becomes the host/.test(lineOf(env)) && textOf(act(env, 'gyes')) === 'Leave room' && leaves(sock) === 0 && !sock.closed);
+    tap(act(env, 'gstay'));
+    check('"Stay here" keeps the room: no Leave, My room and the X still there, the focus is back on the X, no toast', card(env) === null && leaves(sock) === 0 && env.home('mine').hidden === false && env.focused === x && toastTextOf(env) !== 'You left the room.');
+    x.click();
+    pressEscape(env);
+    check('Escape is "Stay here"', card(env) === null && leaves(sock) === 0 && env.home('mine').hidden === false);
+    x.click();
+    tap(act(env, 'gyes'));
+    await flush();
+    check('"Leave room" leaves: one Leave, the socket closed, the session forgets the seat, My room and the X go, and the toast says so', leaves(sock) === 1 && sock.closed && env.session.data['ants.lobby'] === undefined && env.home('mine').hidden === true && toastTextOf(env) === 'You left the room.');
+}
+{   // keyboard: the X is a real button (Enter and Space press it); touch: a tap is a click
+    const env = await withRooms(ROWS);
+    const sock = myRoom(env, ['Maya']);
+    env.roomBar('rhome').click();
+    tap(env.home('minex'));
+    await flush();
+    check('a tap on the X leaves (alone: at once)', leaves(sock) === 1 && env.screen() === 'home');
+}
+{   // the hand-off is stalled: the X stays off like Leave room
+    const env = await withRooms(ROWS);
+    const own = myRoom(env, ['Maya', 'Sage'], PRIVATE);
+    own.receive(roomMessage(seatsOf(['Maya', 'Sage']), { you: 0, leader: 0, flags: STARTING }));
+    env.roomBar('rhome').click();
+    await wait(env, 16000);
+    env.home('minex').click();
+    check('the X stays off on a page whose hand-off did not come (it never asks, it never leaves)', card(env) === null && leaves(own) === 0 && env.home('minex').disabled === true);
+}
+
 done('Quick join and Leave room');
 function OTHERS_OF(names) { return names; }
 })().catch(broke);

@@ -149,13 +149,15 @@ class TheFolder(unittest.TestCase):
     def test_a_hand_off_that_does_not_come_is_given_up_after_15_seconds(self):
         js = read("web", "home", "home.js")
         self.assertIn("var OPENING_MS = 15000, GIVE_UP_MS = 60000;", js)
-        self.assertIn("goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(held);", js, "the card goes, Home is free, Leave room stays off (the seat may still be the game's), and what a dialog holds stays held")
+        self.assertIn("goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = mineX.disabled = true; leave.setAttribute('aria-disabled', 'true'); mineX.setAttribute('aria-disabled', 'true'); inert(held);", js, "the card goes, Home is free, Leave room stays off (the seat may still be the game's), and what a dialog holds stays held")
         self.assertIn("try { if (page.stalled) page.stalled(words); } catch (e) { /* what the page says is its own */ }", js, "the page says that the game is slow to open, and a minute after START that it did not")
         self.assertIn("failTimer = setTimeout(function () { failTimer = null; tell(TEXT.failed); }, GIVE_UP_MS - OPENING_MS);", js, "the wording of a failure comes a minute after START, not at 15 s")
         self.assertIn("if (failTimer !== null) clearTimeout(failTimer);", js, "a second hand-off starts both times again")
         self.assertIn("tell(TEXT.slow);", js)
         self.assertIn("slow: 'The game is slow to open. Reload this page to get your seat back.', failed: 'The game did not open. Reload this page to get your seat back.',", js)
-        self.assertIn("function () { if (stalled) return; var go = function () { page.leave(); show('home', 'push'); }; if (!asking(go)) go(); }", js, "a Leave room that reaches the page all the same does nothing; one that may go asks the Games list first (a room with other people in it is asked about)")
+        self.assertIn("function leaveFrom(opener) {", js)
+        self.assertIn("if (stalled) return;\n            var go = function () { page.leave(); show('home', 'push'); gamesCall('said', TEXT.left);", js)
+        self.assertIn("if (!asking(go, opener)) go();", js, "a Leave room that reaches the page all the same does nothing; one that may go asks the Games list first (a room with other people in it is asked about)")
         self.assertIn("if (goingTimer !== null) clearTimeout(goingTimer);", js, "a second hand-off starts the time again")
 
     def test_nothing_of_it_is_in_the_folder_that_has_its_cap_already(self):
