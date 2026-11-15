@@ -600,7 +600,7 @@ def main():
                 noMore: !document.getElementById('more') && !document.getElementById('morebox') && document.body.textContent.indexOf('More ways to play') === -1,
                 font: Array.from(document.fonts).some(function (f) { return f.family.indexOf('Libre Franklin') !== -1 && f.status === 'loaded'; }),
                 screenSize: [screen.width, screen.height], picked: pickedShape,
-                footer: document.querySelector('footer').textContent, notice: document.getElementById('footer-notice').textContent, noticeShown: document.getElementById('footer-notice').getBoundingClientRect().height > 0,
+                footer: document.querySelector('footer').textContent, notice: document.getElementById('room-notice').textContent, noticeShown: document.getElementById('room-notice').getBoundingClientRect().height > 0, footerShown: getComputedStyle(document.querySelector('footer')).display !== 'none',
                 nav: Array.prototype.map.call(document.querySelectorAll('footer nav > *'), function (a) { return [a.tagName, a.textContent.trim(), a.getAttribute('href'), a.getAttribute('target'), a.id]; }),
                 version: [document.getElementById('game-version').textContent, document.getElementById('game-build-id').textContent], scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth})"""))
             check(info["title"].startswith("Ants (1998)") and info["path"] == "/" and info["h1"] == 1, "the front page is at / and is titled Ants (1998) (%r)" % info["title"])
@@ -752,7 +752,8 @@ def main():
             check(all(hrefs[k][2] == "_blank" for k in ("Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal")) and hrefs["Matches"][2] is None, "the links that leave the front page keep their new tab, the ones to the match pages do not")
             top = json.loads(value("(function () { var b = document.getElementById('watch-top'), m = document.querySelector('header.mast'), r = b && b.getBoundingClientRect(), h = m.getBoundingClientRect(), l = m.querySelector('img').getBoundingClientRect(); return JSON.stringify({text: b && b.textContent.trim(), href: b && b.getAttribute('href'), target: b && b.getAttribute('target'), inHeader: !!b && m.contains(b), right: r && Math.round(h.right - r.right), after: r && r.left > l.right, vis: !!r && r.width > 0 && getComputedStyle(b).visibility === 'visible'}); })()"))
             check(top["text"] == "Matches" and top["href"] == "/matches" and top["target"] is None and top["inHeader"] and top["vis"] and top["after"] and 0 <= top["right"] <= 4, "the header has the one button, Matches, at the right of the row, in this tab (%s)" % top)
-            check(info["notice"] == LOBBY_NOTICE and info["noticeShown"], "the footer says that online matches are recorded, the recordings kept for 30 days, the results and names kept for good and public (%r)" % info["notice"])
+            check(info["notice"] == LOBBY_NOTICE and info["noticeShown"], "the Room says under START that online matches are recorded, the recordings kept for 30 days, the results and names kept for good and public (%r)" % info["notice"])
+            check(not info["footerShown"], "the Room draws no site footer (its markup stays: the Menu reads the numbers and the version from it)")
             stats = json.loads(value("JSON.stringify({hidden: document.getElementById('stats').hidden, text: document.getElementById('stats').textContent.replace(/\\s+/g, ' ').trim()})"))
             check(stats["hidden"] or re.match(r"^\d[\d,]* matches? being played · \d[\d,]* players? online(\d[\d,]* games? played \(\d[\d,]* today\))?$", stats["text"]) is not None,
                   "the line of numbers is either not there (a site with no /stats) or says what it counts: matches and players now, and, where the site counts them, the games played (%r; the dot between the two is drawn by the page's style)" % (stats["text"],))
@@ -957,8 +958,8 @@ def main():
                 tab.ev("window.scrollTo(0, document.documentElement.scrollHeight); 1")
                 time.sleep(0.3)
                 shot("home_front_phone_bottom")
-                pb = json.loads(value("JSON.stringify({start: document.getElementById('start').getBoundingClientRect().bottom, inner: window.innerHeight, foot: document.querySelector('footer').getBoundingClientRect().bottom, docH: document.documentElement.scrollHeight})"))
-                check(abs(pb["foot"] - pb["inner"]) < 2 and pb["start"] <= pb["inner"], "scrolled to the bottom of a phone the footer ends the page and START! has not moved off the window (%s)" % pb)
+                pb = json.loads(value("JSON.stringify({start: document.getElementById('start').getBoundingClientRect().bottom, inner: window.innerHeight, foot: document.getElementById('room-notice').getBoundingClientRect().bottom, docH: document.documentElement.scrollHeight})"))
+                check(0 < pb["foot"] <= pb["inner"] and pb["start"] <= pb["inner"], "scrolled to the bottom of a phone the recording notice is in the window and START! has not moved off it (%s)" % pb)
             finally:
                 tab.call("Page.removeScriptToEvaluateOnNewDocument", {"identifier": stub})
             fresh_tab()

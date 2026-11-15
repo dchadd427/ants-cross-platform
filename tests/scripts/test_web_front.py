@@ -1077,7 +1077,6 @@ class TheColors(unittest.TestCase):
     def test_the_footer_keeps_its_text_readable(self):
         self.check((
             ("the footer's text and links", (".bar", "color"), (".bar", "background")),
-            ("the recording notice", (".bar .notice", "color"), (".bar", "background")),
             ("the version", (".bar .ver", "color"), (".bar .ver", "background")),
         ))
         self.assertEqual(len(self.sheet.colors(".bar", "background")), 2)                                  # (both ends of the bar are measured)
@@ -1088,6 +1087,7 @@ class TheColors(unittest.TestCase):
             ("the name step's label", (".name-step label", "color"), (":root", "--clay")),
             ("the name step's hint", (".name-step-hint", "color"), (":root", "--clay")),
             ("the line under START", (".go .plan", "color"), (":root", "--clay")),
+            ("the recording notice under START", (".room-notice", "color"), (":root", "--clay")),
         ))
         self.assertEqual(self.sheet.colors("body", "color"), [self.token("ink")])                           # (and the page's own text, where nothing says another color, is that ink)
         self.assertGreaterEqual(self.ratio(self.token("ink"), self.token("clay")), 4.5)

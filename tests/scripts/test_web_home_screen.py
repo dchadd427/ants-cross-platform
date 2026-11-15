@@ -181,7 +181,7 @@ class TheStyle(unittest.TestCase):
 
     def test_each_screen_shows_its_own_things(self):
         css = self.css
-        self.assertIn('body[data-screen="home"] main.wrap, body[data-screen="home"] .bar { display: none; }', css)
+        self.assertIn('body[data-screen="home"] main.wrap { display: none; }', css)
         self.assertIn('body[data-screen="room"] #home { display: none; }', css)
         self.assertRegex(css, r"\.mast \{ display: none; \}")
         self.assertRegex(css, r'body\[data-screen="home"\] \{ display: flex; flex-direction: column; height: 100vh; height: 100dvh; padding-bottom: env\(safe-area-inset-bottom\); overflow: hidden; \}')

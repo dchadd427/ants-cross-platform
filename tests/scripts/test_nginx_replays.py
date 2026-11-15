@@ -259,7 +259,7 @@ class TheLocations(unittest.TestCase):
         # (the element who-notice, which docs/SERVER.md names); the game page shows it once, under its name field
         words = "Online matches are recorded. Recordings are kept for %s days. Results and names are kept for good and are public." % days
         self.assertEqual(lobby.count(words), 2)
-        self.assertIn('<p class="notice" id="footer-notice">' + words + "</p>", lobby)
+        self.assertIn('<p class="room-notice" id="room-notice">' + words + "</p>", lobby)
         self.assertIn('<div class="name-step-hint name-step-notice" id="who-notice">' + words + "</div>", lobby)
         self.assertEqual(len(re.findall(r"Recordings are kept for \d+ days", lobby)), 2)       # (no page says another number)
         self.assertEqual(len(re.findall(r"Recordings are kept for \d+ days", shell)), 1)
