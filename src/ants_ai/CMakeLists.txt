@@ -5,6 +5,7 @@ add_library(ants_ai STATIC
     bot_view.cpp
     map_info.cpp
     island_info.cpp
+    reach_guard.cpp
     gate_info.cpp
     gate_goal.cpp
     gate_task.cpp
