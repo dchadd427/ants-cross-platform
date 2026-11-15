@@ -1,0 +1,119 @@
+{
+ "note": "Mutants of the cut-off batch (include/ants_ai/tactics.hpp LevelPlan::cutoff, src/ants_ai/standard_bot.cpp decide_cut_off, island_expedition.cpp, docs/BOTS.md 'Cut off') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_cutoff_mutants.json --keep-going --jobs 1 --timeout 1800. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs all the cases of the batch (AI41).",
+ "defaults": {
+  "build": "test_ai"
+ },
+ "baseline": {
+  "build": "test_ai",
+  "test": "timeout 1800 env ANTS_TEST_FILTER='AI41.' ./build/tests/test_ai/test_ai"
+ },
+ "mutants": [
+  {
+   "id": "detector_inverted",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "tactics_.cut_food = food && !reaches;",
+   "new": "tactics_.cut_food = food && reaches;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.2"
+  },
+  {
+   "id": "gate_map_plays_cut_off",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "tactics_.cut_open = tactics_.cut_food && tactics_.plan.cutoff && !tactics_.gate_map;",
+   "new": "tactics_.cut_open = tactics_.cut_food && tactics_.plan.cutoff;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.2"
+  },
+  {
+   "id": "stall_not_for_cut_off",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "if (tactics_.cut_off) return view.tick() >= progress_tick_ + (plan.cutoff_stall_ticks != 0 ? plan.cutoff_stall_ticks : plan.stall_ticks);",
+   "new": "if (false) return view.tick() >= progress_tick_ + (plan.cutoff_stall_ticks != 0 ? plan.cutoff_stall_ticks : plan.stall_ticks);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.3"
+  },
+  {
+   "id": "stall_ticks_of_the_level_ignored",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "(plan.cutoff_stall_ticks != 0 ? plan.cutoff_stall_ticks : plan.stall_ticks);",
+   "new": "(plan.stall_ticks);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.3"
+  },
+  {
+   "id": "contest_not_entered",
+   "file": "src/ants_ai/standard_tasks_powerup.cpp",
+   "old": "const bool enter_contest = tactics_.cut_open && kind == sim::AntType::Swimmer;",
+   "new": "const bool enter_contest = false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.4"
+  },
+  {
+   "id": "hard_crew_min_raised",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.cutoff_notice_ticks = 0;\n            p.cutoff_crew_min = 1;",
+   "new": "            p.cutoff_notice_ticks = 0;\n            p.cutoff_crew_min = 5;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.1",
+   "build": "test_ai"
+  },
+  {
+   "id": "smaller_crew_not_tried_at_the_hill",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "    if (plan(c, hill_comp_, true)) return true;\n    std::map",
+   "new": "    if (false) return true;\n    std::map",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.5",
+   "build": "test_ai"
+  },
+  {
+   "id": "one_swimmer_where_scarce_off",
+   "file": "src/ants_ai/island_tasks.cpp",
+   "old": "if (tactics_.cut_off && tactics_.swim_scarce) swimmers = 1;",
+   "new": "if (false) swimmers = 1;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.5"
+  },
+  {
+   "id": "other_islands_not_tried",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "        if (plan(c, e.second, true)) return true;",
+   "new": "        if (false) return true;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.6"
+  },
+  {
+   "id": "bombers_never_crew",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "            if (a.type != sim::AntType::Bomber || a.holding || a.carried_points > 0 || !a.takes_orders() || !free_for_us(a)) continue;\n            if (c.map.ant_component(c.seat, a.tile) != home",
+   "new": "            if (true) continue;\n            if (c.map.ant_component(c.seat, a.tile) != home",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.9",
+   "build": "test_ai"
+  },
+  {
+   "id": "bomber_duty_not_handed_on",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "if (tactics_.cut_off && now >= l.bomber_since + params_.bomber_wait) {",
+   "new": "if (false) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.9"
+  },
+  {
+   "id": "landing_held_never_given_up",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "            } else if (now >= l.busy_since + params_.bomb_wait) {",
+   "new": "            } else if (false) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.10"
+  },
+  {
+   "id": "land_map_cut_off",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "tactics_.cut_food = food && !reaches;",
+   "new": "tactics_.cut_food = food && (!reaches || seat_ < 4);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.7"
+  }
+ ]
+}

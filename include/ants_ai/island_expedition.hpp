@@ -42,6 +42,13 @@ public:
         uint32_t hopeless_ticks{200};        // the same when no plain ant of the crew can take a token any more (and at least two are left; one at Easy), as they would hold the other ants for stuck_ticks
         uint32_t retry_ticks{900};           // the pause after the first attempt that was given up; it doubles with each one in a row, up to eight times this
         uint32_t min_ticks_left{3600};       // nothing starts with less than this left on the clock
+        bool cutoff{false};                  // a cut-off seat (Tactics::cut_off) may plan from the island where its ants stand and with a smaller crew (LevelPlan::cutoff)
+        uint32_t cutoff_crew_min{1};         // ... the smallest crew then
+        uint32_t bomber_wait{180};           // a cut-off seat's ant that was sent to the Bomber power-up and stands idle this long after the first order, still no Bomber, hands the duty to the nearest ant
+        uint32_t cutoff_stuck_ticks{1200};   // a cut-off seat gives an attempt up after this many ticks without progress (0: stuck_ticks) ...
+        uint32_t cutoff_retry_ticks{300};    // ... and tries again after this pause (0: retry_ticks)
+        uint32_t bomb_wait{160};             // a cut-off seat gives a flight up when a stranger has stood on its bomb tile this long
+        uint32_t bad_ticks{1200};            // ... and leaves it alone for this long
         bool fly_on{true};                   // the Bomber of a leg flies on after the crew (an island with no Bomber to take can be on the route; a crew one ant short gets the Bomber as the last)
         bool timed_row{false};               // (Hard) timed clicks through the hats of the row: one ant for a Swimmer, the Fire hats stay (see "timed" above)
         uint32_t chain_slack{1};             // a click of a chain is applied from the ticks that the model gives to that many more (the window of the cancel is 3 ticks wide; the early edge is the harmless one)
@@ -109,6 +116,10 @@ private:
         Flight flight;                       // the flight that is flown now (S, B, L)
         sim::TileCoord station{-1, -1};      // where the Bomber stands when it plants (beside B, not S)
         uint32_t bomber{0};
+        uint64_t busy_since{0};              // the first look at which the landing was busy with an ant that is not the seat's (a cut-off seat; 0: it is not)
+        uint64_t held_since{0};              // the first look at which a stranger stood on the bomb tile (a cut-off seat; 0: none does)
+        std::vector<std::pair<sim::TileCoord, uint64_t>> bad;   // (bomb tile, until when) flights that are left alone: a stranger held the bomb tile
+        uint64_t bomber_since{0};            // the look of the first order to the ant that is to take the island's Bomber power-up (0: none yet)
         uint64_t bomber_ordered{0};          // the look at which the Bomber was last sent (to the power-up, to its station)
         uint64_t plant_ordered{0};
         uint64_t hop_ordered{0};
@@ -130,7 +141,8 @@ private:
         static constexpr int32_t kThroat = 3;   // fewer steps than this from the entrance
     };
 
-    bool plan(TaskContext& context);
+    bool plan(TaskContext& context, int32_t home, bool relaxed);
+    bool plan_any(TaskContext& context);
     void stations(const TaskContext& context, Stations& out) const;
     void drive_leg(TaskContext& context, size_t leg);
     void note_taken(TaskContext& context);
@@ -143,6 +155,8 @@ private:
     bool able_to_take(const TaskContext& context, const AntView& ant) const;
     bool crew_one_short(const TaskContext& context) const;
     bool crew_hopeless(const TaskContext& context) const;
+    /// The Bomber of a leg flies on after the crew: the plan of the level says so, and so does every plan of a cut-off seat made with the smaller crew (Easy does not fly on otherwise: its looks are slow)
+    bool fly_on_now() const noexcept { return params_.fly_on || relaxed_plan_; }
     bool timed_on() const noexcept { return params_.timed_row && !timed_off_; }
     bool chains_now() const noexcept { return timed_on() && row_timed_; }
     /// An ant in the row behind hats comes out over them by a chain, also when the row has gone back to one ant for every hat since it went in
@@ -193,6 +207,7 @@ private:
     uint32_t chains_out_{0};
     uint32_t chain_misses_{0};
     uint32_t miss_run_{0};                   // the chains in a row that missed (chain_misses_max of them end the timed row)
+    bool relaxed_plan_{false};               // the route was planned with the smaller crew of a cut-off seat (fly_on_now)
     bool timed_off_{false};                  // the row has gone back to one ant for every hat (chains missed)
     uint32_t planned_{0};
     uint32_t given_up_{0};

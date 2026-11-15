@@ -207,7 +207,7 @@ bool ExpeditionTask::crew_hopeless(const TaskContext& c) const {
         if (a != nullptr && a->type == c.view.default_ant_type() && able_to_take(c, *a)) return false;
     }
     // (a Bomber takes the last token and no other; timed: not behind hats, where the power-up that it drops would shut the way out)
-    const bool bomber = params_.fly_on && !(chains_now() && hats_before_swimmer(c.view));
+    const bool bomber = fly_on_now() && !(chains_now() && hats_before_swimmer(c.view));
     return tokens_needed(c.view) > (bomber ? 1u : 0u);
 }
 
@@ -282,12 +282,14 @@ bool ExpeditionTask::bomber_source(const TaskContext& c, int32_t island, sim::Ti
 
 // The row to go for, the way there and the crew. False when there is nothing to do: no row with a Swimmer in it that flights reach (and a Bomber to take on every island but the last), or
 // not enough plain ants on the hill's island
-bool ExpeditionTask::plan(TaskContext& c) {
+// The plan of an expedition that starts from the island `home` (the hill's, or, for a cut-off seat, the island where its ants stand: `relaxed`, see below). With `relaxed` the crew may be as small as
+// LevelPlan::cutoff_crew_min says, and the Bombers that are on the island count as crew when the island has too few plain ants
+bool ExpeditionTask::plan(TaskContext& c, int32_t home, bool relaxed) {
     const BotView& v = c.view;
     const IslandInfo& info = islands_->info();
     const uint64_t now = v.tick();
     if (info.empty()) return false;
-    const std::vector<int32_t> dist = info.flight_distances(hill_comp_);
+    const std::vector<int32_t> dist = info.flight_distances(home);
     const uint32_t more = swimmers_more(v);
     const auto free_for_us = [&](const AntView& a) {
         const TaskId owner = c.ledger.owner(a.id);
@@ -306,13 +308,13 @@ bool ExpeditionTask::plan(TaskContext& c) {
     std::vector<int32_t> from_of(n_comps, -2);
     std::vector<int32_t> cost(n_comps, 1 << 20);
     {
-        std::vector<int32_t> queue{hill_comp_};
-        from_of[static_cast<size_t>(hill_comp_)] = -1;
-        cost[static_cast<size_t>(hill_comp_)] = 0;
+        std::vector<int32_t> queue{home};
+        from_of[static_cast<size_t>(home)] = -1;
+        cost[static_cast<size_t>(home)] = 0;
         for (size_t head = 0; head < queue.size(); ++head) {
             const int32_t a = queue[head];
             const bool source = own_bomber_on(a) || bomber_source(c, a, nullptr);
-            if (!source && !(params_.fly_on && a != hill_comp_)) continue;
+            if (!source && !((params_.fly_on || relaxed) && a != home)) continue;
             const int32_t step = source ? 2 : 3;
             for (const Flight* f : info.flights_from(a)) {
                 const size_t b = static_cast<size_t>(f->to_comp);
@@ -342,7 +344,7 @@ bool ExpeditionTask::plan(TaskContext& c) {
         const TokenGroup& g = info.token_groups()[gi];
         for (size_t ei = 0; ei < g.entrances.size(); ++ei) {
             const TokenGroup::Entrance& e = g.entrances[ei];
-            if (e.comp < 0 || e.comp == hill_comp_ || static_cast<size_t>(e.comp) >= dist.size() || dist[static_cast<size_t>(e.comp)] <= 0) continue;
+            if (e.comp < 0 || e.comp == home || static_cast<size_t>(e.comp) >= dist.size() || dist[static_cast<size_t>(e.comp)] <= 0) continue;
             uint32_t ants = 0;                                                                     // the ants that it takes to reach `more` Swimmers from this end
             uint32_t swimmers = 0;
             std::vector<sim::TileCoord> walk;
@@ -370,11 +372,20 @@ bool ExpeditionTask::plan(TaskContext& c) {
     std::vector<const AntView*> plain;
     for (const AntView& a : v.mine()) {
         if (a.type != v.default_ant_type() || a.holding || a.carried_points > 0 || !a.takes_orders() || !free_for_us(a)) continue;
-        if (c.map.ant_component(c.seat, a.tile) != hill_comp_ || a.hp < params_.min_hp + 2u * static_cast<uint32_t>(legs - 1)) continue;
+        if (c.map.ant_component(c.seat, a.tile) != home || a.hp < params_.min_hp + 2u * static_cast<uint32_t>(legs - 1)) continue;
         plain.push_back(&a);
     }
-    const uint32_t spare = own_bomber_on(hill_comp_) ? 0u : 1u;
-    if (plain.size() < params_.crew_min + spare) return false;
+    uint32_t spare = own_bomber_on(home) ? 0u : 1u;
+    const uint32_t crew_min = relaxed ? std::max<uint32_t>(1u, params_.cutoff_crew_min) : params_.crew_min;
+    if (relaxed && plain.size() < crew_min + spare) {                                               // the Bombers that an attempt that was given up left (an ant does not change back) and a start of Bombers are crew too
+        for (const AntView& a : v.mine()) {
+            if (a.type != sim::AntType::Bomber || a.holding || a.carried_points > 0 || !a.takes_orders() || !free_for_us(a)) continue;
+            if (c.map.ant_component(c.seat, a.tile) != home || a.hp < params_.min_hp + 2u * static_cast<uint32_t>(legs - 1)) continue;
+            plain.push_back(&a);
+        }
+        if (plain.size() >= crew_min + 1u) spare = 0u;                                              // (a Bomber of the crew is the Bomber of the leg: drive_leg takes the first one of it)
+    }
+    if (plain.size() < crew_min + spare) return false;
     const auto shore_dist = [&](const AntView* a) {
         int32_t d = 1 << 20;
         for (const Flight* f : info.flights_between(best.route[0], best.route[1])) d = std::min(d, a->tile.chebyshev_dist(f->from));
@@ -382,17 +393,18 @@ bool ExpeditionTask::plan(TaskContext& c) {
     };
     std::stable_sort(plain.begin(), plain.end(), [&](const AntView* x, const AntView* y) { return shore_dist(x) < shore_dist(y); });
     // (a row whose near end starts with a Swimmer needs one ant, a lone Swimmer token too: the crew is never smaller than crew_min, else the same group would be chosen and refused at every look)
-    const uint32_t crew_n = std::min<uint32_t>(std::max(best.ants + params_.crew_spare, params_.crew_min), static_cast<uint32_t>(plain.size()) - spare);
+    const uint32_t crew_n = std::min<uint32_t>(std::max(best.ants + params_.crew_spare, crew_min), static_cast<uint32_t>(plain.size()) - spare);
     std::set<uint32_t> crew;
     for (const AntView* a : plain) {
         if (crew.size() >= crew_n) break;
         if (c.ledger.take(a->id, id())) crew.insert(a->id);
     }
-    if (crew.size() < params_.crew_min) {
+    if (crew.size() < crew_min) {
         for (const uint32_t ant : crew) c.ledger.release(ant, id());
         return false;
     }
     crew_ = std::move(crew);
+    relaxed_plan_ = relaxed;
     route_ = best.route;
     legs_.assign(legs, Leg{});
     group_ = best.group;
@@ -420,6 +432,33 @@ bool ExpeditionTask::plan(TaskContext& c) {
     return true;
 }
 
+// The plan that is made at a look: from the hill's island with the crew of the level; for a cut-off seat (Tactics::cut_off) that has no Swimmer, none within a walk and no crew, from the hill's island with the smaller crew of its plan, then from
+// every other island where the seat has ants (most ants first): the start ants of a map may stand anywhere, and the Swimmer that they take swims home and carries the food
+bool ExpeditionTask::plan_any(TaskContext& c) {
+    if (plan(c, hill_comp_, false)) return true;
+    if (!params_.cutoff || !tactics_.cut_off) return false;
+    for (const AntView& a : c.view.mine()) {
+        if (a.type == sim::AntType::Swimmer) return false;                                         // (the smaller crews are for the first Swimmer: a seat that has one is not held back by them, it ferries)
+    }
+    for (const PowerUpInfo& p : c.map.powerups()) {
+        if (p.type == sim::AntType::Swimmer && p.approach[c.seat].reachable() && c.view.powerup_at(p.tile) != nullptr) return false;   // (a Swimmer that lies within a walk is the power-up task's: OCEAN's banks)
+    }
+    if (plan(c, hill_comp_, true)) return true;
+    std::map<int32_t, uint32_t> ants;
+    for (const AntView& a : c.view.mine()) {
+        if (a.holding || a.carried_points > 0 || !a.takes_orders()) continue;
+        const int32_t comp = c.map.ant_component(c.seat, a.tile);
+        if (comp >= 0 && comp != hill_comp_ && (a.type == c.view.default_ant_type() || a.type == sim::AntType::Bomber)) ++ants[comp];
+    }
+    std::vector<std::pair<uint32_t, int32_t>> order;
+    for (const auto& e : ants) order.emplace_back(e.second, e.first);
+    std::stable_sort(order.begin(), order.end(), [](const std::pair<uint32_t, int32_t>& x, const std::pair<uint32_t, int32_t>& y) { return x.first > y.first; });
+    for (const auto& e : order) {
+        if (plan(c, e.second, true)) return true;
+    }
+    return false;
+}
+
 // ---- the legs ---------------------------------------------------------------------------------------------------------------------------------------
 
 // The flight of a leg: of those the analysis lists between the two islands, one whose bomb tile is still bomb ground, whose landing the engine accepts, whose shore tile can be stood on and is
@@ -432,6 +471,9 @@ bool ExpeditionTask::choose_flight(TaskContext& c, size_t leg, const std::vector
     int64_t best_score = std::numeric_limits<int64_t>::min();
     for (const Flight* f : islands_->info().flights_between(here, route_[leg + 1])) {
         if (!(bomb_ground(grid, f->bomb) || grid.has_bomb_at(f->bomb)) || !flight_landing_ok(grid, f->land) || !MapInfo::walkable(grid, c.seat, f->from, v.walk_context())) continue;
+        bool bad = false;                                                                           // (a flight whose bomb tile was held by a stranger for too long is left alone for a while)
+        for (const auto& e : l.bad) bad = bad || (e.first == f->bomb && e.second > v.tick());
+        if (bad) continue;
         bool stranger = false;                                                                      // somebody else on S or B (a crew ant on B is a bomb that was a dud: it moves)
         for (const AntView& a : v.others()) stranger = stranger || a.tile == f->from || a.tile == f->bomb;
         for (const AntView& a : v.mine()) stranger = stranger || ((a.tile == f->from || a.tile == f->bomb) && crew_.count(a.id) == 0 && a.id != l.bomber);
@@ -521,6 +563,31 @@ void ExpeditionTask::drive_leg(TaskContext& c, size_t leg) {
     if (!bomber_ready) {                                                                            // on its way to the power-up (or its order was lost)
         sim::TileCoord token{-1, -1};
         if (bm->idle() && now >= l.bomber_ordered + gap_ && bomber_source(c, here, &token)) {
+            // a cut-off seat's ant that was sent several times and stands where it stood (the engine says "Can't go there": the ants of the crew wait in the one-wide way to the power-up) hands the
+            // duty to the ant that stands nearest to it, crew or not, and joins the crew itself
+            if (l.bomber_since == 0) l.bomber_since = now;
+            if (tactics_.cut_off && now >= l.bomber_since + params_.bomber_wait) {
+                const AntView* near = nullptr;
+                int32_t near_d = bm->tile.chebyshev_dist(token);
+                for (const AntView& a : v.mine()) {
+                    if (a.id == bm->id || a.type != v.default_ant_type() || island_of(a) != here || !a.takes_orders() || a.holding || !free_for_us(a) || (crew_.count(a.id) != 0 && a.hp < params_.min_hp)) continue;
+                    const int32_t d = a.tile.chebyshev_dist(token);
+                    if (d < near_d) {
+                        near_d = d;
+                        near = &a;
+                    }
+                }
+                l.bomber_since = 0;
+                if (near != nullptr && c.ledger.take(near->id, id())) {
+                    crew_.erase(near->id);
+                    crew_.insert(bm->id);
+                    l.bomber = near->id;
+                    c.orders.pick_up(near->id, token);
+                    l.bomber_ordered = now;
+                    ordered_[near->id] = now;
+                    return;
+                }
+            }
             c.orders.pick_up(bm->id, token);
             l.bomber_ordered = now;
         }
@@ -575,7 +642,7 @@ void ExpeditionTask::drive_leg(TaskContext& c, size_t leg) {
 
     // ---- the Bomber flies on, last, as one of the crew (on a bomb of its own: it plants, walks to S and steps on it): when no crew ant that can hop is left on this island or an earlier one,
     // and the next leg has no Bomber to take (and none that has flown on: that leg is over), or the crew that is left is one ant short of the tokens that are wanted (the Bomber takes the last one)
-    if (params_.fly_on && bomber_ready && bm->hp >= params_.min_hp && l.hopper == 0 && (leg == 0 || legs_[leg - 1].hopper == 0) && !crew_to_come(c, leg)) {
+    if (fly_on_now() && bomber_ready && bm->hp >= params_.min_hp && l.hopper == 0 && (leg == 0 || legs_[leg - 1].hopper == 0) && !crew_to_come(c, leg)) {
         const bool next_needs = leg + 1 < legs_.size() && legs_[leg + 1].bomber == 0 && !legs_[leg + 1].flown && !bomber_source(c, route_[leg + 1], nullptr);
         if (next_needs || crew_one_short(c)) crew_.insert(bm->id);
     }
@@ -665,6 +732,18 @@ void ExpeditionTask::drive_leg(TaskContext& c, size_t leg) {
     // ---- the bomb is there: the ant on S steps onto it
     if (grid.has_bomb_at(f.bomb)) {
         if (next == nullptr) return;
+        if (tactics_.cut_off && next->tile == f.from && l.hopper == 0) {                              // an ant of another team stays on or beside the landing: after bomb_wait ticks another flight of the leg is chosen
+            if (!landing_busy()) {
+                l.busy_since = 0;
+            } else if (l.busy_since == 0) {
+                l.busy_since = now;
+            } else if (now >= l.busy_since + params_.bomb_wait) {
+                l.bad.emplace_back(f.bomb, now + params_.bad_ticks);
+                l.chosen = false;
+                l.busy_since = 0;
+                return;
+            }
+        }
         // (one ant is thrown at a time: the ant that was thrown before has landed and walked off the landing before the next one is sent, or it would be thrown into the water)
         if (next->tile == f.from && next->idle() && may_order(next->id, now) && l.hopper == 0 && !landing_busy()) {
             c.orders.move({next->id}, f.bomb, Priority::Urgent);
@@ -708,6 +787,20 @@ void ExpeditionTask::drive_leg(TaskContext& c, size_t leg) {
             ordered_[bm->id] = now;
         }
         return;
+    }
+    if (tactics_.cut_off) {                                                                           // a stranger that stands on B and does not walk off (the start ants of every seat stand in the same place on
+        bool held = false;                                                                           // Stranded): after bomb_wait ticks another flight of the leg is chosen
+        for (const AntView& a : v.others()) held = held || a.tile == f.bomb;
+        if (!held) {
+            l.held_since = 0;
+        } else if (l.held_since == 0) {
+            l.held_since = now;
+        } else if (now >= l.held_since + params_.bomb_wait) {
+            l.bad.emplace_back(f.bomb, now + params_.bad_ticks);
+            l.chosen = false;
+            l.held_since = 0;
+            return;
+        }
     }
     if (occupied(v, f.bomb, bm->id)) return;                                                          // (B is held by an ant: it walks off)
     if (bm->idle() && !planting) {
@@ -1075,8 +1168,8 @@ void ExpeditionTask::drive_row(TaskContext& c) {
 
 void ExpeditionTask::step(TaskContext& c) {
     const BotView& v = c.view;
-    if (islands_ == nullptr || !islands_->active() || !v.has_grid()) return;
     const uint64_t now = v.tick();
+    if (islands_ == nullptr || !islands_->active() || !v.has_grid()) return;
     if (hill_comp_ < 0) hill_comp_ = c.map.hill_component(c.seat);
     if (hill_comp_ < 0) return;
     gap_ = islands_->latency() + 20u;
@@ -1089,7 +1182,7 @@ void ExpeditionTask::step(TaskContext& c) {
     }
     if (route_.empty()) {
         if (now < retry_at_ || have >= want || v.ticks_left() < params_.min_ticks_left) return;
-        if (!plan(c)) {
+        if (!plan_any(c)) {
             retry_at_ = now + 200u;
             return;
         }
@@ -1103,14 +1196,15 @@ void ExpeditionTask::step(TaskContext& c) {
     const bool exiting = exit_chains() && !done_.empty();                                             // (timed: a Swimmer that is on its way out over the hats is not left alone)
     const bool finished = (have >= want || !swimmer_left) && !exiting;
     const bool lost = crew_.empty() && row_ant_.empty() && !exiting;
-    const uint32_t patience = row_ant_.empty() && crew_hopeless(c) ? std::min(params_.hopeless_ticks, params_.stuck_ticks) : params_.stuck_ticks;
+    const uint32_t stuck_ticks = tactics_.cut_off && params_.cutoff_stuck_ticks != 0 ? std::min(std::max(params_.cutoff_stuck_ticks, 5u * gap_), params_.stuck_ticks) : params_.stuck_ticks;     // (a cut-off seat has nothing else to do: it tries again sooner)
+    const uint32_t patience = row_ant_.empty() && crew_hopeless(c) ? std::min(params_.hopeless_ticks, stuck_ticks) : stuck_ticks;
     if (finished || lost || now > progress_ + patience) {
         if (!finished) ++given_up_;
         giveups_in_a_row_ = finished ? 0u : giveups_in_a_row_ + 1u;
         release_all(c);
         // an attempt that came to nothing is made again after retry_ticks, the next one after twice that, then four and eight times (and then at that rate): a row that nothing reaches (a stranger keeps
         // the shore tile, no flight has the station tile that it needs) does not hold the crew and a Bomber for two thirds of the match
-        retry_at_ = now + (finished ? 0u : pause_after(params_.retry_ticks, giveups_in_a_row_));
+        retry_at_ = now + (finished ? 0u : pause_after(tactics_.cut_off && params_.cutoff_retry_ticks != 0 ? std::min(params_.cutoff_retry_ticks, params_.retry_ticks) : params_.retry_ticks, giveups_in_a_row_));
         return;
     }
     for (const uint32_t ant : crew_) {                                                               // the landings: a crew ant that stands on a later island of the route

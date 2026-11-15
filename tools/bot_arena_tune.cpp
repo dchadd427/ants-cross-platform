@@ -332,6 +332,13 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "ibuild") { p.island_builders = static_cast<uint32_t>(v); return true; }
     if (key == "ibridge") { p.island_bridge_ants = static_cast<uint32_t>(v); return true; }
     if (key == "iguard") return flag(p.island_guard);
+    if (key == "cutoff") return flag(p.cutoff);                                       // the cut-off play as a whole (0: the bot as it was; docs/BOTS.md "Cut off")
+    if (key == "cutnotice") { p.cutoff_notice_ticks = static_cast<uint32_t>(v); return true; }     // ticks into the match at which a cut-off seat notices it
+    if (key == "cutcrew") { p.cutoff_crew_min = static_cast<uint32_t>(v); return true; }           // the smallest crew of a cut-off seat's expedition
+    if (key == "cutstall") { p.cutoff_stall_ticks = static_cast<uint32_t>(v); return true; }       // the stall of a cut-off seat after this many ticks without a point (0: stall)
+    if (key == "cutstuck") { p.cutoff_stuck_ticks = static_cast<uint32_t>(v); return true; }       // the cut-off seat's expedition is given up after this many ticks without progress (0: the level's)
+    if (key == "cutretry") { p.cutoff_retry_ticks = static_cast<uint32_t>(v); return true; }       // ... and made again after this pause (0: the level's)
+    if (key == "cutbomb") { p.cutoff_bomb_wait = static_cast<uint32_t>(v); return true; }          // a flight whose bomb tile or landing a stranger holds this long is left alone for a while
     if (key == "iferrypile") { p.island_ferry_per_pile = static_cast<uint32_t>(v); return true; }
     err = "unknown tuning key '" + key + "' (the keys are those of apply_tune in tools/bot_arena_tune.cpp)";
     return false;

@@ -244,14 +244,17 @@ bool IslandTask::start(TaskContext& c) {
     interval_ = c.profile.decision_interval;
     latency_ = c.profile.decision_interval + c.profile.reaction_delay * (100u + c.profile.jitter_percent) / 100u + 10u;
     if (!tactics_.plan.islands) return false;
+    // a cut-off seat (Tactics::cut_food: food on the map and none of it on foot) plays the island play on any map: the food may lie in a ring round an island that no chain of water joins to the hill's
+    // (!AntFreaks), and the Swimmers that fetch it are wanted all the same
+    const bool cut_off = tactics_.plan.cutoff && tactics_.cut_open;
     if (c.map.component_count(c.seat) <= 1) {
-        active_ = water_locked_food(v, c.map, c.seat);
+        active_ = water_locked_food(v, c.map, c.seat) || cut_off;
         return active_;
     }
     info_ = IslandInfo::analyse(c.map, v.grid(), c.seat);
     hill_comp_ = c.map.hill_component(c.seat);
     if (info_.empty() || hill_comp_ < 0) {
-        active_ = water_locked_food(v, c.map, c.seat);
+        active_ = water_locked_food(v, c.map, c.seat) || cut_off;
         return active_;
     }
     // active when a pile lies on an island that a chain of water tiles joins to the hill's island, directly or over other islands (TREASURE has islands, walled in by rocks: no channel)
@@ -270,7 +273,7 @@ bool IslandTask::start(TaskContext& c) {
     for (const IslandComponent& comp : info_.components()) {
         if (comp.id != hill_comp_ && seen[static_cast<size_t>(comp.id)] != 0 && !comp.piles.empty()) active_ = true;
     }
-    if (!active_) active_ = water_locked_food(v, c.map, c.seat);
+    if (!active_) active_ = water_locked_food(v, c.map, c.seat) || cut_off;
     return active_;
 }
 
@@ -1079,7 +1082,11 @@ void IslandTask::step(TaskContext& c) {
     const uint64_t now = v.tick();
     if (scan_bridges(v, now)) next_refresh_ = 0;                                                   // a new bridge tile: the piles it opens get their limits before the economy looks
     // the Swimmers that the level wants: the power-up task takes them from the map (one ant each, the closest)
-    if (v.ticks_left() > params_.min_ticks_left && beyond_food(v, c.map, c.seat)) tactics_.wants[static_cast<size_t>(sim::AntType::Swimmer)] = static_cast<uint8_t>(std::max<uint32_t>(params_.swimmers, tactics_.wants[static_cast<size_t>(sim::AntType::Swimmer)]));
+    if (v.ticks_left() > params_.min_ticks_left && beyond_food(v, c.map, c.seat)) {
+        uint32_t swimmers = params_.swimmers;
+        if (tactics_.cut_off && tactics_.swim_scarce) swimmers = 1;                                    // (a cut-off seat on a map with too few Swimmer power-ups takes one, and leaves the others to the seats that have none)
+        tactics_.wants[static_cast<size_t>(sim::AntType::Swimmer)] = static_cast<uint8_t>(std::max<uint32_t>(swimmers, tactics_.wants[static_cast<size_t>(sim::AntType::Swimmer)]));
+    }
     if (info_.empty() || hill_comp_ < 0) return;
     adopt_builders(c);
     if (now >= next_refresh_) {

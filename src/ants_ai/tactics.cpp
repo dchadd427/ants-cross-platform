@@ -49,6 +49,10 @@ LevelPlan plan_for(Level level) noexcept {
             p.island_swimmers = 2;                                  // they carry food; no builder at any level (a Swimmer that ferries earns 700 to 850 points a match, a bridge carries one ant at a time: docs/BOTS.md)
             p.island_builders = 0;
             p.island_fly_on = false;             // Easy looks every 100 ticks: a leg that waits for the Bomber to fly on costs more than the flight it saves
+            p.cutoff = true;
+            p.cutoff_notice_ticks = 400;         // (Easy notices that it is cut off after 20 s, Medium after 8 s, Hard at once; the smaller crew is the same, the stall is declared later the slower the level is)
+            p.cutoff_crew_min = 1;
+            p.cutoff_stall_ticks = 7200;
             break;
         case Level::Medium:
             p.defenders = 2;
@@ -91,6 +95,10 @@ LevelPlan plan_for(Level level) noexcept {
             p.island_ferry = true;
             p.island_swimmers = 3;                                  // (the row has three Swimmers; with one more the bot scored a third more: docs/BOTS.md)
             p.island_builders = 0;
+            p.cutoff = true;
+            p.cutoff_notice_ticks = 160;
+            p.cutoff_crew_min = 1;
+            p.cutoff_stall_ticks = 4800;
             break;
         case Level::Hard:
             p.defenders = 3;
@@ -148,6 +156,10 @@ LevelPlan plan_for(Level level) noexcept {
             p.island_ferry = true;
             p.island_swimmers = 3;
             p.island_builders = 0;
+            p.cutoff = true;
+            p.cutoff_notice_ticks = 0;
+            p.cutoff_crew_min = 1;
+            p.cutoff_stall_ticks = 3600;
             break;
     }
     // The war batch (docs/BOTS.md, "The war batch"; requested 2026-10-09: the bots start more fights with each other, fire at their opponent, and try to kill their

@@ -81,8 +81,23 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     }
     tactics_.memory.update(view, *map);
 
+    // 0a. the cut-off detector: decided at the first look from the analysis of the start (a hill that reaches some food is never cut off: those maps play as they did)
+    if (!cut_decided_) decide_cut_off(view, *map);
+
     // 1a. the gate play (Tactics::gate_map): decided once, from the analysis of the start
     if (!gate_decided_) decide_gate_map(context);
+    if (!cut_opened_ && gate_decided_) {                                                    // (a gate map stays the gate goals': the cut-off play is for the maps that no gate analysis owns)
+        cut_opened_ = true;
+        tactics_.cut_open = tactics_.cut_food && tactics_.plan.cutoff && !tactics_.gate_map;
+        if (tactics_.cut_open) {                                                                   // (a Swimmer whose loop ended away from its pile is sent again, to another pile)
+            FerryTask::Params ferry = ferry_.params();
+            ferry.reorder_ended = true;
+            ferry.exclude_ended = true;
+            ferry_.set_params(ferry);
+            ledger_.set_rank(kExpedition, kRankFight);                                             // (the expedition of a cut-off seat takes its Bomber and its crew from the mines, the walls and the bombs: they have nothing to work on)
+        }
+    }
+    tactics_.cut_off = tactics_.cut_open && now >= tactics_.plan.cutoff_notice_ticks;
 
     // 1b. the stall detector: the score is the only progress; a stall sends the bot to the plain economy for a while
     update_progress(view);
@@ -246,6 +261,37 @@ bool StandardBot::accepts_invitation(const BotView& view, uint8_t from) {
     return team_up_answer(view, from) == TeamUpAnswer::Accept;                       // the one rule (team_up.hpp): the application tells the player the reason of a refusal from the same function
 }
 
+// Cut off (docs/BOTS.md, "Cut off"): food lies on the map and the own hill walks to none of it (cut_food); the hill walks to the hill of no other team that plays (cut_foes). Both come from the
+// analysis of the start, the walker components of MapInfo, so a bridge or a flight later does not undo them. A map without food (the game type 187) is never cut off.
+void StandardBot::decide_cut_off(const BotView& view, const MapInfo& map) {
+    cut_decided_ = true;
+    tactics_.cut_food = false;
+    tactics_.cut_foes = false;
+    bool food = false;
+    bool reaches = false;
+    for (const PileView& p : view.piles()) {
+        const PileInfo* info = map.pile(p.index);
+        if (info == nullptr) continue;                                                   // (a lunchbox that a bot created in the middle of a match is not in the analysis)
+        food = true;
+        reaches = reaches || info->approach[seat_].reachable();
+    }
+    tactics_.cut_food = food && !reaches;
+    bool foes = false;
+    bool foe_reached = false;
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+        const TeamRow& row = view.rows()[t];
+        if (t == seat_ || !row.present || row.dropped || (view.ally() < sim::MAX_PLAYERS && t == view.ally()) || !map.hill(t).present) continue;
+        foes = true;
+        foe_reached = foe_reached || reachable_by(map, seat_, map.hill(t).raid);
+    }
+    tactics_.cut_foes = foes && !foe_reached;
+    uint32_t swimmers = 0;
+    uint32_t teams = 0;
+    for (const PowerUpInfo& p : map.powerups()) swimmers += p.type == sim::AntType::Swimmer ? 1u : 0u;
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) teams += view.rows()[t].present && !view.rows()[t].dropped ? 1u : 0u;
+    tactics_.swim_scarce = swimmers <= std::max<uint32_t>(teams, 1u);                                // (not even two for every team: a seat that takes a second one leaves another with none)
+}
+
 // ---- the stall detector ------------------------------------------------------------------------------------------------------------------------------
 
 // An order that left (Fate::Sent): the same type, tile and first ant again and again with nothing banked is an order that the world does not carry out. Attacks are left out: an attack order
@@ -293,7 +339,10 @@ bool StandardBot::detect_stall(const BotView& view) {
     const LevelPlan& plan = tactics_.plan;
     // an order hammered repeat_limit times within the last window while nothing was banked for that whole window (a jam of a few seconds that clears by itself is no stall: a fallback costs the gate for minutes)
     if (view.tick() >= progress_tick_ + plan.repeat_window && hammered(view.tick())) return true;
-    if (plan.stall_ticks == 0 || view.tick() < progress_tick_ + plan.stall_ticks || view.mine().empty()) return false;
+    if (plan.stall_ticks == 0 || view.mine().empty()) return false;
+    // a cut-off seat has no food that its hill can reach, so nothing in the loop below could ever fire: it is stalled once cutoff_stall_ticks have passed without a point
+    if (tactics_.cut_off) return view.tick() >= progress_tick_ + (plan.cutoff_stall_ticks != 0 ? plan.cutoff_stall_ticks : plan.stall_ticks);
+    if (view.tick() < progress_tick_ + plan.stall_ticks) return false;
     // food that the own hill can reach lies on the map (a map whose last reachable pile is gone leaves nothing to bank, and nothing to stall at)
     const MapInfo* map = view.map() != nullptr ? view.map() : map_;
     for (const PileView& p : view.piles()) {

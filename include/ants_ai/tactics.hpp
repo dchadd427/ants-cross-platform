@@ -275,6 +275,15 @@ struct LevelPlan {
     uint32_t repeat_limit{12};
     uint32_t repeat_window{1200};
     uint32_t fallback_ticks{2400};
+    // cut off (docs/BOTS.md, "Cut off"): the hill reaches no food on foot at the start of the match (a lake, a moat, a ring of food round the island that holds it). The seat notices it (Tactics::cut_off)
+    // and goes for the Swimmers by every way it has: the island play opens, the expedition may start from the island where its ants stand and take a smaller crew, and the stall detector fires
+    bool cutoff{false};                  // the detector and what hangs on it are on (a plan made by hand has it off; `--tune cutoff=0`: the bot as it was)
+    uint32_t cutoff_notice_ticks{0};     // the bot notices that it is cut off this many ticks into the match (a person looks at the map and sees it at once; a slower level takes longer)
+    uint32_t cutoff_crew_min{1};         // the smallest crew of the expedition of a cut-off seat (the ants that are flown; one Bomber more plants the bombs)
+    uint32_t cutoff_stall_ticks{0};      // a cut-off seat is stalled after this many ticks without a point (0: stall_ticks)
+    uint32_t cutoff_stuck_ticks{800};   // the expedition of a cut-off seat is given up after this many ticks without progress (0: ExpeditionTask::Params::stuck_ticks) ...
+    uint32_t cutoff_retry_ticks{200};    // ... and made again after this pause, the next one after twice that (0: Params::retry_ticks)
+    uint32_t cutoff_bomb_wait{160};      // a flight is given up for a while when an ant of another team has stood on its bomb tile or beside its landing this long
     uint32_t gate_user_fails{16};        // the gate stops guiding for 900 ticks after this many clicks onto the entrance in a row that delivered nothing (0: it never stops)
     // islands (ISLANDS, SMALL: food beyond water; IslandTask, docs/BOTS.md "Islands"): a Swimmer digs bridges, the economy walks over them. Idle where nothing lies beyond water
     bool islands{false};                 // the island task is on (every level of the standard bot; a plan made by hand, as the tests do, has it off)
@@ -619,6 +628,16 @@ struct Tactics {
     bool no_work{false};
     /// Food lies beyond water (the island play) or behind a gate or a field (the gate goals): the few ants of the seat are the crews of that work
     bool far_work{false};
+    /// The cut-off detector (StandardBot, decided at the first look from the analysis of the start; docs/BOTS.md, "Cut off"): `cut_food` is true when food lies on the map and the own hill walks to
+    /// none of it, `cut_foes` when it walks to the hill of no other team that plays. `cut_off` is `cut_food` once the level has noticed it (LevelPlan::cutoff and cutoff_notice_ticks): the island
+    /// play, the expedition and the stall detector read it. False on every map whose hill reaches some food: those play as they did.
+    bool cut_food{false};
+    bool cut_foes{false};
+    bool cut_off{false};
+    /// The island play may open for a cut-off seat (`cut_food`, the level's plan, and not a gate map: a map that the gate goals play is theirs): set by StandardBot after the gate decision, read by the island task at its first look
+    bool cut_open{false};
+    /// The map has no more Swimmer power-ups than there are teams that play: a cut-off seat wants one Swimmer only, so that it does not take the one that another team has none of
+    bool swim_scarce{false};
     /// The ants that no fight takes: the last ones (a wipe-out forces a hatch of 200 points, or ends the team); with LevelPlan::idle_hunt and no work (nothing to bank, nothing to lose) only the last one
     size_t reserve_of(const BotView& view) const noexcept { return plan.idle_hunt && no_work ? 1u : plan.fight_reserve + (view.eggs() == 0 ? 1u : 0u); }
     Standing standing;                   // where the bot stands at this look

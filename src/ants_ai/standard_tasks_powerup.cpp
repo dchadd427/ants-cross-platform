@@ -141,8 +141,11 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
                                   (c.map.ant_component(c.seat, p.tile) == c.map.hill_component(c.seat) ||
                                    c.map.ant_component(c.seat, p.tile) == c.map.ant_component(c.seat, best->tile));
         bool lost = false;
+        // a cut-off seat enters the contest for a Swimmer: it is the only way to any food it has, and two seats whose ants stand as near to the same Swimmer both gave it up for ever (!AntFreaks: every
+        // Swimmer lies between two hills)
+        const bool enter_contest = tactics_.cut_open && kind == sim::AntType::Swimmer;
         for (const AntView& e : v.others()) {
-            if (skip_contest || e.holding || !grid.in_bounds(e.tile) || (v.ally() < sim::MAX_PLAYERS && e.team == v.ally())) continue;
+            if (skip_contest || enter_contest || e.holding || !grid.in_bounds(e.tile) || (v.ally() < sim::MAX_PLAYERS && e.team == v.ally())) continue;
             if (e.state == sim::UnitState::EnteringBase || e.state == sim::UnitState::PoweringUp) continue;
             const int32_t cost = f[tile_index(grid, e.tile)];
             if (cost < 0) continue;

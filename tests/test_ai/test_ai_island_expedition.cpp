@@ -547,7 +547,7 @@ void run_island_expedition_tests() {
         Match m;
         m.expedition = true;
         m.ferry = true;
-        m.init("ISLANDS", 1, 0x01, Level::Medium, 0);
+        m.init("ISLANDS", 1, 0x01, Level::Medium, 0, [](LevelPlan& p) { p.cutoff = false; });  // (the arithmetic of the level's own patience: the cut-off play has its own, AI41)
         ExpeditionTask::Params p = m.bot(0)->expedition().params();
         p.stuck_ticks = 30;
         m.bot(0)->expedition_for_labs().set_params(p);
@@ -860,7 +860,7 @@ void run_island_expedition_tests() {
         Match m;
         m.expedition = true;
         m.ferry = true;
-        m.init("ISLANDS", 1, 1u, Level::Medium, 0);
+        m.init("ISLANDS", 1, 1u, Level::Medium, 0, [](LevelPlan& p) { p.cutoff = false; });  // (the arithmetic of the level's own patience: the cut-off play has its own, AI41)
         const ExpeditionTask& ex = m.bot(0)->expedition();
         ExpeditionTask::Params p = ex.params();
         p.min_hp = 9;
@@ -928,7 +928,7 @@ void run_island_expedition_tests() {
         Match m;
         m.expedition = true;
         m.ferry = true;
-        m.init("ISLANDS", 1, 8u, Level::Medium, 0);
+        m.init("ISLANDS", 1, 8u, Level::Medium, 0, [](LevelPlan& p) { p.cutoff = false; });  // (the arithmetic of the level's own patience: the cut-off play has its own, AI41)
         const ExpeditionTask& ex = m.bot(3)->expedition();
         uint32_t bomber = 0;
         size_t crew = 0;                                                                             // the crew at the first look: it only shrinks, unless the Bomber is made one of it

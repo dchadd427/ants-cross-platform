@@ -23,6 +23,7 @@ public:
         uint32_t blacklist_ticks{900};
         uint32_t rescue_after{900};          // a Swimmer that stands idle with food this long is sent to the hill's entrance (the engine's loop ended without a deposit)
         uint32_t endgame_margin{40};         // a trip needs this many ticks more than it takes before the clock runs out
+        bool exclude_ended{false};           // (a cut-off seat) with reorder_ended: the pile that the Swimmer's loop ended away from is left alone for it for blacklist_ticks, so that it is not sent to the same one again
         bool reorder_ended{false};           // a Swimmer whose loop ended away from where it was sent from (idle and empty for fail_after ticks: its walk back found no way, another ant
                                              // stood in a corridor) is free again, and the next look sends it again. On the maps of the field breach (Tactics::field_map), whose
                                              // carriers share a dug corridor

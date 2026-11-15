@@ -230,6 +230,11 @@ private:
         ExpeditionTask::Params p;
         p.fly_on = plan.island_fly_on;
         p.timed_row = plan.island_timed_row;
+        p.cutoff = plan.cutoff;
+        p.cutoff_crew_min = plan.cutoff_crew_min;
+        p.cutoff_stuck_ticks = plan.cutoff_stuck_ticks;
+        p.cutoff_retry_ticks = plan.cutoff_retry_ticks;
+        p.bomb_wait = plan.cutoff_bomb_wait;
         return p;
     }
     static FerryTask::Params ferry_params(const LevelPlan& plan) {
@@ -315,8 +320,11 @@ private:
     void begin_fallback(uint64_t now);
     void end_fallback();
     void decide_gate_map(TaskContext& context);      // once, at the first look with a grid: sets Tactics::gate_map
+    void decide_cut_off(const BotView& view, const MapInfo& map);    // once, at the first look: Tactics::cut_food and cut_foes
 
     bool gate_decided_{false};
+    bool cut_decided_{false};
+    bool cut_opened_{false};
 
     uint32_t denials_{0};
     uint32_t accepts_{0};

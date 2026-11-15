@@ -157,6 +157,7 @@ void FerryTask::step(TaskContext& c) {
                 const auto since = idle_since_.emplace(a.id, now).first;
                 if (now >= since->second + params_.fail_after) {
                     ++ended_;
+                    if (params_.exclude_ended) excluded_[std::make_pair(a.id, r.pile)] = now + params_.blacklist_ticks;
                     idle_since_.erase(a.id);
                     c.ledger.release(a.id, id());
                     recs_.erase(a.id);
