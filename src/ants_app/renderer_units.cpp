@@ -237,6 +237,10 @@ void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
 // slots, leading zeros skipped but still advancing, the sign glyph in the slot of the first significant digit and
 // every digit from there on shifted one slot to the right.
 void Renderer::draw_score_number(int32_t amount, int32_t world_x, int32_t world_y) {
+    if (font_numbers()) {                                               // (the font's digits: drawn once the world is on the screen, at the output's resolution: renderer_numbers.cpp)
+        deferred_scores_.push_back(ScoreDigit{amount, world_x, world_y});
+        return;
+    }
     int32_t value = std::clamp(amount < 0 ? -amount : amount, 0, 999999);
     int32_t divisor = 100000;
     bool leading = true;
