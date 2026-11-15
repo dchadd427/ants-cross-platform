@@ -1834,7 +1834,7 @@
   {
    "id": "legal_forgets_that_a_picture_is_fetched_once",
    "file": "web/legal.html",
-   "old": "fetches one small copy of your Discord profile picture from Discord, once, and keeps it on its own server",
+   "old": "fetches one small copy of your Discord profile picture from Discord and keeps it on its own server",
    "new": "fetches your Discord profile picture",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   },

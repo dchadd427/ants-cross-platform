@@ -162,6 +162,8 @@ class Chat:
         you = peer.identity
         if you is not None:
             self.roles.want(you.account_id)                       # (its role is asked at the front of the queue; the welcome says the last answer, and a `you` frame follows a new one)
+            if self.pictures is not None:
+                self.pictures.want(you.account_id)                # (where the roles' check does not say what the picture is, its profile is asked for when that is due)
         lines = self.recent()
         names = self.usernames([l.account for l in lines]) if you is not None and self.is_mod(you.account_id) else None        # (only a moderator's welcome has the usernames)
         welcome = {"t": "welcome", "v": PROTOCOL, "you": self.you_of(you) if you else None, "login": bool(self.login), "presence": True,
@@ -356,6 +358,8 @@ class Chat:
             self.pictures.sync()
         except StoreError as e:
             return self.trouble(peer, e, PICS_REFUSED)
+        if on and state == SHOW_ON and before != SHOW_ON and self.pictures is not None:
+            self.pictures.want(who.account_id)                                  # (switched on: where the roles' check will not say what the picture is, it is asked for now)
         if state == before:                                                     # (nothing changed: no frame goes to the account, so the asking socket is answered all the same, and a page's box never waits for nothing)
             peer.send_text(dumps({"t": "you", "you": self.you_of(who)}))
 
