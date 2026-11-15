@@ -93,7 +93,7 @@ class TheNicknameIsShown(NickTest):
         self.assertEqual(self.profile(), [(USER, GLOBAL, "display")])
 
     def test_a_nickname_that_is_not_text_or_is_unusable_is_none(self):
-        for nick in ("", "   ", "x", 7, ["a"], "a" * 300, "‮​"):
+        for nick in ("", "   ", "x", 7, ["a"], "a" * 300, "\u202e\u200b"):
             with self.subTest(nick=nick):
                 self.member(nick=nick)
                 before = len(self.fake.member_ids)

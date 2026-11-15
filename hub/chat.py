@@ -184,7 +184,7 @@ class Chat:
         you = {"name": who.name, "mod": role != "none", "role": role, "k": self.key_of(who.account_id)}
         if who.other:
             you["pick"], you["other"] = who.pick, who.other
-            entry = self.roles.entries.get(who.account_id)
+            entry = getattr(self.roles, "entries", {}).get(who.account_id)
             if entry is not None and entry.nick and who.name == entry.nick and entry.display and entry.display not in (who.name, who.username):
                 you["next"] = entry.display      # (the name that comes after the server nickname: a page whose game cannot take the nickname tries it before the username)
         if self.pictures is not None:
