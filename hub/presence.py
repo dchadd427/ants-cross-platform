@@ -210,8 +210,7 @@ class Presence:
             key = (WEIGHT[where.at], where.seq) if where else (0, 0)
             if who.account_id not in best or key > best[who.account_id][0]:
                 best[who.account_id] = (key, who.name, where, who.young)
-        for account in [a for a in self.ids if a not in best and a not in self.away]:
-            del self.ids[account]                   # (a person who left is a new row if they come back)
+        # (the numbers of people who left are dropped once a tick, in flush: a look between a close and the tick must not take the number of a person who is about to be Away)
         for account in banned.intersection(best):
             del best[account]
             guests += 1

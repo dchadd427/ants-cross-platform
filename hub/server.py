@@ -303,6 +303,8 @@ class Hub:
             if who is not None and not peer.closed and ((session is not None and who.session == session) or (account is not None and who.account_id == account)):
                 peer.close(1000, "logged out")
                 self.chat.presence.forget(who.account_id)               # (a login that ended is not kept as Away)
+        if account is not None:
+            self.chat.presence.forget(account)                          # (an account that has no socket open, and is Away, is taken from the list too)
 
     @staticmethod
     def believable(who):

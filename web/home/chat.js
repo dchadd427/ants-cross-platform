@@ -444,25 +444,24 @@
             tapped('lost');
             render();
         }
-        function probe() {
-            try { sock.send('{"t":"ping"}'); } catch (e) { lost(); return; }
-            if (timers.answer) return;                                           // (the oldest question is the one that is waited for)
-            grace = false;
-            timers.answer = setTimeout(guard(silent), MS.answer);                // (the answer to a ping is the online count: a hub that says nothing for this long is gone)
+        function probe(quick) {                                                  // quick: the page just woke, so the answer is waited for 5 s and not 30 (a socket that died while the page slept is let go at once)
+            if (timers.answer && quick) stop('answer');                          // (the oldest question is the one that is waited for, unless a wake asks again)
+            if (!timers.answer) { grace = !!quick; timers.answer = setTimeout(guard(function () { silent(quick ? MS.grace : MS.answer); }), quick ? MS.grace : MS.answer); }       // (the answer to a ping is the online count: a hub that says nothing for this long is gone)
+            try { sock.send('{"t":"ping"}'); } catch (e) { lost(); }
         }
-        function silent() {                                                      // a page that was hidden or just woke gets a moment more (its timers run late, before what the hub said is read)
+        function silent(limit) {                                                 // a page that was hidden gets a moment more (its timers run late, before what the hub said is read)
             timers.answer = 0;
             if (!sock) return;
-            if (now() - rx < MS.answer) return;
-            if (sock.readyState === 1 && !grace && (!visible() || (wokeAt !== null && now() - wokeAt < MS.wake))) { grace = true; timers.answer = setTimeout(guard(silent), MS.grace); return; }
+            if (now() - rx < limit) return;
+            if (sock.readyState === 1 && !grace && !visible()) { grace = true; timers.answer = setTimeout(guard(function () { silent(limit); }), MS.grace); return; }
             lost();
         }
         function ping() {
             timers.ping = setTimeout(guard(function () {
                 timers.ping = 0;
                 if (!sock || sock.readyState !== 1) return;
-                if (visible()) probe();                                          // (hidden: the hub's own PING frames keep the socket)
-                ping();
+                if (!visible()) return;                                          // (hidden: no timer runs on; the hub's own PING frames keep the socket, and a wake starts the timer again)
+                probe(); ping();
             }), MS.ping);
         }
         function lock() {                                                        // a shared Web Lock while the socket is open (feature-detected)
@@ -477,7 +476,7 @@
             if (stopped) return;
             if (sock && sock.readyState > 1) lost();
             else if (!sock) nudge();
-            else if (welcomed && sock.readyState === 1) probe();
+            else if (welcomed && sock.readyState === 1 && visible()) { probe(true); if (!timers.ping) ping(); }
         }
         function go() {
             timers.retry = 0;
@@ -712,7 +711,7 @@
         doc.addEventListener('resume', guard(wake));
         win.addEventListener('online', guard(wake));
         win.addEventListener('pagehide', guard(function () { stopped = true; lost(); }));       // (a page that goes away, or into the back-forward cache, lets the hub go)
-        win.addEventListener('pageshow', guard(function (e) { if (e && e.persisted && stopped) { stopped = false; attempt = 0; wokeAt = now(); go(); } else wake(); }));
+        win.addEventListener('pageshow', guard(function (e) { if (!e || !e.persisted) return; if (stopped) { stopped = false; attempt = 0; wokeAt = now(); go(); } else wake(); }));
 
         paint();
         go();

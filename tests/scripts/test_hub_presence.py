@@ -1679,6 +1679,45 @@ class TheAwayRows(unittest.TestCase):
         w.presence.forget("1001")
         self.assertNotIn("alice", self.rows())
 
+    def test_a_forget_me_of_an_account_with_no_socket_open_takes_its_away_row_at_once(self):
+        from hub import config as configmod, log as logmod, server
+        import io
+        w = self.make()
+        hub = server.Hub(configmod.Config(db=w.db), w.store, session.NoLogin(), logmod.Log(io.StringIO()), limitmod.Limits(), clock=lambda: 100.0)
+        hub.chat = w.chat                                   # (the chat of this world: the hub's own end_logins is what is under test)
+        a = w.join(person(1, "alice"))
+        self.rows()
+        w.leave(a)
+        self.assertEqual(self.rows()["alice"]["at"], "away")
+        hub.end_logins(account="1001")
+        self.assertNotIn("alice", self.rows(), "no socket was open: the row is taken all the same")
+        self.assertEqual(w.presence.away, {})
+
+    def test_a_ban_made_while_the_person_is_away_takes_the_entry_and_an_unban_does_not_bring_it_back(self):
+        w = self.make()
+        mod = w.join(session.Identity("9001", "moddy", False))
+        a = w.join(person(1, "alice"))
+        w.store.set_profile("1001", "alice", "", 100)       # (what the login of the account made: a moderator can name it while it has no socket)
+        self.rows()
+        w.leave(a)
+        self.assertEqual(self.rows()["alice"]["at"], "away")
+        w.chat.roles.roles["9001"] = "admin"                # (a ban is an administrator's)
+        w.send(mod, t="say", text="/ban alice")
+        self.assertEqual(w.presence.away, {}, "the entry itself is gone, not only hidden")
+        self.assertNotIn("alice", self.rows())
+        w.store.unban("1001")
+        self.assertNotIn("alice", self.rows(), "lifted within the ten minutes: not back as Away")
+
+    def test_the_number_of_a_person_who_just_closed_is_kept_by_a_look_before_the_tick(self):
+        w = self.make()
+        a = w.join(person(1, "alice"))
+        self.rows()
+        number = w.presence.ids["1001"]
+        w.shut(a)                                           # (closed, and the clock has not ticked yet)
+        w.presence.view()                                   # (what a `who` ask makes)
+        self.assertEqual(w.presence.ids.get("1001"), number)
+        self.assertEqual(self.rows()["alice"]["i"], number, "back within the time: the same number")
+
     def test_away_rows_come_last_and_the_cap_of_rows_counts_them(self):
         w = self.make(who_rows_max=3)
         a, b = w.join(person(1, "alice")), w.join(person(2, "bob"))

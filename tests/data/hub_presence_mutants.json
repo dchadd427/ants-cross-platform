@@ -497,8 +497,8 @@
   {
    "id": "a_banned_account_loses_its_number",
    "file": "hub/presence.py",
-   "old": "for account in [a for a in self.ids if a not in best and a not in self.away]:",
-   "new": "for account in [a for a in self.ids if (a not in best and a not in self.away) or a in banned]:",
+   "old": "self.ids = {a: i for a, i in self.ids.items() if a in here or a in self.away}\n        if self.watchers:",
+   "new": "self.ids = {a: i for a, i in self.ids.items() if (a in here or a in self.away) and a not in self.restricted()[0]}\n        if self.watchers:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
@@ -849,6 +849,27 @@
    "file": "hub/presence.py",
    "old": "return {\"n\": len(best) + guests, \"g\": guests, \"more\": max(0, len(people)",
    "new": "return {\"n\": len(best) + len(away) + guests, \"g\": guests, \"more\": max(0, len(people)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "forget_me_needs_an_open_socket",
+   "file": "hub/server.py",
+   "old": "        if account is not None:\n            self.chat.presence.forget(account)                          # (an account that has no socket open, and is Away, is taken from the list too)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "ban_leaves_the_away_entry",
+   "file": "hub/chat.py",
+   "old": "            self.presence.forget(target)                           # (a ban takes the Away row too, whether or not a socket is open)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_look_takes_the_number_of_a_person_who_just_closed",
+   "file": "hub/presence.py",
+   "old": "        # (the numbers of people who left are dropped once a tick, in flush: a look between a close and the tick must not take the number of a person who is about to be Away)\n",
+   "new": "        for account in [a for a in self.ids if a not in best and a not in self.away]:\n            del self.ids[account]\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   }
  ]

@@ -697,7 +697,41 @@ function rig(o) {
     const o = rig({ random: () => 1 });
     o.live(W({ you: YOU }));
     (o.win.listeners.pageshow || []).forEach((fn) => fn({ persisted: false }));
-    check('a pageshow of a page that was not in the cache asks the hub once and changes nothing else', o.pings() === 1 && o.sockets.length === 1 && o.dock.state() === 'live');
+    check('the first pageshow of a normal load is no wake: nothing is asked and nothing changes', o.pings() === 0 && o.sockets.length === 1 && o.dock.state() === 'live');
+}
+{   // a hidden page runs no timer loop; a wake starts it again; a socket that died while the page slept is let go after 5 s
+    const r = rig();
+    r.live(W({ you: YOU }));
+    r.hidden(true);
+    r.clock.advance(25001);
+    const timers = r.clock.timers.length;
+    r.clock.advance(300000);
+    check('hidden: the ping timer ran once and did not set another (no timer is left running, and nothing was sent)', r.clock.timers.length === timers && r.pings() === 0 && r.dock.state() === 'live');
+    r.hidden(false);
+    check('it is shown again: one ping at once and the loop is back', r.pings() === 1 && (r.clock.advance(25000), r.pings() === 2));
+    const q = rig();
+    q.live(W({ you: YOU }));
+    q.hidden(true);
+    (q.win.listeners.online || []).forEach((fn) => fn({}));
+    (q.doc.listeners.resume || []).forEach((fn) => fn({}));
+    check('an `online` or a `resume` of a page that is still hidden asks nothing', q.pings() === 0);
+    const d = rig({ pong: false });
+    d.live(W({ you: YOU }));
+    d.hidden(true);
+    d.clock.advance(120000);
+    d.hidden(false);
+    d.clock.advance(4999);
+    check('a socket that says nothing after a wake is waited for 5 s: still live just before', d.pings() === 1 && d.dock.state() === 'live' && d.sockets.length === 1);
+    d.clock.advance(1);
+    check('... and let go at 5 s (not 30), and a new socket is opened within the first backoff step', d.dock.state() !== 'live' && (d.clock.advance(1600), d.sockets.length === 2));
+    const a = rig({ pong: false });
+    a.live(W({ you: YOU }));
+    a.hidden(true);
+    a.clock.advance(120000);
+    a.hidden(false);
+    a.s().recv({ t: 'online', n: 3 });
+    a.clock.advance(30000);
+    check('... an answer in that time keeps the link', a.sockets.length === 1 && a.dock.state() === 'live');
 }
 {   // a Web Lock for as long as the socket is open (feature-detected: a page without locks works as before)
     const log = [];

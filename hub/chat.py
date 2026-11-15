@@ -561,6 +561,7 @@ class Chat:
                 except StoreError as e:
                     if self.on_store_error:
                         self.on_store_error(e)                     # (the ban is done and stays: the person is removed and the answer is `ok`; the lines can be taken off with /del)
+            self.presence.forget(target)                           # (a ban takes the Away row too, whether or not a socket is open)
             self.remove(self.sockets_of(target), "banned")
             self.sync_pictures()
             self.announce("%s was banned." % shown, me)

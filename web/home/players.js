@@ -303,7 +303,8 @@
             keep(); tell(); ask();
             if (phase !== 'none') paint();
         }
-        function clock() { timers.poll = setTimeout(guard(function () { timers.poll = 0; sync(); clock(); }), MS.poll); }
+        function clock() { timers.poll = setTimeout(guard(function () { timers.poll = 0; if (doc.hidden) return; sync(); clock(); }), MS.poll); }       // (a hidden page runs no loop: it starts again when the page is shown)
+        if (doc.addEventListener) doc.addEventListener('visibilitychange', guard(function () { if (!doc.hidden && !timers.poll) { sync(); clock(); } }));
         dock.tap(guard(function (kind, m) {
             if (kind === 'live') {
                 supported = !!m && m.presence === true; live = true; asked = false; sentSig = null; lastSent = null; model = fresh();

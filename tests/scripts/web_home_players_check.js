@@ -227,6 +227,18 @@ function rig(o) {
     r.live();
     check('a new welcome (a new socket) keeps nothing of the old list: it waits for the new one', r.list.state() === 'on' && Object.keys(r.list.model().rows).length === 0);
 }
+{   // a hidden page runs no poll loop; it starts again when the page is shown
+    const r = rig();
+    r.live(); r.who(FULL([row(1, 'maple')]));
+    r.doc.hidden = true;
+    r.tick(1000);
+    const timers = r.clock.timers.length, sent = r.sent.length;
+    r.tick(60000);
+    check('hidden: the poll ran once and set no other timer (nothing is polled or sent while it is hidden)', r.clock.timers.length === timers && r.sent.length === sent);
+    r.doc.hidden = false;
+    (r.doc.listeners.visibilitychange || []).forEach((fn) => fn({}));
+    check('shown: the loop is back (a timer is waiting again), and a second event does not start a second one', r.clock.timers.length === timers + 1 && ((r.doc.listeners.visibilitychange || []).forEach((fn) => fn({})), r.clock.timers.length === timers + 1));
+}
 {   // a hub that has no list (an older one): nothing, whatever happens
     const r = rig();
     r.live(W({ presence: undefined }));
