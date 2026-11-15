@@ -68,6 +68,8 @@ function loadChat(clock) {
 const cls = (e) => String(e.className).split(/\s+/);
 const byClass = (root, c) => root.findAll((e) => cls(e).indexOf(c) !== -1);
 const one = (root, c) => byClass(root, c)[0] || null;
+const QUIET = { DateTimeFormat: function () { return { format: () => '' }; } };       // (the rig's clock words are empty, so that a line's text is its name and its words; the clock has its own section)
+const numberOf = (x) => { const t = one(x, 'gc-t'), m = /^#(\d+)/.exec(t ? String(t.getAttribute('title') || '') : ''); return m ? m[1] : null; };       // (the number of a line, only where the time's title says it: a moderator's)
 const L = (id, who, text, mod) => ({ t: 'line', id, at: 1700000000 + id, who, text, mod: !!mod });
 const W = (o) => Object.assign({ t: 'welcome', v: 1, you: null, login: false, online: 7, history: [] }, o);
 const HISTORY = [L(1, 'pebble', 'anyone up for Islands?'), L(2, 'clover', 'I have a room open', true), L(3, 'juniper', 'joining!')].map((m) => { const x = Object.assign({}, m); delete x.t; return x; });
@@ -102,7 +104,7 @@ function rig(o) {
     win.assign = (url) => went.push(url);
     win.location.assign = (url) => went.push(url);
     const fetcher = o.noFetch ? undefined : (path, init) => { fetches.push({ path, init }); if (o.fetchThrows) throw new Error('no network'); return { then(ok, bad) { pending = { ok, bad }; } }; };
-    const dock = Chat.mount({ doc, win, host, chip, screen: o.screen, fetch: fetcher, now: clock.now, random: o.random || (() => 0), WebSocket: o.noWebSocket ? undefined : HubSocket, error: (e) => errors.push(e) });
+    const dock = Chat.mount({ doc, win, host, chip, screen: o.screen, fetch: fetcher, now: o.now || clock.now, random: o.random || (() => 0), Intl: o.Intl || QUIET, WebSocket: o.noWebSocket ? undefined : HubSocket, error: (e) => errors.push(e) });
     if (o.home !== false) dock.shown(true);                // (the page tells the dock which screen shows, right after it is mounted)
     const r = { env, clock, Chat, doc, win, host, sockets, dock, errors, hidden, HubSocket, root: dock.root, chip, went, fetches };
     r.answer = (response) => { const p = pending; pending = null; p.ok(response); };
@@ -110,7 +112,8 @@ function rig(o) {
     r.pending = () => pending !== null;
     r.s = () => sockets[sockets.length - 1];
     r.log = () => one(dock.root, 'gc-log');
-    r.rows = () => r.log().children.slice(1);
+    r.rows = () => r.log().children.slice(1).filter((x) => cls(x).indexOf('gc-day') === -1);       // (the day dividers are not lines)
+    r.days = () => r.log().children.filter((x) => cls(x).indexOf('gc-day') !== -1).map((x) => x.textContent);
     r.rowTexts = () => r.rows().map((x) => x.textContent);
     r.note = () => one(dock.root, 'gc-note').textContent;
     r.answers = () => r.rows().filter((x) => cls(x).indexOf('gc-private') !== -1).map((x) => x.children.slice(1).map((c) => c.textContent).join('\n'));       // (the private answers of the screen: the lines of each, after its "Only you" tag)
@@ -176,7 +179,7 @@ function rig(o) {
     r.live(W({ login: false, you: null, online: 7, history: HISTORY }));
     check('the welcome shows the history oldest first as "name: text", the mod\'s line marked, and how many are here', eq(r.rowTexts(), ['pebble: anyone up for Islands?', 'moderator clover: I have a room open', 'juniper: joining!']) && one(r.rows()[1], 'gc-sr').textContent === 'moderator '
           && cls(r.rows()[1]).indexOf('gc-mod') !== -1 && cls(r.rows()[0]).indexOf('gc-mod') === -1 && r.on() === '7 here now' && box.getAttribute('data-state') === 'live');
-    check('a name and a line each sit in a <bdi> (the right-to-left letters of one do not reorder the other)', eq(r.rows()[0].children.map((c) => c.tagName), ['bdi', 'span', 'bdi']));
+    check('a name and a line each sit in a <bdi> (the right-to-left letters of one do not reorder the other)', eq(r.rows()[0].children.map((c) => c.tagName), ['span', 'bdi', 'span', 'bdi']));
     check('login:false and nobody named: "Chat is read-only for now" and the guest line; NO field, NO Send, NO login button (the only button on the screen is the fold button; the login\'s place is hidden)',
         r.note() === 'Chat is read-only for now' && r.form().hidden === true && one(box, 'gc-guest').hidden === false && one(box, 'gc-guest').textContent === 'You can read as a guest. Playing and watching stay anonymous.'
         && eq(buttonsShown(r.root), ['Fold chat']) && r.dock.slot.hidden === true && r.dock.slot.id === 'gchat-login-slot' && box.getAttribute('data-you') === 'no');
@@ -248,8 +251,8 @@ function rig(o) {
         ['<img src=x onerror=alert(1)>: <script>alert(1)</script> <b>bold</b> javascript:alert(1) http://evil.example/x [link](http://a.b) &lt;i&gt;', 'evil: abcdefghi', 'n'.repeat(32) + '…: ' + 't'.repeat(200) + '…', 'a: many blanks here', '?: lone surrogate and a pair \ud83d\ude00 stay']);
     const tags = {};
     r.log().all().forEach((e) => { tags[e.tagName] = (tags[e.tagName] || 0) + 1; });
-    same('the only elements in the log are the log itself, its welcome line, and lines of div, span and bdi: no a, img, script, b, i, iframe or style, ever', Object.keys(tags).sort(), ['bdi', 'div', 'p', 'span']);
-    check('no element of the log has an attribute that came from the hub (no href, src, style, on...)', r.log().all().every((e) => Object.keys(e.attributes).every((k) => ['class', 'role', 'aria-live', 'aria-label', 'tabindex'].indexOf(k) !== -1)));
+    same('the only elements in the log are the log itself, its welcome line, and lines of div, span and bdi: no a, img, script, b, i, iframe or style, ever', Object.keys(tags).sort(), ['a', 'bdi', 'div', 'p', 'span']);
+    check('no element of the log has an attribute that came from the hub (no href, src, style, on...)', r.log().all().every((e) => Object.keys(e.attributes).every((k) => ['class', 'role', 'aria-live', 'aria-label', 'tabindex', 'data-n', 'title'].indexOf(k) !== -1 || (e.tagName === 'a' && ['href', 'target', 'rel', 'referrerpolicy'].indexOf(k) !== -1 && /^https?:/.test(e.attributes.href)))) && r.log().all().filter((e) => e.tagName === 'a').every((e) => ['href', 'target', 'rel', 'referrerpolicy', 'title'].every((k) => e.attributes[k] !== undefined)));       // (only a checked http or https link made from the hub's text, on an a; the links have their own checks)
     check('nothing was written as markup anywhere (innerHTML), and nothing threw', r.env.innerHTMLWrites.length === 0 && r.errors.length === 0);
     check('a name that is a word of the page ("mod", "__proto__", "constructor") is only a name', (() => { const q = rig(); q.live(W({})); q.s().recv(L(1, '__proto__', 'constructor')); q.s().recv(L(2, 'constructor', 'toString', false)); q.s().recv(Object.assign(L(3, 'a', 'b'), { mod: 'true' })); return q.rowTexts().join('|') === '__proto__: constructor|constructor: toString|a: b' && q.errors.length === 0 && one(q.rows()[2], 'gc-badge') === null; })());
 }
@@ -261,7 +264,7 @@ function rig(o) {
     r.clock.advance(1);
     const rows = r.rows();
     check('a burst of 1000 lines leaves 100 on the screen (the oldest go first) and the welcome line stays at the top', rows.length === 100 && rows[0].textContent === 'u4: line number 900' && rows[99].textContent === 'u5: line number 999' && r.log().children[0].textContent === 'Welcome to the front page. Everyone here can read what you write.');
-    check('... and it takes no time worth speaking of (under 2 s), the model holds 100, not 1000, and nothing threw', Date.now() - started < 2000 && r.errors.length === 0 && r.log().children.length === 101);
+    check('... and it takes no time worth speaking of (under 2 s), the model holds 100, not 1000, and nothing threw', Date.now() - started < 2000 && r.errors.length === 0 && r.log().children.length === 102 && r.days().length === 1);
     r.s().recv({ t: 'del', id: 1950 });
     check('del takes the line off the screen at once (and only that one)', r.rows().length === 99 && r.rowTexts().indexOf('u5: line number 950') === -1 && r.rowTexts().indexOf('u6: line number 951') !== -1 && r.rowTexts().indexOf('u4: line number 949') !== -1);
     ['del-no-id', undefined, null, 'x', -1, 1.5, 99999999].forEach((id) => r.s().recv({ t: 'del', id }));
@@ -978,7 +981,7 @@ function bring(env) {                                     // the two files arriv
 // 7. The source of the script
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
-    const code = chatSource.replace(/\/\/.*/g, '').replace(/\bimg\.setAttribute\(\s*'src',\s*PICDIR\s*\+\s*\w+\s*\+\s*PICEXT\s*\);/, '');       // (the one address of a picture: made of a checked name and two constants, checked in section 11)
+    const code = chatSource.replace(/\/\/.*/g, '').replace(/\ba\.setAttribute\('href', p\.url\);/, '').replace(/\bimg\.setAttribute\(\s*'src',\s*PICDIR\s*\+\s*\w+\s*\+\s*PICEXT\s*\);/, '');       // (the one address of a picture: made of a checked name and two constants, checked in section 11)
     check('chat.js builds nothing from markup, runs nothing from text, keeps nothing in the browser and makes no link', !/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|srcdoc|localStorage|sessionStorage|indexedDB|document\.cookie|createElement\(['"]a['"]\)|setAttribute\(['"](href|src|style|on)/.test(code));
     check('chat.js names no other site (no http:// or https:// address at all) and loads nothing', !/https?:\/\//.test(code) && !/XMLHttpRequest|importScripts|\bimport\b/.test(code));
     check('the one thing that it asks for is a POST of the page itself to the two pages of the login (/hub/logout, /hub/forget): `fetch` is in one line, and it is that one', (code.match(/\bfetch\b/g) || []).length === 2 && code.indexOf('var f = env.fetch || win.fetch;') !== -1
@@ -1316,10 +1319,10 @@ const menuOf = (r) => { const live = r.live; r.live = (...args) => { const sock 
     const none = rig({});
     none.live(W({ login: true, you: TWO, history }));
     none.s().recv(Object.assign(L(3, 'Maple Leaf', 'live'), { k: OTHERS, u: 'bbb.two' }));
-    check('a person who holds no role is shown the name only: no username, no line number, even where the hub sent a username (it never does: the page does not draw it for them)', none.rows().length === 3 && none.rows().every((x) => one(x, 'gc-u') === null && one(x, 'gc-no') === null)
+    check('a person who holds no role is shown the name only: no username, no line number, even where the hub sent a username (it never does: the page does not draw it for them)', none.rows().length === 3 && none.rows().every((x) => one(x, 'gc-u') === null && numberOf(x) === null)
           && none.rows()[0].textContent === 'Maple Leaf: hello' && none.rows()[1].textContent === 'pebble: a line that shows the username' && none.rows()[2].textContent === 'Maple Leaf: live' && Pure.lineOf({ id: 1, who: 'a', text: 'x', u: 'aaa.one' }).u === 'aaa.one');
     check('a moderator is shown the username where the hub sent one (it differs from the name) and the number of every line, which is the hub\'s own id (what /del takes)', rows.length === 3 && one(rows[0], 'gc-u').textContent === ' (aaa.one)' && one(rows[1], 'gc-u') === null && one(rows[2], 'gc-u').textContent === ' (bbb.two)'
-          && rows.map((x) => one(x, 'gc-no').textContent).join() === ' #1, #2, #3' && rows[0].textContent === 'Maple Leaf (aaa.one): hello #1' && rows[1].textContent === 'pebble: a line that shows the username #2' && rows[2].textContent === 'Maple Leaf (bbb.two): live #3');
+          && rows.map(numberOf).join() === '1,2,3' && rows.map((x) => x.getAttribute('data-n')).join() === '1,2,3' && rows[0].textContent === 'Maple Leaf (aaa.one): hello' && rows[1].textContent === 'pebble: a line that shows the username' && rows[2].textContent === 'Maple Leaf (bbb.two): live');
     const odd = rig({});
     odd.live(W({ login: true, you: TWO, history: [{ id: 1, at: 1, who: 'a', text: 'x', mod: false, u: '<i>x</i> \u202eevil\u202c \u200b' }, { id: 2, at: 2, who: 'a', text: 'y', mod: false, u: 'u'.repeat(80) }, { id: 3, at: 3, who: 'a', text: 'z', mod: false, u: { x: 1 } }] }));
     check('a username from the hub in any shape is not drawn and breaks nothing (markup, invisible characters, a long one, an object)', odd.rows().every((x) => one(x, 'gc-u') === null) && odd.rows()[0].textContent === 'a: x'
@@ -1386,18 +1389,19 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
 }
 {   // the numbers and the usernames of a moderator, and nobody else's
     const hist = [Object.assign(L(7, 'Maple Leaf', 'one'), { k: OTHERS, u: 'aaa.one' }), L(8, 'pebble', 'two'), { id: 9, at: 9, who: 'system', text: 'x was kicked.', mod: false, k: '', sys: true }].map((x) => { const y = Object.assign({}, x); delete y.t; return y; });
+    const noHash = (q) => q.rows().every((x) => x.textContent.indexOf('#') === -1);       // (no number is drawn in any line)
     const rowsOf = (role) => { const r = rig({}); r.live(W({ login: true, you: asRole(role), history: hist })); return r; };
     const mod = rowsOf('mod'), admin = rowsOf('admin'), none = rowsOf('none');
-    check('a moderator and an administrator see the number of each line of a person (not the hub\'s own line) and the username where the hub sent one; the number is the line\'s id', [mod, admin].every((q) => q.rows().slice(0, 2).map((x) => one(x, 'gc-no').textContent).join() === ' #7, #8' && one(q.rows()[2], 'gc-no') === null && one(q.rows()[0], 'gc-u').textContent === ' (aaa.one)' && one(q.rows()[1], 'gc-u') === null) && mod.rows()[0].textContent === 'Maple Leaf (aaa.one): one #7');
-    check('nobody else ever sees one: a person with no role, a reader, a hub that says nothing of a role', [none, (() => { const q = rig({}); q.live(W({ login: true, you: null, history: hist })); return q; })(), (() => { const q = rig({}); q.live(W({ login: false, you: null, history: hist })); return q; })(), (() => { const q = rig({}); q.live(W({ login: true, you: { name: 'maple.leaf', mod: false }, history: hist })); return q; })()].every((q) => q.rows().every((x) => one(x, 'gc-no') === null && one(x, 'gc-u') === null) && q.rowTexts()[0] === 'Maple Leaf: one'));
+    check('a moderator and an administrator see the number of each line of a person (not the hub\'s own line) and the username where the hub sent one; the number is the line\'s id', [mod, admin].every((q) => q.rows().slice(0, 2).map(numberOf).join() === '7,8' && numberOf(q.rows()[2]) === null && one(q.rows()[0], 'gc-u').textContent === ' (aaa.one)' && one(q.rows()[1], 'gc-u') === null) && mod.rows()[0].textContent === 'Maple Leaf (aaa.one): one' && noHash(mod));
+    check('nobody else ever sees one: a person with no role, a reader, a hub that says nothing of a role', [none, (() => { const q = rig({}); q.live(W({ login: true, you: null, history: hist })); return q; })(), (() => { const q = rig({}); q.live(W({ login: false, you: null, history: hist })); return q; })(), (() => { const q = rig({}); q.live(W({ login: true, you: { name: 'maple.leaf', mod: false }, history: hist })); return q; })()].every((q) => q.rows().every((x) => numberOf(x) === null && one(x, 'gc-u') === null) && q.rowTexts()[0] === 'Maple Leaf: one'));
     const live = rig({}); live.live(W({ login: true, you: asRole('mod') })); live.s().recv(Object.assign(L(31, 'pebble', 'live line'), { u: 'peb.ble' }));
-    check('a live line is numbered the same way', live.rows().length === 1 && one(live.rows()[0], 'gc-no').textContent === ' #31' && one(live.rows()[0], 'gc-u').textContent === ' (peb.ble)' && one(live.rows()[0], 'gc-no').getAttribute('title') === 'line number');
+    check('a live line carries its number the same way', live.rows().length === 1 && numberOf(live.rows()[0]) === '31' && one(live.rows()[0], 'gc-u').textContent === ' (peb.ble)' && live.rows()[0].getAttribute('data-n') === '31' && live.rows()[0].textContent.indexOf('#') === -1);
     const change = rig({}); change.live(W({ login: true, you: asRole('none'), history: hist }));
-    check('before a promotion nothing is shown; when the `you` frame comes, the log is made again with the numbers (no reload), and when the role goes, they go', change.rows().every((x) => one(x, 'gc-no') === null) && (change.s().recv({ t: 'you', you: asRole('mod') }), change.rows().slice(0, 2).every((x) => one(x, 'gc-no') !== null))
-          && (change.s().recv({ t: 'you', you: asRole('none') }), change.rows().every((x) => one(x, 'gc-no') === null && one(x, 'gc-u') === null)));
+    check('before a promotion nothing is shown; when the `you` frame comes, the log is made again with the numbers (no reload), and when the role goes, they go', change.rows().every((x) => numberOf(x) === null) && (change.s().recv({ t: 'you', you: asRole('mod') }), change.rows().slice(0, 2).every((x) => numberOf(x) !== null))
+          && (change.s().recv({ t: 'you', you: asRole('none') }), change.rows().every((x) => numberOf(x) === null && one(x, 'gc-u') === null)));
     const plainText = rig({}); plainText.live(W({ login: true, you: asRole('mod'), history: [{ id: 5, at: 1, who: 'a', text: 'x', mod: false, u: '<img src=x onerror=alert(1)> \u202e' }] }));
-    check('the username is text (markup stays markup, the bidirectional controls go) in a <bdi>', plainText.env.innerHTMLWrites.length === 0 && plainText.rows()[0].textContent === 'a (<img src=x onerror=alert(1)>): x #5' && one(plainText.rows()[0], 'gc-u').tagName === 'bdi');
-    check('the help line for /del says to use the number beside the line', Pure.helpOf('mod').filter((l) => l[0] === '/del number')[0][1].indexOf('number beside the line') !== -1);
+    check('the username is text (markup stays markup, the bidirectional controls go) in a <bdi>', plainText.env.innerHTMLWrites.length === 0 && plainText.rows()[0].textContent === 'a (<img src=x onerror=alert(1)>): x' && one(plainText.rows()[0], 'gc-u').tagName === 'bdi');
+    check('the help line for /del says where staff find the number now (no number is drawn beside a line)', (() => { const h = Pure.helpOf('mod').filter((l) => l[0] === '/del number')[0][1]; return h.indexOf('beside the line') === -1 && h.indexOf('time of the line') !== -1; })());
 }
 {   // the role changes while the page is open
     const r = menuOf(rig({ chip: true }));
@@ -1407,7 +1411,7 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     r.s().recv({ t: 'you', you: asRole('mod') });
     check('a `you` frame that makes a person a moderator: the chip, the data-role and the dropdown follow at once, nobody reloads; the players list hears of it (tap kind `you`)', r.root.getAttribute('data-role') === 'mod' && cls(one(r.chip, 'gc-cn')).indexOf('gc-r-mod') !== -1 && r.errors.length === 0 && seenBy.join() === 'live:none,you:mod');
     r.dock.say('/help');
-    same('... and /help lists the moderator\'s four commands', r.answers(), ['Commands you can use. Only you can see this.\n/mute name minutes stop a person writing for 1 to 10080 minutes\n/unmute name allow a muted person to write again\n/del number take one line off the screen of everybody (use the number beside the line)\n/kick name remove a person from the chat (they can log in again)']);
+    same('... and /help lists the moderator\'s four commands', r.answers(), ['Commands you can use. Only you can see this.\n/mute name minutes stop a person writing for 1 to 10080 minutes\n/unmute name allow a muted person to write again\n/del number take one line off the screen of everybody (hold or point at the time of the line to see its number)\n/kick name remove a person from the chat (they can log in again)']);
     r.s().recv({ t: 'you', you: asRole('admin') });
     r.clock.advance(2600); r.dock.say('/help');
     check('... an admin\'s seven', r.answers().length === 2 && r.answers()[1].split('\n').length === 8 && r.root.getAttribute('data-role') === 'admin' && cls(one(r.chip, 'gc-cn')).indexOf('gc-r-admin') !== -1);
@@ -1548,15 +1552,15 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
 {   // a moderator's view is gone at once after Log out; a lifted ban; a role that changes keeps the reader's place; the hub's own line is nobody's own; the marks of one's own old lines give no tools
     const hist = [Object.assign(L(7, 'Maple Leaf', 'one'), { k: OTHERS, u: 'aaa.one' }), L(8, 'pebble', 'two')].map((x) => { const y = Object.assign({}, x); delete y.t; return y; });
     const out = rig({ chip: true }); out.live(W({ login: true, you: asRole('mod'), history: hist })); out.chip.click(); one(out.dock.slot, 'gc-out').click(); out.answer({ ok: true, status: 200 });
-    check('after Log out, before any welcome, the log holds no username and no number (a moderator\'s view does not stay for the next person)', out.rows().length === 2 && out.rows().every((x) => one(x, 'gc-u') === null && one(x, 'gc-no') === null) && out.rowTexts()[0] === 'Maple Leaf: one');
+    check('after Log out, before any welcome, the log holds no username and no number (a moderator\'s view does not stay for the next person)', out.rows().length === 2 && out.rows().every((x) => one(x, 'gc-u') === null && numberOf(x) === null) && out.rowTexts()[0] === 'Maple Leaf: one');
     const gone = rig({ chip: true }); gone.live(W({ login: true, you: asRole('admin'), history: hist })); gone.chip.click(); one(gone.dock.slot, 'gc-forget').click(); gone.clock.advance(500); one(gone.dock.slot, 'gc-forget').click();
-    check('... the same after Forget me', gone.pending() && (gone.answer({ ok: true, status: 200 }), gone.rows().length === 2 && gone.rows().every((x) => one(x, 'gc-no') === null && one(x, 'gc-u') === null)));
+    check('... the same after Forget me', gone.pending() && (gone.answer({ ok: true, status: 200 }), gone.rows().length === 2 && gone.rows().every((x) => numberOf(x) === null && one(x, 'gc-u') === null)));
     const priv = rig({ chip: true }); priv.live(W({ login: true, you: asRole('admin'), history: hist })); priv.dock.say('/help'); priv.chip.click(); one(priv.dock.slot, 'gc-out').click();
     check('the private answers of an administrator ("/help", a list of bans) do not stay on the screen after Log out', priv.answers().length === 1 && (priv.answer({ ok: true, status: 200 }), priv.answers().length === 0 && priv.rows().length === 2));
     const place = rig({}); place.live(W({ login: true, you: asRole('mod'), history: hist }));
     place.clock.advance(1); const box = place.log(); box.scrollHeight = 2000; box.clientHeight = 100; box.scrollTop = 300;
     place.s().recv({ t: 'you', you: asRole('none') }); place.clock.advance(1);
-    check('a role that changes keeps the place of a reader who is up in the log (the log is made again, but the reader is not taken to the newest line)', box.scrollTop === 300 && place.rows().length === 2 && place.rows().every((x) => one(x, 'gc-no') === null));
+    check('a role that changes keeps the place of a reader who is up in the log (the log is made again, but the reader is not taken to the newest line)', box.scrollTop === 300 && place.rows().length === 2 && place.rows().every((x) => numberOf(x) === null));
     const place2 = rig({}); place2.live(W({ login: true, you: asRole('mod'), history: hist })); place2.clock.advance(1); const box2 = place2.log(); box2.scrollHeight = 2000; box2.clientHeight = 100; box2.scrollTop = 1900;
     place2.s().recv({ t: 'you', you: asRole('none') }); place2.clock.advance(1);
     check('... and a reader who is at the bottom stays there', box2.scrollTop === 2000);
@@ -1576,7 +1580,7 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     own.s().fail(); own.clock.advance(1600); own.s().open().recv(W({ login: true, you: ME, history: HISTORY.concat([{ id: 91, at: 2, who: 'system', text: 'carol was banned.', mod: false, k: MINE, sys: true }]) }));
     check('the hub\'s own line is news even where it carries the visitor\'s key (it is nobody\'s own line): live and in the history of a new welcome, each counts as unread', liveCount === '1' && own.pill() === '1');
     const marked = rig({}); marked.live(W({ login: true, you: ME, history: [Object.assign({ id: 3, at: 3, who: 'maple.leaf', text: 'written as a moderator', mod: true, role: 'mod', k: MINE, u: 'x.y' })] }));
-    check('a person with no role whose own older lines carry a mark sees no numbers and no usernames (the marks of lines give no tools)', marked.rows().length === 1 && one(marked.rows()[0], 'gc-no') === null && one(marked.rows()[0], 'gc-u') === null && marked.rowTexts()[0].indexOf('moderator maple.leaf: written as a moderator') === 0);
+    check('a person with no role whose own older lines carry a mark sees no numbers and no usernames (the marks of lines give no tools)', marked.rows().length === 1 && numberOf(marked.rows()[0]) === null && one(marked.rows()[0], 'gc-u') === null && marked.rowTexts()[0].indexOf('moderator maple.leaf: written as a moderator') === 0);
     check('a line by a person NAMED admin, moderator or mod has no role (a name makes none)', ['admin', 'moderator', 'mod', 'administrator'].every((n) => { const q = rig({}); q.live(W({ login: true, you: ME, history: [{ id: 3, at: 3, who: n, text: 'a person called ' + n, mod: false, k: OTHERS }] })); return cls(q.rows()[0]).every((c) => c !== 'gc-admin' && c !== 'gc-mod') && one(q.rows()[0], 'gc-sr') === null && Pure.lineOf({ id: 1, who: n, text: 'x', mod: false }).role === 'none'; }));
     const privateDel = rig({}); privateDel.live(W({ login: true, you: asRole('mod') })); privateDel.dock.say('/help');
     [null, undefined, 'x', 1.5, -1, {}].forEach((id) => privateDel.s().recv({ t: 'del', id }));
@@ -1921,6 +1925,128 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     const kids = r.dock.slot.children, at = (c) => kids.indexOf(one(r.dock.slot, c));
     check('the switch stands between the name choice and Log out', at('gc-pick') < at('gc-sw') && at('gc-sw') < at('gc-out') && at('gc-pick') >= 0);
     check('nothing of the switch was written as markup or threw', [r, none, dead, blocked, login].every((q) => q.env.innerHTMLWrites.length === 0 && q.errors.length === 0));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 12. Links in a line, the time on the left, the day dividers, and no number beside a line
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+process.env.TZ = 'UTC';       // (the local day and hour of these checks; one of them changes it on purpose)
+{   // the linkifier: an address of http or https, or a bare www host, and nothing else
+    const P = Pure;
+    const links = (t) => P.partsOf(t).filter((x) => x.url !== undefined);
+    const kinds = (t) => P.partsOf(t).map((x) => (x.url !== undefined ? 'a:' + x.s : 't:' + x.s));
+    same('a link in a sentence: the text around it stays text, the link shows what was typed and goes to the checked address', P.partsOf('see https://example.com/a?b=1#c now'),
+        [{ s: 'see ' }, { s: 'https://example.com/a?b=1#c', url: 'https://example.com/a?b=1#c', title: 'https://example.com/a?b=1#c' }, { s: ' now' }]);
+    same('a bare www host is made https and shown as typed; a port is fine; the scheme may be in capitals', [links('go www.example.com now')[0].url, links('go www.example.com now')[0].s, links('http://example.com:8080/x')[0].url, links('HTTPS://EXAMPLE.COM/x')[0].url],
+        ['https://www.example.com/', 'www.example.com', 'http://example.com:8080/x', 'https://example.com/x']);
+    const refused = ['javascript:alert(1)', 'JaVaScRiPt:alert(1)', 'data:text/html,<b>x</b>', 'vbscript:msgbox(1)', 'file:///etc/passwd', 'about:blank', 'blob:https://example.com/1234', 'mailto:a@example.com', 'intent://scan/#Intent;end', 'ftp://example.com/x',
+        'tel:123456', 'sms:123456', 'chrome://settings', 'view-source:https://example.com', 'xhttp://example.com', 'javascript://example.com/%0aalert(1)', '//example.com/x', 'ttp://example.com'];
+    same('every other scheme is text (javascript, data, vbscript, file, about, blob, mailto, intent, ftp, tel, ...)', refused.map((t) => links('open ' + t + ' now').length), refused.map(() => 0));
+    same('a link that hides behind a refused scheme is only the part that is an address', [links('javascript:alert(1)//http://example.com/').length, links('(http://example.com/a)')[0].s], [0, 'http://example.com/a']);
+    const creds = ['http://user:pass@example.com/', 'https://user@example.com/', 'http://example.com@evil.example/', 'https://a:b@www.example.com', 'http://:pw@example.com/'];
+    same('an address with a user name or a password is text', creds.map((t) => links(t).length), creds.map(() => 0));
+    const nohost = ['http://', 'https://x', 'http://localhost/x', 'https://.com', 'http:///x', 'http://exa mple.com', 'www.', 'www', 'http://-.', 'https://[::1]/'];
+    same('no host, a host with no dot, or no name before the dot is text', nohost.map((t) => links(t).length), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    same('an address on the "www." of a word is not one (no link inside a word or an e-mail address)', [links('xwww.example.com').length, links('me@www.example.com').length, links('a/www.example.com').length], [0, 0, 0]);
+    const tail = (t) => { const l = links(t); return l.length === 1 ? l[0].s : 'none'; };
+    same('the end of a sentence is not the end of the address: . , ! ? : ; \' " ) ] } are cut off when nothing opened them', ['.', ',', '!', '?', ':', ';', "'", '"', ')', ']', '}', '.)', '?!', '").'].map((c) => tail('go to https://example.com/a' + c)), Array(14).fill('https://example.com/a'));
+    same('a bracket that was opened inside the address stays (a page of a wiki), one that was not is cut; two closers after one opener leave one', [tail('https://en.wikipedia.org/wiki/Ant_(insect)'), tail('(https://en.wikipedia.org/wiki/Ant_(insect))'), tail('https://en.wikipedia.org/wiki/Ant_(insect).'),
+        tail('see [https://example.com/a]'), tail('https://example.com/a_[1]'), tail('https://example.com/a_{b}')], ['https://en.wikipedia.org/wiki/Ant_(insect)', 'https://en.wikipedia.org/wiki/Ant_(insect)', 'https://en.wikipedia.org/wiki/Ant_(insect)', 'https://example.com/a', 'https://example.com/a_[1]', 'https://example.com/a_{b}']);
+    same('the cut-off end is text again', kinds('(see https://example.com/a).'), ['t:(see ', 'a:https://example.com/a', 't:).']);
+    const idn = links('http://exаmple.com/x')[0];
+    check('a look-alike host (a Cyrillic "a") is shown as typed, goes to the punycode address, and its title names the punycode host first', idn && idn.s === 'http://exаmple.com/x' && /^https:\/\/|^http:\/\/xn--/.test(idn.url) && idn.url.indexOf('xn--') !== -1 && idn.title.indexOf('xn--') === 0 && idn.title.indexOf(idn.url) !== -1 && !/[^\x00-\x7f]/.test(idn.url), JSON.stringify(idn));
+    const long = 'https://example.com/' + 'a'.repeat(100), shown = links(long)[0];
+    check('a long address is shortened in the middle (48 characters with the ellipsis), the title has all of it, the address is whole', shown.s.length === 48 && shown.s.indexOf('…') === 30 && shown.s.slice(0, 30) === long.slice(0, 30) && shown.s.slice(-17) === long.slice(-17) && shown.title === long && shown.url === long);
+    const edge = 'https://example.com/' + 'b'.repeat(28);
+    same('an address of exactly 48 characters is not shortened, one of 49 is', [edge.length, links(edge)[0].s.length, links(edge + 'c')[0].s.length], [48, 48, 48]);
+    check('a cut never leaves half of an emoji', (() => { const l = links('https://example.com/' + '😀'.repeat(40))[0]; return !/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(l.s); })());
+    const six = Array.from({ length: 6 }, (_, i) => 'https://example.com/' + i).join(' ');
+    check('six links in one line: five are links, the sixth is text, and nothing is lost', links(six).length === 5 && kinds(six).slice(-1)[0] === 't: https://example.com/5' && P.partsOf(six).map((x) => x.s).join('') === six);
+    same('a line with no address is one text part, and an empty one has none', [P.partsOf('hello there').length, P.partsOf('').length], [1, 0]);
+    same('markup in the text around a link is text', kinds('<b>x</b> http://example.com/ <img src=x onerror=alert(1)>'), ['t:<b>x</b> ', 'a:http://example.com/', 't: <img src=x onerror=alert(1)>']);
+}
+{   // the line builder: a link is an element made with attributes, never markup
+    const r = rig({}); r.live(W({ login: true, you: YOU }));
+    r.s().recv(L(1, 'pebble', 'read https://example.com/a?x=1&y=2, then www.example.org! and javascript:alert(1) <b>bold</b>'));
+    const row = r.rows()[0], as = row.findAll((e) => e.tagName === 'a');
+    check('the line has two links and the rest is text', as.length === 2 && row.textContent === 'pebble: read https://example.com/a?x=1&y=2, then www.example.org! and javascript:alert(1) <b>bold</b>' && one(row, 'gc-text').tagName === 'bdi');
+    same('a link: exactly these attributes, the rel and the referrer policy of the rules, the full address in the title', as.map((a) => Object.keys(a.attributes).sort().join() + '|' + a.getAttribute('href') + '|' + a.getAttribute('target') + '|' + a.getAttribute('rel') + '|' + a.getAttribute('referrerpolicy') + '|' + a.getAttribute('title') + '|' + a.textContent),
+        ['href,referrerpolicy,rel,target,title|https://example.com/a?x=1&y=2|_blank|noopener noreferrer nofollow ugc|no-referrer|https://example.com/a?x=1&y=2|https://example.com/a?x=1&y=2', 'href,referrerpolicy,rel,target,title|https://www.example.org/|_blank|noopener noreferrer nofollow ugc|no-referrer|https://www.example.org/|www.example.org']);
+    check('nothing was written as markup, and nothing threw', r.env.innerHTMLWrites.length === 0 && r.errors.length === 0);
+    const hostile = rig({}); hostile.live(W({ you: YOU }));
+    hostile.s().recv(L(2, 'x', '<a href="javascript:alert(1)">z</a> javascript:alert(1) data:text/html,x http://user:pw@evil.example/ file:///etc/passwd'));
+    check('hostile text makes no link at all', hostile.rows()[0].findAll((e) => e.tagName === 'a').length === 0 && hostile.env.innerHTMLWrites.length === 0);
+    const hidden = rig({}); hidden.live(W({ you: YOU }));
+    hidden.s().recv(L(3, 'm', 'https://example.com/ https://example.com/ https://example.com/ https://example.com/ https://example.com/ https://example.com/ https://example.com/'));
+    check('at most five links in a line', hidden.rows()[0].findAll((e) => e.tagName === 'a').length === 5);
+    const sys = rig({}); sys.live(W({ you: YOU })); sys.s().recv({ t: 'line', id: 9, at: 1700000009, who: 'system', text: 'see https://example.com/x', mod: false, k: '', sys: true });
+    check('the hub\'s own line is as it was: quiet text, no link', sys.rows()[0].findAll((e) => e.tagName === 'a').length === 0 && cls(sys.rows()[0]).indexOf('gc-event') !== -1);
+    const staff = rig({}); staff.live(W({ login: true, you: asRole('mod') })); staff.s().recv(L(4, 'p', 'https://example.com/z'));
+    check('a moderator\'s lines have the same links', staff.rows()[0].findAll((e) => e.tagName === 'a').length === 1);
+    check('the source of chat.js holds no innerHTML, no outerHTML and no insertAdjacentHTML anywhere (comments and code)', !/innerHTML|outerHTML|insertAdjacentHTML/.test(chatSource.replace(/\/\/.*/g, '')));
+    check('the link style has an underline and a visible focus ring, in forced colors too', (() => { const css = fs.readFileSync(path.join(lobbyDir, 'home', 'chat.css'), 'utf8'); return /^\.gc-a \{[^}]*text-decoration: underline/m.test(css) && /^\.gc-a:focus-visible \{[^}]*outline: 2px solid/m.test(css) && /forced-colors: active\) \{[^@]*\.gc-a \{[^}]*underline/.test(css) && /forced-colors[^@]*\.gc-a:focus-visible/.test(css); })());
+}
+{   // the time on the left
+    const calls = [];
+    const intl = (twelve) => ({ DateTimeFormat: function (loc, o) { calls.push([loc, o]); return { format: (d) => { const p = (n) => String(n).padStart(2, '0'), h = d.getHours(), t = twelve ? ((h + 11) % 12 + 1) + ':' + p(d.getMinutes()) + (h < 12 ? ' AM' : ' PM') : p(h) + ':' + p(d.getMinutes());
+        return o.month && o.hour ? 'F ' + (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear() + ' ' + t : o.month ? 'D ' + (d.getMonth() + 1) + '/' + d.getDate() + (o.year ? '/' + d.getFullYear() : '') : t; } }; } });
+    const NOW = Date.UTC(2026, 10, 14, 15, 0, 0);
+    const AT = Date.UTC(2026, 10, 14, 15, 5, 0) / 1000;
+    const line = (id, at, who, text) => Object.assign(L(id, who || 'pebble', text || 'hello'), { at });
+    const make = (twelve, role) => { const r = rig({ Intl: intl(twelve), now: () => NOW }); r.live(W({ login: true, you: role ? asRole(role) : YOU })); r.s().recv(line(7, AT)); return r; };
+    const h12 = make(true, 'none'), h24 = make(false, 'none'), staff = make(false, 'mod');
+    const stamp = (r) => one(r.rows()[0], 'gc-t');
+    same('the time is the hub\'s own, in the device\'s 12 or 24 hour setting (an injected Intl), and the formatter is asked for the device\'s language and hour and minute only', [stamp(h12).textContent, stamp(h24).textContent, calls[0][0], calls[0][1]],
+        ['3:05 PM', '15:05', undefined, { hour: 'numeric', minute: '2-digit' }]);
+    check('the time is the first thing in the line (read before the name), and the line text is the time and then the name and the words', h24.rows()[0].children[0] === stamp(h24) && h24.rows()[0].textContent === '15:05pebble: hello');
+    check('the title has the date and the time, and for a person with no role no number', stamp(h24).getAttribute('title') === 'F 11/14/2026 15:05' && h24.rows()[0].textContent.indexOf('#') === -1);
+    check('a moderator has the number in the title of the time and in no other place; the date follows it', stamp(staff).getAttribute('title') === '#7 F 11/14/2026 15:05' && staff.rows()[0].textContent === '15:05pebble: hello' && staff.rows()[0].findAll((e) => e !== stamp(staff) && String(e.getAttribute('title') || '').indexOf('#') !== -1).length === 0);
+    check('the number stays in the line as data for everybody (staff and not), for the menu of a moderator and /del', [h12, h24, staff].every((q) => q.rows()[0].getAttribute('data-n') === '7'));
+    check('nothing in a line shows a number: no "#", for a person with no role, a moderator and an administrator, on a live line and in the history', (() => { const out = []; ['none', 'mod', 'admin'].forEach((role) => { const q = rig({ Intl: intl(false), now: () => NOW }); q.live(W({ login: true, you: asRole(role), history: [{ id: 3, at: AT, who: 'a', text: 'old', mod: false }] })); q.s().recv(line(4, AT)); out.push(...q.rows().map((x) => x.textContent)); }); return out.length === 6 && out.every((t) => t.indexOf('#') === -1); })());
+    const tz = rig({ Intl: intl(false), now: () => NOW }); process.env.TZ = 'Asia/Tokyo'; tz.live(W({ you: YOU })); tz.s().recv(line(8, AT));
+    same('the time is in the device\'s time zone (Tokyo: nine hours on)', one(tz.rows()[0], 'gc-t').textContent, '00:05');
+    process.env.TZ = 'UTC';
+    const noTime = rig({ Intl: intl(false), now: () => NOW }); noTime.live(W({ you: YOU })); ['x', '5', -1, 1.5, NaN, null, 4e9 + 1].forEach((bad, i) => noTime.s().recv({ t: 'line', id: 20 + i, at: bad, who: 'a', text: 'no time ' + i, mod: false }));
+    noTime.s().recv({ t: 'line', id: 40, who: 'a', text: 'no field', mod: false });
+    check('a line with no usable time from the hub has no time (none is made up by the page) and no divider', noTime.rows().length === 8 && noTime.rows().every((x) => one(x, 'gc-t').textContent === '' && one(x, 'gc-t').getAttribute('title') === null) && noTime.days().length === 0);
+    same('lineOf keeps the hub\'s time only when it is a whole number of seconds in range', [Pure.lineOf({ id: 1, at: AT, who: 'a', text: 'x' }).at, Pure.lineOf({ id: 1, at: -1, who: 'a', text: 'x' }).at, Pure.lineOf({ id: 1, at: '5', who: 'a', text: 'x' }).at, Pure.lineOf({ id: 1, who: 'a', text: 'x' }).at], [AT, undefined, undefined, undefined]);
+    const broken = rig({ Intl: { DateTimeFormat: function () { throw new Error('no Intl'); } }, now: () => NOW }); broken.live(W({ you: YOU })); broken.s().recv(line(9, AT));
+    check('a device without Intl still shows a time (24 hour), and nothing throws', one(broken.rows()[0], 'gc-t').textContent === '15:05' && broken.errors.length === 0);
+    const priv = make(false, 'mod'); priv.dock.say('/help');
+    check('a private answer has no time and no divider of its own', priv.answers().length === 1 && one(priv.rows()[1], 'gc-t') === null && priv.days().length === 1);
+}
+{   // the day dividers
+    const NOW = Date.UTC(2026, 10, 14, 15, 0, 0);
+    const at = (m, d, h, mi, y) => Date.UTC(y || 2026, m - 1, d, h, mi, 0) / 1000;
+    const intl = { DateTimeFormat: function (loc, o) { return { format: (d) => (o.hour && o.month ? 'F' : o.month ? (d.getMonth() + 1) + '/' + d.getDate() + (o.year ? '/' + d.getFullYear() : '') : d.getHours() + ':' + d.getMinutes()) }; } };
+    const hist = (rows) => rows.map((a, i) => ({ id: i + 1, at: a, who: 'a', text: 'line ' + (i + 1), mod: false }));
+    const make = (rows) => { const r = rig({ Intl: intl, now: () => NOW }); r.live(W({ you: YOU, history: hist(rows) })); return r; };
+    const order = (r) => r.log().children.slice(1).map((x) => (cls(x).indexOf('gc-day') !== -1 ? '[' + x.textContent + ']' : x.textContent.replace(/^[\d:]+/, ''))).join(' ');
+    const r = make([at(10, 3, 9, 0), at(11, 13, 23, 50), at(11, 13, 23, 55), at(11, 14, 0, 10), at(11, 14, 9, 0), at(12, 31, 8, 0, 2025)].sort());
+    same('a divider before the first line and wherever two neighbours are on different days: a short date (the year only when it is not this one), Yesterday, Today', order(r),
+        '[12/31/2025] a: line 1 [10/3] a: line 2 [Yesterday] a: line 3 a: line 4 [Today] a: line 5 a: line 6');
+    same('the dividers are separators with their words and are not lines', [r.days(), r.log().children.slice(1).filter((x) => cls(x).indexOf('gc-day') !== -1).every((x) => x.getAttribute('role') === 'separator'), r.rows().length], [['12/31/2025', '10/3', 'Yesterday', 'Today'], true, 6]);
+    const old = make([at(12, 31, 8, 0, 2025), at(1, 2, 8, 0)]);
+    same('a date of another year has the year', old.days(), ['12/31/2025', '1/2']);
+    const live = make([at(11, 14, 9, 0)]);
+    live.s().recv(Object.assign(L(5, 'a', 'later'), { at: at(11, 14, 9, 30) })); live.s().recv(Object.assign(L(6, 'a', 'tomorrow'), { at: at(11, 15, 0, 5) }));
+    same('a live line on the same day adds none, one on the next day adds one before it', [live.days(), order(live)], [['Today', '11/15'], '[Today] a: line 1 a: later [11/15] a: tomorrow']);
+    const gone = make([at(11, 13, 9, 0), at(11, 14, 9, 0), at(11, 14, 10, 0)]);
+    gone.s().recv({ t: 'del', id: 2 });
+    same('a line that is taken off and held the divider leaves the divider with the next line of its day', order(gone), '[Yesterday] a: line 1 [Today] a: line 3');
+    const first = make([at(11, 14, 9, 0), at(11, 14, 10, 0)]); first.s().recv({ t: 'del', id: 1 });
+    same('the first line goes and the next one is first: it has the divider', order(first), '[Today] a: line 2');
+    const cap = rig({ Intl: intl, now: () => NOW }); cap.live(W({ you: YOU, history: hist([at(11, 14, 9, 0)]) }));
+    for (let i = 0; i < 150; i++) cap.s().recv(Object.assign(L(100 + i, 'a', 'c' + i), { at: at(11, 14, 9, 1) }));
+    check('at the cap of 100 lines the oldest go, the first line always has its divider, and there is one divider only', cap.rows().length === 100 && cap.days().length === 1 && cap.log().children[1] !== undefined && cls(cap.log().children[1]).indexOf('gc-day') !== -1);
+    process.env.TZ = 'Asia/Tokyo';
+    const tokyo = make([at(11, 14, 14, 0), at(11, 14, 16, 0)]);
+    process.env.TZ = 'UTC';
+    same('the day is the device\'s own: two times of one UTC day that are two days in Tokyo have a divider between them', order(tokyo).replace(/\[[^\]]*\]/g, '[]'), '[] a: line 1 [] a: line 2');
+    const none = make([]);
+    check('no lines, no divider', none.days().length === 0);
+    const again = make([at(11, 13, 9, 0), at(11, 14, 9, 0)]); again.s().recv({ t: 'you', you: asRole('mod') });
+    same('the log made again (a role changes) has the same dividers', again.days(), ['Yesterday', 'Today']);
 }
 
 console.log('home chat: ' + checks + ' checks, ' + failures + ' failed');
