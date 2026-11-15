@@ -1,0 +1,35 @@
+/* The handles of Home (web/home/split.js, docs/HOME_SCREEN.md "The splitters"), loaded after the first paint. Wide windows only: a phone (up to 700 px) has its strip and shows none. The line is thin; the target
+   around it is about 30 px (the line's own box and padding that reaches over the edge of the lists), so it takes no room from the layout. Sizes come as two properties on Home's div, --pl-w (the players'
+   width) and --gc-h (the chat dock's height); the id of Home makes these rules win over the dock's own height (chat.css, talk.css), which stay as the first size. */
+.sp { display: none; }
+@media (min-width: 701px) {
+    #home { --pl-w: clamp(220px, 24vw, 280px); }
+    #home[data-split-w].pl-on .hmain { grid-template-columns: minmax(0, 1fr) var(--pl-w); }
+    #home[data-split-h] .gc[data-open="true"] { height: var(--gc-h); }
+    #home .gc { position: relative; }
+    .sp { position: absolute; z-index: 4; touch-action: none; user-select: none; -webkit-user-select: none; outline: none; }
+    .sp::before { content: ""; position: absolute; }       /* (the wider target) */
+    .sp-line { position: absolute; border-radius: 3px; background: rgba(244, 236, 226, .5); transition: background-color .12s; }
+    .sp:hover .sp-line, .sp:focus-visible .sp-line, .sp.sp-live .sp-line { background: var(--gold, #f6d058); }
+    .sp:focus-visible .sp-line { box-shadow: 0 0 0 2px var(--edge, #000); }
+    /* between the games and the players: in the gap of the grid, from the top of the lists to their bottom */
+    .hmain { position: relative; }
+    #home.pl-on .sp-x { display: block; top: 4px; bottom: 14px; right: calc(24px + var(--pl-w)); width: 14px; cursor: col-resize; }
+    .sp-x::before { top: 0; bottom: 0; left: -8px; right: -8px; }
+    .sp-x .sp-line { top: 12px; bottom: 12px; left: 5px; width: 4px; }
+    .sp-x:hover .sp-line, .sp-x:focus-visible .sp-line { top: 0; bottom: 0; }
+    /* along the top of the chat dock: in the space above it */
+    .gc[data-open="true"] > .sp-y { display: block; top: -14px; left: 0; right: 0; height: 14px; cursor: row-resize; }
+    .sp-y::before { left: 0; right: 0; top: -8px; bottom: -8px; }
+    .sp-y .sp-line { left: 12px; right: 12px; top: 5px; height: 4px; }
+    .sp-y:hover .sp-line, .sp-y:focus-visible .sp-line { left: 0; right: 0; }
+    .sp-drag-x, .sp-drag-x * { cursor: col-resize !important; user-select: none !important; -webkit-user-select: none !important; }
+    .sp-drag-y, .sp-drag-y * { cursor: row-resize !important; user-select: none !important; -webkit-user-select: none !important; }
+}
+@media (forced-colors: active) {
+    .sp:hover .sp-line, .sp.sp-live .sp-line { background: Highlight; }
+    .sp:focus-visible { outline: 2px solid Highlight; }
+    .sp-line { background: ButtonText; opacity: .5; }
+    .sp:hover .sp-line, .sp:focus-visible .sp-line, .sp.sp-live .sp-line { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .sp-line { transition: none; } }
