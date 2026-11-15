@@ -268,8 +268,8 @@
   {
    "id": "copy_link_is_shown_for_a_file_of_your_own",
    "file": "web/shell.html",
-   "old": "body.ownfile #copy-btn, body.ownfile #copy-more,",
-   "new": "body.ownfile #copy-more,",
+   "old": "body.ownfile #copy-btn, body.ownfile #stats-btn",
+   "new": "body.ownfile #stats-btn",
    "test": "python3 tests/scripts/test_web_replay_open.py TheStrip ThePlayer",
    "why": "a link that nobody else can open"
   },

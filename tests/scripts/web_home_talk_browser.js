@@ -1,7 +1,7 @@
 // OPT-IN, not part of ./run_tests.sh: the emoji picker and the voice button of the chat (web/home/talk.js, talk.css, docs/HOME_SCREEN.md "Emoji and voice") in a REAL browser (Chromium through Playwright), on the real front
 // page (web/lobby.html with web/home/) and the FAKE hub (tests/scripts/fake_hub.js) that shares the page's address. The speech recognition is a FAKE (an init script puts a class in its place: no microphone, no sound).
 // For every size (1280 x 800, 701 x 800, a phone 390 x 844, 320 x 640 and a phone held sideways 568 x 320) it checks, with a writer in the chat:
-//   1. the buttons stand in the field's row beside Send (a phone upright: in one box, the field over the whole width and the buttons and Send in the row under it), each at least 44 x 44 px, inside the window, the page does not scroll sideways, and the field keeps room to type (at least 90 px);
+//   1. the composer is one box in every window: the field on top over the whole width, the buttons and Send in the row under it (a window under 501 px high: one row, the field, the buttons, Send), each at least 44 x 44 px, inside the window, the page does not scroll sideways, and the field keeps room to type (at least 90 px);
 //   2. the picker opens above the field inside the dock, never over the field or Send, inside the window, with a scroll of its own; a pick goes in at the caret; the dock is still open; Escape closes it and the focus
 //      is back in the field;
 //   3. the voice: a press starts the (fake) recognition, the words come into the field, the button looks pressed, a second press stops it, an error is a plain line, and nothing is sent until Send is pressed;

@@ -106,10 +106,11 @@ class DiscordLogin(session.Sessions):
     def attach(self, hub):
         self.hub, self.store, self.limits, self.log = hub, hub.store, hub.limits, hub.log
         self.discord = discordmod.Discord(self.cfg, self.limits)
-        self.pictures = picturesmod.Pictures(self.store, self.discord, self.limits, self.log, hub.clock)
+        self.pictures = picturesmod.Pictures(self.store, self.discord, self.limits, self.log, hub.clock, self.cfg.discord_bot_token, hub.chat.roles)
         self.picture_route = self.pictures.serve             # (GET /hub/pic/<name>.png: the hub asks for it by its prefix)
         self.pictures.on_change = hub.chat.picture_changed    # (the chat tells the sockets of an account whose picture arrived, went or was switched)
         hub.chat.pictures = self.pictures
+        hub.chat.roles.on_avatar, hub.chat.roles.on_absent = self.pictures.refresh, self.pictures.absent       # (the roles' check hands over the picture code that it sees, and who is not in the server)
         self.rate_login = limitmod.RateByAddress(self.limits.login_burst, self.limits.login_refill_seconds)
         self.rate_callback = limitmod.RateByAddress(self.limits.login_burst, self.limits.login_refill_seconds)
         self.rate_session = limitmod.RateByAddress(self.limits.session_burst, self.limits.session_refill_seconds)

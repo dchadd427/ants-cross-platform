@@ -3166,13 +3166,6 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "the_box_is_tall_in_every_window",
-   "file": "web/home/chat.js",
-   "old": "if (!tall) { s.height = ''; return; }",
-   "new": "if (false) { s.height = ''; return; }",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
    "id": "enter_skips_the_forms_submit",
    "file": "web/home/chat.js",
    "old": "if (form.requestSubmit) form.requestSubmit();\n            else if",
@@ -3203,8 +3196,15 @@
   {
    "id": "the_log_does_not_follow_the_box",
    "file": "web/home/chat.js",
-   "old": "if (was) log.scrollTop = log.scrollHeight;",
+   "old": "if (was && to !== before) log.scrollTop = log.scrollHeight;",
    "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_log_is_moved_when_the_box_did_not_change",
+   "file": "web/home/chat.js",
+   "old": "if (was && to !== before) log.scrollTop = log.scrollHeight;",
+   "new": "if (was) log.scrollTop = log.scrollHeight;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -3226,13 +3226,6 @@
    "file": "web/home/chat.js",
    "old": "field.setAttribute('aria-describedby', 'gchat-hint');",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "the_script_and_the_style_disagree_on_a_phone",
-   "file": "web/home/chat.js",
-   "old": "var UPRIGHT = '(max-width: 700px)",
-   "new": "var UPRIGHT = '(max-width: 7000px)",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {

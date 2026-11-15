@@ -222,7 +222,7 @@ function makePage(opts) {
     const game = makeGame(opts.watch ? WATCH : MATCH);
     if (opts.watch) { game.where = 1; game.leave = 4; }
     const make = (tag, id, parent, cls) => { const n = doc.createElement(tag); if (id) n.setAttribute('id', id); if (cls) n.className = cls; (parent || doc.body).appendChild(n); return n; };
-    const header = make('header'), menuBtn = make('a', 'menu-btn', header, 'btn sm');
+    const header = make('header'), fullscreenBtn = make('button', 'fullscreen-btn', header, 'btn');
     const stage = make('div', 'game-stage'), box = make('div', 'game-container', stage), canvas = make('canvas', 'canvas', box), chat = make('input', 'chat-keys', box);
     stage.setAttribute('data-aspect', '16:9');
     const shapes = {};                                                                   // (what the page's own dropdown does with a pick: antsPickShape; the page's `pickShape` is that function)
@@ -249,7 +249,7 @@ function makePage(opts) {
         cancelsKey: opts.noCancel ? undefined : (e) => { asked.push(e.key + (e.ctrlKey ? '+ctrl' : '')); return !!(e.ctrlKey ? 'ahlnopqs'.indexOf(e.key) >= 0 : /^F[123]$/.test(e.key)); },       // (the page's ANTS_PAGE.cancelsBrowserKey, in the cases that matter here)
     };
     const menu = Menu.forPage(page);
-    const p = { shapeChanged: () => watchers.slice().forEach((fn) => fn()), asked, doc, win, game, state, page, menu, auto, stage, canvas, header, menuBtn, picwrap, rbar, toast, chat, shapes, lockState, touchState, intervals, box };
+    const p = { shapeChanged: () => watchers.slice().forEach((fn) => fn()), asked, doc, win, game, state, page, menu, auto, stage, canvas, header, fullscreenBtn, picwrap, rbar, toast, chat, shapes, lockState, touchState, intervals, box };
     p.styleLoaded = () => { doc.links.forEach((l) => { if (l.onload) l.onload(); }); };
     p.poll = () => intervals.forEach((i) => i.fn());
     p.ready = () => { p.styleLoaded(); p.poll(); return p; };
@@ -271,7 +271,7 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     ok('the style is fetched with the script (one link)', p.doc.links.length === 1 && p.doc.links[0].rel === 'stylesheet' && p.doc.links[0].href === 'game_menu.css?v=7');
     const all = p.qa('.gm-btn');
     expect('one button, in the header, none under the picture and none over it (there is no strip under the picture)', all.map((b) => b.id), ['settings-btn']);
-    expect('the header button stands right after Menu, at every width', p.header.children.map((c) => c.id), ['menu-btn', 'settings-btn']);
+    expect('the header button stands right before Fullscreen, at every width', p.header.children.map((c) => c.id), ['settings-btn', 'fullscreen-btn']);
     ok('none is in the stage, the element that goes fullscreen: nothing is laid over the game\'s picture', all.every((b) => !p.stage.contains(b)) && !p.q('#settings-btn-fs'));
     ok('all hide until the style is there', all.every((b) => b.hidden && b.style.display === 'none'));
     ok('every one is a real button with the page\'s look and the word Settings', all.every((b) => b.tagName === 'button' && b.type === 'button' && /(^| )btn( |$)/.test(b.className) && b.textContent === 'Settings' && b.getAttribute('aria-label') === 'Settings' && b.getAttribute('aria-haspopup') === 'dialog'));
@@ -1274,7 +1274,7 @@ function sdlModel(p) {
         timers[0].fn();
         ok('...with a new link', q.doc.links.length === 2);
         q.doc.links[1].onerror();
-        expect('...and the second failure is said in the toast for a while', [q.toast.textContent, q.toast.hidden, timers.map((t) => t.ms)], ['The settings menu could not load its style. Press Reset to try again.', false, [2000, 5000]]);
+        expect('...and the second failure is said in the toast for a while', [q.toast.textContent, q.toast.hidden, timers.map((t) => t.ms)], ['The settings menu could not load its style. Open the Menu and press Reload page to try again.', false, [2000, 5000]]);
         timers[1].fn();
         ok('...and it goes again', q.toast.hidden);
     } finally { global.setTimeout = real; }

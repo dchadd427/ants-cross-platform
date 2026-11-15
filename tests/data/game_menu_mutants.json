@@ -291,8 +291,8 @@
     {
       "id": "overlay_button_back",
       "file": "web/game_menu.js",
-      "old": "if (menu && menu.parentNode) insertAfter(makeButton('gm-top', 'settings-btn'), menu);",
-      "new": "if (menu && menu.parentNode) insertAfter(makeButton('gm-top', 'settings-btn'), menu); stage.appendChild(makeButton('gm-fs', 'settings-btn-fs'));",
+      "old": "if (fullscreen && fullscreen.parentNode) fullscreen.parentNode.insertBefore(makeButton('gm-top', 'settings-btn'), fullscreen);",
+      "new": "if (fullscreen && fullscreen.parentNode) fullscreen.parentNode.insertBefore(makeButton('gm-top', 'settings-btn'), fullscreen); stage.appendChild(makeButton('gm-fs', 'settings-btn-fs'));",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -401,10 +401,10 @@
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
-      "id": "header_button_before_menu",
+      "id": "header_button_after_fullscreen",
       "file": "web/game_menu.js",
-      "old": "if (menu && menu.parentNode) insertAfter(makeButton('gm-top', 'settings-btn'), menu);",
-      "new": "if (menu && menu.parentNode) menu.parentNode.insertBefore(makeButton('gm-top', 'settings-btn'), menu);",
+      "old": "if (fullscreen && fullscreen.parentNode) fullscreen.parentNode.insertBefore(makeButton('gm-top', 'settings-btn'), fullscreen);",
+      "new": "if (fullscreen && fullscreen.parentNode) fullscreen.parentNode.insertBefore(makeButton('gm-top', 'settings-btn'), fullscreen.nextSibling);",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -445,7 +445,7 @@
     {
       "id": "style_failure_not_said",
       "file": "web/game_menu.js",
-      "old": "else say('The settings menu could not load its style. Press Reset to try again.');",
+      "old": "else say('The settings menu could not load its style. Open the Menu and press Reload page to try again.');",
       "new": "",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },

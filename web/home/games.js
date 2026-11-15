@@ -52,7 +52,7 @@
         noneLine: 'Nobody is waiting for a player. Host one, and others can join you.', noneYours: 'Your room goes public with its map and your friends in it.', noneNew: 'A new room opens for you, and it goes public.', joiningCode: 'Joining the room…', joinFirst: ' Wait for it, or cancel it in the list.', opening: 'The game is opening. If it does not, reload this page.',
         already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went private after 30 minutes. Make it public again?',
         hostChanged: 'This room is private again because the host changed.', stillPrivate: 'Your room is still private. Use the Public switch in the room.',
-        watch: 'Watch', liveMark: 'Live', inProgress: 'In progress', noLive: 'No games in progress.', soFar: ' so far', nobodyNamed: 'Players not named',
+        watch: 'Watch', liveMark: 'Live', inProgress: 'In progress', soFar: ' so far', nobodyNamed: 'Players not named',
         full: 'That room is full.', started: 'The match in that room has already started.', gone: 'That game is not open any more.', silent: 'The server did not answer. Try again in a moment.'
     };
 
@@ -446,12 +446,12 @@
         // ---- the list's popover ----
         var pop = el('section', 'gpop'), popHead = el('div', 'gphead'), popTitle = el('h2', 'gptitle', TEXT.title), popCount = el('span', 'gpcount'), popNote = el('p', 'gpnote');
         var popBody = el('div', 'gpbody'), popList = el('ul', 'glist'), popLoad = el('p', 'gemline', TEXT.loading), popEmpty = el('div', 'gempty'), popOff = el('div', 'goff'), popLegend = el('p', 'glegend');
-        var liveBox = el('div', 'glivebox'), liveHead = el('h3', 'gsub', TEXT.inProgress), liveList = el('ul', 'glist glivelist'), liveNone = el('p', 'gemline gnolive', TEXT.noLive);
+        var liveBox = el('div', 'glivebox'), liveHead = el('h3', 'gsub', TEXT.inProgress), liveList = el('ul', 'glist glivelist');
         var popJoin = el('div', 'gjoining'), popJoinText = el('span'), popJoinStop = button('sm', TEXT.cancel, guard(function () { cancelJoin(); }));
         var codeBox = el('div', 'gcode'), codeLink = el('button', 'gcodelink', TEXT.haveCode), codeClose = button('sm gcx', '\u00d7'), codeOpen = false, codeRow = el('div', 'joinbox'), codeInput = el('input'), codeGo = button('sm gcgo', TEXT.join), codeHint = el('p', 'hint');
         pop.hidden = !docked; pop.setAttribute('role', docked ? 'region' : 'dialog'); pop.setAttribute('aria-label', TEXT.title); popNote.setAttribute('role', 'status'); codeHint.setAttribute('role', 'status'); popNote.hidden = true;
         popHead.appendChild(popTitle); popHead.appendChild(popCount); popHead.appendChild(codeLink);
-        liveBox.hidden = true; liveBox.appendChild(liveHead); liveBox.appendChild(liveList); liveBox.appendChild(liveNone);
+        liveBox.hidden = true; liveBox.appendChild(liveHead); liveBox.appendChild(liveList);
         popJoin.hidden = true; popJoin.setAttribute('role', 'status'); popJoin.appendChild(popJoinText); popJoin.appendChild(popJoinStop);
         popEmpty.appendChild(el('span', 'ant ant-green')); popEmpty.firstChild.setAttribute('aria-hidden', 'true');
         popEmpty.appendChild(el('p', 'gemtitle', TEXT.emptyTitle)); popEmpty.appendChild(el('p', 'gemline', TEXT.emptyLine));
@@ -527,9 +527,8 @@
         function liveShown() { return liveLoaded && !liveOff && loaded; }          // (the section stands only with an answer of /live that was good and the list's own first look done)
         function paintLive() {
             var on = liveShown(), active = doc.activeElement, focusId = active && active.getAttribute ? active.getAttribute('data-live') : null;
-            liveBox.hidden = !on;
+            liveBox.hidden = !on || !live.length;                             // (no match running: no box at all, so an empty list does not grow the panel)
             if (!on) { liveSig = null; liveLens = []; while (liveList.firstChild) liveList.removeChild(liveList.firstChild); return; }          // (nothing of a match stays in the page while the section is away)
-            liveNone.hidden = live.length > 0; liveList.hidden = live.length === 0;
             var sig = JSON.stringify(live.map(function (e) { return [e.id, e.map, e.who]; }));
             if (sig !== liveSig) {                                              // (made again only when a match, its map or its players came or went: a focus stays, and the clocks tick in place)
                 liveSig = sig; liveLens = [];
@@ -544,7 +543,7 @@
         }
         function countLine(n) {                            // the list's head: "3 open, 2 in progress" while the matches are shown, else "3 waiting - updates live"
             if (!loaded || off) return '';
-            if (liveShown()) return !n && !live.length ? TEXT.none : countText(n) + ' open, ' + countText(live.length) + ' in progress';
+            if (liveShown() && live.length) return countText(n) + ' open, ' + countText(live.length) + ' in progress';
             return n === 0 ? TEXT.none : countText(n) + ' waiting' + TEXT.live;
         }
         function paintList() {

@@ -741,11 +741,11 @@
                 }
                 if (from && typeof from.roster === 'number') meta.appendChild(chipsOf(doc, playersOf(from.roster, from.names)));
             },
-            // the header's buttons: the way back is "Matches" here, and a narrow window's More has a way to open another file
+            // the bar's buttons: the way back is "Matches" here, and the bar's Menu has a way to open another file (web/game_bar.js makes its line from this button, which is kept out of sight)
             chrome: function () {
-                var back = doc.getElementById('all-btn'), list = doc.querySelector('.header-actions.rep-only .more-list');
+                var back = doc.getElementById('all-btn'), hold = doc.getElementById('own-hold');
                 if (back) back.textContent = '‹ Matches';
-                if (list) { var more = press(mk(doc, 'button', 'btn sm', 'Open another file'), pick); more.id = 'own-more'; list.appendChild(more); }
+                if (hold) { var more = press(mk(doc, 'button', 'btn sm', 'Open another file'), pick); more.id = 'own-more'; hold.appendChild(more); }
             },
             // The card of a kind that a file of your own has its own words for ('older', 'newer', 'nomap': the site has no such map, 'changed': it has another file of that name, 'again': no record, 'cant':
             // the rest), or null. ctx: made (what made the file, "v0.11.0"), version (this page's), map (the name of the map), why (a reason, as text). { title, body (nodes), buttons (nodes) }

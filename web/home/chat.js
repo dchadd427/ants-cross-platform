@@ -22,7 +22,7 @@
     var PATH = '/hub/ws', VERSION = 1;
     var LOGIN = '/hub/login?next=', LOGOUT = '/hub/logout', FORGET = '/hub/forget';      // the hub's pages (nginx passes them; the cookie goes along with a request of this page only)
     var LIMIT = { name: 32, line: 200, feed: 100, history: 50, frame: 120000, bad: 30, field: 400, count: 1e9, here: 500, said: 2 };       // (the hub's own: names 32, lines 200 code points, history 50; the rest is this page's)
-    var UPRIGHT = '(max-width: 700px) and (min-height: 501px)', ROW = 44, LINE = 22;       // (a phone held upright, as chat.css says it; the box's one row and the height of one more line of words: four lines at most)
+    var ROW = 44, LINE = 22;       // (the box's one row and the height of one more line of words: four lines at most; the style sheet's max-height keeps it lower in a wide or a low window)
     var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, pics: 8000, flood: 3000, pending: 8000 };       // (pending: the hub answers a line at once: one that has no answer after this long is not waited for)
     var BACKOFF = { min: 1000, max: 60000, low: 0.5, high: 1.5 };      // the wait is spread from half to one and a half times the step (never under a second or over a minute): many pages that lost one hub do not come back together
     var PACE = { burst: 2, every: 2500, same: 31000 };                  // this page's own limit, below the hub's (3 at once, one every 2 s, the same text twice within 30 s)
@@ -579,15 +579,13 @@
         doc.addEventListener('click', guard(function (e) { var t = e && e.target; if (menuOn && !(t && ((slot.contains && slot.contains(t)) || (chip && chip.contains && chip.contains(t))))) setMenu(false); }));       // (a press anywhere else puts it away)
         win.addEventListener('resize', guard(function () { if (menuOn) render(); }));
         doc.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Escape' && menuOn) { setMenu(false); if (chip && chip.focus) chip.focus(); } }));       // (Escape closes it, wherever the focus is, and the focus goes back to the chip)
-        // the field is a text area (a phone's box grows with the words) that behaves as the one-line field it replaced: Enter sends (a keyboard that makes a line break through beforeinput does too), a line break that is pasted becomes a space
-        function grow() {                                                       // a phone held upright: the height of the words, one line to four, then it scrolls; elsewhere the style sheet's own height
-            var s = field.style, tall = false;
-            try { tall = !!win.matchMedia && win.matchMedia(UPRIGHT).matches; } catch (x) { /* none */ }
-            if (!tall) { s.height = ''; return; }
+        // the field is a text area (the box grows with the words, in every window) that behaves as the one-line field it replaced: Enter sends (a keyboard that makes a line break through beforeinput does too), a line break that is pasted becomes a space
+        function grow() {                                                       // the height of the words, one line to four, then it scrolls (talk.css has a lower max-height for a wide window and for a low one)
+            var s = field.style;
             if (field.scrollHeight === 0) return;                                 // (the Chat view is not shown: it is measured when the view comes, paint() asks again)
-            var was = atBottom(), at = field.selectionStart;                       // (a log that is read at its end stays at its end while the box grows and shrinks)
-            s.height = 'auto'; s.height = Math.max(ROW, Math.min(ROW + 3 * LINE, field.scrollHeight)) + 'px';
-            if (was) log.scrollTop = log.scrollHeight;
+            var was = atBottom(), at = field.selectionStart, before = s.height, to;       // (a log that is read at its end stays at its end while the box grows and shrinks)
+            s.height = 'auto'; to = Math.max(ROW, Math.min(ROW + 3 * LINE, field.scrollHeight)) + 'px'; s.height = to;
+            if (was && to !== before) log.scrollTop = log.scrollHeight;
             if (typeof at !== 'number' || at >= field.value.length) field.scrollTop = field.scrollHeight;
         }
         function post() { if (sendLine(field.value) === '') { field.value = ''; grow(); } }

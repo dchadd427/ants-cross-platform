@@ -15,3 +15,9 @@ REFERENCE = re.compile(r"[0-9a-f]{%d}\Z" % LENGTH)
 def reference(secret, account):
     """The reference of `account` (a Discord id as text) under `secret` (bytes): 16 lower-case hex characters."""
     return hmac.new(secret, account.encode("utf-8"), hashlib.sha256).hexdigest()[:LENGTH]
+
+
+def keyed(secret, kind, text):
+    """A keyed mark of `text` (a picture's short code, say) for the use `kind`: 16 lower-case hex characters that only say whether two texts are the same. It is made under the same secret as a
+    reference, with the use in front (so it is never a reference and two uses never agree), and it is kept in memory only, never written down and never sent."""
+    return hmac.new(secret, (kind + "\x00" + text).encode("utf-8"), hashlib.sha256).hexdigest()[:LENGTH]

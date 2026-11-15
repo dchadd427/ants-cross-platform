@@ -81,6 +81,10 @@ class StoreBase:
         """Mark a line deleted and give the deletion the next number of the counter; False when there is no such line or it was deleted already. `note` (see check_note) goes into the moderators' log in the same step, and only when a line was deleted."""
         raise NotImplementedError
 
+    def delete_lines_since(self, account, since, by, note=None):
+        """Mark deleted every line of `account` that is not deleted and was written at or after `since` (seconds since 1970), each with the next number of the counter (as delete_line does), in one step; returns how many. `note` (see check_note) goes into the moderators' log in the same step, and only when a line was deleted."""
+        raise NotImplementedError
+
     def deletions_since(self, seq):
         """[(number, line id)] of the deletions after `seq`, in order."""
         raise NotImplementedError
@@ -135,6 +139,10 @@ class StoreBase:
 
     def has_picture(self, account):
         """Whether a picture is kept for the account now."""
+        raise NotImplementedError
+
+    def has_login(self, account):
+        """Whether the account has a login that has not run out (no login, no picture: hub/pictures.py looks at Discord only for such an account)."""
         raise NotImplementedError
 
     def picture(self, name):

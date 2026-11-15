@@ -147,8 +147,8 @@
   {
    "id": "fetch_trouble_fails_the_login",
    "file": "hub/pictures.py",
-   "old": "        except Exception as e:                                # (a bug or a refusing database costs one picture, never the login)\n            self.log.event(\"picture\", kind=\"bug\", error=type(e).__name__)\n\n    def drop",
-   "new": "        except ZeroDivisionError as e:\n            self.log.event(\"picture\", kind=\"bug\", error=type(e).__name__)\n\n    def drop",
+   "old": "        except Exception as e:                                # (a bug or a refusing database costs one picture, never the login)\n            self.log.event(\"picture\", kind=\"bug\", error=type(e).__name__)\n\n    def enqueue",
+   "new": "        except ZeroDivisionError as e:\n            self.log.event(\"picture\", kind=\"bug\", error=type(e).__name__)\n\n    def enqueue",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheStoreAndTheHub"
   },
   {
@@ -175,8 +175,8 @@
   {
    "id": "a_404_keeps_the_old_copy",
    "file": "hub/pictures.py",
-   "old": "        if status == 404:\n            self.store.clear_picture(account)\n",
-   "new": "        if status == 404:\n",
+   "old": "        if status == 404:\n            self.codes.pop(key, None)\n            self.store.clear_picture(account)\n",
+   "new": "        if status == 404:\n            self.codes.pop(key, None)\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheLoginWithAPicture"
   },
   {
@@ -217,15 +217,15 @@
   {
    "id": "switched_off_or_blocked_is_fetched",
    "file": "hub/pictures.py",
-   "old": "            if self.store.picture_state(account, touch=True) != SHOW_ON:\n                return",
-   "new": "            self.store.picture_state(account, touch=True)",
+   "old": "        return self.store.picture_state(account) == SHOW_ON and not self.store.is_banned(account) and self.store.has_login(account)",
+   "new": "        return not self.store.is_banned(account) and self.store.has_login(account)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheEndOfAPicture"
   },
   {
    "id": "banned_is_fetched",
    "file": "hub/pictures.py",
-   "old": "            if self.store.is_banned(account):",
-   "new": "            if False:",
+   "old": "        return self.store.picture_state(account) == SHOW_ON and not self.store.is_banned(account) and self.store.has_login(account)",
+   "new": "        return self.store.picture_state(account) == SHOW_ON and self.store.has_login(account)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheEndOfAPicture"
   },
   {
@@ -266,8 +266,8 @@
   {
    "id": "error_of_the_fetch_in_the_log",
    "file": "hub/pictures.py",
-   "old": "        except discordmod.DiscordError as e:\n            return self.log.event(\"picture\", kind=\"big\" if e.kind == \"big\" else \"down\")",
-   "new": "        except discordmod.DiscordError as e:\n            return self.log.event(\"picture\", kind=\"big\" if e.kind == \"big\" else \"down\", status=account)",
+   "old": "        except discordmod.DiscordError as e:\n            if e.kind == \"big\":\n                self.give_up(key, avatar)\n            return self.log.event(\"picture\", kind=\"big\" if e.kind == \"big\" else \"down\")",
+   "new": "        except discordmod.DiscordError as e:\n            if e.kind == \"big\":\n                self.give_up(key, avatar)\n            return self.log.event(\"picture\", kind=\"big\" if e.kind == \"big\" else \"down\", status=account)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheLog"
   },
   {
@@ -539,8 +539,8 @@
   {
    "id": "one_account_may_have_two_fetches_at_a_time",
    "file": "hub/pictures.py",
-   "old": "            if key in self.queued or len(self.waiting) >= self.limits.picture_waiting:",
-   "new": "            if len(self.waiting) >= self.limits.picture_waiting:",
+   "old": "        if key in self.queued or len(self.waiting) >= self.limits.picture_waiting:",
+   "new": "        if len(self.waiting) >= self.limits.picture_waiting:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheLoginWithAPicture"
   },
   {
@@ -784,8 +784,8 @@
   {
    "id": "a_login_during_the_stop_is_fetched",
    "file": "hub/pictures.py",
-   "old": "            if self.stopping:\n                return\n",
-   "new": "",
+   "old": "            if self.stopping:\n                return\n            self.store.picture_state(account, touch=True)",
+   "new": "            self.store.picture_state(account, touch=True)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheStop"
   },
   {
@@ -1065,8 +1065,8 @@
   {
    "id": "a_switch_whose_look_fails_is_still_answered_with_a_you",
    "file": "hub/chat.py",
-   "old": "        except StoreError as e:\n            return self.trouble(peer, e, PICS_REFUSED)\n        if state == before:",
-   "new": "        except StoreError as e:\n            self.trouble(peer, e, PICS_REFUSED)\n        if state == before:",
+   "old": "        except StoreError as e:\n            return self.trouble(peer, e, PICS_REFUSED)\n        if on and state == SHOW_ON",
+   "new": "        except StoreError as e:\n            self.trouble(peer, e, PICS_REFUSED)\n        if on and state == SHOW_ON",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheStoreRefusing"
   },
   {

@@ -2,7 +2,9 @@
 // JSON. Used by tests/scripts/test_web_site_nav.py (the Menu's last line, the links, the pages' footers). Usage: node web_site_nav_menu_check.js MANIFEST.json, where the manifest is
 // [{"name": ..., "path": ..., "live": ...}, ...] (the page files, stamped or not, as the test made them; "live" is what a fake /live does: {"count": N}, "fail" (the request is rejected), "status" (a 500),
 // "never" (it does not answer), "notlist" (an answer that is not a list) or absent (an empty list)); the answer is {name: {footers, versionIds, items: [{tag, cls, text, href}], hrefs, fetched, hidden, mark}},
-// where mark is the bar's live mark after the answer: {there, hidden, text, label, href}.
+// where mark is the bar's live mark after the answer: {there, hidden, text, label, title, href}. Two more keys of a manifest entry: "click": false (the Menu is not opened), and "later": what the fake /live does
+// from the moment the tab comes back to the front (a "visibilitychange" with the state "visible"; "hidden" first: "back": ["hidden", "visible"] lists the states that are fired, in order); the answer then has
+// "after" (the mark once those events are handled) and "fetched" holds every address asked, in order.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -76,16 +78,18 @@ function parse(html) {
     return root;
 }
 
-async function run(file, live) {
+async function run(file, live, extra) {
     const root = parse(fs.readFileSync(file, 'utf8')), body = root.querySelector('body') || root, fetched = [];
     const listeners = {};
     const document = {
-        body, location: { pathname: '/page' }, createElement: (t) => new El(t),
+        visibilityState: 'visible', body, location: { pathname: '/page' }, createElement: (t) => new El(t),
         querySelector: (s) => root.querySelector(s), addEventListener: (t, f) => { (listeners[t] = listeners[t] || []).push(f); },
     };
     const window = { innerHeight: 800, addEventListener() {} };
+    let mode = live;
     const fetchFake = (url) => {
         fetched.push(url);
+        const live = mode;
         if (live === 'fail') return Promise.reject(new Error('offline'));
         if (live === 'never') return new Promise(() => {});
         if (live === 'status') return Promise.resolve({ ok: false, json: () => ({ live: [{}] }) });
@@ -95,17 +99,29 @@ async function run(file, live) {
     };
     new Function('document', 'window', 'fetch', SOURCE)(document, window, fetchFake);
     const button = root.querySelector('.sb .sbtn');
-    (button.listeners.click || []).forEach((f) => f({ target: button }));
-    for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));          // (the answer of the fake /live, and what the bar does with it)
+    if (!extra || extra.click !== false) (button.listeners.click || []).forEach((f) => f({ target: button }));
+    const settle = async () => { for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve)); };          // (the answer of the fake /live, and what the bar does with it)
+    await settle();
+    const markOf = () => { const t = root.querySelector('.sb .sblive'); return { there: !!t, hidden: t ? t.hidden : null, text: t ? t.textContent : null, label: t ? t.getAttribute('aria-label') : null, title: t ? t.getAttribute('title') : null, href: t ? t.getAttribute('href') : null }; };
+    let after = null, first = markOf();
+    if (extra && extra.later !== undefined) {
+        mode = extra.later;
+        for (const state of extra.back || ['hidden', 'visible']) {
+            document.visibilityState = state;
+            (listeners.visibilitychange || []).forEach((f) => f({}));
+            await settle();
+        }
+        after = markOf();
+    }
     const box = body.children.filter((c) => c.id === 'sbm')[0], top = root.querySelector('.sb .sblive');
     const items = box ? box.children.map((c) => ({ tag: c.tagName, cls: c.className, text: c.textContent, href: c.getAttribute('href'), links: c.querySelectorAll('a').map((a) => a.getAttribute('href')) })) : [];
     const hrefs = box ? box.querySelectorAll('a').map((a) => a.getAttribute('href')) : [];
     return { footers: root.querySelectorAll('footer').length, versionIds: ['game-version-line', 'game-version', 'game-build', 'game-build-id', 'game-build-date'].filter((i) => root.querySelector('#' + i)), items, hrefs, fetched, hidden: box ? box.hidden : null,
-             mark: { there: !!top, hidden: top ? top.hidden : null, text: top ? top.textContent : null, label: top ? top.getAttribute('aria-label') : null, href: top ? top.getAttribute('href') : null } };
+             mark: first, after };
 }
 
 (async () => {
     const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')), out = {};
-    for (const page of manifest) out[page.name] = await run(page.path, page.live);
+    for (const page of manifest) out[page.name] = await run(page.path, page.live, page);
     process.stdout.write(JSON.stringify(out));
 })();

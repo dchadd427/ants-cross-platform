@@ -105,9 +105,9 @@ const M = 'TREASURE.LVL';
 }
 {   // nothing in progress; nothing open
     const env = await livePage({ rows: [], lobbies: [row('k7m2xq', 'Pebble')] });
-    check('nothing in progress: the box says so, with the heading "1 open, 0 in progress"', boxOf(env).hidden === false && first(boxOf(env), 'gnolive').hidden === false && first(boxOf(env), 'gnolive').textContent === 'No games in progress.' && headOf(env) === '1 open, 0 in progress', headOf(env));
+    check('nothing in progress: no box at all (an empty box would grow the panel), and the heading is the plain one, "1 waiting · updates live"', boxOf(env).hidden === true && headOf(env) === '1 waiting \u00b7 updates live', headOf(env));
     const both = await livePage({ rows: [] });
-    check('nothing open and nothing in progress: the empty card of the open games, one line "none waiting", and the box says no games in progress', headOf(both) === 'none waiting' && first(popOf(both), 'gempty').hidden === false && first(boxOf(both), 'gnolive').hidden === false);
+    check('nothing open and nothing in progress: the empty card of the open games, one line "none waiting", and no box of matches', headOf(both) === 'none waiting' && first(popOf(both), 'gempty').hidden === false && boxOf(both).hidden === true);
     const only = await livePage({ lobbies: [] });
     check('nothing open, two in progress: no "No open games right now." card at all, the rows are the first thing under the heading; the head says "0 open, 2 in progress"', first(popOf(only), 'gempty').hidden === true && liveRows(only).length === 2 && headOf(only) === '0 open, 2 in progress', headOf(only));
     const openOnes = await livePage({ lobbies: [row('k7m2xq', 'Pebble')] });

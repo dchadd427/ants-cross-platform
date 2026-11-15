@@ -8,7 +8,7 @@ What this holds the bar to, without a browser (tests/scripts/web_site_nav_browse
     has none, and the other pages keep to it);
   - the byte budgets of the two files, and the pages that are meant to stay without the bar (the admin page);
   - the Menu run in node on the real markup of the pages (web/site_nav.js with a small fake of the DOM: tests/scripts/web_site_nav_menu_check.js): its last line is the stamped version and build as
-    text, a page that nobody stamped shows no line (never "@@GAME_VERSION@@"), every link that the old footers had is in it, and the pages with the bar have no footer (the front page and the game page keep theirs).
+    text, a page that nobody stamped shows no line (never "@@GAME_VERSION@@"), every link that the old footers had is in it, and the pages with the bar have no footer (the front page keeps its own; the game page, with the bar, has none and a hidden stamp).
 """
 import gzip
 import json
@@ -51,6 +51,7 @@ PAGES = {
     "changelog": (changelog_page(), None, "menu"),
     "mapmaker": (read("web", "mapmaker.html"), "/mapmaker", "menu"),
     "catalog": (read("asset_catalog", "index.html"), None, "menu"),
+    "game": (read("web", "shell.html"), None, "menu"),                                                        # (the game page: a bot game, a joined match, a recording, a live view; its tools and its stamp are tests/scripts/test_web_game.py's)
 }
 CSS = read("web", "site_nav.css")
 JS = read("web", "site_nav.js")
@@ -79,7 +80,7 @@ class ThePages(unittest.TestCase):
     def test_the_bar_has_the_phone_pieces_and_the_menu_button_is_named_and_controls_the_menu(self):
         for name, (page, marked, live) in PAGES.items():
             bar = bar_of(page).group(2)
-            self.assertIn('<a class="btn sbhome" href="/"><span class="sbchev" aria-hidden="true">&lsaquo;</span>Home</a>', bar, name)
+            self.assertRegex(bar, r'<a class="btn sbhome" href="/"[^>]*><span class="sbchev" aria-hidden="true">&lsaquo;</span>Home</a>', name)
             self.assertIn('<a class="btn sblive" href="/" hidden></a>', bar, name)                          # (the live mark: it goes to the front page, and is hidden until the count is known and above none)
             self.assertIn('<button class="btn sbtn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="sbm"><i class="sbbars"></i></button>', bar, name)
             self.assertEqual(bar.count("sblive"), 1, name)                                                    # (one mark: not a second one in the row)
@@ -101,7 +102,7 @@ class ThePages(unittest.TestCase):
 
     def test_the_title_and_its_line_are_one_block_under_the_bar_with_the_only_h1(self):
         for name, (page, marked, live) in PAGES.items():
-            if name in ("mapmaker", "catalog"):
+            if name in ("mapmaker", "catalog", "game"):
                 continue                                                                                      # (the editor and the catalog keep their own title rows)
             self.assertEqual(len(re.findall(r"<h1[ >]", page)), 1, name)
             self.assertRegex(page, r'</header>\n(    )?<div class="pt">(<a class="crumb"[^>]*>[^<]*</a>)?<h1>[^<]+</h1><p>[^<]+</p></div>', name)
@@ -190,6 +191,7 @@ class TheFiles(unittest.TestCase):
         self.assertIn(".sb .btn { min-height: 44px;", CSS)                                                      # (a 44 px target)
         self.assertIn("@media (forced-colors: active)", CSS)
         self.assertIn("outline: 3px solid Highlight", CSS)
+        self.assertIn(".sb .sblive::before { background: ButtonText; box-shadow: none; }", CSS[CSS.index("@media (forced-colors: active)"):])      # (the mark's dot: the page's colors are not used there, so it takes the button's text color and stays seen)
         self.assertNotIn("transition", CSS)                                                                     # (no motion)
         self.assertNotIn("animation", CSS)
         self.assertIn(".sb nav [aria-current]", CSS)
@@ -214,7 +216,7 @@ class TheFiles(unittest.TestCase):
 
 STAMPS = {"@@GAME_VERSION@@": "v9.8.7", "@@BUILD_ID@@": "abc1234", "@@BUILD_DATE@@": "2026-01-02 09:30 PT"}
 LINKS_OF_THE_OLD_FOOTERS = ["/", "/matches", "/asset_catalog/", "/changelog", "https://github.com/dchadd427/ants-cross-platform", "https://github.com/dchadd427/ants-cross-platform/issues", "/legal"]
-BAR_PAGES = ("matches", "match", "legal", "mapmaker")
+BAR_PAGES = ("matches", "match", "legal", "mapmaker", "shell")             # (shell: the game page)
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the Menu is not run here")
@@ -313,12 +315,12 @@ class TheMenusLastLine(unittest.TestCase):
     def test_the_pages_with_the_bar_have_no_footer_and_none_of_the_footers_version_markup(self):
         for name, result in sorted(self.found.items()):
             self.assertEqual(result["footers"], 0, name)
-            self.assertEqual(result["versionIds"], [], name)
+            if not name.startswith("shell"):
+                self.assertEqual(result["versionIds"], [], name)                                              # (the game page keeps the hidden stamp that the image build reads)
 
-    def test_the_front_page_and_the_game_page_keep_their_footers_with_the_version_line(self):
-        for name in ("lobby.html", "shell.html"):
-            page = read("web", name)
-            self.assertEqual(len(re.findall(r"<footer\b", page)), 1, name)
+    def test_the_front_page_keeps_its_footer_with_the_version_line_and_the_game_page_has_none(self):
+        self.assertEqual(len(re.findall(r"<footer\b", read("web", "lobby.html"))), 1)
+        self.assertEqual(len(re.findall(r"<footer\b", read("web", "shell.html"))), 0)
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the live mark is not run here")
@@ -326,8 +328,12 @@ class TheLiveMark(unittest.TestCase):
     """The small red mark of the bar (docs/SITE_NAV.md "The live mark"), run with the real web/site_nav.js on the real markup of the pages, against a fake /live: shown only while at least one match
     runs, named for a screen reader, linked to the front page; not there for none, for an answer that is no list, a failure, an error status or an answer that never comes."""
 
-    PAGE_NAMES = ("matches", "legal", "mapmaker", "changelog", "catalog")        # (data-live "now" on the first, "menu" on the others: both ask for the count)
-    CASES = [("one", {"count": 1}), ("twelve", {"count": 12}), ("none", None), ("fail", "fail"), ("status", "status"), ("never", "never"), ("notlist", "notlist")]
+    PAGE_NAMES = ("matches", "legal", "mapmaker", "changelog", "catalog", "game")        # (data-live "now" on the first, "menu" on the others: both ask for the count)
+    CASES = [("one", {"count": 1}), ("twelve", {"count": 12}), ("none", None), ("fail", "fail"), ("status", "status"), ("never", "never"), ("notlist", "notlist"), ("many", {"count": 120})]
+    # the tab comes back to the front: (case, the first answer, the answer from then on, the states fired, whether the Menu is opened)
+    AGAIN = [("more", {"count": 1}, {"count": 4}, None, True), ("ended", {"count": 3}, None, None, True), ("appears", None, {"count": 2}, None, True), ("fails", {"count": 3}, "fail", None, True),
+             ("errors", {"count": 3}, "status", None, True), ("not_list", {"count": 3}, "notlist", None, True), ("hidden_only", {"count": 2}, {"count": 5}, ["hidden"], True),
+             ("twice", {"count": 2}, {"count": 6}, ["hidden", "visible", "hidden", "visible"], True), ("unopened", {"count": 2}, {"count": 5}, None, False)]
 
     @classmethod
     def setUpClass(cls):
@@ -341,6 +347,11 @@ class TheLiveMark(unittest.TestCase):
                 f.write(page)
             for case, behavior in cls.CASES:
                 manifest.append({"name": "%s:%s" % (name, case), "path": path, "live": behavior})
+            for case, first, later, states, click in cls.AGAIN:
+                entry = {"name": "%s:again_%s" % (name, case), "path": path, "live": first, "later": later, "click": click}
+                if states:
+                    entry["back"] = states
+                manifest.append(entry)
         with open(os.path.join(cls.tmp, "manifest.json"), "w", encoding="utf-8") as f:
             json.dump(manifest, f)
         done = subprocess.run(["node", os.path.join(REPO, "tests", "scripts", "web_site_nav_menu_check.js"), os.path.join(cls.tmp, "manifest.json")], capture_output=True, text=True, timeout=120)
@@ -360,14 +371,52 @@ class TheLiveMark(unittest.TestCase):
             mark = self.mark(page, "one")
             self.assertEqual((mark["there"], mark["hidden"]), (True, False), page)
             self.assertEqual(mark["text"], "1 live", page)
-            self.assertEqual(mark["label"], "1 match live, see them on the front page", page)
+            self.assertEqual(mark["label"], "1 live: see them on the front page", page)           # (the name starts with the words on the button)
+            self.assertEqual(mark["title"], "1 match is being played - see them on the front page", page)
             self.assertEqual(mark["href"], "/", page)
 
     def test_with_twelve_matches_the_mark_says_12_live_and_names_the_count(self):
         for page in self.PAGE_NAMES:
             mark = self.mark(page, "twelve")
             self.assertEqual((mark["hidden"], mark["text"], mark["href"]), (False, "12 live", "/"), page)
-            self.assertEqual(mark["label"], "12 matches live, see them on the front page", page)
+            self.assertEqual(mark["label"], "12 live: see them on the front page", page)
+            self.assertEqual(mark["title"], "12 matches are being played - see them on the front page", page)
+
+    def test_the_count_stops_at_99(self):
+        for page in self.PAGE_NAMES:
+            mark = self.mark(page, "many")
+            self.assertEqual((mark["hidden"], mark["text"], mark["label"]), (False, "99 live", "99 live: see them on the front page"), page)
+
+    def after(self, page, case):
+        return self.found["%s:again_%s" % (page, case)]
+
+    def test_when_the_tab_comes_back_the_count_is_asked_again_and_the_mark_follows_it(self):
+        for page in self.PAGE_NAMES:
+            more = self.after(page, "more")
+            self.assertEqual((more["mark"]["text"], more["after"]["text"], more["after"]["hidden"]), ("1 live", "4 live", False), page)
+            self.assertEqual(more["after"]["label"], "4 live: see them on the front page", page)
+            self.assertEqual(more["fetched"], ["/live", "/live"], page)
+            self.assertEqual(self.after(page, "twice")["after"]["text"], "6 live", page)
+            self.assertEqual(self.after(page, "twice")["fetched"], ["/live"] * 3, page)             # (once for the opening, once for each return)
+
+    def test_when_the_matches_have_ended_the_mark_goes_and_when_one_starts_it_comes(self):
+        for page in self.PAGE_NAMES:
+            self.assertEqual((self.after(page, "ended")["mark"]["hidden"], self.after(page, "ended")["after"]["hidden"]), (False, True), page)
+            self.assertEqual((self.after(page, "appears")["mark"]["hidden"], self.after(page, "appears")["after"]["hidden"], self.after(page, "appears")["after"]["text"]), (True, False, "2 live"), page)
+
+    def test_when_the_count_cannot_be_read_on_return_the_mark_goes(self):
+        for case in ("fails", "errors", "not_list"):
+            for page in self.PAGE_NAMES:
+                self.assertEqual((self.after(page, case)["mark"]["hidden"], self.after(page, case)["after"]["hidden"]), (False, True), "%s %s" % (page, case))
+
+    def test_a_tab_that_goes_to_the_back_does_not_ask_and_a_page_that_never_asked_does_not_either(self):
+        for page in self.PAGE_NAMES:
+            hidden = self.after(page, "hidden_only")
+            self.assertEqual((hidden["fetched"], hidden["after"]["text"]), (["/live"], "2 live"), page)
+        for page in self.PAGE_NAMES:
+            if page != "matches":                                                                    # (the Menu is not opened: a page that waits for it has not asked, and does not on a return)
+                unopened = self.after(page, "unopened")
+                self.assertEqual((unopened["fetched"], unopened["after"]["hidden"]), ([], True), page)
 
     def test_with_no_match_the_mark_is_not_shown(self):
         for page in self.PAGE_NAMES:
@@ -388,11 +437,10 @@ class TheLiveMark(unittest.TestCase):
             self.assertNotIn("/live-now", result["hrefs"], page)
             self.assertEqual([i["cls"] for i in result["items"] if "12" in i["text"]], [], page)
 
-    def test_the_front_page_has_no_mark_and_no_bar_script_and_the_game_page_neither(self):
-        for name in ("lobby.html", "shell.html"):
-            page = read("web", name)
-            self.assertNotIn("sblive", page, name)
-            self.assertNotIn("site_nav.js", page, name)
+    def test_the_front_page_has_no_mark_and_no_bar_script(self):
+        page = read("web", "lobby.html")
+        self.assertNotIn("sblive", page)
+        self.assertNotIn("site_nav.js", page)
 
 
 class TheOldPageIsNotLinked(unittest.TestCase):
