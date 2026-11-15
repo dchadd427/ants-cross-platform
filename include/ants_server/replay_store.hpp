@@ -121,6 +121,8 @@ public:
     uint64_t total_bytes() const noexcept { return total_; }
     /// A number that moves every time the index changes (a file kept, found, forgotten, deleted): a reader that works through the files, the match history's feeder, looks at it to know when to look again
     uint64_t revision() const noexcept { return revision_; }
+    /// The store's clock in seconds (the one that names its files)
+    int64_t clock_now() const { return now_s(); }
     /// Lines for the server's log, once each: what prepare() found, files that were purged, a file that was refused or could not be written. A repeat of the last line is counted, not repeated: the count
     /// comes as one line when another line follows, every kRepeatReportEveryS (update()) and when the server stops (report_repeats()).
     std::vector<std::string> take_notes();

@@ -993,8 +993,18 @@ bool HistoryFeeder::step(const std::function<bool()>& idle, uint32_t now_ms) {
     if (paced_ && !net::time_reached(now_ms, next_ms_)) return false;
     const bool backfill_due = !backfill_built_ || !backfill_.empty() || backfilled_ != reported_backfilled_;
     if (replays_.revision() == seen_revision_ && queue_.empty() && counted_ == reported_counted_ && skipped_.size() == reported_skipped_ && !backfill_due) return false;      // (nothing to do: the usual pass)
-    if (!idle()) return false;
-    if (replays_.revision() != seen_revision_) rebuild();
+    if (!idle()) {
+        // A match runs. A match that ended a few seconds ago is counted anyway (one pass, then the usual gap), when the server's gate allows: a server that is never quiet would hold it back for minutes.
+        if (!busy_gate_ || !busy_gate_()) return false;
+        if (replays_.revision() != seen_revision_) rebuild();
+        if (!history_.available() || queue_.empty()) return false;
+        const ReplayEntry* newest = replays_.find(queue_.back());
+        if (newest == nullptr) return false;
+        const int64_t age = replays_.clock_now() - newest->ended_s;
+        if (age < kBusyWaitS || age > kFreshS) return false;
+    } else if (replays_.revision() != seen_revision_) {
+        rebuild();
+    }
     if (!history_.available()) return false;
     if (queue_.empty()) {
         if (counted_ != reported_counted_ || skipped_.size() != reported_skipped_) {      // (the work of this run is done: one line says what came of it)

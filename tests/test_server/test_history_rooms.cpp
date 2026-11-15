@@ -216,6 +216,77 @@ int main() {
         } TEST_END();
     }
 
+
+    // A server that is never quiet: a match that ended is in the lists within seconds although another room still plays (docs/REPLAYS.md "The match history")
+    {
+        const auto ended = [](const Rooms& r, const char* code) { return r.status(code).state == RoomState::Finished || r.status(code).state == RoomState::Failed; };
+        // one second of the server's time, the clock of the replay store moving with it
+        const auto second = [](Rooms& r) {
+            r.run(1000);
+            ++r.clock;
+        };
+        TEST_CASE("HR2.1 A match that ends while another room still plays is in /replays at once and in /history within a few seconds, not when the other room is over") {
+            Rooms r;
+            ASSERT_TRUE(r.db_ok && r.open());
+            ASSERT_TRUE(r.mgr.create_room(bots_room("HIS-A", 0), r.now).ok);
+            ASSERT_TRUE(r.until([&] { return r.status("HIS-A").state == RoomState::Running; }, 12000));
+            r.run(10000);
+            RoomSpec other = bots_room("HIS-B", 0);
+            other.run_ms = 120u * 1000u;                                                                    // (it plays on for minutes after the first is over)
+            ASSERT_TRUE(r.mgr.create_room(other, r.now).ok);
+            ASSERT_TRUE(r.until([&] { return ended(r, "HIS-A"); }, 90000));
+            ASSERT_TRUE(r.status("HIS-A").replay_kept);
+            const std::string file = r.status("HIS-A").replay_file;
+            ASSERT_TRUE(r.status("HIS-B").state == RoomState::Running);
+            ASSERT_TRUE(contains(r.call("GET", "/replays", "", true).body, file));                          // (the file is kept and listed as the match ends)
+            ASSERT_EQ(r.mgr.history_store()->count(), size_t{0});
+            uint32_t seconds = 0;
+            while (seconds < 10 && r.mgr.history_store()->count() == 0) {
+                second(r);
+                ++seconds;
+            }
+            ASSERT_TRUE(r.mgr.history_store()->count() == 1 && seconds <= 6);                               // (3 s of waiting for a quiet moment, then one pass)
+            ASSERT_TRUE(r.status("HIS-B").state == RoomState::Running);                                     // (the other room still plays)
+            ASSERT_TRUE(contains(r.call("GET", "/history", "", true).body, stem_of(file)));
+        } TEST_END();
+
+        TEST_CASE("HR2.2 The wait for a quiet moment ends only for a match that ended a few minutes ago at most: an older file (the backlog of a start) is counted when no room plays, as before") {
+            Rooms r;
+            ASSERT_TRUE(r.db_ok && r.open());
+            ASSERT_TRUE(r.mgr.create_room(bots_room("HIS-A", 0), r.now).ok);
+            ASSERT_TRUE(r.until([&] { return r.status("HIS-A").state == RoomState::Running; }, 12000));
+            r.run(10000);
+            RoomSpec other = bots_room("HIS-B", 0);
+            other.run_ms = 120u * 1000u;
+            ASSERT_TRUE(r.mgr.create_room(other, r.now).ok);
+            ASSERT_TRUE(r.until([&] { return ended(r, "HIS-A"); }, 90000));
+            r.clock += HistoryFeeder::kFreshS + 60;                                                         // (the file is now older than the busy rule reaches)
+            for (int i = 0; i < 10; ++i) second(r);
+            ASSERT_TRUE(r.status("HIS-B").state == RoomState::Running && r.mgr.history_store()->count() == 0);
+            ASSERT_TRUE(r.until([&] { return ended(r, "HIS-B"); }, 150000));
+            ASSERT_TRUE(r.until([&] { return r.mgr.history_store()->count() == 2; }, 8000));                // (both are counted once nothing plays)
+        } TEST_END();
+
+        TEST_CASE("HR2.3 A match that ended seconds ago is not counted before the short wait for a quiet moment is over") {
+            Rooms r;
+            ASSERT_TRUE(r.db_ok && r.open());
+            ASSERT_TRUE(r.mgr.create_room(bots_room("HIS-A", 0), r.now).ok);
+            ASSERT_TRUE(r.until([&] { return r.status("HIS-A").state == RoomState::Running; }, 12000));
+            r.run(10000);
+            RoomSpec other = bots_room("HIS-B", 0);
+            other.run_ms = 120u * 1000u;
+            ASSERT_TRUE(r.mgr.create_room(other, r.now).ok);
+            ASSERT_TRUE(r.until([&] { return ended(r, "HIS-A"); }, 90000));
+            ASSERT_TRUE(r.status("HIS-B").state == RoomState::Running);
+            second(r);
+            second(r);
+            ASSERT_EQ(r.mgr.history_store()->count(), size_t{0});                                           // (two seconds after the end: still waiting)
+            for (int i = 0; i < 4; ++i) second(r);
+            ASSERT_EQ(r.mgr.history_store()->count(), size_t{1});                                           // (the wait is over, the other room still plays)
+            ASSERT_TRUE(r.status("HIS-B").state == RoomState::Running);
+        } TEST_END();
+    }
+
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";
     return g_test_failures == 0 ? 0 : 1;
 }

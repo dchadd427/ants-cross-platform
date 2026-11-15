@@ -738,6 +738,13 @@ bool RoomManager::enable_history(db::Database& database, std::string& why, Histo
             const ApprovedMap* map = store_.approved(name);
             return map != nullptr && OnlineLimits::allows(map->counts()) ? map->path : std::string();
         });
+        history_feeder_->set_busy_gate([this]() {                  // (a match that ended a few seconds ago is counted while others run: not while a room loads, not while rooms are brought back after a start)
+            if (!restoring_.empty()) return false;
+            for (const auto& kv : rooms_) {
+                if (kv.second->state() == RoomState::Loading) return false;
+            }
+            return true;
+        });
     }
     return true;
 }

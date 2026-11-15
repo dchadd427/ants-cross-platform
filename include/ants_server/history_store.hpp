@@ -206,6 +206,8 @@ public:
     static constexpr uint32_t kPaceFactor = 4;        // ... and at least this many times the time that the last one took (a long match is paid for with a longer gap: the main thread is mostly free)
     static constexpr size_t kMaxSkipLines = 10;       // the lines about files that were left out, one each; the rest are counted in the summary
     static constexpr uint32_t kPruneEveryMs = 3600u * 1000u;
+    static constexpr int64_t kBusyWaitS = 3;          // a match that just ended waits this long for a quiet moment (no room runs a match); then it is counted even while one runs, if the busy gate allows
+    static constexpr int64_t kFreshS = 300;           // ... and only for the first five minutes after it ended: an older file (a backlog after a start) waits for a quiet server as ever
 
     /// `maps_dir` is the folder that replay::load_map looks for the match's map in, then `community_dir` (the players' maps: a match on one of them is counted too; empty: none). The three objects must outlive
     /// the feeder. `clock_us` is a steady clock in microseconds that times the work of a pass (empty: std::chrono::steady_clock; the tests inject one).
@@ -228,6 +230,12 @@ public:
     /// One piece of work: at most one file. `idle` is asked only when a file is due (a quiet server: no room runs a match). True when a file was played (counted or left out).
     bool step(const std::function<bool()>& idle, uint32_t now_ms);
 
+    /// Asked when a match that ended a few seconds ago (kBusyWaitS to kFreshS) is due and `idle` says a match runs: true lets that one file be counted now (one pass, 0.4 - 0.5 s for a match of ten
+    /// minutes, then the usual gap), so that a finished match is in the history within seconds on a server that is never quiet. The server says false while a room loads or a restart brings rooms back.
+    /// Unset: a file is counted only when `idle` says so.
+    using BusyGate = std::function<bool()>;
+    void set_busy_gate(BusyGate gate) { busy_gate_ = std::move(gate); }
+
     size_t pending() const noexcept { return queue_.size() + backfill_.size(); }
     size_t counted() const noexcept { return counted_; }
     size_t left_out() const noexcept { return skipped_.size(); }
@@ -244,6 +252,7 @@ private:
     bool load_level(const replay::Header& head, assets::LevelData& level, std::string& why) const;
 
     ApprovedMapPath approved_path_;
+    BusyGate busy_gate_;
     HistoryStore& history_;
     const ReplayStore& replays_;
     std::vector<std::string> map_dirs_;               // the folders of the maps, asked in order
