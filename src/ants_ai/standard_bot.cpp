@@ -1,5 +1,6 @@
 #include "ants_ai/standard_bot.hpp"
 
+#include "ants_ai/reach_guard.hpp"
 #include "ants_ai/team_up.hpp"
 
 namespace ants::ai {
@@ -213,6 +214,14 @@ void StandardBot::think(const BotView& view, Orders& orders) {
         if (island_.take_reask()) harvest_.reask_soon();                                    // a bridge was finished: the economy asks the map again now
     }
     harvest_.step(context);
+    // (cg=0 is the bot as it was: no guard either. On a walled map (the gate play, the field breach) the tasks order ants to places behind the walls that they are about to open with fire and bombs:
+    // there the orders are theirs to judge, as before)
+    if (plan.reach_guard && plan.cantgo_aware && !tactics_.gate_map && !tactics_.field_map) {
+        for (const sim::Command& refused : ReachGuard::filter(view, seat_, orders)) {
+            on_command(refused, Fate::Filtered, now);                                       // the tasks are told, as for a click that the controller refuses
+            fight_.unreachable(refused);                                                    // and a fight that sent ants where no walk goes is over
+        }
+    }
 }
 
 // The gate play is on where the start analysis (GateInfo) finds every pile walled off from the seat's hill, also with the power-ups taken, and the island play (water, bridges, flights over channels)
