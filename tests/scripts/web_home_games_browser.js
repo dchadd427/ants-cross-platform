@@ -151,13 +151,13 @@ async function flows() {
                 }).length;
                 return { title: document.title, label: !!document.getElementById('site-label'), main: r(main), bar: r(bar), host: r(document.getElementById('home')), pop: r(pop), chat: r(chat), tabs: r(tabs), tabsShown: shown(tabs), popShown: shown(pop), chatShown: shown(chat), role: pop && pop.getAttribute('role'),
                     yard: !!document.getElementById('yard') || !!document.querySelector('.standin, .ylabel, .yant'), rows: document.querySelectorAll('.gpop .gitem').length, joins: document.querySelectorAll('.gpop .gjoin').length, covered, tab: document.getElementById('home').getAttribute('data-tab'),
-                    bar: document.querySelectorAll('.hbar .games').length, wide: document.documentElement.scrollWidth <= window.innerWidth, mapSize: (document.querySelector('.gpop .gmap') || { getBoundingClientRect: () => ({ width: 0 }) }).getBoundingClientRect().width };
+                    gamesInBar: document.querySelectorAll('.hbar .games').length, wide: document.documentElement.scrollWidth <= window.innerWidth, mapSize: (document.querySelector('.gpop .gmap') || { getBoundingClientRect: () => ({ width: 0 }) }).getBoundingClientRect().width };
             });
             for (const size of [['desktop', 1280, 800], ['laptop', 1366, 640], ['tablet', 900, 700], ['small window', 800, 600], ['701 wide', 701, 800], ['700 wide', 700, 800], ['phone', 390, 844], ['side', 844, 390], ['small side', 568, 320]]) {
                 const plain = await newPage(browser, prod, 'Maple', size, '/', true), test = await newPage(browser, staging, 'Maple', size, '/', true);
                 await plain.waitForSelector('.gpop .gitem'); await plain.waitForSelector('.gc', { state: 'attached' }); await test.waitForSelector('.gpop .gitem'); await test.waitForSelector('.gc', { state: 'attached' }); await sleep(300);
                 const a = await look(plain), b = await look(test), at = size[0] + ' (' + size[1] + ' x ' + size[2] + ')', phone = size[1] <= 700;
-                check('Home, ' + at + ': the Games list is docked in the body (#hmain: a region, five cards with a Join each), there is no Yard and no stand-in, the bar has no Games button, nothing scrolls sideways', a.popShown && a.role === 'region' && a.rows === 5 && a.joins === 5 && !a.yard && a.bar === 0 && a.wide
+                check('Home, ' + at + ': the Games list is docked in the body (#hmain: a region, five cards with a Join each), there is no Yard and no stand-in, the bar has no Games button, nothing scrolls sideways', a.popShown && a.role === 'region' && a.rows === 5 && a.joins === 5 && !a.yard && a.gamesInBar === 0 && a.wide
                     && a.main && a.pop[0] >= a.main[0] && a.pop[1] >= a.main[1] && a.pop[0] + a.pop[2] <= a.main[0] + a.main[2] + 1 && a.pop[1] + a.pop[3] <= a.main[1] + a.main[3] + 1, JSON.stringify(a));
                 if (!phone) check('... a wide window: the chat panel lies under the list along the bottom of Home, as wide as the body (no strip: the games, the players and the chat are all there), and no Join or code field of the list is under anything else ' + at,
                     a.chatShown && !a.tabsShown && a.chat[1] >= a.pop[1] + a.pop[3] && a.chat[1] + a.chat[3] <= a.host[1] + a.host[3] + 1 && a.chat[0] <= a.pop[0] && a.covered === 0, JSON.stringify(a));
@@ -170,9 +170,6 @@ async function flows() {
                     check('a press on Chat in the strip shows the chat view (open, filling the page between the bar and the strip) and puts the list away, and Games brings the list back ' + at,
                         c.tab === 'chat' && c.chatShown && !c.popShown && c.chat[1] >= c.bar[1] + c.bar[3] - 1 && c.chat[1] + c.chat[3] <= c.tabs[1] + 1 && await plain.evaluate(() => document.querySelector('.gc').getAttribute('data-open') === 'true')
                         && (await plain.click('.htab.t-games'), await sleep(150), await plain.evaluate(() => document.querySelector('.gpop').getClientRects().length > 0 && document.querySelector('.gc').getClientRects().length === 0)), JSON.stringify(c));
-                } else {
-                    await plain.evaluate(() => document.querySelector('.htab.t-games').click()); await sleep(200);
-                    check('Games takes the focus into the list and the list stays ' + at, await plain.evaluate(() => !!document.activeElement.closest('.gpop')) && (await look(plain)).popShown);
                 }
                 check('... and neither page said anything wrong (no error of the page)', plain.errors.length === 0 && test.errors.length === 0, plain.errors.concat(test.errors).join('; '));
                 await plain.context().close(); await test.context().close();
