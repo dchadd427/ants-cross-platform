@@ -80,8 +80,23 @@ function boxChecks() {
     // clicking inside .dlg does not close it; clicking the outer .scrim closes it
     p.host.querySelector('.dlg').fire('click', { target: p.host.querySelector('.dlg') });
     check(p.dialogs.isOpen(), 'clicking inside the dialog keeps it open');
-    p.host.querySelector('.scrim').fire('click', { target: p.host.querySelector('.scrim') });
-    check(!p.dialogs.isOpen(), 'clicking the outer scrim closes the dialog');
+    const scrim = () => p.host.querySelector('.scrim'), dlg = () => p.host.querySelector('.dlg');
+    const press = (from, to) => { scrim().fire('pointerdown', { target: from }); scrim().fire('pointerup', { target: to }); scrim().fire('click', { target: scrim() }); };
+    scrim().fire('click', { target: scrim() });
+    check(p.dialogs.isOpen(), 'a click with no press before it (a script) on the outer scrim does not close it');
+    press(dlg(), scrim());
+    check(p.dialogs.isOpen(), 'a drag from inside the dialog to the outer scrim does not close it');
+    press(scrim(), dlg());
+    check(p.dialogs.isOpen(), 'a drag from the outer scrim into the dialog does not close it');
+    scrim().fire('pointerdown', { target: scrim() }); scrim().fire('pointercancel', {}); scrim().fire('click', { target: scrim() });
+    check(p.dialogs.isOpen(), 'a scroll that the browser takes does not close it');
+    press(scrim(), scrim());
+    check(!p.dialogs.isOpen(), 'a press that starts and ends on the outer scrim closes the dialog (as Escape does)');
+    // a dialog with a choice: the press on the scrim picks none of them
+    const picks = [];
+    p.dialogs.open({ title: 'Choose', buttons: [{ text: 'First', onClick: () => picks.push('first') }, { text: 'Second', ghost: true, onClick: () => picks.push('second') }] });
+    press(scrim(), scrim());
+    check(!p.dialogs.isOpen() && picks.length === 0, 'a press on the scrim of a dialog with choices closes it and picks none of them');
 }
 
 function newMapChecks() {

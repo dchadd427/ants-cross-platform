@@ -325,6 +325,24 @@ function rig(options) {
         r.picker.open(''); await settle();
         r.btn('Close').dispatch('click');
         same('the Close button closes', r.overlay.hidden, true);
+        // a press on the dimmed page around the list is its close button (it starts AND ends there)
+        {
+            const chosenBefore = r.log.chosen.length;
+            const press = (from, to) => { r.overlay.dispatch('pointerdown', { target: from }); r.overlay.dispatch('pointerup', { target: to }); r.overlay.dispatch('click', { target: r.overlay }); };
+            r.picker.open(''); await settle();
+            press(r.host, r.host);
+            same('a press inside the list does not close it', r.overlay.hidden, false);
+            press(r.host, r.overlay);
+            same('a drag from inside the list to the dimmed page does not close it', r.overlay.hidden, false);
+            press(r.overlay, r.host);
+            same('a drag from the dimmed page into the list does not close it', r.overlay.hidden, false);
+            r.overlay.dispatch('pointerdown', { target: r.overlay }); r.overlay.dispatch('pointercancel', {}); r.overlay.dispatch('click', { target: r.overlay });
+            same('a scroll that the browser takes does not close it', r.overlay.hidden, false);
+            r.overlay.dispatch('click', { target: r.overlay });
+            same('a click with no press before it does not close it', r.overlay.hidden, false);
+            press(r.overlay, r.overlay);
+            same('a press that starts and ends on the dimmed page closes it as Close does and chooses no map', [r.overlay.hidden, r.picker.isOpen(), r.log.chosen.length === chosenBefore], [true, false, true]);
+        }
         // the Tab key stays in the dialog
         r.picker.open('TINY.LVL'); await settle();
         r.btn('Choose map').focus();

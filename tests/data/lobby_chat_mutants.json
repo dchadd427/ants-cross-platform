@@ -249,8 +249,8 @@
   {
    "id": "chat_field_not_emptied_after_a_line",
    "file": "web/front/lobby_chat.js",
-   "old": "                input.value = '';\n                setHint('');\n                lostText = null;",
-   "new": "                setHint('');\n                lostText = null;",
+   "old": "                input.value = '';\n                grow();\n                setHint('');\n                lostText = null;",
+   "new": "                grow();\n                setHint('');\n                lostText = null;",
    "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
   },
   {
@@ -655,8 +655,8 @@
   {
    "id": "chat_lost_text_not_put_back",
    "file": "web/front/lobby_chat.js",
-   "old": "if (input.value === '') { input.value = lostText; lostHint = TEXT.lostBack; }",
-   "new": "if (input.value === '') { lostHint = TEXT.lostBack; }",
+   "old": "if (input.value === '') { input.value = lostText; grow(); lostHint = TEXT.lostBack; }",
+   "new": "if (input.value === '') { grow(); lostHint = TEXT.lostBack; }",
    "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
   },
   {
@@ -690,7 +690,7 @@
   {
    "id": "chat_late_echo_keeps_the_text",
    "file": "web/front/lobby_chat.js",
-   "old": "                if (input.value === lostText) input.value = '';\n",
+   "old": "                if (input.value === lostText) { input.value = ''; grow(); }\n",
    "new": "",
    "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
   },
@@ -781,8 +781,8 @@
   {
    "id": "css_shut_field_is_not_dimmed",
    "file": "web/front/lobby_chat.css",
-   "old": ".chat-form input[readonly] { opacity: .6; }",
-   "new": ".chat-form input[readonly] { opacity: 1; }",
+   "old": ".chat-form .gc-input[readonly] { opacity: .6; }",
+   "new": ".chat-form .gc-input[readonly] { opacity: 1; }",
    "test": "python3 -m unittest tests.scripts.test_web_lobby_chat.ThePage tests.scripts.test_web_lobby_chat.TheStylesheet"
   },
   {
@@ -790,6 +790,90 @@
    "file": "web/front/lobby_chat.css",
    "old": ".chat-log > div { --accent: #79bf93; font-size: 16px; line-height: 1.35; color: var(--cream); overflow-wrap: anywhere; }",
    "new": ".chat-log > div { --accent: #79bf93; font-size: 16px; line-height: 1.35; color: var(--cream); }",
+   "test": "python3 -m unittest tests.scripts.test_web_lobby_chat.ThePage tests.scripts.test_web_lobby_chat.TheStylesheet"
+  },
+  {
+   "id": "chat_enter_does_not_send",
+   "file": "web/front/lobby_chat.js",
+   "old": "if (e && e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) {",
+   "new": "if (false) {",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_enter_in_a_composition_sends",
+   "file": "web/front/lobby_chat.js",
+   "old": "if (e && e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) {",
+   "new": "if (e && e.key === 'Enter') {",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_asks_for_emoji",
+   "file": "web/front/lobby_chat.js",
+   "old": "emoji: false, limit: MAX_LINE",
+   "new": "emoji: true, limit: MAX_LINE",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_voice_limit_is_the_hubs",
+   "file": "web/front/lobby_chat.js",
+   "old": "emoji: false, limit: MAX_LINE",
+   "new": "emoji: false, limit: 200",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_field_is_not_the_composers",
+   "file": "web/front/lobby_chat.js",
+   "old": "var input = el('textarea', 'gc-input');",
+   "new": "var input = el('textarea', 'chat-field');",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_pasted_breaks_stay",
+   "file": "web/front/lobby_chat.js",
+   "old": "input.value = input.value.replace(/[\\r\\n]+/g, ' ');",
+   "new": "input.value = input.value;",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "chat_linebreak_key_does_not_send",
+   "file": "web/front/lobby_chat.js",
+   "old": "e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph'",
+   "new": "e.inputType === 'insertParagraph'",
+   "test": "node tests/scripts/web_lobby_chat_check.js web/front/lobby_chat.js web/front/lobby_rules.js web/front/lobby_net.js"
+  },
+  {
+   "id": "page_footer_is_drawn_again",
+   "file": "web/lobby.html",
+   "old": "    .bar { display: none; margin: 18px 0 0;",
+   "new": "    .bar { margin: 18px 0 0;",
+   "test": "python3 -m unittest tests.scripts.test_web_lobby_chat.ThePage tests.scripts.test_web_lobby_chat.TheStylesheet"
+  },
+  {
+   "id": "page_room_notice_is_gone",
+   "file": "web/lobby.html",
+   "old": "<p class=\"room-notice\" id=\"room-notice\">",
+   "new": "<p class=\"room-notice\" id=\"room-notice\" hidden>",
+   "test": "python3 -m unittest tests.scripts.test_web_lobby_chat.ThePage tests.scripts.test_web_lobby_chat.TheStylesheet"
+  },
+  {
+   "id": "page_room_notice_is_hidden_by_style",
+   "file": "web/lobby.html",
+   "old": ".room-notice { margin: 0 0 18px;",
+   "new": ".room-notice { display: none; margin: 0 0 18px;",
+   "test": "python3 -m unittest tests.scripts.test_web_lobby_chat.ThePage tests.scripts.test_web_lobby_chat.TheStylesheet"
+  },
+  {
+   "id": "home_asks_for_talk_twice",
+   "file": "web/home/home.js",
+   "old": "if (win.AntsHomeTalk) { win.AntsHomeTalk.mount({ doc: doc, win: win, dock: dock }); return; }",
+   "new": "if (false) { return; }",
+   "test": "python3 -m unittest tests.scripts.test_web_lobby_chat.ThePage tests.scripts.test_web_lobby_chat.TheStylesheet"
+  },
+  {
+   "id": "talk_ignores_the_emoji_switch",
+   "file": "web/home/talk.js",
+   "old": "withEmoji = env.emoji !== false;",
+   "new": "withEmoji = true;",
    "test": "python3 -m unittest tests.scripts.test_web_lobby_chat.ThePage tests.scripts.test_web_lobby_chat.TheStylesheet"
   }
  ]

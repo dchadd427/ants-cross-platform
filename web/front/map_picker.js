@@ -190,6 +190,7 @@
             [head, bar, sorts, parts.out, parts.pane, parts.fine, foot].forEach(function (n) { host.appendChild(n); });
 
             parts.close.addEventListener('click', close);
+            onBackdrop(host.parentNode, close);       // (a press on the dimmed page around the list is its close button)
             parts.q.addEventListener('input', function () { unlater(typing); typing = later(function () { typing = 0; query = parts.q.value; paint('top'); }, 120); });       // (a search is made when the typing pauses)
             parts.q.addEventListener('keydown', function (e) { if (e.key === 'ArrowDown') { e.preventDefault(); flush(); focusItem(pickedIndex() >= 0 ? pickedIndex() : 0); } });
             parts.vD.addEventListener('click', function () { setView('detail'); });
@@ -421,6 +422,13 @@
             var coarse = false;
             try { coarse = !!(opts.matchMedia && opts.matchMedia('(pointer: coarse)').matches); } catch (e) { coarse = false; }
             (coarse ? host : parts.q).focus();
+        }
+        function onBackdrop(node, close) {         // a press that starts and ends on the backdrop itself closes the box as its Cancel does (a drag from inside the box, a text selection or a scroll does not)
+            var down = false, hit = false;
+            node.addEventListener('pointerdown', function (e) { down = e.target === node; hit = false; });
+            node.addEventListener('pointerup', function (e) { hit = down && e.target === node; down = false; });
+            node.addEventListener('pointercancel', function () { down = hit = false; });
+            node.addEventListener('click', function (e) { var h = hit; hit = false; if (h && e.target === node) close(); });
         }
         function close() {
             if (!opened) return;

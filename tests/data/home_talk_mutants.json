@@ -21,7 +21,7 @@
   {
    "id": "insert_ignores_the_limit",
    "file": "web/home/talk.js",
-   "old": "return points(next) > LIMIT ? null :",
+   "old": "return points(next) > (limit || LIMIT) ? null :",
    "new": "return false ? null :",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
@@ -42,7 +42,7 @@
   {
    "id": "said_text_is_not_cut",
    "file": "web/home/talk.js",
-   "old": "t = head(t, Math.max(0, LIMIT - points(before + after) - 2)).replace(/\\s+$/, '');",
+   "old": "t = head(t, Math.max(0, (limit || LIMIT) - points(before + after) - 2)).replace(/\\s+$/, '');",
    "new": "t = t;",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
@@ -133,8 +133,8 @@
   {
    "id": "interim_words_are_added_not_replaced",
    "file": "web/home/talk.js",
-   "old": "var r = speak(me.before, me.text, me.after);",
-   "new": "var r = speak(field.value, me.text, '');",
+   "old": "var r = speak(me.before, me.text, me.after, max);",
+   "new": "var r = speak(field.value, me.text, '', max);",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
   {
@@ -189,7 +189,7 @@
   {
    "id": "buttons_stay_with_a_field_that_is_off",
    "file": "web/home/talk.js",
-   "old": "tools.hidden = !!field.disabled;",
+   "old": "tools.hidden = off;",
    "new": "tools.hidden = false;",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
@@ -469,8 +469,8 @@
   {
    "id": "heard_words_do_not_grow_the_box",
    "file": "web/home/talk.js",
-   "old": "var r = speak(me.before, me.text, me.after); field.value = r.value; grown();",
-   "new": "var r = speak(me.before, me.text, me.after); field.value = r.value;",
+   "old": "var r = speak(me.before, me.text, me.after, max); field.value = r.value; grown();",
+   "new": "var r = speak(me.before, me.text, me.after, max); field.value = r.value;",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
   {
@@ -534,6 +534,27 @@
    "file": "web/home/talk.css",
    "old": "border: 2px solid var(--frame); border-radius: 8px; box-shadow: 0 0 0 2px var(--edge); }",
    "new": "border: 2px solid var(--frame); border-radius: 22px; box-shadow: 0 0 0 2px var(--edge); }",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "room_emoji_switch_ignored",
+   "file": "web/home/talk.js",
+   "old": "withEmoji = env.emoji !== false;",
+   "new": "withEmoji = true;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "room_limit_ignored",
+   "file": "web/home/talk.js",
+   "old": "var max = env.limit || LIMIT,",
+   "new": "var max = LIMIT,",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "room_off_hook_ignored",
+   "file": "web/home/talk.js",
+   "old": "var off = !!field.disabled || !!(dock.off && dock.off());",
+   "new": "var off = !!field.disabled;",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   }
  ]

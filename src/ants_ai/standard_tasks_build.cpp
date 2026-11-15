@@ -1044,6 +1044,11 @@ void MineTask::step(TaskContext& c) {
         for (const AntView& a : v.mine()) {
             if (a.type != sim::AntType::Bomber || a.hp < 5 || a.holding || a.carried_points > 0 || !a.takes_orders() || a.state == sim::UnitState::Stunned || jobs_.count(a.id) != 0) continue;
             if (targets[i].comp >= 0 && c.map.ant_component(c.seat, a.tile) != targets[i].comp) continue;      // (a mine on an island is laid by a Bomber that stands on it)
+            if (plan.island_mine_reach && targets[i].comp < 0) {                         // (plan.island_mine_reach: nor is a mine on another island's ground laid by a Bomber that cannot walk there)
+                const int32_t here = c.map.ant_component(c.seat, a.tile);
+                const int32_t there = c.map.component(c.seat, tile);
+                if (here >= 0 && there >= 0 && here != there) continue;
+            }
             const TaskId owner = c.ledger.owner(a.id);
             if (owner != kNoTask && owner != id() && c.ledger.rank(owner) > 1) continue;                  // (only an ant of the economy: the Bombers of the expedition, the power-up trips and the walls are theirs)
             const int32_t d = a.tile.chebyshev_dist(tile);

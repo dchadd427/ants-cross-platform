@@ -586,7 +586,7 @@ bool same_match(const ai::ArenaResult& a, const ai::ArenaResult& b) {
             x.banked != y.banked || x.raided != y.raided || x.kills != y.kills || x.losses != y.losses || x.stats.decisions != y.stats.decisions || x.stats.intents != y.stats.intents ||
             x.stats.released != y.stats.released || x.stats.expired != y.stats.expired || x.stats.pruned != y.stats.pruned || x.stats.superseded != y.stats.superseded ||
             x.stats.filtered != y.stats.filtered || x.stats.rejected != y.stats.rejected || x.stalls != y.stalls || x.cantgo != y.cantgo || x.cantgo_began != y.cantgo_began ||
-            x.orders != y.orders || x.attack_orders != y.attack_orders || x.bombs_planted != y.bombs_planted || x.fires_lit != y.fires_lit || x.war_ticks != y.war_ticks || x.fire_hunts != y.fire_hunts || x.mines_planted != y.mines_planted || x.ramp_unjams != y.ramp_unjams || x.rushes != y.rushes || x.rush_ticks != y.rush_ticks || x.rush_attacks != y.rush_attacks || x.refused_orders != y.refused_orders || x.took != y.took || x.took_at_flowers != y.took_at_flowers || !(x.expedition == y.expedition)) {
+            x.orders != y.orders || x.attack_orders != y.attack_orders || x.bombs_planted != y.bombs_planted || x.fires_lit != y.fires_lit || x.war_ticks != y.war_ticks || x.fire_hunts != y.fire_hunts || x.mines_planted != y.mines_planted || x.ramp_unjams != y.ramp_unjams || x.rushes != y.rushes || x.rush_ticks != y.rush_ticks || x.rush_attacks != y.rush_attacks || x.refused_orders != y.refused_orders || x.took != y.took || x.took_at_flowers != y.took_at_flowers || !(x.expedition == y.expedition) || !(x.miner_flight == y.miner_flight)) {
             return false;
         }
     }
@@ -846,7 +846,7 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
     JsonWriter j(&out);
     j.begin_object();
     j.field("tool", "bot_arena");
-    j.field("format", uint64_t{5});                                   // 2: banked and raided replace the engine's food_deposited, food_stolen and food_lost (never fed, always 0); 3: the can't-go counts per seat; 4: the flowers (landings per match, the power-ups taken per seat); 5: the expedition per seat
+    j.field("format", uint64_t{6});                                   // 2: banked and raided replace the engine's food_deposited, food_stolen and food_lost (never fed, always 0); 3: the can't-go counts per seat; 4: the flowers (landings per match, the power-ups taken per seat); 5: the expedition per seat; 6: the Bomber flight to the ring pile per seat
     j.field("note", kKindsNote);
     j.key("options");
     j.begin_object();
@@ -962,6 +962,16 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             j.field("first_plant", s.expedition.first_plant);
             j.field("first_landing", s.expedition.first_landing);
             j.field("first_swimmer", s.expedition.first_swimmer);
+            j.end_object();
+            j.key("miner_flight");                                          // the Bomber that flies to the island of the ring pile (all 0 where none flew)
+            j.begin_object();
+            j.field("started", uint64_t{s.miner_flight.started});
+            j.field("planted", uint64_t{s.miner_flight.planted});
+            j.field("hops", uint64_t{s.miner_flight.hops});
+            j.field("landed", uint64_t{s.miner_flight.landed});
+            j.field("gave_up", uint64_t{s.miner_flight.gave_up});
+            j.field("first_start", s.miner_flight.first_start);
+            j.field("first_landing", s.miner_flight.first_landing);
             j.end_object();
             j.field("decisions", uint64_t{s.stats.decisions});
             j.field("intents", uint64_t{s.stats.intents});
