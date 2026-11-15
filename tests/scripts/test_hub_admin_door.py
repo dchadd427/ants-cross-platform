@@ -1003,7 +1003,7 @@ class TheKey(unittest.TestCase):
     def test_a_key_of_thirty_two_printable_characters_or_more_opens_the_door(self):
         for key in ("abcdefgh" * 4, "abcdefgh" * 32, "a1!~xyzw" * 5, "kjhgfedc" + "k" * 24):
             self.assertTrue(self.load(ANTS_HUB_ADMIN_GATE_SECRET=key).admin_gate_on, len(key))
-        for key in ("", "k" * 40, "ab" * 20, "abcdefg" * 6, "abcdefgh" * 3 + "a" * 7, "abcdefgh" * 32 + "x", "k" * 31, "k" * 257, "k" * 16 + " " + "k" * 16, "caf\u00e9" * 10, "tab\t" * 10):
+        for key in ("", "k" * 40, "ab" * 20, "abcdefg" * 6, "abcdefgh" * 3 + "a" * 7, "abcdefgh" * 32 + "x", "k" * 31, "k" * 257, "abcdefgh" * 2 + " " + "abcdefgh" * 2, "caf\u00e9" * 10, "abcdefgh" * 2 + "\t" + "abcdefgh" * 2):
             cfg = self.load(ANTS_HUB_ADMIN_GATE_SECRET=key)
             self.assertFalse(cfg.admin_gate_on, repr(len(key)))
             self.assertEqual(cfg.admin_gate_secret, "")

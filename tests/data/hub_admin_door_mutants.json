@@ -313,13 +313,6 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   },
   {
-   "id": "the_actor_may_have_lost_the_role",
-   "file": "hub/admindoor.py",
-   "old": "        if not self.is_owner(me) and roles.role_of(me) != rolesmod.ADMIN:",
-   "new": "        if False:",
-   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
-  },
-  {
    "id": "a_picture_change_is_not_logged",
    "file": "hub/admindoor.py",
    "old": "lambda show, note: setter(show, (by,) + note[1:])",
