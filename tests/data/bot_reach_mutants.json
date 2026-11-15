@@ -1,0 +1,158 @@
+{
+ "note": "Mutants of the reach guard of the computer players (docs/BOTS.md, 'The can't-go loop', orders over water) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the guard's filter, the engine's goal of a click, the Swimmer, the Fire Ant, the power-ups, the timed chain, the plan and the tune key against test_ai AI48, AI7.8 and AI27.9. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_reach_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "reach_guard_off_in_filter",
+   "file": "src/ants_ai/reach_guard.cpp",
+   "old": "    if (!view.has_grid() || view.map() == nullptr) return gone;",
+   "new": "    if (true) return gone;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI48.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI48.1"
+  },
+  {
+   "id": "reach_group_keeps_empty_order",
+   "file": "src/ants_ai/reach_guard.cpp",
+   "old": "        if (stay.empty()) continue;",
+   "new": "        if (false) continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI48.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI48.1"
+  },
+  {
+   "id": "reach_goal_is_the_click",
+   "file": "src/ants_ai/reach_guard.cpp",
+   "old": "        if (enterable(target.x, target.y, true)) {",
+   "new": "        if (true) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI48.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI48.5"
+  },
+  {
+   "id": "reach_ring_scan_never_runs",
+   "file": "src/ants_ai/reach_guard.cpp",
+   "old": "            for (int32_t d = 1; d < 5 && goal.x < 0; ++d) {",
+   "new": "            for (int32_t d = 1; d < 1 && goal.x < 0; ++d) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI48.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI48.5"
+  },
+  {
+   "id": "reach_enclosed_goal_unknown",
+   "file": "src/ants_ai/reach_guard.cpp",
+   "old": "        if (out.empty()) out.insert(-2); ",
+   "new": "        if (false) out.insert(-2); ",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI48.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI48.3"
+  },
+  {
+   "id": "reach_swimmer_not_exempt",
+   "file": "src/ants_ai/reach_guard.cpp",
+   "old": "it->second->type == sim::AntType::Swimmer",
+   "new": "false",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI48.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI48.4"
+  },
+  {
+   "id": "reach_fire_wall_stops_fire_ant",
+   "file": "src/ants_ai/reach_guard.cpp",
+   "old": "terrain_walkable(grid.terrain_class_at(f.tile))) open[static_cast<size_t>(f.tile.y) * static_cast<size_t>(w) + static_cast<size_t>(f.tile.x)] = 1;",
+   "new": "terrain_walkable(grid.terrain_class_at(f.tile))) open[static_cast<size_t>(f.tile.y) * static_cast<size_t>(w) + static_cast<size_t>(f.tile.x)] = 0;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI48.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI48.4"
+  },
+  {
+   "id": "reach_power_up_cuts_a_place",
+   "file": "src/ants_ai/reach_guard.cpp",
+   "old": "if (MapInfo::can_step_onto(grid, seat, pu.tile, view.walk_context())) mask[static_cast<size_t>(pu.tile.y) * static_cast<size_t>(w) + static_cast<size_t>(pu.tile.x)] = 1;",
+   "new": "if (MapInfo::can_step_onto(grid, seat, pu.tile, view.walk_context())) mask[static_cast<size_t>(pu.tile.y) * static_cast<size_t>(w) + static_cast<size_t>(pu.tile.x)] = 0;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI48.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI48.4"
+  },
+  {
+   "id": "reach_chain_step_alone",
+   "file": "src/ants_ai/reach_guard.cpp",
+   "old": "            chains.insert(in.chain);\n",
+   "new": "            (void)chains;\n",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI48.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI48.6"
+  },
+  {
+   "id": "reach_unknown_ant_place_refused",
+   "file": "src/ants_ai/reach_guard.cpp",
+   "old": "        if (here.empty() || goal.empty()) return true;",
+   "new": "        if (goal.empty()) return true;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI48.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI48.6"
+  },
+  {
+   "id": "reach_plan_off",
+   "file": "include/ants_ai/tactics.hpp",
+   "old": "    bool reach_guard{true};",
+   "new": "    bool reach_guard{false};",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI48.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI48.7"
+  },
+  {
+   "id": "reach_tune_key_wrong_field",
+   "file": "tools/bot_arena_tune.cpp",
+   "old": "if (key == \"rg\") return flag(p.reach_guard);",
+   "new": "if (key == \"rg\") return flag(p.cantgo_aware);",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI48.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI48.7"
+  },
+  {
+   "id": "reach_bot_never_asks",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "plan.reach_guard && plan.cantgo_aware &&",
+   "new": "false &&",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI48.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI48.8"
+  },
+  {
+   "id": "reach_bomb_cuts_a_place",
+   "file": "src/ants_ai/reach_guard.cpp",
+   "old": "if (MapInfo::can_step_onto(grid, seat, b.tile, view.walk_context())) mask[static_cast<size_t>(b.tile.y) * static_cast<size_t>(w) + static_cast<size_t>(b.tile.x)] = 1;",
+   "new": "if (MapInfo::can_step_onto(grid, seat, b.tile, view.walk_context())) mask[static_cast<size_t>(b.tile.y) * static_cast<size_t>(w) + static_cast<size_t>(b.tile.x)] = 0;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI48.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI48.4"
+  },
+  {
+   "id": "reach_home_walk_by_ring",
+   "file": "src/ants_ai/reach_guard.cpp",
+   "old": "            if (ah.team_id == seat) {",
+   "new": "            if (false) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI48.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI48.9"
+  },
+  {
+   "id": "reach_fight_not_told",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "            fight_.unreachable(refused); ",
+   "new": "            (void)refused; ",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI7.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI7.8"
+  },
+  {
+   "id": "reach_walled_maps_guarded",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": " && !tactics_.gate_map && !tactics_.field_map) {",
+   "new": ") {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI27.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI27.9"
+  }
+ ]
+}

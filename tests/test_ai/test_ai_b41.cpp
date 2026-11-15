@@ -460,6 +460,7 @@ void run_b41_tests() {
     } TEST_END();
 
     TEST_CASE("AI7.8 An Attack That Shows 'Can't Go' Soon After It Left Means That No Order Reaches The Target: It Is Left Alone For 900 Ticks (An Enemy Shut In By Rocks Is Hit, Its Attackers Are Refused By The Path Finder, The Fight Ends And Is Not Started Again)") {
+        for (const bool guard : {false, true}) {                                                     // (false: the order leaves and the path finder refuses it; true: the reach guard of AI48 does not let it leave, and ends the fight the same way)
         sim::SimulationEngine sim;
         empty_field(sim, 6);
         for (int dy = -1; dy <= 1; ++dy) {
@@ -471,7 +472,9 @@ void run_b41_tests() {
         sim.spawn_unit(0, sim::AntType::Worker, TileCoord{26, 28});
         sim.spawn_unit(0, sim::AntType::Worker, TileCoord{26, 32});
         const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{30, 30});            // shut in: no path leads to its tile
-        Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan_for(Level::Medium)), 4, 4);
+        LevelPlan plan = plan_for(Level::Medium);
+        plan.reach_guard = guard;
+        Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan), 4, 4);
         rig.run(10);
         sim.get_unit(victim).hp = 9;                                                                 // "hit" (the enemy cannot reach anybody: the test makes the blow)
         rig.run(300);
@@ -481,11 +484,13 @@ void run_b41_tests() {
         ASSERT_TRUE(bot.fight().shunned(enemy, sim.current_tick()));
         ASSERT_EQ(bot.fight().fights(), 0u);
         const size_t attacks = rig.proposed_count(CommandType::GroupAttack);
-        ASSERT_TRUE(attacks >= 1 && attacks <= 3);                                                   // one round of orders, not a stream
+        if (guard) ASSERT_EQ(attacks, 0u);                                                           // (no order leaves)
+        else ASSERT_TRUE(attacks >= 1 && attacks <= 3);                                              // one round of orders, not a stream
         ASSERT_EQ(bot.ledger().count(StandardBot::kFight), 0u);                                       // and the ants are free again
         sim.get_unit(victim).hp = 8;                                                                 // another blow while the enemy is left alone: no new fight
         rig.run(200);
         ASSERT_EQ(rig.proposed_count(CommandType::GroupAttack), attacks);
+        }
     } TEST_END();
 
     TEST_CASE("AI7.9 Interception Of A Thief (Off In Every Level's Plan: Measured, It Costs More Than It Takes; The Plan Flag Turns It On): A Thief That Stands Near The Hill Is Attacked And Hit, A Thief That WALKS To The Hill Is Never Chased (It Cannot Be Caught From Behind: The Walls And The Guard Are For It)") {
@@ -1395,7 +1400,9 @@ void run_b41_tests() {
                 for (const auto& e : r.proposed) n += e.second.type == CommandType::GroupMove && e.second.tile_x == shut.x && e.second.tile_y == shut.y ? 1u : 0u;
                 return n;
             };
-            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(peace_plan(Level::Medium)), 4, 4);
+            LevelPlan open_plan = peace_plan(Level::Medium);
+            open_plan.reach_guard = false;                                                                  // (the order that leaves and is refused: the reach guard of AI48 would not let it leave)
+            Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(open_plan), 4, 4);
             rig.run(250);
             const StandardBot& bot = rig.as<StandardBot>();
             ASSERT_EQ(bot.bombs().failures(), 1u);
@@ -1403,6 +1410,18 @@ void run_b41_tests() {
             rig.run(250);                                                                                  // 500 ticks in: the 300 of the blacklist are over (it started at about tick 170)
             ASSERT_TRUE(clicks_onto(rig) >= 2);
             ASSERT_TRUE(sim.grid().has_bomb_at(shut));
+            sim::SimulationEngine guarded;                                                                  // with the guard the click never leaves: nothing is refused, the bomb is left alone all the same
+            build(guarded, 1, shut, false, 10);
+            for (int i = 0; i < 3; ++i) guarded.spawn_unit(0, sim::AntType::Worker, TileCoord{18 + i, 12});
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    if (dx != 0 || dy != 0) guarded.set_terrain(shut.x + dx, shut.y + dy, sim::TERRAIN_OBSTACLE);
+                }
+            }
+            Rig r2(guarded, 0, Level::Medium, std::make_unique<StandardBot>(peace_plan(Level::Medium)), 4, 4);
+            r2.run(500);
+            ASSERT_EQ(clicks_onto(r2), 0u);
+            ASSERT_TRUE(guarded.grid().has_bomb_at(shut));
         }
     } TEST_END();
 

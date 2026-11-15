@@ -164,6 +164,8 @@ public:
     void break_alliance();
 
     const std::vector<Intent>& intents() const noexcept { return intents_; }
+    /// The list itself, for the bot that looks over what it proposed before it leaves (ReachGuard)
+    std::vector<Intent>& edit() noexcept { return intents_; }
     void clear() noexcept {
         intents_.clear();
         chains_ = 0;

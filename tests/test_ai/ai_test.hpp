@@ -223,6 +223,7 @@ void run_token_group_tests();
 void run_power_up_cap_tests();
 void run_merge_tests();
 void run_cantgo_tests();
+void run_reach_tests();
 void run_flower_tests();
 void run_war_tests();
 void run_stand_tests();

@@ -33,6 +33,7 @@ int main() {
     run_power_up_cap_tests();
     run_merge_tests();
     run_cantgo_tests();
+    run_reach_tests();
     run_flower_tests();
     run_war_tests();
     run_stand_tests();
