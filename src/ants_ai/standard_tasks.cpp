@@ -80,6 +80,15 @@ void FightTask::on_command(const sim::Command& command, Bot::Fate fate, uint64_t
     }
 }
 
+void FightTask::unreachable(const sim::Command& command) {
+    if (command.type != sim::CommandType::GroupAttack) return;
+    for (auto& f : fights_) {
+        for (const uint32_t ant : command.ants) {
+            if (f.second.defenders.count(ant) != 0) f.second.dead_end = true;
+        }
+    }
+}
+
 void FightTask::start_fights(TaskContext& c) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
@@ -497,6 +506,12 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
     const AntView* target = find_ant(v.others(), f.target);
     if (v.mine().size() <= tactics_.reserve_of(v)) {
         end = true;                                                              // down to the last ants: they leave the fight
+        return;
+    }
+    if (f.dead_end) {                                                            // the guard found no walk to the target: left alone like a target that refused an order
+        shunned_[f.target] = now + kShunTicks;
+        ++shunned_count_;
+        end = true;
         return;
     }
     // (the defence batch: defence.hpp) a fight that answers a blow is sized by the enemy ants near its target and kept up while the force is at least plan.defend_keep_percent of theirs (plan.defend_by_strength)

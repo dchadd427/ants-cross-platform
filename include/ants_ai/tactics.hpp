@@ -52,6 +52,7 @@ struct LevelPlan {
     bool carrier_aid{true};              // a carrier that was hit stands idle with its food (the blow cleared its walk): it is sent home at once, as a person would click it
     bool cantgo_aware{true};             // no order that the engine is bound to refuse for a reason that the view shows (a ring of fire shuts the hill, an ant holds a hole or the ramp): docs/BOTS.md,
                                          // "The can't-go loop"; false (the ablation cg=0): the bot as it was before
+    bool reach_guard{true};              // no order to a place that the ant's own walk cannot reach on the map as it is now (ReachGuard: a pile, an enemy ant or a tile for a bomb on another island); false (the ablation rg=0): the bot as it was
     // the defence batch (docs/BOT_PEOPLE.md, "Step 1: everyone hits back"; src/ants_ai/defence.cpp): the fights that answer a blow of an enemy ant. The flags are OFF in a plan made by hand and at Easy and
     // Medium, ON at Hard; without_defence_batch() puts a plan back as it was before
     bool defend_all_types{false};        // any ant that can strike may answer (a Thief, a Fire Ant, a Bomber, a Swimmer too), apart from the few that a job of their own holds (can_defend); false: the own default type and Combat Ants only
