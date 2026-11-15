@@ -70,6 +70,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.denial_order = true;              // the denial order: contested food first, the own safe piles last (docs/BOT_FOOD.md)
             p.secure_side = true;
             p.secure_kinds = kSecureOpening;
+            p.drop_retake = true;
             p.takes_combat = true;
             p.takes_thief = true;
             p.intercepts = false;
@@ -120,6 +121,8 @@ LevelPlan plan_for(Level level) noexcept {
             p.flower_recover = true;
             p.flower_recall = true;
             p.flower_watch = true;
+            p.drop_retake = true;
+            p.drop_contest = true;
             p.takes_combat = true;
             p.takes_thief = true;
             p.intercepts = false;
@@ -145,6 +148,14 @@ LevelPlan plan_for(Level level) noexcept {
             p.islands = true;
             p.island_expedition = true;
             p.island_timed_row = true;
+            p.island_fly_miner = true;
+            p.island_mines = true;
+            p.island_ferry_reorder = true;
+            p.island_flower_link = true;             // a Swimmer digs the tile from the ring half to a flower strip, an idle ant of the crew walks over and takes the drops (docs/BOTS.md, "The flower link")
+            p.island_flower_swimmers = 2;            // up to five Swimmers (three of the row, two of the flower)
+            p.island_flower_thief = true;            // a Thief drop is taken as well and held (nothing uses it yet)
+            p.island_crew_spare = 2;                 // the crew that is flown over has one more ant for the strip
+            p.island_ferry_per_pile = 3;             // three Swimmers a pile (two lose 24 points a match to three, 40 matches; docs/BOTS.md)
             p.island_ferry = true;
             p.island_swimmers = 3;
             p.island_builders = 0;

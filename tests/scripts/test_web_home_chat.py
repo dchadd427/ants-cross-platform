@@ -303,7 +303,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn("min-height: %dpx;" % row, talk)
         self.assertIn("@media (max-width: 700px) and (min-height: 501px) {       /* (a phone held upright: four lines of words, and the off field is small and wraps) */\n    .gt-on textarea.gc-input { max-height: %dpx; }" % (row + 3 * line), talk, "one row, and three more lines of the same height: four lines on a phone held upright")
         self.assertIn("height: %dpx; min-height: %dpx; max-height: %dpx;" % (row, row, row + line), talk, "a wide window: two lines")
-        self.assertIn(".gt-on textarea.gc-input { max-height: %dpx; }" % row, talk, "a low window: one row")
+        self.assertIn(".gt-on textarea.gc-input, .gt-tall.gt-on textarea.gc-input { max-height: %dpx; }" % row, talk, "a low window: one row")
         self.assertIn("line-height: %dpx;" % line, talk)
 
     def test_the_input_is_16_px_so_that_a_phone_does_not_zoom_into_it(self):

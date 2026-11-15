@@ -217,6 +217,74 @@ void FlowerTally::scan(const sim::SimulationEngine& sim) {
     }
 }
 
+void DropTally::scan(const sim::SimulationEngine& sim) {
+    const sim::WorldState& ws = sim.get_world_state();
+    const uint64_t tick = sim.current_tick();
+    const sim::Grid& grid = sim.grid();
+    // 1. ants that were typed at the last look and are gone: their drop
+    std::vector<uint8_t> alive(typed_.size(), 0);
+    for (const sim::AntSnapshot& a : ws.ants) {
+        if (a.id < alive.size()) alive[a.id] = 1;
+    }
+    for (size_t id = 0; id < typed_.size(); ++id) {
+        if (typed_[id].type == 0 || alive[id] != 0) continue;
+        const Typed t = typed_[id];
+        typed_[id].type = 0;
+        bool found = false;
+        for (int32_t dy = -2; dy <= 2 && !found; ++dy) {
+            for (int32_t dx = -2; dx <= 2 && !found; ++dx) {
+                const sim::TileCoord n{t.x + dx, t.y + dy};
+                if (!grid.in_bounds(n) || !grid.has_powerup_at(n) || grid.get_powerup_type(n) != t.type) continue;
+                bool known = false;
+                for (const size_t o : open_) known = known || (drops_[o].x == n.x && drops_[o].y == n.y);
+                bool flower = false;
+                for (const sim::FlowerDropperSnapshot& d : ws.flower_droppers) flower = flower || (d.drop_x == n.x && d.drop_y == n.y);
+                if (known || flower) continue;
+                Drop d;
+                d.owner = t.team;
+                d.kind = t.type;
+                d.x = n.x;
+                d.y = n.y;
+                d.tick = tick;
+                for (const sim::AntSnapshot& a : ws.ants) d.others = static_cast<uint8_t>(d.others + (a.player_id == t.team && static_cast<uint8_t>(a.raw_type) == t.type ? 1 : 0));
+                int32_t best = 1 << 20;
+                for (const auto& h : ws.anthills) {
+                    if (h.team_id >= sim::MAX_PLAYERS) continue;
+                    const int32_t dist = std::max(std::abs(static_cast<int32_t>(h.x) - n.x), std::abs(static_cast<int32_t>(h.y) - n.y));
+                    if (h.team_id == t.team) d.hill_dist = dist;
+                    if (dist < best) { best = dist; d.nearest = h.team_id; } else if (dist == best && h.team_id != d.nearest) d.nearest = 255;
+                }
+                open_.push_back(drops_.size());
+                drops_.push_back(d);
+                found = true;
+            }
+        }
+    }
+    // 2. drops that are gone
+    for (size_t i = 0; i < open_.size();) {
+        Drop& d = drops_[open_[i]];
+        const sim::TileCoord n{d.x, d.y};
+        if (grid.has_powerup_at(n) && grid.get_powerup_type(n) == d.kind) {
+            ++i;
+            continue;
+        }
+        d.taken = tick;
+        for (const sim::AntSnapshot& a : ws.ants) {
+            if (a.id >= raw_type_.size() || raw_type_[a.id] == 255 || raw_type_[a.id] == static_cast<uint8_t>(a.raw_type) || a.player_id >= sim::MAX_PLAYERS) continue;
+            if (std::max(std::abs(a.tile_x - d.x), std::abs(a.tile_y - d.y)) <= 2) d.taker = a.player_id;
+        }
+        open_.erase(open_.begin() + static_cast<std::ptrdiff_t>(i));
+    }
+    // 3. the looks
+    for (const sim::AntSnapshot& a : ws.ants) {
+        if (a.id > (1u << 20) || a.player_id >= sim::MAX_PLAYERS) continue;
+        if (a.id >= typed_.size()) typed_.resize(static_cast<size_t>(a.id) + 1);
+        if (a.id >= raw_type_.size()) raw_type_.resize(static_cast<size_t>(a.id) + 1, 255);
+        raw_type_[a.id] = static_cast<uint8_t>(a.raw_type);
+        typed_[a.id] = Typed{a.player_id, static_cast<uint8_t>(a.raw_type), a.tile_x, a.tile_y};
+    }
+}
+
 ExpeditionResult read_expedition(const ExpeditionTask& e) noexcept {
     ExpeditionResult r;
     r.planned = e.planned();
@@ -271,6 +339,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
     ledger.start(sim);
     CantGoTally tally;
     FlowerTally flowers;
+    DropTally drop_tally;
     Recorder rec;
     rec.log = spec.record ? &out.log : nullptr;
     rec.steps = &steps;
@@ -302,7 +371,10 @@ ArenaResult play_match(const ArenaSpec& spec) {
         const std::vector<sim::NewsEvent> news = sim.poll_news_events();
         const size_t audio = sim.poll_audio_events().size();
         tally.scan(sim, news);
-        if (sim.current_tick() % kFlowerScanPeriod == 0) flowers.scan(sim);
+        if (sim.current_tick() % kFlowerScanPeriod == 0) {
+            drop_tally.scan(sim);                       // (before the flower tally: both read the types of the last look)
+            flowers.scan(sim);
+        }
         out.news_events += news.size();
         out.audio_events += audio;
         out.peak_queue = std::max(out.peak_queue, static_cast<uint32_t>(std::max(news.size(), audio)));
@@ -318,6 +390,7 @@ ArenaResult play_match(const ArenaSpec& spec) {
     out.hash = sim.state_hash().total;
     flowers.scan(sim);                                   // (the last ticks, when the match ended between two looks)
     out.landings = flowers.landings();
+    out.drops = drop_tally.drops();
     for (size_t k = 1; k < out.landed.size(); ++k) out.landed[k] = flowers.landed(static_cast<sim::AntType>(k));
     {
         std::set<uint32_t> counted;

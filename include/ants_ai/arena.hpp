@@ -119,6 +119,36 @@ private:
     std::vector<uint8_t> raw_type_;            // by ant id: the ant's own type at the last scan, 255 before it was seen
 };
 
+/// The power-ups that dead typed ants leave (the arena's measure of whether a team takes its own drop back): from the looks the flower tally makes (every 4 ticks), a typed ant that is gone
+/// and a power-up that stands on a free neighbour of its last tile are one drop; the drop ends when its tile is empty again, and the ant that changed type beside it is the taker.
+class DropTally {
+public:
+    struct Drop {
+        uint8_t owner{0};                      // the team of the dead ant
+        uint8_t kind{0};                       // sim::AntType number of the power-up
+        int32_t x{0}, y{0};
+        uint64_t tick{0};                      // the look at which the drop was seen
+        uint64_t taken{0};                     // the look at which its tile was empty again (0: still there at the end)
+        uint8_t taker{255};                    // the team of the ant that became typed beside it (255: none seen)
+        uint8_t others{0};                     // the owner's other living ants of the kind when the drop was seen
+        int32_t hill_dist{0};                  // tiles (Chebyshev) from the owner's start marker
+        uint8_t nearest{255};                  // the team whose start marker is nearest to the drop (255: a tie)
+    };
+    void scan(const sim::SimulationEngine& sim);
+    const std::vector<Drop>& drops() const noexcept { return drops_; }
+
+private:
+    struct Typed {
+        uint8_t team{0};
+        uint8_t type{0};
+        int32_t x{0}, y{0};
+    };
+    std::vector<Drop> drops_;
+    std::vector<size_t> open_;                 // indexes into drops_ that lie on the map
+    std::vector<Typed> typed_;                 // by ant id: the ant's own type at the last look (type 0: a worker or not seen)
+    std::vector<uint8_t> raw_type_;            // by ant id, 255 before it was seen
+};
+
 struct ArenaSpec {
     const assets::LevelData* level{nullptr};   // the map (must outlive the call)
     uint32_t seed{1};                          // the engine's seed AND the controller's match seed
@@ -218,6 +248,7 @@ struct ArenaResult {
     /// Units still lying on the piles that the hill of some playing seat can walk to (MapInfo's analysis of the start), the object whose units a bite takes counted once: 0 when
     /// the whole reachable pot was taken
     uint32_t reachable_units_left{0};
+    std::vector<DropTally::Drop> drops;        // the power-ups that dead typed ants left (DropTally)
     uint32_t landings{0};                      // the droplets of the flower droppers that landed (FlowerTally)
     std::array<uint32_t, 6> landed{};          // ... by the kind of ant they make (index = sim::AntType)
     std::vector<ArenaSeatResult> seats;        // in seat order

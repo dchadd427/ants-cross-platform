@@ -90,7 +90,7 @@ class TheStyle(unittest.TestCase):
     def test_the_size_of_the_chat_beats_the_docks_own_height_by_the_id_of_home(self):
         self.assertIn('#home[data-split-h] .gc[data-open="true"] { height: var(--gc-h); }', self.css)
         talk = read("web", "home", "talk.css")
-        self.assertIn('.gc[data-open="true"]:has(.gc-form.gt-on) { height: clamp(', talk, "the dock's own height is the first size: the handle's rule has an id and wins")
+        self.assertIn('.gc[data-open="true"]:has(.gc-form.gt-on.gt-tall) { height: clamp(', talk, "while the box has two rows, the dock's own height is the first size: the handle's rule has an id and wins")
 
     def test_the_target_is_wider_than_the_line_and_the_line_shows_on_hover_focus_and_drag(self):
         self.assertIn(".sp::before", self.css)

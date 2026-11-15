@@ -655,7 +655,8 @@
             var s = field.style;
             if (field.scrollHeight === 0) return;                                 // (the Chat view is not shown: it is measured when the view comes, paint() asks again)
             var was = atBottom(), at = field.selectionStart, before = s.height, to;       // (a log that is read at its end stays at its end while the box grows and shrinks)
-            s.height = 'auto'; to = Math.max(ROW, Math.min(ROW + 3 * LINE, field.scrollHeight)) + 'px'; s.height = to;
+            s.height = 'auto'; to = field.gtFit ? field.gtFit() : field.scrollHeight;
+            to = Math.max(ROW, Math.min(ROW + 3 * LINE, to)) + 'px'; s.height = to;
             if (was && to !== before) log.scrollTop = log.scrollHeight;
             if (typeof at !== 'number' || at >= field.value.length) field.scrollTop = field.scrollHeight;
         }

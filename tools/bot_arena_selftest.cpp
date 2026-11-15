@@ -1015,6 +1015,10 @@ int selftest() {
         t.check(cg.island_timed_row && !ai::plan_for(ai::Level::Medium).island_timed_row && !ai::plan_for(ai::Level::Easy).island_timed_row && apply_tune(cg, "itimed", 0, tune_err) && !cg.island_timed_row &&
                     apply_tune(cg, "itimed", 1, tune_err) && cg.island_timed_row,
                 "the key itimed switches the timed clicks through the hats of the rows of ISLANDS (on at Hard only)");
+        t.check(cg.island_flower_link && cg.island_flower_swimmers == 2u && cg.island_flower_thief && cg.island_crew_spare == 2u && !ai::plan_for(ai::Level::Medium).island_flower_link && !ai::plan_for(ai::Level::Easy).island_flower_link &&
+                    ai::plan_for(ai::Level::Medium).island_crew_spare == 1u && apply_tune(cg, "iflink", 0, tune_err) && !cg.island_flower_link && apply_tune(cg, "iflink", 1, tune_err) && cg.island_flower_link &&
+                    apply_tune(cg, "iflower", 0, tune_err) && cg.island_flower_swimmers == 0u && apply_tune(cg, "ifthief", 0, tune_err) && !cg.island_flower_thief && apply_tune(cg, "icrew", 1, tune_err) && cg.island_crew_spare == 1u,
+                "the keys iflink, iflower, ifthief and icrew set the flower link of ISLANDS (the link, two more Swimmers, a held Thief and one more crew ant at Hard only)");
         ai::LevelPlan hm = ai::plan_for(ai::Level::Hard);
         t.check(!hm.home_on_route && !hm.home_first && hm.home_route_lane == 60 && ai::plan_for(ai::Level::Medium).home_route_lane == 20 && apply_tune(hm, "homemines", 1, tune_err) && hm.home_on_route && hm.home_first &&
                     apply_tune(hm, "homemines", 0, tune_err) && !hm.home_on_route && !hm.home_first && apply_tune(hm, "homeonroute", 1, tune_err) && hm.home_on_route && !hm.home_first &&
