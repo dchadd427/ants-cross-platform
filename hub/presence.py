@@ -20,9 +20,10 @@ import re
 
 from .store import StoreError
 
-AT = ("look", "wait", "play")
+AT = ("look", "wait", "play")                         # (what a page may say; the hub itself adds "away" to a row: an account whose last socket closed a short while ago)
+AWAY = "away"
 WEIGHT = {"look": 0, "wait": 1, "play": 2}              # of the sockets of one account, the one that is doing the most is the account's row
-RANK = {"wait": 0, "play": 1, "look": 2}                # when there are more people than rows: moderators first, then those who wait (a Join is there), those who play, those who look
+RANK = {"wait": 0, "play": 1, "look": 2, "away": 3}                # when there are more people than rows: moderators first, then those who wait (a Join is there), those who play, those who look
 SEATS = 4
 REFUSED = "here"                                        # the code of the `err` for a `here` that is not what a page says (the chat's own codes are for its lines)
 ROOM_CODE = re.compile(r"[a-z0-9_-]{1,32}\Z")           # (the codes that the game server makes for a room: lower case, the page's own rule)
@@ -65,6 +66,9 @@ def parse_here(msg, seq):
     if at == "play":
         return Where(at, file, n, None, True, None, seq)
     return Where(at, file, n, size, True, code, seq)
+
+
+AWAY_WHERE = Where(AWAY, None, None, None, False, None, 0)      # (the whole of what an Away row says: the word)
 
 
 def bare(where):
@@ -136,6 +140,8 @@ class Presence:
         self.limited = (frozenset(), frozenset())       # the accounts that are banned and muted, as the store last said
         self.limited_seq = None                         # ... the store's number of its last change of them when it said so (None: it has not said yet)
         self.limited_until = float("inf")               # ... and when the soonest of those mutes runs out
+        self.away = collections.OrderedDict()   # account id -> [until, name]: the accounts whose last socket closed, oldest first, for `away_seconds` (the row keeps its number; nothing of a room)
+        self.known = {}                 # account id -> the name of the accounts that had a socket open at the last look of the clock (to see which one closed since)
         self.counted = 0                # the number of people, and the version of the sockets that it was counted for
         self.counted_version = None
 
@@ -204,19 +210,22 @@ class Presence:
             key = (WEIGHT[where.at], where.seq) if where else (0, 0)
             if who.account_id not in best or key > best[who.account_id][0]:
                 best[who.account_id] = (key, who.name, where, who.young)
-        for account in [a for a in self.ids if a not in best]:
-            del self.ids[account]                   # (a person who left is a new row if they come back)
+        # (the numbers of people who left are dropped once a tick, in flush: a look between a close and the tick must not take the number of a person who is about to be Away)
         for account in banned.intersection(best):
             del best[account]
             guests += 1
-        mods = {account: self.chat.roles.role_of(account) for account in best}
+        gone = AWAY_WHERE
+        soon = self.clock()
+        away = {a: (None, entry[1], gone, False) for a, entry in self.away.items() if a not in best and a not in banned and entry[0] > soon}       # (an Away row is never a second row of a person who is here again, and never of a banned account)
+        mods = {account: self.chat.roles.role_of(account) for account in list(best) + list(away)}
         mods = {account: role for account, role in mods.items() if role != "none"}
-        order = sorted(best.items(), key=lambda item: (item[0] not in mods, RANK[item[1][2].at if item[1][2] else "look"], item[1][1], item[0]))
+        people = list(best.items()) + list(away.items())
+        order = sorted(people, key=lambda item: (item[0] not in mods, RANK[item[1][2].at if item[1][2] else "look"], item[1][1], item[0]))
         rows = {}
         for account, (_, name, where, young) in order[:self.limits.who_rows_max]:
             ident = self.row_id(account)
             rows[ident] = row_of(ident, name, mods.get(account, False), bare(where) if where is not None and (young or account in muted) else where, self.picture_of(account))
-        return {"n": len(best) + guests, "g": guests, "more": max(0, len(best) - self.limits.who_rows_max), "rows": rows}
+        return {"n": len(best) + guests, "g": guests, "more": max(0, len(people) - self.limits.who_rows_max), "rows": rows}
 
     def picture_of(self, account):
         """The name of the account's picture, where the hub has pictures and the account has one that may be shown (a banned account is never in the list, so its picture is not either)."""
@@ -279,14 +288,31 @@ class Presence:
 
     # ---- the clock's work ------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+    def forget(self, account):
+        """The account's Away row is taken now, and it is not made again by the sockets that close with this call (a logout, a forget-me, a kick or a ban, a login that ran out)."""
+        self.away.pop(account, None)
+        self.known.pop(account, None)
+
     def flush(self, now):
-        """Once a tick: forget the sockets that are gone, and send the change if somebody watches."""
+        """Once a tick: forget the sockets that are gone, keep the row of an account whose last socket closed (Away, for `away_seconds`), and send the change if somebody watches."""
         alive = {p for p in self.chat.peers if not getattr(p, "closed", False)}
         self.counted_version = None                 # (the number of people is counted again at least once a tick)
         self.where = {p: w for p, w in self.where.items() if p in alive}
         self.asked = {p: t for p, t in self.asked.items() if p in alive}
         self.watchers &= alive
-        here = {p.identity.account_id for p in alive if p.identity is not None}
-        self.ids = {a: i for a, i in self.ids.items() if a in here}
+        here = {p.identity.account_id: p.identity.name for p in alive if p.identity is not None}
+        left = [a for a in self.known if a not in here]
+        if left:
+            banned = self.restricted()[0]
+            for account in left:
+                if account not in banned and self.limits.away_seconds > 0:
+                    self.away.pop(account, None)
+                    self.away[account] = [now + self.limits.away_seconds, self.known[account]]
+            while len(self.away) > self.limits.away_max:
+                self.away.popitem(last=False)       # (the oldest goes first: a flood of accounts that come and go never makes the table grow)
+        self.known = here
+        for account in [a for a, entry in self.away.items() if a in here or entry[0] <= now]:
+            del self.away[account]
+        self.ids = {a: i for a, i in self.ids.items() if a in here or a in self.away}
         if self.watchers:
             self.refresh(now)

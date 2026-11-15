@@ -561,6 +561,7 @@ class Chat:
                 except StoreError as e:
                     if self.on_store_error:
                         self.on_store_error(e)                     # (the ban is done and stays: the person is removed and the answer is `ok`; the lines can be taken off with /del)
+            self.presence.forget(target)                           # (a ban takes the Away row too, whether or not a socket is open)
             self.remove(self.sockets_of(target), "banned")
             self.sync_pictures()
             self.announce("%s was banned." % shown, me)
@@ -574,6 +575,8 @@ class Chat:
         for peer in sockets:
             peer.send_text(dumps({"t": "bye", "why": why}))
             peer.close(1000, why)
+            if peer.identity is not None:
+                self.presence.forget(peer.identity.account_id)       # (a person who was kicked or banned is not kept as Away)
 
     def shown_name(self, account):
         """The name that the account is shown by: its open socket's, else its profile's (the display name where that is the pick), else None."""

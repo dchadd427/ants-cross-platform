@@ -105,8 +105,8 @@
   {
    "id": "those_who_look_are_before_those_who_wait",
    "file": "hub/presence.py",
-   "old": "RANK = {\"wait\": 0, \"play\": 1, \"look\": 2}",
-   "new": "RANK = {\"wait\": 2, \"play\": 1, \"look\": 0}",
+   "old": "RANK = {\"wait\": 0, \"play\": 1, \"look\": 2, \"away\": 3}",
+   "new": "RANK = {\"wait\": 2, \"play\": 1, \"look\": 0, \"away\": 3}",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
@@ -119,7 +119,7 @@
   {
    "id": "the_rest_is_not_counted",
    "file": "hub/presence.py",
-   "old": "\"more\": max(0, len(best) - self.limits.who_rows_max), \"rows\": rows}",
+   "old": "\"more\": max(0, len(people) - self.limits.who_rows_max), \"rows\": rows}",
    "new": "\"more\": 0, \"rows\": rows}",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
@@ -147,7 +147,7 @@
   {
    "id": "the_numbers_of_people_who_left_stay_when_nobody_watches",
    "file": "hub/presence.py",
-   "old": "        self.ids = {a: i for a, i in self.ids.items() if a in here}",
+   "old": "        self.ids = {a: i for a, i in self.ids.items() if a in here or a in self.away}",
    "new": "",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
@@ -497,8 +497,8 @@
   {
    "id": "a_banned_account_loses_its_number",
    "file": "hub/presence.py",
-   "old": "for account in [a for a in self.ids if a not in best]:",
-   "new": "for account in [a for a in self.ids if a not in best or a in banned]:",
+   "old": "self.ids = {a: i for a, i in self.ids.items() if a in here or a in self.away}\n        if self.watchers:",
+   "new": "self.ids = {a: i for a, i in self.ids.items() if (a in here or a in self.away) and a not in self.restricted()[0]}\n        if self.watchers:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
@@ -779,6 +779,97 @@
    "file": "hub/presence.py",
    "old": "row[\"solo\"] = True                      # (a game",
    "new": "pass                      # (a game",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "away_never_ends",
+   "file": "hub/presence.py",
+   "old": "entry[0] <= now]:",
+   "new": "False]:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "away_has_no_cap",
+   "file": "hub/presence.py",
+   "old": "while len(self.away) > self.limits.away_max:",
+   "new": "while False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "away_keeps_a_banned_account",
+   "file": "hub/presence.py",
+   "old": "if account not in banned and self.limits.away_seconds > 0:",
+   "new": "if self.limits.away_seconds > 0:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "away_row_is_new_each_time",
+   "file": "hub/presence.py",
+   "old": "self.ids = {a: i for a, i in self.ids.items() if a in here or a in self.away}",
+   "new": "self.ids = {a: i for a, i in self.ids.items() if a in here}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "away_row_stays_when_back",
+   "file": "hub/presence.py",
+   "old": "if a not in best and a not in banned and entry[0] > soon}",
+   "new": "if a not in banned and entry[0] > soon}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "away_keeps_the_room",
+   "file": "hub/presence.py",
+   "old": "AWAY_WHERE = Where(AWAY, None, None, None, False, None, 0)",
+   "new": "AWAY_WHERE = Where(AWAY, \"TREASURE.LVL\", 1, 4, True, \"c1v3rr\", 0)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "forget_keeps_the_row",
+   "file": "hub/presence.py",
+   "old": "        self.away.pop(account, None)\n        self.known.pop(account, None)\n\n    def flush",
+   "new": "        pass\n\n    def flush",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "logout_is_kept_as_away",
+   "file": "hub/server.py",
+   "old": "                self.chat.presence.forget(who.account_id)               # (a login that ended is not kept as Away)",
+   "new": "                pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "kick_is_kept_as_away",
+   "file": "hub/chat.py",
+   "old": "                self.presence.forget(peer.identity.account_id)       # (a person who was kicked or banned is not kept as Away)",
+   "new": "                pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "away_is_counted_as_here",
+   "file": "hub/presence.py",
+   "old": "return {\"n\": len(best) + guests, \"g\": guests, \"more\": max(0, len(people)",
+   "new": "return {\"n\": len(best) + len(away) + guests, \"g\": guests, \"more\": max(0, len(people)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "forget_me_needs_an_open_socket",
+   "file": "hub/server.py",
+   "old": "        if account is not None:\n            self.chat.presence.forget(account)                          # (an account that has no socket open, and is Away, is taken from the list too)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "ban_leaves_the_away_entry",
+   "file": "hub/chat.py",
+   "old": "            self.presence.forget(target)                           # (a ban takes the Away row too, whether or not a socket is open)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_look_takes_the_number_of_a_person_who_just_closed",
+   "file": "hub/presence.py",
+   "old": "        # (the numbers of people who left are dropped once a tick, in flush: a look between a close and the tick must not take the number of a person who is about to be Away)\n",
+   "new": "        for account in [a for a in self.ids if a not in best and a not in self.away]:\n            del self.ids[account]\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   }
  ]

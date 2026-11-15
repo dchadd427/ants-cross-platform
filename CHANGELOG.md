@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.16.11 - 2026-11-15 - Away on the Players list, press outside a dialog to cancel, computer players that walk where they go
+
+**For players:**
+- **People who leave the page stay on the Players list as Away.** When you switch tabs, minimize the window or lock your phone, your name stays in the list for 10 minutes, dimmed, in an Away group at the bottom (staff who are away stay under Staff). It goes back to normal the moment the page returns, and the chat reconnects at once if the connection dropped while the page slept. Logging out, a kick or a ban removes the row right away. Nothing about Away is saved on disk.
+- **Press outside a dialog to cancel it.** On every popup (host a game, How it works, the map list, the in-game menu, the Map Maker's boxes, the admin page's boxes) a press on the dimmed page around the box does what Cancel does. A drag that starts inside the box, a text selection or a scroll does not close it. In the game menu with the Leave game question showing, it means Stay.
+- **Computer players no longer give orders an ant cannot walk to.** The "Can't go there" messages from computer players on ISLANDS are almost gone, and their ants no longer waste time on those orders.
+- **Hard computer players on ISLANDS fly the Bomber to the ring pile earlier.** A Bomber is no longer held back by a mine it cannot reach, so the flight starts much earlier. Easy, Medium and the other maps play as before.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.10 page or game still joins. Under the hood: the chat server, the game server and the web pages are rebuilt.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/25a64658...6b375eeb)
+
 ## v0.16.10 - 2026-11-15 - Chat box on one row, computer players take back power-ups and contest the ISLANDS ring
 
 **For players:**
@@ -463,29 +475,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/736c9486...7f6588ed)
 
-## v0.12.132 - 2026-10-25 - Faster: big maps with thousands of ants
+## Older versions (v0.12.132 and before)
 
-**For players:**
-- **Faster: a map with thousands of ants plays quicker.** Two questions that looked at every ant (which ant has this number, and does an ant wait for a path) are now answered at once. A tick with 4 x 693 ants walking across a 90 x 90 map takes 11 ms instead of 26 ms (2,772 ants packed in the corners: 10 ms instead of 38 ms), and 4 x 1,500 ants on 150 x 150 take 47 ms instead of 112 ms (packed: 46 instead of 119); the browser build gains the same (27 to 12 ms and 115 to 49 ms).
-- A crowd that only stands and fights is not faster yet (6,000 ants in a brawl cost about 47 ms a tick: still too much for a slow computer); the next releases remove the other scans.
-- Nothing about a match changes: every tick has the same state as before (all 540 maps of the library and crowds of 6,000 ants play identically).
-
-**Rules / network:** none; the rules and network protocol 21 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c03ec4c0...fbb14974)
-
-## v0.12.131 - 2026-10-25 - Big maps now warn: "may run slowly"
-
-**For players:**
-- **No map is refused for its ants.** A map that starts more than 300 ants (all colors together: 75 a color on four) only gets a warning, because a game on it may run slowly, most on phones and older computers. The number 300 is where the warning starts; it changes nothing else.
-- **The map picker** shows an amber chip, "Many ants: may run slowly", on the row of such a map. The map can be chosen as any other, for a room too.
-- **Map Maker, Play this map:** both *Against bots* and *With other players* say "This map starts with N ants, so a game may run slowly, especially on phones and older computers." right under the first sentence of the dialog. The buttons stay on.
-- We scanned the 540 maps of the library: none starts more than 300 ants (0 of 540; the most starts 248), so no map in the picker is marked today.
-
-**Rules / network:** none: the rules and network protocol 21 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/99261f5d...85c01ad8), [the warning](docs/MAP_SUBMISSIONS.md#older-games-and-big-maps)
-
-## Older versions (v0.12.130 and before)
-
-Every release before v0.12.131, and the long notes of v0.12.130 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.133, and the long notes of v0.12.132 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

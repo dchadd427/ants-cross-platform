@@ -284,6 +284,17 @@ function gameChecks() {
         w.document.key('Escape');
         check(w.document.querySelector('[role=dialog]') === null && w.closes === 0, 'Escape is Keep playing');
         equal((w.document.listeners.keydown || []).length, 0, 'no key listener is left');
+        {   // a press on the dimmed page around the question is Keep playing (it starts AND ends there)
+            back.click();
+            const box = w.document.querySelector('[role=dialog]'), scrim = box.parentNode, press = (from, to) => { scrim.fire('pointerdown', { target: from }); scrim.fire('pointerup', { target: to }); scrim.fire('click', { target: scrim }); };
+            press(box, box); press(box, scrim); press(scrim, box);
+            scrim.fire('click', { target: scrim });
+            scrim.fire('pointerdown', { target: scrim }); scrim.fire('pointercancel', {}); scrim.fire('click', { target: scrim });
+            check(w.document.querySelector('[role=dialog]') === box, 'a press inside the question, a drag out of it or into it, a scroll and a click with no press before it keep it open');
+            press(scrim, scrim);
+            check(w.document.querySelector('[role=dialog]') === null && w.closes === 0 && opener2.back.length === 0, 'a press that starts and ends on the dimmed page is Keep playing: the question goes, nobody leaves');
+            equal((w.document.listeners.keydown || []).length, 0, 'no key listener is left');
+        }
         back.click();
         w.document.querySelector('[role=dialog]').querySelectorAll('button')[1].click();
         equal([w.closes, opener2.back, w.timers.length, w.timers[0] && w.timers[0][1]], [1, [ID], 1, 300], 'Back to editor tells the map maker\'s tab, closes this tab, and waits for it');

@@ -23,7 +23,7 @@
     var LOGIN = '/hub/login?next=', LOGOUT = '/hub/logout', FORGET = '/hub/forget';      // the hub's pages (nginx passes them; the cookie goes along with a request of this page only)
     var LIMIT = { name: 32, line: 200, feed: 100, history: 50, frame: 120000, bad: 30, field: 400, count: 1e9, here: 500, said: 2 };       // (the hub's own: names 32, lines 200 code points, history 50; the rest is this page's)
     var ROW = 44, LINE = 22;       // (the box's one row and the height of one more line of words: four lines at most; the style sheet's max-height keeps it lower in a wide or a low window)
-    var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, pics: 8000, flood: 3000, pending: 8000 };       // (pending: the hub answers a line at once: one that has no answer after this long is not waited for)
+    var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, wake: 3000, grace: 5000, pics: 8000, flood: 3000, pending: 8000 };       // (pending: the hub answers a line at once: one that has no answer after this long is not waited for)
     var BACKOFF = { min: 1000, max: 60000, low: 0.5, high: 1.5 };      // the wait is spread from half to one and a half times the step (never under a second or over a minute): many pages that lost one hub do not come back together
     var PACE = { burst: 2, every: 2500, same: 31000 };                  // this page's own limit, below the hub's (3 at once, one every 2 s, the same text twice within 30 s)
     var TEXT = {
@@ -207,6 +207,7 @@
         var visit = env.go || function (url) { win.location.assign(url); };
         var now = env.now || function () { return Date.now(); }, rnd = env.random || Math.random, Socket = env.WebSocket || win.WebSocket;
         var feed = [], you = null, login = false, people = null, state = 'connecting', welcomed = false, ever = false, lastId = -1, bad = 0, attempt = 0, liveSince = null, lastTry = 0;
+        var rx = 0, wokeAt = null, grace = false, lockOf = null;       // (when the hub last spoke; when the page last came back; the Web Lock held)
         var sock = null, stopped = false, isHome = false, stale = true, notice = '', unanswered = [], stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0, pics: 0 };       // (unanswered: lines and commands sent and not answered yet, oldest first)
         var picWait = false, picWant = false, picFailed = false;                  // (the switch: a press waits for the `you` frame; a refusal or 8 s of silence puts it back)
         var busy = false, menuOn = false, forgetSure = false, refocus = false, forgetAt = 0;                                       // (a POST of the login is on its way; the chip's dropdown of the account is open)
@@ -432,25 +433,50 @@
         function drop() {                                                        // let go of the socket: its timers stop, its handlers are cleared, it is closed
             var s = sock;
             sock = null;
-            ['connect', 'ping', 'answer', 'retry', 'notice'].forEach(stop); notice = ''; unanswered = []; picPending(false);
+            ['connect', 'ping', 'answer', 'retry', 'notice'].forEach(stop); notice = ''; unanswered = []; picPending(false); unlock();
             if (s) { try { s.onopen = s.onmessage = s.onerror = s.onclose = null; s.close(); } catch (e) { /* it is gone */ } }
         }
         function lost() {                                                        // the socket is gone (closed, failed, silent, or it sent what no hub sends): say so, and try again later
             drop();
             if (liveSince !== null && now() - liveSince >= MS.stable) attempt = 0;       // (a link that held for a while starts over at 1 s; one that is closed at once keeps growing)
             liveSince = null; welcomed = false; state = 'offline'; hello = null;
-            if (!stopped) { timers.retry = setTimeout(guard(go), delayOf(attempt, rnd())); attempt++; }
+            if (!stopped) { var soon = wokeAt !== null && now() - wokeAt < MS.wake; wokeAt = null; timers.retry = setTimeout(guard(go), soon ? 0 : delayOf(attempt, rnd())); attempt++; }
             tapped('lost');
             render();
+        }
+        function probe(quick) {                                                  // quick: the page just woke, so the answer is waited for 5 s and not 30 (a socket that died while the page slept is let go at once)
+            if (timers.answer && quick) stop('answer');                          // (the oldest question is the one that is waited for, unless a wake asks again)
+            if (!timers.answer) { grace = !!quick; timers.answer = setTimeout(guard(function () { silent(quick ? MS.grace : MS.answer); }), quick ? MS.grace : MS.answer); }       // (the answer to a ping is the online count: a hub that says nothing for this long is gone)
+            try { sock.send('{"t":"ping"}'); } catch (e) { lost(); }
+        }
+        function silent(limit) {                                                 // a page that was hidden gets a moment more (its timers run late, before what the hub said is read)
+            timers.answer = 0;
+            if (!sock) return;
+            if (now() - rx < limit) return;
+            if (sock.readyState === 1 && !grace && !visible()) { grace = true; timers.answer = setTimeout(guard(function () { silent(limit); }), MS.grace); return; }
+            lost();
         }
         function ping() {
             timers.ping = setTimeout(guard(function () {
                 timers.ping = 0;
                 if (!sock || sock.readyState !== 1) return;
-                try { sock.send('{"t":"ping"}'); } catch (e) { lost(); return; }
-                timers.answer = setTimeout(guard(lost), MS.answer);             // (the answer to a ping is the online count: a hub that says nothing for this long is gone)
-                ping();
+                if (!visible()) return;                                          // (hidden: no timer runs on; the hub's own PING frames keep the socket, and a wake starts the timer again)
+                probe(); ping();
             }), MS.ping);
+        }
+        function lock() {                                                        // a shared Web Lock while the socket is open (feature-detected)
+            var locks = win.navigator && win.navigator.locks, mine;
+            if (lockOf || !locks || typeof locks.request !== 'function') return;
+            mine = lockOf = {};
+            try { locks.request('ants-home-chat', { mode: 'shared' }, function () { return new Promise(function (resolve) { mine.release = resolve; if (lockOf !== mine) resolve(); }); }).catch(function () { /* no lock */ }); } catch (e) { lockOf = null; }
+        }
+        function unlock() { var mine = lockOf; lockOf = null; if (mine && mine.release) mine.release(); }
+        function wake() {                                                        // the page is back: look at the socket now
+            wokeAt = now();
+            if (stopped) return;
+            if (sock && sock.readyState > 1) lost();
+            else if (!sock) nudge();
+            else if (welcomed && sock.readyState === 1 && visible()) { probe(true); if (!timers.ping) ping(); }
         }
         function go() {
             timers.retry = 0;
@@ -501,8 +527,8 @@
                 e.fresh = ever && e.id > before && !e.own && !seen();             // (the first welcome is the past; after a lost link, the lines that came meanwhile are news)
                 push(e);
             });
-            stop('connect'); stop('notice'); notice = ''; stale = true; welcomed = ever = true; state = 'live'; liveSince = now(); hello = m;
-            ping();
+            stop('connect'); stop('notice'); notice = ''; stale = true; welcomed = ever = true; state = 'live'; liveSince = now(); hello = m; rx = now();
+            lock(); ping();
             render();
             tapped('live', m);
         }
@@ -557,7 +583,7 @@
             var m = parse(data);
             if (!m) { if (++bad >= LIMIT.bad) lost(); return; }                  // (a hub that sends nothing but noise is dropped; a frame of noise is ignored)
             if (!welcomed && m.t !== 'welcome') return;
-            stop('answer');
+            rx = now(); stop('answer');
             if (m.t === 'welcome') onWelcome(m);
             else if (m.t === 'line') onLine(m);
             else if (m.t === 'del') onDel(m);
@@ -681,10 +707,11 @@
         box.addEventListener('keydown', guard(function (e) {
             if (e && e.key === 'Escape' && open && !menuOn) { setOpen(false); if (fold.focus) fold.focus(); }       // (the dropdown first, then the panel)
         }));
-        doc.addEventListener('visibilitychange', guard(function () { if (visible()) { stale = true; render(); nudge(); } }));
-        win.addEventListener('online', guard(nudge));
+        doc.addEventListener('visibilitychange', guard(function () { if (visible()) { stale = true; render(); wake(); } }));
+        doc.addEventListener('resume', guard(wake));
+        win.addEventListener('online', guard(wake));
         win.addEventListener('pagehide', guard(function () { stopped = true; lost(); }));       // (a page that goes away, or into the back-forward cache, lets the hub go)
-        win.addEventListener('pageshow', guard(function (e) { if (e && e.persisted && stopped) { stopped = false; attempt = 0; go(); } }));
+        win.addEventListener('pageshow', guard(function (e) { if (!e || !e.persisted) return; if (stopped) { stopped = false; attempt = 0; wokeAt = now(); go(); } else wake(); }));
 
         paint();
         go();

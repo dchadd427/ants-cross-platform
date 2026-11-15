@@ -574,6 +574,7 @@ void run_kill_tests() {
                 sim.spawn_unit(1, sim::AntType::Worker, across ? TileCoord{36, 30} : TileCoord{20, 36});
                 LevelPlan plan = plan_for(Level::Hard);
                 plan.reach_fights = reach;
+                plan.reach_guard = reach;                                   // (without the walk check the bot is the bot as it was: the guard of AI48 would take the orders out)
                 plan.opportunity = false;
                 plan.assault_after = 100;
                 plan.assault_odds_percent = 10;
@@ -607,6 +608,7 @@ void run_kill_tests() {
             plan.opportunity = false;
             plan.assault = false;
             plan.reach_fights = reach;
+            plan.reach_guard = reach;                                                       // (the guard of AI48 is the same walk check at the end of the look)
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(3);
             for (int t = 0; t < 200; ++t) {
