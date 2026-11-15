@@ -488,6 +488,20 @@ public:
     /// keeps the old drawing (the 8 x 15 raster digits and the archive's digit sprites); it is also what is drawn when no font was found. A prototype switch.
     void set_classic_numbers(bool classic) noexcept { classic_numbers_ = classic; }
     bool classic_numbers() const noexcept { return classic_numbers_; }
+    /// (a test hook) the face's file that the numbers use: empty is no face (the classic numbers are drawn); a file that does not open draws no number
+    void set_number_font_path(const std::string& path) { ttf_path_ = path; font_per_point_ = 0.0; clear_number_pictures(); }
+    /// The font's numbers are the ones drawn now (not the classic switch, and a face was found)
+    bool font_numbers() const noexcept { return !classic_numbers_ && !ttf_path_.empty(); }
+    /// (public for the tests) The output's own pixels: SDL's logical size is switched off while the numbers are drawn (`NativeFrame` keeps what to put back)
+    struct NativeFrame {
+        double scale{1.0};                         // output pixels per canvas pixel
+        int32_t x{0}, y{0};                        // where the canvas starts in the output
+        SDL_Rect clip{0, 0, 0, 0};
+        bool clipped{false};
+        bool on{false};
+    };
+    NativeFrame begin_native();
+    void end_native(const NativeFrame& frame);
     static constexpr int32_t kFixedCellW = 8;
     static constexpr int32_t kFixedCellH = 15;
     void draw_rgba_image(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) override;
@@ -747,15 +761,15 @@ private:
     std::vector<ChangePicture> change_pictures_;
     const ChangePicture* change_picture(const std::string& text);
     // The numbers in the TrueType font (renderer_numbers.cpp)
-    bool classic_numbers_{true};                   // (the prototype: the old drawing until the application asks for the font)
+    bool classic_numbers_{false};                  // (the hidden fallback: the old drawing, chosen by a test or a picture; it is also what is drawn when no face was found)
     std::string ttf_path_;                         // the face that draw_text uses (empty: none was found, the classic numbers are drawn)
-    bool font_numbers() const noexcept { return !classic_numbers_ && !ttf_path_.empty(); }
     struct NumberPicture {
         std::string text;
-        int32_t digit_px{0};                       // the height of a digit in output pixels
+        int32_t height_px{0};                      // the wanted height of what shows (a digit and its outline) in output pixels
+        int32_t outline_px{0};
         SDL_Texture* texture{nullptr};
-        int32_t w{0}, h{0};                        // the texture, outline included
-        int32_t ink_x{0}, ink_y{0}, ink_w{0};      // the first glyph's left edge, the digits' top edge, the width of the ink, in the texture
+        int32_t w{0}, h{0};                        // the texture
+        int32_t box_x{0}, box_y{0}, box_w{0}, box_h{0};   // the box of what shows (glyphs and outline) in the texture: the digits' height, the text's width
     };
     std::vector<NumberPicture> number_pictures_;
     struct DigitFont {                             // the face at the size whose digit is `digit_px` tall: the fill, and the same face with an outline (TTF_Font*, kept as void* so that this header needs no SDL_ttf)
@@ -765,20 +779,14 @@ private:
         void* edge{nullptr};
     };
     std::vector<DigitFont> digit_fonts_;
-    const NumberPicture* number_picture(const std::string& text, int32_t digit_px);
+    double font_per_point_{0.0};                   // the height of a digit per point of the face (measured once)
+    const NumberPicture* number_picture(const std::string& text, int32_t height_px, int32_t outline_px);
     void clear_number_pictures();
-    /// The output's own pixels: SDL's logical size is switched off while the numbers are drawn (`NativeFrame` keeps what to put back)
-    struct NativeFrame {
-        double scale{1.0};                         // output pixels per canvas pixel
-        int32_t x{0}, y{0};                        // where the canvas starts in the output
-        SDL_Rect clip{0, 0, 0, 0};
-        bool clipped{false};
-        bool on{false};
-    };
-    NativeFrame begin_native();
-    void end_native(const NativeFrame& frame);
-    /// `x`, `y` are the canvas position of the number's ink (left edge, top edge of the digits) in canvas pixels; a centred one passes the middle
-    void draw_number_ink(const NativeFrame& f, const NumberPicture& pic, double x, double y, bool centre_x, bool centre_y, health::Color color, int32_t alpha);
+    /// `x`, `y` are the canvas position of the box of what shows (its left and top edge; a centred one passes the middle); `width_px` > 0 stretches the box to that many output pixels
+    void draw_number_box(const NativeFrame& f, const NumberPicture& pic, double x, double y, bool centre_x, bool centre_y, health::Color color, int32_t alpha, int32_t width_px = 0);
+    /// The part of an animation's sprites that shows (the pixels that are not the color key), in the animation's own coordinates: the digit sprites' ink, not their cell
+    AnimBounds anim_ink(int32_t anim_id);
+    std::unordered_map<int32_t, AnimBounds> anim_ink_;
     struct ScoreDigit {
         int32_t amount{0};
         int32_t wx{0};
@@ -786,6 +794,21 @@ private:
     };
     std::vector<ScoreDigit> deferred_scores_;
     void draw_deferred_scores();
+public:
+    /// (for the tests) how many number pictures and fonts the cache holds, and its bounds
+    size_t number_cache_size() const noexcept { return number_pictures_.size(); }
+    size_t number_font_count() const noexcept { return digit_fonts_.size(); }
+    static constexpr size_t kMaxNumberPictures = 512;
+    static constexpr size_t kMaxNumberFonts = 64;
+    /// (for the tests) the picture of a text drawn as the font numbers draw it: nullptr when there is no face; `box` gets the box of what shows
+    bool font_number_box(const std::string& text, int32_t height_px, int32_t outline_px, int32_t& box_w, int32_t& box_h) {
+        const NumberPicture* p = number_picture(text, height_px, outline_px);
+        if (p == nullptr) return false;
+        box_w = p->box_w;
+        box_h = p->box_h;
+        return true;
+    }
+private:
     void draw_font_digits(const LayoutRect& view, double zoom);
     void draw_font_changes();
 

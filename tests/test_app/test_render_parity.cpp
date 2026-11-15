@@ -1862,6 +1862,7 @@ int main(int argc, char* argv[]) {
         std::fprintf(stderr, "renderer init failed\n");
         return 2;
     }
+    r.set_classic_numbers(true);   // (these pictures and hashes are pinned for the classic numbers: the font numbers have test_font_numbers)
 
     test_part_order_helper();
     test_mirrored_part_order(arc);

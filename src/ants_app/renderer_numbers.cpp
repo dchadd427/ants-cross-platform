@@ -67,6 +67,32 @@ void Renderer::clear_number_pictures() {
     digit_fonts_.clear();
 }
 
+// The part of a digit sprite that shows: the pixels that are not the color key, over every frame of the animation (the sprite's own box is the cell, which has margins)
+AnimBounds Renderer::anim_ink(int32_t anim_id) {
+    const auto found = anim_ink_.find(anim_id);
+    if (found != anim_ink_.end()) return found->second;
+    AnimBounds b;
+    if (archive_ && anim_id >= 0) {
+        const auto& seq = archive_->get_animation(static_cast<uint32_t>(anim_id));
+        for (const auto& sub : seq.subitems) {
+            for (const auto& fr : sub.frames) {
+                const auto& sp = archive_->get_sprite(fr.sprite_index);
+                for (uint32_t y = 0; y < sp.height; ++y) {
+                    for (uint32_t x = 0; x < sp.width; ++x) {
+                        if (sp.get_pixel(x, y) == ants::assets::CHD_COLOR_KEY_INDEX) continue;
+                        const int32_t px = fr.dx + static_cast<int32_t>(x);
+                        const int32_t py = fr.dy + static_cast<int32_t>(y);
+                        if (!b.valid) { b.x0 = px; b.y0 = py; b.x1 = px + 1; b.y1 = py + 1; b.valid = true; }
+                        else { b.x0 = std::min(b.x0, px); b.y0 = std::min(b.y0, py); b.x1 = std::max(b.x1, px + 1); b.y1 = std::max(b.y1, py + 1); }
+                    }
+                }
+            }
+        }
+    }
+    anim_ink_[anim_id] = b;
+    return b;
+}
+
 #ifdef ANTS_ENABLE_SDL_TTF
 namespace {
 
@@ -81,41 +107,36 @@ std::string font_text(const std::string& text, TTF_Font* font) {
     return out;
 }
 
-uint16_t first_code(const std::string& text) {
-    if (!text.empty() && text[0] == '-') return 0x2212;
-    return text.empty() ? uint16_t{'0'} : static_cast<uint16_t>(static_cast<unsigned char>(text[0]));
-}
-
 }  // namespace
 #endif
 
-const Renderer::NumberPicture* Renderer::number_picture(const std::string& text, int32_t digit_px) {
+// The picture of a text: the face's glyphs in white over an outline of `outline_px` output pixels in near black, the whole of what shows `height_px` tall (the glyphs of a digit are
+// `height_px - 2 * outline_px` tall), the way the old drawing's ink was measured (its outline counted). Made once per (text, size, outline); the number of them is bounded.
+const Renderer::NumberPicture* Renderer::number_picture(const std::string& text, int32_t height_px, int32_t outline_px) {
 #ifdef ANTS_ENABLE_SDL_TTF
-    if (!renderer_ || text.empty() || ttf_path_.empty() || digit_px < 2) return nullptr;
+    if (!renderer_ || text.empty() || ttf_path_.empty() || height_px < 4) return nullptr;
+    const int32_t o = std::max(1, outline_px);
+    const int32_t digit_px = std::max(2, height_px - 2 * o);
     for (const NumberPicture& p : number_pictures_) {
-        if (p.digit_px == digit_px && p.text == text) return p.texture != nullptr ? &p : nullptr;
+        if (p.height_px == height_px && p.outline_px == o && p.text == text) return p.texture != nullptr ? &p : nullptr;
     }
-    if (number_pictures_.size() >= 256) clear_number_pictures();      // (a bound, not a working size: the texts of one match are a few dozen)
-    const DigitFont* df = nullptr;
-    for (const DigitFont& d : digit_fonts_) {
-        if (d.digit_px == digit_px) df = &d;
-    }
-    if (df == nullptr) {
-        if (digit_fonts_.size() >= 12) {
-            clear_number_pictures();
-        }
-        // the point size whose digit is `digit_px` tall (measured on a probe: the glyph's height grows with the size)
+    if (number_pictures_.size() >= kMaxNumberPictures) clear_number_pictures();      // (a bound, not a working size)
+    if (font_per_point_ <= 0.0) {                      // (how tall a digit is per point of the face: measured once, on a probe)
         TTF_Font* probe = TTF_OpenFont(ttf_path_.c_str(), 200);
         if (probe == nullptr) return nullptr;
         int minx = 0, maxx = 0, miny = 0, maxy = 0, adv = 0;
         TTF_GlyphMetrics(probe, '0', &minx, &maxx, &miny, &maxy, &adv);
         TTF_CloseFont(probe);
-        const double per_point = static_cast<double>(maxy - miny) / 200.0;
-        if (per_point <= 0.05) return nullptr;
-        const int32_t point = std::max(4, static_cast<int32_t>(std::lround(static_cast<double>(digit_px) / per_point)));
-        DigitFont d;
-        d.digit_px = digit_px;
-        d.outline = std::max(1, static_cast<int32_t>(std::lround(static_cast<double>(digit_px) / 10.0)));     // (one canvas pixel: a digit is 10 of them tall)
+        font_per_point_ = static_cast<double>(maxy - miny) / 200.0;
+        if (font_per_point_ <= 0.05) { font_per_point_ = 0.0; return nullptr; }
+    }
+    const DigitFont* df = nullptr;
+    for (const DigitFont& d : digit_fonts_) {
+        if (d.digit_px == digit_px && d.outline == o) df = &d;
+    }
+    if (df == nullptr) {
+        if (digit_fonts_.size() >= kMaxNumberFonts) clear_number_pictures();
+        const int32_t point = std::max(4, static_cast<int32_t>(std::lround(static_cast<double>(digit_px) / font_per_point_)));
         TTF_Font* fill = TTF_OpenFont(ttf_path_.c_str(), point);
         TTF_Font* edge = TTF_OpenFont(ttf_path_.c_str(), point);
         if (fill == nullptr || edge == nullptr) {
@@ -123,7 +144,10 @@ const Renderer::NumberPicture* Renderer::number_picture(const std::string& text,
             if (edge) TTF_CloseFont(edge);
             return nullptr;
         }
-        TTF_SetFontOutline(edge, d.outline);
+        TTF_SetFontOutline(edge, o);
+        DigitFont d;
+        d.digit_px = digit_px;
+        d.outline = o;
         d.fill = fill;
         d.edge = edge;
         digit_fonts_.push_back(d);
@@ -139,7 +163,8 @@ const Renderer::NumberPicture* Renderer::number_picture(const std::string& text,
     SDL_Surface* out = nullptr;
     NumberPicture pic;
     pic.text = text;
-    pic.digit_px = digit_px;
+    pic.height_px = height_px;
+    pic.outline_px = o;
     if (fs != nullptr && es != nullptr && es->w >= fs->w && es->h >= fs->h) {
         out = SDL_CreateRGBSurfaceWithFormat(0, es->w, es->h, 32, SDL_PIXELFORMAT_ARGB8888);
         if (out != nullptr) {
@@ -162,21 +187,26 @@ const Renderer::NumberPicture* Renderer::number_picture(const std::string& text,
             SDL_SetSurfaceBlendMode(fs, SDL_BLENDMODE_BLEND);
             SDL_Rect at{(es->w - fs->w) / 2, (es->h - fs->h) / 2, 0, 0};
             SDL_BlitSurface(fs, nullptr, out, &at);
+            // the box of what shows: the digits' height (the '0' of this face, from its top to its bottom, outline round it), the text's width (first glyph's left edge to the last one's right edge)
             int minx = 0, maxx = 0, miny = 0, maxy = 0, adv = 0;
             TTF_GlyphMetrics(fill, '0', &minx, &maxx, &miny, &maxy, &adv);
+            const auto code = [](char c) { return c == '-' ? uint16_t{0x2212} : static_cast<uint16_t>(static_cast<unsigned char>(c)); };
             int fminx = 0, fmaxx = 0, fminy = 0, fmaxy = 0, fadv = 0;
-            TTF_GlyphMetrics(fill, first_code(text), &fminx, &fmaxx, &fminy, &fmaxy, &fadv);
+            TTF_GlyphMetrics(fill, code(text.front()), &fminx, &fmaxx, &fminy, &fmaxy, &fadv);
             int lminx = 0, lmaxx = 0, lminy = 0, lmaxy = 0, ladv = 0;
-            TTF_GlyphMetrics(fill, text.back() == '-' ? uint16_t{0x2212} : static_cast<uint16_t>(static_cast<unsigned char>(text.back())), &lminx, &lmaxx, &lminy, &lmaxy, &ladv);
+            TTF_GlyphMetrics(fill, code(text.back()), &lminx, &lmaxx, &lminy, &lmaxy, &ladv);
+            const int32_t left = at.x + std::max(0, fminx) - o;
+            const int32_t right = at.x + fs->w - std::max(0, ladv - lmaxx) + o;
+            pic.box_x = std::max(0, left);
+            pic.box_w = std::max(1, std::min(out->w, right) - pic.box_x);
+            pic.box_y = std::max(0, at.y + TTF_FontAscent(fill) - maxy - o);
+            pic.box_h = std::min(out->h - pic.box_y, (maxy - miny) + 2 * o);
             pic.w = out->w;
             pic.h = out->h;
-            pic.ink_x = at.x + std::max(0, fminx);
-            pic.ink_y = at.y + TTF_FontAscent(fill) - maxy;                        // (the digits' top: the '0' of this face)
-            pic.ink_w = std::max(1, fs->w - std::max(0, fminx) - std::max(0, ladv - lmaxx));
             pic.texture = SDL_CreateTextureFromSurface(renderer_, out);
             if (pic.texture != nullptr) {
                 SDL_SetTextureBlendMode(pic.texture, SDL_BLENDMODE_BLEND);
-                SDL_SetTextureScaleMode(pic.texture, SDL_ScaleModeNearest);      // (one texel to one output pixel: nothing to filter)
+                SDL_SetTextureScaleMode(pic.texture, SDL_ScaleModeLinear);      // (one texel to one output pixel; a score digit's slight stretch is filtered)
             }
         }
     }
@@ -187,57 +217,69 @@ const Renderer::NumberPicture* Renderer::number_picture(const std::string& text,
     return pic.texture != nullptr ? &number_pictures_.back() : nullptr;
 #else
     (void)text;
-    (void)digit_px;
+    (void)height_px;
+    (void)outline_px;
     return nullptr;
 #endif
 }
 
-void Renderer::draw_number_ink(const NativeFrame& f, const NumberPicture& pic, double x, double y, bool centre_x, bool centre_y, health::Color color, int32_t alpha) {
+// A picture copied by the box of what shows. (x, y) is its left and top edge in canvas pixels (the middle when centred); `width_px` > 0 stretches it to that many output pixels wide,
+// about the same middle, so that a glyph takes the width of the sprite digit that it replaces.
+void Renderer::draw_number_box(const NativeFrame& f, const NumberPicture& pic, double x, double y, bool centre_x, bool centre_y, health::Color color, int32_t alpha, int32_t width_px) {
+    const double k = width_px > 0 ? static_cast<double>(width_px) / static_cast<double>(pic.box_w) : 1.0;
+    const double sx = (k > 0.7 && k < 1.45) ? k : 1.0;       // (a stretch only where it stays slight)
+    const int32_t box_w = static_cast<int32_t>(std::lround(static_cast<double>(pic.box_w) * sx));
     int32_t dx = f.x + static_cast<int32_t>(std::lround(x * f.scale));
     int32_t dy = f.y + static_cast<int32_t>(std::lround(y * f.scale));
-    if (centre_x) dx -= pic.ink_w / 2;
-    if (centre_y) dy -= pic.digit_px / 2;
-    const SDL_Rect dst{dx - pic.ink_x, dy - pic.ink_y, pic.w, pic.h};
+    if (centre_x) dx -= box_w / 2;
+    if (centre_y) dy -= pic.box_h / 2;
+    const SDL_Rect dst{dx - static_cast<int32_t>(std::lround(static_cast<double>(pic.box_x) * sx)), dy - pic.box_y, static_cast<int32_t>(std::lround(static_cast<double>(pic.w) * sx)), pic.h};
     SDL_SetTextureColorMod(pic.texture, color.r, color.g, color.b);
     SDL_SetTextureAlphaMod(pic.texture, static_cast<uint8_t>(std::clamp(alpha, 0, 255)));
     SDL_RenderCopy(renderer_, pic.texture, nullptr, &dst);
 }
 
-// The hit point numbers: the top left of the old cell at the sprite's position, the digits starting 2 pixels under it; the digits as tall as the old ones (10 canvas pixels, times the phone's scale)
+// The hit point numbers: where the old cell's ink stood (2 pixels under the sprite's position, and one scaled pixel out on the phone, where the old digits were outlined), as tall as the old ink
+// (10 canvas pixels, outline included on the phone: (10 + 2) x the scale), so they do not look larger.
 void Renderer::draw_font_digits(const LayoutRect& view, double zoom) {
     if (deferred_digits_.empty()) return;
     const NativeFrame f = begin_native();
     if (f.on) {
         const int32_t px = std::max(1, digit_scale_);
-        const int32_t digit_px = std::max(2, static_cast<int32_t>(std::lround(10.0 * static_cast<double>(px) * f.scale)));
+        const int32_t pad = digit_outline_ ? px : 0;                             // (the old outline's width, canvas pixels)
+        const int32_t height_px = std::max(4, static_cast<int32_t>(std::lround(static_cast<double>(10 * px + 2 * pad) * f.scale)));
+        const int32_t outline_px = std::max(1, static_cast<int32_t>(std::lround(static_cast<double>(std::max(1, pad)) * f.scale)));
         for (const DeferredDigits& d : deferred_digits_) {
             const int32_t sx = view.x + static_cast<int32_t>(std::floor((static_cast<double>(d.wx) - static_cast<double>(camera_.x)) * zoom));
             const int32_t sy = view.y + static_cast<int32_t>(std::floor((static_cast<double>(d.wy) - static_cast<double>(camera_.y)) * zoom));
-            const NumberPicture* pic = number_picture(d.text, digit_px);
+            const NumberPicture* pic = number_picture(d.text, height_px, outline_px);
             if (pic == nullptr) continue;
-            const SDL_Rect at = placed(sx, sy + 2 * px, 0, 0);
-            draw_number_ink(f, *pic, at.x, at.y, false, false, health::Color{255, 255, 255}, 255);
+            const SDL_Rect at = placed(sx - pad, sy + 2 * px - pad, 0, 0);
+            draw_number_box(f, *pic, at.x, at.y, false, false, health::Color{255, 255, 255}, 255);
         }
         end_native(f);
     }
     deferred_digits_.clear();
 }
 
-// The damage and heal numbers: where the old ones stood (centred on the ant's body, rising), the digits as tall as the old ones (10 canvas pixels)
+// The damage and heal numbers: where the old ones stood (centred on the ant's body, rising), as tall as the old picture (10 canvas pixels and an outline: 12), and, with the age, smaller:
+// health::scale_at, about the number's own middle, so that it stays over the ant. Every size is its own picture (one output pixel steps, a bounded cache): crisp at every size.
 void Renderer::draw_font_changes() {
     const NativeFrame f = begin_native();
     if (!f.on) return;
     const double zoom = static_cast<double>(camera_.zoom);
     const LayoutRect view = layout_.view();
     const health::Rect screen{view.x, view.y, view.w, view.h};
-    const int32_t digit_px = std::max(2, static_cast<int32_t>(std::lround(10.0 * f.scale)));
     for (size_t i = 0; i < changes_->count(); ++i) {
         const health::Number& num = changes_->at(i);
         const int32_t age = static_cast<int32_t>(changes_now_ms_ - num.start_ms);
         const int32_t alpha = health::alpha_at(age);
         if (alpha <= 0 || num.hidden) continue;
+        const double shrink = health::scale_at(age);
+        const int32_t height_px = std::max(4, static_cast<int32_t>(std::lround(static_cast<double>(health::kGlyphHeight + 2) * f.scale * shrink)));
+        const int32_t outline_px = std::max(1, static_cast<int32_t>(std::lround(f.scale * shrink)));
         const std::string text = std::string(num.heal ? "+" : "-") + std::to_string(std::min<int32_t>(num.amount, 9999));
-        const NumberPicture* pic = number_picture(text, digit_px);
+        const NumberPicture* pic = number_picture(text, height_px, outline_px);
         if (pic == nullptr) continue;
         int32_t sx = 0;
         int32_t sy = 0;
@@ -247,37 +289,41 @@ void Renderer::draw_font_changes() {
         const int32_t width = static_cast<int32_t>(text.size()) * health::kGlyphAdvance + 2;
         if (!health::overlaps(health::Rect{sx - width / 2, centre - rise - 6, width, 12}, screen)) continue;
         const SDL_Rect at = placed(sx, centre - rise, 0, 0);
-        draw_number_ink(f, *pic, at.x, at.y, true, true, num.heal ? health::kHealColor : health::kDamageColor, alpha);
+        const int32_t old_ink = static_cast<int32_t>(text.size()) * health::kGlyphAdvance + 1;       // (the old glyphs' ink: 7 pixels a character and one more: "-2" is 15 wide)
+        draw_number_box(f, *pic, at.x, at.y, true, true, num.heal ? health::kHealColor : health::kDamageColor, alpha, static_cast<int32_t>(std::lround(static_cast<double>(old_ink) * f.scale * shrink)));
     }
     end_native(f);
 }
 
-// The score numbers: the original's field (a slot of 9 world pixels per digit, the sign in the slot of the first digit that is not a zero), each glyph centred in the slot that its sprite
-// is centred in, as tall as the digit sprite, and (a world art) scaled by the zoom.
+// The score numbers: the original's field (a slot of 9 world pixels per digit, the sign in the slot of the first digit that is not a zero). Each glyph is as tall as the digit sprite's INK
+// (the pixels that show, outline included, not its cell), as wide as the sprite that it replaces (a slight stretch), and centred on that sprite's ink: so the number takes the old one's room.
+// A world art: scaled by the zoom.
 void Renderer::draw_deferred_scores() {
     if (deferred_scores_.empty()) return;
     const NativeFrame f = begin_native();
     if (f.on) {
         const double zoom = static_cast<double>(camera_.zoom);
-        const AnimBounds zero = anim_bounds(anim_id_digit_[0]);
-        const int32_t sprite_h = zero.valid ? std::max(1, zero.y1 - zero.y0) : 10;
-        const int32_t digit_px = std::max(2, static_cast<int32_t>(std::lround(static_cast<double>(sprite_h) * zoom * f.scale)));
+        const AnimBounds zero = anim_ink(anim_id_digit_[0]);
+        const int32_t ink_h = zero.valid ? std::max(1, zero.y1 - zero.y0) : 10;
+        const int32_t height_px = std::max(4, static_cast<int32_t>(std::lround(static_cast<double>(ink_h) * zoom * f.scale)));
+        const int32_t outline_px = std::max(1, static_cast<int32_t>(std::lround(zoom * f.scale)));
         for (const ScoreDigit& s : deferred_scores_) {
             int32_t value = std::clamp(s.amount < 0 ? -s.amount : s.amount, 0, 999999);
             int32_t divisor = 100000;
             bool leading = true;
             bool sign_pending = true;
             int32_t x = s.wx;
-            const auto put = [&](int32_t anim_id, const std::string& glyph, health::Color color) {
-                const AnimBounds b = anim_bounds(anim_id);
+            const auto put = [&](int32_t anim_id, const std::string& glyph) {
+                const AnimBounds b = anim_ink(anim_id);
                 if (!b.valid) return;
-                const NumberPicture* pic = number_picture(glyph, digit_px);
+                const NumberPicture* pic = number_picture(glyph, height_px, outline_px);
                 if (pic == nullptr) return;
                 int32_t sx = 0;
                 int32_t sy = 0;
-                camera_.world_to_screen(x + (b.x0 + b.x1) / 2, s.wy + (b.y0 + b.y1) / 2, sx, sy);
+                camera_.world_to_screen(x + (b.x0 + b.x1) / 2, s.wy + (zero.valid ? (zero.y0 + zero.y1) / 2 : (b.y0 + b.y1) / 2), sx, sy);
                 const SDL_Rect at = placed(sx, sy, 0, 0);
-                draw_number_ink(f, *pic, at.x, at.y, true, true, color, 255);
+                const int32_t want_w = static_cast<int32_t>(std::lround(static_cast<double>(b.x1 - b.x0) * zoom * f.scale));
+                draw_number_box(f, *pic, at.x, at.y, true, true, health::Color{255, 255, 255}, 255, want_w);
             };
             while (divisor > 0) {
                 const int32_t digit = value / divisor;
@@ -285,11 +331,11 @@ void Renderer::draw_deferred_scores() {
                 if (digit != 0 || divisor == 1) leading = false;
                 if (!leading) {
                     if (sign_pending) {
-                        put(s.amount > 0 ? anim_id_plus_ : anim_id_minus_, s.amount > 0 ? "+" : "-", health::Color{255, 255, 255});
+                        put(s.amount > 0 ? anim_id_plus_ : anim_id_minus_, s.amount > 0 ? "+" : "-");
                         x += 9;
                         sign_pending = false;
                     }
-                    put(anim_id_digit_[digit], std::to_string(digit), health::Color{255, 255, 255});
+                    put(anim_id_digit_[digit], std::to_string(digit));
                 }
                 divisor /= 10;
                 x += 9;

@@ -54,6 +54,15 @@ constexpr int32_t rise_at(int32_t age_ms) noexcept {
     return (kRisePx * age_ms + kLifeMs / 2) / kLifeMs;
 }
 
+/// The size of a number of this age, as a fraction of its full size, in the font's drawing: 1 at birth, `kEndScale` at the end of its life, on an ease-out curve (it shrinks fast at first, then settles)
+constexpr double kEndScale = 0.70;
+constexpr double scale_at(int32_t age_ms) noexcept {
+    if (age_ms <= 0) return 1.0;
+    if (age_ms >= kLifeMs) return kEndScale;
+    const double left = 1.0 - static_cast<double>(age_ms) / static_cast<double>(kLifeMs);
+    return 1.0 - (1.0 - kEndScale) * (1.0 - left * left);
+}
+
 /// One live number
 struct Number {
     uint32_t id{0};             // the ant

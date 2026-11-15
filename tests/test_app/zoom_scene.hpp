@@ -173,6 +173,7 @@ struct PixelRig {
         renderer.set_layout(layout);
         renderer.pin_animation_clock(1500);
         renderer.set_hud_team(0);
+        renderer.set_classic_numbers(true);         // (the pictures that these tests pin are the classic numbers' ones; the font's numbers have their own test, test_font_numbers)
         if (synthetic_tiles > 0) {
             engine.init_test_world(synthetic_tiles, synthetic_tiles, 1, 600000);
             tiles_w = tiles_h = synthetic_tiles;

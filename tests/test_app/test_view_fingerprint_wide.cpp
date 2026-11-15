@@ -618,6 +618,7 @@ struct WideRendererRig {
         SDL_Init(SDL_INIT_VIDEO);
         win = SDL_CreateWindow("view-fingerprint-wide", 0, 0, kWW, kWH, SDL_WINDOW_HIDDEN);
         if (win == nullptr || !renderer.init(win, archive)) return;
+        renderer.set_classic_numbers(true);   // (these pictures and hashes are pinned for the classic numbers: the font numbers have test_font_numbers)
         renderer.set_canvas_size(kWW, kWH);
         renderer.set_layout(kWide);
         renderer.pin_animation_clock(1500);

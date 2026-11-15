@@ -596,8 +596,8 @@
     {
       "id": "number_left_out_below_half",
       "file": "src/ants_app/renderer_health.cpp",
-      "old": "    if (in_world_target_ && pass_.camera.zoom != zoom::kNormal) {\n        deferred_digits_.push_back(",
-      "new": "    if (in_world_target_ && pass_.camera.zoom < 0.5f) return;\n    if (in_world_target_ && pass_.camera.zoom != zoom::kNormal) {\n        deferred_digits_.push_back(",
+      "old": "    if (font_numbers() || (in_world_target_ && pass_.camera.zoom != zoom::kNormal)) {\n        deferred_digits_.push_back(",
+      "new": "    if (in_world_target_ && pass_.camera.zoom < 0.5f) return;\n    if (font_numbers() || (in_world_target_ && pass_.camera.zoom != zoom::kNormal)) {\n        deferred_digits_.push_back(",
       "build": [
         "test_health_marks"
       ],
