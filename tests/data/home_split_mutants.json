@@ -1,0 +1,204 @@
+{
+ "note": "Mutants of the drag handles of Home (web/home/split.js and split.css, the loader in web/home/home.js; docs/HOME_SCREEN.md 'The splitters') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_home_split_check.js and the static checks of tests/scripts/test_web_home_split.py: a limit that moves, a step, a drag or a key that goes the wrong way, a size that is not clamped, kept sizes that are not guarded, a storage that throws, a reset that does not reset, a pointer that is not captured, a phone that keeps sizes, the style on a phone, the dock's own height winning, no focus state, no forced colors, the loader; every one must be caught (tools/mutate.py tests/data/home_split_mutants.json --keep-going --jobs 1).",
+ "baseline": {
+  "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+ },
+ "mutants": [
+  {
+   "id": "side_min_is_241",
+   "file": "web/home/split.js",
+   "old": "var SIDE_MIN = 240, CHAT_MIN = 120, CHAT_SHARE = 0.7;",
+   "new": "var SIDE_MIN = 241, CHAT_MIN = 120, CHAT_SHARE = 0.7;",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "chat_min_is_100",
+   "file": "web/home/split.js",
+   "old": "CHAT_MIN = 120, CHAT_SHARE",
+   "new": "CHAT_MIN = 100, CHAT_SHARE",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "chat_max_is_80_percent",
+   "file": "web/home/split.js",
+   "old": "CHAT_SHARE = 0.7;",
+   "new": "CHAT_SHARE = 0.8;",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "step_is_20",
+   "file": "web/home/split.js",
+   "old": "var STEP = 16, BIG = 64;",
+   "new": "var STEP = 20, BIG = 64;",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "shift_step_is_32",
+   "file": "web/home/split.js",
+   "old": "var STEP = 16, BIG = 64;",
+   "new": "var STEP = 16, BIG = 32;",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "drag_goes_the_wrong_way",
+   "file": "web/home/split.js",
+   "old": "clamp(Math.round(start - d), lim.min, lim.max)",
+   "new": "clamp(Math.round(start + d), lim.min, lim.max)",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "arrow_left_narrows",
+   "file": "web/home/split.js",
+   "old": "var s = shift ? BIG : STEP, plus = kind === 'x' ? 'ArrowLeft' : 'ArrowUp', minus = kind === 'x' ? 'ArrowRight' : 'ArrowDown';",
+   "new": "var s = shift ? BIG : STEP, plus = kind === 'x' ? 'ArrowRight' : 'ArrowUp', minus = kind === 'x' ? 'ArrowLeft' : 'ArrowDown';",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "home_key_gives_the_most",
+   "file": "web/home/split.js",
+   "old": "if (key === 'Home') return lim.min;",
+   "new": "if (key === 'Home') return lim.max;",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "keys_do_not_clamp",
+   "file": "web/home/split.js",
+   "old": "if (key === plus) return clamp(now + s, lim.min, lim.max);",
+   "new": "if (key === plus) return now + s;",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "the_limit_forgets_the_other_list",
+   "file": "web/home/split.js",
+   "old": "max: Math.max(SIDE_MIN, Math.floor(room - SIDE_MIN))",
+   "new": "max: Math.max(SIDE_MIN, Math.floor(room))",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "a_stored_nonsense_is_taken",
+   "file": "web/home/split.js",
+   "old": "o.p > 0 && o.p < 10000",
+   "new": "o.p < 1e12",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "the_storage_failure_is_not_caught",
+   "file": "web/home/split.js",
+   "old": "} catch (e) { /* the sizes are not kept: they still hold for this visit */ }",
+   "new": "} finally { /* none */ }",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "the_storage_key_changes",
+   "file": "web/home/split.js",
+   "old": "var KEY = 'ants.home.split.v1';",
+   "new": "var KEY = 'ants.home.split';",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "enter_does_not_reset",
+   "file": "web/home/split.js",
+   "old": "if (e.key === 'Enter') { set(kind, null);",
+   "new": "if (e.key === 'Enter') { set(kind, current(kind));",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "double_click_does_not_reset",
+   "file": "web/home/split.js",
+   "old": "h.addEventListener('dblclick', function () { set(kind, null); });",
+   "new": "h.addEventListener('dblclick', function () { });",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "no_pointer_capture",
+   "file": "web/home/split.js",
+   "old": "if (h.setPointerCapture && e.pointerId !== undefined) h.setPointerCapture(e.pointerId);",
+   "new": "/* none */",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "a_right_button_drags",
+   "file": "web/home/split.js",
+   "old": "if (e.button !== undefined && e.button !== 0) return;",
+   "new": "/* any button */",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "the_drag_class_stays",
+   "file": "web/home/split.js",
+   "old": "doc.documentElement.classList.remove('sp-drag-' + kind);",
+   "new": "/* stays */",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "a_phone_keeps_the_sizes",
+   "file": "web/home/split.js",
+   "old": "if (want.p !== null || want.c !== null) { want.p = null; want.c = null; save(); }",
+   "new": "/* kept */",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "the_window_does_not_clamp",
+   "file": "web/home/split.js",
+   "old": "paint('x', want.p); paint('y', want.c);\n        }\n        win.addEventListener",
+   "new": "}\n        win.addEventListener",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "the_orientation_is_wrong",
+   "file": "web/home/split.js",
+   "old": "h.setAttribute('aria-orientation', kind === 'x' ? 'vertical' : 'horizontal');",
+   "new": "h.setAttribute('aria-orientation', kind === 'x' ? 'horizontal' : 'vertical');",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "the_handle_is_not_a_separator",
+   "file": "web/home/split.js",
+   "old": "h.setAttribute('role', 'separator');",
+   "new": "h.setAttribute('role', 'slider');",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "the_css_size_works_on_a_phone",
+   "file": "web/home/split.css",
+   "old": "@media (min-width: 701px) {\n    #home { --pl-w",
+   "new": "@media (min-width: 0px) {\n    #home { --pl-w",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "the_chat_size_loses_to_the_dock",
+   "file": "web/home/split.css",
+   "old": "#home[data-split-h] .gc[data-open=\"true\"] { height: var(--gc-h); }",
+   "new": ".gc[data-split-h] { height: var(--gc-h); }",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "the_line_has_no_focus_state",
+   "file": "web/home/split.css",
+   "old": ".sp:hover .sp-line, .sp:focus-visible .sp-line, .sp.sp-live .sp-line { background: var(--gold, #f6d058); }",
+   "new": ".sp:hover .sp-line { background: var(--gold, #f6d058); }",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "no_forced_colors",
+   "file": "web/home/split.css",
+   "old": "@media (forced-colors: active) {",
+   "new": "@media (forced-colors: none) {",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "the_loader_is_removed",
+   "file": "web/home/home.js",
+   "old": "            wantSplit();\n            wantGames();\n",
+   "new": "            wantGames();\n",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  },
+  {
+   "id": "the_dock_is_not_watched",
+   "file": "web/home/split.js",
+   "old": "new win.MutationObserver(attach).observe(host, { childList: true })",
+   "new": "new win.MutationObserver(attach)",
+   "test": "python3 tests/scripts/test_web_home_split.py TheScript TheStyle TheLoader && node tests/scripts/web_home_split_check.js"
+  }
+ ]
+}

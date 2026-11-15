@@ -62,6 +62,7 @@ PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 38_000, 11_800
 VP_BUDGET, VP_GZIP_BUDGET = 4_200, 1_900            # vp.js: the screen numbers of /?vp (loaded for that address only)
 CHAT_BUDGET, CHAT_GZIP_BUDGET = 88_000, 28_000
 TALK_BUDGET, TALK_GZIP_BUDGET = 28_500, 9_800
+SPLIT_BUDGET, SPLIT_GZIP_BUDGET = 16_000, 5_200     # split.js and split.css: the drag handles of Home
 SCRIPT_BUDGET, SCRIPT_GZIP_BUDGET = 13_000, 4_500       # player_name.js
 # the installable web app (web/app/, web/manifest.webmanifest): the four icons together (measured 4,260 bytes), and the manifest (measured 1,166, revalidated on every visit)
 APP_ICONS_BUDGET = 4_700
