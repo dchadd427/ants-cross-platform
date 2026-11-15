@@ -33,7 +33,7 @@
         login: 'Log in', loginWith: 'Log in with Discord', chatting: 'Chatting as ', logout: 'Log out', forget: 'Forget me', sure: 'Are you sure? Press again', forgetNote: 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.',
         picShow: 'Show my Discord picture', picNote: 'Everyone on the front page sees it next to your name.', picNone: 'Your picture is loaded when you log in.', picAgain: 'Log in again', picBlocked: 'Your picture is hidden on this site.',
         shows: 'Chat shows your ', names: ['display name', 'username'], use: 'Show my ',
-        administrator: 'administrator', moderator: 'moderator', only: 'Only you', youAre: { mod: 'You are a moderator', admin: 'You are an administrator' }, number: 'line number', today: 'Today', yesterday: 'Yesterday', linkMax: 5, linkCut: 48,
+        administrator: 'administrator', moderator: 'moderator', only: 'Only you', youAre: { mod: 'You are a moderator', admin: 'You are an administrator' }, today: 'Today', yesterday: 'Yesterday', linkMax: 5, linkCut: 48,
         helpHead: 'Commands you can use. Only you can see this.', helpNone: 'There are no chat commands for you.', cmdBad: 'That command is not right. Type /help to see the commands.', cmdRate: 'You are going too fast, try again in a moment', bansHead: 'People who are banned', bansNone: 'Nobody is banned.', noName: '(no name)',
         kicked: 'A moderator removed you from the chat. You can log in again.', banned: 'You are banned from the chat. You can still read it.', banField: 'You are banned from the chat'
     };

@@ -172,7 +172,7 @@
   {
    "id": "old_rows_stay_on_the_screen",
    "file": "web/home/chat.js",
-   "old": "var old = feed.shift(); if (seen() && !stale && old.el && old.el.parentNode) old.el.parentNode.removeChild(old.el); else stale = true; }",
+   "old": "var old = feed.shift(); if (seen() && !stale && old.el && old.el.parentNode) unrow(old); else stale = true; }",
    "new": "var old = feed.shift(); }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -186,7 +186,7 @@
   {
    "id": "del_leaves_the_row",
    "file": "web/home/chat.js",
-   "old": "if (seen() && !stale && gone.el && gone.el.parentNode) gone.el.parentNode.removeChild(gone.el); else stale = true;",
+   "old": "if (seen() && !stale && gone.el && gone.el.parentNode) { unrow(gone); days(); } else stale = true;",
    "new": "gone.el = gone.el;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -788,8 +788,8 @@
   {
    "id": "line_painted_in_a_hidden_tab",
    "file": "web/home/chat.js",
-   "old": "if (seen() && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); } else stale = true;",
-   "new": "if (isHome && open && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); } else stale = true;",
+   "old": "if (seen() && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); days(); } else stale = true;",
+   "new": "if (isHome && open && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); days(); } else stale = true;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -1173,8 +1173,8 @@
   {
    "id": "marks_alone_are_a_line",
    "file": "web/home/chat.js",
-   "old": "return shows(text) ? {",
-   "new": "return text ? {",
+   "old": "if (!shows(text)) return null;",
+   "new": "if (!text) return null;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -2671,7 +2671,7 @@
   {
    "id": "the_hubs_own_line_has_an_author",
    "file": "web/home/chat.js",
-   "old": "if (e.sys) return put(el('div', 'gc-line gc-event'), [el('bdi', 'gc-text', e.text)]);",
+   "old": "if (e.sys) { r = put(el('div', 'gc-line gc-event'), [stamp(e), el('bdi', 'gc-text', e.text)]); r.setAttribute('data-n', String(e.id)); return r; }",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -3021,21 +3021,21 @@
   {
    "id": "the_number_is_off_by_one",
    "file": "web/home/chat.js",
-   "old": "' #' + e.id",
-   "new": "' #' + (e.id + 1)",
+   "old": "? '#' + e.id + ' ' + full",
+   "new": "? '#' + (e.id + 1) + ' ' + full",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "the_number_is_the_row_not_the_id",
    "file": "web/home/chat.js",
-   "old": "' #' + e.id",
-   "new": "' #' + feed.indexOf(e)",
+   "old": "? '#' + e.id + ' ' + full",
+   "new": "? '#' + feed.indexOf(e) + ' ' + full",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "the_number_has_no_title",
    "file": "web/home/chat.js",
-   "old": "no.setAttribute('title', TEXT.number);",
+   "old": "t.setAttribute('title', tools() && !e.sys ? '#' + e.id + ' ' + full : full);",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
