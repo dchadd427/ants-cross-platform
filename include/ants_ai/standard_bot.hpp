@@ -196,11 +196,12 @@ private:
         IslandTask::Params p;
         p.swimmers = plan.island_swimmers;
         p.builders = plan.island_builders;
-        p.bridge_food = plan.island_bridge_food;
+        const bool food = plan.island_bridge_food && plan.island_builders == 0;                   // (a plan with a builder of its own keeps the builder's rules: the labs of the island task)
+        p.bridge_food = food;
         p.bridge_from = plan.island_bridge_from;
         p.bridge_idle = plan.island_bridge_idle;
         p.bridge_low = plan.island_bridge_low;
-        p.max_new_tiles = plan.island_bridge_food ? plan.island_bridge_tiles : p.max_new_tiles;
+        p.max_new_tiles = food ? plan.island_bridge_tiles : p.max_new_tiles;
         p.bridge_rest = plan.island_bridge_rest;
         p.bridge_share = plan.island_bridge_share;
         p.ferry_keep = plan.island_ferry_keep;
