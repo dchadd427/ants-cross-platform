@@ -312,11 +312,9 @@ def open_name_card(t):
 
 
 def open_games(t):
-    """Home, then the Games list (web/home/games.js: the page loads it after its first paint, so the button is waited for), with "Have a code?" pressed (the box is open under the heading and the cursor is in its field)."""
+    """Home, then the Games list (web/home/games.js: the page loads it after its first paint, so the list is waited for; Home has no Games button, the list is always there), with "Have a code?" pressed (the box is open under the heading and the cursor is in its field)."""
     t.ev("(function () { var h = document.querySelector('.rhome'); if (h && document.body.getAttribute('data-screen') === 'room') h.click(); return 1; })()")
-    wait_for(lambda: t.ev("(function () { var g = document.querySelector('.hchip.games'); return !!g && !g.disabled; })()"), 10)
-    click_on(t, ".hchip.games")
-    wait_for(lambda: t.ev("!document.querySelector('.gpop').hidden"), 5)
+    wait_for(lambda: t.ev("(function () { var p = document.querySelector('.gpop'); return !!p && !p.hidden && document.body.getAttribute('data-screen') === 'home'; })()"), 10)
     if t.ev("document.querySelector('.gpop .gcode').hidden"):
         click_on(t, ".gpop .gcodelink")
     t.ev("document.querySelector('.gpop .joinbox input').focus(); 1")
@@ -693,7 +691,7 @@ def main():
 
             # Join by code (the Games list of Home)
             open_games(tab)
-            check(value("!document.querySelector('.gpop').hidden"), "Games opens the list, with Have a code? in its heading")
+            check(value("!document.querySelector('.gpop').hidden") and value("document.querySelectorAll('.hbar .games').length") == 0, "Home shows the Games list, with Have a code? in its heading, and has no Games button in its bar")
             check(value("document.querySelector('.gpop .gcodelink').getAttribute('aria-expanded')") == "true" and value("document.activeElement === document.querySelector('.gpop .joinbox input')") is True,
                   "Have a code? opens the box (aria-expanded) with the cursor in the field")
             size = json.loads(value("JSON.stringify([document.querySelector('.gpop .gcodelink'), document.querySelector('.gpop .gcx'), document.querySelector('.gpop .gcgo')].map(function (e) { var r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }))"))
@@ -737,8 +735,6 @@ def main():
             wait_for(lambda: open_name_card(tab), 5)
             click_on(tab, "#name-step-own")
             check(not open_name_card(tab) and lobby()["code"] == st["code"] and lobby()["heading"] == "Your room", "\"Start a room of my own instead\" closes the card and the page's own room stays")
-            real_click(".hchip.games")
-            check(value("document.querySelector('.gpop').hidden") is True, "Games again puts the list away")
             real_click(".hchip.mine")
 
             # the footer
