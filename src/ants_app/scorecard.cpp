@@ -22,6 +22,16 @@ void draw_counter(IRenderer& renderer, const std::string& text, int32_t x, int32
     renderer.clear_clip_rect();
 }
 
+// The score of a row (the first column): the numbers' face with the thick outline, in the label's color, from the column's left edge, as high as the label's digits and squeezed to the column's width
+// when it is wider; the old label where that face cannot be drawn
+void draw_score_counter(IRenderer& renderer, const std::string& text, int32_t x, int32_t y, int32_t box_w) {
+    renderer.set_clip_rect(x, y, box_w, ScorecardModal::LABEL_H);
+    if (!renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, false, kLabelColor)) {
+        renderer.draw_text_squeezed(text, x, y, kLabelColor, FontSize::Px18, kResultsDigitWidth * static_cast<int32_t>(text.size()));
+    }
+    renderer.clear_clip_rect();
+}
+
 } // anonymous namespace
 
 ScorecardModal::ScorecardModal() = default;
@@ -185,9 +195,9 @@ void ScorecardModal::render(IRenderer& renderer, const assets::AssetArchive& ass
         const int32_t y = layout.row_y(i);
         draw_label(renderer, row.name, layout.name_x, y, layout.name_w, kLabelColor, FontSize::Px18, false);
         if (is_187) {
-            for (size_t c = 0; c < 3; ++c) draw_counter(renderer, row.numbers[c], layout.numbers187_x[c], y, layout.numbers187_w[c]);
+            for (size_t c = 0; c < 3; ++c) (c == 0 ? draw_score_counter : draw_counter)(renderer, row.numbers[c], layout.numbers187_x[c], y, layout.numbers187_w[c]);
         } else {
-            for (size_t c = 0; c < 4; ++c) draw_counter(renderer, row.numbers[c], layout.column_x[c], y, layout.column_w[c]);
+            for (size_t c = 0; c < 4; ++c) (c == 0 ? draw_score_counter : draw_counter)(renderer, row.numbers[c], layout.column_x[c], y, layout.column_w[c]);
         }
         if (row.has_second()) {
             draw_portrait(renderer, assets, row.first, layout.portrait_pair_x[0], y + layout.portrait_dy);

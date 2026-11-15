@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the numbers in the game's font for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the output-resolution drawing in src/ants_app/renderer_numbers.cpp (SDL's logical size and the clip put back, the size of what shows against the old ink, the outline, the score number's width, the shrink about the number's middle, the bounds of the cache) and the shrink curve in include/ants_app/health_changes.hpp, against tests/test_app/test_font_numbers.cpp. Run from the checkout: tools/mutate.py tests/data/font_numbers_mutants.json --keep-going --jobs 1; every mutant must be caught.",
+  "note": "Mutants of the numbers in the game's font for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the output-resolution drawing in src/ants_app/renderer_numbers.cpp (SDL's logical size and the clip put back, the size of what shows against the old ink, the outline, the score number's width, the shrink about the number's middle, the bounds of the cache) and the shrink curve in include/ants_app/health_changes.hpp, against tests/test_app/test_font_numbers.cpp. Run from the checkout: tools/mutate.py tests/data/font_numbers_mutants.json --keep-going --jobs 1; every mutant must be caught. The numbers' face (Libre Franklin Black, the fallback to the face of the labels), the thick outline that grows outward, and the team scores in the HUD boxes and on the results page are pinned too.",
   "mutants": [
     {
       "id": "native_logical_size_not_restored",
@@ -34,8 +34,8 @@
     {
       "id": "size_is_the_cell_not_the_ink",
       "file": "src/ants_app/renderer_numbers.cpp",
-      "old": "    const int32_t digit_px = std::max(2, height_px - 2 * o);",
-      "new": "    const int32_t digit_px = std::max(2, height_px - 2 * o + 4);",
+      "old": "    const int32_t digit_px = std::max(2, height_px - 2 * base);",
+      "new": "    const int32_t digit_px = std::max(2, height_px - 2 * base + 4);",
       "build": [
         "test_font_numbers"
       ],
@@ -124,8 +124,8 @@
     {
       "id": "cache_unbounded",
       "file": "src/ants_app/renderer_numbers.cpp",
-      "old": "    if (number_pictures_.size() >= kMaxNumberPictures) clear_number_pictures();",
-      "new": "    if (false) clear_number_pictures();",
+      "old": "    if (number_pictures_.size() >= kMaxNumberPictures) evict_number_pictures();",
+      "new": "    if (false) evict_number_pictures();",
       "build": [
         "test_font_numbers"
       ],
@@ -134,8 +134,8 @@
     {
       "id": "font_cache_unbounded",
       "file": "src/ants_app/renderer_numbers.cpp",
-      "old": "        if (digit_fonts_.size() >= kMaxNumberFonts) clear_number_pictures();",
-      "new": "        if (false) clear_number_pictures();",
+      "old": "        if (digit_fonts_.size() >= kMaxNumberFonts) evict_number_fonts();",
+      "new": "        if (false) evict_number_fonts();",
       "build": [
         "test_font_numbers"
       ],
@@ -144,7 +144,7 @@
     {
       "id": "no_fallback_without_face",
       "file": "include/ants_app/renderer.hpp",
-      "old": "    bool font_numbers() const noexcept { return !classic_numbers_ && !ttf_path_.empty(); }",
+      "old": "    bool font_numbers() const noexcept { return !classic_numbers_ && !number_path_.empty(); }",
       "new": "    bool font_numbers() const noexcept { return !classic_numbers_; }",
       "build": [
         "test_font_numbers"
@@ -156,6 +156,126 @@
       "file": "src/ants_app/renderer_health.cpp",
       "old": "    if (font_numbers() || (in_world_target_ && pass_.camera.zoom != zoom::kNormal)) {",
       "new": "    if (in_world_target_ && pass_.camera.zoom != zoom::kNormal) {",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "face_is_the_medium_not_the_black",
+      "file": "src/ants_app/renderer.cpp",
+      "old": "        number_path_ = choose_number_face(ttf_path_, \"Original-Ants/LibreFranklin-Black.ttf\");",
+      "new": "        number_path_ = ttf_path_;",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "outline_is_one_pixel",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "constexpr int32_t kNumberOutlineFactor = 2;",
+      "new": "constexpr int32_t kNumberOutlineFactor = 1;",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "no_fallback_when_the_black_file_is_missing",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "    return text_face;\n}",
+      "new": "    return black_file;\n}",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "outline_eats_the_glyph",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "    const int32_t digit_px = std::max(2, height_px - 2 * base);",
+      "new": "    const int32_t digit_px = std::max(2, height_px - 2 * o);",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "hud_score_is_the_sprites",
+      "file": "src/ants_app/hud.cpp",
+      "old": "    if (!renderer.draw_number_text(std::to_string(std::clamp(score, 0, 999999)),",
+      "new": "    if (false && !renderer.draw_number_text(std::to_string(std::clamp(score, 0, 999999)),",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "hud_score_box_too_wide",
+      "file": "src/ants_app/hud.cpp",
+      "old": "slot.box_left + 52, slot.top + 2, 51, 10, true,",
+      "new": "slot.box_left + 52, slot.top + 2, 510, 10, true,",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "results_score_is_the_label",
+      "file": "src/ants_app/scorecard.cpp",
+      "old": "    if (!renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, false, kLabelColor)) {",
+      "new": "    if (false && !renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, false, kLabelColor)) {",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "score_number_not_squeezed",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "        const double k = pic->box_w > avail ? static_cast<double>(avail) / static_cast<double>(pic->box_w) : 1.0;",
+      "new": "        const double k = 1.0;",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "cache_full_clears_everything",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "    if (number_pictures_.size() >= kMaxNumberPictures) evict_number_pictures();",
+      "new": "    if (number_pictures_.size() >= kMaxNumberPictures) clear_number_pictures();",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "picture_eviction_closes_the_fonts",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "    number_pictures_.swap(keep);\n}",
+      "new": "    number_pictures_.swap(keep);\n    drop_number_fonts();\n}",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "font_bound_clears_everything",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "        if (digit_fonts_.size() >= kMaxNumberFonts) evict_number_fonts();",
+      "new": "        if (digit_fonts_.size() >= kMaxNumberFonts) clear_number_pictures();",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "eviction_drops_the_newest",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "        if (p.used <= cutoff && dropped < drop) {\n            if (p.texture) SDL_DestroyTexture(p.texture);",
+      "new": "        if (p.used > cutoff && dropped < drop) {\n            if (p.texture) SDL_DestroyTexture(p.texture);",
       "build": [
         "test_font_numbers"
       ],

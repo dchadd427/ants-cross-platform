@@ -1392,14 +1392,15 @@ void test_counters(const assets::AssetArchive& arc) {
                 }
                 bool inside = true, apart = true;
                 for (size_t c = 0; c < 4; ++c) {
-                    const int32_t width = kResultsDigitWidth * static_cast<int32_t>(std::string(texts[row][c]).size());
+                    // (the score column is drawn in the numbers' heavy face with its thick outline: it keeps to its column's width, squeezed to it when wider; the other three keep the 8 px digits)
+                    const int32_t width = c == 0 ? l.column_w[0] : kResultsDigitWidth * static_cast<int32_t>(std::string(texts[row][c]).size());
                     inside = inside && ink[c].first >= l.column_x[c] - 1 && ink[c].last <= l.column_x[c] + width;
                     if (c + 1 < 4) apart = apart && ink[c + 1].first - ink[c].last >= 3;
                 }
                 check(ink[0].first >= 0 && ink[1].first >= 0 && ink[2].first >= 0 && ink[3].first >= 0, "the row " + std::to_string(row + 1) + ": every number has ink");
                 std::string extents;
-                for (size_t c = 0; c < 4; ++c) extents += " [" + std::to_string(ink[c].first) + " .. " + std::to_string(ink[c].last) + " in " + std::to_string(l.column_x[c]) + " .. " + std::to_string(l.column_x[c] + kResultsDigitWidth * static_cast<int32_t>(std::string(texts[row][c]).size())) + "]";
-                check(inside, "the row " + std::to_string(row + 1) + ": every number stays inside the width of its digits (8 px each):" + extents);
+                for (size_t c = 0; c < 4; ++c) extents += " [" + std::to_string(ink[c].first) + " .. " + std::to_string(ink[c].last) + " in " + std::to_string(l.column_x[c]) + " .. " + std::to_string(l.column_x[c] + (c == 0 ? l.column_w[0] : kResultsDigitWidth * static_cast<int32_t>(std::string(texts[row][c]).size()))) + "]";
+                check(inside, "the row " + std::to_string(row + 1) + ": every number stays inside the width of its digits (8 px each; the score: its column):" + extents);
                 check(apart, "the row " + std::to_string(row + 1) + ": two numbers are at least two empty columns apart (" + std::to_string(ink[1].first - ink[0].last) + ", " + std::to_string(ink[2].first - ink[1].last) + ", " + std::to_string(ink[3].first - ink[2].last) + ")");
             }
         }

@@ -17,6 +17,22 @@
 
 namespace ants::app {
 
+std::string Renderer::choose_number_face(const std::string& text_face, const std::string& black_file) {
+    if (text_face.empty()) return std::string();
+#ifdef ANTS_ENABLE_SDL_TTF
+    if (TTF_WasInit() != 0) {
+        TTF_Font* probe = TTF_OpenFont(black_file.c_str(), 24);
+        if (probe != nullptr) {
+            TTF_CloseFont(probe);
+            return black_file;
+        }
+    }
+#else
+    (void)black_file;
+#endif
+    return text_face;
+}
+
 Renderer::NativeFrame Renderer::begin_native() {
     NativeFrame f;
     if (!renderer_ || in_world_target_) return f;
@@ -53,11 +69,8 @@ void Renderer::end_native(const NativeFrame& f) {
     SDL_RenderSetClipRect(renderer_, f.clipped ? &f.clip : nullptr);
 }
 
-void Renderer::clear_number_pictures() {
-    for (NumberPicture& p : number_pictures_) {
-        if (p.texture) SDL_DestroyTexture(p.texture);
-    }
-    number_pictures_.clear();
+// The faces that the numbers are made with (opened once per size), closed
+void Renderer::drop_number_fonts() {
 #ifdef ANTS_ENABLE_SDL_TTF
     for (DigitFont& d : digit_fonts_) {
         if (d.fill) TTF_CloseFont(static_cast<TTF_Font*>(d.fill));
@@ -65,6 +78,63 @@ void Renderer::clear_number_pictures() {
     }
 #endif
     digit_fonts_.clear();
+}
+
+// Everything: the pictures and the faces (a new face file, the end of the renderer)
+void Renderer::clear_number_pictures() {
+    for (NumberPicture& p : number_pictures_) {
+        if (p.texture) SDL_DestroyTexture(p.texture);
+    }
+    number_pictures_.clear();
+    drop_number_fonts();
+}
+
+// The picture cache is full: the oldest quarter (the least recently used) goes, the other three quarters stay, and so do the faces: a fight with many numbers of many sizes would otherwise
+// throw every picture away and open every face again (twice a size) in the frames that follow, and a frame is only a few milliseconds long.
+void Renderer::evict_number_pictures() {
+    const size_t drop = std::max<size_t>(1, number_pictures_.size() / 4);
+    std::vector<uint64_t> ages;
+    ages.reserve(number_pictures_.size());
+    for (const NumberPicture& p : number_pictures_) ages.push_back(p.used);
+    std::nth_element(ages.begin(), ages.begin() + static_cast<std::ptrdiff_t>(drop - 1), ages.end());
+    const uint64_t cutoff = ages[drop - 1];
+    std::vector<NumberPicture> keep;
+    keep.reserve(number_pictures_.size());
+    size_t dropped = 0;
+    for (NumberPicture& p : number_pictures_) {
+        if (p.used <= cutoff && dropped < drop) {
+            if (p.texture) SDL_DestroyTexture(p.texture);
+            ++dropped;
+        } else {
+            keep.push_back(std::move(p));
+        }
+    }
+    number_pictures_.swap(keep);
+}
+
+// The faces are at their bound: the oldest quarter goes (their pictures stay: a picture does not need its face once it is made)
+void Renderer::evict_number_fonts() {
+    const size_t drop = std::max<size_t>(1, digit_fonts_.size() / 4);
+    std::vector<uint64_t> ages;
+    ages.reserve(digit_fonts_.size());
+    for (const DigitFont& d : digit_fonts_) ages.push_back(d.used);
+    std::nth_element(ages.begin(), ages.begin() + static_cast<std::ptrdiff_t>(drop - 1), ages.end());
+    const uint64_t cutoff = ages[drop - 1];
+    std::vector<DigitFont> keep;
+    keep.reserve(digit_fonts_.size());
+    size_t dropped = 0;
+    for (DigitFont& d : digit_fonts_) {
+        if (d.used <= cutoff && dropped < drop) {
+#ifdef ANTS_ENABLE_SDL_TTF
+            if (d.fill) TTF_CloseFont(static_cast<TTF_Font*>(d.fill));
+            if (d.edge) TTF_CloseFont(static_cast<TTF_Font*>(d.edge));
+#endif
+            ++dropped;
+        } else {
+            keep.push_back(d);
+        }
+    }
+    digit_fonts_.swap(keep);
 }
 
 // The part of a digit sprite that shows: the pixels that are not the color key, over every frame of the animation (the sprite's own box is the cell, which has margins)
@@ -114,15 +184,21 @@ std::string font_text(const std::string& text, TTF_Font* font) {
 // `height_px - 2 * outline_px` tall), the way the old drawing's ink was measured (its outline counted). Made once per (text, size, outline); the number of them is bounded.
 const Renderer::NumberPicture* Renderer::number_picture(const std::string& text, int32_t height_px, int32_t outline_px) {
 #ifdef ANTS_ENABLE_SDL_TTF
-    if (!renderer_ || text.empty() || ttf_path_.empty() || height_px < 4) return nullptr;
+    if (!renderer_ || text.empty() || number_path_.empty() || height_px < 4) return nullptr;
     const int32_t o = std::max(1, outline_px);
-    const int32_t digit_px = std::max(2, height_px - 2 * o);
-    for (const NumberPicture& p : number_pictures_) {
-        if (p.height_px == height_px && p.outline_px == o && p.text == text) return p.texture != nullptr ? &p : nullptr;
+    // `height_px` is what shows with the OLD outline (one scaled pixel, `base` here); the thicker outline grows outward from the glyphs, which keep the size that the old one left them
+    // (the counters of 0 6 8 9 4 stay open). So what shows is `2 * (o - base)` taller and wider than asked, and the glyph is `height_px - 2 * base` tall.
+    const int32_t base = std::max(1, o / health::kNumberOutlineFactor);
+    const int32_t digit_px = std::max(2, height_px - 2 * base);
+    for (NumberPicture& p : number_pictures_) {
+        if (p.height_px == height_px && p.outline_px == o && p.text == text) {
+            p.used = ++number_tick_;
+            return p.texture != nullptr ? &p : nullptr;
+        }
     }
-    if (number_pictures_.size() >= kMaxNumberPictures) clear_number_pictures();      // (a bound, not a working size)
+    if (number_pictures_.size() >= kMaxNumberPictures) evict_number_pictures();      // (a bound, not a working size: the oldest quarter goes)
     if (font_per_point_ <= 0.0) {                      // (how tall a digit is per point of the face: measured once, on a probe)
-        TTF_Font* probe = TTF_OpenFont(ttf_path_.c_str(), 200);
+        TTF_Font* probe = TTF_OpenFont(number_path_.c_str(), 200);
         if (probe == nullptr) return nullptr;
         int minx = 0, maxx = 0, miny = 0, maxy = 0, adv = 0;
         TTF_GlyphMetrics(probe, '0', &minx, &maxx, &miny, &maxy, &adv);
@@ -130,15 +206,17 @@ const Renderer::NumberPicture* Renderer::number_picture(const std::string& text,
         font_per_point_ = static_cast<double>(maxy - miny) / 200.0;
         if (font_per_point_ <= 0.05) { font_per_point_ = 0.0; return nullptr; }
     }
-    const DigitFont* df = nullptr;
-    for (const DigitFont& d : digit_fonts_) {
+    DigitFont* df = nullptr;
+    for (DigitFont& d : digit_fonts_) {
         if (d.digit_px == digit_px && d.outline == o) df = &d;
     }
+    if (df != nullptr) df->used = ++number_tick_;
     if (df == nullptr) {
-        if (digit_fonts_.size() >= kMaxNumberFonts) clear_number_pictures();
+        if (digit_fonts_.size() >= kMaxNumberFonts) evict_number_fonts();
         const int32_t point = std::max(4, static_cast<int32_t>(std::lround(static_cast<double>(digit_px) / font_per_point_)));
-        TTF_Font* fill = TTF_OpenFont(ttf_path_.c_str(), point);
-        TTF_Font* edge = TTF_OpenFont(ttf_path_.c_str(), point);
+        TTF_Font* fill = TTF_OpenFont(number_path_.c_str(), point);
+        TTF_Font* edge = TTF_OpenFont(number_path_.c_str(), point);
+        number_font_opens_ += 2;
         if (fill == nullptr || edge == nullptr) {
             if (fill) TTF_CloseFont(fill);
             if (edge) TTF_CloseFont(edge);
@@ -150,6 +228,7 @@ const Renderer::NumberPicture* Renderer::number_picture(const std::string& text,
         d.outline = o;
         d.fill = fill;
         d.edge = edge;
+        d.used = ++number_tick_;
         digit_fonts_.push_back(d);
         df = &digit_fonts_.back();
     }
@@ -213,6 +292,7 @@ const Renderer::NumberPicture* Renderer::number_picture(const std::string& text,
     if (out) SDL_FreeSurface(out);
     if (fs) SDL_FreeSurface(fs);
     if (es) SDL_FreeSurface(es);
+    pic.used = ++number_tick_;
     number_pictures_.push_back(pic);
     return pic.texture != nullptr ? &number_pictures_.back() : nullptr;
 #else
@@ -248,7 +328,7 @@ void Renderer::draw_font_digits(const LayoutRect& view, double zoom) {
         const int32_t px = std::max(1, digit_scale_);
         const int32_t pad = digit_outline_ ? px : 0;                             // (the old outline's width, canvas pixels)
         const int32_t height_px = std::max(4, static_cast<int32_t>(std::lround(static_cast<double>(10 * px + 2 * pad) * f.scale)));
-        const int32_t outline_px = std::max(1, static_cast<int32_t>(std::lround(static_cast<double>(std::max(1, pad)) * f.scale)));
+        const int32_t outline_px = health::number_outline_px(static_cast<double>(std::max(1, pad)) * f.scale);
         for (const DeferredDigits& d : deferred_digits_) {
             const int32_t sx = view.x + static_cast<int32_t>(std::floor((static_cast<double>(d.wx) - static_cast<double>(camera_.x)) * zoom));
             const int32_t sy = view.y + static_cast<int32_t>(std::floor((static_cast<double>(d.wy) - static_cast<double>(camera_.y)) * zoom));
@@ -277,7 +357,7 @@ void Renderer::draw_font_changes() {
         if (alpha <= 0 || num.hidden) continue;
         const double shrink = health::scale_at(age);
         const int32_t height_px = std::max(4, static_cast<int32_t>(std::lround(static_cast<double>(health::kGlyphHeight + 2) * f.scale * shrink)));
-        const int32_t outline_px = std::max(1, static_cast<int32_t>(std::lround(f.scale * shrink)));
+        const int32_t outline_px = health::number_outline_px(f.scale * shrink);
         const std::string text = std::string(num.heal ? "+" : "-") + std::to_string(std::min<int32_t>(num.amount, 9999));
         const NumberPicture* pic = number_picture(text, height_px, outline_px);
         if (pic == nullptr) continue;
@@ -306,7 +386,7 @@ void Renderer::draw_deferred_scores() {
         const AnimBounds zero = anim_ink(anim_id_digit_[0]);
         const int32_t ink_h = zero.valid ? std::max(1, zero.y1 - zero.y0) : 10;
         const int32_t height_px = std::max(4, static_cast<int32_t>(std::lround(static_cast<double>(ink_h) * zoom * f.scale)));
-        const int32_t outline_px = std::max(1, static_cast<int32_t>(std::lround(zoom * f.scale)));
+        const int32_t outline_px = health::number_outline_px(zoom * f.scale);
         for (const ScoreDigit& s : deferred_scores_) {
             int32_t value = std::clamp(s.amount < 0 ? -s.amount : s.amount, 0, 999999);
             int32_t divisor = 100000;
@@ -344,6 +424,33 @@ void Renderer::draw_deferred_scores() {
         end_native(f);
     }
     deferred_scores_.clear();
+}
+
+// A score number of the HUD's boxes or the results page: the numbers' face, white (or `color`), the thick outline. `ink_h` canvas pixels tall as the old drawing's ink was (the outline grows outward from it,
+// about the middle), starting at `x` (or ending there), squeezed to `box_w` canvas pixels when wider (the draw_text_squeezed rule: the height stays).
+bool Renderer::draw_number_text(const std::string& text, int32_t x, int32_t y, int32_t box_w, int32_t ink_h, bool right_align, ants::assets::ColorRGBA color) {
+    if (text.empty() || !font_numbers() || ink_h < 2 || box_w < 2) return false;
+    const NativeFrame f = begin_native();
+    if (!f.on) return false;
+    bool drawn = false;
+    const int32_t height_px = std::max(4, static_cast<int32_t>(std::lround(static_cast<double>(ink_h) * f.scale)));
+    const NumberPicture* pic = number_picture(text, height_px, health::number_outline_px(f.scale));
+    if (pic != nullptr) {
+        const SDL_Rect at = placed(x, y, 0, 0);
+        const int32_t avail = std::max(1, static_cast<int32_t>(std::lround(static_cast<double>(box_w) * f.scale)));
+        const double k = pic->box_w > avail ? static_cast<double>(avail) / static_cast<double>(pic->box_w) : 1.0;
+        const int32_t shown_w = std::max(1, static_cast<int32_t>(std::lround(static_cast<double>(pic->box_w) * k)));
+        const int32_t left = f.x + static_cast<int32_t>(std::lround(static_cast<double>(at.x) * f.scale)) - (right_align ? shown_w : 0);
+        const int32_t mid = f.y + static_cast<int32_t>(std::lround((static_cast<double>(at.y) + static_cast<double>(ink_h) / 2.0) * f.scale));
+        const SDL_Rect dst{left - static_cast<int32_t>(std::lround(static_cast<double>(pic->box_x) * k)), mid - pic->box_h / 2 - pic->box_y,
+                           static_cast<int32_t>(std::lround(static_cast<double>(pic->w) * k)), pic->h};
+        SDL_SetTextureColorMod(pic->texture, color.r, color.g, color.b);
+        SDL_SetTextureAlphaMod(pic->texture, color.a);
+        SDL_RenderCopy(renderer_, pic->texture, nullptr, &dst);
+        drawn = true;
+    }
+    end_native(f);
+    return drawn;
 }
 
 }  // namespace ants::app
