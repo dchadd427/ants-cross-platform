@@ -294,6 +294,10 @@ struct LevelPlan {
     bool island_ferry_reorder{false};    // a Swimmer that a blast or a blow stopped (its hit points fell, it stands idle) is sent to a pile again at once, a hit carrier is sent home soon (FerryTask::reorder_hurt; `--tune ireorder=0`: off)
     bool island_timed_row{false};        // (Hard) the crew takes a Swimmer behind the Fire hats of a corner row with timed clicks, one ant for every Swimmer (`--tune itimed=0`: one ant for every hat, as before)
     bool island_fly_on{true};            // the Bomber of an expedition's leg flies on after the crew (`--tune ifly=0`: it stays behind and every island of the route needs a Bomber to take, as before; the quicker hops stay)
+    bool island_flower_link{false};      // (Hard) a ferry Swimmer digs the one or two tiles from the ring half where the crew landed to a flower strip, and renews them while an ant waits to cross; an idle plain ant on the ring half walks over and takes the Swimmer drops (`--tune iflink=0`: off)
+    uint32_t island_flower_swimmers{0};  // ... Swimmers that the flower link wants beyond island_swimmers (`--tune iflower=N`)
+    bool island_flower_thief{false};     // ... the ant that waits at the strip also takes a Thief drop and holds it (nothing uses a Thief there yet; `--tune ifthief=1`)
+    uint32_t island_crew_spare{1};       // plain ants beyond the tokens' number that the expedition flies (ExpeditionTask::Params::crew_spare; `--tune icrew=N`)
     // the gate goals (docs/reverse_engineering/bomb_gates.md, "Gate goals"): where walls (fire, bombs, rock) shut every pile off from the hill (HELLRAISER, POPcOrN) the bot gets the right ant first (a Fire ant to
     // put a wall out, a Bomber to bomb itself over it) and does it. There is no switch: Medium and Hard play it on a walled map (Tactics::gate_map, decided from the analysis of the start), Easy never;
     // the times are the owner's numbers (ticks of 50 ms)
@@ -639,6 +643,15 @@ struct Tactics {
     uint32_t wall_keeper{0};             // the Fire Ant that keeps the walls of the own thief hole (set by the WallTask at its last step; 0: none): the sabotage uses another one
     /// Bridge tiles that no trip may be planned over now (index = y * width + x; empty: none): the bridges that will not last another trip (set by the IslandTask at its last refresh)
     std::vector<uint8_t> shut_tiles;
+    /// The links from an island that the bot's crew lands on to a flower strip (set by the FlowerLinkTask at its first look; empty where there is none): the component of the ring half, the
+    /// component of the strip, the drop tile of its flower and the water tiles to dig, from the ring half outward
+    struct FlowerLink {
+        int32_t ring{-1};
+        int32_t strip{-1};
+        sim::TileCoord drop{-1, -1};
+        std::vector<sim::TileCoord> tiles;
+    };
+    std::vector<FlowerLink> flower_links;
     /// The map is walled for this seat (GateInfo::walled at the first look: no pile that the hill reaches with fire walls and bombs closed) and the island play does not own it, and the level is
     /// Medium or Hard: the gate goals play, and the pick-up trips, the ferry and the opening are shaped by them (StandardBot, PowerUpTask). False on every other map: there the bot is as it was.
     bool gate_map{false};
