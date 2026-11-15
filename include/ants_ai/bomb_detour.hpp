@@ -3,7 +3,7 @@
 // Bombs on the way (docs/BOTS.md, "Bombs on the way"): the walk round a visible bomb of another team.
 //
 // The engine's path finder walks straight over a bomb of ANOTHER team (only the ant's own and its ally's bombs are walls), and the bomb goes off under the walker. A person sees every bomb
-// (it is drawn in its owner's colour) and clicks round it; a bot's orders were plain clicks on the target. BombDetour is the last look of a standard bot at the orders of a look (after the
+// (it is drawn in its owner's color) and clicks round it; a bot's orders were plain clicks on the target. BombDetour is the last look of a standard bot at the orders of a look (after the
 // tasks and the ReachGuard): for every ant that is ordered to walk, it runs the engine's own path search (sim::PathSearch, the port of the original's A*) on the map as it is now and, when that
 // walk would cross a bomb of another team, runs it again with those bombs as walls. When a walk round them exists and is not much longer, the ant is sent to ONE waypoint of that walk first (a
 // plain move to a tile that no bomb covers, from which the engine's own walk to it crosses no bomb) and the order the task gave is given again when the ant is there (a person's second click).

@@ -424,6 +424,7 @@ void BombTask::step(TaskContext& c) {
         const sim::Grid& grid = v.grid();
         const int gw = static_cast<int>(grid.width());
         const auto at = [&](sim::TileCoord t) { return static_cast<size_t>(t.y) * static_cast<size_t>(gw) + static_cast<size_t>(t.x); };
+        const uint32_t bomber_hp = plan.own_ground_counters ? plan.counter_bomber_hp : 3u;
         std::vector<uint8_t> open = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
         std::vector<uint8_t> safe = open;
         const uint8_t ally = v.ally();
@@ -436,12 +437,12 @@ void BombTask::step(TaskContext& c) {
         };
         std::vector<Cand> cands;
         for (const BombView& b : v.bombs()) {
-            if (b.owner == c.seat || (ally < sim::MAX_PLAYERS && b.owner == ally) || (plan.gate_spare_map_bombs && tactics_.gate_goals_live && b.owner >= sim::MAX_PLAYERS)) continue;
+            if (b.owner == c.seat || (ally < sim::MAX_PLAYERS && b.owner == ally) || (b.owner >= sim::MAX_PLAYERS && plan.gate_spare_map_bombs && tactics_.gate_goals_live)) continue;
             const auto bl = black_.find(key_of(b.tile));
             if (bl != black_.end() && bl->second > now) continue;
             const int harm = harm_to(v, c.map, plan, b.tile, b.owner >= sim::MAX_PLAYERS);
             if (harm == 0) continue;
-            if (plan.own_ground_counters && b.owner < sim::MAX_PLAYERS && few_ants && (harm == 2 || hazard_ground(v, c.map, plan, b.tile) != HazardGround::Own)) continue;
+            if (plan.own_ground_counters && b.owner < sim::MAX_PLAYERS && few_ants && (hazard_ground(v, c.map, plan, b.tile) != HazardGround::Own || harm == 2)) continue;
             cands.push_back(Cand{&b, harm});
         }
         if (cands.empty() && !v.bombs().empty()) {                                                       // no bomb harms the hill or a pile: the bombs that shut a busy route (every 60 looks' worth of ticks, the walk is measured)
@@ -460,7 +461,7 @@ void BombTask::step(TaskContext& c) {
             int rt_harm = 99;
             int32_t rt_cost = 0;
             for (const AntView& a : v.mine()) {
-                if (a.type != sim::AntType::Bomber || a.hp < (plan.own_ground_counters ? plan.counter_bomber_hp : 3u) || a.holding || a.carried_points > 0 || !a.takes_orders() || a.state == sim::UnitState::Stunned) continue;
+                if (a.type != sim::AntType::Bomber || a.hp < bomber_hp || a.holding || a.carried_points > 0 || !a.takes_orders() || a.state == sim::UnitState::Stunned) continue;
                 const TaskId owner = c.ledger.owner(a.id);
                 if (owner != kNoTask && owner != id() && c.ledger.rank(owner) >= c.ledger.rank(id())) continue;
                 if (!grid.in_bounds(a.tile)) continue;
