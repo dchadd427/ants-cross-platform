@@ -301,6 +301,10 @@ struct LevelPlan {
     uint32_t island_flower_swimmers{0};  // ... Swimmers that the flower link wants beyond island_swimmers (`--tune iflower=N`)
     bool island_flower_thief{false};     // ... the ant that waits at the strip also takes a Thief drop and holds it (nothing uses a Thief there yet; `--tune ifthief=1`)
     uint32_t island_crew_spare{1};       // plain ants beyond the tokens' number that the expedition flies (ExpeditionTask::Params::crew_spare; `--tune icrew=N`)
+    bool island_swarm{false};            // (Hard) every spare ant that a walk reaches goes to the Swimmer drop of a flower strip and takes it: up to island_swarm_swimmers Swimmers in all (SwarmTask; `--tune iswarm=1`)
+    uint32_t island_swarm_swimmers{8};   // ... the Swimmers that the bot wants in all (the row's three and the drops of the strips; `--tune iswarmn=N`)
+    uint32_t island_swarm_stage{2};      // ... ants that wait beside the drop tile of one strip (`--tune iswarmstage=N`)
+    uint32_t island_swarm_hp{3};         // ... the least hit points of an ant that waits there: a drop is taken by walking onto it, and the crew's hops leave an ant with 4 (`--tune iswarmhp=N`)
     // the gate goals (docs/reverse_engineering/bomb_gates.md, "Gate goals"): where walls (fire, bombs, rock) shut every pile off from the hill (HELLRAISER, POPcOrN) the bot gets the right ant first (a Fire ant to
     // put a wall out, a Bomber to bomb itself over it) and does it. There is no switch: Medium and Hard play it on a walled map (Tactics::gate_map, decided from the analysis of the start), Easy never;
     // the times are the owner's numbers (ticks of 50 ms)

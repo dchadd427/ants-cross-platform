@@ -1071,6 +1071,36 @@ void ExpeditionTask::drive_row(TaskContext& c) {
     row_before_[taker->id] = taker->type;
 }
 
+// The crew ants on the island of the row that no Swimmer still to be taken needs go free: timed clicks take one ant for every Swimmer, so the others only wait for nothing. The Swimmers
+// that are still wanted, less those that ants on their way to a token make, are the ants that stay (and one more while fewer than two Swimmers are made); the nearest to the entrance by
+// the steps of a walk stay, the others are released and the swarm sends them to a strip
+void ExpeditionTask::release_spares(TaskContext& c) {
+    const BotView& v = c.view;
+    const sim::Grid& grid = v.grid();
+    const int32_t target = route_.back();
+    uint32_t have = 0;
+    for (const AntView& a : v.mine()) have += a.type == sim::AntType::Swimmer ? 1u : 0u;
+    const uint32_t want = swimmers_wanted();
+    const uint32_t making = static_cast<uint32_t>(row_ant_.size());                                   // (an ant that took its Swimmer is one of `have` already)
+    const uint32_t needed = want > have + making ? want - have - making : 0u;
+    const uint32_t keep = needed + (have + making < 2u ? 1u : 0u);
+    Stations st;
+    stations(c, st);
+    std::vector<std::pair<int32_t, uint32_t>> waiting;                                               // (steps from the entrance, ant)
+    for (const uint32_t ant : crew_) {
+        const AntView* a = find_ant(v.mine(), ant);
+        if (a == nullptr || a->type != v.default_ant_type() || c.map.ant_component(c.seat, a->tile) != target) continue;
+        if (row_ant_.count(ant) != 0 || done_.count(ant) != 0 || ant == stage_ant_ || chained_.count(ant) != 0 || !a->idle()) continue;
+        waiting.emplace_back(st.steps_of(grid, a->tile), ant);
+    }
+    if (waiting.size() <= keep) return;
+    std::sort(waiting.begin(), waiting.end());
+    for (size_t i = keep; i < waiting.size(); ++i) {
+        crew_.erase(waiting[i].second);
+        c.ledger.release(waiting[i].second, id());
+    }
+}
+
 // ---- every look -------------------------------------------------------------------------------------------------------------------------------------
 
 void ExpeditionTask::step(TaskContext& c) {
@@ -1095,6 +1125,7 @@ void ExpeditionTask::step(TaskContext& c) {
         }
     }
     note_taken(c);                                                                                   // (before the end is looked at: the last token taken counts)
+    if (params_.release_spares && chains_now()) release_spares(c);
     bool swimmer_left = false;
     for (const sim::TileCoord t : row_) {
         const PowerUpView* p = v.powerup_at(t);

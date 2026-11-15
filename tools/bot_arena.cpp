@@ -51,6 +51,7 @@
 #include <fstream>
 #include <functional>
 #include <map>
+#include <set>
 #include <memory>
 #include <mutex>
 #include <ostream>
@@ -385,6 +386,7 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
         else if (s == "--ally-standard") o.ally_standard = true;
         else if (s == "--ally-pairs") o.ally_pairs = true;
         else if (s == "--replay-check") o.replay_check = true;
+        else if (s == "--swimmer-trace") o.swimmer_trace = true;
         else if (s == "--save-replays") {
             if (!value("--save-replays", v)) return false;
             if (v.empty()) { err = "--save-replays needs a folder"; return false; }
@@ -722,6 +724,76 @@ void save_replay(const LoadedMap& m, const Job& job, const ai::ArenaSpec& spec, 
     else g_replay_sink->notes.push_back("not saved: " + result.note);
 }
 
+// --swimmer-trace: what the seats' Swimmers did (read from the engine every 10th tick; nothing is sent and the match is the same). A Swimmer counts while it lives.
+struct SwimmerTrace {
+    static constexpr size_t kMinutes = 12;
+    std::array<std::array<uint64_t, 9>, 4> reached{};        // seat -> tick at which it first had n Swimmers alive (index n, 1..8; 0 = never)
+    std::array<uint32_t, 4> most{};
+    std::array<std::array<int32_t, kMinutes>, 4> score{};    // seat -> score at the end of each minute
+    std::array<std::array<uint32_t, kMinutes>, 4> alive{};   // seat -> Swimmers alive at the end of each minute
+    std::map<uint32_t, uint8_t> kind_of;                     // SWT_EVENTS (temporary)
+    std::set<int32_t> bridges;
+    int drop_kind[2] = {0, 0};
+    void look(const sim::SimulationEngine& sim) {
+        const uint64_t tick = sim.current_tick();
+        if (std::getenv("SWT_EVENTS") != nullptr) {
+            for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
+                const uint8_t k = static_cast<uint8_t>(a.raw_type);
+                auto it = kind_of.find(a.id);
+                if (it == kind_of.end()) kind_of[a.id] = k;
+                else if (it->second != k) { std::fprintf(stderr, "EV t=%llu seat=%u ant=%u %u->%u at (%d,%d)\n", (unsigned long long)tick, a.player_id, a.id, it->second, k, a.tile_x, a.tile_y); it->second = k; }
+            }
+            if (tick % 200 == 0 && tick <= 5000) {
+                for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
+                    if (a.player_id == 0) std::fprintf(stderr, "POS t=%llu ant=%u type=%u at (%d,%d) state=%d hp=%d\n", (unsigned long long)tick, a.id, (unsigned)a.raw_type, a.tile_x, a.tile_y, (int)a.state, (int)a.hp);
+                }
+            }
+            {
+                static const sim::TileCoord drops[2] = {{30, 5}, {30, 56}};
+                for (int d = 0; d < 2; ++d) {
+                    const sim::Grid& gg = sim.grid();
+                    const int k = gg.has_powerup_at(drops[d]) ? gg.get_powerup_type(drops[d]) : 0;
+                    if (k != drop_kind[d]) { std::fprintf(stderr, "EV t=%llu drop at (%d,%d) kind %d\n", (unsigned long long)tick, drops[d].x, drops[d].y, k); drop_kind[d] = k; }
+                }
+            }
+            const sim::Grid& g = sim.grid();
+            for (uint32_t y = 0; y < g.height(); ++y) for (uint32_t x = 0; x < g.width(); ++x) {
+                const bool b = g.get_cell(sim::TileCoord{(int32_t)x, (int32_t)y}).has_completed_bridge();
+                const int32_t idx = (int32_t)(y * g.width() + x);
+                if (b && bridges.insert(idx).second) std::fprintf(stderr, "EV t=%llu bridge up (%u,%u)\n", (unsigned long long)tick, x, y);
+                if (!b && bridges.erase(idx)) std::fprintf(stderr, "EV t=%llu bridge gone (%u,%u)\n", (unsigned long long)tick, x, y);
+            }
+        }
+        if (tick % 10 != 0) return;
+        std::array<uint32_t, 4> n{};
+        for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
+            if (a.player_id < 4 && a.raw_type == sim::AntType::Swimmer && a.hp > 0 && a.state != sim::UnitState::Dead && a.state != sim::UnitState::Drowning) ++n[a.player_id];
+        }
+        for (size_t t = 0; t < 4; ++t) {
+            most[t] = std::max(most[t], n[t]);
+            for (size_t k = 1; k <= 8 && k <= n[t]; ++k) {
+                if (reached[t][k] == 0) reached[t][k] = tick;
+            }
+            if (tick % 1200 == 0 && tick / 1200 >= 1 && tick / 1200 <= kMinutes) {
+                score[t][tick / 1200 - 1] = sim.get_player_score(static_cast<uint8_t>(t));
+                alive[t][tick / 1200 - 1] = n[t];
+            }
+        }
+    }
+};
+
+void print_swimmer_trace(const LoadedMap& m, const Job& job, const SwimmerTrace& t) {
+    for (const ai::BotSpec& b : job.bots) {
+        if (b.seat >= 4) continue;
+        std::string line = fmt("SWT %s seed=%u rot=%u seat=%u kind=%s sw3=%llu sw5=%llu sw8=%llu most=%u alive=", m.name.c_str(), job.seed, job.rotation, static_cast<unsigned>(b.seat), b.kind.c_str(),
+                               static_cast<unsigned long long>(t.reached[b.seat][3]), static_cast<unsigned long long>(t.reached[b.seat][5]), static_cast<unsigned long long>(t.reached[b.seat][8]), t.most[b.seat]);
+        for (size_t k = 0; k < SwimmerTrace::kMinutes; ++k) line += fmt("%s%u", k == 0 ? "" : ",", t.alive[b.seat][k]);
+        line += " score=";
+        for (size_t k = 0; k < SwimmerTrace::kMinutes; ++k) line += fmt("%s%d", k == 0 ? "" : ",", t.score[b.seat][k]);
+        std::fprintf(g_out, "%s\n", line.c_str());
+    }
+}
+
 MatchReport run_job(const Options& o, const std::vector<LoadedMap>& maps, const Job& job, std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> factory) {
     MatchReport r;
     r.job = job;
@@ -733,7 +805,10 @@ MatchReport run_job(const Options& o, const std::vector<LoadedMap>& maps, const 
     const Clock::time_point started = Clock::now();
     ai::ArenaSpec spec = spec_of(o, m, job, o.replay_check || g_replay_sink != nullptr);
     spec.factory = factory ? factory : o.ally_pairs ? ally_pairs_factory(job) : o.ally_standard ? ally_factory(job) : std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)>(arena_factory);
+    SwimmerTrace trace;
+    if (o.swimmer_trace) spec.on_tick = [&trace](const sim::SimulationEngine& sim) { trace.look(sim); };
     r.result = ai::play_match(spec);
+    if (o.swimmer_trace && r.result.error.empty()) print_swimmer_trace(m, job, trace);
     r.plays = 1;
     if (r.result.error.empty() && o.replay_check) {
         r.replay_checked = true;

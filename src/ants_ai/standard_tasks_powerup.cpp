@@ -47,6 +47,7 @@ bool PowerUpTask::is_link_flower(sim::TileCoord drop) const noexcept {
 
 // The Swimmers that the bot wants beyond the level's own number while a flower link is set: the drops of the strip are taken for them
 size_t PowerUpTask::extra_want(sim::AntType kind) const noexcept {
+    if (tactics_.plan.island_swarm) return 0;                                                       // (the swarm takes the drops of the strips: its ants are staged there, no trip is sent)
     if (kind == sim::AntType::Thief && tactics_.plan.island_flower_link && tactics_.plan.island_flower_thief && !tactics_.flower_links.empty()) return 1;       // (one Thief of the strip: the plan's own want of the Thief, where it has one, counts first)
     if (kind != sim::AntType::Swimmer || !tactics_.plan.island_flower_link || tactics_.flower_links.empty() || tactics_.wants[static_cast<size_t>(kind)] == 0) return 0;
     return tactics_.plan.island_flower_swimmers;
@@ -509,7 +510,8 @@ void PowerUpTask::step(TaskContext& c) {
         }
     }
     if (!call_back.empty()) c.orders.stop(call_back);
-    if (tactics_.plan.island_flower_link && !tactics_.flower_links.empty()) watch_link(c);
+    if (tactics_.plan.island_swarm && !tactics_.flower_links.empty()) {}                          // (the swarm waits at the strips)
+    else if (tactics_.plan.island_flower_link && !tactics_.flower_links.empty()) watch_link(c);
     else watch(c);
     step_off(c);
 

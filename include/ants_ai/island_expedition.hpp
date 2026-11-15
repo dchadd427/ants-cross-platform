@@ -46,6 +46,7 @@ public:
         bool timed_row{false};               // (Hard) timed clicks through the hats of the row: one ant for a Swimmer, the Fire hats stay (see "timed" above)
         uint32_t chain_slack{1};             // a click of a chain is applied from the ticks that the model gives to that many more (the window of the cancel is 3 ticks wide; the early edge is the harmless one)
         uint32_t chain_ticks{90};            // an ant that a chain was ordered for is left alone this long (the chain takes about 60 ticks); then it has made its token or the chain missed
+        bool release_spares{false};          // (swarm) a plain crew ant that stands on the island of the row and is not needed for a Swimmer still to be taken goes free at once (the swarm sends it to a flower strip); one spare stays until two Swimmers are made
         uint32_t chain_misses_max{2};        // chains in a row that missed (the ant took a hat, or stood still with nothing taken) before the row goes back to one ant for every hat; a Swimmer taken by a chain ends the run
     };
 
@@ -157,6 +158,7 @@ private:
     bool steps_in(const TaskContext& context, sim::TileCoord entrance, std::vector<ChainStep>& steps, sim::TileCoord* target) const;
     bool steps_out(const TaskContext& context, const AntView& ant, sim::TileCoord leave, std::vector<ChainStep>& steps, sim::TileCoord* goal) const;
     void release_all(TaskContext& context);
+    void release_spares(TaskContext& context);
     bool may_order(uint32_t ant, uint64_t now) const;
     uint32_t swimmers_wanted() const;
 
