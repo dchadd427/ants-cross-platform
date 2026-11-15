@@ -1022,13 +1022,12 @@ class TheLiveRoles(LiveTest):
         self.fake.member_mode = "slow:0.9"
         a, _ = self.connect("1001:alice")
         b, _ = self.connect("1002:bob")
-        started = time.monotonic()
         for n in range(5):
             a.say("line %d" % n)
             time.sleep(0.05)
         got = [m for m in b.drain(0.6) if m["t"] == "line"]
-        self.assertGreaterEqual(len(got), 2)                                     # (lines go through while a lookup waits)
-        self.assertLess(time.monotonic() - started, 1.5)
+        self.assertGreaterEqual(len(got), 2)                                     # (lines go through while a lookup waits: a loop that a lookup held, each one 0.9 s, would have none within the 0.6 s that are waited for. No bound on the whole test's wall time: it measured the runner, and a slow one took 1.51 s)
+        self.assertGreaterEqual(len(self.fake.member_times), 1)                  # (and the slow lookup did run)
 
 
 class TheLiveOwner(LiveTest):
