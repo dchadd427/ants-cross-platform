@@ -144,10 +144,10 @@ class TheServices(unittest.TestCase):
     def test_the_settings_it_is_given(self):
         for name, text in self.files.items():
             hub = service(text, "ants-hub")
-            self.assertEqual(sorted(re.findall(r"(?m)^      (ANTS_[A-Z_]+):", hub)), ["ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_CLIENT_ID", "ANTS_HUB_DISCORD_CLIENT_SECRET",
+            self.assertEqual(sorted(re.findall(r"(?m)^      (ANTS_[A-Z_]+):", hub)), ["ANTS_HUB_ADMIN_GATE_SECRET", "ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_CLIENT_ID", "ANTS_HUB_DISCORD_CLIENT_SECRET",
                                                                                      "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_MIN_ACCOUNT_DAYS", "ANTS_HUB_OWNER", "ANTS_HUB_PUBLIC_URL",
                                                                                      "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_ROLE_RECHECK_SECONDS"], name)
-            for secret in ("ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_OWNER"):
+            for secret in ("ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_OWNER", "ANTS_HUB_ADMIN_GATE_SECRET"):
                 self.assertIn("%s: ${%s:-}\n" % (secret, secret), hub + "\n", name)                  # (the bot's token, the server and the roles: from the stack's environment only, no value in the file)
             self.assertIn("ANTS_HUB_ROLE_RECHECK_SECONDS: ${ANTS_HUB_ROLE_RECHECK_SECONDS:-180}\n", hub + "\n", name)
             self.assertNotIn("ANTS_HUB_MODS", hub, name)

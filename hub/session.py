@@ -27,6 +27,15 @@ class Identity(collections.namedtuple("Identity", "account_id name young session
         return "<Identity>"             # (the default shows the account id and the session's key: the id is like a password, and is in no representation)
 
 
+def renamed(who, username, display, pick):
+    """The Identity `who` with the names of an account as they are now (its username, its display name or '' for none, and the pick): what a socket that stays open is shown by."""
+    if not display:
+        return who._replace(name=username, username=username, pick="", other="")
+    if pick == "display":
+        return who._replace(name=display, username=username, pick="display", other=username)
+    return who._replace(name=username, username=username, pick="username", other=display)
+
+
 class Sessions:
     login = False                       # whether this hub offers a login at all (the welcome's `login`)
     routes = {}                         # the HTTP addresses of the login (hub/login.py); none for the others
