@@ -28,15 +28,15 @@
   {
    "id": "display_name_comes_before_the_nickname",
    "file": "hub/chat.py",
-   "old": "            wanted = nick or display\n",
+   "old": "            wanted = nick if nick and nick != profile.username else display       # (a nickname equal to the username is no nickname: the display name stays)\n",
    "new": "            wanted = display or nick\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_nickname.TheNicknameIsShown"
   },
   {
    "id": "a_removed_nickname_leaves_no_name",
    "file": "hub/chat.py",
-   "old": "            wanted = nick or display\n",
-   "new": "            wanted = nick\n",
+   "old": "            wanted = nick if nick and nick != profile.username else display       # (a nickname equal to the username is no nickname: the display name stays)\n",
+   "new": "            wanted = nick if nick != profile.username else \"\"\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_nickname.TheNicknameChanges"
   },
   {
@@ -94,6 +94,13 @@
    "old": "name = shown || fit(you.next, check) || fit(you.other, check);",
    "new": "name = shown || fit(you.other, check);",
    "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "nickname_equal_to_the_username_drops_the_display_name",
+   "file": "hub/chat.py",
+   "old": "            wanted = nick if nick and nick != profile.username else display       # (a nickname equal to the username is no nickname: the display name stays)\n",
+   "new": "            wanted = nick or display\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_nickname.TheNicknameIsShown"
   }
  ]
 }

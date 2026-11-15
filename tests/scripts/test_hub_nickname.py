@@ -102,12 +102,13 @@ class TheNicknameIsShown(NickTest):
                 self.checks(2, since=before)
                 self.assertEqual(self.profile(), [(USER, GLOBAL, "display")])
 
-    def test_a_nickname_that_is_the_username_leaves_one_name(self):
+    def test_a_nickname_that_is_the_username_is_no_nickname_and_the_display_name_stays(self):
         self.member(nick=USER)
         c = self.open(self.login())
-        you = self.you_until(c, self.shown(USER))
-        self.assertNotIn("other", you)
-        self.assertEqual(self.profile()[0][1], "")
+        welcome = c.recv_json()
+        self.checks(2)
+        self.assertEqual((welcome["you"]["name"], welcome["you"]["other"]), (GLOBAL, USER))
+        self.assertEqual(self.profile(), [(USER, GLOBAL, "display")])
 
     def test_a_nickname_for_a_person_with_no_display_name_is_shown_and_the_username_is_the_other(self):
         self.fake.user = (ACCOUNT, USER)

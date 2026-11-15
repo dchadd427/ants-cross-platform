@@ -138,7 +138,7 @@ class Chat:
             profile = self.store.profile(account)
             if profile is None or not textrules.valid_name(profile.username):
                 return
-            wanted = nick or display
+            wanted = nick if nick and nick != profile.username else display       # (a nickname equal to the username is no nickname: the display name stays)
             if wanted == profile.username:
                 wanted = ""
             if wanted != profile.display:
