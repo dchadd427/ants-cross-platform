@@ -479,8 +479,8 @@ public:
     void set_health_marks(health::Setting setting, double picture_px_per_css = 1.0, bool scale_digits = true);
     health::Setting health_marks() const noexcept { return health_; }
     /// The damage and heal numbers (health_changes.hpp; renderer_health.cpp). `tracker` null is the setting Off: nothing is read, nothing is drawn. `now_ms` is the numbers' own clock (it stops while the match is
-    /// paused), `picture_px_per_css` and `scale_digits` are set_health_marks' (a canvas shown small, the browser only): the numbers grow with the same rule, to twice their size at most.
-    void set_health_changes(health::ChangeTracker* tracker, int64_t now_ms, double picture_px_per_css = 1.0, bool scale_digits = true);
+    /// paused). They keep one size on every canvas and stand centred on the ant's body.
+    void set_health_changes(health::ChangeTracker* tracker, int64_t now_ms);
     /// The numbers' font, the original's fixed system font (the 8 x 15 raster "Fixedsys"): a cell is `kFixedCellW` x `kFixedCellH` pixels; only digits and '-' have glyphs (nothing else is drawn)
     /// `scale` makes every font pixel `scale` x `scale` (the cell grows right and down from (x, y)); `outline` first draws the glyph in black one scaled pixel round (the phone look, health_marks.hpp: digit_scale)
     void draw_fixed_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, int32_t scale = 1, bool outline = false);
@@ -734,8 +734,6 @@ private:
     /// The damage and heal numbers: the tracker (null = Off), its clock and the size they are drawn at. The pictures of "-12" and "+7" are made once (outlined, white, 7 x 10 pixel glyphs) and tinted
     health::ChangeTracker* changes_{nullptr};
     int64_t changes_now_ms_{0};
-    int32_t changes_scale_{1};
-    bool changes_thick_{false};
     struct ChangePicture {
         std::string text;
         SDL_Texture* texture{nullptr};

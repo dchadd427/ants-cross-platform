@@ -35,10 +35,11 @@ function dockFor(hub, o) {                               // the real script, rea
     const sockets = [];
     class Counted extends MiniWebSocket { constructor(url) { super(url); sockets.push(this); } }
     const host = new El(env, 'div', 'home');
-    const dock = root.AntsHomeChat.mount({ doc, win, host, WebSocket: Counted, error: (e) => errors.push(e) });
+    const dock = root.AntsHomeChat.mount({ doc, win, host, Intl: { DateTimeFormat: function () { return { format: () => '' }; } }, WebSocket: Counted, error: (e) => errors.push(e) });
     dock.shown(true);
     const view = { dock, env, errors, sockets, log: one(dock.root, 'gc-log') };
-    view.rows = () => view.log.children.slice(1).map((r) => r.textContent);
+    view.lines = () => view.log.children.filter((r) => String(r.className).indexOf('gc-day') === -1);       // (the day dividers are not lines)
+    view.rows = () => view.log.children.slice(1).filter((r) => String(r.className).indexOf('gc-day') === -1).map((r) => r.textContent);
     view.note = () => one(dock.root, 'gc-note').textContent;
     view.on = () => one(dock.root, 'gc-on').textContent;
     view.pill = () => { const p = one(dock.root, 'gc-unread'); return p.hidden ? '' : p.textContent; };
@@ -71,7 +72,7 @@ async function main() {
         check('a named visitor has the field and Send', v.form().hidden === false && v.note() === '');
         const answers = ['one', 'two', 'three', 'four', 'five'].map((t) => v.dock.say(t));
         check('five lines in a row: two go (the page\'s burst), the others wait, and the hub never has to say "rate" (the page paces below it)', JSON.stringify(answers) === JSON.stringify(['', '', 'rate', 'rate', 'rate']) && await until(() => v.rows().length === 5) && (hub.rateRefusals || 0) === 0 && hub.received.filter((m) => m.t === 'say').length === 2);
-        check('the visitor\'s own lines come back from the hub as lines, in the visitor\'s mark', v.rows().slice(3).join('|') === 'maple.leaf: one|maple.leaf: two' && v.log.children[4].className.indexOf('gc-me') !== -1);
+        check('the visitor\'s own lines come back from the hub as lines, in the visitor\'s mark', v.rows().slice(3).join('|') === 'maple.leaf: one|maple.leaf: two' && v.lines()[4].className.indexOf('gc-me') !== -1);
         await until(() => v.note() === '', 8000);                      // (the page's own "Slow down a little" for the three that waited goes by itself)
         hub.send(hub.peers[0], { t: 'err', code: 'rate' });
         await sleep(150);
@@ -88,7 +89,7 @@ async function main() {
         const v = dockFor(hub);
         check('a welcome that comes in pieces (50 lines in frames of 700 bytes) is read whole', await until(() => v.dock.state() === 'live', 5000) && v.rows().length === 50);
         hub.say('<img src=x onerror=alert(1)>', '<script>alert(1)</script> ‮ evil ​ text http://x.example');
-        check('markup and bidi from the hub are text and nothing else', await until(() => v.rows().length === 51) && v.rows()[50] === '<img src=x onerror=alert(1)>: <script>alert(1)</script> evil text http://x.example' && v.log.all().every((e) => ['div', 'p', 'span', 'bdi'].indexOf(e.tagName) !== -1) && v.env.innerHTMLWrites.length === 0);
+        check('markup and bidi from the hub are text and nothing else', await until(() => v.rows().length === 51) && v.rows()[50] === '<img src=x onerror=alert(1)>: <script>alert(1)</script> evil text http://x.example' && v.log.all().every((e) => ['div', 'p', 'span', 'bdi', 'a'].indexOf(e.tagName) !== -1) && v.env.innerHTMLWrites.length === 0);
         hub.raw(hub.peers[0], require('./fake_hub.js').frame(1, Buffer.from('{"t":"line","id":900,"who":"big","text":"' + 'z'.repeat(3 * 1024 * 1024) + '"}')));
         for (let i = 0; i < 5; i++) hub.send(hub.peers[0], 'not json ' + i);
         hub.say('after', 'the noise');
@@ -116,7 +117,7 @@ async function main() {
         const hub = await startHub({ login: true, you: { name: 'Maple Leaf', mod: false, k: 'aaaaaaaaaaaa', pick: 'display', other: 'maple.leaf' }, history: [line(1, 'Maple Leaf', 'under the display name', false, { k: 'aaaaaaaaaaaa' }), line(2, 'Maple Leaf', 'another account that shows the same name', false, { k: 'bbbbbbbbbbbb' })], online: 2 });
         const v = dockFor(hub);
         await until(() => v.dock.state() === 'live');
-        const mineRows = () => v.log.children.slice(1).map((r) => cls(r).indexOf('gc-me') !== -1);
+        const mineRows = () => v.log.children.slice(1).filter((r) => cls(r).indexOf('gc-day') === -1).map((r) => cls(r).indexOf('gc-me') !== -1);
         (v.chip && v.chip.click());
         check('a hub that says that the account has both names: the history has the visitor\'s line marked by the key and not the other account\'s of the same name; the menu offers the other name', JSON.stringify(mineRows()) === '[true,false]' && one(v.dock.slot, 'gc-pick').textContent === 'Show my username: maple.leaf');
         one(v.dock.slot, 'gc-pick').click();
@@ -125,7 +126,7 @@ async function main() {
         check('the hub closes the socket, the dock is offline for a moment and then connects again (a second socket, a second welcome, after about a second)', await until(() => hub.upgrades === 2 && v.dock.state() === 'live', 4000) && Date.now() - cut < 3000);
         check('the new welcome names the account by its username, and the menu offers the display name; the old line is still the visitor\'s (by its key)', one(v.dock.slot, 'gc-an').textContent === 'maple.leaf' && one(v.dock.slot, 'gc-pick').textContent === 'Show my display name: Maple Leaf' && JSON.stringify(mineRows()) === '[true,false]' && v.errors.length === 0);
         v.dock.say('and now by the username');
-        check('a new line is by the new name, and comes back as the visitor\'s own', await until(() => v.rows().length === 3) && v.rows()[2] === 'maple.leaf: and now by the username' && cls(v.log.children[3]).indexOf('gc-me') !== -1);
+        check('a new line is by the new name, and comes back as the visitor\'s own', await until(() => v.rows().length === 3) && v.rows()[2] === 'maple.leaf: and now by the username' && cls(v.lines()[3]).indexOf('gc-me') !== -1);
         await hub.close();
         const plain = await startHub({ login: true, you: { name: 'maple.leaf', mod: false }, history: [], online: 1 });
         const w = dockFor(plain);
