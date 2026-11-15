@@ -164,6 +164,34 @@ void run_ring_mines_tests() {
         ASSERT_EQ(h.island_miners, 1u);
         ASSERT_EQ(h.island_mine_count, 10u);
         ASSERT_EQ(h.island_mine_apart, 2u);
-        ASSERT_EQ(h.island_mine_from, 2400u);
+        ASSERT_EQ(h.island_mine_from, 600u);                                                // (the flight starts when the expedition is over)
+        ASSERT_TRUE(h.island_mine_reach && !h.island_walker_bridge);
+        for (const Level level : {Level::Easy, Level::Medium}) ASSERT_TRUE(!plan_for(level).island_mine_reach && !plan_for(level).island_walker_bridge);
+    } TEST_END();
+
+    // AI49: a Bomber that cannot walk to a mine is not sent to lay it, so it stays free for the flight to the ring pile
+    TEST_CASE("AI49.1 With A Second Team On The Map, The Bomber On The Satellite Is Not Sent To Lay A Mine On Another Island's Ground: It Is Free For The Flight, Which Starts And Lands Within 2,000 Ticks; With `island_mine_reach` Off (And The Reach Guard Off, Which Would Drop The Refused Orders Itself) The Mine Task Keeps It And No Flight Starts")
+    {
+        for (const bool reach : {true, false}) {
+            Lab lab([&](LevelPlan& p) { p.island_mine_reach = reach; p.reach_guard = false; p.island_mines = false; p.war_free_only = false; p.mine_gate = 3; p.mine_home = 4; p.mine_home_after = 0; p.island_mine_from = 300; }, 0x0f);
+            lab.sim.spawn_unit(0, sim::AntType::Bomber, kSatellite);
+            lab.run(2000);
+            if (reach) {
+                ASSERT_TRUE(lab.bot()->miner_flight().started() >= 1);
+                ASSERT_TRUE(lab.bot()->miner_flight().landed() >= 1);
+            } else {
+                ASSERT_EQ(lab.bot()->miner_flight().started(), 0u);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI49.2 The Reports Name The Flight: first_start And first_landing Are Set Once The Flight Has Landed And Are 0 Before")
+    {
+        Lab lab([](LevelPlan& p) { p.island_mines = false; });
+        lab.sim.spawn_unit(0, sim::AntType::Bomber, kSatellite);
+        ASSERT_EQ(lab.bot()->miner_flight().first_start(), 0u);
+        lab.run(1500);
+        ASSERT_TRUE(lab.bot()->miner_flight().first_start() > 0);
+        ASSERT_TRUE(lab.bot()->miner_flight().first_landing() > lab.bot()->miner_flight().first_start());
     } TEST_END();
 }

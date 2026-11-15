@@ -346,6 +346,8 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "ibridge") { p.island_bridge_ants = static_cast<uint32_t>(v); return true; }
     if (key == "iguard") return flag(p.island_guard);
     if (key == "iflink") return flag(p.island_flower_link);
+    if (key == "imreach") return flag(p.island_mine_reach);
+    if (key == "iwb") return flag(p.island_walker_bridge);
     if (key == "iflower") { p.island_flower_swimmers = static_cast<uint32_t>(v); return true; }
     if (key == "ifthief") return flag(p.island_flower_thief);
     if (key == "icrew") { p.island_crew_spare = static_cast<uint32_t>(v); return true; }

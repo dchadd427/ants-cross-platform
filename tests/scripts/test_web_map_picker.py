@@ -195,6 +195,9 @@ class ThePickersOwnCode(unittest.TestCase):
             "the reason is read without the refusal": ("m.online === false && m.online_why === 'ants'", "m.online_why === 'ants'"),
             "any refused map is marked as too many ants": ("m.online === false && m.online_why === 'ants'", "m.online === false"),
             "the chip says the game is slow": ("var TOO_MANY_TEXT = 'Too many ants to play online';", "var TOO_MANY_TEXT = 'Many ants: may run slowly';"),
+            "a press on the dimmed page does nothing": ("            onBackdrop(host.parentNode, close);", ""),
+            "a drag from the dimmed page into the list closes it": ("hit = down && e.target === node; down = false; });", "hit = down; down = false; });"),
+            "a drag from inside the list to the dimmed page closes it": ("hit = down && e.target === node; down = false; });", "hit = e.target === node; down = false; });"),
         }
         with tempfile.TemporaryDirectory() as folder:
             for why, (old, new) in broken.items():

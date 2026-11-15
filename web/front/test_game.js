@@ -109,6 +109,13 @@
         function close() { doc.removeEventListener('keydown', onKey, true); if (scrim.parentNode) scrim.parentNode.removeChild(scrim); if (previous && previous.focus) previous.focus(); }
         function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } else if (e.key === 'Tab') { e.preventDefault(); (doc.activeElement === keep ? out : keep).focus(); } }
         keep.addEventListener('click', close);
+        (function () {       // a press that starts and ends on the dimmed page closes the question as Keep playing does (not a drag from inside the box, not a scroll)
+            var down = false, hit = false;
+            scrim.addEventListener('pointerdown', function (e) { down = e.target === scrim; hit = false; });
+            scrim.addEventListener('pointerup', function (e) { hit = down && e.target === scrim; down = false; });
+            scrim.addEventListener('pointercancel', function () { down = hit = false; });
+            scrim.addEventListener('click', function (e) { var h = hit; hit = false; if (h && e.target === scrim) close(); });
+        })();
         out.addEventListener('click', function () { close(); leave(win, id); });
         box.appendChild(h);
         box.appendChild(el(doc, 'p', 'margin:0;font-size:17px;line-height:1.35;', 'The game stops here. You go back to the map exactly as you left it.'));

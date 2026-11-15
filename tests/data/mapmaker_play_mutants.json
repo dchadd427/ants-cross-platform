@@ -1442,6 +1442,34 @@
       "old": "noMore.setAttribute('role', 'status');\n                    friendsPanel.appendChild(noMore);",
       "new": "friendsPanel.appendChild(noMore);",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "test_game_question_backdrop_press_does_nothing",
+      "file": "web/front/test_game.js",
+      "old": "            scrim.addEventListener('click', function (e) { var h = hit; hit = false; if (h && e.target === scrim) close(); });\n",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "test_game_question_backdrop_press_leaves",
+      "file": "web/front/test_game.js",
+      "old": "if (h && e.target === scrim) close(); });",
+      "new": "if (h && e.target === scrim) { close(); leave(win, id); } });",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "test_game_question_drag_into_it_closes",
+      "file": "web/front/test_game.js",
+      "old": "hit = down && e.target === scrim; down = false; });",
+      "new": "hit = down; down = false; });",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "test_game_question_drag_out_of_it_closes",
+      "file": "web/front/test_game.js",
+      "old": "hit = down && e.target === scrim; down = false; });",
+      "new": "hit = e.target === scrim; down = false; });",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
     }
   ]
 }

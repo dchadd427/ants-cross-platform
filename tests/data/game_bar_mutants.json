@@ -308,6 +308,27 @@
    "old": "if (window.innerWidth !== openWidth) close(false); else fit();",
    "new": "if (window.innerWidth !== openWidth) close(false);",
    "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "reload_question_backdrop_press_does_nothing",
+   "file": "web/game_bar.js",
+   "old": "            onBackdrop(dialog, closeAsk);\n",
+   "new": "",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "reload_question_drag_into_it_closes",
+   "file": "web/game_bar.js",
+   "old": "hit = down && e.target === node; down = false; });",
+   "new": "hit = down; down = false; });",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "reload_question_drag_out_of_it_closes",
+   "file": "web/game_bar.js",
+   "old": "hit = down && e.target === node; down = false; });",
+   "new": "hit = e.target === node; down = false; });",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
   }
  ]
 }

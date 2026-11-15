@@ -296,6 +296,14 @@
             });
         }
 
+        function onBackdrop(node, close) {         // a press that starts and ends on the backdrop itself closes the box as its Cancel does (a drag from inside the box, a text selection or a scroll does not)
+            var down = false, hit = false;
+            node.addEventListener('pointerdown', function (e) { down = e.target === node; hit = false; });
+            node.addEventListener('pointerup', function (e) { hit = down && e.target === node; down = false; });
+            node.addEventListener('pointercancel', function () { down = hit = false; });
+            node.addEventListener('click', function (e) { var h = hit; hit = false; if (h && e.target === node) close(); });
+        }
+
         function build(lite) {
             var w = info.words, watching = where() === 1;
             if (lite) watching = false;
@@ -355,6 +363,7 @@
             if (!lite) btns.appendChild(state.leave);
             panel.appendChild(btns);
             scrim.appendChild(panel);
+            onBackdrop(scrim, function () { if (ask) hideAsk(); else close(); });       // (as Esc)
             if (lite) fillSmall(); else selectTab(info.sections[0].id, false);
         }
 

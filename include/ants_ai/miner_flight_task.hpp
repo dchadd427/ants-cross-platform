@@ -36,6 +36,8 @@ public:
     uint32_t landed() const noexcept { return landed_; }
     uint32_t gave_up() const noexcept { return gave_up_; }
     bool flying() const noexcept { return job_.ant != 0; }
+    uint64_t first_start() const noexcept { return first_start_; }      // the tick of the first flight begun and of the first landing (0: never)
+    uint64_t first_landing() const noexcept { return first_landing_; }
 
 private:
     struct Job {
@@ -66,6 +68,8 @@ private:
     uint32_t planted_{0};
     uint32_t landed_{0};
     uint32_t gave_up_{0};
+    uint64_t first_start_{0};
+    uint64_t first_landing_{0};
 };
 
 }  // namespace ants::ai

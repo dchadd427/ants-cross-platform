@@ -316,7 +316,7 @@ void IslandTask::adopt_builders(TaskContext& c) {
     for (const auto& e : builders_) work = work || !e.second.chain.empty();
     for (auto it = builders_.begin(); it != builders_.end();) {
         Builder& b = it->second;
-        if (!b.chain.empty() || !plan_.tiles.empty() || tactics_.surplus > 0) {
+        if (!b.chain.empty() || !plan_.tiles.empty() || (tactics_.surplus > 0 && !params_.walker_bridge)) {
             b.idle_since = 0;
         } else if (b.idle_since == 0) {
             b.idle_since = now;
@@ -327,7 +327,7 @@ void IslandTask::adopt_builders(TaskContext& c) {
         }
         ++it;
     }
-    if (!work && tactics_.surplus == 0) return;
+    if (!work && (tactics_.surplus == 0 || params_.walker_bridge)) return;
     // a bridge is for the workers that walk over it: with none at the hill's island (the expedition took them) the Swimmer carries food instead
     uint32_t workers = 0;
     for (const AntView& a : v.mine()) {
@@ -335,7 +335,7 @@ void IslandTask::adopt_builders(TaskContext& c) {
         const TaskId owner = c.ledger.owner(a.id);
         workers += owner == kNoTask || c.ledger.rank(owner) < c.ledger.rank(id()) ? 1u : 0u;
     }
-    if (workers < params_.min_workers) return;
+    if (workers < params_.min_workers && !params_.walker_bridge) return;
     for (const AntView& a : v.mine()) {
         if (builders_.size() >= params_.builders) break;
         if (a.type != sim::AntType::Swimmer || builders_.count(a.id) != 0 || a.holding || a.carried_points > 0) continue;
@@ -470,7 +470,7 @@ void IslandTask::refresh(TaskContext& c) {
     const uint64_t now = v.tick();
     const HillInfo& hill = c.map.hill(c.seat);
     const uint32_t life_eff = params_.life_ticks > interval_ ? params_.life_ticks - interval_ : 0u;
-    bool builder_free = false;
+    bool builder_free = params_.walker_bridge && builders_.empty();                                // (walker bridge: the plan comes first, and a Swimmer is taken for it)
     for (const auto& e : builders_) builder_free = builder_free || e.second.chain.empty();
     const bool might_plan = builder_free && plan_.tiles.empty() && v.ticks_left() > params_.min_ticks_left && beyond_food(v, c.map, c.seat);
     const bool have_bridges = !seen_.empty();

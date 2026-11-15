@@ -2,7 +2,7 @@
    the top bar and under it the games (left), the players (right) and the chat (along the bottom); a phone has one of the three at a time and a strip to pick. Every target is at least 44 px high and wide. */
 
 /* ---- which screen shows ---- */
-body[data-screen="home"] main.wrap, body[data-screen="home"] .bar { display: none; }
+body[data-screen="home"] main.wrap { display: none; }
 body[data-screen="room"] #home { display: none; }
 .mast { display: none; }                                    /* the old heading row: its buttons are in the Menu now, and the bars below carry the page's name as a heading */
 .strips { flex: none; padding-top: 0; padding-bottom: 0; }

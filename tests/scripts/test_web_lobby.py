@@ -291,7 +291,7 @@ class TheFrontPageMarkup(PageCase):
         script = self.script
         self.assertIn("function openHow() { howOpener = document.activeElement; $('how').hidden = false; inert(true); $('how-close').focus(); }", script)       # (the focus goes into the dialog, and the page behind it takes no key or tap, as behind the map list)
         self.assertIn("function closeHow() { $('how').hidden = true; inert(false); if (howOpener && howOpener.focus) howOpener.focus(); }", script)       # (and comes back to what opened it)
-        self.assertIn("$('how').addEventListener('click', function (e) { if (e.target === $('how')) closeHow(); });", script)
+        self.assertIn("onBackdrop($('how'), closeHow);", script)       # (a press that starts and ends on the dimmed page closes it, as the Close button does)
         self.assertIn("if (!$('how').hidden) { closeHow(); return; }", script)                                      # (Escape)
         self.assertIn("$('how-open').addEventListener('click', openHow);", script)
         self.assertIn("$('how-close').addEventListener('click', closeHow);", script)
@@ -346,7 +346,7 @@ class TheFrontPageMarkup(PageCase):
             self.assertIn(needle, nav, needle)
         self.assertIn('id="game-version"', self.page)
         self.assertIn('id="game-build-id"', self.page)
-        self.assertIn('<p class="notice" id="footer-notice">Online matches are recorded. Recordings are kept for 30 days. Results and names are kept for good and are public.</p>', self.markup)
+        self.assertIn('<p class="room-notice" id="room-notice">Online matches are recorded. Recordings are kept for 30 days. Results and names are kept for good and are public.</p>', self.markup)
         self.found(self.markup, r'<p class="stats" id="stats" hidden><i class="live" id="stats-dot" aria-hidden="true"></i><span id="stats-live"></span><span id="stats-played"></span></p>')
         # the name: asked on a card (a link, a code that was typed, an old address) and changed with the pencil on the player's own color; the field of the card takes the name rules of the game page
         self.assertEqual(len(re.findall(r'<input[^>]*id="name-step-input"', self.markup)), 1)

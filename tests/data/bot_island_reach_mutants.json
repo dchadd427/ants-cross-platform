@@ -1,0 +1,44 @@
+{
+ "note": "Mutants of the Bomber that is free to fly (src/ants_ai/standard_tasks_build.cpp, src/ants_ai/tactics.cpp, src/ants_ai/miner_flight_task.cpp, docs/BOTS.md 'Islands') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_island_reach_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect.",
+ "defaults": {
+  "build": "test_ai"
+ },
+ "baseline": {
+  "build": "test_ai",
+  "test": "timeout 900 env ANTS_TEST_FILTER='AI49.' ./build/tests/test_ai/test_ai"
+ },
+ "mutants": [
+  {
+   "id": "reach_filter_removed",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (here >= 0 && there >= 0 && here != there) continue;",
+   "new": "if (false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI49.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI49.1"
+  },
+  {
+   "id": "reach_switch_ignored",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (plan.island_mine_reach && targets[i].comp < 0) {",
+   "new": "if (targets[i].comp < 0) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI49.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI49.1"
+  },
+  {
+   "id": "hard_reach_off",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "p.island_mine_reach = true;",
+   "new": "p.island_mine_reach = false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI43.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI43.6"
+  },
+  {
+   "id": "first_landing_not_kept",
+   "file": "src/ants_ai/miner_flight_task.cpp",
+   "old": "if (first_landing_ == 0) first_landing_ = c.view.tick();",
+   "new": "first_landing_ = 0;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI49.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI49.2"
+  }
+ ]
+}

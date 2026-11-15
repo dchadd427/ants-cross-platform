@@ -2772,6 +2772,48 @@
    "old": "guard(function () { quickHost(); })));",
    "new": "guard(function () { quickJoin(); })));",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "backdrop_press_does_nothing",
+   "file": "web/home/games.js",
+   "old": "            onBackdrop(shade, guard(function () { if (dialog === d) closeAsk(true); }));",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "backdrop_press_picks_the_first_choice",
+   "file": "web/home/games.js",
+   "old": "if (dialog === d) closeAsk(true); }));       // (as Escape",
+   "new": "if (dialog === d) box.querySelector('button').click(); }));       // (as Escape",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "backdrop_press_ignores_where_it_began",
+   "file": "web/home/games.js",
+   "old": "hit = down && e.target === node; down = false; });",
+   "new": "hit = e.target === node; down = false; });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "backdrop_press_ignores_where_it_ended",
+   "file": "web/home/games.js",
+   "old": "hit = down && e.target === node; down = false; });",
+   "new": "hit = down; down = false; });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "backdrop_click_without_a_press_cancels",
+   "file": "web/home/games.js",
+   "old": "if (h && e.target === node) close(); });\n        }\n        function ask(",
+   "new": "if (e.target === node) close(); });\n        }\n        function ask(",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "how_it_works_backdrop_press_does_nothing",
+   "file": "web/lobby.html",
+   "old": "        onBackdrop($('how'), closeHow);",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   }
  ]
 }
