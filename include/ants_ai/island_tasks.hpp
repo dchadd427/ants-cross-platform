@@ -57,6 +57,7 @@ public:
         uint32_t min_units{3};               // no bridge for a pile with fewer units than this
         uint32_t bridge_ants{1};             // ants that work piles over one bridge at a time (see "traffic" above)
         uint32_t max_bridges{3};             // bridges that carry at the same time (one ant each: the hill banks about one deposit per 100 ticks, so about three ants fill its gate); no new bridge for another pile
+        bool walker_bridge{false};           // a Swimmer digs only while a bridge is planned and goes back to the ferry when it is done, whoever stands at the hill (the walkers may stand on another island: the crew that was flown to the Swimmers)
         bool guard{true};                    // false: the ants on a bridge and the ants of a closed pile are left alone (the tests that show what the guard prevents)
     };
 

@@ -258,6 +258,22 @@ const OTHERS = ['Maya', 'Sage'];
     env.home('host').click();
     find(hostCard(env), 'btn')[2].click();
     check('Cancel does the same', hostCard(env) === null && env.sockets.length === 0 && env.screen() === 'home' && env.focused === env.home('host'));
+    {   // a press on the dimmed page around the card is Cancel (it starts AND ends there: a drag from inside the box, a drag into it, or a scroll that the browser takes is not)
+        const press = (target, upTarget, step) => { const shade = hostCard(env).parentNode; const t = (x) => (x === 'shade' ? shade : find(hostCard(env), 'btn')[0]);
+            shade.fire('pointerdown', { target: t(target) }); if (step !== 'cancel') shade.fire('pointerup', { target: t(upTarget) }); else shade.fire('pointercancel', {}); shade.fire('click', { target: shade }); };
+        env.home('host').focus();
+        env.home('host').click();
+        press('box', 'shade');
+        check('a drag that starts inside the box and ends on the dimmed page does not cancel', hostCard(env) !== null);
+        press('shade', 'box');
+        check('a drag that starts on the dimmed page and ends inside the box does not cancel', hostCard(env) !== null);
+        press('shade', 'shade', 'cancel');
+        check('a scroll that the browser takes (pointercancel) does not cancel', hostCard(env) !== null);
+        hostCard(env).parentNode.fire('click', { target: hostCard(env).parentNode });
+        check('a click with no press before it (a script, a key) does not cancel', hostCard(env) !== null && env.sockets.length === 0);
+        press('shade', 'shade');
+        check('a press that starts and ends on the dimmed page cancels as Cancel does: the card is gone, nothing was made (no first choice picked), the focus is back on Quick host', hostCard(env) === null && env.sockets.length === 0 && env.screen() === 'home' && env.focused === env.home('host'));
+    }
     env.home('host').click();
     chooseHost(env, 'Private room');
     check('Private room makes the private room (one socket, the Room shows, My room is there) and never asks for Visibility(public), also after the Welcome', env.sockets.length === 1 && env.screen() === 'room' && hostCard(env) === null && env.home('mine').hidden === false);
@@ -1032,6 +1048,19 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     check('How it works is open: the toast of the list is inert with the rest of the page (a Tab does not reach its OK)', toastOf(env).hasAttribute('inert') && env.$('how').hidden === false && !env.$('how').hasAttribute('inert'));
     env.$('how-close').click();
     check('... and it takes presses again when the dialog is closed', !toastOf(env).hasAttribute('inert') && toastTextOf(env) === 'Your room is already public.');
+    {   // a press on the dimmed page around How it works is its close button (it starts AND ends there)
+        const how = env.$('how'), panel = how.children[0], press = (from, to) => { how.fire('pointerdown', { target: from }); how.fire('pointerup', { target: to }); how.fire('click', { target: how }); };
+        env.$('how-open').focus();
+        env.$('how-open').click();
+        press(panel, panel);
+        press(panel, how);
+        press(how, panel);
+        how.fire('click', { target: how });
+        how.fire('pointerdown', { target: how }); how.fire('pointercancel', {}); how.fire('click', { target: how });
+        check('How it works: a press inside, a drag out of it or into it, a scroll and a click with no press before it keep it open', how.hidden === false);
+        press(how, how);
+        check('How it works: a press that starts and ends on the dimmed page closes it as its Close button does (the focus is back on the button that opened it, the page takes presses again)', how.hidden === true && env.focused === env.$('how-open') && !toastOf(env).hasAttribute('inert'));
+    }
 }
 {
     const env = await page({ options: { lazy: { AntsHomeGames: { mount() { throw new Error('boom'); } } } } });

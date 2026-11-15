@@ -303,6 +303,14 @@ const active = (p) => p.evaluate(() => { const a = document.activeElement; retur
             expect('a press on Cancel cancels and gives the focus to the game', [await ask(), (await log(p)).reloads, await active(p)], [null, 0, 'canvas']);
             await openMenu(p);
             await p.click('#sbm .gb-reload');
+            const inside = await p.evaluate(() => { const r = document.querySelector('.gb-card p').getBoundingClientRect(); return [r.left + r.width / 2, r.top + 4]; });
+            await p.mouse.move(5, 5); await p.mouse.down(); await p.mouse.move(inside[0], inside[1]); await p.mouse.up();
+            expect('a drag that starts outside the card and ends inside it does not cancel', [(await ask()) !== null, (await log(p)).reloads], [true, 0]);
+            await p.evaluate(() => window.getSelection().removeAllRanges());       // (a text that a drag selected would be dragged by the next press)
+            await p.mouse.move(inside[0], inside[1]); await p.mouse.down(); await p.mouse.move(5, 5); await p.mouse.up();
+            expect('a drag that starts inside the card and ends outside it does not cancel', [(await ask()) !== null, (await log(p)).reloads], [true, 0]);
+            await p.mouse.click(inside[0], inside[1]);
+            expect('a press on the card does not cancel', [(await ask()) !== null, (await log(p)).reloads], [true, 0]);
             await p.mouse.click(5, 5);
             expect('a press outside the card cancels', [await ask(), (await log(p)).reloads], [null, 0]);
             await openMenu(p);

@@ -17,8 +17,9 @@
     var MS = { poll: 1000, tell: 3000, note: 4000 };                      // (poll: the page looks at its own room this often; tell: the hub is told what changed at most this often)
     var ROOM = /^[a-z0-9_-]{1,32}$/;
     var STATUS = ['look', 'wait', 'play'];
-    var GROUPS = [['mod', 'Staff'], ['look', 'Looking'], ['wait', 'Waiting'], ['play', 'Playing']];
-    var WORD = { look: 'Looking', wait: 'Waiting', play: 'Playing' };
+    var SHOWN = STATUS.concat('away');       // (what a row may say: a page says the first three; `away` is the hub's own word for a person whose last socket closed a short while ago)
+    var GROUPS = [['mod', 'Staff'], ['look', 'Looking'], ['wait', 'Waiting'], ['play', 'Playing'], ['away', 'Away']];
+    var WORD = { look: 'Looking', wait: 'Waiting', play: 'Playing', away: 'Away' };
     var TEXT = {
         title: 'Players', here: ' here now', you: 'you', moderator: 'moderator', administrator: 'administrator', privateRoom: 'Private room', privateGame: 'Private game', vsComputer: 'vs computer', publicRoom: 'Public room', inRoom: 'In a room', inGame: 'In a game', join: 'Join', gone: 'That game is not open any more.',
         guest: ' guest', guests: ' guests', notIn: 'not logged in', more: ' more', and: 'and ', many: '500+', player: ' player', players: ' players', of: ' of ',
@@ -37,10 +38,11 @@
     // One row of the hub's list, cleaned: { id, name, at, mod, role, pic (a checked picture name or ''), pub, priv (a private room or match), solo (a game against the computer; its map is an original's name only), map, mapName, guess, n, of, code }, or null when it is not a row. A room's details are kept for a public room only, a code for a room that waits only.
     // mapName is an original's name (the page's own table); guess is what a community map would be called, which is drawn only where the Games list shows the same room under the same name (the hub's words are not drawn).
     function rowOf(raw, Chat, rules) {
-        if (!raw || typeof raw !== 'object' || !whole(raw.i, 0, LIMIT.ids) || typeof raw.name !== 'string' || STATUS.indexOf(raw.at) === -1) return null;
+        if (!raw || typeof raw !== 'object' || !whole(raw.i, 0, LIMIT.ids) || typeof raw.name !== 'string' || SHOWN.indexOf(raw.at) === -1) return null;
         var name = Chat.clip(Chat.plain(raw.name.slice(0, LIMIT.name * 4), true), LIMIT.name);
         if (!name) return null;
         var row = { id: raw.i, name: name, at: raw.at, mod: raw.mod === true, role: roleOf(raw.role, raw.mod), pic: Chat.picOf(raw.pic), pub: false, priv: false, solo: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' };
+        if (raw.at === 'away') return row;                                 // (an Away row is a name and the word: whatever else a frame holds is not drawn)
         if (raw.pub !== true && raw.at !== 'look') {                       // a private room or match is a fact (no map, seats or code are kept); a game against the computer is a match with a map at most
             if (raw.priv === true) row.priv = true;
             else if (raw.solo === true && raw.at === 'play') {
@@ -74,7 +76,7 @@
     }
     // The rows in their groups, each by name; the visitor's own row (its number, `me`, comes with the hub's welcome) is shown apart and is not among them
     function listOf(model, me) {
-        var out = { mod: [], look: [], wait: [], play: [] };
+        var out = { mod: [], look: [], wait: [], play: [], away: [] };
         for (var id in model.rows) {
             var row = model.rows[id];
             if (row.id !== me) out[row.mod ? 'mod' : row.at].push(row);
@@ -91,7 +93,7 @@
     // The line under a name: where the person is. A person who looks has none (the group says it), except where `label` is set (the visitor's own row, a moderator's: no group says it there). A room without details
     // is "In a room": the hub keeps none of an account that may not chat either (a private room or match is still a fact for an account that may not chat); the visitor's own row (`own`) knows.
     function metaOf(row, label, own) {
-        if (row.at === 'look') return label ? WORD.look : '';
+        if (row.at === 'look' || row.at === 'away') return label ? WORD[row.at] : '';       // (the group says it, except where there is no group for it: the visitor's own row, a moderator's)
         if (row.at === 'wait') return row.pub ? seatsText(row) || TEXT.publicRoom : row.priv || own ? TEXT.privateRoom : TEXT.inRoom;
         if (row.priv) return TEXT.privateGame;
         if (row.solo) return [row.mapName, TEXT.vsComputer].filter(Boolean).join(' · ');
@@ -301,7 +303,8 @@
             keep(); tell(); ask();
             if (phase !== 'none') paint();
         }
-        function clock() { timers.poll = setTimeout(guard(function () { timers.poll = 0; sync(); clock(); }), MS.poll); }
+        function clock() { timers.poll = setTimeout(guard(function () { timers.poll = 0; if (doc.hidden) return; sync(); clock(); }), MS.poll); }       // (a hidden page runs no loop: it starts again when the page is shown)
+        if (doc.addEventListener) doc.addEventListener('visibilitychange', guard(function () { if (!doc.hidden && !timers.poll) { sync(); clock(); } }));
         dock.tap(guard(function (kind, m) {
             if (kind === 'live') {
                 supported = !!m && m.presence === true; live = true; asked = false; sentSig = null; lastSent = null; model = fresh();

@@ -658,7 +658,7 @@ const outsideTouch = (() => { const o = makePage({ touch: true, touchKeys: true 
     // the dimmed area, Esc
     scrim.fire('click', { target: scrim });
     scrim.fire('mousedown', { target: scrim });
-    ok('a click on the dimmed area does nothing', p.menu.isOpen());
+    ok('a click with no press before it (a script) on the dimmed area does nothing', p.menu.isOpen());
     e = p.doc.key('Escape', { repeat: true });
     ok('a held Esc does nothing (and is not the page\'s)', p.menu.isOpen() && e.prevented && !e.reachedPage);
     p.state.locks.length = 0;
@@ -926,7 +926,7 @@ const outside = (opts) => { const p = makePage(opts).ready(); p.game.where = -1;
     const scrim = p.q('#game-menu');
     scrim.fire('click', { target: scrim });
     scrim.fire('mousedown', { target: scrim });
-    ok('a click on the dimmed area does nothing', p.menu.isOpen());
+    ok('a click with no press before it (a script) on the dimmed area does nothing', p.menu.isOpen());
     p.qa('.gm-btns button')[0].focus();
     e = p.doc.key('Tab');
     ok('Tab from the last control wraps to the first', e.prevented && p.doc.activeElement === p.qa('.gm-panel button').filter((x) => !x.disabled)[0]);
@@ -1278,6 +1278,37 @@ function sdlModel(p) {
         timers[1].fn();
         ok('...and it goes again', q.toast.hidden);
     } finally { global.setTimeout = real; }
+}
+
+// ---- a press on the dimmed area closes the panel as Esc does ------------------------------------------------------------------------------------------------------------------------------
+{
+    const press = (scrim, from, to) => { scrim.fire('pointerdown', { target: from }); scrim.fire('pointerup', { target: to }); scrim.fire('click', { target: scrim }); };
+    for (const form of ['full menu', 'small form']) {
+        const p = form === 'full menu' ? makePage().ready() : outside();
+        if (form === 'full menu') p.q('#settings-btn').click(); else p.q('#settings-btn').fire('click', { detail: 1 });
+        const scrim = p.q('#game-menu'), panel = p.q('.gm-panel');
+        press(scrim, panel, panel);
+        ok(form + ': a press inside the panel does not close it', p.menu.isOpen());
+        press(scrim, panel, scrim);
+        ok(form + ': a drag that starts inside the panel and ends on the dimmed area does not close it', p.menu.isOpen());
+        press(scrim, scrim, panel);
+        ok(form + ': a drag that starts on the dimmed area and ends in the panel does not close it', p.menu.isOpen());
+        scrim.fire('pointerdown', { target: scrim }); scrim.fire('pointercancel', {}); scrim.fire('click', { target: scrim });
+        ok(form + ': a scroll that the browser takes does not close it', p.menu.isOpen());
+        p.game.calls.length = 0;
+        press(scrim, scrim, scrim);
+        ok(form + ': a press that starts and ends on the dimmed area closes it as Esc does (the panel is gone, the game is told, nothing else is done)', !p.menu.isOpen() && p.q('#game-menu') === null && p.game.calls.filter((c) => c[0] === 'open').length === 1 && p.game.calls.every((c) => c[0] === 'open'));
+    }
+    const q = makePage().ready();
+    q.game.leave = 2;
+    q.open();
+    q.qa('.gm-leave')[0].click();
+    const scrim = q.q('#game-menu');
+    ok('the Leave game question is up', !!q.q('.gm-ask'));
+    {
+        press(scrim, scrim, scrim);
+        ok('with the Leave game question up, a press on the dimmed area is Esc: the question is Stay, the panel stays, nobody leaves', q.q('.gm-ask') === null && q.menu.isOpen() && !q.game.calls.some((c) => c[0] === 'do'));
+    }
 }
 
 console.log(checks + ' checks, ' + failed + ' failures');

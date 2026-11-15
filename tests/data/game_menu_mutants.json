@@ -11,8 +11,8 @@
     {
       "id": "esc_in_question_closes_panel",
       "file": "web/game_menu.js",
-      "old": "if (ask) hideAsk(); else close();",
-      "new": "close();",
+      "old": "                if (ask) hideAsk(); else close();\n",
+      "new": "                close();\n",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -233,10 +233,10 @@
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
-      "id": "dimmed_area_closes",
+      "id": "dimmed_area_closes_on_any_click",
       "file": "web/game_menu.js",
-      "old": "            scrim.appendChild(panel);\n            if (lite) fillSmall();",
-      "new": "            scrim.appendChild(panel);\n            scrim.addEventListener('click', function (e) { if (e && e.target === scrim) close(); });\n            if (lite) fillSmall();",
+      "old": "            onBackdrop(scrim, function () { if (ask) hideAsk(); else close(); });       // (as Esc)\n",
+      "new": "            scrim.addEventListener('click', function (e) { if (e && e.target === scrim) close(); });\n",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -1650,6 +1650,34 @@
       "file": "web/game_menu.js",
       "old": "                call('_ants_menu_open', 1);\n",
       "new": "                kept = {};\n                call('_ants_menu_open', 1);\n",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "menu_backdrop_press_does_nothing",
+      "file": "web/game_menu.js",
+      "old": "            onBackdrop(scrim, function () { if (ask) hideAsk(); else close(); });       // (as Esc)\n",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "menu_backdrop_press_leaves_the_game",
+      "file": "web/game_menu.js",
+      "old": "onBackdrop(scrim, function () { if (ask) hideAsk(); else close(); });",
+      "new": "onBackdrop(scrim, function () { if (ask) leaveNow(); else close(); });",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "menu_drag_into_it_closes",
+      "file": "web/game_menu.js",
+      "old": "hit = down && e.target === node; down = false; });",
+      "new": "hit = down; down = false; });",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "menu_drag_out_of_it_closes",
+      "file": "web/game_menu.js",
+      "old": "hit = down && e.target === node; down = false; });",
+      "new": "hit = e.target === node; down = false; });",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     }
   ]

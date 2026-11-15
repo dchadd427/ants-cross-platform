@@ -243,6 +243,10 @@ class TheCodeRuns(unittest.TestCase):
             "an Extended map that loses the sizes typed for the Classic map": ("if (!keepSizes) {", "if (true) {"),
             "a refusal that is not shown": ("setNote('bad', '!', why.text, button);", "setNote('', '', '');"),
             "a Make map that stays on for a size that is too big": ("ctl.setDisabled('make', true);\n        }\n\n        function make()", "}\n\n        function make()"),
+            "a press on the dimmed page does nothing": ("            onBackdrop(scrim, ctl.close);\n", ""),
+            "a press on the dimmed page picks the first choice": ("onBackdrop(scrim, ctl.close);", "onBackdrop(scrim, function () { if (buttons[(spec.buttons || [])[0] && ((spec.buttons || [])[0].id || (spec.buttons || [])[0].text)]) buttons[(spec.buttons || [])[0].id || (spec.buttons || [])[0].text].click(); });"),
+            "a drag from the dimmed page into the dialog closes it": ("hit = down && e.target === node; down = false; });", "hit = down; down = false; });"),
+            "a drag from inside the dialog to the dimmed page closes it": ("hit = down && e.target === node; down = false; });", "hit = e.target === node; down = false; });"),
         }
         for what, (old, new) in mutants.items():
             with self.subTest(what):
