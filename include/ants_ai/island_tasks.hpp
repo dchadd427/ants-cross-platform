@@ -17,6 +17,10 @@
 //                which bridge an ant will walk onto. A bridge with little life left (hot_life) is therefore watched at its ends (in steps over land: water is no way): an ant that walks
 //                towards one is stopped, an idle one waits farther off (the economy may send it over another bridge, and the engine takes the cheapest way from where the ant stands), and
 //                an ant on one is sent off it. (Taking such a bridge down with the Swimmer was tried and left out: the Swimmer is far away when it is due, and the ants it drowns are its own)
+//   bridges for food (Params::bridge_food, Medium and Hard) the ferry carries food from the piles that the walkers cannot reach; when the workers stand idle (nothing placed) and the food on the
+//                piles that the walkers and the ferry serve well is low, ONE Swimmer that is not carrying is taken from the ferry (two stay) and digs the cheapest chain to the best pile that the
+//                ferry does not serve well, up to Params::max_new_tiles new tiles (two straits over a small island); the workers walk over it like over any bridge, and the Swimmer rests at the
+//                end and digs the next bridge before the old one is retired. It goes back to the ferry when no bridge stands and nothing is left to dig
 //   wants        the Swimmers of the level (Tactics::wants): a Swimmer power-up that lies where a worker can walk to is taken by the power-up task
 //
 // Everything is read from the BotView (the grid is the map as it is now: bridges, bombs, ants); nothing is a promise, the next look checks it. The task is idle on every map where nothing lies
@@ -27,6 +31,7 @@
 #include <set>
 #include <vector>
 
+#include "ants_ai/island_ferry.hpp"
 #include "ants_ai/island_info.hpp"
 #include "ants_ai/tactics.hpp"
 #include "ants_ai/tasks.hpp"
@@ -57,6 +62,14 @@ public:
         uint32_t min_units{3};               // no bridge for a pile with fewer units than this
         uint32_t bridge_ants{1};             // ants that work piles over one bridge at a time (see "traffic" above)
         uint32_t max_bridges{3};             // bridges that carry at the same time (one ant each: the hill banks about one deposit per 100 ticks, so about three ants fill its gate); no new bridge for another pile
+        bool bridge_food{false};             // a bridge for food (see "bridges for food" above): one Swimmer that does not ferry digs to a pile that no ant serves
+        uint32_t bridge_from{2400};          // ... not before this tick
+        uint32_t bridge_idle{300};           // ... once the workers have stood idle (nothing placed) this long
+        uint32_t bridge_low{600};            // ... and the food (points) on the piles that the walkers and the ferry serve well is at most this much
+        bool bridge_share{false};            // a bridge may also go to a pile that another hill's island reaches by a chain as short (false: those piles are left to the ferry)
+        bool bridge_rest{false};             // the Swimmer waits at the end of the bridge (false: it goes back to the ferry once the chain stands, and is taken again when the bridge is due for renewal)
+        uint32_t ferry_keep{2};              // ... with this many Swimmers left to the ferry
+        uint32_t ferry_per_pile{2};          // Swimmers of the ferry at a pile that count as serving it well
         bool guard{true};                    // false: the ants on a bridge and the ants of a closed pile are left alone (the tests that show what the guard prevents)
     };
 
@@ -68,6 +81,8 @@ public:
 
     /// The economy whose ants the task watches (which ant works which pile): set by the bot, null when there is none
     void attach(const HarvestTask* economy) noexcept { economy_ = economy; }
+    /// The ferry whose Swimmers the bridge for food may take, and whose piles it leaves alone: set by the bot, null when there is none
+    void attach_ferry(const FerryTask* ferry) noexcept { ferry_ = ferry; }
     /// The piles that the economy must not send ants to now: reachable, but over a bridge that will not last a round trip (see the top)
     const std::set<uint32_t>& closed_piles() const noexcept { return closed_; }
     /// The piles over a bridge that may be worked now, and by how many ants (the economy sends no more)
@@ -102,6 +117,10 @@ public:
     uint32_t renewals() const noexcept { return renewals_; }
     /// Builders sent aside off the tile they had to dig, and tiles given up because an ant stayed on them (no special order names a tile with an ant: BotController::allowed)
     uint32_t asides() const noexcept { return asides_; }
+    /// Swimmers taken from the ferry for a bridge for food
+    uint32_t bridge_builds() const noexcept { return bridge_builds_; }
+    /// Whether the bridge for food is wanted now (the last look)
+    bool bridge_wanted() const noexcept { return bridge_wanted_; }
     uint32_t blocked_tiles() const noexcept { return blocked_tiles_; }
     /// Ants of the economy that the guard has now, and what it does with one: -1 none, 0 sends it off a bridge (Escape), 1 calls it home (Home), 2 keeps it where it stands (Hold)
     size_t guarded() const noexcept { return guarded_.size(); }
@@ -111,6 +130,8 @@ public:
     }
     /// The tiles of the chain the builder is working on (empty: none)
     std::vector<sim::TileCoord> chain() const;
+    /// The pile that the chain being dug is for (the table index; ~0 when the builder has none)
+    uint32_t chain_pile() const noexcept { return builders_.empty() || builders_.begin()->second.chain.empty() ? ~uint32_t{0} : builders_.begin()->second.pile; }
     /// The chain the planner would dig now, for the tests: empty when nothing is wanted or nothing is possible
     const std::vector<sim::TileCoord>& planned() const noexcept { return plan_.tiles; }
     /// The latency (ticks) that the task assumes between a look and the moment an order of it works (the profile's look interval, reaction delay and a margin)
@@ -120,6 +141,7 @@ private:
     static constexpr uint64_t kPending = ~uint64_t{0};
     struct Builder {
         std::vector<sim::TileCoord> chain;   // the tiles that are dug, in the order of digging (from the hill outward)
+        uint32_t pile{~uint32_t{0}};         // the pile that the chain is for
         size_t next{0};                      // the tile that is dug or to be dug
         bool ordered{false};                 // the special order for chain[next] was proposed ...
         uint64_t decided{0};
@@ -157,6 +179,9 @@ private:
     };
 
     bool start(TaskContext& context);
+    void judge_bridge_food(TaskContext& context);
+    void mark_contested(const TaskContext& context);
+    bool ferry_serves_well(uint32_t pile) const;
     bool scan_bridges(const BotView& view, uint64_t now);
     void adopt_builders(TaskContext& context);
     void refresh(TaskContext& context);
@@ -169,6 +194,11 @@ private:
     Tactics& tactics_;
     Params params_;
     const HarvestTask* economy_{nullptr};
+    const FerryTask* ferry_{nullptr};
+    std::set<uint32_t> contested_;           // piles that another hill's island also reaches (mark_contested)
+    uint64_t retry_after_{0};                // no Swimmer is taken for a bridge for food before this tick
+    uint64_t surplus_since_{0};              // the first look at which the workers stood idle with nothing placed (0: they do not)
+    uint32_t bridge_builds_{0};              // Swimmers taken from the ferry to dig a bridge for food
     bool started_{false};
     bool active_{false};
     IslandInfo info_;
@@ -202,6 +232,8 @@ private:
     uint32_t asides_{0};
     uint32_t blocked_tiles_{0};
     bool collapsed_{false};
+    bool bridge_wanted_{false};
+    bool renew_due_{false};                  // a bridge for food will be retired soon: the Swimmer is wanted again
 };
 
 }  // namespace ants::ai

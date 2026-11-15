@@ -271,7 +271,54 @@ bool IslandTask::start(TaskContext& c) {
         if (comp.id != hill_comp_ && seen[static_cast<size_t>(comp.id)] != 0 && !comp.piles.empty()) active_ = true;
     }
     if (!active_) active_ = water_locked_food(v, c.map, c.seat);
+    if (active_) mark_contested(c);
     return active_;
+}
+
+// The piles on land that a chain of at most 2 * max_new_tiles water tiles (over other islands, never over the seat's own) joins to the island of another hill: a bridge to one would join the two
+// hills as soon as the other seat dug its own (the ants of both would meet on it), so it is left to the ferry. (Params::bridge_share: off)
+void IslandTask::mark_contested(const TaskContext& c) {
+    contested_.clear();
+    const int32_t reach = static_cast<int32_t>(2u * params_.max_new_tiles);
+    const size_t comps = info_.components().size();
+    for (uint8_t team = 0; team < sim::MAX_PLAYERS; ++team) {
+        if (team == c.seat || !c.map.hill(team).present) continue;
+        int32_t foe = -1;                                                                          // (the island of the other hill: the walkable tile nearest to its mound, whose own tiles are closed to this seat)
+        int32_t best = 1 << 30;
+        const sim::TileCoord o = c.map.hill(team).origin;
+        for (int dy = -6; dy <= 9; ++dy) {
+            for (int dx = -6; dx <= 9; ++dx) {
+                const int32_t comp = c.map.component(c.seat, sim::TileCoord{o.x + dx, o.y + dy});
+                const int32_t d = std::max(std::abs(dx - 1), std::abs(dy - 1));
+                if (comp >= 0 && d < best) {
+                    best = d;
+                    foe = comp;
+                }
+            }
+        }
+        if (foe < 0 || foe == hill_comp_ || static_cast<size_t>(foe) >= comps) continue;
+        std::vector<int32_t> dist(comps, -1);                                                      // the fewest water tiles from the foe's island (Dijkstra over the channels, the own island left out)
+        std::priority_queue<std::pair<int32_t, int32_t>, std::vector<std::pair<int32_t, int32_t>>, std::greater<>> open;
+        dist[static_cast<size_t>(foe)] = 0;
+        open.push({0, foe});
+        while (!open.empty()) {
+            const auto [d, at] = open.top();
+            open.pop();
+            if (d != dist[static_cast<size_t>(at)]) continue;
+            for (const Channel& ch : info_.channels()) {
+                const int32_t to = ch.a == at ? ch.b : ch.b == at ? ch.a : -1;
+                if (to < 0 || to == hill_comp_ || static_cast<size_t>(to) >= comps) continue;
+                const int32_t nd = d + ch.length();
+                if (nd > reach || (dist[static_cast<size_t>(to)] >= 0 && dist[static_cast<size_t>(to)] <= nd)) continue;
+                dist[static_cast<size_t>(to)] = nd;
+                open.push({nd, to});
+            }
+        }
+        for (const IslandComponent& comp : info_.components()) {
+            if (dist[static_cast<size_t>(comp.id)] < 0) continue;
+            for (const uint32_t pile : comp.piles) contested_.insert(pile);
+        }
+    }
 }
 
 // ---- the bridges as they are now ------------------------------------------------------------------------------------------------------------------------
@@ -299,6 +346,36 @@ std::vector<sim::TileCoord> IslandTask::chain() const { return builders_.empty()
 
 // ---- the builders -----------------------------------------------------------------------------------------------------------------------------------------
 
+bool IslandTask::ferry_serves_well(uint32_t pile) const { return ferry_ != nullptr && ferry_->load(pile) >= params_.ferry_per_pile; }
+
+// The bridge for food is wanted when the workers have stood idle for a while, the clock is past the opening, something lies beyond water that the walkers do not reach and the ferry does not
+// serve well, and the food that the walkers and the ferry do serve well is low
+void IslandTask::judge_bridge_food(TaskContext& c) {
+    const BotView& v = c.view;
+    const uint64_t now = v.tick();
+    bridge_wanted_ = false;
+    if (!params_.bridge_food) return;
+    if (tactics_.surplus > 0) {
+        if (surplus_since_ == 0) surplus_since_ = now;
+    } else {
+        surplus_since_ = 0;
+    }
+    if (surplus_since_ == 0 || now < surplus_since_ + params_.bridge_idle || now < params_.bridge_from || v.ticks_left() <= params_.min_ticks_left) return;
+    int64_t served_points = 0;                                                                     // what the walkers and the ferry serve well
+    bool unserved = false;
+    for (const PileView& p : v.piles()) {
+        const PileInfo* info = c.map.pile(p.index);
+        if (info == nullptr) continue;
+        const bool walked = info->approach[c.seat].reachable();
+        if (walked || ferry_serves_well(p.index)) {
+            served_points += static_cast<int64_t>(p.value) * p.remaining;
+        } else if (!walked && p.remaining >= params_.min_units && (params_.bridge_share || contested_.count(p.index) == 0)) {
+            unserved = true;
+        }
+    }
+    bridge_wanted_ = unserved && served_points <= static_cast<int64_t>(params_.bridge_low);
+}
+
 void IslandTask::adopt_builders(TaskContext& c) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
@@ -316,18 +393,20 @@ void IslandTask::adopt_builders(TaskContext& c) {
     for (const auto& e : builders_) work = work || !e.second.chain.empty();
     for (auto it = builders_.begin(); it != builders_.end();) {
         Builder& b = it->second;
-        if (!b.chain.empty() || !plan_.tiles.empty() || tactics_.surplus > 0) {
+        if (!b.chain.empty() || !plan_.tiles.empty() || (params_.bridge_food ? (params_.bridge_rest ? !seen_.empty() : renew_due_) : tactics_.surplus > 0)) {
             b.idle_since = 0;
         } else if (b.idle_since == 0) {
             b.idle_since = now;
         } else if (now >= b.idle_since + params_.builder_idle) {
+            if (params_.bridge_food) retry_after_ = now + 1500u;                                    // (nothing could be dug: the ferry keeps the Swimmer for a while)
             c.ledger.release(it->first, id());
             it = builders_.erase(it);
             continue;
         }
         ++it;
     }
-    if (!work && tactics_.surplus == 0) return;
+    if (params_.bridge_food && !bridge_wanted_ && !renew_due_ && !work) return;
+    if (!params_.bridge_food && !work && tactics_.surplus == 0) return;
     // a bridge is for the workers that walk over it: with none at the hill's island (the expedition took them) the Swimmer carries food instead
     uint32_t workers = 0;
     for (const AntView& a : v.mine()) {
@@ -336,6 +415,30 @@ void IslandTask::adopt_builders(TaskContext& c) {
         workers += owner == kNoTask || c.ledger.rank(owner) < c.ledger.rank(id()) ? 1u : 0u;
     }
     if (workers < params_.min_workers) return;
+    if (params_.bridge_food) {                                                                     // one Swimmer, the one the ferry misses least: not carrying, not on a pile that has its two; two stay with the ferry
+        if (!builders_.empty() || !(bridge_wanted_ || renew_due_) || now < retry_after_) return;
+        uint32_t swimmers = 0;
+        for (const AntView& a : v.mine()) swimmers += a.type == sim::AntType::Swimmer ? 1u : 0u;
+        if (swimmers <= params_.ferry_keep) return;
+        const AntView* pick = nullptr;
+        uint32_t pick_load = ~uint32_t{0};
+        for (const AntView& a : v.mine()) {
+            if (a.type != sim::AntType::Swimmer || a.holding || a.carried_points > 0 || !a.takes_orders()) continue;
+            uint32_t pile = 0;
+            const bool works = ferry_ != nullptr && ferry_->assigned_pile(a.id, pile);
+            const uint32_t load = works ? ferry_->load(pile) : 0u;
+            const uint32_t rank = works ? load + 1u : 0u;                                           // a Swimmer with no pile first, then the one on the least loaded pile
+            if (pick == nullptr || rank < pick_load) {
+                pick = &a;
+                pick_load = rank;
+            }
+        }
+        if (pick != nullptr && c.ledger.take(pick->id, id())) {
+            builders_[pick->id] = Builder{};
+            ++bridge_builds_;
+        }
+        return;
+    }
     for (const AntView& a : v.mine()) {
         if (builders_.size() >= params_.builders) break;
         if (a.type != sim::AntType::Swimmer || builders_.count(a.id) != 0 || a.holding || a.carried_points > 0) continue;
@@ -370,6 +473,7 @@ void IslandTask::step_builder(TaskContext& c, uint32_t ant, Builder& b) {
     if (b.chain.empty()) {
         if (plan_.tiles.empty()) return;
         b.chain = plan_.tiles;
+        b.pile = plan_.pile;
         b.next = 0;
         b.ordered = false;
         b.parked = false;
@@ -625,6 +729,7 @@ void IslandTask::refresh(TaskContext& c) {
         limits_[o.pile] = params_.bridge_ants;
         if (o.due) due.insert(o.pile);
     }
+    renew_due_ = params_.bridge_food && !due.empty();
     holders_.clear();
     for (const auto& e : limits_) holders_.insert(e.first);
     for (const PileView& p : v.piles()) {                                                          // a pile that no walker reached at the start gets ants only over a bridge that has a place for them
@@ -663,6 +768,58 @@ void IslandTask::refresh(TaskContext& c) {
             if (grid.in_bounds(t)) no_dig[static_cast<size_t>(index_of(grid, t))] = 1;
         }
     }
+    if (params_.bridge_food) {                                                                     // a bridge for food keeps off the islands of the other hills (and the water next to them): it would be a road for their ants
+        std::set<int32_t> foes;
+        for (uint8_t team = 0; team < sim::MAX_PLAYERS; ++team) {
+            if (team != c.seat && c.map.hill(team).present && c.map.hill_component(team) >= 0 && c.map.hill_component(team) != hill_comp_) foes.insert(c.map.hill_component(team));
+        }
+        if (!foes.empty()) {
+            for (size_t i = 0; i < n; ++i) {
+                const sim::TileCoord t = tile_at(grid, static_cast<int32_t>(i));
+                if (foes.count(c.map.component(c.seat, t)) == 0) continue;
+                walk_plan[i] = 0;
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        const sim::TileCoord nb{t.x + dx, t.y + dy};
+                        if (grid.in_bounds(nb)) no_dig[static_cast<size_t>(index_of(grid, nb))] = 1;
+                    }
+                }
+            }
+        }
+    }
+    // the islands that a walk joins now (every bridge that stands counts, whoever dug it) and the ones that the other hills are on: a pile on land that a walk joins to another hill is left to the
+    // ferry (a bridge to it would join the two hills, and the other seat's ants would walk to ours)
+    std::vector<int32_t> live_label;
+    std::set<int32_t> foe_labels;
+    if (params_.bridge_food) {
+        live_label.assign(n, -1);
+        int32_t labels = 0;
+        for (size_t i = 0; i < n; ++i) {
+            if (walk[i] == 0 || live_label[i] >= 0) continue;
+            std::vector<int32_t> stack{static_cast<int32_t>(i)};
+            live_label[i] = labels;
+            while (!stack.empty()) {
+                const int32_t idx = stack.back();
+                stack.pop_back();
+                const sim::TileCoord cur = tile_at(grid, idx);
+                for (int k = 0; k < 8; ++k) {
+                    const sim::TileCoord t{cur.x + kDx[k], cur.y + kDy[k]};
+                    if (!grid.in_bounds(t)) continue;
+                    const int32_t ti = index_of(grid, t);
+                    if (walk[static_cast<size_t>(ti)] == 0 || live_label[static_cast<size_t>(ti)] >= 0) continue;
+                    live_label[static_cast<size_t>(ti)] = labels;
+                    stack.push_back(ti);
+                }
+            }
+            ++labels;
+        }
+        for (uint8_t team = 0; team < sim::MAX_PLAYERS; ++team) {
+            if (team == c.seat || !c.map.hill(team).present) continue;
+            for (const sim::TileCoord& st : c.map.hill(team).starts) {
+                if (grid.in_bounds(st) && live_label[static_cast<size_t>(index_of(grid, st))] >= 0) foe_labels.insert(live_label[static_cast<size_t>(index_of(grid, st))]);
+            }
+        }
+    }
     std::vector<uint8_t> dig(n, 0);
     std::vector<uint8_t> stands(n, 0);                                                             // a tile with an ant that stands still cannot be dug (the engine's valid_water)
     for (const AntView& a : v.mine()) {
@@ -691,11 +848,14 @@ void IslandTask::refresh(TaskContext& c) {
     for (const PileView& p : v.piles()) {
         if (c.map.pile(p.index) == nullptr || p.remaining < params_.min_units) continue;
         const bool served = limits_.count(p.index) != 0;
+        if (params_.bridge_food && !served && ferry_serves_well(p.index)) continue;               // the ferry has it: no bridge toward it
+        if (params_.bridge_food && !params_.bridge_share && !served && contested_.count(p.index) != 0) continue;   // (see mark_contested)
         if (served ? due.count(p.index) == 0 : (tactics_.surplus == 0 || limits_.size() >= params_.max_bridges)) continue;   // a served pile whose bridge will be retired soon, or a pile when somebody is idle and a bridge is wanted
         const Approach ap = c.map.approach_now(grid, p.index, plan_field);
         if (!ap.reachable()) continue;
         const int32_t at = approach_tile(grid, plan_field.cost, ap.click, ap.cost);
         if (at < 0 || s.fresh[static_cast<size_t>(at)] == 0) continue;                             // no tile to dig on the way to it: it has a way that will last
+        if (params_.bridge_food && !served && (walk[static_cast<size_t>(at)] == 0 || foe_labels.count(live_label[static_cast<size_t>(at)]) != 0)) continue;   // (see foe_labels)
         const int32_t own = ap.cost - static_cast<int32_t>(s.fresh[static_cast<size_t>(at)] * params_.tile_cost);
         const auto now_cost = route_cost.find(p.index);
         if (token_closed.count(p.index) != 0 && now_cost != route_cost.end() && own >= now_cost->second) continue;   // the engine would walk the old way: the new bridge would not be used
@@ -1081,6 +1241,7 @@ void IslandTask::step(TaskContext& c) {
     // the Swimmers that the level wants: the power-up task takes them from the map (one ant each, the closest)
     if (v.ticks_left() > params_.min_ticks_left && beyond_food(v, c.map, c.seat)) tactics_.wants[static_cast<size_t>(sim::AntType::Swimmer)] = static_cast<uint8_t>(std::max<uint32_t>(params_.swimmers, tactics_.wants[static_cast<size_t>(sim::AntType::Swimmer)]));
     if (info_.empty() || hill_comp_ < 0) return;
+    judge_bridge_food(c);
     adopt_builders(c);
     if (now >= next_refresh_) {
         refresh(c);

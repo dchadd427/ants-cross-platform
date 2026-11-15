@@ -1,0 +1,76 @@
+{
+ "note": "Mutants of the bridge for food (include/ants_ai/island_tasks.hpp, src/ants_ai/island_tasks.cpp, docs/BOTS.md 'Islands') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_island_food_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs all the cases of the batch (AI41).",
+ "defaults": {
+  "build": "test_ai"
+ },
+ "baseline": {
+  "build": "test_ai",
+  "test": "timeout 900 env ANTS_TEST_FILTER='AI41.' ./build/tests/test_ai/test_ai"
+ },
+ "mutants": [
+  {
+   "id": "contested_piles_not_marked",
+   "file": "src/ants_ai/island_tasks.cpp",
+   "old": "for (const uint32_t pile : comp.piles) contested_.insert(pile);",
+   "new": "for (const uint32_t pile : comp.piles) (void)pile;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.5"
+  },
+  {
+   "id": "ferry_keep_off_by_one",
+   "file": "src/ants_ai/island_tasks.cpp",
+   "old": "if (swimmers <= params_.ferry_keep) return;",
+   "new": "if (swimmers < params_.ferry_keep) return;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.3"
+  },
+  {
+   "id": "start_tick_ignored",
+   "file": "src/ants_ai/island_tasks.cpp",
+   "old": "now < params_.bridge_from || v.ticks_left()",
+   "new": "v.ticks_left()",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.4"
+  },
+  {
+   "id": "low_mark_reversed",
+   "file": "src/ants_ai/island_tasks.cpp",
+   "old": "unserved && served_points <= static_cast<int64_t>(params_.bridge_low)",
+   "new": "unserved && served_points >= static_cast<int64_t>(params_.bridge_low)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.4"
+  },
+  {
+   "id": "easy_digs_for_food",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.island_builders = 0;\n            p.island_fly_on = false;",
+   "new": "            p.island_builders = 0;\n            p.island_bridge_food = true;\n            p.island_fly_on = false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.6"
+  },
+  {
+   "id": "share_default_on",
+   "file": "include/ants_ai/tactics.hpp",
+   "old": "bool island_bridge_share{false};",
+   "new": "bool island_bridge_share{true};",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.6"
+  },
+  {
+   "id": "bridge_longer_than_a_strait",
+   "file": "include/ants_ai/tactics.hpp",
+   "old": "uint32_t island_bridge_tiles{4};",
+   "new": "uint32_t island_bridge_tiles{8};",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.6"
+  },
+  {
+   "id": "ferry_keep_one",
+   "file": "include/ants_ai/tactics.hpp",
+   "old": "uint32_t island_ferry_keep{2};",
+   "new": "uint32_t island_ferry_keep{1};",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI41.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI41.6"
+  }
+ ]
+}

@@ -329,6 +329,14 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "iswim") { p.island_swimmers = static_cast<uint32_t>(v); return true; }
     if (key == "ifly") return flag(p.island_fly_on);
     if (key == "itimed") return flag(p.island_timed_row);
+    if (key == "ibfood") return flag(p.island_bridge_food);
+    if (key == "ibfrom") { p.island_bridge_from = static_cast<uint32_t>(v); return true; }
+    if (key == "ibidle") { p.island_bridge_idle = static_cast<uint32_t>(v); return true; }
+    if (key == "iblow") { p.island_bridge_low = static_cast<uint32_t>(v); return true; }
+    if (key == "ibtiles") { p.island_bridge_tiles = static_cast<uint32_t>(v); return true; }
+    if (key == "ibshare") return flag(p.island_bridge_share);
+    if (key == "ibrest") return flag(p.island_bridge_rest);
+    if (key == "ibkeep") { p.island_ferry_keep = static_cast<uint32_t>(v); return true; }
     if (key == "ibuild") { p.island_builders = static_cast<uint32_t>(v); return true; }
     if (key == "ibridge") { p.island_bridge_ants = static_cast<uint32_t>(v); return true; }
     if (key == "iguard") return flag(p.island_guard);

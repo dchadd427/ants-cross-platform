@@ -91,6 +91,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.island_ferry = true;
             p.island_swimmers = 3;                                  // (the row has three Swimmers; with one more the bot scored a third more: docs/BOTS.md)
             p.island_builders = 0;
+            p.island_bridge_food = true;
             break;
         case Level::Hard:
             p.defenders = 3;
@@ -148,6 +149,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.island_ferry = true;
             p.island_swimmers = 3;
             p.island_builders = 0;
+            p.island_bridge_food = true;
             break;
     }
     // The war batch (docs/BOTS.md, "The war batch"; requested 2026-10-09: the bots start more fights with each other, fire at their opponent, and try to kill their

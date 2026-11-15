@@ -285,6 +285,14 @@ struct LevelPlan {
     bool island_expedition{false};       // the expedition is on (ExpeditionTask: a crew is flown to the Swimmers that lie beyond water, bomb by bomb); the tests of the island task switch it off
     bool island_ferry{false};            // the Swimmers that dig no bridge carry food across the water (FerryTask)
     uint32_t island_ferry_per_pile{2};   // Swimmers of the ferry at one pile
+    bool island_bridge_food{false};      // (Medium, Hard) one Swimmer that does not ferry digs a bridge to a pile that no ant serves, once the workers stand idle and the food that the walkers and the ferry serve is running low (`--tune ibfood=0`: off)
+    uint32_t island_bridge_from{2400};   // no bridge for food before this tick (the ferry and the walkers have the first minutes)
+    uint32_t island_bridge_idle{300};    // the workers must have stood idle (nothing placed) this many ticks
+    uint32_t island_bridge_low{600};     // the food (points) on the piles that the walkers and the ferry serve well must be at most this much
+    uint32_t island_bridge_tiles{4};     // a bridge for food has at most this many new tiles (one strait)
+    bool island_bridge_share{false};     // a bridge may go to a pile that another hill's island reaches as easily (`--tune ibshare=1`: then the two hills are joined and their ants meet on it)
+    bool island_bridge_rest{false};      // the bridge Swimmer waits at the end of its bridge instead of going back to the ferry (`--tune ibrest=1`)
+    uint32_t island_ferry_keep{2};       // Swimmers that stay with the ferry while one digs
     bool island_timed_row{false};        // (Hard) the crew takes a Swimmer behind the Fire hats of a corner row with timed clicks, one ant for every Swimmer (`--tune itimed=0`: one ant for every hat, as before)
     bool island_fly_on{true};            // the Bomber of an expedition's leg flies on after the crew (`--tune ifly=0`: it stays behind and every island of the route needs a Bomber to take, as before; the quicker hops stay)
     // the gate goals (docs/reverse_engineering/bomb_gates.md, "Gate goals"): where walls (fire, bombs, rock) shut every pile off from the hill (HELLRAISER, POPcOrN) the bot gets the right ant first (a Fire ant to

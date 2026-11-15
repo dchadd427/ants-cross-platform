@@ -216,6 +216,7 @@ void run_island_tests();
 void run_island_task_tests();
 void run_island_expedition_tests();
 void run_island_ferry_tests();
+void run_island_food_bridge_tests();
 void run_island_small_tests();
 void run_token_group_tests();
 void run_power_up_cap_tests();

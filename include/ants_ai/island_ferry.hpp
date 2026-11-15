@@ -52,6 +52,12 @@ public:
         pile = it->second.pile;
         return true;
     }
+    /// The Swimmers that work the pile now
+    uint32_t load(uint32_t pile) const noexcept {
+        uint32_t n = 0;
+        for (const auto& e : recs_) n += e.second.pile == pile ? 1u : 0u;
+        return n;
+    }
     /// The ticks of one round trip to the pile for a Swimmer, as of the last search (-1: not known or no way)
     int32_t trip_ticks(uint32_t pile) const noexcept {
         const auto it = trips_.find(pile);

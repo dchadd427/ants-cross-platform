@@ -90,6 +90,7 @@ private:
           opportunity_(kOpportunity, tactics_),
           heal_(kHeal, tactics_) {
         island_.attach(&harvest_);
+        island_.attach_ferry(&ferry_);
         expedition_.attach(&island_);
     }
 
@@ -195,6 +196,15 @@ private:
         IslandTask::Params p;
         p.swimmers = plan.island_swimmers;
         p.builders = plan.island_builders;
+        p.bridge_food = plan.island_bridge_food;
+        p.bridge_from = plan.island_bridge_from;
+        p.bridge_idle = plan.island_bridge_idle;
+        p.bridge_low = plan.island_bridge_low;
+        p.max_new_tiles = plan.island_bridge_food ? plan.island_bridge_tiles : p.max_new_tiles;
+        p.bridge_rest = plan.island_bridge_rest;
+        p.bridge_share = plan.island_bridge_share;
+        p.ferry_keep = plan.island_ferry_keep;
+        p.ferry_per_pile = plan.island_ferry_per_pile;
         p.bridge_ants = plan.island_bridge_ants;
         p.guard = plan.island_guard;
         // the margins grow with the latency of the level (Easy looks every 100 ticks and reacts after 60): its bridges are given up earlier and its ants kept away from them longer
