@@ -1,10 +1,11 @@
 // Runs the emoji picker and the voice button of the chat (web/home/talk.js, docs/HOME_SCREEN.md "Emoji and voice") against the REAL chat dock (web/home/chat.js, mounted on a fake hub) and a FAKE speech recognition
 // (no microphone: the browser's constructor is a class of this file that the test drives by hand), in the fake browser of tests/scripts/web_page_harness.js. What it checks:
-//   1. the pure parts: the emoji (one code point each, ASCII source, groups), the code point count against the field's UTF-16 maxlength, the insert at the caret, the words that are said (spacing, no markup characters, the cut),
-//      and when the browser has speech recognition at all (a secure page and a constructor, with or without the prefix);
+//   1. the pure parts: the emoji (one code point each, ASCII source, eight groups with a name and search words each), the search (names, search words, the rank, plurals), the code point count against the field's UTF-16
+//      maxlength, the insert at the caret, the words that are said (spacing, no markup characters, the cut), and when the browser has speech recognition at all (a secure page and a constructor, with or without the prefix);
 //   2. the buttons: where they stand in the dock's form, their labels and the privacy words in the tooltip, hidden with the field when nobody may write, and NO microphone button with no support or on a page that is not secure;
-//   3. the picker: opens and closes (the button, Escape with the focus back in the field, a press outside, a send), a pick goes in at the caret and replaces a selection, the arrow keys, a full line is said and refused,
-//      Escape does not fold the dock;
+//   3. the picker: opens and closes (the button, Escape with the focus back in the field, a press outside, a send), the nine tabs, the search (results, no result, Enter picks the first and never sends), the arrow keys, Home, End and
+//      the page keys over rows and the recently used row, the recently used emoji (kept in the browser, read with care, a browser that refuses its storage), the name line, where the picker stands (a box, a row over a low window,
+//      a sheet on a phone upright, the keyboard's lift), a pick goes in at the caret and replaces a selection, a full line is said and refused, Escape does not fold the dock;
 //   4. the voice: the first note, listening, interim words in the field and the final ones in their place, the words around the caret kept, never sent, a second press stops, Escape stops, typing, a send, a hidden page and a
 //      page that goes away end it at once and late events are not heard, every error in plain words, a recognizer that throws, a line that fills, markup that is said stays text;
 //   5. the page (web/lobby.html with web/home/home.js): the two files come once, after the dock, and a missing or broken one changes nothing;
@@ -39,7 +40,8 @@ function same(label, got, want) {
 const cls = (e) => String(e.className).split(/\s+/);
 const byClass = (root, c) => root.findAll((e) => cls(e).indexOf(c) !== -1);
 const one = (root, c) => byClass(root, c)[0] || null;
-const GRIN = String.fromCodePoint(0x1F600), ANT = String.fromCodePoint(0x1F41C), STAR = String.fromCodePoint(0x2728);       // (built from code points: the sources are ASCII)
+const THROWS = {};       // (a browser that refuses its storage)
+const GRIN = String.fromCodePoint(0x1F600), ANT = String.fromCodePoint(0x1F41C), STAR = String.fromCodePoint(0x2728), CAT = String.fromCodePoint(0x1F408);       // (built from code points: the sources are ASCII)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 1. The pure parts
@@ -47,12 +49,14 @@ const GRIN = String.fromCodePoint(0x1F600), ANT = String.fromCodePoint(0x1F41C),
 {
     const P = Pure;
     const groups = P.emoji(), all = [].concat(...groups.map((g) => g.list));
-    same('the groups, in order', groups.map((g) => g.name), ['Faces', 'Hands', 'Hearts and signs', 'Ants and nature', 'Games']);
-    check('about a hundred emoji, none twice', all.length >= 60 && all.length <= 150 && new Set(all).size === all.length, all.length);
+    same('the groups, in order', groups.map((g) => g.id), ['smileys', 'people', 'animals', 'food', 'activities', 'travel', 'objects', 'symbols']);
+    same('...with their names', groups.map((g) => g.name), ['Smileys', 'People', 'Animals and nature', 'Food and drink', 'Activities and games', 'Travel and places', 'Objects', 'Symbols']);
+    check('every single code point emoji of Unicode 9 that the hub keeps and that draws by itself: 879, none twice', all.length === 879 && new Set(all).size === all.length, all.length);
     check('every emoji is ONE code point (no joiner, no variation selector, no tag character: the hub keeps it as it is)', all.every((e) => P.points(e) === 1 && [...e].length === 1));
     check('...and the dock\'s own cleaner (the hub\'s rule) leaves each one as it is', all.every((e) => Chat.plain(e) === e) && Chat.plain(all.join('')) === all.join(''));
     check('...and none is a markup character or a blank', all.every((e) => !/[<>\s]/.test(e)));
-    check('the ant is there', all.indexOf(ANT) !== -1 && all.indexOf(GRIN) !== -1 && all.indexOf(STAR) !== -1);
+    check('every emoji has a name (ASCII, a capital first, no separator of the table) and the search words are lower case ASCII', groups.every((g) => g.names.length === g.list.length && g.keys.length === g.list.length && g.names.every((n) => /^[A-Z0-9][ -~]*$/.test(n) && !/[;~@]/.test(n)) && g.keys.every((ks) => ks.every((k) => /^[a-z0-9][a-z0-9 ]*$/.test(k)))));
+    check('the ant is there, and the grin, and the sparkles', all.indexOf(ANT) !== -1 && all.indexOf(GRIN) !== -1 && all.indexOf(STAR) !== -1 && groups[2].list.indexOf(ANT) !== -1 && groups[0].list[0] === GRIN);
     check('talk.js is ASCII only', /^[\x00-\x7f]*$/.test(talkSource));
     same('chr: a code point of the basic plane and one beyond it', [Pure.emoji()[0].list[0], STAR], [GRIN, STAR]);
     same('points counts code points, not UTF-16 units', [P.points(''), P.points('abc'), P.points(GRIN), P.points(GRIN + 'a' + STAR), P.points('\ud83d')], [0, 3, 1, 3, 1]);
@@ -74,6 +78,18 @@ const GRIN = String.fromCodePoint(0x1F600), ANT = String.fromCodePoint(0x1F41C),
     same('recognition: none without a constructor, on a page that is not secure (false, missing) or with something that is no constructor', [P.recognition(W({ isSecureContext: true })), P.recognition(W({ isSecureContext: false, SpeechRecognition: Ctor })), P.recognition(W({ SpeechRecognition: Ctor })),
         P.recognition(W({ isSecureContext: true, SpeechRecognition: {} })), P.recognition(null), P.recognition(W({ isSecureContext: 'yes', SpeechRecognition: Ctor }))], [null, null, null, null, null, null]);
     same('the words: the tooltip says who hears you', Pure.TEXT.voice, 'Voice to text: your browser\'s speech service hears you');
+    const T = P.table(), names = (q) => P.search(T, q).map((e) => e.name);
+    same('search: a name, whole or a start of it, lower or upper case', [names('ant')[0], names('ANT')[0], names('ants')[0], names('thum')[0]], ['Ant', 'Ant', 'Ant', 'Thumbs up']);
+    check('search: a search word that the name does not carry (lol, bunny, poop, rofl)', names('lol').indexOf('Face with tears of joy') !== -1 && names('bunny').indexOf('Rabbit') !== -1 && names('poop')[0] === 'Pile of poo' && names('rofl').indexOf('Rolling on the floor laughing') !== -1);
+    same('search: a whole word of the name comes before a word that starts with it, and the shorter name first: "cat" is the cat, then the faces of cats', names('cat').slice(0, 3), ['Cat', 'Grinning cat', 'Kissing cat']);
+    check('search: a whole search word comes before a name that starts with the word (a trophy for "win" before a winking face)', names('win').indexOf('Trophy') < names('win').indexOf('Winking face'));
+    check('search: a word starts a word of the name, it is not found inside one ("art" is the palette, not a heart)', names('art').indexOf('Beating heart') === -1 && names('art').indexOf('Artist palette') !== -1);
+    check('search: a start of a search word counts from 4 letters (not "cat" for a catch)', names('cat').indexOf('Fishing pole') === -1 && names('catc').indexOf('Fishing pole') !== -1);
+    same('search: every word must answer (two words narrow it), and a word that nothing answers gives nothing', [names('thumbs up'), names('cat qqq'), names('qqqq')], [['Thumbs up'], [], []]);
+    same('search: no word, nothing (blanks, punctuation, an empty string)', [names(''), names('   '), names('!?'), names('<>')], [[], [], [], []]);
+    check('search: a plural is its singular (hearts, cats)', names('hearts').length === names('heart').length && names('cats').length === names('cat').length);
+    check('search: a hundred results at least for a letter (m), and the results are the table\'s own entries (no copy of the characters is made)', P.search(T, 'm').length > 100 && P.search(T, 'm').every((e) => T.by[e.ch] === e));
+    check('the table: a name, search words and the words of both for every one, the characters unique', T.all.length === 879 && T.all.every((e) => e.nw.length > 0 && Array.isArray(e.keys)) && Object.keys(T.by).length === 879);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -84,15 +100,21 @@ function loadScript(source, exportName, clock) {
     new Function('self', 'setTimeout', 'clearTimeout', source)(root, clock.setTimeout, clock.clearTimeout);
     return root[exportName];
 }
-// o.speech: false (none), 'plain' / 'webkit' (the constructor's name), o.secure: false (a page that is not secure), o.lang, o.startThrows, o.noLogin (the dock's field is off: nobody may write)
+// o.speech: false (none), 'plain' / 'webkit' (the constructor's name), o.secure: false (a page that is not secure), o.lang, o.startThrows, o.noLogin (the dock's field is off: nobody may write), o.size ([width, height] of the window),
+// o.storage (the browser's local storage: an object with getItem and setItem, or THROWS for a browser that refuses it), o.vv (a visualViewport)
 function rig(o) {
     o = o || {};
     const env = { elements: {}, innerHTMLWrites: [] };
     const clock = { setTimeout: (fn, ms) => 0, clearTimeout() {} };
     const ChatApi = loadScript(fs.readFileSync(path.join(lobbyDir, 'home', 'chat.js'), 'utf8'), 'AntsHomeChat', clock);
-    const doc = { hidden: false, listeners: {}, createElement: (t) => new El(env, t), addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); } };
+    const html = new El(env, 'html', '');
+    html.style.setProperty = (k, v) => { html.style[k] = v; }; html.style.removeProperty = (k) => { delete html.style[k]; };
+    const doc = { hidden: false, listeners: {}, documentElement: html, createElement: (t) => new El(env, t), addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); } };
     env.doc = doc;
-    const win = { innerWidth: 1280, innerHeight: 800, location: { protocol: 'https:', host: 'play.test' }, listeners: {}, addEventListener(t, fn) { (win.listeners[t] = win.listeners[t] || []).push(fn); }, isSecureContext: o.secure !== false, navigator: { language: o.lang || 'de-DE' } };
+    const win = { innerWidth: o.size ? o.size[0] : 1280, innerHeight: o.size ? o.size[1] : 800, location: { protocol: 'https:', host: 'play.test' }, listeners: {}, addEventListener(t, fn) { (win.listeners[t] = win.listeners[t] || []).push(fn); }, isSecureContext: o.secure !== false, navigator: { language: o.lang || 'de-DE' } };
+    if (o.storage === THROWS) Object.defineProperty(win, 'localStorage', { get() { throw new Error('storage is refused'); } });
+    else if (o.storage) win.localStorage = o.storage;
+    if (o.vv) win.visualViewport = o.vv;
     const recs = [];
     class Rec {
         constructor() { this.starts = 0; this.stops = 0; this.aborts = 0; recs.push(this); }
@@ -126,7 +148,18 @@ function rig(o) {
     r.mic = one(r.form, 'gt-mic');
     r.pick = o.emoji === false ? null : one(r.form, 'gt-pick');
     r.say = one(r.form, 'gt-say');
-    r.keys = () => byClass(r.pick, 'gt-e');
+    r.keys = () => (r.pick ? byClass(r.pick, 'gt-e') : []);
+    r.tabs = () => byClass(r.pick, 'gt-tab');
+    r.q = r.pick ? one(r.pick, 'gt-q') : null;
+    r.clear = r.pick ? one(r.pick, 'gt-x') : null;
+    r.cap = () => byClass(r.pick, 'gt-cap').map((e) => e.textContent);
+    r.html = html;
+    r.body = r.pick ? one(r.pick, 'gt-body') : null;
+    r.tabsBox = r.pick ? one(r.pick, 'gt-tabs') : null;
+    r.nm = r.pick ? one(r.pick, 'gt-nm') : null;
+    r.kw = r.pick ? one(r.pick, 'gt-kw') : null;
+    r.big = r.pick ? one(r.pick, 'gt-big') : null;
+    r.key = (target, k, extra) => { let stopped = false; target.fire('keydown', Object.assign({ key: k, preventDefault() { stopped = true; } }, extra)); return stopped; };
     r.sayText = () => (r.say.hidden ? '' : r.say.textContent);
     r.rec = () => recs[recs.length - 1];
     r.heard = (...parts) => { const rec = r.rec(); rec.onresult({ results: parts.map((t) => [{ transcript: t, confidence: 0.9 }]) }); };
@@ -179,40 +212,39 @@ for (const [label, o] of [['no speech recognition (Firefox)', { speech: false }]
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 3. The picker
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-{
+function geo(r) {       // the fake page has no layout: the emoji stand in rows of 8 (44 px), the recently used row on top, the group's rows from 100 px
+    byClass(r.pick, 'gt-grid').forEach((g) => { const top = cls(g.parent).indexOf('gt-recent') !== -1 ? 0 : 100; byClass(g, 'gt-e').forEach((b, i) => { b.offsetLeft = 44 * (i % 8); b.offsetTop = top + 44 * Math.floor(i / 8); }); });
+}
+const store = (start) => { const data = { v: start }; return { data, getItem: (k) => (k === 'ants.emoji.recent' && data.v !== undefined ? data.v : null), setItem: (k, v) => { if (k === 'ants.emoji.recent') data.v = v; else throw new Error('another key: ' + k); } }; };
+const HEX = (e) => e.codePointAt(0).toString(16).toUpperCase();
+{   // the structure
     const r = rig();
-    check('the picker holds buttons with one emoji each, in groups that are named, and every button is text only', r.keys().length === Pure.emoji().reduce((n, g) => n + g.list.length, 0) && r.keys().every((b) => b.tagName === 'button' && b.type === 'button' && P(b.textContent) === 1) && byClass(r.pick, 'gt-row').length === 5 && byClass(r.pick, 'gt-row').every((g) => g.getAttribute('role') === 'group' && !!g.getAttribute('aria-label')));
+    check('the picker is closed at first and holds a tab list, a search field, a panel with the recently used row and the group, and a line with the name', r.pick.hidden === true && !!r.tabsBox && !!r.q && !!r.body && !!r.nm && byClass(r.pick, 'gt-recent').length === 1 && byClass(r.pick, 'gt-page').length === 1);
+    r.emoji.click();
+    same('nine tabs: a button each with a name, in order (the recently used ones, then the eight groups), one picture each', r.tabs().map((b) => [b.tagName, b.type, b.getAttribute('role'), b.getAttribute('aria-label'), b.getAttribute('title'), b.children.length + ':' + b.children[0].tagName]),
+        ['Recently used', 'Smileys', 'People', 'Animals and nature', 'Food and drink', 'Activities and games', 'Travel and places', 'Objects', 'Symbols'].map((n) => ['button', 'button', 'tab', n, n, '1:svg']));
+    same('the tab list and the panel have their roles; the smileys are selected and the only tab in the tab order', [r.tabsBox.getAttribute('role'), r.body.getAttribute('role'), r.tabs().map((b) => b.getAttribute('aria-selected')), r.tabs().map((b) => b.tabIndex)], ['tablist', 'tabpanel', ['false', 'true', 'false', 'false', 'false', 'false', 'false', 'false', 'false'], [-1, 0, -1, -1, -1, -1, -1, -1, -1]]);
+    same('the search field: a text field with a label, a hint and no spelling help, at most 40 letters', [r.q.tagName, r.q.type, r.q.getAttribute('aria-label'), r.q.getAttribute('placeholder'), r.q.getAttribute('autocomplete'), r.q.getAttribute('autocapitalize'), r.q.getAttribute('autocorrect'), r.q.getAttribute('spellcheck'), r.q.getAttribute('maxlength'), r.q.getAttribute('enterkeyhint')],
+        ['input', 'text', 'Search emoji', 'Search emoji (cat, heart, ant...)', 'off', 'none', 'off', 'false', '40', 'search']);
+    check('the group shows its name over its emoji; nothing is recent yet, so the recently used row is hidden', r.cap().indexOf('Smileys') !== -1 && r.pick.findAll((e) => cls(e).indexOf('gt-recent') !== -1)[0].hidden === true && r.clear.hidden === true);
+    check('every emoji is a button with its name (a screen reader says the name, not the picture) and only text', r.keys().length === 120 && r.keys().every((b) => b.tagName === 'button' && b.type === 'button' && P(b.textContent) === 1 && !!b.getAttribute('aria-label') && b.getAttribute('aria-label') === Pure.emoji()[0].names[r.keys().indexOf(b)]));
     function P(s) { return Pure.points(s); }
-    check('only one button is in the tab order (the arrow keys move)', r.keys().filter((b) => b.tabIndex === 0).length === 0 || r.keys().filter((b) => b.tabIndex === 0).length === 1);
+    check('the name line is hidden from the screen reader (the emoji have names), shows "Pick an emoji" at first', r.pick.findAll((e) => cls(e).indexOf('gt-foot') !== -1)[0].getAttribute('aria-hidden') === 'true' && r.nm.textContent === 'Pick an emoji' && r.big.textContent === '' && r.kw.textContent === '');
+    check('only one emoji is in the tab order (the arrow keys move)', r.keys().filter((b) => b.tabIndex === 0).length === 1 && r.keys()[0].tabIndex === 0);
+}
+{   // opening, closing, a pick
+    const r = rig();
     r.field.value = 'hi '; r.caret(3);
     r.emoji.click();
-    check('the emoji button opens the picker: shown, expanded, and the focus is on an emoji', r.pick.hidden === false && r.emoji.getAttribute('aria-expanded') === 'true' && r.env.focused === r.keys()[0] && r.keys()[0].tabIndex === 0 && r.keys().filter((b) => b.tabIndex === 0).length === 1);
-    r.pick.fire('keydown', { key: 'ArrowRight', preventDefault() {} });
-    check('the right arrow moves to the next one (and only that one is in the tab order)', r.env.focused === r.keys()[1] && r.keys()[1].tabIndex === 0 && r.keys()[0].tabIndex === -1);
-    r.pick.fire('keydown', { key: 'ArrowRight', preventDefault() {} });
-    r.pick.fire('keydown', { key: 'ArrowLeft', preventDefault() {} });
-    r.pick.fire('keydown', { key: 'ArrowDown', preventDefault() {} });
-    r.pick.fire('keydown', { key: 'ArrowUp', preventDefault() {} });
-    check('left, right, down and up: one step each', r.env.focused === r.keys()[1]);
-    r.pick.fire('keydown', { key: 'End', preventDefault() {} });
-    check('End goes to the last, and no further', r.env.focused === r.keys()[r.keys().length - 1]);
-    r.pick.fire('keydown', { key: 'ArrowRight', preventDefault() {} });
-    check('...not past it', r.env.focused === r.keys()[r.keys().length - 1]);
-    r.pick.fire('keydown', { key: 'Home', preventDefault() {} });
-    r.pick.fire('keydown', { key: 'ArrowLeft', preventDefault() {} });
-    check('Home goes to the first, and no further back', r.env.focused === r.keys()[0]);
-    let prevented = 0;
-    r.pick.fire('keydown', { key: 'a', preventDefault() { prevented++; } });
-    r.pick.fire('keydown', { key: 'Tab', preventDefault() { prevented++; } });
-    r.pick.fire('keydown', {});
-    check('other keys (Tab among them) are left alone', prevented === 0 && r.env.focused === r.keys()[0]);
+    check('the emoji button opens the picker: shown, expanded, and the focus is in the search field (the keyboard: type to look)', r.pick.hidden === false && r.emoji.getAttribute('aria-expanded') === 'true' && r.env.focused === r.q);
     r.keys()[0].click();
     check('a pick goes in at the caret, and the caret is after it', r.field.value === 'hi ' + GRIN && r.field.selectionStart === 3 + 2 && r.field.selectionEnd === 5);
     check('the picker stays open and the dock says nothing (it is not sent)', r.pick.hidden === false && r.said().length === 0 && r.sayText() === '');
     r.caret(0); r.keys()[1].click();
     check('the next one goes in where the caret is now', r.field.value === Pure.emoji()[0].list[1] + 'hi ' + GRIN);
-    r.caret(0, 2); r.keys().find((b) => b.textContent === ANT).click();
-    check('a selection is replaced', r.field.value === ANT + 'hi ' + GRIN);
+    r.caret(0, 2); r.tabs()[3].click();
+    r.keys().find((b) => b.textContent === ANT).click();
+    check('a selection is replaced (the ant from the animals tab)', r.field.value === ANT + 'hi ' + GRIN);
     check('the field keeps what is not an emoji, the input is plain text (no markup)', r.env.innerHTMLWrites.length === 0);
     check('Escape closes the picker, the focus is back in the field, and the dock stays open (the event does not reach it)', (() => { const stopped = r.esc(); return stopped && r.pick.hidden === true && r.emoji.getAttribute('aria-expanded') === 'false' && r.env.focused === r.field && r.dock.root.getAttribute('data-open') !== 'false'; })());
     check('...(and Escape with nothing open is left to the dock)', r.esc() === false);
@@ -221,6 +253,8 @@ for (const [label, o] of [['no speech recognition (Firefox)', { speech: false }]
     r.emoji.click();
     r.doc.listeners.pointerdown.forEach((fn) => fn({ target: r.field }));
     check('a press inside the form (the field) keeps it open', r.pick.hidden === false);
+    r.doc.listeners.pointerdown.forEach((fn) => fn({ target: r.q }));
+    check('...and in the picker (the search field, an emoji)', r.pick.hidden === false);
     r.doc.listeners.pointerdown.forEach((fn) => fn({ target: new El(r.env, 'div', '') }));
     check('a press outside closes it', r.pick.hidden === true && r.emoji.getAttribute('aria-expanded') === 'false');
     r.emoji.click();
@@ -232,6 +266,236 @@ for (const [label, o] of [['no speech recognition (Firefox)', { speech: false }]
     r.hide(true);
     check('a hidden page closes it', r.pick.hidden === true);
     r.hide(false);
+    r.emoji.click(); r.q.value = 'cat'; r.q.fire('input', {}); r.esc(); r.emoji.click();
+    check('it opens with nothing searched, whatever was there when it closed, on the group that was shown last (the animals, here)', r.q.value === '' && r.clear.hidden === true && r.tabs()[3].getAttribute('aria-selected') === 'true' && byClass(one(r.pick, 'gt-page'), 'gt-e').length === 102);
+}
+{   // the tabs
+    const r = rig();
+    r.emoji.click();
+    const groups = Pure.emoji();
+    r.tabs()[4].click();
+    check('a tab shows its group: the name over it, the emoji of that group only, the tab selected and the only one in the tab order', r.cap().indexOf('Food and drink') !== -1 && r.keys().map((b) => b.textContent).join('') === groups[3].list.join('') && r.tabs()[4].getAttribute('aria-selected') === 'true' && r.tabs().filter((b) => b.tabIndex === 0).length === 1 && r.tabs()[4].tabIndex === 0 && cls(r.tabs()[4]).indexOf('gt-sel') !== -1 && cls(r.tabs()[1]).indexOf('gt-sel') === -1);
+    check('every group shows all of its emoji (120, 115, 102, 86, 58, 151, 123, 124), and the panel starts at its top', groups.every((g, i) => { r.tabs()[i + 1].click(); return r.keys().length === g.list.length; }) && groups.map((g) => g.list.length).join() === '120,115,102,86,58,151,123,124');
+    r.tabs()[0].click();
+    check('the first tab is the recently used ones: with none, the line that says where they will be, and no emoji', r.cap().indexOf('Emoji that you pick show up here.') !== -1 && r.keys().length === 0);
+    r.tabs()[2].click();
+    r.key(r.tabsBox, 'ArrowRight');
+    check('the right arrow in the tab list goes to the next tab and shows it, with the focus on it', r.tabs()[3].getAttribute('aria-selected') === 'true' && r.env.focused === r.tabs()[3] && r.cap().indexOf('Animals and nature') !== -1);
+    r.key(r.tabsBox, 'ArrowLeft'); r.key(r.tabsBox, 'ArrowLeft');
+    check('the left arrow goes back', r.tabs()[1].getAttribute('aria-selected') === 'true' && r.env.focused === r.tabs()[1]);
+    r.key(r.tabsBox, 'ArrowLeft'); r.key(r.tabsBox, 'ArrowLeft'); r.key(r.tabsBox, 'ArrowLeft');
+    check('...not past the first tab', r.tabs()[0].getAttribute('aria-selected') === 'true');
+    r.key(r.tabsBox, 'End');
+    check('End goes to the last tab, and no further', r.tabs()[8].getAttribute('aria-selected') === 'true' && (r.key(r.tabsBox, 'ArrowRight'), r.tabs()[8].getAttribute('aria-selected') === 'true'));
+    r.key(r.tabsBox, 'Home');
+    check('Home goes to the first', r.tabs()[0].getAttribute('aria-selected') === 'true');
+    check('another key is left alone (Tab, a letter)', !r.key(r.tabsBox, 'Tab') && !r.key(r.tabsBox, 'a'));
+}
+{   // the search
+    const r = rig();
+    r.emoji.click();
+    r.q.value = 'cat'; r.q.fire('input', {});
+    const found = Pure.search(Pure.table(), 'cat');
+    check('a word in the search field: the results replace the group, the count is the line over them, the tabs are dimmed (a class), the clear button shows, the recently used row is gone', r.keys().map((b) => b.textContent).join('') === found.map((e) => e.ch).join('') && r.cap().indexOf(found.length + ' results') !== -1 && cls(r.pick).indexOf('gt-seeking') !== -1 && r.clear.hidden === false && r.tabs().every((b) => cls(b).indexOf('gt-sel') === -1));
+    check('the first result is the cat; the line over the results is a polite status', r.keys()[0].textContent === CAT && one(r.pick, 'gt-page').children[0].getAttribute('role') === 'status');
+    r.q.value = 'ant qq'; r.q.fire('input', {});
+    check('nothing found: the line says so, no emoji', r.keys().length === 0 && r.cap().indexOf('No emoji found. Try another word.') !== -1);
+    r.q.value = 'cat'; r.q.fire('input', {});
+    const enter = r.key(r.q, 'Enter');
+    check('Enter in the search field picks the first result, never sends the chat line (the key is ours), and the picker and the search stay', enter && r.field.value === CAT && r.said().length === 0 && r.pick.hidden === false && r.q.value === 'cat');
+    r.q.value = 'qqq'; r.q.fire('input', {});
+    r.field.value = ''; const again = r.key(r.q, 'Enter');
+    check('Enter with no result puts nothing in, and the key is still ours', again && r.field.value === '');
+    r.q.value = ''; r.q.fire('input', {});
+    check('Enter with nothing searched puts nothing in, and the key is still ours', r.key(r.q, 'Enter') && r.field.value === '' && r.said().length === 0);
+    r.q.value = 'heart'; r.q.fire('input', {});
+    r.key(r.q, 'ArrowDown');
+    check('the down arrow in the search field goes into the results (the first one)', r.env.focused === r.keys()[0]);
+    r.clear.fire('pointerdown', { preventDefault() {} });
+    r.clear.click();
+    check('the clear button empties the search, shows the group again, hides itself and puts the focus in the field', r.q.value === '' && r.clear.hidden === true && byClass(one(r.pick, 'gt-page'), 'gt-e').length === 120 && cls(r.pick).indexOf('gt-seeking') === -1 && r.env.focused === r.q);
+    r.q.value = 'heart'; r.q.fire('input', {});
+    r.tabs()[5].click();
+    check('a tab pressed while searching ends the search and shows its group', r.q.value === '' && r.cap().indexOf('Activities and games') !== -1 && r.clear.hidden === true);
+    r.q.value = 'f'; r.q.fire('input', {});
+    check('a long result list (more than 160 for "f") is cut at 160, and the line says so', Pure.search(Pure.table(), 'f').length > 160 && r.keys().length === 160 && r.cap().some((c) => /^Showing 160 of \d+ results\./.test(c)));
+    r.q.value = 'ant'; r.q.fire('input', {});
+    r.key(r.q, 'ArrowLeft'); r.key(r.q, 'ArrowRight'); r.key(r.q, 'Home');
+    check('the other keys of the search field are the field\'s own (the caret moves, nothing is taken)', !r.key(r.q, 'ArrowLeft') && !r.key(r.q, 'a') && !r.key(r.q, 'Backspace'));
+    r.q.value = 'cat'; r.q.fire('input', {}); r.field.fire('input', {});
+    check('typing in the chat field does not change the search', r.q.value === 'cat' && r.keys().length > 0);
+}
+{   // the arrow keys over the emoji
+    const r = rig({ storage: store('1F600 1F41C 1F44D') });
+    r.emoji.click(); geo(r);
+    const K = () => r.keys(), at = () => K().indexOf(r.env.focused);
+    check('the recently used row is above the group (three here), then the smileys', K().length === 3 + 120 && cls(K()[0].parent.parent).indexOf('gt-recent') !== -1 && K()[3].textContent === GRIN);
+    r.key(r.q, 'ArrowDown');
+    check('from the search field, down goes to the first emoji (the first recent one)', at() === 0);
+    r.key(r.body, 'ArrowRight'); r.key(r.body, 'ArrowRight');
+    check('right: one step, over the whole list in order (the recent row, then the group)', at() === 2 && r.key(r.body, 'ArrowRight') && at() === 3);
+    r.key(r.body, 'ArrowLeft');
+    check('left: one step back', at() === 2);
+    r.key(r.body, 'ArrowDown');
+    check('down from the third recent one: the emoji under it in the first row of the group (the same place from the left)', at() === 3 + 2);
+    r.key(r.body, 'ArrowDown');
+    check('down again: one row (8 emoji) lower', at() === 3 + 2 + 8);
+    r.key(r.body, 'ArrowUp'); r.key(r.body, 'ArrowUp');
+    check('up twice: back in the recently used row, over the same place', at() === 2);
+    const left = r.key(r.body, 'ArrowUp');
+    check('up from the top row goes back to the search field (the key is ours: the page does not scroll)', left && r.env.focused === r.q);
+    r.key(r.q, 'ArrowDown');
+    r.key(r.body, 'PageDown');
+    check('a page down is three rows: from the recent row, 3 rows down (the 1st recent one: the group\'s row 3)', at() === 3 + 16);
+    r.key(r.body, 'PageUp');
+    check('a page up goes back as far as the rows go (to the recent row)', at() === 0);
+    r.key(r.body, 'End');
+    check('End goes to the last, and no further', at() === K().length - 1 && (r.key(r.body, 'ArrowRight'), at() === K().length - 1) && (r.key(r.body, 'ArrowDown'), at() === K().length - 1));
+    r.key(r.body, 'Home'); r.key(r.body, 'ArrowLeft');
+    check('Home goes to the first, and no further back', at() === 0);
+    check('only the emoji that has the focus is in the tab order', K().filter((b) => b.tabIndex === 0).length === 1 && K()[0].tabIndex === 0);
+    check('other keys (Tab among them) are left alone', !r.key(r.body, 'a') && !r.key(r.body, 'Tab') && at() === 0);
+    K()[5].fire('focus', {});
+    r.key(r.body, 'ArrowRight');
+    check('an emoji that took the focus by a press or by Tab is where the arrows start', at() === 6 || r.env.focused === K()[6]);
+    const w = rig(); w.emoji.click(); w.key(w.q, 'ArrowDown'); w.key(w.body, 'ArrowDown');
+    check('a page that tells no places (no layout): the arrows up and down move nothing and break nothing', w.env.focused === w.keys()[0]);
+}
+{   // the recently used
+    const s = store();
+    const r = rig({ storage: s });
+    r.emoji.click();
+    r.keys()[2].click(); r.keys()[0].click(); r.keys()[2].click();
+    check('a pick is kept at once, newest first, once: the browser\'s storage holds the code points (hex, separated by blanks), nothing else', s.data.v === HEX(r.keys()[2].textContent) + ' ' + HEX(r.keys()[0].textContent), s.data.v);
+    check('the row does not move while the picker is open (an emoji does not slide away under a finger)', r.pick.findAll((e) => cls(e).indexOf('gt-recent') !== -1)[0].hidden === true && r.keys().length === 120);
+    r.esc(); r.emoji.click();
+    check('opened again: the recently used row stands over the group, newest first, with the group\'s name under it', byClass(byClass(r.pick, 'gt-recent')[0], 'gt-e').map((b) => HEX(b.textContent)).join(' ') === s.data.v && r.pick.findAll((e) => cls(e).indexOf('gt-recent') !== -1)[0].hidden === false && r.cap().indexOf('Recently used') !== -1 && r.cap().indexOf('Smileys') !== -1);
+    r.tabs()[0].click();
+    check('the first tab shows only them, under the line "Recently used" (and no second row of them over it)', r.keys().map((b) => HEX(b.textContent)).join(' ') === s.data.v && one(r.pick, 'gt-recent').hidden === true && byClass(one(r.pick, 'gt-recent'), 'gt-e').length === 0 && one(r.pick, 'gt-page').children[0].textContent === 'Recently used');
+    const t = rig({ storage: store(Array.from({ length: 20 }, (_, i) => (0x1F600 + i).toString(16).toUpperCase()).join(' ')) });
+    t.emoji.click(); t.tabs()[0].click();
+    check('what the browser kept is read at the first opening: at most 16, in that order', t.keys().length === 16 && HEX(t.keys()[0].textContent) === '1F600' && HEX(t.keys()[15].textContent) === '1F60F');
+    const q = store(); const u = rig({ storage: q });
+    u.emoji.click(); for (let i = 0; i < 20; i++) u.keys()[i].click();
+    check('twenty picks keep the newest 16 (no more is stored)', q.data.v.split(' ').length === 16 && q.data.v.split(' ')[0] === HEX(u.keys()[19].textContent));
+    const junk = ['', '<img src=x onerror=1>', 'ZZZZ 1F600', '1F600 1F600 1F600', '1F600  1F41C', '0041 1F600', '1F600 110000 1F41C', '1F600\n1F41C', '1f600', '1F600 1F41C 1F600 1F44D'];
+    const got = junk.map((v) => { const j = rig({ storage: store(v) }); j.emoji.click(); j.tabs()[0].click(); return j.keys().map((b) => HEX(b.textContent)).join(' '); });
+    same('what is in the storage is read with care: only code points of the table, each once, anything else is ignored (markup, a letter, a number that is no emoji, lower case)', got, ['', '', '1F600', '1F600', '1F600 1F41C', '1F600', '1F600 1F41C', '', '', '1F600 1F41C 1F44D']);
+    check('no markup was made from what the storage held', r.env.innerHTMLWrites.length === 0);
+    const bad = rig({ storage: THROWS }); bad.emoji.click(); bad.keys()[0].click(); bad.esc(); bad.emoji.click(); bad.tabs()[0].click();
+    check('a browser that refuses its storage (the access throws): the picker works, and the picks are kept for the visit', bad.field.value === GRIN && bad.keys().length === 1 && bad.keys()[0].textContent === GRIN);
+    const writes = rig({ storage: { getItem() { throw new Error('no'); }, setItem() { throw new Error('full'); } } });
+    writes.emoji.click(); writes.keys()[0].click(); writes.esc(); writes.emoji.click(); writes.tabs()[0].click();
+    check('a storage that throws on a read and on a write: the same', writes.field.value === GRIN && writes.keys().length === 1);
+    const none = rig(); none.emoji.click(); none.keys()[1].click(); none.esc(); none.emoji.click(); none.tabs()[0].click();
+    check('no storage at all: the same', none.keys().length === 1);
+    const row = rig({ storage: store(Array.from({ length: 16 }, (_, i) => (0x1F600 + i).toString(16).toUpperCase()).join(' ')) });
+    row.emoji.click();
+    check('over a group the recently used row is one row of the grid (8 here, where the page cannot say): the first 8 of them', byClass(byClass(row.pick, 'gt-recent')[0], 'gt-e').length === 8);
+    const wide = rig({ storage: store('1F600 1F41C 1F44D') });
+    wide.win.getComputedStyle = () => ({ gridTemplateColumns: '45px 45px 45px 45px 45px 45px' });
+    wide.emoji.click();
+    check('...and as many as the page says (6 columns: 6 of the 16)', byClass(byClass(wide.pick, 'gt-recent')[0], 'gt-e').length === 3);
+    const hidden = rig({ storage: store(Array.from({ length: 16 }, (_, i) => (0x1F600 + i).toString(16).toUpperCase()).join(' ')) });
+    hidden.win.getComputedStyle = () => ({ gridTemplateColumns: 'repeat(auto-fill, minmax(44px, 1fr))' });
+    hidden.emoji.click();
+    check('...a page that tells the rule and not the places (a box that is not drawn) is the page that cannot say: 8', byClass(byClass(hidden.pick, 'gt-recent')[0], 'gt-e').length === 8);
+    const long = rig({ storage: store(Array.from({ length: 40 }, (_, i) => (0x1F600 + i).toString(16).toUpperCase()).join(' ')) });
+    long.emoji.click(); long.tabs()[0].click();
+    check('a stored text that is too long is read as far as 16 picks can go (and no further)', long.keys().length === 16);
+    const six = rig({ storage: store(Array.from({ length: 16 }, (_, i) => (0x1F600 + i).toString(16).toUpperCase()).join(' ')) });
+    six.win.getComputedStyle = () => ({ gridTemplateColumns: '45px 45px 45px 45px 45px 45px' });
+    six.emoji.click();
+    check('...(6 columns: six of sixteen)', byClass(byClass(six.pick, 'gt-recent')[0], 'gt-e').length === 6);
+}
+{   // the name line
+    const r = rig();
+    r.emoji.click();
+    const first = r.keys()[2];
+    first.fire('mouseover', {});
+    check('pointing at an emoji (or focusing it) shows it large, with its name and its search words', r.big.textContent === first.textContent && r.nm.textContent === 'Face with tears of joy' && r.kw.textContent === 'lol / laugh / funny');
+    r.pick.fire('mouseleave', {});
+    check('leaving the picker with the pointer brings back "Pick an emoji"', r.nm.textContent === 'Pick an emoji' && r.big.textContent === '' && r.kw.textContent === '');
+    r.keys()[0].fire('focus', {});
+    check('a focused emoji shows too', r.nm.textContent === 'Grinning face');
+    r.env.doc.activeElement = r.keys()[0]; r.pick.fire('mouseleave', {});
+    check('the pointer leaving does not take the name of the emoji that has the focus', r.nm.textContent === 'Grinning face');
+    r.tabs()[3].click();
+    check('a new page starts with "Pick an emoji" again', r.nm.textContent === 'Pick an emoji');
+}
+{   // where the picker stands: a box, a row over a low window, a sheet at the bottom of a phone upright
+    const html = (r) => [cls(r.html).indexOf('gt-sheet-open') !== -1, r.html.style['--gt-sheet'] || ''];
+    const box = rig();
+    box.form.getBoundingClientRect = () => ({ top: 705, left: 43, width: 1194, height: 56 });
+    box.emoji.click();
+    same('a wide window: a box (gt-pop), 400 px high where there is room, nothing else set, the page untouched', [cls(box.pick).filter((c) => /^gt-(pop|low|sheet)$/.test(c)), box.pick.style.height, box.pick.style.left, box.pick.style.bottom, html(box)], [['gt-pop'], '400px', '', '', [false, '']]);
+    box.esc(); box.form.getBoundingClientRect = () => ({ top: 300, left: 43, width: 1194, height: 56 }); box.emoji.click();
+    check('...as high as the room above the field (less 20 px) when there is less', box.pick.style.height === '280px');
+    box.esc(); box.form.getBoundingClientRect = () => ({ top: 100, left: 43, width: 1194, height: 56 }); box.emoji.click();
+    check('...and not under 120 px', box.pick.style.height === '120px');
+    const low = rig({ size: [844, 390] });
+    low.form.getBoundingClientRect = () => ({ top: 307, left: 43, width: 758, height: 56 });
+    low.emoji.click();
+    same('a low window (a phone held sideways): a row as wide as the form (gt-low), from 6 px under the top of the window to 12 px above the field', [cls(low.pick).filter((c) => /^gt-(pop|low|sheet|tight)$/.test(c)), low.pick.style.left, low.pick.style.width, low.pick.style.top, low.pick.style.height, html(low)], [['gt-low'], '43px', '758px', '6px', '295px', [false, '']]);
+    low.esc(); low.form.getBoundingClientRect = () => ({ top: 150, left: 12, width: 540, height: 56 }); low.emoji.click();
+    check('...in the least room the group names and the name line give way (gt-tight), and it is never lower than 96 px', cls(low.pick).indexOf('gt-tight') !== -1 && low.pick.style.height === '138px');
+    low.esc(); low.form.getBoundingClientRect = () => ({ top: 20, left: 12, width: 540, height: 56 }); low.emoji.click();
+    check('...(96 px at least)', low.pick.style.height === '96px');
+    const caret = rig({ size: [390, 844] });
+    caret.field.value = 'hi '; caret.caret(3); caret.field.focus();
+    caret.emoji.fire('pointerdown', { preventDefault() {} }); caret.emoji.click();
+    caret.field.selectionStart = 0; caret.field.selectionEnd = 0;       // (a press on an emoji takes the caret of a field that has no focus: Chrome puts it at the start)
+    caret.keys()[0].click(); caret.field.selectionStart = 0; caret.field.selectionEnd = 0; caret.keys()[1].click();
+    check('a field that has lost its focus to the sheet has lost its caret too (the browser puts it at the start): the picks go in where the caret was, one after the other', caret.field.value === 'hi ' + Pure.emoji()[0].list[0] + Pure.emoji()[0].list[1]);
+    caret.esc(); caret.field.fire('focus', {}); caret.field.selectionStart = 1; caret.field.selectionEnd = 1; caret.emoji.click(); caret.field.selectionStart = 0; caret.field.selectionEnd = 0;
+    check('(a caret that is kept is forgotten when the picker closes and the field is typed in again)', caret.field.value === 'hi ' + Pure.emoji()[0].list[0] + Pure.emoji()[0].list[1] && (caret.field.fire('focus', {}), caret.pick.hidden === true));
+    const key = rig(); key.field.value = 'ab'; key.caret(1); key.field.focus(); key.emoji.click(); key.field.fire('blur', {});       // (the browser tells the field that the focus went to the search field)
+    key.field.selectionStart = 0; key.field.selectionEnd = 0; key.keys()[0].click();
+    check('a box opened by the keyboard moves the focus to the search field: the field\'s caret is kept as well (the press on an emoji may take it)', key.field.value === 'a' + Pure.emoji()[0].list[0] + 'b');
+    const phone = rig({ size: [390, 844] });
+    phone.field.focus();
+    phone.emoji.fire('pointerdown', { preventDefault() {} }); phone.emoji.click();
+    same('a phone upright: a sheet (gt-sheet) of 52 percent of the window\'s height, at the bottom; the page keeps that room above it (a class of the page and the height in a variable)', [cls(phone.pick).filter((c) => /^gt-(pop|low|sheet)$/.test(c)), phone.pick.style.height, phone.pick.style.bottom, html(phone)], [['gt-sheet'], '439px', '0px', [true, '439px']]);
+    check('a press on the emoji button takes the keyboard away (the sheet is its place): the field has no focus, and keeps what it holds', phone.env.doc.activeElement === null && phone.pick.hidden === false);
+    phone.emoji.click();
+    check('(a second press closes it)', phone.pick.hidden === true && html(phone)[0] === false);
+    phone.emoji.click();
+    check('the sheet opens by the keyboard too: the focus goes to the search', phone.env.focused === phone.q && html(phone)[0] === true);
+    phone.field.fire('focus', {});
+    check('the keyboard coming for the field (a tap on it) closes the sheet and gives the page its room back', phone.pick.hidden === true && html(phone)[0] === false && html(phone)[1] === '');
+    phone.emoji.click();
+    phone.win.innerHeight = 380;
+    (phone.win.listeners.resize || []).forEach((fn) => fn({}));
+    check('a keyboard that takes the height of the window (no change of width) leaves the sheet a sheet', cls(phone.pick).indexOf('gt-sheet') !== -1 && cls(phone.pick).indexOf('gt-low') === -1 && phone.pick.style.height === '198px');
+    phone.win.innerHeight = 844; phone.win.innerWidth = 844;
+    (phone.win.listeners.resize || []).forEach((fn) => fn({}));
+    check('...and a change of width (the phone is turned) asks again: now a low window\'s row (the box of a wide one is for a height over 500)', cls(phone.pick).indexOf('gt-pop') !== -1 && cls(phone.pick).indexOf('gt-sheet') === -1 && html(phone)[0] === false && phone.pick.style.height !== '');
+    phone.esc();
+    const vv = { height: 844, offsetTop: 0, handlers: {}, addEventListener(t, fn) { this.handlers[t] = fn; } };
+    const kb = rig({ size: [390, 844], vv });
+    kb.emoji.click();
+    check('where the browser tells (visualViewport): without a keyboard the sheet is at the bottom', kb.pick.style.bottom === '0px' && kb.pick.style.height === '439px' && html(kb)[1] === '439px');
+    vv.height = 500; vv.handlers.resize({});
+    check('the keyboard is up: the sheet stands above it (344 px from the bottom) and is lower (275 px: 55 percent of what is left); the page keeps both (619 px)', kb.pick.style.bottom === '344px' && kb.pick.style.height === '275px' && html(kb)[1] === '619px');
+    vv.height = 844; vv.handlers.scroll({});
+    check('the keyboard goes: the sheet comes back down', kb.pick.style.bottom === '0px' && kb.pick.style.height === '439px' && html(kb)[1] === '439px');
+    kb.esc(); vv.height = 500; vv.handlers.resize({});
+    check('a closed picker does not follow the keyboard, and has left the page as it was', html(kb)[0] === false && html(kb)[1] === '' && kb.pick.hidden === true);
+    const logged = rig({ size: [390, 844] });
+    const log = logged.dock.root.querySelector('.gc-log');
+    log.scrollHeight = 500; log.clientHeight = 100; log.scrollTop = 400;
+    logged.emoji.click();
+    check('the sheet takes room from the log: a log that is read at its end stays at its end', log.scrollTop === 500);
+    log.scrollTop = 120; logged.esc();
+    check('...and a log that is not at its end is left where it is, when the sheet goes', log.scrollTop === 120);
+    log.scrollTop = 400; logged.emoji.click(); log.scrollTop = 400; logged.esc();
+    check('...and at its end it stays there when the sheet gives the room back', log.scrollTop === 500);
+    const mover = rig({ size: [1280, 800] }); mover.emoji.fire('pointerdown', { preventDefault() {} }); mover.field.focus(); mover.emoji.click();
+    check('a box leaves the focus where it is (the keyboard of a window of a desktop: the person goes on typing)', mover.env.focused === mover.field);
+    mover.win.innerWidth = 600; (mover.win.listeners.resize || []).forEach((fn) => fn({}));
+    check('a window made narrow while it is open: the sheet', cls(mover.pick).indexOf('gt-sheet') !== -1 && html(mover)[0] === true);
+    mover.field.fire('focus', {});
+    check('a field that takes the focus while the box is open does not close a box (only a sheet gives way to the keyboard)', mover.pick.hidden === true);
 }
 {   // the line fills
     const r = rig();
@@ -425,7 +689,7 @@ for (const [label, o] of [['no speech recognition (Firefox)', { speech: false }]
     f.keys()[0].fire('pointerdown', { preventDefault() { stopped++; } }); f.keys()[0].click();
     check('a press on an emoji keeps the focus in the field too, and the pick is in', stopped === 2 && f.env.focused === f.field && f.field.value === 'hi' + Pure.emoji()[0].list[0]);
     f.esc(); f.emoji.click();
-    check('the keyboard (a click with no pointer press) still puts the focus on an emoji', f.env.focused === f.keys()[0]);
+    check('the keyboard (a click with no pointer press) puts the focus in the search field', f.env.focused === f.q);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -485,7 +749,7 @@ function bring(env, file, name) {
 {
     const code = talkSource.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
     check('no markup is made from text (no innerHTML, outerHTML, insertAdjacentHTML, document.write, eval)', !/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function/.test(code));
-    check('nothing is kept in the browser (no storage, cookie or IndexedDB)', !/localStorage|sessionStorage|indexedDB|document\.cookie|\bcaches\b/.test(code));
+    check('the only thing kept in the browser is the list of picks, in local storage, behind one guarded door (no session storage, cookie, IndexedDB or cache)', !/sessionStorage|indexedDB|document\.cookie|\bcaches\b/.test(code) && (code.match(/localStorage/g) || []).length === 1 && /function store\(\) \{ try \{ return win\.localStorage \|\| null; \} catch/.test(code));
     check('no network of its own (no fetch, XMLHttpRequest, WebSocket, sendBeacon, no address)', !/\bfetch\b|XMLHttpRequest|WebSocket|sendBeacon|https?:|\/\/[a-z]/.test(code));
     check('NO recording of any kind: no MediaRecorder, no getUserMedia, no AudioContext, no Blob', !/MediaRecorder|getUserMedia|mediaDevices|AudioContext|\bBlob\b|FileReader|createObjectURL/.test(code));
     check('the speech constructor is named only where the support is looked up', (code.match(/SpeechRecognition/g) || []).length === 2);
