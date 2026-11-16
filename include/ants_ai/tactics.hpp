@@ -104,6 +104,13 @@ struct LevelPlan {
     uint32_t deny_one_percent{150};      // ... one enemy
     int32_t reserve_threat_tiles{6};     // a reserve pile with an enemy ant this near it counts like a pile that several enemies want
     bool deny_fade{true};                // the weights fade to nothing as the match runs out
+    bool skip_hopeless{false};           // (Medium, Hard) a pile of the class Hopeless (another team's hill is far nearer: it is eaten before the ants arrive) is left alone while any other pile has food (HarvestTask::Params::skip_hopeless; the ablation `--tune nohope=0`)
+    // bombs on the way (docs/BOTS.md, "Bombs on the way"; src/ants_ai/bomb_detour.cpp): a bomb of another team is seen on every screen, and the engine's walk goes straight over it
+    uint8_t bomb_detour{0};              // an order whose walk would cross a visible bomb of another team goes round it first (one waypoint, the order given again on arrival): 0 never (Easy), 1 the economy walks, the power-up trips and the
+                                         // fights (Medium), 2 also the raids, the mine trips and the way home of a carrier (Hard); the ablation `--tune det=0`
+    uint32_t detour_extra_percent{100};  // ... a detour that makes the walk more than this percentage longer is not taken (the walk goes on over the bomb: a blast costs about 100 ticks, a stun and 2 hit points)
+    bool bomb_route{false};              // (Medium, Hard) a Bomber defuses the bomb it can reach without crossing another, nearest to itself, from a side tile that holds no bomb; and a bomb that shuts one of the seat's busy routes is
+                                         // defused on any ground when no detour is left or the detour is much longer (BombTask::route_pick); the ablation `--tune broute=0`
     bool fire_aware{true};               // a pile with a fire wall near it is asked again with the map as it is now: no ant is sent into fire (HarvestTask::Params::fire_aware)
     bool gate{false};                    // (Hard) every carrier is guided at the hill's gate by hand (GateTask: "guiding for eating"): 55 to 65 ticks per deposit instead of 93 to 116
     uint32_t gate_latency{9};            // ticks between a decision and the order's arrival (the profile's reaction delay less its jitter, and the sink)
@@ -416,6 +423,21 @@ struct LevelPlan {
     /// play with there). `bot_arena --tune brawl=0` is the bot before (it plays the food game's tasks in 187 too). The original game never reads these.
     bool brawl187{true};
     BrawlParams brawl;
+    // The thief batch (docs/BOTS.md, "Thieves: the answer to a raid"; Medium and Hard have raid_recheck and fire_home_only on, the meeting and the trap are off; `bot_arena --tune thief_batch=0`, or the keys below, is the bot before it):
+    bool raid_recheck{false};            // a thief on its way to a raid looks at the hole again at every look (fire walls, bombs, an ant on the raid tile, no walk, too little to take): when it is shut it goes to the best other hill, or home (RaidTask)
+    uint32_t raid_recheck_black{300};    // ... a hill that was called off for walls, bombs, a box that shows too little or a missing walk is not chosen again for this long (the walls last 3,600 ticks, a bomb stays); an ant on the raid tile is gone in seconds and costs no wait
+    bool thief_guard{false};             // an enemy Thief on its way to the own hole, standing at it or walking home with loot is met by the nearest free fighters (ThiefGuardTask)
+    int32_t thief_guard_radius{14};      // ... a Thief this close to the own raid tile (Chebyshev) counts, when it comes nearer or stands
+    uint32_t thief_guard_force{2};       // ... the strikers sent to it, at most (Combat Ants first): they wait on the column east of the hole and go at a Thief that stands
+    uint32_t thief_guard_block{3};       // ... the blockers: one ant on each tile in front of the hole that the walls and bombs leave open shuts the hole (a raid order ends in "Can't go there.") while the Thief is near
+    bool thief_guard_no_block{false};    // ... (the ablation: no blockers, strikers only)
+    uint32_t thief_guard_kill_after{100};// ... a Thief that has stood this long in front of the shut hole is struck by every fighter, the blockers too (it is shut out and does not run: a few blows from all of them end it)
+    uint32_t thief_guard_rest{600};      // ... a meeting that ran out its time leaves the Thief alone this long (the bot does not stand at its hole for ever)
+    uint32_t thief_guard_ticks{480};     // ... a meeting that has not ended by itself after this long is called off
+    uint32_t thief_guard_reach{10};      // ... a fighter is taken only when it is at most this many tiles from the meeting tile
+    bool thief_trap{false};              // an enemy Thief shut in on the own raid tile by the own walls: one wall tile is put out on the side where fighters wait, and the Thief is struck as it comes out (never with nobody ready)
+    uint32_t thief_trap_wait{200};       // ... the opened tile stays open this long (the walls are lit again after that)
+    bool fire_home_only{false};          // the Fire power-up is not taken where the ant could not walk back to the own hill (a corner row of ISLANDS), and a wall order that the keeper cannot walk to is dropped
 };
 
 /// The plan of a level (the neutral one: no style, no variations)
@@ -433,6 +455,8 @@ void without_stand_batch(LevelPlan& plan) noexcept;
 void without_home_mines(LevelPlan& plan) noexcept;
 /// The plan without the kill batch (docs/BOT_FIGHT.md): no opportunistic kills, fights at enemies that no walk reaches as before. For `bot_arena --tune kill=0` and the tests whose subject is an older rule.
 void without_kill_batch(LevelPlan& plan) noexcept;
+/// The thief batch off (docs/BOTS.md, "Thieves: the answer to a raid"): the bot as it was before it
+void without_thief_batch(LevelPlan& plan) noexcept;
 /// The plan without the defence batch (docs/BOT_PEOPLE.md, "Step 1: everyone hits back"): the fights that answer a blow take the own default type and Combat Ants only, as many as the level's defenders, and
 /// end at the target's hit clip unless a kill is in reach. For `bot_arena --tune defence=0` and the tests whose subject is an older rule.
 void without_defence_batch(LevelPlan& plan) noexcept;

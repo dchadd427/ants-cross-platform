@@ -51,14 +51,49 @@ void RaidTask::on_command(const sim::Command& command, Bot::Fate fate, uint64_t 
     raids_.erase(it);                                                   // it never left: the thief is ordered again at the next look
 }
 
+uint32_t RaidTask::min_loot_now() const noexcept {
+    const LevelPlan& plan = tactics_.plan;
+    // behind the leader a smaller loot is worth the trip (tier 1: two thirds, tier 2: a third, tier 3: 10 points) and a hill with an enemy Combat Ant near it is raided (tier 2 and up)
+    const uint8_t tier = plan.catchup ? tactics_.standing.tier : 0;
+    return tier >= 3 ? std::min<uint32_t>(plan.raid_min_loot, 10u) : tier == 2 ? plan.raid_min_loot / 3u : tier == 1 ? plan.raid_min_loot * 2u / 3u : plan.raid_min_loot;
+}
+
+RaidTask::Hole RaidTask::hole_state(TaskContext& c, uint8_t t, uint32_t thief_id) const {
+    const BotView& v = c.view;
+    const sim::Grid& grid = v.grid();
+    const LevelPlan& plan = tactics_.plan;
+    const HillInfo& h = c.map.hill(t);
+    if (!h.present) return Hole::Walls;
+    // raided with raid_min_free free tiles in front (nothing lit, bombed or solid; with the can't-go fixes no ant on them) and no ant on the raid tile: such an ant shuts the hole
+    size_t free_tiles = 0;
+    size_t free_of_walls = 0;
+    for (const sim::TileCoord& e : east_tiles(h)) {
+        const EastTile k = classify_tile(grid, e);
+        const bool open = k == EastTile::Open || k == EastTile::Bare;
+        free_of_walls += open ? 1u : 0u;
+        free_tiles += open && !(plan.cantgo_aware && held_by_standing_ant(v, e)) ? 1u : 0u;
+    }
+    if (free_of_walls < plan.raid_min_free) return Hole::Walls;
+    if (free_tiles < plan.raid_min_free || (plan.cantgo_aware && held_by_standing_ant(v, h.raid))) return Hole::Held;
+    // an own thief on the raid tile (it is raiding, or has raided and is on its way out) has the hole: a second one sent now waits on a tile in front of it, and the first one cannot leave
+    // when the walls have shut the other tiles (unjam)
+    if (plan.raid_unjam && plan.cantgo_aware) {
+        for (const AntView& m : v.mine()) {
+            if (m.id != thief_id && m.type == sim::AntType::Thief && m.tile == h.raid) return Hole::Held;
+        }
+    }
+    return Hole::Open;
+}
+
+bool RaidTask::hole_shut(TaskContext& c, uint8_t t, uint32_t thief_id) const { return hole_state(c, t, thief_id) != Hole::Open; }
+
 bool RaidTask::launch(TaskContext& c, const AntView& thief) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
     const sim::Grid& grid = v.grid();
     const LevelPlan& plan = tactics_.plan;
-    // behind the leader a smaller loot is worth the trip (tier 1: two thirds, tier 2: a third, tier 3: 10 points) and a hill with an enemy Combat Ant near it is raided (tier 2 and up)
     const uint8_t tier = plan.catchup ? tactics_.standing.tier : 0;
-    const uint32_t min_loot = tier >= 3 ? std::min<uint32_t>(plan.raid_min_loot, 10u) : tier == 2 ? plan.raid_min_loot / 3u : tier == 1 ? plan.raid_min_loot * 2u / 3u : plan.raid_min_loot;
+    const uint32_t min_loot = min_loot_now();
     // the teams that may be raided, the leading one first (the score boxes: a team that is not in the match, has dropped out or is an ally shows nothing or is no victim)
     std::vector<uint8_t> teams;
     for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
@@ -69,27 +104,7 @@ bool RaidTask::launch(TaskContext& c, const AntView& thief) {
     }
     // the cheap checks first: a hill that is not there, or whose hole is shut, is no target, and a thief that looks at the world every few ticks must not search the map for nothing (a full
     // search per look and thief was the most expensive thing that the bot did)
-    teams.erase(std::remove_if(teams.begin(), teams.end(),
-                               [&](uint8_t t) {
-                                   const HillInfo& h = c.map.hill(t);
-                                   if (!h.present) return true;
-                                   // raided with raid_min_free free tiles in front (nothing lit, bombed or solid; with the can't-go fixes no ant on them) and no ant on the raid tile: such an ant shuts the hole
-                                   size_t free_tiles = 0;
-                                   for (const sim::TileCoord& e : east_tiles(h)) {
-                                       const EastTile k = classify_tile(grid, e);
-                                       free_tiles += (k == EastTile::Open || k == EastTile::Bare) && !(plan.cantgo_aware && held_by_standing_ant(v, e)) ? 1u : 0u;
-                                   }
-                                   if (free_tiles < plan.raid_min_free || (plan.cantgo_aware && held_by_standing_ant(v, h.raid))) return true;
-                                   // an own thief on the raid tile (it is raiding, or has raided and is on its way out) has the hole: a second one sent now waits on a tile in front of it, and the first one cannot leave
-                                   // when the walls have shut the other tiles (unjam)
-                                   if (plan.raid_unjam && plan.cantgo_aware) {
-                                       for (const AntView& m : v.mine()) {
-                                           if (m.id != thief.id && m.type == sim::AntType::Thief && m.tile == h.raid) return true;
-                                       }
-                                   }
-                                   return false;
-                               }),
-                teams.end());
+    teams.erase(std::remove_if(teams.begin(), teams.end(), [&](uint8_t t) { return hole_shut(c, t, thief.id); }), teams.end());
     if (teams.empty()) return false;
     std::stable_sort(teams.begin(), teams.end(), [&](uint8_t x, uint8_t y) { return v.rows()[x].score > v.rows()[y].score; });
     const std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
@@ -141,6 +156,44 @@ bool RaidTask::launch(TaskContext& c, const AntView& thief) {
         return true;
     }
     return false;
+}
+
+// A thief on its way to a hole looks at the hole again (the owner's walls, bombs or ants may have shut it since the order was given: the thief would stand in front of it and show "Can't go there.").
+// The checks are the launch's: the cheap ones at every look, the search of a walk now and then.
+bool RaidTask::recheck(TaskContext& c, const AntView& thief, std::map<uint32_t, Raid>::iterator it) {
+    const BotView& v = c.view;
+    const uint64_t now = v.tick();
+    const LevelPlan& plan = tactics_.plan;
+    Raid& r = it->second;
+    const TeamRow& row = v.rows()[r.team];
+    // what called the raid off decides whether the hill is left alone for a while: walls, bombs, a box that is too small and a missing walk last; an ant on the raid tile or an own thief on it is gone in
+    // seconds (the launch below passes over such a hole at this look, and takes it again at the next one when it is open)
+    const Hole hole = hole_state(c, r.team, thief.id);
+    bool lasting = row.dropped || !row.present || row.score < static_cast<int32_t>(min_loot_now()) || hole == Hole::Walls;
+    bool bad = lasting || hole == Hole::Held;
+    if (!bad && now >= r.next_path) {
+        r.next_path = now + 60u;
+        const HillInfo& hill = c.map.hill(r.team);
+        const sim::Grid& grid = v.grid();
+        const std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, c.seat, v.walk_context());
+        const std::vector<int32_t> field = MapInfo::cost_field(grid, mask, thief.tile);
+        bool reach = false;
+        for (const sim::TileCoord& e : east_tiles(hill)) reach = reach || (grid.in_bounds(e) && !field.empty() && field[tile_index(grid, e)] >= 0);
+        bad = !reach;
+        lasting = bad;
+    }
+    if (!bad) return false;
+    if (lasting) black_[r.team] = std::max(black_[r.team], now + plan.raid_recheck_black);
+    raids_.erase(it);
+    ++rechecks_;
+    if (launch(c, thief)) {
+        ++retargets_;
+        return true;
+    }
+    c.orders.stop({thief.id}, Priority::Normal);                                         // nothing else to raid: it stands where it is and the economy has it again
+    waiting_.erase(thief.id);
+    c.ledger.release(thief.id, id());
+    return true;
 }
 
 namespace {
@@ -303,6 +356,7 @@ void RaidTask::step(TaskContext& c) {
                 raids_.erase(it);
                 continue;
             }
+            if (tactics_.plan.raid_recheck && r.sent != kPending && a.state == sim::UnitState::Walking && recheck(c, a, it)) continue;     // the hole is shut: another hill, or home
             if (r.sent != kPending && a.idle() && now >= r.sent + 40u) {
                 if (a.tile.chebyshev_dist(r.origin) <= 1) {                             // it never got going: the way is shut (a wall that came up, nobody can reach)
                     black_[r.team] = now + tactics_.plan.raid_black_ticks;

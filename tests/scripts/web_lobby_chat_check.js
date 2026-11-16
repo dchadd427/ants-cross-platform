@@ -176,9 +176,9 @@ const lineTexts = (w) => logOf(w).children.map((li) => li.textContent);
     const log = logOf(w);
     check('the log is a live log for a screen reader (a div: the rows are not list items of a list that the role took away), in reading order, that a keyboard can scroll', log.tag === 'div' && log.getAttribute('role') === 'log' && log.getAttribute('aria-live') === 'polite' && log.getAttribute('aria-relevant') === 'additions' && log.getAttribute('tabindex') === '0' && !!log.getAttribute('aria-label'));
     const input = byId(w.host, 'chat-input');
-    same('the field: a text field for one line of 100 that no keyboard corrects, with the key that says Send',
+    same('the field: a text area, the front page composer, for one line of 100 that no keyboard corrects, with the key that says Send',
         [input.tag, input.getAttribute('type'), input.getAttribute('maxlength'), input.getAttribute('autocomplete'), input.getAttribute('autocapitalize'), input.getAttribute('autocorrect'), input.getAttribute('spellcheck'), input.getAttribute('enterkeyhint'), input.getAttribute('inputmode')],
-        ['input', 'text', '100', 'off', 'off', 'off', 'false', 'send', 'text']);
+        ['textarea', null, '100', 'off', 'off', 'off', 'false', 'send', 'text']);
     check('the field has a name for a screen reader and is described by the hint line', !!input.getAttribute('aria-label') && input.getAttribute('aria-describedby') === 'chat-hint');
     const button = byTag(w.host, 'button');
     check('the button is a submit button that says Send', button.getAttribute('type') === 'submit' && button.textContent === 'Send' && /\bbtn\b/.test(button.className));
@@ -525,7 +525,47 @@ const lineTexts = (w) => logOf(w).children.map((li) => li.textContent);
     check('clear() empties the log (the hint comes back)', lineTexts(w).length === 1 && w.chat.lines().length === 0);
 }
 
+{   // the composer is the front page's (web/home/talk.js, talk.css): the same classes, Enter sends, no emoji button and the room's limit of 100 are asked of the shared script, and a page without it still has the field and Send
+    const w = world();
+    const c = fakeClient('k7m2xq', 0, roomOf([P, P, E, E]));
+    w.chat.attach(c);
+    const form = byTag(w.host, 'form'), input = byId(w.host, 'chat-input'), send = byId(w.host, 'chat-send');
+    check('the form, the field and Send have the classes that the front page\'s composer has (gc-form, gc-input, gc-send), so that talk.css dresses them', /\bgc-form\b/.test(form.className) && /\bchat-form\b/.test(form.className) && input.className === 'gc-input' && /\bgc-send\b/.test(send.className) && send.getAttribute('type') === 'submit');
+    input.value = 'on the way';
+    const enter = input.fire('keydown', { key: 'Enter', keyCode: 13 });
+    check('Enter sends (through the form), the browser does not add a line break', enter.prevented === true && w.state.said.length === 1 && w.state.said[0] === 'on the way' && input.value === '');
+    input.value = 'composing';
+    const comp = input.fire('keydown', { key: 'Enter', keyCode: 229, isComposing: true });
+    check('Enter that ends a composition (an IME) sends nothing', comp.prevented !== true && w.state.said.length === 1);
+    input.value = 'phone keyboard';
+    const bi = input.fire('beforeinput', { inputType: 'insertLineBreak' });
+    check('a keyboard that makes a line break through beforeinput sends too', bi.prevented === true && w.state.said.length === 2 && w.state.said[1] === 'phone keyboard');
+    input.value = 'pasted\r\nlines\n\nhere';
+    input.fire('input');
+    check('a line break that is pasted becomes one space', input.value === 'pasted lines here');
+}
+let talkMounts = [];
+{   // the voice button: the page asks the shared script to mount into this field with no emoji and the room's limit; the script is asked for once, after the first paint
+    const win = { requestAnimationFrame: (fn) => fn(), AntsHomeTalk: { mount: (env) => { talkMounts.push(env); return {}; } }, addEventListener() {} };
+    const head = node('head');
+    head.querySelector = () => null;
+    const doc = { defaultView: win, head, createElement: node };
+    win.Event = undefined;
+    const host = node('section');
+    host.hidden = true;
+    C.mount({ doc, host, colors: Rules.COLORS, say: () => true, toast: () => {} });
+}
+setTimeout(() => {
+    check('the shared script was asked to mount once', talkMounts.length === 1);
+    const env = talkMounts[0];
+    check('with no emoji button (the room takes printable ASCII only) and the limit of 100', !!env && env.emoji === false && env.limit === C.MAX_LINE);
+    check('into the room\'s own field, with the box and a way to know when it is off', !!env && env.dock.field.attrs.id === 'chat-input' && typeof env.dock.grow === 'function' && typeof env.dock.off === 'function' && typeof env.dock.tap === 'function' && env.dock.off() === true);
+    finish();
+}, 20);
+
 // ---- END OF SECTIONS ----
+function finish() {
 for (const name of Object.keys(RAW)) if (typeof RAW[name] === 'function') check('the check called ' + name + '()', called[name] > 0);
 console.log('LobbyChat: ' + checks + ' checks, ' + failures + ' failed');
 process.exit(failures === 0 ? 0 : 1);
+}

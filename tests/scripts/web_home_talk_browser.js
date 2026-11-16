@@ -2,13 +2,16 @@
 // page (web/lobby.html with web/home/) and the FAKE hub (tests/scripts/fake_hub.js) that shares the page's address. The speech recognition is a FAKE (an init script puts a class in its place: no microphone, no sound).
 // For every size (1280 x 800, 701 x 800, a phone 390 x 844, 320 x 640 and a phone held sideways 568 x 320) it checks, with a writer in the chat:
 //   1. the composer is one box in every window, ONE row when it is empty (the field, the buttons, Send), each at least 44 x 44 px; a long line makes two rows (the field on top over the whole width, the buttons and Send under it; a window under 501 px high stays one row), and Send or a deleted line brings the one row back; the dock is not taller for one row; inside the window, the page does not scroll sideways, and the field keeps room to type (at least 90 px);
-//   2. the picker opens above the field inside the dock, never over the field or Send, inside the window, with a scroll of its own; a pick goes in at the caret; the dock is still open; Escape closes it and the focus
-//      is back in the field;
+//      a draft of 1,000 characters (one word) keeps the field at four lines at the most and scrolls inside itself, and a line from the hub that is one word of 1,000 characters wraps inside the log (the dock keeps its width, nothing scrolls sideways);
+//   2. the picker (nine tabs, a search field, the recently used row, the emoji of a group, a name line): a box above the field at the right in a wide window, a row of the form's width over a low window, a sheet at the
+//      bottom of a phone upright (52 percent of the height, the log shorter, the field and Send above it); never over the field or Send, inside the window, nothing scrolls sideways; its buttons are at least 44 px high; a
+//      tab shows its group; the search finds the cat and Enter puts it in without sending; a pick goes in at the caret and is kept (it comes back after a reload); the arrow keys move by row; the dock is still open;
+//      Escape closes it and the focus is back in the field;
 //   3. the voice: a press starts the (fake) recognition, the words come into the field, the button looks pressed, a second press stops it, an error is a plain line, and nothing is sent until Send is pressed;
-//   4. the keyboard: Tab goes field, emoji, microphone, Send; Enter opens the picker and puts the focus on an emoji;
+//   4. the keyboard: Tab goes field, emoji, microphone, Send; Enter opens the picker and puts the focus in the search field, the down arrow goes into the emoji;
 //   5. a line with emoji goes out through Send as one say frame with the same text, and the hub's rules would keep it as it is (the check in node does that); the page's own errors are none;
 //   6. a browser with no speech recognition: no microphone button, the emoji button stays; a nameless visitor (read only) has neither.
-//   --shots DIR takes the pictures (talk_<scene>_<size>.png: idle, picker, listening, error, unsupported); with TALK_SCALE=3 in the environment the page is drawn at that scale and a close-up of the two buttons is taken too (talk_close_*).
+//   --shots DIR takes the pictures (talk_<scene>_<size>.png: idle, picker, tab, search, listening, error, unsupported); with TALK_SCALE=3 in the environment the page is drawn at that scale and a close-up of the two buttons is taken too (talk_close_*).
 //
 //   node tests/scripts/web_home_talk_browser.js [--web DIR] [--shots DIR]      (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox)
 //
@@ -97,7 +100,7 @@ async function main() {
     for (const [size, w, h, phone] of SIZES) {
         const { page, context } = await open(w, h, phone);
         const name = size + ': ';
-        check(name + 'the page asked for the two files of the buttons, after the dock', site.requests.indexOf('/home/talk.js') !== -1 && site.requests.indexOf('/home/talk.css') !== -1 && site.requests.indexOf('/home/talk.js') > site.requests.indexOf('/home/chat.js'));
+        check(name + 'the page asked for the two files of the buttons', site.requests.indexOf('/home/talk.js') !== -1 && site.requests.indexOf('/home/talk.css') !== -1 && site.requests.indexOf('/home/chat.js') !== -1);
         const emoji = await rect(page, '.gt-emoji'), mic = await rect(page, '.gt-mic'), input = await rect(page, '.gc-input'), send = await rect(page, '.gc-form .gc-send:not(.gc-login)');
         check(name + 'both buttons and Send are shown', !!emoji && !!mic && !!send && !!input, JSON.stringify([emoji, mic, send, input]));
         if (!emoji || !mic || !send || !input) { await context.close(); continue; }
@@ -115,7 +118,7 @@ async function main() {
         const fieldLook = await page.evaluate(() => { const f = document.querySelector('.gc-input'), c = getComputedStyle(f); return { font: parseFloat(c.fontSize), h: f.getBoundingClientRect().height }; });
         check(name + 'the field\'s text is 16 px or more (an iPhone does not zoom into it) and the field is 44 px high or more', fieldLook.font >= 16 && fieldLook.h >= 44, JSON.stringify(fieldLook));
         check(name + 'the page does not scroll sideways', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth && document.body.scrollWidth <= window.innerWidth));
-        const labels = await page.evaluate(() => [...document.querySelectorAll('.gt-btn')].map((b) => [b.getAttribute('aria-label'), b.title]));
+        const labels = await page.evaluate(() => [...document.querySelectorAll('#gchat .gt-btn')].map((b) => [b.getAttribute('aria-label'), b.title]));
         check(name + 'the labels and tooltips', JSON.stringify(labels) === JSON.stringify([['Emoji', 'Emoji'], ['Voice to text: your browser\'s speech service hears you', 'Voice to text: your browser\'s speech service hears you']]), JSON.stringify(labels));
         await shot(page, 'idle', size);
 
@@ -140,6 +143,15 @@ async function main() {
             check(name + 'a long line: two rows (the field on top over the whole width, the buttons and Send under it at the right), the field taller than 44 px', st.two && !st.one && st.field > 44, JSON.stringify(st));
             if (w > 700) check(name + 'two rows: the dock is taller than with one row, and the log keeps room (60 px at least)', longDock.h > emptyDock.h && longLog.h >= 60, JSON.stringify([emptyDock, longDock, emptyLog, longLog]));
         }
+        await page.fill('.gc-input', 'w'.repeat(1000));
+        await sleep(100);
+        const draft = await page.evaluate(() => { const f = document.querySelector('.gc-input'); return { h: f.getBoundingClientRect().height, scrolls: f.scrollHeight > f.clientHeight, sideways: document.documentElement.scrollWidth > window.innerWidth }; });
+        check(name + 'a draft of 1,000 characters (one word): the field stays at four lines at the most (110 px) and scrolls inside itself, and nothing scrolls sideways', draft.h <= 111 && draft.scrolls && !draft.sideways, JSON.stringify(draft));
+        const dockWidth = (await rect(page, '#gchat')).w;
+        hub.say('long.word', 'W'.repeat(1000));
+        await sleep(200);
+        const wrapped = await page.evaluate(() => { const l = document.querySelector('#gchat .gc-log'); return { width: document.getElementById('gchat').getBoundingClientRect().width, log: l.scrollWidth <= l.clientWidth, page: document.documentElement.scrollWidth <= window.innerWidth, last: l.lastElementChild.innerText.length }; });
+        check(name + 'a line that is one word of 1,000 characters wraps inside the log: the dock keeps its width and nothing scrolls sideways', Math.abs(wrapped.width - dockWidth) < 1 && wrapped.log && wrapped.page && wrapped.last > 1000, JSON.stringify([dockWidth, wrapped]));
         const sweep = await page.evaluate(() => {      // (one letter more, then one less, each measured three times: the class never flips by itself, and it comes and goes at one length)
             const f = document.querySelector('.gc-input'), form = f.form, tall = () => form.classList.contains('gt-tall'), up = [], down = [], steady = [];
             const at = (n) => { f.value = 'x'.repeat(n); const a = []; for (let k = 0; k < 3; k++) { f.dispatchEvent(new Event('input', { bubbles: true })); a.push(tall()); } steady.push(a[0] === a[1] && a[1] === a[2]); return a[2]; };
@@ -164,26 +176,104 @@ async function main() {
         check(name + 'one row again: the dock is as low as it was empty', backDock.h === emptyDock.h, JSON.stringify([emptyDock, backDock]));
 
         // the picker
+        const mode = h <= 500 ? 'low' : w <= 700 ? 'sheet' : 'pop';
         await page.fill('.gc-input', 'hi ');
+        await page.evaluate(() => { try { localStorage.removeItem('ants.emoji.recent'); } catch (e) { /* none */ } });
+        const logBefore = await rect(page, '.gc-log');
         await page.click('.gt-emoji');
-        await sleep(100);
-        const pick = await rect(page, '.gt-pick'), inp = await rect(page, '.gc-input'), snd = await rect(page, '.gc-form .gc-send:not(.gc-login)'), dock = await rect(page, '#gchat');
-        check(name + 'the picker is open and expanded; its buttons are at least 44 px', !!pick && (await page.getAttribute('.gt-emoji', 'aria-expanded')) === 'true' && (await page.evaluate(() => [...document.querySelectorAll('.gt-e')].slice(0, 5).every((b) => b.getBoundingClientRect().width >= 44 && b.getBoundingClientRect().height >= 44))));
+        await sleep(150);
+        const pick = await rect(page, '.gt-pick'), inp = await rect(page, '.gc-input'), snd = await rect(page, '.gc-form .gc-send:not(.gc-login)'), dock = await rect(page, '#gchat'), formBox2 = await rect(page, '#gchat .gc-form');
+        check(name + 'the picker is open and expanded, in the place of its kind (' + mode + ')', !!pick && (await page.getAttribute('.gt-emoji', 'aria-expanded')) === 'true' && (await page.evaluate(() => document.querySelector('.gt-pick').className.split(' ').filter((c) => /^gt-(pop|low|sheet)$/.test(c)).join())) === 'gt-' + mode);
+        const parts = await page.evaluate(() => {
+            const tabs = [...document.querySelectorAll('.gt-tab')].map((t) => { const r = t.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height), t.getAttribute('aria-label')]; });
+            const q = document.querySelector('.gt-q'), qr = q.getBoundingClientRect(), cells = [...document.querySelectorAll('.gt-e')].slice(0, 8).map((b) => { const r = b.getBoundingClientRect(); return [r.width, r.height]; });
+            const cols = getComputedStyle(document.querySelector('.gt-page .gt-grid')).gridTemplateColumns.split(' ').length;
+            return { tabs, q: [Math.round(qr.width), Math.round(qr.height), parseFloat(getComputedStyle(q).fontSize)], cells, cols, foot: !!document.querySelector('.gt-foot').getClientRects().length, search: q.getAttribute('placeholder') };
+        });
+        check(name + 'nine tabs in the window, each at least 44 high (and 30 wide), the search field 44 high with text of 16 px, the emoji at least 44 x 44', parts.tabs.length === 9 && parts.tabs.every((t) => t[1] >= 44 && t[0] >= 30) && parts.q[1] >= 44 && parts.q[2] >= 16 && parts.cells.every((c) => c[0] >= 44 && c[1] >= 44), JSON.stringify(parts));
         if (pick && inp && dock) {
-            check(name + 'the picker is inside the dock and the window, and above the field (nothing covers the field or Send)', pick.x >= 0 && pick.right <= w && pick.y >= 0 && pick.bottom <= inp.y + 1 && pick.bottom <= snd.y + snd.h && inp.bottom <= h && snd.bottom <= h && pick.right <= dock.right + 1 && pick.x >= dock.x - 1, JSON.stringify({ pick, inp, snd, dock }));
-            check(name + 'the picker is not taller than 180 px and has a scroll of its own', pick.h <= 180 && (await page.evaluate(() => { const p = document.querySelector('.gt-pick'); return p.scrollHeight > p.clientHeight && getComputedStyle(p).overflowY === 'auto'; })));
+            check(name + 'the picker is inside the window and above the field (nothing covers the field or Send)', pick.x >= 0 && pick.right <= w + 0.5 && pick.y >= 0 && (mode === 'sheet' ? pick.y >= inp.bottom - 1 && pick.y >= snd.bottom - 1 : pick.bottom <= inp.y + 1) && inp.bottom <= h && snd.bottom <= h, JSON.stringify([pick, inp, snd]));
+            if (mode === 'pop') check(name + 'a box: 380 px wide at most, 400 high at most (120 at least), its right edge level with the form\'s', pick.w <= 380.5 && pick.h <= 400.5 && pick.h >= 120 && Math.abs(pick.right - formBox2.right) <= 3, JSON.stringify([pick, formBox2]));
+            if (mode === 'low') check(name + 'a row over a low window: as wide as the form, 6 px under the top, above the field', Math.abs(pick.x - formBox2.x) <= 2 && Math.abs(pick.w - formBox2.w) <= 4 && pick.y <= 8 && pick.bottom <= formBox2.y, JSON.stringify([pick, formBox2]));
+            if (mode === 'sheet') {
+                const bar = await page.evaluate(() => { const t = document.querySelector('.htabs'); return { strip: !!(t && t.getClientRects().length), cls: document.documentElement.classList.contains('gt-sheet-open') }; });
+                const logNow = await rect(page, '.gc-log');
+                check(name + 'a sheet: the full width of the window at its bottom, 52 percent of its height (56 px more or less is the browser\'s own), the strip of views under it (hidden), the page keeps the room above it', pick.x === 0 && Math.abs(pick.right - w) <= 1 && Math.abs(pick.bottom - h) <= 1 && Math.abs(pick.h - Math.round(0.52 * h)) <= 2 && !bar.strip && bar.cls, JSON.stringify([pick, bar]));
+                check(name + 'the sheet: the log gets shorter (not covered) and keeps room to be read (30 px at least), the dock ends at the sheet', !!logNow && logNow.h < logBefore.h && logNow.h >= 30 && dock.bottom <= pick.y + 2, JSON.stringify([logBefore, logNow, dock, pick]));
+                check(name + 'the sheet in a narrow window has columns enough (6 at 320 px)', parts.cols >= 6, parts.cols);
+            }
+            check(name + 'the page does not scroll sideways with the picker open', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth && document.body.scrollWidth <= window.innerWidth));
         }
-        check(name + 'a press (mouse or finger) on the emoji button keeps the focus in the field (the phone\'s keyboard stays up)', (await active(page)) === 'gc-input');
+        check(name + 'a press (mouse or finger) on the emoji button ' + (mode === 'sheet' ? 'in a window of a phone takes the keyboard away (the sheet is its place)' : 'keeps the focus in the field (the keyboard stays up)'), mode === 'sheet' ? (await active(page)) !== 'gc-input' : (await active(page)) === 'gc-input', await active(page));
         await shot(page, 'picker', size);
         await page.click('.gt-e >> nth=0');
         check(name + 'a pick goes in at the end of the field (the caret was there) and the picker stays', (await field(page)) === 'hi ' + GRIN && (await rect(page, '.gt-pick')) !== null);
-        check(name + 'a press on an emoji keeps the focus in the field too', (await active(page)) === 'gc-input');
-        await page.evaluate(() => document.querySelector('.gt-e[tabindex="0"]').focus());
-        await page.keyboard.press('ArrowRight');
-        check(name + 'the arrow key moves to the next emoji', (await active(page)) === 'gt-e' && (await page.evaluate(() => document.activeElement.textContent !== document.querySelector('.gt-e').textContent)));
+        check(name + 'a press on an emoji leaves the focus where it was (it does not move to the emoji)', (await active(page)) !== 'gt-e');
+        const kept = await page.evaluate(() => localStorage.getItem('ants.emoji.recent'));
+        check(name + 'the pick is kept in this browser (the code point in hex)', kept === '1F600', kept);
+        await page.hover('.gt-page .gt-e >> nth=2');
+        const foot = await page.evaluate(() => ({ nm: document.querySelector('.gt-nm').textContent, kw: document.querySelector('.gt-kw').textContent, big: document.querySelector('.gt-big').textContent }));
+        check(name + 'pointing at an emoji shows its name and its search words in the name line', foot.nm === 'Face with tears of joy' && foot.kw.indexOf('lol') !== -1 && foot.big.length > 0, JSON.stringify(foot));
+        await page.click('.gt-tab >> nth=4');
+        await sleep(80);
+        const food = await page.evaluate(() => ({ cap: [...document.querySelectorAll('.gt-cap')].filter((c) => c.getClientRects().length).map((c) => c.textContent), sel: [...document.querySelectorAll('.gt-tab')].map((t) => t.getAttribute('aria-selected')).join(), n: document.querySelectorAll('.gt-page .gt-e').length, first: document.querySelector('.gt-page .gt-e').textContent, scroll: document.querySelector('.gt-body').scrollTop }));
+        check(name + 'a tab shows its group (the food and drink: 86), the recently used row over it, the panel at its top (in the least room the lines over the groups are left out)', food.n === 86 && (food.cap.join() === '' || (food.cap.indexOf('Food and drink') !== -1 && food.cap.indexOf('Recently used') !== -1)) && food.sel.split(',')[4] === 'true' && food.scroll === 0, JSON.stringify(food));
+        await shot(page, 'tab', size);
+        await page.click('.gt-q');
+        await page.keyboard.type('cat');
+        await sleep(100);
+        const found = await page.evaluate(() => ({ cap: document.querySelector('.gt-page .gt-cap').textContent, first: document.querySelector('.gt-page .gt-e').textContent, label: document.querySelector('.gt-page .gt-e').getAttribute('aria-label'), n: document.querySelectorAll('.gt-page .gt-e').length, recent: !!document.querySelector('.gt-recent').getClientRects().length, x: !!document.querySelector('.gt-x').getClientRects().length }));
+        check(name + 'the search for "cat": a line with the count, the cat first, the recently used row away, the clear button there', /^\d+ results$/.test(found.cap) && found.first === String.fromCodePoint(0x1F408) && found.label === 'Cat' && found.n >= 10 && !found.recent && found.x, JSON.stringify(found));
+        await shot(page, 'search', size);
+        hub.received.length = 0;
+        await page.keyboard.press('Enter');
+        await sleep(100);
+        check(name + 'Enter in the search field puts the cat in the line and sends nothing', (await field(page)) === 'hi ' + GRIN + String.fromCodePoint(0x1F408) && hub.received.filter((m) => m && m.t === 'say').length === 0, await field(page));
+        await page.click('.gt-x');
+        check(name + 'the clear button empties the search and the group is back', (await page.evaluate(() => document.querySelector('.gt-q').value)) === '' && (await page.evaluate(() => document.querySelectorAll('.gt-page .gt-e').length)) === 86);
+        await page.focus('.gt-q');
+        await page.keyboard.press('ArrowDown');
+        check(name + 'the down arrow in the search field puts the focus on the first emoji (the recently used one)', (await active(page)) === 'gt-e' && (await page.evaluate(() => document.activeElement.closest('.gt-recent') !== null)));
+        const walk = await page.evaluate(async () => {
+            const at = () => { const a = document.activeElement; return [a.offsetLeft, a.offsetTop, a.textContent, !!a.closest('.gt-recent')]; };       // (places in the panel, which the scroll does not change)
+            const key = async (k) => { document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true })); await new Promise((r) => setTimeout(r, 20)); return at(); };
+            const out = { start: at() };
+            out.down = await key('ArrowDown'); out.down2 = await key('ArrowDown'); out.up = await key('ArrowUp'); out.right = await key('ArrowRight'); out.left = await key('ArrowLeft');
+            out.end = await key('End'); out.home = await key('Home'); out.page = await key('PageDown'); out.pageUp = await key('PageUp');
+            out.cols = getComputedStyle(document.querySelector('.gt-page .gt-grid')).gridTemplateColumns.split(' ').length;
+            return out;
+        });
+        check(name + 'the arrow keys: down goes from the recently used row to the group\'s first row (the same place), down again one row lower, up goes back; right and left one by one', walk.down[3] === false && walk.down[1] > walk.start[1] && Math.abs(walk.down[0] - walk.start[0]) <= 6 && walk.down2[1] > walk.down[1] && walk.up[1] === walk.down[1] && walk.right[0] > walk.up[0] && walk.left[0] === walk.up[0], JSON.stringify(walk));
+        check(name + 'Home goes back to the first, End to the last, a page down is three rows, a page up goes back', walk.home[3] === true && walk.end[1] > walk.home[1] && walk.page[1] > walk.home[1] && walk.pageUp[1] <= walk.page[1] && walk.home[0] === walk.start[0], JSON.stringify(walk));
         await page.keyboard.press('Escape');
         await sleep(100);
-        check(name + 'Escape closes the picker, the focus is in the field, and the chat is still open', (await rect(page, '.gt-pick')) === null && (await active(page)) === 'gc-input' && (await rect(page, '.gc-input')) !== null && (await page.getAttribute('.gt-emoji', 'aria-expanded')) === 'false');
+        check(name + 'Escape closes the picker, the focus is in the field, and the chat is still open', (await rect(page, '.gt-pick')) === null && (await active(page)) === 'gc-input' && (await rect(page, '.gc-input')) !== null && (await page.getAttribute('#gchat', 'data-open')) !== 'false');
+        if (mode === 'sheet') {
+            const back = await page.evaluate(() => ({ cls: document.documentElement.classList.contains('gt-sheet-open'), pad: document.documentElement.style.getPropertyValue('--gt-sheet'), strip: !!(document.querySelector('.htabs') && document.querySelector('.htabs').getClientRects().length) }));
+            const logBack = await rect(page, '.gc-log');
+            check(name + 'the sheet closed: the page is as it was (the strip of views is back, the log is as tall as before)', !back.cls && back.pad === '' && back.strip && Math.abs(logBack.h - logBefore.h) <= 1, JSON.stringify([back, logBack, logBefore]));
+        }
+        await page.click('.gt-emoji');
+        await sleep(100);
+        const again = await page.evaluate(() => ({ recent: [...document.querySelectorAll('.gt-recent .gt-e')].map((b) => b.textContent).join(''), shown: !!document.querySelector('.gt-recent').getClientRects().length, tab: [...document.querySelectorAll('.gt-tab')].map((t) => t.getAttribute('aria-selected')).indexOf('true'), q: document.querySelector('.gt-q').value, row: new Set([...document.querySelectorAll('.gt-recent .gt-e')].map((b) => Math.round(b.getBoundingClientRect().top))).size }));
+        check(name + 'opened again: the recently used row shows what was picked (the cat, the grin, newest first, one row), the search is empty, the last group is shown', again.shown && again.recent === String.fromCodePoint(0x1F408) + GRIN && again.row === 1 && again.q === '' && again.tab === 4, JSON.stringify(again));
+        if (mode === 'sheet') {
+            await page.focus('.gc-input');
+            await sleep(100);
+            check(name + 'the field takes the focus (the keyboard comes): the sheet gives way and the page has its room back', (await rect(page, '.gt-pick')) === null && !(await page.evaluate(() => document.documentElement.classList.contains('gt-sheet-open'))));
+        } else await page.keyboard.press('Escape');
+        await sleep(60);
+        await page.reload({ waitUntil: 'load' });
+        await page.waitForSelector('.gt-emoji', { state: 'visible', timeout: 6000 }).catch(() => {});
+        if (phone && w <= 700) { await page.click('.htab.t-chat').catch(() => {}); await sleep(250); }
+        if (!phone && h < 500 && (await page.getAttribute('#gchat', 'data-open')) === 'false') { await page.click('#gchat .gc-head'); await sleep(250); }
+        await page.waitForSelector('.gt-emoji', { state: 'visible', timeout: 6000 }).catch(() => {});
+        await page.click('.gt-emoji');
+        await sleep(150);
+        check(name + 'after a reload of the page the recently used emoji are still there', (await page.evaluate(() => [...document.querySelectorAll('.gt-recent .gt-e')].map((b) => b.textContent).join(''))) === String.fromCodePoint(0x1F408) + GRIN);
+        await page.keyboard.press('Escape');
+        await page.fill('.gc-input', '');
+        await page.evaluate(() => { try { localStorage.removeItem('ants.emoji.recent'); } catch (e) { /* none */ } });
 
         // the voice
         await page.fill('.gc-input', '');
@@ -216,7 +306,8 @@ async function main() {
         await page.focus('.gt-emoji');
         await page.keyboard.press('Enter');
         await sleep(100);
-        check(name + 'Enter on the emoji button opens the picker and puts the focus on an emoji', (await active(page)) === 'gt-e' && (await rect(page, '.gt-pick')) !== null);
+        check(name + 'Enter on the emoji button opens the picker and puts the focus in the search field', (await active(page)) === 'gt-q' && (await rect(page, '.gt-pick')) !== null, await active(page));
+        await page.keyboard.press('ArrowDown');
         await page.keyboard.press('Enter');
         check(name + 'Enter on an emoji adds it (at the caret: after the "a")', (await field(page)).length === 3 && (await field(page)).startsWith('a'), JSON.stringify(await field(page)));
         await page.keyboard.press('Escape');

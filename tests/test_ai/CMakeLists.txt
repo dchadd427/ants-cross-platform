@@ -31,6 +31,7 @@ add_executable(test_ai
     test_ai_merge.cpp
     test_ai_cantgo.cpp
     test_ai_reach.cpp
+    test_ai_bombs.cpp
     test_ai_flowers.cpp
     test_ai_war.cpp
     test_ai_stand.cpp
@@ -48,6 +49,7 @@ add_executable(test_ai
     test_ai_homemines.cpp
     test_ai_ownground.cpp
     test_ai_drops.cpp
+    test_ai_thief.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/bot_watch_people.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/bot_arena_tune.cpp
 )

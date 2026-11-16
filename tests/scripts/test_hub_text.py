@@ -2,8 +2,8 @@
 """The hub's rules for untrusted text (hub/text.py; docs/HUB.md "Text rules"): what a visitor types is data, and only plain, visible, markup-free text gets through.
 
 Tables of the tricks that are known (bidirectional overrides and isolates, zero-width characters, joiners, tag characters, the blank-looking letters, line separators, private
-use, unassigned code points, lone surrogates, stacked marks), the limits at their edges (200 code points, 800 bytes), and a fuzz over random strings of the awkward categories that
-checks the laws of the result instead of examples: nothing from a removed category, no markup, no doubled or edge blanks, NFC, at most 200 code points, and the same answer when it
+use, unassigned code points, lone surrogates, stacked marks), the limits at their edges (1,000 code points, 4,000 bytes), and a fuzz over random strings of the awkward categories that
+checks the laws of the result instead of examples: nothing from a removed category, no markup, no doubled or edge blanks, NFC, at most 1,000 code points, and the same answer when it
 is run again.
 
 The name that the chat shows (clean_shown: the Discord display name, which is free text from Discord) has its own tables below: the scripts that must pass, every kind of character that is
@@ -132,45 +132,50 @@ class TheTricks(unittest.TestCase):
 
     def test_a_huge_input_is_long_without_the_work(self):
         self.assertEqual(clean("a" * 100000), (None, "long"))
-        self.assertEqual(clean("\u200b" * 5000 + "a"), (None, "long"))         # (more than a frame can carry: refused unread)
+        self.assertEqual(clean("\u200b" * 5000 + "a"), (None, "long"))         # (more than MAX_RAW code points before any is removed: refused unread)
+        self.assertEqual(clean("a" * text.MAX_RAW)[1], "long")                  # (and the line itself is over the limit)
+        self.assertEqual(clean("\u200b" * (text.MAX_RAW - 1) + "a"), ("a", None))      # (the most that is read: a line of one letter in the largest raw text)
+        self.assertEqual(clean("\u200b" * text.MAX_RAW + "a"), (None, "long"))
 
 
 class TheLimits(unittest.TestCase):
-    def test_200_code_points_are_the_edge(self):
-        self.assertEqual(clean("a" * 200), ("a" * 200, None))
-        self.assertEqual(clean("a" * 201), (None, "long"))
-        self.assertEqual(clean("a" * 199), ("a" * 199, None))
+    def test_1000_code_points_are_the_edge(self):
+        self.assertEqual((text.MAX_CODE_POINTS, text.MAX_BYTES), (1000, 4000))
+        self.assertEqual(clean("a" * 1000), ("a" * 1000, None))
+        self.assertEqual(clean("a" * 1001), (None, "long"))
+        self.assertEqual(clean("a" * 999), ("a" * 999, None))
 
     def test_the_count_is_after_the_rules(self):
-        self.assertEqual(clean("a\u200b" * 200)[1], None)                       # 200 letters and 200 hidden ones
-        self.assertEqual(clean("a\u200b" * 201)[1], "long")
-        self.assertEqual(clean("a " * 100 + "     ")[0], ("a " * 100).strip())      # 199 code points with the spaces
-        self.assertEqual(clean("ab " * 67)[1], None)                           # 200 with the spaces (trailing one trimmed)
-        self.assertEqual(clean("ab " * 68)[1], "long")
+        self.assertEqual(clean("a\u200b" * 1000)[1], None)                      # 1,000 letters and 1,000 hidden ones
+        self.assertEqual(clean("a\u200b" * 1001)[1], "long")
+        self.assertEqual(clean("a " * 500 + "     ")[0], ("a " * 500).strip())      # 999 code points with the spaces
+        self.assertEqual(clean("ab " * 333 + "a")[1], None)                     # 1,000 with the spaces
+        self.assertEqual(clean("ab " * 333 + "ab")[1], "long")                  # 1,001
 
     def test_nfc_decides_the_count(self):
-        self.assertEqual(clean("e\u0301" * 200), ("\u00e9" * 200, None))        # 400 code points typed, 200 after NFC
-        self.assertEqual(clean("e\u0301" * 201)[1], "long")
+        self.assertEqual(clean("e\u0301" * 1000), ("\u00e9" * 1000, None))      # 2,000 code points typed, 1,000 after NFC
+        self.assertEqual(clean("e\u0301" * 1001)[1], "long")
 
-    def test_800_bytes_are_the_other_edge(self):
+    def test_4000_bytes_are_the_other_edge(self):
         four = "\U0001f600"                                                      # 4 bytes in UTF-8
-        self.assertEqual(clean(four * 200), (four * 200, None))                  # 200 code points, exactly 800 bytes
+        self.assertEqual(clean(four * 1000), (four * 1000, None))                # 1,000 code points, exactly 4,000 bytes
         three = "\u4f60"
-        self.assertEqual(len((three * 200).encode()), 600)
-        self.assertEqual(clean(three * 200)[1], None)
-        # a line of 200 code points can never be over 800 bytes in UTF-8, so the byte rule is the same edge; it still has to hold if the code point rule were moved
+        self.assertEqual(len((three * 1000).encode()), 3000)
+        self.assertEqual(clean(three * 1000)[1], None)
+        # a line of 1,000 code points can never be over 4,000 bytes in UTF-8, so the byte rule is the same edge; it still has to hold if the code point rule were moved
         original = text.MAX_CODE_POINTS
         try:
-            text.MAX_CODE_POINTS = 1000
-            self.assertEqual(clean(four * 200)[1], None)
-            self.assertEqual(clean(four * 201)[1], "long")
-            self.assertEqual(clean("a" * 800)[1], None)
-            self.assertEqual(clean("a" * 801)[1], "long")
+            text.MAX_CODE_POINTS = 5000
+            self.assertEqual(clean(four * 1000)[1], None)
+            self.assertEqual(clean(four * 1001)[1], "long")
+            self.assertEqual(clean("a" * 4000)[1], None)
+            self.assertEqual(clean("a" * 4001)[1], "long")
         finally:
             text.MAX_CODE_POINTS = original
 
     def test_order_of_the_verdicts(self):
-        self.assertEqual(clean("<" * 300)[1], "long")                          # too long is said before the markup
+        self.assertEqual(clean("<" * 1500)[1], "long")                         # too long is said before the markup
+        self.assertEqual(clean("<" * 300)[1], "bad")
         self.assertEqual(clean("\u200b<")[1], "bad")
         self.assertEqual(clean("\u200b")[1], "empty")
 
@@ -207,7 +212,7 @@ class TheLawsHold(unittest.TestCase):
             elif kind < 0.9:
                 raw = "".join(chr(rnd.choice(everything)) for _ in range(rnd.randint(0, 30)))
             else:
-                raw = "".join(rnd.choice(plain) for _ in range(rnd.randint(150, 260)))
+                raw = "".join(rnd.choice(plain) for _ in range(rnd.randint(900, 1100)))
             out, why = clean(raw)
             if why:
                 refused += 1
@@ -217,8 +222,8 @@ class TheLawsHold(unittest.TestCase):
             kept += 1
             self.assertTrue(out, repr(raw))
             self.assertEqual(out, unicodedata.normalize("NFC", out), repr(raw))
-            self.assertLessEqual(len(out), 200)
-            self.assertLessEqual(len(out.encode("utf-8")), 800)
+            self.assertLessEqual(len(out), 1000)
+            self.assertLessEqual(len(out.encode("utf-8")), 4000)
             self.assertNotIn("<", out)
             self.assertNotIn(">", out)
             self.assertNotIn("  ", out)
@@ -245,7 +250,7 @@ class TheLawsHold(unittest.TestCase):
             expected = unicodedata.normalize("NFC", raw)
             if not any(c != " " and not unicodedata.category(c).startswith("M") for c in expected):
                 self.assertEqual(clean(raw), (None, "empty"))              # (a word of marks alone shows nothing)
-            elif len(expected) <= 200:
+            elif len(expected) <= 1000:
                 self.assertEqual(clean(raw), (expected, None))
 
 

@@ -36,6 +36,7 @@
 #include <map>
 #include <tuple>
 
+#include "ants_ai/bomb_detour.hpp"
 #include "ants_ai/bot.hpp"
 #include "ants_ai/brawl_task.hpp"
 #include "ants_ai/field_task.hpp"
@@ -48,6 +49,7 @@
 #include "ants_ai/island_tasks.hpp"
 #include "ants_ai/miner_flight_task.hpp"
 #include "ants_ai/opportunity_task.hpp"
+#include "ants_ai/thief_guard.hpp"
 #include "ants_ai/standard_tasks.hpp"
 #include "ants_ai/tactics.hpp"
 #include "ants_ai/tasks.hpp"
@@ -94,7 +96,9 @@ private:
           miner_flight_(kMinerFlight, tactics_),
           heal_(kHeal, tactics_),
           flower_link_(kFlowerLink, tactics_),
+          thief_guard_(kThiefGuard, tactics_),
           swarm_(kSwarm, tactics_) {
+        thief_guard_.attach(&walls_);
         island_.attach(&harvest_);
         expedition_.attach(&island_);
         miner_flight_.attach(&island_, &expedition_);
@@ -115,6 +119,8 @@ public:
     const WallTask& walls() const noexcept { return walls_; }
     const PowerUpTask& powerups() const noexcept { return powerups_; }
     const BombTask& bombs() const noexcept { return bombs_; }
+    /// The walk round the bombs of other teams (BombDetour): its counters, for the tests
+    const BombDetour& detour() const noexcept { return detour_; }
     const MineTask& mines() const noexcept { return mines_; }
     const RaidTask& raids() const noexcept { return raids_; }
     const GuardTask& guard() const noexcept { return guard_; }
@@ -134,6 +140,7 @@ public:
     const GateGoalTask& gate_goals() const noexcept { return gate_goals_; }
     const FieldTask& field() const noexcept { return field_; }
     const OpportunityTask& opportunity() const noexcept { return opportunity_; }
+    const ThiefGuardTask& thief_guard() const noexcept { return thief_guard_; }
     const MinerFlightTask& miner_flight() const noexcept { return miner_flight_; }
     const FlowerLinkTask& flower_link() const noexcept { return flower_link_; }
     const SwarmTask& swarm() const noexcept { return swarm_; }
@@ -186,7 +193,8 @@ public:
     static constexpr TaskId kOpportunity = 22;
     static constexpr TaskId kMinerFlight = 24;
     static constexpr TaskId kFlowerLink = 25;
-    static constexpr TaskId kSwarm = 26;
+    static constexpr TaskId kThiefGuard = 26;
+    static constexpr TaskId kSwarm = 27;
     static constexpr TaskId kHeal = kHealTaskId;                  // (23: tasks.hpp names it for the tasks that leave a carrier to it)
 
 private:
@@ -291,6 +299,7 @@ private:
         p.deny_one_percent = plan.deny_one_percent;
         p.reserve_threat_tiles = plan.reserve_threat_tiles;
         p.deny_fade = plan.deny_fade;
+        p.skip_hopeless = plan.skip_hopeless;
         return p;
     }
 
@@ -301,6 +310,7 @@ private:
     std::function<void(LevelPlan&)> tune_;
     uint8_t seat_{0};
     Profile profile_{};
+    void on_proposed(const sim::Command& command, Fate fate, uint64_t tick);        // on_command for a command as a task proposed it (the detour's waypoints are translated back)
     const MapInfo* map_{nullptr};
     AntLedger ledger_;
     Tactics tactics_;
@@ -310,6 +320,7 @@ private:
     WallTask walls_;
     PowerUpTask powerups_;
     BombTask bombs_;
+    BombDetour detour_;
     MineTask mines_;
     RaidTask raids_;
     GuardTask guard_;
@@ -329,6 +340,7 @@ private:
     MinerFlightTask miner_flight_;
     HealTask heal_;
     FlowerLinkTask flower_link_;
+    ThiefGuardTask thief_guard_;
     SwarmTask swarm_;
     void note_repeat(const sim::Command& command, uint64_t tick);
     void update_progress(const BotView& view);

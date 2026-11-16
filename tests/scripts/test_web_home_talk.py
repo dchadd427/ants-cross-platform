@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 """The emoji picker and the voice button of the chat (web/home/talk.js and talk.css, docs/HOME_SCREEN.md "Emoji and voice", docs/HUB.md "Text rules", web/legal.html; run by ./run_tests.sh --fast and by the CI).
 
-Two small buttons stand beside Send in the chat dock's form: one opens a picker of common emoji, one types what the person says into the field with the browser's own speech recognition (never sending it). They are
-loaded by web/home/home.js after the dock. What this file checks:
-  - the hub's rules against the emoji of the picker, with the REAL rules (hub/text.py): every emoji of the picker passes `clean_line` as it is, alone and all together, counts as one code point of the 200 that a line may
-    have and as at most 4 bytes of 800, is a symbol that the Python of the hub knows (nothing newer than Unicode 9), and the limits that the script names are the hub's own; and what the hub does with the sequences that the
+Two small buttons stand beside Send in the chat dock's form: one opens a picker of every single code point emoji of Unicode 9 that the hub keeps (tabs, search, recently used, names), one types what the person says into the field
+with the browser's own speech recognition (never sending it). They are loaded by web/home/home.js after the dock. What this file checks:
+  - the hub's rules against the emoji of the picker, with the REAL rules (hub/text.py): every emoji of the picker passes `clean_line` as it is, alone and all together, counts as one code point of the 1,000 that a line may
+    have and as at most 4 bytes of 4,000, is a symbol that the Python of the hub knows (nothing newer than Unicode 9), and the limits that the script names are the hub's own; and what the hub does with the sequences that the
     picker avoids (a joiner, a tag character, a variation selector) is pinned here, so that a change of the rules shows;
   - the page and the other pages: web/lobby.html does not link the buttons, no other file names them, the hub's door is still the dock's script alone;
   - the loader in home.js: the two files, once, after the dock is mounted, mounted when BOTH have come, and whatever goes wrong with them stays with them;
-  - the folder: its own budgets (raw and gzipped), plain ES5, no markup made from text, no storage, no network, NO recording (no MediaRecorder, no getUserMedia), the kinds of element it makes;
-  - the style: every target at least 44 px, nothing loaded from another site, the picker in the form's own flow (nothing covers the field), reduced motion;
+  - the folder: its own budgets (raw and gzipped), plain ES5, no markup made from text, one guarded storage door for the recently used emoji and nothing else kept, no network, NO recording (no MediaRecorder, no getUserMedia), the kinds of element it makes;
+  - the style: every target at least 44 px (the nine tabs are 44 high), nothing loaded from another site, the picker over the log above the form (nothing covers the field), its three places (a box, a row over a low window, a sheet), reduced motion;
   - the privacy words: the button's tooltip, the Legal page and docs/HOME_SCREEN.md say who hears the voice and that the site receives and keeps no audio;
   - the code RUNS in node: tests/scripts/web_home_talk_check.js (the real dock, a fake speech recognition and a fake page);
   - tests/data/home_talk_mutants.json changes one thing at a time in a COPY of the files: the checks must then fail (the last class of this file; tools/mutate.py runs the same list).
 The pictures are compared by hand with the page in a real browser (tests/scripts/web_home_talk_browser.js, opt-in, `--shots DIR`).
 """
 import gzip
+import hashlib
 import json
 import os
 import re
@@ -58,6 +59,16 @@ def the_emoji():
     return json.loads(done.stdout)
 
 
+def page_numbers():
+    """The numbers that the scripts name for the hub's limits (node reads them from the scripts themselves)."""
+    if not NODE:
+        raise unittest.SkipTest("node is not installed")
+    code = "const c = require(process.argv[1]), t = require(process.argv[2]); console.log(JSON.stringify({ chat: c.LIMIT, pace: c.PACE, talk: t.LIMIT }))"
+    done = subprocess.run([NODE, "-e", code, os.path.join(HOME, "chat.js"), os.path.join(HOME, "talk.js")], capture_output=True, text=True, timeout=60, cwd=REPO)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout)
+
+
 class TheHubsRules(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -65,11 +76,16 @@ class TheHubsRules(unittest.TestCase):
         cls.all = [e for g in cls.groups for e in g["list"]]
 
     def test_the_limits_that_the_script_names_are_the_hubs_own(self):
-        self.assertEqual(limits.Limits().line_code_points, 200)
-        self.assertEqual(hubtext.MAX_CODE_POINTS, 200)
-        self.assertEqual(hubtext.MAX_BYTES, 800)
-        self.assertIn("var LIMIT = 200;", read("web", "home", "talk.js"))
-        self.assertIn("LIMIT = { name: 32, line: 200, feed: 100, history: 50, frame: 120000, bad: 30, field: 400,", read("web", "home", "chat.js"), "the dock's line of 200 code points and its field of 400 UTF-16 units: 200 code points are never more than 400 units")
+        """The numbers are read from the scripts by node (their own LIMIT and PACE): nothing is copied here from their source."""
+        d, page = limits.Limits(), page_numbers()
+        self.assertEqual((d.line_code_points, d.line_bytes), (hubtext.MAX_CODE_POINTS, hubtext.MAX_BYTES), "the hub names its line twice: they are one")
+        self.assertEqual((hubtext.MAX_CODE_POINTS, hubtext.MAX_BYTES), (1000, 4000))
+        self.assertEqual(page["talk"], hubtext.MAX_CODE_POINTS, "the picker counts the hub's code points")
+        self.assertEqual(page["chat"]["line"], hubtext.MAX_CODE_POINTS, "the dock cuts and refuses at the hub's code points")
+        self.assertEqual(page["chat"]["field"], 2 * hubtext.MAX_CODE_POINTS, "the field counts UTF-16 units: a line of the hub's code points is never more than twice as many (an emoji is two)")
+        self.assertLess(page["pace"]["burst"], d.burst, "the dock's own burst is below the hub's, so that the hub never has to refuse a person who is within it")
+        self.assertGreater(page["pace"]["every"] / 1000.0, d.refill_seconds, "... and its refill is slower")
+        self.assertLessEqual(page["pace"]["burst"] + 2, d.frame_burst, "the lines of a burst and a ping, a `who` and a `here` are within a socket's budget of frames")
 
     def test_every_emoji_of_the_picker_is_one_code_point_that_the_hub_keeps_as_it_is(self):
         self.assertGreaterEqual(len(self.all), 60)
@@ -77,29 +93,49 @@ class TheHubsRules(unittest.TestCase):
         for e in self.all:
             self.assertEqual(len(e), 1, "%r is not one code point" % e)
             self.assertEqual(hubtext.clean_line(e), (e, None), "the hub changes or refuses U+%04X" % ord(e))
-            self.assertEqual(unicodedata.category(e), "So", "U+%04X is not a symbol" % ord(e))
+            self.assertIn(unicodedata.category(e), ("So", "Sm"), "U+%04X is not a symbol (two of the squares are math symbols)" % ord(e))
             self.assertLessEqual(len(e.encode("utf-8")), 4)
             self.assertNotEqual(unicodedata.name(e, ""), "", "U+%04X has no name in this Python (no newer than the hub's)" % ord(e))
             self.assertNotIn(e, "<>")
 
     def test_the_picker_holds_exactly_these_code_points_none_newer_than_unicode_9(self):
-        """The list is pinned here (the Python that runs this test may know a newer Unicode than the hub's image does: the name check cannot see that), so a new emoji is a decision that is read."""
-        pinned = "1F600 1F603 1F604 1F601 1F606 1F605 1F602 1F923 1F60A 1F607 1F642 1F643 1F609 1F60D 1F618 1F60B 1F61C 1F60E 1F913 1F914 1F610 1F611 1F644 1F60F 1F62C 1F634 1F622 1F62D 1F62E 1F631 1F621 1F620 1F629 1F633 1F44D 1F44E 1F44C 1F44F 1F64C 1F64F 1F4AA 1F44B 1F91D 1F440 1F499 1F49A 1F49B 1F49C 1F494 1F495 1F4AF 1F4A5 1F525 2728 2B50 1F389 1F3C6 2705 274C 2753 2757 26A1 1F41C 1F41D 1F41B 1F40C 1F98B 1F33F 1F332 1F335 1F337 1F33B 1F340 1F34E 1F36F 1F36A 1F355 2615 1F4A7 1F30A 1F3AE 1F3B2 1F3AF 1F3C1 1F6A9 1F4A3 1F451 1F680 23F0 231B 1F4A4 1F4A1 1F512 1F514"
-        self.assertEqual(" ".join("%X" % ord(e) for e in self.all), pinned)
-        self.assertEqual(len(pinned.split()), 94)
-        self.assertLessEqual(max(int(h, 16) for h in pinned.split()), 0x1F9C0)
-        for h in pinned.split():
-            self.assertLessEqual(len(h), 5)
+        """The set is pinned here by a digest of its sorted code points (the Python that runs this test may know a newer Unicode than the hub's image does: the name check cannot see that), so a new emoji is a decision that is read.
+        The rule of the set: single code points of Unicode 9 or older that draw as a picture by themselves (Emoji_Presentation), 879 of them; the regional indicator letters (a flag needs two) and the skin tone swatches are
+        left out, and so is everything that needs a joiner or a variation selector."""
+        codes = sorted(ord(e) for e in self.all)
+        self.assertEqual(len(codes), 879)
+        self.assertEqual(hashlib.sha256(" ".join("%X" % c for c in codes).encode()).hexdigest(), "9c47a48bf130f452faf3e4fcb1457d800858cb62f0eeee50a4934c161127f79e")
+        self.assertLessEqual(codes[-1], 0x1F9C0, "nothing newer than Unicode 9 (the last of it is the cheese wedge)")
+        self.assertFalse([c for c in codes if 0x1F1E6 <= c <= 0x1F1FF or 0x1F3FB <= c <= 0x1F3FF or c in (0x200D, 0xFE0F, 0x20E3)], "a regional indicator, a skin tone swatch, a joiner, a variation selector or a keycap")
+        self.assertFalse([c for c in codes if 0xE0000 <= c <= 0xE007F], "a tag character")
+        self.assertEqual([len(g["list"]) for g in self.groups], [120, 115, 102, 86, 58, 151, 123, 124])
+
+    def test_every_emoji_has_a_name_and_search_words_that_are_plain_text(self):
+        names = [n for g in self.groups for n in g["names"]]
+        keys = [k for g in self.groups for ks in g["keys"] for k in ks]
+        self.assertEqual(len(names), 879)
+        self.assertEqual(len(names), len({n.lower() for n in names}), "two emoji with one name")
+        for n in names:
+            self.assertRegex(n, r"^[A-Z0-9][ -~]*$", n)
+            self.assertNotRegex(n, r"[;~@<>]", n)
+            self.assertLessEqual(len(n), 36, n)
+        for k in keys:
+            self.assertRegex(k, r"^[a-z0-9][a-z0-9 ]*$", k)
+        self.assertGreater(len(keys), 800, "the search words are a table of their own: most emoji have some")
+        for g in self.groups:
+            self.assertEqual(len(g["keys"]), len(g["list"]))
 
     def test_all_of_them_together_and_a_full_line_of_them_are_one_line_of_the_right_length(self):
         everything = "".join(self.all)
-        self.assertEqual(hubtext.clean_line(everything), (everything, None))
+        self.assertEqual(hubtext.clean_line(everything), (everything, None), "all 879 of them are one line (at most 3,516 bytes)")
+        self.assertEqual(hubtext.clean_line(everything * 2), (None, "long"), "twice all 879 are more than one line: the picker stops at 1,000")
         for e in (self.all[0], self.all[-1], max(self.all, key=lambda c: len(c.encode("utf-8")))):
-            self.assertEqual(hubtext.clean_line(e * 200), (e * 200, None), "200 of them are a line (at most 800 bytes: the hub's second limit)")
-            self.assertEqual(hubtext.clean_line(e * 201), (None, "long"), "201 are not")
+            self.assertEqual(hubtext.clean_line(e * 1000), (e * 1000, None), "1,000 of them are a line (at most 4,000 bytes: the hub's second limit)")
+            self.assertEqual(hubtext.clean_line(e * 1001), (None, "long"), "1,001 are not")
 
     def test_the_groups_are_named_and_in_order(self):
-        self.assertEqual([g["name"] for g in self.groups], ["Faces", "Hands", "Hearts and signs", "Ants and nature", "Games"])
+        self.assertEqual([g["id"] for g in self.groups], ["smileys", "people", "animals", "food", "activities", "travel", "objects", "symbols"])
+        self.assertEqual([g["name"] for g in self.groups], ["Smileys", "People", "Animals and nature", "Food and drink", "Activities and games", "Travel and places", "Objects", "Symbols"])
 
     def test_what_the_hub_does_with_the_sequences_that_the_picker_does_not_send(self):
         family = "\U0001F468\u200d\U0001F469\u200d\U0001F467"
@@ -108,13 +144,13 @@ class TheHubsRules(unittest.TestCase):
         self.assertEqual(hubtext.clean_line("\u2764\ufe0f"), ("\u2764\ufe0f", None), "a variation selector (a mark) stays after its symbol")
         self.assertEqual(hubtext.clean_line("\ufe0f"), (None, "empty"), "...but alone it shows nothing, and is empty")
         self.assertEqual(hubtext.clean_line("\U0001F44D\U0001F3FD"), ("\U0001F44D\U0001F3FD", None), "a skin tone (a modifier symbol) stays")
-        self.assertEqual(hubtext.clean_line("\u2764\ufe0f" * 100), ("\u2764\ufe0f" * 100, None), "a symbol and its selector are two code points: 100 of them are 200 (the count is in code points)")
-        self.assertEqual(hubtext.clean_line("\u2764\ufe0f" * 101), (None, "long"))
+        self.assertEqual(hubtext.clean_line("\u2764\ufe0f" * 500), ("\u2764\ufe0f" * 500, None), "a symbol and its selector are two code points: 500 of them are 1,000 (the count is in code points)")
+        self.assertEqual(hubtext.clean_line("\u2764\ufe0f" * 501), (None, "long"))
         self.assertEqual(hubtext.clean_line("<3 \U0001F600"), (None, "bad"), "a '<' is refused, whatever stands beside it")
 
     def test_an_emoji_beyond_the_basic_plane_is_two_utf16_units_and_still_one_code_point(self):
-        line = "\U0001F600" * 200
-        self.assertEqual(len(line.encode("utf-16-le")) // 2, 400, "200 code points of them are 400 UTF-16 units: the field's maxlength, and so no cut")
+        line = "\U0001F600" * 1000
+        self.assertEqual(len(line.encode("utf-16-le")) // 2, 2000, "1,000 code points of them are 2,000 UTF-16 units: the field's maxlength, and so no cut")
         self.assertEqual(hubtext.clean_line(line), (line, None))
 
 
@@ -138,11 +174,11 @@ class ThePageAndTheOtherPages(unittest.TestCase):
                     naming_them.add(rel)
                 if re.search(r"/hub/ws", text):
                     naming_the_socket.add(rel)
-        self.assertEqual(sorted(naming_them), ["web/home/home.js", "web/home/talk.css"], "only the front page's own script asks for them (the style names its script)")
+        self.assertEqual(sorted(naming_them), ["web/front/lobby_chat.css", "web/front/lobby_chat.js", "web/home/home.js", "web/home/talk.css"], "only the front page's own scripts ask for them: Home's dock and the Room's chat box (the style names its script; the Room's sheet says whose base it is)")
         self.assertEqual(sorted(naming_the_socket), ["web/home/chat.js", "web/hub_here.js"])
 
     def test_the_game_and_the_other_pages_never_hear_of_them(self):
-        for rel in (("web", "shell.html"), ("web", "front", "lobby_net.js"), ("web", "front", "lobby_chat.js"), ("web", "front", "lobby_rules.js")):
+        for rel in (("web", "shell.html"), ("web", "front", "lobby_net.js"), ("web", "front", "lobby_rules.js")):
             self.assertNotRegex(read(*rel), r"AntsHomeTalk|home/talk|SpeechRecognition", rel[-1])
 
 
@@ -198,10 +234,13 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertNotRegex(self.code, r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|srcdoc|createContextualFragment|DOMParser|setTimeout\(\s*['\"]")
         self.assertNotRegex(self.code, r"\.href\b|\.src\b|setAttribute\(\s*['\"](href|src|style|on\w+|srcdoc)")
         made = sorted(set(re.findall(r"\bel\('(\w+)'", self.code)) | set(re.findall(r"createElement\('(\w+)'", self.code)))
-        self.assertEqual(made, ["button", "div", "p", "span"], "text and boxes: no a, img, script, iframe, style or link")
+        self.assertEqual(made, ["button", "div", "input", "p", "span"], "text, boxes and the search field: no a, img, script, iframe, style or link")
 
-    def test_it_keeps_nothing_in_the_browser_and_has_no_network_of_its_own(self):
-        self.assertNotRegex(self.code, r"localStorage|sessionStorage|indexedDB|document\.cookie|new WebSocket|WebSocket\(|XMLHttpRequest|fetch\(|sendBeacon")
+    def test_it_keeps_only_the_recently_used_emoji_in_the_browser_and_has_no_network_of_its_own(self):
+        self.assertNotRegex(self.code, r"sessionStorage|indexedDB|document\.cookie|new WebSocket|WebSocket\(|XMLHttpRequest|fetch\(|sendBeacon|\bcaches\b")
+        self.assertEqual(len(re.findall(r"localStorage", self.code)), 1, "one door to the storage")
+        self.assertIn("function store() { try { return win.localStorage || null; } catch (e) { return null; } }", self.js, "guarded: a browser that refuses its storage keeps the picks for the visit")
+        self.assertIn("KEY = 'ants.emoji.recent'", self.js)
         self.assertNotRegex(self.code, r"/hub\b|https?:")
 
     def test_it_records_nothing_and_uploads_nothing_the_browsers_own_recognition_is_all(self):
@@ -236,15 +275,18 @@ class TheStyle(unittest.TestCase):
 
     def test_the_picker_lies_over_the_log_right_above_the_form_and_the_words_are_a_bubble_that_takes_no_room(self):
         picker = self.rule(".gt-pick")
-        for part in ("position: absolute;", "bottom: 100%;", "left: 0;", "right: 0;"):
+        for part in ("position: absolute;", "bottom: 100%;", "right: 0;", "top: auto;"):
             self.assertIn(part, picker, part)
         self.assertIn("position: relative;", self.rule(".gc-form.gt-on"), "the picker is placed against the form")
+        self.assertIn("align-self: end; justify-self: end;", self.rule(".gt-pop"), "a box in the form's grid: Chrome aligns it by the grid's own alignment unless it is told")
         for part in ("position: absolute;", "bottom: 100%;"):
             self.assertIn(part, self.rule(".gt-say"), "the line of words is a bubble over the log: it takes no room")
-        self.assertNotRegex(self.css, r"position: *fixed")
-        self.assertEqual(self.css.count("z-index"), 2, "two layers over the log: the picker's (2) and the voice line's (3, so that \"The message is full.\" shows over the open picker)")
+        self.assertEqual(len(re.findall(r"position: *fixed", self.css)), 2, "fixed only for the row over a low window and for the sheet")
+        self.assertIn("position: fixed;", self.rule(".gt-low"))
+        self.assertIn("position: fixed;", self.rule(".gt-sheet"))
+        self.assertEqual(self.css.count("z-index"), 2, "two layers over the log: the picker's (5) and the voice line's (6, so that \"The message is full.\" shows over the open picker)")
         self.assertIn("grid-template-columns: minmax(0, 1fr) auto auto;", self.css)
-        self.assertIn("pick.style.maxHeight = Math.max(72, Math.min(180, ", read("web", "home", "talk.js"), "the script sets its height to the room above the form")
+        self.assertIn("s.height = Math.max(120, Math.min(400, ", read("web", "home", "talk.js"), "the script sets its height to the room above the form")
 
     def test_the_corners_are_the_sites_not_a_pill(self):
         classic = read("web", "front", "classic.css")
@@ -279,15 +321,36 @@ class TheStyle(unittest.TestCase):
             body = self.rule(selector)
             self.assertGreaterEqual(int(re.search(r"min-height: (\d+)px", body).group(1)), 44, selector)
             self.assertGreaterEqual(int(re.search(r"min-width: (\d+)px", body).group(1)), 44, selector)
+        self.assertGreaterEqual(int(re.search(r"min-height: (\d+)px", self.rule(".gt-tab")).group(1)), 44, "the nine tabs share the width of the box: each is at least 44 px high")
+        for dim in ("width", "height"):
+            self.assertGreaterEqual(int(re.search(dim + r": (\d+)px", self.rule(".gt-x")).group(1)), 44, "the clear button " + dim)
+        self.assertGreaterEqual(int(re.search(r"(?<![-\w])height: (\d+)px", self.rule(".gt-q")).group(1)), 44, "the search field")
+        self.assertGreaterEqual(int(re.search(r"font-size: (\d+)px", self.rule(".gt-q")).group(1)), 16, "an iPhone does not zoom into a field of 16 px")
 
     def test_a_hidden_part_stays_hidden(self):
         hidden = next(sel for sel, body in self.rules if body.strip() == "display: none;")
-        for part in (".gt-tools[hidden]", ".gt-pick[hidden]", ".gt-say[hidden]"):
+        for part in (".gt-tools[hidden]", ".gt-pick[hidden]", ".gt-say[hidden]", ".gt-recent[hidden]", ".gt-x[hidden]"):
             self.assertIn(part, hidden, part)
 
-    def test_the_picker_scrolls_and_the_script_makes_it_short_where_there_is_little_room(self):
-        self.assertIn("overflow-y: auto", self.rule(".gt-pick"))
-        self.assertIn("max-height: 150px;", self.rule(".gt-pick"), "without the script's measure (a page that cannot measure) it is 150 px")
+    def test_the_panel_scrolls_inside_a_box_of_its_own_and_the_script_gives_the_box_its_height(self):
+        self.assertIn("overflow-y: auto", self.rule(".gt-body"), "the emoji scroll; the tabs, the search field and the name line stay")
+        self.assertIn("overflow: hidden;", self.rule(".gt-pick"))
+        self.assertIn("height: 400px;", self.rule(".gt-pick"), "without the script's measure (a page that cannot measure) the box is 400 px high")
+        self.assertIn("width: min(380px, 100%);", self.rule(".gt-pick"))
+
+    def test_the_grid_makes_as_many_columns_as_fit_and_the_sheet_has_larger_cells(self):
+        self.assertIn("grid-template-columns: repeat(auto-fill, minmax(var(--gt-c), 1fr));", self.rule(".gt-grid"))
+        self.assertIn("--gt-c: 44px;", self.rule(".gt-pick"))
+        self.assertIn("--gt-c: 46px;", self.rule(".gt-sheet"))
+
+    def test_the_sheet_takes_the_place_of_the_keyboard_and_the_page_keeps_the_room_above_it(self):
+        sheet = self.rule(".gt-sheet")
+        for part in ("left: 0;", "right: 0;", "bottom: 0;", "env(safe-area-inset-bottom)"):
+            self.assertIn(part, sheet, part)
+        self.assertIn("padding-bottom: var(--gt-sheet, 0px);", self.rule('html.gt-sheet-open body[data-screen="home"]'), "the log gets shorter: the field and Send stay in sight")
+        self.assertIn("display: none;", self.rule("html.gt-sheet-open .htabs"), "the strip of views is under the sheet")
+        self.assertIn("display: none;", self.rule(".gt-grab"))
+        self.assertIn("display: block;", self.rule(".gt-sheet .gt-grab"), "the grab bar is the sheet's")
 
     def test_the_dock_is_taller_only_while_the_box_has_two_rows(self):
         self.assertIn("@media (min-width: 701px) and (min-height: 501px) { .gc[data-open=\"true\"]:has(.gc-form.gt-on.gt-tall) { height: clamp(240px, 34vh, 300px); } }", self.css, "a wide window: the dock is 240 to 300 px (its own is 160 to 260 px), so that the log keeps its room")

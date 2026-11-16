@@ -39,29 +39,29 @@
   {
    "id": "topbar_row_one_in_one_column",
    "file": "web/home/home.css",
-   "old": ".hbar .hright { grid-area: 1 / 2;",
-   "new": ".hbar .hright { grid-area: 1 / 1 / 2 / 3;",
+   "old": ".hbar .hright { grid-area: 1 / 1 / 2 / -1;",
+   "new": ".hbar .hright { grid-area: 1 / 1;",
    "test": "node tests/scripts/web_home_topbar_browser.js"
   },
   {
    "id": "mine_shown_without_a_room",
    "file": "web/home/home.js",
-   "old": "mine.hidden = !info.client;",
-   "new": "mine.hidden = false;",
+   "old": "mine.hidden = mineBox.hidden = !info.client;",
+   "new": "mine.hidden = mineBox.hidden = false;",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
   },
   {
    "id": "mine_hidden_with_a_room",
    "file": "web/home/home.js",
-   "old": "mine.hidden = !info.client;",
-   "new": "mine.hidden = true;",
+   "old": "mine.hidden = mineBox.hidden = !info.client;",
+   "new": "mine.hidden = mineBox.hidden = true;",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
   },
   {
    "id": "mine_waits_for_the_count",
    "file": "web/home/home.js",
-   "old": "mine.hidden = !info.client;",
-   "new": "mine.hidden = !n;",
+   "old": "mine.hidden = mineBox.hidden = !info.client;",
+   "new": "mine.hidden = mineBox.hidden = !n;",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
   },
   {
@@ -74,22 +74,8 @@
   {
    "id": "topbar_chip_not_to_the_right",
    "file": "web/home/home.css",
-   "old": "grid-area: 1 / 2; min-width: 0; margin-left: 0; justify-content: flex-end; }",
-   "new": "grid-area: 1 / 2; min-width: 0; margin-left: 0; justify-content: flex-start; }",
-   "test": "node tests/scripts/web_home_topbar_browser.js"
-  },
-  {
-   "id": "topbar_games_not_on_the_first_row",
-   "file": "web/home/home.css",
-   "old": ".hbar .games { grid-row: 1; grid-column: 1; }",
-   "new": ".hbar .games { grid-row: 3; grid-column: 1; }",
-   "test": "node tests/scripts/web_home_topbar_browser.js"
-  },
-  {
-   "id": "mine_games_sideways_leaves_a_hole",
-   "file": "web/home/home.css",
-   "old": "    .hbar .mine[hidden] ~ .games { grid-area: 2 / 1 / 3 / 3; }\n",
-   "new": "",
+   "old": "grid-area: 1 / 1 / 2 / -1; min-width: 0; margin-left: 0; justify-content: flex-end; }",
+   "new": "grid-area: 1 / 1 / 2 / -1; min-width: 0; margin-left: 0; justify-content: flex-start; }",
    "test": "node tests/scripts/web_home_topbar_browser.js"
   },
   {
@@ -158,7 +144,7 @@
   {
    "id": "focus_falls_to_nowhere_when_both_are_off",
    "file": "web/home/home.js",
-   "old": "function away() { return !quickHost.disabled ? quickHost : !gamesBtn.disabled ? gamesBtn : menuHome; }",
+   "old": "function away() { return !quickHost.disabled ? quickHost : menuHome; }",
    "new": "function away() { return quickHost; }",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
   },
@@ -266,6 +252,20 @@
    "old": "focus: 0, opener: parts.quickHost });",
    "new": "focus: 0 });",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
+  },
+  {
+   "id": "mine_not_on_the_first_row",
+   "file": "web/home/home.css",
+   "old": ".hbar .hmine { order: 2; flex: 0 1 auto;",
+   "new": ".hbar .hmine { order: 6; flex: 0 1 auto;",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "minex_too_small",
+   "file": "web/home/home.css",
+   "old": "left: -2px; top: -2px; right: -22px; bottom: -22px; }",
+   "new": "left: -2px; top: -2px; right: -4px; bottom: -4px; }",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
   }
  ]
 }

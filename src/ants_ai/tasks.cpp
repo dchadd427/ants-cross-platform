@@ -623,6 +623,13 @@ void HarvestTask::step(TaskContext& c) {
             fill_micro += 1000000 / std::max<int32_t>(trip > 0 ? trip : 400, 1);
         }
     }
+    // (skip_hopeless) a pile that a nearer enemy eats before the ants arrive is no candidate while another pile has food: the ant stays in the pool for a later look
+    bool hopeless_out = false;
+    if (deny_on && params_.skip_hopeless) {
+        const uint8_t hopeless = static_cast<uint8_t>(PileClass::Hopeless);
+        const bool other = std::any_of(cands.begin(), cands.end(), [&](const Candidate& k) { return k.cls != hopeless; });
+        hopeless_out = other;
+    }
     for (const AntView* a : pool) {
         if (new_this_look >= throttle_) break;                                              // the rest of the pool is ordered at the next looks
         const int32_t stands_in = standing_component(c.map, c.seat, a->tile);
@@ -645,6 +652,7 @@ void HarvestTask::step(TaskContext& c) {
         const std::vector<size_t>& order = surplus ? race_order : plain_order;
         for (const size_t k : order) {
             if (excluded(a->id, cands[k].pile, now)) continue;                              // this ant failed there lately
+            if (hopeless_out && cands[k].cls == static_cast<uint8_t>(PileClass::Hopeless)) continue;     // (skip_hopeless)
             if (cands[k].load >= cands[k].limit) continue;                                  // (a limit holds for the fallback below as well)
             if (!free_now && !cands[k].shut_at_start && !pile_touches(c.map, c.seat, stands_in, *c.map.pile(cands[k].pile))) continue;
             if (best == cands.size()) best = k;

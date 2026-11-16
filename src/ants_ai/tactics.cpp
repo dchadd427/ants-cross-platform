@@ -68,6 +68,9 @@ LevelPlan plan_for(Level level) noexcept {
             p.renew_lead_ticks = 200;
             p.contest_opening_ants = 1;
             p.denial_order = true;              // the denial order: contested food first, the own safe piles last (docs/BOT_FOOD.md)
+            p.skip_hopeless = true;             // a pile that a nearer enemy eats first is left alone while another pile has food (docs/BOT_FOOD.md)
+            p.bomb_detour = 1;                  // the economy, the power-up trips and the fights go round a visible bomb of another team (docs/BOTS.md, "Bombs on the way")
+            p.bomb_route = true;
             p.secure_side = true;
             p.secure_kinds = kSecureOpening;
             p.drop_retake = true;
@@ -114,6 +117,9 @@ LevelPlan plan_for(Level level) noexcept {
             p.renew_lead_ticks = 130;
             p.contest_opening_ants = 2;
             p.denial_order = true;
+            p.skip_hopeless = true;
+            p.bomb_detour = 2;                   // ... and the raids, the mine trips and the way home of a carrier
+            p.bomb_route = true;
             p.secure_side = true;
             p.secure_kinds = kSecureOpening;
             p.flower_sides = true;
@@ -264,6 +270,13 @@ LevelPlan plan_for(Level level) noexcept {
             p.chore_worth = true;
             break;
     }
+    // The thief batch (docs/BOTS.md, "Thieves: the answer to a raid"): Medium and Hard look at a hole again while a thief walks to it, and do not take a Fire power-up that the ant could not carry home.
+    // The meeting with an enemy Thief and the trap (thief_guard, thief_trap) are built and OFF: measured on TREASURE they cost the seat points (docs/BOTS.md). `--tune thief_batch=0` is the bot before the batch.
+    if (level != Level::Easy) {
+        p.raid_recheck = true;
+        p.fire_home_only = true;
+        p.thief_guard_force = level == Level::Hard ? 2u : 1u;
+    }
     return p;
 }
 
@@ -278,6 +291,13 @@ void without_stand_batch(LevelPlan& p) noexcept {
 }
 
 void without_home_mines(LevelPlan& p) noexcept { p.home_on_route = p.home_first = false; }
+
+void without_thief_batch(LevelPlan& p) noexcept {
+    p.raid_recheck = false;
+    p.thief_guard = false;
+    p.thief_trap = false;
+    p.fire_home_only = false;
+}
 
 void without_kill_batch(LevelPlan& p) noexcept {
     p.opportunity = false;

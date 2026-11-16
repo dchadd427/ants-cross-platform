@@ -138,6 +138,17 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
         const PowerUpView& p = *cands[i].p;
         const std::vector<int32_t>& f = field_for(c, p.tile);
         if (f.empty()) continue;
+        // the Fire of the walls has to walk home to be of any use: it is not taken where no walk leads home (an ant that took the Fire of a corner row of ISLANDS stood there for the rest of the match;
+        // plan.fire_home_only; the Swimmer and the Bomber have their own ways off an island)
+        if (tactics_.plan.fire_home_only && tactics_.far_work && !tactics_.gate_map && !tactics_.field_map && kind == sim::AntType::Fire) {
+            const HillInfo& own = c.map.hill(c.seat);
+            bool home = !own.present || own.starts.empty();
+            for (const sim::TileCoord& s : own.starts) home = home || (v.grid().in_bounds(s) && f[tile_index(v.grid(), s)] >= 0);
+            if (!home) {
+                ++stranded_skips_;
+                continue;
+            }
+        }
         const AntView* best = nullptr;
         int32_t best_cost = 0;
         for (const AntView* a : ants) {                                                 // the closest ant by the walking cost from its own tile (a lower id wins a tie)

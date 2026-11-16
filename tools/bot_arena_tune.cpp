@@ -22,6 +22,10 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "dkinds") { p.drop_retake_kinds = static_cast<uint8_t>(v); return true; }
     if (key == "dmem") { p.drop_memory_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "rg") return flag(p.reach_guard);                                     // the reach guard of docs/BOTS.md, "The can't-go loop" (0: the bot as it was before it)
+    if (key == "nohope") return flag(p.skip_hopeless);                               // the Hopeless piles are left alone while another pile has food (0: the bot as it was)
+    if (key == "det") { p.bomb_detour = static_cast<uint8_t>(v > 2 ? 2 : v); return true; }   // the detour round visible bombs of other teams: 0 none, 1 Medium's, 2 Hard's
+    if (key == "detpct") { p.detour_extra_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "broute") return flag(p.bomb_route);                                  // the Bomber's defuse by route (0: the bot as it was)
     if (key == "cg") return flag(p.cantgo_aware);                                    // the can't-go fixes of docs/BOTS.md, "The can't-go loop" (0: the bot as it was before them)
     if (key == "gatebombs") return flag(p.gate_spare_map_bombs);                     // the counters leave a gate map's own bombs alone (0: they counter them, as before)
     if (key == "field") return flag(p.gate_field);                                   // the field breach (0: the gate goals' shore breach, as before)
@@ -200,6 +204,12 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         else p.brawl.regap_ticks = u;
         return true;
     }
+    if (key == "bring" || key == "bsolo") {                                          // the ring bonus of 187 in points (0: no ring) and the side size that sends one ant at a victim (0: never) (docs/BOT_187.md)
+        if (v < 0 || v > 100000) { err = key + " is a number from 0 to 100000"; return false; }
+        if (key == "bring") p.brawl.ring_bonus = static_cast<uint32_t>(v);
+        else p.brawl.solo_ants = static_cast<uint32_t>(v);
+        return true;
+    }
     if (key == "behind") return flag(p.behind_war);                                  // the losers fight harder (docs/BOTS.md, "The war batch"; 0: the war batch without it)
     if (key == "bt1") { p.behind_tier1 = static_cast<uint32_t>(v); return true; }
     if (key == "bt2") { p.behind_tier2 = static_cast<uint32_t>(v); return true; }
@@ -229,6 +239,25 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "aschase") { p.assault_chase = static_cast<int32_t>(v); return true; }
     if (key == "asticks") { p.assault_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "asafter") { p.assault_after = static_cast<uint32_t>(v); return true; }
+    if (key == "thief_batch") {                                                       // the thief batch of docs/BOTS.md, "Thieves: the answer to a raid" (0: the bot as it was before it; 1: the plan that ships, the look again and the Fire Ant's way home; the meeting and the trap are `tguard=1` and `ttrap=1`)
+        if (v == 0) ai::without_thief_batch(p);
+        else p.raid_recheck = p.fire_home_only = true;
+        return true;
+    }
+    if (key == "rr") return flag(p.raid_recheck);
+    if (key == "rrblack") { p.raid_recheck_black = static_cast<uint32_t>(v); return true; }
+    if (key == "tguard") return flag(p.thief_guard);
+    if (key == "tgrad") { p.thief_guard_radius = static_cast<int32_t>(v); return true; }
+    if (key == "tgforce") { p.thief_guard_force = static_cast<uint32_t>(v); return true; }
+    if (key == "tgblock") { p.thief_guard_block = static_cast<uint32_t>(v); return true; }
+    if (key == "tgnoblock") return flag(p.thief_guard_no_block);
+    if (key == "tgkill") { p.thief_guard_kill_after = static_cast<uint32_t>(v); return true; }
+    if (key == "tgrest") { p.thief_guard_rest = static_cast<uint32_t>(v); return true; }
+    if (key == "tgticks") { p.thief_guard_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "tgreach") { p.thief_guard_reach = static_cast<uint32_t>(v); return true; }
+    if (key == "ttrap") return flag(p.thief_trap);
+    if (key == "ttrapwait") { p.thief_trap_wait = static_cast<uint32_t>(v); return true; }
+    if (key == "fhome") return flag(p.fire_home_only);
     if (key == "kill") {                                                              // the kill batch of docs/BOT_FIGHT.md (0: the bot as it was before it; 1: the plan that ships)
         if (v == 0) ai::without_kill_batch(p);
         else p.opportunity = p.reach_fights = p.idle_hunt = p.chore_worth = true;
