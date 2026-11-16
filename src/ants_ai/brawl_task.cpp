@@ -1,6 +1,7 @@
 #include "ants_ai/brawl_task.hpp"
 
 #include <algorithm>
+#include <array>
 
 #include "ants_ai/tactics.hpp"
 
@@ -13,6 +14,7 @@ constexpr uint64_t kCantGoWindow = 24;     // an attack that shows "can't go" wi
 constexpr uint64_t kShunTicks = 300;       // ... twice within kRefusalWindow ticks, and the pair is left alone this long
 constexpr uint64_t kRefusalWindow = 160;
 constexpr uint64_t kAttackTicks = 600;     // an ant on its way to a victim is given this long before it is sent to another
+constexpr int64_t kFar = 1 << 20;          // the walk between two hills that no walk joins
 
 const AntView* find_ant(const std::vector<AntView>& ants, uint32_t id) noexcept {
     const auto it = std::lower_bound(ants.begin(), ants.end(), id, [](const AntView& a, uint32_t want) { return a.id < want; });
@@ -34,6 +36,46 @@ bool BrawlTask::shunned(uint32_t ant, uint32_t target, uint64_t now) const noexc
     return it != shun_.end() && now < it->second;
 }
 
+std::vector<uint8_t> BrawlTask::ring_of(const BotView& v, const MapInfo& map) {
+    std::vector<uint8_t> seats;
+    for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+        if (v.rows()[t].present && map.hill(t).present) seats.push_back(t);
+    }
+    if (seats.size() < 3) return {};                                       // two seats have nobody else to name
+    const auto between = [&](uint8_t a, uint8_t b) -> int64_t {            // the walk from hill to hill, both ways, whichever way it is asked
+        const int32_t ab = map.walking_cost(a, map.hill(b).tile42);
+        const int32_t ba = map.walking_cost(b, map.hill(a).tile42);
+        return ab < 0 || ba < 0 ? kFar : (static_cast<int64_t>(ab) + ba) / 2;
+    };
+    // the shortest way round all the seats (the same sum both ways round); of equal ways the first one in the order of the seat numbers
+    std::vector<uint8_t> tour = seats;
+    std::vector<uint8_t> best = seats;
+    int64_t best_cost = -1;
+    do {
+        int64_t cost = 0;
+        for (size_t i = 0; i < tour.size(); ++i) cost += between(tour[i], tour[(i + 1) % tour.size()]);
+        if (best_cost < 0 || cost < best_cost) {
+            best_cost = cost;
+            best = tour;
+        }
+    } while (std::next_permutation(tour.begin() + 1, tour.end()));
+    return best;
+}
+
+uint8_t BrawlTask::prey_of(const BotView& v) const {
+    const auto me = std::find(ring_.begin(), ring_.end(), v.seat());
+    if (me == ring_.end()) return 255;
+    std::array<bool, sim::MAX_PLAYERS> alive{};
+    for (const AntView& e : v.others()) alive[e.team] = true;
+    const size_t at = static_cast<size_t>(me - ring_.begin());
+    for (size_t step = 1; step < ring_.size(); ++step) {
+        const uint8_t t = ring_[(at + step) % ring_.size()];
+        const TeamRow& row = v.rows()[t];
+        if (row.present && !row.dropped && alive[t] && !ally_of(v, t)) return t;
+    }
+    return 255;
+}
+
 void BrawlTask::on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) {
     for (const uint32_t ant : command.ants) {
         const auto it = jobs_.find(ant);
@@ -52,6 +94,11 @@ void BrawlTask::step(TaskContext& c) {
     const HillInfo& home = c.map.hill(c.seat);
     // the analysis of the map is made for plain walkers: on a level whose ants swim or walk through fire it says nothing about who can meet whom
     const bool walkers = v.default_ant_type() != sim::AntType::Swimmer && v.default_ant_type() != sim::AntType::Fire;
+    if (params_.ring_bonus != 0 && !ring_built_) {
+        ring_ = ring_of(v, c.map);
+        ring_built_ = true;
+    }
+    const uint8_t prey = params_.ring_bonus != 0 ? prey_of(v) : uint8_t{255};
 
     for (auto it = jobs_.begin(); it != jobs_.end();) {
         if (find_ant(v.mine(), it->first) == nullptr) it = jobs_.erase(it);
@@ -156,7 +203,7 @@ void BrawlTask::step(TaskContext& c) {
         if (nearest > params_.reach_tiles) continue;
         // an enemy on the move is not caught by an order that names the tile it stands on: it is only struck when it is about to pass an ant
         if (f->state == sim::UnitState::Walking && nearest > 2) continue;
-        order.push_back(Foe{f, -static_cast<int64_t>(nearest) * 10 - static_cast<int64_t>(f->hp) * static_cast<int64_t>(params_.hp_weight)});
+        order.push_back(Foe{f, -static_cast<int64_t>(nearest) * 10 - static_cast<int64_t>(f->hp) * static_cast<int64_t>(params_.hp_weight) + (f->team == prey ? static_cast<int64_t>(params_.ring_bonus) : 0)});
     }
     std::stable_sort(order.begin(), order.end(), [](const Foe& x, const Foe& y) { return x.score != y.score ? x.score > y.score : x.ant->id < y.ant->id; });
 
@@ -171,9 +218,11 @@ void BrawlTask::step(TaskContext& c) {
         return static_cast<uint32_t>(p == pack.end() ? 0u : p->second.size());
     };
 
+    const uint32_t per_target = params_.solo_ants != 0 && v.mine().size() <= params_.solo_ants ? 1u : params_.per_target;   // (a side of a few ants: one at a victim)
+
     // the packs: the victims in order, each with the nearest ready ants up to its cap
     for (const Foe& fo : order) {
-        while (load_of(fo.ant->id) < params_.per_target) {
+        while (load_of(fo.ant->id) < per_target) {
             const AntView* pick = nullptr;
             int32_t pick_d = 1 << 20;
             for (const AntView* a : ready) {
