@@ -8,7 +8,7 @@ artwork, sounds, music and maps are not covered by it: they belong to their copy
 
 - Where: in the folder `Original-Ants/` exactly these files of the original game: the data archive `ants.chd` (the artwork, animations and sound
   effects), the map files `Maps/*.LVL` and the music files `*.mp3` and `*.MID`; and the data bundle that the web build packs from that folder.
-  The font files `LibreFranklin-Medium.ttf` and `LibreFranklin-OFL.txt` in the same folder are not from the original game (see Libre Franklin below).
+  The font files `LibreFranklin-Medium.ttf`, `LibreFranklin-Black.ttf` and `LibreFranklin-OFL.txt` in the same folder are not from the original game (see Libre Franklin below).
 - What: the data of the 1998 game *Ants*. This project is a reverse-engineered remake; it does not own the original and cannot license it.
 - Not here: the original game's program (`Ants.exe`) and its decompilation are not part of the repository. They are local references for the
   reverse engineering: an owner of the original game keeps a copy at `Original-Ants/Ants.exe` (and `docs/legacy/Ants.exe.c`), which `.gitignore`
@@ -38,11 +38,11 @@ artwork, sounds, music and maps are not covered by it: they belong to their copy
 
 ### Libre Franklin (font)
 
-- Where: `Original-Ants/LibreFranklin-Medium.ttf`, with its licence in `Original-Ants/LibreFranklin-OFL.txt`. The web build preloads both files
-  with the rest of the folder `Original-Ants`. The front page serves a copy of the font, with the same licence text beside it, from
+- Where: `Original-Ants/LibreFranklin-Medium.ttf` (the labels) and `Original-Ants/LibreFranklin-Black.ttf` (the numbers over the world and the scores), with their licence in
+  `Original-Ants/LibreFranklin-OFL.txt`. The web build preloads these files with the rest of the folder `Original-Ants`. The front page serves a copy of the font, with the same licence text beside it, from
   `web/front/` (`LibreFranklin-Medium.ttf`, `LibreFranklin-OFL.txt`); `tools/front_page_art/make_art.py` makes the copy.
 - What: Libre Franklin, Copyright 2020 The Libre Franklin Project Authors, <https://github.com/googlefonts/Libre-Franklin>.
-- Licence: SIL Open Font License, Version 1.1. The full text is in `Original-Ants/LibreFranklin-OFL.txt`; keep that file together with the font.
+- Licence: SIL Open Font License, Version 1.1. The full text is in `Original-Ants/LibreFranklin-OFL.txt`; it covers every weight of the family, and it stays together with the fonts.
 
 ## Local files of the original, not part of the repository
 

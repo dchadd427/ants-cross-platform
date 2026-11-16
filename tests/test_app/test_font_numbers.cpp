@@ -9,6 +9,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -35,6 +37,14 @@ void check(bool ok, const std::string& what) {
         std::fprintf(stderr, "  FAIL: %s\n", what.c_str());
     }
 }
+
+}  // namespace
+
+#include "font_score_cases.hpp"      // (the team scores: the HUD boxes, the results page, the fit; they use check() above)
+
+namespace {
+
+constexpr int kGrow = 2;      // what the thick outline adds to what shows, at 1:1: 2 * (2 - 1) output pixels (the glyphs keep the size that the old one-pixel outline left them)
 
 std::string num(double v) { char b[32]; std::snprintf(b, sizeof b, "%.2f", v); return b; }
 
@@ -138,8 +148,8 @@ void test_drawing(const assets::AssetArchive& arc) {
     const Picture font = shoot(rig, &t, 0);
     const Box dc = delta(none, classic);
     const Box df = delta(none, font);
-    check(df.n > 30 && std::abs(df.h() - dc.h()) <= 1, "-2: what shows is as tall as before (" + std::to_string(df.h()) + " against " + std::to_string(dc.h()) + ")");
-    check(std::abs(df.w() - dc.w()) <= 1, "-2: and as wide as before (" + std::to_string(df.w()) + " against " + std::to_string(dc.w()) + ")");
+    check(df.n > 30 && std::abs((df.h() - dc.h()) - kGrow) <= 1, "-2: what shows is as tall as before and the thick outline's growth outward, 2 pixels at 1:1 (" + std::to_string(df.h()) + " against " + std::to_string(dc.h()) + ")");
+    check(std::abs((df.w() - dc.w()) - kGrow) <= 2, "-2: and as wide as before and that growth (" + std::to_string(df.w()) + " against " + std::to_string(dc.w()) + ")");
     check(std::fabs(df.cx() - dc.cx()) <= 1.0 && std::fabs(df.cy() - dc.cy()) <= 1.0, "-2: and it stands in the same place (the middle moves " + num(df.cx() - dc.cx()) + ", " + num(df.cy() - dc.cy()) + ")");
     int white = 0, dark = 0;
     for (int y = df.y0; y <= df.y1; ++y) {
@@ -196,8 +206,8 @@ void test_drawing(const assets::AssetArchive& arc) {
         const Box o = delta(hc_none, hc_old);
         const Box n = delta(hc_none, hc_new);
         check(delta(hc_old, hc_new).n > 30, "100 (hit points): the font's picture is not the raster's");
-        check(n.n > 30 && std::abs(n.h() - o.h()) <= 1, "100 (hit points): as tall as before (" + std::to_string(n.h()) + " against " + std::to_string(o.h()) + ")");
-        check(std::abs(n.w() - o.w()) <= 2 && std::abs(n.x0 - o.x0) <= 1 && std::abs(n.y0 - o.y0) <= 1, "...from the same corner (" + std::to_string(n.x0 - o.x0) + ", " + std::to_string(n.y0 - o.y0) + ")");
+        check(n.n > 30 && std::abs((n.h() - o.h()) - kGrow) <= 1, "100 (hit points): as tall as before and the outline's growth (" + std::to_string(n.h()) + " against " + std::to_string(o.h()) + ")");
+        check(std::abs((n.w() - o.w()) - kGrow) <= 2 && std::abs(n.x0 - o.x0) <= 1 && std::abs(n.y0 - o.y0) <= 1, "...from the same corner (" + std::to_string(n.x0 - o.x0) + ", " + std::to_string(n.y0 - o.y0) + ")");
     }
     {
         rig.world.ants.clear();
@@ -209,15 +219,15 @@ void test_drawing(const assets::AssetArchive& arc) {
         const Box o = delta(s_none, s_old);
         const Box n = delta(s_none, s_new);
         check(n.n > 30, "+1250 (score) is drawn");
-        check(std::abs(n.w() - o.w()) <= 1, "+1250 is as wide as the old one, within a pixel (" + std::to_string(n.w()) + " against " + std::to_string(o.w()) + ")");
-        check(std::abs(n.h() - o.h()) <= 1, "...and as tall (" + std::to_string(n.h()) + " against " + std::to_string(o.h()) + ")");
+        check(std::abs((n.w() - o.w()) - kGrow) <= 3, "+1250 is as wide as the old one and the outline's growth, within a few pixels (" + std::to_string(n.w()) + " against " + std::to_string(o.w()) + ")");
+        check(std::abs((n.h() - o.h()) - kGrow) <= 1, "...and as tall as it and that growth (" + std::to_string(n.h()) + " against " + std::to_string(o.h()) + ")");
         check(std::fabs(n.cx() - o.cx()) <= 1.0 && std::fabs(n.cy() - o.cy()) <= 1.0, "...in the same place");
         const Picture s_neg_old = [&] { rig.renderer.set_classic_numbers(true); return shoot_scores(rig, -38); }();
         rig.renderer.set_classic_numbers(false);
         const Picture s_neg_new = shoot_scores(rig, -38);
         const Box no = delta(s_none, s_neg_old);
         const Box nn = delta(s_none, s_neg_new);
-        check(std::abs(nn.w() - no.w()) <= 1 && std::abs(nn.h() - no.h()) <= 1, "-38 as well (" + std::to_string(nn.w()) + " x " + std::to_string(nn.h()) + " against " + std::to_string(no.w()) + " x " + std::to_string(no.h()) + ")");
+        check(std::abs((nn.w() - no.w()) - kGrow) <= 3 && std::abs((nn.h() - no.h()) - kGrow) <= 1, "-38 as well (" + std::to_string(nn.w()) + " x " + std::to_string(nn.h()) + " against " + std::to_string(no.w()) + " x " + std::to_string(no.h()) + ")");
     }
 }
 
@@ -273,7 +283,8 @@ void test_output_and_cache(const assets::AssetArchive& arc) {
     {   // output resolution: the glyphs are made at the output's size (a number twice as tall in output pixels on an output twice as big)
         rig.world.score_bubbles.clear();
         int bw = 0, bh = 0;
-        check(rig.renderer.font_number_box("-2", 24, 2, bw, bh) && bh >= 22 && bh <= 24, "a picture asked 24 pixels tall is that tall (" + std::to_string(bh) + ")");
+        const bool got = rig.renderer.font_number_box("-2", 24, 1, bw, bh);
+        check(got && bh >= 23 && bh <= 25, "a picture asked 24 pixels tall is that tall (" + std::to_string(bh) + ")");
         int sw = 0, sh = 0;
         rig.renderer.font_number_box("-2", 12, 1, sw, sh);
         check(std::abs(bh - 2 * sh) <= 2 && bw > sw, "...and twice that is twice as tall: crisp at the output's size, not scaled (" + std::to_string(sh) + " and " + std::to_string(bh) + ")");
@@ -295,7 +306,37 @@ void test_output_and_cache(const assets::AssetArchive& arc) {
                 break;
             }
         }
-        check(rig.renderer.number_cache_size() <= Renderer::kMaxNumberPictures && rig.renderer.number_font_count() <= Renderer::kMaxNumberFonts, "700 sizes and texts: the pictures and the fonts stay within their bounds (" + std::to_string(rig.renderer.number_cache_size()) + ", " + std::to_string(rig.renderer.number_font_count()) + ")");
+        check(rig.renderer.number_cache_size() <= Renderer::kMaxNumberPictures && rig.renderer.number_font_count() <= Renderer::kMaxNumberFonts, "700 sizes and texts: the pictures and the faces stay within their bounds (" + std::to_string(rig.renderer.number_cache_size()) + ", " + std::to_string(rig.renderer.number_font_count()) + ")");
+    }
+    {   // a full cache drops the oldest quarter of the pictures, not all of them, and the faces stay open
+        rig.renderer.set_number_font_path(rig.renderer.number_font_path());          // (an empty cache)
+        const size_t kMax = Renderer::kMaxNumberPictures;
+        int w = 0, h = 0;
+        for (size_t i = 0; i < kMax; ++i) rig.renderer.font_number_box(std::to_string(20000 + i), 14, 1, w, h);
+        check(rig.renderer.number_cache_size() == kMax, "the pictures fill to their bound (" + std::to_string(rig.renderer.number_cache_size()) + ")");
+        const size_t opens = rig.renderer.number_font_opens();
+        check(rig.renderer.number_font_count() == 1, "one size: one face (" + std::to_string(rig.renderer.number_font_count()) + ")");
+        rig.renderer.font_number_box("20000", 14, 1, w, h);                         // (the oldest one is asked for again: now it is the newest)
+        rig.renderer.font_number_box("33333", 14, 1, w, h);                         // (one more: the cache is full)
+        check(rig.renderer.number_cache_size() == kMax - kMax / 4 + 1, "a full cache drops a quarter, not all: " + std::to_string(rig.renderer.number_cache_size()) + " of " + std::to_string(kMax) + " are left, and the new one");
+        check(rig.renderer.number_font_opens() == opens && rig.renderer.number_font_count() == 1, "the face is not opened again, nor closed, by the eviction (" + std::to_string(rig.renderer.number_font_opens() - opens) + " opens)");
+        const size_t before = rig.renderer.number_cache_size();
+        rig.renderer.font_number_box("20000", 14, 1, w, h);
+        check(rig.renderer.number_cache_size() == before, "the picture that was used last stayed (least recently used goes first)");
+        rig.renderer.font_number_box("20001", 14, 1, w, h);
+        check(rig.renderer.number_cache_size() == before + 1, "the oldest one that was not used again went");
+        check(rig.renderer.number_font_opens() == opens + 0, "...and made again with the face that is open");
+    }
+    {   // the faces are bounded too: the oldest quarter goes at the bound, the pictures stay
+        rig.renderer.set_number_font_path(rig.renderer.number_font_path());
+        int w = 0, h = 0;
+        const size_t kFonts = Renderer::kMaxNumberFonts;
+        for (size_t i = 0; i < kFonts; ++i) rig.renderer.font_number_box("5", static_cast<int32_t>(8 + i), 1, w, h);
+        check(rig.renderer.number_font_count() == kFonts, "the faces fill to their bound (" + std::to_string(rig.renderer.number_font_count()) + ")");
+        const size_t pictures = rig.renderer.number_cache_size();
+        rig.renderer.font_number_box("5", static_cast<int32_t>(8 + kFonts), 1, w, h);
+        check(rig.renderer.number_font_count() == kFonts - kFonts / 4 + 1, "at the bound a quarter of the faces goes, not all: " + std::to_string(rig.renderer.number_font_count()));
+        check(rig.renderer.number_cache_size() == pictures + 1, "...and no picture goes with them");
     }
     {   // no face: the classic numbers are drawn
         SDL_SetWindowSize(rig.win, kWideW, kWideH);
@@ -317,6 +358,96 @@ void test_output_and_cache(const assets::AssetArchive& arc) {
     }
 }
 
+
+// A picture of the OUTPUT at its own size (PixelRig::read assumes an output as big as the canvas)
+Picture shoot_output(PixelRig& rig, hc::ChangeTracker* tracker, int64_t now) {
+    rig.renderer.set_health_changes(tracker, now);
+    rig.renderer.set_health_marks(kOff, 1.0);
+    rig.renderer.begin_frame();
+    rig.renderer.render_world(rig.world, rig.engine.grid(), -1, {}, false, false, -1, -1, -1, 0.0f);
+    rig.renderer.set_health_changes(nullptr, 0);
+    Picture p;
+    SDL_GetRendererOutputSize(rig.renderer.get_sdl_renderer(), &p.w, &p.h);
+    p.px.assign(static_cast<size_t>(p.w) * static_cast<size_t>(p.h) * 4u, 0);
+    SDL_RenderReadPixels(rig.renderer.get_sdl_renderer(), nullptr, SDL_PIXELFORMAT_RGBA32, p.px.data(), p.w * 4);
+    return p;
+}
+
+// The face (Libre Franklin Black beside the Medium), its fallback, the thick outline per output scale
+void test_face_and_outline(const assets::AssetArchive& arc) {
+    std::printf("[face] the numbers' face, the fallback, the outline per output scale\n");
+    // ---- the outline's rule: a multiple of the old one-pixel outline, never less than 2 output pixels
+    check(hc::kNumberOutlineFactor == 2, "the outline is twice the old one");
+    check(hc::number_outline_px(1.0) == 2 && hc::number_outline_px(1.33) == 2 && hc::number_outline_px(0.4) == 2, "scale 1 (a 1:1 canvas, a desktop window at 1.33x): 2 output pixels");
+    check(hc::number_outline_px(2.0) == 4 && hc::number_outline_px(2.11) == 4, "scale 2 (a phone at 2.1x): 4 output pixels");
+    check(hc::number_outline_px(3.0) == 6, "scale 3: 6 output pixels");
+    // ---- the face file: Libre Franklin Black, in the folder that the Medium is bundled from
+    {
+        std::ifstream f("Original-Ants/LibreFranklin-Black.ttf", std::ios::binary);
+        const std::string bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        check(bytes.size() > 100000 && bytes.compare(0, 4, std::string("\0\1\0\0", 4)) == 0, "Original-Ants/LibreFranklin-Black.ttf is a TrueType file (" + std::to_string(bytes.size()) + " bytes)");
+        const std::string wide("L\0i\0b\0r\0e\0 \0F\0r\0a\0n\0k\0l\0i\0n\0 \0B\0l\0a\0c\0k", 40);
+        const std::string ascii = "Libre Franklin Black";
+        const std::string be("\0L\0i\0b\0r\0e\0 \0F\0r\0a\0n\0k\0l\0i\0n\0 \0B\0l\0a\0c\0k", 40);
+        check(bytes.find(ascii) != std::string::npos || bytes.find(be) != std::string::npos || bytes.find(wide) != std::string::npos, "...and it names itself Libre Franklin Black");
+        std::ifstream lic("Original-Ants/LibreFranklin-OFL.txt", std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(lic)), std::istreambuf_iterator<char>());
+        check(text.find("SIL OPEN FONT LICENSE Version 1.1") != std::string::npos && text.find("Libre Franklin Project Authors") != std::string::npos, "the licence beside it covers the family (SIL Open Font License 1.1, Libre Franklin Project Authors)");
+    }
+    PixelRig rig(arc, "MEDIUM", kWideW, kWideH);
+    check(rig.ok, "the rig is up");
+    if (!rig.ok) return;
+    rig.renderer.set_classic_numbers(false);
+    const std::string black = "Original-Ants/LibreFranklin-Black.ttf";
+    const std::string medium = "Original-Ants/LibreFranklin-Medium.ttf";
+    check(rig.renderer.number_font_path() == black, "the renderer's numbers use the Black file (" + rig.renderer.number_font_path() + ")");
+    // ---- the fallback: no Black file, the face that draw_text uses, the same outline
+    check(Renderer::choose_number_face(medium, black) == black, "the Black file is there: it is the face");
+    check(Renderer::choose_number_face(medium, "no/such/black.ttf") == medium, "no Black file: the face that draw_text uses (the Medium)");
+    check(Renderer::choose_number_face("", "no/such/black.ttf").empty() && Renderer::choose_number_face("", black).empty(), "no face at all: none (the classic digits are drawn)");
+    rig.look(500.0, 400.0, 1.0f);
+    rig.world.ants = {sprite_less(1, 600, 500, 9)};
+    hc::ChangeTracker t = with_number(600, 500, 2, false);
+    const Picture none = shoot(rig, nullptr, 0);
+    rig.renderer.set_number_font_path(black);
+    const Picture with_black = shoot(rig, &t, 0);
+    rig.renderer.set_number_font_path(medium);
+    const Picture with_medium = shoot(rig, &t, 0);
+    rig.renderer.set_number_font_path(Renderer::choose_number_face(medium, "no/such/black.ttf"));
+    const Picture fallback = shoot(rig, &t, 0);
+    check(delta(none, with_black).n > 30 && delta(none, with_medium).n > 30, "both faces draw a number");
+    check(delta(with_black, with_medium).n > 20, "the Black and the Medium are different pictures");
+    check(delta(with_medium, fallback).n == 0, "no Black file: the number is the Medium's, pixel for pixel, with the same outline");
+    const Box bb = delta(none, with_black), bm = delta(none, with_medium);
+    check(bb.h() == bm.h() && bb.w() == bm.w(), "...and as big as the Black one (" + std::to_string(bb.w()) + " x " + std::to_string(bb.h()) + ")");
+    rig.renderer.set_number_font_path(black);
+    // ---- the outline grows outward: the glyph keeps the size the old one left, what shows is 2 * (o - base) taller
+    {
+        int w1 = 0, h1 = 0, w2 = 0, h2 = 0, w3 = 0, h3 = 0, w4 = 0, h4 = 0;
+        rig.renderer.font_number_box("100", 24, 1, w1, h1);
+        rig.renderer.font_number_box("100", 24, 2, w2, h2);
+        rig.renderer.font_number_box("100", 24, 4, w3, h3);
+        rig.renderer.font_number_box("100", 24, 8, w4, h4);
+        check(std::abs(h1 - 24) <= 1, "an old (1 pixel) outline: as tall as asked (" + std::to_string(h1) + ")");
+        check(std::abs((h2 - h1) - 2) <= 1, "2 pixels: the outline grew outward, 2 pixels taller (" + std::to_string(h2) + ")");
+        check(std::abs((h3 - 24) - 4) <= 1 && std::abs((h4 - 24) - 8) <= 1, "4 and 8 pixels (a phone's): 4 and 8 pixels taller (" + std::to_string(h3) + ", " + std::to_string(h4) + ")");
+        check(w2 > w1, "...and wider (" + std::to_string(w1) + ", " + std::to_string(w2) + ", " + std::to_string(w3) + ")");
+    }
+    // ---- a damage number at output scales 1, 2 and 3: the old ink (12 canvas pixels) plus the outline's growth (2 * scale)
+    for (int k = 1; k <= 3; ++k) {
+        SDL_SetWindowSize(rig.win, kWideW * k, kWideH * k);
+        rig.renderer.refit_canvas();
+        rig.look(500.0, 400.0, 1.0f);
+        const Picture n0 = shoot_output(rig, nullptr, 0);
+        const Picture n1 = shoot_output(rig, &t, 0);
+        const Box d = delta(n0, n1);
+        const int want = 12 * k + 2 * (hc::number_outline_px(k) - std::max(1, k));
+        check(d.n > 30 && std::abs(d.h() - want) <= 2, "-2 at output scale " + std::to_string(k) + ": " + std::to_string(d.h()) + " pixels tall (" + std::to_string(want) + ": 12 x scale and the outline's growth)");
+    }
+    SDL_SetWindowSize(rig.win, kWideW, kWideH);
+    rig.renderer.refit_canvas();
+}
+
 }  // namespace
 
 int main(int, char**) {
@@ -331,6 +462,10 @@ int main(int, char**) {
     }
     test_drawing(arc);
     test_output_and_cache(arc);
+    test_face_and_outline(arc);
+    scorecases::test_hud(arc);
+    scorecases::test_results(arc);
+    scorecases::test_fit(arc);
     std::printf("\nnumbers in the game's font: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
