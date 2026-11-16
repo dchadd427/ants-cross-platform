@@ -235,7 +235,7 @@
       "id": "score_number_not_squeezed",
       "file": "src/ants_app/renderer_numbers.cpp",
       "old": "        const double k = pic->box_w > avail ? static_cast<double>(avail) / static_cast<double>(pic->box_w) : 1.0;",
-      "new": "        const double k = 1.0;",
+      "new": "        const double k = pic->box_w > avail + 100000 ? static_cast<double>(avail) / static_cast<double>(pic->box_w) : 1.0;",
       "build": [
         "test_font_numbers"
       ],

@@ -256,14 +256,14 @@ public:
         return 7;
     }
     virtual void set_hud_team(uint8_t team_id) = 0;
-    /// Restricts everything that is drawn afterwards to a rectangle until clear_clip_rect(): the original draws a label into a surface of the label's own
-    /// size, so what sticks out of the box (the half line at the edge of the chat log) is not seen. A renderer without clipping draws it all.
     /// A score number in the numbers' heavy face with a thick outline (Libre Franklin Black), `ink_h` canvas pixels tall (outline counted), squeezed to `box_w` when wider, ending at the right edge of the box
     /// at `x` (right_align) or starting at `x`. Returns false when it drew nothing (a renderer that cannot, or the classic numbers): the caller then draws the old way.
     virtual bool draw_number_text(const std::string& text, int32_t x, int32_t y, int32_t box_w, int32_t ink_h, bool right_align, ants::assets::ColorRGBA color) {
         (void)text; (void)x; (void)y; (void)box_w; (void)ink_h; (void)right_align; (void)color;
         return false;
     }
+    /// Restricts everything that is drawn afterwards to a rectangle until clear_clip_rect(): the original draws a label into a surface of the label's own
+    /// size, so what sticks out of the box (the half line at the edge of the chat log) is not seen. A renderer without clipping draws it all.
     virtual void set_clip_rect(int32_t x, int32_t y, int32_t w, int32_t h) { (void)x; (void)y; (void)w; (void)h; }
     virtual void clear_clip_rect() {}
     // Blits a tightly packed RGBA8 image of w x h pixels at (x, y) (used by the minimap). The default draws pixel by

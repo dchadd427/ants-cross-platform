@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <iostream>
 #include <sstream>
 
@@ -275,7 +276,8 @@ void test_fit(const assets::AssetArchive& arc) {
             const double box_l = pox + (c.right ? c.x - c.w : c.x), box_r = pox + (c.right ? c.x : c.x + c.w);
             check(left >= box_l - 0.8 && right <= box_r + 0.8, at + "inside the box's width (" + std::to_string(left) + " to " + std::to_string(right) + " of " + std::to_string(box_l) + " to " + std::to_string(box_r) + ")");
             check(top >= py + c.y - 3.5 && bottom <= py + c.y + c.h + 3.5, at + "and its height (" + std::to_string(top) + " to " + std::to_string(bottom) + ")");
-            check(right - left >= 5.0, at + "and it is not squeezed away (" + std::to_string(right - left) + " wide)");
+            const double floor_w = 5.0 * static_cast<double>(std::strlen(c.text));          // (legible: at least 5 canvas pixels a digit, the outline included; three digits in the classic page's 19 to 21 pixels keep it)
+            check(right - left >= floor_w, at + "and it is not squeezed away: at least 5 pixels a digit (" + std::to_string(right - left) + " wide, at least " + std::to_string(floor_w) + ")");
         }
     }
 }
