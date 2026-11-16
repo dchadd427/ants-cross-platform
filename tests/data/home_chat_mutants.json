@@ -102,7 +102,7 @@
   {
    "id": "lines_not_cut",
    "file": "web/home/chat.js",
-   "old": "line: 200, feed: 100,",
+   "old": "line: 1000, feed: 100,",
    "new": "line: 200000, feed: 100,",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -158,7 +158,7 @@
   {
    "id": "frame_limit_is_ten_bytes",
    "file": "web/home/chat.js",
-   "old": "frame: 120000,",
+   "old": "frame: 240000,",
    "new": "frame: 10,",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -277,8 +277,8 @@
   {
    "id": "one_bad_frame_drops_the_hub",
    "file": "web/home/chat.js",
-   "old": "frame: 120000, bad: 30,",
-   "new": "frame: 120000, bad: 1,",
+   "old": "frame: 240000, bad: 30,",
+   "new": "frame: 240000, bad: 1,",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -424,15 +424,36 @@
   {
    "id": "pace_burst_of_ten",
    "file": "web/home/chat.js",
-   "old": "var PACE = { burst: 2,",
+   "old": "var PACE = { burst: 8,",
    "new": "var PACE = { burst: 10,",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "pace_every_tenth_of_a_second",
    "file": "web/home/chat.js",
-   "old": "every: 2500,",
+   "old": "every: 600,",
    "new": "every: 100,",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pace_every_half_second",
+   "file": "web/home/chat.js",
+   "old": "every: 600,",
+   "new": "every: 500,",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "field_in_code_points",
+   "file": "web/home/chat.js",
+   "old": "field: 2000,",
+   "new": "field: 1000,",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "frame_cap_of_the_old_size",
+   "file": "web/home/chat.js",
+   "old": "frame: 240000,",
+   "new": "frame: 120000,",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {

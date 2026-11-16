@@ -630,7 +630,7 @@ class Chat:
     def drop_lines(self, ids):
         """Take lines off every screen at once (the lines of an account that forgot itself, the lines that were deleted from the command line). The number of frames is bounded, whatever the number
         of lines: a page keeps 100 lines at most and the id of a line only ever grows, so the lines that can be on a screen are the newest 100 of the deleted ones, and the older ones need no frame.
-        (One frame for each of 300,000 lines, to each of 500 sockets, is a loop that holds the hub's one thread for minutes.)"""
+        (One frame for each of 300,000 lines, to each of 300 sockets, is a loop that holds the hub's one thread for minutes.)"""
         gone = set(ids)
         for line in [l for l in self.ring if l.id in gone]:
             self.ring.remove(line)

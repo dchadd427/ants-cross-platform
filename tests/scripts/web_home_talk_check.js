@@ -64,14 +64,15 @@ const GRIN = String.fromCodePoint(0x1F600), ANT = String.fromCodePoint(0x1F41C),
     same('insert: at the caret, after it, and in place of a selection', [P.insert('hello', 2, 2, GRIN), P.insert('hello', 5, 5, GRIN), P.insert('hello', 1, 4, STAR), P.insert('', 0, 0, ANT)],
         [{ value: 'he' + GRIN + 'llo', caret: 4 }, { value: 'hello' + GRIN, caret: 7 }, { value: 'h' + STAR + 'o', caret: 2 }, { value: ANT, caret: 2 }]);
     same('insert: a caret that is not a number is the end', [P.insert('ab', undefined, undefined, GRIN), P.insert('ab', 9, 9, GRIN), P.insert('ab', 1, 0, GRIN)], [{ value: 'ab' + GRIN, caret: 4 }, { value: 'ab' + GRIN, caret: 4 }, { value: 'a' + GRIN + 'b', caret: 3 }]);
-    check('insert: 200 code points fit, the 201st is refused', P.insert('a'.repeat(199), 199, 199, GRIN) !== null && P.insert('a'.repeat(200), 200, 200, GRIN) === null && P.insert('a'.repeat(200), 0, 1, GRIN) !== null);
-    check('insert: 200 emoji outside the basic plane are 400 UTF-16 units (the field\'s maxlength) and fit; one more does not', (() => { let v = ''; for (let i = 0; i < 200; i++) { const r = P.insert(v, v.length, v.length, GRIN); if (!r) return false; v = r.value; } return v.length === Chat.LIMIT.field && P.insert(v, v.length, v.length, GRIN) === null; })());
+    check('insert: 1,000 code points fit, the 1,001st is refused', P.insert('a'.repeat(999), 999, 999, GRIN) !== null && P.insert('a'.repeat(1000), 1000, 1000, GRIN) === null && P.insert('a'.repeat(1000), 0, 1, GRIN) !== null);
+    check('insert: 1,000 emoji outside the basic plane are 2,000 UTF-16 units (the field\'s maxlength) and fit; one more does not', (() => { let v = ''; for (let i = 0; i < 1000; i++) { const r = P.insert(v, v.length, v.length, GRIN); if (!r) return false; v = r.value; } return v.length === Chat.LIMIT.field && P.insert(v, v.length, v.length, GRIN) === null; })());
     check('insert: the units never pass the maxlength where the code points fit (the worst is 2 units for 1 point)', 2 * Pure.LIMIT <= Chat.LIMIT.field && Pure.LIMIT === Chat.LIMIT.line);
+    same('the line is 1,000 code points and the field 2,000 UTF-16 units (the hub\'s own line, twice for the pairs)', [Pure.LIMIT, Chat.LIMIT.line, Chat.LIMIT.field], [1000, 1000, 2000]);
     same('speak: the words go in at the caret with one space on each side', [P.speak('hello', 'big world', ''), P.speak('hello ', 'big', ''), P.speak('a', 'b', 'c'), P.speak('', 'hi', ''), P.speak('x ', 'y', ' z')],
         [{ value: 'hello big world', caret: 15 }, { value: 'hello big', caret: 9 }, { value: 'a b c', caret: 3 }, { value: 'hi', caret: 2 }, { value: 'x y z', caret: 3 }]);
     same('speak: nothing said leaves the line as it was; blanks collapse; markup characters go', [P.speak('a', '', 'b'), P.speak('a', ' \n ', 'b'), P.speak('', '  one   two ', ''), P.speak('', '<b>hi</b>', '')], [{ value: 'ab', caret: 1 }, { value: 'ab', caret: 1 }, { value: 'one two', caret: 7 }, { value: 'b hi /b', caret: 7 }]);
-    check('speak: what is said is cut to what is left of the 200 code points, around the words that stay', (() => { const r = P.speak('a'.repeat(150), 'w '.repeat(100), 'z'.repeat(20)); return P.points(r.value) <= 200 && r.value.indexOf('z'.repeat(20)) !== -1 && r.value.slice(0, 150) === 'a'.repeat(150); })());
-    check('speak: a pair of surrogates at the cut is whole', (() => { const r = P.speak('', GRIN.repeat(300), ''); return P.points(r.value) <= 200 && !/[\ud800-\udbff]$/.test(r.value) && r.value.length % 2 === 0; })());
+    check('speak: what is said is cut to what is left of the 1,000 code points, around the words that stay', (() => { const r = P.speak('a'.repeat(950), 'w '.repeat(100), 'z'.repeat(20)); return P.points(r.value) <= 1000 && r.value.indexOf('z'.repeat(20)) !== -1 && r.value.slice(0, 950) === 'a'.repeat(950); })());
+    check('speak: a pair of surrogates at the cut is whole', (() => { const r = P.speak('', GRIN.repeat(1500), ''); return P.points(r.value) <= 1000 && !/[\ud800-\udbff]$/.test(r.value) && r.value.length % 2 === 0; })());
     const W = (o) => Object.assign({}, o);
     class Ctor {}
     same('recognition: a secure page and a constructor', [P.recognition(W({ isSecureContext: true, SpeechRecognition: Ctor })) === Ctor, P.recognition(W({ isSecureContext: true, webkitSpeechRecognition: Ctor })) === Ctor], [true, true]);
@@ -499,24 +500,24 @@ const HEX = (e) => e.codePointAt(0).toString(16).toUpperCase();
 }
 {   // the line fills
     const r = rig();
-    r.field.value = 'a'.repeat(199); r.caret(199);
+    r.field.value = 'a'.repeat(999); r.caret(999);
     r.emoji.click();
     r.keys()[0].click();
-    check('one more code point fits (199 + 1)', Pure.points(r.field.value) === 200 && r.sayText() === '');
+    check('one more code point fits (999 + 1)', Pure.points(r.field.value) === 1000 && r.sayText() === '');
     r.keys()[1].click();
-    check('the 201st is refused, the field is as it was, and the line is told: "The message is full."', Pure.points(r.field.value) === 200 && r.field.value.slice(-1) !== Pure.emoji()[0].list[1] && r.sayText() === 'The message is full.');
+    check('the 1,001st is refused, the field is as it was, and the line is told: "The message is full."', Pure.points(r.field.value) === 1000 && r.field.value.slice(-1) !== Pure.emoji()[0].list[1] && r.sayText() === 'The message is full.');
     r.field.fire('input', {});
     check('typing clears that line', r.sayText() === '');
     r.keys()[1].click(); r.emoji.click(); r.emoji.click();
     check('opening the picker again clears it too', r.sayText() === '');
     const q = rig();
     q.field.value = ''; q.caret(0);
-    for (let i = 0; i < 200; i++) { if (i === 0) q.emoji.click(); q.keys()[i % 90].click(); }
-    check('200 emoji beyond the basic plane (or not) fit: no more than 200 code points, and the field holds at most its maxlength of UTF-16 units', Pure.points(q.field.value) === 200 && q.field.value.length <= Chat.LIMIT.field && q.field.maxLength === Chat.LIMIT.field);
+    for (let i = 0; i < 1000; i++) { if (i === 0) q.emoji.click(); q.keys()[i % 90].click(); }
+    check('1,000 emoji beyond the basic plane (or not) fit: no more than 1,000 code points, and the field holds at most its maxlength of UTF-16 units', Pure.points(q.field.value) === 1000 && q.field.value.length <= Chat.LIMIT.field && q.field.maxLength === Chat.LIMIT.field);
     q.keys()[0].click();
-    check('the 201st is refused', Pure.points(q.field.value) === 200 && q.sayText() === 'The message is full.');
+    check('the 1,001st is refused', Pure.points(q.field.value) === 1000 && q.sayText() === 'The message is full.');
     q.dock.say(q.field.value);
-    check('what the picker built goes out as one line that the dock accepts (not too long)', q.said().length === 1 && Pure.points(q.said()[0].text) === 200);
+    check('what the picker built goes out as one line that the dock accepts (not too long)', q.said().length === 1 && Pure.points(q.said()[0].text) === 1000);
 }
 {   // no selection API (a field that says nothing of its caret): the end
     const r = rig();
@@ -649,15 +650,15 @@ const HEX = (e) => e.codePointAt(0).toString(16).toUpperCase();
     r.heard('<img src=x onerror=window.__hit=1> hi <script>');
     check('markup that is said is text in the field: no markup character is left (the hub refuses them), nothing was made from it', r.field.value.indexOf('<') === -1 && r.field.value.indexOf('>') === -1 && /img src=x onerror/.test(r.field.value) && r.env.innerHTMLWrites.length === 0 && !r.win.__hit);
     rec.onend({});
-    const q = rig(); q.field.value = 'q'.repeat(190); q.caret(190);
+    const q = rig(); q.field.value = 'q'.repeat(990); q.caret(990);
     const rq = q.start();
     q.heard('word '.repeat(40));
-    check('a long speech: the field never passes 200 code points, the recognizer is told to stop, and the line is full', Pure.points(q.field.value) <= 200 && q.field.value.slice(0, 190) === 'q'.repeat(190) && rq.stops === 1 && q.sayText() === 'The message is full.' && q.mic.getAttribute('aria-pressed') === 'false');
+    check('a long speech: the field never passes 1,000 code points, the recognizer is told to stop, and the line is full', Pure.points(q.field.value) <= 1000 && q.field.value.slice(0, 990) === 'q'.repeat(990) && rq.stops === 1 && q.sayText() === 'The message is full.' && q.mic.getAttribute('aria-pressed') === 'false');
     rq.onend({});
     check('...and "The message is full." stays after the end (it is the answer)', q.sayText() === 'The message is full.');
     const z = rig(); z.field.value = ''; const rz = z.start();
-    z.heard(GRIN.repeat(300));
-    check('emoji that are said are kept whole at the cut', Pure.points(z.field.value) <= 200 && !/[\ud800-\udbff]$/.test(z.field.value));
+    z.heard(GRIN.repeat(1500));
+    check('emoji that are said are kept whole at the cut', Pure.points(z.field.value) <= 1000 && !/[\ud800-\udbff]$/.test(z.field.value));
     const e = rig(); const re = e.start(); re.onresult({}); re.onresult({ results: [null, [], [{}], [{ transcript: 5 }]] });
     check('a result that is not what the standard says changes nothing', e.field.value === '');
 }
@@ -668,10 +669,10 @@ const HEX = (e) => e.codePointAt(0).toString(16).toUpperCase();
     check('(a hub that welcomes with no name: nothing is left listening)', r.rec().aborts === 1);
 }
 
-{   // review round: the line of 200 code points, pairs of surrogates, the dock that is inert, a result that carries resultIndex, the focus
+{   // review round: the line of 1,000 code points, pairs of surrogates, the dock that is inert, a result that carries resultIndex, the focus
     const P = Pure;
-    check('speak: nothing that fits adds no spaces and no code point (a line of 199 or 200 stays as it was; 100 + 99 around the words stay 199)', [[199, 0], [200, 0], [100, 99], [0, 200]].every(([a, b]) => { const r = P.speak('x'.repeat(a), 'hello there', 'y'.repeat(b)); return P.points(r.value) === a + b && r.caret === a; }));
-    check('speak: every split of a line near the limit stays within 200 code points', (() => { for (let a = 0; a <= 200; a += 7) for (let b = 0; a + b <= 200; b += 11) if (P.points(P.speak('x'.repeat(a), 'one two three', 'y'.repeat(b)).value) > 200) return false; return true; })());
+    check('speak: nothing that fits adds no spaces and no code point (a line of 999 or 1,000 stays as it was; 500 + 499 around the words stay 999)', [[999, 0], [1000, 0], [500, 499], [0, 1000]].every(([a, b]) => { const r = P.speak('x'.repeat(a), 'hello there', 'y'.repeat(b)); return P.points(r.value) === a + b && r.caret === a; }));
+    check('speak: every split of a line near the limit stays within 1,000 code points', (() => { for (let a = 0; a <= 1000; a += 37) for (let b = 0; a + b <= 1000; b += 41) if (P.points(P.speak('x'.repeat(a), 'one two three', 'y'.repeat(b)).value) > 1000) return false; return true; })());
     same('insert: a caret between the two halves of a pair goes before the pair; a selection that ends inside one takes it whole', [P.insert('a' + GRIN + 'b', 2, 2, 'Z'), P.insert('a' + GRIN + 'b', 0, 2, 'Z'), P.insert('a' + GRIN + 'b', 2, 3, 'Z')], [{ value: 'aZ' + GRIN + 'b', caret: 2 }, { value: 'Zb', caret: 1 }, { value: 'aZb', caret: 2 }]);
     const r = rig(); r.field.value = ''; r.caret(0);
     r.mic.click(); const rec = r.rec(); rec.onstart({});
@@ -841,7 +842,7 @@ function bring(env, file, name) {
 }
 
 {   // the room's chat box (web/front/lobby_chat.js) mounts the same script with no emoji button and a limit of 100: its line is printable ASCII, and at most 100 characters
-    same('insert keeps to the limit that it is given (3 here), and to 200 where none is', [Pure.insert('ab', 2, 2, 'c', 3).value, Pure.insert('abc', 3, 3, 'd', 3), Pure.insert('a'.repeat(200), 200, 200, 'b'), Pure.insert('a'.repeat(100), 100, 100, 'b').value.length], ['abc', null, null, 101]);
+    same('insert keeps to the limit that it is given (3 here), and to 1,000 where none is', [Pure.insert('ab', 2, 2, 'c', 3).value, Pure.insert('abc', 3, 3, 'd', 3), Pure.insert('a'.repeat(1000), 1000, 1000, 'b'), Pure.insert('a'.repeat(100), 100, 100, 'b').value.length], ['abc', null, null, 101]);
     same('speak keeps to the limit that it is given: what is heard is cut to what is left of it (less two)', [Pure.speak('', 'one two three four', '', 10).value, Pure.speak('', 'x'.repeat(50), '', 100).value.length], ['one two', 50]);
     const room = rig({ emoji: false, limit: 100 });
     check('no emoji button and no picker: the microphone and nothing else stand beside Send', room.emoji === null && room.pick === null && !!room.mic && room.form.children.filter((c) => (c.className || '').indexOf('gt-pick') !== -1).length === 0);
@@ -856,8 +857,8 @@ function bring(env, file, name) {
     check('a dock that says it is off (the room, while the link is down) hides the buttons, and shows them again when it is not', tools.hidden === true && (off = false, room.tell('x'), tools.hidden === false));
     const full = rig({});
     full.start();
-    full.heard('word '.repeat(60));
-    check('(the front page\'s own box keeps its 200)', full.field.value.length > 150 && full.field.value.length <= 200, String(full.field.value.length));
+    full.heard('word '.repeat(300));
+    check('(the front page\'s own box keeps its 1,000)', full.field.value.length > 950 && full.field.value.length <= 1000, String(full.field.value.length));
 }
 
 console.log(failures === 0 ? 'OK: ' + checks + ' checks' : failures + ' of ' + checks + ' checks FAILED');

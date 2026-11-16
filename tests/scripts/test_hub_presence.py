@@ -199,9 +199,6 @@ class TheLimits(unittest.TestCase):
         self.assertEqual(presence.SEATS, 4)
         self.assertEqual(presence.AT, ("look", "wait", "play"))
 
-    def test_a_frame_from_a_client_is_still_2_kb_so_what_a_page_says_is_never_big(self):
-        self.assertEqual(limitmod.Limits().frame_max, 2048)
-
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # the count

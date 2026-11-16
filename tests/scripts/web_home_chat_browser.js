@@ -281,11 +281,11 @@ async function main() {
         const { page, context } = await open('desktop');
         await waitState(page, 'live/true');
         hub.received.length = 0;
-        for (const text of ['one', 'two', 'three', 'four', 'five']) { await page.fill('#gchat .gc-input', text); await page.press('#gchat .gc-input', 'Enter'); }
+        for (const text of ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']) { await page.fill('#gchat .gc-input', text); await page.press('#gchat .gc-input', 'Enter'); }
         await sleep(300);
-        check('five lines typed and sent at once with Enter: two reach the hub, the hub never says "rate", the others wait with "Slow down a little" and stay in the field', hub.received.filter((m) => m.t === 'say').length === 2 && (hub.rateRefusals || 0) === 0
-              && (await dockText(page, '.gc-note')) === 'Slow down a little' && (await page.inputValue('#gchat .gc-input')) === 'five');
-        check('the lines come back from the hub and are the visitor\'s own (gold name)', (await page.evaluate(() => document.querySelectorAll('#gchat .gc-me').length)) === 2);
+        check('ten lines typed and sent at once with Enter: eight reach the hub, the hub never says "rate", the others wait with "Slow down a little" and stay in the field', hub.received.filter((m) => m.t === 'say').length === 8 && (hub.rateRefusals || 0) === 0
+              && (await dockText(page, '.gc-note')) === 'Slow down a little' && (await page.inputValue('#gchat .gc-input')) === 'ten');
+        check('the lines come back from the hub and are the visitor\'s own (gold name)', (await page.evaluate(() => document.querySelectorAll('#gchat .gc-me').length)) === 8);
         hub.say('<b>evil</b>', '<img src=x onerror="window.pwned=1"><script>window.pwned=1</script> ‮ rtl javascript:alert(1) http://evil.example');
         await sleep(200);
         const untrusted = await page.evaluate(() => ({ pwned: window.pwned || 0, imgs: document.querySelectorAll('#gchat img, #gchat script, #gchat b, #gchat iframe').length, links: [...document.querySelectorAll('#gchat a')].map((x) => x.getAttribute('href')).join('|'), last: document.querySelector('#gchat .gc-log').lastElementChild.innerText }));

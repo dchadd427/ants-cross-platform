@@ -5,10 +5,10 @@
  },
  "mutants": [
   {
-   "id": "the_line_is_201_code_points",
+   "id": "the_line_is_1001_code_points",
    "file": "web/home/talk.js",
-   "old": "var LIMIT = 200;",
-   "new": "var LIMIT = 201;",
+   "old": "var LIMIT = 1000;",
+   "new": "var LIMIT = 1001;",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
   {
