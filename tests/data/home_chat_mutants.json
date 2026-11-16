@@ -2853,8 +2853,8 @@
   {
    "id": "ok_does_not_answer_the_command",
    "file": "web/home/chat.js",
-   "old": "if (at >= 0) unanswered.splice(at, 1);\n            if (c) answer",
-   "new": "if (c) answer",
+   "old": "entry = at >= 0 ? unanswered.splice(at, 1)[0] : null;",
+   "new": "entry = null;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {

@@ -366,9 +366,21 @@
             lazy('home/split', function () { if (win.AntsHomeSplit) split = win.AntsHomeSplit.mount({ doc: doc, win: win, host: host, main: main }); });
         }
 
+        var askedMod = false, askedSheet = false;
+        function wantMod() {                                // the moderation sheet (mod.js, mod.css): once, and only after the dock names a visitor with a role; a person with no role never asks for it
+            if (askedMod || !dock || !dock.tap || !dock.you) return;
+            askedMod = true;
+            dock.tap(function (kind) {
+                var y;
+                if (askedSheet || (kind !== 'live' && kind !== 'you') || !(y = dock.you()) || y.role === 'none') return;
+                askedSheet = true;
+                lazy('home/mod', function () { if (win.AntsHomeMod) win.AntsHomeMod.mount({ doc: doc, win: win, dock: dock }); });
+            });
+        }
         function wantTalk() {                               // the emoji and microphone buttons (talk.js, talk.css), after the dock: they stand in its form
             if (askedTalk || !dock) return;
             askedTalk = true;
+            wantMod();
             if (win.AntsHomeTalk) { win.AntsHomeTalk.mount({ doc: doc, win: win, dock: dock }); return; }       // (the Room's chat brought the script already)
             lazy('home/talk', function () { if (win.AntsHomeTalk) win.AntsHomeTalk.mount({ doc: doc, win: win, dock: dock }); });
         }

@@ -1,0 +1,99 @@
+/* The moderation sheet of Home's chat (web/home/mod.js, docs/HOME_SCREEN.md "Roles and commands"), loaded only for a visitor with a role. The colors, .btn, .leave and the frames are the page's own (web/lobby.html,
+   games.css, talk.css). Every target is at least 44 px; the sheet is a card in the middle of the window, and a bottom sheet on a phone held upright; nothing scrolls sideways. */
+
+/* ---- the lines of the log that a staff member may act on ---- */
+@media (pointer: coarse) { .gc-line[data-act] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; } }       /* (a long press opens the sheet: the phone's own callout and text selection are held back on these lines only, and only on a touch screen) */
+.gc-line.gm-on { background: rgba(246, 208, 88, .10); box-shadow: -8px 0 0 0 rgba(246, 208, 88, .10); border-radius: 3px; }       /* (the line that is pressed, chosen with the keys, or has its sheet open: a gold bar at its left) */
+.gc-line.gm-on::before { content: ""; position: absolute; left: -9px; top: 0; bottom: 0; width: 4px; border-radius: 2px; background: var(--gold); }
+@media (forced-colors: active) { .gc-line.gm-on { outline: 2px solid Highlight; } .gc-line.gm-on::before { display: none; } }
+
+/* ---- the scrim and the box ---- */
+.gm-shade { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 16px; background: rgba(5, 10, 8, .68); }
+.gm-box { box-sizing: border-box; width: min(440px, 100%); max-height: 100%; overflow-y: auto; overscroll-behavior: contain; padding: 16px 18px 18px; color: var(--cream); background: #050b0e; border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+.gm-box:focus { outline: none; }
+.gm-grab { display: none; }
+.gm-head { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; }
+.gm-head .gc-av { width: 40px; height: 40px; font-size: 20px; }
+.gm-who { flex: 1 1 auto; min-width: 0; }
+.gm-name { margin: 0; font-size: 19px; font-weight: 500; line-height: 1.2; color: #9fe0b8; overflow-wrap: anywhere; }
+.gm-name.gc-r-admin { color: #ff5f66; } .gm-name.gc-r-mod { color: var(--gold); } .gm-name.gc-r-none { color: var(--cream); }
+.gm-sub { margin: 1px 0 0; font-size: 13px; line-height: 1.3; color: #8fb3a6; overflow-wrap: anywhere; }
+.gm-quote { margin: 0 0 12px; padding: 8px 12px; font-size: 15px; line-height: 1.35; color: var(--cream); background: #080d12; border: 1px solid #17382f; border-left: 4px solid #5fa48a; border-radius: 4px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
+.gm-acts { display: grid; gap: 8px; margin: 0 0 12px; }
+.gm-act { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 12px; box-sizing: border-box; width: 100%; min-height: 56px; padding: 6px 12px; text-align: left; font: inherit; color: var(--cream); background: #0f1820; border: 2px solid #1c3a30; border-radius: 8px; cursor: pointer; }
+.gm-act:hover { background: #14232b; border-color: #2b6b4f; }
+.gm-ico { display: block; width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.gm-act.gm-red > .gm-ico:first-child { color: #ff7a6b; }
+.gm-act .gm-chev { width: 22px; height: 22px; color: #8fb3a6; }
+.gm-act b { display: block; font-weight: 500; font-size: 17px; line-height: 1.2; overflow-wrap: anywhere; }
+.gm-act small { display: block; margin-top: 1px; font-size: 13px; line-height: 1.3; color: #a8cfc0; }
+.gm-cancel, .gm-stay { display: flex; width: 100%; min-height: 48px; color: var(--cream); background: #0b1117; box-shadow: inset 0 0 0 2px var(--frame-hi); }
+.gm-cancel:hover, .gm-stay:hover { background-color: #13222b; }
+[aria-disabled="true"] { cursor: default; }
+.gm-wait { position: relative; }
+.gm-wait::after { content: ""; flex: none; width: 16px; height: 16px; margin-left: 10px; box-sizing: border-box; border: 3px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: gm-spin .8s linear infinite; }
+.gm-act.gm-wait::after { position: absolute; right: 14px; top: calc(50% - 8px); margin: 0; }
+@keyframes gm-spin { to { transform: rotate(360deg); } }
+
+/* ---- the mute step ---- */
+.gm-times { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 14px; }
+.gm-time { min-height: 56px; font-size: 20px; padding: 8px 10px; }
+.gm-cap { margin: 0 0 6px; font-size: 12px; line-height: 1.3; letter-spacing: .08em; text-transform: uppercase; color: #8fb3a6; }
+.gm-custom { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.gm-num { position: relative; }
+.gm-num input { display: block; box-sizing: border-box; width: 100%; min-width: 0; height: 48px; padding: 12px 82px 10px 14px; font: inherit; font-size: 18px; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); font-variant-numeric: tabular-nums; }
+.gm-num input::placeholder { color: #7f9c92; opacity: 1; font-size: 16px; }
+.gm-num input.gm-bad { border-color: var(--bad-edge); }
+.gm-unit { position: absolute; right: 14px; top: 0; bottom: 0; display: flex; align-items: center; font-size: 15px; color: #8fb3a6; pointer-events: none; }
+.gm-go { min-height: 48px; min-width: 84px; }
+.gm-hint { min-height: 20px; margin: 6px 0 12px; font-size: 14px; line-height: 1.35; color: #a8cfc0; }
+.gm-hint.gm-err { color: #ffb4a8; }
+
+/* ---- the confirm card ---- */
+.gm-conf { text-align: center; }
+.gm-mark { display: grid; place-items: center; box-sizing: border-box; width: 52px; height: 52px; margin: 0 auto 10px; color: #ffe4de; background: #3b0d10; border: 3px solid var(--bad-edge); border-radius: 50%; }
+.gm-mi { width: 26px; height: 26px; }
+.gm-title { margin: 0 0 10px; font-size: 26px; font-weight: 500; line-height: 1.2; overflow-wrap: anywhere; }
+.gm-chip { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; padding: 8px 10px; text-align: left; font-size: 16px; line-height: 1.25; background: #080d12; border: 1px solid #17382f; border-radius: 4px; overflow-wrap: anywhere; }
+.gm-chip .gc-av { width: 32px; height: 32px; font-size: 17px; }
+.gm-chip.gm-q { display: block; border-left: 4px solid #5fa48a; font-size: 15px; line-height: 1.35; }
+.gm-qw { display: block; margin-bottom: 2px; font-size: 13px; color: #8fb3a6; }
+.gm-qt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.gm-text { margin: 0 0 12px; font-size: 16px; line-height: 1.4; overflow-wrap: anywhere; }
+.gm-note { margin: 0 0 12px; font-size: 14px; line-height: 1.35; color: #a8cfc0; }
+.gm-btns { display: flex; gap: 12px; }
+.gm-btns .btn { flex: 1 1 0; min-height: 48px; padding: 6px 10px; white-space: normal; }
+.gm-btns.gm-2 { margin-top: 12px; }
+.gm-wide { min-height: 52px; line-height: 1.2; text-wrap: balance; }
+
+/* ---- the toast: at the top, under the bar; out of the flow, over the page ---- */
+.gm-toast { position: fixed; left: 50%; z-index: 75; box-sizing: border-box; display: flex; align-items: center; gap: 12px; width: max-content; max-width: min(560px, calc(100vw - 24px)); min-height: 48px; padding: 8px 16px; transform: translateX(-50%); color: var(--cream); background: #050b0e; border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+.gm-toast { pointer-events: none; }       /* (it covers the top of the page for a few seconds: a press goes through it to the line below; only its OK button takes one) */
+.gm-toast .btn { pointer-events: auto; }
+.gm-toast.gm-bad { padding: 2px 6px 2px 14px; border-color: var(--gold); }
+.gm-ti { flex: none; width: 22px; height: 22px; stroke-width: 2.2; color: #44e08a; }
+.gm-bad .gm-ti { color: var(--gold); }
+.gm-tt { flex: 1 1 0; min-width: 0; font-size: 16px; line-height: 1.35; overflow-wrap: anywhere; }
+.gm-tok { flex: none; min-height: 44px; }
+
+/* ---- a phone held upright: the line and the mute step are a sheet at the bottom of the screen (the confirm card stays a card) ---- */
+@media (max-width: 700px) and (min-height: 501px) {
+    .gm-shade:not(.gm-card) { padding: 0; place-items: end stretch; }
+    .gm-shade:not(.gm-card) .gm-box { width: auto; padding: 0 14px calc(14px + env(safe-area-inset-bottom, 0px)); border-width: 2px 0 0; border-color: #1f5a49; border-radius: 10px 10px 0 0; background: #0b1117; box-shadow: 0 -8px 28px rgba(0, 0, 0, .55); }
+    .gm-shade:not(.gm-card) .gm-grab { display: block; width: 36px; height: 4px; margin: 8px auto 10px; border-radius: 2px; background: #2d4a40; }
+}
+/* a phone held sideways, a low window: a card in the middle, the actions two to a row without their small words, the quote two lines */
+@media (max-height: 500px) {
+    .gm-shade { padding: 8px; }
+    .gm-box { padding: 10px 14px 12px; }
+    .gm-acts { grid-template-columns: 1fr 1fr; margin-bottom: 8px; }
+    .gm-act small { display: none; }
+    .gm-act { min-height: 48px; }
+    .gm-quote { margin-bottom: 8px; -webkit-line-clamp: 2; }
+    .gm-times { grid-template-columns: repeat(4, 1fr); margin-bottom: 8px; }
+    .gm-time { min-height: 48px; }
+    .gm-mark { display: none; }
+}
+@media (max-width: 359px) { .gm-times .btn { font-size: 18px; } .gm-btns { gap: 8px; } }
+@media (forced-colors: active) { .gm-act, .gm-box, .gm-toast { border-color: CanvasText; } .gm-act { border-color: ButtonText; } }
+@media (prefers-reduced-motion: reduce) { .gm-wait::after { animation: none; } }
