@@ -6,6 +6,7 @@ add_library(ants_ai STATIC
     map_info.cpp
     island_info.cpp
     reach_guard.cpp
+    bomb_detour.cpp
     gate_info.cpp
     gate_goal.cpp
     gate_task.cpp
