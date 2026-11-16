@@ -6,8 +6,8 @@
   {
    "id": "brawl_pack_cap_off_by_one",
    "file": "src/ants_ai/brawl_task.cpp",
-   "old": "while (load_of(fo.ant->id) < params_.per_target) {",
-   "new": "while (load_of(fo.ant->id) <= params_.per_target) {",
+   "old": "while (load_of(fo.ant->id) < per_target) {",
+   "new": "while (load_of(fo.ant->id) <= per_target) {",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI30.4 ' ./build/tests/test_ai/test_ai",
    "expect": "AI30.4"
   },
@@ -79,7 +79,7 @@
    "id": "brawl_never_gives_up_a_refused_pair",
    "file": "src/ants_ai/brawl_task.cpp",
    "old": "if (r.count >= 2) shun_[{a.id, job.target}] = now + kShunTicks;",
-   "new": "",
+   "new": "shun_[{a.id, job.target}] = now + kShunTicks * 0;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI30.9 ' ./build/tests/test_ai/test_ai",
    "expect": "AI30.9"
   },
@@ -227,8 +227,8 @@
    "file": "src/ants_ai/brawl_task.cpp",
    "old": "(f->hp <= 1 && close)",
    "new": "(f->hp <= 1)",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.5 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI30.5"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.17 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.17"
   },
   {
    "id": "brawl_plan_off_by_default",
@@ -237,6 +237,78 @@
    "new": "bool brawl187{false};",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI30.1b ' ./build/tests/test_ai/test_ai",
    "expect": "AI30.1b"
+  },
+  {
+   "id": "brawl_ring_bonus_dropped",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "(f->team == prey ? static_cast<int64_t>(params_.ring_bonus) : 0)",
+   "new": "(f->team == prey ? static_cast<int64_t>(0) : 0)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.12 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.12"
+  },
+  {
+   "id": "brawl_ring_longest_way_round",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "if (best_cost < 0 || cost < best_cost) {",
+   "new": "if (best_cost < 0 || cost > best_cost) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.12 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.12"
+  },
+  {
+   "id": "brawl_ring_names_a_seat_without_ants",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "row.present && !row.dropped && alive[t] && !ally_of(v, t)",
+   "new": "row.present && !row.dropped && !ally_of(v, t)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.13 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.13"
+  },
+  {
+   "id": "brawl_small_side_sends_two",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "params_.solo_ants != 0 && v.mine().size() <= params_.solo_ants ? 1u : params_.per_target",
+   "new": "params_.per_target",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.14 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.14"
+  },
+  {
+   "id": "brawl_small_side_boundary",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "v.mine().size() <= params_.solo_ants",
+   "new": "v.mine().size() < params_.solo_ants",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.14 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.14"
+  },
+  {
+   "id": "brawl_ring_names_an_ally",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "row.present && !row.dropped && alive[t] && !ally_of(v, t)",
+   "new": "row.present && !row.dropped && alive[t]",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.15 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.15"
+  },
+  {
+   "id": "brawl_ring_tie_takes_the_last_way",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "if (best_cost < 0 || cost < best_cost) {",
+   "new": "if (best_cost < 0 || cost <= best_cost) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.16 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.16"
+  },
+  {
+   "id": "brawl_ring_leaves_out_the_own_seat",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "if (v.rows()[t].present && map.hill(t).present) seats.push_back(t);",
+   "new": "if (v.rows()[t].present && map.hill(t).present && t != v.seat()) seats.push_back(t);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.16 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.16"
+  },
+  {
+   "id": "brawl_chases_a_walking_enemy_of_any_hit_points",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "(f->hp <= 1 && close)",
+   "new": "close",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.17 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.17"
   }
  ]
 }
