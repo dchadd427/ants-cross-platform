@@ -4,7 +4,9 @@
 //   2.x  the start: the map's own ants and eggs, no food and no power-ups, on every shipped map and for every roster
 //   3.x  the end rule and the ranking (kills, the last one standing, ties, alliances, the clock)
 //   4.x  the eggs are lives and the free hatch costs no kills; the original's own ranking (a mode that is not set changes nothing)
+//   5.x  nothing is put on the ground (the rules number 12): no power-up from a special ant that dies or that takes another, no lunchbox, no flower drop; the earlier rules of 187 and the original's game keep their drops
 #include "ants_assets/lvl_parser.hpp"
+#include "ants_assets/lvl_writer.hpp"
 #include "ants_sim/command.hpp"
 #include "ants_sim/game_mode.hpp"
 #include "ants_sim/grid.hpp"
@@ -13,6 +15,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -93,6 +96,63 @@ void kill_pair(SimulationEngine& e, uint8_t killer, uint8_t victim) {
     for (int k = 0; k < 80; ++k) e.tick();
     ASSERT_VOID(e.get_unit(b).removed);
 }
+
+struct PowerUpOnGround {
+    int32_t x{0};
+    int32_t y{0};
+    uint8_t type{0};
+};
+
+// Every power-up on the ground, from the grid's own cells (a flower's drop that has not landed is not on the ground yet)
+std::vector<PowerUpOnGround> power_ups(const SimulationEngine& e) {
+    std::vector<PowerUpOnGround> out;
+    const Grid& g = e.grid();
+    for (uint32_t y = 0; y < g.height(); ++y) {
+        for (uint32_t x = 0; x < g.width(); ++x) {
+            const TileCoord t{static_cast<int32_t>(x), static_cast<int32_t>(y)};
+            if (g.has_powerup_at(t)) out.push_back(PowerUpOnGround{t.x, t.y, g.get_powerup_type(t)});
+        }
+    }
+    return out;
+}
+
+size_t lunchboxes(const SimulationEngine& e) {
+    size_t n = 0;
+    const Grid& g = e.grid();
+    for (uint32_t y = 0; y < g.height(); ++y) {
+        for (uint32_t x = 0; x < g.width(); ++x) n += g.has_lunchbox_at(TileCoord{static_cast<int32_t>(x), static_cast<int32_t>(y)}) ? 1u : 0u;
+    }
+    return n;
+}
+
+// The three sets of rules that the drops tests run: 187 as a match is played now, 187 as a recording of 6, 7, 10 or 11 is played (SimulationEngine::set_no_drops_187(false)), and the original's game
+enum class Drops { Now187, Before187, Original };
+
+// A 40 x 40 test world with the rules of `which` and two Worker bystanders for each of the teams 0 and 1 far from the action, so that no team is out when one ant dies and no egg is hatched
+SimulationEngine drops_world(Drops which, uint32_t seed) {
+    SimulationEngine e;
+    e.set_game_mode(which == Drops::Original ? GameMode::HighestScore : GameMode::Kills187);
+    e.set_no_drops_187(which != Drops::Before187);
+    e.init_test_world(40, 40, seed, 720000);
+    for (uint8_t p = 0; p < MAX_PLAYERS; ++p) e.set_player_eggs(p, 0);
+    for (uint8_t t : {uint8_t{0}, uint8_t{1}}) {
+        e.spawn_unit(t, AntType::Worker, TileCoord{2, 2 + 30 * static_cast<int32_t>(t)});
+        e.spawn_unit(t, AntType::Worker, TileCoord{4, 2 + 30 * static_cast<int32_t>(t)});
+    }
+    return e;
+}
+
+// A fresh Combat ant of team 0 kills an ant of `type` of team 1 in melee (the victim has one hit point left; the flight and the death clip run out); the victim is removed when this returns
+void kill_typed_by_blow(SimulationEngine& e, AntType type, int32_t row) {
+    const uint32_t killer = e.spawn_unit(0, AntType::Combat, TileCoord{20, row});
+    const uint32_t victim = e.spawn_unit(1, type, TileCoord{21, row});
+    e.get_unit(victim).hp = 1;
+    e.execute_melee_attack(killer, victim);
+    for (int k = 0; k < 80; ++k) e.tick();
+    ASSERT_VOID(e.get_unit(victim).removed);
+}
+
+const AntType kSpecialTypes[] = {AntType::Bomber, AntType::Fire, AntType::Thief, AntType::Combat, AntType::Swimmer};
 
 }  // namespace
 
@@ -814,6 +874,161 @@ int main() {
         ASSERT_EQ(r.rows(3)[3].first, 3);
         r.standing = 3;
         ASSERT_EQ(r.rows(0)[0].first, 3);                                  // the last one standing goes first whatever its 1 point is
+    } TEST_END();
+
+
+    TEST_CASE("5.1 an ant of any special type that dies in 187 leaves no power-up (the rules number 12); as a recording of 11 and before plays it, and in the original's game, it leaves its own on a free tile next to it") {
+        for (const AntType type : kSpecialTypes) {
+            for (uint32_t seed = 1; seed <= 8; ++seed) {
+                for (const Drops which : {Drops::Now187, Drops::Before187, Drops::Original}) {
+                    SimulationEngine e = drops_world(which, seed);
+                    const uint32_t id = e.spawn_unit(0, type, TileCoord{20, 20});
+                    e.kill_unit(id);
+                    ASSERT_TRUE(e.get_unit(id).removed);
+                    const std::vector<PowerUpOnGround> on_ground = power_ups(e);
+                    if (which == Drops::Now187) {
+                        ASSERT_EQ(on_ground.size(), 0u);
+                        continue;
+                    }
+                    ASSERT_EQ(on_ground.size(), 1u);                                               // one, of the ant's own type (the type's number is the power-up's)
+                    ASSERT_EQ(on_ground[0].type, static_cast<uint8_t>(type));
+                    ASSERT_TRUE(std::abs(on_ground[0].x - 20) <= 1 && std::abs(on_ground[0].y - 20) <= 1 && (on_ground[0].x != 20 || on_ground[0].y != 20));
+                }
+            }
+        }
+        for (const Drops which : {Drops::Now187, Drops::Before187, Drops::Original}) {                // a Worker leaves nothing in any rules
+            SimulationEngine e = drops_world(which, 3u);
+            e.kill_unit(e.spawn_unit(0, AntType::Worker, TileCoord{20, 20}));
+            ASSERT_EQ(power_ups(e).size(), 0u);
+        }
+    } TEST_END();
+
+    TEST_CASE("5.2 a special ant that a blow kills in 187 leaves no power-up and the kill still counts; the same blow as a recording of 11 and before plays it, and in the original's game, leaves one") {
+        for (const AntType type : kSpecialTypes) {
+            for (const Drops which : {Drops::Now187, Drops::Before187, Drops::Original}) {
+                SimulationEngine e = drops_world(which, 7u);
+                kill_typed_by_blow(e, type, 20);
+                const std::vector<PowerUpOnGround> on_ground = power_ups(e);
+                ASSERT_EQ(on_ground.size(), which == Drops::Now187 ? 0u : 1u);
+                if (which != Drops::Now187) ASSERT_EQ(on_ground[0].type, static_cast<uint8_t>(type));
+                if (which != Drops::Original) ASSERT_EQ(e.get_world_state().player_scores[0], 1);       // (187: the kill is the point, with or without the drop)
+                ASSERT_EQ(e.get_player_stats(0).enemy_killed, 1u);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("5.3 the ants that a map starts as special types (the start markers' own types) leave no power-up either, nor does one that dies later: killed one after the other, a whole army leaves nothing") {
+        LevelData map = ants::assets::blank_level(40, 40, std::vector<std::string>{});
+        map.default_minutes = 12;
+        map.boundary_param = 0;
+        const uint8_t types[] = {1, 2, 3, 4, 5, 4};
+        for (uint8_t team = 0; team < 2; ++team) {
+            for (size_t i = 0; i < sizeof types; ++i) {
+                ants::assets::AnthillSpawn m;
+                m.tile_id = static_cast<uint16_t>(152 + team);
+                m.team_id = team;
+                m.x = static_cast<uint16_t>(8 + 20 * team);
+                m.y = static_cast<uint16_t>(6 + 3 * i);
+                m.ant_type = types[i];
+                map.anthill_spawns.push_back(m);
+            }
+        }
+        for (const Drops which : {Drops::Now187, Drops::Before187, Drops::Original}) {
+            SimulationEngine e;
+            e.set_game_mode(which == Drops::Original ? GameMode::HighestScore : GameMode::Kills187);
+            e.set_no_drops_187(which != Drops::Before187);
+            e.init(map, 11u, 0x03);
+            size_t special = 0;
+            for (const AntSnapshot& a : e.get_world_state().ants) special += a.type != AntType::Worker ? 1u : 0u;
+            ASSERT_EQ(special, 12u);                                                                // (every start marker made a special ant)
+            for (const AntSnapshot& a : ants_of(e, 1)) e.kill_unit(a.id);
+            // the army of team 1 is gone: 187 now left nothing, the other two left one power-up for each of the six ants (they stand three tiles apart, so each has free tiles of its own)
+            ASSERT_EQ(power_ups(e).size(), which == Drops::Now187 ? 0u : 6u);
+        }
+    } TEST_END();
+
+    TEST_CASE("5.4 an ant that already has a type and takes a power-up leaves its old one nowhere in 187 (it is lost); as a recording of 11 and before plays it, and in the original's game, it leaves it on a free tile next to the picked one") {
+        for (const Drops which : {Drops::Now187, Drops::Before187, Drops::Original}) {
+            for (const AntType had : {AntType::Bomber, AntType::Swimmer, AntType::Combat}) {
+                SimulationEngine e = drops_world(which, 5u);
+                e.grid_mut().place_powerup(15, 15, 4);                                              // a Combat power-up (the map's own are taken off in 187; this one is put there by the test)
+                const uint32_t id = e.spawn_unit(0, had, TileCoord{12, 15});
+                e.issue_move_order(id, TileCoord{15, 15});
+                bool took = false;
+                for (int t = 0; t < 60 && !took; ++t) {
+                    e.tick();
+                    took = e.get_unit(id).loco_action == AntUnit::kActionGetPow;
+                }
+                ASSERT_TRUE(took);
+                ASSERT_EQ(e.get_unit(id).type, AntType::Combat);                                    // the type changes at once, in every rules
+                ASSERT_FALSE(e.grid().has_powerup_at(TileCoord{15, 15}));                           // and the picked power-up is gone
+                const std::vector<PowerUpOnGround> on_ground = power_ups(e);
+                ASSERT_EQ(on_ground.size(), which == Drops::Now187 ? 0u : 1u);
+                if (which != Drops::Now187) ASSERT_EQ(on_ground[0].type, static_cast<uint8_t>(had));
+            }
+            SimulationEngine worker = drops_world(which, 5u);                                       // a Worker has none to leave
+            worker.grid_mut().place_powerup(15, 15, 1);
+            const uint32_t w = worker.spawn_unit(0, AntType::Worker, TileCoord{12, 15});
+            worker.issue_move_order(w, TileCoord{15, 15});
+            for (int t = 0; t < 60; ++t) worker.tick();
+            ASSERT_EQ(worker.get_unit(w).type, AntType::Bomber);
+            ASSERT_EQ(power_ups(worker).size(), 0u);
+        }
+    } TEST_END();
+
+    TEST_CASE("5.5 an ant that dies with food or loot in its hands leaves no lunchbox in 187; as a recording of 11 and before plays it, and in the original's game, it leaves one") {
+        for (const Drops which : {Drops::Now187, Drops::Before187, Drops::Original}) {
+            for (const AntType type : {AntType::Worker, AntType::Thief}) {
+                SimulationEngine e = drops_world(which, 9u);
+                const uint32_t id = e.spawn_unit(0, type, TileCoord{20, 20});
+                if (type == AntType::Thief) e.get_unit(id).steal_points(40);
+                else e.get_unit(id).pick_up_food(1, 25);                                            // (there is no food in 187: the test puts it in the ant's hands)
+                ASSERT_TRUE(e.get_unit(id).is_holding());
+                e.kill_unit(id);
+                ASSERT_EQ(lunchboxes(e), which == Drops::Now187 ? 0u : 1u);
+                if (which != Drops::Now187) ASSERT_EQ(e.get_lunchbox_points(TileCoord{20, 20}), type == AntType::Thief ? 40u : 25u);
+                ASSERT_EQ(power_ups(e).size(), (type == AntType::Thief && which != Drops::Now187) ? 1u : 0u);       // (the Thief has a power-up of its own to leave, a Worker none)
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("5.6 the flower droppers of a map drop nothing in 187 for three minutes under every rules number of it (they are cleared when the match starts); the same map in the original's game drops") {
+        const LevelData level = load_map("SMALL");
+        SimulationEngine plain;
+        plain.init(level, 31u);
+        size_t plain_start = power_ups(plain).size();
+        ASSERT_TRUE(!plain.get_world_state().flower_droppers.empty());                             // (the map has droppers: SMALL has two, 15 s)
+        for (const bool no_drops : {true, false}) {
+            SimulationEngine e;
+            e.set_game_mode(GameMode::Kills187);
+            e.set_no_drops_187(no_drops);
+            e.init(level, 31u);
+            ASSERT_EQ(power_ups(e).size(), 0u);
+            ASSERT_EQ(e.get_world_state().flower_droppers.size(), 0u);
+            for (int t = 0; t < 3600; ++t) {
+                e.tick();
+                if (no_drops) plain.tick();
+                if (t % 200 == 199) ASSERT_EQ(power_ups(e).size(), 0u);
+            }
+        }
+        ASSERT_TRUE(power_ups(plain).size() > plain_start);                                        // (the check sees a flower's drop: the original's game has dropped by now)
+    } TEST_END();
+
+    TEST_CASE("5.7 the rule is the one of a match played now whenever the mode is set, and init keeps what a player of an old recording chose; the original's game never reads it") {
+        SimulationEngine e;
+        ASSERT_TRUE(e.no_drops_187());                                                              // (the default is the rule of now)
+        e.set_game_mode(GameMode::Kills187);
+        e.set_no_drops_187(false);
+        ASSERT_FALSE(e.no_drops_187());
+        e.init_test_world(40, 40, 3u, 720000);
+        ASSERT_FALSE(e.no_drops_187());                                                             // (init keeps it, as it keeps the mode)
+        e.set_game_mode(GameMode::Kills187);
+        ASSERT_TRUE(e.no_drops_187());                                                              // (a program that played an old recording and starts a match plays by the rules of a match)
+        SimulationEngine original = drops_world(Drops::Original, 2u);
+        original.set_no_drops_187(true);                                                            // (set on an engine of the original's game: it still drops)
+        const uint32_t id = original.spawn_unit(0, AntType::Bomber, TileCoord{20, 20});
+        original.kill_unit(id);
+        ASSERT_EQ(power_ups(original).size(), 1u);
     } TEST_END();
 
     std::cout << "\n=======================================================\n"

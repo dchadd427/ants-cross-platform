@@ -554,7 +554,7 @@ async function main() {
         const okReply = { status: 201, json: () => Promise.resolve({ test_map: { file: 'Again Map ~test-5566aabb.lvl', name: 'Again Map', kind: 'classic', width: 31, height: 31, usable: [true, true, true, true] } }) };
         const noteDoc = Object.assign({}, doc);
         const footer = node('p'); footer.textContent = 'Online matches are recorded. Recordings are kept for 30 days.';
-        noteDoc.getElementById = (id) => (id === 'footer-notice' ? footer : null);
+        noteDoc.getElementById = (id) => (id === 'room-notice' ? footer : null);
         function testStrip(win, replies, theDoc) {
             const body = node('body'), screen = node('div');
             body.appendChild(screen);

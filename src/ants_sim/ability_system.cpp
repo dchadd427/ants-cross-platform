@@ -100,7 +100,7 @@ void SimulationEngineImpl::powerup_pickup(AntUnit& a, TileCoord tile) {
     set_action(a, AntUnit::kActionGetPow, static_cast<uint8_t>(a.facing), -1, -1, false);   // SetActionDefault(4)
     if (!grid_.has_powerup_at(tile)) return;                                            // the tile id's flag 4 (FUN_01007202)
     const uint8_t new_type = grid_.get_powerup_type(tile);                              // FUN_01021087: 0x3e..0x42 -> 4, 3, 1, 5, 2
-    if (a.type != AntType::Worker) drop_powerup(a, tile, static_cast<uint8_t>(a.type)); // FUN_010210c1 + FUN_01020e6e
+    if (a.type != AntType::Worker && !drops_nothing_187()) drop_powerup(a, tile, static_cast<uint8_t>(a.type)); // FUN_010210c1 + FUN_01020e6e (187 now: the old power-up is lost, mode_187.cpp)
     a.type = static_cast<AntType>(new_type);
     grid_.clear_powerup(tile.x, tile.y);                                                // SetTile(2, tile, 0x7ffe)
     world_state_dirty_ = true;

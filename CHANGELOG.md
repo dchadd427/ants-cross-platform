@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.17.0 - 2026-11-15 - 187 drops nothing, leave your room from Home, a better emoji picker, bots walk round bombs
+
+**For players:**
+- **187 puts nothing on the ground.** In a 187 match an ant of a special type (Combat, Bomber, Fire, Swimmer, Thief and the rest) that dies no longer drops its power-up, so a 187 match has no power-ups, no food and no healing from start to end. The original's game is unchanged: there a special ant still drops its power-up.
+- **Leave your room from Home.** A small red X on the corner of the My room button leaves the room (when other people are in it you are asked first), and the button now reads My room with its count at every window size. The Games button is gone from Home's top bar: the open games are always on Home, and a phone's bottom strip has Games.
+- **A better emoji picker** in the front page chat: 879 emoji in nine groups, a search field (type cat, heart, ant...), your recently used ones, a name line, full keyboard use, and on a phone held upright a sheet that takes the keyboard's place.
+- **Computer players walk round bombs** they can see instead of into them, a Bomber clears a bomb that blocks the way to food, and they skip food piles they cannot reach. A Bomber's flight checks its landing spot first, so it no longer lands in the water when something lies there.
+
+**Rules / network:** network protocol 24: a v0.16.11 page or game cannot join (an old page says that a newer version is out: reload it). The replay rules number of 187 is 12; 187 recordings made before keep their old rule and play as they were recorded. The original's game, its rules number and its recordings are unchanged. Under the hood: the game server and the web pages are rebuilt; matches running at the update end.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/06727fbd...2f426f13)
+
 ## v0.16.11 - 2026-11-15 - Away on the Players list, press outside a dialog to cancel, computer players that walk where they go
 
 **For players:**
@@ -455,26 +467,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/cddbaf07...a3811168)
 
-## v0.12.134 - 2026-10-25 - Health bars over the ants
+## Older versions (v0.12.134 and before)
 
-**For players:**
-- **New: health bars over the ants.** A bar over every hurt ant shows its hit points out of 10: green at 9 or 10, amber at 3 to 8, red at 1 or 2. Full ants have none. On for everybody, for every ant you can see, yours and the enemy's.
-- **Choose:** Settings (Esc), Video: **Ant health** (Hurt ants, All ants, Off) and **Show health as** (Bar, Number). A number has the same colors, an outline, and is left out below zoom 0.6. Ctrl+L turns it off and on again. Bars are thicker on a phone held upright.
-- **The white numbers on every ant are gone.** To get numbers: All ants and Number. If you had turned the old numbers off, the marks start off too.
-
-**Rules / network:** none: only what is drawn changes; the rules, replays and network protocol 21 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/fe195f16...2abf0410)
-
-## v0.12.133 - 2026-10-25 - Map Maker: the footer line is no longer cut off by the screen's frame
-
-**For players:**
-- **The line at the foot of the Map Maker page (the version, the Lobby, Match history, Changelog and Legal links) is whole again.** It sat on the red edge of the page's frame, which hid the lower half of the words; it now has its own room above the edge, on a desktop window of any size and on a phone. The map is as large as before. Map Maker v1.5.9.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the web page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/736c9486...7f6588ed)
-
-## Older versions (v0.12.132 and before)
-
-Every release before v0.12.133, and the long notes of v0.12.132 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.135, and the long notes of v0.12.134 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
