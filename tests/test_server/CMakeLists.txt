@@ -364,4 +364,4 @@ if(NOT WIN32)
 endif()
 
 add_test(NAME test_history_service COMMAND test_history_service)
-set_tests_properties(test_history_service PROPERTIES COST 90)
+set_tests_properties(test_history_service PROPERTIES COST 20)

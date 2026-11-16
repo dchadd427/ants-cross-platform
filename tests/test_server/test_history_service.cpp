@@ -147,6 +147,10 @@ std::string put_recording(const fs::path& dir, const std::vector<uint8_t>& bytes
     }
     std::error_code ec;
     fs::rename(temp, dir / (id + ".antsrep"), ec);
+#if defined(_WIN32)
+    static std::atomic<int> touches{0};                          // (NTFS does not always move a folder's time at once: a look must see this change)
+    fs::last_write_time(dir, fs::file_time_type::clock::now() + std::chrono::milliseconds(++touches), ec);
+#endif
     return id;
 }
 
