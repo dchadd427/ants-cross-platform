@@ -333,7 +333,7 @@ class TheChatOnTheWire(RigTest):
 
     def test_the_text_rules_hold_on_the_wire(self):
         alice, reader = self.connect("1001:alice"), self.connect()
-        for text, code in (("<b>", "bad"), ("", "empty"), ("\u202e", "empty"), ("x" * 201, "long")):
+        for text, code in (("<b>", "bad"), ("", "empty"), ("\u202e", "empty"), ("x" * 1001, "long"), ("\U0001f600" * 1001, "long")):
             alice.say(text)
             self.assertEqual(alice.recv_reply(), {"t": "err", "code": code}, repr(text))
         alice.say("ad\u202emin\u200b  now")
@@ -342,8 +342,8 @@ class TheChatOnTheWire(RigTest):
     def test_the_limit_is_the_account_s_across_sockets(self):
         a1, a2 = self.connect("1001:alice"), self.connect("1001:alice")
         got = []
-        for n, c in enumerate((a1, a2, a1, a2)):
-            c.say("line %d" % n)
+        for n in range(11):                                              # (the burst is 10: the 11th is refused, on whichever socket says it)
+            (a1, a2)[n % 2].say("line %d" % n)
         for c in (a1, a2):
             got += [m for m in c.drain(0.5) if m["t"] == "err"]
         self.assertEqual([m["code"] for m in got], ["rate"])
@@ -373,7 +373,7 @@ class TheChatOnTheWire(RigTest):
 
     def test_each_kind_of_broken_frame(self):
         cases = ((hc.frame(1, b"{}", masked=False), 1002), (hc.frame(1, b"{}", rsv=1), 1002), (hc.frame(3, b""), 1002), (hc.frame(2, b"x"), 1003), (hc.frame(1, b"{", fin=False), 1003),
-                 (hc.frame(0, b"}"), 1003), (hc.frame(1, b"\xff\xfe"), 1007), (hc.frame(1, b"a" * 2049), 1009), (hc.frame(9, b"x" * 126), 1002), (hc.frame(8, b"\x03"), 1002),
+                 (hc.frame(0, b"}"), 1003), (hc.frame(1, b"\xff\xfe"), 1007), (hc.frame(1, b"a" * (limitmod.Limits().frame_max + 1)), 1009), (hc.frame(9, b"x" * 126), 1002), (hc.frame(8, b"\x03"), 1002),
                  (hc.frame(1, b"{}", length_form=16), 1002), (struct.pack("!BBQ", 0x81, 0xFF, 1 << 62), 1009))
         for data, code in cases:
             c = self.connect()
@@ -381,10 +381,26 @@ class TheChatOnTheWire(RigTest):
             self.assertEqual(c.expect_close(), code, data[:12])
         self.assertNotIn("error", self.log_events())
 
-    def test_a_frame_over_2_kb_is_refused_before_its_payload_comes(self):
+    def test_a_frame_of_exactly_the_cap_is_read_and_one_byte_more_is_refused_before_its_payload_comes(self):
+        cap = limitmod.Limits().frame_max
+        head = b'{"t":"ping","pad":"'
         c = self.connect()
-        c.send(struct.pack("!BBH", 0x81, 0x80 | 126, 2049) + b"\x00\x00\x00\x00")       # the header and the mask, not a byte of the payload
-        self.assertEqual(c.expect_close(), 1009)
+        c.send(hc.frame(1, head + b"a" * (cap - len(head) - 2) + b'"}'))
+        self.assertEqual(c.recv_json()["t"], "online")
+        over = self.connect()
+        over.send(struct.pack("!BBH", 0x81, 0x80 | 126, cap + 1) + b"\x00\x00\x00\x00")       # the header and the mask, not a byte of the payload
+        self.assertEqual(over.expect_close(), 1009)
+
+    def test_the_longest_line_goes_through_as_a_page_writes_it_and_as_a_client_that_escapes_everything_does(self):
+        alice, reader = self.connect("1001:alice"), self.connect()
+        line = "\U0001f600" * 1000
+        alice.say(line)                                                                                             # (hc.say writes JSON in ASCII: a pair of escapes for each emoji, 12 KB)
+        self.assertEqual(reader.wait_line()["text"], line)
+        alice.send(hc.frame(1, json.dumps({"t": "say", "text": line[:-1] + "b"}, ensure_ascii=False).encode("utf-8")))       # (as a browser writes it: 4 KB)
+        self.assertEqual(reader.wait_line()["text"], line[:-1] + "b")
+        late = hc.Client(self.rig.port)
+        self.clients.append(late)
+        self.assertEqual([h["text"] for h in late.recv_json()["history"]], [line, line[:-1] + "b"])
 
 
 class TheViolations(RigTest):

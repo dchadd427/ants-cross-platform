@@ -1,0 +1,203 @@
+{
+ "note": "Mutants of the no-drop rule of game mode 187 (the rules number 12) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the death of a special ant (and the random numbers that the drop would have drawn), the pick-up of a typed ant, the lunchbox, the flower droppers, the switch and its default, the original's game (which still drops), and the rules numbers (the player, the table of what plays, the head check, the refusal's sentence) against test_game_mode (2.9.2, cases 5.x) and test_rules_no_drops (2.29.7). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/no_drops_187_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "death_drops_in_187",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "if (a.type != AntType::Worker && !team_dropped(a.player_id) && !drops_nothing_187()) drop_powerup(a, pixel_tile(a), powerup_type_of(a.type));",
+   "new": "if (a.type != AntType::Worker && !team_dropped(a.player_id)) drop_powerup(a, pixel_tile(a), powerup_type_of(a.type));",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "5.1"
+  },
+  {
+   "id": "death_drops_only_for_the_combat_ant",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "if (a.type != AntType::Worker && !team_dropped(a.player_id) && !drops_nothing_187()) drop_powerup(a, pixel_tile(a), powerup_type_of(a.type));",
+   "new": "if (a.type != AntType::Worker && !team_dropped(a.player_id) && (!drops_nothing_187() || a.type != AntType::Combat)) drop_powerup(a, pixel_tile(a), powerup_type_of(a.type));",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "5.1"
+  },
+  {
+   "id": "death_draws_the_random_numbers_but_drops_nothing",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "if (a.type != AntType::Worker && !team_dropped(a.player_id) && !drops_nothing_187()) drop_powerup(a, pixel_tile(a), powerup_type_of(a.type));",
+   "new": "if (a.type != AntType::Worker && !team_dropped(a.player_id)) { if (drops_nothing_187()) { prng_.rand(); prng_.rand(); } else drop_powerup(a, pixel_tile(a), powerup_type_of(a.type)); }",
+   "build": "test_rules_no_drops",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
+   "expect": "RP16.3"
+  },
+  {
+   "id": "death_leaves_no_power_up_in_the_original_either",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "bool drops_nothing_187() const noexcept { return game_mode_ == GameMode::Kills187 && no_drops_187_; }",
+   "new": "bool drops_nothing_187() const noexcept { return no_drops_187_; }",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "5.1"
+  },
+  {
+   "id": "the_rule_is_never_on",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "bool drops_nothing_187() const noexcept { return game_mode_ == GameMode::Kills187 && no_drops_187_; }",
+   "new": "bool drops_nothing_187() const noexcept { return game_mode_ == GameMode::Kills187 && false; }",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "5.1"
+  },
+  {
+   "id": "the_rule_is_off_when_nothing_chose",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "bool no_drops_187_{true};",
+   "new": "bool no_drops_187_{false};",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "5.7"
+  },
+  {
+   "id": "the_switch_is_ignored",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "    impl_->no_drops_187_ = on;",
+   "new": "    impl_->no_drops_187_ = on || true;",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "5.1"
+  },
+  {
+   "id": "set_game_mode_keeps_the_earlier_rule",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "impl_->end_fix_187_ = true; impl_->no_drops_187_ = true; impl_->last_side_rule_ = true;",
+   "new": "impl_->end_fix_187_ = true; impl_->last_side_rule_ = true;",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "5.7"
+  },
+  {
+   "id": "swap_drops_in_187",
+   "file": "src/ants_sim/ability_system.cpp",
+   "old": "if (a.type != AntType::Worker && !drops_nothing_187()) drop_powerup(a, tile, static_cast<uint8_t>(a.type));",
+   "new": "if (a.type != AntType::Worker) drop_powerup(a, tile, static_cast<uint8_t>(a.type));",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "5.4"
+  },
+  {
+   "id": "lunchbox_in_187",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "if (a.is_holding() && grid_.in_bounds(tile) && !drops_nothing_187()) {",
+   "new": "if (a.is_holding() && grid_.in_bounds(tile)) {",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "5.5"
+  },
+  {
+   "id": "flower_droppers_run_in_187",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "if (mode187) impl_->flower_droppers_.clear();",
+   "new": "if (false) impl_->flower_droppers_.clear();",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "2.1"
+  },
+  {
+   "id": "flower_droppers_run_in_187_under_the_old_rules",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "if (mode187) impl_->flower_droppers_.clear();",
+   "new": "if (mode187 && impl_->no_drops_187_) impl_->flower_droppers_.clear();",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "5.6"
+  },
+  {
+   "id": "player_never_turns_the_rule_off",
+   "file": "src/ants_replay/player.cpp",
+   "old": "engine.set_no_drops_187(!(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) < kSimRulesMode187));",
+   "new": "engine.set_no_drops_187(true);",
+   "build": "test_rules_no_drops",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
+   "expect": "RP16.2"
+  },
+  {
+   "id": "player_always_turns_the_rule_off",
+   "file": "src/ants_replay/player.cpp",
+   "old": "engine.set_no_drops_187(!(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) < kSimRulesMode187));",
+   "new": "engine.set_no_drops_187(false);",
+   "build": "test_rules_no_drops",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
+   "expect": "RP16.3"
+  },
+  {
+   "id": "player_plays_12_with_the_drops",
+   "file": "src/ants_replay/player.cpp",
+   "old": "sim_rules_of(replay.head) < kSimRulesMode187));",
+   "new": "sim_rules_of(replay.head) <= kSimRulesMode187));",
+   "build": "test_rules_no_drops",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
+   "expect": "RP16.3"
+  },
+  {
+   "id": "player_plays_11_without_the_drops",
+   "file": "src/ants_replay/player.cpp",
+   "old": "sim_rules_of(replay.head) < kSimRulesMode187));",
+   "new": "sim_rules_of(replay.head) < kSimRulesMode187BeforeNoDrops));",
+   "build": "test_rules_no_drops",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
+   "expect": "RP16.2"
+  },
+  {
+   "id": "player_plays_6_without_the_drops",
+   "file": "src/ants_replay/player.cpp",
+   "old": "sim_rules_of(replay.head) < kSimRulesMode187));",
+   "new": "sim_rules_of(replay.head) < kSimRulesMode187 && sim_rules_of(replay.head) != kSimRulesMode187Heal));",
+   "build": "test_rules_no_drops",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
+   "expect": "RP16.5"
+  },
+  {
+   "id": "player_turns_the_rule_off_for_the_original",
+   "file": "src/ants_replay/player.cpp",
+   "old": "engine.set_no_drops_187(!(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) < kSimRulesMode187));",
+   "new": "engine.set_no_drops_187(!(sim_rules_of(replay.head) < kSimRulesMode187));",
+   "build": "test_rules_no_drops",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
+   "expect": "RP16.5"
+  },
+  {
+   "id": "rules_12_not_played",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeNoDrops ||",
+   "new": "(rules == kSimRulesMode187BeforeNoDrops ||",
+   "build": "test_rules_no_drops",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
+   "expect": "RP16.1"
+  },
+  {
+   "id": "head_12_without_the_mode_ok",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "(h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeNoDrops ||",
+   "new": "(h.sim_rules == kSimRulesMode187BeforeNoDrops ||",
+   "build": "test_rules_no_drops",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
+   "expect": "RP16.1"
+  },
+  {
+   "id": "played_text_lacks_12",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "+ \" and \" + std::to_string(kSimRulesMode187);",
+   "new": ";",
+   "build": "test_rules_no_drops",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
+   "expect": "RP16.1"
+  },
+  {
+   "id": "a_187_match_is_recorded_under_11",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "mode == static_cast<uint8_t>(sim::GameMode::Kills187) ? kSimRulesMode187 : uint16_t{0};",
+   "new": "mode == static_cast<uint8_t>(sim::GameMode::Kills187) ? kSimRulesMode187BeforeNoDrops : uint16_t{0};",
+   "build": "test_rules_no_drops",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
+   "expect": "RP16.1"
+  }
+ ]
+}

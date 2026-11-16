@@ -14,14 +14,16 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 import unittest
 from unittest import mock
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 sys.path.insert(0, os.path.join(REPO, "tests", "scripts"))
+import hub_client as hc  # noqa: E402  (the client side of the frames, which shares no code with the hub)
 import hub_rig  # noqa: E402  (FakeRoles: the roles without Discord)
-from hub import admin, chat as chatmod, config, limits as limitmod, log as logmod, pseudo, session, store as storemod  # noqa: E402
+from hub import admin, chat as chatmod, config, limits as limitmod, log as logmod, pseudo, session, store as storemod, ws  # noqa: E402
 
 LIMITS = limitmod.Limits()
 ALICE = session.Identity("1001", "alice", False)
@@ -165,6 +167,78 @@ class TheWelcome(WorldTest):
         self.assertEqual([l.text for l in again.ring], ["line 0", "line 1", "line 3", "line 4"])
 
 
+class TheLargestFrames(unittest.TestCase):
+    """The limits that have to fit one another (docs/HUB.md, "Limits"): the longest line in a frame that a client sends, and the whole history in what a socket may have unsent."""
+
+    FOUR = "\U0001f600"                                          # four bytes in UTF-8, two UTF-16 units, a pair of escapes where a client writes JSON in ASCII
+
+    def newest_welcome(self, filler, mod):
+        """The welcome that the hub makes when the history is 50 lines of `filler`, each of 1,000 code points, from 50 accounts whose names are 32 code points of four bytes."""
+        limits = dataclasses.replace(LIMITS, burst=10 ** 6, refill_seconds=0.001, global_burst=10 ** 6, global_refill_seconds=0.001, account_hour_lines=10 ** 6, account_day_lines=10 ** 6)
+        w = World(limits=limits)
+        self.addCleanup(w.close)
+        for n in range(50):
+            who = session.Identity("%d" % (3000 + n), "\U00020000" * 32, False, None, 0, "user%02d" % n + "x" * 20, "display", "user%02d" % n + "x" * 20)
+            w.clock.now += 1
+            w.wall.now += 1
+            w.say(w.join(who), filler * 998 + "%02d" % n)
+        self.assertEqual(len(w.store.recent_lines(100)), 50)
+        reader = w.join(MOD if mod else None)
+        return chatmod.dumps(w.chat.welcome(reader))
+
+    def test_the_largest_welcome_and_8_more_lines_fit_what_a_socket_may_have_unsent(self):
+        biggest = 0
+        for filler in (self.FOUR, '"', "\u4f60", "a"):
+            for mod in (False, True):
+                frame = self.newest_welcome(filler, mod)
+                self.assertEqual(len(json.loads(frame)["history"]), 50)
+                biggest = max(biggest, len(frame))
+        self.assertGreater(biggest, 200000)                          # (it is about 212,000 bytes: more than a socket was once let have unsent)
+        line = len(chatmod.dumps({"t": "line", "id": 123456789, "at": 1800000000, "who": "\U00020000" * 32, "text": self.FOUR * 1000, "mod": True, "role": "admin", "k": "0123456789ab", "u": "x" * 32}))
+        self.assertLessEqual(biggest + 8 * line, LIMITS.write_buffer_max)        # (and 8 more lines, that come in the first moments on a slow link, do not make it a slow reader; the longest list of players, about 68,000 bytes more, is not in this sum: docs/HUB.md says so)
+
+    def test_the_longest_line_fits_a_frame_of_a_client_in_either_way_of_writing_it(self):
+        line = self.FOUR * 1000
+        for ascii_only in (False, True):
+            payload = json.dumps({"t": "say", "text": line}, ensure_ascii=ascii_only, separators=(",", ":")).encode("ascii" if ascii_only else "utf-8")
+            self.assertLessEqual(len(payload), LIMITS.frame_max, ascii_only)
+            parser = ws.Parser(LIMITS.frame_max)
+            self.assertEqual(parser.feed(hc.frame(1, payload)), [(1, payload.decode("utf-8"))])
+            w = World()
+            self.addCleanup(w.close)
+            alice, reader = w.join(ALICE), w.join(None)
+            w.chat.on_text(alice, payload.decode("utf-8"))
+            self.assertEqual((alice.codes(), [m["text"] for m in reader.kinds("line")]), ([], [line]), ascii_only)
+        over = ws.Parser(LIMITS.frame_max)
+        over.feed(hc.frame(1, b"a" * (LIMITS.frame_max + 1)))
+        self.assertEqual(over.error.code, 1009)                      # (and one byte more than the cap is still refused from its header)
+
+
+class TheFrameBudgetCoversTheLinePace(unittest.TestCase):
+    """A socket may send 10 frames at once and then 5 a second (docs/HUB.md, "Limits"); an account may say 10 lines at once and then two a second: lines at the whole pace of the account leave room for the other frames."""
+
+    def test_lines_at_the_pace_of_an_account_and_the_other_frames_of_a_page_are_never_refused(self):
+        frames = limitmod.TokenBucket(LIMITS.frame_burst, LIMITS.frame_refill_seconds, 0.0)
+        lines = limitmod.TokenBucket(LIMITS.burst, LIMITS.refill_seconds, 0.0)
+        said = 0
+        for step in range(0, 2 * 120 + 1):                          # 120 seconds in steps of half a second, trying a line at every step
+            now = step * 0.5
+            while lines.take(now):
+                said += 1
+                self.assertTrue(frames.take(now), "a line found no frame in the budget at %.1f s" % now)
+            if now >= 1.0 and now % 10 == 0:
+                self.assertTrue(frames.take(now), "a `who` or a `here` found no frame at %.1f s" % now)
+            if now >= 1.0 and now % 25 == 0:
+                self.assertTrue(frames.take(now), "a ping found no frame at %.1f s" % now)
+        self.assertEqual(said, LIMITS.burst + 2 * 120)             # (the burst, and two a second: every line that the account's pace allows went out)
+
+    def test_a_refusal_that_costs_a_frame_more_still_fits_at_the_pace_of_an_account(self):
+        frames = limitmod.TokenBucket(LIMITS.frame_burst, LIMITS.frame_refill_seconds, 0.0)
+        for step in range(1, 2 * 600 + 1):                          # a line (and its `quota` or `rate` from the whole chat: one frame and one more) every half second for ten minutes
+            now = step * 0.5
+            self.assertTrue(frames.take(now) and frames.take(now), "the second frame of a refusal found none at %.1f s" % now)
+
+
 class TheRules(WorldTest):
     def test_a_line_goes_to_everybody_with_its_id_and_time(self):
         self.w.say(self.alice, "hello")
@@ -219,10 +293,22 @@ class TheRules(WorldTest):
         self.assertEqual(self.bob.codes(), [])
 
     def test_empty_long_and_markup(self):
-        for text, code in (("", "empty"), ("   ", "empty"), ("\u202e\u200b", "empty"), ("a" * 201, "long"), ("<b>", "bad"), ("a>b", "bad")):
+        for text, code in (("", "empty"), ("   ", "empty"), ("\u202e\u200b", "empty"), ("a" * 1001, "long"), ("\U0001f600" * 1001, "long"), ("<b>", "bad"), ("a>b", "bad")):
             self.w.say(self.alice, text)
-            self.assertEqual(self.alice.codes()[-1], code, repr(text))
+            self.assertEqual(self.alice.codes()[-1], code, repr(text[:12]))
         self.assertEqual(self.reader.kinds("line"), [])
+
+    def test_a_line_of_1000_code_points_is_kept_and_sent_whole(self):
+        for n, text in enumerate(("a" * 1000, "\U0001f600" * 999 + "b", "\u4f60" * 1000, "e\u0301" * 1000)):
+            self.w.say(self.alice, text)
+            line = self.reader.kinds("line")[n]
+            self.assertEqual(line["text"], unicodedata.normalize("NFC", text))
+        self.assertEqual(self.alice.codes(), [])
+        self.assertEqual([l.text for l in self.w.store.recent_lines(10)][1], "\U0001f600" * 999 + "b")        # (kept whole, as it was sent)
+        self.assertEqual([l["text"] for l in self.w.chat.welcome(self.reader)["history"]][1], "\U0001f600" * 999 + "b")
+        self.w.say(self.alice, "a" * 1001)
+        self.assertEqual(self.alice.codes(), ["long"])
+        self.assertEqual(len(self.reader.kinds("line")), 4)
 
     def test_the_text_is_cleaned_before_it_is_stored_and_sent(self):
         self.w.say(self.alice, "  hi\u202e   there\u200b  ")
@@ -230,40 +316,49 @@ class TheRules(WorldTest):
         self.assertEqual(self.w.store.recent_lines(50)[0].text, "hi there")
 
     def test_a_refused_line_costs_no_token(self):
-        for _ in range(10):
+        for _ in range(30):
             self.w.say(self.alice, "<b>")
-        for n in range(3):
+        for n in range(LIMITS.burst):
             self.w.say(self.alice, "ok %d" % n)
         self.assertEqual(self.alice.codes().count("rate"), 0)
+        self.assertEqual(len(self.reader.kinds("line")), LIMITS.burst)
 
-    def test_burst_of_3_then_one_every_2_seconds(self):
-        for n in range(3):
+    def test_burst_of_10_then_one_every_half_second(self):
+        self.assertEqual((LIMITS.burst, LIMITS.refill_seconds), (10, 0.5))
+        for n in range(10):
             self.w.say(self.alice, "line %d" % n)
-        self.assertEqual(self.alice.codes(), [])
-        self.w.say(self.alice, "line 3")
+            self.w.say(self.bob, "line %d" % n)
+        self.assertEqual((self.alice.codes(), self.bob.codes()), ([], []))
+        self.w.say(self.alice, "line 10")                             # the 11th
         self.assertEqual(self.alice.codes(), ["rate"])
-        self.w.clock.now += 1.9
-        self.w.say(self.alice, "line 4")
+        self.w.clock.now += 0.49                                      # (not yet half a second since the burst: no token)
+        self.w.say(self.bob, "line 10")
+        self.assertEqual(self.bob.codes(), ["rate"])
+        self.w.clock.now = 1000.5                                     # exactly half a second since the burst: one token
+        self.w.say(self.alice, "line 11")
+        self.assertEqual(self.alice.codes(), ["rate"])
+        self.w.say(self.alice, "line 12")
         self.assertEqual(self.alice.codes(), ["rate", "rate"])
-        self.w.clock.now += 0.2                                      # 2.1 seconds since the burst: one token
-        self.w.say(self.alice, "line 5")
-        self.assertEqual(self.alice.codes(), ["rate", "rate"])
-        self.w.say(self.alice, "line 6")
+        self.w.clock.now = 1001.5                                     # a second more: two tokens, two a second
+        self.w.say(self.alice, "line 13")
+        self.w.say(self.alice, "line 14")
+        self.w.say(self.alice, "line 15")
         self.assertEqual(self.alice.codes(), ["rate", "rate", "rate"])
-        self.w.clock.now += 100                                      # a long quiet time refills the bucket to 3, not more
-        for n in range(3):
+        self.w.clock.now += 100                                       # a long quiet time refills the bucket to 10, not more
+        for n in range(10):
             self.w.say(self.alice, "again %d" % n)
-        self.w.say(self.alice, "again 3")
+        self.w.say(self.alice, "again 10")
         self.assertEqual(self.alice.codes()[-1], "rate")
-        self.assertEqual(len(self.reader.kinds("line")), 3 + 1 + 3)
+        self.assertEqual(self.alice.codes().count("rate"), 4)
+        self.assertEqual(len([l for l in self.reader.kinds("line") if l["who"] == "alice"]), 10 + 1 + 2 + 10)
 
     def test_the_limit_is_the_account_s_across_tabs(self):
         tab2, tab3 = self.w.join(ALICE), self.w.join(ALICE)
-        self.w.say(self.alice, "a")
-        self.w.say(tab2, "b")
-        self.w.say(tab3, "c")
-        self.w.say(self.alice, "d")
-        self.assertEqual(self.alice.codes(), ["rate"])
+        for n, tab in enumerate([self.alice, tab2, tab3] * 3 + [self.alice]):
+            self.w.say(tab, "line %d" % n)
+        self.assertEqual((self.alice.codes(), tab2.codes(), tab3.codes()), ([], [], []))        # (ten lines over three tabs: the burst)
+        self.w.say(tab2, "d")
+        self.assertEqual(tab2.codes(), ["rate"])                      # the 11th, from another tab than the one that said the 10th
         self.w.say(self.bob, "e")                                    # another account has its own bucket
         self.assertEqual(self.bob.codes(), [])
 
@@ -296,29 +391,32 @@ class TheRules(WorldTest):
         self.w.say(self.alice, "x")
         for _ in range(5):
             self.w.say(self.alice, "x")
-        self.w.say(self.alice, "y")
+        for n in range(LIMITS.burst - 1):
+            self.w.say(self.alice, "y%d" % n)
+        self.assertEqual(self.alice.codes(), ["rate"] * 5)           # (the 5 duplicates; the other 9 lines came through on the 9 tokens left)
         self.w.say(self.alice, "z")
-        self.assertEqual(self.alice.codes(), ["rate"] * 5)           # (the 5 duplicates, and y and z came through on the 2 tokens left)
-        self.assertEqual(len(self.reader.kinds("line")), 3)
+        self.assertEqual(self.alice.codes(), ["rate"] * 6)           # (and the next one is the 11th)
+        self.assertEqual(len(self.reader.kinds("line")), 10)
 
     def test_a_refused_line_is_not_kept(self):
-        for n in range(3):
-            self.w.say(self.alice, "line %d" % n)
+        kept = ["line %d" % n for n in range(LIMITS.burst)]
+        for text in kept:
+            self.w.say(self.alice, text)
         self.w.say(self.alice, "too fast")                            # rate
         self.w.say(self.alice, "line 0")                              # a duplicate
         self.assertEqual(self.alice.codes(), ["rate", "rate"])
-        self.assertEqual([l.text for l in self.w.store.recent_lines(50)], ["line 0", "line 1", "line 2"])
-        self.assertEqual([l.text for l in self.w.chat.ring], ["line 0", "line 1", "line 2"])
-        self.assertEqual(self.w.store.db.execute("SELECT COUNT(*) FROM lines").fetchone()[0], 3)
+        self.assertEqual([l.text for l in self.w.store.recent_lines(50)], kept)
+        self.assertEqual([l.text for l in self.w.chat.ring], kept)
+        self.assertEqual(self.w.store.db.execute("SELECT COUNT(*) FROM lines").fetchone()[0], len(kept))
 
     def test_two_accounts_of_one_name_have_a_limit_each(self):
         first, second = self.w.join(session.Identity("1010", "sam", False)), self.w.join(session.Identity("1011", "sam", False))
-        for n in range(3):
+        for n in range(LIMITS.burst):
             self.w.say(first, "a%d" % n)
             self.w.say(second, "b%d" % n)
         self.assertEqual((first.codes(), second.codes()), ([], []))
-        self.w.say(first, "a3")
-        self.w.say(second, "b3")
+        self.w.say(first, "a10")
+        self.w.say(second, "b10")
         self.assertEqual((first.codes(), second.codes()), (["rate"], ["rate"]))
 
     def test_the_same_text_is_free_again_at_exactly_30_seconds(self):
@@ -349,6 +447,24 @@ class TheRules(WorldTest):
         w.say(people[4], "hello")
         self.assertEqual([p.codes() for p in people[3:]], [["rate"], ["rate", "rate"]])      # one more line, for one account
         self.assertEqual(len(w.store.recent_lines(50)), 4)
+
+    def test_ten_accounts_that_each_use_their_burst_are_not_refused_by_the_limit_of_all_accounts_and_the_101st_line_is(self):
+        people = [self.w.join(session.Identity(str(4000 + n), "user%02d" % n, False)) for n in range(11)]
+        for line in range(LIMITS.burst):
+            for person in people[:10]:
+                self.w.say(person, "line %d of %s" % (line, person.identity.name))
+        self.assertEqual([p.codes() for p in people[:10]], [[]] * 10)                  # (ten people, ten lines each, at one moment: the default limits let every one of the 100 lines go)
+        self.assertEqual(len(self.reader.kinds("line")), 100)
+        self.w.say(people[10], "the 101st")
+        self.assertEqual((people[10].codes(), people[10].strikes, people[10].charges), (["rate"], 0, 1))         # (refused as rate, and no mistake of the socket: it costs it one frame more)
+        self.w.clock.now = 1000.09                                    # (not a tenth of a second since: nothing is back)
+        self.w.say(people[10], "not yet")
+        self.assertEqual((people[10].codes(), people[10].strikes), (["rate", "rate"], 0))
+        self.w.clock.now = 1000.2                                     # (a fifth: two lines are back, ten a second)
+        for text in ("one", "two", "three"):
+            self.w.say(people[10], text)
+        self.assertEqual(people[10].codes(), ["rate", "rate", "rate"])
+        self.assertEqual([m["text"] for m in self.reader.kinds("line")][100:], ["one", "two"])
 
     def test_a_moderator_s_command_is_not_held_back_by_the_limits_of_lines(self):
         w = World(limits=dataclasses.replace(LIMITS, global_burst=1, global_refill_seconds=1000.0, db_max_bytes=1))
@@ -414,7 +530,7 @@ class TheRules(WorldTest):
         self.assertEqual((carol.codes().count("rate"), carol.strikes), (30, 0))
         # a client's own limit still counts
         dave = self.w.join(session.Identity("1030", "dave", False))
-        for n in range(8):
+        for n in range(LIMITS.burst + 5):
             self.w.say(dave, "line %d" % n)
         self.assertEqual((dave.codes(), dave.strikes), (["rate"] * 5, 5))
 
@@ -442,7 +558,7 @@ class TheRules(WorldTest):
         self.assertEqual(self.w.store.recent_lines(50), [])
 
     def test_a_message_too_deep_for_the_decoder_is_a_mistake_not_a_crash(self):
-        # a frame of 2 KB holds up to 2,000 brackets: Pythons before 3.12 give up (RecursionError) well below that, newer ones read them; the handler must live through either
+        # a frame holds up to frame_max brackets (16,000): Pythons before 3.12 give up (RecursionError) well below that, newer ones read them; the handler must live through either
         real_loads, deep = json.loads, "[" * 2000
         for decoder_error in (RecursionError("maximum recursion depth exceeded"), ValueError("too deep")):
             def decoder(raw, **kw):
@@ -454,6 +570,10 @@ class TheRules(WorldTest):
                 self.w.chat.on_text(peer, deep)
             self.assertEqual(peer.sent, [{"t": "err", "code": "bad"}])
             self.assertEqual(peer.strikes, 1)
+        for raw in ("[" * LIMITS.frame_max, "[" * (LIMITS.frame_max // 2) + "]" * (LIMITS.frame_max // 2)):            # (and the real decoder, with a whole frame of them)
+            peer = self.w.join(ALICE)
+            self.w.chat.on_text(peer, raw)
+            self.assertEqual((peer.sent, peer.strikes), ([{"t": "err", "code": "bad"}], 1))
 
     def test_extra_fields_are_ignored(self):
         self.w.chat.on_text(self.alice, '{"t":"say","text":"hi","id":99,"who":"bob","mod":true,"x":[1,2]}')
@@ -1405,7 +1525,7 @@ class TheDatabaseThatCannotBeUsed(WorldTest):
         self.assertEqual(self.bob.sent, [])                                                             # (nobody saw a line)
         self.assertEqual(self.w.store.recent_lines(10), [])
         for n in range(3):
-            self.w.say(self.alice, "hello")                                                              # (the same text at once, and the full burst of 3 are still there: nothing was spent)
+            self.w.say(self.alice, "hello")                                                              # (the same text at once; nothing was spent)
             self.w.clock.now += 0.001
         self.assertEqual([m["text"] for m in self.bob.kinds("line")], ["hello"])
         self.assertEqual(self.alice.codes(), ["rate", "rate", "rate"])                                   # (the second and third are the same text: dup, as always)

@@ -1,7 +1,7 @@
 """The hub process: HTTP head, WebSocket upgrade, one task per socket, and a clock that pings, drops the silent, counts who is online and keeps the database tidy.
 
 The door of the chat is wss://<site>/hub/ws (docker/nginx.conf passes it here, with the visitor's address in X-Client-Address, and nothing else of the request but the headers named in
-docs/HUB.md). Every refusal is an HTTP answer before the upgrade: 403 for an Origin that is not the site, 429 for a ninth socket of one address, 503 for the 501st socket. The pages of the
+docs/HUB.md). Every refusal is an HTTP answer before the upgrade: 403 for an Origin that is not the site, 429 for a ninth socket of one address, 503 for the 301st socket. The pages of the
 Discord login (hub/login.py) are the other five paths that nginx passes: each is one request and one answer, and a hub without the login has none of them.
 """
 import asyncio

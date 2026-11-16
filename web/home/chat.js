@@ -21,11 +21,11 @@
 
     var PATH = '/hub/ws', VERSION = 1;
     var LOGIN = '/hub/login?next=', LOGOUT = '/hub/logout', FORGET = '/hub/forget';      // the hub's pages (nginx passes them; the cookie goes along with a request of this page only)
-    var LIMIT = { name: 32, line: 200, feed: 100, history: 50, frame: 120000, bad: 30, field: 400, count: 1e9, here: 500, said: 2 };       // (the hub's own: names 32, lines 200 code points, history 50; the rest is this page's)
+    var LIMIT = { name: 32, line: 1000, feed: 100, history: 50, frame: 240000, bad: 30, field: 2000, count: 1e9, here: 500, said: 2 };       // (the hub's own: names 32, lines 1,000 code points, history 50; the rest is this page's: a frame is read up to 240,000 characters, twice what the largest welcome takes (50 lines of 1,000 emoji, 2,000 UTF-16 units each); the field takes 2,000 UTF-16 units, so that 1,000 code points fit however many are pairs)
     var ROW = 44, LINE = 22;       // (the box's one row and the height of one more line of words: four lines at most; the style sheet's max-height keeps it lower in a wide or a low window)
     var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, wake: 3000, grace: 5000, pics: 8000, flood: 3000, pending: 8000 };       // (pending: the hub answers a line at once: one that has no answer after this long is not waited for)
     var BACKOFF = { min: 1000, max: 60000, low: 0.5, high: 1.5 };      // the wait is spread from half to one and a half times the step (never under a second or over a minute): many pages that lost one hub do not come back together
-    var PACE = { burst: 2, every: 2500, same: 31000 };                  // this page's own limit, below the hub's (3 at once, one every 2 s, the same text twice within 30 s)
+    var PACE = { burst: 8, every: 600, same: 31000 };                   // this page's own limit, below the hub's (10 at once, one every 0.5 s, the same text twice within 30 s)
     var TEXT = {
         title: 'Global chat', welcome: 'Welcome to the front page. Everyone here can read what you write.', online: ' here now', connecting: 'connecting…', reconnecting: 'reconnecting…',
         offline: 'Chat is offline', readonly: 'Chat is read-only for now', guest: 'You can read as a guest. Playing and watching stay anonymous.', field: 'Say something to everyone', hint: 'Enter sends the message.', send: 'Send',

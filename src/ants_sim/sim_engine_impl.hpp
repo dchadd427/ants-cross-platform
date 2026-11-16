@@ -109,6 +109,9 @@ public:
     uint32_t teams_in_match() const;
     /// 187 with the hill closed (the rule of 187 now): no ant enters its hill, so nothing heals, an ant at 1 hp does not retreat and the waiting ring is idle
     bool hill_closed() const noexcept { return game_mode_ == GameMode::Kills187 && !hill_open_187_; }
+    bool no_drops_187_{true};               // 187 only: the rule of the rules number 12 (a recording of 6, 7, 10 or 11 plays without it: set_no_drops_187); the original's game never reads it
+    /// 187 with the no-drop rule (the rule of 187 now, mode_187.cpp): nothing is put on the ground, whatever dies or takes a power-up: no power-up from an ant of a special type that dies or that takes another, no lunchbox from an ant that carries
+    bool drops_nothing_187() const noexcept { return game_mode_ == GameMode::Kills187 && no_drops_187_; }
     uint16_t quitter_{NO_QUITTER};          // the team whose quit (FUN_0101453f, one other side left) ended the match: the word of the game-over message
 
     uint64_t current_tick_{0};
