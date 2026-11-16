@@ -3,6 +3,8 @@
 // state in which the match ended: the same state hash, every order at its turn.
 #include "ants_app/application.hpp"
 #include "ants_ai/bot_controller.hpp"
+#include "ants_ai/standard_bot.hpp"
+#include "ants_ai/tactics.hpp"
 #include "ants_app/game_menu.hpp"
 #include "ants_app/hud.hpp"
 #include "ants_net/netgame.hpp"
@@ -390,7 +392,8 @@ BotMatch make_bot_match(uint32_t turns, const char* map = "TREASURE.LVL", uint32
         spec.seat = seat;
         spec.level = ai::Level::Hard;
         std::string why;
-        if (!controller.add(spec, sink, why)) return out;
+        // (the match is a fixture of the viewer's cases, which need its deaths, blows and thieves: the bots play it as they did when its seed was chosen, without the thief batch)
+        if (!controller.add(spec, std::make_unique<ai::StandardBot>(spec.level, spec.style, [](ai::LevelPlan& p) { ai::without_thief_batch(p); }), sink, why)) return out;
     }
     for (uint32_t turn = 0; turn < turns && !engine.is_match_over(); ++turn) {
         engine.tick();

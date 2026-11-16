@@ -149,8 +149,8 @@ function rig(o) {
         [{ who: 'a', text: 'x' }, { id: '4', who: 'a', text: 'x' }, { id: -1, who: 'a', text: 'x' }, { id: 1.5, who: 'a', text: 'x' }, { id: 4, who: 5, text: 'x' }, { id: 4, who: 'a', text: 5 }, { id: 4, who: 'a', text: ' \u202e \u200b ' }, null, 'x', []].map((m) => P.lineOf(m)),
         [null, null, null, null, null, null, null, null, null, null]);
     same('lineOf: a name of nothing that shows (fillers, variation selectors, tag characters) is "?", a line of marks only is no line, an emoji with its selector is one', [P.lineOf({ id: 1, who: '\u3164\u2800\ufe0f\u180b\udb40\udc41', text: 'x' }).who, P.lineOf({ id: 1, who: 'a', text: '\ufe0f\u0301 ' }), P.lineOf({ id: 1, who: 'a', text: '\u3164\u2800' }), P.lineOf({ id: 1, who: 'a', text: '\u2764\ufe0f' }).text, P.lineOf({ id: 1, who: 'a', text: 'e\u0301' }).text], ['?', null, null, '\u2764\ufe0f', 'e\u0301']);
-    same('lineOf: a name over 32 and a line over 200 code points are cut with "…"; a name with nothing left is "?"', [P.lineOf({ id: 1, who: 'n'.repeat(60), text: 't'.repeat(5000) }).who, P.lineOf({ id: 1, who: 'n'.repeat(60), text: 't'.repeat(5000) }).text.length, P.lineOf({ id: 1, who: '\u202e', text: 'x' }).who],
-        ['n'.repeat(32) + '…', 201, '?']);
+    same('lineOf: a name over 32 and a line over 1,000 code points are cut with "…"; a name with nothing left is "?"', [P.lineOf({ id: 1, who: 'n'.repeat(60), text: 't'.repeat(5000) }).who, P.lineOf({ id: 1, who: 'n'.repeat(60), text: 't'.repeat(5000) }).text.length, P.lineOf({ id: 1, who: '\u202e', text: 'x' }).who],
+        ['n'.repeat(32) + '…', 1001, '?']);
     same('wordOf: the words of the codes; "log in" only where the hub has a login; an unknown code, or a name of Object, is the generic word', [P.wordOf('rate', true), P.wordOf('login', true), P.wordOf('login', false), P.wordOf('muted', false), P.wordOf('banned'), P.wordOf('long'), P.wordOf('empty'), P.wordOf('young'), P.wordOf('bad'), P.wordOf('quota'),
         P.wordOf('what'), P.wordOf(undefined), P.wordOf(5), P.wordOf('constructor'), P.wordOf('__proto__'), P.wordOf('toString'), P.wordOf('hasOwnProperty')],
         ['Slow down a little', 'Log in with Discord to chat', 'Chat is read-only for now', 'You cannot chat for a while', 'You cannot chat here', 'That line is too long', 'Write something first', 'Your account is too new to chat yet', 'That line could not be sent', 'You have chatted a lot, try again later',
@@ -221,10 +221,19 @@ function rig(o) {
     const big = rig();
     big.live(W({ you: YOU, history: HISTORY }));
     big.s().recv(new ArrayBuffer(8)); big.s().recv(42); big.s().recv(undefined); big.s().recv(null);
-    big.s().recv('{"t":"line","id":21,"who":"a","text":"' + 'x'.repeat(130000) + '"}');
-    check('a frame that is not text, and a frame of more than 120,000 characters, are noise as well: ignored, and the link stays', big.rowTexts().length === 3 && big.dock.state() === 'live' && big.errors.length === 0);
+    big.s().recv('{"t":"line","id":21,"who":"a","text":"' + 'x'.repeat(250000) + '"}');
+    check('a frame that is not text, and a frame of more than 240,000 characters, are noise as well: ignored, and the link stays', big.rowTexts().length === 3 && big.dock.state() === 'live' && big.errors.length === 0);
     big.s().recv('{"t":"line","id":22,"who":"a","text":"' + 'x'.repeat(100000) + '"}');
-    check('... a frame of 100,000 characters is still read, and cut to a line', big.rowTexts().length === 4 && big.rowTexts()[3] === 'a: ' + 'x'.repeat(200) + '…');
+    check('... a frame of 100,000 characters is still read, and cut to a line', big.rowTexts().length === 4 && big.rowTexts()[3] === 'a: ' + 'x'.repeat(1000) + '…');
+    {   // the largest welcome that the hub can make (docs/HUB.md "Limits": 50 lines of 1,000 code points of four bytes, names of 32 code points of four bytes, a moderator's copy with the username and the role)
+        const emoji = '\ud83d\ude00', ant = '\ud83d\udc1c', lines = [];
+        for (let i = 0; i < 50; i++) lines.push({ id: i + 1, at: 1800000000 + i, who: ant.repeat(32), text: emoji.repeat(999) + String(i % 10), mod: true, role: 'admin', k: '0123456789ab', u: 'u'.repeat(32) });
+        const welcome = W({ you: YOU, history: lines }), frame = JSON.stringify(welcome);
+        const widest = rig();
+        widest.live(welcome);
+        check('the largest welcome is read whole: 50 lines of 1,000 emoji, each as the hub sent it, and the frame is at most half of what a frame may be (the cap is twice the largest)',
+            frame.length > 100000 && 2 * frame.length <= Pure.LIMIT.frame && Pure.parse(frame) !== null && widest.rowTexts().length === 50 && widest.rowTexts().every((t, i) => t === 'administrator ' + ant.repeat(32) + ': ' + emoji.repeat(999) + String(i % 10)) && widest.errors.length === 0, String(frame.length));
+    }
     for (let i = 0; i < 40; i++) r.s().recv('garbage');
     check('a hub that sends nothing but noise is dropped after 30 frames of it: offline, and a retry is waiting', r.dock.state() === 'offline' && r.s().closes === 1 && r.clock.timers.some((t) => t.at > r.clock.t));
     same('malformed lines are not lines: the page draws none of them', (() => {
@@ -248,7 +257,7 @@ function rig(o) {
     hostile.forEach((m) => r.s().recv(m));
     const texts = r.rowTexts();
     same('markup and links are shown as the plain text that they are (nothing is built from them), names and lines are cut, the bidirectional and zero-width characters and controls are gone, blanks are one space', texts,
-        ['<img src=x onerror=alert(1)>: <script>alert(1)</script> <b>bold</b> javascript:alert(1) http://evil.example/x [link](http://a.b) &lt;i&gt;', 'evil: abcdefghi', 'n'.repeat(32) + '…: ' + 't'.repeat(200) + '…', 'a: many blanks here', '?: lone surrogate and a pair \ud83d\ude00 stay']);
+        ['<img src=x onerror=alert(1)>: <script>alert(1)</script> <b>bold</b> javascript:alert(1) http://evil.example/x [link](http://a.b) &lt;i&gt;', 'evil: abcdefghi', 'n'.repeat(32) + '…: ' + 't'.repeat(1000) + '…', 'a: many blanks here', '?: lone surrogate and a pair \ud83d\ude00 stay']);
     const tags = {};
     r.log().all().forEach((e) => { tags[e.tagName] = (tags[e.tagName] || 0) + 1; });
     same('the only elements in the log are the log itself, its welcome line, and lines of div, span and bdi: no a, img, script, b, i, iframe or style, ever', Object.keys(tags).sort(), ['a', 'bdi', 'div', 'p', 'span']);
@@ -501,7 +510,7 @@ function rig(o) {
 }
 {   // the counts of the welcome, the history's own ids, the noise of one socket, the order of the ids
     const o = (online) => { const q = rig(); q.live(W({ online })); return [q.on(), one(q.root, 'gc-online').hidden]; };
-    same('the count of the welcome is a whole number or nothing (a hub that says "many", -3 or 1.5 gives no count); more than the hub\'s 500 is "500+"', [o(7), o('many'), o(-3), o(1.5), o(null), o(500), o(501), o(1e9)],
+    same('the count of the welcome is a whole number or nothing (a hub that says "many", -3 or 1.5 gives no count); more than 500 (the page\'s own clamp) is "500+"', [o(7), o('many'), o(-3), o(1.5), o(null), o(500), o(501), o(1e9)],
         [['7 here now', false], ['', true], ['', true], ['', true], ['', true], ['500 here now', false], ['500+ here now', false], ['500+ here now', false]]);
     const online = rig(); online.live(W({})); online.s().recv({ t: 'online', n: 900 });
     check('... and the same for the count that follows', online.on() === '500+ here now');
@@ -880,19 +889,21 @@ function rig(o) {
     same('Send puts {"t":"say","text":...} on the socket, exactly, and empties the field', [r.s().sent, r.field().value], [['{"t":"say","text":"hello there"}'], '']);
     r.submit('  two   spaces  \u202e  ');
     same('the text is cleaned as the hub would clean it (blanks, controls and bidirectional characters) before it goes', r.said().map((m) => m.text), ['hello there', 'two spaces']);
+    for (let i = 3; i <= 8; i++) r.submit('line ' + i);
+    same('the eight lines of the burst went, none of them was refused', [r.said().length, r.note()], [8, '']);
     r.submit('third'); r.submit('third');
-    same('the page paces itself below the hub (a burst of 2, then one every 2.5 s): the third line in a row is not sent, and says "Slow down a little"; the words stay in the field', [r.said().length, r.note(), r.field().value], [2, 'Slow down a little', 'third']);
-    r.clock.advance(2499);
+    same('the page paces itself below the hub (a burst of 8, then one every 0.6 s): the ninth line in a row is not sent, and says "Slow down a little"; the words stay in the field', [r.said().length, r.note(), r.field().value], [8, 'Slow down a little', 'third']);
+    r.clock.advance(599);
     r.dock.say('third');
-    check('... not before 2.5 s have passed', r.said().length === 2);
+    check('... not before 0.6 s have passed', r.said().length === 8);
     r.clock.advance(1);
-    check('... and one line after that', r.dock.say('third') === '' && r.said().length === 3);
+    check('... and one line after that', r.dock.say('third') === '' && r.said().length === 9);
     r.clock.advance(5000);
     same('the same text twice within 31 s is not sent (the hub drops it too); after that it is', [r.dock.say('third'), (r.clock.advance(26000), r.dock.say('third'))], ['rate', '']);
     r.clock.advance(60000);
-    check('a long rest gives back the burst of 2 and no more', r.dock.say('a1') === '' && r.dock.say('a2') === '' && r.dock.say('a3') === 'rate');
-    same('an empty line, a line of blanks and controls only, and one of 201 code points are refused here, with their words', [r.dock.say(''), r.dock.say(' \t \u202e '), r.dock.say('x'.repeat(201)), r.note()], ['empty', 'empty', 'long', 'That line is too long']);
-    check('200 code points go (so do 200 emoji: 400 UTF-16 units), 201 do not', (r.clock.advance(60000), r.dock.say('y'.repeat(200)) === '') && (r.clock.advance(60000), r.dock.say('\ud83d\ude00'.repeat(200)) === '') && (r.clock.advance(60000), r.dock.say('\ud83d\ude00'.repeat(201)) === 'long'));
+    check('a long rest gives back the burst of 8 and no more', [1, 2, 3, 4, 5, 6, 7, 8].every((n) => r.dock.say('a' + n) === '') && r.dock.say('a9') === 'rate');
+    same('an empty line, a line of blanks and controls only, and one of 1,001 code points are refused here, with their words', [r.dock.say(''), r.dock.say(' \t \u202e '), r.dock.say('x'.repeat(1001)), r.note()], ['empty', 'empty', 'long', 'That line is too long']);
+    check('1,000 code points go (so do 1,000 emoji: 2,000 UTF-16 units, in a frame of 4 KB), 1,001 do not', (r.clock.advance(60000), r.dock.say('y'.repeat(1000)) === '') && (r.clock.advance(60000), r.dock.say('\ud83d\ude00'.repeat(1000)) === '') && (r.clock.advance(60000), r.dock.say('\ud83d\ude00'.repeat(1001)) === 'long'));
     const same3 = rig();
     same3.live(W({ you: YOU }));
     const sent3 = [same3.dock.say('A'), (same3.clock.advance(2500), same3.dock.say('B')), (same3.clock.advance(2500), same3.dock.say('A')), (same3.clock.advance(2500), same3.dock.say('B'))];
@@ -905,7 +916,7 @@ function rig(o) {
     const lt = rig();
     lt.live(W({ you: YOU }));
     same('a line with < or > is not sent (the hub refuses it, and a refusal is a mistake against the 20 a minute): "Lines cannot hold < or >"', [lt.dock.say('a < b'), lt.note(), lt.dock.say('x > y'), lt.sockets[0].sent.length, lt.dock.say('fine') === ''], ['markup', 'Lines cannot hold < or >', 'markup', 0, true]);
-    check('the field takes at most 400 characters (a paste cannot be a megabyte), and nothing threw', r.field().getAttribute('maxlength') === '400' && r.errors.length === 0);
+    check('the field takes at most 2,000 UTF-16 units (1,000 code points, however many are pairs; a paste cannot be a megabyte), and nothing threw', r.field().getAttribute('maxlength') === '2000' && r.errors.length === 0);
 }
 {   // fold, strip, unread, the Room
     const r = rig();
@@ -1729,8 +1740,8 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     };
     check('the field is a text area of one row that says which way its text runs', mk().f.tagName === 'textarea' && mk().f.getAttribute('rows') === '1' && mk().f.getAttribute('dir') === 'auto');
     const up = mk();
-    same('one line is 44 px, each line adds 22, four lines (110 px) are the most, then the words scroll', [0, 20, 21, 41, 60, 61, 200].map((n) => { up.type('x'.repeat(n)); return up.f.style.height; }), ['44px', '44px', '66px', '88px', '88px', '110px', '110px']);
-    check('... and the words are scrolled to the caret', (up.type('x'.repeat(200)), up.f.scrollTop === up.f.scrollHeight));
+    same('one line is 44 px, each line adds 22, four lines (110 px) are the most, then the words scroll', [0, 20, 21, 41, 60, 61, 200, 1000].map((n) => { up.type('x'.repeat(n)); return up.f.style.height; }), ['44px', '44px', '66px', '88px', '88px', '110px', '110px', '110px']);
+    check('... and the words are scrolled to the caret, also for a draft of 1,000 characters (the box stays at four lines, the draft scrolls inside it)', (up.type('x'.repeat(200)), up.f.scrollTop === up.f.scrollHeight) && (up.type('x'.repeat(1000)), up.f.style.height === '110px' && up.f.scrollHeight > 1000 && up.f.scrollTop === up.f.scrollHeight));
     check('the box grows in a window whose script has no matchMedia (the style sheet caps it in a wide or a low window; no query is read here)', up.r.win.matchMedia === undefined && (up.type('x'.repeat(30)), up.f.style.height === '66px') && up.r.errors.length === 0);
     const e1 = mk();
     e1.type('x'.repeat(100));

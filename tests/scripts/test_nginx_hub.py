@@ -91,7 +91,7 @@ class TheText(unittest.TestCase):
         zone = re.search(r"limit_req_zone \$binary_remote_addr zone=ants_hub_req:(\d+)m rate=(\d+)r/s;", CONF)
         self.assertIsNotNone(zone)
         self.assertLess(CONF.index(zone.group(0)), CONF.index("server {"))        # http context
-        self.assertLessEqual(int(zone.group(2)), 10)                              # (each handshake costs the hub a welcome of up to 50 KB)
+        self.assertLessEqual(int(zone.group(2)), 10)                              # (each handshake costs the hub a welcome of up to about 212 KB)
         self.assertIn("limit_req zone=ants_hub_req burst=10 nodelay;", HUB)
         self.assertIn("limit_req_status 503;", HUB)
 

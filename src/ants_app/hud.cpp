@@ -697,7 +697,10 @@ void HUD::render_score_team(IRenderer& renderer, const assets::AssetArchive& ass
         const int32_t half = (455 - 402) / 2;                                                     // (right - left) / 2 of the 53-wide rectangle
         renderer.fill_rect(slot.box_left + half, slot.top, 54 - half, 14, SCORE_BG_COLORS[ally]);
     }
-    draw_score_digits(renderer, assets, slot.box_left - 1, slot.top + 2, score);
+    // The number: the numbers' face with the thick outline in the box's 52 pixels (right aligned, the old field's way; squeezed when it would be wider), the digit sprites where it cannot be drawn
+    if (!renderer.draw_number_text(std::to_string(std::clamp(score, 0, 999999)), slot.box_left + 52, slot.top + 2, 51, 10, true, {255, 255, 255, 255})) {
+        draw_score_digits(renderer, assets, slot.box_left - 1, slot.top + 2, score);
+    }
 }
 
 void HUD::render_quit_dialog_alone(IRenderer& renderer, const assets::AssetArchive& assets) {
