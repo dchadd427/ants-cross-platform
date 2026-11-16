@@ -2,7 +2,7 @@
 // screen), or the keyboard (Up and Down choose a line of the log, Enter, the menu key or Shift and F10 open it) opens a sheet with what the viewer may do to that line's author: Delete the line, Mute (four times and a
 // custom number of minutes), Kick, Ban (administrators; also with the person's lines of the last hour taken off every screen). Delete, Kick and Ban ask once more in a confirm card whose safe answer has the focus. On another person's line a first row, Recent messages from the person (n), opens the lines of that person that are in
 // the page's log (newest first; the dock finds them by the hub's key, the sheet only holds the number of one of them); a line of the list opens the sheet of that line. ES5,
-// no module system: a page gets AntsHomeMod, node gets module.exports (tests/scripts/web_home_check/web_home_mod_check.js).
+// no module system: a page gets AntsHomeMod, node gets module.exports (tests/scripts/web_home_mod_check.js).
 //   * Loaded by web/home/home.js, with web/home/mod.css, only after the chat dock names a visitor with a role, and mounted into that dock. A person with no role never downloads it and sees no change: no line is marked, a
 //     right click and a long press are the browser's own. A `you` frame that takes the role away closes the sheet and takes the marks off at once.
 //   * It sends nothing by itself: it types the hub's own commands through the dock (`dock.command`), by the NUMBER of the line (`/mute #148 60`, `/kick #148`, `/ban #148`, `/ban #148 purge`, `/del 148`), so there is no new power:
@@ -236,7 +236,7 @@
         }
         function view(name, arg) {
             var s = sheet, box = s.box, l = s.line, who = l.who, acts = actionsOf(viewer(), l), first = null, list, quote, ask = function (kind) { return function () { view('confirm', kind); }; };
-            box.textContent = ''; box.className = 'gm-box'; s.ctl = []; s.view = name; s.armed = false;
+            box.textContent = ''; box.className = 'gm-box'; s.ctl = []; s.view = name; s.armed = false; s.offer = acts.join();
             box.removeAttribute('aria-describedby');
             box.appendChild(el('div', 'gm-grab'));
             if (name === 'line') {
@@ -309,7 +309,7 @@
             shade.appendChild(box);
             for (i = 0; i < kids.length; i++) if (!(kids[i].hasAttribute && kids[i].hasAttribute('inert'))) { kids[i].setAttribute('inert', ''); quiet.push(kids[i]); }       // (what stands behind takes no key or tap; what was inert before stays so)
             doc.body.appendChild(shade);
-            sheet = { shade: shade, box: box, line: l, view: '', ctl: [], busy: false, armed: false, timer: 0, quiet: quiet, at: now(), anchor: l.id, seen: [l.id], items: [], rl: null, rsub: null, back: null, recent: null, cur: null, fromList: false, mine: false };
+            sheet = { shade: shade, box: box, line: l, view: '', ctl: [], busy: false, armed: false, timer: 0, quiet: quiet, at: now(), offer: '', anchor: l.id, seen: [l.id], items: [], rl: null, rsub: null, back: null, recent: null, cur: null, fromList: false, mine: false };
             shade.addEventListener('keydown', guard(onSheetKey));
             shade.addEventListener('click', guard(function (e) { if (e && e.target === shade && sheet && !sheet.busy && !held() && now() - sheet.at >= LIMIT.arm) close(true); }));       // (a press on the dark part is Cancel; not in the moment after a long press that opened it)
             shade.addEventListener('contextmenu', guard(stay));          // (the menu key's event comes when the key is let go, to what has the focus now: the sheet; the browser's own menu is not meant over it)
@@ -418,6 +418,7 @@
         statusBox = el('p', 'gc-news'); statusBox.setAttribute('role', 'status'); statusBox.setAttribute('aria-live', 'polite');
         dock.root.appendChild(hintBox); dock.root.appendChild(statusBox);
         dock.rows(function (id, row) { decorate(row, id); });
+        function stale(s) { return actionsOf(viewer(), dock.line(s.line.id)).join() !== s.offer; }       // (a new welcome: what the viewer is offered on that line is not what the sheet shows: the line is not in the log any more, or the role is another)
         function changed() {                                           // a line came or went: the count on the sheet and the list of the recent step follow
             var s = sheet, n;
             if (!s || s.busy) return;
@@ -429,7 +430,7 @@
         }
         dock.arrived(guard(changed));
         dock.tap(guard(function (kind, m) {
-            if (kind === 'you' || kind === 'live') { if (sheet && kind === 'you') close(true); if (!viewer()) { cancelPress(); cur = null; } refresh(); if (kind === 'live') changed(); }
+            if (kind === 'you' || kind === 'live') { if (sheet && (kind === 'you' || stale(sheet))) close(true); if (!viewer()) { cancelPress(); cur = null; } refresh(); if (kind === 'live') changed(); }
             else if (kind === 'del' && m && sheet && !sheet.busy && m.id === sheet.line.id && sheet.view !== 'recent') { close(true); toast(NOTE.gone, true); }
             else if (kind === 'del') changed();
         }));

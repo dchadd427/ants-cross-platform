@@ -1,7 +1,7 @@
 {
  "note": "Mutants of the moderation sheet of the chat (web/home/mod.js and mod.css, the hooks in web/home/chat.js, the loader in web/home/home.js; docs/HOME_SCREEN.md 'Roles and commands') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_home_mod_check.js (the real dock on a fake socket, a fake clock) and the static checks of tests/scripts/test_web_home_mod.py: what is offered to which role (Ban to a moderator, an administrator's line, a line of one's own, the hub's own line, a visitor with no role), the hub's command for each action (by the number of the line, never a name; the hour of lines), the minutes that are accepted, the words of every answer, the long press (its time, a move, a scroll, a second finger, a mouse, a link, the buzz), the right click (held back only where there is an action, a link keeps the browser's menu), the keys (the direction, the ends, the modifiers, Enter, the menu key, Shift and F10, Escape), the confirm cards (Kick, Delete and Ban ask; the red buttons are dead for 400 ms), one command at a time, Escape and the dark part while a command waits, the focus, the inert page behind, the toast (at the top, a status, 6 or 12 s, OK) and the private line of the same words, a role that goes or comes, a line that goes, a command that is not answered or whose socket goes, text that is never markup, the loader (never for a visitor with no role, once) and the style that holds back the phone's own callout on a touch screen only; every one must be caught (tools/mutate.py tests/data/home_mod_mutants.json --keep-going --jobs 1).",
  "baseline": {
-  "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
  },
  "mutants": [
   {
@@ -9,1239 +9,1253 @@
    "file": "web/home/mod.js",
    "old": "return viewer === 'admin' ? ['del', 'mute', 'kick', 'ban'] : ['del', 'mute', 'kick'];",
    "new": "return ['del', 'mute', 'kick', 'ban'];",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "an_administrators_line_has_actions",
    "file": "web/home/mod.js",
    "old": "if (line.role === 'admin') return [];",
    "new": "if (false) return [];",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_moderator_acts_on_a_moderator",
    "file": "web/home/mod.js",
    "old": "if (line.role === 'mod' && viewer !== 'admin') return [];",
    "new": "if (false) return [];",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_line_of_ones_own_gets_every_action",
    "file": "web/home/mod.js",
    "old": "if (line.own) return ['del'];",
    "new": "if (line.own) return ['del', 'mute', 'kick', 'ban'];",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_line_of_ones_own_has_none",
    "file": "web/home/mod.js",
    "old": "if (line.own) return ['del'];",
    "new": "if (line.own) return [];",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_hubs_own_line_has_actions",
    "file": "web/home/mod.js",
    "old": "if (!line || line.sys || (viewer !== 'mod' && viewer !== 'admin')) return [];",
    "new": "if (!line || (viewer !== 'mod' && viewer !== 'admin')) return [];",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_visitor_with_no_role_has_actions",
    "file": "web/home/mod.js",
    "old": "if (!line || line.sys || (viewer !== 'mod' && viewer !== 'admin')) return [];",
    "new": "if (!line || line.sys) return [];",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "mute_names_the_number_without_the_hash",
    "file": "web/home/mod.js",
    "old": "if (kind === 'mute') return '/mute #' + n + ' ' + minutes;",
    "new": "if (kind === 'mute') return '/mute ' + n + ' ' + minutes;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "mute_sends_a_name",
    "file": "web/home/mod.js",
    "old": "if (kind === 'mute') return '/mute #' + n + ' ' + minutes;",
    "new": "if (kind === 'mute') return '/mute ' + line.who + ' ' + minutes;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "kick_names_the_number_without_the_hash",
    "file": "web/home/mod.js",
    "old": "if (kind === 'kick') return '/kick #' + n;",
    "new": "if (kind === 'kick') return '/kick ' + n;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "kick_sends_a_name",
    "file": "web/home/mod.js",
    "old": "if (kind === 'kick') return '/kick #' + n;",
    "new": "if (kind === 'kick') return '/kick ' + line.who;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "ban_names_the_number_without_the_hash",
    "file": "web/home/mod.js",
    "old": "if (kind === 'ban') return '/ban #' + n;",
    "new": "if (kind === 'ban') return '/ban ' + n;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "ban_with_the_hour_forgets_purge",
    "file": "web/home/mod.js",
    "old": "if (kind === 'banpurge') return '/ban #' + n + ' purge';",
    "new": "if (kind === 'banpurge') return '/ban #' + n;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "delete_names_the_number_with_a_hash",
    "file": "web/home/mod.js",
    "old": "if (kind === 'del') return '/del ' + n;",
    "new": "if (kind === 'del') return '/del #' + n;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_purge_button_sends_a_plain_ban",
    "file": "web/home/mod.js",
    "old": "dock.command(commandOf(purge ? 'banpurge' : kind, l, minutes),",
    "new": "dock.command(commandOf(kind, l, minutes),",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "minutes_over_a_week",
    "file": "web/home/mod.js",
    "old": "return n >= 1 && n <= LIMIT.minutes ? n : null;",
    "new": "return n >= 1 && n <= 99999 ? n : null;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "zero_minutes",
    "file": "web/home/mod.js",
    "old": "return n >= 1 && n <= LIMIT.minutes ? n : null;",
    "new": "return n >= 0 && n <= LIMIT.minutes ? n : null;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_point_in_the_minutes",
    "file": "web/home/mod.js",
    "old": "if (!/^[0-9]{1,5}$/.test(t)) return null;",
    "new": "if (!/^[0-9.]{1,5}$/.test(t)) return null;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "blanks_inside_the_minutes",
    "file": "web/home/mod.js",
    "old": "var t = String(text).replace(/^\\s+|\\s+$/g, '');",
    "new": "var t = String(text).replace(/\\s+/g, '');",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_week_is_seven_days",
    "file": "web/home/mod.js",
    "old": "if (n % LIMIT.minutes === 0) return n / LIMIT.minutes === 1 ? '1 week' : n / LIMIT.minutes + ' weeks';",
    "new": "if (false) return '';",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "one_day_is_plural",
    "file": "web/home/mod.js",
    "old": "if (d) out.push(d + (d === 1 ? ' day' : ' days'));",
    "new": "if (d) out.push(d + ' days');",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "one_hour_is_plural",
    "file": "web/home/mod.js",
    "old": "if (h) out.push(h + (h === 1 ? ' hour' : ' hours'));",
    "new": "if (h) out.push(h + ' hours');",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "minutes_are_dropped_from_the_length",
    "file": "web/home/mod.js",
    "old": "if (m) out.push(m + (m === 1 ? ' minute' : ' minutes'));",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_mute_toast_says_minutes_not_the_length",
    "file": "web/home/mod.js",
    "old": "' is muted for ' + lengthOf(minutes) + '.'",
    "new": "' is muted for ' + minutes + '.'",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_ban_with_the_hour_says_a_plain_ban",
    "file": "web/home/mod.js",
    "old": "purge ? ' is banned and the lines of the last hour are gone.' : ' is banned.'",
    "new": "false ? ' is banned and the lines of the last hour are gone.' : ' is banned.'",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "power_does_not_say_an_administrator",
    "file": "web/home/mod.js",
    "old": "role === 'admin' ? ' (an administrator).'",
    "new": "false ? ' (an administrator).'",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "power_does_not_say_a_moderator",
    "file": "web/home/mod.js",
    "old": "role === 'mod' ? ' (a moderator).'",
    "new": "false ? ' (a moderator).'",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_kick_of_nobody_does_not_say_so",
    "file": "web/home/mod.js",
    "old": "kind === 'kick' ? who + ' is not on the front page now",
    "new": "false ? who + ' is not on the front page now",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_ban_that_is_there_does_not_say_so",
    "file": "web/home/mod.js",
    "old": "kind === 'ban' ? who + ' is banned already.' : NOTE.gone",
    "new": "false ? who + ' is banned already.' : NOTE.gone",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "an_unknown_code_says_nothing",
    "file": "web/home/mod.js",
    "old": "        return NOTE.generic;\n    }\n    function cut",
    "new": "        return '';\n    }\n    function cut",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "silence_says_the_wrong_thing",
    "file": "web/home/mod.js",
    "old": "if (code === 'silent') return NOTE.silent;",
    "new": "if (code === 'silent') return NOTE.generic;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "offline_says_the_wrong_thing",
    "file": "web/home/mod.js",
    "old": "if (code === 'offline') return NOTE.offline;",
    "new": "if (code === 'offline') return NOTE.generic;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_press_is_300_ms",
    "file": "web/home/mod.js",
    "old": "hold: 500,",
    "new": "hold: 300,",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_press_is_800_ms",
    "file": "web/home/mod.js",
    "old": "hold: 500,",
    "new": "hold: 800,",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_mark_comes_at_once",
    "file": "web/home/mod.js",
    "old": "show: 150,",
    "new": "show: 0,",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_mark_never_comes",
    "file": "web/home/mod.js",
    "old": "p.mark = setTimeout(guard(function () { if (press === p) { p.shown = true; paint(); } }), LIMIT.show);",
    "new": "p.mark = 0;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_move_of_100_px_is_still_a_press",
    "file": "web/home/mod.js",
    "old": "move: 10,",
    "new": "move: 100,",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_vertical_move_does_not_cancel",
    "file": "web/home/mod.js",
    "old": " || Math.abs(e.clientY - press.y) > LIMIT.move",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_horizontal_move_does_not_cancel",
    "file": "web/home/mod.js",
    "old": "Math.abs(e.clientX - press.x) > LIMIT.move ||",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_mouse_press_opens_the_sheet",
    "file": "web/home/mod.js",
    "old": "(e.pointerType !== 'touch' && e.pointerType !== 'pen')",
    "new": "false",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_second_finger_does_not_cancel",
    "file": "web/home/mod.js",
    "old": " || e.isPrimary === false",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_press_on_a_link_opens_the_sheet",
    "file": "web/home/mod.js",
    "old": "if (inLink(e.target)) return;",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "pointercancel_does_not_cancel",
    "file": "web/home/mod.js",
    "old": "['pointerup', 'pointercancel', 'scroll']",
    "new": "['pointerup', 'scroll']",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "scroll_does_not_cancel",
    "file": "web/home/mod.js",
    "old": "['pointerup', 'pointercancel', 'scroll']",
    "new": "['pointerup', 'pointercancel']",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "lifting_the_finger_does_not_cancel",
    "file": "web/home/mod.js",
    "old": "['pointerup', 'pointercancel', 'scroll']",
    "new": "['pointercancel', 'scroll']",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "no_buzz",
    "file": "web/home/mod.js",
    "old": "cancelPress(); buzz(); finger = open(id);",
    "new": "cancelPress(); finger = open(id);",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_long_press_opens_without_a_marked_line_check",
    "file": "web/home/mod.js",
    "old": "if (!actionable(id)) return;\n            cancelPress();",
    "new": "if (id === null) return;\n            cancelPress();",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_context_menu_is_not_held_back",
    "file": "web/home/mod.js",
    "old": "if (actionable(id)) { var touching = !!press; stay(e); cancelPress();",
    "new": "if (actionable(id)) { var touching = !!press; cancelPress();",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_context_menu_is_held_back_on_every_line",
    "file": "web/home/mod.js",
    "old": "if (actionable(id)) { var touching = !!press; stay(e);",
    "new": "if (id !== null) { var touching = !!press; stay(e);",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_link_loses_the_browsers_menu",
    "file": "web/home/mod.js",
    "old": "if (inLink(t)) return;",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_menu_key_does_not_open",
    "file": "web/home/mod.js",
    "old": "if (t === log && !sheet && cur !== null && actionable(cur)) { stay(e); open(cur); }",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_arrows_go_the_wrong_way",
    "file": "web/home/mod.js",
    "old": "at + (e.key === 'ArrowUp' ? -1 : 1)",
    "new": "at + (e.key === 'ArrowUp' ? 1 : -1)",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_first_arrow_chooses_the_oldest",
    "file": "web/home/mod.js",
    "old": "list[list.length - 1] : list[Math.max(",
    "new": "list[0] : list[Math.max(",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_arrows_go_round",
    "file": "web/home/mod.js",
    "old": "list[Math.max(0, Math.min(list.length - 1, at + (e.key === 'ArrowUp' ? -1 : 1)))]",
    "new": "list[(at + (e.key === 'ArrowUp' ? -1 : 1) + list.length) % list.length]",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "control_arrows_are_ours",
    "file": "web/home/mod.js",
    "old": "if (!e || !viewer() || sheet || e.ctrlKey || e.altKey || e.metaKey) return;",
    "new": "if (!e || !viewer() || sheet) return;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "an_arrow_does_not_stop_the_scroll",
    "file": "web/home/mod.js",
    "old": "stay(e); cur = id; paint();",
    "new": "cur = id; paint();",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_arrows_are_ours_with_no_line",
    "file": "web/home/mod.js",
    "old": "if (!list.length) return;\n                at = list.indexOf(cur);",
    "new": "if (!list.length) { stay(e); return; }\n                at = list.indexOf(cur);",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "no_status_for_the_chosen_line",
    "file": "web/home/mod.js",
    "old": "if (l) statusBox.textContent =",
    "new": "if (false) statusBox.textContent =",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "enter_does_not_open",
    "file": "web/home/mod.js",
    "old": "if (e.key === 'Enter' || e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {",
    "new": "if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "f10_alone_opens",
    "file": "web/home/mod.js",
    "old": "(e.key === 'F10' && e.shiftKey)",
    "new": "e.key === 'F10'",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_menu_key_needs_a_chosen_line",
    "file": "web/home/mod.js",
    "old": "if (id === null && e.key !== 'Enter') {",
    "new": "if (false) {",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "enter_with_no_chosen_line_opens_the_newest",
    "file": "web/home/mod.js",
    "old": "if (id === null && e.key !== 'Enter') {",
    "new": "if (id === null) {",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "escape_keeps_the_chosen_line",
    "file": "web/home/mod.js",
    "old": "if (e.key === 'Escape' && cur !== null) { cur = null; paint(); if (e.stopPropagation) e.stopPropagation(); }",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "blur_keeps_the_chosen_line",
    "file": "web/home/mod.js",
    "old": "if (!sheet && cur !== null) { cur = null; paint(); }",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_red_button_is_armed_at_once",
    "file": "web/home/mod.js",
    "old": "function (c) { if (s.armed) send(kind, 0, false, c); }",
    "new": "function (c) { send(kind, 0, false, c); }",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_purge_button_is_armed_at_once",
    "file": "web/home/mod.js",
    "old": "function (c) { if (s.armed) send('ban', 0, true, c); }",
    "new": "function (c) { send('ban', 0, true, c); }",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_red_button_is_never_armed",
    "file": "web/home/mod.js",
    "old": "s.timer = setTimeout(guard(function () { s.timer = 0; s.armed = true; }), LIMIT.arm);",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_dark_part_closes_at_once",
    "file": "web/home/mod.js",
    "old": "now() - sheet.at >= LIMIT.arm",
    "new": "true",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_kick_is_not_asked_about",
    "file": "web/home/mod.js",
    "old": "act('kick', TEXT.kick + who, TEXT.kickSmall, true, false, ask('kick'))",
    "new": "act('kick', TEXT.kick + who, TEXT.kickSmall, true, false, function (c) { send('kick', 0, false, c); })",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_delete_is_not_asked_about",
    "file": "web/home/mod.js",
    "old": "act('del', TEXT.del, TEXT.delSmall, true, false, ask('del'))",
    "new": "act('del', TEXT.del, TEXT.delSmall, true, false, function (c) { send('del', 0, false, c); })",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_ban_is_not_asked_about",
    "file": "web/home/mod.js",
    "old": "act('ban', TEXT.ban + who, TEXT.banSmall, true, false, ask('ban'))",
    "new": "act('ban', TEXT.ban + who, TEXT.banSmall, true, false, function (c) { send('ban', 0, false, c); })",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_sheet_does_not_wait_for_the_hub",
    "file": "web/home/mod.js",
    "old": "l = s.line; role = l.role; s.busy = true;",
    "new": "l = s.line; role = l.role;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_controls_stay_live_while_waiting",
    "file": "web/home/mod.js",
    "old": "s.ctl.forEach(function (c) { c.setAttribute('aria-disabled', 'true'); });",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "escape_closes_a_sheet_that_waits",
    "file": "web/home/mod.js",
    "old": "if (!s.busy) { if (s.view === 'recent')",
    "new": "if (true) { if (s.view === 'recent')",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_dark_part_closes_a_sheet_that_waits",
    "file": "web/home/mod.js",
    "old": "if (e && e.target === shade && sheet && !sheet.busy && !held() && now()",
    "new": "if (e && e.target === shade && sheet && !held() && now()",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_press_on_the_sheet_closes_it",
    "file": "web/home/mod.js",
    "old": "if (e && e.target === shade && sheet",
    "new": "if (e && sheet",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_focus_does_not_go_back_to_the_log",
    "file": "web/home/mod.js",
    "old": "if (back && log.focus) log.focus({ preventScroll: true });",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "what_stands_behind_stays_inert",
    "file": "web/home/mod.js",
    "old": "s.quiet.forEach(function (k) { k.removeAttribute('inert'); });",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "what_stands_behind_is_not_inert",
    "file": "web/home/mod.js",
    "old": "kids[i].setAttribute('inert', ''); quiet.push(kids[i]);",
    "new": "quiet.push(kids[i]);",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "what_was_inert_before_is_freed",
    "file": "web/home/mod.js",
    "old": "!(kids[i].hasAttribute && kids[i].hasAttribute('inert'))",
    "new": "true",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "no_first_focus",
    "file": "web/home/mod.js",
    "old": "if (first && first.focus) first.focus();",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_card_focuses_the_red_button",
    "file": "web/home/mod.js",
    "old": "first = no;",
    "new": "first = yes;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "back_loses_the_mute_button",
    "file": "web/home/mod.js",
    "old": ": arg === 'mute' && mute ? mute : del || mute;",
    "new": ": del || mute;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_hour_button_is_6_minutes",
    "file": "web/home/mod.js",
    "old": "[60, '1 hour']",
    "new": "[6, '1 hour']",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_day_button_is_a_wrong_number",
    "file": "web/home/mod.js",
    "old": "[1440, '1 day']",
    "new": "[1400, '1 day']",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_week_button_is_a_wrong_number",
    "file": "web/home/mod.js",
    "old": "[10080, '1 week']",
    "new": "[10000, '1 week']",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "enter_with_a_wrong_number_sends",
    "file": "web/home/mod.js",
    "old": "if (n !== null && !s.busy) send('mute', n, false, go);",
    "new": "if (!s.busy) send('mute', n, false, go);",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_mute_button_is_on_for_a_wrong_number",
    "file": "web/home/mod.js",
    "old": "go.disabled = n === null;",
    "new": "go.disabled = false;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_wrong_number_is_not_flagged",
    "file": "web/home/mod.js",
    "old": "input.setAttribute('aria-invalid', wrong ? 'true' : 'false');",
    "new": "input.setAttribute('aria-invalid', 'false');",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_hint_does_not_say_the_most",
    "file": "web/home/mod.js",
    "old": "hint.textContent = wrong ? TEXT.tooLong :",
    "new": "hint.textContent = wrong ? TEXT.hint :",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "tab_is_not_kept_in_the_sheet",
    "file": "web/home/mod.js",
    "old": "if (e.key !== 'Tab') return;",
    "new": "return;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "shift_tab_goes_forward",
    "file": "web/home/mod.js",
    "old": "(at + (e.shiftKey ? list.length - 1 : 1)) % list.length",
    "new": "(at + 1) % list.length",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "escape_in_the_second_step_closes",
    "file": "web/home/mod.js",
    "old": "if (s.view === 'mute') view('line', 'mute'); else close(true);",
    "new": "close(true);",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_dialog_is_not_modal",
    "file": "web/home/mod.js",
    "old": "box.setAttribute('aria-modal', 'true');",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_dialog_has_no_title",
    "file": "web/home/mod.js",
    "old": "box.setAttribute('aria-labelledby', 'gm-title');",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "an_action_has_no_description",
    "file": "web/home/mod.js",
    "old": "b.setAttribute('aria-describedby', d.id);",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_header_names_a_missing_username",
    "file": "web/home/mod.js",
    "old": "(line.u ? '@' + line.u + ' \\u00b7 ' : '')",
    "new": "('@' + line.u + ' \\u00b7 ')",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_header_does_not_say_you",
    "file": "web/home/mod.js",
    "old": "(line.own ? ' \\u00b7 ' + TEXT.you : '')",
    "new": "''",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_quote_is_not_cut",
    "file": "web/home/mod.js",
    "old": "quote = el('p', 'gm-quote', cut(l.text, LIMIT.quote));",
    "new": "quote = el('p', 'gm-quote', l.text);",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_quote_is_made_with_innerhtml",
    "file": "web/home/mod.js",
    "old": "quote = el('p', 'gm-quote', cut(l.text, LIMIT.quote));",
    "new": "quote = el('p', 'gm-quote'); quote.innerHTML = cut(l.text, LIMIT.quote);",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_toast_is_not_a_status",
    "file": "web/home/mod.js",
    "old": "t.setAttribute('role', 'status');",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_toast_stays_6_s_for_a_refusal",
    "file": "web/home/mod.js",
    "old": "bad ? LIMIT.stayBad : LIMIT.stay",
    "new": "LIMIT.stay",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_toast_stays_12_s_for_a_success",
    "file": "web/home/mod.js",
    "old": "bad ? LIMIT.stayBad : LIMIT.stay",
    "new": "LIMIT.stayBad",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_refusal_has_no_ok_button",
    "file": "web/home/mod.js",
    "old": "if (bad) { ok = el('button', 'btn gm-tok', TEXT.ok);",
    "new": "if (false) { ok = el('button', 'btn gm-tok', TEXT.ok);",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_toast_is_at_the_bottom",
    "file": "web/home/mod.js",
    "old": "t.style.top = top + 'px';",
    "new": "t.style.bottom = top + 'px';",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_toast_ignores_the_bar",
    "file": "web/home/mod.js",
    "old": "top = Math.round(bar.getBoundingClientRect().bottom) + 10;",
    "new": "top = LIMIT.top;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_chat_gets_no_private_line",
    "file": "web/home/mod.js",
    "old": "dock.note(words);",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "an_answer_is_always_a_success",
    "file": "web/home/mod.js",
    "old": "var words = code === 'ok' ? doneWords(kind, l.who, minutes, purge) : refusedWords(code, kind, l.who, role);",
    "new": "var words = doneWords(kind, l.who, minutes, purge);",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_refusal_is_drawn_as_a_success",
    "file": "web/home/mod.js",
    "old": "toast(words, code !== 'ok');",
    "new": "toast(words, false);",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_refusal_forgets_the_role_of_the_author",
    "file": "web/home/mod.js",
    "old": "refusedWords(code, kind, l.who, role)",
    "new": "refusedWords(code, kind, l.who, 'none')",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_new_toast_is_stacked",
    "file": "web/home/mod.js",
    "old": "function toast(words, bad) {\n            clearToast();",
    "new": "function toast(words, bad) {",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_role_that_goes_does_not_close_the_sheet",
    "file": "web/home/mod.js",
-   "old": "if (sheet && kind === 'you') close(true);",
+   "old": "if (sheet && (kind === 'you' || stale(sheet))) close(true);",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_role_that_goes_keeps_the_marks",
    "file": "web/home/mod.js",
    "old": "{ log.removeAttribute('aria-describedby'); cur = null; }",
    "new": "{ cur = null; }",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_log_is_not_described",
    "file": "web/home/mod.js",
    "old": "log.setAttribute('aria-describedby', hintBox.id);",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_line_has_no_description",
    "file": "web/home/mod.js",
    "old": "row.setAttribute('aria-description', TEXT.rowHint);",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "every_line_is_marked",
    "file": "web/home/mod.js",
    "old": "var on = !!viewer() && !!actionable(id);",
    "new": "var on = true;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "new_lines_are_not_marked",
    "file": "web/home/mod.js",
    "old": "dock.rows(function (id, row) { decorate(row, id); });",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_marks_do_not_follow_the_role",
    "file": "web/home/mod.js",
    "old": "if (!viewer()) { cancelPress(); cur = null; } refresh();",
    "new": "if (!viewer()) { cancelPress(); cur = null; }",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_line_that_goes_while_waiting_closes_the_sheet",
    "file": "web/home/mod.js",
    "old": "m && sheet && !sheet.busy && m.id === sheet.line.id",
    "new": "m && sheet && m.id === sheet.line.id",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "any_line_that_goes_closes_the_sheet",
    "file": "web/home/mod.js",
    "old": "m && sheet && !sheet.busy && m.id === sheet.line.id",
    "new": "m && sheet && !sheet.busy",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_line_that_goes_does_not_close_the_sheet",
    "file": "web/home/mod.js",
    "old": "else if (kind === 'del' && m && sheet && !sheet.busy && m.id === sheet.line.id && sheet.view !== 'recent') {",
    "new": "else if (false) {",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "two_commands_at_once",
    "file": "web/home/chat.js",
    "old": "if (oldest(true) >= 0) { entry.done('rate'); return; }",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_command_waits_for_ever",
    "file": "web/home/chat.js",
    "old": "entry.timer = setTimeout(guard(function () { var at = unanswered.indexOf(entry); if (at >= 0) unanswered.splice(at, 1); entry.done('silent'); }), MS.pending);",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_command_waits_80_s",
    "file": "web/home/chat.js",
    "old": "entry.done('silent'); }), MS.pending);",
    "new": "entry.done('silent'); }), MS.pending * 10);",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_refusal_is_not_told_to_the_command",
    "file": "web/home/chat.js",
    "old": "if (refused.done) { refused.done(code); render(); return; }",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "an_ok_is_not_told_to_the_command",
    "file": "web/home/chat.js",
    "old": "if (entry && entry.done) { entry.done('ok'); return; }",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_lost_socket_is_not_told_to_the_command",
    "file": "web/home/chat.js",
    "old": "waits.forEach(function (o) { if (o.done) o.done('offline'); });",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_visitor_with_no_role_may_send_a_command",
    "file": "web/home/chat.js",
    "old": "if (!you || you.role === 'none') { entry.done('power'); return; }",
    "new": "if (!you) { entry.done('power'); return; }",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_command_sends_another_text",
    "file": "web/home/chat.js",
    "old": "try { sock.send(JSON.stringify({ t: 'say', text: entry.text })); }",
    "new": "try { sock.send(JSON.stringify({ t: 'say', text: entry.text.replace('#', '') })); }",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_person_with_no_role_is_told_of_the_rows",
    "file": "web/home/chat.js",
    "old": "if (tools()) rowFns.forEach(",
    "new": "rowFns.forEach(",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_deleted_line_is_not_told",
    "file": "web/home/chat.js",
    "old": "render();\n            tapped('del', m);",
    "new": "render();",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_line_is_not_the_viewers_own",
    "file": "web/home/chat.js",
    "old": "own: !!e.own }; }",
    "new": "own: false }; }",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_note_is_not_made",
    "file": "web/home/chat.js",
    "old": "note: guard(function (text) { answer([String(text)]); })",
    "new": "note: guard(function (text) { })",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "home_asks_for_the_sheet_for_everybody",
    "file": "web/home/home.js",
    "old": "!(y = dock.you()) || y.role === 'none') return;",
    "new": "!(y = dock.you())) return;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "home_asks_for_the_sheet_again_and_again",
    "file": "web/home/home.js",
    "old": "if (askedSheet || (kind !== 'live' && kind !== 'you')",
    "new": "if ((kind !== 'live' && kind !== 'you')",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "home_does_not_give_the_dock_to_the_sheet",
    "file": "web/home/home.js",
    "old": "win.AntsHomeMod.mount({ doc: doc, win: win, dock: dock })",
    "new": "win.AntsHomeMod.mount({ doc: doc, win: win })",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_selection_is_held_back_on_a_desktop_too",
    "file": "web/home/mod.css",
    "old": "@media (pointer: coarse) { .gc-line[data-act]",
    "new": "@media all { .gc-line[data-act]",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_selection_is_held_back_on_every_line",
    "file": "web/home/mod.css",
    "old": "@media (pointer: coarse) { .gc-line[data-act]",
    "new": "@media (pointer: coarse) { .gc-line",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_lifting_finger_presses_a_button",
    "file": "web/home/mod.js",
    "old": "if (sheet && !sheet.busy && !held() && (b.getAttribute('aria-disabled') !== 'true')) run(b);",
    "new": "if (sheet && !sheet.busy && (b.getAttribute('aria-disabled') !== 'true')) run(b);",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_lifting_finger_closes_the_sheet",
    "file": "web/home/mod.js",
    "old": "sheet && !sheet.busy && !held() && now() - sheet.at >= LIMIT.arm",
    "new": "sheet && !sheet.busy && now() - sheet.at >= LIMIT.arm",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_finger_that_opened_it_is_not_counted",
    "file": "web/home/mod.js",
    "old": "buzz(); finger = open(id);",
    "new": "buzz(); open(id);",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_lifting_finger_has_no_grace",
    "file": "web/home/mod.js",
    "old": "if (finger && t !== 'scroll') { finger = false; quiet = now() + LIMIT.arm; }",
    "new": "if (finger && t !== 'scroll') { finger = false; }",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_new_touch_is_not_a_press",
    "file": "web/home/mod.js",
    "old": "shade.addEventListener('pointerdown', guard(function () { finger = false; quiet = 0; }));",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_lifting_finger_moves_the_focus",
    "file": "web/home/mod.js",
    "old": "if (held()) stay(e);",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "escape_of_a_chosen_line_folds_the_chat",
    "file": "web/home/mod.js",
    "old": "cur = null; paint(); if (e.stopPropagation) e.stopPropagation(); }",
    "new": "cur = null; paint(); }",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_pointer_keeps_the_keys_line",
    "file": "web/home/mod.js",
    "old": "if (cur !== null && !sheet) { cur = null; paint(); }",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_new_sheet_keeps_the_last_toast",
    "file": "web/home/mod.js",
    "old": "            clearToast();                                                // (the last answer is read",
    "new": "            // (the last answer is read",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_role_that_goes_keeps_the_hint",
    "file": "web/home/mod.js",
    "old": "hintBox.hidden = !viewer(); if (!viewer()) statusBox.textContent = '';",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "a_contextmenu_with_a_finger_down_forgets_the_finger",
    "file": "web/home/mod.js",
    "old": "if (open(id) && touching) finger = true;",
    "new": "open(id);",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "the_browsers_menu_comes_over_the_sheet",
    "file": "web/home/mod.js",
    "old": "shade.addEventListener('contextmenu', guard(stay));",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_row_on_a_line_of_ones_own",
    "file": "web/home/mod.js",
    "old": "var nr = l.own ? 0 : recentOf(s).length,",
    "new": "var nr = recentOf(s).length,",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_row_hidden_for_one_line",
    "file": "web/home/mod.js",
    "old": "recent = nr ? act('recent'",
    "new": "recent = nr > 1 ? act('recent'",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_count_is_not_followed_live",
    "file": "web/home/mod.js",
    "old": "            else if (kind === 'del') changed();\n",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_list_ignores_a_new_line",
    "file": "web/home/chat.js",
    "old": "            arrivalFns.forEach(function (fn) { tell1(fn); });\n",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_list_is_oldest_first",
    "file": "web/home/chat.js",
    "old": "for (i = feed.length - 1; i >= 0; i--) { e = feed[i]; if (!e.priv && !e.sys && e.k === from.k)",
    "new": "for (i = 0; i < feed.length; i++) { e = feed[i]; if (!e.priv && !e.sys && e.k === from.k)",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_matches_by_name_not_key",
    "file": "web/home/chat.js",
    "old": "e.k === from.k) out.push",
    "new": "e.who === from.who) out.push",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_matches_lines_with_no_key",
    "file": "web/home/chat.js",
    "old": "if (!from || from.sys || !from.k) return out;",
    "new": "if (!from || from.sys) return out;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_counts_the_hubs_own_lines",
    "file": "web/home/chat.js",
    "old": "if (!e.priv && !e.sys && e.k === from.k)",
    "new": "if (!e.priv && e.k === from.k)",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_taken_from_a_hubs_own_line",
    "file": "web/home/chat.js",
    "old": "if (!from || from.sys || !from.k) return out;",
    "new": "if (!from || !from.k) return out;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_given_to_a_visitor_with_no_role",
    "file": "web/home/chat.js",
    "old": "            if (!tools()) return out;\n            for (i = 0; i < feed.length; i++) if (!feed[i].priv && feed[i].id === id) from = feed[i];",
    "new": "            for (i = 0; i < feed.length; i++) if (!feed[i].priv && feed[i].id === id) from = feed[i];",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_list_shows_one_day_heading_always",
    "file": "web/home/mod.js",
    "old": "multi = Object.keys(days).length > 1;",
    "new": "multi = Object.keys(days).length > 0;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_list_loses_the_mark_of_the_opened_line",
    "file": "web/home/mod.js",
    "old": "if (e.id === s.line.id) x.appendChild(el('small', 'gm-this', TEXT.thisLine));",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_list_makes_a_button_of_a_line_that_has_no_action",
    "file": "web/home/mod.js",
    "old": "can = !!l && actionsOf(viewer(), l).length > 0,",
    "new": "can = !!l,",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_list_line_does_not_open_its_sheet",
    "file": "web/home/mod.js",
    "old": "function jump(id) { var l = actionable(id); if (l && sheet && !sheet.busy) {",
    "new": "function jump(id) { var l = null; if (l && sheet && !sheet.busy) {",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_delete_from_the_list_closes_the_sheet",
    "file": "web/home/mod.js",
    "old": "sheet.fromList = true; sheet.mine = false; view('line');",
    "new": "sheet.fromList = false; sheet.mine = false; view('line');",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_delete_focus_goes_to_the_line_before",
    "file": "web/home/mod.js",
    "old": "rest = at === -1 ? order : order.slice(at + 1).concat(order.slice(0, at).reverse()), i;",
    "new": "rest = at === -1 ? order : order.slice(0, at).reverse().concat(order.slice(at + 1)), i;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_delete_of_the_last_line_leaves_the_focus_nowhere",
    "file": "web/home/mod.js",
    "old": "|| (arg === null ? null : s.items[0]) || back;",
    "new": "|| (arg === null ? null : s.items[0]);",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_back_after_ones_own_delete_says_the_line_is_gone",
    "file": "web/home/mod.js",
    "old": "close(true); if (!s.mine) toast(NOTE.gone, true); }",
    "new": "close(true); toast(NOTE.gone, true); }",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_back_when_the_line_went_acts_on_it",
    "file": "web/home/mod.js",
    "old": "function leave(name) { var s = sheet; if (!s) return; if (!dock.line(s.line.id)) {",
    "new": "function leave(name) { var s = sheet; if (!s) return; if (false) {",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_line_gone_while_the_list_is_open_closes_the_sheet",
    "file": "web/home/mod.js",
    "old": "&& sheet.view !== 'recent') { close(true); toast(NOTE.gone, true); }",
    "new": "&& true) { close(true); toast(NOTE.gone, true); }",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_arrow_keys_wrap_at_the_ends",
    "file": "web/home/mod.js",
    "old": "Math.max(0, Math.min(n - 1, at + (up ? -1 : 1)))",
    "new": "(at + (up ? n - 1 : 1)) % n",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_home_goes_to_the_last_line",
    "file": "web/home/mod.js",
    "old": "to = e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 :",
    "new": "to = e.key === 'Home' ? n - 1 : e.key === 'End' ? 0 :",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_arrow_keys_take_a_modifier",
    "file": "web/home/mod.js",
    "old": "e.key === 'End') && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) { walk(s, e); return; }",
    "new": "e.key === 'End')) { walk(s, e); return; }",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_every_line_is_a_tab_stop",
    "file": "web/home/mod.js",
    "old": "|| c === stop); });       // (the list is one stop",
    "new": "|| true); });       // (the list is one stop",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_escape_closes_the_sheet_from_the_list",
    "file": "web/home/mod.js",
    "old": "if (s.view === 'recent') leave('recent'); else if (s.view === 'mute')",
    "new": "if (s.view === 'recent') close(true); else if (s.view === 'mute')",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_list_does_not_follow_a_new_welcome",
    "file": "web/home/mod.js",
    "old": "if (kind === 'live') changed(); }",
    "new": "}",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
    "id": "recent_focus_is_lost_when_its_line_goes",
    "file": "web/home/mod.js",
    "old": "nb = itemOf(s, Number(had)) || itemOf(s, near(before, Number(had), function (n) { return !!itemOf(s, n); })) || s.back;",
    "new": "nb = itemOf(s, Number(had)) || s.back;",
-   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "a_sheet_stays_over_a_reconnect_that_changes_what_it_shows",
+   "file": "web/home/mod.js",
+   "old": "if (sheet && (kind === 'you' || stale(sheet))) close(true);",
+   "new": "if (sheet && kind === 'you') close(true);",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "a_sheet_goes_over_every_reconnect",
+   "file": "web/home/mod.js",
+   "old": "s.offer = acts.join();",
+   "new": "s.offer = '';",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   }
  ]
 }

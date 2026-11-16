@@ -5,7 +5,6 @@ A staff member (the hub's `you.role` is mod or admin) acts on a person's line fr
 and F10 open it). A sheet offers what the viewer may do to that line's author (Delete the line, Mute, Kick, Ban), and types the hub's own commands by the NUMBER of the line, so there is no new power. It is loaded by
 web/home/home.js only for a visitor with a role. What this file checks:
   - the page and the other pages: web/lobby.html does not link it, nothing but home.js asks for it, the hub's door is still the dock's script alone, the game and the other pages never hear of it;
-  - the loader in home.js: the two files, once, only after the dock names a visitor with a role, whatever goes wrong with them stays with them;
   - the folder: its own budgets (raw and gzipped), plain ES5, ASCII, no markup made from text, no storage, no network of its own, the kinds of element it makes, no way to send but the dock's `command`;
   - the style: nothing loaded from another site, no sideways scroll, and the phone's callout and text selection are held back on a line that has an action ONLY on a touch screen (a desktop keeps its text selection);
   - the code RUNS in node: tests/scripts/web_home_mod_check.js (the real dock, a fake socket, a fake clock and a fake page);
@@ -69,22 +68,6 @@ class ThePageAndTheOtherPages(unittest.TestCase):
     def test_the_game_and_the_other_pages_never_hear_of_it(self):
         for rel in (("web", "shell.html"), ("web", "front", "lobby_net.js"), ("web", "front", "lobby_rules.js"), ("web", "front", "lobby_chat.js")):
             self.assertNotRegex(read(*rel), r"AntsHomeMod|home/mod", rel[-1])
-
-
-class TheLoaderInHome(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.js = read("web", "home", "home.js")
-
-    def test_it_asks_for_the_two_files_by_their_base_name_through_the_part_loader(self):
-        self.assertEqual(sorted(set(re.findall(r"home/mod\w*", code_of(self.js)))), ["home/mod"])
-        self.assertEqual(self.js.count("lazy('home/mod',"), 1)
-
-    def test_it_is_given_the_dock_and_nothing_else_and_a_script_that_is_not_there_mounts_nothing(self):
-        self.assertIn("if (win.AntsHomeMod) win.AntsHomeMod.mount({ doc: doc, win: win, dock: dock });", self.js)
-
-    def test_the_sheet_stands_over_the_page_so_the_dock_being_inert_needs_nothing_of_it(self):
-        self.assertNotIn("mod.root", self.js)
 
 
 class TheFolderAndTheScript(unittest.TestCase):

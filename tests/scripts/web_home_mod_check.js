@@ -868,6 +868,34 @@ function rig(o) {
     rw.sock().readyState = 3; rw.sock().onclose({}); rw.clock.advance(60000);
     rw.sock().open().recv({ t: 'welcome', v: 1, you: { name: 'Me', mod: true, role: 'admin', k: 'k-me' }, login: false, online: 3, history: hist().filter((h) => h.id !== 144 && h.id !== 139) });
     check('a new welcome (the page was reconnected) with another history: the count follows it', rowName(rw) === 'Recent messages from Clover (2)' && rw.shade() !== null, rowName(rw));
+    {   // a reconnect while a sheet is open: it goes when it would show what is not so any more (the line is not in the log, the viewer is not staff or is offered something else)
+        const back = (r, role, history) => { r.sock().readyState = 3; r.sock().onclose({}); r.clock.advance(60000); r.sock().open().recv({ t: 'welcome', v: 1, you: { name: 'Me', mod: role !== 'none', role, k: 'k-me' }, login: false, online: 3, history }); };
+        const gone = (r) => r.shade() === null && r.marked().length === 0 && !r.host.hasAttribute('inert') && r.doc.activeElement === r.log;
+        const a = rig({ history: hist() });
+        a.open(148); back(a, 'admin', hist().filter((h) => h.id !== 148));
+        check('a reconnect whose history has not the line of an open sheet: the sheet goes (mark and inert too, the focus on the log), and nothing was sent', gone(a) && a.said().length === 0);
+        const b = rig({ history: hist() });
+        b.open(148); back(b, 'none', hist());
+        check('a reconnect that says the viewer has no role now: the sheet goes, and the marks with it', gone(b) && b.acts().length === 0);
+        const c = rig({ history: hist() });
+        c.open(148);
+        check('(setup) an administrator\'s sheet offers Ban', c.names().indexOf('Ban Clover') !== -1);
+        back(c, 'mod', hist());
+        check('a reconnect that makes the administrator a moderator: the sheet that offers Ban goes, the line is still there', gone(c) && c.row(148) !== undefined);
+        c.open(148);
+        check('...and the next sheet offers a moderator\'s three actions', c.names().indexOf('Ban Clover') === -1 && c.names().indexOf('Kick Clover') !== -1);
+        const d = rig({ history: hist() });
+        d.open(148); d.press('Recent messages from Clover (4)');
+        back(d, 'admin', hist().filter((h) => h.id !== 148));
+        check('the same in the list of recent messages (the line it was opened on is not in the new history)', gone(d));
+        const e = rig({ history: hist() });
+        e.open(148); back(e, 'admin', hist());
+        check('a reconnect that changes nothing for the sheet (same role, the line is there): the sheet stays, with its buttons, and the focus is not moved', e.shade() !== null && e.mod.state() === 'line' && e.names().indexOf('Ban Clover') !== -1 && e.marked().join() === '148');
+        const f = rig({ history: hist() });
+        f.open(148); f.press('Recent messages from Clover (4)');
+        back(f, 'admin', hist().filter((h) => h.id !== 144));
+        check('...in the list too (another of the person\'s lines went: the list follows, the sheet stays)', f.shade() !== null && f.mod.state() === 'recent' && ids(f).join() === '151,148,139');
+    }
     const busy = rig({ history: hist() });
     busy.open(148); busy.press('Delete this line'); busy.clock.advance(401); busy.press('Delete');
     busy.recv(lineOf(160, 'Clover', 'comes while a command waits'));
