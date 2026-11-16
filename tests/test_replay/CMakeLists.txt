@@ -118,6 +118,26 @@ target_include_directories(test_rules_end_fix PRIVATE
 
 add_test(NAME test_rules_end_fix COMMAND test_rules_end_fix)
 
+# The rules number 12 of game mode 187 (run_tests.sh suite 2.29.7): 11, 10, 7 and 6 still play from a recording with the drops of the original's game, 12 is what a match records now: nothing is put on the ground.
+add_executable(test_rules_no_drops
+    test_rules_no_drops.cpp
+)
+
+target_link_libraries(test_rules_no_drops PRIVATE
+    ants_replay
+    ants_net
+    ants_sim
+    ants_assets
+    ants_test_paths
+)
+
+target_include_directories(test_rules_no_drops PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(NAME test_rules_no_drops COMMAND test_rules_no_drops)
+
 # A replay file of your own, opened on the website (run_tests.sh suite 2.29.6): the limit on the starting ants of a map that a file carries, and the recording kept in tests/data plays to its last hash.
 add_executable(test_replay_own_file
     test_replay_own_file.cpp
