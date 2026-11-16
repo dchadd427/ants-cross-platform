@@ -104,6 +104,13 @@ struct LevelPlan {
     uint32_t deny_one_percent{150};      // ... one enemy
     int32_t reserve_threat_tiles{6};     // a reserve pile with an enemy ant this near it counts like a pile that several enemies want
     bool deny_fade{true};                // the weights fade to nothing as the match runs out
+    bool skip_hopeless{false};           // (Medium, Hard) a pile of the class Hopeless (another team's hill is far nearer: it is eaten before the ants arrive) is left alone while any other pile has food (HarvestTask::Params::skip_hopeless; the ablation `--tune nohope=0`)
+    // bombs on the way (docs/BOTS.md, "Bombs on the way"; src/ants_ai/bomb_detour.cpp): a bomb of another team is seen on every screen, and the engine's walk goes straight over it
+    uint8_t bomb_detour{0};              // an order whose walk would cross a visible bomb of another team goes round it first (one waypoint, the order given again on arrival): 0 never (Easy), 1 the economy walks, the power-up trips and the
+                                         // fights (Medium), 2 also the raids, the mine trips and the way home of a carrier (Hard); the ablation `--tune det=0`
+    uint32_t detour_extra_percent{100};  // ... a detour that makes the walk more than this percentage longer is not taken (the walk goes on over the bomb: a blast costs about 100 ticks, a stun and 2 hit points)
+    bool bomb_route{false};              // (Medium, Hard) a Bomber defuses the bomb it can reach without crossing another, nearest to itself, from a side tile that holds no bomb; and a bomb that shuts one of the seat's busy routes is
+                                         // defused on any ground when no detour is left or the detour is much longer (BombTask::route_pick); the ablation `--tune broute=0`
     bool fire_aware{true};               // a pile with a fire wall near it is asked again with the map as it is now: no ant is sent into fire (HarvestTask::Params::fire_aware)
     bool gate{false};                    // (Hard) every carrier is guided at the hill's gate by hand (GateTask: "guiding for eating"): 55 to 65 ticks per deposit instead of 93 to 116
     uint32_t gate_latency{9};            // ticks between a decision and the order's arrival (the profile's reaction delay less its jitter, and the sink)

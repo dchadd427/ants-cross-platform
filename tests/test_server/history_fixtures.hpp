@@ -24,6 +24,7 @@
 #endif
 
 #include "ants_ai/arena.hpp"
+#include "ants_ai/standard_bot.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_db/database.hpp"
 #include "ants_db/migrations.hpp"
@@ -130,6 +131,15 @@ struct MatchSpec {
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if (((spec.roster >> seat) & 1u) != 0) arena.bots.push_back(ai::BotSpec{seat, "standard", ai::Level::Hard, ai::Style::Random});
     }
+    // (the recordings are fixtures of the history code, whose numbers are pinned: the bots play them as they did when the numbers were taken, without the walk round bombs, the Bomber's
+    // route and the rule for Hopeless piles)
+    arena.factory = [](const ai::BotSpec& b) {
+        return std::make_unique<ai::StandardBot>(b.level, b.style, [](ai::LevelPlan& p) {
+            p.bomb_detour = 0;
+            p.bomb_route = false;
+            p.skip_hopeless = false;
+        });
+    };
     const ai::ArenaResult played = ai::play_match(arena);
     if (!played.error.empty()) return std::vector<uint8_t>();
     replay::Replay shell;

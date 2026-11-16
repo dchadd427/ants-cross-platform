@@ -63,6 +63,22 @@
    "new": "uint32_t island_miners{2};",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI43.6 ' ./build/tests/test_ai/test_ai",
    "expect": "AI43.6"
+  },
+  {
+   "id": "flight_landing_unchecked_at_choice",
+   "file": "src/ants_ai/miner_flight_task.cpp",
+   "old": "        if (!flight_landing_ok(grid, f->land)) continue;",
+   "new": "        if (false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI43.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI43.7"
+  },
+  {
+   "id": "flight_landing_unchecked_at_hop",
+   "file": "src/ants_ai/miner_flight_task.cpp",
+   "old": "    if (job_.chosen && !flight_landing_ok(grid, job_.flight.land)) job_.chosen = false;",
+   "new": "    if (false) job_.chosen = false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI43.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI43.7"
   }
  ]
 }
