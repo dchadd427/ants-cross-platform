@@ -270,12 +270,10 @@ LevelPlan plan_for(Level level) noexcept {
             p.chore_worth = true;
             break;
     }
-    // The thief batch (docs/BOTS.md, "Thieves: the answer to a raid"): Medium and Hard look at a hole again while a thief walks to it, meet an enemy Thief with fighters, trap one that the own walls shut in,
-    // and do not take a Fire power-up that the ant could not carry home. `--tune thief_batch=0` is the bot before it.
+    // The thief batch (docs/BOTS.md, "Thieves: the answer to a raid"): Medium and Hard look at a hole again while a thief walks to it, and do not take a Fire power-up that the ant could not carry home.
+    // The meeting with an enemy Thief and the trap (thief_guard, thief_trap) are built and OFF: measured on TREASURE they cost the seat points (docs/BOTS.md). `--tune thief_batch=0` is the bot before the batch.
     if (level != Level::Easy) {
         p.raid_recheck = true;
-        p.thief_guard = true;
-        p.thief_trap = true;
         p.fire_home_only = true;
         p.thief_guard_force = level == Level::Hard ? 2u : 1u;
     }

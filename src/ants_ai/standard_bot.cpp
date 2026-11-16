@@ -188,8 +188,8 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     tactics_.gate_goals_live = tactics_.gate_map && !fallback && (!gate_goals_.exhausted() || (tactics_.field_map && field_.live()));    // (the counters spare the map's own bombs only while the goals are there to deal with them)
     opportunity_.step(context);                                                              // (before the fights and every chore: an enemy that one blow kills is struck at once; nothing when the plan has none)
     fight_.step(context);
-    thief_guard_.step(context);                                                               // (an enemy Thief that comes for the own hole is met by the nearest free fighters; nothing when the plan has none)
     heal_.step(context);                                                                      // (after the fights, which give back the defenders that are too hurt; nothing when the plan has no heal: it gives back what it held)
+    thief_guard_.step(context);                                                               // (after the fights and the heals: an enemy Thief that comes for the own hole is met by the nearest free fighters; nothing when the plan has none)
     if (plan.rush || rush_.active()) rush_.step(context);                                   // (when the plan has no rush the task only gives back what it held)
     if (!gate_breaching) walls_.step(context);
     powerups_.step(context);

@@ -233,9 +233,9 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "aschase") { p.assault_chase = static_cast<int32_t>(v); return true; }
     if (key == "asticks") { p.assault_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "asafter") { p.assault_after = static_cast<uint32_t>(v); return true; }
-    if (key == "thief_batch") {                                                       // the thief batch of docs/BOTS.md, "Thieves: the answer to a raid" (0: the bot as it was before it; 1: its rules on)
+    if (key == "thief_batch") {                                                       // the thief batch of docs/BOTS.md, "Thieves: the answer to a raid" (0: the bot as it was before it; 1: the plan that ships, the look again and the Fire Ant's way home; the meeting and the trap are `tguard=1` and `ttrap=1`)
         if (v == 0) ai::without_thief_batch(p);
-        else p.raid_recheck = p.thief_guard = p.thief_trap = p.fire_home_only = true;
+        else p.raid_recheck = p.fire_home_only = true;
         return true;
     }
     if (key == "rr") return flag(p.raid_recheck);

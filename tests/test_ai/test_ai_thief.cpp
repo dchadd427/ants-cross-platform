@@ -1,13 +1,17 @@
 // AI53: the answer to a raid (docs/BOTS.md, "Thieves: the answer to a raid"): the thief batch of the standard bot in hand-made worlds with the real engine.
 //
+// The meeting (ThiefGuardTask) and the trap are built and OFF in every plan (docs/BOTS.md says why): the tests of them (AI53.1 to AI53.3) switch them on themselves.
+//
 //   AI53.1  an enemy Thief that comes for the hole is met: ants stand on the three tiles in front of it, the raid order ends in "Can't go there." and the victim keeps its points (without the
 //           guard the raid goes through); the strikers hit the Thief that stands in front of the hole
-//   AI53.2  who is no target: a Thief far away or walking off, an ant of the ally, a hole that the walls have shut (while the Thief walks), and nobody is sent when only the last ants are left
-//   AI53.3  the trap: a Thief shut in on the raid tile with the loot by the own walls is let out through one wall when the strikers stand ready; with nobody ready the walls stay
+//   AI53.2  who is no target: a Thief far away or walking off, an ant of the ally, a hole that the walls have shut (a Thief that walks to it or stands in front of it), and nobody is sent when only the
+//           last ants are left
+//   AI53.3  the trap: a Thief shut in on the raid tile with the loot by the own walls is let out (a wall is put out) when the strikers stand ready; with nobody ready, a Thief without loot or the trap off the walls stay; no blocker walks onto the tiles in front of the hole while the Thief is on the raid tile
 //   AI53.4  the raid offence looks again: a thief on its way to a hole that is shut meanwhile goes to the other hill or stops (and never arrives at a hole that it cannot enter); with the
 //           switch off it arrives and shows "Can't go there."
 //   AI53.5  a Fire Ant that stands where no walk leads to the hole gets no wall order (a corner row of ISLANDS), and the Fire power-up of such a place is not taken
-//   AI53.6  the batch is one switch (without_thief_batch, `--tune thief_batch=0`): with it off nothing of it happens, on the other levels' defaults Easy has none of it
+//   AI53.8  a keeper that stands on the mound of its hill or in the fire of its own wall is given the wall order (the rule of AI53.7 judges where a walk leaves from, not the tile it stands on)
+//   AI53.6  the batch is one switch (without_thief_batch, `--tune thief_batch=0`): with it off nothing of it happens; Medium and Hard ship the look again and the Fire Ant rule, Easy none of it, no level the meeting or the trap
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -63,7 +67,7 @@ void run_thief_tests() {
             uint8_t thief_hp{0};
             uint32_t cantgo{0};
         };
-        const auto play = [&](bool guard, uint64_t ticks, size_t workers) {
+        const auto play = [&](bool guard, uint64_t ticks, size_t workers, uint32_t kill_after = 100) {
             sim::SimulationEngine sim;
             empty_field(sim, 71);
             sim.set_player_score(0, 300);
@@ -73,6 +77,7 @@ void run_thief_tests() {
             sim.apply_command(command_of(CommandType::GroupSpecial, 1, {raider.id}, hill.entrance.x, hill.entrance.y));
             LevelPlan plan = quiet_plan(Level::Hard);
             plan.thief_guard = guard;
+            plan.thief_guard_kill_after = kill_after;
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             Out out;
             rig.after_sim_tick = [&]() {
@@ -91,16 +96,17 @@ void run_thief_tests() {
             out.thief_hp = static_cast<uint8_t>(sim.get_unit(raider.id).hp);
             return out;
         };
-        ASSERT_TRUE(plan_for(Level::Hard).thief_guard && plan_for(Level::Medium).thief_guard);
-        ASSERT_FALSE(plan_for(Level::Easy).thief_guard);
-        const Out met = play(true, 700, 6);
+        const Out met = play(true, 300, 6);                                                                    // (the meeting at its strongest: it lasts 480 ticks at most, and its strikers pull the blockers off the tiles when they chase, docs/BOTS.md)
         ASSERT_TRUE(met.meets >= 1u);
         ASSERT_EQ(met.score, 300);                                                                            // nothing was taken
         ASSERT_EQ(met.on_east, 3u);                                                                           // three ants hold the three tiles
         ASSERT_TRUE(met.cantgo > 0u);                                                                         // the Thief stood in front of the hole and showed it
         ASSERT_TRUE(met.strikes >= 1u);                                                                       // and the striker went at it
         ASSERT_TRUE(met.thief_hp < 10u);
-        const Out open = play(false, 700, 6);
+        const Out strikers = play(true, 300, 6, 1000000);                                                      // (no kill mode: the blockers never strike, so every blow is a striker's)
+        ASSERT_TRUE(strikers.strikes >= 1u);
+        ASSERT_TRUE(strikers.thief_hp < 10u);
+        const Out open = play(false, 700, 6);                                                                  // (the plan as it ships: no meeting)
         ASSERT_EQ(open.meets, 0u);
         ASSERT_EQ(open.score, 250);                                                                           // the raid goes through
         ASSERT_EQ(open.cantgo, 0u);
@@ -121,7 +127,9 @@ void run_thief_tests() {
             uint32_t thief = 0;
             set_up(sim, thief);
             for (int t = 0; t < 30; ++t) sim.tick();                                                          // (the thief is on its way: what it was ordered shows on the screen)
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(quiet_plan(Level::Hard)), 4, 4);
+            LevelPlan plan = quiet_plan(Level::Hard);
+            plan.thief_guard = true;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(ticks);
             return rig.as<StandardBot>().thief_guard().meets_started();
         };
@@ -145,6 +153,17 @@ void run_thief_tests() {
                       t = sim.spawn_unit(1, sim::AntType::Thief, TileCoord{22, 8});
                       sim.apply_command(command_of(CommandType::GroupSpecial, 1, {t}, hill.entrance.x, hill.entrance.y));
                   }, 6, 60), 0u);
+        // (c2) a Thief that stands in front of the shut hole is no target either (the walls keep it out), and the same Thief in front of an open hole is one
+        const auto stands = [&](bool walls) {
+            return meets([&](sim::SimulationEngine& sim, uint32_t& t) {
+                if (walls) {
+                    for (const TileCoord& e : east) sim.set_fire_at(e, 3600);
+                }
+                t = sim.spawn_unit(1, sim::AntType::Thief, TileCoord{12, 8});
+            }, 6, 60);
+        };
+        ASSERT_TRUE(stands(false) >= 1u);
+        ASSERT_EQ(stands(true), 0u);
         // (d) only the last ants: two workers (the reserve of a fight) are not sent
         ASSERT_EQ(meets([&](sim::SimulationEngine& sim, uint32_t& t) {
                       t = sim.spawn_unit(1, sim::AntType::Thief, TileCoord{22, 8});
@@ -164,13 +183,15 @@ void run_thief_tests() {
             accept.other_player = 0;
             sim.apply_command(accept);
             sim.apply_command(command_of(CommandType::GroupMove, 1, {ally_thief}, hill.entrance.x + 3, hill.entrance.y + 3));
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(quiet_plan(Level::Hard)), 4, 4);
+            LevelPlan plan = quiet_plan(Level::Hard);
+            plan.thief_guard = true;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(60);
             ASSERT_EQ(rig.as<StandardBot>().thief_guard().meets_started(), 0u);
         }
     } TEST_END();
 
-    TEST_CASE("AI53.3 The Trap: A Thief Shut In On The Raid Tile With The Loot By The Own Walls Is Let Out Through One Wall When The Strikers Stand Ready; With Nobody Ready The Walls Stay")
+    TEST_CASE("AI53.3 The Trap: A Thief Shut In On The Raid Tile With The Loot By The Own Walls Is Let Out When The Strikers Stand Ready (A Wall Is Put Out); With Nobody Ready, With A Thief That Took Nothing, Or With The Trap Off The Walls Stay")
     {
         sim::SimulationEngine probe;
         empty_field(probe, 73);
@@ -193,6 +214,7 @@ void run_thief_tests() {
             const uint32_t thief = sim.spawn_unit(1, sim::AntType::Thief, hill.raid);
             sim.start_thief_infiltration(thief, 0);
             LevelPlan plan = quiet_plan(Level::Hard);
+            plan.thief_guard = true;                                                                          // (the trap is a part of the meeting)
             plan.thief_trap = trap;
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             Out out;
@@ -207,10 +229,45 @@ void run_thief_tests() {
         const Out ready = play(6, true);
         ASSERT_TRUE(ready.opens >= 1u);
         ASSERT_TRUE(ready.thief_out);                                                                         // it came out of the hole
+        // (not checked: that one wall stays out and that the Thief dies. Neither happens today: the keeper puts out the walls one after the other until none is left, and the Thief walks off
+        // alive with the loot. That is why the trap ships off, docs/BOTS.md; a test of either would pin a rule that the trap does not keep.)
+        {
+            // (the fighters that were taken are on their way to the posts, not at them: no wall is put out yet)
+            sim::SimulationEngine sim;
+            empty_field(sim, 73);
+            sim.set_player_score(0, 300);
+            for (size_t i = 0; i < 6; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{9 + static_cast<int>(i % 3), 9 + static_cast<int>(i / 3)});
+            sim.spawn_unit(0, sim::AntType::Fire, TileCoord{10, 12});
+            for (const TileCoord& e : east) sim.set_fire_at(e, 3600);
+            const uint32_t thief = sim.spawn_unit(1, sim::AntType::Thief, hill.raid);
+            sim.start_thief_infiltration(thief, 0);
+            LevelPlan plan = quiet_plan(Level::Hard);
+            plan.thief_guard = true;
+            plan.thief_trap = true;
+            plan.thief_trap_wait = 1;                                                                          // (the wait between two openings would hide it: the first opening waits for the fighters alone)
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(100);                                                                                      // (the Thief has the loot from about tick 70; the fighters start to move at tick 80 and are not at the posts yet)
+            ASSERT_EQ(rig.as<StandardBot>().thief_guard().trap_opens(), 0u);
+        }
         const Out none = play(1, true);                                                                        // (one worker and the Fire Ant: the last ants, nobody is ready)
         ASSERT_EQ(none.opens, 0u);
         ASSERT_EQ(none.walls_after, 3u);                                                                       // the walls stay
         ASSERT_FALSE(none.thief_out);
+        // no blocker is taken while the Thief is on the raid tile (it would be shut in with the loot): the meeting holds the strikers only (open hole, six workers near it)
+        {
+            sim::SimulationEngine sim;
+            empty_field(sim, 73);
+            sim.set_player_score(0, 300);
+            for (int i = 0; i < 6; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{hill.origin.x + 7 + i % 3, hill.origin.y + 1 + i / 3});
+            const uint32_t thief = sim.spawn_unit(1, sim::AntType::Thief, hill.raid);
+            sim.start_thief_infiltration(thief, 0);
+            LevelPlan plan = quiet_plan(Level::Hard);
+            plan.thief_guard = true;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(60);                                                                                       // (the raid clip is not over: the Thief is on the raid tile)
+            ASSERT_TRUE(rig.as<StandardBot>().thief_guard().meets_started() >= 1u);                            // (it is waited for)
+            ASSERT_EQ(rig.as<StandardBot>().thief_guard().fighters_of(thief).size(), static_cast<size_t>(plan.thief_guard_force));
+        }
         const Out off = play(6, false);
         ASSERT_EQ(off.opens, 0u);
         ASSERT_EQ(off.walls_after, 3u);
@@ -371,12 +428,49 @@ void run_thief_tests() {
         ASSERT_EQ(unreachable, 0u);
     } TEST_END();
 
-    TEST_CASE("AI53.6 The Batch Is One Switch: without_thief_batch Is The Bot As It Was (No Meeting, No Look Again, No Trap, No Stranded Skip), Easy Never Had It, Medium And Hard Have It On")
+    TEST_CASE("AI53.8 A Keeper That Stands On The Mound Of Its Hill Or In The Fire Of Its Own Wall Is Given The Wall Order: The Tile It Stands On Is Not A Tile That A Walk Enters, And The Walk Leaves From It (With The Rule On, As With It Off)")
+    {
+        WallWorld pw;
+        pw.build(true, 0);
+        const MapInfo pmap(pw.sim);
+        const HillInfo& hill = pmap.hill(0);
+        const auto play = [&](TileCoord at, bool fire, bool rule, uint32_t& unreachable, size_t& specials) {
+            WallWorld w;
+            w.build(true, 0);
+            const uint32_t keeper = w.sim.spawn_unit(0, sim::AntType::Fire, at);
+            if (fire) w.sim.set_fire_at(at, 3600);
+            LevelPlan plan = peace_plan(Level::Hard);
+            plan.secure_side = false;
+            plan.reach_guard = false;
+            plan.fire_home_only = rule;
+            Rig rig(w.sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(3);
+            w.let_enemy_play();
+            rig.run(500);
+            unreachable = rig.as<StandardBot>().walls().unreachable();
+            specials = 0;
+            for (const auto& e : rig.proposed) specials += (e.second.type == CommandType::GroupSpecial && e.second.ants.size() == 1 && e.second.ants[0] == keeper) ? 1u : 0u;
+        };
+        for (const bool fire : {false, true}) {
+            const TileCoord at = fire ? TileCoord{14, 20} : TileCoord{hill.origin.x + 1, hill.origin.y + 1};
+            uint32_t unreachable = 0;
+            size_t specials = 0;
+            play(at, fire, false, unreachable, specials);
+            ASSERT_TRUE(specials >= 1u);                                                                          // (the premise: a keeper there is sent to its walls)
+            play(at, fire, true, unreachable, specials);
+            ASSERT_TRUE(specials >= 1u);
+            ASSERT_EQ(unreachable, 0u);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI53.6 The Batch Is One Switch: without_thief_batch Is The Bot As It Was (No Meeting, No Look Again, No Trap, No Stranded Skip), Easy Never Had It, Medium And Hard Have The Look Again And The Fire Ant Rule On, No Level Has The Meeting Or The Trap")
     {
         for (const Level level : {Level::Medium, Level::Hard}) {
-            const LevelPlan on = plan_for(level);
-            ASSERT_TRUE(on.raid_recheck && on.thief_guard && on.thief_trap && on.fire_home_only);
-            LevelPlan off = on;
+            const LevelPlan shipped = plan_for(level);
+            ASSERT_TRUE(shipped.raid_recheck && shipped.fire_home_only);
+            ASSERT_FALSE(shipped.thief_guard || shipped.thief_trap);                                          // (built and off: docs/BOTS.md)
+            LevelPlan off = shipped;
+            off.thief_guard = off.thief_trap = true;                                                          // (every flag on, as the experiments set them)
             without_thief_batch(off);
             ASSERT_FALSE(off.raid_recheck || off.thief_guard || off.thief_trap || off.fire_home_only);
         }
@@ -392,6 +486,7 @@ void run_thief_tests() {
             s->apply_command(command_of(CommandType::GroupSpecial, 1, {t}, 5, 5));
         }
         LevelPlan pa = plan_for(Level::Hard);
+        pa.thief_guard = pa.thief_trap = true;                                                                  // (the meeting is on until the switch turns it off)
         without_thief_batch(pa);
         LevelPlan pb = plan_for(Level::Hard);
         pb.raid_recheck = pb.thief_guard = pb.thief_trap = pb.fire_home_only = false;

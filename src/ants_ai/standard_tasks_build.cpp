@@ -17,11 +17,24 @@ using standard_detail::tile_index;
 namespace {
 
 // Whether an ant that stands on `from` can walk to `to` on the map as it is now (bridges and all): a Fire Ant that was left on another island (a corner row of ISLANDS) cannot, and an order that names
-// a tile it cannot walk to ends in "Can't go there." again and again (plan.fire_home_only)
+// a tile it cannot walk to ends in "Can't go there." again and again (plan.fire_home_only). The tile the ant stands on counts as walkable whatever it holds (a Fire Ant stands in the fire of its own
+// wall), and so does the whole mound if it stands on one: no walk may enter a mound, but an ant inside walks out of it
 bool walks_to(const BotView& v, uint8_t seat, sim::TileCoord from, sim::TileCoord to) {
     const sim::Grid& grid = v.grid();
     if (!grid.in_bounds(from) || !grid.in_bounds(to)) return false;
-    const std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, seat, v.walk_context());
+    std::vector<uint8_t> mask = MapInfo::walkable_mask(grid, seat, v.walk_context());
+    mask[tile_index(grid, from)] = 1;
+    for (const assets::AnthillSpawn& ah : grid.anthills()) {
+        const int32_t bx = static_cast<int32_t>(ah.x);
+        const int32_t by = static_cast<int32_t>(ah.y);
+        if (from.x < bx || from.x > bx + 3 || from.y < by || from.y > by + 3) continue;
+        for (int32_t y = by; y <= by + 3; ++y) {
+            for (int32_t x = bx; x <= bx + 3; ++x) {
+                const sim::TileCoord t{x, y};
+                if (grid.in_bounds(t) && sim::movement::terrain_walkable(grid.terrain_class_at(t))) mask[tile_index(grid, t)] = 1;
+            }
+        }
+    }
     std::vector<sim::TileCoord> sources;                                                  // the ant walks to a tile next to the target (the target itself may be a wall of fire)
     for (int32_t dy = -1; dy <= 1; ++dy) {
         for (int32_t dx = -1; dx <= 1; ++dx) {

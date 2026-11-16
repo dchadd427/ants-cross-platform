@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the thief batch of the computer players (docs/BOTS.md, 'Thieves: the answer to a raid') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the raid offence's look on the way, the meeting with an enemy Thief (who is a target, the blockers and strikers, the trap, the reserve), the wall order of a keeper that cannot walk to the hole, the Fire power-up of a corner row and the plan switch against test_ai AI53. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_thief_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "note": "Mutants of the thief batch of the computer players (docs/BOTS.md, 'Thieves: the answer to a raid') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the raid offence's look on the way, the meeting with an enemy Thief (who is a target, the blockers and strikers, the trap, the reserve), the wall order of a keeper that cannot walk to the hole (and the walk that leaves a mound or a fire wall), the Fire power-up of a corner row and the plan switch (what ships: the look again and the Fire Ant rule on, the meeting and the trap off) against test_ai AI53. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_thief_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
  "mutants": [
   {
    "id": "recheck_off",
@@ -50,7 +50,7 @@
    "id": "guard_closed_gate_met",
    "file": "src/ants_ai/thief_guard.cpp",
    "old": "    if (gate_closed) return false;                                                        // the walls shut the hole",
-   "new": "    if (false) return false;                                                        // the walls shut the hole",
+   "new": "    if (gate_closed && false) return false;                                                        // the walls shut the hole",
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI53.2 ' ./build/tests/test_ai/test_ai",
    "expect": "AI53.2"
@@ -59,7 +59,7 @@
    "id": "guard_last_ants_sent",
    "file": "src/ants_ai/thief_guard.cpp",
    "old": "if (v.mine().size() <= reserve + fighting + 1) return;",
-   "new": "if (false) return;",
+   "new": "if (false && v.mine().size() <= reserve + fighting + 1) return;",
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI53.2 ' ./build/tests/test_ai/test_ai",
    "expect": "AI53.2"
@@ -95,7 +95,7 @@
    "id": "guard_blocker_on_raid_tile_thief",
    "file": "src/ants_ai/thief_guard.cpp",
    "old": "const bool at_raid = thief.state == sim::UnitState::Infiltrating || thief.tile == hill.raid;",
-   "new": "const bool at_raid = false;",
+   "new": "const bool at_raid = false && (thief.state == sim::UnitState::Infiltrating || thief.tile == hill.raid);",
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI53.3 ' ./build/tests/test_ai/test_ai",
    "expect": "AI53.3"
@@ -113,7 +113,7 @@
    "id": "guard_trap_nobody_ready",
    "file": "src/ants_ai/thief_guard.cpp",
    "old": "if (ready > 0 && ready >= std::min<size_t>(kReadyForTrap, meet.fighters.size()) && now >= meet.trap_asked + plan.thief_trap_wait) {",
-   "new": "if (now >= meet.trap_asked + plan.thief_trap_wait) {",
+   "new": "if (ready + std::min<size_t>(kReadyForTrap, meet.fighters.size()) + 1 > 0 && now >= meet.trap_asked + plan.thief_trap_wait) {",
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI53.3 ' ./build/tests/test_ai/test_ai",
    "expect": "AI53.3"
@@ -146,6 +146,24 @@
    "expect": "AI53.7"
   },
   {
+   "id": "walk_from_tile_unwalkable",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "    mask[tile_index(grid, from)] = 1;\n",
+   "new": "",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.8"
+  },
+  {
+   "id": "walk_from_mound_ignored",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (from.x < bx || from.x > bx + 3 || from.y < by || from.y > by + 3) continue;",
+   "new": "if (true || from.x < bx || from.x > bx + 3 || from.y < by || from.y > by + 3) continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.8"
+  },
+  {
    "id": "fire_home_taken",
    "file": "src/ants_ai/standard_tasks_powerup.cpp",
    "old": "tactics_.far_work && !tactics_.gate_map && !tactics_.field_map && kind == sim::AntType::Fire) {",
@@ -155,13 +173,31 @@
    "expect": "AI53.5"
   },
   {
-   "id": "plan_guard_off_medium",
+   "id": "plan_guard_shipped_on",
    "file": "src/ants_ai/tactics.cpp",
-   "old": "        p.thief_guard = true;\n",
-   "new": "        p.thief_guard = false;\n",
+   "old": "        p.fire_home_only = true;\n        p.thief_guard_force",
+   "new": "        p.fire_home_only = true;\n        p.thief_guard = true;\n        p.thief_guard_force",
    "build": "test_ai",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.1 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI53.1"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.6"
+  },
+  {
+   "id": "plan_trap_shipped_on",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "        p.fire_home_only = true;\n        p.thief_guard_force",
+   "new": "        p.fire_home_only = true;\n        p.thief_trap = true;\n        p.thief_guard_force",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.6"
+  },
+  {
+   "id": "plan_fhome_shipped_off",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "        p.fire_home_only = true;\n",
+   "new": "        p.fire_home_only = false;\n",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.6"
   },
   {
    "id": "plan_recheck_off_hard",

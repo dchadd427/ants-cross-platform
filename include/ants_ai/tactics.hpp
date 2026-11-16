@@ -419,7 +419,7 @@ struct LevelPlan {
     /// play with there). `bot_arena --tune brawl=0` is the bot before (it plays the food game's tasks in 187 too). The original game never reads these.
     bool brawl187{true};
     BrawlParams brawl;
-    // The thief batch (docs/BOTS.md, "Thieves: the answer to a raid"; Medium and Hard; `bot_arena --tune thief_batch=0`, or the keys below, is the bot before it):
+    // The thief batch (docs/BOTS.md, "Thieves: the answer to a raid"; Medium and Hard have raid_recheck and fire_home_only on, the meeting and the trap are off; `bot_arena --tune thief_batch=0`, or the keys below, is the bot before it):
     bool raid_recheck{false};            // a thief on its way to a raid looks at the hole again at every look (fire walls, bombs, an ant on the raid tile, no walk, too little to take): when it is shut it goes to the best other hill, or home (RaidTask)
     uint32_t raid_recheck_black{300};    // ... the hill that was shut is not chosen again for this long (the walls last 3,600 ticks, a bomb stays, an ant moves on)
     bool thief_guard{false};             // an enemy Thief on its way to the own hole, standing at it or walking home with loot is met by the nearest free fighters (ThiefGuardTask)
