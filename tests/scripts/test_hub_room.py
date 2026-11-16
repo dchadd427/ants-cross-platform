@@ -497,9 +497,23 @@ class TheBudgetsOfAnAccount(unittest.TestCase):
     def said(self, al, count, now, account="1001", prefix="line"):
         return [al.check(account, "%s %d at %d" % (prefix, n, now), now) for n in range(count)]
 
-    def test_the_defaults_are_200_lines_an_hour_and_1000_a_day(self):
+    def test_the_defaults_are_600_lines_an_hour_and_3000_a_day(self):
         defaults = limitmod.Limits()
-        self.assertEqual((defaults.account_hour_lines, defaults.account_day_lines), (200, 1000))
+        self.assertEqual((defaults.account_hour_lines, defaults.account_day_lines), (600, 3000))
+
+    def test_the_default_hour_gives_one_line_back_every_6_seconds(self):
+        for second, answer in ((5.9, "quota"), (6.0, None)):
+            al = self.budgets()
+            self.assertEqual(self.said(al, 600, 0.0), [None] * 600)
+            self.assertEqual(al.check("1001", "the 601st", 0.0), "quota")
+            self.assertEqual(al.check("1001", "and later", second), answer, second)
+
+    def test_the_default_day_gives_one_line_back_every_28_8_seconds(self):
+        for second, answer in ((28.7, "quota"), (28.8, None)):
+            al = limitmod.AccountLimits(dataclasses.replace(limitmod.Limits(), burst=10 ** 6, refill_seconds=0.001, account_hour_lines=10 ** 6))      # (the pace and the hour out of the way)
+            self.assertEqual(self.said(al, 3000, 0.0), [None] * 3000)
+            self.assertEqual(al.check("1001", "the 3001st", 0.0), "quota")
+            self.assertEqual(al.check("1001", "and later", second), answer, second)
 
     def test_the_budget_of_the_hour_fills_up_again_steadily(self):
         al = self.budgets(account_hour_lines=10, account_day_lines=1000)
@@ -640,10 +654,10 @@ class TheBusiestChat(unittest.TestCase):
         self.assertEqual([who.codes() for who in quiet], [[]] * 20)
         for who in busy:
             lines = accepted[who.identity.account_id]
-            self.assertTrue(370 <= lines <= 410, lines)                                # (the hour's 200 and a line every 18 seconds for an hour: 400, less what the limit of all accounts took)
-            self.assertGreater(who.codes().count("quota"), 1000)
+            self.assertTrue(1170 <= lines <= 1210, lines)                              # (the hour's 600 and a line every 6 seconds for an hour: 1,200; twelve accounts say 6 lines a second together, under the limit of all accounts)
+            self.assertGreater(who.codes().count("quota"), 500)
         self.assertEqual(sum(accepted.values()), sum(accepted[w.identity.account_id] for w in busy + quiet))
-        self.assertIn("prune lines=", room.log.getvalue())                             # (more than the store holds: the oldest were deleted, not 21,600 lines kept)
+        self.assertIn("prune lines=", room.log.getvalue())                             # (more than the store holds: the oldest were deleted, not 14,400 lines kept)
         self.assertLess(room.store.usage().lines, sum(accepted.values()))
 
 
@@ -672,8 +686,8 @@ class TheGuardAtItsEdges(unittest.TestCase):
         fill(self.room.store, 500)
         self.room.store.checkpoint()
         who, other = self.room.person(1), self.room.person(2)
-        largest = "\U0001F600" * 200                                                  # (200 code points, 800 bytes: what the text rules allow)
-        self.assertEqual(len(largest.encode("utf-8")), 800)
+        largest = "\U0001F600" * 1000                                                 # (1,000 code points, 4,000 bytes: what the text rules allow)
+        self.assertEqual(len(largest.encode("utf-8")), 4000)
         self.limit_at(self.room.store.size() + 1)
         self.room.say(who, largest)
         self.assertEqual(who.codes(), [])
@@ -1157,9 +1171,9 @@ class TheDocumentsSayWhatTheCodeDoes(unittest.TestCase):
     def test_the_numbers_of_the_document_are_the_limits_of_the_code(self):
         d = limitmod.Limits()
         self.assertEqual((d.account_hour_lines, d.account_day_lines, d.prune_from_percent, d.prune_to_percent, d.keep_lines, d.purge_chunk, d.db_max_bytes),
-                         (200, 1000, 90, 80, 1000, 2000, 64 * 1024 * 1024))
+                         (600, 3000, 90, 80, 1000, 2000, 64 * 1024 * 1024))
         self.assertEqual((d.prune_from_bytes, d.prune_to_bytes), (64 * 1024 * 1024 * 9 // 10, 64 * 1024 * 1024 * 8 // 10))
-        for needle in ("a budget of 200 lines for the hour and 1,000 for the day", "one line every 18 seconds, one every 86.4", "answered `quota`", "The budgets are kept in memory", "From 90% of 64 MB", "down to 80%",
+        for needle in ("a budget of 600 lines for the hour and 3,000 for the day", "one line every 6 seconds, one every 28.8", "answered `quota`", "The budgets are kept in memory", "From 90% of 64 MB", "down to 80%",
                        "2,000 lines a second", "the moderators' lines and the lines that a moderator deleted last", "the newest 1,000 never", "`quota` (the account has said the lines of its hour or of its day)", "and a `quota`, are not the client's doing",
                        "a tenth of a second between two chunks", "\"a reader holds the log file\"", "database_full_a_reader_holds_the_log_file", "is over 16 MB the hub deletes no more lines",
                        "python -m hub.admin status", "python -m hub.admin purge [--keep-lines N]", "`--keep-lines N` (100 or more", "\"nothing to purge\"", "database_full_and_no_line_to_delete",

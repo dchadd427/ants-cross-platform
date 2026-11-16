@@ -81,7 +81,8 @@ ants-cross-platform/
 │   ├── ants.chd                        # The original's archive: sprites, sounds, palette, animations
 │   ├── LibreFranklin-Medium.ttf        # Bundled text font, not from the original (Libre Franklin, SIL Open Font
 │   │                                   # License)
-│   ├── LibreFranklin-OFL.txt           # The licence of that font
+│   ├── LibreFranklin-Black.ttf         # Bundled heavy face for the numbers (same family and licence)
+│   ├── LibreFranklin-OFL.txt           # The licence of those fonts
 │   ├── *.MID                           # The four pieces of music, as MIDI files
 │   ├── *.mp3                           # MP3 renders of the four pieces: the game plays these
 │   └── Maps/                           # Binary .LVL maps: the six of the original; every .lvl in this folder is

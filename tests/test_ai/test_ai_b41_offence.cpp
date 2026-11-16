@@ -513,6 +513,7 @@ void run_b41_offence_tests() {
             const uint32_t second = sim.spawn_unit(0, sim::AntType::Thief, TileCoord{east[1].x + 4, east[1].y + 6});
             LevelPlan plan = plan_for(Level::Hard);
             plan.raid_unjam = unjam;
+            plan.raid_recheck = false;                                                                        // (the premise is a second thief that waits in front of the hole; one that looks again on its way does not)
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             uint64_t clip_over = 0;
             for (int t = 0; t < 1200; ++t) {

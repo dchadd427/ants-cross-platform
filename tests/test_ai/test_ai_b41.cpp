@@ -498,6 +498,7 @@ void run_b41_tests() {
             ASSERT_FALSE(plan_for(level).intercepts);                                             // the plans as shipped: no level intercepts
             for (const bool enabled : {false, true}) {
                 LevelPlan plan = plan_for(level);
+                without_thief_batch(plan);                                                          // (the subject is the plan flag; the thief batch's own meetings are AI53)
                 plan.intercepts = enabled;
                 // (a) a thief that stands 4 tiles from the raid tile
                 {
@@ -1845,6 +1846,7 @@ void run_b41_tests() {
             const uint32_t thief = sim.spawn_unit(0, sim::AntType::Thief, TileCoord{30, 10});
             LevelPlan plan = plan_for(Level::Hard);
             if (!learn) plan.raid_black_ticks = 1;                                                                // (a wait of one tick: the same code path without the memory)
+            plan.raid_recheck = false;                                                                            // (the subject is the memory of a raid that never got going; a thief that looks again on its way never stands there, AI53.4)
             plan.gate = false;
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             int guard = 0;

@@ -553,7 +553,10 @@ void run_ownground_tests() {
             spec.extra_kinds = {"turtle"};
             spec.factory = [rule](const BotSpec& b) -> std::unique_ptr<Bot> {
                 if (b.kind == "turtle") return bench::make_bench_bot(b.kind, b.level);
-                return std::make_unique<StandardBot>(b.level, Style::Random, [rule](LevelPlan& p) { p.own_ground_counters = rule; });
+                return std::make_unique<StandardBot>(b.level, Style::Random, [rule](LevelPlan& p) {
+                    without_thief_batch(p);                                                                  // (the subject is the counters' rule: the bots play the match as they did when the seeds were chosen)
+                    p.own_ground_counters = rule;
+                });
             };
             std::vector<uint8_t> was_busy;                                                                  // by ant id: the ant was defusing or putting out fire at the last tick
             sim::TileCoord hill0{-1, -1};

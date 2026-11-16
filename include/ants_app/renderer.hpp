@@ -256,6 +256,12 @@ public:
         return 7;
     }
     virtual void set_hud_team(uint8_t team_id) = 0;
+    /// A score number in the numbers' heavy face with a thick outline (Libre Franklin Black), `ink_h` canvas pixels tall (outline counted), squeezed to `box_w` when wider, ending at the right edge of the box
+    /// at `x` (right_align) or starting at `x`. Returns false when it drew nothing (a renderer that cannot, or the classic numbers): the caller then draws the old way.
+    virtual bool draw_number_text(const std::string& text, int32_t x, int32_t y, int32_t box_w, int32_t ink_h, bool right_align, ants::assets::ColorRGBA color) {
+        (void)text; (void)x; (void)y; (void)box_w; (void)ink_h; (void)right_align; (void)color;
+        return false;
+    }
     /// Restricts everything that is drawn afterwards to a rectangle until clear_clip_rect(): the original draws a label into a surface of the label's own
     /// size, so what sticks out of the box (the half line at the edge of the chat log) is not seen. A renderer without clipping draws it all.
     virtual void set_clip_rect(int32_t x, int32_t y, int32_t w, int32_t h) { (void)x; (void)y; (void)w; (void)h; }
@@ -489,9 +495,17 @@ public:
     void set_classic_numbers(bool classic) noexcept { classic_numbers_ = classic; }
     bool classic_numbers() const noexcept { return classic_numbers_; }
     /// (a test hook) the face's file that the numbers use: empty is no face (the classic numbers are drawn); a file that does not open draws no number
-    void set_number_font_path(const std::string& path) { ttf_path_ = path; font_per_point_ = 0.0; clear_number_pictures(); }
+    void set_number_font_path(const std::string& path) { number_path_ = path; font_per_point_ = 0.0; clear_number_pictures(); }
+    /// The face's file that the numbers use now (the bundled Libre Franklin Black, else the face that draw_text uses; empty: none)
+    const std::string& number_font_path() const noexcept { return number_path_; }
+    /// The face of the numbers: the bundled heavy file `black_file` when it opens, else `text_face` (the face that draw_text uses: the Medium on a normal install, with the same outline); empty when there is
+    /// no text face either (the classic digits are drawn)
+    static std::string choose_number_face(const std::string& text_face, const std::string& black_file);
     /// The font's numbers are the ones drawn now (not the classic switch, and a face was found)
-    bool font_numbers() const noexcept { return !classic_numbers_ && !ttf_path_.empty(); }
+    bool font_numbers() const noexcept { return !classic_numbers_ && !number_path_.empty(); }
+    /// A team's score number or a results column's score, in the numbers' face (white or `color`, the thick outline), as tall as `ink_h` canvas pixels (outline counted) and never wider than `box_w`
+    /// (squeezed to it when wider: the draw_text_squeezed rule); `right_align` ends it at the box's right edge, else it starts at the left. false when the font numbers are off: the caller draws the old way
+    bool draw_number_text(const std::string& text, int32_t x, int32_t y, int32_t box_w, int32_t ink_h, bool right_align, ants::assets::ColorRGBA color) override;
     /// (public for the tests) The output's own pixels: SDL's logical size is switched off while the numbers are drawn (`NativeFrame` keeps what to put back)
     struct NativeFrame {
         double scale{1.0};                         // output pixels per canvas pixel
@@ -762,7 +776,8 @@ private:
     const ChangePicture* change_picture(const std::string& text);
     // The numbers in the TrueType font (renderer_numbers.cpp)
     bool classic_numbers_{false};                  // (the hidden fallback: the old drawing, chosen by a test or a picture; it is also what is drawn when no face was found)
-    std::string ttf_path_;                         // the face that draw_text uses (empty: none was found, the classic numbers are drawn)
+    std::string ttf_path_;                         // the face that draw_text uses (empty: none was found)
+    std::string number_path_;                      // the face of the numbers: the bundled Libre Franklin Black, else ttf_path_ (empty: none was found, the classic numbers are drawn)
     struct NumberPicture {
         std::string text;
         int32_t height_px{0};                      // the wanted height of what shows (a digit and its outline) in output pixels
@@ -770,6 +785,7 @@ private:
         SDL_Texture* texture{nullptr};
         int32_t w{0}, h{0};                        // the texture
         int32_t box_x{0}, box_y{0}, box_w{0}, box_h{0};   // the box of what shows (glyphs and outline) in the texture: the digits' height, the text's width
+        uint64_t used{0};                          // when it was made or last asked for (number_tick_): the oldest go first
     };
     std::vector<NumberPicture> number_pictures_;
     struct DigitFont {                             // the face at the size whose digit is `digit_px` tall: the fill, and the same face with an outline (TTF_Font*, kept as void* so that this header needs no SDL_ttf)
@@ -777,11 +793,17 @@ private:
         int32_t outline{0};
         void* fill{nullptr};
         void* edge{nullptr};
+        uint64_t used{0};                          // when it was opened or last used (number_tick_)
     };
     std::vector<DigitFont> digit_fonts_;
     double font_per_point_{0.0};                   // the height of a digit per point of the face (measured once)
     const NumberPicture* number_picture(const std::string& text, int32_t height_px, int32_t outline_px);
-    void clear_number_pictures();
+    void clear_number_pictures();                  // every picture and every face
+    void evict_number_pictures();                  // the oldest quarter of the pictures (the faces stay open)
+    void evict_number_fonts();                     // the oldest quarter of the faces (their pictures stay)
+    void drop_number_fonts();
+    uint64_t number_tick_{0};                      // a counter of the cache's uses (the age of a picture or a face)
+    size_t number_font_opens_{0};                  // how many times a face was opened for a size (two a size: the fill and the outline)
     /// `x`, `y` are the canvas position of the box of what shows (its left and top edge; a centred one passes the middle); `width_px` > 0 stretches the box to that many output pixels
     void draw_number_box(const NativeFrame& f, const NumberPicture& pic, double x, double y, bool centre_x, bool centre_y, health::Color color, int32_t alpha, int32_t width_px = 0);
     /// The part of an animation's sprites that shows (the pixels that are not the color key), in the animation's own coordinates: the digit sprites' ink, not their cell
@@ -798,6 +820,7 @@ public:
     /// (for the tests) how many number pictures and fonts the cache holds, and its bounds
     size_t number_cache_size() const noexcept { return number_pictures_.size(); }
     size_t number_font_count() const noexcept { return digit_fonts_.size(); }
+    size_t number_font_opens() const noexcept { return number_font_opens_; }
     static constexpr size_t kMaxNumberPictures = 512;
     static constexpr size_t kMaxNumberFonts = 64;
     /// (for the tests) the picture of a text drawn as the font numbers draw it: nullptr when there is no face; `box` gets the box of what shows

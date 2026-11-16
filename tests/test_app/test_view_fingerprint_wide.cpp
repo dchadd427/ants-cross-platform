@@ -752,6 +752,7 @@ struct WideAppRig {
         ok = app.init(cfg);
         if (!ok) return;
         app.renderer().pin_animation_clock(1500);
+        app.renderer().set_classic_numbers(true);                 // (the pinned pictures are the classic numbers' ones, the HUD's score boxes included; the font's numbers have their own tests, test_font_numbers)
         app.hud().set_ticks_function(&test_clock);
         g_now_ms = 0;
         app.handle_window_event(window_event(SDL_WINDOWEVENT_LEAVE));

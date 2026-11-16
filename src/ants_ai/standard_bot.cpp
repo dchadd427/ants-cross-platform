@@ -52,6 +52,7 @@ void StandardBot::start(const BotContext& context) {
     ledger_.set_rank(kMinerFlight, kRankPowerUps);                // (a free Bomber on its way to the island of the ring pile)
     ledger_.set_rank(kHeal, kRankFight);                          // (the same rank as a fight: it takes the ants of the ranks below, never one that a fight, a rush or a gate goal holds, and a fight never takes an ant that it holds)
     ledger_.set_rank(kFlowerLink, kRankPowerUps);                 // (the Swimmer that digs the tiles to a flower strip: taken from the ferry, which has the lower rank)
+    ledger_.set_rank(kThiefGuard, kRankFight);                    // (the fighters that meet an enemy Thief: taken from the economy, the guard and the ferry, never from a pick-up, a raid, a wall or a fight)
     ledger_.set_rank(kFerry, kRankGuard);                         // (the Swimmers that carry food: the island task takes one when a bridge is wanted)
 }
 
@@ -188,6 +189,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     opportunity_.step(context);                                                              // (before the fights and every chore: an enemy that one blow kills is struck at once; nothing when the plan has none)
     fight_.step(context);
     heal_.step(context);                                                                      // (after the fights, which give back the defenders that are too hurt; nothing when the plan has no heal: it gives back what it held)
+    thief_guard_.step(context);                                                               // (after the fights and the heals: an enemy Thief that comes for the own hole is met by the nearest free fighters; nothing when the plan has none)
     if (plan.rush || rush_.active()) rush_.step(context);                                   // (when the plan has no rush the task only gives back what it held)
     if (!gate_breaching) walls_.step(context);
     powerups_.step(context);
@@ -383,6 +385,7 @@ void StandardBot::on_proposed(const sim::Command& command, Fate fate, uint64_t t
     field_.on_command(command, fate, tick);
     brawl_.on_command(command, fate, tick);
     opportunity_.on_command(command, fate, tick);
+    thief_guard_.on_command(command, fate, tick);
     gate_.on_command(command, fate, tick);
     aid_.on_command(command, fate, tick);
     harvest_.on_command(command, fate, tick);

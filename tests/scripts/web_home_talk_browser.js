@@ -2,6 +2,7 @@
 // page (web/lobby.html with web/home/) and the FAKE hub (tests/scripts/fake_hub.js) that shares the page's address. The speech recognition is a FAKE (an init script puts a class in its place: no microphone, no sound).
 // For every size (1280 x 800, 701 x 800, a phone 390 x 844, 320 x 640 and a phone held sideways 568 x 320) it checks, with a writer in the chat:
 //   1. the composer is one box in every window, ONE row when it is empty (the field, the buttons, Send), each at least 44 x 44 px; a long line makes two rows (the field on top over the whole width, the buttons and Send under it; a window under 501 px high stays one row), and Send or a deleted line brings the one row back; the dock is not taller for one row; inside the window, the page does not scroll sideways, and the field keeps room to type (at least 90 px);
+//      a draft of 1,000 characters (one word) keeps the field at four lines at the most and scrolls inside itself, and a line from the hub that is one word of 1,000 characters wraps inside the log (the dock keeps its width, nothing scrolls sideways);
 //   2. the picker (nine tabs, a search field, the recently used row, the emoji of a group, a name line): a box above the field at the right in a wide window, a row of the form's width over a low window, a sheet at the
 //      bottom of a phone upright (52 percent of the height, the log shorter, the field and Send above it); never over the field or Send, inside the window, nothing scrolls sideways; its buttons are at least 44 px high; a
 //      tab shows its group; the search finds the cat and Enter puts it in without sending; a pick goes in at the caret and is kept (it comes back after a reload); the arrow keys move by row; the dock is still open;
@@ -142,6 +143,15 @@ async function main() {
             check(name + 'a long line: two rows (the field on top over the whole width, the buttons and Send under it at the right), the field taller than 44 px', st.two && !st.one && st.field > 44, JSON.stringify(st));
             if (w > 700) check(name + 'two rows: the dock is taller than with one row, and the log keeps room (60 px at least)', longDock.h > emptyDock.h && longLog.h >= 60, JSON.stringify([emptyDock, longDock, emptyLog, longLog]));
         }
+        await page.fill('.gc-input', 'w'.repeat(1000));
+        await sleep(100);
+        const draft = await page.evaluate(() => { const f = document.querySelector('.gc-input'); return { h: f.getBoundingClientRect().height, scrolls: f.scrollHeight > f.clientHeight, sideways: document.documentElement.scrollWidth > window.innerWidth }; });
+        check(name + 'a draft of 1,000 characters (one word): the field stays at four lines at the most (110 px) and scrolls inside itself, and nothing scrolls sideways', draft.h <= 111 && draft.scrolls && !draft.sideways, JSON.stringify(draft));
+        const dockWidth = (await rect(page, '#gchat')).w;
+        hub.say('long.word', 'W'.repeat(1000));
+        await sleep(200);
+        const wrapped = await page.evaluate(() => { const l = document.querySelector('#gchat .gc-log'); return { width: document.getElementById('gchat').getBoundingClientRect().width, log: l.scrollWidth <= l.clientWidth, page: document.documentElement.scrollWidth <= window.innerWidth, last: l.lastElementChild.innerText.length }; });
+        check(name + 'a line that is one word of 1,000 characters wraps inside the log: the dock keeps its width and nothing scrolls sideways', Math.abs(wrapped.width - dockWidth) < 1 && wrapped.log && wrapped.page && wrapped.last > 1000, JSON.stringify([dockWidth, wrapped]));
         const sweep = await page.evaluate(() => {      // (one letter more, then one less, each measured three times: the class never flips by itself, and it comes and goes at one length)
             const f = document.querySelector('.gc-input'), form = f.form, tall = () => form.classList.contains('gt-tall'), up = [], down = [], steady = [];
             const at = (n) => { f.value = 'x'.repeat(n); const a = []; for (let k = 0; k < 3; k++) { f.dispatchEvent(new Event('input', { bubbles: true })); a.push(tall()); } steady.push(a[0] === a[1] && a[1] === a[2]); return a[2]; };

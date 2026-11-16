@@ -283,6 +283,7 @@ void app_scenarios() {
                 }
                 Application& app = rig.app;
                 app.renderer().pin_animation_clock(1500);
+                app.renderer().set_classic_numbers(true);                 // (the pinned pictures are the classic numbers' ones, the HUD's score boxes included; the font's numbers have their own tests, test_font_numbers)
                 if (!app.start_game(maps_dir() + map + ".LVL")) {
                     check(false, std::string("the match on ") + map + " starts");
                     continue;
@@ -321,6 +322,7 @@ void app_ants_scenarios() {
                 }
                 Application& app = rig.app;
                 app.renderer().pin_animation_clock(1500);
+                app.renderer().set_classic_numbers(true);                 // (the pinned pictures are the classic numbers' ones, the HUD's score boxes included; the font's numbers have their own tests, test_font_numbers)
                 app.handle_window_event([] { SDL_WindowEvent we{}; we.type = SDL_WINDOWEVENT; we.event = SDL_WINDOWEVENT_LEAVE; return we; }());     // (no game cursor in the picture)
                 if (!app.start_game(maps_dir() + map + ".LVL")) {
                     check(false, std::string("the match on ") + map + " starts");
