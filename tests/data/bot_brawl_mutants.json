@@ -242,7 +242,7 @@
    "id": "brawl_ring_bonus_dropped",
    "file": "src/ants_ai/brawl_task.cpp",
    "old": "(f->team == prey ? static_cast<int64_t>(params_.ring_bonus) : 0)",
-   "new": "0",
+   "new": "(f->team == prey ? static_cast<int64_t>(0) : 0)",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI30.12 ' ./build/tests/test_ai/test_ai",
    "expect": "AI30.12"
   },
