@@ -446,6 +446,10 @@ public:
                      "DIAG2 label=%s seat=%u fights=%u offence=%u aborted=%u hunt_available=%u hunts=%u hunts_killed=%u fire_hunts=%u sab_walls=%u sab_refused=%u sab_put_out=%u tier_looks=%u/%u/%u/%u guard_looks=%u\n",
                      label_.c_str(), static_cast<unsigned>(seat_), b.fight().fights_started(), b.fight().offence_started(), b.fight().offence_aborted(), b.fight().hunt_available(), b.fight().hunts_started(), b.fight().hunts_killed(),
                      b.fight().fire_hunts(), b.sabotage().walls_ordered(), b.sabotage().refused_safe(), b.sabotage().put_out(), tier_looks_[0], tier_looks_[1], tier_looks_[2], tier_looks_[3], guard_looks_);
+        // The thief batch: raids called off on the way (and sent to another hill), the meetings with enemy Thieves (strikes, thieves gone, walls opened for the trap), the trips and wall orders dropped for a stranded ant
+        std::fprintf(stderr, "DIAG3 label=%s seat=%u raids=%u rechecks=%u retargets=%u meets=%u strikes=%u gone=%u trap_opens=%u stranded_skips=%u wall_unreachable=%u\n", label_.c_str(), static_cast<unsigned>(seat_),
+                     b.raids().raids_ordered(), b.raids().rechecks(), b.raids().retargets(), b.thief_guard().meets_started(), b.thief_guard().strikes(), b.thief_guard().thieves_gone(), b.thief_guard().trap_opens(),
+                     b.powerups().stranded_skips(), b.walls().unreachable());
     }
     const char* kind() const noexcept override { return inner_->kind(); }
     void start(const BotContext& context) override {

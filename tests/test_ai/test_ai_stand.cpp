@@ -168,6 +168,7 @@ void run_stand_tests() {
                 sim.kill_unit(enemy);
                 sim.spawn_unit(1, sim::AntType::Thief, TileCoord{home.origin.x + 12, home.origin.y + 9});
                 LevelPlan plan = plan_for(Level::Hard);
+                without_thief_batch(plan);                                                                   // (the subject is the duel: the ants that a Thief in sight would call to the hole are the fire hunt's here)
                 plan.fire_defence_hold = 0;
                 plan.fire_duel_walls = walls;
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
