@@ -9,6 +9,9 @@
 // is read as the hub reads it (the seven words, any case; a role of none gets `bad` and nothing is posted; a role that may not gets `power`; a name that is nobody's in `people` ({ name: role }) gets `who`; a
 // person of the same or a higher rank, or oneself, gets `power`; `o.roleDown` makes every command `role`; a done one is answered `ok`, a kick and a ban also make the hub's own line `<name> was kicked.` with
 // `sys: true`, a line of a moderator or an administrator carries `role`, and /bans answers the private `bans` frame from `o.bans`); `hub.bye(why)` sends the `bye` frame and closes the sockets (a kick also ends the login: the next welcome names nobody).
+// A person may be named by `#<number>` (the author of that line: `hub.lines` keeps who wrote each line, from the history and from `say`) or `row:<number>` (the person of that row of the players list: `o.rows`, { number: name }),
+// `/ban who purge` also takes the person's lines of the last hour (the hub's own `del` frames are sent for the lines of `hub.lines` of that person), `/mutes` is answered the private `mutes` frame from `o.mutes`, and a done `/del`
+// sends the `del` frame to every socket before the `ok`, as the hub does. A line that is not there is `bad`, a line of the hub's own is `power`, a row that is not there is `who`.
 //   const hub = await startHub({ you: { name: 'maple.leaf', mod: false }, login: true, history: [line(1, 'pebble', 'hello')] });  hub.url; hub.say('pebble', 'hi'); hub.drop(); await hub.close();
 'use strict';
 const http = require('http');
@@ -26,7 +29,8 @@ function frame(opcode, payload) {                       // a server's frame: who
 
 function startHub(options) {
     const o = Object.assign({ you: null, login: false, history: [], online: 3, mode: 'normal', path: '/hub/ws' }, options);
-    const hub = { peers: [], received: [], upgrades: 0, nextId: 100, welcomes: 0, options: o };
+    const hub = { peers: [], received: [], upgrades: 0, nextId: 100, welcomes: 0, options: o, lines: {} };
+    for (const l of o.history) if (l && typeof l.id === 'number') hub.lines[l.id] = { who: l.who, sys: l.sys === true };       // (who wrote each line: a command may name a person by the number of a line)
     const server = o.server || http.createServer((req, res) => { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('not here'); });       // (o.server: the upgrades of a server that is there already, a page's own, are taken: the page and the hub share one address)
     const writers = new Map();                          // peer -> { tokens, at, said }
     const welcome = () => Object.assign({ t: 'welcome', v: 1, you: o.you, login: o.login, online: o.online, history: o.history }, o.welcomeExtra);       // (o.welcomeExtra: more of the welcome, for example { presence: true, me: 3 })
@@ -104,7 +108,7 @@ function startHub(options) {
         }
         if (m.t !== 'say') { hub.send(peer, { t: 'err', code: 'bad' }); return; }
         if (!o.you) { hub.send(peer, { t: 'err', code: 'login' }); return; }
-        if (typeof m.text === 'string' && /^\/(mute|unmute|del|kick|ban|unban|bans)(\s|$)/i.test(m.text.trim())) { command(peer, m.text.trim()); return; }
+        if (typeof m.text === 'string' && /^\/(mute|unmute|del|kick|ban|unban|bans|mutes)(\s|$)/i.test(m.text.trim())) { command(peer, m.text.trim()); return; }
         const w = writers.get(peer), now = Date.now();
         w.tokens = Math.min(10, w.tokens + (now - w.at) / 500); w.at = now;
         for (const [t, at] of w.said) if (now - at >= 30000) w.said.delete(t);
@@ -114,22 +118,35 @@ function startHub(options) {
         w.tokens -= 1; w.said.set(m.text, now);
         hub.say(o.you.name, m.text, o.you.mod, Object.assign(o.you.k ? { k: o.you.k } : {}, o.you.role === 'mod' || o.you.role === 'admin' ? { role: o.you.role } : {}));       // (a line says the role that its author has, as the hub's does)
     }
-    const RANK = { none: 0, mod: 1, admin: 2 }, NEEDS = { mute: 1, unmute: 1, del: 1, kick: 1, ban: 2, unban: 2, bans: 2 }, ARGS = { mute: 2, unmute: 1, del: 1, kick: 1, ban: 1, unban: 1, bans: 0 };
+    const RANK = { none: 0, mod: 1, admin: 2 }, NEEDS = { mute: 1, unmute: 1, del: 1, kick: 1, ban: 2, unban: 2, bans: 2, mutes: 1 }, ARGS = { mute: 2, unmute: 1, del: 1, kick: 1, ban: 1, unban: 1, bans: 0, mutes: 0 };
     function command(peer, text) {                      // a moderator's command, as the hub answers it
         const parts = text.split(/\s+/), word = parts[0].slice(1).toLowerCase(), mine = o.you.role || (o.you.mod ? 'mod' : 'none');
         const err = (code) => hub.send(peer, { t: 'err', code });
         hub.commands.push(text);
-        if (mine === 'none' || parts.length - 1 !== ARGS[word]) { err('bad'); return; }
+        const purge = word === 'ban' && parts.length === 3 && parts[2] === 'purge';
+        if (mine === 'none' || (parts.length - 1 !== ARGS[word] && !purge)) { err('bad'); return; }
         if (RANK[mine] < NEEDS[word]) { err('power'); return; }
         if (o.roleDown) { err('role'); return; }
         if (word === 'bans') { hub.send(peer, { t: 'bans', rows: o.bans || [] }); return; }
-        if (word === 'del') { if (!/^\d+$/.test(parts[1])) { err('bad'); return; } hub.send(peer, { t: 'ok', c: 'del' }); return; }
+        if (word === 'mutes') { hub.send(peer, { t: 'mutes', rows: o.mutes || [] }); return; }
+        if (word === 'del') { if (!/^\d+$/.test(parts[1])) { err('bad'); return; } hub.broadcast({ t: 'del', id: Number(parts[1]) }); hub.send(peer, { t: 'ok', c: 'del' }); return; }
         if (word === 'mute' && !/^\d+$/.test(parts[2])) { err('bad'); return; }
-        const them = (o.people || {})[parts[1]], self = parts[1] === o.you.name || parts[1] === o.you.other;
+        let name = parts[1];
+        if (/^#\d{1,9}$/.test(name)) {                    // (the author of a line: the hub's own line is `power`, a line that is not there `bad`)
+            const l = hub.lines[Number(name.slice(1))];
+            if (!l) { err('bad'); return; }
+            if (l.sys) { err('power'); return; }
+            name = l.who;
+        } else if (/^row:\d{1,9}$/.test(name)) {
+            name = (o.rows || {})[Number(name.slice(4))];
+            if (name === undefined) { err('who'); return; }
+        }
+        const them = (o.people || {})[name] !== undefined ? o.people[name] : (o.people || {})[String(name).toLowerCase()], self = name === o.you.name || name === o.you.other;
         if (them === undefined && !self) { err('who'); return; }
         if (self || RANK[them] >= RANK[mine]) { err('power'); return; }
+        if (purge) for (const id of Object.keys(hub.lines)) if (hub.lines[id].who === name) hub.broadcast({ t: 'del', id: Number(id) });
         hub.send(peer, { t: 'ok', c: word });
-        if (word === 'kick' || word === 'ban') hub.say('system', parts[1] + ' was ' + (word === 'kick' ? 'kicked' : 'banned') + '.', false, { k: '', sys: true });
+        if (word === 'kick' || word === 'ban') hub.say('system', name + ' was ' + (word === 'kick' ? 'kicked' : 'banned') + '.', false, { k: '', sys: true });
     }
     hub.commands = [];
     hub.you = (you) => { o.you = you; hub.broadcast({ t: 'you', you }); };
@@ -137,7 +154,7 @@ function startHub(options) {
     hub.send = (peer, obj) => { if (peer.open) peer.socket.write(frame(1, Buffer.from(typeof obj === 'string' ? obj : JSON.stringify(obj)))); };
     hub.raw = (peer, buffer) => { if (peer.open) peer.socket.write(buffer); };
     hub.broadcast = (obj) => hub.peers.forEach((p) => hub.send(p, obj));
-    hub.say = (who, text, mod, extra) => { const id = hub.nextId++; hub.broadcast(Object.assign({ t: 'line' }, line(id, who, text, mod, extra))); return id; };
+    hub.say = (who, text, mod, extra) => { const id = hub.nextId++; hub.lines[id] = { who, sys: !!(extra && extra.sys) }; hub.broadcast(Object.assign({ t: 'line' }, line(id, who, text, mod, extra))); return id; };
     hub.del = (id) => hub.broadcast({ t: 'del', id });
     hub.setOnline = (n) => { o.online = n; hub.broadcast({ t: 'online', n }); };
     hub.drop = () => hub.peers.slice().forEach((p) => p.socket.destroy());            // every socket is cut, no close frame

@@ -1,4 +1,4 @@
-// Runs the front page's PUBLIC ROOM, QUICK HOST and JOIN (web/home/games.js with web/lobby.html's own script, docs/HOME_SCREEN.md, docs/PUBLIC_ROOMS.md) in the fake browser of tests/scripts/web_page_harness.js against a
+// Runs the front page's PUBLIC ROOM, QUICK HOST and JOIN (web/home/games.js with web/lobby.html's own script, docs/HOME_GAMES.md, docs/PUBLIC_ROOMS.md) in the fake browser of tests/scripts/web_page_harness.js against a
 // scripted game server and a fake GET /lobbies (the list itself, its looks and its words are web_home_games_check.js):
 //   1. the Room's switch: the leader's Public | Private, the guest's chip, the state that is the Room message's and never the press's, a double press, the page's pace, the place of the switch on a wide and a narrow window;
 //   2. what the room says: a room that went private after 30 minutes (the notice and its button), a host that changed, a leader's own "private", a guest; the repeat every 10 minutes, only while the Room shows, the tab is

@@ -1,5 +1,5 @@
 // The front page's PUBLIC ROOM and GAMES LIST in a REAL browser (Chromium through Playwright) against a REAL ants_server, behind a small stand-in for the site's nginx: the files of web/ (stamped as the Dockerfile
-// stamps them), /ws to the server's WebSocket door, /lobbies, /stats and /busy to its public door and its status, and nothing else (docs/HOME_SCREEN.md, docs/PUBLIC_ROOMS.md). Opt-in, like the other browser checks: it needs
+// stamps them), /ws to the server's WebSocket door, /lobbies, /stats and /busy to its public door and its status, and nothing else (docs/HOME_SCREEN.md, docs/HOME_GAMES.md, docs/PUBLIC_ROOMS.md). Opt-in, like the other browser checks: it needs
 // Playwright (`require('playwright')`), a Chromium that it can start and a built ants_server.
 //   1. two browser contexts: the first makes its room public with Quick host (a real room, a real Visibility), the second opens the Games list and sees that room in the answer of the real /lobbies door (the host's name,
 //      the map, the seats), joins it from the list (a second client that only joins; the page's own room goes when the new one welcomes it), and the first sees the guest in its room;
@@ -375,7 +375,7 @@ async function flows() {
             await ctx.close();
         }
 
-        // ---- 1f. the cards in short and narrow windows (docs/HOME_SCREEN.md): at 568 x 320 and at 195 x 422 (a 390 x 844 phone zoomed to 200 %: the same CSS pixels) both buttons of the empty card and of the question stand inside the card, the card inside the window and nothing scrolls
+        // ---- 1f. the cards in short and narrow windows (docs/HOME_GAMES.md): at 568 x 320 and at 195 x 422 (a 390 x 844 phone zoomed to 200 %: the same CSS pixels) both buttons of the empty card and of the question stand inside the card, the card inside the window and nothing scrolls
         // inside it; at 390 x 844 and 1280 x 800 the cards are not compact (the shade's 16 px, the title's 26 px) --------------------------------------------------------------------------------------------
         for (const [label, w, h, compact, narrow] of [['568 x 320', 568, 320, true, false], ['195 x 422 (200 % zoom)', 195, 422, true, true], ['390 x 844', 390, 844, false, false], ['1280 x 800', 1280, 800, false, false]]) {
             const size = ['x', w, h];
@@ -718,7 +718,7 @@ async function flows() {
             }
             check('with the system bar over the last 36 px (448 x 998, 390 x 880), 24 px (844 x 390) or nothing (390 x 844, 1280 x 800): Home, the body and the chat dock (folded and open) end at or above the visible bottom (the window less the inset), and Home fills the window when there is no inset', bad.length === 0, bad.join(' | '));
         }
-        // ---- 1j. the Room's Public | Private switch: the label sits in the middle of its button (docs/HOME_SCREEN.md, "The Room's switch"). The two words (the big "Private" / "Public" and the small "link only" / "listed") share a baseline; they were a flex row
+        // ---- 1j. the Room's Public | Private switch: the label sits in the middle of its button (docs/HOME_GAMES.md, "The Room's switch"). The two words (the big "Private" / "Public" and the small "link only" / "listed") share a baseline; they were a flex row
         // with align-items: baseline, which hangs at the TOP of a 44 px button (the capitals' middle was 7 px above the button's middle, more empty space below the text than above). The middle of the big word's capitals (its baseline less half
         // the cap height of its font) is within 1 px of the middle of the button, with either button selected, at a phone's 448 x 962, 390 x 844, 360 x 640, 320 x 568 (a pixel ratio of 2.6), 844 x 390 and 1280 x 800; the button is 44 px high and the words are not cut.
         // At 320 px (and 300 to 346) "link only" spilled past the button's right border (the label did not fit the box): at every width from 300 to 400 px, and at a few above, the small word is inside its button (not past the border, one line) ----

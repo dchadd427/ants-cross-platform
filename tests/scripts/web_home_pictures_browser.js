@@ -1,6 +1,6 @@
 // OPT-IN, not part of ./run_tests.sh: the pictures in the round circles of Home in a REAL browser (Chromium through Playwright), against the fake hub of tests/scripts/fake_hub.js behind a small stand-in for the
-// site that serves the files of web/ and the pictures at /hub/pic/<name>.png (test pictures drawn here, each with a mode: ok, slow, 404, 429). What no fake DOM can show (docs/HOME_SCREEN.md, "The login",
-// "The players list"):
+// site that serves the files of web/ and the pictures at /hub/pic/<name>.png (test pictures drawn here, each with a mode: ok, slow, 404, 429). What no fake DOM can show (docs/HOME_CHAT.md, "The login",
+// docs/HOME_SCREEN.md, "The players list"):
 //   1. nothing moves when a picture loads: the rows of the list, the list and the account chip have the same boxes before and after (the pictures are held back, then let through), and the page reports no layout shift;
 //   2. the ring: the circle's own border (red for an administrator, yellow for a moderator, 2 px) is still there around a picture, the picture is inside it, and the status dot is on top of the picture;
 //   3. the letter: shown while the picture is on its way, hidden once it has loaded; a picture that answers 404 or 429, a request that is blocked, are the letter exactly as without a picture (no broken image, same boxes);

@@ -1,4 +1,4 @@
-// The public Room and the Games list (docs/HOME_SCREEN.md, docs/PUBLIC_ROOMS.md): the Room's Public | Private switch, Quick host, and the Games list (GET /lobbies: rows, Join, Join by code), a popover under the Home bar or docked
+// The public Room and the Games list (docs/HOME_GAMES.md, docs/PUBLIC_ROOMS.md): the Room's Public | Private switch, Quick host, and the Games list (GET /lobbies: rows, Join, Join by code), a popover under the Home bar or docked
 // in Home's body. Loaded by web/home/home.js after the first paint, with games.css (until then the buttons that it lights stay disabled). ES5: a page gets AntsHomeGames, node gets module.exports
 // (tests/scripts/web_home_games_check.js). The client, model and session are the page's own (web/lobby.html), read through `page`.
 //   * The room's state is the server's word: the switch is drawn from the last Room message, never from what a press asked, and a request that the page's pace holds back sends nothing.

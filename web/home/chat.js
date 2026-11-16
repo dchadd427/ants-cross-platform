@@ -1,4 +1,4 @@
-// The global chat dock of Home (docs/HOME_SCREEN.md, "The chat dock"): a panel along the bottom of Home (the Chat view on a phone) that reads and writes the site's chat hub, one WebSocket, JSON, version 1
+// The global chat dock of Home (docs/HOME_CHAT.md, "The chat dock"): a panel along the bottom of Home (the Chat view on a phone) that reads and writes the site's chat hub, one WebSocket, JSON, version 1
 // (docs/HUB.md: up {"t":"say","text"} and {"t":"ping"}; down welcome, line, del, online, err, and for a moderator you, ok, bans, bye). Loaded by web/home/home.js after the first paint, with web/home/chat.css, and only by the front page: a plain visit of any
 // other page opens no hub socket. ES5, no module system: a page gets AntsHomeChat, node gets module.exports (tests/scripts/web_home_chat_check.js).
 //   * Everything the hub sends is text from strangers: it becomes DOM text with createElement and textContent only (never markup; the one thing that becomes a link is an http or https address, or a bare www host, made as an element with attributes: see partsOf); names and lines are cut for display, the bidirectional and zero-width
@@ -11,6 +11,8 @@
 //   * Roles (docs/HUB.md, "Roles", "Moderation"): `you.role` is none, mod or admin and a `you` frame changes it live. Only the flags `mod`, `role` and `sys` of the hub's frames decide a mark or the hub's own line, never
 //     a person's text. /help is this page's own (never sent) and lists the commands of the role; each reply of the hub (`ok`, `bans`, the codes power, role, who, rate, bad) is told in plain words as a private line of this
 //     screen. A `bye` is a plain notice, the field off where the hub's state needs it, and the usual reconnect with its backoff (so the person reads on).
+//   * Staff on a touch screen or with a mouse act on a line through the moderation sheet (web/home/mod.js, loaded by home.js only for a role): the dock gives it its log, `you()`, `line(id)`, `command(text, done)` (a
+//     command sent as typed, one at a time, answered once), `note(text)` (a private line), `rows(fn)` (told of every person's line that is drawn for staff), `by(id)` (the lines of the log that the author of line `id` wrote, newest first), `when(at)` (the log's own words for a time) and `arrived(fn)` (told when a line comes) and the tap kind `del`. Nothing of it exists for a person with no role.
 //   * While the tab is hidden the socket stays and the model follows, but nothing is painted (the screen is made again when the tab is back); a line that arrives while the dock is folded, on the Room or in a hidden tab is unread.
 (function (root, factory) {
     var api = factory();
@@ -216,7 +218,7 @@
         var hold = false;                                                        // the next repaint is for a change of the role: the reader keeps their place
         var removed = '';                                                        // 'kicked' or 'banned' after the hub said `bye` (or `banned` to a line): a notice stays on the screen, and a banned person's field stays off
         var barredShown = false;                                                 // (whether the last paint showed the field off for a ban: the pieces that stand beside the field are told when it changes)
-        var taps = [], hello = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
+        var taps = [], hello = null, rowFns = [], arrivalFns = [];                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -299,6 +301,7 @@
             put(r, [name]);
             if (tools() && e.u) put(r, [el('bdi', 'gc-u', ' (' + e.u + ')')]);       // (a moderator is shown the username where it differs from the name; nobody else ever is)
             put(r, [el('span', 'gc-sep', ': '), words(e.text)]);
+            if (tools()) rowFns.forEach(function (fn) { tell1(fn, e.id, r); });       // (the moderation sheet marks the lines that its viewer may act on)
             return r;
         }
         function stamp(e) {                                                      // the time of a line, from the hub's frame: first in the line, so that it is read before the name; the title has the date, and a moderator's the number that /del takes
@@ -431,9 +434,10 @@
 
         // ---- the link -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         function drop() {                                                        // let go of the socket: its timers stop, its handlers are cleared, it is closed
-            var s = sock;
+            var s = sock, waits = unanswered;
             sock = null;
             ['connect', 'ping', 'answer', 'retry', 'notice'].forEach(stop); notice = ''; unanswered = []; picPending(false); unlock();
+            waits.forEach(function (o) { if (o.done) o.done('offline'); });       // (a command of the sheet that waits is told: it says that nothing was done)
             if (s) { try { s.onopen = s.onmessage = s.onerror = s.onclose = null; s.close(); } catch (e) { /* it is gone */ } }
         }
         function lost() {                                                        // the socket is gone (closed, failed, silent, or it sent what no hub sends): say so, and try again later
@@ -540,6 +544,7 @@
             push(e);
             if (seen() && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); days(); } else stale = true;
             render();
+            arrivalFns.forEach(function (fn) { tell1(fn); });
         }
         function onDel(m) {
             if (count(m.id) === null) return;                                    // (only a number names a line: a private answer has none)
@@ -550,6 +555,7 @@
                 break;
             }
             render();
+            tapped('del', m);
         }
         function picPending(on) { picWait = !!on; stop('pics'); if (!on) picFailed = false; }
         function failPic(guest) { picWait = false; stop('pics'); picFailed = true; if (guest && you) you.pics = ''; render(); }       // (a refused press: nothing is sent again; `login` says that this socket is a guest: no switch)       // (the box goes back to what the hub last said, with "That did not work, try again")
@@ -575,8 +581,8 @@
             answer(lines);
         }
         function onOk(m) {                                                       // a command was done: the oldest command that waits is answered
-            var at = oldest(true), c = typeof m.c === 'string' && Object.prototype.hasOwnProperty.call(DONE, m.c) ? m.c : '';
-            if (at >= 0) unanswered.splice(at, 1);
+            var at = oldest(true), c = typeof m.c === 'string' && Object.prototype.hasOwnProperty.call(DONE, m.c) ? m.c : '', entry = at >= 0 ? unanswered.splice(at, 1)[0] : null;
+            if (entry && entry.done) { entry.done('ok'); return; }               // (the sheet's own command: the sheet says the words, as a toast and a private line)
             if (c) answer([DONE[c]]);
         }
         function take(data) {
@@ -606,6 +612,7 @@
             var about = ABOUT.indexOf(code) !== -1, at = oldest(about || code === 'bad'), refused = at < 0 && about ? { cmd: true } : unanswered.splice(at < 0 ? 0 : at, 1)[0];       // (power, role and who are a command's, even when its wait is over)
             if (!refused) return;
             if (code === 'banned') removed = 'banned';                           // (a banned person who reloads the page is told by the hub's refusal: the notice and the field off)
+            if (refused.done) { refused.done(code); render(); return; }          // (the sheet's own command: the sheet says the words)
             if (refused.cmd) answer([code === 'bad' ? TEXT.cmdBad : code === 'rate' ? TEXT.cmdRate : wordOf(code, login)]); else tell(code);
             if (refused.text === undefined) return;
             delete said[refused.text];
@@ -630,6 +637,30 @@
             waiting(); unanswered.push({ text: text, key: nfc(text), at: now(), cmd: cmd });       // (a command has no answer when the hub takes it, and `bad` when it is wrong)
             return '';
         }
+        function command(text, done) {                                          // a command of the moderation sheet, sent as the hub reads a typed one, one at a time; done(code) is called once: 'ok', a code of the hub (power, role, who, rate, bad...), 'offline', or 'silent' (no answer in 8 s). The dock adds nothing to the log: the sheet says the words
+            var entry = { text: text, key: nfc(text), at: now(), cmd: true }, fired = false;
+            entry.done = function (code) { if (fired) return; fired = true; clearTimeout(entry.timer); tell1(function () { done(code); }); };
+            waiting();
+            if (!you || you.role === 'none') { entry.done('power'); return; }
+            if (!sock || sock.readyState !== 1 || !welcomed || state !== 'live') { entry.done('offline'); return; }
+            if (oldest(true) >= 0) { entry.done('rate'); return; }
+            try { sock.send(JSON.stringify({ t: 'say', text: entry.text })); } catch (e) { lost(); entry.done('offline'); return; }
+            unanswered.push(entry);
+            entry.timer = setTimeout(guard(function () { var at = unanswered.indexOf(entry); if (at >= 0) unanswered.splice(at, 1); entry.done('silent'); }), MS.pending);
+        }
+        function lineById(id) {                                                 // a copy of a person's line of the log (never a private answer), or null
+            for (var i = 0; i < feed.length; i++) { var e = feed[i]; if (!e.priv && e.id === id) return { id: e.id, who: e.who, text: e.text, role: e.role, sys: e.sys, u: e.u, own: !!e.own }; }
+            return null;
+        }
+        function byAuthor(id) {                                                 // for a moderator or an administrator only: the lines of the log (never a private answer, never the hub's own) that the account of line `id` wrote, newest first, as { id, text, at }; matched by the hub's key of the account, never by a name; none when that line is not in the log or has no key
+            var from = null, out = [], i, e;
+            if (!tools()) return out;
+            for (i = 0; i < feed.length; i++) if (!feed[i].priv && feed[i].id === id) from = feed[i];
+            if (!from || from.sys || !from.k) return out;
+            for (i = feed.length - 1; i >= 0; i--) { e = feed[i]; if (!e.priv && !e.sys && e.k === from.k) out.push({ id: e.id, text: e.text, at: e.at }); }
+            return out;
+        }
+        function clockOf(at) { return typeof at === 'number' && dayOf(at) !== '' ? { time: timeOf(at), full: fullOf(at), day: dayWord(at), key: localDay(new Date(at * 1000)) } : null; }       // the log's own words for a time of a line: the clock, the full date, the divider's word and a number per local day
         function setOpen(on) { open = !!on; if (seen()) stale = true; render(); }
         function setMenu(on) { menuOn = !!on; render(); }
         function startLogin() {                                                 // a full navigation: Discord, then the hub's callback, then this page again, on the screen that the visitor was on
@@ -716,7 +747,8 @@
         paint();
         go();
         return {
-            root: box, slot: slot, field: field, grow: grow, say: sendLine, state: function () { return state; },
+            root: box, slot: slot, field: field, log: log, grow: grow, say: sendLine, state: function () { return state; },
+            you: function () { return you ? { name: you.name, role: you.role } : null; }, line: lineById, by: byAuthor, when: clockOf, arrived: function (fn) { arrivalFns.push(fn); }, command: guard(command), note: guard(function (text) { answer([String(text)]); }), rows: function (fn) { rowFns.push(fn); },
             tap: function (fn) { taps.push(fn); if (hello) tell1(fn, 'live', hello); else if (state === 'offline') tell1(fn, 'lost'); },
             send: out,
             shown: guard(function (on) { isHome = !!on; if (!on) menuOn = false; if (seen()) stale = true; render(); tapped('shown', !!on); }), open: guard(setOpen)

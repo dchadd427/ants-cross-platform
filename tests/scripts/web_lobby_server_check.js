@@ -520,7 +520,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         for (const ws of pageSockets) { try { ws.close(); } catch (e) { /* closed already */ } }
     });
 
-    // ---- the front page's public room and Games list against the real server and its real public door (docs/HOME_SCREEN.md): Quick host makes the room public, a second page lists it and joins it from the list ------------------
+    // ---- the front page's public room and Games list against the real server and its real public door (docs/HOME_GAMES.md): Quick host makes the room public, a second page lists it and joins it from the list ------------------
     await scenario('the front page: Quick host makes a real room public, a second page sees it in the real list and joins it from there', async () => {
         if (!listBase) { console.log('SKIP: no public door was given: the front page\'s Games list was NOT run against the real list'); return; }
         const webDir = path.join(path.dirname(path.resolve(modulePath)), '..');
@@ -561,7 +561,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         for (const ws of sockets) { try { ws.close(); } catch (e) { /* closed already */ } }
     });
 
-    // ---- Quick join against the real server and its real door (docs/HOME_SCREEN.md): a page presses it and lands in the room of another page; the question when others are in its own room; nothing to join; a room that is full
+    // ---- Quick join against the real server and its real door (docs/HOME_GAMES.md): a page presses it and lands in the room of another page; the question when others are in its own room; nothing to join; a room that is full
     // or started is skipped for the next one and no more than three are tried; a Cancel while a try waits leaves no seat behind. The pages of the front page are the real one in the fake browser; the hosts are plain clients;
     // the list that a page sees is the real door's, kept to the hosts of this scenario (rooms of the scenarios before are still in it), with the rooms that went full or started a moment after the list was made added by hand.
     await scenario('Quick join: the best open room of the real list, the question when others are in the room, a room that is full or started is skipped, three tries at most, Cancel leaves no seat behind', async () => {
