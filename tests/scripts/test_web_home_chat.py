@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The chat dock of Home (web/home/chat.js and chat.css, docs/HOME_SCREEN.md "The chat dock"; run by ./run_tests.sh --fast and by the CI).
+"""The chat dock of Home (web/home/chat.js and chat.css, docs/HOME_CHAT.md "The chat dock"; run by ./run_tests.sh --fast and by the CI).
 
 Home carries the site's global chat in a panel in its lower-left corner (a strip along the bottom on a phone). It reads and writes the chat hub, one WebSocket at /hub/ws (docs/HUB.md), and every word it shows
 is text from strangers. It is loaded by web/home/home.js, after the first paint and only when Home is shown, so that it can never hold up Home, the Room or START. What this file checks:
@@ -460,11 +460,12 @@ class TheWayIntoTheImage(unittest.TestCase):
         self.assertIn(" home/home.js home/home.css home/chat.js home/chat.css ", read(".github", "workflows", "ci.yml"))
 
     def test_the_documentation_is_where_the_screens_are(self):
-        doc = read("docs", "HOME_SCREEN.md")
+        doc = read("docs", "HOME_CHAT.md")
         self.assertIn("## The chat dock", doc)
         for needle in ("`chat.js` and `chat.css` load once, after the first paint", "no other page loads them or opens a hub socket", "#gchat-login-slot", "Chat is read-only for now", "Chat is offline", "1 s, doubling to 60 s", "100 lines at most",
-                       "eight at once, then one every 0.6 s", "nothing the chat does can block Home, the Room or START", "tests/scripts/test_web_home_chat.py"):
+                       "eight at once, then one every 0.6 s", "nothing the chat does can block Home, the Room or START"):
             self.assertIn(needle, doc, needle)
+        self.assertIn("tests/scripts/test_web_home_chat.py", read("docs", "HOME_SCREEN.md"), "the Tests section of the screens' page names this file")
 
 
 @unittest.skipUnless(NODE, "node is not installed: the invisible characters were NOT compared with the hub's (tests/scripts/test_web_home_chat.py)")
@@ -550,7 +551,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     copy with nothing changed must pass"""
     FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/hub_here.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/talk.css", "web/home/players.css", "web/home/players.js", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
               "tests/scripts/web_home_chat_hub_check.js", "tests/scripts/web_page_harness.js", "tests/scripts/fake_hub.js", "tests/scripts/mini_websocket.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
-              "docs/HOME_SCREEN.md", "hub/__init__.py", "hub/text.py", "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html"]
+              "docs/HOME_SCREEN.md", "docs/HOME_CHAT.md", "hub/__init__.py", "hub/text.py", "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])
 
     @classmethod

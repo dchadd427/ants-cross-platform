@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The moderation sheet of the chat (web/home/mod.js and mod.css, docs/HOME_SCREEN.md "Roles and commands", docs/HUB.md "Moderation"; run by ./run_tests.sh --fast and by the CI).
+"""The moderation sheet of the chat (web/home/mod.js and mod.css, docs/HOME_CHAT.md "Roles and commands", docs/HUB.md "Moderation"; run by ./run_tests.sh --fast and by the CI).
 
 A staff member (the hub's `you.role` is mod or admin) acts on a person's line from the chat itself: a right click on the line, a long press on a touch screen, or the keys (Up and Down choose a line, Enter, the menu key or Shift
 and F10 open it). A sheet offers what the viewer may do to that line's author (Delete the line, Mute, Kick, Ban), and types the hub's own commands by the NUMBER of the line, so there is no new power. It is loaded by

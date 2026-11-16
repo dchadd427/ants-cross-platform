@@ -1,4 +1,4 @@
-// OPT-IN, not part of ./run_tests.sh: the moderation sheet of the chat (web/home/mod.js, mod.css, docs/HOME_SCREEN.md "Roles and commands") in a REAL browser (Chromium through Playwright), on the real front page
+// OPT-IN, not part of ./run_tests.sh: the moderation sheet of the chat (web/home/mod.js, mod.css, docs/HOME_CHAT.md "Roles and commands") in a REAL browser (Chromium through Playwright), on the real front page
 // (web/lobby.html with web/home/) and the FAKE hub (tests/scripts/fake_hub.js) that shares the page's address. Made-up names only. For each window size (a phone upright 390 x 844, a phone held sideways 844 x 390,
 // a desktop 1280 x 800 with a mouse, the same with a touch screen, and a small phone 320 x 640) it checks:
 //   1. an administrator: the part is asked for after the welcome, the lines that have an action carry the mark, and the lines that have none (an administrator's, the hub's own) do not;

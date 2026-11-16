@@ -1,4 +1,4 @@
-// The moderation sheet of Home's chat (docs/HOME_SCREEN.md, "Roles and commands"): staff (the hub's `you.role` is mod or admin) act on a person's line without typing: a right click on the line, a long press on it (a touch
+// The moderation sheet of Home's chat (docs/HOME_CHAT.md, "Roles and commands"): staff (the hub's `you.role` is mod or admin) act on a person's line without typing: a right click on the line, a long press on it (a touch
 // screen), or the keyboard (Up and Down choose a line of the log, Enter, the menu key or Shift and F10 open it) opens a sheet with what the viewer may do to that line's author: Delete the line, Mute (four times and a
 // custom number of minutes), Kick, Ban (administrators; also with the person's lines of the last hour taken off every screen). Delete, Kick and Ban ask once more in a confirm card whose safe answer has the focus. On another person's line a first row, Recent messages from the person (n), opens the lines of that person that are in
 // the page's log (newest first; the dock finds them by the hub's key, the sheet only holds the number of one of them); a line of the list opens the sheet of that line. ES5,

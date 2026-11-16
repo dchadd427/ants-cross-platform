@@ -1,4 +1,4 @@
-/* The global chat dock of Home (web/home/chat.js, docs/HOME_SCREEN.md "The chat dock"), loaded after the first paint. The colors, .btn and the frame are the page's own (web/lobby.html). A panel along the bottom of
+/* The global chat dock of Home (web/home/chat.js, docs/HOME_CHAT.md "The chat dock"), loaded after the first paint. The colors, .btn and the frame are the page's own (web/lobby.html). A panel along the bottom of
    Home, under the games and the players, as wide as they are together; the minus button folds it to its header (a short window opens it folded). On a phone it is the Chat view: it fills the page above the strip. Every target is at least 44 px; nothing scrolls sideways. */
 .gc { order: 5; flex: none; margin: 0 24px 22px; display: flex; flex-direction: column; height: clamp(160px, 28vh, 260px); color: var(--cream); background: var(--inset);
     border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
