@@ -8,7 +8,7 @@ The database library of the game server (`ants_db`, `docs/SERVER.md` "The databa
 - SHA-256 of the zip: `1e71ddf93849c6a6ecf58b827c0692073d2dd7ee40196158068f7b29f422e87d`
 - SHA3-256 of the zip: `628a44cfe82c66aed1ccbbe85a562d2e33ebe64b3288981ed76285612227934e` (computed on the download: the download page lists SHA3-256 only for the current release)
 - Licence: public domain (the author disclaims copyright; see the blessing at the top of `sqlite3.h`). Listed in `THIRD_PARTY_NOTICES.md`.
-- Build: `CMakeLists.txt` here makes the static library `ants_sqlite` with the compile definitions explained in it (not threadsafe, no extensions, foreign keys on, no double-quoted strings).
+- Build: `CMakeLists.txt` here makes the static library `ants_sqlite` with the compile definitions explained in it (built for one connection per thread, no extensions, foreign keys on, no double-quoted strings).
 
 ## Update
 

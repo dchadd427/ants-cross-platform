@@ -389,4 +389,26 @@ void run_migration_tests() {
         DB_CHECK(db.exec(row("31", "3", std::string(3000, 'A'))).ok() && rows_in(db, "history_deaths") == 2);
         DB_CHECK(db.exec("DELETE FROM history_matches WHERE id = 'ants-TINY-20261008-143209Z'").ok() && rows_in(db, "history_deaths") == 1);   // (the row goes with its match)
     } DB_END;
+
+    DB_CASE("SV1.8 The history service's schema (history_db_migrations): numbered 1 to 4, the same history tables as the server's (the same SQL, every index and check), and no table of anything else (no statistics, submissions or accounts)") {
+        Database server, service;
+        DB_CHECK(server.open(":memory:").ok() && service.open(":memory:").ok());
+        int v = 0;
+        DB_CHECK(migrate(server, ants::server::db_migrations(), &v).ok() && v == 7);
+        DB_CHECK(migrate(service, ants::server::history_db_migrations(), &v).ok() && v == 4);
+        const auto schema = [](Database& d) {
+            std::string out;
+            Statement st;
+            if (!d.prepare(st, "SELECT type, name, tbl_name, COALESCE(sql, '') FROM sqlite_master WHERE tbl_name IN ('history_matches', 'history_seats', 'history_markers', 'history_deaths', 'map_plays', 'meta') ORDER BY name").ok()) return std::string("(no schema)");
+            while (st.step() == Statement::Step::Row) out += st.column_text(0) + "|" + st.column_text(1) + "|" + st.column_text(2) + "|" + st.column_text(3) + "\n";
+            return out;
+        };
+        DB_CHECK(schema(server) == schema(service) && schema(service).size() > 2000);
+        std::string tables;
+        Statement st;
+        DB_CHECK(service.prepare(st, "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").ok());
+        while (st.step() == Statement::Step::Row) tables += st.column_text(0) + ",";
+        DB_CHECK(tables == "history_deaths,history_markers,history_matches,history_seats,map_plays,meta,schema_version,");
+        DB_CHECK(rows_in(service, "schema_version") == 4 && rows_in(service, "meta") == 1);
+    } DB_END;
 }

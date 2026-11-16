@@ -82,8 +82,13 @@ ctl::HttpResponse handle_replays(RoomManager& rooms, const ctl::HttpRequest& req
 
 /// The routes of the match history that handle_control hands over (/history and /history/<id>: GET, and DELETE of one; the secret is checked before)
 ctl::HttpResponse handle_history(RoomManager& rooms, const ctl::HttpRequest& request);
-/// GET /history and GET /history/<id> of the public door (every other method is 404 there)
-ctl::HttpResponse handle_public_history(const RoomManager& rooms, const ctl::HttpRequest& request);
+/// GET /history, GET /history/<id> and GET /history/deaths of the public door (every other method is 404 there), as a function of the two stores: the game server's door and the history service call it. `history`
+/// null: the 404 of a server that keeps no history; `replays` null: every recording is "removed" (the state that the list shows for each match).
+ctl::HttpResponse public_history_response(const HistoryStore* history, const ReplayStore* replays, const ctl::HttpRequest& request);
+/// GET /replays and GET /replays/<file> of the public door, and the 404 that any other request gets there (a function of the replay store alone, null: a server that keeps none)
+ctl::HttpResponse public_replays_response(const ReplayStore* store, const ctl::HttpRequest& request);
+/// What the history service's public door says: /history* as public_history_response, /replays* as public_replays_response, 404 for everything else
+ctl::HttpResponse public_history_service_response(const HistoryStore* history, const ReplayStore* replays, const ctl::HttpRequest& request);
 /// The query string of GET /history: false with a sentence that names the key when it is not understood. Every key at most once, every value one of its words, numbers in range (the tests call it)
 bool parse_history_query(const std::string& raw, HistoryQuery& query, std::string& error);
 

@@ -1364,6 +1364,89 @@ int main() {
         ASSERT_TRUE(alone.mgr.history_store() != nullptr && alone.mgr.history_store()->count() == 0);
     } TEST_END();
 
+    TEST_CASE("HS5.7 set_pace changes the gap after a recording (the history service's counter has a thread of its own): the least gap and the factor are the ones that were given, counted from the end of the pass") {
+        if (match_file(1).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        for (const uint64_t work_us : {uint64_t{10}, uint64_t{400000}}) {
+            Rig rig;
+            rig.work_us = work_us;
+            ASSERT_TRUE(rig.open());
+            rig.feeder.set_pace(20, 2);
+            rig.keep(match_file(1));
+            rig.keep(match_file(2));
+            const auto idle = [] { return true; };
+            uint32_t t = 5000;
+            ASSERT_TRUE(rig.feeder.step(idle, t));
+            const uint64_t spent_ms = (work_us + 999) / 1000;
+            const uint64_t wait = spent_ms + std::max<uint64_t>(20, spent_ms * 2);          // 21 ms, 1200 ms
+            ASSERT_FALSE(rig.feeder.step(idle, t + static_cast<uint32_t>(wait) - 1));
+            ASSERT_EQ(rig.history.count(), size_t{1});
+            ASSERT_TRUE(rig.feeder.step(idle, t + static_cast<uint32_t>(wait)));
+            ASSERT_EQ(rig.history.count(), size_t{2});
+        }
+        Rig none;                                                                             // (no gap at all: the next recording follows as soon as the pass is over)
+        none.work_us = 1000;
+        ASSERT_TRUE(none.open());
+        none.feeder.set_pace(0, 0);
+        none.keep(match_file(1));
+        none.keep(match_file(2));
+        const auto idle = [] { return true; };
+        ASSERT_TRUE(none.feeder.step(idle, 5000));
+        ASSERT_TRUE(none.feeder.step(idle, 5001));
+        ASSERT_EQ(none.history.count(), size_t{2});
+    } TEST_END();
+
+    TEST_CASE("HS7.1 A store that only reads a file that another connection writes (the history service's HTTP side): a read scope sees what was committed before it, keeps one state to its end, and the next one sees the rest; the counts and the sums are made again") {
+        TempDir temp;
+        const std::string path = (temp.path / "shared.db").string();
+        db::Database writer_db;
+        ASSERT_TRUE(open_server_db(writer_db, path));
+        HistoryStore writer(writer_db);
+        std::string why;
+        ASSERT_TRUE(writer.prepare(why));
+        db::Database reader_db;
+        db::OpenOptions ro;
+        ro.read_only = true;
+        ro.create = false;
+        ASSERT_TRUE(reader_db.open(path, ro).ok());
+        HistoryStore reader(reader_db);
+        ASSERT_TRUE(reader.prepare(why));
+        ASSERT_EQ(reader.count(), size_t{0});
+        const std::vector<HistoryRecord> all = eight_records();
+        ASSERT_TRUE(writer.put(all[0], why));
+        ASSERT_EQ(reader.count(), size_t{0});                                                 // (the reader has not looked: what it counted is what it counted)
+        {
+            const HistoryStore::ReadScope scope(reader);
+            ASSERT_EQ(reader.count(), size_t{1});                                             // (a scope looks, and counts again)
+            ASSERT_TRUE(writer.put(all[1], why));                                             // (committed while the scope is open: not in its state)
+            const HistoryPage page = reader.query(HistoryQuery(), kNoRecordings, HistoryStore::Door::Owner);
+            ASSERT_TRUE(page.ok && page.count == 1 && page.items.size() == 1 && page.items[0].id == all[0].id);
+            HistoryRecord found;
+            ASSERT_TRUE(reader.find(all[0].id, found) && !reader.find(all[1].id, found));
+            ASSERT_EQ(reader.count(), size_t{1});
+        }
+        {
+            const HistoryStore::ReadScope scope(reader);
+            ASSERT_EQ(reader.count(), size_t{2});
+            const HistoryPage page = reader.query(HistoryQuery(), kNoRecordings, HistoryStore::Door::Owner);
+            ASSERT_TRUE(page.ok && page.count == 2 && reader.count() == page.count);
+        }
+        {
+            const HistoryStore::ReadScope scope(reader);                                      // (nothing was committed: the same state, and no new count is needed)
+            ASSERT_EQ(reader.count(), size_t{2});
+        }
+        // a connection that cannot write: the store's writes are refused by the database and are not a failure of the file
+        ASSERT_FALSE(reader.put(all[2], why));
+        // a file whose tables are gone: the scope says no, and the store is unavailable
+        ASSERT_TRUE(writer_db.exec("ALTER TABLE history_matches RENAME TO history_matches_gone").ok());
+        ASSERT_FALSE(reader.begin_read());
+        ASSERT_FALSE(reader.available());
+        reader.end_read();                                                                    // (nothing is open: nothing to do)
+        ASSERT_TRUE(lines_with(reader.take_notes(), "unavailable") >= 1);
+    } TEST_END();
+
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";
     return g_test_failures == 0 ? 0 : 1;
 }

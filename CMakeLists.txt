@@ -175,6 +175,7 @@ if(NOT EMSCRIPTEN)
     add_subdirectory(src/ants_db)         # the database layer of the game server (SQLite behind a thin wrapper, schema migrations): no SDL, no sockets, no threads
     add_subdirectory(src/ants_ctl)    # control interface of the game server (strict JSON, authenticated HTTP on the loopback address): sockets, native only
     add_subdirectory(src/ants_server) # the dedicated game server (rooms, a referee per room): native only
+    add_subdirectory(src/ants_history) # the history service (the match history of the recordings, counted on a thread of its own, and its public pages): native only
 endif()
 # The game program needs SDL2 (window, audio, fonts); a build of the dedicated server alone (the server's Docker image) does not: -DANTS_BUILD_APP=OFF
 option(ANTS_BUILD_APP "Build the game program (needs SDL2)" ON)

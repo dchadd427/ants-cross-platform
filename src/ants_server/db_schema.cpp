@@ -213,19 +213,33 @@ const char* const kDeathsSql =
     ") WITHOUT ROWID;"
     "CREATE INDEX history_deaths_map ON history_deaths (map, hash, ended, id);";
 
+// Version 1 (of either file): the foundation, a `meta` table with the time the file was made (and, in the history service's file, the row that says the import was done)
+const char* const kMetaSql =
+    "CREATE TABLE meta (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL) WITHOUT ROWID;"
+    "INSERT INTO meta (key, value) VALUES ('created_at', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'));";
+
 }  // namespace
 
 const std::vector<db::Migration>& db_migrations() {
     static const std::vector<db::Migration> list = {
-        {1, "meta",
-         "CREATE TABLE meta (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL) WITHOUT ROWID;"
-         "INSERT INTO meta (key, value) VALUES ('created_at', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'));"},
+        {1, "meta", kMetaSql},
         {2, "history", kHistorySql},
         {3, "map_plays", kMapPlaysSql},
         {4, "site_stats", kSiteStatsSql},
         {5, "map_submissions", kSubmissionsSql},
         {6, "admin_accounts", kAccountsSql},
         {7, "history_deaths", kDeathsSql},
+    };
+    return list;
+}
+
+// The history service's own file (docs/HISTORY_SERVICE.md) holds the match history and nothing else: the same tables as the game server's (the same SQL), under numbers of its own.
+const std::vector<db::Migration>& history_db_migrations() {
+    static const std::vector<db::Migration> list = {
+        {1, "meta", kMetaSql},
+        {2, "history", kHistorySql},
+        {3, "map_plays", kMapPlaysSql},
+        {4, "history_deaths", kDeathsSql},
     };
     return list;
 }

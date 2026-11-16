@@ -12,7 +12,8 @@
 // new match that HistoryRecord::counts_as_map_play, so a match is counted once, however often the server restarts, and a match that is kept again, or that the owner took out, is not counted twice). A request's words never reach the SQL text: the text of a statement
 // is made of fixed pieces, and every value is a bound parameter.
 //
-// One thread: the server's main loop (SQLite is built without mutexes). The store never throws and never stops the server: the first database error is logged once and the store is UNAVAILABLE (the routes answer
+// One thread for each store object (a connection is not shared between threads). The game server uses one, on its main loop; the history service (docs/HISTORY_SERVICE.md) has two connections to its file, a writer on
+// the counter thread and a reader on the HTTP thread, each with a store of its own. The store never throws and never stops the server: the first database error is logged once and the store is UNAVAILABLE (the routes answer
 // 503, the feeder waits); it tries again after kRetryMs, and says so in the log when it works again. The match path does not use the store at all.
 
 #include <cstddef>
@@ -162,6 +163,25 @@ public:
     /// the public door's is paid from the budget (see Door); a page that could not be made has `ok` false and says why.
     HistoryPage query(const HistoryQuery& query, const std::function<Recording(const std::string& id)>& recording, Door door = Door::Public) const;
 
+    /// For a store that only READS a file that another connection writes (the history service's HTTP side): begin_read() opens a read transaction, so that everything one request asks is from one state of the file, and
+    /// looks whether another connection committed since the last look (PRAGMA data_version): if so, the counts are read again and the sums of the maps of deaths are made again. False when the store is unavailable (or the
+    /// database did not answer). end_read() closes it. A store that writes its file itself (the game server's, the service's counter) does not need them.
+    bool begin_read() const;
+    void end_read() const;
+    class ReadScope {
+    public:
+        explicit ReadScope(const HistoryStore& store) : store_(store), open_(store.begin_read()) {}
+        ~ReadScope() {
+            if (open_) store_.end_read();
+        }
+        ReadScope(const ReadScope&) = delete;
+        ReadScope& operator=(const ReadScope&) = delete;
+
+    private:
+        const HistoryStore& store_;
+        bool open_;
+    };
+
     /// Lines for the server's log (a failure of the database, the way back), once each
     std::vector<std::string> take_notes();
     void report(const std::string& line) { note(line); }
@@ -192,6 +212,9 @@ private:
     mutable uint64_t deaths_cached_at_{~uint64_t{0}};
     mutable std::vector<std::string> deaths_names_;  // the maps that have a map of deaths, sorted
     mutable std::unordered_map<std::string, std::string> deaths_cache_;
+    mutable bool reading_{false};                    // a read transaction is open (begin_read)
+    mutable bool version_seen_{false};
+    mutable int64_t data_version_{0};                // PRAGMA data_version at the last begin_read()
 };
 
 /// Counts the matches that the replay store keeps and the history does not know yet, one at a time. A file is played again with no screen (0.4 - 0.5 s for a match of 10 - 12 minutes, more for a longer one) and its numbers go to the
@@ -215,6 +238,13 @@ public:
     /// (its plays, its stats) like any other; the server gives only the maps that a room plays (OnlineLimits), because the recording is played in one piece on the one thread. Unset: no approved map is known.
     using ApprovedMapPath = std::function<std::string(const std::string& map_name)>;
     void set_approved_map_path(ApprovedMapPath fn) { approved_path_ = std::move(fn); }
+
+    /// The pace: the least gap after a recording and how many times what it took (the defaults are kPaceMs and kPaceFactor, made for a server whose one thread must stay free). The history service, whose counter has a thread
+    /// of its own, asks for less.
+    void set_pace(uint32_t min_gap_ms, uint32_t factor) {
+        pace_ms_ = min_gap_ms;
+        pace_factor_ = factor;
+    }
 
     /// Makes the `details` of a counted match (make_history_details by default); a test hands a maker that throws, to see that the counters of a match are written whatever the pass does
     using DetailsMaker = std::function<std::string(const replay::MatchStats&, const HistoryRecord&)>;
@@ -263,6 +293,8 @@ private:
     size_t reported_skipped_{0};
     size_t skip_lines_{0};
     bool paced_{false};
+    uint32_t pace_ms_{kPaceMs};
+    uint32_t pace_factor_{kPaceFactor};
     uint32_t next_ms_{0};
     bool prune_armed_{false};
     uint32_t next_prune_ms_{0};

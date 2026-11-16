@@ -460,6 +460,39 @@ size_t HistoryStore::prune_markers(const std::function<bool(const std::string& i
     return gone.size();
 }
 
+bool HistoryStore::begin_read() const {
+    if (reading_) return true;
+    if (!up_) return false;
+    db::Error e = db_.exec("BEGIN");                                                      // (a deferred transaction: no lock until the first read, and no write lock ever)
+    if (!e.ok()) {
+        fail("a read could not be started", e);
+        return false;
+    }
+    reading_ = true;
+    int64_t version = 0;
+    e = scalar(db_, "PRAGMA data_version", {}, version);                                  // (the first read: the snapshot of this request starts here)
+    if (e.ok() && (!version_seen_ || version != data_version_)) {                         // (another connection committed since the last look: what is cached is read again)
+        e = refresh_counts();
+        if (e.ok()) {
+            ++deaths_revision_;
+            version_seen_ = true;
+            data_version_ = version;
+        }
+    }
+    if (!e.ok()) {
+        fail("the records could not be counted", e);
+        end_read();
+        return false;
+    }
+    return true;
+}
+
+void HistoryStore::end_read() const {
+    if (!reading_) return;
+    reading_ = false;
+    db_.exec("COMMIT");                                                                   // (a read transaction has nothing to write; an error here changes nothing)
+}
+
 bool HistoryStore::map_plays(std::vector<MapPlays>& out) const {
     out.clear();
     if (!up_) return false;
@@ -1026,7 +1059,7 @@ bool HistoryFeeder::step(const std::function<bool()>& idle, uint32_t now_ms) {
     const uint64_t began = clock_us_();
     const bool played = fresh ? work(file) : backfill(file);
     const uint64_t spent_ms = (clock_us_() - began + 999u) / 1000u;                      // (what the pass really took, which the server's clock of this pass does not show)
-    const uint64_t gap = std::max<uint64_t>(kPaceMs, spent_ms * kPaceFactor);
+    const uint64_t gap = std::max<uint64_t>(pace_ms_, spent_ms * pace_factor_);
     next_ms_ = now_ms + static_cast<uint32_t>(std::min<uint64_t>(spent_ms + gap, 60u * 1000u));       // (counted from the END of the work, so passes never run back to back)
     return played;
 }

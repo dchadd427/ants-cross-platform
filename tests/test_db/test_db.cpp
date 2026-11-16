@@ -3,8 +3,10 @@
 #include "ants_db/database.hpp"
 #include "db_check.hpp"
 
+#include <atomic>
 #include <cstdint>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace ants::db;
@@ -104,6 +106,80 @@ void open_and_close_cases() {
         const Error p = b.prepare(st, "SELECT * FROM missing_table");
         DB_CHECK(!p.ok() && p.message.find("missing_table") != std::string::npos);
         DB_CHECK(!st.valid());
+    } DB_END;
+
+    DB_CASE("DB1.7 A read-only connection reads what another connection committed and writes nothing, makes no file and never asks for a journal mode") {
+        TempDir dir;
+        Database writer;
+        DB_CHECK(writer.open(dir.file("r.db")).ok());
+        DB_CHECK(writer.exec("CREATE TABLE t (a INTEGER); INSERT INTO t VALUES (1)").ok());
+        OpenOptions ro;
+        ro.read_only = true;
+        ro.create = true;                                    // (ignored: a read-only open never makes a file)
+        Database reader;
+        DB_CHECK(reader.open(dir.file("r.db"), ro).ok());
+        DB_CHECK(count_rows(reader, "t") == 1);
+        DB_CHECK(writer.exec("INSERT INTO t VALUES (2)").ok());
+        DB_CHECK(count_rows(reader, "t") == 2);              // (a commit of the other connection is seen at once)
+        const Error refused = reader.exec("INSERT INTO t VALUES (3)");
+        DB_CHECK(!refused.ok() && refused.message.find("readonly") != std::string::npos);
+        DB_CHECK(count_rows(writer, "t") == 2);
+        DB_CHECK(reader.journal_mode() == "wal");            // (the file's own: the reader did not change it)
+        Database none;
+        DB_CHECK(!none.open(dir.file("absent.db"), ro).ok());
+        DB_CHECK(!std::filesystem::exists(dir.file("absent.db")));
+        OpenOptions plain;
+        plain.wal = false;
+        Database rollback;
+        DB_CHECK(rollback.open(dir.file("d.db"), plain).ok() && rollback.exec("CREATE TABLE u (a)").ok());
+        rollback.close();
+        Database looked;
+        ro.wal = true;                                       // (asked for, and ignored: the journal of a read-only file is not changed)
+        DB_CHECK(looked.open(dir.file("d.db"), ro).ok());
+        DB_CHECK(looked.journal_mode() == "delete");
+    } DB_END;
+
+    DB_CASE("DB1.8 Two threads with a connection each: a writer commits while a reader reads (a read transaction is one state of the file, and PRAGMA data_version says that another connection committed)") {
+        TempDir dir;
+        Database writer;
+        DB_CHECK(writer.open(dir.file("two.db")).ok());
+        DB_CHECK(writer.exec("CREATE TABLE t (a INTEGER)").ok());
+        OpenOptions ro;
+        ro.read_only = true;
+        Database reader;
+        DB_CHECK(reader.open(dir.file("two.db"), ro).ok());
+        std::atomic<bool> done{false};
+        std::atomic<int> committed{0};
+        std::thread writing([&]() {
+            for (int i = 1; i <= 300; ++i) {
+                if (!writer.exec("INSERT INTO t VALUES (" + std::to_string(i) + ")").ok()) break;
+                committed = i;
+            }
+            done = true;
+        });
+        const auto version = [&]() {
+            Statement st;
+            return reader.prepare(st, "PRAGMA data_version").ok() && st.step() == Statement::Step::Row ? st.column_int64(0) : int64_t{-1};
+        };
+        bool consistent = true;
+        bool moved = false;
+        int64_t last_version = version();
+        int64_t last_rows = 0;
+        while (!done || last_rows < 300) {
+            DB_CHECK(reader.exec("BEGIN").ok());
+            const int64_t v = version();
+            const int64_t first = count_rows(reader, "t");
+            const int64_t second = count_rows(reader, "t");    // (the same state: the writer may have committed between the two, and this transaction does not see it)
+            consistent = consistent && first == second && first >= last_rows;
+            moved = moved || v != last_version;
+            last_version = v;
+            last_rows = first;
+            DB_CHECK(reader.exec("COMMIT").ok());
+            if (done && last_rows < 300 && committed == 300) last_rows = count_rows(reader, "t");
+        }
+        writing.join();
+        DB_CHECK(consistent && moved);
+        DB_CHECK(count_rows(reader, "t") == 300);
     } DB_END;
 }
 
