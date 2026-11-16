@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.17.1 - 2026-11-16 - Longer chat lines, bold numbers on every results column, computer players defend better against Thieves
+
+**For players:**
+- **Longer chat lines and a faster pace.** A line in the front page chat can be 1,000 characters (was 200). You can send 10 lines at once and then two a second, up to 600 lines an hour and 3,000 a day. The emoji picker follows the new length. The room chat in a game is unchanged.
+- **Every number on the results page is bold.** Ants lost, ants killed and hatched now use the same bold face with an outline as the score, on the normal and the 187 results page. In the narrow columns of the classic page a three-digit number is squeezed to fit, where the old face cut off its last digit.
+- **Computer players defend better against Thieves.** A Thief on its way to a raid looks again: when walls, bombs or a closed way meet it, it turns to another hill; a Fire Ant is no longer sent to a bank it cannot walk home from.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.0 page or game still joins. Under the hood: the chat server (it reconnects by itself within seconds), the game server and the web pages are rebuilt.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d63874e8...4a74eadd)
+
 ## v0.17.0 - 2026-11-15 - 187 drops nothing, leave your room from Home, a better emoji picker, bots walk round bombs
 
 **For players:**
@@ -456,17 +467,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/cddbaf07...51169738)
 
-## v0.12.135 - 2026-10-25 - Faster: crowds that pile up
+## Older versions (v0.12.135 and before)
 
-**For players:**
-- **Faster: a crowd that piles up plays quicker.** The game now keeps a list of the ants on each tile, so a tile with several ants (a pile-up, a fire wall, a bomb) no longer makes it look at every ant of the map. Measured here, milliseconds a tick before and after: 4 x 693 ants stacked on shared tiles and sent across a 90 x 90 map 19.6 and 12.5, 4 x 1,500 on 150 x 150 103 and 81, a real map of 2,772 ants fighting 16.3 and 12.9 (walking 17.4 and 12.5; its worst ticks 108 ms and 24 ms), a map of 6,000 ants fighting 122 and 111.
-- Ants that are spread out, one to a tile, are as fast as before (4 x 1,500 across 150 x 150: 84 ms either way). 6,000 ants fighting still cost more than 100 ms a tick (the budget is 50): the biggest cost left is how the game picks the next ant to move, and the next release removes it.
-- Nothing about a match changes: every tick has the same state as before (all 540 maps of the library and crowds of 6,000 ants play identically).
-
-**Rules / network:** none; the rules and network protocol 21 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/cddbaf07...a3811168)
-
-## Older versions (v0.12.134 and before)
-
-Every release before v0.12.135, and the long notes of v0.12.134 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.136, and the long notes of v0.12.135 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
