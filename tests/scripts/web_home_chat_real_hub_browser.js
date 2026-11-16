@@ -1,6 +1,6 @@
 // OPT-IN, not part of ./run_tests.sh: the chat dock of Home in a REAL browser (Chromium through Playwright) against the REAL hub (`python3 -m hub`, with its test login), behind a small stand-in for the site's nginx that
 // passes /hub/ws and tells the hub who is at the other end (the hub's test login believes `X-Hub-Test-Login: <id>:<name>`, which the stand-in takes from a cookie). It looks at what the fake hub of
-// tests/scripts/fake_hub.js cannot say, because the real hub does it: the lines that the page sent and the hub answers, or does not answer, in a way that the page does not expect (docs/HOME_SCREEN.md, "The chat dock"):
+// tests/scripts/fake_hub.js cannot say, because the real hub does it: the lines that the page sent and the hub answers, or does not answer, in a way that the page does not expect (docs/HOME_CHAT.md, "The chat dock"):
 //   1. a line that the hub composes (NFC) before it says it back, and the next refusal (two tabs of one account: the second tab uses up the account's three lines, the first is refused with `rate`): the refused line
 //      is the one that comes back into the field, not the composed one;
 //   2. a line from which the hub takes out a character that its Unicode does not know (U+1FAE9): the same;

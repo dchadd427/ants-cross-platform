@@ -204,6 +204,12 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         else p.brawl.regap_ticks = u;
         return true;
     }
+    if (key == "bring" || key == "bsolo") {                                          // the ring bonus of 187 in points (0: no ring) and the side size that sends one ant at a victim (0: never) (docs/BOT_187.md)
+        if (v < 0 || v > 100000) { err = key + " is a number from 0 to 100000"; return false; }
+        if (key == "bring") p.brawl.ring_bonus = static_cast<uint32_t>(v);
+        else p.brawl.solo_ants = static_cast<uint32_t>(v);
+        return true;
+    }
     if (key == "behind") return flag(p.behind_war);                                  // the losers fight harder (docs/BOTS.md, "The war batch"; 0: the war batch without it)
     if (key == "bt1") { p.behind_tier1 = static_cast<uint32_t>(v); return true; }
     if (key == "bt2") { p.behind_tier2 = static_cast<uint32_t>(v); return true; }

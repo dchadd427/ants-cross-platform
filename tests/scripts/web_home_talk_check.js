@@ -1,4 +1,4 @@
-// Runs the emoji picker and the voice button of the chat (web/home/talk.js, docs/HOME_SCREEN.md "Emoji and voice") against the REAL chat dock (web/home/chat.js, mounted on a fake hub) and a FAKE speech recognition
+// Runs the emoji picker and the voice button of the chat (web/home/talk.js, docs/HOME_CHAT.md "Emoji and voice") against the REAL chat dock (web/home/chat.js, mounted on a fake hub) and a FAKE speech recognition
 // (no microphone: the browser's constructor is a class of this file that the test drives by hand), in the fake browser of tests/scripts/web_page_harness.js. What it checks:
 //   1. the pure parts: the emoji (one code point each, ASCII source, eight groups with a name and search words each), the search (names, search words, the rank, plurals), the code point count against the field's UTF-16
 //      maxlength, the insert at the caret, the words that are said (spacing, no markup characters, the cut), and when the browser has speech recognition at all (a secure page and a constructor, with or without the prefix);

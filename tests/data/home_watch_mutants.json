@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the games in progress of the Games list (web/home/games.js, games.css, docs/HOME_SCREEN.md, \"Games in progress\"): the fake-browser check web_home_games_live_check.js sees the code ones, the opt-in real-Chromium script web_home_watch_browser.js (Playwright and a Chromium, no server) the style ones. Run with `python3 tools/mutate.py tests/data/home_watch_mutants.json --keep-going --jobs 1 --report SOME_FOLDER/report.json`; tools/mutate.py --check only proves that every old text is still in the code.",
+ "note": "Mutants of the games in progress of the Games list (web/home/games.js, games.css, docs/HOME_GAMES.md, \"Games in progress\"): the fake-browser check web_home_games_live_check.js sees the code ones, the opt-in real-Chromium script web_home_watch_browser.js (Playwright and a Chromium, no server) the style ones. Run with `python3 tools/mutate.py tests/data/home_watch_mutants.json --keep-going --jobs 1 --report SOME_FOLDER/report.json`; tools/mutate.py --check only proves that every old text is still in the code.",
  "mutants": [
   {
    "id": "watch_opens_in_the_same_tab",

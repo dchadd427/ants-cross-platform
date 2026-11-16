@@ -35,7 +35,7 @@ COSTS = {
     "test_web_map_files.ThePagesOwnCode": 84, "test_web_home_players.TheChecksAreNotVacuous": 68, "test_nginx_history.TheBlocksRun": 60, "test_web_mapmaker_play.ThePlayChecks": 57,
     "test_web_home_screen.TheChecksAreNotVacuous": 44, "test_web_replay_open.TheChecksAreNotVacuous": 43, "test_bot_names.TheMutants": 35, "test_web_death_map.TheCards": 35,
     "test_web_admin.ThePagesOwnCode": 30, "test_nginx_stats.TheCacheRuns": 29, "test_web_lobby_chat.TheChecksAreNotVacuous": 27, "test_web_mapmaker.ThePage": 22,
-    "test_nginx_live.TheBlocksRun": 20, "test_web_home_talk.TheChecksAreNotVacuous": 19, "test_e2e_deadlines.Waits": 18, "test_hub_login.TheCallbackWhenDiscordGoesWrong": 18,
+    "test_nginx_live.TheBlocksRun": 20, "test_web_home_talk.TheChecksAreNotVacuous": 19, "test_web_home_mod.TheChecksAreNotVacuous": 18, "test_e2e_deadlines.Waits": 18, "test_hub_login.TheCallbackWhenDiscordGoesWrong": 18,
     "test_run_tests.ParallelResources": 16, "test_web_lobby_net.TheBudgetChecksAreNotVacuous": 15, "test_web_lobby_rules.TheCheckIsNotVacuous": 15, "test_e2e_deadlines.Watchdog": 14,
     "test_web_game_menu.TheMutants": 14, "test_web_home_chat.TheCodeRuns": 14, "test_web_player_name.TheChecksAreNotVacuous": 14, "test_web_rematch.TheChecksAreNotVacuous": 14,
     "test_map_atlas.TheAtlas": 11, "test_nginx_lobbies.TheCacheRuns": 11, "test_nginx_replays.TheBlocksRun": 11,
