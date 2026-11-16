@@ -1,6 +1,7 @@
 // The moderation sheet of Home's chat (docs/HOME_SCREEN.md, "Roles and commands"): staff (the hub's `you.role` is mod or admin) act on a person's line without typing: a right click on the line, a long press on it (a touch
 // screen), or the keyboard (Up and Down choose a line of the log, Enter, the menu key or Shift and F10 open it) opens a sheet with what the viewer may do to that line's author: Delete the line, Mute (four times and a
-// custom number of minutes), Kick, Ban (administrators; also with the person's lines of the last hour taken off every screen). Delete, Kick and Ban ask once more in a confirm card whose safe answer has the focus. ES5,
+// custom number of minutes), Kick, Ban (administrators; also with the person's lines of the last hour taken off every screen). Delete, Kick and Ban ask once more in a confirm card whose safe answer has the focus. On another person's line a first row, Recent messages from the person (n), opens the lines of that person that are in
+// the page's log (newest first; the dock finds them by the hub's key, the sheet only holds the number of one of them); a line of the list opens the sheet of that line. ES5,
 // no module system: a page gets AntsHomeMod, node gets module.exports (tests/scripts/web_home_check/web_home_mod_check.js).
 //   * Loaded by web/home/home.js, with web/home/mod.css, only after the chat dock names a visitor with a role, and mounted into that dock. A person with no role never downloads it and sees no change: no line is marked, a
 //     right click and a long press are the browser's own. A `you` frame that takes the role away closes the sheet and takes the marks off at once.
@@ -25,6 +26,7 @@
         hint: 'Or type 1 to 10,080 minutes (1 week).', tooLong: 'The most is 10,080 minutes (1 week).', delTitle: 'Delete this line?', delText: 'It goes from every screen and from the history. This cannot be undone.',
         kickText: ' is logged out of the chat and can log in again at once. Everyone sees ', banText: ' can still read the chat but cannot write until an administrator lifts the ban. Everyone sees ',
         banNote: 'The second red button also removes everything that person wrote in the hour before the ban, from every screen. That cannot be undone.', banPurge: 'Ban and delete their lines from the last hour',
+        recent: 'Recent messages from ', recentSmall: 'Their lines in this chat, newest first', recentSub: ' in this chat', one: ' message', more: ' messages', thisLine: 'this line', recentNone: 'None of their lines is in the chat now.', recentName: 'Recent messages, newest first', recentKeys: 'Up and Down move between the lines, Home and End go to the first and the last.',
         ok: 'OK', example: 'for example 45', admin: 'administrator', mod: 'moderator', you: 'you', line: 'line #'
     };
     var NOTE = {                                                          // the words of an answer (the toast and the private line of the chat are these, and nothing else)
@@ -37,6 +39,7 @@
         mute: [['path', 'd:M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'], ['line', 'x1:3;y1:3;x2:21;y2:21']],
         kick: [['path', 'd:M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4'], ['polyline', 'points:16 17 21 12 16 7'], ['line', 'x1:21;y1:12;x2:9;y2:12']],
         ban: [['circle', 'cx:12;cy:12;r:10'], ['line', 'x1:4.93;y1:4.93;x2:19.07;y2:19.07']],
+        recent: [['line', 'x1:8;y1:6;x2:21;y2:6'], ['line', 'x1:8;y1:12;x2:21;y2:12'], ['line', 'x1:8;y1:18;x2:21;y2:18'], ['line', 'x1:3;y1:6;x2:3.01;y2:6'], ['line', 'x1:3;y1:12;x2:3.01;y2:12'], ['line', 'x1:3;y1:18;x2:3.01;y2:18']],
         chev: [['polyline', 'points:9 18 15 12 9 6']],
         check: [['path', 'd:M22 11.08V12a10 10 0 1 1-5.93-9.14'], ['polyline', 'points:22 4 12 14.01 9 11.01']],
         warn: [['path', 'd:M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'], ['line', 'x1:12;y1:9;x2:12;y2:13'], ['line', 'x1:12;y1:17;x2:12.01;y2:17']]
@@ -165,8 +168,8 @@
             return b;
         }
         function title(text, role) { var h = el('h2', 'gm-name' + (role === 'admin' ? ' gc-r-admin' : role === 'mod' ? ' gc-r-mod' : ''), text); h.id = 'gm-title'; return h; }
-        function head(line, name, plain) {
-            var who = el('div', 'gm-who'), sub = (line.u ? '@' + line.u + ' \u00b7 ' : '') + (line.role === 'admin' ? TEXT.admin + ' \u00b7 ' : line.role === 'mod' ? TEXT.mod + ' \u00b7 ' : '') + TEXT.line + line.id + (line.own ? ' \u00b7 ' + TEXT.you : '');
+        function head(line, name, plain, words) {
+            var who = el('div', 'gm-who'), sub = words !== undefined ? words : (line.u ? '@' + line.u + ' \u00b7 ' : '') + (line.role === 'admin' ? TEXT.admin + ' \u00b7 ' : line.role === 'mod' ? TEXT.mod + ' \u00b7 ' : '') + TEXT.line + line.id + (line.own ? ' \u00b7 ' + TEXT.you : '');
             put(who, [title(name, plain ? 'none' : line.role), el('p', 'gm-sub', sub)]);
             return put(el('div', 'gm-head'), [circle(line), who]);
         }
@@ -178,6 +181,59 @@
             b.setAttribute('aria-label', verb); b.setAttribute('aria-describedby', d.id);       // (the name is the verb and the person; the small words are the description)
             return b;
         }
+        // ---- recent messages: the person's lines that are in the page's log (the welcome's history and what came since), found by the hub's key of the account that the dock holds; the sheet only follows a number ----
+        function recentOf(s) {                                          // newest first; when the line that the sheet follows is gone, it follows another line of the same person
+            var list = dock.by(s.anchor), i;
+            for (i = 0; !list.length && i < s.seen.length; i++) list = dock.by(s.seen[i]);
+            if (list.length) { s.anchor = list[0].id; s.seen = list.map(function (e) { return e.id; }); }
+            return list;
+        }
+        function countWords(n) { return n + (n === 1 ? TEXT.one : TEXT.more); }
+        function recentVerb(l, n) { return TEXT.recent + l.who + ' (' + n + ')'; }
+        function near(order, id, ok) {                                  // the line after `id` in `order` (newest first) that `ok` accepts, else the one before it, else null
+            var at = order.indexOf(id), rest = at === -1 ? order : order.slice(at + 1).concat(order.slice(0, at).reverse()), i;
+            for (i = 0; i < rest.length; i++) if (rest[i] !== id && ok(rest[i])) return rest[i];
+            return null;
+        }
+        function leave(name) { var s = sheet; if (!s) return; if (!dock.line(s.line.id)) { close(true); if (!s.mine) toast(NOTE.gone, true); } else view('line', name); }       // (back from the list: if the line that the sheet was opened on went meanwhile there is nothing to act on, and the page says so unless the viewer deleted it)
+        function jump(id) { var l = actionable(id); if (l && sheet && !sheet.busy) { sheet.line = l; sheet.anchor = id; sheet.fromList = true; sheet.mine = false; view('line'); } }       // the sheet of another line of the same person (Delete works on it)
+        function again(s, gone) {                                       // a line that was deleted from the list: back to the list, the focus on the next line (else the one before it, else Back)
+            var pick = near(s.seen.slice(), gone, function (n) { return n !== gone && !!actionable(n); }), l = pick === null ? null : actionable(pick);
+            s.busy = false; s.mine = true;
+            if (l) { s.line = l; s.anchor = pick; }
+            view('recent', pick);
+        }
+        function itemOf(s, id) { var i; for (i = 0; i < s.items.length; i++) if (Number(s.items[i].getAttribute('data-n')) === id) return s.items[i]; return null; }
+        function fill(s, keep) {                                        // the list of the recent step, made (again) from the dock
+            var box = s.rl, before = s.seen.slice(), list = recentOf(s), at = keep ? box.scrollTop : 0, mark = null, rel = 0, had = keep && box.contains(doc.activeElement) ? doc.activeElement.getAttribute('data-n') : null, fresh = [], last = 0, days = {}, multi, i, c, found = null, nb;
+            if (keep) for (i = 0; i < box.children.length; i++) { c = box.children[i]; if (c.getAttribute('data-n') !== null && c.offsetTop + c.offsetHeight > at) { mark = c.getAttribute('data-n'); rel = c.offsetTop - at; break; } }
+            box.textContent = '';
+            list.forEach(function (e) { var w = e.at === undefined ? null : dock.when(e.at); if (w) days[w.key] = 1; });
+            multi = Object.keys(days).length > 1;
+            list.forEach(function (e) {
+                var w = e.at === undefined ? null : dock.when(e.at), l = dock.line(e.id), can = !!l && actionsOf(viewer(), l).length > 0, row, t = el('span', 'gm-rt', w ? w.time : ''), x = el('span', 'gm-rx');
+                if (multi && w && w.key !== last) { box.appendChild(el('p', 'gm-day', w.day)); last = w.key; }
+                x.appendChild(el('span', 'gm-rq', cut(e.text, LIMIT.quote)));
+                if (e.id === s.line.id) x.appendChild(el('small', 'gm-this', TEXT.thisLine));
+                if (can) { row = button('gm-ri', '', function () { jump(e.id); }); fresh.push(row); } else row = el('div', 'gm-ri');
+                if (w) row.setAttribute('title', w.full);
+                row.setAttribute('data-n', String(e.id));
+                if (e.id === s.line.id) row.className += ' gm-here';
+                put(row, [t, x, can ? icon('chev', 'gm-ico gm-chev') : null]);
+                if (can) row.setAttribute('aria-label', (w ? (multi ? w.day + ' ' : '') + w.time + '. ' : '') + cut(e.text, LIMIT.quote) + (e.id === s.line.id ? '. ' + TEXT.thisLine : ''));
+                box.appendChild(row);
+            });
+            if (!list.length) box.appendChild(el('p', 'gm-none', TEXT.recentNone));
+            s.ctl = fresh.concat(s.ctl.filter(function (k) { return fresh.indexOf(k) === -1 && s.items.indexOf(k) === -1; }));
+            s.items = fresh;
+            if (s.rsub) s.rsub.textContent = (s.line.u ? '@' + s.line.u + ' \u00b7 ' : '') + countWords(list.length) + TEXT.recentSub;
+            if (mark !== null) { for (i = 0; i < box.children.length; i++) if (box.children[i].getAttribute('data-n') === mark) { found = box.children[i]; break; } if (found && at > 0) box.scrollTop = found.offsetTop - rel; else box.scrollTop = at; }
+            if (had !== null) {                                         // (the focus stays on its line; if that line went, on the next one, else the one before it, else Back)
+                nb = itemOf(s, Number(had)) || itemOf(s, near(before, Number(had), function (n) { return !!itemOf(s, n); })) || s.back;
+                if (nb && nb.focus) nb.focus({ preventScroll: true });       // (the list keeps the place that is being read, wherever the focus is)
+            }
+            return list;
+        }
         function view(name, arg) {
             var s = sheet, box = s.box, l = s.line, who = l.who, acts = actionsOf(viewer(), l), first = null, list, quote, ask = function (kind) { return function () { view('confirm', kind); }; };
             box.textContent = ''; box.className = 'gm-box'; s.ctl = []; s.view = name; s.armed = false;
@@ -186,11 +242,21 @@
             if (name === 'line') {
                 quote = el('p', 'gm-quote', cut(l.text, LIMIT.quote)); quote.id = 'gm-quote'; box.setAttribute('aria-describedby', quote.id);
                 list = el('div', 'gm-acts');
+                var nr = l.own ? 0 : recentOf(s).length, recent = nr ? act('recent', recentVerb(l, nr), TEXT.recentSmall, false, true, function () { view('recent'); }) : null;       // (not on a line of one's own: Delete only)
                 var del = acts.indexOf('del') !== -1 ? act('del', TEXT.del, TEXT.delSmall, true, false, ask('del')) : null, mute = acts.indexOf('mute') !== -1 ? act('mute', TEXT.mute + who + '\u2026', TEXT.muteSmall, false, true, function () { view('mute'); }) : null;
                 var kick = acts.indexOf('kick') !== -1 ? act('kick', TEXT.kick + who, TEXT.kickSmall, true, false, ask('kick')) : null, ban = acts.indexOf('ban') !== -1 ? act('ban', TEXT.ban + who, TEXT.banSmall, true, false, ask('ban')) : null;
+                s.recent = recent;
                 put(list, [del, mute, kick, ban]);
-                put(box, [head(l, l.who), quote, list, button('btn gm-cancel', TEXT.cancel, function () { close(true); })]);
-                first = arg === 'mute' && mute ? mute : del || mute;
+                put(box, [head(l, l.who), quote, recent ? put(el('div', 'gm-acts gm-nav'), [recent]) : null, list, button('btn gm-cancel', TEXT.cancel, function () { close(true); })]);
+                first = arg === 'recent' && recent ? recent : arg === 'mute' && mute ? mute : del || mute;
+            } else if (name === 'recent') {
+                var hd = head(l, TEXT.recent + who, true, ''), back = button('btn gm-cancel', TEXT.back, function () { leave('recent'); }), rl = el('div', 'gm-rl');
+                rl.setAttribute('role', 'group'); rl.setAttribute('aria-label', TEXT.recentName);
+                box.className = 'gm-box gm-rbox'; s.rl = rl; s.items = []; s.back = back; s.rsub = hd.querySelector('.gm-sub');
+                put(box, [hd, rl, back]);
+                fill(s, false);
+                rl.setAttribute('aria-description', TEXT.recentKeys);
+                first = (typeof arg === 'number' ? itemOf(s, arg) : null) || (arg === null ? null : s.items[0]) || back;       // (after a delete from the list: `arg` is the line to focus, or null for Back)
             } else if (name === 'mute') {
                 var custom = el('div', 'gm-custom'), wrap = el('div', 'gm-num'), input = el('input'), go, hint = el('p', 'gm-hint', TEXT.hint), grid = el('div', 'gm-times');
                 TIMES.forEach(function (t) { var b = button('btn gm-time', t[1], function (c) { send('mute', t[0], false, c); }); if (!first) first = b; grid.appendChild(b); });
@@ -243,7 +309,7 @@
             shade.appendChild(box);
             for (i = 0; i < kids.length; i++) if (!(kids[i].hasAttribute && kids[i].hasAttribute('inert'))) { kids[i].setAttribute('inert', ''); quiet.push(kids[i]); }       // (what stands behind takes no key or tap; what was inert before stays so)
             doc.body.appendChild(shade);
-            sheet = { shade: shade, box: box, line: l, view: '', ctl: [], busy: false, armed: false, timer: 0, quiet: quiet, at: now() };
+            sheet = { shade: shade, box: box, line: l, view: '', ctl: [], busy: false, armed: false, timer: 0, quiet: quiet, at: now(), anchor: l.id, seen: [l.id], items: [], rl: null, rsub: null, back: null, recent: null, cur: null, fromList: false, mine: false };
             shade.addEventListener('keydown', guard(onSheetKey));
             shade.addEventListener('click', guard(function (e) { if (e && e.target === shade && sheet && !sheet.busy && !held() && now() - sheet.at >= LIMIT.arm) close(true); }));       // (a press on the dark part is Cancel; not in the moment after a long press that opened it)
             shade.addEventListener('contextmenu', guard(stay));          // (the menu key's event comes when the key is let go, to what has the focus now: the sheet; the browser's own menu is not meant over it)
@@ -263,16 +329,25 @@
             if (back && log.focus) log.focus({ preventScroll: true });
         }
         function onSheetKey(e) {
-            var s = sheet, i, list, at;
+            var s = sheet, i, list, at, stop;
             if (!s || !e) return;
-            if (e.key === 'Escape') { stay(e); if (e.stopPropagation) e.stopPropagation(); if (!s.busy) { if (s.view === 'mute') view('line', 'mute'); else close(true); } return; }
+            if (e.key === 'Escape') { stay(e); if (e.stopPropagation) e.stopPropagation(); if (!s.busy) { if (s.view === 'recent') leave('recent'); else if (s.view === 'mute') view('line', 'mute'); else close(true); } return; }
+            if (s.view === 'recent' && (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Home' || e.key === 'End') && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) { walk(s, e); return; }
             if (e.key !== 'Tab') return;
-            list = s.ctl.filter(function (c) { return !c.hidden && !c.disabled; });
+            stop = s.view === 'recent' ? stopOf(s) : null;
+            list = s.ctl.filter(function (c) { return !c.hidden && !c.disabled && (s.view !== 'recent' || s.items.indexOf(c) === -1 || c === stop); });       // (the list is one stop: Up and Down walk it)
             if (!list.length) { stay(e); return; }
             at = list.indexOf(doc.activeElement);
             stay(e);
             i = at === -1 ? 0 : (at + (e.shiftKey ? list.length - 1 : 1)) % list.length;
             list[i].focus();
+        }
+        function stopOf(s) { var a = doc.activeElement; if (s.items.indexOf(a) !== -1) { s.cur = Number(a.getAttribute('data-n')); return a; } return itemOf(s, s.cur) || s.items[0] || null; }       // (the line of the list that the focus is on, or was last on)
+        function walk(s, e) {                                           // the list of the recent step: Up and Down, Home and End move the focus along the lines
+            var n = s.items.length, at = s.items.indexOf(doc.activeElement), up = e.key === 'ArrowUp', to;
+            if (!n) return;
+            to = e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : at === -1 ? (up ? n - 1 : 0) : Math.max(0, Math.min(n - 1, at + (up ? -1 : 1)));
+            stay(e); s.items[to].focus(); s.cur = Number(s.items[to].getAttribute('data-n'));
         }
         function send(kind, minutes, purge, b) {                        // one command at a time: the buttons take no press until the hub has answered (the dock says when, at most 8 s)
             var s = sheet, l, role;
@@ -282,7 +357,7 @@
             if (b) { b.setAttribute('aria-busy', 'true'); b.classList.add('gm-wait'); }
             dock.command(commandOf(purge ? 'banpurge' : kind, l, minutes), function (code) {
                 var words = code === 'ok' ? doneWords(kind, l.who, minutes, purge) : refusedWords(code, kind, l.who, role);
-                if (sheet === s) close(true);
+                if (sheet === s) { if (kind === 'del' && s.fromList) again(s, l.id); else close(true); }
                 toast(words, code !== 'ok');
                 dock.note(words);
             });
@@ -343,9 +418,20 @@
         statusBox = el('p', 'gc-news'); statusBox.setAttribute('role', 'status'); statusBox.setAttribute('aria-live', 'polite');
         dock.root.appendChild(hintBox); dock.root.appendChild(statusBox);
         dock.rows(function (id, row) { decorate(row, id); });
+        function changed() {                                           // a line came or went: the count on the sheet and the list of the recent step follow
+            var s = sheet, n;
+            if (!s || s.busy) return;
+            if (s.view === 'recent') fill(s, true);
+            else if (s.view === 'line' && s.recent) {
+                n = recentOf(s).length;
+                s.recent.querySelector('b').textContent = recentVerb(s.line, n); s.recent.setAttribute('aria-label', recentVerb(s.line, n));
+            }
+        }
+        dock.arrived(guard(changed));
         dock.tap(guard(function (kind, m) {
-            if (kind === 'you' || kind === 'live') { if (sheet && kind === 'you') close(true); if (!viewer()) { cancelPress(); cur = null; } refresh(); }
-            else if (kind === 'del' && m && sheet && !sheet.busy && m.id === sheet.line.id) { close(true); toast(NOTE.gone, true); }
+            if (kind === 'you' || kind === 'live') { if (sheet && kind === 'you') close(true); if (!viewer()) { cancelPress(); cur = null; } refresh(); if (kind === 'live') changed(); }
+            else if (kind === 'del' && m && sheet && !sheet.busy && m.id === sheet.line.id && sheet.view !== 'recent') { close(true); toast(NOTE.gone, true); }
+            else if (kind === 'del') changed();
         }));
         refresh();
         return { close: close, open: open, state: function () { return sheet ? sheet.view : ''; } };

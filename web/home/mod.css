@@ -49,6 +49,30 @@
 .gm-hint { min-height: 20px; margin: 6px 0 12px; font-size: 14px; line-height: 1.35; color: #a8cfc0; }
 .gm-hint.gm-err { color: #ffb4a8; }
 
+/* ---- the recent messages step: a row on the sheet, then a list that scrolls between the head and Back ---- */
+.gm-nav { margin-bottom: 12px; }
+.gm-nav .gm-act { background: #0b1117; }
+.gm-nav .gm-act > .gm-ico:first-child { color: #9fe0b8; }
+.gm-nav .gm-act b { text-wrap: balance; }
+.gm-rbox { display: flex; flex-direction: column; max-height: min(100%, 700px); }
+.gm-rbox > * { flex: none; }
+.gm-rbox > .gm-rl { flex: 1 1 auto; min-height: 96px; }
+.gm-rl { position: relative; display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; padding: 0 2px 2px 0; overflow-y: auto; overscroll-behavior: contain; }
+.gm-rl > * { flex: none; }
+.gm-day { margin: 8px 0 0; font-size: 12px; line-height: 1.3; letter-spacing: .08em; text-transform: uppercase; color: #8fb3a6; }
+.gm-day:first-child { margin-top: 0; }
+.gm-ri { display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; align-items: start; gap: 10px; box-sizing: border-box; width: 100%; min-height: 48px; padding: 8px 10px; text-align: left; font: inherit; color: var(--cream); background: #0f1820; border: 2px solid #1c3a30; border-radius: 8px; }
+button.gm-ri { cursor: pointer; }
+button.gm-ri:hover { background: #14232b; border-color: #2b6b4f; }
+div.gm-ri { background: #0b1117; }
+.gm-ri.gm-here { border-left: 4px solid var(--gold); padding-left: 8px; }
+.gm-rt { font-size: 13px; line-height: 1.5; color: #8fb3a6; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.gm-rx { min-width: 0; font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
+.gm-rq { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
+.gm-this { display: block; margin-top: 2px; font-size: 12px; line-height: 1.3; color: var(--gold); }
+.gm-ri .gm-chev { width: 20px; height: 20px; margin-top: 1px; color: #8fb3a6; }
+.gm-none { margin: 4px 0; font-size: 15px; line-height: 1.4; color: #a8cfc0; }
+
 /* ---- the confirm card ---- */
 .gm-conf { text-align: center; }
 .gm-mark { display: grid; place-items: center; box-sizing: border-box; width: 52px; height: 52px; margin: 0 auto 10px; color: #ffe4de; background: #3b0d10; border: 3px solid var(--bad-edge); border-radius: 50%; }
@@ -95,5 +119,5 @@
     .gm-mark { display: none; }
 }
 @media (max-width: 359px) { .gm-times .btn { font-size: 18px; } .gm-btns { gap: 8px; } }
-@media (forced-colors: active) { .gm-act, .gm-box, .gm-toast { border-color: CanvasText; } .gm-act { border-color: ButtonText; } }
+@media (forced-colors: active) { .gm-act, .gm-box, .gm-toast, .gm-ri { border-color: CanvasText; } .gm-act, button.gm-ri { border-color: ButtonText; } }
 @media (prefers-reduced-motion: reduce) { .gm-wait::after { animation: none; } }

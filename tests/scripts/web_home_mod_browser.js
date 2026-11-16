@@ -7,6 +7,8 @@
 //   3. the sheet: a dialog, modal, named by the person, the first action has the focus, every control is at least 44 x 44 px, the box is inside the window, nothing scrolls sideways, Tab stays inside, what stands
 //      behind is inert, Escape lets it go and the focus is back on the log; the mute step (four times, the custom number: Mute stays off for 0 and for 10,081, on for 90, Enter sends, the commands are `/mute #n m`);
 //      the confirm cards (Cancel has the focus, nothing is sent before the red button, the red button takes no press for 400 ms, `/kick #n`, `/ban #n`, `/ban #n purge`, `/del n`); one command at a time;
+//      the recent messages (the row with the count, the list: its lines, times and text only, every control at least 44 px, the box inside the window with a long list scrolling between the head and Back, Up, Down, Home, End and Tab,
+//      a line of the list opens its sheet, new lines join without moving what is read, a Delete from the list returns to it);
 //   4. the answer: a toast AT THE TOP (inside the window, under the bar, over no composer), the same words as a private line of the chat, a refusal that stays with OK;
 //   5. the keyboard: the log has the focus, Up and Down choose a line, Enter, the menu key and Shift and F10 open it, Escape lets the line go;
 //   6. a moderator (no Ban, nothing on an administrator's or a moderator's line) and a person with no role: nothing marked, the part is never asked for, a right click and a long press are the browser's own, and the lines
@@ -175,7 +177,7 @@ async function main() {
         if (!touch) check(name + 'the browser\'s own menu was held back', info.prevented.length === 1 && info.prevented[0] === true, JSON.stringify(info.prevented));
         else check(name + 'the phone buzzed once, lightly', info.buzz === 1, String(info.buzz));
         check(name + 'the first action has the focus', (await focused(page)) === 'Delete this line', await focused(page));
-        check(name + 'the actions of an administrator on a person: Delete, Mute, Kick, Ban, Cancel', JSON.stringify(await names(page)) === JSON.stringify(['Delete this line', 'Mute Clover…', 'Kick Clover', 'Ban Clover', 'Cancel']), JSON.stringify(await names(page)));
+        check(name + 'the actions of an administrator on a person: Recent messages (1), Delete, Mute, Kick, Ban, Cancel', JSON.stringify(await names(page)) === JSON.stringify(['Recent messages from Clover (1)', 'Delete this line', 'Mute Clover…', 'Kick Clover', 'Ban Clover', 'Cancel']), JSON.stringify(await names(page)));
         const small = await page.evaluate(() => [...document.querySelectorAll('.gm-box button, .gm-box input')].map((e) => { const r = e.getBoundingClientRect(); return [e.getAttribute('aria-label') || e.textContent, Math.round(r.width), Math.round(r.height)]; }).filter((a) => a[1] < 44 || a[2] < 44));
         check(name + 'every control of the sheet is at least 44 x 44', small.length === 0, JSON.stringify(small));
         const inside = await page.evaluate(() => { const r = document.querySelector('.gm-box').getBoundingClientRect(), b = document.documentElement; return { top: r.top, left: r.left, right: window.innerWidth - r.right, bottom: window.innerHeight - r.bottom, sideways: b.scrollWidth > window.innerWidth || document.body.scrollWidth > window.innerWidth, box: document.querySelector('.gm-box').scrollWidth > document.querySelector('.gm-box').clientWidth }; });
@@ -298,6 +300,56 @@ async function main() {
         await sleep(6300);
         check(name + 'the toast goes by itself after 6 seconds', (await toastWords(page)) === null);
 
+        // the recent messages: the row, the list, the keys, a line of the list, a long list, a Delete from it
+        await openIt(context, page, touch, 149);
+        check(name + 'the sheet of Juniper\'s line: the row "Recent messages from Juniper (2)" first, Delete has the focus', JSON.stringify((await names(page)).slice(0, 2)) === JSON.stringify(['Recent messages from Juniper (2)', 'Delete this line']) && (await focused(page)) === 'Delete this line', JSON.stringify(await names(page)));
+        await clickBy(page, 'Recent messages from Juniper'); await sleep(200);
+        const rl = await page.evaluate(() => {
+            const b = document.querySelector('.gm-box'), r = b.getBoundingClientRect(), items = [...b.querySelectorAll('.gm-rl .gm-ri')];
+            const logTime = (id) => { const e = document.querySelector('#gchat .gc-line[data-n="' + id + '"] .gc-t'); return e ? e.textContent : null; };
+            return { title: document.getElementById('gm-title').textContent, ids: items.map((e) => e.getAttribute('data-n')), times: items.map((e) => e.querySelector('.gm-rt').textContent + '=' + logTime(e.getAttribute('data-n'))), texts: items.map((e) => e.querySelector('.gm-rq').textContent), links: b.querySelectorAll('a').length,
+                small: [...b.querySelectorAll('button')].filter((x) => { const q = x.getBoundingClientRect(); return q.width < 44 || q.height < 44; }).length, sideways: document.documentElement.scrollWidth > innerWidth, inside: r.top >= -0.5 && r.left >= -0.5 && r.bottom <= innerHeight + 0.5 && r.right <= innerWidth + 0.5, here: [...b.querySelectorAll('.gm-this')].length, sub: b.querySelector('.gm-sub').textContent };
+        });
+        check(name + 'the list: Juniper\'s two lines, newest first, the title and the count', rl.title === 'Recent messages from Juniper' && rl.ids.join() === '149,142' && /juniper\.berry · 2 messages in this chat/.test(rl.sub), JSON.stringify(rl));
+        check(name + '...each with the time of the log\'s own line, and the words as text (the address in 149 is not a link)', rl.times.every((x) => x.split('=')[0] === x.split('=')[1]) && /https:\/\/example\.org\/spam/.test(rl.texts[0]) && rl.links === 0, JSON.stringify(rl.times));
+        check(name + '...every control at least 44 x 44, the box inside the window, nothing sideways, the line that was opened is marked', rl.small === 0 && rl.inside && !rl.sideways && rl.here === 1, JSON.stringify([rl.small, rl.inside, rl.sideways, rl.here]));
+        check(name + '...the newest line has the focus', (await page.evaluate(() => document.activeElement.getAttribute('data-n'))) === '149');
+        const onItem = () => page.evaluate(() => { const a = document.activeElement; return a ? (a.getAttribute('data-n') || a.textContent) : null; });
+        await page.keyboard.press('ArrowDown'); const d1 = await onItem(); await page.keyboard.press('ArrowDown'); const d2 = await onItem(); await page.keyboard.press('ArrowUp'); const u1 = await onItem(); await page.keyboard.press('End'); const e1 = await onItem(); await page.keyboard.press('Home'); const h1 = await onItem();
+        check(name + 'Down, Down (no wrap), Up, End, Home walk the list: ' + [d1, d2, u1, e1, h1].join(' '), [d1, d2, u1, e1, h1].join() === '142,142,149,142,149');
+        await page.keyboard.press('Tab'); const t1 = await onItem(); await page.keyboard.press('Tab'); const t2 = await onItem();
+        check(name + 'the list is one Tab stop: Tab goes to Back, and Tab again to the line', t1 === 'Back' && t2 === '149', t1 + ' ' + t2);
+        await page.keyboard.press('Escape'); await sleep(100);
+        check(name + 'Escape in the list: the sheet again, the focus on the row', (await sheetUp(page)) && (await focused(page)).indexOf('Recent messages from Juniper') === 0, await focused(page));
+        await clickBy(page, 'Recent messages from Juniper'); await sleep(150);
+        await page.locator('.gm-rl .gm-ri[data-n="142"]').click(); await sleep(200);
+        const sh = await page.evaluate(() => ({ title: document.getElementById('gm-title').textContent, quote: document.querySelector('.gm-quote').textContent, sub: document.querySelector('.gm-sub').textContent, marked: [...document.querySelectorAll('.gc-line.gm-on')].map((r) => r.getAttribute('data-n')).join() }));
+        check(name + 'a line of the list opens the sheet of that line (its words, its number, the line marked in the log)', sh.title === 'Juniper' && sh.quote === 'I am in, give me a minute' && /line #142/.test(sh.sub) && sh.marked === '142', JSON.stringify(sh));
+        // a long list: it scrolls between the head and Back, new lines join without moving what is read
+        hub.nextId = 300;
+        await clickBy(page, 'Recent messages from Juniper'); await sleep(150);
+        for (let i = 1; i <= 25; i++) { hub.say('Juniper', 'flood line number ' + i + ' of the long list, it goes on and on and on', false, { k: 'k-juniper', u: 'juniper.berry', at: NOW + i }); await sleep(45); }
+        await sleep(250);
+        const lg = await page.evaluate(() => { const b = document.querySelector('.gm-box').getBoundingClientRect(), l = document.querySelector('.gm-rl'), back = [...document.querySelectorAll('.gm-box button')].pop().getBoundingClientRect(); return { items: l.querySelectorAll('.gm-ri').length, client: l.clientHeight, scroll: l.scrollHeight, top: Math.round(b.top), bottom: Math.round(b.bottom), vh: innerHeight, backBottom: Math.round(back.bottom), backH: Math.round(back.height) }; });
+        check(name + 'a long list (27 lines) scrolls inside the box, the box stays inside the window, Back stays in view and is at least 44 px', lg.items === 27 && lg.scroll > lg.client + 100 && lg.top >= 0 && lg.bottom <= lg.vh && lg.backBottom <= lg.vh && lg.backH >= 44, JSON.stringify(lg));
+        await page.evaluate(() => { document.querySelector('.gm-rl').scrollTop = 400; }); await sleep(100);
+        const mark = await page.evaluate(() => { const l = document.querySelector('.gm-rl'), r = l.getBoundingClientRect(); const first = [...l.querySelectorAll('.gm-ri')].find((e) => e.getBoundingClientRect().bottom > r.top + 4); return { id: first.getAttribute('data-n'), off: Math.round(first.getBoundingClientRect().top - r.top), top: l.scrollTop }; });
+        hub.say('Juniper', 'one more line while the list is read', false, { k: 'k-juniper', u: 'juniper.berry', at: NOW + 30 }); await sleep(300);
+        const after = await page.evaluate((id) => { const l = document.querySelector('.gm-rl'), r = l.getBoundingClientRect(), e = l.querySelector('.gm-ri[data-n="' + id + '"]'); return { off: e ? Math.round(e.getBoundingClientRect().top - r.top) : null, top: l.scrollTop, items: l.querySelectorAll('.gm-ri').length, first: l.querySelector('.gm-ri').getAttribute('data-n') }; }, mark.id);
+        check(name + 'a line that comes while the list is scrolled joins at the top and the line that is being read stays where it is (' + JSON.stringify(mark) + ' -> ' + JSON.stringify(after) + ')', after.items === 28 && after.off !== null && Math.abs(after.off - mark.off) <= 2 && after.first === '325', JSON.stringify([mark, after]));
+        await page.evaluate(() => { document.querySelector('.gm-rl').scrollTop = 0; }); await sleep(80);
+        // Delete from the list: back to the list, the focus on the next line
+        const targetId = await page.evaluate(() => document.querySelectorAll('.gm-rl .gm-ri')[1].getAttribute('data-n'));
+        const nextId = await page.evaluate(() => document.querySelectorAll('.gm-rl .gm-ri')[2].getAttribute('data-n'));
+        await page.locator('.gm-rl .gm-ri[data-n="' + targetId + '"]').click(); await sleep(200);
+        await clickBy(page, 'Delete this line'); await sleep(450); await pressBy(page, 'Delete'); await sleep(500);
+        const dl = await page.evaluate(() => ({ list: !!document.querySelector('.gm-rl'), items: document.querySelectorAll('.gm-rl .gm-ri').length, on: document.activeElement.getAttribute('data-n'), sub: document.querySelector('.gm-sub').textContent }));
+        check(name + 'a Delete from the list goes back to the list, one line fewer, the focus on the next line (' + nextId + ')', said()[said().length - 1] === '/del ' + targetId && dl.list && dl.items === 27 && dl.on === nextId && /27 messages/.test(dl.sub), JSON.stringify([said().slice(-1), dl, targetId, nextId]));
+        check(name + '...the toast says "Done: the line is gone."', (await toastWords(page)) === 'Done: the line is gone.');
+        await closeIt(page); await closeIt(page); await sleep(100);
+        check(name + '...Escape twice: Back to the sheet, then closed, the focus back on the log', !(await sheetUp(page)) && (await page.evaluate(() => document.activeElement === document.querySelector('#gchat .gc-log'))));
+        await sleep(6200);
+
         // the times: a tap acts at once; the confirm cards
         await openIt(context, page, touch, 149);
         await clickBy(page, 'Mute Juniper'); await clickBy(page, '1 hour'); await sleep(450);
@@ -348,7 +400,7 @@ async function main() {
         const marked = await page.evaluate(() => [...document.querySelectorAll('#gchat .gc-line[data-act]')].map((r) => Number(r.getAttribute('data-n'))));
         check(name + 'the lines with an action: not an administrator\'s, not a moderator\'s, not the hub\'s own', marked.join() === '141,142,144,145,148,149,150,151,152', marked.join());
         await openIt(context, page, touch, 148);
-        check(name + 'the sheet offers Delete, Mute and Kick, no Ban', JSON.stringify(await names(page)) === JSON.stringify(['Delete this line', 'Mute Clover…', 'Kick Clover', 'Cancel']), JSON.stringify(await names(page)));
+        check(name + 'the sheet offers Recent messages, Delete, Mute and Kick, no Ban', JSON.stringify(await names(page)) === JSON.stringify(['Recent messages from Clover (1)', 'Delete this line', 'Mute Clover…', 'Kick Clover', 'Cancel']), JSON.stringify(await names(page)));
         await shot(page, '2b_line_sheet_moderator_no_ban', size);
         await closeIt(page);
         await openIt(context, page, touch, 152);

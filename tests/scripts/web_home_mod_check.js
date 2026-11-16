@@ -9,6 +9,9 @@
 //   5. the sheet: the actions of each role, Cancel, Escape, Back, the focus (first action, Cancel on a card, back to the log), Tab kept inside, what stands behind is inert, the dark part is Cancel (not at once), nothing is
 //      sent before the red button (and not in its first 400 ms), the exact commands, one at a time, the answers (toast and private line: the same words), the codes in words, 8 s of silence, a socket that goes,
 //      a line that goes, a role that goes meanwhile, text that is never markup;
+//   5b. the recent messages: a row on the sheet with the count of the person's lines that are in the page's log (matched by the hub's key, never a name; not on a line of one's own; not for a visitor with no role),
+//      the list (newest first, the log's own times and day words, text only, the line that was opened marked, one stop for Tab, Up, Down, Home and End walk it, Escape and Back), the sheet of a line of the list,
+//      Delete from it (back to the list, the focus on the next line, else the one before, else Back), and the live follow (a new line, a deleted line, the log's 100 lines, a role that goes);
 //   6. the page (web/lobby.html with web/home/home.js): the two files come once, after the dock names a visitor with a role, and never for a person with none; a broken or missing one changes nothing.
 // tests/scripts/test_web_home_mod.py runs this with node (the quick tier). usage: node web_home_mod_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
@@ -231,6 +234,27 @@ function rig(o) {
     const z = rig({ role: 'none', noMod: true }), none = [];
     z.dock.rows((id) => none.push(id)); z.recv({ t: 'line', id: 151, at: T0 + 151, who: 'Fern', text: 'hello', mod: false });
     same('rows(fn): not told anything for a visitor with no role', none, []);
+    const b = rig({ noMod: true }), by = b.dock.by(148);
+    same('by(id): for staff, the lines of the log that the author of line `id` wrote, newest first, as { id, text, at } and nothing else (no key, no name)', [by, b.dock.by(150).length, b.dock.by(147), b.dock.by(999), b.dock.by(null), b.dock.by('148')],
+        [[{ id: 148, text: 'FREE ant gold!!! see my page', at: T0 + 148 }], 1, [], [], [], []]);
+    const bb = rig({ noMod: true, history: [line(1, 'Clover', 'one', { k: 'k-c' }), line(2, 'Pebble', 'two', { k: 'k-p' }), line(3, 'Clover2', 'three', { k: 'k-c' }), line(4, 'Clover', 'four', { k: 'k-other' }), line(5, 'Fern', 'five', { k: '' }), line(6, 'Fern', 'six', { k: '' }), line(7, 'system', 'Dash was kicked.', { k: 'k-c', sys: true })] });
+    same('...matched by the hub\'s key of the account: a changed name is the same person, the same name with another key is not, and a line with no key has no one to match', [bb.dock.by(1).map((x) => x.id), bb.dock.by(3).map((x) => x.id), bb.dock.by(4).map((x) => x.id), bb.dock.by(5).map((x) => x.id)], [[3, 1], [3, 1], [4], []]);
+    same('...the hub\'s own line is nobody\'s, whatever key it carries, and it is never counted for anybody', [bb.dock.by(7), bb.dock.by(1).map((x) => x.id)], [[], [3, 1]]);
+    bb.dock.note('a private answer');
+    same('...never a private answer', bb.dock.by(1).length, 2);
+    const nobody = rig({ role: 'none', noMod: true });
+    same('...and nothing for a visitor with no role', [nobody.dock.by(148), nobody.dock.by(141)], [[], []]);
+    nobody.you('mod');
+    same('...until the hub gives the role', nobody.dock.by(148).length, 1);
+    const wh = b.dock.when(T0 + 148), wn = b.dock.when(undefined), wd = b.dock.when(T0 + 148 - 3 * 86400);
+    check('when(at): the log\'s own words for a time (the clock, the full date, the divider\'s word, a number per local day); none for a line with no time', wn === null && typeof wh.time === 'string' && wh.time.length > 0 && wh.full.indexOf(wh.time) !== -1 && typeof wh.day === 'string' && wh.day.length > 0 && wh.key !== wd.key && wh.key === b.dock.when(T0 + 150).key);
+    const told = [], ar = rig({ noMod: true });
+    ar.dock.arrived(() => told.push('line'));
+    ar.recv({ t: 'line', id: 151, at: T0 + 151, who: 'Fern', text: 'hello', mod: false, k: 'k-fern' });
+    ar.recv({ t: 'line', id: 151, at: T0 + 151, who: 'Fern', text: 'hello', mod: false, k: 'k-fern' });
+    ar.dock.note('a private answer');
+    ar.recv({ t: 'del', id: 151 });
+    same('arrived(fn): told once for each new line of the log, not for the same line twice, a private answer or a deleted line', told, ['line']);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -433,17 +457,17 @@ function rig(o) {
     const r = rig();
     r.open(148);
     const box = r.box();
-    same('an administrator on a person\'s line: Delete, Mute, Kick, Ban and Cancel, each named by its verb and the person', r.names(), ['Delete this line', 'Mute Clover\u2026', 'Kick Clover', 'Ban Clover', 'Cancel']);
-    same('...each action says what it does in a few words (the description)', r.buttons().slice(0, 4).map((b) => r.env.elements && b.getAttribute('aria-describedby')).map((id) => id && one(box, 'gm-act') && box.findAll((e) => e.id === id)[0].textContent), ['Gone from every screen', 'Cannot write for a while', 'Logged out; can log in again', 'Can read, cannot write']);
+    same('an administrator on a person\'s line: the recent messages row (with the count of their lines in the log), Delete, Mute, Kick, Ban and Cancel, each named by its verb and the person', r.names(), ['Recent messages from Clover (1)', 'Delete this line', 'Mute Clover\u2026', 'Kick Clover', 'Ban Clover', 'Cancel']);
+    same('...each action says what it does in a few words (the description)', r.buttons().slice(1, 5).map((b) => r.env.elements && b.getAttribute('aria-describedby')).map((id) => id && one(box, 'gm-act') && box.findAll((e) => e.id === id)[0].textContent), ['Gone from every screen', 'Cannot write for a while', 'Logged out; can log in again', 'Can read, cannot write']);
     check('it is a dialog, modal, labelled by its title and described by the line', box.getAttribute('role') === 'dialog' && box.getAttribute('aria-modal') === 'true' && box.getAttribute('aria-labelledby') === 'gm-title' && box.findAll((e) => e.id === 'gm-title')[0].textContent === 'Clover' && box.getAttribute('aria-describedby') === 'gm-quote' && box.findAll((e) => e.id === 'gm-quote')[0].textContent === 'FREE ant gold!!! see my page');
     same('the header: the author, then the username where the hub sent one and the number of the line', one(box, 'gm-sub').textContent, '@clover.4782 \u00b7 line #148');
-    check('the first action has the focus', r.doc.activeElement === r.buttons()[0]);
-    check('Mute is the only one with a chevron (it goes on to a second step)', box.findAll((e) => e.tagName === 'svg' && cls(e).indexOf('gm-chev') !== -1).length === 1 && r.buttons()[1].findAll((e) => e.tagName === 'svg' && cls(e).indexOf('gm-chev') !== -1).length === 1);
+    check('the first action (Delete, not the recent messages row) has the focus', r.doc.activeElement === r.buttons()[1]);
+    check('the recent messages row and Mute are the only ones with a chevron (each goes on to a second step)', box.findAll((e) => e.tagName === 'svg' && cls(e).indexOf('gm-chev') !== -1).length === 2 && [0, 2].every((i) => r.buttons()[i].findAll((e) => e.tagName === 'svg' && cls(e).indexOf('gm-chev') !== -1).length === 1));
     check('the line is marked while its sheet is open, and what stands behind is inert (the page, not the sheet)', r.marked().join() === '148' && r.host.hasAttribute('inert') && !r.shade().hasAttribute('inert'));
     r.press('Cancel');
     check('Cancel: the sheet and the mark and the inert are gone, and nothing was sent', r.shade() === null && r.marked().length === 0 && !r.host.hasAttribute('inert') && r.said().length === 0 && r.privates().length === 0);
     r.open(143);
-    same('an administrator on a moderator\'s line: all four, and the header says what the author is', [r.names().length, one(r.box(), 'gm-sub').textContent, cls(one(r.box(), 'gm-name')).indexOf('gc-r-mod') !== -1], [5, '@sage.moss \u00b7 moderator \u00b7 line #143', true]);
+    same('an administrator on a moderator\'s line: all four, and the header says what the author is', [r.names().length, one(r.box(), 'gm-sub').textContent, cls(one(r.box(), 'gm-name')).indexOf('gc-r-mod') !== -1], [6, '@sage.moss \u00b7 moderator \u00b7 line #143', true]);
     r.press('Cancel');
     r.open(150);
     same('on the viewer\'s own line: Delete and Cancel, and the header says "you"', [r.names(), one(r.box(), 'gm-sub').textContent], [['Delete this line', 'Cancel'], '@me.r \u00b7 administrator \u00b7 line #150 \u00b7 you']);
@@ -453,7 +477,7 @@ function rig(o) {
     r.press('Cancel');
     const m = rig({ role: 'mod' });
     m.open(148);
-    same('a moderator on a person\'s line: no Ban', m.names(), ['Delete this line', 'Mute Clover\u2026', 'Kick Clover', 'Cancel']);
+    same('a moderator on a person\'s line: no Ban', m.names(), ['Recent messages from Clover (1)', 'Delete this line', 'Mute Clover\u2026', 'Kick Clover', 'Cancel']);
     const l = rig({ history: [line(148, 'Clover', 'x'.repeat(2000), { u: 'clover.4782' })] });
     l.open(148);
     check('a very long line is cut for the quote (the style sheet keeps three lines of it)', one(l.box(), 'gm-quote').textContent.length <= Pure.LIMIT.quote);
@@ -464,7 +488,7 @@ function rig(o) {
 {   // focus, Escape, Tab, the dark part
     const r = rig();
     r.open(148);
-    const first = r.buttons()[0], last = r.buttons()[4];
+    const first = r.buttons()[0], last = r.buttons()[5];
     check('Tab goes to the next control, and from the last to the first (the sheet keeps the focus)', (() => { first.focus(); const stopped = r.event(r.shade(), 'keydown', { key: 'Tab', shiftKey: false }); const second = r.doc.activeElement === r.buttons()[1]; last.focus(); r.event(r.shade(), 'keydown', { key: 'Tab' }); return stopped && second && r.doc.activeElement === first; })());
     check('Shift and Tab goes back, and from the first to the last', (() => { first.focus(); r.event(r.shade(), 'keydown', { key: 'Tab', shiftKey: true }); return r.doc.activeElement === last; })());
     r.event(r.shade(), 'keydown', { key: 'Escape' });
@@ -472,9 +496,9 @@ function rig(o) {
     r.open(148); r.press('Mute Clover\u2026');
     check('Mute\u2026 is a second step on the same sheet (the line sheet is replaced, not stacked)', r.mod.state() === 'mute' && r.body.children.filter((c) => cls(c).indexOf('gm-shade') !== -1).length === 1);
     r.event(r.shade(), 'keydown', { key: 'Escape' });
-    check('Escape in the second step is Back: the line sheet again, with the focus on Mute\u2026', r.mod.state() === 'line' && r.doc.activeElement === r.buttons()[1] && r.shade() !== null);
+    check('Escape in the second step is Back: the line sheet again, with the focus on Mute\u2026', r.mod.state() === 'line' && r.doc.activeElement === r.buttons()[2] && r.shade() !== null);
     r.press('Mute Clover\u2026'); r.press('Back');
-    check('the Back button does the same', r.mod.state() === 'line' && r.doc.activeElement === r.buttons()[1]);
+    check('the Back button does the same', r.mod.state() === 'line' && r.doc.activeElement === r.buttons()[2]);
     r.press('Cancel');
     r.open(148);
     const shade = r.shade();
@@ -654,6 +678,200 @@ function rig(o) {
     b.doc.querySelector = (s) => (s === '.hbar' ? { getBoundingClientRect: () => ({ bottom: 64 }) } : null);
     b.open(148); b.press('Delete this line'); b.clock.advance(401); b.press('Delete'); b.recv({ t: 'ok', c: 'del' });
     check('...10 px under the bar where the page has one', b.toast().style.top === '74px');
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 5b. The recent messages
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const CL = { u: 'clover.4782' };
+    const hist = () => [
+        line(139, 'Clover', 'old line from three days ago', Object.assign({ at: T0 - 3 * 86400 }, CL)),
+        line(141, 'Pebble', 'anyone up for Islands?'),
+        line(143, 'Sage', 'Please be kind.', { role: 'mod', u: 'sage.moss' }),
+        line(144, 'Clover', 'FREE ant gold!!! see my page', CL),
+        line(145, 'Juniper', 'looks like spam', { u: 'juniper.berry' }),
+        line(147, 'system', 'Dash was kicked.', { sys: true, k: '' }),
+        line(148, 'Clover', 'second: <b>free</b> & https://example.org/x', CL),
+        line(150, 'Me', 'looking at it', { u: 'me.r' }),
+        line(151, 'Clover', 'third line', CL),
+    ];
+    const items = (r) => r.box().findAll((e) => cls(e).indexOf('gm-ri') !== -1);
+    const ids = (r) => items(r).map((e) => Number(e.getAttribute('data-n')));
+    const rowName = (r) => { const b = r.buttons()[0]; return b ? b.getAttribute('aria-label') : null; };
+    const said = (r, name) => r.box().findAll((e) => e.getAttribute && e.getAttribute('data-n') === String(name))[0];
+    const keyOn = (r, k, extra) => r.event(r.shade(), 'keydown', Object.assign({ key: k }, extra));
+    const lineOf = (id, who, text, extra) => ({ t: 'line', id, at: T0 + id, who, text, mod: false, k: 'k-' + who.toLowerCase(), u: 'clover.4782', ...(extra || {}) });
+    const red = (r, name) => { r.press(name); r.clock.advance(401); r.press('Delete'); };
+
+    // the row
+    const r = rig({ history: hist() });
+    r.open(148);
+    check('the sheet of a person\'s line has the recent messages row first (under the quoted line), with the count of their lines in the log, a chevron and its description', rowName(r) === 'Recent messages from Clover (4)' && r.buttons()[0].findAll((e) => e.tagName === 'svg' && cls(e).indexOf('gm-chev') !== -1).length === 1 && r.box().findAll((e) => e.id === 'gm-d-recent')[0].textContent === 'Their lines in this chat, newest first' && r.buttons()[0].getAttribute('aria-describedby') === 'gm-d-recent');
+    check('...the first action is still Delete (the row is not the first stop of the focus)', r.doc.activeElement === r.buttons()[1] && r.names()[1] === 'Delete this line');
+    check('...the hub\'s own line is not counted, nor are the lines of other people', rowName(r).indexOf('(4)') !== -1 && r.dock.by(148).every((x) => x.id !== 147));
+    r.press('Cancel');
+    r.open(141);
+    check('a person with one line in the log: the row stays, with (1)', rowName(r) === 'Recent messages from Pebble (1)');
+    r.press('Cancel');
+    r.open(143);
+    check('an administrator on a moderator\'s line: the row too', rowName(r) === 'Recent messages from Sage (1)');
+    r.press('Cancel');
+    r.open(150);
+    check('a line of one\'s own: Delete only, no row (that sheet stays what it was)', r.names().join('|') === 'Delete this line|Cancel');
+    r.press('Cancel');
+    const m = rig({ role: 'mod', history: hist() });
+    m.open(148);
+    check('a moderator on a person\'s line: the row, and no Ban', rowName(m) === 'Recent messages from Clover (4)' && m.names().indexOf('Ban Clover') === -1);
+    m.press('Cancel');
+    check('a moderator on a moderator\'s line: no sheet at all (so no row)', m.menu(143) === false && m.shade() === null);
+    const nk = rig({ history: [line(1, 'Fern', 'a line from a hub that sent no key', { k: '' }), line(2, 'Fern', 'and another', { k: '' })] });
+    nk.open(1);
+    check('a line that carries no key: no row (nobody to match), the sheet is the old one', nk.names().join('|') === 'Delete this line|Mute Fern…|Kick Fern|Ban Fern|Cancel');
+    const pl = rig({ role: 'none', history: hist() });
+    check('a person with no role never sees it: no sheet, no marks, the browser\'s own menu, nothing of the recent messages is asked of the dock', pl.menu(148) === false && pl.shade() === null && pl.acts().length === 0 && pl.dock.by(148).length === 0);
+    pl.you('mod');
+    pl.menu(148);
+    check('...a role that comes gives it', rowName(pl) === 'Recent messages from Clover (4)');
+    pl.you('none');
+    check('...and a role that goes closes the sheet at once, with the row', pl.shade() === null);
+
+    // the list
+    const q = rig({ history: hist() });
+    q.open(148); q.press('Recent messages from Clover (4)');
+    check('the row opens a second step on the same sheet: titled by the person, described by its keys, named group of lines', q.mod.state() === 'recent' && q.body.children.filter((c) => cls(c).indexOf('gm-shade') !== -1).length === 1 && q.box().findAll((e) => e.id === 'gm-title')[0].textContent === 'Recent messages from Clover' && q.box().getAttribute('aria-labelledby') === 'gm-title' && one(q.box(), 'gm-rl').getAttribute('role') === 'group' && one(q.box(), 'gm-rl').getAttribute('aria-label') === 'Recent messages, newest first' && /Up and Down/.test(one(q.box(), 'gm-rl').getAttribute('aria-description')));
+    same('...the lines of that person, newest first, and nobody else\'s', ids(q), [151, 148, 144, 139]);
+    same('...the header says who and how many', one(q.box(), 'gm-sub').textContent, '@clover.4782 · 4 messages in this chat');
+    check('...every line has its time in the log\'s own words, and the full date as its title', ids(q).every((id) => { const tt = q.row(id).findAll((e) => cls(e).indexOf('gc-t') !== -1)[0], mine = said(q, id); return tt && one(mine, 'gm-rt').textContent === tt.textContent && mine.getAttribute('title') === tt.getAttribute('title').replace(/^#\d+ /, ''); }), ids(q).map((id) => [one(said(q, id), 'gm-rt').textContent, q.row(id).findAll((e) => cls(e).indexOf('gc-t') !== -1)[0].textContent].join('=')).join());
+    check('...words are text: markup characters and an address stay as typed, no link, no element made from them', one(said(q, 148), 'gm-rq').textContent === 'second: <b>free</b> & https://example.org/x' && q.box().findAll((e) => e.tagName === 'a' || e.tagName === 'b' || e.tagName === 'script').filter((e) => e.textContent.indexOf('free') !== -1 && cls(e.parent).indexOf('gm-at') === -1 && e.tagName !== 'b').length === 0 && q.env.innerHTMLWrites.length === 0);
+    check('...the line that was opened is marked "this line" and nothing else is', one(said(q, 148), 'gm-this').textContent === 'this line' && byClass(q.box(), 'gm-this').length === 1 && cls(said(q, 148)).indexOf('gm-here') !== -1 && byClass(q.box(), 'gm-here').length === 1);
+    const days = byClass(q.box(), 'gm-day').map((e) => e.textContent), logDays = byClass(q.log, 'gc-day').map((e) => e.textContent);
+    check('...day headings only because the lines are on two days: the log\'s own words for them, the newest day first', days.length === 2 && days[0] === logDays[logDays.length - 1] && days[1] === logDays[0] && days[0] !== days[1], JSON.stringify([days, logDays]));
+    same('...the order of the group: heading, three lines of the day, heading, the old line', one(q.box(), 'gm-rl').children.map((c) => (cls(c).indexOf('gm-day') !== -1 ? 'day' : c.getAttribute('data-n'))), ['day', '151', '148', '144', 'day', '139']);
+    check('...a line is a button named by its day word (only when there are two days), time and words', said(q, 148).getAttribute('aria-label') === days[0] + ' ' + one(said(q, 148), 'gm-rt').textContent + '. second: <b>free</b> & https://example.org/x. this line' && said(q, 151).tagName === 'button' && q.names().length === 5 && q.names()[4] === 'Back');
+    check('...the first (newest) line has the focus, every line is at least a button with a chevron', q.doc.activeElement === said(q, 151) && items(q).every((e) => e.findAll((x) => x.tagName === 'svg' && cls(x).indexOf('gm-chev') !== -1).length === 1));
+    const one1 = rig({ history: [line(1, 'Fern', 'only line', { k: 'k-f' })] });
+    one1.open(1); one1.press('Recent messages from Fern (1)');
+    check('a person with one line: the list is that line, "1 message", no day heading, and it is marked as the line that was opened', ids(one1).join() === '1' && one(one1.box(), 'gm-sub').textContent === '1 message in this chat' && byClass(one1.box(), 'gm-day').length === 0 && byClass(one1.box(), 'gm-this').length === 1 && one1.names().join('|') === one1.names()[0] + '|Back' && one1.buttons()[0].getAttribute('aria-label').indexOf('Today') === -1);
+
+    // the keys in the list
+    const stopped = (k, extra) => keyOn(q, k, extra);
+    check('Down walks to the next line (and stops the page from scrolling), Up comes back', stopped('ArrowDown') === true && q.doc.activeElement === said(q, 148) && stopped('ArrowDown') && q.doc.activeElement === said(q, 144) && stopped('ArrowUp') && q.doc.activeElement === said(q, 148));
+    check('...Home and End go to the first and the last, and the ends do not wrap', stopped('End') && q.doc.activeElement === said(q, 139) && stopped('ArrowDown') && q.doc.activeElement === said(q, 139) && stopped('Home') && q.doc.activeElement === said(q, 151) && stopped('ArrowUp') && q.doc.activeElement === said(q, 151));
+    check('...a key with Shift, Ctrl, Alt or Meta is not the list\'s', ['shiftKey', 'ctrlKey', 'altKey', 'metaKey'].every((mod) => { q.doc.activeElement = said(q, 151); const s = keyOn(q, 'ArrowDown', { [mod]: true }); return s === false && q.doc.activeElement === said(q, 151); }));
+    stopped('ArrowDown'); stopped('ArrowDown');
+    check('the list is one stop for Tab: from a line to Back, from Back to the line that was last on, Shift and Tab the other way', (() => { const there = q.doc.activeElement; keyOn(q, 'Tab'); const onBack = q.doc.activeElement === q.named('Back'); keyOn(q, 'Tab'); const again = q.doc.activeElement === there; keyOn(q, 'Tab', { shiftKey: true }); const back2 = q.doc.activeElement === q.named('Back'); keyOn(q, 'Tab', { shiftKey: true }); return onBack && again && back2 && q.doc.activeElement === there && there === said(q, 144); })());
+    check('...from Back, Up goes to the last line of the list', (() => { q.named('Back').focus(); const s = keyOn(q, 'ArrowUp'); return s === true && q.doc.activeElement === said(q, 139); })());
+    check('...Enter is the button\'s own (a line of the list opens its sheet; nothing of the list takes it)', keyOn(q, 'Enter') === false);
+    q.named('Back').focus();
+    keyOn(q, 'Escape');
+    check('Escape in the list is Back: the line sheet again, with the focus on the recent messages row', q.mod.state() === 'line' && q.doc.activeElement === q.buttons()[0] && rowName(q) === 'Recent messages from Clover (4)' && q.shade() !== null);
+    q.press('Recent messages from Clover (4)'); q.press('Back');
+    check('the Back button does the same', q.mod.state() === 'line' && q.doc.activeElement === q.buttons()[0]);
+    q.press('Recent messages from Clover (4)');
+    q.event(q.shade(), 'click', { target: q.shade() });
+    q.clock.advance(401);
+    q.event(q.shade(), 'click', { target: q.shade() });
+    check('the dark part (after the first 400 ms) is Cancel from the list too, with nothing sent', q.shade() === null && q.said().length === 0 && q.doc.activeElement === q.log);
+
+    // a line of the list: its own sheet
+    const s = rig({ history: hist() });
+    s.open(148); s.press('Recent messages from Clover (4)'); said(s, 144).click();
+    check('a line of the list opens the sheet of that line: its words, its number, the line marked in the log, Delete has the focus, and the row is there with the same count', s.mod.state() === 'line' && s.box().findAll((e) => e.id === 'gm-title')[0].textContent === 'Clover' && one(s.box(), 'gm-quote').textContent === 'FREE ant gold!!! see my page' && one(s.box(), 'gm-sub').textContent === '@clover.4782 · line #144' && s.marked().join() === '144' && s.doc.activeElement === s.buttons()[1] && rowName(s) === 'Recent messages from Clover (4)');
+    s.press('Kick Clover'); s.clock.advance(401); s.press('Kick');
+    same('...its actions are the sheet\'s own: Kick sends the command of THAT line by its number, and the sheet closes after the answer (only a Delete returns to the list)', [s.said(), s.shade() === null || (s.recv({ t: 'ok', c: 'kick' }), s.shade() === null)], [['/kick #144'], true]);
+
+    // Delete from the list: back to the list, the focus on the next line
+    for (const [open, target, focusAfter, order, early] of [[148, 148, 144, [151, 144, 139], true], [148, 148, 144, [151, 144, 139], false], [148, 139, 144, [151, 148, 144], true], [148, 151, 148, [148, 144, 139], false]]) {
+        const d = rig({ history: hist() });
+        d.open(open); d.press('Recent messages from Clover (4)');
+        const order0 = ids(d);
+        same('(setup) the list before: ' + order0, order0, [151, 148, 144, 139]);
+        said(d, target).click();
+        red(d, 'Delete this line');
+        same('Delete of line ' + target + ' from the list: `/del ' + target + '` is sent', d.said(), ['/del ' + target]);
+        if (early) d.recv({ t: 'del', id: target });
+        d.recv({ t: 'ok', c: 'del' });
+        if (!early) d.recv({ t: 'del', id: target });
+        check('...after the answer (' + (early ? 'the line goes first' : 'the ok comes first') + ') the sheet is the list again, without that line, and the focus is on the next line (' + focusAfter + ')', d.mod.state() === 'recent' && ids(d).join() === order.join() && d.doc.activeElement === said(d, focusAfter) && d.shade() !== null, JSON.stringify([d.mod.state(), ids(d), d.doc.activeElement && d.doc.activeElement.getAttribute && d.doc.activeElement.getAttribute('data-n')]));
+        check('...the toast and the private line say "Done: the line is gone."', d.toastText() === 'Done: the line is gone.' && d.privates().join() === 'Done: the line is gone.');
+        check('...nothing is waiting: the lines take a press again', d.buttons().every((b) => b.getAttribute('aria-disabled') !== 'true'));
+        d.press('Back');
+        check('...Back goes to the sheet of a line that is still there', d.mod.state() === 'line' && d.shade() !== null && d.toast() !== null && d.toastText() === 'Done: the line is gone.');
+    }
+    {   // the last line goes: the focus is on Back, and Back closes without a word about a line that is gone
+        const d = rig({ history: [line(1, 'Fern', 'only line', { k: 'k-f' })] });
+        d.open(1); d.press('Recent messages from Fern (1)'); said(d, 1).click(); red(d, 'Delete this line');
+        d.recv({ t: 'del', id: 1 }); d.recv({ t: 'ok', c: 'del' });
+        check('the only line is deleted from the list: the list says none is left and the focus is on Back', d.mod.state() === 'recent' && ids(d).length === 0 && /None of their lines/.test(one(d.box(), 'gm-none').textContent) && d.doc.activeElement === d.named('Back') && one(d.box(), 'gm-sub').textContent === '0 messages in this chat');
+        d.press('Back');
+        check('...Back closes the sheet, and the toast stays the done one (not "that line is gone already")', d.shade() === null && d.toastText() === 'Done: the line is gone.');
+    }
+    {   // a refusal from the hub: also back to the list, the toast stays with OK
+        const d = rig({ history: hist() });
+        d.open(148); d.press('Recent messages from Clover (4)'); said(d, 144).click(); red(d, 'Delete this line');
+        d.recv({ t: 'err', code: 'power' });
+        check('a refused Delete from the list: back to the list with every line still there, and the refusal stays with OK', d.mod.state() === 'recent' && ids(d).join() === '151,148,144,139' && /You cannot do that/.test(d.toastText()) && one(d.toast(), 'gm-tok') !== null);
+    }
+    {   // Delete of the line that the sheet was OPENED on (not from the list) closes the sheet, as before
+        const d = rig({ history: hist() });
+        d.open(148); d.press('Recent messages from Clover (4)'); d.press('Back'); red(d, 'Delete this line');
+        d.recv({ t: 'ok', c: 'del' });
+        check('Delete of the line that was opened (the list only looked at) closes the sheet as it always did', d.shade() === null);
+    }
+
+    // live: the count on the row, the list, the log's 100 lines, a role that goes
+    const v = rig({ history: hist() });
+    v.open(148);
+    v.recv(lineOf(152, 'Clover', 'a new line while the sheet is open'));
+    check('a new line of the person: the count on the row goes up at once (and its name for a screen reader)', rowName(v) === 'Recent messages from Clover (5)' && v.buttons()[0].textContent.indexOf('(5)') !== -1);
+    v.recv(lineOf(153, 'Pebble', 'someone else', { u: undefined }));
+    check('...a line of somebody else changes nothing', rowName(v) === 'Recent messages from Clover (5)');
+    v.recv({ t: 'del', id: 144 });
+    check('a deleted line of the person: the count goes down at once', rowName(v) === 'Recent messages from Clover (4)');
+    v.recv({ t: 'del', id: 141 });
+    check('...a deleted line of somebody else changes nothing', rowName(v) === 'Recent messages from Clover (4)');
+    v.press('Recent messages from Clover (4)');
+    same('the list follows: the new line is at the top, the deleted one is gone', ids(v), [152, 151, 148, 139]);
+    v.doc.activeElement = said(v, 148);
+    v.recv(lineOf(154, 'Clover', 'and one more while the list is open'));
+    check('a line that comes while the list is open joins it at the top, the count in the header follows, the focus stays where it was', ids(v).join() === '154,152,151,148,139' && one(v.box(), 'gm-sub').textContent === '@clover.4782 · 5 messages in this chat' && v.doc.activeElement === said(v, 148) && v.mod.state() === 'recent');
+    v.recv({ t: 'del', id: 148 });
+    check('the line under the focus is deleted by somebody: the focus goes to the next line, and the line that the sheet was opened on is no longer marked', ids(v).join() === '154,152,151,139' && v.doc.activeElement === said(v, 139) && byClass(v.box(), 'gm-this').length === 0 && v.mod.state() === 'recent', JSON.stringify([ids(v), v.doc.activeElement && v.doc.activeElement.getAttribute && v.doc.activeElement.getAttribute('data-n')]));
+    v.recv({ t: 'del', id: 139 });
+    check('...the last line of the list goes: the focus goes to the one before it', v.doc.activeElement === said(v, 151) && ids(v).join() === '154,152,151');
+    v.press('Back');
+    check('Back when the line that the sheet was opened on went meanwhile: the sheet closes and says so (nothing to act on)', v.shade() === null && v.toastText() === 'That line is gone already.' && one(v.toast(), 'gm-tok') !== null);
+    const w = rig({ history: hist() });
+    w.open(148); w.press('Recent messages from Clover (4)');
+    for (const id of [151, 148, 144, 139]) w.recv({ t: 'del', id });
+    check('all their lines go while the list is open: the list says so, the focus is on Back (the sheet stays until the viewer leaves it)', w.mod.state() === 'recent' && ids(w).length === 0 && w.shade() !== null && w.doc.activeElement !== null && /None of their lines/.test(one(w.box(), 'gm-none').textContent));
+    const x = rig({ history: hist() });
+    x.open(148);
+    for (const id of [151, 144, 139]) x.recv({ t: 'del', id });
+    check('the other lines go while the line sheet is open: the count follows down to (1)', rowName(x) === 'Recent messages from Clover (1)');
+    const t = rig({ history: hist() });
+    t.open(148);
+    for (let i = 0; i < 96; i++) t.recv(lineOf(300 + i, 'Pebble', 'filler ' + i));       // (9 + 96 lines: the four oldest, 139, 141, 143 and 144, go)
+    check('the log keeps 100 lines: lines of the person that fall out of it fall out of the count (139 and 144 here: the log holds the last 100)', rowName(t) === 'Recent messages from Clover (2)', rowName(t));
+    const u = rig({ history: hist() });
+    u.open(148); u.press('Recent messages from Clover (4)');
+    u.you('none');
+    check('a role that goes while the list is open: the sheet closes at once', u.shade() === null && u.marked().length === 0);
+    const c = rig({ role: 'mod', history: [line(1, 'Clover', 'was a moderator once', { k: 'k-c', role: 'mod', mod: true }), line(2, 'Clover', 'now a person', { k: 'k-c' })] });
+    c.open(2); c.press('Recent messages from Clover (2)');
+    check('a line of the person that the viewer may not act on (written when they were a moderator, and the viewer is a moderator): shown, as text, not a button', ids(c).join() === '2,1' && said(c, 1).tagName === 'div' && said(c, 2).tagName === 'button' && c.names().join('|') === c.names()[0] + '|Back');
+    c.recv({ t: 'del', id: 2 });
+    check('...and a list with only such lines has Back as its first stop', c.doc.activeElement !== null && ids(c).join() === '1');
+    const rw = rig({ history: hist() });
+    rw.open(148);
+    rw.sock().readyState = 3; rw.sock().onclose({}); rw.clock.advance(60000);
+    rw.sock().open().recv({ t: 'welcome', v: 1, you: { name: 'Me', mod: true, role: 'admin', k: 'k-me' }, login: false, online: 3, history: hist().filter((h) => h.id !== 144 && h.id !== 139) });
+    check('a new welcome (the page was reconnected) with another history: the count follows it', rowName(rw) === 'Recent messages from Clover (2)' && rw.shade() !== null, rowName(rw));
+    const busy = rig({ history: hist() });
+    busy.open(148); busy.press('Delete this line'); busy.clock.advance(401); busy.press('Delete');
+    busy.recv(lineOf(160, 'Clover', 'comes while a command waits'));
+    check('a line that comes while a command waits changes nothing on the card (the buttons stay off until the answer)', busy.buttons().every((b) => b.getAttribute('aria-disabled') === 'true') && busy.mod.state() === 'confirm');
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
