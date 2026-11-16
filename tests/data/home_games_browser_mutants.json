@@ -315,6 +315,41 @@
    "old": "    .quick::before { display: none; }\n}\n/* ---- ... under 773 px the type shrinks again ---- */",
    "new": "    .quick::before { display: none; }\n    .hbar .mine .pill { display: none; }\n}\n/* ---- ... under 773 px the type shrinks again ---- */",
    "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "x_badge_press_target_too_small",
+   "file": "web/home/home.css",
+   "old": "left: -2px; top: -2px; right: -22px; bottom: -22px; }",
+   "new": "left: -2px; top: -2px; right: -4px; bottom: -4px; }",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "x_badge_press_target_over_the_count",
+   "file": "web/home/home.css",
+   "old": "left: -2px; top: -2px; right: -22px; bottom: -22px; }",
+   "new": "left: -22px; top: -2px; right: -22px; bottom: -22px; }",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "x_badge_press_target_over_what_is_beside_my_room",
+   "file": "web/home/home.css",
+   "old": "flex: none; margin-right: 32px; }",
+   "new": "flex: none; margin-right: 6px; }",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "x_badge_under_the_frame",
+   "file": "web/home/home.css",
+   "old": "{ --room-top: 10px; }        /* (the X badge",
+   "new": "{ --room-top: 0px; }        /* (the X badge",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "x_badge_over_row_one_of_a_phone_held_sideways",
+   "file": "web/home/home.css",
+   "old": "{ --room-top: 0px; row-gap: 14px; }",
+   "new": "{ --room-top: 0px; row-gap: 6px; }",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
   }
  ]
 }

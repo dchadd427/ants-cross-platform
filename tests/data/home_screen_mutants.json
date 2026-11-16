@@ -1267,6 +1267,13 @@
    "old": "leave.disabled = mineX.disabled = true;",
    "new": "leave.disabled = true;",
    "test": "node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
+  },
+  {
+   "id": "mine_x_has_no_name",
+   "file": "web/home/home.js",
+   "old": "mineX.setAttribute('aria-label', TEXT.leaveMine); mineX.setAttribute('title', TEXT.leaveMine);",
+   "new": "mineX.setAttribute('title', TEXT.leaveMine);",
+   "test": "node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
   }
  ]
 }

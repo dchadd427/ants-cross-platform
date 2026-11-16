@@ -17,7 +17,7 @@
     var OPENING_MS = 15000, GIVE_UP_MS = 60000;          // a hand-off that is still here after the first has been slow: Home takes presses again, and says so; after the second the page says that it did not come
     var GAMES = 'home/games';                            // the Games list, Quick host and the Room's switch (games.js, games.css): loaded once, after the first paint
     var TEXT = {
-        name: 'Ants!', quickHost: 'Quick host', quickJoin: 'Quick join', mine: 'My room', games: 'Games', menu: 'Menu', login: 'Log in', home: 'Home', leave: 'Leave room', opening: 'Opening the game…', left: 'You left the room.',
+        name: 'Ants!', quickHost: 'Quick host', quickJoin: 'Quick join', mine: 'My room', games: 'Games', menu: 'Menu', login: 'Log in', home: 'Home', leave: 'Leave room', leaveMine: 'Leave my room', opening: 'Opening the game…', left: 'You left the room.',
         slow: 'The game is slow to open. Reload this page to get your seat back.', failed: 'The game did not open. Reload this page to get your seat back.',
         players: 'Players', chat: 'Chat', views: 'Home views'
     };
@@ -124,8 +124,8 @@
         var mine = button('hchip mine', '', function () { openRoom(); });
         var mineName = el('span', 'name', TEXT.mine), minePill = el('span', 'pill'); minePill.hidden = true;
         mine.appendChild(mineName); mine.appendChild(minePill); mine.hidden = true;       // (My room is there only while the page holds a room: sync() shows it)
-        var mineX = button('minex', '', function () { leaveFrom(mineX); });        // the X beside My room: it leaves the room as the Room's Leave room does (a room with other people in it is asked about first)
-        mineX.setAttribute('aria-label', TEXT.leave); mineX.setAttribute('title', TEXT.leave); mineX.appendChild(el('i', 'cross'));
+        var mineX = button('minex', '', function () { leaveFrom(mineX); });        // the round X badge on My room's corner: it leaves the room as the Room's Leave room does (a room with other people in it is asked about first)
+        mineX.setAttribute('aria-label', TEXT.leaveMine); mineX.setAttribute('title', TEXT.leaveMine); mineX.appendChild(el('i', 'cross'));
         var mineBox = el('div', 'hmine'); mineBox.hidden = true; mineBox.appendChild(mine); mineBox.appendChild(mineX);
         var gamesBtn = stub('hchip games', ''), gamesPill = el('span', 'pill');       // (no Games button in the bar: the games list is always on Home, and a phone's strip has Games. The button and its count stay as the list's own handle and are not placed in the page)
         gamesPill.hidden = true; gamesBtn.appendChild(el('span', 'name', TEXT.games)); gamesBtn.appendChild(gamesPill);

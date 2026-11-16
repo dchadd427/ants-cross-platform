@@ -580,8 +580,8 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     const sock = myRoom(env, ['Maya']);
     env.roomBar('rhome').click();
     const x = env.home('minex');
-    check('with a room the X shows beside My room: a button named "Leave room" (label and tooltip), not disabled', env.screen() === 'home' && x.parent.hidden === false && x.getAttribute('aria-label') === 'Leave room' && x.getAttribute('title') === 'Leave room' && x.disabled === false && x.tagName.toLowerCase() === 'button');
-    check('... it is a button of its own beside the pill, not inside My room', x.parent === env.home('mine').parent && !find(env.home('mine'), 'minex').length);
+    check('with a room the X shows on My room\'s corner: a button named "Leave my room" (label and tooltip), not disabled', env.screen() === 'home' && x.parent.hidden === false && x.getAttribute('aria-label') === 'Leave my room' && x.getAttribute('title') === 'Leave my room' && x.disabled === false && x.tagName.toLowerCase() === 'button');
+    check('... it is a button of its own next to the pill in the same box, not inside My room', x.parent === env.home('mine').parent && !find(env.home('mine'), 'minex').length);
     x.click();
     await flush();
     check('the X, alone in the room, leaves at once (no card): one Leave, the socket closed, no seat kept in the session, Home stays', card(env) === null && leaves(sock) === 1 && sock.closed && env.screen() === 'home' && env.session.data['ants.lobby'] === undefined);

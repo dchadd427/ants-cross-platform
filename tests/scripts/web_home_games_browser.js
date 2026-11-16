@@ -623,6 +623,27 @@ async function flows() {
             const badHome = [], badRoom = [];
             for (const [w, h] of sizes) { await bar.setViewportSize({ width: w, height: h }); await bar.evaluate(WIDEST); const o = await bar.evaluate(OUT); if (o.length) badHome.push(w + 'x' + h + ': ' + o.join(', ')); }
             check('Home\'s bar at ' + sizes.length + ' sizes (900 to 1000 px wide, 844 x 390, 390 x 844, 360 x 640, every tenth width from 320 to 1300 px, and both sides of every limit) with the widest counts and a long name on the login chip: every button inside the window and no sideways scroll', badHome.length === 0, badHome.slice(0, 6).join(' | ') + (badHome.length > 6 ? ' ... ' + badHome.length + ' sizes' : ''));
+            const TARGET = () => {                                                      // the X badge on My room's corner: a press target of 44 px or more that lies over no neighbour and not over the count, the badge itself over nothing but My room, not under the window's frame (10 px at the edge)
+                const bar = document.querySelector('.hbar'), x = bar.querySelector('.minex'), vw = document.documentElement.clientWidth, vh = window.innerHeight, bad = [];
+                if (!x || x.closest('[hidden]')) return ['no X badge'];
+                const b = x.getBoundingClientRect(), pill = bar.querySelector('.mine .pill');
+                let l = 1e9, t = 1e9, r = -1e9, d = -1e9;
+                for (let py = Math.floor(b.top) - 40; py <= Math.ceil(b.bottom) + 40; py += 2) for (let px = Math.floor(b.left) - 40; px <= Math.ceil(b.right) + 40; px += 2) {      // (which points of the window answer to the badge: its own box and its invisible padding)
+                    if (px < 0 || py < 0 || px >= vw || py >= vh) continue;
+                    const e = document.elementFromPoint(px, py);
+                    if (e === x || (e && x.contains(e))) { l = Math.min(l, px); r = Math.max(r, px); t = Math.min(t, py); d = Math.max(d, py); }
+                }
+                if (l === 1e9) return ['no press target'];
+                const hit = { left: l, top: t, right: r + 1, bottom: d + 1 };         // (a sample stands for 2 px: the box is known to a pixel)
+                const meets = (a, q) => Math.min(a.right, q.right) - Math.max(a.left, q.left) > 1.5 && Math.min(a.bottom, q.bottom) - Math.max(a.top, q.top) > 1.5;
+                if (hit.right - hit.left < 42 || hit.bottom - hit.top < 42) bad.push('press target ' + (hit.right - hit.left) + ' x ' + (hit.bottom - hit.top) + ' px');
+                if (pill && !pill.closest('[hidden]') && meets(hit, pill.getBoundingClientRect())) bad.push('press target over the count');
+                if (pill && !pill.closest('[hidden]') && meets(b, pill.getBoundingClientRect())) bad.push('badge over the count');
+                bar.querySelectorAll('button').forEach((e) => { if (e === x || e.classList.contains('mine') || e.closest('[hidden]') || e.getClientRects().length === 0) return; const q = e.getBoundingClientRect(); if (meets(hit, q)) bad.push('press target over ' + e.className); if (meets(b, q)) bad.push('badge over ' + e.className); });
+                if (b.top < 10) bad.push('badge under the frame (top ' + Math.round(b.top) + ' px)');
+                if (b.left < 0 || b.right > vw) bad.push('badge outside the window');
+                return bad;
+            };
             // My room keeps its words and its count at every width (the maintainer's rule: no "Room" for a short window): the label reads "My room" in a type of 13 px or more, no rule puts another word in its place or takes its count away
             const LABEL = () => {
                 const m = document.querySelector('.hbar .mine'), n = m && m.querySelector('.name'), p = m && m.querySelector('.pill'), r = (e) => e.getBoundingClientRect();
@@ -633,36 +654,42 @@ async function flows() {
             const badLabel = [];
             for (const [w, h] of sizes) { await bar.setViewportSize({ width: w, height: h }); await bar.evaluate(WIDEST); const l = await bar.evaluate(LABEL); if (l) badLabel.push(w + 'x' + h + ': ' + l); }
             check('My room says "My room" with its count ("4/4") at the same ' + sizes.length + ' sizes (a phone upright and held sideways, a tablet, a desktop): no shorter word, no count taken away, a type of 13 px or more', badLabel.length === 0, badLabel.slice(0, 6).join(' | ') + (badLabel.length > 6 ? ' ... ' + badLabel.length + ' sizes' : ''));
-            // a phone held sideways (docs/HOME_SCREEN.md, "The top bar"): 360 to 639 px wide and at most 500 px high, landscape, Home's bar is two compact rows (at most 110 px, the body keeps the rest: 110 px or more at 568 x 320, beside the strip), every target at
+            const badBadge = [];
+            for (const [w, h] of sizes) { await bar.setViewportSize({ width: w, height: h }); await bar.evaluate(WIDEST); const o = await bar.evaluate(TARGET); if (o.length) badBadge.push(w + 'x' + h + ': ' + o.join(', ')); }
+            check('the X badge on My room\'s corner at the same ' + sizes.length + ' sizes: a press target of 44 px or more (the badge answers to the points of a 44 px square, found by hit tests), over no other button of the bar and not over the count, the badge over nothing but My room, not under the window\'s frame, inside the window', badBadge.length === 0, badBadge.slice(0, 6).join(' | ') + (badBadge.length > 6 ? ' ... ' + badBadge.length + ' sizes' : ''));
+            // a phone held sideways (docs/HOME_SCREEN.md, "The top bar"): 360 to 639 px wide and at most 500 px high, landscape, Home's bar is two compact rows (at most 106 px, 114 px with a room, the body keeps the rest: 110 px or more at 568 x 320, beside the strip), every target at
             // least 44 px high and wide and no two of them over each other; one pixel narrower or one pixel higher, a window wider than high keeps the three rows (150 px or more), and a phone upright has two rows of 44 px (110 px); from 640 px wide it is the one low row (at most 70 px)
             const BARS = () => {
                 const box = (e) => e.getBoundingClientRect(), bar = document.querySelector('.hbar'), yard = document.querySelector('#hmain'), small = [], over = [], cut = [], list = [];
                 bar.querySelectorAll('button').forEach((e) => { const r = box(e); if (r.width >= 3 && !e.closest('[hidden]')) list.push([e, r]); });
-                bar.querySelectorAll('button, button *').forEach((e) => { if (e.clientWidth && e.scrollWidth > e.clientWidth + 0.5 && !e.closest('[hidden]')) cut.push((e.className || e.tagName) + ' ' + (e.scrollWidth - e.clientWidth)); });       // (a word or a count that is wider than its box)
-                list.forEach(([e, r], i) => { if (r.height < 43.5 || r.width < 43.5) small.push(e.className + ' ' + Math.round(r.width) + 'x' + Math.round(r.height)); for (const [f, q] of list.slice(i + 1)) if (Math.min(r.right, q.right) - Math.max(r.left, q.left) > 1 && Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top) > 1) over.push(e.className + ' on ' + f.className); });
+                bar.querySelectorAll('button, button *').forEach((e) => { if (e.clientWidth && e.scrollWidth > e.clientWidth + 0.5 && !e.closest('[hidden]') && !e.closest('.minex')) cut.push((e.className || e.tagName) + ' ' + (e.scrollWidth - e.clientWidth)); });       // (a word or a count that is wider than its box)
+                const isX = (e) => e.classList.contains('minex'), isMine = (e) => e.classList.contains('mine');       // (the badge is 24 px to look at, its press target is TARGET's, and it lies over My room's corner)
+                list.forEach(([e, r], i) => { if (!isX(e) && (r.height < 43.5 || r.width < 43.5)) small.push(e.className + ' ' + Math.round(r.width) + 'x' + Math.round(r.height)); for (const [f, q] of list.slice(i + 1)) if (Math.min(r.right, q.right) - Math.max(r.left, q.left) > 1 && Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top) > 1 && !((isX(e) && isMine(f)) || (isX(f) && isMine(e)))) over.push(e.className + ' on ' + f.className); });
                 return { bar: Math.round(box(bar).height), yard: Math.round(box(yard).height), small, over, cut };
             };
             const badRows = [];
             for (const [w, h] of SIDEWAYS) {
                 await bar.setViewportSize({ width: w, height: h }); await bar.evaluate(WIDEST); const m = await bar.evaluate(BARS), two = w >= 360 && w <= 639 && h <= 500 && w > h;
-                if (two && (m.bar > 110 || m.small.length || m.over.length || m.cut.length)) badRows.push(w + 'x' + h + ': two rows expected, the bar is ' + m.bar + ' px high' + (m.small.length ? ', small: ' + m.small.join(', ') : '') + (m.over.length ? ', over: ' + m.over.join(', ') : '') + (m.cut.length ? ', cut: ' + m.cut.join(', ') : ''));
+                if (two && (m.bar > 116 || m.small.length || m.over.length || m.cut.length)) badRows.push(w + 'x' + h + ': two rows expected (106 px, 114 with a room), the bar is ' + m.bar + ' px high' + (m.small.length ? ', small: ' + m.small.join(', ') : '') + (m.over.length ? ', over: ' + m.over.join(', ') : '') + (m.cut.length ? ', cut: ' + m.cut.join(', ') : ''));
                 const upright = h >= w && w <= 720;       // (a phone upright: two rows of 44 px, 110 px high)
-                if (upright && (m.bar > 112 || m.small.length || m.over.length || m.cut.filter((c) => !/^gc-cn /.test(c)).length)) badRows.push(w + 'x' + h + ': the upright phone\'s two rows expected, the bar is ' + m.bar + ' px high' + (m.small.length ? ', small: ' + m.small.join(', ') : '') + (m.over.length ? ', over: ' + m.over.join(', ') : '') + (m.cut.length ? ', cut: ' + m.cut.join(', ') : ''));
-                if (!two && !upright && w <= 639 && m.bar < 120) badRows.push(w + 'x' + h + ': two or three rows expected (128 px, 184 with My room), the bar is ' + m.bar + ' px high');
-                if (w >= 640 && h <= 500 && m.bar > 70) badRows.push(w + 'x' + h + ': one low row expected, the bar is ' + m.bar + ' px high');
+                if (upright && (m.bar > 122 || m.small.length || m.over.length || m.cut.filter((c) => !/^gc-cn /.test(c)).length)) badRows.push(w + 'x' + h + ': the upright phone\'s two rows expected (110 px, 120 with a room), the bar is ' + m.bar + ' px high' + (m.small.length ? ', small: ' + m.small.join(', ') : '') + (m.over.length ? ', over: ' + m.over.join(', ') : '') + (m.cut.length ? ', cut: ' + m.cut.join(', ') : ''));
+                if (!two && !upright && w <= 639 && m.bar < 120) badRows.push(w + 'x' + h + ': two or three rows expected (128 px, 190 px with My room), the bar is ' + m.bar + ' px high');
+                if (w >= 640 && h <= 500 && m.bar > 76) badRows.push(w + 'x' + h + ': one low row expected (62 px, 74 with a room), the bar is ' + m.bar + ' px high');
                 if (w === 568 && h === 320 && m.yard < 110) badRows.push('568x320: the body is only ' + m.yard + ' px high');
             }
-            check('a phone held sideways (568 x 320, 600 x 300, 630 x 360, 480 x 320, 360 x 240, 639 x 500) shows two compact rows: the bar at most 110 px high, the body 110 px or more at 568 x 320, every button 44 px or more, none over another and no word or count wider than its button; and the three rows on the other side of each limit (359 x 240, 639 x 501, 600 x 501), the two rows of a phone upright (360 x 480 and 500 x 500: 110 px) and the low row from 640 px wide', badRows.length === 0, badRows.join(' | '));
-            // the chat dock's open panel stays under the bar (its top is at or below the bar's bottom), also under the two compact rows (106 px): chat.css
+            check('a phone held sideways (568 x 320, 600 x 300, 630 x 360, 480 x 320, 360 x 240, 639 x 500) shows two compact rows: the bar at most 114 px high (a room held), the body 110 px or more at 568 x 320, every button 44 px or more (the X badge: its press target, TARGET), none over another (the badge lies over the corner of My room) and no word or count wider than its button; and the three rows on the other side of each limit (359 x 240, 639 x 501, 600 x 501), the two rows of a phone upright (360 x 480 and 500 x 500: 110 px) and the low row from 640 px wide', badRows.length === 0, badRows.join(' | '));
+            // the chat dock's open panel stays under the bar (its top is at or below the bar's bottom), also under the two compact rows (106 px, 114 px with a room): chat.css
             const badPanel = [];
             for (const [w, h] of [[568, 320], [480, 300], [600, 400], [630, 360], [640, 360], [844, 390]]) {
                 await bar.setViewportSize({ width: w, height: h });
+                await sleep(300);       // (the window's resize makes the chat dock open or close by itself, as the strip shows or goes: the press comes after it, or the press is undone by it)
                 await bar.evaluate((phone) => { const g = document.querySelector('.gc'); if (phone) document.querySelector('.htab.t-chat').click(); else if (g && g.getAttribute('data-open') !== 'true') document.querySelector('.gc-fold').click(); }, w <= 700);
-                await sleep(100);
+                await bar.waitForFunction(() => { const g = document.querySelector('.gc'); return !!g && g.getAttribute('data-open') === 'true'; }, null, { timeout: 3000 }).catch(() => null);       // (the panel opens a moment after the press: it is waited for, not guessed at)
+                await sleep(50);
                 const m = await bar.evaluate(() => { const g = document.querySelector('.gc'), b = document.querySelector('.hbar').getBoundingClientRect(); return g ? { open: g.getAttribute('data-open'), hidden: g.hidden, top: Math.round(g.getBoundingClientRect().top * 10) / 10, bar: Math.round(b.bottom * 10) / 10 } : null; });
                 if (!m || m.hidden || m.open !== 'true' || m.top < m.bar - 0.5) badPanel.push(w + 'x' + h + ': ' + JSON.stringify(m));
             }
-            check('the chat dock\'s open panel starts at or below the bottom of the bar at 568 x 320, 480 x 300, 600 x 400, 630 x 360, 640 x 360 and 844 x 390 (the two compact rows are 106 px, the panel used to start at 64 px)', badPanel.length === 0, badPanel.join(' | '));
+            check('the chat dock\'s open panel starts at or below the bottom of the bar at 568 x 320, 480 x 300, 600 x 400, 630 x 360, 640 x 360 and 844 x 390 (the two compact rows are 106 px, 114 px with a room; the panel used to start at 64 px)', badPanel.length === 0, badPanel.join(' | '));
             await bar.setViewportSize({ width: SIZES[2][1], height: SIZES[2][2] });
             await bar.evaluate(() => document.querySelector('.hchip.mine').click());
             await until('the page shows the Room', async () => (await screenOf(bar)) === 'room', 10000);

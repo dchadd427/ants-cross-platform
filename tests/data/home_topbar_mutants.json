@@ -263,8 +263,8 @@
   {
    "id": "minex_too_small",
    "file": "web/home/home.css",
-   "old": ".hbar .minex { flex: none; min-width: 46px; padding: 0; }",
-   "new": ".hbar .minex { flex: none; min-width: 30px; padding: 0; }",
+   "old": "left: -2px; top: -2px; right: -22px; bottom: -22px; }",
+   "new": "left: -2px; top: -2px; right: -4px; bottom: -4px; }",
    "test": "node tests/scripts/web_home_topbar_browser.js"
   }
  ]

@@ -57,6 +57,28 @@ const ROW = () => {
         mineDisplay: getComputedStyle(document.querySelector('.hbar .mine')).display, mineLabel: document.querySelector('.hbar .mine').getAttribute('aria-label') };
 };
 const SHOW_COUNT = () => { document.querySelector('.hbar .hmine').hidden = false; const m = document.querySelector('.hbar .mine'); m.hidden = false; const p = m.querySelector('.pill'); p.hidden = false; p.textContent = '1/4'; m.setAttribute('aria-label', 'My room, 1 of 4'); };       // (the count comes from the game server's room, which this run does not have: only the count is put in by hand)
+const BADGE = () => {                                                      // the X badge on My room's top right corner: its press target (found by hit tests) is 44 px or more, over no other button of the bar and not over the count, the badge itself over nothing but My room, in the window and not under the window's frame (10 px at the edge); '' when it is all so
+    const bar = document.querySelector('.hbar'), x = bar.querySelector('.minex'), mine = bar.querySelector('.mine'), pill = mine.querySelector('.pill'), vw = document.documentElement.clientWidth, vh = window.innerHeight, bad = [];
+    if (!x || !x.getClientRects().length) return 'no X badge';
+    const b = x.getBoundingClientRect(), m = mine.getBoundingClientRect();
+    let l = 1e9, t = 1e9, r = -1e9, d = -1e9;
+    for (let py = Math.floor(b.top) - 40; py <= Math.ceil(b.bottom) + 40; py += 2) for (let px = Math.floor(b.left) - 40; px <= Math.ceil(b.right) + 40; px += 2) {
+        if (px < 0 || py < 0 || px >= vw || py >= vh) continue;
+        const e = document.elementFromPoint(px, py);
+        if (e === x || (e && x.contains(e))) { l = Math.min(l, px); r = Math.max(r, px); t = Math.min(t, py); d = Math.max(d, py); }
+    }
+    if (l === 1e9) return 'no press target';
+    const hit = { left: l, top: t, right: r + 1, bottom: d + 1 };
+    const meets = (a, q) => Math.min(a.right, q.right) - Math.max(a.left, q.left) > 1.5 && Math.min(a.bottom, q.bottom) - Math.max(a.top, q.top) > 1.5;
+    if (hit.right - hit.left < 42 || hit.bottom - hit.top < 42) bad.push('press target ' + (hit.right - hit.left) + ' x ' + (hit.bottom - hit.top));
+    if (meets(hit, pill.getBoundingClientRect())) bad.push('press target over the count');
+    if (meets(b, pill.getBoundingClientRect())) bad.push('badge over the count');
+    bar.querySelectorAll('button').forEach((e) => { if (e === x || e === mine || !e.getClientRects().length) return; const q = e.getBoundingClientRect(); if (meets(hit, q)) bad.push('press target over ' + e.className); if (meets(b, q)) bad.push('badge over ' + e.className); });
+    if (Math.abs((b.left + b.right) / 2 - m.right) > 18 || Math.abs((b.top + b.bottom) / 2 - m.top) > 14) bad.push('badge is not on the corner of My room');
+    if (b.top < 10) bad.push('badge under the frame (top ' + Math.round(b.top) + ')');
+    if (b.left < 0 || b.right > vw) bad.push('badge outside the window');
+    return bad.join(', ');
+};
 const BOXES = () => {
     const box = (s) => { const e = document.querySelector(s); if (!e || e.hidden || !e.getClientRects().length) return null; const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; };
     const cn = document.querySelector('.hbar .hlogin .gc-cn');
@@ -141,11 +163,11 @@ async function main() {
             const room = await page.evaluate(ROW);
             const up = (r) => { for (const k of ['host', 'join', 'games', 'mine', 'minex', 'menu', 'chip']) if (r[k]) r[k] = [r[k][0], r[k][1] - r.bar[1], r[k][2], r[k][3]]; return r; };       // (a room that cannot reach a game server shows its notice above the bar: the bar's parts are compared from the bar's own top)
             up(room);
-            const same = (a, b) => a.every((r, i) => !!r && !!b[i] && r.every((v, k) => Math.abs(v - b[i][k]) <= 1));       // (to a pixel: a bar that is lower by a notice rounds each part on its own)
-            check(s[0] + ' a room: My room is drawn (44 px or more)' + (phoneRow ? ', on the first row at the left (where Games was), and Quick host, Quick join and the Menu do not move' : ' and Quick host, Quick join and the Menu do not move'),
+            const same = (a, b) => { const dy = a[0] && b[0] ? a[0][1] - b[0][1] : 0; return dy >= 0 && dy <= 14 && a.every((r, i) => !!r && !!b[i] && Math.abs(r[0] - b[i][0]) <= 1 && Math.abs(r[2] - b[i][2]) <= 1 && Math.abs(r[3] - b[i][3]) <= 1 && Math.abs(r[1] - b[i][1] - dy) <= 1); };       // (to a pixel: a bar that is lower by a notice rounds each part on its own; the bar is a few pixels higher at the top while a room is held, for the badge, so the parts move down together by the same amount)
+            check(s[0] + ' a room: My room is drawn (44 px or more)' + (phoneRow ? ', on the first row at the left (where Games was), and Quick host, Quick join and the Menu keep their places (all of them move down together by the badge\'s room at the top)' : ' and Quick host, Quick join and the Menu keep their places (all of them move down together by the badge\'s room at the top)'),
                 !!room.mine && room.mine[3] >= 44 && (phoneRow ? room.mine[1] < room.host[1] && room.mine[0] <= 20 && Math.abs(room.mine[1] - room.menu[1]) <= 4 && room.host[0] + room.host[2] <= room.join[0] + 1 && room.join[0] + room.join[2] >= s[1] - 20 && same([room.host, room.join, room.menu], [none.host, none.join, none.menu])
                     : same([room.host, room.join, room.menu], [none.host, none.join, none.menu])), JSON.stringify([none, room]));
-            check(s[0] + ' a room: the X beside My room is there (its own target, 44 px or more, aria-label Leave room), to the right of My room, inside the window, and (on a phone) before the chip and the Menu, and it does not overlap Quick host or Quick join', !!room.minex && room.minex[2] >= 44 && room.minex[3] >= 44 && room.minex[0] >= room.mine[0] + room.mine[2] - 1 && room.minex[0] + room.minex[2] <= s[1] && (!phoneRow || room.minex[0] + room.minex[2] <= (room.chip ? room.chip[0] : room.menu[0]) + 1) && (room.minex[0] + room.minex[2] <= room.host[0] + 1 || room.minex[1] + room.minex[3] <= room.host[1] + 1 || room.host[1] + room.host[3] <= room.minex[1] + 1 || room.host[0] + room.host[2] <= room.minex[0] + 1) && (await page.evaluate(() => document.querySelector('.hbar .minex').getAttribute('aria-label'))) === 'Leave room', JSON.stringify(room));
+            check(s[0] + ' a room: the X is a round badge on the top right corner of My room (name "Leave my room"), its press target 44 px or more, over no other button and not over the count, inside the window and not under the frame', (await page.evaluate(BADGE)) === '' && (await page.evaluate(() => document.querySelector('.hbar .minex').getAttribute('aria-label'))) === 'Leave my room' && (await page.evaluate(() => document.querySelector('.hbar .minex').getAttribute('title'))) === 'Leave my room', (await page.evaluate(BADGE)) + ' ' + JSON.stringify(room));
             if (['w390', 'w1280', 'side667'].indexOf(s[0]) !== -1) await shot(page, 'room_' + s[0]);
             if (['w390', 'w1280', 'side667'].indexOf(s[0]) !== -1) await shot(page, 'guest_' + s[0]);
             await page.close();
@@ -168,7 +190,7 @@ async function main() {
             check(L + 'every target is 44 px or more', [m.chip, m.menu, m.host, m.join].every((x) => x[3] - x[1] >= 43.5 && x[2] - x[0] >= 43.5), JSON.stringify(m));
             await page.evaluate(() => { document.querySelector('.hbar .hmine').hidden = false; const e = document.querySelector('.hbar .mine'); e.hidden = false; e.querySelector('.pill').hidden = false; e.querySelector('.pill').textContent = '1/4'; });
             const r = await page.evaluate(() => { const q = (e) => { const x = document.querySelector(e); if (!x || !x.getClientRects().length) return null; const r = x.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; }; return { minex: q('.hbar .minex'), host: q('.hbar .quick.host'), mine: q('.hbar .mine'), menu: q('.hbar .hmenu') }; });
-            check(L + 'with My room (a room is held): it has the third row to itself with its X at the right end, under Quick host and Quick join, and the first row does not move', !!r.mine && !!r.minex && r.mine[1] >= r.host[3] - 0.5 && r.mine[0] <= 20 && r.minex[2] >= w - 20 && r.minex[3] - r.minex[1] >= 43.5 && r.minex[2] - r.minex[0] >= 43.5 && JSON.stringify(r.menu) === JSON.stringify(m.menu), JSON.stringify([m, r]));
+            check(L + 'with My room (a room is held): it has the third row to itself with its X badge on its top right corner, under Quick host and Quick join, the badge and its press target over nothing else, and the first row does not move', !!r.mine && !!r.minex && r.mine[1] >= r.host[3] - 0.5 && r.mine[0] <= 20 && (await page.evaluate(BADGE)) === '' && JSON.stringify(r.menu) === JSON.stringify(m.menu), (await page.evaluate(BADGE)) + ' ' + JSON.stringify([m, r]));
             if (name === 'w620x560') await shot(page, 'threerow_' + name);
             await page.close();
         }
