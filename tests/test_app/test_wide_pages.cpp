@@ -1382,7 +1382,6 @@ void test_counters(const assets::AssetArchive& arc) {
             draw_results_picture(rig, arc, card);
             const std::vector<uint8_t> px = rig.read();
             const ResultsLayout& l = ResultsLayout::wide();
-            const char* const texts[3][4] = {{"1500", "17", "26", "40"}, {"420", "20", "4", "10"}, {"100", "25", "1", "5"}};
             for (size_t row = 0; row < 3; ++row) {
                 const int32_t y = l.row_y(row);
                 Ink ink[4];
@@ -1392,19 +1391,21 @@ void test_counters(const assets::AssetArchive& arc) {
                 }
                 bool inside = true, apart = true;
                 for (size_t c = 0; c < 4; ++c) {
-                    const int32_t width = kResultsDigitWidth * static_cast<int32_t>(std::string(texts[row][c]).size());
+                    // (the four numbers are drawn in the numbers' heavy face with its thick outline: each keeps to its column's width, squeezed to it when wider)
+                    const int32_t width = l.column_w[c];
                     inside = inside && ink[c].first >= l.column_x[c] - 1 && ink[c].last <= l.column_x[c] + width;
                     if (c + 1 < 4) apart = apart && ink[c + 1].first - ink[c].last >= 3;
                 }
                 check(ink[0].first >= 0 && ink[1].first >= 0 && ink[2].first >= 0 && ink[3].first >= 0, "the row " + std::to_string(row + 1) + ": every number has ink");
                 std::string extents;
-                for (size_t c = 0; c < 4; ++c) extents += " [" + std::to_string(ink[c].first) + " .. " + std::to_string(ink[c].last) + " in " + std::to_string(l.column_x[c]) + " .. " + std::to_string(l.column_x[c] + kResultsDigitWidth * static_cast<int32_t>(std::string(texts[row][c]).size())) + "]";
-                check(inside, "the row " + std::to_string(row + 1) + ": every number stays inside the width of its digits (8 px each):" + extents);
+                for (size_t c = 0; c < 4; ++c) extents += " [" + std::to_string(ink[c].first) + " .. " + std::to_string(ink[c].last) + " in " + std::to_string(l.column_x[c]) + " .. " + std::to_string(l.column_x[c] + l.column_w[c]) + "]";
+                check(inside, "the row " + std::to_string(row + 1) + ": every number stays inside its column:" + extents);
                 check(apart, "the row " + std::to_string(row + 1) + ": two numbers are at least two empty columns apart (" + std::to_string(ink[1].first - ink[0].last) + ", " + std::to_string(ink[2].first - ink[1].last) + ", " + std::to_string(ink[3].first - ink[2].last) + ")");
             }
         }
     }
-    // five-digit counters fit whole inside the widened columns (47 .. 49 px hold five 8 px digits = 40 px with 7 .. 9 px to spare), and a counter wider than its box is clipped at the box's right edge
+    // five-digit counters fit whole inside the widened columns (47 .. 49 px: the numbers' face takes the column's width, squeezed to it, each digit at least 6 px wide), and a counter wider than its box is squeezed
+    // to the box's width, it does not run out of it
     {
         RendererRig rig(arc, 960, 540);
         if (rig.ok) {
@@ -1426,12 +1427,12 @@ void test_counters(const assets::AssetArchive& arc) {
             for (size_t c = 1; c < 4; ++c) {
                 const int32_t to = c + 1 < 4 ? l.column_x[c + 1] : l.column_x[3] + l.column_w[3] + 2;
                 const Ink five = ink_between(px, 960, l.column_x[c] - 1, to, y1, y1 + 18);
-                check(five.first >= l.column_x[c] - 1 && five.last <= l.column_x[c] + 5 * kResultsDigitWidth && five.last < l.column_x[c] + l.column_w[c] - 4,
-                      "column " + std::to_string(c + 1) + ": a five-digit counter fits whole inside its " + std::to_string(l.column_w[c]) + " px box without clipping (ink " + std::to_string(five.first) + " .. " + std::to_string(five.last) + ")");
+                check(five.first >= l.column_x[c] - 1 && five.last <= l.column_x[c] + l.column_w[c] && five.last - five.first + 1 >= 5 * 6,
+                      "column " + std::to_string(c + 1) + ": a five-digit counter fits whole inside its " + std::to_string(l.column_w[c]) + " px box, at least 6 px a digit (ink " + std::to_string(five.first) + " .. " + std::to_string(five.last) + ")");
             }
             const int32_t y2 = l.row_y(2);
             const Ink cut = ink_between(px, 960, l.column_x[1] - 1, l.column_x[2] - 1, y2, y2 + 18);
-            check(cut.first >= 0 && cut.last <= l.column_x[1] + l.column_w[1] - 1, "a counter wider than its 47 px label is cut at its label's right edge (x " + std::to_string(l.column_x[1] + l.column_w[1]) + "), it does not run into the next column (ink " + std::to_string(cut.first) + " .. " + std::to_string(cut.last) + ")");
+            check(cut.first >= 0 && cut.last <= l.column_x[1] + l.column_w[1] - 1, "a counter wider than its 47 px label is squeezed to its label's width (x " + std::to_string(l.column_x[1] + l.column_w[1]) + "), it does not run into the next column (ink " + std::to_string(cut.first) + " .. " + std::to_string(cut.last) + ")");
         }
     }
 }

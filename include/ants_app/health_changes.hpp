@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -37,6 +38,13 @@ constexpr int32_t kGlyphAdvance = 7;        // a sign and a digit take 7 pixels 
 constexpr int32_t kGlyphHeight = 10;
 constexpr int32_t kBodyCentreAbove = 8;     // the middle of the ant's body is this many world pixels above its sprite position (scaled by the zoom); the number starts centred there
 constexpr uint8_t kOutlineAlpha = 217;      // the outline's near black at about 85 %
+constexpr int32_t kNumberOutlineFactor = 2; // the font numbers' outline is this many times as wide as the old drawing's (one scaled pixel): 2 output pixels at 1:1, 4 on a phone at 2x
+
+/// The outline of a font number in OUTPUT pixels, from the old drawing's outline width (`base_scale`: that width in output pixels, before rounding): never less than one old pixel, times kNumberOutlineFactor.
+/// The glyphs keep the size that the old outline left them; the thicker outline grows outward (renderer_numbers.cpp), so the counters of 0 6 8 9 4 stay open
+inline int32_t number_outline_px(double base_scale) noexcept {
+    return kNumberOutlineFactor * std::max<int32_t>(1, static_cast<int32_t>(std::lround(base_scale)));
+}
 
 constexpr Color kDamageColor{255, 255, 255};     // the color of the original's Ctrl+L numbers
 constexpr Color kHealColor{132, 236, 120};

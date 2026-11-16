@@ -326,6 +326,10 @@ bool Renderer::init(SDL_Window* window,
                 }
             }
         }
+        // The numbers (hit points, damage and heal, scores) use the heavy face: Libre Franklin Black, bundled beside the Medium (same family and licence), a thick outline round it. Without that file they use
+        // the face that draw_text uses (the Medium on a normal install), with the same outline; with no face at all the classic digits are drawn.
+        number_path_ = choose_number_face(ttf_path_, "Original-Ants/LibreFranklin-Black.ttf");
+        if (number_path_ != ttf_path_) std::cout << "[Renderer] Numbers font: " << number_path_ << std::endl;
     }
 #endif
 
