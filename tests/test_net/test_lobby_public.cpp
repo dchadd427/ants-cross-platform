@@ -614,11 +614,11 @@ void run_lobby_public_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N4.54 The Number Of The Protocol Is 23: A Hello Of 22 Is Refused (VersionMismatch) And Seats Nobody, A Hello Of 23 Is Taken") {
-        ASSERT_EQ(kProtocolVersion, uint16_t{23});
+    TEST_CASE("N4.54 The Hello Is Held To The Number Of The Protocol: A Hello Of The Number Before Is Refused (VersionMismatch) And Seats Nobody, A Hello Of The Number Itself Is Taken, One Of The Number After Is Told To Come Back Later") {
+        ASSERT_TRUE(kProtocolVersion >= 23);
         Room room(lobby_room_config(251));
         HelloMsg old_hello;
-        old_hello.version = 22;
+        old_hello.version = static_cast<uint16_t>(kProtocolVersion - 1);
         old_hello.name = "Old";
         old_hello.client_kind = kClientPage;
         const RawClient c = raw_hello(room, old_hello);
@@ -632,7 +632,7 @@ void run_lobby_public_tests() {
         ASSERT_EQ(answer_type(room, hello), uint8_t{2});
         ASSERT_EQ(room.host.players(), size_t{1});
         HelloMsg newer = old_hello;
-        newer.version = 24;
+        newer.version = static_cast<uint16_t>(kProtocolVersion + 1);
         ASSERT_EQ(answer_type(room, newer), uint8_t{3});
         ASSERT_EQ(room.host.players(), size_t{1});
     } TEST_END();

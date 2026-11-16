@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the no-drop rule of game mode 187 (the rules number 12) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the death of a special ant, the pick-up of a typed ant, the lunchbox, the flower droppers, the switch and its default, the original's game (which still drops), and the rules numbers (the player, the table of what plays, the head check, the refusal's sentence) against test_game_mode (2.9.2, cases 5.x) and test_rules_no_drops (2.29.7). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/no_drops_187_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "note": "Mutants of the no-drop rule of game mode 187 (the rules number 12) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the death of a special ant (and the random numbers that the drop would have drawn), the pick-up of a typed ant, the lunchbox, the flower droppers, the switch and its default, the original's game (which still drops), and the rules numbers (the player, the table of what plays, the head check, the refusal's sentence) against test_game_mode (2.9.2, cases 5.x) and test_rules_no_drops (2.29.7). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/no_drops_187_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
  "mutants": [
   {
    "id": "death_drops_in_187",
@@ -18,6 +18,15 @@
    "build": "test_game_mode",
    "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
    "expect": "5.1"
+  },
+  {
+   "id": "death_draws_the_random_numbers_but_drops_nothing",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "if (a.type != AntType::Worker && !team_dropped(a.player_id) && !drops_nothing_187()) drop_powerup(a, pixel_tile(a), powerup_type_of(a.type));",
+   "new": "if (a.type != AntType::Worker && !team_dropped(a.player_id)) { if (drops_nothing_187()) { prng_.rand(); prng_.rand(); } else drop_powerup(a, pixel_tile(a), powerup_type_of(a.type)); }",
+   "build": "test_rules_no_drops",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
+   "expect": "RP16.3"
   },
   {
    "id": "death_leaves_no_power_up_in_the_original_either",
