@@ -58,6 +58,18 @@ bool SimulationEngine::end_fix_187() const noexcept {
     return impl_->end_fix_187_;
 }
 
+// The no-drop rule (the rules number 12; set_no_drops_187 turns it off for a recording of 6, 7, 10 or 11): 187 puts nothing on the ground. `drops_nothing_187()` (sim_engine_impl.hpp) is the one question; the places that ask it are finish_death
+// (the power-up of a special ant that dies), powerup_pickup (the old power-up of a typed ant that takes another) and remove_ant (the lunchbox of an ant that carries food or loot). The flower droppers are not a place: 187 clears them at init() for every
+// rules number, and nothing heals but the enter clip of a hill, which 187 has closed since the rules number 7.
+void SimulationEngine::set_no_drops_187(bool on) {
+    impl_->no_drops_187_ = on;
+    impl_->world_state_dirty_ = true;
+}
+
+bool SimulationEngine::no_drops_187() const noexcept {
+    return impl_->no_drops_187_;
+}
+
 bool SimulationEngineImpl::end_rule_187() const {
     const uint32_t in_match = teams_in_match();
     const uint32_t sides = alive_sides();

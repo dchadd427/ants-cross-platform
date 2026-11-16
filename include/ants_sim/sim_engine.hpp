@@ -506,6 +506,12 @@ public:
     /// of a match played now) and before init(), which keeps it; the original's game never reads it. The state hash does not carry it (the end of the match, which it does, shows the difference).
     void set_end_fix_187(bool on);
     bool end_fix_187() const noexcept;
+    /// 187 only, the rules number of the recording that is being played (replay::kSimRulesMode187BeforeNoDrops): with `on` (the default, the rules of a match played now) nothing is put on the ground in 187: an ant of any special type that dies leaves
+    /// no power-up, an ant that takes a power-up leaves no old one, an ant that dies carrying food leaves no lunchbox (docs/GAMEPLAY.md, "187"); with `on` unset a recording of 6, 7, 10 or 11 plays as it was played, the power-up of a special ant that dies on a free
+    /// neighbour tile as in the original's game. Chosen after set_game_mode (which sets it back to the rule of a match played now) and before init(), which keeps it; the original's game never reads it. The state hash does not carry it (the
+    /// power-ups on the ground, which it does, show the difference).
+    void set_no_drops_187(bool on);
+    bool no_drops_187() const noexcept;
     /// The original's game only, the rules number of the recording that is being played (replay::kSimRulesBeforeLastSide): with `on` (the default, the rules of a match played now) a match ends when exactly one side
     /// still has an ant, an egg or a hatch in progress and no food is left that could score, and the results rank by score as always, a tie for the top going to that side (docs/GAMEPLAY.md, "The last side standing"); with `on` unset the match ends
     /// by the original's CHECKGO alone, as a recording of the rules number 5 was played. It is chosen after set_game_mode (which sets it back to the rule of a match played now) and before init(), which keeps it;

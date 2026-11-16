@@ -511,7 +511,8 @@ void SimulationEngineImpl::burn_overlay_end(AntUnit& a) {
 void SimulationEngineImpl::finish_death(AntUnit& a) {
     if (a.removed) return;
     // The ant's OWN type (mov ax, word ptr [esi + 0x54] at 0x1021011), not the getter: an ant that never took a power-up leaves none, whatever its level's default type is
-    if (a.type != AntType::Worker && !team_dropped(a.player_id)) drop_powerup(a, pixel_tile(a), powerup_type_of(a.type));
+    // 187 now leaves nothing on the ground (mode_187.cpp): no power-up, and the call is not made at all, so that it draws nothing from the generator either
+    if (a.type != AntType::Worker && !team_dropped(a.player_id) && !drops_nothing_187()) drop_powerup(a, pixel_tile(a), powerup_type_of(a.type));
     remove_ant(a);
 }
 
@@ -559,7 +560,7 @@ void SimulationEngineImpl::remove_ant(AntUnit& a) {
     }
     const TileCoord tile = pixel_tile(a);
     occ_move(a, TileCoord{-1, -1});
-    if (a.is_holding() && grid_.in_bounds(tile)) {
+    if (a.is_holding() && grid_.in_bounds(tile) && !drops_nothing_187()) {                // (187 now: no lunchbox either; there is no food to carry and no raid to loot, mode_187.cpp)
         const auto& cell = grid_.get_cell(tile);
         if (cell.is_empty_overlay() && grid_.terrain_class_at(tile) != movement::kTerrainWater && !grid_.is_solid_object(tile)) {
             grid_.drop_lunchbox(static_cast<uint32_t>(tile.x), static_cast<uint32_t>(tile.y),
