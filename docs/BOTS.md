@@ -606,7 +606,7 @@ A Medium or Hard bot plays the gate goals (`GateGoalTask`: put a fire wall out, 
 
 ### 187: the brawl
 
-In the game type 187 ([GAMEPLAY.md](GAMEPLAY.md#187-a-game-type-of-the-remake): no food, no power-up, the kills are the score) a standard bot of any level plays `BrawlTask` instead of every task above: packs of ants on the enemy ants it can reach (the seat that the ring of the seats names for it first, so that no seat is every bot's first victim; one ant at a victim for a side of four ants or fewer), no hurt ant sent home (the hill is closed), a march to the enemy hill when nobody can be struck. `StandardBot::think` reads the mode from the engine (`BotView::game_mode()`); the original's game never reaches the code (AI30.3), and `bot_arena --tune brawl=0` is the bot before. What the engine allows, what was measured, tried and left out, and the limits: [BOT_187.md](BOT_187.md).
+In the game type 187 ([GAMEPLAY.md](GAMEPLAY.md#187-a-game-type-of-the-remake): no food, no power-up, the kills are the score) a standard bot of any level plays `BrawlTask` instead of every task above: packs of ants on the enemy ants it can reach, no hurt ant sent home (the hill is closed), a march to the enemy hill when nobody can be struck. `StandardBot::think` reads the mode from the engine (`BotView::game_mode()`); the original's game never reaches the code (AI30.3), and `bot_arena --tune brawl=0` is the bot before. What the engine allows, what was measured, tried and left out, and the limits: [BOT_187.md](BOT_187.md).
 
 ## Names
 
