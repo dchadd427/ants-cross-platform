@@ -129,6 +129,39 @@ class ThePage(unittest.TestCase):
         """the section is inside #lobby, which the open list makes inert: nothing of the chat takes a key while the list is open"""
         self.assertRegex(self.page, r"\[document\.querySelector\('header\.mast'\), \$\('banner'\), \$\('rejoin'\), \$\('lobby'\), \$\('footer-bar'\)\]")
 
+    def test_the_room_has_no_site_footer_and_says_that_matches_are_recorded_under_start(self):
+        """the Room (and the front page) draw no footer: the bar is display none, the markup stays for the Menu (it reads the numbers and the version there) and the legal test; the recording notice
+        that the footer carried is under START, in the match column, once, with the stack's words"""
+        self.assertRegex(self.page, r"\.bar \{ display: none;")
+        css = read(os.path.join(REPO, "web", "home", "home.css"))
+        self.assertNotRegex(css, r"\.bar \{ display: (block|flex|grid)")
+        self.assertNotIn('id="footer-notice"', self.page)
+        words = "Online matches are recorded. Recordings are kept for 30 days. Results and names are kept for good and are public."
+        notice = '<p class="room-notice" id="room-notice">' + words + "</p>"
+        self.assertEqual(self.page.count(notice), 1)
+        side = self.page[self.page.index('<aside class="side"'):self.page.index("</aside>")]
+        self.assertIn(notice, side, "in the match column")
+        self.assertGreater(self.page.index(notice), self.page.index('id="start"'), "after START")
+        self.assertNotIn(words, self.page[self.page.index('<footer class="bar"'):self.page.index("</footer>")], "not in the footer that is not drawn")
+        rule = re.search(r"\.room-notice \{([^}]*)\}", self.page).group(1)
+        self.assertNotRegex(rule, r"display:\s*none")
+        self.assertRegex(rule, r"margin:\s*0 0 1[0-9]px", "room at the foot of the page, where the footer's was")
+
+    def test_the_room_chat_loads_the_front_pages_composer_and_does_not_copy_it(self):
+        js = read(CHAT)
+        self.assertIn("'home/talk.js'", js)
+        self.assertIn("'home/talk.css'", js)
+        self.assertIn("emoji: false, limit: MAX_LINE", js, "no emoji button (the room's line is printable ASCII) and the room's own limit")
+        for name in ("gc-form", "gc-input", "gc-send"):
+            self.assertIn(name, js)
+        self.assertIn("el('textarea', 'gc-input')", js)
+        talk = read(os.path.join(REPO, "web", "home", "talk.js"))
+        self.assertIn("env.emoji !== false", talk)
+        self.assertIn("env.limit || LIMIT", talk)
+        self.assertEqual(self.page.count("home/talk"), 0, "the page does not name the files: the box asks for them once, after the first paint")
+        home = read(os.path.join(REPO, "web", "home", "home.js"))
+        self.assertIn("if (win.AntsHomeTalk) { win.AntsHomeTalk.mount({ doc: doc, win: win, dock: dock }); return; }", home, "the dock does not ask for a script that is there")
+
     def test_no_name_or_line_reaches_the_page_as_markup(self):
         self.assertNotRegex(self.page, r"\.innerHTML\s*=")
 
@@ -153,14 +186,14 @@ class TheStylesheet(unittest.TestCase):
             self.assertRegex(self.css, r'\.chat-log > div\[data-c="%s"\] \{ --accent: %s; \}' % (color, value) if color != "green" else r"--accent: %s;" % re.escape(default), color)
 
     def test_a_phone_does_not_zoom_into_the_field(self):
-        field = re.search(r"\.chat-form input \{([^}]*)\}", self.css).group(1)
+        field = re.search(r"\.chat-form \.gc-input \{([^}]*)\}", self.css).group(1)
         size = re.search(r"font-size:\s*(\d+)px", field)
         self.assertIsNotNone(size)
         self.assertGreaterEqual(int(size.group(1)), 16, "iOS Safari zooms into a field below 16 px")
 
     def test_the_button_and_the_field_are_a_finger_tall(self):
-        self.assertRegex(self.css, r"\.chat-form input \{[^}]*min-height:\s*(4[4-9]|[5-9]\d)px")
-        self.assertRegex(self.css, r"\.chat-form \.btn \{[^}]*min-height:\s*(4[4-9]|[5-9]\d)px")
+        self.assertRegex(self.css, r"\.chat-form \.gc-input \{[^}]*min-height:\s*(4[4-9]|[5-9]\d)px")
+        self.assertRegex(self.css, r"\.chat-form \.gc-send \{[^}]*min-height:\s*(4[4-9]|[5-9]\d)px")
 
     def test_the_places_at_each_width(self):
         self.assertRegex(self.css, r"@media \(min-width: 1041px\) \{[^@]*\.grid > \.chat \{ grid-column: 1 / -1; grid-row: 2; \}")          # (a wide window: across the page, under the room and the map)
@@ -214,8 +247,9 @@ class TheStylesheet(unittest.TestCase):
             self.assertGreaterEqual(ratio(dim(rgb(color)), dim(back)), 4.5, "%s %s on the dimmed log: %.2f" % (name, color, ratio(dim(rgb(color)), dim(back))))
 
     def test_a_field_that_is_shut_is_read_only_and_not_disabled_so_that_it_keeps_the_focus(self):
-        self.assertRegex(self.css, r"\.chat-form input\[readonly\] \{[^}]*opacity:\s*\.6")
+        self.assertRegex(self.css, r"\.chat-form \.gc-input\[readonly\] \{[^}]*opacity:\s*\.6")
         self.assertNotIn("input:disabled", self.css)
+        self.assertNotIn("textarea:disabled", self.css)
 
 
 @unittest.skipUnless(NODE, "node is not installed: the lobby page's chat was NOT run (tests/scripts/web_lobby_chat_check.js)")
@@ -236,7 +270,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/lobby_chat_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make a check
     fail (a command that exits non-zero), and the copy with nothing changed must pass, so that a failure is the change's"""
 
-    FILES = ("web/front/lobby_chat.js", "web/front/lobby_chat.css", "web/front/lobby_rules.js", "web/front/player_name.js", "web/front/lobby_net.js", "web/front/map_picker.css", "web/front/game_modes.js", "web/front/game_type.js", "web/front/game_type.css", "web/lobby.html", "web/rejoin_key.js", "tests/scripts/web_lobby_chat_check.js",
+    FILES = ("web/home/home.css", "web/home/home.js", "web/home/talk.js", "web/front/lobby_chat.js", "web/front/lobby_chat.css", "web/front/lobby_rules.js", "web/front/player_name.js", "web/front/lobby_net.js", "web/front/map_picker.css", "web/front/game_modes.js", "web/front/game_type.js", "web/front/game_type.css", "web/lobby.html", "web/rejoin_key.js", "tests/scripts/web_lobby_chat_check.js",
              "tests/scripts/web_lobby_client_check.js", "tests/scripts/web_lobby_net_check.js", "tests/scripts/test_web_lobby_chat.py", "tests/data/lobby_messages.txt",
              "include/ants_net/flood.hpp")      # (the client check reads the server's limits from the header)
 
@@ -267,6 +301,8 @@ class TheChecksAreNotVacuous(unittest.TestCase):
         ids = [m["id"] for m in self.spec["mutants"]]
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
         self.assertGreaterEqual(len(ids), 60)
+        for needed in ('chat_enter_does_not_send', 'chat_asks_for_emoji', 'chat_voice_limit_is_the_hubs', 'chat_field_is_not_the_composers'):
+            self.assertIn(needed, ids)
         for needed in ("chat_ascii_upper_includes_del", "chat_ascii_lower_includes_control", "chat_line_101", "net_chat_burst_of_six", "net_chat_has_no_budget", "net_encode_chat_accent", "net_valid_line_of_101",
                        "chat_a_line_is_markup", "chat_sends_while_shut",
                        "net_chat_at_the_servers_own_rate", "net_chat_burst_without_reserve", "net_chat_rate_without_margin"):

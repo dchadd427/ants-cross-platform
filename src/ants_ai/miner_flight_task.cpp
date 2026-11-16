@@ -126,6 +126,7 @@ bool MinerFlightTask::choose(TaskContext& c, const AntView& a) {
     int32_t best = 1 << 20;
     for (const Flight* f : info.flights_between(job_.here, path.front())) {
         if (!grid.in_bounds(f->bomb) || !grid.get_cell(f->bomb).can_place_bomb() || grid.has_bomb_at(f->bomb) || occupied(v, f->bomb, a.id)) continue;
+        if (!flight_landing_ok(grid, f->land)) continue;                                      // (a power-up, food or a lunchbox on L: the engine turns the throw to another way, here into the water)
         if (!MapInfo::walkable(grid, c.seat, f->from, v.walk_context()) || occupied(v, f->from, a.id)) continue;
         const int32_t d = a.tile.chebyshev_dist(f->from);
         if (d < best) {
@@ -174,6 +175,7 @@ void MinerFlightTask::drive(TaskContext& c) {
         job_.here = here;
         job_.chosen = false;
     }
+    if (job_.chosen && !flight_landing_ok(grid, job_.flight.land)) job_.chosen = false;     // (L was free when the flight was chosen: something has been put on it since)
     if (!job_.chosen && !choose(c, *a)) {
         if (now > job_.begun + 200u) end_job(c, false);
         return;

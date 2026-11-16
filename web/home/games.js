@@ -859,7 +859,7 @@
         poll();
         pollLive();
         return {
-            sync: guard(sync), shown: guard(shown), leaving: leaving, opening: opening, stalled: stalled, inert: inert, poll: poll,
+            sync: guard(sync), shown: guard(shown), leaving: leaving, said: guard(function (words) { notice('left', words, '', []); }), opening: opening, stalled: stalled, inert: inert, poll: poll,
             state: function () { return { rows: rows, loaded: loaded, off: off, failures: failures, open: isOpen, pending: !!pending, joining: joining, notice: noticeKind, live: live, liveOff: liveOff, liveLoaded: liveLoaded, showLive: showLive }; }
         };
     }

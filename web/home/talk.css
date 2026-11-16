@@ -30,20 +30,53 @@
 }
 
 .gt-tools { display: flex; gap: 6px; }
-.gt-tools[hidden], .gt-pick[hidden], .gt-say[hidden] { display: none; }
+.gt-tools[hidden], .gt-pick[hidden], .gt-say[hidden], .gt-recent[hidden], .gt-x[hidden] { display: none; }
 .gt-btn { min-width: 44px; min-height: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 .gt-ico { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .gt-ico .gt-eye { fill: currentColor; stroke: none; }
 .gt-hot .gt-cap { fill: currentColor; }
 .btn.gt-hot, .btn.gt-hot:hover, .btn.gt-hot:active { background: #8a2c2c; animation: gt-beat 1.2s ease-in-out infinite; }
 @keyframes gt-beat { 50% { opacity: .65; } }
-.gt-say { position: absolute; bottom: 100%; left: 0; right: 0; z-index: 3; margin: 0 0 8px; padding: 7px 10px; font-size: 14px; line-height: 1.3; color: #f2c48c; background: #10161d; border: 1px solid #6b5a22; border-radius: 8px; box-shadow: 0 0 0 2px rgba(0, 0, 0, .7); }
-.gt-pick { position: absolute; left: 0; right: 0; bottom: 100%; z-index: 2; box-sizing: border-box; max-height: 150px; overflow-y: auto; overscroll-behavior: contain; margin-bottom: 8px; padding: 6px 8px; background: #0b1117; border: 2px solid var(--edge); border-radius: 8px; box-shadow: 0 0 0 2px #000; }
-.gt-row { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
-.gt-name { flex: 0 0 100%; margin-top: 4px; font-size: 13px; line-height: 1.3; color: #a8cfc0; }
-.gt-e { min-width: 44px; min-height: 44px; padding: 0; font-size: 24px; line-height: 1; color: var(--cream); background: transparent; border: 2px solid transparent; border-radius: 6px; cursor: pointer; }
+.gt-say { position: absolute; top: auto; bottom: 100%; left: 0; right: 0; align-self: end; z-index: 6; margin: 0 0 8px; padding: 7px 10px; font-size: 14px; line-height: 1.3; color: #f2c48c; background: #10161d; border: 1px solid #6b5a22; border-radius: 8px; box-shadow: 0 0 0 2px rgba(0, 0, 0, .7); }
+.gt-pick { --gt-c: 44px; position: absolute; top: auto; right: 0; bottom: 100%; z-index: 5; box-sizing: border-box; display: flex; flex-direction: column; width: min(380px, 100%); height: 400px; margin-bottom: 6px; overflow: hidden; color: var(--cream); background: #0b1117; border: 2px solid var(--edge); border-radius: 8px; box-shadow: 0 0 0 2px #000, 0 10px 28px rgba(0, 0, 0, .55); }
+.gt-pop { align-self: end; justify-self: end; }       /* (a box in the grid of the form: Chrome aligns it by the grid's own alignment unless it is told where its edge is) */
+.gt-low { position: fixed; right: auto; bottom: auto; margin: 0; }       /* (a low window: the script gives the left edge, the width, the top and the height: the room above the field, over the dock's own clip) */
+.gt-sheet { --gt-c: 46px; position: fixed; left: 0; right: 0; bottom: 0; width: auto; margin: 0; padding-bottom: env(safe-area-inset-bottom); border-width: 2px 0 0; border-radius: 8px 8px 0 0; box-shadow: 0 -8px 28px rgba(0, 0, 0, .55); }       /* (a phone upright: a sheet at the bottom of the screen; the script gives its height and lifts it over a keyboard that the browser reports) */
+html.gt-sheet-open body[data-screen="home"] { padding-bottom: var(--gt-sheet, 0px); }       /* (the page keeps the room above the sheet: the log gets shorter, the field and Send stay in sight) */
+html.gt-sheet-open .htabs { display: none; }
+.gt-grab { display: none; }
+.gt-sheet .gt-grab { display: block; flex: none; width: 36px; height: 4px; margin: 8px auto 0; border-radius: 2px; background: #2d4a40; }
+.gt-top { flex: none; }
+.gt-tabs { display: flex; padding: 0 4px; }
+.gt-tab { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; color: #8fb3a6; background: none; border: 0; border-bottom: 3px solid transparent; border-radius: 0; cursor: pointer; }
+.gt-tab:hover { color: var(--cream); }
+.gt-tab.gt-sel { color: var(--gold); border-bottom-color: var(--gold); }
+.gt-seeking .gt-tab { opacity: .45; }
+.gt-find { position: relative; margin: 6px 10px; }
+.gt-q { display: block; box-sizing: border-box; width: 100%; height: 44px; padding: 0 12px 0 40px; font: inherit; font-size: 16px; text-overflow: ellipsis; color: var(--cream); background: #080d12; border: 2px solid var(--edge); border-radius: 8px; outline: none; }
+.gt-seeking .gt-q { padding-right: 44px; }
+.gt-q::placeholder { color: #7f9c92; opacity: 1; }
+.gt-q:focus { border-color: var(--gold); }
+.gt-lens { position: absolute; left: 12px; top: 12px; width: 20px; height: 20px; color: #8fb3a6; pointer-events: none; }
+.gt-x { position: absolute; right: 0; top: 0; width: 44px; height: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; color: #a8cfc0; background: none; border: 0; border-radius: 8px; cursor: pointer; }
+.gt-x .gt-ico { width: 18px; height: 18px; }
+.gt-body { position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 8px 6px; border-top: 1px solid #17382f; }
+.gt-cap { margin: 0; padding: 10px 2px 4px; font-size: 12px; line-height: 1.3; letter-spacing: .08em; text-transform: uppercase; color: #8fb3a6; }
+.gt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--gt-c), 1fr)); }
+.gt-e { min-width: 44px; min-height: 44px; padding: 0; font-size: 26px; line-height: 1; color: var(--cream); background: transparent; border: 2px solid transparent; border-radius: 6px; cursor: pointer; }
+.gt-sheet .gt-e { font-size: 28px; }
 .gt-e:hover { background: #1b2a34; }
 .gt-e:focus-visible, .gt-btn:focus-visible { outline: 3px solid var(--gold, #f6d058); outline-offset: 1px; }
+.gt-tab:focus-visible, .gt-x:focus-visible { outline: 3px solid var(--gold, #f6d058); outline-offset: -3px; }
+.gt-foot { flex: none; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 4px 12px; border-top: 1px solid #17382f; }
+.gt-big:empty { display: none; }
+.gt-big { flex: none; min-width: 32px; font-size: 28px; line-height: 1; text-align: center; }
+.gt-nm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+.gt-kw { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; font-size: 12px; color: #8fb3a6; }
+.gt-low .gt-top { display: flex; align-items: center; }
+.gt-low .gt-tabs { flex: 1 1 auto; }
+.gt-low .gt-find { flex: 0 0 min(280px, 38%); margin: 4px 8px; }
+.gt-tight .gt-foot, .gt-tight .gt-cap { display: none; }       /* (the least room: the emoji first) */
 @media (forced-colors: active) { .gt-on .btn.gt-btn { border-color: ButtonText; } .gt-on textarea.gc-input:focus-visible { outline: 2px solid Highlight; } }
 @media (min-width: 701px) and (min-height: 501px) { .gc[data-open="true"]:has(.gc-form.gt-on.gt-tall) { height: clamp(240px, 34vh, 300px); } }       /* (a wide window: while the box has two rows the dock is taller by the row of the buttons, so that the log keeps its room; one row, no extra) */
 @media (prefers-reduced-motion: reduce) { .btn.gt-hot { animation: none; } }

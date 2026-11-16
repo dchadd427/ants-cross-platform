@@ -142,24 +142,10 @@
    "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
   },
   {
-   "id": "phone_sideways_rows_not_collapsed",
-   "file": "web/home/home.css",
-   "old": ".hbar .games { grid-area: 2 / 2; }",
-   "new": ".hbar .games { grid-area: 3 / 2; }",
-   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
-  },
-  {
    "id": "phone_sideways_buttons_too_low_to_press",
    "file": "web/home/home.css",
    "old": ".hbar .btn { min-height: 44px; padding: 4px 6px;",
    "new": ".hbar .btn { min-height: 40px; padding: 4px 6px;",
-   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
-  },
-  {
-   "id": "phone_sideways_wider_column_for_games_dropped",
-   "file": "web/home/home.css",
-   "old": "@media (max-width: 479px) { .hbar { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto; } }",
-   "new": "@media (max-width: 479px) { .hbar { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; } }",
    "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
   },
   {
@@ -314,6 +300,55 @@
    "file": "web/home/home.css",
    "old": "min-height: 0; overflow: hidden; }\n.gdock .gpbody",
    "new": "min-height: 0; overflow: visible; }\n.gdock .gpbody",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "my_room_says_room_on_a_narrow_phone",
+   "file": "web/home/home.css",
+   "old": ".hbar .hmine .mine { padding: 4px 6px; font-size: 14px; }",
+   "new": ".hbar .hmine .mine { padding: 4px 6px; font-size: 14px; } .hbar .mine .name { font-size: 0; } .hbar .mine .name::after { content: \"Room\"; font-size: 15px; }",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "my_room_loses_its_count_in_the_low_row",
+   "file": "web/home/home.css",
+   "old": "    .quick::before { display: none; }\n}\n/* ---- ... under 773 px the type shrinks again ---- */",
+   "new": "    .quick::before { display: none; }\n    .hbar .mine .pill { display: none; }\n}\n/* ---- ... under 773 px the type shrinks again ---- */",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "x_badge_press_target_too_small",
+   "file": "web/home/home.css",
+   "old": "left: -2px; top: -2px; right: -22px; bottom: -22px; }",
+   "new": "left: -2px; top: -2px; right: -4px; bottom: -4px; }",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "x_badge_press_target_over_the_count",
+   "file": "web/home/home.css",
+   "old": "left: -2px; top: -2px; right: -22px; bottom: -22px; }",
+   "new": "left: -22px; top: -2px; right: -22px; bottom: -22px; }",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "x_badge_press_target_over_what_is_beside_my_room",
+   "file": "web/home/home.css",
+   "old": "flex: none; margin-right: 32px; }",
+   "new": "flex: none; margin-right: 6px; }",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "x_badge_under_the_frame",
+   "file": "web/home/home.css",
+   "old": "{ --room-top: 10px; }        /* (the X badge",
+   "new": "{ --room-top: 0px; }        /* (the X badge",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "x_badge_over_row_one_of_a_phone_held_sideways",
+   "file": "web/home/home.css",
+   "old": "{ --room-top: 0px; row-gap: 14px; }",
+   "new": "{ --room-top: 0px; row-gap: 6px; }",
    "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
   }
  ]

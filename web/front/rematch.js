@@ -312,11 +312,11 @@
                 env.fetch('/replays', { cache: 'no-store', credentials: 'omit' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (list) { done(findReplay(list, back)); }, function () { done(''); });
             } catch (e) { /* no list: the link goes to the list of matches */ }
         }
-        // The line at the foot of the page says that online matches are recorded; a match on a test map from the map maker is not (no replay, no result, no name), so in such a room the line says that
+        // The line under START says that online matches are recorded; a match on a test map from the map maker is not (no replay, no result, no name), so in such a room the line says that
         var notice = null, noticeWas = '';
         function footNotice(isTest) {
             if (!notice) {
-                try { notice = env.doc.getElementById ? env.doc.getElementById('footer-notice') : null; } catch (e) { notice = null; }
+                try { notice = env.doc.getElementById ? env.doc.getElementById('room-notice') : null; } catch (e) { notice = null; }
                 if (!notice) return;
                 noticeWas = notice.textContent;
             }

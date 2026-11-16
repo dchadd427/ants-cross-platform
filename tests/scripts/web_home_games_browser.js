@@ -126,7 +126,7 @@ async function newPage(browser, site, name, size, search, silent) {
     await page.goto(site.url + (search || '/'));
     return page;
 }
-const lit = (page) => page.waitForFunction(() => { const g = document.querySelector('.hchip.games'), q = document.querySelector('.quick.host'); return !!g && !!q && !g.disabled && !q.disabled; }, null, { timeout: 10000 });
+const lit = (page) => page.waitForFunction(() => { const g = document.querySelector('.quick.join'), q = document.querySelector('.quick.host'); return !!g && !!q && !g.disabled && !q.disabled; }, null, { timeout: 10000 });
 const screenOf = (page) => page.evaluate(() => document.body.getAttribute('data-screen'));
 const textOf = (page, selector) => page.evaluate((q) => { const e = document.querySelector(q); return e ? e.textContent : null; }, selector);
 
@@ -151,13 +151,13 @@ async function flows() {
                 }).length;
                 return { title: document.title, label: !!document.getElementById('site-label'), main: r(main), bar: r(bar), host: r(document.getElementById('home')), pop: r(pop), chat: r(chat), tabs: r(tabs), tabsShown: shown(tabs), popShown: shown(pop), chatShown: shown(chat), role: pop && pop.getAttribute('role'),
                     yard: !!document.getElementById('yard') || !!document.querySelector('.standin, .ylabel, .yant'), rows: document.querySelectorAll('.gpop .gitem').length, joins: document.querySelectorAll('.gpop .gjoin').length, covered, tab: document.getElementById('home').getAttribute('data-tab'),
-                    hasPopup: document.querySelector('.hchip.games').getAttribute('aria-haspopup'), wide: document.documentElement.scrollWidth <= window.innerWidth, mapSize: (document.querySelector('.gpop .gmap') || { getBoundingClientRect: () => ({ width: 0 }) }).getBoundingClientRect().width };
+                    gamesInBar: document.querySelectorAll('.hbar .games').length, wide: document.documentElement.scrollWidth <= window.innerWidth, mapSize: (document.querySelector('.gpop .gmap') || { getBoundingClientRect: () => ({ width: 0 }) }).getBoundingClientRect().width };
             });
             for (const size of [['desktop', 1280, 800], ['laptop', 1366, 640], ['tablet', 900, 700], ['small window', 800, 600], ['701 wide', 701, 800], ['700 wide', 700, 800], ['phone', 390, 844], ['side', 844, 390], ['small side', 568, 320]]) {
                 const plain = await newPage(browser, prod, 'Maple', size, '/', true), test = await newPage(browser, staging, 'Maple', size, '/', true);
                 await plain.waitForSelector('.gpop .gitem'); await plain.waitForSelector('.gc', { state: 'attached' }); await test.waitForSelector('.gpop .gitem'); await test.waitForSelector('.gc', { state: 'attached' }); await sleep(300);
                 const a = await look(plain), b = await look(test), at = size[0] + ' (' + size[1] + ' x ' + size[2] + ')', phone = size[1] <= 700;
-                check('Home, ' + at + ': the Games list is docked in the body (#hmain: a region, five cards with a Join each), there is no Yard and no stand-in, Games names no popup, nothing scrolls sideways', a.popShown && a.role === 'region' && a.rows === 5 && a.joins === 5 && !a.yard && a.hasPopup === null && a.wide
+                check('Home, ' + at + ': the Games list is docked in the body (#hmain: a region, five cards with a Join each), there is no Yard and no stand-in, the bar has no Games button, nothing scrolls sideways', a.popShown && a.role === 'region' && a.rows === 5 && a.joins === 5 && !a.yard && a.gamesInBar === 0 && a.wide
                     && a.main && a.pop[0] >= a.main[0] && a.pop[1] >= a.main[1] && a.pop[0] + a.pop[2] <= a.main[0] + a.main[2] + 1 && a.pop[1] + a.pop[3] <= a.main[1] + a.main[3] + 1, JSON.stringify(a));
                 if (!phone) check('... a wide window: the chat panel lies under the list along the bottom of Home, as wide as the body (no strip: the games, the players and the chat are all there), and no Join or code field of the list is under anything else ' + at,
                     a.chatShown && !a.tabsShown && a.chat[1] >= a.pop[1] + a.pop[3] && a.chat[1] + a.chat[3] <= a.host[1] + a.host[3] + 1 && a.chat[0] <= a.pop[0] && a.covered === 0, JSON.stringify(a));
@@ -170,9 +170,6 @@ async function flows() {
                     check('a press on Chat in the strip shows the chat view (open, filling the page between the bar and the strip) and puts the list away, and Games brings the list back ' + at,
                         c.tab === 'chat' && c.chatShown && !c.popShown && c.chat[1] >= c.bar[1] + c.bar[3] - 1 && c.chat[1] + c.chat[3] <= c.tabs[1] + 1 && await plain.evaluate(() => document.querySelector('.gc').getAttribute('data-open') === 'true')
                         && (await plain.click('.htab.t-games'), await sleep(150), await plain.evaluate(() => document.querySelector('.gpop').getClientRects().length > 0 && document.querySelector('.gc').getClientRects().length === 0)), JSON.stringify(c));
-                } else {
-                    await plain.click('.hchip.games'); await sleep(200);
-                    check('Games takes the focus into the list and the list stays ' + at, await plain.evaluate(() => !!document.activeElement.closest('.gpop')) && (await look(plain)).popShown);
                 }
                 check('... and neither page said anything wrong (no error of the page)', plain.errors.length === 0 && test.errors.length === 0, plain.errors.concat(test.errors).join('; '));
                 await plain.context().close(); await test.context().close();
@@ -235,9 +232,9 @@ async function flows() {
         const list = await until('the real list holds the room', async () => { const r = await (await sage.request.get(live.url + '/lobbies')).json(); return r.lobbies.some((x) => x.code === code) ? r : null; }, 10000);
         const mine = list.lobbies.find((x) => x.code === code);
         check('the real /lobbies door lists the public room: its code, the host\'s name, the map (the server\'s default) and the seats (one person, three free colors)', mine.host === 'Maple' && /\.LVL$/.test(mine.map) && mine.people === 1 && mine.free === 3 && mine.size === 4);
-        await sage.click('.hchip.games');
+        await sage.evaluate(() => document.querySelector('.htab.t-games').click());
         await until('the row is in the popover', async () => (await textOf(sage, '.glist .gname')) === 'Maple', 12000);
-        check('a second browser sees the room in its Games list (the count on the button too) and joins from it', (await textOf(sage, '.hchip.games .pill')) === '1' && (await textOf(sage, '.glist .gcount')) === '1/4');
+        check('a second browser sees the room in its Games list (the count on the button too) and joins from it', (await textOf(sage, '.htab.t-games .pill')) === '1' && (await textOf(sage, '.glist .gcount')) === '1/4');
         await sage.click('.gjoin');
         await until('the guest is in the Room', async () => (await screenOf(sage)) === 'room' && (await textOf(sage, '#room-h')) === 'Maple’s room', 12000);
         check('Join in a real browser: the guest shows the Room of the host, the chip says "Public room" and there is no switch, and the notice says it', (await textOf(sage, '.vistag')) === 'Public room' && (await sage.evaluate(() => document.querySelector('.vis').hidden)) === true && (await textOf(sage, '.gtoast')).indexOf('Joined') === 0);
@@ -260,7 +257,7 @@ async function flows() {
             await b.click('#name-step-go');
             await until('Sage is in the room of Maple', async () => (await a.evaluate(() => document.getElementById('slots').textContent.indexOf('Sage') !== -1)), 10000);
             await a.click('.rhome');
-            await a.click('.hchip.games'); await a.waitForSelector('.glist .gitem');
+            await a.evaluate(() => document.querySelector('.htab.t-games').click()); await a.waitForSelector('.glist .gitem');
             await a.click('.gjoin');
             await a.waitForSelector('.gconfirm');
             await a.click('.gstay');
@@ -294,7 +291,7 @@ async function flows() {
             const code = await host.evaluate(() => new URL(document.getElementById('link').value).searchParams.get('room'));
             const guest = await newPage(browser, live, 'Sage', size); await lit(guest);
             await until('the real list holds the room', async () => (await (await guest.request.get(live.url + '/lobbies')).json()).lobbies.some((x) => x.code === code), 10000);
-            await guest.click('.hchip.games');
+            await guest.evaluate(() => document.querySelector('.htab.t-games').click());
             await guest.waitForSelector('.gjoin[data-code="' + code + '"]', { timeout: 15000 });
             await guest.dblclick('.gjoin[data-code="' + code + '"]');
             await until('the guest is in the Room of the host', async () => (await screenOf(guest)) === 'room' && (await textOf(guest, '#room-h')) === 'Maple’s room', 12000).catch(() => null);
@@ -366,11 +363,11 @@ async function flows() {
             await page.click('.quick.join');
             check('Quick join with the Rejoin offer up (a real click): "Your match is running." with Rejoin, no card, no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => document.querySelectorAll('.gconfirm').length)) === 0 && sockets.length === 0);
             await page.click('.gtoast .btn:last-child');
-            await page.click('.hchip.games'); await page.waitForSelector('.glist .gitem');
+            await page.evaluate(() => document.querySelector('.htab.t-games').click()); await page.waitForSelector('.glist .gitem');
             await page.click('.gjoin');
             check('Join in the list with the Rejoin offer up: the same words and the same Rejoin, the list stays where it is (docked in the body), no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => { const p = document.querySelector('.gpop'); return p.classList.contains('gdock') ? !p.hidden : p.hidden; })) && sockets.length === 0);
             await page.click('.gtoast .btn:last-child');
-            await page.click('.hchip.games'); await page.waitForSelector('.gcodelink'); await page.click('.gcodelink'); await page.waitForSelector('.gcode input');
+            await page.evaluate(() => document.querySelector('.htab.t-games').click()); await page.waitForSelector('.gcodelink'); await page.click('.gcodelink'); await page.waitForSelector('.gcode input');
             await page.fill('.gcode input', 'abc234');
             await page.click('.gcgo');
             check('Join by code with the Rejoin offer up: the same words, no name card, no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => document.getElementById('name-step').hidden)) && sockets.length === 0);
@@ -422,10 +419,10 @@ async function flows() {
                 const label = size[0] + ' ' + size[1] + 'x' + size[2];
                 // Home with the count, the list, the empty list, the list that is off (a fake list on the real site)
                 let p = await newPage(browser, fake, 'Maple', size); await lit(p);
-                await p.waitForFunction(() => document.querySelector('.hchip.games .pill') && !document.querySelector('.hchip.games .pill').hidden);
+                await p.waitForFunction(() => document.querySelector('.htab.t-games .pill') && !document.querySelector('.htab.t-games .pill').hidden);
                 await shot(p, 'home', size);
                 check(label + ': Home has no sideways scroll and every control is inside the window', (await p.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)) && (await reach(p)).length === 0, JSON.stringify(await reach(p)));
-                await p.click('.hchip.games'); await p.waitForSelector('.glist .gitem');
+                await p.evaluate(() => document.querySelector('.htab.t-games').click()); await p.waitForSelector('.glist .gitem');
                 await shot(p, 'games', size);
                 const best = await p.evaluate(() => { const r = document.querySelector('.glist .gitem'), n = r.querySelector('.gname').getBoundingClientRect(), m = r.querySelector('.gmapname').getBoundingClientRect(), b = r.querySelector('.gbest').getBoundingClientRect(); return { nameTop: Math.round(n.top), nameBottom: Math.round(n.bottom), mapRight: Math.round(m.right), bestTop: Math.round(b.top), bestBottom: Math.round(b.bottom), bestLeft: Math.round(b.left) }; });
                 check(label + ': the BEST tag ' + (size[0] === 'phone' ? 'wraps under the name (the row is too narrow for it, as the phone picture draws it)' : 'stands beside the name and the map\'s name, on their line (the picture draws it so)'), size[0] === 'phone' ? best.bestTop >= best.nameBottom - 1 : best.bestTop >= best.nameTop - 1 && best.bestBottom <= best.nameBottom + 1 && best.bestLeft >= best.mapRight, JSON.stringify(best));
@@ -438,12 +435,12 @@ async function flows() {
                 await p.keyboard.press('Escape');
                 await p.context().close();
                 p = await newPage(browser, emptySite, 'Maple', size); await lit(p);
-                await p.click('.hchip.games'); await p.waitForSelector('.gempty:not([hidden])');
+                await p.evaluate(() => document.querySelector('.htab.t-games').click()); await p.waitForSelector('.gempty:not([hidden])');
                 await shot(p, 'games_empty', size);
                 check(label + ': the empty list says it, with no button of its own', (await p.evaluate(() => !!document.querySelector('.gempty') && document.querySelectorAll('.gempty button').length === 0)));
                 await p.context().close();
                 p = await newPage(browser, offSite, 'Maple', size); await lit(p);
-                await p.click('.hchip.games'); await p.waitForSelector('.goff:not([hidden])');
+                await p.evaluate(() => document.querySelector('.htab.t-games').click()); await p.waitForSelector('.goff:not([hidden])');
                 await shot(p, 'games_off', size);
                 await p.context().close();
                 // the room: Maple, Sage and a computer player; private; then Quick host from Home; Sage's own view
@@ -468,7 +465,7 @@ async function flows() {
                 await shot(a, 'room_public', size);
                 await shot(b, 'room_guest', size);
                 await a.click('.rhome');
-                await a.click('.hchip.games'); await a.waitForSelector('.glist .gitem');
+                await a.evaluate(() => document.querySelector('.htab.t-games').click()); await a.waitForSelector('.glist .gitem');
                 await a.click('.gjoin');
                 await a.waitForSelector('.gconfirm');
                 await shot(a, 'confirm', size);
@@ -480,7 +477,7 @@ async function flows() {
                 await a.context().close(); await b.context().close();
                 // a refusal in plain words (a game of the fake list that the real server does not have), and a Join that works (the real list)
                 const r = await newPage(browser, fake, 'Sage', size); await lit(r);
-                await r.click('.hchip.games'); await r.waitForSelector('.glist .gitem');
+                await r.evaluate(() => document.querySelector('.htab.t-games').click()); await r.waitForSelector('.glist .gitem');
                 await r.click('.gjoin');
                 await r.waitForSelector('.gpnote:not([hidden])');
                 await shot(r, 'join_refused', size);
@@ -490,8 +487,8 @@ async function flows() {
                 await host.click('.quick.host'); await host.click('.gconfirm .gyes');       // (Quick host with no room asks Public or Private first: Public room)
                 await host.waitForSelector('.vbtn[aria-pressed="true"] >> text=Public');
                 const guest = await newPage(browser, live, 'Sage', size); await lit(guest);
-                await guest.waitForFunction(() => { const p = document.querySelector('.hchip.games .pill'); return p && p.textContent === '1'; }, null, { timeout: 12000 });
-                await guest.click('.hchip.games'); await guest.waitForSelector('.glist .gitem');
+                await guest.waitForFunction(() => { const p = document.querySelector('.htab.t-games .pill'); return p && p.textContent === '1'; }, null, { timeout: 12000 });
+                await guest.evaluate(() => document.querySelector('.htab.t-games').click()); await guest.waitForSelector('.glist .gitem');
                 await guest.click('.gjoin');
                 await guest.waitForSelector('.vistag');
                 await shot(guest, 'joined', size);
@@ -499,7 +496,7 @@ async function flows() {
                 await host.context().close(); await guest.context().close();
                 // Quick join: the cards of the approved pictures (finding: a game server that says nothing; joined: the real one; none: an empty list; confirm: another person in the own room), and the question before Leave room
                 const qf = await newPage(browser, fake, 'Maple', size, undefined, true); await lit(qf);
-                await qf.waitForFunction(() => { const p = document.querySelector('.hchip.games .pill'); return p && !p.hidden; });
+                await qf.waitForFunction(() => { const p = document.querySelector('.htab.t-games .pill'); return p && !p.hidden; });
                 await qf.click('.quick.join');
                 await qf.waitForSelector('.gconfirm .gbar');
                 await shot(qf, 'qj_finding', size);
@@ -509,7 +506,7 @@ async function flows() {
                 await qh.click('.quick.host'); await qh.click('.gconfirm .gyes');       // (Quick host with no room asks Public or Private first: Public room)
                 await qh.waitForSelector('.vbtn[aria-pressed="true"] >> text=Public');
                 const qg = await newPage(browser, live, 'Sage', size); await lit(qg);
-                await qg.waitForFunction(() => { const p = document.querySelector('.hchip.games .pill'); return p && p.textContent === '1'; }, null, { timeout: 12000 });
+                await qg.waitForFunction(() => { const p = document.querySelector('.htab.t-games .pill'); return p && p.textContent === '1'; }, null, { timeout: 12000 });
                 await qg.click('.quick.join');
                 await qg.waitForSelector('.gmark.check');
                 await shot(qg, 'qj_joined', size);
@@ -529,7 +526,7 @@ async function flows() {
                 const qb = await newPage(browser, fake, 'Sage', size, '/?room=' + qRoom);
                 await qb.click('#name-step-go');
                 await until('Sage is in', async () => (await qa.evaluate(() => document.getElementById('slots').textContent.indexOf('Sage') !== -1)), 10000);
-                await qa.waitForFunction(() => { const p = document.querySelector('.hchip.games .pill'); return p && !p.hidden; }).catch(() => null);
+                await qa.waitForFunction(() => { const p = document.querySelector('.htab.t-games .pill'); return p && !p.hidden; }).catch(() => null);
                 await qa.click('.rbar .leave');
                 await qa.waitForSelector('.gconfirm');
                 await shot(qa, 'qj_leave', size);
@@ -553,21 +550,21 @@ async function flows() {
                 await until(name + ' room is public', async () => (await p.evaluate(() => { const b = document.querySelector('.vbtn[aria-pressed="true"] b'); return b && b.textContent; })) === 'Public', 10000);
                 return p;
             };
-            const openGames = async (p) => { if (!(await p.evaluate(() => document.querySelector('.gpop') && !document.querySelector('.gpop').hidden))) await p.click('.hchip.games'); };
+            const openGames = async (p) => { if (!(await p.evaluate(() => document.querySelector('.gpop') && !document.querySelector('.gpop').hidden))) await p.evaluate(() => document.querySelector('.htab.t-games').click()); };
             const maple = await hostPublic('Maple');
             await maple.click('.rhome');
             await openGames(maple);
             await until('the own room is the one row', async () => (await rowsOf(maple)).length === 1, 12000);
             let rows = await rowsOf(maple);
             check(label + ': only the own public room is open: one row, Maple, tagged Yours, with no Join button and no button at all, no BEST', rows[0].name === 'Maple' && rows[0].yours === 'Yours' && !rows[0].join && rows[0].buttons === 0 && !rows[0].best);
-            check(label + ': ... the button counts it (1), the heading says "1 waiting · updates live", and "No open games right now." is not shown', (await textOf(maple, '.hchip.games .pill')) === '1' && (await textOf(maple, '.gpcount')) === '1 waiting · updates live' && (await maple.evaluate(() => document.querySelector('.gempty').hidden && !document.querySelector('.glist').hidden)));
+            check(label + ': ... the button counts it (1), the heading says "1 waiting · updates live", and "No open games right now." is not shown', (await textOf(maple, '.htab.t-games .pill')) === '1' && (await textOf(maple, '.gpcount')) === '1 waiting · updates live' && (await maple.evaluate(() => document.querySelector('.gempty').hidden && !document.querySelector('.glist').hidden)));
             await maple.click('.glist .gitem');
             check(label + ': ... a press on the own row changes nothing: Home, the list still open, the room still Maple\'s', (await screenOf(maple)) === 'home' && (await maple.evaluate(() => !document.querySelector('.gpop').hidden && document.querySelectorAll('.glist .gitem').length === 1)));
             const sage = await hostPublic('Sage'), tess = await hostPublic('Tess');
             await until('the list holds three rows', async () => (await rowsOf(maple)).length === 3, 14000);
             rows = await rowsOf(maple);
             check(label + ': own room and two others: Yours is the first row, BEST is on the second and on no other, only the other two have a Join', rows[0].name === 'Maple' && rows[0].yours === 'Yours' && !rows[0].best && !rows[0].join && !rows[1].yours && rows[1].best && rows[1].join && !rows[2].yours && !rows[2].best && rows[2].join, JSON.stringify(rows));
-            check(label + ': ... the button says 3 and the heading "3 waiting · updates live"', (await textOf(maple, '.hchip.games .pill')) === '3' && (await textOf(maple, '.gpcount')) === '3 waiting · updates live');
+            check(label + ': ... the button says 3 and the heading "3 waiting · updates live"', (await textOf(maple, '.htab.t-games .pill')) === '3' && (await textOf(maple, '.gpcount')) === '3 waiting · updates live');
             const bestHost = rows[1].name;
             // the own room goes private: its row is gone at the next look
             await maple.keyboard.press('Escape');
@@ -578,7 +575,7 @@ async function flows() {
             await openGames(maple);
             await until('the own row is gone', async () => (await rowsOf(maple)).length === 2, 14000);
             rows = await rowsOf(maple);
-            check(label + ': the own room goes private: its row disappears at the next look, the other two stay (BEST on the first), the button says 2', rows.every((r) => r.name !== 'Maple' && !r.yours && r.join) && rows[0].best && !rows[1].best && (await textOf(maple, '.hchip.games .pill')) === '2' && (await textOf(maple, '.gpcount')) === '2 waiting · updates live');
+            check(label + ': the own room goes private: its row disappears at the next look, the other two stay (BEST on the first), the button says 2', rows.every((r) => r.name !== 'Maple' && !r.yours && r.join) && rows[0].best && !rows[1].best && (await textOf(maple, '.htab.t-games .pill')) === '2' && (await textOf(maple, '.gpcount')) === '2 waiting · updates live');
             // public again, and Quick join: the own room is skipped by its code, the page joins the best other room
             await maple.keyboard.press('Escape');
             await maple.evaluate(() => document.querySelector('.hchip.mine').click());
@@ -604,7 +601,7 @@ async function flows() {
         {
             const WIDEST = () => {
                 const set = (q, text) => { const e = document.querySelector(q); if (e) { e.hidden = false; e.textContent = text; } };
-                (document.querySelector('.mine') || {}).hidden = false; set('.mine .pill', '4/4'); set('.games .pill', '50+');
+                (document.querySelector('.hmine') || {}).hidden = false; (document.querySelector('.mine') || {}).hidden = false; set('.mine .pill', '4/4'); set('.htab.t-games .pill', '50+');
                 const chip = document.querySelector('.hlogin');
                 if (chip) { chip.hidden = false; chip.textContent = ''; for (const [c, t] of [['gc-av', 'M'], ['gc-cn', 'Maple_Leaf_Longname_88']]) { const i = document.createElement('span'); i.className = c; i.textContent = t; chip.appendChild(i); } }
             };
@@ -626,36 +623,73 @@ async function flows() {
             const badHome = [], badRoom = [];
             for (const [w, h] of sizes) { await bar.setViewportSize({ width: w, height: h }); await bar.evaluate(WIDEST); const o = await bar.evaluate(OUT); if (o.length) badHome.push(w + 'x' + h + ': ' + o.join(', ')); }
             check('Home\'s bar at ' + sizes.length + ' sizes (900 to 1000 px wide, 844 x 390, 390 x 844, 360 x 640, every tenth width from 320 to 1300 px, and both sides of every limit) with the widest counts and a long name on the login chip: every button inside the window and no sideways scroll', badHome.length === 0, badHome.slice(0, 6).join(' | ') + (badHome.length > 6 ? ' ... ' + badHome.length + ' sizes' : ''));
-            // a phone held sideways (docs/HOME_SCREEN.md, "The top bar"): 360 to 639 px wide and at most 500 px high, landscape, Home's bar is two compact rows (at most 110 px, the body keeps the rest: 110 px or more at 568 x 320, beside the strip), every target at
+            const TARGET = () => {                                                      // the X badge on My room's corner: a press target of 44 px or more that lies over no neighbour and not over the count, the badge itself over nothing but My room, not under the window's frame (10 px at the edge)
+                const bar = document.querySelector('.hbar'), x = bar.querySelector('.minex'), vw = document.documentElement.clientWidth, vh = window.innerHeight, bad = [];
+                if (!x || x.closest('[hidden]')) return ['no X badge'];
+                const b = x.getBoundingClientRect(), pill = bar.querySelector('.mine .pill');
+                let l = 1e9, t = 1e9, r = -1e9, d = -1e9;
+                for (let py = Math.floor(b.top) - 40; py <= Math.ceil(b.bottom) + 40; py += 2) for (let px = Math.floor(b.left) - 40; px <= Math.ceil(b.right) + 40; px += 2) {      // (which points of the window answer to the badge: its own box and its invisible padding)
+                    if (px < 0 || py < 0 || px >= vw || py >= vh) continue;
+                    const e = document.elementFromPoint(px, py);
+                    if (e === x || (e && x.contains(e))) { l = Math.min(l, px); r = Math.max(r, px); t = Math.min(t, py); d = Math.max(d, py); }
+                }
+                if (l === 1e9) return ['no press target'];
+                const hit = { left: l, top: t, right: r + 1, bottom: d + 1 };         // (a sample stands for 2 px: the box is known to a pixel)
+                const meets = (a, q) => Math.min(a.right, q.right) - Math.max(a.left, q.left) > 1.5 && Math.min(a.bottom, q.bottom) - Math.max(a.top, q.top) > 1.5;
+                if (hit.right - hit.left < 42 || hit.bottom - hit.top < 42) bad.push('press target ' + (hit.right - hit.left) + ' x ' + (hit.bottom - hit.top) + ' px');
+                if (pill && !pill.closest('[hidden]') && meets(hit, pill.getBoundingClientRect())) bad.push('press target over the count');
+                if (pill && !pill.closest('[hidden]') && meets(b, pill.getBoundingClientRect())) bad.push('badge over the count');
+                bar.querySelectorAll('button').forEach((e) => { if (e === x || e.classList.contains('mine') || e.closest('[hidden]') || e.getClientRects().length === 0) return; const q = e.getBoundingClientRect(); if (meets(hit, q)) bad.push('press target over ' + e.className); if (meets(b, q)) bad.push('badge over ' + e.className); });
+                if (b.top < 10) bad.push('badge under the frame (top ' + Math.round(b.top) + ' px)');
+                if (b.left < 0 || b.right > vw) bad.push('badge outside the window');
+                return bad;
+            };
+            // My room keeps its words and its count at every width (the maintainer's rule: no "Room" for a short window): the label reads "My room" in a type of 13 px or more, no rule puts another word in its place or takes its count away
+            const LABEL = () => {
+                const m = document.querySelector('.hbar .mine'), n = m && m.querySelector('.name'), p = m && m.querySelector('.pill'), r = (e) => e.getBoundingClientRect();
+                if (!m || !n || !p) return 'no My room';
+                const bad = n.textContent !== 'My room' || getComputedStyle(n, '::after').content !== 'none' || parseFloat(getComputedStyle(n).fontSize) < 13 || r(n).width < 40 || p.hidden || p.textContent !== '4/4' || r(p).width < 20;
+                return bad ? n.textContent + ' / ' + getComputedStyle(n).fontSize + ' / ' + getComputedStyle(n, '::after').content + ' / count ' + Math.round(r(p).width) + ' px wide' : '';
+            };
+            const badLabel = [];
+            for (const [w, h] of sizes) { await bar.setViewportSize({ width: w, height: h }); await bar.evaluate(WIDEST); const l = await bar.evaluate(LABEL); if (l) badLabel.push(w + 'x' + h + ': ' + l); }
+            check('My room says "My room" with its count ("4/4") at the same ' + sizes.length + ' sizes (a phone upright and held sideways, a tablet, a desktop): no shorter word, no count taken away, a type of 13 px or more', badLabel.length === 0, badLabel.slice(0, 6).join(' | ') + (badLabel.length > 6 ? ' ... ' + badLabel.length + ' sizes' : ''));
+            const badBadge = [];
+            for (const [w, h] of sizes) { await bar.setViewportSize({ width: w, height: h }); await bar.evaluate(WIDEST); const o = await bar.evaluate(TARGET); if (o.length) badBadge.push(w + 'x' + h + ': ' + o.join(', ')); }
+            check('the X badge on My room\'s corner at the same ' + sizes.length + ' sizes: a press target of 44 px or more (the badge answers to the points of a 44 px square, found by hit tests), over no other button of the bar and not over the count, the badge over nothing but My room, not under the window\'s frame, inside the window', badBadge.length === 0, badBadge.slice(0, 6).join(' | ') + (badBadge.length > 6 ? ' ... ' + badBadge.length + ' sizes' : ''));
+            // a phone held sideways (docs/HOME_SCREEN.md, "The top bar"): 360 to 639 px wide and at most 500 px high, landscape, Home's bar is two compact rows (at most 106 px, 114 px with a room, the body keeps the rest: 110 px or more at 568 x 320, beside the strip), every target at
             // least 44 px high and wide and no two of them over each other; one pixel narrower or one pixel higher, a window wider than high keeps the three rows (150 px or more), and a phone upright has two rows of 44 px (110 px); from 640 px wide it is the one low row (at most 70 px)
             const BARS = () => {
                 const box = (e) => e.getBoundingClientRect(), bar = document.querySelector('.hbar'), yard = document.querySelector('#hmain'), small = [], over = [], cut = [], list = [];
                 bar.querySelectorAll('button').forEach((e) => { const r = box(e); if (r.width >= 3 && !e.closest('[hidden]')) list.push([e, r]); });
-                bar.querySelectorAll('button, button *').forEach((e) => { if (e.clientWidth && e.scrollWidth > e.clientWidth + 0.5 && !e.closest('[hidden]')) cut.push((e.className || e.tagName) + ' ' + (e.scrollWidth - e.clientWidth)); });       // (a word or a count that is wider than its box)
-                list.forEach(([e, r], i) => { if (r.height < 43.5 || r.width < 43.5) small.push(e.className + ' ' + Math.round(r.width) + 'x' + Math.round(r.height)); for (const [f, q] of list.slice(i + 1)) if (Math.min(r.right, q.right) - Math.max(r.left, q.left) > 1 && Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top) > 1) over.push(e.className + ' on ' + f.className); });
+                bar.querySelectorAll('button, button *').forEach((e) => { if (e.clientWidth && e.scrollWidth > e.clientWidth + 0.5 && !e.closest('[hidden]') && !e.closest('.minex')) cut.push((e.className || e.tagName) + ' ' + (e.scrollWidth - e.clientWidth)); });       // (a word or a count that is wider than its box)
+                const isX = (e) => e.classList.contains('minex'), isMine = (e) => e.classList.contains('mine');       // (the badge is 24 px to look at, its press target is TARGET's, and it lies over My room's corner)
+                list.forEach(([e, r], i) => { if (!isX(e) && (r.height < 43.5 || r.width < 43.5)) small.push(e.className + ' ' + Math.round(r.width) + 'x' + Math.round(r.height)); for (const [f, q] of list.slice(i + 1)) if (Math.min(r.right, q.right) - Math.max(r.left, q.left) > 1 && Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top) > 1 && !((isX(e) && isMine(f)) || (isX(f) && isMine(e)))) over.push(e.className + ' on ' + f.className); });
                 return { bar: Math.round(box(bar).height), yard: Math.round(box(yard).height), small, over, cut };
             };
             const badRows = [];
             for (const [w, h] of SIDEWAYS) {
                 await bar.setViewportSize({ width: w, height: h }); await bar.evaluate(WIDEST); const m = await bar.evaluate(BARS), two = w >= 360 && w <= 639 && h <= 500 && w > h;
-                if (two && (m.bar > 110 || m.small.length || m.over.length || m.cut.length)) badRows.push(w + 'x' + h + ': two rows expected, the bar is ' + m.bar + ' px high' + (m.small.length ? ', small: ' + m.small.join(', ') : '') + (m.over.length ? ', over: ' + m.over.join(', ') : '') + (m.cut.length ? ', cut: ' + m.cut.join(', ') : ''));
+                if (two && (m.bar > 116 || m.small.length || m.over.length || m.cut.length)) badRows.push(w + 'x' + h + ': two rows expected (106 px, 114 with a room), the bar is ' + m.bar + ' px high' + (m.small.length ? ', small: ' + m.small.join(', ') : '') + (m.over.length ? ', over: ' + m.over.join(', ') : '') + (m.cut.length ? ', cut: ' + m.cut.join(', ') : ''));
                 const upright = h >= w && w <= 720;       // (a phone upright: two rows of 44 px, 110 px high)
-                if (upright && (m.bar > 112 || m.small.length || m.over.length || m.cut.filter((c) => !/^gc-cn /.test(c)).length)) badRows.push(w + 'x' + h + ': the upright phone\'s two rows expected, the bar is ' + m.bar + ' px high' + (m.small.length ? ', small: ' + m.small.join(', ') : '') + (m.over.length ? ', over: ' + m.over.join(', ') : '') + (m.cut.length ? ', cut: ' + m.cut.join(', ') : ''));
-                if (!two && !upright && w <= 639 && m.bar < 120) badRows.push(w + 'x' + h + ': two or three rows expected (128 px, 184 with My room), the bar is ' + m.bar + ' px high');
-                if (w >= 640 && h <= 500 && m.bar > 70) badRows.push(w + 'x' + h + ': one low row expected, the bar is ' + m.bar + ' px high');
+                if (upright && (m.bar > 122 || m.small.length || m.over.length || m.cut.filter((c) => !/^gc-cn /.test(c)).length)) badRows.push(w + 'x' + h + ': the upright phone\'s two rows expected (110 px, 120 with a room), the bar is ' + m.bar + ' px high' + (m.small.length ? ', small: ' + m.small.join(', ') : '') + (m.over.length ? ', over: ' + m.over.join(', ') : '') + (m.cut.length ? ', cut: ' + m.cut.join(', ') : ''));
+                if (!two && !upright && w <= 639 && m.bar < 120) badRows.push(w + 'x' + h + ': two or three rows expected (128 px, 190 px with My room), the bar is ' + m.bar + ' px high');
+                if (w >= 640 && h <= 500 && m.bar > 76) badRows.push(w + 'x' + h + ': one low row expected (62 px, 74 with a room), the bar is ' + m.bar + ' px high');
                 if (w === 568 && h === 320 && m.yard < 110) badRows.push('568x320: the body is only ' + m.yard + ' px high');
             }
-            check('a phone held sideways (568 x 320, 600 x 300, 630 x 360, 480 x 320, 360 x 240, 639 x 500) shows two compact rows: the bar at most 110 px high, the body 110 px or more at 568 x 320, every button 44 px or more, none over another and no word or count wider than its button; and the three rows on the other side of each limit (359 x 240, 639 x 501, 600 x 501), the two rows of a phone upright (360 x 480 and 500 x 500: 110 px) and the low row from 640 px wide', badRows.length === 0, badRows.join(' | '));
-            // the chat dock's open panel stays under the bar (its top is at or below the bar's bottom), also under the two compact rows (106 px): chat.css
+            check('a phone held sideways (568 x 320, 600 x 300, 630 x 360, 480 x 320, 360 x 240, 639 x 500) shows two compact rows: the bar at most 114 px high (a room held), the body 110 px or more at 568 x 320, every button 44 px or more (the X badge: its press target, TARGET), none over another (the badge lies over the corner of My room) and no word or count wider than its button; and the three rows on the other side of each limit (359 x 240, 639 x 501, 600 x 501), the two rows of a phone upright (360 x 480 and 500 x 500: 110 px) and the low row from 640 px wide', badRows.length === 0, badRows.join(' | '));
+            // the chat dock's open panel stays under the bar (its top is at or below the bar's bottom), also under the two compact rows (106 px, 114 px with a room): chat.css
             const badPanel = [];
             for (const [w, h] of [[568, 320], [480, 300], [600, 400], [630, 360], [640, 360], [844, 390]]) {
                 await bar.setViewportSize({ width: w, height: h });
+                await sleep(300);       // (the window's resize makes the chat dock open or close by itself, as the strip shows or goes: the press comes after it, or the press is undone by it)
                 await bar.evaluate((phone) => { const g = document.querySelector('.gc'); if (phone) document.querySelector('.htab.t-chat').click(); else if (g && g.getAttribute('data-open') !== 'true') document.querySelector('.gc-fold').click(); }, w <= 700);
-                await sleep(100);
+                await bar.waitForFunction(() => { const g = document.querySelector('.gc'); return !!g && g.getAttribute('data-open') === 'true'; }, null, { timeout: 3000 }).catch(() => null);       // (the panel opens a moment after the press: it is waited for, not guessed at)
+                await sleep(50);
                 const m = await bar.evaluate(() => { const g = document.querySelector('.gc'), b = document.querySelector('.hbar').getBoundingClientRect(); return g ? { open: g.getAttribute('data-open'), hidden: g.hidden, top: Math.round(g.getBoundingClientRect().top * 10) / 10, bar: Math.round(b.bottom * 10) / 10 } : null; });
                 if (!m || m.hidden || m.open !== 'true' || m.top < m.bar - 0.5) badPanel.push(w + 'x' + h + ': ' + JSON.stringify(m));
             }
-            check('the chat dock\'s open panel starts at or below the bottom of the bar at 568 x 320, 480 x 300, 600 x 400, 630 x 360, 640 x 360 and 844 x 390 (the two compact rows are 106 px, the panel used to start at 64 px)', badPanel.length === 0, badPanel.join(' | '));
+            check('the chat dock\'s open panel starts at or below the bottom of the bar at 568 x 320, 480 x 300, 600 x 400, 630 x 360, 640 x 360 and 844 x 390 (the two compact rows are 106 px, 114 px with a room; the panel used to start at 64 px)', badPanel.length === 0, badPanel.join(' | '));
             await bar.setViewportSize({ width: SIZES[2][1], height: SIZES[2][2] });
             await bar.evaluate(() => document.querySelector('.hchip.mine').click());
             await until('the page shows the Room', async () => (await screenOf(bar)) === 'room', 10000);
