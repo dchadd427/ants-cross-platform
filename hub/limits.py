@@ -6,17 +6,17 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Limits:
-    frame_max: int = 2048               # bytes of a frame's payload that a client may send
-    line_code_points: int = 200         # a chat line, after the text rules (NFC)
-    line_bytes: int = 800               # ... and in UTF-8
+    frame_max: int = 16384              # bytes of a frame's payload that a client may send: the page's frame for the longest line is about 4 KB (4,000 bytes of text and the envelope), and a client that writes every character as a \u escape (a pair for each emoji) needs 12 KB
+    line_code_points: int = 1000        # a chat line, after the text rules (NFC)
+    line_bytes: int = 4000              # ... and in UTF-8 (four times the code points: the longest a code point is)
     history_lines: int = 50             # lines sent on connect, kept in memory
     deleted_announce_max: int = 100     # `del` frames for one bulk deletion (a forget, a run of deletions from the command line): the pages keep 100 lines, ids only grow, so only the newest 100 can be on a screen
     retention_days: int = 7             # lines kept in the database for moderation
-    burst: int = 3                      # lines an account may send at once ...
-    refill_seconds: float = 2.0         # ... then one every this long, across all its tabs
+    burst: int = 10                     # lines an account may send at once ...
+    refill_seconds: float = 0.5         # ... then one every this long (two a second), across all its tabs
     duplicate_seconds: float = 30.0     # the same text twice within this long is dropped
-    account_hour_lines: int = 200       # lines an account may say in an hour: a budget of 200 that fills up again steadily (one every 18 seconds) ...
-    account_day_lines: int = 1000       # ... and in a day: 1,000, one more every 86.4 seconds. What is over is `quota`. (The store is everybody's: an account's share of it stays small)
+    account_hour_lines: int = 600       # lines an account may say in an hour: a budget of 600 that fills up again steadily (one every 6 seconds) ...
+    account_day_lines: int = 3000       # ... and in a day: 3,000, one more every 28.8 seconds. What is over is `quota`. (The store is everybody's: an account's share of it stays small)
     violations: int = 20                # this many mistakes within a minute close the socket (1008)
     violation_window: float = 60.0
     frame_burst: int = 10               # frames of any kind a socket may send at once ...
@@ -31,11 +31,11 @@ class Limits:
     tick_seconds: float = 1.0
     deletions_seconds: float = 2.0      # how often the lines that the command line deleted are looked for
     purge_seconds: float = 3600.0       # how often the lines past their 7 days, or past the newest 200, are deleted
-    write_buffer_max: int = 131072      # a socket that has this much unsent is dropped (it cannot keep up); 500 of them stay well inside the container's memory
+    write_buffer_max: int = 262144      # a socket that has this much unsent is dropped (it cannot keep up): more than the largest welcome (50 lines of 4,000 bytes and their names, about 212,000 bytes), so that a reader on a slow link is not dropped for the history that it was just sent; 500 of them at the limit are 125 MiB, inside the container's 192 MiB
     close_grace_seconds: float = 5.0    # a socket that was closed with output unsent is cut after this long
     identify_seconds: float = 5.0       # the login layer has this long to say who is at the other end of a handshake
-    global_burst: int = 50              # lines that all accounts together may say at once ...
-    global_refill_seconds: float = 0.2  # ... then five a second (what the database is asked to keep)
+    global_burst: int = 100             # lines that all accounts together may say at once (ten people who each use their burst of 10) ...
+    global_refill_seconds: float = 0.1  # ... then ten a second (what the database is asked to keep)
     db_max_bytes: int = 67108864        # no new chat line is kept once hub.db and its log file hold this much (mutes, bans and deletions are never refused for it)
     prune_from_percent: int = 90        # the hub starts to delete the oldest lines when hub.db and its log file hold this much of db_max_bytes ...
     prune_to_percent: int = 80          # ... and goes on, purge_chunk lines a second, until the pages that hold something are down to this much (the freed pages are reused)

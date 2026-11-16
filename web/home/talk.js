@@ -4,8 +4,8 @@
 //   * Emoji: every single code point emoji of Unicode 9 or older that draws as a picture by itself, in eight groups, with a name and a few English search words each; own code and no library. Each one is a single code point
 //     (a character that the hub's text rules keep as it is: no joiner, no tag character, no variation selector; tests/scripts/test_web_home_talk.py runs every one through hub/text.py). The picker has a tab for the
 //     recently used ones and one for each group, a search field (the words of the names and the search words), the recently used ones above each group, a name line, and the keyboard (arrows, Home, End, Page keys,
-//     Enter in the search field picks the first result). A pick goes in at the caret of the field, and only while the line stays within the hub's 200 code points (the field's own maxlength counts UTF-16 units, 400,
-//     and an emoji outside the basic plane is two of them: so the count here is in code points, and 200 of them are never more than 400 units). The only thing kept is the list of the last 16 picks, in this browser (localStorage).
+//     Enter in the search field picks the first result). A pick goes in at the caret of the field, and only while the line stays within the hub's 1,000 code points (the field's own maxlength counts UTF-16 units, 2,000,
+//     and an emoji outside the basic plane is two of them: so the count here is in code points, and 1,000 of them are never more than 2,000 units). The only thing kept is the list of the last 16 picks, in this browser (localStorage).
 //   * Voice: the browser's own speech recognition (SpeechRecognition, or webkitSpeechRecognition), only on a secure page; a browser without it (Firefox) has no microphone button at all. It never sends: the words go into
 //     the field, the interim ones too (replaced by the final ones), and the person presses Send. In Chrome and Edge the browser sends the audio to its maker's speech service; this page never sees audio, records nothing and
 //     uploads nothing (no MediaRecorder, no getUserMedia), and keeps nothing: the button says so (title and label), and so does web/legal.html. It stops on a second press, on Escape, when the person types or sends, and
@@ -20,7 +20,7 @@
 
     var ROW = 44;                                              // px: the box's one row (chat.js has the same)
     var BUBBLE = 6000;                                         // ms that the line of words stays
-    var LIMIT = 200;                                           // code points of a chat line (the hub's own, and the dock's)
+    var LIMIT = 1000;                                          // code points of a chat line (the hub's own, and the dock's)
     var COLS = 8;                                              // emoji in a row, where the page cannot be asked how many there are (a fake page)
     var RECENT = 16, SHOWN = 160, KEY = 'ants.emoji.recent';   // the picks that are kept, the search results that are drawn, and where the picks are kept (this browser only)
     var TEXT = {
@@ -239,7 +239,7 @@
         while (i < s.length && k < n) { var c = s.charCodeAt(i); i += c >= 0xd800 && c <= 0xdbff && i + 1 < s.length ? 2 : 1; k++; }
         return s.slice(0, i);
     }
-    // `text` into `value` between the caret's two ends: the new value and the caret after it, or null when the line would pass 200 code points
+    // `text` into `value` between the caret's two ends: the new value and the caret after it, or null when the line would pass 1,000 code points
     function insert(value, from, to, text, limit) {
         var a = typeof from === 'number' && from >= 0 && from <= value.length ? from : value.length, b = typeof to === 'number' && to >= a && to <= value.length ? to : a;
         var held = a === b;
@@ -249,7 +249,7 @@
         var next = value.slice(0, a) + text + value.slice(b);
         return points(next) > (limit || LIMIT) ? null : { value: next, caret: a + text.length };
     }
-    // what is said, into the field around the place where the person was: no markup characters (the hub refuses them), one space between words, at most what is left of the 200 code points
+    // what is said, into the field around the place where the person was: no markup characters (the hub refuses them), one space between words, at most what is left of the 1,000 code points
     function speak(before, said, after, limit) {
         var t = String(said).replace(/[<>]/g, ' ').replace(/\s+/g, ' ').trim();
         if (!t) return { value: before + after, caret: before.length };

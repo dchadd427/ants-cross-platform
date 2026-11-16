@@ -263,17 +263,17 @@ class TheCode(unittest.TestCase):
     def test_the_documented_limits_are_the_ones_in_the_code(self):
         doc = read(os.path.join(REPO, "docs", "HUB.md"))
         defaults = limitmod.Limits()
-        for needle in ("5 lines a second (a burst of 50)", "64 MB", "2,000 lines", "closed with output still unsent is cut after 5 seconds", "5 seconds to answer", "5 new sockets a second"):
+        for needle in ("10 lines a second (a burst of 100)", "64 MB", "2,000 lines", "closed with output still unsent is cut after 5 seconds", "5 seconds to answer", "5 new sockets a second"):
             self.assertIn(needle, doc, needle)
         self.assertEqual((defaults.global_burst, defaults.global_refill_seconds, defaults.db_max_bytes, defaults.purge_chunk, defaults.close_grace_seconds, defaults.identify_seconds,
-                          defaults.checkpoint_retry_seconds, defaults.crowded_sockets), (50, 0.2, 64 * 1024 * 1024, 2000, 5.0, 5.0, 10.0, 6))
-        for needle in ("2 KB", "200 code points", "800 bytes", "burst of 3", "every 2 seconds", "30 seconds", "20 within a minute", "8 for each client address", "500 in all", "every 25 seconds",
-                       "60 seconds", "last 50 lines", "7 days", "128 KB"):
+                          defaults.checkpoint_retry_seconds, defaults.crowded_sockets), (100, 0.1, 64 * 1024 * 1024, 2000, 5.0, 5.0, 10.0, 6))
+        for needle in ("16 KB", "1,000 code points", "4,000 bytes", "burst of 10, then one line every half second", "30 seconds", "20 within a minute", "8 for each client address", "500 in all", "every 25 seconds",
+                       "60 seconds", "last 50 lines", "7 days", "256 KB"):
             self.assertIn(needle, doc, needle)
         self.assertEqual((defaults.frame_max, defaults.line_code_points, defaults.line_bytes, defaults.history_lines, defaults.retention_days, defaults.burst, defaults.refill_seconds,
                           defaults.duplicate_seconds, defaults.violations, defaults.violation_window, defaults.sockets_per_address, defaults.sockets_total, defaults.ping_seconds,
                           defaults.silence_seconds, defaults.write_buffer_max),
-                         (2048, 200, 800, 50, 7, 3, 2.0, 30.0, 20, 60.0, 8, 500, 25.0, 60.0, 131072))
+                         (16384, 1000, 4000, 50, 7, 10, 0.5, 30.0, 20, 60.0, 8, 500, 25.0, 60.0, 262144))
 
     def test_the_documented_limits_of_the_pictures_are_the_ones_in_the_code(self):
         doc = read(os.path.join(REPO, "docs", "HUB_PICTURES.md"))

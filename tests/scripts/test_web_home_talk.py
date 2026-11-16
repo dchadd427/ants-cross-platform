@@ -3,8 +3,8 @@
 
 Two small buttons stand beside Send in the chat dock's form: one opens a picker of every single code point emoji of Unicode 9 that the hub keeps (tabs, search, recently used, names), one types what the person says into the field
 with the browser's own speech recognition (never sending it). They are loaded by web/home/home.js after the dock. What this file checks:
-  - the hub's rules against the emoji of the picker, with the REAL rules (hub/text.py): every emoji of the picker passes `clean_line` as it is, alone and all together, counts as one code point of the 200 that a line may
-    have and as at most 4 bytes of 800, is a symbol that the Python of the hub knows (nothing newer than Unicode 9), and the limits that the script names are the hub's own; and what the hub does with the sequences that the
+  - the hub's rules against the emoji of the picker, with the REAL rules (hub/text.py): every emoji of the picker passes `clean_line` as it is, alone and all together, counts as one code point of the 1,000 that a line may
+    have and as at most 4 bytes of 4,000, is a symbol that the Python of the hub knows (nothing newer than Unicode 9), and the limits that the script names are the hub's own; and what the hub does with the sequences that the
     picker avoids (a joiner, a tag character, a variation selector) is pinned here, so that a change of the rules shows;
   - the page and the other pages: web/lobby.html does not link the buttons, no other file names them, the hub's door is still the dock's script alone;
   - the loader in home.js: the two files, once, after the dock is mounted, mounted when BOTH have come, and whatever goes wrong with them stays with them;
@@ -59,6 +59,16 @@ def the_emoji():
     return json.loads(done.stdout)
 
 
+def page_numbers():
+    """The numbers that the scripts name for the hub's limits (node reads them from the scripts themselves)."""
+    if not NODE:
+        raise unittest.SkipTest("node is not installed")
+    code = "const c = require(process.argv[1]), t = require(process.argv[2]); console.log(JSON.stringify({ chat: c.LIMIT, pace: c.PACE, talk: t.LIMIT }))"
+    done = subprocess.run([NODE, "-e", code, os.path.join(HOME, "chat.js"), os.path.join(HOME, "talk.js")], capture_output=True, text=True, timeout=60, cwd=REPO)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout)
+
+
 class TheHubsRules(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -66,11 +76,16 @@ class TheHubsRules(unittest.TestCase):
         cls.all = [e for g in cls.groups for e in g["list"]]
 
     def test_the_limits_that_the_script_names_are_the_hubs_own(self):
-        self.assertEqual(limits.Limits().line_code_points, 200)
-        self.assertEqual(hubtext.MAX_CODE_POINTS, 200)
-        self.assertEqual(hubtext.MAX_BYTES, 800)
-        self.assertIn("var LIMIT = 200;", read("web", "home", "talk.js"))
-        self.assertIn("LIMIT = { name: 32, line: 200, feed: 100, history: 50, frame: 120000, bad: 30, field: 400,", read("web", "home", "chat.js"), "the dock's line of 200 code points and its field of 400 UTF-16 units: 200 code points are never more than 400 units")
+        """The numbers are read from the scripts by node (their own LIMIT and PACE): nothing is copied here from their source."""
+        d, page = limits.Limits(), page_numbers()
+        self.assertEqual((d.line_code_points, d.line_bytes), (hubtext.MAX_CODE_POINTS, hubtext.MAX_BYTES), "the hub names its line twice: they are one")
+        self.assertEqual((hubtext.MAX_CODE_POINTS, hubtext.MAX_BYTES), (1000, 4000))
+        self.assertEqual(page["talk"], hubtext.MAX_CODE_POINTS, "the picker counts the hub's code points")
+        self.assertEqual(page["chat"]["line"], hubtext.MAX_CODE_POINTS, "the dock cuts and refuses at the hub's code points")
+        self.assertEqual(page["chat"]["field"], 2 * hubtext.MAX_CODE_POINTS, "the field counts UTF-16 units: a line of the hub's code points is never more than twice as many (an emoji is two)")
+        self.assertLess(page["pace"]["burst"], d.burst, "the dock's own burst is below the hub's, so that the hub never has to refuse a person who is within it")
+        self.assertGreater(page["pace"]["every"] / 1000.0, d.refill_seconds, "... and its refill is slower")
+        self.assertLessEqual(page["pace"]["burst"] + 2, d.frame_burst, "the lines of a burst and a ping, a `who` and a `here` are within a socket's budget of frames")
 
     def test_every_emoji_of_the_picker_is_one_code_point_that_the_hub_keeps_as_it_is(self):
         self.assertGreaterEqual(len(self.all), 60)
@@ -112,12 +127,11 @@ class TheHubsRules(unittest.TestCase):
 
     def test_all_of_them_together_and_a_full_line_of_them_are_one_line_of_the_right_length(self):
         everything = "".join(self.all)
-        for i in range(0, len(everything), 200):
-            self.assertEqual(hubtext.clean_line(everything[i:i + 200]), (everything[i:i + 200], None), "every 200 of them are a line")
-        self.assertEqual(hubtext.clean_line(everything), (None, "long"), "all 879 are more than one line: the picker stops at 200")
+        self.assertEqual(hubtext.clean_line(everything), (everything, None), "all 879 of them are one line (at most 3,516 bytes)")
+        self.assertEqual(hubtext.clean_line(everything * 2), (None, "long"), "twice all 879 are more than one line: the picker stops at 1,000")
         for e in (self.all[0], self.all[-1], max(self.all, key=lambda c: len(c.encode("utf-8")))):
-            self.assertEqual(hubtext.clean_line(e * 200), (e * 200, None), "200 of them are a line (at most 800 bytes: the hub's second limit)")
-            self.assertEqual(hubtext.clean_line(e * 201), (None, "long"), "201 are not")
+            self.assertEqual(hubtext.clean_line(e * 1000), (e * 1000, None), "1,000 of them are a line (at most 4,000 bytes: the hub's second limit)")
+            self.assertEqual(hubtext.clean_line(e * 1001), (None, "long"), "1,001 are not")
 
     def test_the_groups_are_named_and_in_order(self):
         self.assertEqual([g["id"] for g in self.groups], ["smileys", "people", "animals", "food", "activities", "travel", "objects", "symbols"])
@@ -130,13 +144,13 @@ class TheHubsRules(unittest.TestCase):
         self.assertEqual(hubtext.clean_line("\u2764\ufe0f"), ("\u2764\ufe0f", None), "a variation selector (a mark) stays after its symbol")
         self.assertEqual(hubtext.clean_line("\ufe0f"), (None, "empty"), "...but alone it shows nothing, and is empty")
         self.assertEqual(hubtext.clean_line("\U0001F44D\U0001F3FD"), ("\U0001F44D\U0001F3FD", None), "a skin tone (a modifier symbol) stays")
-        self.assertEqual(hubtext.clean_line("\u2764\ufe0f" * 100), ("\u2764\ufe0f" * 100, None), "a symbol and its selector are two code points: 100 of them are 200 (the count is in code points)")
-        self.assertEqual(hubtext.clean_line("\u2764\ufe0f" * 101), (None, "long"))
+        self.assertEqual(hubtext.clean_line("\u2764\ufe0f" * 500), ("\u2764\ufe0f" * 500, None), "a symbol and its selector are two code points: 500 of them are 1,000 (the count is in code points)")
+        self.assertEqual(hubtext.clean_line("\u2764\ufe0f" * 501), (None, "long"))
         self.assertEqual(hubtext.clean_line("<3 \U0001F600"), (None, "bad"), "a '<' is refused, whatever stands beside it")
 
     def test_an_emoji_beyond_the_basic_plane_is_two_utf16_units_and_still_one_code_point(self):
-        line = "\U0001F600" * 200
-        self.assertEqual(len(line.encode("utf-16-le")) // 2, 400, "200 code points of them are 400 UTF-16 units: the field's maxlength, and so no cut")
+        line = "\U0001F600" * 1000
+        self.assertEqual(len(line.encode("utf-16-le")) // 2, 2000, "1,000 code points of them are 2,000 UTF-16 units: the field's maxlength, and so no cut")
         self.assertEqual(hubtext.clean_line(line), (line, None))
 
 

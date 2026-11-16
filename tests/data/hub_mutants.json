@@ -96,24 +96,24 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
   },
   {
-   "id": "text_201_code_points_allowed",
+   "id": "text_1001_code_points_allowed",
    "file": "hub/text.py",
-   "old": "MAX_CODE_POINTS = 200",
-   "new": "MAX_CODE_POINTS = 201",
+   "old": "MAX_CODE_POINTS = 1000",
+   "new": "MAX_CODE_POINTS = 1001",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
   },
   {
-   "id": "text_199_code_points_only",
+   "id": "text_999_code_points_only",
    "file": "hub/text.py",
-   "old": "MAX_CODE_POINTS = 200",
-   "new": "MAX_CODE_POINTS = 199",
+   "old": "MAX_CODE_POINTS = 1000",
+   "new": "MAX_CODE_POINTS = 999",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
   },
   {
-   "id": "text_801_bytes_allowed",
+   "id": "text_4001_bytes_allowed",
    "file": "hub/text.py",
-   "old": "MAX_BYTES = 800",
-   "new": "MAX_BYTES = 801",
+   "old": "MAX_BYTES = 4000",
+   "new": "MAX_BYTES = 4001",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
   },
   {
@@ -201,17 +201,17 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
-   "id": "rate_burst_4",
+   "id": "rate_burst_11",
    "file": "hub/limits.py",
-   "old": "    burst: int = 3 ",
-   "new": "    burst: int = 4 ",
+   "old": "    burst: int = 10 ",
+   "new": "    burst: int = 11 ",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
-   "id": "rate_refill_1_second",
+   "id": "rate_refill_quarter_second",
    "file": "hub/limits.py",
-   "old": "refill_seconds: float = 2.0 ",
-   "new": "refill_seconds: float = 1.0 ",
+   "old": "    refill_seconds: float = 0.5 ",
+   "new": "    refill_seconds: float = 0.25 ",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -327,11 +327,18 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
-   "id": "frame_cap_2049",
+   "id": "frame_cap_16385",
    "file": "hub/limits.py",
-   "old": "frame_max: int = 2048 ",
-   "new": "frame_max: int = 2049 ",
+   "old": "frame_max: int = 16384 ",
+   "new": "frame_max: int = 16385 ",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "frame_cap_back_to_2_kb",
+   "file": "hub/limits.py",
+   "old": "frame_max: int = 16384 ",
+   "new": "frame_max: int = 2048 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheLargestFrames"
   },
   {
    "id": "history_51_lines",
@@ -1447,17 +1454,31 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
-   "id": "write_buffer_cap_256_kb",
+   "id": "write_buffer_cap_512_kb",
    "file": "hub/limits.py",
-   "old": "write_buffer_max: int = 131072 ",
-   "new": "write_buffer_max: int = 262144 ",
+   "old": "write_buffer_max: int = 262144 ",
+   "new": "write_buffer_max: int = 524288 ",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
-   "id": "global_burst_51",
+   "id": "write_buffer_cap_back_to_128_kb",
    "file": "hub/limits.py",
-   "old": "global_burst: int = 50 ",
-   "new": "global_burst: int = 51 ",
+   "old": "write_buffer_max: int = 262144 ",
+   "new": "write_buffer_max: int = 131072 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheLargestFrames"
+  },
+  {
+   "id": "global_burst_101",
+   "file": "hub/limits.py",
+   "old": "global_burst: int = 100 ",
+   "new": "global_burst: int = 101 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "global_refill_every_fifth_of_a_second",
+   "file": "hub/limits.py",
+   "old": "global_refill_seconds: float = 0.1 ",
+   "new": "global_refill_seconds: float = 0.2 ",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
