@@ -3,7 +3,7 @@
 //   RP16.1  TINY grown to 512 x 512 (rules 2): an ant sent 450 tiles along its row gets a path (at rules 1 it gets none), the match is recorded under kSimRules, plays to its hashes, and
 //           ends in the hash that is pinned (the reference match of a map of rules 2)
 //   RP16.2  a reader that does not know the word 2 (modelled by the word 3) refuses the map that a file carries, with the reader's sentence; this build reads the 2
-//   RP16.3  the word takes no rules number of its own: the same match plays to the same hashes under 5, 8 and 9 (the original's game) and under 7, 10 and 11 (187); a 187 match recorded under 6 (the hill
+//   RP16.3  the word takes no rules number of its own: the same match plays to the same hashes under 5, 8 and 9 (the original's game) and under 7, 10, 11 and 12 (187); a 187 match recorded under 6 (the hill
 //           that works) plays to its own hashes under 6; the number after the newest is refused in both modes
 #include "ants_replay/player.hpp"
 #include "ants_replay/recorder.hpp"
@@ -168,7 +168,7 @@ int main() {
         ASSERT_TRUE(error == "the map in the replay cannot be loaded: the rules word is 3: only 0 (the original's rules), 1 (extended rules) and 2 (extended rules with long orders) are known, the file is not read");
     } TEST_END();
 
-    TEST_CASE("RP16.3 The Word 2 Takes No Rules Number: The Same Match Plays To The Same Hashes Under Every Number That This Build Plays (5, 8 And 9 Of The Original's Game; 7, 10 And 11 Of 187, And 6, Whose Hill Works, Has Its Own), And The Number After The Newest Is Refused") {
+    TEST_CASE("RP16.3 The Word 2 Takes No Rules Number: The Same Match Plays To The Same Hashes Under Every Number That This Build Plays (5, 8 And 9 Of The Original's Game; 7, 10, 11 And 12 Of 187, And 6, Whose Hill Works, Has Its Own), And The Number After The Newest Is Refused") {
         ASSERT_TRUE(loaded);
         const uint64_t map_hash = net::hash_bytes(reinterpret_cast<const uint8_t*>(big.data()), big.size());
         const Played wide = play_recorded(two, map_hash);
@@ -180,13 +180,13 @@ int main() {
             const Outcome o = play(copy, two, Hooks{});
             ASSERT_TRUE(o.ran && o.ok && o.complete && o.hash == wide.hash);
         }
-        // 187 (150 turns): the same orders are another match (the mode is hashed). The numbers 7, 10 and 11 (the hill is closed; the loader and the end rule differ only where there is a named fire wall, a seat without a team or eggs
-        // that cannot hatch) play it alike; the number 6 has the hill that works, which the state hash carries, so a match recorded under 6 is another match, and plays to its own hashes under 6.
+        // 187 (150 turns): the same orders are another match (the mode is hashed). The numbers 7, 10, 11 and 12 (the hill is closed; the loader, the end rule and the drops differ only where there is a named fire wall, a seat without a team, eggs
+        // that cannot hatch or a special ant that dies) play it alike; the number 6 has the hill that works, which the state hash carries, so a match recorded under 6 is another match, and plays to its own hashes under 6.
         constexpr uint8_t k187 = static_cast<uint8_t>(sim::GameMode::Kills187);
         const Played with_hill_closed = play_recorded(two, map_hash, k187);
         ASSERT_TRUE(with_hill_closed.verified);
         ASSERT_EQ(with_hill_closed.replay.head.sim_rules, kSimRulesMode187);
-        for (const uint16_t number : {kSimRulesMode187BeforeFireWall, kSimRulesMode187BeforeEndFix, kSimRulesMode187}) {
+        for (const uint16_t number : {kSimRulesMode187BeforeFireWall, kSimRulesMode187BeforeEndFix, kSimRulesMode187BeforeNoDrops, kSimRulesMode187}) {
             ASSERT_TRUE(plays_mode_rules(k187, number));
             Replay copy = with_hill_closed.replay;
             copy.head.sim_rules = number;
