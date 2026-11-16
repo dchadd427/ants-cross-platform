@@ -100,6 +100,11 @@
         if (!row.pub) return own ? TEXT.privateGame : TEXT.inGame;
         return [row.mapName, row.n >= 0 ? row.n + (row.n === 1 ? TEXT.player : TEXT.players) : ''].filter(Boolean).join(' · ') || TEXT.inGame;
     }
+    // Where a person is, in words, for the moderation sheet (web/home/mod.js): the group's word, then what the row says under the name ("Waiting · Treasure · 2 of 4", "Playing · Private game", "Looking")
+    function whereOf(row) {
+        var meta = row.at === 'look' || row.at === 'away' ? '' : metaOf(row, false, false);
+        return meta ? WORD[row.at] + ' · ' + meta : WORD[row.at];
+    }
     // What this page tells the hub it is doing, from its own room (client: the page's LobbyClient or null; count: Home's { people, size } of the room or null; handing: the page is on its way to a game).
     // Looking: no room. Waiting: a room that has not started. Playing: it has (or the page is on its way to it). A public room adds its map and seats, and its code if the visitor is its host; a private one says `pub`:false and nothing more.
     function announceOf(client, count, handing) {
@@ -130,7 +135,7 @@
     }
 
     // ---- the list ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    // mount({ doc, win, host (Home's div), yard (the box that it mounts into), games (the bar's button), dock (the chat dock: tap(fn), send(obj)), page (the bridge: client(), info(), handing()), now, error }) returns { root, state, model, open, sync }, or null
+    // mount({ doc, win, host (Home's div), yard (the box that it mounts into), games (the bar's button), dock (the chat dock: tap(fn), send(obj)), page (the bridge: client(), info(), handing()), now, error }) returns { root, list (the scrolling list: the moderation sheet's way in), state, model, person(i), drawn(fn), sync }, or null
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, dock = env.dock, page = env.page || {};
         var Chat = win.AntsHomeChat, rules = win.AntsLobbyRules, Home = win.AntsHome;
@@ -138,7 +143,7 @@
         var now = env.now || function () { return Date.now(); };
         var yard = env.yard || host;
         var phase = 'none', supported = null, live = false, asked = false, you = null, model = fresh();      // phase: 'none' (nothing shows), 'off' (the hub is not there), 'on'
-        var me = null, doing = null, sentSig = null, lastSent = null, painted = '', joins = [], kept = '', timers = { poll: 0, note: 0 };
+        var me = null, doing = null, sentSig = null, lastSent = null, painted = '', joins = [], kept = '', timers = { poll: 0, note: 0 }, drawnFns = [];
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -186,6 +191,7 @@
         function card(row, o) {                                          // o: { you: the visitor's own row, label: say where the person is under the name, join: a Join button (a public room that waits) }
             var li = el('li', 'pl-card'), who = el('span', 'pl-who'), name = el('span', 'pl-name'), av = el('span', 'pl-av', initial(row.name, Chat)), meta = metaOf(row, o.label, o.you);
             li.setAttribute('data-s', row.at);
+            if (!o.you) li.setAttribute('data-i', String(row.id));       // (the hub's number of the row: the moderation sheet names the person by it, `row:<n>`, never by the name)
             av.setAttribute('aria-hidden', 'true'); Chat.picture(el, av, row.pic, 32);
             var nm = el('bdi', 'pl-nm', row.name), word = row.role === 'admin' ? TEXT.administrator : TEXT.moderator;
             if (row.mod) { li.className += row.role === 'admin' ? ' r-admin' : ' r-mod'; nm.setAttribute('title', word); name.appendChild(el('span', 'pl-sr', word + ' ')); }       // (the name is red or yellow: the word is in the accessible name and the title as well, so that color is never the only sign)
@@ -233,7 +239,7 @@
             var active = doc.activeElement, focused = active && active.getAttribute ? active.getAttribute('data-code') : null, scroll = list.scrollTop;
             painted = sig;
             clear(body); clear(list); clear(youList); clear(offBox); joins = [];
-            if (phase === 'off') { put(offBox, [el('p', '', TEXT.off), el('p', 'small', TEXT.offNote)]); body.appendChild(offBox); return; }
+            if (phase === 'off') { put(offBox, [el('p', '', TEXT.off), el('p', 'small', TEXT.offNote)]); body.appendChild(offBox); told(); return; }
             if (you) {                                                   // the visitor, first, as the page knows it (not as the hub last said)
                 var away = playingElsewhere(), row = rowOf(away ? { i: 0, name: you.name, at: 'play', mod: you.mod, role: you.role, pic: you.pic, pub: away.pub, priv: away.priv, solo: away.solo, map: away.map, n: away.n, of: away.of } : { i: 0, name: you.name, at: doing ? doing.at : 'look', mod: you.mod, role: you.role, pic: you.pic, pub: !!(doing && doing.pub), map: doing && doing.map, n: doing && doing.n, of: doing && doing.of }, Chat, rules);
                 if (row) { row.mapName = row.mapName || row.guess; youList.appendChild(card(row, { you: true, label: true, join: false })); put(body, [youBox, rule]); }       // (the page's own room: its map's name is its own word)
@@ -248,6 +254,12 @@
             if (!empty && model.g > 0) body.appendChild(guests(model.g, 'pinned'));
             list.scrollTop = scroll;
             if (focused) joins.forEach(function (b) { if (b.getAttribute('data-code') === focused && b.focus) b.focus(); });
+            told();
+        }
+        function told() { drawnFns.forEach(function (fn) { try { fn(); } catch (e) { if (env.error) env.error(e); } }); }       // (the list was made again: whoever marks rows marks them again)
+        function person(i) {                                             // a row of the list for the moderation sheet: { i, name, role, at, where }, or null (no such row now, the visitor's own, or the hub is not there)
+            var row = whole(i, 0, LIMIT.ids) && live && supported ? model.rows[i] : null;
+            return row && i !== me ? { i: row.id, name: row.name, role: row.role, at: row.at, where: whereOf(named(row)) } : null;
         }
         function paint() {
             var shown = phase !== 'none', on = phase === 'on';
@@ -330,8 +342,8 @@
         }));
         doing = look();
         clock();
-        return { root: root, state: function () { return phase; }, model: function () { return model; }, sync: guard(sync) };
+        return { root: root, list: list, state: function () { return phase; }, model: function () { return model; }, person: person, drawn: function (fn) { drawnFns.push(fn); }, sync: guard(sync) };
     }
 
-    return { LIMIT: LIMIT, MS: MS, TEXT: TEXT, GROUPS: GROUPS, rowOf: rowOf, apply: apply, listOf: listOf, metaOf: metaOf, seatsText: seatsText, announceOf: announceOf, noteOf: noteOf, hashOf: hashOf, possessive: possessive, roleOf: roleOf, mount: mount };
+    return { LIMIT: LIMIT, MS: MS, TEXT: TEXT, GROUPS: GROUPS, rowOf: rowOf, apply: apply, listOf: listOf, metaOf: metaOf, whereOf: whereOf, seatsText: seatsText, announceOf: announceOf, noteOf: noteOf, hashOf: hashOf, possessive: possessive, roleOf: roleOf, mount: mount };
 });

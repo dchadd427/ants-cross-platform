@@ -162,6 +162,7 @@ class El {
     }
     closest(selector) { for (let n = this; n && n.matches; n = n.parent) if (n.matches(selector)) return n; return null; }
     querySelector(selector) { return this.all().find((e) => e !== this && e.tagName && e.matches(selector)) || null; }
+    querySelectorAll(selector) { return this.all().filter((e) => e !== this && e.tagName && e.matches(selector)); }
 }
 
 const THROWS = 'THROWS';

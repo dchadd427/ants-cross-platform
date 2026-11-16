@@ -12,7 +12,7 @@
 //     a person's text. /help is this page's own (never sent) and lists the commands of the role; each reply of the hub (`ok`, `bans`, the codes power, role, who, rate, bad) is told in plain words as a private line of this
 //     screen. A `bye` is a plain notice, the field off where the hub's state needs it, and the usual reconnect with its backoff (so the person reads on).
 //   * Staff on a touch screen or with a mouse act on a line through the moderation sheet (web/home/mod.js, loaded by home.js only for a role): the dock gives it its log, `you()`, `line(id)`, `command(text, done)` (a
-//     command sent as typed, one at a time, answered once), `note(text)` (a private line), `rows(fn)` (told of every person's line that is drawn for staff), `by(id)` (the lines of the log that the author of line `id` wrote, newest first), `when(at)` (the log's own words for a time) and `arrived(fn)` (told when a line comes) and the tap kind `del`. Nothing of it exists for a person with no role.
+//     command sent as typed, one at a time, answered once), `mutes(done)` (the same for `/mutes`: done('ok', the hub's list of mutes as { until, i } rows, never a name), or a code), `note(text)` (a private line), `rows(fn)` (told of every person's line that is drawn for staff), `by(id)` (the lines of the log that the author of line `id` wrote, newest first), `when(at)` (the log's own words for a time) and `arrived(fn)` (told when a line comes) and the tap kind `del`. Nothing of it exists for a person with no role.
 //   * While the tab is hidden the socket stays and the model follows, but nothing is painted (the screen is made again when the tab is back); a line that arrives while the dock is folded, on the Room or in a hidden tab is unread.
 (function (root, factory) {
     var api = factory();
@@ -185,6 +185,16 @@
         if (!m || !Array.isArray(m.rows) || m.rows.length > MAXBANS) return null;
         var out = [m.rows.length ? TEXT.bansHead : TEXT.bansNone];
         m.rows.forEach(function (r) { if (r && typeof r === 'object') out.push([nameOf(r.u) || TEXT.noName, dayOf(r.at)]); });
+        return out;
+    }
+    function mutesOf(m) {                                               // the hub's private list of mutes { rows: [{ u, until, i }] } as the sheet needs it: [{ until (seconds since 1970), i (the person's row of the players list, or -1 where they have none now) }], never a name; null when it is not that
+        if (!m || !Array.isArray(m.rows) || MAXBANS < m.rows.length) return null;       // (the newest 50, as the bans)
+        var out = [], i, r;
+        for (i = 0; i < m.rows.length; i++) {
+            r = m.rows[i];
+            if (!r || typeof r !== 'object' || typeof r.until !== 'number' || !(r.until > 0) || r.until > 1e12 || (r.i !== undefined && count(r.i) === null)) return null;
+            out.push({ until: Math.floor(r.until), i: r.i === undefined ? -1 : r.i });
+        }
         return out;
     }
     function wordOf(code, login) {                                       // the words of an err code; "log in" is asked only where the hub has a login
@@ -580,6 +590,14 @@
             if (at !== undefined) unanswered.splice(at, 1);
             answer(lines);
         }
+        function onMutes(m) {                                                    // the answer to the sheet's own `/mutes` (never to a typed one: that has nothing to show here): the oldest command that asked for the rows is answered with them
+            var rows = mutesOf(m), at = -1, i, entry;
+            if (!rows) return;
+            for (i = 0; i < unanswered.length && at < 0; i++) if (unanswered[i].cmd && unanswered[i].rows) at = i;
+            if (at < 0) return;
+            entry = unanswered.splice(at, 1)[0];
+            entry.done('ok', rows);
+        }
         function onOk(m) {                                                       // a command was done: the oldest command that waits is answered
             var at = oldest(true), c = typeof m.c === 'string' && Object.prototype.hasOwnProperty.call(DONE, m.c) ? m.c : '', entry = at >= 0 ? unanswered.splice(at, 1)[0] : null;
             if (entry && entry.done) { entry.done('ok'); return; }               // (the sheet's own command: the sheet says the words, as a toast and a private line)
@@ -596,6 +614,7 @@
             else if (m.t === 'you') onYou(m);
             else if (m.t === 'ok') onOk(m);
             else if (m.t === 'bans') onBans(m);
+            else if (m.t === 'mutes') onMutes(m);
             else if (m.t === 'bye') onBye(m);
             else if (m.t === 'online') { people = count(m.n); render(); }
             else if (m.t === 'who') tapped('who', m);
@@ -637,9 +656,9 @@
             waiting(); unanswered.push({ text: text, key: nfc(text), at: now(), cmd: cmd });       // (a command has no answer when the hub takes it, and `bad` when it is wrong)
             return '';
         }
-        function command(text, done) {                                          // a command of the moderation sheet, sent as the hub reads a typed one, one at a time; done(code) is called once: 'ok', a code of the hub (power, role, who, rate, bad...), 'offline', or 'silent' (no answer in 8 s). The dock adds nothing to the log: the sheet says the words
-            var entry = { text: text, key: nfc(text), at: now(), cmd: true }, fired = false;
-            entry.done = function (code) { if (fired) return; fired = true; clearTimeout(entry.timer); tell1(function () { done(code); }); };
+        function command(text, done, rows) {                                    // a command of the moderation sheet, sent as the hub reads a typed one, one at a time; done(code) is called once: 'ok', a code of the hub (power, role, who, rate, bad...), 'offline', or 'silent' (no answer in 8 s). The dock adds nothing to the log: the sheet says the words. With `rows` (the sheet's `/mutes`) the hub's `mutes` frame is the answer: done('ok', rows)
+            var entry = { text: text, key: nfc(text), at: now(), cmd: true, rows: rows === true }, fired = false;
+            entry.done = function (code, list) { if (fired) return; fired = true; clearTimeout(entry.timer); tell1(function () { done(code, list); }); };
             waiting();
             if (!you || you.role === 'none') { entry.done('power'); return; }
             if (!sock || sock.readyState !== 1 || !welcomed || state !== 'live') { entry.done('offline'); return; }
@@ -748,12 +767,12 @@
         go();
         return {
             root: box, slot: slot, field: field, log: log, grow: grow, say: sendLine, state: function () { return state; },
-            you: function () { return you ? { name: you.name, role: you.role } : null; }, line: lineById, by: byAuthor, when: clockOf, arrived: function (fn) { arrivalFns.push(fn); }, command: guard(command), note: guard(function (text) { answer([String(text)]); }), rows: function (fn) { rowFns.push(fn); },
+            you: function () { return you ? { name: you.name, role: you.role } : null; }, line: lineById, by: byAuthor, when: clockOf, arrived: function (fn) { arrivalFns.push(fn); }, command: guard(command), mutes: guard(function (done) { command('/mutes', done, true); }), note: guard(function (text) { answer([String(text)]); }), rows: function (fn) { rowFns.push(fn); },
             tap: function (fn) { taps.push(fn); if (hello) tell1(fn, 'live', hello); else if (state === 'offline') tell1(fn, 'lost'); },
             send: out,
             shown: guard(function (on) { isHome = !!on; if (!on) menuOn = false; if (seen()) stale = true; render(); tapped('shown', !!on); }), open: guard(setOpen)
         };
     }
 
-    return { PATH: PATH, LIMIT: LIMIT, MS: MS, PACE: PACE, TEXT: TEXT, ERR: ERR, plain: plain, points: points, clip: clip, parse: parse, count: count, lineOf: lineOf, partsOf: partsOf, youOf: youOf, picOf: picOf, picture: picture, roleOf: roleOf, wordOfRole: wordOfRole, helpOf: helpOf, bansOf: bansOf, wordOfCommand: wordOfCommand, wordOf: wordOf, delayOf: delayOf, addressOf: addressOf, mount: mount };
+    return { PATH: PATH, LIMIT: LIMIT, MS: MS, PACE: PACE, TEXT: TEXT, ERR: ERR, plain: plain, points: points, clip: clip, parse: parse, count: count, lineOf: lineOf, partsOf: partsOf, mutesOf: mutesOf, youOf: youOf, picOf: picOf, picture: picture, roleOf: roleOf, wordOfRole: wordOfRole, helpOf: helpOf, bansOf: bansOf, wordOfCommand: wordOfCommand, wordOf: wordOf, delayOf: delayOf, addressOf: addressOf, mount: mount };
 });

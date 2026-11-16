@@ -38,6 +38,9 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 const ONLY = arg('--only');       // (one size by its name, to look at one)
 const SIZES = [['phone', 390, 844, true], ['side', 844, 390, true], ['desktop', 1280, 800, false], ['desktouch', 1280, 800, true], ['w320', 320, 640, true]].filter((s) => !ONLY || s[0] === ONLY);       // [name, width, height, touch]
 const NOW = Math.floor(Date.now() / 1000);
+const LOBBIES = { format: 1, count: 2, lobbies: [
+    { code: 'c1v3rr', host: 'Clover', map: 'TREASURE.LVL', mode: 'highest-score', people: 2, bots: 0, free: 2, size: 4, age: 200 },
+    { code: 'p4n8dz', host: 'Pebble', map: 'ISLANDS.LVL', mode: 'highest-score', people: 2, bots: 0, free: 2, size: 4, age: 312 }] };
 
 let checks = 0;
 let failures = 0;
@@ -52,6 +55,7 @@ function serve() {
     const server = http.createServer((req, res) => {
         const url = new URL(req.url, 'http://x');
         requests.push(url.pathname);
+        if (url.pathname === '/lobbies') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(LOBBIES)); return; }       // (the Games list: its rooms are what the players list's Join presses)
         const file = url.pathname === '/' ? 'lobby.html' : url.pathname.replace(/^\/+/, '');
         const full = path.resolve(WEB, file);
         if (full.indexOf(WEB + path.sep) !== 0 || !fs.existsSync(full) || !fs.statSync(full).isFile()) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"not here"}'); return; }
@@ -82,6 +86,11 @@ function history(v) {
         L(152, v.name, v.role === 'admin' ? 'I am looking at it now.' : v.role === 'mod' ? 'Thanks, I will check it.' : 'thanks for the heads up', Object.assign({ k: v.k }, v.role === 'none' ? {} : { role: v.role }, v.role === 'none' ? {} : { mod: true })),
     ];
 }
+// the players list as the hub sends it (the visitor's own row is number 3): the number of a row is what the sheet names a person by
+const PEOPLE = (v) => [
+    { i: 1, name: 'Tess', at: 'look', mod: true, role: 'admin' }, { i: 2, name: 'Sage', at: 'look', mod: true, role: 'mod' }, Object.assign({ i: 3, name: v.name, at: 'look' }, v.role === 'none' ? {} : { mod: true, role: v.role }),
+    { i: 4, name: 'Clover', at: 'wait', pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr' }, { i: 5, name: 'Juniper', at: 'look' }, { i: 6, name: 'Fern', at: 'look' },
+    { i: 7, name: 'Pebble', at: 'wait', pub: true, map: 'ISLANDS.LVL', n: 2, of: 4, code: 'p4n8dz' }, { i: 8, name: 'Hazel', at: 'play', priv: true }];
 async function startAll(kind) {
     const site = await serve();
     const v = VIEWERS[kind];
@@ -89,7 +98,8 @@ async function startAll(kind) {
         server: site.server, login: true, online: 12,
         you: v.role === 'none' ? { name: v.name, mod: false, k: v.k } : { name: v.name, mod: true, role: v.role, k: v.k },
         history: history(v),
-        people: { clover: 'none', juniper: 'none', fern: 'none', pebble: 'none', sage: 'mod', tess: 'admin' },       // ('Nobody' is not here: a command that names that line is answered `who`)
+        welcomeExtra: { presence: true, me: 3 }, who: { t: 'who', full: true, n: PEOPLE(v).length, g: 3, more: 0, rows: PEOPLE(v) }, rows: { 1: 'Tess', 2: 'Sage', 4: 'Clover', 5: 'Juniper', 6: 'Fern', 7: 'Pebble', 8: 'Hazel' },
+        people: { clover: 'none', juniper: 'none', fern: 'none', pebble: 'none', hazel: 'none', sage: 'mod', tess: 'admin' },       // ('Nobody' is not here: a command that names that line is answered `who`)
     });
     return { site, hub };
 }
@@ -432,6 +442,215 @@ async function main() {
         await page.keyboard.press('ArrowUp'); await page.keyboard.press('Enter'); await sleep(100);
         check(name + 'Up and Enter in the log do nothing', !(await sheetUp(page)) && (await page.evaluate(() => !document.querySelector('.gc-line.gm-on'))));
         await shot(page, '6_chat_log_player', size);
+        await context.close();
+    }
+
+    // ---- the players list: the sheet of a person (docs/HOME_CHAT.md "Roles and commands") ----
+    const card = (i) => '#players .pl-card[data-i="' + i + '"]';
+    async function openList(rig, size, w, h, touch, staff) {
+        const o = await open(rig, size, w, h, touch, { staff });
+        if (w <= 700) await o.page.locator('.htab.t-players').click();
+        await o.page.waitForFunction(() => document.querySelectorAll('#players .pl-card[data-i]').length >= 6, null, { timeout: 8000 });
+        await sleep(300);
+        return o;
+    }
+    async function holdRow(ctx, page, selector, ms) {                      // a real touch held on a row (or a button of it), through the browser's own input
+        const box = await page.locator(selector).boundingBox();
+        const x = Math.round(box.x + Math.min(box.width - 4, 60)), y = Math.round(box.y + box.height / 2);
+        const cdp = await ctx.newCDPSession(page);
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+        await sleep(ms);
+        return { cdp, x, y, end: () => cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }), move: (dy) => cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + dy }] }) };
+    }
+    async function openRow(ctx, page, touch, i) {
+        await page.locator(card(i)).scrollIntoViewIfNeeded();
+        if (touch) { const t = await holdRow(ctx, page, card(i), 650); await t.end(); await sleep(450); }
+        else { const b = await page.locator(card(i)).boundingBox(); await page.mouse.click(Math.round(b.x + 30), Math.round(b.y + b.height / 2), { button: 'right' }); await sleep(150); }
+    }
+    const toListed = (page) => page.evaluate(() => { const t = document.querySelector('.gm-toast'); return t ? { words: t.querySelector('.gm-tt').textContent, top: Math.round(t.getBoundingClientRect().top), bottom: Math.round(t.getBoundingClientRect().bottom), inside: t.getBoundingClientRect().left >= 0 && t.getBoundingClientRect().right <= window.innerWidth } : null; });
+    for (const [size, w, h, touch] of SIZES) {
+        const name = size + ' (the list): ';
+        const rig = rigs.admin, hub = rig.hub;
+        hub.set({ mutes: [], mutesDelay: 0, roleDown: false });
+        const { page, context } = await openList(rig, size, w, h, touch, true);
+        const base = hub.commands.length, said = () => hub.commands.slice(base);
+        const pic = async (scene) => { const h = touch ? await page.addStyleTag({ content: '*:focus-visible { outline: none !important; }' }) : null; await shot(page, scene, size); if (h) await h.evaluate((n) => n.remove()); };       // (a touch window shows no focus ring: the keys that the checks press leave one behind)
+        check(name + 'the page asked for the two files of the sheet and the list, once', rig.site.requests.filter((r) => r === '/home/mod.js').length >= 1 && rig.site.requests.indexOf('/home/players.js') !== -1);
+        const ids = await page.evaluate(() => [...document.querySelectorAll('#players .pl-card[data-i]')].map((c) => Number(c.getAttribute('data-i'))).sort((a, b) => a - b).join());
+        check(name + 'every row but the visitor\'s own carries the hub\'s number of the row', ids === '1,2,4,5,6,7,8', ids);
+        const acts = await page.evaluate(() => [...document.querySelectorAll('#players .pl-card[data-act]')].map((c) => Number(c.getAttribute('data-i'))).sort((a, b) => a - b).join());
+        check(name + 'the rows that have an action carry the mark (not an administrator\'s)', acts === '2,4,5,6,7,8', acts);
+        check(name + 'the list is described to a screen reader (the keys), as one stop', await page.evaluate(() => { const l = document.querySelector('#players .pl-list'), d = document.getElementById(l.getAttribute('aria-describedby') || '-'); return !!d && /Up and Down/.test(d.textContent) && l.getAttribute('tabindex') === '0'; }));
+        const user = await page.evaluate((s) => getComputedStyle(document.querySelector(s)).userSelect, card(4));
+        check(name + 'the text of a row is held back from selection on a touch screen only (' + user + ')', touch ? user === 'none' : user !== 'none', user);
+        await pic('1_players_list_staff');
+        // the way in
+        await page.evaluate(() => { window.__ctx.length = 0; window.__buzz.length = 0; });
+        await openRow(context, page, touch, 4);
+        check(name + way(touch) + ' on Clover\'s row opens the sheet', await sheetUp(page));
+        const info = await page.evaluate(() => {
+            const b = document.querySelector('.gm-box'), t = document.getElementById('gm-title'), sub = document.getElementById('gm-sub');
+            return { role: b.getAttribute('role'), modal: b.getAttribute('aria-modal'), title: t ? t.textContent : '', sub: sub ? sub.textContent : '', described: b.getAttribute('aria-describedby'), marked: [...document.querySelectorAll('#players .pl-card.gm-on')].map((r) => r.getAttribute('data-i')), lineMarked: document.querySelectorAll('.gc-line.gm-on').length, prevented: window.__ctx.slice(), buzz: window.__buzz.length };
+        });
+        check(name + 'it is a modal dialog named by the person, described by where they are, and their row is marked', info.role === 'dialog' && info.modal === 'true' && info.title === 'Clover' && info.sub === 'Waiting · Treasure · 2 of 4' && info.described === 'gm-sub' && info.marked.join() === '4' && info.lineMarked === 0, JSON.stringify(info));
+        if (!touch) check(name + 'the browser\'s own menu was held back', info.prevented.length === 1 && info.prevented[0] === true, JSON.stringify(info.prevented));
+        else check(name + 'the phone buzzed once, lightly', info.buzz === 1, String(info.buzz));
+        await sleep(300);
+        check(name + 'the sheet asked `/mutes` once, and offers Mute, Kick, Ban and Cancel (no line to delete, no recent messages)', JSON.stringify(said()) === JSON.stringify(['/mutes']) && JSON.stringify(await names(page)) === JSON.stringify(['Mute Clover…', 'Kick Clover', 'Ban Clover', 'Cancel']), JSON.stringify([said(), await names(page)]));
+        const small = await page.evaluate(() => [...document.querySelectorAll('.gm-box button, .gm-box input')].map((e) => { const r = e.getBoundingClientRect(); return [e.getAttribute('aria-label') || e.textContent, Math.round(r.width), Math.round(r.height)]; }).filter((a) => a[1] < 44 || a[2] < 44));
+        check(name + 'every control of the sheet is at least 44 x 44', small.length === 0, JSON.stringify(small));
+        const inside = await page.evaluate(() => { const r = document.querySelector('.gm-box').getBoundingClientRect(), b = document.documentElement; return { top: r.top, left: r.left, right: window.innerWidth - r.right, bottom: window.innerHeight - r.bottom, sideways: b.scrollWidth > window.innerWidth || document.body.scrollWidth > window.innerWidth }; });
+        check(name + 'the sheet is inside the window and nothing scrolls sideways', inside.top >= -0.5 && inside.left >= -0.5 && inside.right >= -0.5 && inside.bottom >= -0.5 && !inside.sideways, JSON.stringify(inside));
+        check(name + 'everything behind the sheet is inert', (await page.evaluate(() => [...document.body.children].filter((c) => !c.classList.contains('gm-shade') && !c.hasAttribute('inert')).length)) === 0);
+        await pic('2_person_sheet_admin');
+        let outside = 0;
+        for (let i = 0; i < 6; i++) { await page.keyboard.press('Tab'); if (!(await page.evaluate(() => !!document.activeElement && !!document.activeElement.closest('.gm-box')))) outside++; }
+        check(name + 'Tab stays inside the sheet', outside === 0);
+        await page.keyboard.press('Escape'); await sleep(100);
+        check(name + 'Escape lets the sheet go, with nothing sent, the row unmarked, and the focus is back on the list', !(await sheetUp(page)) && said().length === 1 && (await page.evaluate(() => !document.querySelector('.pl-card.gm-on') && document.activeElement === document.querySelector('#players .pl-list'))));
+        // what does not open it
+        await page.evaluate(() => { window.__ctx.length = 0; });
+        await page.locator(card(1)).scrollIntoViewIfNeeded();
+        if (touch) { const t = await holdRow(context, page, card(1), 650); await t.end(); } else { const b = await page.locator(card(1)).boundingBox(); await page.mouse.click(Math.round(b.x + 30), Math.round(b.y + b.height / 2), { button: 'right' }); }
+        await sleep(150);
+        check(name + way(touch) + ' on an administrator\'s row opens nothing (the browser\'s own menu is left alone)', !(await sheetUp(page)) && (touch || (await page.evaluate(() => window.__ctx.every((x) => x === false)))));
+        const join = card(4) + ' .pl-join';
+        check(name + 'Clover\'s row has the list\'s Join', (await page.locator(join).count()) === 1);
+        await page.evaluate(() => { window.__ctx.length = 0; window.__buzz.length = 0; });
+        if (touch) { const t = await holdRow(context, page, join, 700); await t.end(); await sleep(150); } else { const b = await page.locator(join).boundingBox(); await page.mouse.click(Math.round(b.x + b.width / 2), Math.round(b.y + b.height / 2), { button: 'right' }); await sleep(150); }
+        check(name + (touch ? 'a long press' : 'a right click') + ' on a row\'s Join is the button\'s: no sheet, no mark, nothing held back', !(await sheetUp(page)) && (await page.evaluate(() => !document.querySelector('.pl-card.gm-on') && window.__buzz.length === 0 && window.__ctx.every((x) => x === false))));
+        if (touch) {
+            await page.locator(card(5)).scrollIntoViewIfNeeded();
+            let t = await holdRow(context, page, card(5), 650); await t.end(); await sleep(450);
+            await page.keyboard.press('Escape'); await sleep(100);
+            await page.locator(card(5)).scrollIntoViewIfNeeded();
+            const calm = await page.addStyleTag({ content: '*:focus-visible { outline: none !important; }' });       // (no ring on a touch screen: the keys that the checks press leave one)
+            t = await holdRow(context, page, card(5), 200);
+            const shown = await page.evaluate(() => [...document.querySelectorAll('#players .pl-card.gm-on')].map((c) => c.getAttribute('data-i')).join());
+            await shot(page, '1b_players_row_pressed', size, true);       // (quick: the long press is at 500 ms)
+            await calm.evaluate((n) => n.remove());
+            await t.move(40); await sleep(700); await t.end(); await sleep(450);
+            check(name + 'a touch held on a row marks it before the sheet comes; a finger that moves is a scroll: no sheet, no mark', shown === '5' && !(await sheetUp(page)) && (await page.evaluate(() => !document.querySelector('.pl-card.gm-on'))), shown);
+        } else {
+            await page.evaluate(() => document.querySelector('#players .pl-list').focus());
+            await page.keyboard.press('ArrowDown'); await sleep(80);
+            const first = await page.evaluate(() => [...document.querySelectorAll('#players .pl-card.gm-on')].map((c) => c.getAttribute('data-i')).join());
+            const say = await page.evaluate(() => [...document.querySelectorAll('.gc-news[role="status"]')].map((n) => n.textContent).join(' ').trim());
+            check(name + 'Down in the list chooses the first row that has an action, and says so', first === '2' && /^Sage: Looking\./.test(say), first + ' / ' + say);
+            await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await sleep(80);
+            await pic('1b_players_row_pressed');
+            await page.keyboard.press('Enter'); await sleep(150);
+            check(name + 'Enter opens the sheet of the chosen row', (await sheetUp(page)) && (await page.evaluate(() => document.getElementById('gm-title').textContent)) === 'Juniper');
+            await page.keyboard.press('Escape'); await sleep(100);
+            await page.keyboard.press('Escape'); await sleep(50);
+            await page.keyboard.press('Shift+F10'); await sleep(150);
+            check(name + 'Shift and F10 opens the first row', (await sheetUp(page)) && (await page.evaluate(() => document.getElementById('gm-title').textContent)) === 'Sage');
+            await page.keyboard.press('Escape'); await sleep(100);
+        }
+        // Mute: the state is asked first, the time sends the row's number
+        await openRow(context, page, touch, 4); await sleep(300);
+        await clickBy(page, 'Mute Clover…'); await sleep(100);
+        await clickBy(page, '1 hour'); await sleep(250);
+        check(name + 'Mute, 1 hour sends `/mute row:4 60` (the number of the row, never the name)', JSON.stringify(said().slice(-1)) === JSON.stringify(['/mute row:4 60']), JSON.stringify(said()));
+        const done = await toListed(page);
+        check(name + 'the answer is a toast at the top, inside the window, with the words of the sheet', !!done && done.words === 'Done: Clover is muted for 1 hour.' && done.top < 140 && done.inside && !(await sheetUp(page)), JSON.stringify(done));
+        await pic('5_toast_done_muted');
+        await sleep(6300);
+        // Unmute: the hub says that Clover is muted
+        hub.set({ mutes: [{ u: 'clover.4782', until: NOW + 2400, i: 4 }] });
+        await openRow(context, page, touch, 4); await sleep(300);
+        const un = await names(page);
+        check(name + 'a person who is muted: Unmute in place of Mute, with the end of the mute', un[0] === 'Unmute Clover' && (await page.evaluate(() => /^Muted until .*today$/.test(document.querySelector('.gm-act small').textContent))), JSON.stringify(un));
+        await pic('3_person_muted_unmute');
+        await clickBy(page, 'Unmute Clover'); await sleep(250);
+        check(name + 'Unmute asks nothing more and sends `/unmute row:4`', JSON.stringify(said().slice(-1)) === JSON.stringify(['/unmute row:4']) && (await toastWords(page)) === 'Done: Clover can write again.', JSON.stringify(said().slice(-1)));
+        await pic('5c_toast_done_unmuted');
+        await sleep(6300);
+        hub.set({ mutes: [] });
+        // Mute is not offered before the answer; a failed check is "Check again"
+        hub.set({ mutesDelay: 1600 });
+        await openRow(context, page, touch, 4); await sleep(300);
+        const wait = await page.evaluate(() => { const b = document.querySelector('.gm-act'); return { off: b.getAttribute('aria-disabled'), words: b.querySelector('small').textContent }; });
+        check(name + 'until the hub has answered Mute is off and says why', wait.off === 'true' && wait.words === 'Checking whether Clover is muted', JSON.stringify(wait));
+        await pic('2d_person_sheet_checking_mutes');
+        const before = said().length;
+        await page.evaluate(() => document.querySelector('.gm-act').click()); await sleep(100);
+        check(name + '...a press on it does nothing', said().length === before && (await names(page))[0] === 'Mute Clover…' && (await sheetUp(page)));
+        await sleep(1700);
+        check(name + '...then Mute is offered, and the focus stays where it was', (await page.evaluate(() => document.querySelector('.gm-act').getAttribute('aria-disabled'))) === null);
+        await closeIt(page);
+        hub.set({ mutesDelay: 0, roleDown: true });
+        await openRow(context, page, touch, 4); await sleep(300);
+        check(name + 'a check that fails says so and asks again when pressed', JSON.stringify((await names(page)).slice(0, 1)) === JSON.stringify(['Check again']));
+        await pic('2f_person_sheet_check_failed');
+        hub.set({ roleDown: false });
+        await clickBy(page, 'Check again'); await sleep(300);
+        check(name + '...and the second time it works', (await names(page))[0] === 'Mute Clover…');
+        await closeIt(page);
+        // Kick: a card, the red button after 400 ms
+        await openRow(context, page, touch, 4); await sleep(300);
+        await clickBy(page, 'Ban Clover'); await sleep(100);
+        await pic('6_confirm_ban_from_person');
+        const chip = await page.evaluate(() => document.querySelector('.gm-chip').textContent);
+        check(name + 'the Ban card names the person (no username, the list has none) and has two red buttons', chip.replace(/^C/, '') === 'Clover' && (await names(page)).join() === 'Cancel,Ban,Ban and delete their lines from the last hour', chip + ' / ' + (await names(page)).join());
+        await clickBy(page, 'Cancel'); await sleep(80);
+        await openRow(context, page, touch, 8); await sleep(300);
+        check(name + 'a person in a private game: where they are, in the list\'s own words', (await page.evaluate(() => document.getElementById('gm-sub').textContent)) === 'Playing · Private game');
+        await clickBy(page, 'Kick Hazel'); await sleep(450); await pressBy(page, 'Kick'); await sleep(250);
+        check(name + 'Kick sends `/kick row:8`', JSON.stringify(said().slice(-1)) === JSON.stringify(['/kick row:8']), JSON.stringify(said().slice(-1)));
+        await sleep(6300);
+        // a moderator's row, seen by an administrator
+        await openRow(context, page, touch, 2); await sleep(300);
+        check(name + 'an administrator on a moderator\'s row: all three actions, and the header says what the person is', (await page.evaluate(() => document.getElementById('gm-sub').textContent)) === 'moderator · Looking' && (await names(page)).slice(1).join() === 'Kick Sage,Ban Sage,Cancel', JSON.stringify(await names(page)));
+        await pic('2e_person_sheet_moderators_row_by_admin');
+        await closeIt(page);
+        // a kick that the hub refuses: the person is not on the front page any more
+        const rows0 = Object.assign({}, hub.options.rows), rows1 = Object.assign({}, rows0); delete rows1[7];
+        hub.set({ rows: rows1 });
+        await openRow(context, page, touch, 7); await sleep(300);
+        await clickBy(page, 'Kick Pebble'); await sleep(450); await pressBy(page, 'Kick'); await sleep(250);
+        const refusedKick = await toListed(page);
+        check(name + 'a refusal of the hub is a toast in words with an OK button', !!refusedKick && refusedKick.words === 'Pebble is not on the front page now, so there is nobody to kick. Mute or ban instead.' && (await page.evaluate(() => !!document.querySelector('.gm-toast button'))), JSON.stringify(refusedKick));
+        await pic('5b_toast_refused_kick');
+        await page.locator('.gm-toast button').click(); await sleep(80);
+        hub.set({ rows: rows0 });
+        // a person who has gone
+        hub.set({ who: Object.assign({}, hub.options.who, { rows: hub.options.who.rows.filter((x) => x.i !== 5) }) });
+        await openRow(context, page, touch, 5); await sleep(300);
+        hub.broadcast({ t: 'who', full: false, n: 7, g: 3, more: 0, rows: [], gone: [5] }); await sleep(300);
+        const gone = await toListed(page);
+        check(name + 'a person who leaves the list while their sheet is open: the sheet goes, the toast says so', !(await sheetUp(page)) && !!gone && gone.words === 'That person is not here any more.', JSON.stringify(gone));
+        hub.set({ who: { t: 'who', full: true, n: 8, g: 3, more: 0, rows: PEOPLE(VIEWERS.admin) } });
+        await context.close();
+    }
+    // ---- a moderator: no Ban, nothing on a moderator or an administrator ----
+    for (const [size, w, h, touch] of SIZES) {
+        const name = size + ' (the list, a moderator): ';
+        const { page, context } = await openList(rigs.mod, size, w, h, touch, true);
+        const pic = async (scene) => { const h = touch ? await page.addStyleTag({ content: '*:focus-visible { outline: none !important; }' }) : null; await shot(page, scene, size); if (h) await h.evaluate((n) => n.remove()); };
+        const acts = await page.evaluate(() => [...document.querySelectorAll('#players .pl-card[data-act]')].map((c) => Number(c.getAttribute('data-i'))).sort((a, b) => a - b).join());
+        check(name + 'the rows with an action: not an administrator\'s, not a moderator\'s', acts === '4,5,6,7,8', acts);
+        await openRow(context, page, touch, 4); await sleep(300);
+        check(name + 'Mute and Kick, no Ban', JSON.stringify(await names(page)) === JSON.stringify(['Mute Clover…', 'Kick Clover', 'Cancel']), JSON.stringify(await names(page)));
+        await pic('2b_person_sheet_moderator_no_ban');
+        await closeIt(page);
+        await page.evaluate(() => { window.__ctx.length = 0; });
+        await page.locator(card(2)).scrollIntoViewIfNeeded();
+        if (touch) { const t = await holdRow(context, page, card(2), 650); await t.end(); } else { const b = await page.locator(card(2)).boundingBox(); await page.mouse.click(Math.round(b.x + 30), Math.round(b.y + b.height / 2), { button: 'right' }); }
+        await sleep(150);
+        check(name + way(touch) + ' on a moderator\'s row opens nothing', !(await sheetUp(page)) && (touch || (await page.evaluate(() => window.__ctx.every((x) => x === false)))));
+        await context.close();
+    }
+    // ---- a person with no role: the list is as it is ----
+    for (const [size, w, h, touch] of SIZES) {
+        const name = size + ' (the list, no role): ';
+        const rig = rigs.player;
+        const { page, context } = await openList(rig, size, w, h, touch, false);
+        check(name + 'no row is marked, nothing describes the list, and the sheet was never asked for', await page.evaluate(() => !document.querySelector('#players [data-act]') && !document.querySelector('#players [aria-description]') && !document.querySelector('#players .pl-list').getAttribute('aria-describedby')) && rig.site.requests.indexOf('/home/mod.js') === -1);
+        await page.evaluate(() => { window.__ctx.length = 0; });
+        await page.locator(card(4)).scrollIntoViewIfNeeded();
+        if (touch) { const t = await holdRow(context, page, card(4), 700); await t.end(); await sleep(150); } else { const b = await page.locator(card(4)).boundingBox(); await page.mouse.click(Math.round(b.x + 30), Math.round(b.y + b.height / 2), { button: 'right' }); await sleep(150); }
+        check(name + (touch ? 'a long press' : 'a right click') + ' on a row is the browser\'s own: no sheet, nothing held back', !(await sheetUp(page)) && (await page.evaluate(() => window.__buzz.length === 0 && window.__ctx.every((x) => x === false))));
         await context.close();
     }
 

@@ -357,8 +357,8 @@
   {
    "id": "a_list_that_comes_late_is_not_inert",
    "file": "web/home/home.js",
-   "old": "page: page }); inert(held); var c = ",
-   "new": "page: page }); var c = ",
+   "old": "page: page }); meet(); inert(held); var c = ",
+   "new": "page: page }); meet(); var c = ",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -842,6 +842,55 @@
    "file": "web/home/players.js",
    "old": "if (!doc.hidden && !timers.poll) { sync(); clock(); }",
    "new": "if (false) { sync(); clock(); }",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_row_has_no_number_for_the_sheet",
+   "file": "web/home/players.js",
+   "old": "if (!o.you) li.setAttribute('data-i', String(row.id));",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_visitors_own_place_has_a_number",
+   "file": "web/home/players.js",
+   "old": "if (!o.you) li.setAttribute('data-i', String(row.id));",
+   "new": "li.setAttribute('data-i', String(row.id));",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_sheet_may_act_on_the_visitor",
+   "file": "web/home/players.js",
+   "old": "return row && i !== me ? {",
+   "new": "return row ? {",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_sheet_is_never_told_the_list_was_drawn",
+   "file": "web/home/players.js",
+   "old": "            told();\n        }\n        function told()",
+   "new": "        }\n        function told()",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_sheet_is_told_when_nothing_was_drawn",
+   "file": "web/home/players.js",
+   "old": "if (sig === painted) return;",
+   "new": "if (sig === painted) { told(); return; }",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "where_leaves_out_the_group",
+   "file": "web/home/players.js",
+   "old": "return meta ? WORD[row.at] + ' · ' + meta : WORD[row.at];",
+   "new": "return meta ? meta : WORD[row.at];",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_person_is_found_by_any_value",
+   "file": "web/home/players.js",
+   "old": "var row = whole(i, 0, LIMIT.ids) && live && supported ? model.rows[i] : null;",
+   "new": "var row = live && supported ? model.rows[i] : null;",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]
