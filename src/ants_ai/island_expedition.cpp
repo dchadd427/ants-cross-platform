@@ -458,6 +458,8 @@ bool ExpeditionTask::intact_row(const TaskContext& c, size_t gi) const {
     const BotView& v = c.view;
     const TokenGroup& g = islands_->info().token_groups()[gi];
     if (gi < claimed_.size() && claimed_[gi] != 0 && v.tick() < params_.rows_idle_after) return false;
+    const auto blocked = foot_blocked_.find(static_cast<int32_t>(gi));
+    if (blocked != foot_blocked_.end() && v.tick() < blocked->second) return false;
     uint32_t start = 0;
     uint32_t there = 0;
     for (const uint32_t m : g.members) {
@@ -476,12 +478,19 @@ bool ExpeditionTask::intact_row(const TaskContext& c, size_t gi) const {
     return true;
 }
 
-// From tick `rows_after` on: a row other than the one that is worked now has all its Swimmers (see intact_row)
+// From tick `rows_after` on: a row other than the one that is worked now has all its Swimmers (see intact_row). A row that is worked on foot counts as long as a Swimmer lies in it: the crew has begun
+// it, so it is no longer whole, and without it the bot would want the level's Swimmers again, the row would be over at the next look and planned again at the one after
 bool ExpeditionTask::rows_open(const TaskContext& c) const {
     if (params_.rows_after == 0 || tactics_.flower_links.empty() || c.view.tick() < params_.rows_after || c.view.ticks_left() < params_.min_ticks_left || islands_->info().empty()) return false;       // (no links: not ISLANDS, where the strips and the corner rows are)
     const std::vector<TokenGroup>& groups = islands_->info().token_groups();
     for (size_t gi = 0; gi < groups.size(); ++gi) {
-        if (!route_.empty() && static_cast<int32_t>(gi) == group_) continue;
+        if (!route_.empty() && static_cast<int32_t>(gi) == group_) {
+            for (const sim::TileCoord t : row_) {
+                const PowerUpView* p = foot_ ? c.view.powerup_at(t) : nullptr;
+                if (p != nullptr && p->kind == sim::AntType::Swimmer) return true;
+            }
+            continue;
+        }
         if (intact_row(c, gi)) return true;
     }
     return false;
@@ -1099,6 +1108,17 @@ void ExpeditionTask::drive_row(TaskContext& c) {
     stations(c, st);
     const sim::TileCoord park = st.park;
     const sim::TileCoord leave = st.leave;
+    if (foot_) {                                                                                     // an ant that is still on its way (farther than the stations from the row) and says "Can't go there.": no way for the engine where the analysis found one; the row is left alone for a while
+        for (const uint32_t ant : crew_) {
+            const AntView* a = find_ant(v.mine(), ant);
+            if (a == nullptr || a->state != sim::UnitState::CantGo || row_ant_.count(ant) != 0 || chained_.count(ant) != 0 || st.steps_of(grid, a->tile) < 99) continue;
+            foot_blocked_[group_] = now + params_.foot_block_ticks;
+            ++foot_blocks_;
+            release_all(c);
+            retry_at_ = now + 100u;
+            return;
+        }
+    }
     const bool timed = chains_now();
     const bool out_chains = exit_chains();
     if (stage_ant_ != 0 && (now > stage_since_ + 300 || crew_.count(stage_ant_) == 0)) stage_ant_ = 0;      // (the ant that was sent to the tile in front of the row did not get there, or is gone)

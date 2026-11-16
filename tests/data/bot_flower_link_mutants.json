@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the flower link and the swarm (include/ants_ai/island_link.hpp, island_swarm.hpp, island_expedition.hpp; src/ants_ai/island_link.cpp, island_swarm.cpp, island_expedition.cpp, standard_tasks_powerup.cpp; docs/BOTS.md 'The swarm') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_flower_link_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs all the cases of the batch (AI44).",
+ "note": "Mutants of the flower link and the swarm (include/ants_ai/island_link.hpp, island_swarm.hpp, island_expedition.hpp; src/ants_ai/island_link.cpp, island_swarm.cpp, island_expedition.cpp, standard_tasks_powerup.cpp; docs/BOTS.md 'The swarm') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_flower_link_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs all the cases of the batch (AI44). The rules of the claim filter (which row may be taken from a seat that plays) are AI44.14 to AI44.16; the row that the engine will not let an ant walk to is AI44.21.",
  "defaults": {
   "build": "test_ai"
  },
@@ -111,6 +111,86 @@
    "new": "if (skip_contest || (link_drop && false) || e.holding",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI44.7 ' ./build/tests/test_ai/test_ai",
    "expect": "AI44.7"
+  },
+  {
+   "id": "empty_seat_claims_a_row",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "if (t == c.seat || !row.present || row.dropped || !hill.present) continue;",
+   "new": "if (t == c.seat || (!row.present && false)) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI44.14 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI44.14"
+  },
+  {
+   "id": "row_that_is_begun_is_taken",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "if (start == 0 || there != start) return false;",
+   "new": "if (start == 0 || there == 0) return false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI44.15 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI44.15"
+  },
+  {
+   "id": "enemy_beside_a_row_is_not_seen",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "if (o.tile.chebyshev_dist(c.map.powerups()[m].tile) <= 8) return false;",
+   "new": "if (o.tile.chebyshev_dist(c.map.powerups()[m].tile) <= -1) return false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI44.16 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI44.16"
+  },
+  {
+   "id": "enemy_radius_seven",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "if (o.tile.chebyshev_dist(c.map.powerups()[m].tile) <= 8) return false;",
+   "new": "if (o.tile.chebyshev_dist(c.map.powerups()[m].tile) <= 7) return false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI44.16 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI44.16"
+  },
+  {
+   "id": "enemy_radius_nine",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "if (o.tile.chebyshev_dist(c.map.powerups()[m].tile) <= 8) return false;",
+   "new": "if (o.tile.chebyshev_dist(c.map.powerups()[m].tile) <= 9) return false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI44.16 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI44.16"
+  },
+  {
+   "id": "worked_row_not_counted",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "const PowerUpView* p = foot_ ? c.view.powerup_at(t) : nullptr;",
+   "new": "const PowerUpView* p = (foot_ && false) ? c.view.powerup_at(t) : nullptr;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI44.17 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI44.17"
+  },
+  {
+   "id": "swarm_keeps_ants_when_enough",
+   "file": "src/ants_ai/island_swarm.cpp",
+   "old": "if (swimmers >= want || v.ticks_left() < params_.min_ticks_left) {",
+   "new": "if (v.ticks_left() < params_.min_ticks_left) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI44.18 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI44.18"
+  },
+  {
+   "id": "swarm_sends_a_carrier",
+   "file": "src/ants_ai/island_swarm.cpp",
+   "old": "if (a.holding || a.carried_points > 0 || a.hp < plan.island_swarm_hp || !a.takes_orders() || !grid.in_bounds(a.tile)) continue;",
+   "new": "if (a.hp < plan.island_swarm_hp || !a.takes_orders() || !grid.in_bounds(a.tile)) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI44.19 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI44.19"
+  },
+  {
+   "id": "spares_held_until_the_row_is_done",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "if (params_.release_spares && chains_now()) release_spares(c);",
+   "new": "if (false) release_spares(c);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI44.20 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI44.20"
+  },
+  {
+   "id": "cant_go_on_the_way_is_ignored",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "if (a == nullptr || a->state != sim::UnitState::CantGo || row_ant_.count(ant) != 0",
+   "new": "if (a == nullptr || a->state != sim::UnitState::CantGo || a->hp > 0 || row_ant_.count(ant) != 0",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI44.21 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI44.21"
   }
  ]
 }

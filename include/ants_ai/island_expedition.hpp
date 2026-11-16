@@ -57,6 +57,7 @@ public:
         uint32_t rows_idle_after{2400};      // a row that a seat which plays would go for (the nearest to its hill) counts as nobody's only from this tick on (a player who does not play); the rows of seats that do not play, at once
         uint32_t foot_hp{3};                 // an ant that goes for a row on foot has at least this many hit points (a walk costs none; the swarm's number)
         uint32_t foot_walk_ticks{1500};      // ... and is at most this far from the end of the row by the walk
+        uint32_t foot_block_ticks{3000};     // a row on foot that an ant far from it answers with "Can't go there." (the engine finds no way where the map analysis does) is left alone this long
         uint32_t chain_misses_max{2};        // chains in a row that missed (the ant took a hat, or stood still with nothing taken) before the row goes back to one ant for every hat; a Swimmer taken by a chain ends the run
     };
 
@@ -86,6 +87,8 @@ public:
     /// A row is being worked on foot (see "on foot" above), and how many were planned that way
     bool on_foot() const noexcept { return foot_ && !route_.empty(); }
     uint32_t foot_rows() const noexcept { return foot_rows_; }
+    /// Rows on foot that were given up because a crew ant on its way to the row said "Can't go there."
+    uint32_t foot_blocks() const noexcept { return foot_blocks_; }
     /// The islands of the route (the hill's first, the island with the row last), the row (IslandInfo::token_groups index) and the end of it that the crew goes in at; -1 when none
     const std::vector<int32_t>& route() const noexcept { return route_; }
     int32_t group() const noexcept { return group_; }
@@ -190,6 +193,8 @@ private:
     bool rows_open_{false};                  // swarm: a row that nobody works is left, from tick rows_after on (set at every look)
     bool foot_{false};                       // the row that is worked now is worked on foot: the crew was not flown, it walks to the end of the row
     uint32_t foot_rows_{0};
+    uint32_t foot_blocks_{0};
+    std::map<int32_t, uint64_t> foot_blocked_;   // token group -> the tick until which no row on foot is planned there
     std::vector<uint8_t> claimed_;           // by token group: it is the row that another seat which plays would go for (the nearest to its hill)
     int32_t hill_comp_{-1};
     uint32_t gap_{0};                        // the ticks before a second order to one ant: the latency of the level and 20 (set at every look)

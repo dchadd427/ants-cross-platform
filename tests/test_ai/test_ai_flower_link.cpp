@@ -6,6 +6,7 @@
 
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
+#include "island_fixture.hpp"
 #include "ants_ai/standard_bot.hpp"
 #include "ants_sim/movement_tables.hpp"
 
@@ -19,8 +20,9 @@ struct Lab {
     sim::SimulationEngine sim;
     std::unique_ptr<RecordingSink> sink;
     std::unique_ptr<BotController> ctl;
+    uint8_t seat_{0};
 
-    explicit Lab(const std::function<void(LevelPlan&)>& tweak, const char* map = "ISLANDS", uint8_t roster = 0x01) {
+    explicit Lab(const std::function<void(LevelPlan&)>& tweak, const char* map = "ISLANDS", uint8_t roster = 0x01, uint8_t seat = 0) : seat_(seat) {
         start_match(sim, map, 1, roster);
         sink = std::make_unique<RecordingSink>(sim, true);
         ctl = std::make_unique<BotController>(sim, 1);
@@ -32,7 +34,7 @@ struct Lab {
         plan.island_swarm_rows = 0;                                                             // (a test of the rows on foot says so)
         if (tweak) tweak(plan);
         BotSpec spec;
-        spec.seat = 0;
+        spec.seat = seat;
         spec.kind = "standard";
         spec.level = Level::Hard;
         std::string why;
@@ -46,7 +48,7 @@ struct Lab {
             sim.clear_audio_events();
         }
     }
-    StandardBot* bot() { return dynamic_cast<StandardBot*>(ctl->bot(0)); }
+    StandardBot* bot() { return dynamic_cast<StandardBot*>(ctl->bot(seat_)); }
     const sim::AntSnapshot* ant(uint32_t id) const {
         for (const auto& a : sim.get_world_state().ants) {
             if (a.id == id) return &a;
@@ -64,9 +66,9 @@ const TileCoord kStrip{27, 4};           // a tile of the top strip
 bool on_strip(const sim::AntSnapshot* a) { return a != nullptr && a->tile_x >= 24 && a->tile_y <= 6; }
 
 /// The tiles of the corner rows of ISLANDS (the groups of seven tokens), found on a fresh engine before anything is taken
-std::vector<std::vector<TileCoord>> row_tiles(sim::SimulationEngine& sim) {
+std::vector<std::vector<TileCoord>> row_tiles(sim::SimulationEngine& sim, uint8_t team = 0) {
     const MapInfo map(sim);
-    const IslandInfo info = IslandInfo::analyse(map, sim.grid(), 0);
+    const IslandInfo info = IslandInfo::analyse(map, sim.grid(), team);
     std::vector<std::vector<TileCoord>> out;
     for (const TokenGroup& g : info.token_groups()) {
         if (g.members.size() < 7) continue;
@@ -263,7 +265,9 @@ void run_flower_link_tests() {
             Lab lab([after](LevelPlan& p) { p.island_expedition = true; p.island_swarm_rows = after; });
             const auto tiles = row_tiles(lab.sim);
             ASSERT_EQ(tiles.size(), 4u);
-            lab.run(6000);
+            lab.run(2000);
+            ASSERT_EQ(lab.bot()->expedition().foot_rows() >= 1u, after != 0u);                  // (the row of an empty seat is nobody's from `island_swarm_rows`, not from `island_swarm_idle`)
+            lab.run(4000);
             const std::vector<uint32_t> rows = swimmers_in_rows(lab.sim, tiles);
             uint32_t left = 0;
             for (const uint32_t n : rows) left += n;
@@ -301,5 +305,128 @@ void run_flower_link_tests() {
         lab.run(3000);
         ASSERT_EQ(lab.bot()->expedition().foot_rows(), 0u);
         ASSERT_EQ(lab.bot()->swarm().sent(), 0u);
+    } TEST_END();
+
+    TEST_CASE("AI44.14 A Seat That Is Not In The Roster Has No Row Of Its Own, Whichever Seat The Bot Has (One Hard Bot On Seat 2, The Other Seats Empty): The Other Row Of The West Half Is Under Way By Tick 2,000, Long Before `island_swarm_idle`")
+    {
+        Lab lab([](LevelPlan& p) { p.island_expedition = true; p.island_swarm_rows = 1300; }, "ISLANDS", 0x04, 2);
+        lab.run(2000);
+        ASSERT_TRUE(lab.bot()->expedition().foot_rows() >= 1u);
+    } TEST_END();
+
+    TEST_CASE("AI44.15 A Row That Somebody Has Begun Is Left Alone (One Hard Bot On Seat 0; At Tick 10 One Swimmer Of The Bottom Row Of The West Half Is Gone): No Row Is Taken On Foot In 4,000 Ticks And The Two Swimmers Are There")
+    {
+        Lab lab([](LevelPlan& p) { p.island_expedition = true; p.island_swarm_rows = 1300; });
+        const auto tiles = row_tiles(lab.sim);
+        ASSERT_EQ(tiles.size(), 4u);
+        const std::vector<TileCoord>& row = tiles[2];                                           // (the rows come in the order of IslandInfo::token_groups: (3, 1), (56, 1), (0, 56), (59, 56))
+        ASSERT_TRUE(row.front().x == 0 && row.front().y == 56);
+        lab.run(10);
+        for (const TileCoord t : row) {
+            if (lab.sim.grid().get_powerup_type(t) != 5) continue;
+            lab.sim.grid_mut().clear_powerup(t.x, t.y);
+            break;
+        }
+        lab.run(4000);
+        ASSERT_EQ(lab.bot()->expedition().foot_rows(), 0u);
+        ASSERT_EQ(swimmers_in_rows(lab.sim, tiles)[2], 2u);
+    } TEST_END();
+
+    TEST_CASE("AI44.16 An Enemy Ant Within Eight Tiles Of A Row Means That Somebody Works It (One Hard Bot On Seat 0, Seat 1 In The Roster; An Enemy Worker Eight Tiles From The First Token Of The Bottom Row Of The West Half): No Row On Foot; With Nine Tiles The Row Is Taken")
+    {
+        for (const int gap : {8, 9}) {
+            Lab lab([](LevelPlan& p) { p.island_expedition = true; p.island_swarm_rows = 1300; }, "ISLANDS", 0x03);
+            const auto tiles = row_tiles(lab.sim);
+            ASSERT_EQ(tiles.size(), 4u);
+            lab.sim.spawn_unit(1, sim::AntType::Worker, TileCoord{tiles[2].front().x, tiles[2].front().y - gap});
+            lab.run(4000);
+            ASSERT_EQ(lab.bot()->expedition().foot_rows() >= 1u, gap == 9);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI44.17 The Last Row That Nobody Works Is Worked Once, Not Planned Again At Every Second Look (One Hard Bot On Seat 0; Enemy Workers Beside The Two Rows Of The East Half, So That Only The Bottom Row Of The West Half Is Open, And Two Plain Workers On The West Half): At Most Three Rows On Foot In 6,000 Ticks And At Least One Swimmer Of That Row Is Gone")
+    {
+        Lab lab([](LevelPlan& p) { p.island_expedition = true; p.island_swarm_rows = 1300; }, "ISLANDS", 0x03);
+        const auto tiles = row_tiles(lab.sim);
+        ASSERT_EQ(tiles.size(), 4u);
+        lab.sim.spawn_unit(1, sim::AntType::Worker, TileCoord{tiles[1].front().x - 4, tiles[1].front().y + 1});
+        lab.sim.spawn_unit(1, sim::AntType::Worker, TileCoord{tiles[3].front().x - 3, tiles[3].front().y - 4});
+        lab.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{1, 30});                           // (two plain ants on the west half: the Fire that the bot wants takes the crew's spare)
+        lab.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{1, 31});
+        lab.run(6000);
+        ASSERT_TRUE(lab.bot()->expedition().foot_rows() >= 1u);
+        ASSERT_TRUE(lab.bot()->expedition().foot_rows() <= 3u);
+        ASSERT_TRUE(swimmers_in_rows(lab.sim, tiles)[2] <= 2u);
+    } TEST_END();
+
+    TEST_CASE("AI44.18 The Ants At The Strips Go Free When The Bot Has The Swimmers It Wants (`island_swarm_swimmers` 4, Three Swimmers, A Worker That Waits At The Strip): A Fourth Swimmer Frees The Worker, And It Takes No Drop After That")
+    {
+        Lab lab([](LevelPlan& p) { p.island_swarm_swimmers = 4; p.island_ferry = false; });
+        for (int i = 0; i < 3; ++i) lab.sim.spawn_unit(0, sim::AntType::Swimmer, TileCoord{10 + i, 4});
+        const uint32_t worker = lab.sim.spawn_unit(0, sim::AntType::Worker, kRing);
+        lab.run(700);
+        ASSERT_EQ(lab.bot()->swarm().staged(), 1u);
+        lab.sim.spawn_unit(0, sim::AntType::Swimmer, TileCoord{13, 4});
+        lab.run(60);
+        ASSERT_EQ(lab.bot()->swarm().staged(), 0u);
+        lab.sim.grid_mut().place_powerup(kDrop.x, kDrop.y, 5);
+        lab.run(400);
+        ASSERT_TRUE(lab.ant(worker)->raw_type == sim::AntType::Worker);
+    } TEST_END();
+
+    TEST_CASE("AI44.19 An Ant That Carries Food Is Not Sent To The Strip (A Whole Worker Digs The Way, A Worker With Food Stands Beside It): The Whole One Is At The Strip, The Carrier Is Not")
+    {
+        Lab lab({});
+        lab.sim.spawn_unit(0, sim::AntType::Swimmer, TileCoord{19, 6});
+        lab.sim.spawn_unit(0, sim::AntType::Worker, kRing);
+        const uint32_t carrier = lab.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{19, 5});
+        lab.sim.get_unit(carrier).pick_up_food();
+        lab.run(700);
+        ASSERT_TRUE(lab.bridge_at(kBridge));
+        ASSERT_TRUE(lab.ant(carrier) != nullptr);
+        ASSERT_TRUE(!on_strip(lab.ant(carrier)));
+    } TEST_END();
+
+    TEST_CASE("AI44.20 The Crew's Spares Go Free While The Row Is Still Being Worked (One Hard Bot, The Expedition On): At Tick 1,100 Two Swimmers Are Taken, The Third Is Still To Come, And Fewer Than Three Of The Crew Are Held")
+    {
+        Lab lab([](LevelPlan& p) { p.island_expedition = true; });
+        lab.run(1100);
+        const ExpeditionTask& e = lab.bot()->expedition();
+        ASSERT_TRUE(e.active());
+        ASSERT_EQ(e.swimmers_taken(), 2u);
+        ASSERT_TRUE(e.crew_size() < 3u);                                                        // (the ant for the third Swimmer and one spare: the others went to the swarm)
+    } TEST_END();
+
+    TEST_CASE("AI44.21 A Row On Foot That An Ant On Its Way Answers With \"Can't Go There.\" Is Left Alone (Three Hard Bots On Seats 0 To 2 As The Arena Plays Them, Seed 1): No Ant Is Told To Walk To One Tile Beside A Row More Than Ten Times In 3,000 Ticks, And A Row Or Two Were Given Up, Not Every Second Look")
+    {
+        island_test::Match m;
+        m.expedition = true;
+        m.ferry = true;
+        m.builders = 0;
+        m.styled = true;
+        m.latency = 3;
+        m.init("ISLANDS", 1, 0x07, Level::Hard, 0, [](LevelPlan& p) { p.island_flower_link = true; p.island_crew_spare = 2; });
+        const auto rows = row_tiles(m.sim);
+        ASSERT_EQ(rows.size(), 4u);
+        m.run(3000);
+        const auto beside_a_row = [&](int x, int y) {
+            for (const std::vector<TileCoord>& row : rows) {
+                for (const TileCoord t : row) {
+                    if (std::max(std::abs(t.x - x), std::abs(t.y - y)) <= 8) return true;
+                }
+            }
+            return false;
+        };
+        std::map<std::tuple<uint8_t, uint32_t, int, int>, uint32_t> told;                       // (seat, ant, tile) -> orders
+        uint32_t most = 0;
+        for (const auto& entry : m.log()) {
+            const sim::Command& c = entry.second;
+            if (c.type != sim::CommandType::GroupMove || c.ants.size() != 1 || !beside_a_row(c.tile_x, c.tile_y)) continue;
+            most = std::max(most, ++told[std::make_tuple(c.issuer, c.ants[0], int(c.tile_x), int(c.tile_y))]);
+        }
+        ASSERT_TRUE(most <= 10u);
+        uint32_t blocks = 0;
+        for (uint8_t seat = 0; seat < 3; ++seat) blocks += m.bot(seat)->expedition().foot_blocks();
+        ASSERT_TRUE(blocks >= 1u && blocks <= 4u);                                              // (a row that was given up is not planned again for a while: with no pause it would be given up at every second look)
     } TEST_END();
 }
