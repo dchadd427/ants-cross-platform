@@ -1,5 +1,5 @@
 // OPT-IN, not part of ./run_tests.sh: the games in progress of Home's Games list in a REAL browser (Chromium through Playwright), behind a small stand-in for the site's nginx (the files of web/, a fake /lobbies and a fake
-// /live, no hub: the chat says it is offline). docs/HOME_SCREEN.md, "Games in progress". For every width (1280, 1180, 701, 700, 390, 320 and a phone held sideways, 568 x 320) it checks:
+// /live, no hub: the chat says it is offline). docs/HOME_GAMES.md, "Games in progress". For every width (1280, 1180, 701, 700, 390, 320 and a phone held sideways, 568 x 320) it checks:
 //   1. a busy list (open rooms and eight matches in progress, with long names, a name that is markup and a map of the players): the page does not scroll sideways, no row is wider than the list, every Watch is at least
 //      44 x 44 px, inside its row and not over the row's own text (nor over the box of the names), and the Games button counts the open rooms only;
 //      (and Watch stands at the row's right edge and four names of 32 characters are cut at three lines inside their box);

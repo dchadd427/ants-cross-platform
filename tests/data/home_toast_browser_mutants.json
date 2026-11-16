@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the toast of Home's notices (web/home/games.js, games.css, docs/HOME_SCREEN.md, \"Notices\") that only the opt-in real-Chromium check can see (Playwright and a Chromium, no server): run with `python3 tools/mutate.py tests/data/home_toast_browser_mutants.json --keep-going --jobs 1`; tools/mutate.py --check only proves that every old text is still in the code.",
+ "note": "Mutants of the toast of Home's notices (web/home/games.js, games.css, docs/HOME_GAMES.md, \"Notices\") that only the opt-in real-Chromium check can see (Playwright and a Chromium, no server): run with `python3 tools/mutate.py tests/data/home_toast_browser_mutants.json --keep-going --jobs 1`; tools/mutate.py --check only proves that every old text is still in the code.",
  "mutants": [
   {
    "id": "toast_motion_always",

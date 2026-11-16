@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The emoji picker and the voice button of the chat (web/home/talk.js and talk.css, docs/HOME_SCREEN.md "Emoji and voice", docs/HUB.md "Text rules", web/legal.html; run by ./run_tests.sh --fast and by the CI).
+"""The emoji picker and the voice button of the chat (web/home/talk.js and talk.css, docs/HOME_CHAT.md "Emoji and voice", docs/HUB.md "Text rules", web/legal.html; run by ./run_tests.sh --fast and by the CI).
 
 Two small buttons stand beside Send in the chat dock's form: one opens a picker of every single code point emoji of Unicode 9 that the hub keeps (tabs, search, recently used, names), one types what the person says into the field
 with the browser's own speech recognition (never sending it). They are loaded by web/home/home.js after the dock. What this file checks:
@@ -10,7 +10,7 @@ with the browser's own speech recognition (never sending it). They are loaded by
   - the loader in home.js: the two files, once, after the dock is mounted, mounted when BOTH have come, and whatever goes wrong with them stays with them;
   - the folder: its own budgets (raw and gzipped), plain ES5, no markup made from text, one guarded storage door for the recently used emoji and nothing else kept, no network, NO recording (no MediaRecorder, no getUserMedia), the kinds of element it makes;
   - the style: every target at least 44 px (the nine tabs are 44 high), nothing loaded from another site, the picker over the log above the form (nothing covers the field), its three places (a box, a row over a low window, a sheet), reduced motion;
-  - the privacy words: the button's tooltip, the Legal page and docs/HOME_SCREEN.md say who hears the voice and that the site receives and keeps no audio;
+  - the privacy words: the button's tooltip, the Legal page and docs/HOME_CHAT.md say who hears the voice and that the site receives and keeps no audio;
   - the code RUNS in node: tests/scripts/web_home_talk_check.js (the real dock, a fake speech recognition and a fake page);
   - tests/data/home_talk_mutants.json changes one thing at a time in a COPY of the files: the checks must then fail (the last class of this file; tools/mutate.py runs the same list).
 The pictures are compared by hand with the page in a real browser (tests/scripts/web_home_talk_browser.js, opt-in, `--shots DIR`).
@@ -382,7 +382,7 @@ class ThePrivacyWords(unittest.TestCase):
         self.assertIn("The voice button", page)
 
     def test_the_docs_say_the_same_and_the_hub_changes_nothing(self):
-        docs = read("docs", "HOME_SCREEN.md")
+        docs = read("docs", "HOME_CHAT.md")
         self.assertIn("Emoji and voice", docs)
         self.assertIn("speech service", docs)
         self.assertIn("web/legal.html", docs)
@@ -410,7 +410,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     copy with nothing changed must pass"""
     FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/hub_here.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/talk.js", "web/home/talk.css",
               "tests/scripts/test_web_home_talk.py", "tests/scripts/web_home_talk_check.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
-              "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html", "docs/HOME_SCREEN.md",
+              "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html", "docs/HOME_CHAT.md",
               "hub/__init__.py", "hub/text.py", "hub/limits.py"]
              + ["web/front/" + n for n in ("classic.css", "lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])
 
