@@ -22,7 +22,7 @@ class Limits:
     frame_burst: int = 10               # frames of any kind a socket may send at once ...
     frame_refill_seconds: float = 0.2   # ... then five a second
     sockets_per_address: int = 8
-    sockets_total: int = 500
+    sockets_total: int = 300            # sockets open in all. Measured with every socket stalled at the limit of `write_buffer_max` (the worst that they can hold): 300 sockets peaked at 135 MB of the process's memory, 500 at 175 to 200 MB, against the 192 MB of the container
     pending_total: int = 64             # connections that have not finished their handshake
     ping_seconds: float = 25.0
     silence_seconds: float = 60.0
@@ -31,7 +31,7 @@ class Limits:
     tick_seconds: float = 1.0
     deletions_seconds: float = 2.0      # how often the lines that the command line deleted are looked for
     purge_seconds: float = 3600.0       # how often the lines past their 7 days, or past the newest 200, are deleted
-    write_buffer_max: int = 262144      # a socket that has this much unsent is dropped (it cannot keep up): more than the largest welcome (50 lines of 4,000 bytes and their names, about 212,000 bytes), so that a reader on a slow link is not dropped for the history that it was just sent; 500 of them at the limit are 125 MiB, inside the container's 192 MiB
+    write_buffer_max: int = 262144      # a socket that has this much unsent is dropped (it cannot keep up): more than the largest welcome (50 lines of 4,000 bytes and their names, about 212,000 bytes), and 8 more lines, so that a reader on a slow link is not dropped for the history that it was just sent. The welcome and the longest list of players together (about 280,000 bytes) are more than that: a reader whose connection took none of them is dropped, and connects again. The cost of the limit is in `sockets_total`
     close_grace_seconds: float = 5.0    # a socket that was closed with output unsent is cut after this long
     identify_seconds: float = 5.0       # the login layer has this long to say who is at the other end of a handshake
     global_burst: int = 100             # lines that all accounts together may say at once (ten people who each use their burst of 10) ...

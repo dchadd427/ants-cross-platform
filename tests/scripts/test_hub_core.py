@@ -186,7 +186,7 @@ class TheLargestFrames(unittest.TestCase):
         reader = w.join(MOD if mod else None)
         return chatmod.dumps(w.chat.welcome(reader))
 
-    def test_the_largest_welcome_fits_what_a_socket_may_have_unsent_with_room_for_more_lines(self):
+    def test_the_largest_welcome_and_8_more_lines_fit_what_a_socket_may_have_unsent(self):
         biggest = 0
         for filler in (self.FOUR, '"', "\u4f60", "a"):
             for mod in (False, True):
@@ -195,7 +195,7 @@ class TheLargestFrames(unittest.TestCase):
                 biggest = max(biggest, len(frame))
         self.assertGreater(biggest, 200000)                          # (it is about 212,000 bytes: more than a socket was once let have unsent)
         line = len(chatmod.dumps({"t": "line", "id": 123456789, "at": 1800000000, "who": "\U00020000" * 32, "text": self.FOUR * 1000, "mod": True, "role": "admin", "k": "0123456789ab", "u": "x" * 32}))
-        self.assertLessEqual(biggest + 8 * line, LIMITS.write_buffer_max)        # (and the lines that come in the first moments, on a slow link, do not make it a slow reader)
+        self.assertLessEqual(biggest + 8 * line, LIMITS.write_buffer_max)        # (and 8 more lines, that come in the first moments on a slow link, do not make it a slow reader; the longest list of players, about 68,000 bytes more, is not in this sum: docs/HUB.md says so)
 
     def test_the_longest_line_fits_a_frame_of_a_client_in_either_way_of_writing_it(self):
         line = self.FOUR * 1000
@@ -447,6 +447,24 @@ class TheRules(WorldTest):
         w.say(people[4], "hello")
         self.assertEqual([p.codes() for p in people[3:]], [["rate"], ["rate", "rate"]])      # one more line, for one account
         self.assertEqual(len(w.store.recent_lines(50)), 4)
+
+    def test_ten_accounts_that_each_use_their_burst_are_not_refused_by_the_limit_of_all_accounts_and_the_101st_line_is(self):
+        people = [self.w.join(session.Identity(str(4000 + n), "user%02d" % n, False)) for n in range(11)]
+        for line in range(LIMITS.burst):
+            for person in people[:10]:
+                self.w.say(person, "line %d of %s" % (line, person.identity.name))
+        self.assertEqual([p.codes() for p in people[:10]], [[]] * 10)                  # (ten people, ten lines each, at one moment: the default limits let every one of the 100 lines go)
+        self.assertEqual(len(self.reader.kinds("line")), 100)
+        self.w.say(people[10], "the 101st")
+        self.assertEqual((people[10].codes(), people[10].strikes, people[10].charges), (["rate"], 0, 1))         # (refused as rate, and no mistake of the socket: it costs it one frame more)
+        self.w.clock.now = 1000.09                                    # (not a tenth of a second since: nothing is back)
+        self.w.say(people[10], "not yet")
+        self.assertEqual((people[10].codes(), people[10].strikes), (["rate", "rate"], 0))
+        self.w.clock.now = 1000.2                                     # (a fifth: two lines are back, ten a second)
+        for text in ("one", "two", "three"):
+            self.w.say(people[10], text)
+        self.assertEqual(people[10].codes(), ["rate", "rate", "rate"])
+        self.assertEqual([m["text"] for m in self.reader.kinds("line")][100:], ["one", "two"])
 
     def test_a_moderator_s_command_is_not_held_back_by_the_limits_of_lines(self):
         w = World(limits=dataclasses.replace(LIMITS, global_burst=1, global_refill_seconds=1000.0, db_max_bytes=1))

@@ -320,10 +320,10 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
-   "id": "sockets_total_501",
+   "id": "sockets_total_301",
    "file": "hub/limits.py",
-   "old": "sockets_total: int = 500\n",
-   "new": "sockets_total: int = 501\n",
+   "old": "sockets_total: int = 300 ",
+   "new": "sockets_total: int = 301 ",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -1480,6 +1480,27 @@
    "old": "    frame_burst: int = 10 ",
    "new": "    frame_burst: int = 5  ",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "global_burst_99",
+   "file": "hub/limits.py",
+   "old": "global_burst: int = 100 ",
+   "new": "global_burst: int = 99  ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core"
+  },
+  {
+   "id": "global_burst_the_old_50",
+   "file": "hub/limits.py",
+   "old": "global_burst: int = 100 ",
+   "new": "global_burst: int = 50  ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core"
+  },
+  {
+   "id": "global_refill_twenty_a_second",
+   "file": "hub/limits.py",
+   "old": "global_refill_seconds: float = 0.1 ",
+   "new": "global_refill_seconds: float = 0.05",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core"
   },
   {
    "id": "global_burst_101",

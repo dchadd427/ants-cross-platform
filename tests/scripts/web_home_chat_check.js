@@ -510,7 +510,7 @@ function rig(o) {
 }
 {   // the counts of the welcome, the history's own ids, the noise of one socket, the order of the ids
     const o = (online) => { const q = rig(); q.live(W({ online })); return [q.on(), one(q.root, 'gc-online').hidden]; };
-    same('the count of the welcome is a whole number or nothing (a hub that says "many", -3 or 1.5 gives no count); more than the hub\'s 500 is "500+"', [o(7), o('many'), o(-3), o(1.5), o(null), o(500), o(501), o(1e9)],
+    same('the count of the welcome is a whole number or nothing (a hub that says "many", -3 or 1.5 gives no count); more than 500 (the page\'s own clamp) is "500+"', [o(7), o('many'), o(-3), o(1.5), o(null), o(500), o(501), o(1e9)],
         [['7 here now', false], ['', true], ['', true], ['', true], ['', true], ['500 here now', false], ['500+ here now', false], ['500+ here now', false]]);
     const online = rig(); online.live(W({})); online.s().recv({ t: 'online', n: 900 });
     check('... and the same for the count that follows', online.on() === '500+ here now');
