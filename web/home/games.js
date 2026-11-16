@@ -423,12 +423,20 @@
             });
             box.appendChild(btns);
             shade.appendChild(box);
+            onBackdrop(shade, guard(function () { if (dialog === d) closeAsk(true); }));       // (as Escape: nothing is answered)
             doc.body.appendChild(shade);
             dialog = d;
             inertOthers(true, [shade]); hold(true);
             if (o.timer) d.timer = later(guard(function () { d.timer = null; if (dialog === d) closeAsk(false); }), o.timer);
             box.setAttribute('tabindex', '-1');
             (focus || box).focus();       // (a card whose only button waits has the focus itself: Escape and a screen reader's reading start there)
+        }
+        function onBackdrop(node, close) {         // a press that starts and ends on the backdrop itself closes the box as its Cancel does (a drag from inside the box, a text selection or a scroll does not)
+            var down = false, hit = false;
+            node.addEventListener('pointerdown', function (e) { down = e.target === node; hit = false; });
+            node.addEventListener('pointerup', function (e) { hit = down && e.target === node; down = false; });
+            node.addEventListener('pointercancel', function () { down = hit = false; });
+            node.addEventListener('click', function (e) { var h = hit; hit = false; if (h && e.target === node) close(); });
         }
         function ask(o, yes) {                             // o: { title, line, row, best, yes (the words of the button), stay (the words of the other) }: the answer that changes nothing has the focus
             card({ title: o.title, lines: [o.line], row: o.row, best: o.best, opener: o.opener, acts: [{ text: o.yes, cls: 'gyes', run: yes }, { text: o.stay || TEXT.stay, cls: 'gstay', back: true }], focus: 1 });
@@ -851,7 +859,7 @@
         poll();
         pollLive();
         return {
-            sync: guard(sync), shown: guard(shown), leaving: leaving, opening: opening, stalled: stalled, inert: inert, poll: poll,
+            sync: guard(sync), shown: guard(shown), leaving: leaving, said: guard(function (words) { notice('left', words, '', []); }), opening: opening, stalled: stalled, inert: inert, poll: poll,
             state: function () { return { rows: rows, loaded: loaded, off: off, failures: failures, open: isOpen, pending: !!pending, joining: joining, notice: noticeKind, live: live, liveOff: liveOff, liveLoaded: liveLoaded, showLive: showLive }; }
         };
     }

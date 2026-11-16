@@ -176,7 +176,8 @@
     .plan-short { display: none; }
 
     /* ---- footer ---- */
-    .bar { margin: 18px 0 0; padding: 12px 30px 14px; color: var(--cream); font-size: 14px; background: linear-gradient(180deg, #2b685f, #2b6b4f); border-top: 3px solid var(--frame-hi); box-shadow: inset 0 3px 0 var(--frame-lo); position: relative; z-index: 2; }
+    /* the site footer is not drawn on either screen (the Room has the recording notice under START, and the Menu has the links, the numbers and the version: web/home/home.js reads them from the markup below) */
+    .bar { display: none; margin: 18px 0 0; padding: 12px 30px 14px; color: var(--cream); font-size: 14px; background: linear-gradient(180deg, #2b685f, #2b6b4f); border-top: 3px solid var(--frame-hi); box-shadow: inset 0 3px 0 var(--frame-lo); position: relative; z-index: 2; }
     .bar-in { max-width: 1220px; margin: 0 auto; display: grid; gap: 6px; }
     .bar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 22px; }
     .bar a, .bar button.lnk { text-decoration: none; padding: 2px 4px; background: none; border: 0; cursor: pointer; color: inherit; }
@@ -262,7 +263,8 @@
     /* the line of numbers flows as one text, as the phone picture draws it ("... 5 players online · 31 games / played (5 today)"): the dot that joins the two parts keeps a no-break space before it (a line never begins with it) and a space after it */
     #stats-played::before { content: "\00a0\00b7\0020"; }
     #stats-played:empty { display: none; }
-    .bar .notice { font-size: 13px; color: #cfe3da; max-width: 90ch; } .bar .coffee { margin: 6px 0 0; text-align: center; } .bar .coffee a { display: inline-block; padding: 0; } .bar .coffee img { display: block; width: 217px; max-width: 100%; height: auto; border-radius: 6px; }                      /* the recording notice, for a visitor who is not asked for a name */
+    .room-notice { margin: 0 0 18px; font-size: 13px; line-height: 1.35; color: var(--ink); max-width: 90ch; }       /* (the recording notice of the Room, under START) */
+    .bar .coffee { margin: 6px 0 0; text-align: center; } .bar .coffee a { display: inline-block; padding: 0; } .bar .coffee img { display: block; width: 217px; max-width: 100%; height: auto; border-radius: 6px; }                      /* the recording notice, for a visitor who is not asked for a name */
     .name-step-notice { margin-top: 8px; }
     .live.on { background: #44e08a; box-shadow: 0 0 0 1px #000, 0 0 7px rgba(68, 224, 138, .8); }
 
@@ -311,13 +313,13 @@
                 <p class="plan"><span class="plan-long" id="plan"></span><span class="plan-short" id="plan-short"></span></p>
                 <p class="start-note" id="start-note" role="status" hidden></p>
             </div>
+            <p class="room-notice" id="room-notice">Online matches are recorded. Recordings are kept for 30 days. Results and names are kept for good and are public.</p>
         </aside>
     </div>
 </main>
 
 <footer class="bar" id="footer-bar"><div class="bar-in">
     <p class="stats" id="stats" hidden><i class="live" id="stats-dot" aria-hidden="true"></i><span id="stats-live"></span><span id="stats-played"></span></p>
-    <p class="notice" id="footer-notice">Online matches are recorded. Recordings are kept for 30 days. Results and names are kept for good and are public.</p>
     <div class="bar-row"><span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span>&#8197;<span id="game-build-date">(@@BUILD_DATE@@)</span></span></span></span>
     <nav aria-label="Footer links"><button class="lnk" type="button" id="how-open">How it works</button><a href="/matches" id="watch-link">Matches</a><a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a><a href="/changelog" target="_blank" rel="noopener noreferrer">Changelog</a><a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a><a href="/legal" target="_blank" rel="noopener noreferrer">Legal</a></nav></div>
 <p class="coffee"><a href="https://www.buymeacoffee.com/dchadd" target="_blank" rel="noopener noreferrer"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="217" height="61" crossorigin="anonymous" loading="lazy"></a></p></div></footer>
@@ -1214,7 +1216,14 @@
         function closeHow() { $('how').hidden = true; inert(false); if (howOpener && howOpener.focus) howOpener.focus(); }
         $('how-open').addEventListener('click', openHow);
         $('how-close').addEventListener('click', closeHow);
-        $('how').addEventListener('click', function (e) { if (e.target === $('how')) closeHow(); });
+        function onBackdrop(node, close) {         // a press that starts and ends on the backdrop itself closes the box as its Cancel does (a drag from inside the box, a text selection or a scroll does not)
+            var down = false, hit = false;
+            node.addEventListener('pointerdown', function (e) { down = e.target === node; hit = false; });
+            node.addEventListener('pointerup', function (e) { hit = down && e.target === node; down = false; });
+            node.addEventListener('pointercancel', function () { down = hit = false; });
+            node.addEventListener('click', function (e) { var h = hit; hit = false; if (h && e.target === node) close(); });
+        }
+        onBackdrop($('how'), closeHow);
 
         // ---- the page comes and goes ----
         window.addEventListener('pageshow', function (e) { if (e && e.persisted) window.location.reload(); });       // (Back from the match: the room is the match's now, this page makes another)

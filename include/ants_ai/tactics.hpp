@@ -104,6 +104,13 @@ struct LevelPlan {
     uint32_t deny_one_percent{150};      // ... one enemy
     int32_t reserve_threat_tiles{6};     // a reserve pile with an enemy ant this near it counts like a pile that several enemies want
     bool deny_fade{true};                // the weights fade to nothing as the match runs out
+    bool skip_hopeless{false};           // (Medium, Hard) a pile of the class Hopeless (another team's hill is far nearer: it is eaten before the ants arrive) is left alone while any other pile has food (HarvestTask::Params::skip_hopeless; the ablation `--tune nohope=0`)
+    // bombs on the way (docs/BOTS.md, "Bombs on the way"; src/ants_ai/bomb_detour.cpp): a bomb of another team is seen on every screen, and the engine's walk goes straight over it
+    uint8_t bomb_detour{0};              // an order whose walk would cross a visible bomb of another team goes round it first (one waypoint, the order given again on arrival): 0 never (Easy), 1 the economy walks, the power-up trips and the
+                                         // fights (Medium), 2 also the raids, the mine trips and the way home of a carrier (Hard); the ablation `--tune det=0`
+    uint32_t detour_extra_percent{100};  // ... a detour that makes the walk more than this percentage longer is not taken (the walk goes on over the bomb: a blast costs about 100 ticks, a stun and 2 hit points)
+    bool bomb_route{false};              // (Medium, Hard) a Bomber defuses the bomb it can reach without crossing another, nearest to itself, from a side tile that holds no bomb; and a bomb that shuts one of the seat's busy routes is
+                                         // defused on any ground when no detour is left or the detour is much longer (BombTask::route_pick); the ablation `--tune broute=0`
     bool fire_aware{true};               // a pile with a fire wall near it is asked again with the map as it is now: no ant is sent into fire (HarvestTask::Params::fire_aware)
     bool gate{false};                    // (Hard) every carrier is guided at the hill's gate by hand (GateTask: "guiding for eating"): 55 to 65 ticks per deposit instead of 93 to 116
     uint32_t gate_latency{9};            // ticks between a decision and the order's arrival (the profile's reaction delay less its jitter, and the sink)
@@ -295,6 +302,8 @@ struct LevelPlan {
     bool island_ferry_reorder{false};    // a Swimmer that a blast or a blow stopped (its hit points fell, it stands idle) is sent to a pile again at once, a hit carrier is sent home soon (FerryTask::reorder_hurt; `--tune ireorder=0`: off)
     bool island_timed_row{false};        // (Hard) the crew takes a Swimmer behind the Fire hats of a corner row with timed clicks, one ant for every Swimmer (`--tune itimed=0`: one ant for every hat, as before)
     bool island_fly_on{true};            // the Bomber of an expedition's leg flies on after the crew (`--tune ifly=0`: it stays behind and every island of the route needs a Bomber to take, as before; the quicker hops stay)
+    bool island_mine_reach{false};       // (Hard) a mine is laid by a Bomber that can walk to its tile: a Bomber on another island is not sent (it stood where it was and was not free for the flight to the ring pile; `--tune imreach=0`: off)
+    bool island_walker_bridge{false};    // (Hard) the walkers eat over bridges: a Swimmer digs the chain from the hill to a pile only while a free ant has no pile and the plan has a chain, and goes back to the ferry when it is dug (`--tune iwb=1`)
     bool island_flower_link{false};      // (Hard) a ferry Swimmer digs the one or two tiles from the ring half where the crew landed to a flower strip, and renews them while an ant waits to cross; an idle plain ant on the ring half walks over and takes the Swimmer drops (`--tune iflink=0`: off)
     uint32_t island_flower_swimmers{0};  // ... Swimmers that the flower link wants beyond island_swimmers (`--tune iflower=N`)
     bool island_flower_thief{false};     // ... the ant that waits at the strip also takes a Thief drop and holds it (nothing uses a Thief there yet; `--tune ifthief=1`)

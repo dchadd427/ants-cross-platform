@@ -36,6 +36,7 @@
 #include <map>
 #include <tuple>
 
+#include "ants_ai/bomb_detour.hpp"
 #include "ants_ai/bot.hpp"
 #include "ants_ai/brawl_task.hpp"
 #include "ants_ai/field_task.hpp"
@@ -115,6 +116,8 @@ public:
     const WallTask& walls() const noexcept { return walls_; }
     const PowerUpTask& powerups() const noexcept { return powerups_; }
     const BombTask& bombs() const noexcept { return bombs_; }
+    /// The walk round the bombs of other teams (BombDetour): its counters, for the tests
+    const BombDetour& detour() const noexcept { return detour_; }
     const MineTask& mines() const noexcept { return mines_; }
     const RaidTask& raids() const noexcept { return raids_; }
     const GuardTask& guard() const noexcept { return guard_; }
@@ -209,7 +212,8 @@ private:
     static IslandTask::Params island_params(const LevelPlan& plan) {
         IslandTask::Params p;
         p.swimmers = plan.island_swimmers;
-        p.builders = plan.island_builders;
+        p.builders = plan.island_walker_bridge ? std::max<uint32_t>(plan.island_builders, 1u) : plan.island_builders;
+        p.walker_bridge = plan.island_walker_bridge;
         p.bridge_ants = plan.island_bridge_ants;
         p.guard = plan.island_guard;
         // the margins grow with the latency of the level (Easy looks every 100 ticks and reacts after 60): its bridges are given up earlier and its ants kept away from them longer
@@ -289,6 +293,7 @@ private:
         p.deny_one_percent = plan.deny_one_percent;
         p.reserve_threat_tiles = plan.reserve_threat_tiles;
         p.deny_fade = plan.deny_fade;
+        p.skip_hopeless = plan.skip_hopeless;
         return p;
     }
 
@@ -299,6 +304,7 @@ private:
     std::function<void(LevelPlan&)> tune_;
     uint8_t seat_{0};
     Profile profile_{};
+    void on_proposed(const sim::Command& command, Fate fate, uint64_t tick);        // on_command for a command as a task proposed it (the detour's waypoints are translated back)
     const MapInfo* map_{nullptr};
     AntLedger ledger_;
     Tactics tactics_;
@@ -308,6 +314,7 @@ private:
     WallTask walls_;
     PowerUpTask powerups_;
     BombTask bombs_;
+    BombDetour detour_;
     MineTask mines_;
     RaidTask raids_;
     GuardTask guard_;

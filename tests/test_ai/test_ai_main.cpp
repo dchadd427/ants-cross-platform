@@ -34,6 +34,7 @@ int main() {
     run_merge_tests();
     run_cantgo_tests();
     run_reach_tests();
+    run_bombs_tests();
     run_flower_tests();
     run_war_tests();
     run_stand_tests();

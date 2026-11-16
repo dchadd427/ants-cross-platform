@@ -358,7 +358,14 @@
         }
 
         // ---- boxes (the account menu's Change password, the Users page's questions): one at a time, the page behind is inert, Escape and Tab stay in it ----
-        function openModal(title, nodes, foot, focusNode) {
+        function onBackdrop(node, close) {         // a press that starts and ends on the backdrop itself closes the box as its Cancel does (a drag from inside the box, a text selection or a scroll does not)
+            var down = false, hit = false;
+            node.addEventListener('pointerdown', function (e) { down = e.target === node; hit = false; });
+            node.addEventListener('pointerup', function (e) { hit = down && e.target === node; down = false; });
+            node.addEventListener('pointercancel', function () { down = hit = false; });
+            node.addEventListener('click', function (e) { var h = hit; hit = false; if (h && e.target === node) close(); });
+        }
+        function openModal(title, nodes, foot, focusNode, sticky) {
             closeModal();
             var scrim = el('div', 'scrim');
             var dlg = el('div', 'dlg');
@@ -373,6 +380,7 @@
             add(dlg, inner);
             if (foot && foot.length) { var f = el('div', 'dlg-foot'); foot.forEach(function (b) { add(f, b); }); add(dlg, f); }
             add(scrim, dlg);
+            if (!sticky) onBackdrop(scrim, closeModal);       // (not the box that shows a password once: only its Done button or Escape closes that)
             var back = doc.activeElement;
             Array.prototype.slice.call(app.children).forEach(function (n) { n.setAttribute('inert', ''); });
             add(app, scrim);
@@ -692,6 +700,7 @@
                     else if (!e.shiftKey && now === go) { e.preventDefault(); cancel.focus(); }
                 }
                 add(scrim, dlg);
+                onBackdrop(scrim, closeDialog);
                 return { node: scrim, focus: cancel, onKey: onKey };
             }
 
@@ -770,7 +779,7 @@
             var nodes = [];
             if (line) nodes.push(line);
             nodes.push(shown.node);
-            openModal(title, nodes, [done], done);
+            openModal(title, nodes, [done], done, true);
         }
 
         function renderUsers(host) {

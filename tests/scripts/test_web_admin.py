@@ -118,6 +118,11 @@ class ThePagesOwnCode(unittest.TestCase):
             "reset of oneself reloads the list under the password": ("if (user.you && action === 'reset') return; load(); return; }", "load(); return; }"),
             "the sign-out sends no token": ("call('POST', '/admin/api/logout', {})", "env.fetch('/admin/api/logout', { method: 'POST', credentials: 'same-origin', headers: {}, body: '{}' })"),
             "the textarea has no limit": ("area.maxLength = 200;", ""),
+            "a press on the dimmed page does nothing in the boxes": ("if (!sticky) onBackdrop(scrim, closeModal);", ""),
+            "a press on the dimmed page does nothing in the Approve and Take down question": ("                onBackdrop(scrim, closeDialog);\n", ""),
+            "a press on the dimmed page closes the box that shows a password once": ("if (!sticky) onBackdrop(scrim, closeModal);", "onBackdrop(scrim, closeModal);"),
+            "a drag from the dimmed page into a box closes it": ("hit = down && e.target === node; down = false; });", "hit = down; down = false; });"),
+            "a drag from inside a box to the dimmed page closes it": ("hit = down && e.target === node; down = false; });", "hit = e.target === node; down = false; });"),
         }
         with tempfile.TemporaryDirectory() as folder:
             for why, (old, new) in broken.items():

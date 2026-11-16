@@ -339,9 +339,13 @@ public:
     uint32_t set_off() const noexcept { return set_off_; }
     uint32_t failures() const noexcept { return failures_; }
     bool busy() const noexcept { return actor_ != 0; }
+    uint32_t routed() const noexcept { return routed_; }               // jobs for a bomb that shut one of the busy routes
+    uint32_t side_walks() const noexcept { return side_walks_; }       // defuses that began with a walk to a side tile that holds no bomb
 
 private:
     static constexpr uint64_t kPending = ~uint64_t{0};
+    // (plan.bomb_route) the bombs of other teams that shut a route that the seat works: a pile's way from the hill with no walk round them, or one more than a quarter longer
+    void find_route_bombs(const BotView& view, const MapInfo& map, const std::vector<uint8_t>& open_mask);
     static int64_t key_of(sim::TileCoord t) noexcept { return static_cast<int64_t>(t.y) * 4096 + t.x; }
     Tactics& tactics_;
     uint32_t actor_{0};
@@ -353,6 +357,12 @@ private:
     uint32_t defused_{0};
     uint32_t set_off_{0};
     uint32_t failures_{0};
+    bool walking_{false};                          // the Bomber walks to side_ (a tile beside the bomb that holds no bomb) before the defuse order
+    sim::TileCoord side_{};
+    uint64_t route_tick_{0};                       // the look at which route_bombs_ was made (0: never)
+    std::vector<sim::TileCoord> route_bombs_;
+    uint32_t routed_{0};
+    uint32_t side_walks_{0};
 };
 
 // ---- rank 4: the mines ------------------------------------------------------------------------------------------------------------------------------------

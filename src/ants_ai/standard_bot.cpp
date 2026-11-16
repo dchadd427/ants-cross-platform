@@ -224,6 +224,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
             fight_.unreachable(refused);                                                    // and a fight that sent ants where no walk goes is over
         }
     }
+    if (!tactics_.gate_map && !tactics_.field_map) detour_.apply(view, plan, profile_, orders);        // the last look: the walk round a bomb of another team (BombDetour)
 }
 
 // The gate play is on where the start analysis (GateInfo) finds every pile walled off from the seat's hill, also with the power-ups taken, and the island play (water, bridges, flights over channels)
@@ -354,6 +355,12 @@ void StandardBot::end_fallback() {
 }
 
 void StandardBot::on_command(const sim::Command& command, Fate fate, uint64_t tick) {
+    // a waypoint of the walk round a bomb is no task's order: the tasks hear about the order they proposed
+    detour_.note(command, fate, tick);
+    for (const sim::Command& proposed : detour_.proposed(command)) on_proposed(proposed, fate, tick);
+}
+
+void StandardBot::on_proposed(const sim::Command& command, Fate fate, uint64_t tick) {
     if (command.type == sim::CommandType::AllianceDeny || command.type == sim::CommandType::AllianceAccept) {
         deny_after_ = fate == Fate::Sent ? tick + 12u : 0u;
         return;

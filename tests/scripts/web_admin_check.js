@@ -107,6 +107,14 @@ async function press(app, label, which) {
     await settle();
     return true;
 }
+// a pointer press on the page's dimmed area (the .scrim): from and to are the nodes where it starts and ends
+async function backdrop(app, from, to) {
+    const scrim = app.querySelector('.scrim');
+    scrim.fire('pointerdown', { target: from === 'scrim' ? scrim : app.querySelector('.dlg') });
+    scrim.fire('pointerup', { target: to === 'scrim' ? scrim : app.querySelector('.dlg') });
+    scrim.fire('click', { target: scrim });
+    await settle();
+}
 async function type(app, selector, value) {
     const input = app.querySelector(selector);
     input.value = value;
@@ -371,6 +379,15 @@ function noMarkup(label, app) {
         doc.key('Escape');
         await settle();
         same('Escape closes it too', [all(app, '.dlg').length, w.calls.length], [0, 0]);
+        await press(app, 'Take down');
+        await backdrop(app, 'dlg', 'dlg');
+        await backdrop(app, 'dlg', 'scrim');
+        await backdrop(app, 'scrim', 'dlg');
+        app.querySelector('.scrim').fire('click', { target: app.querySelector('.scrim') });
+        await settle();
+        same('a press inside the question, a drag out of it or into it, and a click with no press before it keep it open', [all(app, '.dlg').length, w.calls.length], [1, 0]);
+        await backdrop(app, 'scrim', 'scrim');
+        same('a press that starts and ends on the dimmed page is Cancel: the question goes, nothing was sent, the focus is back on the button that asked', [all(app, '.dlg').length, w.calls.length, doc.activeElement && doc.activeElement.getAttribute('data-take')], [0, 0, 'c'.repeat(32)]);
         await press(app, 'Take down');
         await press(app, 'Take down', 1);
         same('the red Take down of the box sends the call', [w.calls[0].method, w.calls[0].url, w.calls[0].body], ['POST', '/admin/api/maps/' + 'c'.repeat(32) + '/take-down', {}]);
@@ -727,6 +744,8 @@ function noMarkup(label, app) {
         await press(app, 'Copy');
         same('add: Copy copies the password and says so', [copied, texts(app, '.once button')], [['Wd4Tn8GpYe3XrC6bKm2F'], ['✓ Copied']]);
         check('add: the name and the password are marked or shown as text, never as markup', all(app, '.once .ol [data-untrusted]').length === 1);
+        await backdrop(app, 'scrim', 'scrim');
+        same('add: a press on the dimmed page does not close the box that shows the password once (only Done or Escape does)', [all(app, '.dlg').length, app.textContent.indexOf('Wd4Tn8GpYe3XrC6bKm2F') >= 0], [1, true]);
         await press(app, 'Done');
         same('add: Done closes the box, and the password is nowhere in the page any more', [all(app, '.dlg').length, app.textContent.indexOf('Wd4Tn8GpYe3XrC6bKm2F')], [0, -1]);
         same('add: the new row is in the list, not yet signed in', [texts(app, '.chip')[0], all(app, '.urow').length], ['Users (5)', 5]);
@@ -790,6 +809,9 @@ function noMarkup(label, app) {
         same('remove: asks first, and sends nothing', [texts(app, '.dlg h2'), texts(app, '.dlg .srcrow .nm'), texts(app, '.dlg .srcrow .sm'), texts(app, '.dlg .lead'), texts(app, '.dlg-foot button'), w.calls.length],
             [['Remove this user?'], ['mia Moderator'], ['Last sign-in: yesterday'], ['They can no longer sign in. This cannot be undone. Maps they approved stay approved.'], ['Cancel', 'Remove'], 0]);
         check('remove: the focus is on Cancel (the safe button)', doc.activeElement === button(app, 'Cancel')[0]);
+        await backdrop(app, 'scrim', 'scrim');
+        same('remove: a press on the dimmed page is Cancel (the question goes, nothing is sent)', [all(app, '.dlg').length, w.calls.length], [0, 0]);
+        await press(app, 'Remove', 1);
         {   // the Tab key stays in the box (the page asks the box for its buttons: a NodeList has no filter, so a strict list is the real thing)
             const buttons = all(app, '.dlg-foot button');
             const tabAt = (node, shift) => { node.focus(); return doc.key('Tab', { shiftKey: !!shift }); };

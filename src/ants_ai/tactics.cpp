@@ -68,6 +68,9 @@ LevelPlan plan_for(Level level) noexcept {
             p.renew_lead_ticks = 200;
             p.contest_opening_ants = 1;
             p.denial_order = true;              // the denial order: contested food first, the own safe piles last (docs/BOT_FOOD.md)
+            p.skip_hopeless = true;             // a pile that a nearer enemy eats first is left alone while another pile has food (docs/BOT_FOOD.md)
+            p.bomb_detour = 1;                  // the economy, the power-up trips and the fights go round a visible bomb of another team (docs/BOTS.md, "Bombs on the way")
+            p.bomb_route = true;
             p.secure_side = true;
             p.secure_kinds = kSecureOpening;
             p.drop_retake = true;
@@ -114,6 +117,9 @@ LevelPlan plan_for(Level level) noexcept {
             p.renew_lead_ticks = 130;
             p.contest_opening_ants = 2;
             p.denial_order = true;
+            p.skip_hopeless = true;
+            p.bomb_detour = 2;                   // ... and the raids, the mine trips and the way home of a carrier
+            p.bomb_route = true;
             p.secure_side = true;
             p.secure_kinds = kSecureOpening;
             p.flower_sides = true;
@@ -151,6 +157,8 @@ LevelPlan plan_for(Level level) noexcept {
             p.island_fly_miner = true;
             p.island_mines = true;
             p.island_ferry_reorder = true;
+            p.island_mine_reach = true;              // a Bomber lays no mine on ground it cannot walk to, so it is free to fly to the ring pile
+            p.island_mine_from = 600;                // the flight starts as soon as the expedition is over (the clock only keeps it from the first minutes)
             p.island_flower_link = true;             // a Swimmer digs the tile from the ring half to a flower strip, an idle ant of the crew walks over and takes the drops (docs/BOTS.md, "The flower link")
             p.island_flower_swimmers = 2;            // up to five Swimmers (three of the row, two of the flower)
             p.island_flower_thief = true;            // a Thief drop is taken as well and held (nothing uses it yet)
