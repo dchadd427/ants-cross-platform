@@ -623,6 +623,16 @@ async function flows() {
             const badHome = [], badRoom = [];
             for (const [w, h] of sizes) { await bar.setViewportSize({ width: w, height: h }); await bar.evaluate(WIDEST); const o = await bar.evaluate(OUT); if (o.length) badHome.push(w + 'x' + h + ': ' + o.join(', ')); }
             check('Home\'s bar at ' + sizes.length + ' sizes (900 to 1000 px wide, 844 x 390, 390 x 844, 360 x 640, every tenth width from 320 to 1300 px, and both sides of every limit) with the widest counts and a long name on the login chip: every button inside the window and no sideways scroll', badHome.length === 0, badHome.slice(0, 6).join(' | ') + (badHome.length > 6 ? ' ... ' + badHome.length + ' sizes' : ''));
+            // My room keeps its words and its count at every width (the maintainer's rule: no "Room" for a short window): the label reads "My room" in a type of 13 px or more, no rule puts another word in its place or takes its count away
+            const LABEL = () => {
+                const m = document.querySelector('.hbar .mine'), n = m && m.querySelector('.name'), p = m && m.querySelector('.pill'), r = (e) => e.getBoundingClientRect();
+                if (!m || !n || !p) return 'no My room';
+                const bad = n.textContent !== 'My room' || getComputedStyle(n, '::after').content !== 'none' || parseFloat(getComputedStyle(n).fontSize) < 13 || r(n).width < 40 || p.hidden || p.textContent !== '4/4' || r(p).width < 20;
+                return bad ? n.textContent + ' / ' + getComputedStyle(n).fontSize + ' / ' + getComputedStyle(n, '::after').content + ' / count ' + Math.round(r(p).width) + ' px wide' : '';
+            };
+            const badLabel = [];
+            for (const [w, h] of sizes) { await bar.setViewportSize({ width: w, height: h }); await bar.evaluate(WIDEST); const l = await bar.evaluate(LABEL); if (l) badLabel.push(w + 'x' + h + ': ' + l); }
+            check('My room says "My room" with its count ("4/4") at the same ' + sizes.length + ' sizes (a phone upright and held sideways, a tablet, a desktop): no shorter word, no count taken away, a type of 13 px or more', badLabel.length === 0, badLabel.slice(0, 6).join(' | ') + (badLabel.length > 6 ? ' ... ' + badLabel.length + ' sizes' : ''));
             // a phone held sideways (docs/HOME_SCREEN.md, "The top bar"): 360 to 639 px wide and at most 500 px high, landscape, Home's bar is two compact rows (at most 110 px, the body keeps the rest: 110 px or more at 568 x 320, beside the strip), every target at
             // least 44 px high and wide and no two of them over each other; one pixel narrower or one pixel higher, a window wider than high keeps the three rows (150 px or more), and a phone upright has two rows of 44 px (110 px); from 640 px wide it is the one low row (at most 70 px)
             const BARS = () => {

@@ -124,11 +124,11 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
     .hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { font-size: 14px; }
     .hbar .hmenu { order: 4; flex: none; min-width: 46px; padding: 0; }
     .hbar .hmine { order: 2; flex: 0 1 auto; min-width: 0; margin-right: 6px; } .hbar .hmine .mine { flex: 0 1 auto; min-width: 0; padding: 4px 8px; }        /* (My room and its X take the first row's left side, where Games was) */
-    .hbar:has(.hmine:not([hidden])) button.hlogin { max-width: calc(100% - 240px); }
+    .hbar:has(.hmine:not([hidden])) button.hlogin { max-width: calc(100% - 262px); }
     .hbar .quick { order: 7; flex: 1 1 0; min-width: 0; min-height: 44px; padding: 4px 6px; font-size: 16px; letter-spacing: .06em; gap: 8px; } .quick::before { width: 15px; height: 15px; }
 }
-@media (max-width: 421px) and (orientation: portrait) { .hbar:has(.hmine:not([hidden])) button.hlogin { max-width: calc(100% - 214px); } .hbar .mine .name { font-size: 0; } .hbar .mine .name::after { content: "Room"; font-size: 15px; } .hbar .hmine .mine { padding: 4px 4px; } .hbar .mine .pill { margin-left: 4px; padding: 0 4px; } }
-@media (max-width: 359px) and (orientation: portrait) { .hbar { gap: 0 4px; } .hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { display: none; } .hbar .mine .name::after { font-size: 14px; } .hbar .mine .pill { margin-left: 3px; padding: 0 3px; } .hbar button.hlogin { max-width: calc(100% - 54px); } .hbar .quick { font-size: 14px; letter-spacing: .02em; } .quick::before { display: none; } }
+@media (max-width: 421px) and (orientation: portrait) { .hbar:has(.hmine:not([hidden])) button.hlogin { max-width: calc(100% - 241px); } .hbar .hmine .mine { padding: 4px 6px; font-size: 14px; } .hbar .mine .pill { margin-left: 5px; padding: 0 5px; font-size: 14px; } }
+@media (max-width: 359px) and (orientation: portrait) { .hbar { gap: 0 4px; } .hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { display: none; } .hbar .hmine .mine { padding: 4px 5px; font-size: 13px; } .hbar .mine .pill { margin-left: 4px; padding: 0 4px; font-size: 13px; } .hbar button.hlogin { max-width: calc(100% - 54px); } .hbar .quick { font-size: 14px; letter-spacing: .02em; } .quick::before { display: none; } }
 /* ---- ... held sideways (a short window, 360 to 639 px wide): two compact rows (106 px), not three (184) ---- */
 @media (min-width: 360px) and (max-width: 639px) and (max-height: 500px) and (orientation: landscape) {
     .hbar { grid-template-columns: repeat(2, minmax(0, 1fr)) auto auto; gap: 6px; padding: 8px 12px 4px; }
@@ -150,8 +150,6 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
     .hbar .btn { min-height: 44px; padding: 4px 12px; font-size: 15px; }
     .hbar .quick { min-height: 46px; padding: 4px 18px; font-size: 16px; letter-spacing: .08em; }
     .quick::before { display: none; }
-    .hbar .mine .pill { display: none; }
-    .hbar .mine .name { font-size: 0; } .hbar .mine .name::after { content: "Room"; font-size: 15px; }
 }
 /* ---- ... under 773 px the type shrinks again ---- */
 @media (min-width: 721px) and (max-width: 774px), (orientation: landscape) and (min-width: 640px) and (max-width: 720px) {
