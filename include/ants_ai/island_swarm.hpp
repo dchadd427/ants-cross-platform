@@ -1,6 +1,6 @@
 #pragma once
 
-// The swarm of the standard bot (docs/BOTS.md, "Islands", "The swarm"; plan.island_swarm, Hard): the Swimmers of the corner rows are taken in the first minute and then there are none left (twelve
+// The swarm of the standard bot (docs/BOTS.md, "Islands", "The swarm"; plan.island_flower_link, Hard): the Swimmers of the corner rows are taken in the first minute and then there are none left (twelve
 // tokens, three to a corner), but the two flower strips let a Swimmer fall every minute (70 percent of the drops) and an ant that stands beside the drop tile takes it. Every ant that no other
 // task holds, that a walk over the bridges that stand reaches the strip from (the crew's spares on the ring half, a Bomber that flew over) and that is not a Swimmer yet goes to the strip and
 // waits there beside the drop tile, `stage` ants to a strip, and the nearest of them walks onto the Swimmer when one lies on the drop tile. A typed ant takes the drop as well (it leaves its
@@ -38,6 +38,15 @@ public:
     void attach(const IslandTask* islands) noexcept { islands_ = islands; }
     void set_params(const Params& params) { params_ = params; }
     const Params& params() const noexcept { return params_; }
+
+    /// An ant that waits at a strip with no pick-up ordered: the expedition takes it for a row on foot (a Swimmer that lies in a row is sure, a drop is not), and the swarm lets it go
+    bool spare(uint32_t ant) const noexcept {
+        const auto it = staged_.find(ant);
+        return it != staged_.end() && it->second.picking == 0;
+    }
+    void give_up(uint32_t ant, AntLedger& ledger) {
+        if (staged_.erase(ant) != 0) ledger.release(ant, id());
+    }
 
     // ---- for the tests and the reports ----
     /// Ants that wait at a strip now, pick-ups ordered, Swimmers made (an ant of the task that is a Swimmer now), ants sent to a strip in all

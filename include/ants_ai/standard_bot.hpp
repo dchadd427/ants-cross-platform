@@ -104,6 +104,7 @@ private:
         miner_flight_.attach(&island_, &expedition_);
         flower_link_.attach(&island_);
         swarm_.attach(&island_);
+        expedition_.attach_swarm(&swarm_);
     }
 
 public:
@@ -255,7 +256,11 @@ private:
         p.fly_on = plan.island_fly_on;
         p.timed_row = plan.island_timed_row;
         p.crew_spare = plan.island_crew_spare;
-        p.release_spares = plan.island_swarm;
+        p.release_spares = plan.island_flower_link;
+        p.rows_after = plan.island_flower_link ? plan.island_swarm_rows : 0u;
+        p.rows_swimmers = plan.island_swarm_swimmers;
+        p.rows_idle_after = plan.island_swarm_idle;
+        p.foot_hp = plan.island_swarm_hp;
         return p;
     }
     static FerryTask::Params ferry_params(const LevelPlan& plan) {

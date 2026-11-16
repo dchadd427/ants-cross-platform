@@ -74,7 +74,7 @@ sim::TileCoord SwarmTask::free_spot(TaskContext& c, size_t link, const std::vect
 void SwarmTask::step(TaskContext& c) {
     const LevelPlan& plan = tactics_.plan;
     const BotView& v = c.view;
-    if (!plan.island_swarm || !v.has_grid() || tactics_.flower_links.empty() || islands_ == nullptr || !islands_->active()) {
+    if (!plan.island_flower_link || !v.has_grid() || tactics_.flower_links.empty() || islands_ == nullptr || !islands_->active()) {
         release_all(c.ledger);
         return;
     }
