@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """The hub's hand-rolled WebSocket (hub/ws.py) and its HTTP request reader (hub/http.py), fuzzed (docs/HUB.md "The handshake", "Frames").
 
-The framing is the riskiest part of the hub (it reads bytes from strangers), so it is tested three ways: by the cases of RFC 6455 and of the hub's own rules (the 2 KB cap,
-fragments refused), by an exhaustive sweep of every first byte with every length form against a model written separately in this file, and by random streams: pure noise,
+The framing is the riskiest part of the hub (it reads bytes from strangers), so it is tested three ways: by the cases of RFC 6455 and of the hub's own rules (a cap of 2 KB here: the hub's own is `frame_max`, tested in test_hub_core.py; fragments refused), by an exhaustive sweep of every first byte with every length form against a model written separately in this file, and by random streams: pure noise,
 valid frames cut at random places, valid frames with a bit flipped. What must hold for all of them: the parser raises nothing but ProtocolError, never keeps more than a header and
 a frame's worth of bytes, gives the same answer however the bytes are cut, and stops for good after an error or a close frame. The client side of these tests is tests/scripts/hub_client.py,
 which shares no code with hub/ws.py. Reproducible (fixed seeds); ANTS_HUB_FUZZ_SCALE=10 runs ten times more.

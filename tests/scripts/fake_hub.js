@@ -1,5 +1,5 @@
 // A fake of the site's chat hub (docs/HUB.md) on a real socket, for the checks of the chat dock (tests/scripts/web_home_chat_hub_check.js, tests/scripts/web_home_chat_browser.js). It speaks the hub's protocol, version 1,
-// at /hub/ws: down welcome (you, login, online, history), line, del, online, err; up say and ping; and it keeps the hub's own pace for a writer (a burst of 3, then one line every 2 seconds, the same text twice
+// at /hub/ws: down welcome (you, login, online, history), line, del, online, err; up say and ping; and it keeps the hub's own pace for a writer (a burst of 10, then one line every half second, the same text twice
 // within 30 seconds refused), so that a page that sends faster than it would is seen. It is also the hub's bad days on demand: a socket that says nothing, frames that are not JSON, a frame of megabytes, a
 // welcome that comes in pieces, an upgrade answered 503 with the JSON of a missing hub (what nginx says) or 404 (a site that has no such door), a socket that is cut. Plain node, no packages.
 // The two names (docs/HUB.md "Names"): a `you` with `k` (the key of the account), `pick` ("display" or "username") and `other` (the name that is not shown) is an account that can choose; its lines carry its key,
@@ -39,7 +39,7 @@ function startHub(options) {
         socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + crypto.createHash('sha1').update(key + GUID).digest('base64') + '\r\n\r\n');
         const peer = { socket, buffer: Buffer.alloc(0), open: true, origin: req.headers.origin || null };
         hub.peers.push(peer);
-        writers.set(peer, { tokens: 3, at: Date.now(), said: new Map() });
+        writers.set(peer, { tokens: 10, at: Date.now(), said: new Map() });
         socket.on('data', (data) => { peer.buffer = Buffer.concat([peer.buffer, data]); read(peer); });
         socket.on('close', () => { peer.open = false; hub.peers = hub.peers.filter((p) => p !== peer); writers.delete(peer); });
         socket.on('error', () => {});
@@ -106,10 +106,10 @@ function startHub(options) {
         if (!o.you) { hub.send(peer, { t: 'err', code: 'login' }); return; }
         if (typeof m.text === 'string' && /^\/(mute|unmute|del|kick|ban|unban|bans)(\s|$)/i.test(m.text.trim())) { command(peer, m.text.trim()); return; }
         const w = writers.get(peer), now = Date.now();
-        w.tokens = Math.min(3, w.tokens + (now - w.at) / 2000); w.at = now;
+        w.tokens = Math.min(10, w.tokens + (now - w.at) / 500); w.at = now;
         for (const [t, at] of w.said) if (now - at >= 30000) w.said.delete(t);
         if (typeof m.text !== 'string' || !m.text.trim()) { hub.send(peer, { t: 'err', code: 'empty' }); return; }
-        if ([...m.text].length > 200) { hub.send(peer, { t: 'err', code: 'long' }); return; }
+        if ([...m.text].length > 1000) { hub.send(peer, { t: 'err', code: 'long' }); return; }
         if (w.said.has(m.text) || w.tokens < 1) { hub.rateRefusals = (hub.rateRefusals || 0) + 1; hub.send(peer, { t: 'err', code: 'rate' }); return; }
         w.tokens -= 1; w.said.set(m.text, now);
         hub.say(o.you.name, m.text, o.you.mod, Object.assign(o.you.k ? { k: o.you.k } : {}, o.you.role === 'mod' || o.you.role === 'admin' ? { role: o.you.role } : {}));       // (a line says the role that its author has, as the hub's does)

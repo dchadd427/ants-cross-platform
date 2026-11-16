@@ -7,7 +7,7 @@ The rules, in order:
      (Co), characters no Unicode version of this Python has assigned (Cn), and the letters that draw as blanks (the Hangul fillers, the braille blank, the combining grapheme joiner, the
      Khmer inherent vowels, the musical null notehead). So nothing is left that reorders the text or hides in it.
   4. More than MAX_MARKS combining marks in a row are cut (a column of them would overlap the lines above and below).
-  5. Nothing left, or nothing but combining marks (a variation selector shows nothing by itself): 'empty'. More than 200 code points or 800 bytes: 'long'. A '<' or '>': 'bad' (no markup; the page uses textContent only, shows no link and makes no mention).
+  5. Nothing left, or nothing but combining marks (a variation selector shows nothing by itself): 'empty'. More than 1,000 code points or 4,000 bytes: 'long'. A '<' or '>': 'bad' (no markup; the page uses textContent only, shows no link and makes no mention).
 The check for '<' and '>' is made on the result, after the hiding places are gone.
 
 The names of people (docs/HUB.md, "Names"): a username is what Discord gives out (valid_name); the name that the chat shows may be the person's Discord display name, which is free text from
@@ -17,10 +17,10 @@ the chat shows the username, and nothing else happens.
 import re
 import unicodedata
 
-MAX_CODE_POINTS = 200
-MAX_BYTES = 800
+MAX_CODE_POINTS = 1000
+MAX_BYTES = 4000
 MAX_MARKS = 4
-MAX_RAW = 4096                      # a client frame is 2 KB: anything longer is not looked at
+MAX_RAW = 4096                      # more code points than this, before any is removed, are not looked at (a little over four times the longest line: the cleaning below reads every one)
 BLANK_CATEGORIES = frozenset(("Zs", "Zl", "Zp"))
 BLANK_CONTROLS = frozenset("\t\n\r\x0b\x0c\x85")
 REMOVED_CATEGORIES = frozenset(("Cc", "Cf", "Cs", "Co", "Cn"))

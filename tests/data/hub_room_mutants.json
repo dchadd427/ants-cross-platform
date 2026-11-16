@@ -252,15 +252,15 @@
   {
    "id": "limits_the_hour_is_a_lot_of_lines",
    "file": "hub/limits.py",
-   "old": "account_hour_lines: int = 200 ",
-   "new": "account_hour_lines: int = 2000",
+   "old": "account_hour_lines: int = 600 ",
+   "new": "account_hour_lines: int = 6000",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheDocumentsSayWhatTheCodeDoes tests.scripts.test_hub_room.TheHubsClock tests.scripts.test_hub_room.TheStoreAtItsLimit"
   },
   {
    "id": "limits_the_day_is_a_lot_of_lines",
    "file": "hub/limits.py",
-   "old": "account_day_lines: int = 1000 ",
-   "new": "account_day_lines: int = 100000",
+   "old": "account_day_lines: int = 3000 ",
+   "new": "account_day_lines: int = 300000",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheDocumentsSayWhatTheCodeDoes tests.scripts.test_hub_room.TheHubsClock tests.scripts.test_hub_room.TheStoreAtItsLimit"
   },
   {
