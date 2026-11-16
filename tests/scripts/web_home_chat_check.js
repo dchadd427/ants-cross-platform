@@ -1,4 +1,4 @@
-// Runs the chat dock of Home (web/home/chat.js, docs/HOME_SCREEN.md "The chat dock") against a FAKE hub: a fake WebSocket that plays the hub's protocol (docs/HUB.md) and a fake clock, in the fake browser of
+// Runs the chat dock of Home (web/home/chat.js, docs/HOME_CHAT.md "The chat dock") against a FAKE hub: a fake WebSocket that plays the hub's protocol (docs/HUB.md) and a fake clock, in the fake browser of
 // tests/scripts/web_page_harness.js (its DOM). The dock is made by the page's real code on the real page in section 5; the rest runs it alone, so that every case is one line of the script:
 //   1. the pure parts: the text cleaned for display, the cut, the frame, the line, the words of the err codes, the backoff, the address;
 //   2. what the dock shows: read-only (login:false), logged out (login:true, you null), a writer (you), the history, the lines, the mod mark, the online count, who may type;
@@ -1128,7 +1128,7 @@ function bring(env) {                                     // the two files arriv
 
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 8. The login: the Log in button and the bar's chip, the account line with Log out and Forget me, and what the page may do about it (docs/HUB.md "Login", docs/HOME_SCREEN.md)
+// 8. The login: the Log in button and the bar's chip, the account line with Log out and Forget me, and what the page may do about it (docs/HUB.md "Login", docs/HOME_CHAT.md)
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {   // a hub with a login, a visitor who is not logged in
     const r = rig({ chip: true });

@@ -10,7 +10,8 @@
 // moved on is hit again only by an order that names its new tile. The task therefore
 //   * under the earlier rule sends every ant that is hurt home to heal (the hill restores all hit points) and calls it back when it is whole; when the hill is closed (BotView::hill_enterable() is false, 187 now)
 //     it sends no ant home at all,
-//   * forms packs of a few ants on each enemy ant it can reach, the wounded and the near first, so that blows land in parallel on different victims,
+//   * forms packs of a few ants on each enemy ant it can reach, the seat that the ring names first (docs/BOT_187.md, "Who is struck first"), then the wounded and the near, so that blows land in
+//     parallel on different victims; a side of four ants or fewer sends one ant at a victim,
 //   * orders a whole pack onto its victim again whenever the victim was thrown to another tile or an ant of the pack stands idle after its blow,
 //   * lets ants that found no victim of their own join the nearest fight, and
 //   * when no enemy ant can be struck (every one is inside its hill, or beyond any walk) marches to the nearest enemy hill that a walk reaches and waits at its door.
@@ -32,6 +33,9 @@ public:
     BrawlTask(TaskId id, const BrawlParams& params) : Task(id), params_(params) {}
 
     void set_params(const BrawlParams& params) noexcept { params_ = params; }
+    /// The ring of the seats of a match, from the hills alone (so every bot of the match reads the same one): the seats in the order of the shortest way round them all; each seat names the
+    /// next one of the ring first (BrawlParams::ring_bonus). Empty for fewer than three seats.
+    static std::vector<uint8_t> ring_of(const BotView& view, const MapInfo& map);
     const char* name() const noexcept override { return "brawl"; }
     void step(TaskContext& context) override;
     void on_command(const sim::Command& command, Bot::Fate fate, uint64_t tick) override;
@@ -59,8 +63,12 @@ private:
 
     bool pending(const Job& job, const Profile& profile, uint64_t now) const noexcept;
     bool shunned(uint32_t ant, uint32_t target, uint64_t now) const noexcept;
+    /// The seat that this bot names first: the next one of the ring that has ants and is no ally; 255 when there is none
+    uint8_t prey_of(const BotView& view) const;
 
     BrawlParams params_;
+    std::vector<uint8_t> ring_;          // the seats of the match in the order of the ring: each seat names the next one first (empty: fewer than three seats, or not built yet)
+    bool ring_built_{false};
     std::map<uint32_t, Job> jobs_;       // by own ant
     std::map<uint32_t, Fight> fights_;   // by victim
     std::map<std::pair<uint32_t, uint32_t>, Refusal> refusals_;

@@ -16,7 +16,15 @@
 //   AI30.8   allies are never struck
 //   AI30.9   an attack that is refused twice (the walk is not there though the analysis of the start says it is) is not ordered again for a while
 //   AI30.10  whole matches on a shipped map: bit-reproducible, the commands replay into a fresh engine without any bot, and the brawl kills more than the food game's bot in 187
+//   AI30.12  the opening is spread: on TINY four brawl bots name four different first victims, so no seat is every bot's first victim
+//   AI30.13  the seat that the ring names is struck first while it has ants; with none, the next seat of the ring (not the nearest ant) is
+//   AI30.14  a side of four ants or fewer sends one ant at a victim, a bigger side two
+//   AI30.15  an ally is skipped for the next seat of the ring (its ant stands nearer than the next seat's, which is still the victim)
+//   AI30.16  every seat's view works out the same ring, on the six maps for three and four seats: the shortest way round, a tie to the first in the order of the seat numbers
+//   AI30.17  an enemy that walks with one hit point is ordered upon again and again by a pack within two tiles of it, not by one farther off; one with more hit points is not
 #include <algorithm>
+#include <array>
+#include <map>
 #include <set>
 
 #include "ai_test.hpp"
@@ -150,7 +158,7 @@ void run_brawl_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI30.4 Packs: At Most Two Ants Strike A Victim, Each Victim Has A Pack Of Its Own, And The Ants Left Over Join The Nearest Fight, Three On A Victim") {
+    TEST_CASE("AI30.4 Packs: At Most Two Ants Strike A Victim, Each Victim Has A Pack Of Its Own, And The Ants Left Over Join The Nearest Fight, Three On A Victim; The Wounded Come First") {
         {   // six ants and three victims: three packs of two, three different victims
             Fight f(sim::GameMode::Kills187, 6, {TileCoord{30, 12}, TileCoord{34, 14}, TileCoord{30, 20}});
             Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(brawl_plan(Level::Hard)), 4, 8);
@@ -179,8 +187,8 @@ void run_brawl_tests() {
             }
             ASSERT_EQ(ants.size(), 3u);                                                           // the cap of a crowd; the other two wait for another victim
         }
-        {   // the wounded first: two victims at the same distance, one with 4 hit points, are struck in that order
-            Fight f(sim::GameMode::Kills187, 2, {TileCoord{30, 11}, TileCoord{30, 13}});
+        {   // the wounded first: with one ant to send, of two victims at the same distance the one with 4 hit points is struck (a side of two would send one ant at each)
+            Fight f(sim::GameMode::Kills187, 1, {TileCoord{30, 11}, TileCoord{30, 13}});
             f.sim.get_unit(f.foes[1]).hp = 4;
             Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(brawl_plan(Level::Hard)), 4, 8);
             rig.run(12);
@@ -492,5 +500,206 @@ void run_brawl_tests() {
             }
             ASSERT_TRUE(brawl_kills >= 2 * old_kills + 6);
         }
+    } TEST_END();
+
+    TEST_CASE("AI30.12 The Opening Is Spread: On TINY Four Brawl Bots Name Four Different First Victims, So No Seat Is Every Bot's First Victim") {
+        {   // the ring is the shortest way round the four hills: it never joins the seats of opposite corners (0 and 1, 2 and 3)
+            sim::SimulationEngine sim;
+            sim.set_game_mode(sim::GameMode::Kills187);
+            sim.init(level_of("TINY"), 1, 0x0F);
+            const MapInfo map(sim);
+            const std::vector<uint8_t> ring = BrawlTask::ring_of(BotView::build(sim, 0, &map), map);
+            ASSERT_EQ(ring.size(), 4u);
+            for (size_t i = 0; i < 4; ++i) {
+                const int a = ring[i];
+                const int b = ring[(i + 1) % 4];
+                ASSERT_FALSE((a == 0 && b == 1) || (a == 1 && b == 0) || (a == 2 && b == 3) || (a == 3 && b == 2));
+            }
+        }
+        for (const uint32_t seed : {1u, 2u, 3u}) {
+            ArenaSpec s;
+            s.level = &level_of("TINY");
+            s.seed = seed;
+            s.game_mode = sim::GameMode::Kills187;
+            s.max_ticks = 150;
+            s.record = true;
+            for (uint8_t seat = 0; seat < 4; ++seat) {
+                BotSpec b;
+                b.seat = seat;
+                b.level = Level::Hard;
+                s.bots.push_back(b);
+            }
+            std::map<uint64_t, std::vector<std::array<int, 3>>> seen;                             // tick -> (team, x, y) of every ant, until the first orders have left
+            s.on_tick = [&seen](const sim::SimulationEngine& sim) {
+                if (sim.current_tick() > 150) return;
+                std::vector<std::array<int, 3>>& at = seen[sim.current_tick()];
+                for (const sim::AntSnapshot& a : sim.get_world_state().ants) at.push_back({a.player_id, a.tile_x, a.tile_y});
+            };
+            const ArenaResult r = play_match(s);
+            ASSERT_TRUE(r.error.empty());
+            std::array<int, 4> first{-1, -1, -1, -1};                                             // seat -> the team of the ant that its first attack order names
+            for (const RecordedCommand& rc : r.log) {
+                const Command& c = rc.command;
+                if (c.type != CommandType::GroupAttack || c.issuer > 3 || first[c.issuer] >= 0) continue;
+                const auto at = seen.upper_bound(rc.tick);
+                if (at == seen.begin()) continue;
+                for (const std::array<int, 3>& a : std::prev(at)->second) {
+                    if (a[0] != c.issuer && std::abs(a[1] - c.tile_x) <= 1 && std::abs(a[2] - c.tile_y) <= 1) first[c.issuer] = a[0];
+                }
+            }
+            std::array<int, 4> named{};
+            for (int seat = 0; seat < 4; ++seat) {
+                ASSERT_TRUE(first[static_cast<size_t>(seat)] >= 0 && first[static_cast<size_t>(seat)] != seat);
+                ++named[static_cast<size_t>(first[static_cast<size_t>(seat)])];
+            }
+            for (int team = 0; team < 4; ++team) ASSERT_EQ(named[static_cast<size_t>(team)], 1);   // each seat is the first victim of one bot: nobody is everybody's
+        }
+    } TEST_END();
+
+    TEST_CASE("AI30.13 The Seat That The Ring Names Is Struck First While It Has Ants: With None, The Next Seat Of The Ring Is, Though An Ant Of Another Seat Stands Nearer") {
+        const auto first_victim_tile = [&](bool ring_on, TileCoord& at) {
+            sim::SimulationEngine sim;
+            sim.set_game_mode(sim::GameMode::Kills187);
+            empty_field(sim, 33);
+            const MapInfo map(sim);
+            const std::vector<uint8_t> ring = BrawlTask::ring_of(BotView::build(sim, 0, &map), map);
+            ASSERT_EQ(ring.size(), 4u);
+            const size_t me = static_cast<size_t>(std::find(ring.begin(), ring.end(), uint8_t{0}) - ring.begin());
+            const uint8_t gone = ring[(me + 1) % 4];                                              // the seat this one names has no ant,
+            const uint8_t next = ring[(me + 2) % 4];                                              // so the next of the ring is named: its ant stands far,
+            const uint8_t other = ring[(me + 3) % 4];                                             // and the ant of the last seat stands nearer
+            ASSERT_TRUE(gone != 0 && next != 0 && other != 0);
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{12, 12});                           // (one ant: it goes to the first victim only)
+            sim.spawn_unit(other, sim::AntType::Worker, TileCoord{14, 30});
+            sim.spawn_unit(next, sim::AntType::Worker, TileCoord{40, 40});
+            LevelPlan p = brawl_plan(Level::Hard);
+            if (!ring_on) p.brawl.ring_bonus = 0;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(p), 4, 8);
+            rig.run(12);
+            const std::vector<Command> attacks = attacks_of(rig);
+            ASSERT_TRUE(!attacks.empty());
+            at = TileCoord{attacks[0].tile_x, attacks[0].tile_y};
+        };
+        TileCoord with_ring{-1, -1};
+        TileCoord without{-1, -1};
+        first_victim_tile(true, with_ring);
+        first_victim_tile(false, without);
+        ASSERT_TRUE(with_ring == (TileCoord{40, 40}));
+        ASSERT_TRUE(without == (TileCoord{14, 30}));                                              // (without the ring the nearest ant is the victim)
+    } TEST_END();
+
+    TEST_CASE("AI30.14 A Side Of Four Ants Or Fewer Sends One Ant At A Victim, A Bigger Side Two") {
+        {   // four ants, four victims side by side: one ant on each
+            Fight f(sim::GameMode::Kills187, 4, {TileCoord{30, 10}, TileCoord{30, 12}, TileCoord{30, 14}, TileCoord{30, 16}});
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(brawl_plan(Level::Hard)), 4, 8);
+            rig.run(12);
+            const std::vector<Command> attacks = attacks_of(rig);
+            ASSERT_EQ(attacks.size(), 4u);
+            for (const Command& c : attacks) ASSERT_EQ(c.ants.size(), 1u);
+        }
+        {   // five ants, five victims: a pack of two on a victim
+            Fight f(sim::GameMode::Kills187, 5, {TileCoord{30, 10}, TileCoord{30, 12}, TileCoord{30, 14}, TileCoord{30, 16}, TileCoord{30, 18}});
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(brawl_plan(Level::Hard)), 4, 8);
+            rig.run(12);
+            const std::vector<Command> attacks = attacks_of(rig);
+            size_t named = 0;
+            size_t pairs = 0;
+            for (const Command& c : attacks) {
+                named += c.ants.size();
+                pairs += c.ants.size() >= 2 ? 1u : 0u;
+            }
+            ASSERT_EQ(named, 5u);
+            ASSERT_TRUE(pairs >= 1);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI30.15 An Ally Is Skipped For The Next Seat Of The Ring: Its Ant Stands Nearer Than The Next Seat's, Which Is Still The Victim") {
+        const auto first_victim_tile = [&](bool allied, TileCoord& at) {
+            sim::SimulationEngine sim;
+            sim.set_game_mode(sim::GameMode::Kills187);
+            empty_field(sim, 33);
+            const MapInfo map(sim);
+            const std::vector<uint8_t> ring = BrawlTask::ring_of(BotView::build(sim, 0, &map), map);
+            ASSERT_EQ(ring.size(), 4u);
+            const size_t me = static_cast<size_t>(std::find(ring.begin(), ring.end(), uint8_t{0}) - ring.begin());
+            const uint8_t named = ring[(me + 1) % 4];                                             // the seat this one names first (an ally in one of the runs),
+            const uint8_t next = ring[(me + 2) % 4];                                              // then the next of the ring, whose ant stands far,
+            const uint8_t other = ring[(me + 3) % 4];                                             // and the last seat's ant stands nearer
+            if (allied) sim.form_alliance(0, named);
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{12, 12});                           // (one ant: it goes to the first victim only)
+            sim.spawn_unit(named, sim::AntType::Worker, TileCoord{30, 30});
+            sim.spawn_unit(other, sim::AntType::Worker, TileCoord{14, 30});
+            sim.spawn_unit(next, sim::AntType::Worker, TileCoord{40, 40});
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(brawl_plan(Level::Hard)), 4, 8);
+            rig.run(12);
+            const std::vector<Command> attacks = attacks_of(rig);
+            ASSERT_TRUE(!attacks.empty());
+            at = TileCoord{attacks[0].tile_x, attacks[0].tile_y};
+        };
+        TileCoord allied_at{-1, -1};
+        TileCoord alone_at{-1, -1};
+        first_victim_tile(true, allied_at);
+        first_victim_tile(false, alone_at);
+        ASSERT_TRUE(allied_at == (TileCoord{40, 40}));
+        ASSERT_TRUE(alone_at == (TileCoord{30, 30}));                                             // (not allied, the named seat is the victim)
+    } TEST_END();
+
+    TEST_CASE("AI30.16 Every Seat's View Works Out The Same Ring, On The Six Maps For Three And Four Seats: The Shortest Way Round, A Tie To The First In The Order Of The Seat Numbers") {
+        const uint8_t rosters[] = {0x0F, 0x07, 0x0B, 0x0D, 0x0E};                                 // four seats, then the four rosters of three
+        for (const char* name : {"TINY", "SMALL", "MEDIUM", "GAUNTLET", "ISLANDS", "TREASURE"}) {
+            for (const uint8_t roster : rosters) {
+                std::vector<uint8_t> seats;
+                for (uint8_t t = 0; t < 4; ++t) {
+                    if (((roster >> t) & 1u) != 0) seats.push_back(t);
+                }
+                std::vector<uint8_t> first;
+                for (const uint8_t seat : seats) {
+                    sim::SimulationEngine sim;
+                    sim.set_game_mode(sim::GameMode::Kills187);
+                    sim.init(level_of(name), 1, roster);
+                    const MapInfo map(sim);                                                       // (each seat has an analysis of its own, as in a match)
+                    const std::vector<uint8_t> ring = BrawlTask::ring_of(BotView::build(sim, seat, &map), map);
+                    ASSERT_EQ(ring.size(), seats.size());
+                    ASSERT_EQ(ring[0], seats[0]);                                                 // (the ring starts at the lowest seat, whoever asks)
+                    if (first.empty()) first = ring;
+                    ASSERT_TRUE(ring == first);
+                    std::vector<uint8_t> sorted = ring;
+                    std::sort(sorted.begin(), sorted.end());
+                    ASSERT_TRUE(sorted == seats);                                                 // every seat of the roster once
+                    if (seats.size() == 3) ASSERT_TRUE(ring == seats);                            // three seats: both ways round are equally long, the seat order wins the tie
+                }
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI30.17 An Enemy That Walks With One Hit Point Is Ordered Upon Again And Again By A Pack That Stands Within Two Tiles Of It, Not By One That Is Farther Off, And An Enemy With More Hit Points That Walks Is Not") {
+        // the enemy walks from the start (so that it walks when the pack is formed) or is sent off after the pack was formed on it; the orders that leave within 100 ticks from 30 ticks after that are counted
+        const auto chase_orders = [&](uint16_t hp, TileCoord foe_at, TileCoord to, bool walking_from_start, size_t& again) {
+            Fight f(sim::GameMode::Kills187, 1, {foe_at});
+            f.sim.get_unit(f.foes[0]).hp = hp;
+            if (walking_from_start) {
+                f.sim.apply_command(command_of(CommandType::GroupMove, 1, {f.foes[0]}, to.x, to.y));
+                tick_all(f.sim, 6);
+            }
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(brawl_plan(Level::Hard)), 4, 8);
+            rig.run(12);
+            if (!walking_from_start) {
+                ASSERT_TRUE(attacks_of(rig).size() >= 1u);                                        // the pack was formed on the standing enemy
+                f.sim.apply_command(command_of(CommandType::GroupMove, 1, {f.foes[0]}, to.x, to.y));
+            }
+            const uint64_t from = f.sim.current_tick() + 30;
+            rig.run(150);
+            again = 0;
+            for (const auto& e : rig.proposed) again += (e.second.type == CommandType::GroupAttack && e.first >= from && e.first < from + 100) ? 1u : 0u;
+        };
+        size_t beside = 0;
+        size_t behind = 0;
+        size_t healthy = 0;
+        chase_orders(1, TileCoord{22, 13}, TileCoord{2, 13}, true, beside);                       // it walks past the ant, one tile from it
+        chase_orders(1, TileCoord{30, 12}, TileCoord{58, 12}, false, behind);                     // it walks away from a pack that is 18 tiles behind
+        chase_orders(10, TileCoord{22, 13}, TileCoord{2, 13}, true, healthy);                     // the same walk with all its hit points
+        ASSERT_TRUE(beside >= 3u);                                                                // the pack beside it is ordered again at every look it is due
+        ASSERT_TRUE(behind <= 1u);                                                                // a pack far behind does not run after it
+        ASSERT_TRUE(healthy <= 2u);                                                               // an enemy with its hit points that walks is not followed by an order at every step
     } TEST_END();
 }

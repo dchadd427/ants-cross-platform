@@ -15,6 +15,8 @@ struct BrawlParams {
     uint32_t regap_ticks{8};             // a pack is ordered onto its victim again no sooner than this
     int32_t reach_tiles{40};             // enemy ants further than this from an ant are no target of that ant
     uint32_t march_gap_ticks{60};        // an ant that marches is told again no sooner than this
+    uint32_t ring_bonus{1000};           // the enemy seat that the ring of the seats names for this seat counts this many points (10 = a tile) nearer; 0: no ring (docs/BOT_187.md, "Who is struck first")
+    uint32_t solo_ants{4};               // a side with this many living ants or fewer sends one ant at a victim (per_target 1); 0: always per_target
 };
 
 }  // namespace ants::ai

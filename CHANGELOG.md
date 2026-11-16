@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.17.2 - 2026-11-16 - Fairer computer players in 187, chat moderation from a phone
+
+**For players:**
+- **Fairer computer players in 187.** Each computer player now opens on a different side instead of all of them rushing the same one (on TINY that was always the first seat), and a side down to four ants or fewer sends one ant at each enemy instead of two that get in each other's way.
+- **Chat moderators can act from a phone.** A moderator or admin right-clicks a line in the front page chat, or presses and holds it on a phone (or picks it with the arrow keys and Enter), to delete it, mute, kick or ban its writer, or see that person's recent messages in the chat. Players see no change.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.1 page or game still joins. Under the hood: the game server and the web pages are rebuilt.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/da6092fb...443b5fbb)
+
 ## v0.17.1 - 2026-11-16 - Longer chat lines, bold numbers on every results column, computer players defend better against Thieves
 
 **For players:**
@@ -455,18 +465,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/32ad1087...f3847677)
 
-## v0.12.136 - 2026-10-25 - Health numbers at every zoom, and the settings menu scrolls in fullscreen
+## Older versions (v0.12.136 and before)
 
-**For players:**
-- **Health numbers now show at every zoom down to 0.5** (the four wheel steps out from 1), where they used to vanish at the third step out and left no mark at all with Show health as: Number. Below 0.5 a ten would be wider than the tile of its ant, so they stay left out there; the bars are as they were.
-- **The settings menu scrolls with the mouse wheel in fullscreen,** so the lower rows (Map scroll speed in Video, the end of the Controls list) can be reached there; in a window and with a finger it always did.
-
-**Fixes:**
-- The wheel over the settings panel was cancelled by the fullscreen page's guard over the black bars; only the bars (and a Ctrl + wheel) are cancelled now.
-- The health numbers' lowest zoom was the bars' second size edge by accident (0.6); the two are separate now.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/cddbaf07...51169738)
-
-## Older versions (v0.12.135 and before)
-
-Every release before v0.12.136, and the long notes of v0.12.135 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.137, and the long notes of v0.12.136 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

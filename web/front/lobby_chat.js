@@ -125,7 +125,7 @@
         log.setAttribute('tabindex', '0');
         var empty = el('div', 'empty');
         log.appendChild(empty);
-        // The composer is the front page's (web/home/talk.js and talk.css, docs/HOME_SCREEN.md "Emoji and voice"): the same classes (gc-form, gc-input, gc-send), so that the same script and sheet dress it:
+        // The composer is the front page's (web/home/talk.js and talk.css, docs/HOME_CHAT.md "Emoji and voice"): the same classes (gc-form, gc-input, gc-send), so that the same script and sheet dress it:
         // one row, the field, the microphone and Send at the right, two rows when the words wrap. The field is a text area that behaves as a one-line field (Enter sends).
         var form = el('form', 'chat-form gc-form');
         form.setAttribute('autocomplete', 'off');
