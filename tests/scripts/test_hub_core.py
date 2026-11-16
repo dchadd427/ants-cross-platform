@@ -214,6 +214,31 @@ class TheLargestFrames(unittest.TestCase):
         self.assertEqual(over.error.code, 1009)                      # (and one byte more than the cap is still refused from its header)
 
 
+class TheFrameBudgetCoversTheLinePace(unittest.TestCase):
+    """A socket may send 10 frames at once and then 5 a second (docs/HUB.md, "Limits"); an account may say 10 lines at once and then two a second: lines at the whole pace of the account leave room for the other frames."""
+
+    def test_lines_at_the_pace_of_an_account_and_the_other_frames_of_a_page_are_never_refused(self):
+        frames = limitmod.TokenBucket(LIMITS.frame_burst, LIMITS.frame_refill_seconds, 0.0)
+        lines = limitmod.TokenBucket(LIMITS.burst, LIMITS.refill_seconds, 0.0)
+        said = 0
+        for step in range(0, 2 * 120 + 1):                          # 120 seconds in steps of half a second, trying a line at every step
+            now = step * 0.5
+            while lines.take(now):
+                said += 1
+                self.assertTrue(frames.take(now), "a line found no frame in the budget at %.1f s" % now)
+            if now >= 1.0 and now % 10 == 0:
+                self.assertTrue(frames.take(now), "a `who` or a `here` found no frame at %.1f s" % now)
+            if now >= 1.0 and now % 25 == 0:
+                self.assertTrue(frames.take(now), "a ping found no frame at %.1f s" % now)
+        self.assertEqual(said, LIMITS.burst + 2 * 120)             # (the burst, and two a second: every line that the account's pace allows went out)
+
+    def test_a_refusal_that_costs_a_frame_more_still_fits_at_the_pace_of_an_account(self):
+        frames = limitmod.TokenBucket(LIMITS.frame_burst, LIMITS.frame_refill_seconds, 0.0)
+        for step in range(1, 2 * 600 + 1):                          # a line (and its `quota` or `rate` from the whole chat: one frame and one more) every half second for ten minutes
+            now = step * 0.5
+            self.assertTrue(frames.take(now) and frames.take(now), "the second frame of a refusal found none at %.1f s" % now)
+
+
 class TheRules(WorldTest):
     def test_a_line_goes_to_everybody_with_its_id_and_time(self):
         self.w.say(self.alice, "hello")
