@@ -420,7 +420,9 @@ void BombTask::step(TaskContext& c) {
     const AntView* routed_actor = nullptr;
     const BombView* routed_pick = nullptr;
     sim::TileCoord routed_side{-1, -1};
-    if (plan.bomb_route && v.has_grid()) {
+    const uint8_t route_ally = v.ally();
+    const bool foreign_bomb = std::any_of(v.bombs().begin(), v.bombs().end(), [&](const BombView& b) { return b.owner != c.seat && !(route_ally < sim::MAX_PLAYERS && b.owner == route_ally); });
+    if (plan.bomb_route && v.has_grid() && foreign_bomb) {                                              // (no bomb of another team on the map: nothing to choose, and the walk maps are not made)
         const sim::Grid& grid = v.grid();
         const int gw = static_cast<int>(grid.width());
         const auto at = [&](sim::TileCoord t) { return static_cast<size_t>(t.y) * static_cast<size_t>(gw) + static_cast<size_t>(t.x); };
@@ -590,12 +592,15 @@ void BombTask::find_route_bombs(const BotView& view, const MapInfo& map, const s
     const auto at = [&](sim::TileCoord t) { return static_cast<size_t>(t.y) * static_cast<size_t>(w) + static_cast<size_t>(t.x); };
     std::vector<uint8_t> safe = open_mask;
     std::vector<uint8_t> bomb(open_mask.size(), 0);
+    bool foreign = false;
     const uint8_t ally = view.ally();
     for (const BombView& b : view.bombs()) {
         if (!grid.in_bounds(b.tile) || b.owner == view.seat() || (ally < sim::MAX_PLAYERS && b.owner == ally)) continue;
         safe[at(b.tile)] = 0;
         bomb[at(b.tile)] = 1;
+        foreign = true;
     }
+    if (!foreign) return;                                                                                  // (no bomb of another team: no route is shut by one, and the two walks are not made)
     const std::vector<int32_t> all = MapInfo::cost_field(grid, open_mask, hill.starts);
     const std::vector<int32_t> round = MapInfo::cost_field(grid, safe, hill.starts);
     std::vector<std::pair<int32_t, const PileView*>> piles;
@@ -604,7 +609,7 @@ void BombTask::find_route_bombs(const BotView& view, const MapInfo& map, const s
         if (info == nullptr || !info->approach[view.seat()].reachable() || p.remaining == 0) continue;
         piles.emplace_back(info->approach[view.seat()].cost, &p);
     }
-    std::sort(piles.begin(), piles.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::sort(piles.begin(), piles.end(), [](const auto& a, const auto& b) { return a.first != b.first ? a.first < b.first : a.second->index < b.second->index; });   // (a total order: equal costs go by the pile's number, so the four kept do not depend on the library's sort)
     if (piles.size() > 4) piles.resize(4);
     static const int kDx[8] = {-1, 0, 1, -1, 1, -1, 0, 1};
     static const int kDy[8] = {-1, -1, -1, 0, 0, 1, 1, 1};

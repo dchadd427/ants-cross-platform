@@ -90,6 +90,42 @@
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI51.8 ' ./build/tests/test_ai/test_ai",
    "expect": "AI51.8"
+  },
+  {
+   "id": "reissue_loses_pickup_mark",
+   "file": "src/ants_ai/bomb_detour.cpp",
+   "old": "        in.pickup = f.pickup;",
+   "new": "        in.pickup = false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI51.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI51.10"
+  },
+  {
+   "id": "final_forgets_pickup",
+   "file": "src/ants_ai/bomb_detour.cpp",
+   "old": "            f.pickup = in.pickup;",
+   "new": "            f.pickup = false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI51.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI51.10"
+  },
+  {
+   "id": "group_not_chunked",
+   "file": "src/ants_ai/bomb_detour.cpp",
+   "old": "    if (in.command.ants.size() <= cap) {",
+   "new": "    if (true) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI51.11 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI51.11"
+  },
+  {
+   "id": "hopeless_skipped_when_all_hopeless",
+   "file": "src/ants_ai/tasks.cpp",
+   "old": "        hopeless_out = other;",
+   "new": "        hopeless_out = other || !cands.empty();",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI51.12 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI51.12"
   }
  ]
 }

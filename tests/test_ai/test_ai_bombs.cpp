@@ -12,7 +12,10 @@
 //   AI51.6  a bomb in a corridor of rocks (no way round) on the way to a pile is defused by a Bomber that is far from it, over no bomb; without the rule (broute=0) nobody clears it
 //   AI51.7  a pile of the class Hopeless (an enemy's hill is far nearer) is left alone while another pile has food (nohope=0 sends ants there)
 //   AI51.8  the plans and the tune keys
-//   AI51.9  whole matches on TREASURE (Hard, seeds 1 to 3, with and without the detour): the bombs walked into fall by half at least and the score does not fall
+//   AI51.10 the order that is given again at the waypoint of a power-up trip keeps its pick-up mark (the controller lets a move onto a power-up through only with it)
+//   AI51.11 a group that is sent round a bomb is never one command of more than 32 ants (the controller refuses a bigger one whole)
+//   AI51.12 the Hopeless rule applies only while another pile has food: when every pile is Hopeless the ants go to them as before
+//   AI51.9  whole matches on TREASURE (Hard, seeds 1 to 6, with and without the detour and the Bomber's route): fewer bombs walked into, and the score within 3 percent
 #include <algorithm>
 #include <cstdint>
 #include <memory>
@@ -120,16 +123,18 @@ void run_bombs_tests() {
                 LevelPlan p = peace_plan(level);
                 p.bomb_detour = detour ? p.bomb_detour : 0;
                 Rig rig(sim, 0, level, std::make_unique<StandardBot>(p), 4, 4);
-                rig.run(700);
+                bool beyond = false;
+                for (int step = 0; step < 70; ++step) {
+                    rig.run(10);
+                    for (const sim::AntSnapshot& a : sim.get_world_state().ants) beyond = beyond || (a.id == road.worker && a.tile_x > 24);
+                }
                 const StandardBot& bot = rig.as<StandardBot>();
                 if (detour) {
                     ASSERT_TRUE(sim.grid().has_bomb_at(TileCoord{20, 20}));
                     ASSERT_EQ(sim.get_unit(road.worker).hp, 10);
                     ASSERT_TRUE(bot.detour().detours() >= 1u);
                     ASSERT_TRUE(bot.detour().reissued() >= 1u);
-                    bool beyond = false;                                                         // (the ant went on past the bomb and reached the pile)
-                    for (const sim::AntSnapshot& a : sim.get_world_state().ants) beyond = beyond || (a.id == road.worker && a.tile_x > 24);
-                    ASSERT_TRUE(beyond || sim.get_world_state().ants.empty() == false);
+                    ASSERT_TRUE(beyond);                                                         // (the ant went on past the bomb and reached the pile)
                     size_t waypoint_orders = 0;
                     for (const auto& e : rig.proposed) {
                         if (e.second.type == CommandType::GroupMove && !(e.second.tile_x == 30 && e.second.tile_y == 20) && !(e.second.tile_x > 28 && e.second.tile_x < 33)) ++waypoint_orders;
@@ -144,10 +149,6 @@ void run_bombs_tests() {
     } TEST_END();
 
     TEST_CASE("AI51.2 An Order Whose Walk Meets No Bomb Of Another Team Is Left Byte For Byte As It Was: No Bomb, An Own Bomb, A Bomb Far From The Walk, A Click Onto A Bomb") {
-        const auto give = [](Orders& o) {
-            o.move({1}, TileCoord{30, 20});
-            o.attack({1}, TileCoord{40, 40}, Priority::Urgent);
-        };
         for (const int variant : {0, 1, 2, 3}) {
             sim::SimulationEngine sim;
             empty_field(sim, 72);
@@ -169,7 +170,6 @@ void run_bombs_tests() {
             ASSERT_TRUE(same_orders(before.intents(), orders));
             ASSERT_EQ(detour.detours(), 0u);
         }
-        (void)give;
     } TEST_END();
 
     TEST_CASE("AI51.3 The Levels: Easy Never; Medium The Walks Of Workers (Not A Thief, Not A Special Order); Hard Every Walk; A Swimmer Never; No Way Round Or A Much Longer One: The Walk Goes As It Is") {
@@ -195,9 +195,6 @@ void run_bombs_tests() {
         for (int l = 0; l < 3; ++l) {
             for (int k = 0; k < 5; ++k) ASSERT_EQ(detoured(levels[l], k), expect[l][k]);
         }
-        sim::SimulationEngine sim;
-        Road road;
-        road.build(sim);
         // no way round: the bomb stands in a corridor of rocks (a wall across the field with a gap of one tile)
         {
             sim::SimulationEngine corridor;
@@ -279,6 +276,68 @@ void run_bombs_tests() {
         }
     } TEST_END();
 
+    TEST_CASE("AI51.10 The Order That Is Given Again At The Waypoint Of A Power-Up Trip Keeps Its Pick-Up Mark: A Plain Click On A Power-Up Tile Is Refused By The Controller") {
+        sim::SimulationEngine sim;
+        empty_field(sim, 80);
+        sim.grid_mut().place_powerup(40, 20, 3);
+        sim.grid_mut().place_bomb(25, 20, 1);
+        const uint32_t w = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10, 20});
+        const auto tile_of = [&](uint32_t id) {
+            for (const sim::AntSnapshot& a : sim.get_world_state().ants) {
+                if (a.id == id) return TileCoord{a.tile_x, a.tile_y};
+            }
+            return TileCoord{-1, -1};
+        };
+        BombDetour d;
+        Look look = judge(d, sim, Level::Hard, [&](Orders& o) { o.pick_up(w, TileCoord{40, 20}); });
+        int legs = 0;
+        while (legs < 8 && !(look.intents.size() == 1 && is_move_to(look.intents[0], 40, 20))) {            // (the waypoints: plain moves, one after the other, until the walk to the power-up meets no bomb)
+            ASSERT_EQ(look.intents.size(), size_t{1});
+            ASSERT_FALSE(look.intents[0].pickup);
+            const Command waypoint = look.intents[0].command;
+            sim.apply_command(command_of(CommandType::GroupMove, 0, {w}, waypoint.tile_x, waypoint.tile_y));
+            d.note(waypoint, Bot::Fate::Sent, sim.current_tick() + 1);
+            for (int i = 0; i < 100 && tile_of(w).chebyshev_dist(TileCoord{waypoint.tile_x, waypoint.tile_y}) > 0; ++i) tick_all(sim, 5);
+            tick_all(sim, 10);
+            look = judge(d, sim, Level::Hard, [](Orders&) {});
+            ++legs;
+        }
+        ASSERT_TRUE(legs >= 1);
+        ASSERT_EQ(look.intents.size(), size_t{1});
+        ASSERT_TRUE(is_move_to(look.intents[0], 40, 20));
+        ASSERT_TRUE(look.intents[0].pickup);
+        ASSERT_EQ(d.reissued(), 1u);
+    } TEST_END();
+
+    TEST_CASE("AI51.11 A Group Sent Round A Bomb Is Never One Command Of More Than 32 Ants: Forty Workers On Two Orders Are Sent Round A Wall Of Bombs That Appears On Their Way, And Every Command That Leaves Names 32 At Most") {
+        sim::SimulationEngine sim;
+        empty_field(sim, 81);
+        add_pile(sim, 40, 17, 80, 30);
+        std::vector<uint32_t> ants;
+        for (int i = 0; i < 40; ++i) ants.push_back(sim.spawn_unit(0, sim::AntType::Worker, TileCoord{14 + i % 8, 15 + i / 8}));
+        const std::vector<uint32_t> first_half(ants.begin(), ants.begin() + 20);
+        const std::vector<uint32_t> second_half(ants.begin() + 20, ants.end());
+        BombDetour d;
+        {
+            const Look first = judge(d, sim, Level::Hard, [&](Orders& o) {
+                o.move(first_half, TileCoord{40, 17});
+                o.move(second_half, TileCoord{40, 17});
+            });
+            ASSERT_EQ(first.intents.size(), size_t{2});                                           // (no bomb yet: both orders go as they are)
+        }
+        sim.apply_command(command_of(CommandType::GroupMove, 0, first_half, 40, 17));
+        sim.apply_command(command_of(CommandType::GroupMove, 0, second_half, 40, 17));
+        tick_all(sim, 12);
+        for (int y = 14; y <= 26; ++y) sim.grid_mut().place_bomb(28, static_cast<uint32_t>(y), 1);          // a wall of bombs of another team lands across the way, with a way round at both ends
+        const Look second = judge(d, sim, Level::Hard, [](Orders&) {});
+        size_t named = 0;
+        for (const Intent& in : second.intents) {
+            ASSERT_TRUE(in.command.ants.size() <= sim::kMaxCommandAnts);
+            named += in.command.ants.size();
+        }
+        ASSERT_EQ(named, size_t{40});
+    } TEST_END();
+
     TEST_CASE("AI51.5 A Bomber That The Engine's Walk Would Take Over Another Bomb Walks To A Tile Beside The Bomb That Holds None First: Whole And The Bomb Gone; With broute=0 It Is Sent Straight And Is Hurt") {
         for (const bool route : {true, false}) {
             sim::SimulationEngine sim;
@@ -353,6 +412,24 @@ void run_bombs_tests() {
         }
         ASSERT_EQ(sent[0], size_t{0});
         ASSERT_TRUE(sent[1] > 0u);
+    } TEST_END();
+
+    TEST_CASE("AI51.12 The Hopeless Rule Applies Only While Another Pile Has Food: When Every Pile Is Hopeless (Only The Pile Beside An Enemy's Hill) The Ants Still Go There With The Rule On") {
+        size_t sent = 0;
+        sim::SimulationEngine sim;
+        empty_field(sim, 79);
+        add_pile(sim, 44, 10, 60, 100);                                                           // beside the hill of seat 1 at (50, 4): the only pile
+        for (int i = 0; i < 14; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + (i % 4), 9 + i / 4});
+        for (uint8_t t = 1; t < 4; ++t) sim.spawn_unit(t, sim::AntType::Worker, TileCoord{kFightHills[t].x + 2, kFightHills[t].y + 6});
+        LevelPlan p = peace_plan(Level::Medium);
+        ASSERT_TRUE(p.skip_hopeless);
+        p.bomb_detour = 0;
+        Rig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(p), 4, 4);
+        rig.run(120);
+        for (const auto& e : rig.proposed) {
+            if (e.second.type == CommandType::GroupMove && e.second.tile_x > 38) sent += e.second.ants.size();
+        }
+        ASSERT_TRUE(sent > 0u);
     } TEST_END();
 
     TEST_CASE("AI51.8 The Plans And The Tune Keys: Easy Plays None Of It, Medium And Hard Play The Detour (1 And 2), The Bomber's Route And The Hopeless Rule; det, detpct, broute And nohope Put Them Over") {

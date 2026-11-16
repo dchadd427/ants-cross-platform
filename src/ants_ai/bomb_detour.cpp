@@ -18,9 +18,9 @@ namespace {
 constexpr uint32_t kBlocked = static_cast<uint32_t>(MapInfo::kPathCostLimit);   // the engine's cost of a blocked step
 constexpr uint64_t kOrderMemory = 1800;                                           // a remembered order older than this (ticks) is forgotten
 constexpr uint64_t kPileMemory = 7200;                                            // ... except a walk to a pile: the engine repeats a harvest on its own, so the ant goes on walking to the pile it was sent to
-constexpr int kMaxCandidates = 10;
+constexpr int kMaxCandidates = 10;                                                // waypoint candidates tried for one detour
 constexpr uint64_t kRecheckTicks = 24;                                            // a walk that is under way is looked at again this often (the engine's repeat of a harvest walks on its own)
-constexpr uint64_t kIdleForget = 120;                                             // an ant that stands still this long is no longer on the order that it was given                                                // waypoint candidates tried for one detour
+constexpr uint64_t kIdleForget = 120;                                             // an ant that stands still this long is no longer on the order that it was given
 
 bool walking_type(sim::CommandType t) noexcept { return t == sim::CommandType::GroupMove || t == sim::CommandType::GroupSpecial || t == sim::CommandType::GroupAttack; }
 
@@ -40,6 +40,21 @@ sim::Command make_command(sim::CommandType type, sim::TileCoord tile, const std:
     c.tile_y = static_cast<int16_t>(tile.y);
     c.ants = ants;
     return c;
+}
+
+// An intent that names more ants than a command may (sim::kMaxCommandAnts) goes out as several, with the same priority and pick-up mark: the controller refuses a command that names too many whole
+void push_chunked(std::vector<Intent>& into, Intent in) {
+    const size_t cap = sim::kMaxCommandAnts;
+    if (in.command.ants.size() <= cap) {
+        into.push_back(std::move(in));
+        return;
+    }
+    const std::vector<uint32_t> all = in.command.ants;
+    for (size_t i = 0; i < all.size(); i += cap) {
+        Intent part = in;
+        part.command.ants.assign(all.begin() + static_cast<std::ptrdiff_t>(i), all.begin() + static_cast<std::ptrdiff_t>(std::min(all.size(), i + cap)));
+        into.push_back(std::move(part));
+    }
 }
 
 
@@ -381,7 +396,7 @@ void BombDetour::apply(const BotView& view, const LevelPlan& plan, const Profile
             Intent in;
             in.command = make_command(sim::CommandType::GroupMove, via, g.second);
             in.priority = priority;
-            into.push_back(std::move(in));
+            push_chunked(into, std::move(in));
             Via v;
             v.ants = g.second;
             v.via = via;
@@ -442,7 +457,7 @@ void BombDetour::apply(const BotView& view, const LevelPlan& plan, const Profile
         if (!stay.empty()) {
             Intent rest = in;
             rest.command.ants = stay;
-            result.push_back(std::move(rest));
+            push_chunked(result, std::move(rest));
         }
         add_waypoint(go, in.priority, original, in.pickup, result);
     }
@@ -597,7 +612,7 @@ void BombDetour::apply(const BotView& view, const LevelPlan& plan, const Profile
         Intent in;
         in.command = make_command(sim::CommandType::GroupMove, sim::TileCoord{g.first.first, g.first.second}, g.second);
         in.priority = Priority::Normal;
-        extra.push_back(std::move(in));
+        push_chunked(extra, std::move(in));
         Via v;
         v.ants = g.second;
         v.via = sim::TileCoord{g.first.first, g.first.second};
@@ -612,7 +627,7 @@ void BombDetour::apply(const BotView& view, const LevelPlan& plan, const Profile
         in.command = g.second.first;
         in.command.ants = g.second.second;
         in.priority = static_cast<Priority>(std::get<3>(g.first));
-        extra.push_back(std::move(in));
+        push_chunked(extra, std::move(in));
     }
     for (Intent& in : extra) result.push_back(std::move(in));
     intents.swap(result);

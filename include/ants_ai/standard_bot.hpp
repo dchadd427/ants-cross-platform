@@ -113,7 +113,7 @@ public:
     const WallTask& walls() const noexcept { return walls_; }
     const PowerUpTask& powerups() const noexcept { return powerups_; }
     const BombTask& bombs() const noexcept { return bombs_; }
-    /// The walk round the bombs of other teams (BombDetour): its counters, for the arena report and the tests
+    /// The walk round the bombs of other teams (BombDetour): its counters, for the tests
     const BombDetour& detour() const noexcept { return detour_; }
     const MineTask& mines() const noexcept { return mines_; }
     const RaidTask& raids() const noexcept { return raids_; }

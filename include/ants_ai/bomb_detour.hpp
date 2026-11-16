@@ -46,7 +46,7 @@ public:
     /// What became of a command that left (or never left) the controller: the ants of a waypoint order start their walk when it is sent; one that never left keeps what it had
     void note(const sim::Command& command, Bot::Fate fate, uint64_t tick);
 
-    /// Counters (the arena report, the tests)
+    /// Counters (read by the tests; the arena's report does not carry them)
     uint32_t detours() const noexcept { return detours_; }
     uint32_t reissued() const noexcept { return reissued_; }
     uint32_t carriers() const noexcept { return carriers_; }
