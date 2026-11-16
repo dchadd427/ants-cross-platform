@@ -1,5 +1,5 @@
 // OPT-IN, not part of ./run_tests.sh: the toast of Home's notices in a REAL browser (Chromium through Playwright), behind a small stand-in for the site's nginx (the files of web/, a fake /lobbies, no hub:
-// the chat says it is offline and draws no field, so the script makes the field show, as it does when the chat is online). docs/HOME_SCREEN.md, "Notices": a notice is a box over the page that takes no room.
+// the chat says it is offline and draws no field, so the script makes the field show, as it does when the chat is online). docs/HOME_GAMES.md, "Notices": a notice is a box over the page that takes no room.
 // The notice that can be made without a game server is "Your match is running." with a Rejoin button (the page's own Rejoin strip is up, and a press on Quick host says it); it asks, so it stays. The notices that
 // go by themselves after 6 s, and the others, need a room or a game server: the node checks (web_home_games_room_check.js, section 9) have them on a fake clock. For every width (1280, 1180, 640, 390, 320 and a
 // phone held sideways, 568 x 320) and every view of a phone (Games, Players, Chat) it checks:
@@ -250,7 +250,7 @@ async function shot(page, name) { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: 
             if (t5) {
                 check(name + ': on the Room the toast is inside the window', t5.l >= -0.5 && t5.t >= -0.5 && t5.r <= w + 0.5 && t5.b <= h + 0.5, JSON.stringify(t5));
                 if (phone) await clearOf(page, name + ': the Room', t5, ['.go']);
-                // Copy link: free where there is room; in a window under about 400 px high there is none, and the toast (which OK closes) can sit over it (docs/HOME_SCREEN.md, "Notices")
+                // Copy link: free where there is room; in a window under about 400 px high there is none, and the toast (which OK closes) can sit over it (docs/HOME_GAMES.md, "Notices")
                 if (h > 400) await clearOf(page, name + ': the Room', t5, ['#copy']);
                 else {
                     await page.evaluate(() => Array.from(document.querySelectorAll('.gtoast button')).pop().click());

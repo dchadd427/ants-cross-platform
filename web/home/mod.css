@@ -1,4 +1,4 @@
-/* The moderation sheet of Home's chat (web/home/mod.js, docs/HOME_SCREEN.md "Roles and commands"), loaded only for a visitor with a role. The colors, .btn, .leave and the frames are the page's own (web/lobby.html,
+/* The moderation sheet of Home's chat (web/home/mod.js, docs/HOME_CHAT.md "Roles and commands"), loaded only for a visitor with a role. The colors, .btn, .leave and the frames are the page's own (web/lobby.html,
    games.css, talk.css). Every target is at least 44 px; the sheet is a card in the middle of the window, and a bottom sheet on a phone held upright; nothing scrolls sideways. */
 
 /* ---- the lines of the log that a staff member may act on ---- */

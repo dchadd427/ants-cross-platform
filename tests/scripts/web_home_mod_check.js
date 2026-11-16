@@ -1,4 +1,4 @@
-// Runs the moderation sheet of Home's chat (web/home/mod.js, docs/HOME_SCREEN.md "Roles and commands") against the REAL chat dock (web/home/chat.js, mounted on a fake hub socket) in the fake browser of
+// Runs the moderation sheet of Home's chat (web/home/mod.js, docs/HOME_CHAT.md "Roles and commands") against the REAL chat dock (web/home/chat.js, mounted on a fake hub socket) in the fake browser of
 // tests/scripts/web_page_harness.js, with a fake clock. What it checks:
 //   1. the pure parts: what a viewer is offered on a line (every viewer x author), the hub's command for each action (by the number of the line, never by a name), the minutes that a typed text means, the words of an
 //      answer (every code of the hub), the source of the script (ASCII, no markup);

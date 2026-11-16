@@ -1,4 +1,4 @@
-/* The Games list, Quick host and the Room's Public | Private switch (web/home/games.js, docs/HOME_SCREEN.md). Loaded after the first paint; the colors, .btn, .banner, .joinbox and .hint are the page's own
+/* The Games list, Quick host and the Room's Public | Private switch (web/home/games.js, docs/HOME_GAMES.md). Loaded after the first paint; the colors, .btn, .banner, .joinbox and .hint are the page's own
    (web/lobby.html). Every target is at least 44 px high and wide. */
 
 /* ---- the Games button while the list is open ---- */

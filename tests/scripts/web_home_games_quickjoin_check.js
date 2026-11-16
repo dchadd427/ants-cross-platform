@@ -1,4 +1,4 @@
-// Runs QUICK JOIN and the question before LEAVE ROOM (web/home/games.js with web/lobby.html's own script, docs/HOME_SCREEN.md) in the fake browser of tests/scripts/web_page_harness.js, with a scripted game server and a fake
+// Runs QUICK JOIN and the question before LEAVE ROOM (web/home/games.js with web/lobby.html's own script, docs/HOME_GAMES.md) in the fake browser of tests/scripts/web_page_harness.js, with a scripted game server and a fake
 // GET /lobbies (the rig is tests/scripts/web_home_games_rig.js):
 //   1. the order of the rooms (the fullest that still has a free seat, then the oldest, then the list's own order), the BEST tag, "updates live";
 //   2. the way that works: the card "Finding a game...", the second client for the best room, the card "Joined Pebble's room", the Room that opens by itself or at the press of its button, no toast, nothing left of the old room

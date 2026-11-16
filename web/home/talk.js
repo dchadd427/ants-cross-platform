@@ -1,4 +1,4 @@
-// The chat's two small helpers (docs/HOME_SCREEN.md, "Emoji and voice"): an emoji button with a picker, and a microphone button that types what the person says into the chat field. They stand beside Send. ES5, no module
+// The chat's two small helpers (docs/HOME_CHAT.md, "Emoji and voice"): an emoji button with a picker, and a microphone button that types what the person says into the chat field. They stand beside Send. ES5, no module
 // system: a page gets AntsHomeTalk, node gets module.exports (tests/scripts/web_home_talk_check.js). web/home/home.js loads this file and talk.css after the chat dock, once, and mounts it into the dock's own form; a page
 // whose dock never comes has neither button, and what goes wrong in here stays here.
 //   * Emoji: every single code point emoji of Unicode 9 or older that draws as a picture by itself, in eight groups, with a name and a few English search words each; own code and no library. Each one is a single code point

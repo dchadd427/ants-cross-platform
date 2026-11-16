@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The public Room and the Games list of the front page (web/home/games.js and games.css, docs/HOME_SCREEN.md, docs/PUBLIC_ROOMS.md; run by ./run_tests.sh --fast and by the CI).
+"""The public Room and the Games list of the front page (web/home/games.js and games.css, docs/HOME_GAMES.md, docs/PUBLIC_ROOMS.md; run by ./run_tests.sh --fast and by the CI).
 
 The front page shows the Home bar's **Games** (a popover with the list that `GET /lobbies` gives, Join, Join by code), **Quick host**, and, in the Room's card, the host's Public | Private switch. All of it is made by a
 script and a style that the page loads after its first paint, in the folder of the two screens (web/home/), with a budget of their own. Text that comes from the list is somebody else's: it is checked field by field and

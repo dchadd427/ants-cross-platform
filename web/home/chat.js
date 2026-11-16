@@ -1,4 +1,4 @@
-// The global chat dock of Home (docs/HOME_SCREEN.md, "The chat dock"): a panel along the bottom of Home (the Chat view on a phone) that reads and writes the site's chat hub, one WebSocket, JSON, version 1
+// The global chat dock of Home (docs/HOME_CHAT.md, "The chat dock"): a panel along the bottom of Home (the Chat view on a phone) that reads and writes the site's chat hub, one WebSocket, JSON, version 1
 // (docs/HUB.md: up {"t":"say","text"} and {"t":"ping"}; down welcome, line, del, online, err, and for a moderator you, ok, bans, bye). Loaded by web/home/home.js after the first paint, with web/home/chat.css, and only by the front page: a plain visit of any
 // other page opens no hub socket. ES5, no module system: a page gets AntsHomeChat, node gets module.exports (tests/scripts/web_home_chat_check.js).
 //   * Everything the hub sends is text from strangers: it becomes DOM text with createElement and textContent only (never markup; the one thing that becomes a link is an http or https address, or a bare www host, made as an element with attributes: see partsOf); names and lines are cut for display, the bidirectional and zero-width

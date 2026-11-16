@@ -1,4 +1,4 @@
-// Runs the front page's PUBLIC ROOM and GAMES LIST (web/home/games.js and games.css with web/lobby.html's own script, docs/HOME_SCREEN.md, docs/PUBLIC_ROOMS.md) in the fake browser of tests/scripts/web_page_harness.js,
+// Runs the front page's PUBLIC ROOM and GAMES LIST (web/home/games.js and games.css with web/lobby.html's own script, docs/HOME_GAMES.md, docs/PUBLIC_ROOMS.md) in the fake browser of tests/scripts/web_page_harness.js,
 // against a scripted game server and a fake GET /lobbies:
 //   1. the pure parts: a row of the list on a table (every field of the shape, every wrong type and range, markup and look-alike characters in a name), the list (extra fields, duplicates, 10,000 rows, a top level that is
 //      no list), the waits (30 s, 5 s, doubled after a failure up to a cap, +-20 %), the count ("50+"), the seats;

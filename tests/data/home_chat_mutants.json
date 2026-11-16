@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the chat dock of Home (web/home/chat.js and chat.css, docs/HOME_SCREEN.md 'The chat dock') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_home_chat_check.js (the dock against a fake hub and a fake clock), tests/scripts/web_home_chat_hub_check.js (the fake hub on a real socket) and the static checks of tests/scripts/test_web_home_chat.py: text that becomes markup, no cap on the lines, del ignored, a send while offline, no backoff, a reconnect storm, unread never reset, the words of the errors, garbage that throws, a socket on another page, no ping, a login button with login:false, the field without `you`, the loader in home.js, the style and the wiring; every one must be caught (tools/mutate.py tests/data/home_chat_mutants.json --keep-going --jobs 1).",
+ "note": "Mutants of the chat dock of Home (web/home/chat.js and chat.css, docs/HOME_CHAT.md 'The chat dock') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_home_chat_check.js (the dock against a fake hub and a fake clock), tests/scripts/web_home_chat_hub_check.js (the fake hub on a real socket) and the static checks of tests/scripts/test_web_home_chat.py: text that becomes markup, no cap on the lines, del ignored, a send while offline, no backoff, a reconnect storm, unread never reset, the words of the errors, garbage that throws, a socket on another page, no ping, a login button with login:false, the field without `you`, the loader in home.js, the style and the wiring; every one must be caught (tools/mutate.py tests/data/home_chat_mutants.json --keep-going --jobs 1).",
  "mutants": [
   {
    "id": "text_made_with_innerhtml",
@@ -1641,21 +1641,21 @@
   },
   {
    "id": "docs_forget_the_login_place",
-   "file": "docs/HOME_SCREEN.md",
+   "file": "docs/HOME_CHAT.md",
    "old": "a press opens `#gchat-login-slot`, a box",
    "new": "a press opens the dropdown, a box",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "docs_say_another_backoff",
-   "file": "docs/HOME_SCREEN.md",
+   "file": "docs/HOME_CHAT.md",
    "old": "1 s, doubling to 60 s",
    "new": "1 s, doubling to 600 s",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "docs_say_the_dock_loads_everywhere",
-   "file": "docs/HOME_SCREEN.md",
+   "file": "docs/HOME_CHAT.md",
    "old": "no other page loads them or opens a hub socket",
    "new": "every page loads them",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
