@@ -421,7 +421,7 @@ struct LevelPlan {
     BrawlParams brawl;
     // The thief batch (docs/BOTS.md, "Thieves: the answer to a raid"; Medium and Hard have raid_recheck and fire_home_only on, the meeting and the trap are off; `bot_arena --tune thief_batch=0`, or the keys below, is the bot before it):
     bool raid_recheck{false};            // a thief on its way to a raid looks at the hole again at every look (fire walls, bombs, an ant on the raid tile, no walk, too little to take): when it is shut it goes to the best other hill, or home (RaidTask)
-    uint32_t raid_recheck_black{300};    // ... the hill that was shut is not chosen again for this long (the walls last 3,600 ticks, a bomb stays, an ant moves on)
+    uint32_t raid_recheck_black{300};    // ... a hill that was called off for walls, bombs, a box that shows too little or a missing walk is not chosen again for this long (the walls last 3,600 ticks, a bomb stays); an ant on the raid tile is gone in seconds and costs no wait
     bool thief_guard{false};             // an enemy Thief on its way to the own hole, standing at it or walking home with loot is met by the nearest free fighters (ThiefGuardTask)
     int32_t thief_guard_radius{14};      // ... a Thief this close to the own raid tile (Chebyshev) counts, when it comes nearer or stands
     uint32_t thief_guard_force{2};       // ... the strikers sent to it, at most (Combat Ants first): they wait on the column east of the hole and go at a Thief that stands

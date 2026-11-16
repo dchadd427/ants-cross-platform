@@ -13,8 +13,8 @@
   {
    "id": "recheck_ignores_box",
    "file": "src/ants_ai/standard_tasks_raid.cpp",
-   "old": "row.score < static_cast<int32_t>(min_loot_now()) || hole_shut(c, r.team, thief.id);",
-   "new": "hole_shut(c, r.team, thief.id);",
+   "old": "row.score < static_cast<int32_t>(min_loot_now()) || hole == Hole::Walls;",
+   "new": "hole == Hole::Walls;",
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI53.4 ' ./build/tests/test_ai/test_ai",
    "expect": "AI53.4"
@@ -33,6 +33,60 @@
    "file": "src/ants_ai/standard_tasks_raid.cpp",
    "old": "    c.orders.stop({thief.id}, Priority::Normal);",
    "new": "    // no stop",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.4"
+  },
+  {
+   "id": "recheck_no_walk_check",
+   "file": "src/ants_ai/standard_tasks_raid.cpp",
+   "old": "        bad = !reach;",
+   "new": "        bad = !reach && false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.4"
+  },
+  {
+   "id": "recheck_held_not_called_off",
+   "file": "src/ants_ai/standard_tasks_raid.cpp",
+   "old": "bool bad = lasting || hole == Hole::Held;",
+   "new": "bool bad = lasting;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.4"
+  },
+  {
+   "id": "recheck_blacklists_every_reason",
+   "file": "src/ants_ai/standard_tasks_raid.cpp",
+   "old": "    if (lasting) black_[r.team] = std::max(black_[r.team], now + plan.raid_recheck_black);",
+   "new": "    black_[r.team] = std::max(black_[r.team], now + plan.raid_recheck_black);",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.4"
+  },
+  {
+   "id": "recheck_never_blacklists",
+   "file": "src/ants_ai/standard_tasks_raid.cpp",
+   "old": "    if (lasting) black_[r.team] = std::max(black_[r.team], now + plan.raid_recheck_black);",
+   "new": "    if (false && lasting) black_[r.team] = std::max(black_[r.team], now + plan.raid_recheck_black);",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.4"
+  },
+  {
+   "id": "hole_walls_judged_held",
+   "file": "src/ants_ai/standard_tasks_raid.cpp",
+   "old": "if (free_of_walls < plan.raid_min_free) return Hole::Walls;",
+   "new": "if (free_of_walls < plan.raid_min_free) return Hole::Held;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.4"
+  },
+  {
+   "id": "hole_held_judged_walls",
+   "file": "src/ants_ai/standard_tasks_raid.cpp",
+   "old": "(plan.cantgo_aware && held_by_standing_ant(v, h.raid))) return Hole::Held;",
+   "new": "(plan.cantgo_aware && held_by_standing_ant(v, h.raid))) return Hole::Walls;",
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI53.4 ' ./build/tests/test_ai/test_ai",
    "expect": "AI53.4"
@@ -141,6 +195,78 @@
    "file": "src/ants_ai/standard_tasks_build.cpp",
    "old": "if (check_walk && !walks_to(v, c.seat, keeper->tile, target)) {",
    "new": "if (false) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.7"
+  },
+  {
+   "id": "wall_build_unreachable_not_released",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "failed_until_[pick] = now + 600u;\n            ++unreachable_;\n            c.ledger.release(keeper_, id());",
+   "new": "failed_until_[pick] = now + 600u;\n            ++unreachable_;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.7"
+  },
+  {
+   "id": "wall_renew_unreachable_sent",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (check_walk && !walks_to(v, c.seat, keeper->tile, tiles[static_cast<size_t>(renew)])) {",
+   "new": "if (false) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.7"
+  },
+  {
+   "id": "wall_renew_unreachable_not_blacklisted",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "            renew_black_[renew] = now + 600u;\n",
+   "new": "",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.7"
+  },
+  {
+   "id": "wall_renew_blacklist_ignored",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (st.tile[static_cast<size_t>(i)] != EastTile::Wall || renew_blacked(i, now)) continue;\n            const uint64_t seen",
+   "new": "if (st.tile[static_cast<size_t>(i)] != EastTile::Wall) continue;\n            const uint64_t seen",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.7"
+  },
+  {
+   "id": "wall_renew_unreachable_not_released",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "renew_black_[renew] = now + 600u;\n            ++unreachable_;\n            c.ledger.release(keeper_, id());",
+   "new": "renew_black_[renew] = now + 600u;\n            ++unreachable_;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.7"
+  },
+  {
+   "id": "wall_counter_unreachable_sent",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (check_walk && !walks_to(v, c.seat, keeper->tile, counter_tile)) {",
+   "new": "if (false) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.7"
+  },
+  {
+   "id": "wall_counter_unreachable_not_blacklisted",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "counter_black_[static_cast<int64_t>(counter_tile.y) * 4096 + counter_tile.x] = now + 600u;",
+   "new": "",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI53.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI53.7"
+  },
+  {
+   "id": "wall_walk_asked_on_walled_maps",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "const bool check_walk = plan.fire_home_only && !tactics_.gate_map && !tactics_.field_map;",
+   "new": "const bool check_walk = plan.fire_home_only;",
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI53.7 ' ./build/tests/test_ai/test_ai",
    "expect": "AI53.7"

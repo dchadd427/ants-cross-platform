@@ -62,7 +62,6 @@ private:
         uint32_t thief{0};
         uint64_t started{0};
         uint64_t last_threat{0};             // the last look at which the Thief was a target
-        uint8_t last_hp{10};
         uint64_t trap_asked{0};              // the tick the wall was asked to be put out (0: none)
         uint64_t stood_since{0};             // the tick since which the Thief has not walked (0: it walks)
         std::map<uint32_t, Fighter> fighters;

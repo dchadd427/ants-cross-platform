@@ -276,7 +276,6 @@ void ThiefGuardTask::step(TaskContext& c) {
             end_meet(c, it++, true);
             continue;
         }
-        m.last_hp = e->hp;
         if (e->state == sim::UnitState::Walking) m.stood_since = 0;
         else if (m.stood_since == 0) m.stood_since = now;
         if (wanted(v, hill, *e, gate_closed, now)) m.last_threat = now;
@@ -304,7 +303,6 @@ void ThiefGuardTask::step(TaskContext& c) {
         m.thief = e->id;
         m.started = now;
         m.last_threat = now;
-        m.last_hp = e->hp;
         Meet& slot = meets_.emplace(e->id, std::move(m)).first->second;
         top_up(c, slot, *e, hill);
         if (slot.fighters.empty()) {

@@ -7,14 +7,19 @@
 //   AI53.2  who is no target: a Thief far away or walking off, an ant of the ally, a hole that the walls have shut (a Thief that walks to it or stands in front of it), and nobody is sent when only the
 //           last ants are left
 //   AI53.3  the trap: a Thief shut in on the raid tile with the loot by the own walls is let out (a wall is put out) when the strikers stand ready; with nobody ready, a Thief without loot or the trap off the walls stay; no blocker walks onto the tiles in front of the hole while the Thief is on the raid tile
-//   AI53.4  the raid offence looks again: a thief on its way to a hole that is shut meanwhile goes to the other hill or stops (and never arrives at a hole that it cannot enter); with the
-//           switch off it arrives and shows "Can't go there."
+//   AI53.4  the raid offence looks again: a thief on its way to a hole that is shut meanwhile (walls, a box that falls, rocks across the way, an ant on the raid tile) goes to the other hill or stops
+//           (and never arrives at a hole that it cannot enter); with the switch off it arrives and shows "Can't go there."; the hill is left alone for 300 ticks after walls or a missing walk, not after
+//           an ant that stood on the raid tile for a moment
 //   AI53.5  a Fire Ant that stands where no walk leads to the hole gets no wall order (a corner row of ISLANDS), and the Fire power-up of such a place is not taken
+//   AI53.7  a keeper that cannot walk to a wall (a rock in a lake) is given no order for it, to build, to renew or to put out an enemy wall: it is not asked again for 600 ticks and is the economy's
+//           meanwhile; on a walled map the walk is not asked
 //   AI53.8  a keeper that stands on the mound of its hill or in the fire of its own wall is given the wall order (the rule of AI53.7 judges where a walk leaves from, not the tile it stands on)
 //   AI53.6  the batch is one switch (without_thief_batch, `--tune thief_batch=0`): with it off nothing of it happens; Medium and Hard ship the look again and the Fire Ant rule, Easy none of it, no level the meeting or the trap
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <tuple>
+#include <vector>
 
 #include "ai_test.hpp"
 #include "ants_ai/arena.hpp"
@@ -275,15 +280,16 @@ void run_thief_tests() {
         ASSERT_EQ(empty_handed.opens, 0u);
     } TEST_END();
 
-    TEST_CASE("AI53.4 The Raid Offence Looks Again: A Thief On Its Way To A Hole That Is Shut Meanwhile Goes To The Other Hill Or Stops, And Never Arrives At A Hole That It Cannot Enter (With The Switch Off It Arrives And Shows Can't Go There)")
+    TEST_CASE("AI53.4 The Raid Offence Looks Again: A Thief On Its Way To A Hole That Is Shut Meanwhile Goes To The Other Hill Or Stops, And Never Arrives At A Hole That It Cannot Enter (With The Switch Off It Arrives And Shows Can't Go There); The Hill Is Left Alone For 300 Ticks After Walls Or A Missing Walk, Not After An Ant That Stands On The Raid Tile For A Moment")
     {
         sim::SimulationEngine probe;
         empty_field(probe, 74);
         const MapInfo pmap(probe);
         const HillInfo& h1 = pmap.hill(1);
-        const HillInfo& h2 = pmap.hill(2);
         const std::array<TileCoord, 3> east1 = east_tiles(h1);
-        const std::array<TileCoord, 3> east2 = east_tiles(h2);
+        // what shuts the hole while the thief walks to it: its owner lights all three walls for good (Walls) or for 120 ticks (Burning); an ant of a third team stands on the raid tile for 70 ticks
+        // (Ant); a line of rocks across the whole field cuts the thief off from the hole (Cut)
+        enum class Shut { Walls, Burning, Ant, Cut };
         struct Out {
             uint32_t rechecks{0};
             uint32_t retargets{0};
@@ -291,8 +297,11 @@ void run_thief_tests() {
             int32_t score1{0};
             int32_t score2{0};
             uint32_t raids{0};
+            uint64_t off{0};                                                                                    // the tick of the stop that called the raid off (0: none)
+            uint64_t again{0};                                                                                  // the tick of the first raid order after it (0: none)
+            int32_t thief_x{0};
         };
-        const auto play = [&](bool recheck, bool other_open) {
+        const auto play = [&](bool recheck, bool other_open, Shut how) {
             sim::SimulationEngine sim;
             empty_field(sim, 74);
             sim.set_player_score(1, 300);
@@ -304,14 +313,24 @@ void run_thief_tests() {
             CantGoTally tally;
             rig.count_with(&tally);
             bool shut = false;
+            uint32_t ant = 0;
+            uint64_t ant_since = 0;
             for (int t = 0; t < 900; ++t) {
                 rig.tick();
                 const sim::AntUnit& u = sim.get_unit(thief);
-                // the victim lights its walls (all three tiles) while the thief is on its way, at ten tiles from the hole
-                if (!shut && u.is_alive() && u.state == sim::UnitState::Walking && std::abs(u.pixel_x / 32 - h1.raid.x) <= 12 && u.pixel_x / 32 > h1.raid.x - 4) {
-                    for (const TileCoord& e : east1) sim.set_fire_at(e, 3600);
+                const int32_t ahead = h1.raid.x - u.pixel_x / 32;                                                // the tiles to the hole
+                if (!shut && u.is_alive() && u.state == sim::UnitState::Walking && (how == Shut::Cut ? u.pixel_x / 32 >= 34 : ahead <= 12 && ahead >= 4)) {
                     shut = true;
+                    if (how == Shut::Walls || how == Shut::Burning) {
+                        for (const TileCoord& e : east1) sim.set_fire_at(e, how == Shut::Walls ? 3600 : 120);
+                    } else if (how == Shut::Ant) {
+                        ant = sim.spawn_unit(3, sim::AntType::Worker, h1.raid);
+                        ant_since = sim.current_tick();
+                    } else {
+                        for (int y = 0; y < 60; ++y) sim.set_terrain(46, y, sim::TERRAIN_OBSTACLE);
+                    }
                 }
+                if (ant != 0 && sim.current_tick() == ant_since + 70) sim.apply_command(command_of(CommandType::GroupMove, 3, {ant}, 40, 40));       // it walks off the tile
             }
             Out out;
             const StandardBot& bot = rig.as<StandardBot>();
@@ -321,19 +340,42 @@ void run_thief_tests() {
             out.score1 = sim.get_player_score(1);
             out.score2 = sim.get_player_score(2);
             out.raids = bot.raids().raids_ordered();
-            (void)east2;
-            (void)h2;
+            out.thief_x = sim.get_unit(thief).pixel_x / 32;
+            for (const auto& e : rig.proposed) {
+                if (e.second.ants.size() != 1 || e.second.ants[0] != thief) continue;
+                if (e.second.type == CommandType::Stop && out.off == 0 && shut) out.off = e.first;
+                else if (e.second.type == CommandType::GroupSpecial && out.off != 0 && out.again == 0) out.again = e.first;
+            }
             return out;
         };
         ASSERT_TRUE(plan_for(Level::Hard).raid_recheck && plan_for(Level::Medium).raid_recheck);
         ASSERT_FALSE(plan_for(Level::Easy).raid_recheck);
-        const Out after = play(true, false);
+        const Out after = play(true, false, Shut::Walls);
         ASSERT_TRUE(after.rechecks >= 1u);                                                                     // the hole was found shut on the way
         ASSERT_EQ(after.cantgo, 0u);                                                                           // and the thief never stood in front of it
         ASSERT_EQ(after.score1, 300);                                                                          // nothing was taken
-        const Out before = play(false, false);
+        const Out before = play(false, false, Shut::Walls);
         ASSERT_EQ(before.rechecks, 0u);
         ASSERT_TRUE(before.cantgo > 0u);                                                                       // it arrived and showed "Can't go there."
+        // no walk reaches the hole any more (a line of rocks across the field): the raid is called off at the look of the walk, the thief stops short of the rocks; with the switch off it walks to them
+        const Out cut = play(true, false, Shut::Cut);
+        ASSERT_TRUE(cut.rechecks >= 1u);
+        ASSERT_TRUE(cut.off != 0u);
+        ASSERT_TRUE(cut.thief_x < 44);
+        const Out cut_off = play(false, false, Shut::Cut);
+        ASSERT_EQ(cut_off.rechecks, 0u);
+        ASSERT_TRUE(cut_off.thief_x >= 44);
+        // what shut the hole decides how long the hill is left alone: walls that burn out (a bomb stays, a missing walk stays) for the 300 ticks of the plan, an ant that stands on the raid tile for
+        // a moment not at all (the thief goes again when it has walked off)
+        const Out burnt = play(true, false, Shut::Burning);
+        ASSERT_TRUE(burnt.rechecks >= 1u);
+        ASSERT_TRUE(burnt.off != 0u && burnt.again != 0u);
+        ASSERT_TRUE(burnt.again >= burnt.off + 300u);
+        const Out passing = play(true, false, Shut::Ant);
+        ASSERT_TRUE(passing.rechecks >= 1u);
+        ASSERT_TRUE(passing.off != 0u && passing.again != 0u);
+        ASSERT_TRUE(passing.again < passing.off + 150u);
+        ASSERT_TRUE(passing.score1 < 300);                                                                     // and it raided
         // the box of the victim falls below what a raid is worth while the thief walks (its owner spent it on eggs): the thief stops, and with the switch off it takes what is left
         for (const bool recheck : {true, false}) {
             sim::SimulationEngine sim;
@@ -356,7 +398,7 @@ void run_thief_tests() {
             ASSERT_EQ(rig.as<StandardBot>().raids().rechecks() >= 1u, recheck);
             ASSERT_EQ(sim.get_player_score(1), recheck ? 10 : 0);
         }
-        const Out other = play(true, true);
+        const Out other = play(true, true, Shut::Walls);
         ASSERT_TRUE(other.retargets >= 1u);                                                                    // another hill with points: the thief went there
         ASSERT_EQ(other.score1, 300);
         ASSERT_TRUE(other.score2 < 250);
@@ -395,15 +437,36 @@ void run_thief_tests() {
         ASSERT_EQ(without[2], 0u);
     } TEST_END();
 
-    TEST_CASE("AI53.7 A Keeper That Cannot Walk To The Hole Is Given No Wall Order: A Fire Ant On A Rock In A Lake (No Walk Leads To The Three Tiles) With A Thief In Sight Gets None And Is The Economy's, And The Counter Is Not Sent; With The Rule Off The Order Is Sent And Refused")
+    TEST_CASE("AI53.7 A Keeper That Cannot Walk To A Wall Is Given No Order For It, Whatever The Wall Is For: A Fire Ant On A Rock In A Lake (No Walk Leads To The Wall) Gets No Order To Build, To Renew Or To Put Out An Enemy Wall, Is Not Asked Again For 600 Ticks And Is The Economy's In The Meantime; With The Rule Off The Order Is Sent And Refused; A Walled Map Is Judged By Its Goals, Not By This Rule")
     {
-        const auto play = [&](bool rule, uint32_t& unreachable, size_t& specials) {
+        // what the keeper is asked for: a wall in front of the hole (Build: none is up, a Thief is in sight), a wall that is due to be put out and lit again (Renew: the three walls are up since the start
+        // and are due 3,300 ticks in), an enemy wall near the hill (Counter: no Thief is in sight)
+        enum class Work { Build, Renew, Counter };
+        struct Out {
+            uint32_t unreachable{0};
+            uint32_t walls_ordered{0};
+            size_t specials{0};                                                                                 // the orders of the keeper's own: a special onto a tile
+            bool kept{false};                                                                                   // the keeper was still the wall task's after a look that dropped an order
+            bool gate_map{false};
+        };
+        const auto play = [&](bool rule, Work work, bool gate) {
             WallWorld w;
-            w.build(true, 0);
+            w.build(work != Work::Counter, 0);
             for (int dy = -2; dy <= 2; ++dy) {
                 for (int dx = -2; dx <= 2; ++dx) {
                     if (dx != 0 || dy != 0) w.sim.set_terrain(30 + dx, 30 + dy, sim::TERRAIN_WATER);
                 }
+            }
+            if (gate) {                                                                                         // a pile behind a wall of fire across the field: the map is walled, the bot plays it by its goals
+                place_crackers(w.sim, 12, 40, 25);
+                for (int x = 0; x < 60; ++x) w.sim.set_fire_at(TileCoord{x, 20}, 1000000);
+            }
+            const MapInfo wmap(w.sim);
+            const HillInfo& hill0 = wmap.hill(0);
+            if (work == Work::Renew) {
+                for (const TileCoord& e : east_tiles(hill0)) w.sim.set_fire_at(e, 3600);
+            } else if (work == Work::Counter) {
+                for (int i = 0; i < 3; ++i) w.sim.set_fire_at(TileCoord{hill0.origin.x + 6, hill0.origin.y + 2 + i}, 3500);
             }
             const uint32_t keeper = w.sim.spawn_unit(0, sim::AntType::Fire, TileCoord{30, 30});
             LevelPlan plan = peace_plan(Level::Hard);
@@ -413,19 +476,40 @@ void run_thief_tests() {
             Rig rig(w.sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(3);
             w.let_enemy_play();
-            rig.run(500);
-            unreachable = rig.as<StandardBot>().walls().unreachable();
-            specials = 0;
-            for (const auto& e : rig.proposed) specials += (e.second.type == CommandType::GroupSpecial && e.second.ants.size() == 1 && e.second.ants[0] == keeper) ? 1u : 0u;
+            Out out;
+            uint32_t seen = 0;
+            const uint64_t ticks = work == Work::Renew ? 3560 : 500;
+            for (uint64_t t = 0; t < ticks; ++t) {
+                rig.tick();
+                const StandardBot& bot = rig.as<StandardBot>();
+                if (bot.walls().unreachable() != seen) {
+                    seen = bot.walls().unreachable();
+                    out.kept = out.kept || bot.ledger().owner(keeper) == StandardBot::kWalls;
+                }
+            }
+            const StandardBot& bot = rig.as<StandardBot>();
+            out.unreachable = bot.walls().unreachable();
+            out.walls_ordered = bot.walls().walls_ordered();
+            out.gate_map = bot.gate_map();
+            for (const auto& e : rig.proposed) out.specials += (e.second.type == CommandType::GroupSpecial && e.second.ants.size() == 1 && e.second.ants[0] == keeper) ? 1u : 0u;
+            return out;
         };
-        uint32_t unreachable = 0;
-        size_t specials = 0;
-        play(true, unreachable, specials);
-        ASSERT_EQ(specials, 0u);
-        ASSERT_TRUE(unreachable >= 1u);
-        play(false, unreachable, specials);
-        ASSERT_TRUE(specials >= 1u);                                                                              // (the order that ends in Can't go there.)
-        ASSERT_EQ(unreachable, 0u);
+        for (const Work work : {Work::Build, Work::Renew, Work::Counter}) {
+            const Out on = play(true, work, false);
+            ASSERT_EQ(on.specials, 0u);
+            ASSERT_TRUE(on.unreachable >= 1u);
+            ASSERT_TRUE(on.unreachable <= 3u);                                                                    // (one look for each of the three walls, then 600 ticks of peace)
+            ASSERT_FALSE(on.gate_map);
+            if (work != Work::Counter) ASSERT_FALSE(on.kept);                                                    // (a wall to build or to renew: the ant is the economy's again at once)
+            const Out off = play(false, work, false);
+            ASSERT_TRUE(off.specials >= 1u);                                                                      // (the order that ends in Can't go there.)
+            ASSERT_EQ(off.unreachable, 0u);
+        }
+        // a walled map: the keeper is judged by the goals of the map, the walk is not asked
+        const Out walled = play(true, Work::Build, true);
+        ASSERT_TRUE(walled.gate_map);
+        ASSERT_EQ(walled.unreachable, 0u);
+        ASSERT_TRUE(walled.specials >= 1u);
     } TEST_END();
 
     TEST_CASE("AI53.8 A Keeper That Stands On The Mound Of Its Hill Or In The Fire Of Its Own Wall Is Given The Wall Order: The Tile It Stands On Is Not A Tile That A Walk Enters, And The Walk Leaves From It (With The Rule On, As With It Off)")
@@ -476,25 +560,49 @@ void run_thief_tests() {
         }
         const LevelPlan easy = plan_for(Level::Easy);
         ASSERT_FALSE(easy.raid_recheck || easy.thief_guard || easy.thief_trap || easy.fire_home_only);
-        // a match with the batch off plays the same as one with every flag of it off by hand: the same commands, tick for tick
-        sim::SimulationEngine a, b;
-        for (sim::SimulationEngine* s : {&a, &b}) {
-            empty_field(*s, 75);
-            s->set_player_score(0, 300);
-            for (int i = 0; i < 6; ++i) s->spawn_unit(0, sim::AntType::Worker, TileCoord{10 + i % 3, 10 + i / 3});
-            const uint32_t t = s->spawn_unit(1, sim::AntType::Thief, TileCoord{22, 8});
-            s->apply_command(command_of(CommandType::GroupSpecial, 1, {t}, 5, 5));
-        }
+        // a match with the batch off plays the same as one with every flag of it off by hand, and the guard that is off plays the same whatever its other keys say: the same commands, tick for tick, in
+        // a world where the guard that is on acts (a Thief comes for the hole of a hill with six workers)
+        sim::SimulationEngine probe;
+        empty_field(probe, 75);
+        const TileCoord entrance = MapInfo(probe).hill(0).entrance;
+        using Orders = std::vector<std::tuple<uint64_t, int, std::vector<uint32_t>, int, int>>;
+        const auto play = [&](const LevelPlan& plan) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 75);
+            sim.set_player_score(0, 300);
+            place_crackers(sim, 16, 14, 25);                                                                    // (the economy has work: the commands are not none)
+            for (int i = 0; i < 6; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10 + i % 3, 10 + i / 3});
+            const uint32_t t = sim.spawn_unit(1, sim::AntType::Thief, TileCoord{30, 8});
+            sim.apply_command(command_of(CommandType::GroupSpecial, 1, {t}, entrance.x, entrance.y));
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(400);
+            Orders out;
+            for (const auto& e : rig.proposed) out.emplace_back(e.first, static_cast<int>(e.second.type), e.second.ants, static_cast<int>(e.second.tile_x), static_cast<int>(e.second.tile_y));
+            return std::make_pair(out, rig.as<StandardBot>().thief_guard().meets_started());
+        };
         LevelPlan pa = plan_for(Level::Hard);
         pa.thief_guard = pa.thief_trap = true;                                                                  // (the meeting is on until the switch turns it off)
         without_thief_batch(pa);
         LevelPlan pb = plan_for(Level::Hard);
         pb.raid_recheck = pb.thief_guard = pb.thief_trap = pb.fire_home_only = false;
-        Rig ra(a, 0, Level::Hard, std::make_unique<StandardBot>(pa), 4, 4);
-        Rig rb(b, 0, Level::Hard, std::make_unique<StandardBot>(pb), 4, 4);
-        ra.run(400);
-        rb.run(400);
-        ASSERT_EQ(ra.proposed.size(), rb.proposed.size());
-        ASSERT_EQ(ra.as<StandardBot>().thief_guard().meets_started(), 0u);
+        LevelPlan pc = pb;
+        pc.thief_guard_force = 5;
+        pc.thief_guard_block = 0;
+        pc.thief_guard_radius = 40;
+        pc.thief_trap_wait = 7;
+        LevelPlan pd = pb;
+        pd.thief_guard = true;
+        const auto ra = play(pa);
+        const auto rb = play(pb);
+        const auto rc = play(pc);
+        const auto rd = play(pd);
+        ASSERT_TRUE(!rb.first.empty());
+        ASSERT_TRUE(rd.second >= 1u);                                                                           // (the premise: with the meeting on, the bot meets this Thief)
+        ASSERT_TRUE(rd.first != rb.first);                                                                      // ... and plays another game
+        ASSERT_TRUE(ra.first == rb.first);
+        ASSERT_TRUE(rc.first == rb.first);
+        ASSERT_EQ(ra.second, 0u);
+        ASSERT_EQ(rb.second, 0u);
+        ASSERT_EQ(rc.second, 0u);
     } TEST_END();
 }

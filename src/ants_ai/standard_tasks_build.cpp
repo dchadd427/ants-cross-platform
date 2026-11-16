@@ -194,7 +194,7 @@ void WallTask::step(TaskContext& c) {
         bool calm = true;
         for (const ThiefSighting& t : tactics_.memory.thieves()) calm = calm && t.tile.chebyshev_dist(hill.raid) > 12;
         for (int i = 0; i < 3 && calm && renew < 0; ++i) {
-            if (st.tile[static_cast<size_t>(i)] != EastTile::Wall) continue;
+            if (st.tile[static_cast<size_t>(i)] != EastTile::Wall || renew_blacked(i, now)) continue;
             const uint64_t seen = tactics_.memory.wall_seen(tiles[static_cast<size_t>(i)]);
             const uint64_t travel = 8u * static_cast<uint64_t>(keeper->tile.chebyshev_dist(tiles[static_cast<size_t>(i)])) + 30u;       // the ant may be away at a pile
             if (seen == 0 || now + plan.renew_lead_ticks + travel < seen + sim::LIFETIME_180S_TICKS) continue;
@@ -205,7 +205,7 @@ void WallTask::step(TaskContext& c) {
     if (opening && renew < 0 && jobs_.empty()) {                                          // the wall nearest to the keeper goes out
         int32_t best_open = 0;
         for (int i = 0; i < 3; ++i) {
-            if (st.tile[static_cast<size_t>(i)] != EastTile::Wall) continue;
+            if (st.tile[static_cast<size_t>(i)] != EastTile::Wall || renew_blacked(i, now)) continue;
             const int32_t d = keeper->tile.chebyshev_dist(tiles[static_cast<size_t>(i)]);
             if (renew < 0 || d < best_open) {
                 renew = i;
@@ -337,8 +337,10 @@ void WallTask::step(TaskContext& c) {
             return;
         }
         if (occupied(v, tiles[static_cast<size_t>(renew)]) || v.predict_ack(probe) == 0) return;
-        if (check_walk && !walks_to(v, c.seat, keeper->tile, tiles[static_cast<size_t>(renew)])) {
+        if (check_walk && !walks_to(v, c.seat, keeper->tile, tiles[static_cast<size_t>(renew)])) {   // the keeper cannot walk to the wall: as with a wall to build, no order, no new look for a while, and the ant is the economy's
+            renew_black_[renew] = now + 600u;
             ++unreachable_;
+            c.ledger.release(keeper_, id());
             return;
         }
         c.orders.special(keeper_, tiles[static_cast<size_t>(renew)], Priority::Normal);

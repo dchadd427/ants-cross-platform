@@ -300,6 +300,11 @@ private:
     Tactics& tactics_;
     uint32_t unreachable_{0};
     uint64_t open_until_{0};
+    std::map<int, uint64_t> renew_black_;          // east tiles whose wall the keeper could not walk to, until when no renewal is tried (plan.fire_home_only)
+    bool renew_blacked(int tile, uint64_t now) const noexcept {
+        const auto it = renew_black_.find(tile);
+        return it != renew_black_.end() && it->second > now;
+    }
     uint32_t keeper_{0};
     std::map<int, Job> jobs_;                      // by east tile index
     std::map<int, uint64_t> failed_until_;
@@ -509,12 +514,17 @@ private:
         uint64_t next_path{0};               // the tick of the next look at the walk (plan.raid_recheck)
     };
     bool launch(TaskContext& context, const AntView& thief);
-    /// Whether the hole of `team` cannot be raided now by the thief `thief`: no hill, fewer free tiles in front of it than the plan asks, an ant on its raid tile, an own thief on it
+    /// What shuts the hole of `team` for the thief `thief` now: Walls (no hill, or the walls, bombs and solid tiles leave fewer tiles in front of it than the plan asks: they last for minutes), Held (an ant on
+    /// the raid tile or on the tiles in front of it, an own thief on the raid tile: a matter of seconds), or Open
+    enum class Hole : uint8_t { Open, Walls, Held };
+    Hole hole_state(TaskContext& context, uint8_t team, uint32_t thief) const;
+    /// Whether the hole of `team` cannot be raided now by the thief `thief` (anything but Open)
     bool hole_shut(TaskContext& context, uint8_t team, uint32_t thief) const;
     /// The least that a hill's score box must show for a raid now (the tiers of the catch-up lower it)
     uint32_t min_loot_now() const noexcept;
     /// (plan.raid_recheck) A thief that walks to a hole looks at it again: when the hole is shut, the box shows too little or no walk reaches it any more, the raid is called off and the thief goes to the best other
-    /// hill, or stops (the economy has it again). True when the thief's raid ended here
+    /// hill, or stops (the economy has it again). A hill that walls, bombs, a small box or a missing walk called off is left alone for plan.raid_recheck_black ticks; one that an ant on the raid tile or an own
+    /// thief shut for the moment is not (the thief is sent again at the first look at which the hole is open). True when the thief's raid ended here
     bool recheck(TaskContext& context, const AntView& thief, std::map<uint32_t, Raid>::iterator it);
     void unjam(TaskContext& context);
     bool ambush(TaskContext& context, const AntView& thief);
