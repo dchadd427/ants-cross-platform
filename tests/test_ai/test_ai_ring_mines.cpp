@@ -185,6 +185,45 @@ void run_ring_mines_tests() {
         }
     } TEST_END();
 
+    // A power-up (or food, a lunchbox) on the landing tile is a solid object: the engine does not throw the ant onto it but turns the throw to the next free direction, and here that is water
+    TEST_CASE("AI43.7 A Flight Is Flown Only Onto A Landing That The Engine Accepts: A Power-Up On Every Landing Before The Choice Means No Flight, One On The Landing Of The Planted Bomb Never Throws The Bomber Into The Water")
+    {
+        const auto drowned_within = [](Lab& lab, uint32_t bomber, int ticks) {
+            for (int i = 0; i < ticks; i += 5) {
+                lab.run(5);
+                const sim::AntSnapshot* a = lab.ant(bomber);
+                if (a == nullptr || a->state == sim::UnitState::Drowning) return true;
+            }
+            return false;
+        };
+        {                                                                                  // before the choice: no landing of the satellite's flights is free, so none is flown
+            Lab lab([](LevelPlan& p) { p.island_mines = false; });
+            const uint32_t bomber = lab.sim.spawn_unit(0, sim::AntType::Bomber, kSatellite);
+            lab.run(1);
+            const std::vector<const Flight*> flights = lab.bot()->islands().info().flights_from(lab.ctl->map().component(0, kSatellite));
+            ASSERT_TRUE(!flights.empty());
+            for (const Flight* f : flights) lab.sim.grid_mut().place_powerup(f->land.x, f->land.y, 3);
+            ASSERT_TRUE(!drowned_within(lab, bomber, 1500));
+            ASSERT_EQ(lab.bot()->miner_flight().hops(), 0u);
+            ASSERT_EQ(lab.bot()->miner_flight().planted(), 0u);                           // (no bomb is laid for a flight that cannot be flown)
+        }
+        {                                                                                  // after the bomb is planted: the flight is chosen again or given up, the ant stays dry
+            Lab lab([](LevelPlan& p) { p.island_mines = false; });
+            const uint32_t bomber = lab.sim.spawn_unit(0, sim::AntType::Bomber, kSatellite);
+            lab.run(1);
+            const std::vector<const Flight*> flights = lab.bot()->islands().info().flights_from(lab.ctl->map().component(0, kSatellite));
+            ASSERT_TRUE(!flights.empty());
+            int guard = 0;
+            while (lab.bombs().empty() && guard++ < 400) lab.run(5);
+            ASSERT_TRUE(!lab.bombs().empty());
+            const std::vector<TileCoord> planted = lab.bombs();
+            for (const Flight* f : flights) {
+                if (std::find(planted.begin(), planted.end(), f->bomb) != planted.end()) lab.sim.grid_mut().place_powerup(f->land.x, f->land.y, 3);
+            }
+            ASSERT_TRUE(!drowned_within(lab, bomber, 1500));
+        }
+    } TEST_END();
+
     TEST_CASE("AI49.2 The Reports Name The Flight: first_start And first_landing Are Set Once The Flight Has Landed And Are 0 Before")
     {
         Lab lab([](LevelPlan& p) { p.island_mines = false; });

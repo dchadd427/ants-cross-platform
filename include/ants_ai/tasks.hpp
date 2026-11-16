@@ -232,6 +232,8 @@ public:
         uint32_t deny_one_percent{150};
         int32_t reserve_threat_tiles{6};
         bool deny_fade{true};
+        /// With the denial order: a pile of the class Hopeless is no candidate while any other pile has food (the ants that would have gone there stay in the pool and are ordered at a later look).
+        bool skip_hopeless{false};
         /// Fire-aware piles (the standard bot; false for the worker): a pile with a fire wall within fire_radius tiles of its anchor is asked again with the map as it is now (the
         /// start analysis does not know the walls): a pile that the walls have cut off is no candidate (no ant is sent into fire), one that they only made longer is ranked by its
         /// real cost. The engine's own path finder goes round a wall that leaves a way.
