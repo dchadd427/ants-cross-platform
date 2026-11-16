@@ -1,6 +1,6 @@
 // Tests of the rules numbers that go with the loader's fire wall (ants_replay/replay.hpp, docs/REPLAYS.md "Which files play: sim_rules", docs/reverse_engineering/map_loader_fidelity.md section 8): a fire wall of a
 // map file loads as the original loads it, with no obstacle overlay from its dictionary entry, from the rules number 9 (the original's game) and 10 (game mode 187) on. The numbers 5, 8 (the original's game) and
-// 6, 7 (187) keep the old loader, and every number belongs to one mode. This build plays all seven (5, 8 and 9; 6, 7, 10 and 11).
+// 6, 7 (187) keep the old loader, and every number belongs to one mode. This build plays all eight (5, 8 and 9; 6, 7, 10, 11 and 12).
 //   RP14.1  the numbers: what a build plays, what a head may say, what a match is recorded under, which numbers have the loader, what a refusal says, a number nobody plays
 //   RP14.2  the recordings of the old numbers (8 and 7), made in code on a map with a named fire wall, play to the hashes that the build before the number made of them
 //   RP14.3  the same match recorded under the new numbers (9 and 10) is another match from the first hash; the files play to their pinned hashes
@@ -123,7 +123,7 @@ Made make(uint8_t mode, uint16_t rules, const assets::LevelData& level) {
         std::string why;
         if (!decode(m.file.data(), m.file.size(), m.replay, why)) m.error = why;
         if (m.replay.head.sim_rules != rules) {
-            m.replay.head.sim_rules = rules;                                                 // (a 187 match of the number 7: the Recorder wrote 11)
+            m.replay.head.sim_rules = rules;                                                 // (a 187 match of the number 7: the Recorder wrote 12)
             m.file = encode(m.replay, why);
             if (m.file.empty()) m.error = why;
         }
@@ -154,19 +154,19 @@ int main() {
     std::cout << "=== Rules numbers of the loader's fire wall: 9 and 10 (5 to 8 keep the old loader) ===\n";
     const assets::LevelData level = scenario::level();
 
-    TEST_CASE("RP14.1 This build plays 5, 8 and 9 for the original's game and 6, 7, 10 and 11 for 187, nothing else; a match is recorded under 9 or 11; every number names its one mode; the loader of the original is the numbers from 9 on; a refusal names all seven") {
+    TEST_CASE("RP14.1 This build plays 5, 8 and 9 for the original's game and 6, 7, 10, 11 and 12 for 187, nothing else; a match is recorded under 9 or 12; every number names its one mode; the loader of the original is the numbers from 9 on; a refusal names all eight") {
         ASSERT_TRUE(kSimRules == 9 && kSimRulesBeforeFireWall == 8 && kSimRulesBeforeLastSide == 5);
-        ASSERT_TRUE(kSimRulesMode187 == 11 && kSimRulesMode187BeforeEndFix == 10 && kSimRulesMode187BeforeFireWall == 7 && kSimRulesMode187Heal == 6);
-        ASSERT_TRUE(kSimRulesFireWallFirst == 9 && kSimRulesNewest == 11);
-        ASSERT_TRUE(sim_rules_for_mode(0) == 9 && sim_rules_for_mode(1) == 11 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
+        ASSERT_TRUE(kSimRulesMode187 == 12 && kSimRulesMode187BeforeNoDrops == 11 && kSimRulesMode187BeforeEndFix == 10 && kSimRulesMode187BeforeFireWall == 7 && kSimRulesMode187Heal == 6);
+        ASSERT_TRUE(kSimRulesFireWallFirst == 9 && kSimRulesNewest == 12);
+        ASSERT_TRUE(sim_rules_for_mode(0) == 9 && sim_rules_for_mode(1) == 12 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
         for (uint16_t rules = 0; rules < 16; ++rules) {
             ASSERT_EQ(plays_mode_rules(0, rules), rules == 5 || rules == 8 || rules == 9);
-            ASSERT_EQ(plays_mode_rules(k187, rules), rules == 6 || rules == 7 || rules == 10 || rules == 11);
+            ASSERT_EQ(plays_mode_rules(k187, rules), rules == 6 || rules == 7 || rules == 10 || rules == 11 || rules == 12);
             ASSERT_FALSE(plays_mode_rules(2, rules));
             ASSERT_FALSE(plays_mode_rules(255, rules));
             ASSERT_EQ(fire_wall_as_original_rules(rules), rules >= 9);                       // (5, 6, 7 and 8 keep the old loader; 9, 10 and every number after them have the original's)
         }
-        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7, 8, 9, 10 and 11"));
+        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7, 8, 9, 10, 11 and 12"));
         Header head;
         head.map_name = "TINY.LVL";
         head.roster = 0x0F;
@@ -180,10 +180,10 @@ int main() {
                 r.head = h;
                 std::string error;
                 const std::vector<uint8_t> bytes = encode(r, error);
-                const bool mode_has_it = mode == 0 ? (rules == 5 || rules == 8 || rules == 9) : (rules == 6 || rules == 7 || rules == 10 || rules == 11);
-                const bool other_mode_has_it = mode == 0 ? (rules == 6 || rules == 7 || rules == 10 || rules == 11) : (rules == 5 || rules == 8 || rules == 9);
+                const bool mode_has_it = mode == 0 ? (rules == 5 || rules == 8 || rules == 9) : (rules == 6 || rules == 7 || rules == 10 || rules == 11 || rules == 12);
+                const bool other_mode_has_it = mode == 0 ? (rules == 6 || rules == 7 || rules == 10 || rules == 11 || rules == 12) : (rules == 5 || rules == 8 || rules == 9);
                 ASSERT_EQ(plays_here(h), mode_has_it);
-                ASSERT_EQ(!bytes.empty(), !other_mode_has_it && (mode == 0 || rules >= 6));      // (a number of another mode is no file; a mode with a rules number that predates it is none either; 4 and 12 are files, only not played)
+                ASSERT_EQ(!bytes.empty(), !other_mode_has_it && (mode == 0 || rules >= 6));      // (a number of another mode is no file; a mode with a rules number that predates it is none either; 4 and 13 are files, only not played)
                 if (!bytes.empty()) {
                     Replay back;
                     ASSERT_TRUE(decode(bytes.data(), bytes.size(), back, error) && back.head.sim_rules == rules && back.head.mode == mode && plays_here(back.head) == mode_has_it);
@@ -191,12 +191,12 @@ int main() {
             }
         }
         // a match that a Recorder starts: the original's game keeps the number its head names (5, 8 and 9 are the ones it writes), a mode that is not 0 gets the number of that mode whatever the head said
-        for (const uint16_t said : {uint16_t{5}, uint16_t{6}, uint16_t{7}, uint16_t{8}, uint16_t{9}, uint16_t{10}, uint16_t{11}}) {
+        for (const uint16_t said : {uint16_t{5}, uint16_t{6}, uint16_t{7}, uint16_t{8}, uint16_t{9}, uint16_t{10}, uint16_t{11}, uint16_t{12}}) {
             Header h = head;
             h.set_mode(k187);
             h.sim_rules = said;
             Recorder rec(h);
-            ASSERT_EQ(rec.replay().head.sim_rules, 11);
+            ASSERT_EQ(rec.replay().head.sim_rules, 12);
         }
         Recorder fresh(head);
         ASSERT_TRUE(fresh.replay().head.sim_rules == 9 && fresh.replay().head.mode == 0);
@@ -206,12 +206,12 @@ int main() {
             Recorder rec(h);
             ASSERT_EQ(rec.replay().head.sim_rules, old);
         }
-        // the refusal of a number nobody plays names the seven that this build does
+        // the refusal of a number nobody plays names the eight that this build does
         Header foreign = head;
-        foreign.sim_rules = 12;
-        ASSERT_TRUE(rules_refusal(foreign).find("simulation rules 12; this build plays simulation rules 5, 6, 7, 8, 9, 10 and 11") != std::string::npos);
+        foreign.sim_rules = 13;
+        ASSERT_TRUE(rules_refusal(foreign).find("simulation rules 13; this build plays simulation rules 5, 6, 7, 8, 9, 10, 11 and 12") != std::string::npos);
         foreign.sim_rules = 4;
-        ASSERT_TRUE(rules_refusal(foreign).find("with simulation rules 4; this build plays simulation rules 5, 6, 7, 8, 9, 10 and 11") != std::string::npos);
+        ASSERT_TRUE(rules_refusal(foreign).find("with simulation rules 4; this build plays simulation rules 5, 6, 7, 8, 9, 10, 11 and 12") != std::string::npos);
     } TEST_END();
 
     TEST_CASE("RP14.2 A recording of the number 8 or 7, made in code on a map with a named fire wall, plays to every hash it holds and to the final hash that the build before the numbers made of it") {
@@ -262,9 +262,9 @@ int main() {
         const Outcome ten_as_seven = play(with_rules(ten.replay, 7), level);
         ASSERT_TRUE(!ten_as_seven.ok && ten_as_seven.first_bad_turn > 0u && ten_as_seven.first_bad_turn <= 100u);       // (the first hash that the file holds, after turn 100, is not reached: the loader is another)
         // a number from a newer build: not played, and the refusal says what this build plays
-        const Outcome newer = play(with_rules(nine.replay, 12), level);
+        const Outcome newer = play(with_rules(nine.replay, 13), level);
         ASSERT_FALSE(newer.ran);
-        ASSERT_TRUE(newer.error.find("simulation rules 12") != std::string::npos && newer.error.find("5, 6, 7, 8, 9, 10 and 11") != std::string::npos);
+        ASSERT_TRUE(newer.error.find("simulation rules 13") != std::string::npos && newer.error.find("5, 6, 7, 8, 9, 10, 11 and 12") != std::string::npos);
         ASSERT_FALSE(play(with_rules(nine.replay, 4), level).ran);
         // 7 and 10 are 187's: with the original's mode they are no file and not played
         Replay mixed = nine.replay;

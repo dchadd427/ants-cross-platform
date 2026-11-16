@@ -100,8 +100,8 @@
   {
    "id": "player_plays_11_without_the_fix",
    "file": "src/ants_replay/player.cpp",
-   "old": "sim_rules_of(replay.head) < kSimRulesMode187));",
-   "new": "sim_rules_of(replay.head) <= kSimRulesMode187));",
+   "old": "sim_rules_of(replay.head) < kSimRulesMode187BeforeNoDrops));",
+   "new": "sim_rules_of(replay.head) <= kSimRulesMode187BeforeNoDrops));",
    "build": "test_rules_end_fix",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
    "expect": "RP15.3"
@@ -109,7 +109,7 @@
   {
    "id": "player_plays_10_with_the_fix",
    "file": "src/ants_replay/player.cpp",
-   "old": "sim_rules_of(replay.head) < kSimRulesMode187));",
+   "old": "sim_rules_of(replay.head) < kSimRulesMode187BeforeNoDrops));",
    "new": "sim_rules_of(replay.head) < kSimRulesMode187BeforeEndFix));",
    "build": "test_rules_end_fix",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
@@ -118,7 +118,7 @@
   {
    "id": "player_plays_6_with_the_fix",
    "file": "src/ants_replay/player.cpp",
-   "old": "sim_rules_of(replay.head) < kSimRulesMode187));",
+   "old": "sim_rules_of(replay.head) < kSimRulesMode187BeforeNoDrops));",
    "new": "sim_rules_of(replay.head) < kSimRulesMode187Heal));",
    "build": "test_rules_end_fix",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
@@ -127,8 +127,8 @@
   {
    "id": "rules_11_not_played",
    "file": "include/ants_replay/replay.hpp",
-   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeEndFix ||",
-   "new": "(rules == kSimRulesMode187BeforeEndFix ||",
+   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeNoDrops ||",
+   "new": "(rules == kSimRulesMode187 ||",
    "build": "test_rules_end_fix",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
    "expect": "RP15.1"
@@ -136,8 +136,8 @@
   {
    "id": "rules_10_not_played",
    "file": "include/ants_replay/replay.hpp",
-   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeEndFix ||",
-   "new": "(rules == kSimRulesMode187 ||",
+   "old": "rules == kSimRulesMode187BeforeNoDrops || rules == kSimRulesMode187BeforeEndFix ||",
+   "new": "rules == kSimRulesMode187BeforeNoDrops ||",
    "build": "test_rules_end_fix",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
    "expect": "RP15.1"
@@ -145,8 +145,8 @@
   {
    "id": "head_10_without_the_mode_ok",
    "file": "src/ants_replay/replay.cpp",
-   "old": "h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeEndFix ||",
-   "new": "h.sim_rules == kSimRulesMode187 ||",
+   "old": "h.sim_rules == kSimRulesMode187BeforeNoDrops || h.sim_rules == kSimRulesMode187BeforeEndFix ||",
+   "new": "h.sim_rules == kSimRulesMode187BeforeNoDrops ||",
    "build": "test_rules_end_fix",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
    "expect": "RP15.1"
@@ -154,8 +154,8 @@
   {
    "id": "played_text_lacks_10",
    "file": "src/ants_replay/replay.cpp",
-   "old": "std::to_string(kSimRules) + \", \" +\n           std::to_string(kSimRulesMode187BeforeEndFix) + \" and \"",
-   "new": "std::to_string(kSimRules) +\n           \" and \"",
+   "old": "std::to_string(kSimRules) + \", \" +\n           std::to_string(kSimRulesMode187BeforeEndFix) + \", \" + std::to_string(kSimRulesMode187BeforeNoDrops) + \" and \"",
+   "new": "std::to_string(kSimRules) + \", \" +\n           std::to_string(kSimRulesMode187BeforeNoDrops) + \" and \"",
    "build": "test_rules_end_fix",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
    "expect": "RP15.1"
@@ -172,8 +172,8 @@
   {
    "id": "head_11_without_the_mode_ok",
    "file": "src/ants_replay/replay.cpp",
-   "old": "h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeEndFix ||",
-   "new": "h.sim_rules == kSimRulesMode187BeforeEndFix ||",
+   "old": "h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeNoDrops ||",
+   "new": "h.sim_rules == kSimRulesMode187 ||",
    "build": "test_rules_end_fix",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
    "expect": "RP15.1"
