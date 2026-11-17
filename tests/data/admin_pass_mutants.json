@@ -1,0 +1,498 @@
+{
+ "note": "Mutants of the admin page's pass and its door (src/ants_server/admin_pass.cpp and .hpp, the admin part of submissions_http.cpp, the version 8 migration of db_schema.cpp) for tools/mutate.py (docs/TESTING.md). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/admin_pass_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: each breaks one rule of docs/MAP_SUBMISSIONS.md, 'The admin page' (the key and its shape, the raw derived keys and their order, the mac compared in constant time before anything is read, the time, the role, exactly the five members and their kinds, a pass used once and the bound of the table, a name that is an id never shown, the one answer without a good pass, the page's token and the checks of a change, what a decision is signed with and logged as, the lines for the operator's log, the migration that retires the accounts and the file rewritten after it so that no old hash or name is left, the published sample key that is no key). Not listed on purpose, because no program can tell them apart from the real one: the 1,024-byte and 512-byte caps on a pass and its payload (a pass of the hub is far under both; a larger one fails the mac or the five members as well).",
+ "defaults": {
+  "build": "test_admin_pass test_admin_audit test_submissions_api",
+  "test": "./build/tests/test_server/test_admin_pass && ./build/tests/test_server/test_admin_audit && ./build/tests/test_server/test_submissions_api"
+ },
+ "mutants": [
+  {
+   "id": "key_blanks_not_cut",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    return std::string(text.substr(a, b - a));",
+   "new": "    return std::string(text);"
+  },
+  {
+   "id": "key_min_31",
+   "file": "include/ants_server/admin_pass.hpp",
+   "old": "constexpr size_t kGateSecretMinChars = 32;",
+   "new": "constexpr size_t kGateSecretMinChars = 31;"
+  },
+  {
+   "id": "key_max_257",
+   "file": "include/ants_server/admin_pass.hpp",
+   "old": "constexpr size_t kGateSecretMaxChars = 256;",
+   "new": "constexpr size_t kGateSecretMaxChars = 257;"
+  },
+  {
+   "id": "key_distinct_not_required",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    return distinct >= kGateSecretMinDistinct;",
+   "new": "    (void)distinct;\n    return true;"
+  },
+  {
+   "id": "key_distinct_7",
+   "file": "include/ants_server/admin_pass.hpp",
+   "old": "constexpr size_t kGateSecretMinDistinct = 8;",
+   "new": "constexpr size_t kGateSecretMinDistinct = 7;"
+  },
+  {
+   "id": "key_blank_allowed",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "if (u < 0x21 || u > 0x7e) return false;",
+   "new": "if (u < 0x20 || u > 0x7e) return false;"
+  },
+  {
+   "id": "key_non_ascii_allowed",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "if (u < 0x21 || u > 0x7e) return false;",
+   "new": "if (u < 0x21 || u > 0xfe) return false;"
+  },
+  {
+   "id": "pass_key_is_hex_text",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "pass_key_ = hmac_sha256(secret, kPassLabel);",
+   "new": "pass_key_ = hex_encode(hmac_sha256(secret, kPassLabel));"
+  },
+  {
+   "id": "pass_key_swaps_key_and_message",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "pass_key_ = hmac_sha256(secret, kPassLabel);",
+   "new": "pass_key_ = hmac_sha256(kPassLabel, secret);"
+  },
+  {
+   "id": "pass_key_is_the_secret",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "pass_key_ = hmac_sha256(secret, kPassLabel);",
+   "new": "pass_key_ = secret;\n    (void)kPassLabel;"
+  },
+  {
+   "id": "csrf_key_is_the_pass_key",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "csrf_key_ = hmac_sha256(secret, kCsrfLabel);",
+   "new": "csrf_key_ = pass_key_;\n    (void)kCsrfLabel;"
+  },
+  {
+   "id": "csrf_label_is_the_hubs",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "constexpr const char* kCsrfLabel = \"ants-admin-csrf-server-v1\";",
+   "new": "constexpr const char* kCsrfLabel = \"ants-admin-csrf-v1\";"
+  },
+  {
+   "id": "mac_compared_with_not_equal",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "if (!ctl::constant_time_equal(std::string(mac), expected)) return PassVerdict::BadPass;",
+   "new": "if (std::string(mac) != expected) return PassVerdict::BadPass;"
+  },
+  {
+   "id": "mac_not_checked",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    if (!ctl::constant_time_equal(std::string(mac), expected)) return PassVerdict::BadPass;          // (before anything else is read)\n",
+   "new": ""
+  },
+  {
+   "id": "mac_over_the_payload_only",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "hex_encode(hmac_sha256(pass_key_, signed_part))",
+   "new": "hex_encode(hmac_sha256(pass_key_, payload_text)) + std::string(signed_part.substr(0, 0))"
+  },
+  {
+   "id": "version_not_checked",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": " || header.substr(0, first) != \"v1\") return PassVerdict::Malformed;",
+   "new": ") return PassVerdict::Malformed;"
+  },
+  {
+   "id": "no_key_checks_nothing",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    if (!open_) return PassVerdict::NoKey;\n",
+   "new": ""
+  },
+  {
+   "id": "expiry_not_checked",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    if (exp <= now) return PassVerdict::Expired;\n",
+   "new": ""
+  },
+  {
+   "id": "expiry_at_the_second_still_good",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    if (exp <= now) return PassVerdict::Expired;",
+   "new": "    if (exp < now) return PassVerdict::Expired;"
+  },
+  {
+   "id": "no_ceiling_on_the_time",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    if (exp > now + kPassSeconds + kPassSlackSeconds) return PassVerdict::BadFields;                 // (the hub does not make a pass that lasts this long)\n",
+   "new": ""
+  },
+  {
+   "id": "ceiling_slack_31",
+   "file": "include/ants_server/admin_pass.hpp",
+   "old": "constexpr int64_t kPassSlackSeconds = 30;",
+   "new": "constexpr int64_t kPassSlackSeconds = 31;"
+  },
+  {
+   "id": "moderator_may_pass",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "if (role != \"admin\" && role != \"owner\") return PassVerdict::BadRole;",
+   "new": "if (role != \"admin\" && role != \"owner\" && role != \"moderator\") return PassVerdict::BadRole;"
+  },
+  {
+   "id": "any_role_may_pass",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    if (role != \"admin\" && role != \"owner\") return PassVerdict::BadRole;\n",
+   "new": ""
+  },
+  {
+   "id": "member_count_not_checked",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    if (v.size() != 5) return PassVerdict::BadFields;                  // (exactly five members; a member that is missing is null below, which is of no kind that is asked for)\n",
+   "new": ""
+  },
+  {
+   "id": "time_may_be_text",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "!v.get(\"exp\").is_int() || ",
+   "new": ""
+  },
+  {
+   "id": "name_may_be_a_number",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "!v.get(\"name\").is_string() || ",
+   "new": ""
+  },
+  {
+   "id": "reference_shape_not_checked",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "if (!all_lower_hex(ref, kReferenceChars) || ",
+   "new": "if ((void)all_lower_hex(ref, kReferenceChars), "
+  },
+  {
+   "id": "nonce_shape_not_checked",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": " || !all_lower_hex(nonce, kNonceChars) || ",
+   "new": " || ((void)all_lower_hex(nonce, kNonceChars), false) || "
+  },
+  {
+   "id": "name_not_checked",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": " || !plain_name(name)) return PassVerdict::BadFields;",
+   "new": " || ((void)plain_name(name), false)) return PassVerdict::BadFields;"
+  },
+  {
+   "id": "name_limit_65",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "constexpr size_t kMaxNameBytes = 64;",
+   "new": "constexpr size_t kMaxNameBytes = 65;"
+  },
+  {
+   "id": "name_control_characters_allowed",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "static_cast<unsigned char>(c) < 0x20 || c == 0x7f",
+   "new": "(void)c, false"
+  },
+  {
+   "id": "replay_not_checked",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    if (seen_.count(nonce) != 0) return PassVerdict::Replayed;\n",
+   "new": ""
+  },
+  {
+   "id": "nonce_not_remembered",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    seen_.insert(nonce);\n",
+   "new": ""
+  },
+  {
+   "id": "table_not_bounded",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    if (seen_.size() >= max_remembered_) return PassVerdict::Full;\n",
+   "new": "    (void)max_remembered_;\n"
+  },
+  {
+   "id": "nonces_never_forgotten",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "by_age_.front().first <= now) {",
+   "new": "false) {"
+  },
+  {
+   "id": "nonces_forgotten_at_once",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "by_age_.front().first <= now) {",
+   "new": "true) {"
+  },
+  {
+   "id": "an_id_shaped_name_is_shown",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "out.name = name.empty() || looks_like_an_id(name) ? ref : name;",
+   "new": "out.name = ((void)looks_like_an_id(name), name.empty()) ? ref : name;"
+  },
+  {
+   "id": "id_shape_from_16",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "s.size() >= 15 && s.size() <= 20",
+   "new": "s.size() >= 16 && s.size() <= 20"
+  },
+  {
+   "id": "id_shape_to_19",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "s.size() >= 15 && s.size() <= 20",
+   "new": "s.size() >= 15 && s.size() <= 19"
+  },
+  {
+   "id": "an_empty_name_is_shown_empty",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "out.name = name.empty() || looks_like_an_id(name) ? ref : name;",
+   "new": "out.name = looks_like_an_id(name) ? ref : name;"
+  },
+  {
+   "id": "a_refused_pass_is_remembered",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    if (!ctl::constant_time_equal(std::string(mac), expected)) return PassVerdict::BadPass;          // (before anything else is read)\n",
+   "new": "    if (!ctl::constant_time_equal(std::string(mac), expected)) return PassVerdict::BadPass;          // (before anything else is read)\n    {\n        ctl::JsonValue early;\n        std::string raw;\n        if (base64url_decode(payload_text, raw) && ctl::parse_json(raw, early, nullptr) && early.get(\"nonce\").is_string()) seen_.insert(early.get(\"nonce\").str());\n    }\n"
+  },
+  {
+   "id": "a_visitor_without_a_pass_is_let_in",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (!admitted(request, now_s, who)) return closed_reply();\n",
+   "new": "    admitted(request, now_s, who);\n    (void)closed_reply;\n"
+  },
+  {
+   "id": "closed_is_a_404",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "error_reply(403, \"closed\", \"The admin page is closed.\")",
+   "new": "error_reply(404, \"closed\", \"The admin page is closed.\")"
+  },
+  {
+   "id": "closed_tells_the_reason",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (!admitted(request, now_s, who)) return closed_reply();\n",
+   "new": "    if (!admitted(request, now_s, who)) return notices_.empty() ? closed_reply() : error_reply(403, \"closed\", notices_.back().c_str());\n"
+  },
+  {
+   "id": "a_change_needs_no_token",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (token == nullptr || !ctl::constant_time_equal(*token, gate_.csrf_token(who))) {",
+   "new": "    if (token == nullptr || ((void)who, false)) {"
+  },
+  {
+   "id": "the_token_is_compared_with_not_equal",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (token == nullptr || !ctl::constant_time_equal(*token, gate_.csrf_token(who))) {",
+   "new": "    if (token == nullptr || *token != gate_.csrf_token(who)) {"
+  },
+  {
+   "id": "a_change_from_any_site",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (site != nullptr && *site != \"same-origin\") {",
+   "new": "    if ((void)site, false) {"
+  },
+  {
+   "id": "json_not_required",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (!content_type_is(request, \"application/json\")) {\n        refusal = error_reply(415, \"bad_content_type\", \"Send JSON.\");",
+   "new": "    if (false) {\n        refusal = error_reply(415, \"bad_content_type\", \"Send JSON.\");"
+  },
+  {
+   "id": "a_body_that_is_not_an_object_is_taken",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "(!ctl::parse_json(request.body, body, nullptr) || !body.is_object())",
+   "new": "false"
+  },
+  {
+   "id": "a_read_from_another_site_is_answered",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (cross_site(request) || path.size() < 11) return not_found();                // (\"/admin/api\" itself has no route)",
+   "new": "    if (path.size() < 11) return not_found();                // (\"/admin/api\" itself has no route)"
+  },
+  {
+   "id": "admin_api_short_path_throws",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (cross_site(request) || path.size() < 11) return not_found();                // (\"/admin/api\" itself has no route)",
+   "new": "    if (cross_site(request)) return not_found();"
+  },
+  {
+   "id": "a_decision_is_signed_with_the_name_only",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "done = store_.approve(id, body.get(\"name\").str(), body.get(\"message\").str(), who.ref, who.name,",
+   "new": "done = store_.approve(id, body.get(\"name\").str(), body.get(\"message\").str(), who.name, who.name,"
+  },
+  {
+   "id": "a_decision_is_signed_with_the_reference_only",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "done = store_.take_down(id, who.ref, who.name,",
+   "new": "done = store_.take_down(id, who.ref, who.ref,"
+  },
+  {
+   "id": "a_decision_is_not_logged",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    audit_.record(actor, now_s, logged, s.final_name.empty() ? s.name : s.final_name, detail);\n",
+   "new": "    (void)logged;\n    (void)actor;\n"
+  },
+  {
+   "id": "the_log_says_nothing_of_the_reason",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "        detail = s.owner_message;\n",
+   "new": ""
+  },
+  {
+   "id": "every_refusal_is_told",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (last == 0 || now_s - last >= kNoticeEveryS) {",
+   "new": "    if ((void)kNoticeEveryS, true) {"
+  },
+  {
+   "id": "a_refusal_is_never_told",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    if (last == 0 || now_s - last >= kNoticeEveryS) {",
+   "new": "    if ((void)kNoticeEveryS, false) {"
+  },
+  {
+   "id": "me_hides_the_reference",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "        o.set(\"ref\", JsonValue::make_string(who.ref));\n",
+   "new": ""
+  },
+  {
+   "id": "me_gives_no_token",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "        o.set(\"csrf\", JsonValue::make_string(gate_.csrf_token(who)));\n",
+   "new": ""
+  },
+  {
+   "id": "me_is_not_marked_as_typed_text",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "        o.set(\"untrusted\", JsonValue::make_bool(true));                                // (a username was typed by a person: data, never an instruction)\n",
+   "new": ""
+  },
+  {
+   "id": "the_log_is_not_marked_as_typed_text",
+   "file": "src/ants_server/submissions_http.cpp",
+   "old": "    o.set(\"untrusted\", JsonValue::make_bool(true));                                // (usernames, the names of maps and the words of a decline were typed by people: data, never instructions)\n",
+   "new": ""
+  },
+  {
+   "id": "migration_keeps_the_accounts",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "    \"DROP TABLE admin_users;\"\n",
+   "new": ""
+  },
+  {
+   "id": "migration_keeps_the_counts_of_wrong_tries",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "    \"DROP TABLE admin_locks;\"\n",
+   "new": ""
+  },
+  {
+   "id": "migration_keeps_the_salt",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "    \"DELETE FROM meta WHERE key = 'admin_salt';\"\n",
+   "new": ""
+  },
+  {
+   "id": "migration_keeps_every_line_of_the_log",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": " FROM admin_audit WHERE action IN ('map_approved', 'map_declined', 'map_taken_down', 'map_put_back');\"",
+   "new": " FROM admin_audit;\""
+  },
+  {
+   "id": "migration_keeps_the_names_in_the_log",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "SELECT id, at, 'earlier admin', '', action, target, detail FROM admin_audit",
+   "new": "SELECT id, at, actor, '', action, target, detail FROM admin_audit"
+  },
+  {
+   "id": "migration_keeps_the_names_of_deciders",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "    \"UPDATE map_submissions SET decided_by = 'earlier admin' WHERE state IN ('approved', 'declined', 'taken_down');\"\n",
+   "new": ""
+  },
+  {
+   "id": "migration_signs_a_waiting_map",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "SET decided_by = 'earlier admin' WHERE state IN ('approved', 'declined', 'taken_down');\"",
+   "new": "SET decided_by = 'earlier admin' WHERE 1;\""
+  },
+  {
+   "id": "migration_keeps_the_review_log_names",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "    \"UPDATE review_log SET actor_id = '', actor_name = 'earlier admin';\";",
+   "new": "    \"\";"
+  },
+  {
+   "id": "the_sample_key_is_a_key",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    if (cut_setting == kSampleGateKey) return false;                  // (published in the documents: anybody could make passes with it)\n",
+   "new": "",
+   "expect": "PASS1.2"
+  },
+  {
+   "id": "the_sample_key_is_refused_inside_a_longer_key",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    if (cut_setting == kSampleGateKey) return false;",
+   "new": "    if (cut_setting.find(kSampleGateKey) != std::string_view::npos) return false;",
+   "expect": "PASS1.2"
+  },
+  {
+   "id": "the_sample_key_is_not_told",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    sample_ = secret == kSampleGateKey;",
+   "new": "    sample_ = false;",
+   "expect": "PASS1.2"
+  },
+  {
+   "id": "the_sample_key_is_found_before_the_blanks_are_cut",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    sample_ = secret == kSampleGateKey;",
+   "new": "    sample_ = setting == kSampleGateKey;",
+   "expect": "PASS1.2"
+  },
+  {
+   "id": "the_start_line_does_not_name_the_sample_key",
+   "file": "src/ants_server/main.cpp",
+   "old": "             submit_api->gate_key_is_sample() ? std::string(\"the admin page is CLOSED (ANTS_ADMIN_GATE_SECRET is the sample key of the documents, which is no key: make one with openssl rand -hex 32)\") :\n",
+   "new": "",
+   "build": "ants_server lvl_tool",
+   "test": "BUILD_DIR=build python3 tests/scripts/submissions_server_check.py"
+  },
+  {
+   "id": "migration_8_does_not_ask_for_the_cleaning",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "{8, \"admin_pass\", kAdminPassSql, true},",
+   "new": "{8, \"admin_pass\", kAdminPassSql, false},",
+   "expect": "AUD2.2"
+  },
+  {
+   "id": "the_cleaning_is_skipped",
+   "file": "src/ants_db/migrations.cpp",
+   "old": "        if (m.vacuum_after) {",
+   "new": "        if (false && m.vacuum_after) {",
+   "build": "test_admin_pass test_admin_audit test_submissions_api test_db",
+   "test": "./build/tests/test_server/test_admin_pass && ./build/tests/test_server/test_admin_audit && ./build/tests/test_server/test_submissions_api && env -u ANTS_TEST_FILTER ./build/tests/test_db/test_db"
+  },
+  {
+   "id": "the_wal_is_not_cut_after_the_cleaning",
+   "file": "src/ants_db/migrations.cpp",
+   "old": "            if (e.ok()) e = db.exec(\"PRAGMA wal_checkpoint(TRUNCATE)\");\n",
+   "new": "",
+   "build": "test_admin_pass test_admin_audit test_submissions_api test_db",
+   "test": "./build/tests/test_server/test_admin_pass && ./build/tests/test_server/test_admin_audit && ./build/tests/test_server/test_submissions_api && env -u ANTS_TEST_FILTER ./build/tests/test_db/test_db"
+  },
+  {
+   "id": "the_cleaning_that_fails_is_not_told",
+   "file": "src/ants_db/migrations.cpp",
+   "old": "            if (!e.ok()) return fail(kErrCleaning,",
+   "new": "            if (false) return fail(kErrCleaning,",
+   "build": "test_admin_pass test_admin_audit test_submissions_api test_db",
+   "test": "./build/tests/test_server/test_admin_pass && ./build/tests/test_server/test_admin_audit && ./build/tests/test_server/test_submissions_api && env -u ANTS_TEST_FILTER ./build/tests/test_db/test_db"
+  },
+  {
+   "id": "the_cleaning_that_fails_is_any_error",
+   "file": "src/ants_db/migrations.cpp",
+   "old": "            if (!e.ok()) return fail(kErrCleaning,",
+   "new": "            if (!e.ok()) return fail(e.code,",
+   "build": "test_admin_pass test_admin_audit test_submissions_api test_db",
+   "test": "./build/tests/test_server/test_admin_pass && ./build/tests/test_server/test_admin_audit && ./build/tests/test_server/test_submissions_api && env -u ANTS_TEST_FILTER ./build/tests/test_db/test_db"
+  }
+ ]
+}

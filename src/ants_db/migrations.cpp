@@ -84,6 +84,11 @@ Error migrate(Database& db, const Migration* migrations, size_t count, int* vers
         if (!e.ok()) return fail(e.code, label + " failed and was rolled back: " + e.message);       // (the destructor of tx rolls back)
         have = m.version;
         if (version != nullptr) *version = have;
+        if (m.vacuum_after) {                                 // (outside the transaction: VACUUM cannot run inside one. The checkpoint moves what a WAL file holds into the file and cuts it, so the dropped bytes are in neither)
+            e = db.exec("VACUUM");
+            if (e.ok()) e = db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+            if (!e.ok()) return fail(kErrCleaning, label + " was applied, but cleaning the file after it failed: " + e.message);
+        }
     }
     return Error();
 }

@@ -225,6 +225,9 @@ COPY web/map_files.js /usr/share/nginx/html/map_files.js
 # The countdown's Fullscreen button (docs/MATCH_COUNTDOWN.md): the game page lays it over the card that opens a match of two or more people (countdown_button.js)
 COPY web/countdown_button.js /usr/share/nginx/html/countdown_button.js
 
+# The screen stays on while a match is played or a recording plays (docs/PLAY_IN_BROWSER.md "The screen stays on"): the game page asks the browser for a Screen Wake Lock (wake_lock.js)
+COPY web/wake_lock.js /usr/share/nginx/html/wake_lock.js
+
 # The touch buttons for the game's hotkeys (docs/TOUCH.md "The hotkey buttons"): the game page makes them on a touch screen during a match (touch_keys.js, touch_keys.css)
 COPY web/touch_keys.js /usr/share/nginx/html/touch_keys.js
 COPY web/touch_keys.css /usr/share/nginx/html/touch_keys.css

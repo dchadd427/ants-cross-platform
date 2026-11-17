@@ -87,7 +87,7 @@
 //                      lists and gives the files and the history too (all of them), and deletes them, behind its secret whatever this says
 //   --replay-any-interface
 //                      the replay port listens on every interface (for a container only, like --ws-any-interface)
-//   --submit-port N    the door of the MAP SUBMISSIONS (docs/MAP_SUBMISSIONS.md): a player sends a map (POST /submissions), finds their own again, withdraws one; the owner's review page asks /admin/api/...
+//   --submit-port N    the door of the MAP SUBMISSIONS (docs/MAP_SUBMISSIONS.md): a player sends a map (POST /submissions), finds their own again, withdraws one; the admin page asks /admin/api/...
 //                      0 = off, the default. This machine only; the site's nginx passes the paths to it and sets the real client address. It needs the database and a folder for the files
 //   --submit-any-interface
 //                      the submission door listens on every interface (for a container only)
@@ -105,11 +105,8 @@
 //                      where the test maps are kept (wiped when the server starts). Default: the folder "test-maps" in --results-dir
 //   --test-map-ignore-client-header
 //                      count an address by the connection's own address instead of the X-Client-Address that the site's nginx sets
-//   The owner's page needs one setting in the environment (never on the command line): ANTS_ADMIN_SESSION_SECRET (32 or more characters; it signs the sign-in cookie). Without it, every /admin/api
-//   path answers 404. ANTS_ADMIN_ALLOW_HTTP=1 drops the Secure flag of the cookie, for a trial over plain http on this machine only.
-//   --admin-create NAME   makes the first Admin account (3 to 32 letters, digits, dot, dash, underscore), prints its random starting password ONCE on standard output and stops. It refuses when an Admin exists.
-//   --admin-reset NAME    gives that user a new random starting password (printed once), signs the user out, clears the locks and enables the account, and stops.
-//                      Both need --db FILE or --results-dir DIR (ants.db in it) and may run beside the server. (docs/MAP_SUBMISSIONS.md, "Accounts")
+//   The admin page needs one setting in the environment (never on the command line): ANTS_ADMIN_GATE_SECRET (32 to 256 printable characters without a blank: the same value as the chat hub's
+//   ANTS_HUB_ADMIN_GATE_SECRET; it checks the pass that the site's nginx gets from the hub's gate). Without a good one, every /admin/api path answers 403 closed. There are no accounts and no passwords here.
 //   --version, --help
 //
 // SIGTERM and SIGINT stop the server within a moment: the records of the running rooms are made durable (fsync) and left where they are (docker stop: give the container a grace period, the stack
@@ -140,8 +137,8 @@
 #include "ants_net/tcp.hpp"
 #include "ants_net/ws.hpp"
 #include "ants_net/protocol.hpp"
-#include "ants_server/admin_accounts.hpp"
-#include "ants_server/admin_cli.hpp"
+#include "ants_server/admin_audit.hpp"
+#include "ants_server/private_files.hpp"
 #include "ants_server/control.hpp"
 #include "ants_db/database.hpp"
 #include "ants_db/migrations.hpp"
@@ -214,7 +211,6 @@ struct Options {
     bool test_map_any_interface{false};
     std::string test_maps_dir;                 // --test-maps-dir (empty: the folder "test-maps" in the results folder)
     bool test_map_ignore_client_header{false};
-    std::string admin_create, admin_reset;     // --admin-create, --admin-reset: the account commands
 };
 
 void usage(FILE* to) {
@@ -229,7 +225,6 @@ void usage(FILE* to) {
                  "                    [--replay-port N] [--replay-any-interface] [--bot-match-every-min 0|5-1440] [--db FILE | --no-db] [--no-history]\n"
                  "                    [--submit-port N] [--submit-any-interface] [--submissions-dir DIR] [--submit-max-waiting N] [--submit-per-address N] [--submit-ignore-client-header]\n"
                  "                    [--test-map-port N] [--test-map-any-interface] [--test-maps-dir DIR] [--test-map-ignore-client-header]\n"
-                 "       ants_server (--admin-create NAME | --admin-reset NAME) (--db FILE | --results-dir DIR)\n"
                  "  the control interface takes its secret from the environment variable ANTS_SERVER_SECRET; without it the server makes one and keeps it\n"
                  "  in --secret-file (default: control-secret in --results-dir)\n");
 }
@@ -311,8 +306,6 @@ int main(int argc, char** argv) {
                 std::fprintf(stderr, "--test-maps-dir takes a folder\n");
                 return 2;
             }
-        } else if (a == "--admin-create" || a == "--admin-reset") {
-            (a == "--admin-create" ? o.admin_create : o.admin_reset) = value(a.c_str());
         } else if (a == "--submit-any-interface") {
             o.submit_any_interface = true;
         } else if (a == "--submit-ignore-client-header") {
@@ -460,18 +453,6 @@ int main(int argc, char** argv) {
             usage(stderr);
             return 2;
         }
-    }
-    if (!o.admin_create.empty() || !o.admin_reset.empty()) {            // the account commands: no server, no maps folder
-        if (!o.admin_create.empty() && !o.admin_reset.empty()) {
-            std::fprintf(stderr, "--admin-create and --admin-reset exclude each other\n");
-            return 2;
-        }
-        ants::server::AdminCommand command;
-        command.kind = o.admin_create.empty() ? ants::server::AdminCommand::Kind::Reset : ants::server::AdminCommand::Kind::Create;
-        command.name = o.admin_create.empty() ? o.admin_reset : o.admin_create;
-        command.folder = o.db_file.empty() ? o.results_dir : std::string();
-        command.db_path = !o.db_file.empty() ? o.db_file : o.results_dir.empty() ? std::string() : (std::filesystem::path(o.results_dir) / "ants.db").u8string();
-        return ants::server::run_admin_command(command, std::cout, std::cerr);
     }
     if (o.maps_dir.empty()) {
         usage(stderr);
@@ -687,12 +668,13 @@ int main(int argc, char** argv) {
             const ants::server::PrivateCreation private_files;                           // (the database, and the -wal and -shm that SQLite makes after it, are for this user only)
             const ants::db::Error err = ants::db::open_and_migrate(database, path, ants::server::db_migrations(), ants::db::OpenOptions(), &version, &journal);
             if (!err.ok()) {
-                std::fprintf(stderr, "database %s: %s\n(the file was not changed; --no-db starts the server without a database)\n", path.c_str(), err.message.c_str());
+                std::fprintf(stderr, "database %s: %s\n(%s; --no-db starts the server without a database)\n", path.c_str(), err.message.c_str(),
+                             err.code == ants::db::kErrCleaning ? "the file has the new schema, but its old bytes were not cleaned out: put back the copy that was made before the update and start again" : "the file was not changed");
                 return 1;
             }
             log("database " + path + ": schema version " + std::to_string(version) + " (journal mode " + journal + ")" +
                 (journal == "wal" ? std::string() : std::string("; the file system gave no WAL, the rollback journal is used")));
-            for (const std::string& line : ants::server::tighten_private_files(path, o.db_file.empty() ? o.results_dir : std::string())) log(line);          // (the accounts' hashes are in this file)
+            for (const std::string& line : ants::server::tighten_private_files(path, o.db_file.empty() ? o.results_dir : std::string())) log(line);          // (the hashes of the makers' tokens are in this file)
         }
     }
     {
@@ -781,10 +763,10 @@ int main(int argc, char** argv) {
             log(std::string("match history kept for good in the database") + (rooms.replay_store() != nullptr ? "; the matches of the replay store are counted while no match runs" : "; the server keeps no replays, so nothing is added"));
         }
     }
-    // The map submissions (submissions.hpp, docs/MAP_SUBMISSIONS.md): the store needs the database and a folder; the owner's page needs two settings of the environment. What is missing switches a part off with a line in
+    // The map submissions (submissions.hpp, docs/MAP_SUBMISSIONS.md): the store needs the database and a folder; the admin page needs one setting of the environment. What is missing switches a part off with a line in
     // the log; a door that was asked for and cannot work stops the server (the operator asked for it).
     std::unique_ptr<ants::server::SubmissionStore> submissions;
-    std::unique_ptr<ants::server::AdminAccounts> accounts;
+    std::unique_ptr<ants::server::AdminAudit> audit;
     std::unique_ptr<ants::server::SubmissionApi> submit_api;
     if (submit_http) {
         if (!database.is_open()) {
@@ -805,26 +787,26 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "map submissions: %s\n", why.c_str());
             return 1;
         }
-        accounts = std::make_unique<ants::server::AdminAccounts>(database);
-        if (!accounts->open(why)) {
-            std::fprintf(stderr, "accounts: %s\n", why.c_str());
+        audit = std::make_unique<ants::server::AdminAudit>(database);
+        if (!audit->open(why)) {
+            std::fprintf(stderr, "admin log: %s\n", why.c_str());
             return 1;
         }
         ants::server::SubmissionApiConfig ac;
-        if (const char* session_key = std::getenv("ANTS_ADMIN_SESSION_SECRET")) ac.session_secret = session_key;
-        const char* plain_http = std::getenv("ANTS_ADMIN_ALLOW_HTTP");
-        ac.cookie_secure = !(plain_http != nullptr && std::string(plain_http) == "1");
+        if (const char* gate_key = std::getenv("ANTS_ADMIN_GATE_SECRET")) ac.gate_secret = gate_key;
         ac.trust_client_header = !o.submit_ignore_client_header;
-        submit_api = std::make_unique<ants::server::SubmissionApi>(*submissions, *accounts, ac);
+        submit_api = std::make_unique<ants::server::SubmissionApi>(*submissions, *audit, ac);
         auto refresh = [&rooms, &submissions]() { rooms.mutable_store().set_approved(submissions->approved_maps()); };
         refresh();
         submissions->take_approved_changed();
         submit_api->set_on_approved_changed(refresh);
         log("map submissions on: files in " + sc.dir + ", at most " + std::to_string(sc.max_waiting) + " waiting and " + std::to_string(sc.per_address_per_day) + " a day from one address; " +
-            (submit_api->owner_api_on() ? "the owner's review page is on" + std::string(ac.cookie_secure ? "" : " (ANTS_ADMIN_ALLOW_HTTP: the cookie is not marked Secure)") : "the owner's review page is OFF (ANTS_ADMIN_SESSION_SECRET, 32 characters or more, is needed)") +
+            (submit_api->admin_api_on() ? std::string("the admin page's API is on (it answers a visitor whom the hub's gate lets in)") :
+             submit_api->gate_key_is_sample() ? std::string("the admin page is CLOSED (ANTS_ADMIN_GATE_SECRET is the sample key of the documents, which is no key: make one with openssl rand -hex 32)") :
+             submit_api->gate_key_given() ? std::string("the admin page is CLOSED (ANTS_ADMIN_GATE_SECRET is not 32 to 256 printable characters without a blank)") : std::string("the admin page is CLOSED (ANTS_ADMIN_GATE_SECRET is not set)")) +
             "; " + std::to_string(submissions->approved_maps().size()) + " approved maps in the lobby's list");
         for (const std::string& line : submissions->take_notices()) log(line);
-        for (const std::string& line : accounts->take_notices()) log(line);
+        for (const std::string& line : audit->take_notices()) log(line);
     }
     // The test maps (test_maps.hpp, docs/MAP_SUBMISSIONS.md "Test maps"): a folder and a list in memory, no database and nothing of the submissions above, so they work on a server whose submissions door is off.
     // What is missing switches the door off with a line in the log; the game goes on.
@@ -915,12 +897,13 @@ int main(int argc, char** argv) {
                 last_submission_upkeep_ms = now;
                 submissions->maintenance(static_cast<int64_t>(std::time(nullptr)));
                 if (submissions->take_approved_changed()) rooms.mutable_store().set_approved(submissions->approved_maps());
-                if (accounts) {
-                    accounts->maintenance(static_cast<int64_t>(std::time(nullptr)));
-                    for (const std::string& line : accounts->take_notices()) log(line);          // (a refused write of the accounts: never a password, a name or an address)
+                if (audit) {
+                    audit->maintenance(static_cast<int64_t>(std::time(nullptr)));
+                    for (const std::string& line : audit->take_notices()) log(line);          // (a refused write of the log: never a name or an address)
                 }
             }
             for (const std::string& line : submissions->take_notices()) log(line);
+            for (const std::string& line : submit_api->take_notices()) log(line);           // (a pass that was refused: its kind, never the pass, a name or an address)
         }
         if (test_map_http && test_api) {
             test_map_http->update(now, [&](const ants::ctl::HttpRequest& request) { return test_api->handle(request, static_cast<int64_t>(std::time(nullptr)), now); });

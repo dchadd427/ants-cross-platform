@@ -28,6 +28,7 @@ constexpr int kErrNested = -3;              // a transaction is open already
 constexpr int kErrNotOpen = -4;             // the database (or statement) is not open
 constexpr int kErrInterrupted = 9;          // SQLite's SQLITE_INTERRUPT: a statement stopped by the progress handler
 constexpr int kErrForeign = -6;             // a database that this program did not make (it has tables and no schema_version)
+constexpr int kErrCleaning = -7;            // a migration was applied and committed, but the VACUUM or the checkpoint that must follow it failed (the file has the new schema; see Migration::vacuum_after)
 
 struct Error {
     int code{0};                           // 0 = no error; SQLite's result code, or one of the kErr values

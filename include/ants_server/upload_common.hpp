@@ -26,7 +26,7 @@ Failure make_failure(int status, const char* code, const char* message);
 /// The cheap refusals that a real submission and a test map share: the file is a map of version 8 (Classic) or 9 (Extended), and it is the kind that the request says. On success `real_kind` is the file's own kind.
 bool kind_of_file(const std::string& claimed, const std::string& bytes, std::string& real_kind, Failure& why);
 
-/// The warnings of a check, as the owner's page and the Map Maker show them (the notes are not kept; at most 20, each cut to 240 bytes)
+/// The warnings of a check, as the admin page and the Map Maker show them (the notes are not kept; at most 20, each cut to 240 bytes)
 ctl::JsonValue kept_findings(const ctl::JsonValue& report);
 
 /// Parses what the map core answers (a few MB of JSON at most)

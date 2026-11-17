@@ -665,12 +665,12 @@ int main() {
         ASSERT_TRUE(rig.history.put(a, why) && rig.history.find(a.id, got) && got.deaths == field);        // (kept again: the marker goes, the row is back)
     } TEST_END();
 
-    TEST_CASE("DD4.5 The schema is version 7 and a database of version 6 gets the table without losing a record; the cap of the column is the cap of the field") {
-        ASSERT_EQ(db_schema_version(), 7);
+    TEST_CASE("DD4.5 The map of deaths is schema version 7 and a database of version 6 gets the table without losing a record; the cap of the column is the cap of the field") {
+        ASSERT_TRUE(db_schema_version() >= 7);
         TempDir dir;
         db::Database d;
-        std::vector<db::Migration> six = db_migrations();
-        six.pop_back();
+        const std::vector<db::Migration> every = db_migrations();
+        const std::vector<db::Migration> six(every.begin(), every.begin() + 6);
         ASSERT_TRUE(db::open_and_migrate(d, (dir.path / "six.db").string(), six, db::OpenOptions()).ok());
         {
             db::Statement st;

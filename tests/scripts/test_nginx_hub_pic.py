@@ -261,7 +261,7 @@ class TheBlockRuns(unittest.TestCase):
         self.assertEqual(self.nginx.get(self.path).status, 200)                                  # (no header at all: a program, an address typed)
 
     def test_nothing_of_the_visitors_request_reaches_the_hub_but_the_address_nginx_saw(self):
-        self.nginx.get(self.path, [("Cookie", "__Host-ants_hub=%s; ants_admin=secret-1; other=2" % ("a" * 32)), ("Authorization", "Bearer canary-token"), ("Origin", "https://elsewhere.example"),
+        self.nginx.get(self.path, [("Cookie", "__Host-ants_hub=%s; ants_other=secret-1; other=2" % ("a" * 32)), ("Authorization", "Bearer canary-token"), ("Origin", "https://elsewhere.example"),
                                    ("Referer", "https://elsewhere.example/page"), ("X-Client-Address", "203.0.113.99"), ("X-Forwarded-For", "203.0.113.98"), ("Accept-Language", "de"), ("User-Agent", "canary-agent"),
                                    ("Sec-Fetch-Site", "same-origin"), ("Cache-Control", "no-cache"), ("Range", "bytes=0-10"), ("If-None-Match", "x")])
         (_, _, names, values), = self.stand.asked(self.path)

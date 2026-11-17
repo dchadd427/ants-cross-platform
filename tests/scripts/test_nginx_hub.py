@@ -44,8 +44,8 @@ class TheText(unittest.TestCase):
     def test_it_is_an_exact_location_and_the_only_one_of_its_name(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
         self.assertEqual([l for l in locations if "hub" in l].count("= /hub/ws"), 1)
-        self.assertEqual(sorted(l for l in locations if "hub" in l and "/hub/pic" not in l),                       # (the pages of the login are tests/scripts/test_nginx_hub_login.py, the pictures' door test_nginx_hub_pic.py)
-                         sorted(["= /hub/ws", "@hub_off", "= /hub/login", "= /hub/callback", "= /hub/me", "= /hub/logout", "= /hub/forget", "@hub_page_off", "@hub_page_limit", "@hub_page_site"]))
+        self.assertEqual(sorted(l for l in locations if "hub" in l and "/hub/pic" not in l),                       # (the pages of the login and the admin's gate are tests/scripts/test_nginx_hub_login.py, the pictures' door test_nginx_hub_pic.py)
+                         sorted(["= /hub/ws", "@hub_off", "= /hub/login", "= /hub/callback", "= /hub/me", "= /hub/logout", "= /hub/forget", "@hub_page_off", "@hub_page_limit", "@hub_page_site", "= /hub/admin/gate"]))
         self.assertTrue(HUB and OFF)
 
     def test_only_a_get_without_a_query_goes_through_and_the_checks_come_first(self):
@@ -231,7 +231,7 @@ class TheBlockRuns(unittest.TestCase):
         self.assertEqual(next(m for m in b.drain(0.5) if m["t"] == "line")["text"], "through nginx")
 
     def test_the_hub_gets_the_upgrade_headers_the_visitors_cookie_and_the_address_nginx_saw_and_nothing_else(self):
-        c = self.connect(headers={"Cookie": "a=b; ants_admin=v2.canary-admin-cookie; %s; __Host-ants_oauth=%s; z=1" % (COOKIE, "b2" * 16), "X-Client-Address": "9.9.9.9", "X-Forwarded-For": "8.8.8.8", "X-Hub-Test-Login": "1001:mallory", "Authorization": "Bearer secret-token",
+        c = self.connect(headers={"Cookie": "a=b; ants_other=v2.canary-other-cookie; %s; __Host-ants_oauth=%s; z=1" % (COOKIE, "b2" * 16), "X-Client-Address": "9.9.9.9", "X-Forwarded-For": "8.8.8.8", "X-Hub-Test-Login": "1001:mallory", "Authorization": "Bearer secret-token",
                                   "User-Agent": "test-agent", "Accept-Language": "en", "Sec-Fetch-Site": "same-origin", "X-Custom": "1", "Referer": "https://evil.example/"})
         self.assertTrue(c.ok)
         c.recv_json()
@@ -239,11 +239,11 @@ class TheBlockRuns(unittest.TestCase):
         self.assertEqual(sorted(seen), sorted(["host", "upgrade", "connection", "sec-websocket-key", "sec-websocket-version", "origin", "cookie", "sec-fetch-site", "x-client-address"]))
         self.assertEqual(seen["x-client-address"], "127.0.0.1")                  # the address of the connection, never the visitor's own header
         self.assertEqual(seen["origin"], hc.SITE)
-        self.assertEqual(seen["cookie"], COOKIE)                                   # (the login's cookie, and none of the visitor's others: not the admin page's, not the state of a login)
+        self.assertEqual(seen["cookie"], COOKIE)                                   # (the login's cookie, and none of the visitor's others: not another site cookie, not the state of a login)
         self.assertEqual(seen["sec-fetch-site"], "same-origin")
         self.assertEqual(seen["upgrade"].lower(), "websocket")
         self.assertNotIn("secret-token", str(seen))
-        self.assertNotIn("canary-admin-cookie", str(seen))
+        self.assertNotIn("canary-other-cookie", str(seen))
 
     def test_refusals_of_the_hub_reach_the_visitor(self):
         c = self.connect(origin="https://evil.example")

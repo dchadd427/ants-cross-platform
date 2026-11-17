@@ -8,11 +8,11 @@
 THE rule (`Door.decide`, used by every one of the above): the visitor's hub login names an account; the account may when it is `ANTS_HUB_OWNER` (no call to Discord) or when its role is
 `admin` on the hub's own freshness rule (hub/roles.py `role_of`: an answer of Discord that is not past its interval and its grace; a role that is not known or not that young is looked up
 once, urgently, and a lookup that does not answer means no). A moderator may not. Unknown, stale, failed: not allowed. The door is shut for everybody when `ANTS_HUB_ADMIN_GATE_SECRET` is
-absent, shorter than 32 characters or not printable (the hub still starts; the start line says so).
+absent, shorter than 32 characters, not printable or the made-up key of the known answer below (the hub still starts; the start line says so).
 
 The keys: the secret is the setting's text with the characters that Python's str.strip() cuts removed from both ends (in practice ASCII space, tab, CR and LF; the secret is printable ASCII), taken as ASCII bytes. The key of the pass is
 the RAW 32-byte digest (not its hex text) of HMAC-SHA-256 with the secret as the KEY and the label `ants-admin-pass-v1` as the MESSAGE; the key of the page's token is the same with the label `ants-admin-csrf-v1`, so the two never share a key. (Known answer: the secret
-`canary-gate-key-5d8f0c1e7a9b4263-q` gives the pass key 13be5dab7dcbeb06e979f0fa5e5f817d178fa6b40da7c92bc02588e80ae3dd25 and the token key 03a2b6b94fabcf8ae018852e8e6c0b1ec691375286a0263168238796556e3018, as hex of the 32 bytes.)
+`canary-gate-key-5d8f0c1e7a9b4263-q` gives the pass key 13be5dab7dcbeb06e979f0fa5e5f817d178fa6b40da7c92bc02588e80ae3dd25 and the token key 03a2b6b94fabcf8ae018852e8e6c0b1ec691375286a0263168238796556e3018, as hex of the 32 bytes. That key is published, so it is refused as a key, here and by the game server.)
 
 The pass: `v1.<payload>.<mac>`; payload = base64url (no padding) of the JSON `{"exp", "name", "nonce", "ref", "role"}` (exp: seconds since 1970, 60 seconds after it was made; name: the Discord
 username; nonce: 16 hex characters; ref: the account's reference, hub/pseudo.py; role: `admin` or `owner`); mac = hex (64 characters) HMAC-SHA-256, under the raw pass key, of the ASCII text `v1.<payload>`. The game
@@ -69,7 +69,7 @@ def sign(key, payload):
 def warn(cfg, log):
     """One line at the start when the door is shut for want of a good key (never the key, nor how long it is)."""
     if not cfg.admin_gate_on:
-        log.event("warning", what="admin_page_door_shut_" + ("secret_too_short_or_not_printable" if cfg.admin_gate_given else "no_secret_set"))
+        log.event("warning", what="admin_page_door_shut_" + ("secret_is_the_sample_key" if cfg.admin_gate_sample else "secret_too_short_or_not_printable" if cfg.admin_gate_given else "no_secret_set"))
 
 
 def no_duplicates(pairs):
