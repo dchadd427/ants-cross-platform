@@ -119,6 +119,7 @@ function world(overrides) {
 }
 // an answer whose body is not JSON (the web server's own answer to too many requests)
 const notJson = (status) => () => ({ status, json: async () => { throw new SyntaxError('Unexpected token'); } });
+const guard = { t: 0, step: 1000 };                 // the clock that only goes forward: each reading is one step later (a question that is answered one step after it opened; 1000 ms, or 100 for a double click)
 const STAMPED = { 'data-version': 'v0.16.11', 'data-build': '9d41c2e', 'data-built': '2026-11-16 09:30 PT' };
 async function open(w, stamps) {
     const doc = makeDocument();
@@ -131,7 +132,7 @@ async function open(w, stamps) {
     doc.body.appendChild(app);
     doc.getElementById = (id) => (id === 'app' ? app : null);
     const timers = [];
-    const page = A.create({ doc, fetch: w.fetch, now: () => NOW, setTimeout: (f) => { timers.push(f); return timers.length; }, clearTimeout: () => {} });
+    const page = A.create({ doc, fetch: w.fetch, now: () => NOW, tick: () => (guard.t += guard.step), setTimeout: (f) => { timers.push(f); return timers.length; }, clearTimeout: () => {} });
     await page.start();
     await settle();
     return { doc, app, page, timers, bar };
@@ -153,6 +154,12 @@ async function backdrop(app, from, to) {
     scrim.fire('pointerup', { target: to === 'scrim' ? scrim : app.querySelector('.dlg') });
     scrim.fire('click', { target: scrim });
     await settle();
+}
+async function open_maps(label) {                  // the page on the Maps section (Approved for Take down), for a question
+    const w = world();
+    const o = await open(w);
+    if (label === 'Take down') await press(o.app, 'Approved (1)');
+    return Object.assign({ w }, o);
 }
 // the sections, by their tabs
 async function section(app, title) {
@@ -953,6 +960,40 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
         const post = w.calls.filter((c) => c.method === 'POST');
         same('the red Ban sends the call, once: the username as typed, the hub\'s token', [post.length, post[0].url, post[0].body, post[0].headers['X-Ants-Csrf']], [1, '/hub/admin/api/ban', { account: 'clover.4782' }, 'hub-token-1']);
         same('and the question is gone, the line says it is done, the lists are asked again', [all(app, '.dlg').length, texts(app, '.panel .msg'), w.calls.filter((c) => c.url === '/hub/admin/api/bans').length, all(app, '.cgrid .cc').length], [0, ['Done: clover.4782 is banned.'], 1, 2]);
+    }
+    // ---- a question ignores its confirm button for the first half second: the second click of a double click is no answer
+    {
+        const w = world();
+        const { app } = await open(w);
+        await section(app, 'Chat');
+        type(app, 'cm-user', 'clover.4782');
+        w.calls.length = 0;
+        guard.step = 100;
+        await press(app, 'Ban');
+        await press(app, 'Ban', 1);
+        same('Ban question: a press on the red Ban 100 ms after it opened sends nothing and the question stays', [w.calls.filter((c) => c.method === 'POST').length, all(app, '.dlg').length], [0, 1]);
+        guard.step = 600;
+        await press(app, 'Ban', 1);
+        same('Ban question: the same press 600 ms after it opened is an answer', [w.calls.filter((c) => c.method === 'POST').map((c) => c.url), all(app, '.dlg').length], [['/hub/admin/api/ban'], 0]);
+        type(app, 'cm-user', 'clover.4782');
+        guard.step = 100;
+        await press(app, 'Ban');
+        check('Ban question: it is open again', all(app, '.dlg').length === 1);
+        await press(app, 'Cancel');
+        same('Cancel works at once (it never was a danger)', [all(app, '.dlg').length, w.calls.filter((c) => c.method === 'POST').length], [0, 1]);
+        guard.step = 1000;
+        for (const [label, open, confirm, url] of [['Approve', 'Approve', 'Approve', '/approve'], ['Take down', 'Take down', 'Take down', '/take-down']]) {
+            const m = await open_maps(label);
+            m.w.calls.length = 0;
+            guard.step = 100;
+            await press(m.app, open, 0);
+            await press(m.app, confirm, label === 'Approve' ? 2 : 1);
+            same(label + ' question: a press on its red or green button 100 ms after it opened sends nothing and the question stays', [m.w.calls.filter((c) => c.method === 'POST').length, all(m.app, '.dlg').length], [0, 1]);
+            guard.step = 600;
+            await press(m.app, confirm, label === 'Approve' ? 2 : 1);
+            same(label + ' question: 600 ms after it opened it is an answer', [m.w.calls.filter((c) => c.method === 'POST').map((c) => c.url.replace(/[0-9a-f]{32}/, '<id>')), all(m.app, '.dlg').length], [['/admin/api/maps/<id>' + url], 0]);
+            guard.step = 1000;
+        }
     }
     // ---- the buttons of the lists send the account's reference, never a name
     {

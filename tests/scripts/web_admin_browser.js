@@ -6,7 +6,8 @@
 //   2. every button, link, box and select that is shown is 44 px tall (and wide) or more, and inside the window;
 //   3. no error of the script and no refusal of the content security policy;
 //   4. the sections are a row of tabs from 601 px and a select under that, never both;
-//   5. the names are text: a name that is markup is shown as it is, and no tag of it is in the page.
+//   5. the names are text: a name that is markup is shown as it is, and no tag of it is in the page;
+//   6. a real double click on the form's Ban of a short phone, where the Ban of the question that it opens comes to stand under the second click, bans nobody (the question ignores a press in its first half second).
 //   --shots DIR takes a picture of every scene (NAME_phone.png, NAME_desktop.png; the phone's is the whole page, the window for the question and the menu); --only PREFIX draws the scenes that start with it.
 //   Made-up names only (basil and tess are admins, sage a moderator, pebble a player, clover.4782 the spammer). ADMIN_SHOT_THUMBS=DIR names a folder with mapthumb_a.png to mapthumb_d.png for the pictures of the
 //   maps (else small drawings are made).
@@ -75,7 +76,7 @@ function world() {
             { at: at('2026-11-12T20:00:00Z'), action: 'mute', actor: '3f9a52c07de18b44', actor_name: '', target: REF.fern, target_name: 'fern.leaf', detail: '10' }],
         audit: [{ at: at('2026-11-16T19:30:00Z'), who: 'basil', ref: REF.basil, action: 'map_approved', target: 'Mossy Ridge', detail: '' }, { at: at('2026-11-16T18:02:00Z'), who: 'tess', ref: REF.tess, action: 'map_declined', target: 'Test 1', detail: 'Same as an existing map.' },
             { at: at('2026-11-15T20:00:00Z'), who: 'basil', ref: REF.basil, action: 'map_taken_down', target: 'Old Bridge', detail: '' }, { at: at('2026-11-12T20:00:00Z'), who: 'tess', ref: REF.tess, action: 'map_put_back', target: 'Old Bridge', detail: '' }],
-        busy: { matches: 2, players: 5 },
+        busy: { matches: 2, players: 5 }, posts: [],
         status: { store: { bytes: 4404019, limit: 67108864, log: 314572, free: 0, lines: 187, oldest: at('2026-11-09T20:00:00Z'), pictures: 41, pictures_max: 1000, picture_bytes: 1153434, picture_bytes_max: 25165824, off: 6, blocked: 1 },
             health: { roles: 'ok', roles_known: 14, kind: null, status: null, retry: null }, last_picture: { kind: 'ok', age: 180 }, version: { code: '9f3c1a2e', started: at('2026-11-16T17:30:00Z') } }
     };
@@ -127,6 +128,7 @@ const server = http.createServer((req, res) => {
             req.on('data', (c) => { body += c; });
             req.on('end', () => {
                 const names = ['clover.4782', 'hazel_b', 'juniper.berry', 'pebble_9', 'marlow.old', 'spam.king'];
+                W.posts.push(name);
                 const account = JSON.parse(body || '{}').account;
                 if (account && account.length < 20 && names.indexOf(account) < 0 && !/^[0-9a-f]{16}$/.test(account)) return json(404, { error: 'who' });
                 return json(200, name === 'mute' ? { ok: true, until: at('2026-11-16T22:20:00Z') } : { ok: true });
@@ -225,6 +227,41 @@ async function checks_of(pg, label, size) {
             if (SHOTS) await pg.screenshot({ path: path.join(SHOTS, name + '_' + sizeName + '.png'), fullPage: !spec.window });
             await ctx.close();
         }
+    }
+    {   // a real double click on the form's Ban: the second click lands on the question's own Ban, and the question must not take it for an answer
+        W = world();
+        who = WHO.admin;
+        const ctx = await browser.newContext({ viewport: { width: 390, height: 600 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, colorScheme: 'dark' });
+        const pg = await ctx.newPage();
+        const errors = [];
+        pg.on('pageerror', (e) => errors.push(String(e)));
+        await pg.goto(base + '/admin', { waitUntil: 'load' });
+        await pg.waitForSelector('.alist .arow');
+        await openSection(pg, 'chat');
+        await pg.waitForSelector('.p-banned .prow');
+        await pg.fill('#cm-user', 'clover.4782');
+        await pg.click('.acts .btn.bad');                                                      // (once, to see where the question's Ban stands)
+        await pg.waitForSelector('.dlg');
+        const sheet = await pg.locator('.dlg-foot .btn.bad').boundingBox();
+        await pg.keyboard.press('Escape');
+        await pg.waitForSelector('.dlg', { state: 'detached' });
+        const form = await pg.locator('.acts .btn.bad').boundingBox();
+        await pg.evaluate((dy) => window.scrollBy(0, dy), form.y + form.height / 2 - (sheet.y + sheet.height / 2));      // (the form's Ban at the height of the question's)
+        const at = await pg.locator('.acts .btn.bad').boundingBox();
+        const x = Math.round(at.x + at.width / 2), y = Math.round(at.y + at.height / 2);
+        await pg.mouse.dblclick(x, y);
+        await pg.waitForTimeout(100);
+        const over = await pg.evaluate(([px, py]) => { const e = document.elementFromPoint(px, py); return e && e.closest('.dlg-foot') ? e.textContent : null; }, [x, y]);
+        check('the second click of a double click lands on the Ban of the question (else this check shows nothing)', over === 'Ban', String(over));
+        check('and it banned nobody: the question is open and nothing was sent', (await pg.locator('.dlg').count()) === 1 && W.posts.length === 0, JSON.stringify(W.posts));
+        if ((await pg.locator('.dlg').count()) === 1) {
+            await pg.waitForTimeout(700);
+            await pg.locator('.dlg-foot .btn.bad').click();
+            await pg.waitForTimeout(200);
+            check('a press on it a moment later is the answer: the ban is sent, once', W.posts.length === 1 && W.posts[0] === 'ban', JSON.stringify(W.posts));
+        }
+        check('no error of the script', errors.length === 0, errors.join(' | '));
+        await ctx.close();
     }
     {   // a name that is markup is text on every section: no tag of it is in the page
         const evil = '<img src=x onerror=alert(1)>';

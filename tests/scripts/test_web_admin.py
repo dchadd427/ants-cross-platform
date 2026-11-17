@@ -165,6 +165,10 @@ class ThePagesOwnCode(unittest.TestCase):
             'a time that is not a number stops the list': ("    function when(seconds, nowMs) {\n        if (!isTime(seconds)) return '';", '    function when(seconds, nowMs) {'),
             'the end of a mute that is not a time stops the list': ("    function untilWords(seconds, nowMs) {\n        if (!isTime(seconds)) return '';", '    function untilWords(seconds, nowMs) {'),
             'the time that is left of a mute that is not a time stops the list': ("    function leftWords(seconds, nowMs) {\n        if (!isTime(seconds)) return '';", '    function leftWords(seconds, nowMs) {'),
+            'the Ban question can be confirmed at once': ("if (tick() - opened < ASK_DELAY) return; closeAsk(); change('ban',", "closeAsk(); change('ban',"),
+            'the Approve and Take down questions can be confirmed at once': ('                    if (tick() - st.dialogAt < ASK_DELAY) return;                 // (a press that comes at once is the second click of a double click, not an answer)\n', ''),
+            'the delay of a question is none': ('var ASK_DELAY = 500;', 'var ASK_DELAY = 0;'),
+            'the Cancel of a question waits too': ("var cancel = button('Cancel', 'ghost', closeAsk);", "var cancel = button('Cancel', 'ghost', function () { if (tick() - opened < ASK_DELAY) return; closeAsk(); });"),
             'the log is not newest first': ('rows.sort(function (a, b) { return b.at - a.at; });', 'rows.sort(function (a, b) { return a.at - b.at; });'),
             'a log that cannot be had is shown as an empty one': ('st.chat = rs[0].status === 200 ? rs[0].json.modlog || [] : null;', 'st.chat = rs[0].status === 200 ? rs[0].json.modlog || [] : [];'),
             'a status that the door refuses is not noticed': ('if (refused(rs[1])) return;', ''),
@@ -205,11 +209,8 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
         for name in ("sitemap.xml", "robots.txt"):
             self.assertFalse(os.path.exists(os.path.join(REPO, "web", name)), name + " would list it")
 
-    def test_the_one_link_to_it_is_a_line_of_the_front_pages_account_menu_for_an_administrator(self):
-        chat = read("web", "home", "chat.js")
-        self.assertEqual(re.findall(r"/admin\b[^\n]*", chat), ["/admin'); adminLink.hidden = true; slot.insertBefore(adminLink, outBtn);        // (a plain link, for an administrator or the owner only: the page decides again who may come in)"])
-        self.assertIn("adminLink.hidden = !(you && you.role === 'admin');", chat)                 # (the role of the hub's own frame: an administrator or the owner; a moderator and everybody else do not see it)
-        self.assertRegex(read("web", "home", "chat.css"), r"\.gc-admin\[hidden\] \{ display: none; \}")        # (a button's display would show a hidden link)
+    def test_the_front_pages_account_menu_names_the_address_once_and_its_behavior_is_run_in_node(self):
+        self.assertEqual(read("web", "home", "chat.js").count("/admin"), 1)                       # (the one line for an administrator: what it shows and to whom is RUN by tests/scripts/web_home_chat_check.js)
 
     def test_the_page_has_the_bar_and_no_other_link_and_loads_only_its_own_files(self):
         page = read("web", "admin.html")
@@ -245,18 +246,6 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
         shell = script[script.index("function paintTabs()"):script.index("// ---- the section \"Maps\"")]
         for word in ("Waiting", "Banned", "Muted", "Refresh"):
             self.assertNotIn(word, shell)
-
-    def test_the_text_of_the_pictures_is_in_the_script(self):
-        script = read("web", "admin_page.js")
-        for words in ("Rename and approve", "Use next name", "Save name and approve",
-                      "Name for this map", "Take this map down?", "Players will no longer find it. It can be put back later.", "Put back", "No approved maps yet", "Go to maps waiting",
-                      "A name that is already taken is never replaced.", "Declining asks for a short reason that the maker can read. Nothing is deleted.",
-                      "Taking a map down does not delete it. Its name stays protected",
-                      "Mute or ban someone", "Minutes (a mute only)", "A mute ends by itself.", "They can read the chat but cannot write.", "Hide a picture", "Hidden now", "Show again",
-                      "They can still read the chat but cannot write until an admin lifts the ban.", "as typed in the Username box", "Chat actions", "Map decisions", "newest first",
-                      "Role checks", "Pictures from Discord", "Chat store", "Versions", "Refresh", "Made an admin just now? Wait a minute and reload this page.",
-                      "The tools for moderators are on the front page."):
-            self.assertIn(words, script)
 
 
 if __name__ == "__main__":

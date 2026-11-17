@@ -16,7 +16,7 @@
     if (typeof module === 'object' && module.exports) module.exports = api;
     else {
         root.AntsAdmin = api;
-        if (root.document && root.document.getElementById('app')) api.create({ doc: root.document, fetch: root.fetch.bind(root), now: function () { return Date.now(); }, setTimeout: root.setTimeout.bind(root), clearTimeout: root.clearTimeout.bind(root) }).start();
+        if (root.document && root.document.getElementById('app')) api.create({ doc: root.document, fetch: root.fetch.bind(root), now: function () { return Date.now(); }, tick: function () { return root.performance && root.performance.now ? root.performance.now() : Date.now(); }, setTimeout: root.setTimeout.bind(root), clearTimeout: root.clearTimeout.bind(root) }).start();
     }
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
@@ -54,6 +54,7 @@
     var TITLE_LINE = 'Maps that players sent, bans and mutes in the chat, the logs, and how the site is doing.';
     var PRESETS = [['10 min', 10], ['1 hour', 60], ['1 day', 1440], ['1 week', 10080]];       // the minutes of a mute that the front page's chat also offers
     var MAX_MINUTES = 10080;
+    var ASK_DELAY = 500;                                   // milliseconds: the confirm button of a question that has just opened ignores a press (the second click of a double click lands on it)
     var REFERENCE = /^[0-9a-f]{16}$/;                      // the hub's short name for an account (never a Discord id)
     var ID_SHAPED = /^[0-9]{15,20}$/;                      // as long as a Discord id: never typed into this page's boxes, never sent
     var HUB_API = '/hub/admin/api/';
@@ -136,6 +137,7 @@
         var tabsBox = null, select = null, waiting = 0;     // the tabs, the select of a phone, and the number of maps that wait (the badge)
         var cleanup = null;                                 // what a section must undo when another screen takes its place (the key listener of a question)
         var toastTimer = null;
+        function tick() { return (env.tick || env.now)(); }                      // a clock that only goes forward, in milliseconds (the page's other clock, now, says the time of day and can be frozen)
         var inerted = [];                                   // the nodes that a question made inert
         var menu = null;                                    // the person's menu while it is open: { node, off }
         var cardSeq = 0;                                    // a card that waits for the name of the person is not drawn over a page that came after it
@@ -445,7 +447,7 @@
 
         // ---- the section "Maps" (the maps that players sent) ----
         function renderMaps(host) {
-            var st = { tab: 'waiting', data: null, open: null, busy: false, dialog: null, dialogKind: null, dialogBody: null, keyOff: null, focusBack: null, dead: false };
+            var st = { tab: 'waiting', data: null, open: null, busy: false, dialog: null, dialogAt: null, dialogKind: null, dialogBody: null, keyOff: null, focusBack: null, dead: false };
             cleanup = function () { st.dead = true; if (st.keyOff) { st.keyOff(); st.keyOff = null; } };          // (another screen took the page: nothing of this one is drawn or heard any more)
 
             function load(tab) {
@@ -612,6 +614,7 @@
                 function closeDialog() { st.focusBack = m.id; st.dialog = null; draw(); }
                 var cancel = button('Cancel', 'ghost', closeDialog);
                 var go = button(approve ? 'Approve' : 'Take down', approve ? 'ok' : 'bad', function () {
+                    if (tick() - st.dialogAt < ASK_DELAY) return;                 // (a press that comes at once is the second click of a double click, not an answer)
                     if (!approve) return act(m.id, 'take-down', {});
                     act(m.id, 'approve', body || {}, function (res) {
                         var sug = res.json && res.json.suggestion ? res.json.suggestion : '';
@@ -635,6 +638,8 @@
                 if (st.keyOff) { st.keyOff(); st.keyOff = null; }
                 clearInert();
                 if (!st.dialog) st.dialogBody = null;
+                if (!st.dialog) st.dialogAt = null;
+                else if (st.dialogAt === null) st.dialogAt = tick();
                 host.textContent = '';
                 var counts = st.data ? st.data.counts : { waiting: 0, approved: 0, declined: 0, taken_down: 0 };
                 var tools = el('div', 'mtools');
@@ -864,7 +869,7 @@
                 var src = el('div', 'srcrow');
                 add(src, add(el('div'), typed('div', 'nm', a.shown), el('div', 'sm', 'as typed in the Username box')));
                 add(dlg, add(el('div', 'dlg-in'), h, src, el('div', 'lead', 'They can still read the chat but cannot write until an admin lifts the ban.')));
-                var shell;
+                var shell, opened = tick();
                 function closeAsk() {
                     if (st.keyOff) { st.keyOff(); st.keyOff = null; }
                     if (shell.node.parentNode) shell.node.parentNode.removeChild(shell.node);
@@ -872,7 +877,7 @@
                     banButton.focus();
                 }
                 var cancel = button('Cancel', 'ghost', closeAsk);
-                var go = button('Ban', 'bad', function () { closeAsk(); change('ban', { account: a.account }, typed('span', null, a.shown), 'is banned', user.input); });
+                var go = button('Ban', 'bad', function () { if (tick() - opened < ASK_DELAY) return; closeAsk(); change('ban', { account: a.account }, typed('span', null, a.shown), 'is banned', user.input); });
                 add(dlg, add(el('div', 'dlg-foot'), cancel, go));
                 shell = questionBox(dlg, cancel, go, closeAsk);
                 add(host, shell.node);
