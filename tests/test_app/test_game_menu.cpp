@@ -306,6 +306,18 @@ void test_settings() {
         check(refused.values().empty(), "a store that gives nothing has no values");
         m.load(refused);
         check(m.hud_art_new, "...and the HUD art is the new one");
+        ConfigStore folder;                                                    // a folder where the settings file should be: the standard library of Linux throws when it reads one, that of the Mac reads nothing
+        folder.set_location(std::filesystem::temp_directory_path().string());
+        bool threw = false;
+        try {
+            folder.load();
+        } catch (...) {
+            threw = true;
+        }
+        check(!threw && folder.values().empty(), "a settings path that is a folder gives nothing, and nothing is thrown");
+        m.hud_art_new = false;
+        m.load(folder);
+        check(m.hud_art_new, "...and the HUD art is the new one");
         s.hud_art_new = false;
         s.write(store, gm::kHudArt);
         gm::MenuSettings classic;

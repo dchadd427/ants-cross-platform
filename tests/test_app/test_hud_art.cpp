@@ -228,6 +228,42 @@ void test_png() {
             out << "this is not a picture";
         }
         check(!loaded.load(dir.string()), "a sheet that is no picture is refused");
+        // a folder where a file should be (the standard library of Linux throws when it reads one): a refusal, never a throw
+        fs::remove(dir / "sheet_2x.png", ignored);
+        fs::create_directories(dir / "sheet_2x.png", ignored);
+        bool threw = false;
+        bool refused_folder = false;
+        try {
+            refused_folder = !loaded.load(dir.string());
+        } catch (...) {
+            threw = true;
+        }
+        check(!threw && refused_folder, "a sheet that is a folder is refused, and nothing is thrown");
+        fs::remove_all(dir / "sheet_2x.png", ignored);
+        fs::copy_file(art_folder() + "/sheet_2x.png", dir / "sheet_2x.png", fs::copy_options::overwrite_existing, ignored);
+        check(loaded.load(dir.string()), "(the folder is whole again)");
+        fs::remove(dir / "sheet_3x.png", ignored);
+        fs::create_directories(dir / "sheet_3x.png", ignored);                 // (after the manifest was read: the sheet is read when a texture needs it)
+        DecodedImage never;
+        threw = false;
+        bool decoded = true;
+        try {
+            decoded = loaded.sheet_pixels(3, never);
+        } catch (...) {
+            threw = true;
+        }
+        check(!threw && !decoded && never.rgba.empty(), "a sheet that became a folder reads as a failure, and nothing is thrown");
+        fs::remove_all(dir / "sheet_3x.png", ignored);
+        fs::remove(dir / "hud_art.txt", ignored);
+        fs::create_directories(dir / "hud_art.txt", ignored);
+        threw = false;
+        refused_folder = false;
+        try {
+            refused_folder = !loaded.load(dir.string());
+        } catch (...) {
+            threw = true;
+        }
+        check(!threw && refused_folder && !loaded.loaded(), "a manifest that is a folder is refused, and nothing is thrown");
         fs::remove_all(dir, ignored);
     }
     // the shipped sheets: every scale decodes to the size of the 1x sheet times the scale

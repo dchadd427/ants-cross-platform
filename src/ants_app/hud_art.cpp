@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <fstream>
 #include <iterator>
 #include <sstream>
@@ -30,6 +31,18 @@ std::vector<std::string> words_of(const std::string& line) {
     std::string w;
     while (in >> w) out.push_back(w);
     return out;
+}
+
+/// The whole file as bytes. Never throws: a file that cannot be read, and a folder where the file should be (the standard library of Linux throws when it reads one), are a failure
+bool read_file(const std::string& path, std::string& out) {
+    try {
+        std::ifstream f(path, std::ios::binary);
+        if (!f) return false;
+        out.assign((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        return !f.bad();
+    } catch (const std::exception&) {
+        return false;
+    }
 }
 
 }  // namespace
@@ -167,13 +180,12 @@ bool Art::parse(const std::string& manifest) {
 bool Art::load(const std::string& folder) {
     std::string dir = folder;
     if (!dir.empty() && dir.back() != '/' && dir.back() != '\\') dir += '/';
-    std::ifstream f(dir + "hud_art.txt", std::ios::binary);
-    if (!f) {
+    std::string text;
+    if (!read_file(dir + "hud_art.txt", text)) {
         *this = Art{};
         what_ = "no " + dir + "hud_art.txt";
         return false;
     }
-    const std::string text((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
     if (!parse(text)) return false;
     folder_ = dir;
     // The sheets are decoded later (when a texture needs one), but they must be there and be the size that the manifest's places assume: the header of each file is read now, so that a folder that lacks
@@ -199,10 +211,9 @@ bool Art::sheet_pixels(int32_t scale, DecodedImage& out) const {
     out = DecodedImage{};
     const std::string& file = sheet_file(scale);
     if (!loaded_ || file.empty()) return false;
-    std::ifstream f(folder_ + file, std::ios::binary);
-    if (!f) return false;
-    const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    if (!decode_png_rgba(bytes.data(), bytes.size(), out)) return false;
+    std::string bytes;
+    if (!read_file(folder_ + file, bytes)) return false;
+    if (!decode_png_rgba(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), out)) return false;
     if (out.width != sheet_w_ * scale || out.height != sheet_h_ * scale) {
         out = DecodedImage{};
         return false;
