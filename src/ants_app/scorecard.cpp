@@ -19,7 +19,7 @@ const assets::ColorRGBA kLabelColor{239, 231, 223, 255};
 // face cannot be drawn, in the original's digits (8 px wide: the bundled face's are wider, so the text is squeezed to the original's width for as many digits)
 void draw_counter(IRenderer& renderer, const std::string& text, int32_t x, int32_t y, int32_t box_w) {
     renderer.set_clip_rect(x, y, box_w, ScorecardModal::LABEL_H);
-    if (!renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, false, kLabelColor)) {
+    if (!renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, NumberAlign::Left, kLabelColor, true)) {
         renderer.draw_text_squeezed(text, x, y, kLabelColor, FontSize::Px18, kResultsDigitWidth * static_cast<int32_t>(text.size()));
     }
     renderer.clear_clip_rect();

@@ -612,15 +612,26 @@ void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive& archiv
     const uint32_t ms = world.match_time_remaining_ms;
     const uint32_t mm = (ms / 1000) / 60;
     const uint32_t ss = (ms / 1000) % 60;
-    auto digit = [&](uint32_t d, int32_t x) {
-        const std::string name = "dig" + std::to_string(d % 10);
-        draw_animation_frame0(renderer, archive, name.c_str(), x, 6);
-    };
-    if (mm >= 10) digit(mm / 10, 70);
-    digit(mm % 10, 80);
-    draw_animation_frame0(renderer, archive, "digc", 90, 6);
-    digit(ss / 10, 97);
-    digit(ss % 10, 107);
+    // In the numbers' face (plain white glyphs, 10 pixels tall, no outline) each character is centred in the cell of the sprite it replaces (the digits are 10 pixels apart, the colon's cell is 7 wide), so
+    // that the clock does not shift when a digit changes (the face's digits are not all as wide); where the face cannot be drawn, the digit sprites.
+    struct ClockCell { char ch; int32_t x; int32_t w; };
+    const ClockCell cells[5] = {{static_cast<char>('0' + (mm / 10) % 10), 70, 10}, {static_cast<char>('0' + mm % 10), 80, 10}, {':', 90, 7},
+                                {static_cast<char>('0' + ss / 10), 97, 10}, {static_cast<char>('0' + ss % 10), 107, 10}};
+    bool numbers = true;
+    for (size_t i = mm >= 10 ? 0 : 1; i < 5 && numbers; ++i) {
+        numbers = renderer.draw_number_text(std::string(1, cells[i].ch), cells[i].x + cells[i].w / 2, 6, cells[i].w, 10, NumberAlign::Centre, {255, 255, 255, 255}, false);
+    }
+    if (!numbers) {
+        auto digit = [&](uint32_t d, int32_t x) {
+            const std::string name = "dig" + std::to_string(d % 10);
+            draw_animation_frame0(renderer, archive, name.c_str(), x, 6);
+        };
+        if (mm >= 10) digit(mm / 10, 70);
+        digit(mm % 10, 80);
+        draw_animation_frame0(renderer, archive, "digc", 90, 6);
+        digit(ss / 10, 97);
+        digit(ss % 10, 107);
+    }
 
     // The local team's label and score box (402..455, 4..17) and label (312..399): FUN_0100dbe2 / FUN_01021e36, see render_score_team
     render_score_team(renderer, archive, world, local_player_id_);
@@ -697,8 +708,8 @@ void HUD::render_score_team(IRenderer& renderer, const assets::AssetArchive& ass
         const int32_t half = (455 - 402) / 2;                                                     // (right - left) / 2 of the 53-wide rectangle
         renderer.fill_rect(slot.box_left + half, slot.top, 54 - half, 14, SCORE_BG_COLORS[ally]);
     }
-    // The number: the numbers' face with the thick outline in the box's 52 pixels (right aligned, the old field's way; squeezed when it would be wider), the digit sprites where it cannot be drawn
-    if (!renderer.draw_number_text(std::to_string(std::clamp(score, 0, 999999)), slot.box_left + 52, slot.top + 2, 51, 10, true, {255, 255, 255, 255})) {
+    // The number: the numbers' face, plain white glyphs 10 pixels tall (no outline) in the box's 52 pixels (right aligned, the old field's way; squeezed when it would be wider), the digit sprites where it cannot be drawn
+    if (!renderer.draw_number_text(std::to_string(std::clamp(score, 0, 999999)), slot.box_left + 52, slot.top + 2, 51, 10, NumberAlign::Right, {255, 255, 255, 255}, false)) {
         draw_score_digits(renderer, assets, slot.box_left - 1, slot.top + 2, score);
     }
 }
