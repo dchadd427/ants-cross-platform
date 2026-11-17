@@ -87,7 +87,7 @@
    "id": "no_heal_before_the_field",
    "file": "src/ants_ai/field_plan.cpp",
    "old": "    if (at_home && ant.hp < kLeaveHp && !has_bomb_of(",
-   "new": "    if (at_home && ant.hp < 1 && !has_bomb_of(",
+   "new": "    if (at_home && ant.hp < kLeaveHp && false && !has_bomb_of(",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI29.2 ' ./build/tests/test_ai/test_ai",
    "expect": "AI29.2"
   },
@@ -102,8 +102,8 @@
   {
    "id": "defuse_from_a_diagonal",
    "file": "src/ants_ai/field_plan.cpp",
-   "old": "if (m.dig < 0 || (m.strict && (diagonal != 0 || t.of(from) == kWater || !stands))) return -1;",
-   "new": "if (m.dig < 0 || (m.strict && (t.of(from) == kWater || !stands))) return -1;",
+   "old": "if (m.strict && (diagonal != 0 || t.of(from) == kWater || !stands)) return -1;",
+   "new": "if (m.strict && (t.of(from) == kWater || !stands)) return -1;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI29.3 ' ./build/tests/test_ai/test_ai",
    "expect": "AI29.3"
   },
@@ -118,8 +118,8 @@
   {
    "id": "start_without_a_source",
    "file": "src/ants_ai/field_plan.cpp",
-   "old": "        if (field_ant_cost(plan, view, map, seat, a) >= 0) return true;",
-   "new": "        if (field_ant_cost(plan, view, map, seat, a) >= -1) return true;",
+   "old": "        if (field_ant_cost(plan, view, map, seat, a, hints) >= 0) return true;",
+   "new": "        if (field_ant_cost(plan, view, map, seat, a, hints) >= -1) return true;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI29.7 ' ./build/tests/test_ai/test_ai",
    "expect": "AI29.7"
   },
@@ -294,6 +294,134 @@
    "new": "    ledger_.set_rank(kField, kRankPowerUps);",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI21.1' ./build/tests/test_ai/test_ai",
    "expect": "AI21.1"
+  },
+  {
+   "id": "pick_own_tile_off",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "if (hints.rules.pick) return step_of(FieldAction::Take, work, ant.tile);",
+   "new": "if (hints.rules.pick && false) return step_of(FieldAction::Take, work, ant.tile);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.15 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.15"
+  },
+  {
+   "id": "pick_own_tile_not_counted",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "const bool own = hints.rules.pick && p.standing_team != 255 && p.standing_ant == ant.id;",
+   "new": "const bool own = hints.rules.pick && p.standing_team != 255 && p.standing_ant == ant.id && false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.15 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.15"
+  },
+  {
+   "id": "boxed_on_swimmer_stays",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "if (step.action == FieldAction::Stuck && boxed_on_swimmer(t, view, ant, hints))",
+   "new": "if (step.action == FieldAction::Stuck && boxed_on_swimmer(t, view, ant, hints) && false)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.15 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.15"
+  },
+  {
+   "id": "boxed_on_swimmer_not_a_start",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "if (cost >= kFar && hints.stalled && boxed_on_swimmer(t, view, ant, hints))",
+   "new": "if (cost >= kFar && hints.stalled && boxed_on_swimmer(t, view, ant, hints) && false)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.15 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.15"
+  },
+  {
+   "id": "boxed_on_swimmer_before_stall",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "if (cost >= kFar && hints.stalled && boxed_on_swimmer(t, view, ant, hints))",
+   "new": "if (cost >= kFar && boxed_on_swimmer(t, view, ant, hints))",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.15 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.15"
+  },
+  {
+   "id": "engine_walk_off",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "if (walk == EngineWalks::Walk::Clear && steps <= g + kWalkSlack) return step_of(FieldAction::Walk, work, way[g]);",
+   "new": "if (walk == EngineWalks::Walk::Clear && steps <= g + kWalkSlack && false) return step_of(FieldAction::Walk, work, way[g]);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.16 The' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.16"
+  },
+  {
+   "id": "engine_walk_over_a_bomb",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "if (walk == EngineWalks::Walk::Clear && steps <= g + kWalkSlack) return step_of(FieldAction::Walk, work, way[g]);",
+   "new": "if (walk != EngineWalks::Walk::None && steps <= g + kWalkSlack) return step_of(FieldAction::Walk, work, way[g]);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.16 The' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.16"
+  },
+  {
+   "id": "defuse_ahead_off",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "walker.walks->special(*walker.ant, way[first], &steps) == EngineWalks::Walk::Clear && steps <= first + kWalkSlack",
+   "new": "walker.walks->special(*walker.ant, way[first], &steps) == EngineWalks::Walk::Clear && steps <= first + kWalkSlack && false",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.16 The' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.16"
+  },
+  {
+   "id": "defuse_ahead_over_a_bomb",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "walker.walks->special(*walker.ant, way[first], &steps) == EngineWalks::Walk::Clear && steps <= first + kWalkSlack",
+   "new": "walker.walks->special(*walker.ant, way[first], &steps) != EngineWalks::Walk::None && steps <= first + kWalkSlack",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.16 The' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.16"
+  },
+  {
+   "id": "engine_walk_unknown_one_tile",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "bool safe = !known && goal >= 2;",
+   "new": "bool safe = false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.10' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.10"
+  },
+  {
+   "id": "set_off_hit_points_ignored",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "return h.end == HopEnd::Ground && static_cast<int32_t>(hp) >= h.hp + kSetOffHp;",
+   "new": "return h.end == HopEnd::Ground && static_cast<int32_t>(hp) >= h.hp + kSetOffHp - 100;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.17 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.17"
+  },
+  {
+   "id": "set_off_into_water",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "return h.end == HopEnd::Ground && static_cast<int32_t>(hp) >= h.hp + kSetOffHp;",
+   "new": "return static_cast<int32_t>(hp) >= h.hp + kSetOffHp;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.17 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.17"
+  },
+  {
+   "id": "set_off_two_bombs",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "if (mover.set_off >= 0 && bombs_on_way(t, reach, n) > kSetOffBombs) continue;   // (a plain ant sets one bomb off, not a field of them)",
+   "new": "if (mover.set_off >= 0 && bombs_on_way(t, reach, n) > 99) continue;   // (a plain ant sets one bomb off, not a field of them)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.17 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.17"
+  },
+  {
+   "id": "set_off_two_bombs_start",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "if (m.set_off >= 0 && bombs_on_way(t, reach, n) > kSetOffBombs) continue;",
+   "new": "if (m.set_off >= 0 && bombs_on_way(t, reach, n) > 99) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.17 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.17"
+  },
+  {
+   "id": "set_off_not_stalled",
+   "file": "src/ants_ai/field_task.cpp",
+   "old": "hints_.stalled = hints_.rules.set_off && stalled_since_ != 0 && now >= stalled_since_ + params_.stalled_ticks;",
+   "new": "hints_.stalled = hints_.rules.set_off && stalled_since_ != 0;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.17 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.17"
+  },
+  {
+   "id": "set_off_a_typed_ant",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "(ant.type != sim::AntType::Worker && ant.type != view.default_ant_type())",
+   "new": "(false && ant.type != sim::AntType::Worker && ant.type != view.default_ant_type())",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.17 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.17"
   }
  ]
 }

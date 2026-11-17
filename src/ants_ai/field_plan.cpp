@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <limits>
+#include <memory>
 #include <queue>
 #include <utility>
 
+#include "ants_ai/bomb_detour.hpp"
 #include "ants_ai/island_info.hpp"
 #include "ants_sim/movement_tables.hpp"
 
@@ -28,6 +30,9 @@ constexpr int32_t kHopWork = 30;              // planting and the throw itself
 constexpr int32_t kStrandRisk = 100;          // a chain over a map bomb whose dud leaves the ant where no dig reaches the work
 constexpr int32_t kDudRisk = 10;
 constexpr uint8_t kLeaveHp = 8;               // the hit points a breach ant leaves the hill's side with at least (a pocket and an island hop, and a dud)
+constexpr int32_t kSetOff = 40;               // a bomb set off by a plain ant that steps on it: about five defuses' worth (2 hit points, a stun of about 70 ticks, the walk back from where it is thrown, a dud a fifth of the time)
+constexpr uint8_t kSetOffHp = 3;              // the hit points that stay after a set-off, at least (2 are lost for each bomb of the chain)
+constexpr int32_t kSetOffBombs = 1;           // the bombs a plain ant sets off on its way to a power-up
 
 enum Kind : uint8_t { kBlocked, kClear, kBomb, kFire, kWater, kToken, kPass };   // kToken: a power-up a walk does not pass (solid: one that an ant left); kPass: one it passes over
 
@@ -79,6 +84,13 @@ Tiles read_tiles(const BotView& view, uint8_t seat, const FieldHints& hints) {
     return t;
 }
 
+// A plain ant that steps onto the bomb of another team at `bomb` in the direction `dir` (0 N, 2 E, 4 S, 6 W) sets it off: the engine's throw (GateInfo::simulate: the rule of the engine's
+// pick_landing, 4 tiles back from the way it faces) puts it on ground, not into water or fire, and it keeps kSetOffHp hit points after the 2 that each bomb of the chain takes.
+bool set_off_ok(const sim::Grid& grid, sim::TileCoord bomb, int dir, uint8_t hp) {
+    const BombHop h = GateInfo::simulate(grid, bomb, static_cast<uint8_t>(dir));
+    return h.end == HopEnd::Ground && static_cast<int32_t>(hp) >= h.hp + kSetOffHp;
+}
+
 // How an ant gets about: clear ground always; water, fire and bombs as its kind and the work allow (-1: closed). The ant's OWN way is strict: it enters a bomb only from a side and
 // from land (it defuses it from there), and steps onto a power-up only as a last resort (it takes it: its kind changes). The carriers' route and the ways of the typed ants are
 // not: the work on them is done from whichever side its worker reaches.
@@ -90,6 +102,9 @@ struct Mover {
     int32_t put_out{-1};    // fire, put out first
     int32_t token{-1};      // a power-up, stepped on
     bool strict{false};
+    int32_t set_off{-1};    // a bomb of another team, set off by stepping onto it from a side (a plain ant that cannot defuse): only where the throw lands on ground and the ant keeps kSetOffHp
+    const sim::Grid* grid{nullptr};
+    uint8_t hp{0};
 };
 
 constexpr int32_t kPassOver = 10;             // a power-up that a walk passes over: allowed (the rooms of power-ups are entered so) but not sought (a step onto it takes it)
@@ -122,7 +137,8 @@ int32_t enter_cost(const Tiles& t, const Mover& m, sim::TileCoord from, sim::Til
             if (m.fire >= 0) return m.fire + diagonal;
             return (m.put_out >= 0 && !(m.strict && (diagonal != 0 || !stands))) ? m.put_out + diagonal : -1;
         case kBomb:
-            if (m.dig < 0 || (m.strict && (diagonal != 0 || t.of(from) == kWater || !stands))) return -1;
+            if (m.dig < 0) return (m.set_off >= 0 && diagonal == 0 && stands && t.of(from) != kWater && t.own[t.at(to)] == 0 && set_off_ok(*m.grid, to, dir, m.hp)) ? m.set_off : -1;
+            if (m.strict && (diagonal != 0 || t.of(from) == kWater || !stands)) return -1;
             return m.dig + diagonal;
         case kToken:
             return m.token >= 0 ? m.token + diagonal : -1;
@@ -265,9 +281,18 @@ FieldStep step_of(FieldAction action, FieldWork work, sim::TileCoord tile) {
     return s;
 }
 
-// The next move on a way that holds no bomb or solid power-up before `goal`: a walk of several tiles over ground with no bomb on or next to it, else one tile. A walk never ends on a
-// power-up (it would take it), and a power-up next to the ant is passed by a walk to the first tile after it.
-FieldStep move_along(const Tiles& t, const std::vector<sim::TileCoord>& way, size_t goal, FieldWork work) {
+// The ant that steps and the engine's own walk (EngineWalks: null with FieldRules::walk off, or for a Swimmer, whose walk is water)
+struct Walker {
+    EngineWalks* walks{nullptr};
+    const AntView* ant{nullptr};
+};
+
+constexpr size_t kWalkSlack = 3;              // the engine's walk may have this many tiles more than the way it is ordered along (it takes the cheaper one: else the ant wanders)
+
+// The next move on a way that holds no bomb or solid power-up before `goal`: a walk of several tiles to the farthest tile that the engine's own walk reaches without crossing a bomb
+// (EngineWalks; without it: over ground with no bomb on or next to the way), else one tile. A walk never ends on a power-up (it would take it), and a power-up next to the ant is passed
+// by a walk to the first tile after it.
+FieldStep move_along(const Tiles& t, const std::vector<sim::TileCoord>& way, size_t goal, FieldWork work, const Walker& walker = Walker{}) {
     while (goal >= 1 && t.of(way[goal]) == kPass) --goal;
     if (goal == 0) {                                                                      // nothing but power-ups up to the goal: past them
         size_t past = 1;
@@ -275,7 +300,16 @@ FieldStep move_along(const Tiles& t, const std::vector<sim::TileCoord>& way, siz
         if (past >= way.size() || t.of(way[past]) != kClear) return step_of(FieldAction::Stuck, work, way.size() > 1 ? way[1] : way[0]);
         return step_of(FieldAction::Walk, work, way[past]);
     }
-    bool safe = goal >= 2;
+    const bool exact = walker.walks != nullptr && walker.ant != nullptr && walker.ant->tile == way[0];
+    bool known = false;                                                                   // (the engine's walk to some tile further on exists: it crosses a bomb, or it is no walk to take)
+    for (size_t g = goal; exact && g >= 2; --g) {
+        if (t.of(way[g]) != kClear) continue;
+        size_t steps = 0;
+        const EngineWalks::Walk walk = walker.walks->click(*walker.ant, way[g], &steps);
+        known = known || walk != EngineWalks::Walk::None;
+        if (walk == EngineWalks::Walk::Clear && steps <= g + kWalkSlack) return step_of(FieldAction::Walk, work, way[g]);
+    }
+    bool safe = !known && goal >= 2;                                                       // (the engine's walk knows nothing of the tiles further on: the rule of ground with no bomb on or next to it)
     for (size_t i = 1; i <= goal && safe; ++i) {
         if (t.of(way[i]) != kClear && t.of(way[i]) != kPass) safe = false;
         for (int dir = 0; dir < 8 && safe; ++dir) safe = t.of(sim::TileCoord{way[i].x + kDx[dir], way[i].y + kDy[dir]}) != kBomb;
@@ -287,22 +321,31 @@ FieldStep move_along(const Tiles& t, const std::vector<sim::TileCoord>& way, siz
     return step_of(FieldAction::Walk, work, way[std::min(past, goal)]);
 }
 
-// The next step on `way` (from the ant): the first bomb on it is defused from the tile before it, a power-up on it is taken (its kind changes: the next look plans again), the ground
-// up to them is walked
-FieldStep along(const Tiles& t, const std::vector<sim::TileCoord>& way, FieldWork work) {
+// The next step on `way` (from the ant): the first bomb on it is defused from the tile before it (a bomb further on with ONE order, the engine walks to the side it takes first, when its walk
+// there crosses no bomb; an ant that cannot defuse sets it off), a power-up on it is taken (its kind changes: the next look plans again), the ground up to them is walked
+FieldStep along(const Tiles& t, const std::vector<sim::TileCoord>& way, FieldWork work, const Walker& walker = Walker{}) {
     if (way.size() < 2) return step_of(FieldAction::Stuck, work, sim::TileCoord{-1, -1});
     size_t first = 1;
     while (first < way.size() && t.of(way[first]) != kBomb && t.of(way[first]) != kToken) ++first;
-    if (first == 1) return step_of(t.of(way[1]) == kBomb ? FieldAction::Defuse : FieldAction::Take, work, way[1]);
-    return move_along(t, way, first - 1, work);
+    const bool digs = walker.ant == nullptr || walker.ant->type == sim::AntType::Bomber;
+    if (first == 1) {
+        if (t.of(way[1]) != kBomb) return step_of(FieldAction::Take, work, way[1]);
+        return step_of(digs ? FieldAction::Defuse : FieldAction::SetOff, work, way[1]);
+    }
+    size_t steps = 0;
+    if (digs && first < way.size() && t.of(way[first]) == kBomb && walker.walks != nullptr && walker.ant != nullptr && walker.ant->tile == way[0] &&
+        walker.walks->special(*walker.ant, way[first], &steps) == EngineWalks::Walk::Clear && steps <= first + kWalkSlack) {
+        return step_of(FieldAction::Defuse, work, way[first]);
+    }
+    return move_along(t, way, first - 1, work, walker);
 }
 
 // Toward `goal` (a tile the ant can stand on) by the way `reach` found, then `then` on `target` there
-FieldStep toward(const Tiles& t, const Search& reach, sim::TileCoord goal, FieldAction then, sim::TileCoord target, FieldWork work) {
+FieldStep toward(const Tiles& t, const Search& reach, sim::TileCoord goal, FieldAction then, sim::TileCoord target, FieldWork work, const Walker& walker = Walker{}) {
     const std::vector<sim::TileCoord> way = way_to(t, reach, goal);
     if (way.empty()) return step_of(FieldAction::Stuck, work, goal);
     if (way.size() == 1) return step_of(then, work, target);
-    return along(t, way, work);
+    return along(t, way, work, walker);
 }
 
 // ---- hops ----------------------------------------------------------------------------------------------------------------------------------------------------
@@ -350,17 +393,17 @@ Launch value_launch(const sim::Grid& grid, const Tiles& t, const Search& reach, 
 }
 
 // The steps of a launch from where the ant is: to the side it plants from (digging what is in the way), the bombs on T, P and that side defused, the plant, the step to P, the throw
-FieldStep carry_out(const Tiles& t, const Search& reach, const BotView& view, uint8_t seat, const AntView& ant, const Launch& l, FieldWork work) {
+FieldStep carry_out(const Tiles& t, const Search& reach, const BotView& view, uint8_t seat, const AntView& ant, const Launch& l, FieldWork work, const Walker& walker) {
     const BombHop& h = l.hop;
     FieldStep s;
     if (has_bomb_of(view, h.bomb, seat)) {                                                // planted: to P, then onto the bomb
         if (ant.tile == h.from) s = step_of(FieldAction::Fly, work, h.bomb);
         else if (ant.tile.chebyshev_dist(h.from) == 1 && t.of(h.from) == kClear) s = step_of(FieldAction::Step, work, h.from);
-        else s = toward(t, reach, h.from, FieldAction::Step, h.from, work);
+        else s = toward(t, reach, h.from, FieldAction::Step, h.from, work, walker);
     } else if (ant.tile == h.bomb) {                                                      // a dud left it on T: off it, to the side it plants from
         s = step_of(FieldAction::Step, work, l.plant_from);
     } else if (ant.tile != l.plant_from) {
-        s = toward(t, reach, l.plant_from, FieldAction::Plant, h.bomb, work);
+        s = toward(t, reach, l.plant_from, FieldAction::Plant, h.bomb, work, walker);
     } else if (t.of(h.bomb) == kBomb) {
         s = step_of(FieldAction::Defuse, work, h.bomb);
     } else if (t.of(h.from) == kBomb) {
@@ -374,7 +417,7 @@ FieldStep carry_out(const Tiles& t, const Search& reach, const BotView& view, ui
 
 // A Bomber that no dig brings to `targets`: the best hop (see value_launch), the one under way first while it still holds; a full ant leaves the hill's side
 FieldStep hop_step(const Tiles& t, const Search& reach, const BotView& view, const MapInfo& map, uint8_t seat, const AntView& ant, const std::vector<sim::TileCoord>& targets,
-                   const FieldHints& hints, FieldWork work) {
+                   const FieldHints& hints, FieldWork work, const Walker& walker) {
     const sim::Grid& grid = view.grid();
     const Search back = search_back(t, mover_of(sim::AntType::Bomber), targets);
     const bool at_home = map.hill(seat).present && hill_walk(t, map, seat, ant.tile);
@@ -409,7 +452,7 @@ FieldStep hop_step(const Tiles& t, const Search& reach, const BotView& view, con
         s.hop = best.hop;
         return s;
     }
-    return carry_out(t, reach, view, seat, ant, best, work);
+    return carry_out(t, reach, view, seat, ant, best, work, walker);
 }
 
 // ---- the work ------------------------------------------------------------------------------------------------------------------------------------------------
@@ -430,16 +473,38 @@ bool shuts_in(const Tiles& t, const BotView& view, const AntView& ant, sim::Tile
     return free_land <= 1 && other == 0;
 }
 
-// The ant takes a power-up of `kind` (`prefer` first): it walks, swims or digs to a tile next to it and steps on; a Bomber that cannot get there hops toward it
+// A seat that has no ant to start the work (FieldHints::stalled): a PLAIN ant (one that took no power-up: the level's own kind, a Worker, on POPcOrN a Combat Ant) crosses a bomb of
+// another team by setting it off. A typed ant never does: the one that then takes the Bomber power-up would lose its kind (a Fire Ant, the carrier's Swimmer), and a Bomber defuses.
+// Not an ant that carries food.
+void allow_set_off(Mover& m, const BotView& view, const AntView& ant, const FieldHints& hints) {
+    if (!hints.stalled || !hints.rules.set_off || (ant.type != sim::AntType::Worker && ant.type != view.default_ant_type()) || ant.holding || ant.carried_points > 0) return;
+    m.set_off = kSetOff;
+    m.grid = &view.grid();
+    m.hp = ant.hp;
+}
+
+// The bombs of the way a search found to `end` (the source's own tile is none)
+int32_t bombs_on_way(const Tiles& t, const Search& s, sim::TileCoord end) {
+    int32_t n = 0;
+    int32_t i = t.in(end) ? static_cast<int32_t>(t.at(end)) : -1;
+    while (i >= 0 && s.parent[static_cast<size_t>(i)] >= 0) {                              // (the source has no parent: it is no step)
+        n += t.kind[static_cast<size_t>(i)] == kBomb ? 1 : 0;
+        i = s.parent[static_cast<size_t>(i)];
+    }
+    return n;
+}
+
+// The ant takes a power-up of `kind` (`prefer` first): it walks, swims or digs to a tile next to it and steps on (on its own tile: a click on it); a Bomber that cannot get there hops toward it
 FieldStep take_step(const Tiles& t, const BotView& view, const MapInfo& map, uint8_t seat, const AntView& ant, sim::AntType kind, sim::TileCoord prefer, const FieldHints& hints,
-                    FieldWork work) {
+                    FieldWork work, const Walker& walker) {
     std::vector<sim::TileCoord> tokens;
     for (const PowerUpView& p : view.powerups()) {
         if (p.kind == kind && (p.standing_team == 255 || p.standing_ant == ant.id) && !shuts_in(t, view, ant, p.tile, kind)) tokens.push_back(p.tile);
     }
     if (tokens.empty()) return step_of(FieldAction::Stuck, work, sim::TileCoord{-1, -1});
-    if (std::find(tokens.begin(), tokens.end(), ant.tile) != tokens.end()) {             // a flight put it on the power-up, which a flight does not take: off and back on
-        for (int dir = 0; dir < 8; ++dir) {
+    if (std::find(tokens.begin(), tokens.end(), ant.tile) != tokens.end()) {             // a flight put it on the power-up, which a flight does not take
+        if (hints.rules.pick) return step_of(FieldAction::Take, work, ant.tile);        // (a click on the own tile takes it, as a person's click does)
+        for (int dir = 0; dir < 8; ++dir) {                                              // off and back on
             const sim::TileCoord n{ant.tile.x + kDx[dir], ant.tile.y + kDy[dir]};
             if (t.of(n) == kClear) return step_of(FieldAction::Step, work, n);
         }
@@ -450,7 +515,9 @@ FieldStep take_step(const Tiles& t, const BotView& view, const MapInfo& map, uin
         }
         return step_of(FieldAction::Stuck, work, ant.tile);
     }
-    const Search reach = search(t, mover_of(ant.type), {{ant.tile, 0}}, crowd(t, view, ant.id));
+    Mover mover = mover_of(ant.type);
+    allow_set_off(mover, view, ant, hints);
+    const Search reach = search(t, mover, {{ant.tile, 0}}, crowd(t, view, ant.id));
     int32_t best = kFar;
     sim::TileCoord best_token{-1, -1};
     sim::TileCoord best_stand{-1, -1};
@@ -461,6 +528,7 @@ FieldStep take_step(const Tiles& t, const BotView& view, const MapInfo& map, uin
             const uint8_t k = t.of(n);
             if (k == kClear || k == kBomb || (k == kWater && ant.type == sim::AntType::Swimmer)) next_to.push_back(n);
             if (!reach.reaches(t, n) || k == kBomb || !(k == kClear || (k == kWater && ant.type == sim::AntType::Swimmer))) continue;
+            if (mover.set_off >= 0 && bombs_on_way(t, reach, n) > kSetOffBombs) continue;   // (a plain ant sets one bomb off, not a field of them)
             const int32_t cost = reach.cost(t, n) - (u == prefer ? 40 : 0);
             if (cost < best) {
                 best = cost;
@@ -474,15 +542,15 @@ FieldStep take_step(const Tiles& t, const BotView& view, const MapInfo& map, uin
             for (const sim::TileCoord& n : next_to) {
                 if (t.of(n) == kBomb && reach.reaches(t, n)) return toward(t, reach, n, FieldAction::Defuse, n, work);
             }
-            return hop_step(t, reach, view, map, seat, ant, next_to, hints, work);
+            return hop_step(t, reach, view, map, seat, ant, next_to, hints, work, walker);
         }
         return step_of(FieldAction::Stuck, work, sim::TileCoord{-1, -1});
     }
     if (ant.tile == best_stand || ant.tile.chebyshev_dist(best_token) == 1) return step_of(FieldAction::Take, work, best_token);
-    return toward(t, reach, best_stand, FieldAction::Take, best_token, work);
+    return toward(t, reach, best_stand, FieldAction::Take, best_token, work, walker);
 }
 
-FieldStep dig_step(const Tiles& t, const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat, const AntView& ant, const FieldHints& hints) {
+FieldStep dig_step(const Tiles& t, const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat, const AntView& ant, const FieldHints& hints, const Walker& walker) {
     const Search reach = search(t, mover_of(sim::AntType::Bomber), {{ant.tile, 0}}, crowd(t, view, ant.id));
     int32_t best = kFar;
     sim::TileCoord target{-1, -1};
@@ -492,16 +560,16 @@ FieldStep dig_step(const Tiles& t, const FieldPlan& plan, const BotView& view, c
             target = b;
         }
     }
-    if (target.x >= 0) return along(t, way_to(t, reach, target), FieldWork::Bombs);
+    if (target.x >= 0) return along(t, way_to(t, reach, target), FieldWork::Bombs, walker);
     std::vector<sim::TileCoord> left;
     for (const sim::TileCoord& b : plan.bombs) {
         if (t.of(b) == kBomb) left.push_back(b);
     }
-    return hop_step(t, reach, view, map, seat, ant, left, hints, FieldWork::Bombs);
+    return hop_step(t, reach, view, map, seat, ant, left, hints, FieldWork::Bombs, walker);
 }
 
 // A Swimmer bridges the fire way's water from the land beside it; a Fire Ant puts the route's fire cells out from a side
-FieldStep work_from_side(const Tiles& t, const BotView& view, const AntView& ant, const std::vector<sim::TileCoord>& targets, uint8_t target_kind, FieldAction action, FieldWork work) {
+FieldStep work_from_side(const Tiles& t, const BotView& view, const AntView& ant, const std::vector<sim::TileCoord>& targets, uint8_t target_kind, FieldAction action, FieldWork work, const Walker& walker) {
     const sim::Grid& grid = view.grid();
     const Search reach = search(t, mover_of(ant.type), {{ant.tile, 0}}, crowd(t, view, ant.id));
     int32_t best = kFar;
@@ -520,7 +588,7 @@ FieldStep work_from_side(const Tiles& t, const BotView& view, const AntView& ant
         }
     }
     if (goal.x < 0) return step_of(FieldAction::Stuck, work, sim::TileCoord{-1, -1});
-    return toward(t, reach, goal, action, target, work);
+    return toward(t, reach, goal, action, target, work, walker);
 }
 
 // The engine's step cost of a carrier (MapInfo::step_cost for a walker; a Swimmer's weights for water): another team's bomb is no obstacle to the engine's walk (an ant that steps on one is
@@ -883,38 +951,58 @@ FieldPlan plan_field(const BotView& view, const MapInfo& map, uint8_t seat, cons
     return p;
 }
 
-FieldStep next_field_step(const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat, const AntView& ant, const FieldHints& hints) {
-    const FieldWork work = plan.work();
-    if (work == FieldWork::None || !view.has_grid()) return FieldStep{};
-    const Tiles t = read_tiles(view, seat, hints);
+namespace {
+
+// The work's step for `ant`; Stuck when nothing the ant can do reaches the work
+FieldStep work_step(const FieldPlan& plan, const Tiles& t, const BotView& view, const MapInfo& map, uint8_t seat, const AntView& ant, const FieldHints& hints, FieldWork work, const Walker& walker) {
     switch (work) {
         case FieldWork::Bombs:
-            if (ant.type != sim::AntType::Bomber) return take_step(t, view, map, seat, ant, sim::AntType::Bomber, sim::TileCoord{-1, -1}, hints, work);
-            return dig_step(t, plan, view, map, seat, ant, hints);
+            if (ant.type != sim::AntType::Bomber) return take_step(t, view, map, seat, ant, sim::AntType::Bomber, sim::TileCoord{-1, -1}, hints, work, walker);
+            return dig_step(t, plan, view, map, seat, ant, hints, walker);
         case FieldWork::Bridges:
-            if (ant.type != sim::AntType::Swimmer) return take_step(t, view, map, seat, ant, sim::AntType::Swimmer, plan.swim_source, hints, work);
-            return work_from_side(t, view, ant, plan.waters, kWater, FieldAction::Bridge, work);
+            if (ant.type != sim::AntType::Swimmer) return take_step(t, view, map, seat, ant, sim::AntType::Swimmer, plan.swim_source, hints, work, walker);
+            return work_from_side(t, view, ant, plan.waters, kWater, FieldAction::Bridge, work, walker);
         case FieldWork::Fire:
-            if (ant.type != sim::AntType::Fire) return take_step(t, view, map, seat, ant, sim::AntType::Fire, plan.fire_source, hints, work);
-            return work_from_side(t, view, ant, plan.fires, kFire, FieldAction::Extinguish, work);
+            if (ant.type != sim::AntType::Fire) return take_step(t, view, map, seat, ant, sim::AntType::Fire, plan.fire_source, hints, work, walker);
+            return work_from_side(t, view, ant, plan.fires, kFire, FieldAction::Extinguish, work, walker);
         case FieldWork::Carrier:
             if (ant.type == sim::AntType::Swimmer) {                                       // the carrier starts at the pile: the walk the engine gives it from far may cross bombs
                 if (plan.route.empty() || ant.tile.chebyshev_dist(plan.route.back()) <= 1) return FieldStep{};
                 const Search reach = search(t, mover_of(ant.type), {{ant.tile, 0}}, crowd(t, view, ant.id));
-                return toward(t, reach, plan.route.back(), FieldAction::None, plan.route.back(), work);
+                return toward(t, reach, plan.route.back(), FieldAction::None, plan.route.back(), work, walker);
             }
-            return take_step(t, view, map, seat, ant, sim::AntType::Swimmer, plan.swim_source, hints, work);
+            return take_step(t, view, map, seat, ant, sim::AntType::Swimmer, plan.swim_source, hints, work, walker);
         default:
             return FieldStep{};
     }
+}
+
+// The Swimmer power-up under an ant that can do nothing else (an island that bombs and water close in; the way out is a Swimmer's): the click on its own tile takes it
+bool boxed_on_swimmer(const Tiles& t, const BotView& view, const AntView& ant, const FieldHints& hints) {
+    if (!hints.rules.pick || ant.type == sim::AntType::Swimmer) return false;
+    const PowerUpView* under = view.powerup_at(ant.tile);
+    return under != nullptr && under->kind == sim::AntType::Swimmer && under->standing_ant == ant.id && !shuts_in(t, view, ant, ant.tile, sim::AntType::Swimmer);
+}
+
+}  // namespace
+
+FieldStep next_field_step(const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat, const AntView& ant, const FieldHints& hints) {
+    const FieldWork work = plan.work();
+    if (work == FieldWork::None || !view.has_grid()) return FieldStep{};
+    const Tiles t = read_tiles(view, seat, hints);
+    const std::unique_ptr<EngineWalks> walks = hints.rules.walk && ant.type != sim::AntType::Swimmer ? std::make_unique<EngineWalks>(view) : nullptr;
+    const FieldStep step = work_step(plan, t, view, map, seat, ant, hints, work, Walker{walks.get(), &ant});
+    if (step.action == FieldAction::Stuck && boxed_on_swimmer(t, view, ant, hints)) return step_of(FieldAction::Take, work, ant.tile);
+    return step;
 }
 
 // The choice of the breach ant: the work is reached from the hill's side (an ant away from it may be cut off), and a hurt ant has fewer hops in it
 constexpr int32_t kAwayFromHill = 60;
 constexpr uint8_t kHurtHp = 5;
 constexpr int32_t kHurt = 40;
+constexpr int32_t kBoxed = 100;               // an ant that is no more than a Swimmer power-up away from being free: chosen only when no other ant can start the work
 
-int32_t field_ant_cost(const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat, const AntView& ant) {
+int32_t field_ant_cost(const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat, const AntView& ant, const FieldHints& hints) {
     const FieldWork work = plan.work();
     if (work == FieldWork::None || !view.has_grid()) return -1;
     const sim::AntType need = work == FieldWork::Bombs ? sim::AntType::Bomber : (work == FieldWork::Fire ? sim::AntType::Fire : sim::AntType::Swimmer);
@@ -923,17 +1011,22 @@ int32_t field_ant_cost(const FieldPlan& plan, const BotView& view, const MapInfo
     if (ant.type != need) {
         Mover m = mover_of(ant.type);
         m.token = -1;
+        allow_set_off(m, view, ant, hints);
         const Search reach = search(t, m, {{ant.tile, 0}});
         cost = kFar;
         for (const PowerUpView& p : view.powerups()) {
-            if (p.kind != need || p.standing_team != 255 || shuts_in(t, view, ant, p.tile, need)) continue;
+            const bool own = hints.rules.pick && p.standing_team != 255 && p.standing_ant == ant.id;   // (the power-up under the ant: it takes it with a click on its own tile)
+            if (p.kind != need || (p.standing_team != 255 && !own) || shuts_in(t, view, ant, p.tile, need)) continue;
             if (ant.tile.chebyshev_dist(p.tile) <= 1) cost = std::min(cost, kStep);
             for (int dir = 0; dir < 8; ++dir) {
                 const sim::TileCoord n{p.tile.x + kDx[dir], p.tile.y + kDy[dir]};
                 const uint8_t k = t.of(n);
-                if (k == kClear || (k == kWater && ant.type == sim::AntType::Swimmer)) cost = std::min(cost, reach.cost(t, n) + kStep);
+                if (!(k == kClear || (k == kWater && ant.type == sim::AntType::Swimmer)) || !reach.reaches(t, n)) continue;
+                if (m.set_off >= 0 && bombs_on_way(t, reach, n) > kSetOffBombs) continue;
+                cost = std::min(cost, reach.cost(t, n) + kStep);
             }
         }
+        if (cost >= kFar && hints.stalled && boxed_on_swimmer(t, view, ant, hints)) cost = kStep + kBoxed;   // (a seat with no ant to start the work: an ant on a Swimmer power-up takes it, and swims out)
         if (cost >= kFar) return -1;
     }
     if (!hill_walk(t, map, seat, ant.tile)) cost += kAwayFromHill;
@@ -941,9 +1034,9 @@ int32_t field_ant_cost(const FieldPlan& plan, const BotView& view, const MapInfo
     return cost;
 }
 
-bool field_startable(const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat) {
+bool field_startable(const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat, const FieldHints& hints) {
     for (const AntView& a : view.mine()) {
-        if (field_ant_cost(plan, view, map, seat, a) >= 0) return true;
+        if (field_ant_cost(plan, view, map, seat, a, hints) >= 0) return true;
     }
     return false;
 }

@@ -343,6 +343,45 @@ bool BombDetour::approach_crosses(const BotView& view, const AntView& ant, sim::
     return walk.size() >= 2 && crosses(world, walk);
 }
 
+struct EngineWalks::Impl {
+    sim::PathGridPool pool;
+    DetourWorld world;
+    explicit Impl(const BotView& view) : world(view, pool) {}
+};
+
+EngineWalks::EngineWalks(const BotView& view) : impl_(view.has_grid() && view.map() != nullptr ? std::make_unique<Impl>(view) : nullptr) {}
+
+EngineWalks::~EngineWalks() = default;
+
+EngineWalks::Walk EngineWalks::click(const AntView& ant, sim::TileCoord tile, size_t* steps) {
+    if (steps != nullptr) *steps = 0;
+    if (!impl_ || ant.type == sim::AntType::Swimmer || !impl_->world.inside(ant.tile) || !impl_->world.inside(tile)) return Walk::None;
+    DetourWorld& world = impl_->world;
+    sim::TileCoord goal{};
+    bool goal_ok = false;
+    if (world.occupied[world.idx(tile)] != 0 && tile != ant.tile) return Walk::None;                                         // (a click on a tile that an ant stands on is an attack or a refusal, no walk)
+    if (!resolve_goal(world, ant, sim::CommandType::GroupMove, tile, goal, goal_ok) || goal != tile) return Walk::None;      // (a click on a tile that the engine scans a ring round is no click on it)
+    if (goal == ant.tile) return Walk::Clear;
+    const std::vector<sim::TileCoord> walk = search(world, ant.type == sim::AntType::Fire, ant.tile, goal, goal_ok, false);
+    if (walk.size() < 2) return Walk::None;
+    if (steps != nullptr) *steps = walk.size() - 1;
+    return crosses(world, walk) ? Walk::Crosses : Walk::Clear;
+}
+
+EngineWalks::Walk EngineWalks::special(const AntView& ant, sim::TileCoord target, size_t* steps) {
+    if (steps != nullptr) *steps = 0;
+    if (!impl_ || ant.type == sim::AntType::Swimmer || !impl_->world.inside(ant.tile) || !impl_->world.inside(target)) return Walk::None;
+    DetourWorld& world = impl_->world;
+    sim::TileCoord goal{};
+    bool goal_ok = false;
+    if (!resolve_goal(world, ant, sim::CommandType::GroupSpecial, target, goal, goal_ok)) return Walk::None;
+    if (goal == ant.tile) return Walk::Clear;
+    const std::vector<sim::TileCoord> walk = search(world, ant.type == sim::AntType::Fire, ant.tile, goal, goal_ok, false);
+    if (walk.size() < 2) return Walk::None;
+    if (steps != nullptr) *steps = walk.size() - 1;
+    return crosses(world, walk) ? Walk::Crosses : Walk::Clear;
+}
+
 void BombDetour::apply(const BotView& view, const LevelPlan& plan, const Profile& profile, Orders& orders) {
     if (plan.bomb_detour == 0 || !view.has_grid() || view.map() == nullptr) {
         finals_.clear();
