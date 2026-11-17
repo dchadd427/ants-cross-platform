@@ -861,8 +861,8 @@
   {
    "id": "the_sheet_may_act_on_the_visitor",
    "file": "web/home/players.js",
-   "old": "return row && i !== me ? {",
-   "new": "return row ? {",
+   "old": "return row && i !== me && row.at !== 'away' ? {",
+   "new": "return row && row.at !== 'away' ? {",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -891,6 +891,13 @@
    "file": "web/home/players.js",
    "old": "var row = whole(i, 0, LIMIT.ids) && live && supported ? model.rows[i] : null;",
    "new": "var row = live && supported ? model.rows[i] : null;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_sheet_may_act_on_a_person_who_is_away",
+   "file": "web/home/players.js",
+   "old": "return row && i !== me && row.at !== 'away' ? {",
+   "new": "return row && i !== me ? {",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]

@@ -633,6 +633,12 @@ function bringPlayers(env) {
     broken.win.AntsHomePlayers = { mount() { throw new Error('a list that breaks'); } };
     filesOf(broken, 'players').forEach((n) => { if (n.onload) n.onload(); });
     check('a list that throws when it mounts: Home goes on (My room still makes the room, the dock is there)', broken.$('home').children[4].id === 'gchat' && (broken.home('mine').click(), broken.sockets.length === 1) && broken.screen() === 'room');
+    const seen = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
+    hubFor(seen); seen.advance(0); bringChat(seen);
+    let given = null;
+    seen.win.AntsHomePlayers = { mount(o) { given = o; return null; } };
+    filesOf(seen, 'players').forEach((n) => { if (n.onload) n.onload(); });
+    same('the list is given the document, the window, Home\'s box and body, the two buttons of the bar that it uses, the dock and the page\'s bridge, and nothing else', given && Object.keys(given).sort(), ['doc', 'dock', 'games', 'host', 'page', 'quickHost', 'win', 'yard']);
     const none = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
     hubFor(none); none.advance(0); bringChat(none);
     filesOf(none, 'players').forEach((n) => { if (n.onload) n.onload(); });
@@ -869,7 +875,7 @@ check('the hash of the note is the game page\'s own', ['c1v3rr', 'a', 'k7m2xq', 
     r.who(FULL([row(1, 'maple', 'look', { mod: true, role: 'admin' }), row(2, 'zed', 'look', { mod: true, role: 'mod' }), row(4, 'clover', 'wait', { pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr' }), row(5, 'sage'), row(6, 'sage', 'away')], { n: 6 }));
     same('a row of the list carries the hub\'s number of the row as data-i; the visitor\'s own place does not (it has no number to act on)', [byClass(r.panel(), 'pl-card').map((c) => c.getAttribute('data-i')).filter((x) => x !== null).sort().join(), byClass(r.panel(), 'pl-card').filter((c) => c.getAttribute('data-i') === null).length], ['2,4,5,6', 1]);
     same('person(i): the number, the name, the role, what the person does and where, in words', [r.list.person(4), r.list.person(2), r.list.person(5)], [{ i: 4, name: 'clover', role: 'none', at: 'wait', where: 'Waiting \u00b7 Treasure \u00b7 2 of 4' }, { i: 2, name: 'zed', role: 'mod', at: 'look', where: 'Looking' }, { i: 5, name: 'sage', role: 'none', at: 'look', where: 'Looking' }]);
-    same('...two people with one name are two rows, told apart by the number', [r.list.person(5).name, r.list.person(6).name, r.list.person(6).where], ['sage', 'sage', 'Away']);
+    same('...a person who is Away has a row (and a number) and no sheet: the hub takes `row:` only for a person with an open socket, so every command would be refused', [byClass(r.panel(), 'pl-card').some((c) => c.getAttribute('data-i') === '6'), r.list.person(5).name, r.list.person(6)], [true, 'sage', null]);
     same('...the visitor\'s own row (number 1 here), a number that is not a row, and anything that is not a number are nobody', [r.list.person(1), r.list.person(99), r.list.person('4'), r.list.person(-1), r.list.person(1.5), r.list.person(null)], [null, null, null, null, null, null]);
     check('drawn(fn) is told when the list was made again (a change in it), with the list already drawn', drawn.length >= 1 && drawn[drawn.length - 1] === 5 && r.list.list.parent !== null);
     const before = drawn.length;

@@ -19,7 +19,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var LIMIT = { hold: 500, show: 150, move: 10, arm: 400, stay: 6000, stayBad: 12000, minutes: 10080, quote: 240, top: 76 };       // (ms and px; minutes: the hub's own longest mute, a week)
+    var LIMIT = { hold: 500, show: 150, move: 10, arm: 400, stay: 6000, stayBad: 12000, minutes: 10080, quote: 240, top: 76, listed: 50 };       // (ms and px; minutes: the hub's own longest mute, a week)
     var TIMES = [[10, '10 min'], [60, '1 hour'], [1440, '1 day'], [10080, '1 week']];       // the four buttons: minutes and words
     var TEXT = {
         rowHint: 'Moderation: press Enter, the menu key or Shift and F10 on this line for its actions.', logHint: 'For moderators: Up and Down choose a line, Enter opens its actions.',
@@ -130,7 +130,7 @@
         function actionable(id) { return lines.target(id); }
         // ---- the two places that open the sheet: the lines of the log and the rows of the players list (the same marks, the same ways in); o: { kind, el (the scrolling box), row (a row's selector), attr (its number), keep (what keeps its own press: a link, a button), find(id), say(target) (the words for a screen reader), rowHint, hint (the box that describes the box) }
         function surface(o) {
-            var s = { kind: o.kind, el: o.el, cur: null, press: null, hint: o.hint, cancel: null, say: o.say, top: !!o.top };
+            var s = { kind: o.kind, el: o.el, cur: null, press: null, hint: o.hint, status: o.status, cancel: null, say: o.say, top: !!o.top };
             s.idOf = function (row) { var n = row && row.getAttribute ? row.getAttribute(o.attr) : null; return n !== null && /^[0-9]{1,9}$/.test(n) ? Number(n) : null; };
             s.rowOf = function (node) { var r = node && node.closest ? node.closest(o.row) : null; return r && s.el.contains(r) ? r : null; };
             s.keeps = function (node) { var a = node && node.closest ? node.closest(o.keep) : null; return !!a && s.el.contains(a); };       // (a link or a button of the row is its own: it keeps the browser's menu and its press)
@@ -145,6 +145,7 @@
             s.refresh = function () {                                   // every row again (the role changed, or the list was drawn again)
                 s.rows().forEach(function (r) { var id = s.idOf(r); if (id !== null) s.decorate(r, id); });
                 s.hint.hidden = !viewer();
+                if (!viewer()) s.status.textContent = '';
                 if (viewer()) s.el.setAttribute('aria-describedby', s.hint.id); else { s.el.removeAttribute('aria-describedby'); s.cur = null; }       // (the words for a screen reader go with the role)
             };
             s.paint = function () { var on = s.subjects(); s.rows().forEach(function (r) { var id = s.idOf(r); if (id !== null && r.classList) r.classList.toggle('gm-on', on.indexOf(id) !== -1); }); };
@@ -152,7 +153,7 @@
             s.ids = function () { return s.rows().map(s.idOf).filter(function (id) { return id !== null && !!s.target(id); }); };       // (the rows that the viewer may act on, in the order of the screen)
             return s;
         }
-        function refresh() { lines.refresh(); if (persons) persons.refresh(); if (!viewer()) statusBox.textContent = ''; }
+        function refresh() { lines.refresh(); if (persons) persons.refresh(); }
         function paint() { lines.paint(); if (persons) persons.paint(); }
 
         // ---- the toast: at the top, under the bar; the same words are a private line of the chat ----
@@ -274,7 +275,7 @@
             dock.mutes(function (code, rows) {
                 var i;
                 if (sheet !== s) return;
-                s.mutes = code === 'ok' ? 'free' : 'fail';
+                s.mutes = code === 'ok' && rows.length < LIMIT.listed ? 'free' : 'fail';       // (the hub lists 50 mutes at most, the ones that end soonest: a full list that does not name the person tells nothing about them)
                 for (i = 0; code === 'ok' && i < rows.length; i++) if (rows[i].i === s.line.id) { s.mutes = 'muted'; s.until = rows[i].until; }
                 if (s.view === 'line') swap(s);
             });
@@ -444,7 +445,7 @@
             s.el.addEventListener('blur', guard(function () { if (!sheet && s.cur !== null) { s.cur = null; s.paint(); } }));
             s.el.addEventListener('keydown', guard(function (e) {
                 var list, at, id, r, t;
-                if (!e || !viewer() || sheet || e.ctrlKey || e.altKey || e.metaKey) return;
+                if (!e || !viewer() || sheet || e.ctrlKey || e.altKey || e.metaKey || s.keeps(e.target)) return;       // (a key that starts on a link or a button of a row is that control's: Join joins, the arrows scroll)
                 if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
                     list = s.ids();
                     if (!list.length) return;
@@ -453,11 +454,10 @@
                     stay(e); s.cur = id; s.paint();
                     r = s.rowById(id); t = s.target(id);
                     if (r && r.scrollIntoView) r.scrollIntoView({ block: 'nearest' });
-                    if (t) statusBox.textContent = s.say(t);
+                    if (t) s.status.textContent = s.say(t);
                     return;
                 }
                 if (e.key === 'Enter' || e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
-                    if (s.keeps(e.target)) return;                     // (Enter on a button of a row is the button's: Join joins)
                     id = s.cur !== null && s.target(s.cur) ? s.cur : null;
                     if (id === null && e.key !== 'Enter') { list = s.ids(); id = list.length ? list[s.top ? 0 : list.length - 1] : null; }
                     if (id !== null) { stay(e); s.cur = id; openFrom(s, id); }
@@ -471,21 +471,21 @@
         hintBox = el('p', 'gc-news', TEXT.logHint); hintBox.id = 'gchat-mod-hint';
         statusBox = el('p', 'gc-news'); statusBox.setAttribute('role', 'status'); statusBox.setAttribute('aria-live', 'polite');
         dock.root.appendChild(hintBox); dock.root.appendChild(statusBox);
-        lines = surface({ kind: 'line', el: log, row: '.gc-line[data-n]', attr: 'data-n', keep: 'a', rowHint: TEXT.rowHint, hint: hintBox, find: function (id) { return dock.line(id); }, say: function (l) { return l.who + ': ' + cut(l.text, 80) + '. ' + TEXT.rowHint; } });
+        lines = surface({ kind: 'line', el: log, row: '.gc-line[data-n]', attr: 'data-n', keep: 'a', rowHint: TEXT.rowHint, hint: hintBox, status: statusBox, find: function (id) { return dock.line(id); }, say: function (l) { return l.who + ': ' + cut(l.text, 80) + '. ' + TEXT.rowHint; } });
         watch(lines);
         dock.rows(function (id, row) { lines.decorate(row, id); });
         function attach(p) {                                           // the players list (its own script), once it is there: its rows open the sheet of a person in the same ways; the person is named to the hub by the NUMBER of the row (`row:<n>`), never by a name
             if (persons || !p || !p.list || !p.root || typeof p.person !== 'function' || typeof p.drawn !== 'function') return;
-            var hint = el('p', 'gc-news', TEXT.listHint);
-            hint.id = 'gchat-mod-list-hint';
-            p.root.appendChild(hint);
+            var hint = el('p', 'gc-news', TEXT.listHint), status = el('p', 'gc-news');       // (its own words for a screen reader: the chat dock is not shown on a phone's Players view)
+            hint.id = 'gchat-mod-list-hint'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
+            p.root.appendChild(hint); p.root.appendChild(status);
             people = p;
-            persons = surface({ kind: 'person', el: p.list, top: true, row: '.pl-card[data-i]', attr: 'data-i', keep: 'a, button', rowHint: TEXT.personHint, hint: hint, find: personOf, say: function (t) { return t.who + ': ' + t.where + '. ' + TEXT.personHint; } });
+            persons = surface({ kind: 'person', el: p.list, top: true, row: '.pl-card[data-i]', attr: 'data-i', keep: 'a, button', rowHint: TEXT.personHint, hint: hint, status: status, find: personOf, say: function (t) { return t.who + ': ' + t.where + '. ' + TEXT.personHint; } });
             watch(persons);
             p.drawn(guard(function () { persons.refresh(); if (sheet && sheet.line.person && !sheet.busy && p.state() === 'on' && !personOf(sheet.line.id)) { close(true); toast(NOTE.away, true); } }));       // (the list was drawn again: the marks follow, and a person who has gone has no sheet; a hub that is gone is the socket's, not this)
             persons.refresh();
         }
-        function stale(s) { return actionsOf(viewer(), dock.line(s.line.id)).join() !== s.offer; }       // (a new welcome: what the viewer is offered on that line is not what the sheet shows: the line is not in the log any more, or the role is another)
+        function stale(s) { return !!s.line.person || actionsOf(viewer(), dock.line(s.line.id)).join() !== s.offer; }       // (a new welcome: what the viewer is offered on that line is not what the sheet shows: the line is not in the log any more, or the role is another)
         function changed() {                                           // a line came or went: the count on the sheet and the list of the recent step follow
             var s = sheet, n;
             if (!s || s.busy) return;

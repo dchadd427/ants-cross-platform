@@ -156,7 +156,9 @@ function rig(o) {
     r.row = (id) => r.rows().find((c) => c.getAttribute('data-n') === String(id));
     r.acts = () => r.rows().filter((c) => c.getAttribute('data-act') === 'true').map((c) => Number(c.getAttribute('data-n')));
     r.marked = () => r.rows().filter((c) => cls(c).indexOf('gm-on') !== -1).map((c) => Number(c.getAttribute('data-n')));
-    r.mount = () => { r.mod = Mod.mount({ doc, win, dock, now: () => clock.t, error: (e) => { throw e; } }); return r.mod; };
+    const taps = [], spyDock = Object.assign({}, dock, { tap: (fn) => { taps.push(fn); return dock.tap(fn); } });       // (the sheet's own taps, so that a test can tell it what the dock would)
+    r.tell = (kind, m) => taps.forEach((fn) => fn(kind, m));
+    r.mount = () => { r.mod = Mod.mount({ doc, win, dock: spyDock, now: () => clock.t, error: (e) => { throw e; } }); return r.mod; };
     if (!o.noMod && !o.modLast) r.mount();
     if (o.people) {
         const yard = new El(env, 'main'), quick = new El(env, 'button'), games = new El(env, 'button');
@@ -937,7 +939,8 @@ const ROWS = [
     { i: 7, name: 'Rowan', at: 'away' }, { i: 9, name: 'Clover', at: 'look' }];       // (two people called Clover: a name is not one person)
 const withPeople = (role, o) => { const r = rig(Object.assign({ role, people: true }, o || {})); r.who(ROWS); return r; };
 const sortedIds = (list) => list.slice().sort((a, b) => a - b).join();
-const statusOf = (r) => r.dock.root.findAll((e) => cls(e).indexOf('gc-news') !== -1 && e.getAttribute('role') === 'status').pop().textContent;
+const statusIn = (root) => root.findAll((e) => cls(e).indexOf('gc-news') !== -1 && e.getAttribute('role') === 'status').pop().textContent;
+const statusOf = (r) => statusIn(r.players.root);       // (the list's own words for a screen reader: the chat dock is not shown on a phone's Players view)
 const answer = (r, code) => (code === 'ok' ? r.recv({ t: 'ok', c: 'x' }) : r.recv({ t: 'err', code }));
 {   // the pure parts
     const P = Pure;
@@ -978,9 +981,10 @@ const answer = (r, code) => (code === 'ok' ? r.recv({ t: 'ok', c: 'x' }) : r.rec
 {   // the rows, and who gets a mark
     const r = withPeople('admin');
     same('every person of the list but the visitor carries the hub\'s number of the row', sortedIds(r.cards().map((c) => Number(c.getAttribute('data-i')))), '1,2,4,5,6,7,9');
-    same('an administrator: a mark on everyone but another administrator (a moderator, a person who looks, waits, plays or is away)', sortedIds(r.pacts()), '2,4,5,6,7,9');
+    same('an administrator: a mark on everyone but another administrator (a moderator, a person who looks, waits or plays) and a person who is away (the hub takes a row only for an open socket: every command would be refused)', sortedIds(r.pacts()), '2,4,5,6,9');
+    check('...an Away row has a number and no mark; a right click on it is the browser\'s own, and nothing opens', r.card(7) !== undefined && r.card(7).getAttribute('data-act') === null && r.pmenu(7) === false && r.shade() === null && !r.popen(7));
     check('...each marked row has the description for a screen reader, the others none, and the list is described by its hint (one stop, not one per row)', r.card(4).getAttribute('aria-description') !== null && r.card(1).getAttribute('aria-description') === null && r.players.list.getAttribute('aria-describedby') === 'gchat-mod-list-hint' && r.players.list.getAttribute('tabindex') === '0');
-    same('a moderator: no mark on a moderator or an administrator', sortedIds(withPeople('mod').pacts()), '4,5,6,7,9');
+    same('a moderator: no mark on a moderator or an administrator', sortedIds(withPeople('mod').pacts()), '4,5,6,9');
     const n = withPeople('none');
     check('a visitor with no role: no mark, no description, the browser\'s own menu, no press, nothing', n.pacts().length === 0 && n.players.list.getAttribute('aria-describedby') === null && !n.pmenu(4) && n.shade() === null && (n.pdown(4), n.clock.advance(700), n.shade() === null && n.pmarked().length === 0));
     r.pkey('ArrowDown');
@@ -988,9 +992,9 @@ const answer = (r, code) => (code === 'ok' ? r.recv({ t: 'ok', c: 'x' }) : r.rec
     r.you('none');
     check('a `you` that takes the role away: the marks and the description go at once, the words of the keys with them', r.pacts().length === 0 && r.players.list.getAttribute('aria-describedby') === null && statusOf(r) === '' && r.players.root.findAll((e) => e.id === 'gchat-mod-list-hint')[0].hidden === true);
     r.you('mod');
-    same('...and one that gives a role brings them back (for that role)', sortedIds(r.pacts()), '4,5,6,7,9');
+    same('...and one that gives a role brings them back (for that role)', sortedIds(r.pacts()), '4,5,6,9');
     r.who(ROWS.concat([{ i: 11, name: 'Fern', at: 'look' }]));
-    check('a list that is drawn again is marked again', sortedIds(r.pacts()) === '4,5,6,7,9,11');
+    check('a list that is drawn again is marked again', sortedIds(r.pacts()) === '4,5,6,9,11');
     const s = withPeople('admin');
     s.mod.people(s.players);
     check('the sheet is told of the list once (a second time changes nothing)', s.dock.root.findAll((e) => e.id === 'gchat-mod-list-hint').length === 0 && s.players.root.findAll((e) => e.id === 'gchat-mod-list-hint').length === 1);
@@ -1028,19 +1032,21 @@ const answer = (r, code) => (code === 'ok' ? r.recv({ t: 'ok', c: 'x' }) : r.rec
     check('a long press on an administrator\'s row (no action) does nothing', r.shade() === null && r.pmarked().length === 0);
     r.pkey('ArrowDown');
     same('the keys: Down from nothing chooses the first row that has an action (the list is read from the top)', r.pmarked(), [2]);
-    check('...and says so for a screen reader, with how to open it', /^Sage: Looking\. /.test(statusOf(r)) && /Enter/.test(statusOf(r)));
+    check('...and says so for a screen reader, with how to open it, in the list\'s own words (not in the chat dock, which is hidden on a phone\'s Players view)', /^Sage: Looking\. /.test(statusOf(r)) && /Enter/.test(statusOf(r)) && statusIn(r.dock.root) === '');
     r.pkey('ArrowDown'); r.pkey('ArrowDown'); r.pkey('ArrowUp');
     same('Down and Up walk the rows that have an action, one at a time', r.pmarked(), [9]);
     for (let i = 0; i < 9; i++) r.pkey('ArrowDown');
-    same('...and stop at the last', r.pmarked(), [7]);
+    same('...and stop at the last (not the Away row: Hazel is the last row that has an action)', r.pmarked(), [6]);
+    const chosen = r.pmarked().join();
+    check('Up and Down on a button of a row are the button\'s (the arrows scroll the list): not held back, no row is chosen by them', r.event(r.players.list, 'keydown', { key: 'ArrowDown', target: b }) === false && r.event(r.players.list, 'keydown', { key: 'ArrowUp', target: b }) === false && r.pmarked().join() === chosen);
     check('Enter on a button of a row is the button\'s (Join joins): no sheet, the key is not held back', r.event(r.players.list, 'keydown', { key: 'Enter', target: b }) === false && r.shade() === null);
     r.pkey('Enter');
-    check('Enter opens the sheet of the chosen row', r.shade() !== null && one(r.box(), 'gm-name').textContent === 'Rowan' && r.pmarked().join() === '7');
+    check('Enter opens the sheet of the chosen row', r.shade() !== null && one(r.box(), 'gm-name').textContent === 'Hazel' && r.pmarked().join() === '6');
     r.event(r.shade(), 'keydown', { key: 'Escape' });
-    check('...and when it closes the row stays the chosen one (the keys go on from there)', r.pmarked().join() === '7');
+    check('...and when it closes the row stays the chosen one (the keys go on from there)', r.pmarked().join() === '6');
     r.pkey('Escape');
     r.pkey('ArrowUp');
-    same('Up from nothing chooses the last row', r.pmarked(), [7]);
+    same('Up from nothing chooses the last row that has an action', r.pmarked(), [6]);
     r.pkey('Escape');
     check('Escape lets the chosen row go', r.pmarked().length === 0);
     r.pkey('ContextMenu');
@@ -1051,6 +1057,10 @@ const answer = (r, code) => (code === 'ok' ? r.recv({ t: 'ok', c: 'x' }) : r.rec
     r.event(r.shade(), 'keydown', { key: 'Escape' });
     r.pkey('ArrowDown'); r.pdown(4);
     check('a press on the list lets the row that the keys chose go (one row is marked at a time)', r.pmarked().length === 0);
+}
+{   // a link in a line of the log keeps its keys too
+    const r = rig(), link = r.row(149).findAll((e) => e.tagName === 'a')[0];
+    check('Up and Down on a link of a line are the link\'s: not held back, no line is chosen', !!link && r.event(r.log, 'keydown', { key: 'ArrowUp', target: link }) === false && r.marked().length === 0 && r.event(r.log, 'keydown', { key: 'Enter', target: link }) === false && r.shade() === null);
 }
 {   // the sheet
     const r = withPeople('admin');
@@ -1087,6 +1097,16 @@ const answer = (r, code) => (code === 'ok' ? r.recv({ t: 'ok', c: 'x' }) : r.rec
     check('the mute is matched by the number of the row, not by the name: the other Clover is the one who is muted', t.names()[0] === 'Mute Clover…' && t.buttons()[0].getAttribute('aria-disabled') === null);
     t.press('Cancel'); t.popen(9); t.mutes([{ until: 5000, i: 9 }]);
     check('...and on the other row it is Unmute', t.names()[0] === 'Unmute Clover');
+    const fifty = (extra) => Array.from({ length: 50 }, (_, n) => ({ until: 5000 + n, i: 100 + n })).slice(extra ? 1 : 0).concat(extra ? [{ until: 6000, i: 4 }] : []);
+    const full = withPeople('admin');
+    full.popen(4); full.mutes(fifty(false));
+    same('a full list (the hub lists 50 mutes at most, the ones that end soonest) that does not name the person tells nothing about them: "Check again", never Mute', [full.names()[0], full.buttons()[0].getAttribute('aria-disabled')], ['Check again', null]);
+    const named = withPeople('admin');
+    named.popen(4); named.mutes(fifty(true));
+    check('...a full list that names the person is Unmute, as any other', named.names()[0] === 'Unmute Clover');
+    const short = withPeople('admin');
+    short.popen(4); short.mutes(fifty(false).slice(1));
+    check('...49 mutes that do not name the person is Mute (nothing is cut off)', short.names()[0] === 'Mute Clover\u2026' && short.buttons()[0].getAttribute('aria-disabled') === null);
     const f = withPeople('admin');
     f.popen(4); f.recv({ t: 'err', code: 'role' });
     same('a `/mutes` that fails: a row that says so, and asks again when pressed (never Mute before the state is known)', [f.names()[0], f.buttons()[0].textContent.indexOf('Could not tell whether Clover is muted') !== -1, f.buttons()[0].getAttribute('aria-disabled')], ['Check again', true, null]);
@@ -1150,6 +1170,9 @@ const answer = (r, code) => (code === 'ok' ? r.recv({ t: 'ok', c: 'x' }) : r.rec
     const rr = withPeople('admin');
     rr.who(ROWS.concat([{ i: 148, name: 'Clover', at: 'look' }])); rr.popen(148);
     check('a row whose number is the number of a line of the log has no recent messages: the lines are found by the key of an account, and a row has none', rr.mod.state() === 'line' && rr.names().every((n) => !/^Recent/.test(n)));
+    const tl = withPeople('admin');
+    tl.popen(4); tl.mutes([]); tl.tell('live', {});
+    check('a welcome tapped to the sheet closes the sheet of a person without a word (a row number is the hub\'s for one run, and a line of that number is no judge of it)', tl.shade() === null && tl.toastText() === null);
     const y = withPeople('admin');
     y.popen(4); y.mutes([]); y.you('none');
     check('a `you` that takes the role away closes it, and the focus is not sent anywhere the viewer should not be', y.shade() === null && y.pacts().length === 0);

@@ -90,7 +90,7 @@ function history(v) {
 const PEOPLE = (v) => [
     { i: 1, name: 'Tess', at: 'look', mod: true, role: 'admin' }, { i: 2, name: 'Sage', at: 'look', mod: true, role: 'mod' }, Object.assign({ i: 3, name: v.name, at: 'look' }, v.role === 'none' ? {} : { mod: true, role: v.role }),
     { i: 4, name: 'Clover', at: 'wait', pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr' }, { i: 5, name: 'Juniper', at: 'look' }, { i: 6, name: 'Fern', at: 'look' },
-    { i: 7, name: 'Pebble', at: 'wait', pub: true, map: 'ISLANDS.LVL', n: 2, of: 4, code: 'p4n8dz' }, { i: 8, name: 'Hazel', at: 'play', priv: true }];
+    { i: 7, name: 'Pebble', at: 'wait', pub: true, map: 'ISLANDS.LVL', n: 2, of: 4, code: 'p4n8dz' }, { i: 8, name: 'Hazel', at: 'play', priv: true }, { i: 9, name: 'Rowan', at: 'away' }];
 async function startAll(kind) {
     const site = await serve();
     const v = VIEWERS[kind];
@@ -98,8 +98,8 @@ async function startAll(kind) {
         server: site.server, login: true, online: 12,
         you: v.role === 'none' ? { name: v.name, mod: false, k: v.k } : { name: v.name, mod: true, role: v.role, k: v.k },
         history: history(v),
-        welcomeExtra: { presence: true, me: 3 }, who: { t: 'who', full: true, n: PEOPLE(v).length, g: 3, more: 0, rows: PEOPLE(v) }, rows: { 1: 'Tess', 2: 'Sage', 4: 'Clover', 5: 'Juniper', 6: 'Fern', 7: 'Pebble', 8: 'Hazel' },
-        people: { clover: 'none', juniper: 'none', fern: 'none', pebble: 'none', hazel: 'none', sage: 'mod', tess: 'admin' },       // ('Nobody' is not here: a command that names that line is answered `who`)
+        welcomeExtra: { presence: true, me: 3 }, who: { t: 'who', full: true, n: PEOPLE(v).length, g: 3, more: 0, rows: PEOPLE(v) }, rows: { 1: 'Tess', 2: 'Sage', 4: 'Clover', 5: 'Juniper', 6: 'Fern', 7: 'Pebble', 8: 'Hazel', 9: 'Rowan' },
+        people: { clover: 'none', juniper: 'none', fern: 'none', pebble: 'none', hazel: 'none', rowan: 'none', sage: 'mod', tess: 'admin' },       // ('Nobody' is not here: a command that names that line is answered `who`)
     });
     return { site, hub };
 }
@@ -477,9 +477,9 @@ async function main() {
         const pic = async (scene) => { const h = touch ? await page.addStyleTag({ content: '*:focus-visible { outline: none !important; }' }) : null; await shot(page, scene, size); if (h) await h.evaluate((n) => n.remove()); };       // (a touch window shows no focus ring: the keys that the checks press leave one behind)
         check(name + 'the page asked for the two files of the sheet and the list, once', rig.site.requests.filter((r) => r === '/home/mod.js').length >= 1 && rig.site.requests.indexOf('/home/players.js') !== -1);
         const ids = await page.evaluate(() => [...document.querySelectorAll('#players .pl-card[data-i]')].map((c) => Number(c.getAttribute('data-i'))).sort((a, b) => a - b).join());
-        check(name + 'every row but the visitor\'s own carries the hub\'s number of the row', ids === '1,2,4,5,6,7,8', ids);
+        check(name + 'every row but the visitor\'s own carries the hub\'s number of the row', ids === '1,2,4,5,6,7,8,9', ids);
         const acts = await page.evaluate(() => [...document.querySelectorAll('#players .pl-card[data-act]')].map((c) => Number(c.getAttribute('data-i'))).sort((a, b) => a - b).join());
-        check(name + 'the rows that have an action carry the mark (not an administrator\'s)', acts === '2,4,5,6,7,8', acts);
+        check(name + 'the rows that have an action carry the mark (not an administrator\'s, not a person who is away: the hub takes a row only for an open socket)', acts === '2,4,5,6,7,8', acts);
         check(name + 'the list is described to a screen reader (the keys), as one stop', await page.evaluate(() => { const l = document.querySelector('#players .pl-list'), d = document.getElementById(l.getAttribute('aria-describedby') || '-'); return !!d && /Up and Down/.test(d.textContent) && l.getAttribute('tabindex') === '0'; }));
         const user = await page.evaluate((s) => getComputedStyle(document.querySelector(s)).userSelect, card(4));
         check(name + 'the text of a row is held back from selection on a touch screen only (' + user + ')', touch ? user === 'none' : user !== 'none', user);
@@ -514,6 +514,11 @@ async function main() {
         if (touch) { const t = await holdRow(context, page, card(1), 650); await t.end(); } else { const b = await page.locator(card(1)).boundingBox(); await page.mouse.click(Math.round(b.x + 30), Math.round(b.y + b.height / 2), { button: 'right' }); }
         await sleep(150);
         check(name + way(touch) + ' on an administrator\'s row opens nothing (the browser\'s own menu is left alone)', !(await sheetUp(page)) && (touch || (await page.evaluate(() => window.__ctx.every((x) => x === false)))));
+        await page.evaluate(() => { window.__ctx.length = 0; });
+        await page.locator(card(9)).scrollIntoViewIfNeeded();
+        if (touch) { const t = await holdRow(context, page, card(9), 650); await t.end(); } else { const b = await page.locator(card(9)).boundingBox(); await page.mouse.click(Math.round(b.x + 30), Math.round(b.y + b.height / 2), { button: 'right' }); }
+        await sleep(150);
+        check(name + way(touch) + ' on the row of a person who is away opens nothing either (the browser\'s own menu is left alone)', !(await sheetUp(page)) && (touch || (await page.evaluate(() => window.__ctx.every((x) => x === false)))));
         const join = card(4) + ' .pl-join';
         check(name + 'Clover\'s row has the list\'s Join', (await page.locator(join).count()) === 1);
         await page.evaluate(() => { window.__ctx.length = 0; window.__buzz.length = 0; });

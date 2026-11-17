@@ -257,9 +257,9 @@
             told();
         }
         function told() { drawnFns.forEach(function (fn) { try { fn(); } catch (e) { if (env.error) env.error(e); } }); }       // (the list was made again: whoever marks rows marks them again)
-        function person(i) {                                             // a row of the list for the moderation sheet: { i, name, role, at, where }, or null (no such row now, the visitor's own, or the hub is not there)
+        function person(i) {                                             // a row of the list for the moderation sheet: { i, name, role, at, where }, or null (no such row now, the visitor's own, a person who is away: the hub takes a row only for an open socket, or the hub is not there)
             var row = whole(i, 0, LIMIT.ids) && live && supported ? model.rows[i] : null;
-            return row && i !== me ? { i: row.id, name: row.name, role: row.role, at: row.at, where: whereOf(named(row)) } : null;
+            return row && i !== me && row.at !== 'away' ? { i: row.id, name: row.name, role: row.role, at: row.at, where: whereOf(named(row)) } : null;
         }
         function paint() {
             var shown = phase !== 'none', on = phase === 'on';

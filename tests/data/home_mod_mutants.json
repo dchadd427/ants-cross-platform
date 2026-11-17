@@ -385,8 +385,8 @@
   {
    "id": "control_arrows_are_ours",
    "file": "web/home/mod.js",
-   "old": "if (!e || !viewer() || sheet || e.ctrlKey || e.altKey || e.metaKey) return;",
-   "new": "if (!e || !viewer() || sheet) return;",
+   "old": "if (!e || !viewer() || sheet || e.ctrlKey || e.altKey || e.metaKey || s.keeps(e.target)) return;",
+   "new": "if (!e || !viewer() || sheet || s.keeps(e.target)) return;",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
@@ -406,8 +406,8 @@
   {
    "id": "no_status_for_the_chosen_line",
    "file": "web/home/mod.js",
-   "old": "if (t) statusBox.textContent = s.say(t);",
-   "new": "if (false) statusBox.textContent = s.say(t);",
+   "old": "if (t) s.status.textContent = s.say(t);",
+   "new": "if (false) s.status.textContent = s.say(t);",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
@@ -1036,8 +1036,8 @@
   {
    "id": "a_role_that_goes_keeps_the_hint",
    "file": "web/home/mod.js",
-   "old": "if (persons) persons.refresh(); if (!viewer()) statusBox.textContent = ''; }",
-   "new": "if (persons) persons.refresh(); }",
+   "old": "                if (!viewer()) s.status.textContent = '';\n",
+   "new": "",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
@@ -1288,7 +1288,7 @@
   {
    "id": "a_failed_check_offers_mute",
    "file": "web/home/mod.js",
-   "old": "s.mutes = code === 'ok' ? 'free' : 'fail';",
+   "old": "s.mutes = code === 'ok' && rows.length < LIMIT.listed ? 'free' : 'fail';",
    "new": "s.mutes = 'free';",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
@@ -1372,8 +1372,8 @@
   {
    "id": "enter_on_a_button_opens_the_sheet",
    "file": "web/home/mod.js",
-   "old": "if (s.keeps(e.target)) return;                     // (Enter on a button of a row is the button's: Join joins)",
-   "new": "",
+   "old": "e.metaKey || s.keeps(e.target)) return;",
+   "new": "e.metaKey) return;",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   },
   {
@@ -1507,6 +1507,41 @@
    "file": "web/home/mod.js",
    "old": "!sheet.busy && p.state() === 'on' && !personOf(sheet.line.id)) {",
    "new": "!sheet.busy && !personOf(sheet.line.id)) {",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "a_full_list_that_does_not_name_the_person_is_free",
+   "file": "web/home/mod.js",
+   "old": "rows.length < LIMIT.listed ? 'free' : 'fail';",
+   "new": "rows.length <= LIMIT.listed ? 'free' : 'fail';",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "a_list_of_49_is_not_trusted",
+   "file": "web/home/mod.js",
+   "old": "rows.length < LIMIT.listed ? 'free' : 'fail';",
+   "new": "rows.length < LIMIT.listed - 1 ? 'free' : 'fail';",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "the_arrows_of_a_button_are_taken",
+   "file": "web/home/mod.js",
+   "old": "|| e.metaKey || s.keeps(e.target)) return;       // (a key that starts on a link or a button of a row is that control's: Join joins, the arrows scroll)",
+   "new": "|| e.metaKey) return;       // (a key that starts on a link or a button of a row is that control's: Join joins, the arrows scroll)",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "the_list_says_which_row_in_the_chat_dock",
+   "file": "web/home/mod.js",
+   "old": "p.root.appendChild(hint); p.root.appendChild(status);",
+   "new": "p.root.appendChild(hint); dock.root.appendChild(status);",
+   "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
+  },
+  {
+   "id": "an_away_person_has_a_mark_and_a_sheet",
+   "file": "web/home/players.js",
+   "old": "return row && i !== me && row.at !== 'away' ? {",
+   "new": "return row && i !== me ? {",
    "test": "python3 tests/scripts/test_web_home_mod.py ThePageAndTheOtherPages TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_mod_check.js web/lobby.html"
   }
  ]
