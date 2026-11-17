@@ -226,9 +226,9 @@ void run_migration_tests() {
         DB_CHECK(open_and_migrate(db, ":memory:", ants::server::db_migrations(), OpenOptions(), &v, &mode).ok() && mode == "memory");
     } DB_END;
 
-    DB_CASE("SV1.1 The server's schema: version 1 makes the meta table with created_at; version 2 the match history tables; version 3 the play counts of the maps; version 4 the site statistics; version 5 the map submissions; version 6 the accounts of the owner's page") {
+    DB_CASE("SV1.1 The server's schema: version 1 makes the meta table with created_at; version 2 the match history tables; version 3 the play counts of the maps; version 4 the site statistics; version 5 the map submissions; version 6 the accounts of the admin page; version 8 ends them (the log stays)") {
         const auto& list = ants::server::db_migrations();
-        DB_CHECK(list.size() == 7 && list.front().version == 1 && list.back().version == 7);
+        DB_CHECK(list.size() == 8 && list.front().version == 1 && list.back().version == 8);
         DB_CHECK(ants::server::db_schema_version() == list.back().version);
         Database db;
         DB_CHECK(db.open(":memory:").ok());
@@ -241,7 +241,7 @@ void run_migration_tests() {
         const std::string created = st.column_text(0);
         DB_CHECK(created.size() == 20 && created.substr(0, 2) == "20" && created.back() == 'Z');
         DB_CHECK(db.prepare(st, "SELECT group_concat(name, ',') FROM (SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('meta', 'schema_version') ORDER BY name)").ok());
-        DB_CHECK(st.step() == Statement::Step::Row && st.column_text(0) == "admin_audit,admin_known_addr,admin_locks,admin_revoked,admin_users,history_deaths,history_markers,history_matches,history_seats,map_plays,map_submissions,review_log,site_stats,site_stats_hours,submission_limits");
+        DB_CHECK(st.step() == Statement::Step::Row && st.column_text(0) == "admin_audit,history_deaths,history_markers,history_matches,history_seats,map_plays,map_submissions,review_log,site_stats,site_stats_hours,submission_limits");
         DB_CHECK(migrate(db, list).ok());
         DB_CHECK(rows_in(db, "meta") == 1);
     } DB_END;
@@ -371,7 +371,7 @@ void run_migration_tests() {
         DB_CHECK(migrate(db, list.data(), 6, &v).ok() && v == 6 && !has_table(db, "history_deaths"));
         DB_CHECK(db.exec("INSERT INTO history_matches (id, ended, map, game, turns, finished, quitter, mode, format, result, computers_only, best_score, best_kills, best_hatched, search, rows_json, counted_at) VALUES "
                          "('ants-TINY-20261008-143209Z', 1, 'TINY.LVL', 'v0.12.0', 100, 1, NULL, 'highest-score', '1v1', 'decided', 1, 0, 0, 0, 'tiny', '[]', 1)").ok());
-        DB_CHECK(migrate(db, list, &v).ok() && v == 7 && has_table(db, "history_deaths") && rows_in(db, "history_matches") == 1 && rows_in(db, "schema_version") == 7);
+        DB_CHECK(migrate(db, list.data(), 7, &v).ok() && v == 7 && has_table(db, "history_deaths") && rows_in(db, "history_matches") == 1 && rows_in(db, "schema_version") == 7);
         const std::string ok_row = "INSERT INTO history_deaths (id, map, hash, ended, w, h, n, deaths) VALUES ('ants-TINY-20261008-143209Z', 'TINY.LVL', '0123456789abcdef', 1, 31, 31, 3, 'AAAAAAAAAAAAAAAAAAAAAAAAAAA')";
         DB_CHECK(db.exec(ok_row).ok() && rows_in(db, "history_deaths") == 1);
         DB_CHECK(!db.exec(ok_row).ok());                                                                       // (one row for each match)

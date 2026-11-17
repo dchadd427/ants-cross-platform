@@ -5,10 +5,7 @@
 #include <cstring>
 #include <iterator>
 
-#include "ants_server/admin_accounts.hpp"
-#include "ants_server/crypto.hpp"
 #include "ants_server/map_names.hpp"
-#include "ants_server/secret.hpp"
 
 namespace ants::server {
 
@@ -18,12 +15,11 @@ using ctl::HttpRequest;
 using ctl::HttpResponse;
 using ctl::JsonValue;
 
-constexpr size_t kSmallBody = 4 * 1024;                  // the owner's calls carry a name or a short sentence
+constexpr size_t kSmallBody = 4 * 1024;                  // the admin page's calls carry a name or a short sentence
 constexpr size_t kMaxAddressesKept = 10000;
 constexpr int64_t kAttemptWindowS = 3600;
-constexpr int64_t kSessionSlackS = 60;                    // a cookie that claims to last longer than the session length (plus this) is not one that this server made
-constexpr const char* kCookieName = "ants_admin";
-constexpr const char* kCookiePrefix = "v2.";
+constexpr int64_t kNoticeEveryS = 60;                     // a refused pass is told to the operator's log once a minute for each kind
+constexpr size_t kNoticesMax = 100;
 
 // The bearer token of a request, or ""
 std::string bearer_of(const HttpRequest& r) {
@@ -38,8 +34,14 @@ std::string bearer_of(const HttpRequest& r) {
 
 // ------------------------------------------------------------------------------------------------
 
-SubmissionApi::SubmissionApi(SubmissionStore& store, AdminAccounts& accounts, SubmissionApiConfig config) : store_(store), accounts_(accounts), config_(std::move(config)) {
-    if (config_.session_secret.size() < 32) config_.session_secret.clear();               // (a short secret is none: the owner's API stays off)
+SubmissionApi::SubmissionApi(SubmissionStore& store, AdminAudit& audit, SubmissionApiConfig config) : store_(store), audit_(audit), config_(std::move(config)), gate_(config_.gate_secret) {
+    config_.gate_secret.clear();                                                            // (the key is held by the gate alone, as the derived keys)
+}
+
+std::vector<std::string> SubmissionApi::take_notices() {
+    std::vector<std::string> out;
+    out.swap(notices_);
+    return out;
 }
 
 size_t SubmissionApi::max_body() { return SubmissionStore::max_upload_bytes("extended"); }
@@ -70,7 +72,7 @@ bool SubmissionApi::address_allowed(const std::string& identity, int64_t now_s) 
 
 HttpResponse SubmissionApi::handle(const HttpRequest& request, int64_t now_s, uint32_t now_ms) {
     const std::string& path = request.path;
-    if (path == "/admin/api" || path.compare(0, 11, "/admin/api/") == 0) return admin_routes(request, now_s, now_ms);
+    if (path == "/admin/api" || path.compare(0, 11, "/admin/api/") == 0) return admin_routes(request, now_s);
     if (path == "/submissions" && request.method == "POST") return submit(request, now_s, now_ms);
     if (path == "/submissions" || path.compare(0, 13, "/submissions/") == 0) return maker_routes(request, now_s, now_ms);
     return not_found();
@@ -143,115 +145,32 @@ HttpResponse SubmissionApi::maker_routes(const HttpRequest& request, int64_t now
     return not_found();
 }
 
-// ------------------------------------------------------------------------------------------------ the owner's session
+// ------------------------------------------------------------------------------------------------ the admin page's calls
 
 namespace {
 
-// The body of a call that names no path, and the answer to anything of the owner's that a visitor must not learn about, with the status of a refusal: a signed-in Moderator who asks for
-// something of an Admin's gets exactly the bytes of a missing path (so the page cannot tell what an Admin may do), only the status is 403
-HttpResponse forbidden_like_missing() {
-    HttpResponse r = not_found();
-    r.status = 403;
-    return r;
-}
-
-std::string cookie_attributes(bool secure, int64_t max_age) {
-    return "; Path=/admin; Max-Age=" + std::to_string(max_age) + "; HttpOnly; SameSite=Strict" + (secure ? "; Secure" : "");
-}
-
-bool all_digits(const std::string& s) { return !s.empty() && s.size() <= 18 && std::all_of(s.begin(), s.end(), [](char c) { return c >= '0' && c <= '9'; }); }
-
-JsonValue user_json(const User& u, bool you) {
-    JsonValue o = JsonValue::make_object();
-    o.set("id", JsonValue::make_int(u.id));
-    o.set("name", JsonValue::make_string(u.name));
-    o.set("role", JsonValue::make_string(u.role));
-    o.set("disabled", JsonValue::make_bool(u.disabled));
-    o.set("has_not_chosen_password", JsonValue::make_bool(u.must_change));
-    o.set("created_at", JsonValue::make_int(u.created_at));
-    o.set("last_login_at", JsonValue::make_int(u.last_login_at));
-    o.set("created_by", JsonValue::make_string(u.created_by));
-    o.set("you", JsonValue::make_bool(you));
-    return o;
-}
+// The one answer to every call under /admin/api that has no good pass, whatever the path, the method or the reason: nothing is learned about what is there
+HttpResponse closed_reply() { return error_reply(403, "closed", "The admin page is closed."); }
 
 }  // namespace
 
-std::string SubmissionApi::make_cookie(const User& user, int64_t now_s, std::string& csrf) const {
-    uint8_t raw[12];
-    if (!random_bytes(raw, sizeof raw)) return std::string();
-    const std::string nonce = base64url_encode(std::string_view(reinterpret_cast<const char*>(raw), sizeof raw));
-    JsonValue p = JsonValue::make_object();
-    p.set("u", JsonValue::make_int(user.id));
-    p.set("g", JsonValue::make_int(user.session_gen));
-    p.set("exp", JsonValue::make_int(now_s + config_.session_seconds));
-    p.set("n", JsonValue::make_string(nonce));
-    const std::string signed_part = std::string(kCookiePrefix) + base64url_encode(ctl::to_json(p));
-    csrf = csrf_for(nonce, user);
-    return std::string(kCookieName) + "=" + signed_part + "." + hex_encode(hmac_sha256(config_.session_secret, signed_part)) + cookie_attributes(config_.cookie_secure, config_.session_seconds);
-}
-
-std::string SubmissionApi::clear_cookie() const { return std::string(kCookieName) + "=" + cookie_attributes(config_.cookie_secure, 0); }
-
-std::string SubmissionApi::csrf_for(const std::string& nonce, const User& user) const {
-    return hex_encode(hmac_sha256(config_.session_secret, "csrf2|" + nonce + "|" + std::to_string(user.id) + "|" + std::to_string(user.session_gen))).substr(0, 32);
-}
-
-SubmissionApi::Session SubmissionApi::session_of(const HttpRequest& request, int64_t now_s) const {
-    Session none;
-    if (!owner_api_on()) return none;
-    const std::string* cookie = request.header("cookie");
-    if (cookie == nullptr || cookie->size() > 2048) return none;
-    std::string value;
-    size_t pos = 0;
-    const std::string wanted = std::string(kCookieName) + "=";
-    while (pos < cookie->size()) {
-        size_t end = cookie->find(';', pos);
-        if (end == std::string::npos) end = cookie->size();
-        size_t b = pos;
-        while (b < end && (*cookie)[b] == ' ') ++b;
-        if (cookie->compare(b, wanted.size(), wanted) == 0) {
-            value = cookie->substr(b + wanted.size(), end - b - wanted.size());
-            break;
-        }
-        pos = end + 1;
+// Checks the pass of a request (once: a pass that was used is refused). The reason a pass is refused goes to the operator's log as a kind and nothing else, once a minute for each kind.
+bool SubmissionApi::admitted(const HttpRequest& request, int64_t now_s, AdminIdentity& who) {
+    const std::string* header = request.header("x-ants-admin-pass");
+    const PassVerdict verdict = gate_.check(header == nullptr ? std::string_view() : std::string_view(*header), now_s, who);
+    if (verdict == PassVerdict::Ok) return true;
+    int64_t& last = pass_logged_[static_cast<int>(verdict)];
+    if (last == 0 || now_s - last >= kNoticeEveryS) {
+        last = now_s;
+        if (notices_.size() < kNoticesMax) notices_.push_back(std::string("admin_gate kind=") + pass_verdict_word(verdict));
     }
-    if (value.compare(0, 3, kCookiePrefix) != 0) return none;
-    const size_t dot = value.rfind('.');
-    if (dot == std::string::npos || dot < 3) return none;
-    const std::string signed_part = value.substr(0, dot);                         // "v2.<payload>"
-    const std::string mac = value.substr(dot + 1);
-    const std::string expected = hex_encode(hmac_sha256(config_.session_secret, signed_part));
-    if (!ctl::constant_time_equal(mac, expected)) return none;
-    std::string payload;
-    JsonValue v;
-    if (!base64url_decode(signed_part.substr(3), payload) || payload.size() > 512 || !ctl::parse_json(payload, v, nullptr)) return none;
-    const int64_t exp = v.get("exp").as_int_or(0);
-    if (exp <= now_s || exp > now_s + config_.session_seconds + kSessionSlackS) return none;
-    const int64_t uid = v.get("u").as_int_or(0);
-    const int64_t gen = v.get("g").as_int_or(0);
-    const std::string nonce = v.get("n").str();
-    if (uid <= 0 || gen <= 0 || nonce.empty() || nonce.size() > 64) return none;
-    Session s;
-    if (!accounts_.find(uid, s.user) || s.user.disabled || s.user.session_gen != gen) return none;          // (a reset, a disable, a removal or a new password made the cookie old)
-    if (accounts_.session_revoked(nonce)) return none;                                     // (signed out: this very cookie is dead, a copy of it too)
-    s.nonce = nonce;
-    s.valid = true;
-    return s;
+    return false;
 }
 
-Actor SubmissionApi::actor_of(const Session& who, const HttpRequest& request) const {
-    Actor a;
-    a.id = who.user.id;
-    a.name = who.user.name;
-    a.address = client_identity(request, config_.trust_client_header);
-    return a;
-}
-
-// The checks that every change of a signed-in user passes before anything is done: the CSRF token of this very session, a same-origin request, the JSON type and a JSON object
-bool SubmissionApi::post_guard(const HttpRequest& request, const Session& who, JsonValue& body, HttpResponse& refusal) const {
+// The checks that every change passes before anything is done: the CSRF token of this account, a same-origin request, the JSON type and a JSON object
+bool SubmissionApi::post_guard(const HttpRequest& request, const AdminIdentity& who, JsonValue& body, HttpResponse& refusal) const {
     const std::string* token = request.header("x-ants-csrf");
-    if (token == nullptr || !ctl::constant_time_equal(*token, csrf_for(who.nonce, who.user))) {
+    if (token == nullptr || !ctl::constant_time_equal(*token, gate_.csrf_token(who))) {
         refusal = error_reply(403, "csrf", "The page's token is missing or old. Reload the page.");
         return false;
     }
@@ -272,140 +191,25 @@ bool SubmissionApi::post_guard(const HttpRequest& request, const Session& who, J
     return true;
 }
 
-HttpResponse SubmissionApi::login(const HttpRequest& request, int64_t now_s, uint32_t now_ms) {
-    const std::string* site = request.header("sec-fetch-site");
-    if (site != nullptr && *site != "same-origin") return error_reply(403, "cross_site", "This request must come from the site's own page.");
-    if (!content_type_is(request, "application/json")) return error_reply(415, "bad_content_type", "Send JSON.");
-    const std::string identity = client_identity(request, config_.trust_client_header);
-    if (identity.empty()) return error_reply(400, "no_address", "The server cannot tell where this request came from.");
-    JsonValue body;
-    if (!ctl::parse_json(request.body, body, nullptr) || !body.is_object()) return error_reply(400, "bad_json", "The request is not a JSON object.");
-    const std::string username = body.get("username").str();
-    const std::string password = body.get("password").str();
-    const HttpResponse wrong = error_reply(401, "bad_login", "Wrong username or password.");
-    if (username.size() > 64 || password.size() > kPasswordMaxBytes) return wrong;                  // (no name and no password of such a size exists: nothing is checked)
-    User user;
-    switch (accounts_.sign_in(username, password, identity, now_s, now_ms, user)) {
-        case Attempt::Ok: break;
-        case Attempt::Wrong: return wrong;
-        case Attempt::Locked: return error_reply(429, "locked", "Too many tries. Wait a few minutes.");
-        case Attempt::Busy: return error_reply(503, "busy", "The server is busy. Please try again in a minute.");
-        case Attempt::Error: return error_reply(503, "storage_error", "The server could not check this just now. Please try again later.");
-    }
-    std::string csrf;
-    const std::string cookie = make_cookie(user, now_s, csrf);
-    if (cookie.empty()) return error_reply(503, "no_random", "The server could not start a session just now.");
-    JsonValue o = JsonValue::make_object();
-    o.set("signed_in", JsonValue::make_bool(true));
-    o.set("name", JsonValue::make_string(user.name));
-    o.set("role", JsonValue::make_string(user.role));
-    o.set("must_change", JsonValue::make_bool(user.must_change));
-    o.set("csrf", JsonValue::make_string(csrf));
-    HttpResponse r = json_reply(200, o);
-    r.set_cookies.push_back(cookie);
-    return r;
-}
-
-HttpResponse SubmissionApi::logout(const HttpRequest& request, const Session& who, int64_t now_s) {
-    const std::string* site = request.header("sec-fetch-site");
-    if (site != nullptr && *site != "same-origin") return error_reply(403, "cross_site", "This request must come from the site's own page.");
-    if (who.valid) {
-        const std::string* token = request.header("x-ants-csrf");
-        if (token == nullptr || !ctl::constant_time_equal(*token, csrf_for(who.nonce, who.user))) return error_reply(403, "csrf", "The page's token is missing or old. Reload the page.");
-    }
-    JsonValue o = JsonValue::make_object();
-    o.set("signed_in", JsonValue::make_bool(false));
-    HttpResponse r = json_reply(200, o);
-    if (who.valid && !accounts_.revoke_session(who.nonce, now_s + config_.session_seconds + kSessionSlackS)) {
-        r = error_reply(503, "storage_error", "The server could not sign you out just now. Please try again.");        // (the cookie is cleared all the same; the session is not over on the server)
-    }
-    r.set_cookies.push_back(clear_cookie());
-    return r;
-}
-
-HttpResponse SubmissionApi::change_password(const HttpRequest& request, const Session& who, int64_t now_s, uint32_t now_ms) {
-    JsonValue body;
-    HttpResponse refusal;
-    if (!post_guard(request, who, body, refusal)) return refusal;
-    const std::string identity = client_identity(request, config_.trust_client_header);
-    if (identity.empty()) return error_reply(400, "no_address", "The server cannot tell where this request came from.");
-    const std::string current = body.get("current").str();
-    const std::string fresh = body.get("new").str();
-    const auto bad_new = [](const std::string& reason) {
-        HttpResponse r = error_reply(400, "bad_new_password", reason == "too_short" ? "The new password needs at least 12 characters." : reason == "same_as_name" ? "The new password cannot be your username." :
-                                                              reason == "same_as_old" ? "Choose a password that is not the old one." : "That password cannot be used.");
-        JsonValue o;
-        ctl::parse_json(r.body, o, nullptr);
-        o.set("reason", JsonValue::make_string(reason));
-        r.body = ctl::to_json(o);
-        return r;
-    };
-    const std::string problem = password_problem(fresh, who.user.name);
-    if (!problem.empty()) return bad_new(problem);
-    if (!who.user.must_change) {                                                   // (the old password proves who is typing; the starting password needs no proof, the sign-in a moment ago was it)
-        if (current.size() > kPasswordMaxBytes) return error_reply(403, "bad_password", "That is not your current password.");
-        switch (accounts_.confirm_password(who.user, current, identity, now_s, now_ms)) {
-            case Attempt::Ok: break;
-            case Attempt::Wrong: return error_reply(403, "bad_password", "That is not your current password.");
-            case Attempt::Locked: return error_reply(429, "locked", "Too many tries. Wait a few minutes.");
-            case Attempt::Busy: return error_reply(503, "busy", "The server is busy. Please try again in a minute.");
-            case Attempt::Error: return error_reply(503, "storage_error", "The server could not check this just now. Please try again later.");
-        }
-        if (current == fresh) return bad_new("same_as_old");
-    } else {
-        switch (accounts_.password_matches(who.user, fresh, now_ms)) {                // (not the starting password: this costs a password check, so it is counted like one)
-            case Attempt::Ok: return bad_new("same_as_old");
-            case Attempt::Wrong: break;
-            case Attempt::Busy: return error_reply(503, "busy", "The server is busy. Please try again in a minute.");
-            case Attempt::Locked:
-            case Attempt::Error: return error_reply(503, "storage_error", "The server could not check this just now. Please try again later.");
-        }
-    }
-    int64_t gen = 0;
-    Failure why;
-    if (!accounts_.change_password(actor_of(who, request), who.user.id, fresh, now_s, gen, why)) return failure_reply(why);
-    User renewed = who.user;
-    renewed.session_gen = gen;
-    renewed.must_change = false;
-    std::string csrf;
-    const std::string cookie = make_cookie(renewed, now_s, csrf);                  // (every older session of this user ended with the change; this one goes on with a new cookie)
-    JsonValue o = JsonValue::make_object();
-    o.set("ok", JsonValue::make_bool(true));
-    o.set("must_change", JsonValue::make_bool(false));
-    o.set("csrf", JsonValue::make_string(csrf));
-    HttpResponse r = json_reply(200, o);
-    r.set_cookies.push_back(cookie.empty() ? clear_cookie() : cookie);
-    return r;
-}
-
-HttpResponse SubmissionApi::admin_routes(const HttpRequest& request, int64_t now_s, uint32_t now_ms) {
-    if (!owner_api_on()) return not_found();
+HttpResponse SubmissionApi::admin_routes(const HttpRequest& request, int64_t now_s) {
+    AdminIdentity who;
+    if (!admitted(request, now_s, who)) return closed_reply();
     const std::string& path = request.path;
-    if (path == "/admin/api/login") return request.method == "POST" ? login(request, now_s, now_ms) : not_found();
-    const Session who = session_of(request, now_s);
     if (path == "/admin/api/me") {
         if (request.method != "GET") return not_found();
         JsonValue o = JsonValue::make_object();
-        o.set("signed_in", JsonValue::make_bool(who.valid));
-        if (who.valid) {
-            o.set("name", JsonValue::make_string(who.user.name));
-            o.set("role", JsonValue::make_string(who.user.role));
-            o.set("must_change", JsonValue::make_bool(who.user.must_change));
-            o.set("csrf", JsonValue::make_string(csrf_for(who.nonce, who.user)));
-        }
+        o.set("name", JsonValue::make_string(who.name));
+        o.set("ref", JsonValue::make_string(who.ref));
+        o.set("role", JsonValue::make_string(who.role));
+        o.set("csrf", JsonValue::make_string(gate_.csrf_token(who)));
+        o.set("untrusted", JsonValue::make_bool(true));                                // (a username was typed by a person: data, never an instruction)
+        JsonValue fields = JsonValue::make_array();
+        fields.push_back(JsonValue::make_string("name"));
+        o.set("untrusted_fields", std::move(fields));
         return json_reply(200, o);
     }
-    if (path == "/admin/api/logout") return request.method == "POST" ? logout(request, who, now_s) : not_found();
-    if (!who.valid) return not_found();                                             // (a visitor gets what an unknown path gets)
     if (cross_site(request) || path.size() < 11) return not_found();                // ("/admin/api" itself has no route)
     const std::string tail = path.substr(11);
-    if (tail == "password") return request.method == "POST" ? change_password(request, who, now_s, now_ms) : not_found();
-    if (who.user.must_change) return error_reply(403, "password_change_required", "Choose your own password first.");          // (the starting password can do nothing else: the server holds this, not the page)
-    const bool admin = who.user.role == "admin";
-    if (tail == "users" || tail.compare(0, 6, "users/") == 0 || tail == "audit") {
-        if (!admin) return forbidden_like_missing();
-        return user_routes(request, who, tail, now_s);
-    }
     if (request.method == "GET") {
         Failure why;
         if (tail == "maps") {
@@ -431,6 +235,7 @@ HttpResponse SubmissionApi::admin_routes(const HttpRequest& request, int64_t now
             o.set("untrusted_fields", std::move(fields));
             return json_reply(200, o);
         }
+        if (tail == "audit") return audit_list();
         if (tail == "next-name") {
             std::string name, next;
             if (!query_value(request.query, "name", name) || !store_.next_name(name, next, why)) return why.status != 0 ? failure_reply(why) : error_reply(400, "bad_name", "Give a name.");
@@ -453,7 +258,7 @@ HttpResponse SubmissionApi::admin_routes(const HttpRequest& request, int64_t now
     return admin_post(request, who, tail, now_s);
 }
 
-HttpResponse SubmissionApi::admin_post(const HttpRequest& request, const Session& who, const std::string& tail, int64_t now_s) {
+HttpResponse SubmissionApi::admin_post(const HttpRequest& request, const AdminIdentity& who, const std::string& tail, int64_t now_s) {
     JsonValue body;
     HttpResponse refusal;
     if (!post_guard(request, who, body, refusal)) return refusal;
@@ -466,28 +271,27 @@ HttpResponse SubmissionApi::admin_post(const HttpRequest& request, const Session
     Submission s;
     Failure why;
     bool done = false;
-    const Actor actor = actor_of(who, request);
-    const std::string by = std::to_string(who.user.id);
+    const Actor actor{who.ref, who.name};
     const char* logged = "";
     std::string detail;
     if (action == "approve") {
-        done = store_.approve(id, body.get("name").str(), body.get("message").str(), by, who.user.name, now_s, s, why);
+        done = store_.approve(id, body.get("name").str(), body.get("message").str(), who.ref, who.name, now_s, s, why);
         logged = "map_approved";
     } else if (action == "decline") {
-        done = store_.decline(id, body.get("reason").str(), by, who.user.name, now_s, s, why);
+        done = store_.decline(id, body.get("reason").str(), who.ref, who.name, now_s, s, why);
         logged = "map_declined";
         detail = s.owner_message;
     } else if (action == "take-down") {
-        done = store_.take_down(id, by, who.user.name, now_s, s, why);
+        done = store_.take_down(id, who.ref, who.name, now_s, s, why);
         logged = "map_taken_down";
     } else if (action == "put-back") {
-        done = store_.put_back(id, by, who.user.name, now_s, s, why);
+        done = store_.put_back(id, who.ref, who.name, now_s, s, why);
         logged = "map_put_back";
     } else {
         return not_found();
     }
     if (!done) return failure_reply(why);
-    accounts_.audit(actor, now_s, logged, s.final_name.empty() ? s.name : s.final_name, detail);
+    audit_.record(actor, now_s, logged, s.final_name.empty() ? s.name : s.final_name, detail);
     if (store_.take_approved_changed() && on_approved_changed_) on_approved_changed_();
     JsonValue o = JsonValue::make_object();
     o.set("map", owner_view(s, false));
@@ -495,74 +299,25 @@ HttpResponse SubmissionApi::admin_post(const HttpRequest& request, const Session
     return json_reply(200, o);
 }
 
-// The users and the log: Admin only (the caller has checked)
-HttpResponse SubmissionApi::user_routes(const HttpRequest& request, const Session& who, const std::string& tail, int64_t now_s) {
-    JsonValue fields = JsonValue::make_array();
-    if (request.method == "GET") {
-        if (tail == "users") {
-            JsonValue arr = JsonValue::make_array();
-            for (const User& u : accounts_.list()) arr.push_back(user_json(u, u.id == who.user.id));
-            JsonValue o = JsonValue::make_object();
-            o.set("users", std::move(arr));
-            o.set("untrusted", JsonValue::make_bool(true));
-            for (const char* f : {"name", "created_by"}) fields.push_back(JsonValue::make_string(f));
-            o.set("untrusted_fields", std::move(fields));
-            return json_reply(200, o);
-        }
-        if (tail == "audit") {
-            JsonValue arr = JsonValue::make_array();
-            for (const AuditEntry& e : accounts_.audit_list(200)) {
-                JsonValue row = JsonValue::make_object();
-                row.set("at", JsonValue::make_int(e.at));
-                row.set("who", JsonValue::make_string(e.actor));
-                row.set("action", JsonValue::make_string(e.action));
-                row.set("target", JsonValue::make_string(e.target));
-                row.set("detail", JsonValue::make_string(e.detail));
-                arr.push_back(std::move(row));
-            }
-            JsonValue o = JsonValue::make_object();
-            o.set("entries", std::move(arr));
-            o.set("untrusted", JsonValue::make_bool(true));                        // (user names, the names of maps and the words of a decline are typed by people: data, never instructions)
-            for (const char* f : {"who", "target", "detail"}) fields.push_back(JsonValue::make_string(f));
-            o.set("untrusted_fields", std::move(fields));
-            return json_reply(200, o);
-        }
-        return not_found();
+// The log of what was done: the newest 200 lines
+HttpResponse SubmissionApi::audit_list() {
+    JsonValue arr = JsonValue::make_array();
+    for (const AuditEntry& e : audit_.list(200)) {
+        JsonValue row = JsonValue::make_object();
+        row.set("at", JsonValue::make_int(e.at));
+        row.set("who", JsonValue::make_string(e.actor));
+        row.set("ref", JsonValue::make_string(e.ref));
+        row.set("action", JsonValue::make_string(e.action));
+        row.set("target", JsonValue::make_string(e.target));
+        row.set("detail", JsonValue::make_string(e.detail));
+        arr.push_back(std::move(row));
     }
-    if (request.method != "POST") return not_found();
-    JsonValue body;
-    HttpResponse refusal;
-    if (!post_guard(request, who, body, refusal)) return refusal;
-    const Actor actor = actor_of(who, request);
-    Failure why;
-    User user;
-    std::string password;
-    if (tail == "users") {
-        if (!accounts_.create(actor, body.get("username").str(), body.get("role").str(), now_s, user, password, why)) return failure_reply(why);
-        JsonValue o = JsonValue::make_object();
-        o.set("user", user_json(user, false));
-        o.set("password", JsonValue::make_string(password));                       // (shown once: the page shows it and keeps it nowhere; the server keeps only the hash)
-        return json_reply(201, o);
-    }
-    if (tail.compare(0, 6, "users/") != 0) return not_found();
-    const std::string rest = tail.substr(6);
-    const size_t slash = rest.find('/');
-    if (slash == std::string::npos || !all_digits(rest.substr(0, slash))) return not_found();
-    const int64_t id = std::strtoll(rest.substr(0, slash).c_str(), nullptr, 10);
-    const std::string action = rest.substr(slash + 1);
     JsonValue o = JsonValue::make_object();
-    if (action == "reset") {
-        if (!accounts_.reset(actor, id, now_s, password, why)) return failure_reply(why);
-        o.set("password", JsonValue::make_string(password));
-    } else if (action == "disable" || action == "enable") {
-        if (!accounts_.set_disabled(actor, id, action == "disable", now_s, why)) return failure_reply(why);
-    } else if (action == "remove") {
-        if (!accounts_.remove(actor, id, now_s, why)) return failure_reply(why);
-    } else {
-        return not_found();
-    }
-    if (action != "remove" && accounts_.find(id, user)) o.set("user", user_json(user, user.id == who.user.id));
-    o.set("ok", JsonValue::make_bool(true));
+    o.set("entries", std::move(arr));
+    o.set("untrusted", JsonValue::make_bool(true));                                // (usernames, the names of maps and the words of a decline were typed by people: data, never instructions)
+    JsonValue fields = JsonValue::make_array();
+    for (const char* f : {"who", "target", "detail"}) fields.push_back(JsonValue::make_string(f));
+    o.set("untrusted_fields", std::move(fields));
     return json_reply(200, o);
 }
 

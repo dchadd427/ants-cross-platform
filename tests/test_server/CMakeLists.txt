@@ -301,37 +301,37 @@ target_include_directories(test_test_maps PRIVATE
 add_test(NAME test_test_maps COMMAND test_test_maps)
 set_tests_properties(test_test_maps PROPERTIES COST 8)
 
-# The accounts of the owner's page (ants_server/admin_accounts.hpp, admin_cli.hpp): PBKDF2 against published vectors, the hash and its upgrade, the random password, the limits on guessing, the generation of the sessions,
-# the last Admin, the log, the migration of a copy of a version 5 database, and the command line of the first account. No network
-add_executable(test_admin_accounts
-    test_admin_accounts.cpp
+# The admin page's log and the step that retired its accounts (ants_server/admin_audit.hpp, db_schema.cpp version 8, private_files.hpp): what a line holds, the caps, the migration of a copy of a version 7 database, the privacy of the database files
+add_executable(test_admin_audit
+    test_admin_audit.cpp
 )
 
-target_link_libraries(test_admin_accounts PRIVATE
+target_link_libraries(test_admin_audit PRIVATE
     ants_server_core
     ants_test_paths
 )
 
-target_include_directories(test_admin_accounts PRIVATE
+target_include_directories(test_admin_audit PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
-add_test(NAME test_admin_accounts COMMAND test_admin_accounts)
-set_tests_properties(test_admin_accounts PROPERTIES COST 12)
+add_test(NAME test_admin_audit COMMAND test_admin_audit)
+set_tests_properties(test_admin_audit PROPERTIES COST 3)
 
-# The owner's page API for accounts (ants_server/submissions_http.hpp): the sign-in and its answers, the forced choice of a password, the change of a password, the two roles, the user pages, the log. Requests made by hand: no network
-add_executable(test_admin_api
-    test_admin_api.cpp
+# The admin page's pass (ants_server/admin_pass.hpp) and the door that checks it (ants_server/submissions_http.hpp): the key, the known answers of docs/HUB.md, every reason a pass is refused, a pass used once, the one answer without a good pass,
+# the token of a change, the retired routes, the decisions signed with the username and the reference. Requests made by hand: no network
+add_executable(test_admin_pass
+    test_admin_pass.cpp
 )
 
-target_link_libraries(test_admin_api PRIVATE
+target_link_libraries(test_admin_pass PRIVATE
     ants_server_core
     ants_test_paths
 )
 
-target_include_directories(test_admin_api PRIVATE
+target_include_directories(test_admin_pass PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
 
-add_test(NAME test_admin_api COMMAND test_admin_api)
-set_tests_properties(test_admin_api PROPERTIES COST 6)
+add_test(NAME test_admin_pass COMMAND test_admin_pass)
+set_tests_properties(test_admin_pass PROPERTIES COST 4)

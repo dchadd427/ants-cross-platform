@@ -26,8 +26,9 @@ add_library(ants_server_core STATIC
     test_maps_http.cpp
     test_maps_rooms.cpp
     upload_common.cpp
-    admin_accounts.cpp
-    admin_cli.cpp
+    admin_audit.cpp
+    admin_pass.cpp
+    private_files.cpp
 )
 target_include_directories(ants_server_core PUBLIC
     ${CMAKE_SOURCE_DIR}/include
