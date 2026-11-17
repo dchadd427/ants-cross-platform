@@ -165,6 +165,29 @@ void HUD::apply_layout() {
     // The quit confirmation dialog's buttons: dyn_byes1 part (80, 160) + origin (100, 100), dyn_bno1 part (192, 160) + origin (100, 100). A picture of the original's screen
     place(yes_button_, 180, 260, 49, 24);
     place(no_button_, 292, 260, 49, 24);
+    refresh_art();                                       // (the art's pieces follow the layout too: the frame at this shape, the pedestals' places)
+}
+
+void HUD::set_art(const hud_art::Art* art) {
+    art_ = art != nullptr && art->loaded() ? art : nullptr;
+    refresh_art();
+}
+
+void HUD::refresh_art() {
+    art_frame_ = art_ != nullptr ? hud_art::frame_draws(*art_, layout_) : std::vector<hud_art::Draw>{};
+    left_pedestal_.set_art(art_, layout_);
+    right_pedestal_.set_art(art_, layout_);
+}
+
+void HUD::draw_ui(IRenderer& renderer, const assets::AssetArchive& assets, const char* name, int32_t dx, int32_t dy) {
+    if (art_ != nullptr && hud_art::draw_animation(renderer, *art_, name, 0, layout_)) return;
+    draw_animation_frame0(renderer, assets, name, dx, dy);
+}
+
+void HUD::draw_top_button(IRenderer& renderer, const assets::AssetArchive& assets, const char* up, const char* hover, const char* down, bool is_down, bool is_hovered) {
+    if (is_down) draw_ui(renderer, assets, down, layout_.dx(), 0);
+    else if (is_hovered) draw_ui(renderer, assets, hover, layout_.dx(), 0);
+    else if (art_ != nullptr) draw_ui(renderer, assets, up, layout_.dx(), 0);
 }
 
 bool HUD::in_slot(int slot, int32_t x, int32_t y) const noexcept {
@@ -464,15 +487,15 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
             // Egg tray egg<N> (N = min(eggs, 9)) and the Stop button; both are animations with absolute part coordinates
             if (eggs_now > 0) {
                 const std::string tray = "egg" + std::to_string(std::min<uint32_t>(eggs_now, 9u));
-                draw_animation_frame0(renderer, assets, tray.c_str(), layout_.dx(), 0);
+                draw_ui(renderer, assets, tray.c_str(), layout_.dx(), 0);
             }
-            draw_animation_frame0(renderer, assets, (stop_button_.is_pressed || flashing(2)) ? "butcand" : "butcanu", layout_.dx(), 0);
+            draw_ui(renderer, assets, (stop_button_.is_pressed || flashing(2)) ? "butcand" : "butcanu", layout_.dx(), 0);
         }
         // (an enemy base shows the status box only: the ally pedestal is the left slot)
     } else {
         if (has_friendly_ants) {
             // Stop button (animation butcanu / butcand: label at (595,180), button at (595,198))
-            draw_animation_frame0(renderer, assets, (stop_button_.is_pressed || flashing(2)) ? "butcand" : "butcanu", layout_.dx(), 0);
+            draw_ui(renderer, assets, (stop_button_.is_pressed || flashing(2)) ? "butcand" : "butcanu", layout_.dx(), 0);
 
             // Lunchbox indicator (animation UI_LBOX, sprite at (597,131)) only when every selected ant carries food
             bool all_carry = false;
@@ -487,7 +510,7 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
                 all_carry = true;
             }
             if (all_carry) {
-                draw_animation_frame0(renderer, assets, "UI_LBOX", layout_.dx(), 0);
+                draw_ui(renderer, assets, "UI_LBOX", layout_.dx(), 0);
             }
         }
     }
@@ -512,13 +535,18 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     }
     // Chat switched off in the options: chatcovr (three chcovr2 tiles at (478,421/436/445)) covers the input box
     if (!options_.state().chat) {
-        draw_animation_frame0(renderer, assets, "chatcovr", layout_.dx(), layout_.dy());
+        if (art_ != nullptr) {
+            const LayoutRect box{layout_.right(480), layout_.bottom(424), 141, 12};         // (the art's input box, inside its frame: a dim field, no text, no caret)
+            renderer.fill_rect(box.x, box.y, box.w, box.h, assets::ColorRGBA{24, 78, 60, 255});
+        } else {
+            draw_animation_frame0(renderer, assets, "chatcovr", layout_.dx(), layout_.dy());
+        }
     }
 
     // "Send to:" buttons (animations butall*, butals*): up / hover ("r" label over the up art) / pressed. [All] is hidden while chat is off,
     // [Team] exists only while the local player has an ally.
     auto send_button = [&](bool down, bool hovered, const char* up, const char* hover, const char* pressed) {
-        draw_animation_frame0(renderer, assets, down ? pressed : (hovered ? hover : up), layout_.dx(), layout_.dy());       // (bottom of the panel: right and down)
+        draw_ui(renderer, assets, down ? pressed : (hovered ? hover : up), layout_.dx(), layout_.dy());       // (bottom of the panel: right and down)
     };
     if (options_.state().chat) {
         send_button(send_to_button_.is_pressed, send_to_button_.is_hovered, "butallu", "butallr", "butalld");
@@ -589,6 +617,10 @@ void HUD::render_options_dim(IRenderer& renderer) {
 // The frame of the match screen: the 14 pieces of the animation uishell, last stored piece first (the order the original draws them), each where its anchor puts it in this picture and,
 // when it is one of the stretched pieces, in parts around one repeated line (shell_layout.hpp). In the original's own picture every piece is one plain copy at its own place.
 void HUD::render_shell(IRenderer& renderer, const assets::AssetArchive& assets) {
+    if (art_ != nullptr) {                                               // the HUD art's frame: eight pieces that cover the picture but the map view
+        hud_art::draw_all(renderer, *art_, art_frame_);
+        return;
+    }
     const auto* seq = assets.find_animation("uishell");
     if (!seq || seq->subitems.empty()) return;
     const auto& frames = seq->subitems[0].frames;
@@ -639,21 +671,9 @@ void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive& archiv
     // Top-bar buttons (animations buthlp*, butopt*, butqit*; absolute coordinates): the resting art is already part of
     // the top bar image, hovering draws the small "r" label over it and the pressed art replaces it. A button stays down
     // while the screen it opened is showing.
-    if (help_button_.is_pressed || show_quick_help_) {
-        draw_animation_frame0(renderer, archive, "buthlpd", layout_.dx(), 0);
-    } else if (help_button_.is_hovered) {
-        draw_animation_frame0(renderer, archive, "buthlpr", layout_.dx(), 0);
-    }
-    if (options_button_.is_pressed || options_.is_open()) {
-        draw_animation_frame0(renderer, archive, "butoptd", layout_.dx(), 0);
-    } else if (options_button_.is_hovered) {
-        draw_animation_frame0(renderer, archive, "butoptr", layout_.dx(), 0);
-    }
-    if (quit_button_.is_pressed || show_quit_dialog_) {
-        draw_animation_frame0(renderer, archive, "butqitd", layout_.dx(), 0);
-    } else if (quit_button_.is_hovered) {
-        draw_animation_frame0(renderer, archive, "butqitr", layout_.dx(), 0);
-    }
+    draw_top_button(renderer, archive, "buthlpu", "buthlpr", "buthlpd", help_button_.is_pressed || show_quick_help_, help_button_.is_hovered);
+    draw_top_button(renderer, archive, "butoptu", "butoptr", "butoptd", options_button_.is_pressed || options_.is_open(), options_button_.is_hovered);
+    draw_top_button(renderer, archive, "butqitu", "butqitr", "butqitd", quit_button_.is_pressed || show_quit_dialog_, quit_button_.is_hovered);
 }
 
 void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world) {
@@ -696,8 +716,12 @@ void HUD::render_score_team(IRenderer& renderer, const assets::AssetArchive& ass
     // ally's color and the score shown is the sum of the two; any other team's box is covered (scorcovr, 58 x 17 at (left - 2, top - 1))
     const bool dropped = ((world.dropped_mask >> team) & 1u) != 0;
     if (!exists || dropped) {
-        renderer.draw_named_sprite("scorcovr.bmp", slot.box_left - 2, slot.top - 1);
+        if (art_ == nullptr) renderer.draw_named_sprite("scorcovr.bmp", slot.box_left - 2, slot.top - 1);      // (the art has no cover: it has no window there until a team plays)
         return;
+    }
+    if (art_ != nullptr && team != local_player_id_ && art_->score_window >= 0) {                                 // (the local team's window is part of the art's top bar)
+        const hud_art::Sprite& w = art_->sprites()[static_cast<size_t>(art_->score_window)];
+        hud_art::draw_all(renderer, *art_, {hud_art::Draw{art_->score_window, LayoutRect{slot.box_left - 2, slot.top - 1, w.w, w.h}, LayoutRect{0, 0, w.w, w.h}}});
     }
     renderer.fill_rect(slot.box_left, slot.top, 54, 14, SCORE_BG_COLORS[team % 4]);
     // The number is the team's score plus its ally's (FUN_01021e36): the engine's player_scores ARE those sums already (get_display_score), so an allied team's
@@ -772,6 +796,7 @@ void HUD::render_pedestal_glow(IRenderer& renderer, const assets::AssetArchive& 
     else sub_idx = 3;
 
     if (sub_idx >= seq->subitems.size()) sub_idx = 0;
+    if (art_ != nullptr && hud_art::draw_animation(renderer, *art_, anim_name, sub_idx, layout_)) return;      // (the art's rim flash, the same four steps)
     const auto& sub = seq->subitems[sub_idx];
     for (const auto& fr : sub.frames) {
         renderer.draw_sprite(fr.sprite_index, layout_.dx() + fr.dx, fr.dy);

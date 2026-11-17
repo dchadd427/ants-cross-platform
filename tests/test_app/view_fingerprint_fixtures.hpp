@@ -888,6 +888,8 @@ inline ApplicationConfig app_config() {
     cfg.midi_path = std::string(ORIGINAL_ASSETS_DIR) + "/INTRO.MID";
     cfg.random_seed = 1337;
     cfg.player_name = "Tester";                                  // not the system user
+    cfg.hud_art_given = true;                                    // the fingerprints pin the original's own art, byte for byte: the new HUD art is another picture (test_hud_art)
+    cfg.hud_art_new = false;
     return cfg;
 }
 

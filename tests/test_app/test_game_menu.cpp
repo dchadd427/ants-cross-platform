@@ -119,7 +119,7 @@ void test_table() {
     std::printf("[table] the one list of rows\n");
     size_t count = 0;
     const gm::Row* rows = gm::rows(count);
-    check(count == 16, "sixteen rows");
+    check(count == 17, "seventeen rows");
     for (size_t i = 0; i < count; ++i) {
         const gm::Row& row = rows[i];
         check(gm::find_row(row.id) == &row, std::string("row ") + row.key + " is found by its id");
@@ -141,9 +141,9 @@ void test_table() {
               "the picture row has one word for each row of the shape table, in its order, and the web's default shape as its default");
         check(picture != nullptr && std::string(picture->hint) == "The shape of the picture; the match goes on", "the picture row's hint says what the dropdown does (the page lists the shapes, from its own copy of the table)");
     }
-    check(gm::find_row(0) == nullptr && gm::find_row(17) == nullptr && gm::find_row(-1) == nullptr, "no other id is a row");
+    check(gm::find_row(0) == nullptr && gm::find_row(18) == nullptr && gm::find_row(-1) == nullptr, "no other id is a row");
     check(gm::find_row(gm::kMaster)->def == 100 && gm::find_row(gm::kMusic)->def == 65 && gm::find_row(gm::kEffects)->def == 100 && gm::find_row(gm::kScroll)->def == 50, "the defaults are the original's (Master 100: nothing changes)");
-    check((gm::find_row(gm::kMaster)->show & gm::kShowNew) && (gm::find_row(gm::kMute)->show & gm::kShowNew) && (gm::find_row(gm::kAntHealth)->show & gm::kShowNew) && (gm::find_row(gm::kHealthStyle)->show & gm::kShowNew) && (gm::find_row(gm::kHealthChanges)->show & gm::kShowNew) && !(gm::find_row(gm::kMusic)->show & gm::kShowNew), "exactly the five new rows carry the new tag");
+    check((gm::find_row(gm::kMaster)->show & gm::kShowNew) && (gm::find_row(gm::kMute)->show & gm::kShowNew) && (gm::find_row(gm::kAntHealth)->show & gm::kShowNew) && (gm::find_row(gm::kHealthStyle)->show & gm::kShowNew) && (gm::find_row(gm::kHealthChanges)->show & gm::kShowNew) && (gm::find_row(gm::kHudArt)->show & gm::kShowNew) && !(gm::find_row(gm::kMusic)->show & gm::kShowNew), "exactly the five new rows carry the new tag");
     {   // Damage & heal numbers: one On / Off row in Video right after "Show health as", on by default, in a match and while watching, in both skins
         const gm::Row* row = gm::find_row(gm::kHealthChanges);
         check(row != nullptr && std::string(row->key) == "health_changes" && std::string(row->label) == "Damage & heal numbers" && row->section == gm::Section::Video && row->kind == gm::Kind::Switch &&
@@ -158,6 +158,20 @@ void test_table() {
         }
         check(style_at < n_rows && row_at == style_at + 1, "...right after Show health as");
     }
+    {   // HUD art: one New / Classic choice in Video right after the damage and heal numbers, New by default, in a match and while watching, in both skins
+        const gm::Row* row = gm::find_row(gm::kHudArt);
+        check(row != nullptr && std::string(row->key) == "hud_art" && std::string(row->label) == "HUD art" && row->section == gm::Section::Video && row->kind == gm::Kind::Choice &&
+                  row->def == 0 && row->min == 0 && row->max == 1 && std::string(row->words) == "New|Classic" && (row->show & gm::kShowWatch) && (row->show & gm::kShowWeb) && (row->show & gm::kShowDesktop),
+              "the HUD art row: a choice in Video, New first and by default, in both skins and in a recording");
+        size_t n_rows = 0;
+        const gm::Row* all = gm::rows(n_rows);
+        size_t changes_at = n_rows, row_at = n_rows;
+        for (size_t i = 0; i < n_rows; ++i) {
+            if (all[i].id == gm::kHealthChanges) changes_at = i;
+            if (all[i].id == gm::kHudArt) row_at = i;
+        }
+        check(changes_at < n_rows && row_at == changes_at + 1, "...right after Damage & heal numbers");
+    }
     check((gm::find_row(gm::kMaster)->show & gm::kShowLive) && !(gm::find_row(gm::kMusic)->show & gm::kShowLive), "Master volume acts while it is dragged, the original's sliders at the release");
 
     for (const bool watching : {false, true}) {
@@ -165,7 +179,7 @@ void test_table() {
             const std::string json = gm::describe_json(watching, web);
             Json reader(json);
             check(reader.valid(), std::string("the JSON is valid (watching ") + (watching ? "yes" : "no") + ", " + (web ? "web" : "desktop") + ")");
-            check(has(json, "\"key\":\"master\"") && has(json, "\"key\":\"mute\"") && has(json, "\"key\":\"ant_health\"") && has(json, "\"key\":\"ant_health_style\"") && has(json, "\"key\":\"health_changes\"") && !has(json, "hp_numbers") && has(json, "\"key\":\"scroll\""), "the sound and video rows are there");
+            check(has(json, "\"key\":\"master\"") && has(json, "\"key\":\"mute\"") && has(json, "\"key\":\"ant_health\"") && has(json, "\"key\":\"ant_health_style\"") && has(json, "\"key\":\"health_changes\"") && has(json, "\"key\":\"hud_art\"") && !has(json, "hp_numbers") && has(json, "\"key\":\"scroll\""), "the sound and video rows are there");
             check(has(json, "\"id\":\"controls\"") && has(json, "\"id\":\"sound\"") && has(json, "\"id\":\"video\""), "the Sound, Video and Controls sections are there");
             check(has(json, "\"key\":\"chat\"") == !watching && has(json, "\"id\":\"game\"") == !watching && has(json, "\"key\":\"version\"") == !watching, "the Game section is in a match and not in a recording");
             check(has(json, "\"key\":\"picture\"") == web && has(json, "\"key\":\"lockmouse\"") == web, "the picture's shape and the fullscreen mouse are the browser's rows");
@@ -257,6 +271,46 @@ void test_settings() {
         m.health_changes = false;
         m.load(each);
         check(m.health_changes, "a value that is not exactly off reads as on: '" + odd + "'");
+    }
+    {   // HUD art: New unless the file says classic; it round-trips; a store that cannot be read (the browser refuses its storage) is New
+        check(defaults.hud_art_new, "the HUD art is the new one when the file says nothing");
+        for (const bool new_art : {true, false}) {
+            ConfigStore each;
+            gm::MenuSettings out;
+            out.hud_art_new = new_art;
+            out.write(each, gm::kHudArt);
+            gm::MenuSettings in;
+            in.hud_art_new = !new_art;
+            in.load(each);
+            check(in.hud_art_new == new_art && each.get_string("hud_art", "", 8) == (new_art ? "new" : "classic"), std::string("round trip of hud_art=") + (new_art ? "new" : "classic"));
+            ConfigStore text;
+            text.parse(each.serialise());
+            gm::MenuSettings again;
+            again.hud_art_new = !new_art;
+            again.load(text);
+            check(again.hud_art_new == new_art, std::string("...through the settings text, as the browser keeps it: ") + (new_art ? "new" : "classic"));
+        }
+        for (const std::string odd : {"Classic", "CLASSIC", "old", "0", "", "classic "}) {
+            ConfigStore each;
+            each.set_string("hud_art", odd);
+            gm::MenuSettings m;
+            m.hud_art_new = false;
+            m.load(each);
+            check(m.hud_art_new, "a value that is not exactly classic reads as new: '" + odd + "'");
+        }
+        ConfigStore refused;                                                   // a "file" that is a folder: it exists and cannot be read
+        refused.set_location(std::filesystem::temp_directory_path().string());
+        gm::MenuSettings m;
+        m.hud_art_new = false;
+        refused.load();                                                          // (whether this platform says no or reads nothing, nothing comes out of it)
+        check(refused.values().empty(), "a store that cannot be read gives nothing");
+        m.load(refused);
+        check(m.hud_art_new, "...and the HUD art is the new one");
+        s.hud_art_new = false;
+        s.write(store, gm::kHudArt);
+        gm::MenuSettings classic;
+        classic.load(store);
+        check(!classic.hud_art_new && store.get_string("hud_art", "", 8) == "classic", "classic is written under hud_art and read back");
     }
     for (const When w : {When::Hurt, When::All, When::Off}) {
         for (const Style st : {Style::Bar, Style::Number}) {
@@ -422,7 +476,7 @@ void test_values() {
     std::printf("[values] the panel and the original's options window show the same state\n");
     const std::filesystem::path file = std::filesystem::temp_directory_path() / ("ants_game_menu_" + std::to_string(static_cast<long long>(SDL_GetTicks())) + ".ini");
     {
-        AppRig rig(Aspect::Wide16x9, 1.0f, false, file.string(), true, true);
+        AppRig rig(Aspect::Wide16x9, 1.0f, false, file.string(), true, true, false);
         check(rig.ok, "the match is up");
         if (!rig.ok) return;
         Application& app = rig.app;
@@ -450,6 +504,11 @@ void test_values() {
         check(!app.game_menu_set(gm::kAntHealth, 3) && !app.game_menu_set(gm::kAntHealth, -1) && !app.game_menu_set(gm::kHealthStyle, 2) && app.game_menu_get(gm::kAntHealth) == 2 && app.game_menu_get(gm::kHealthStyle) == 1,
               "a word that the row does not have is refused, and nothing changes");
         check(has(read_file(file), "ant_health=off\n") && has(read_file(file), "ant_health_style=number\n"), "both are written at once");
+        check(app.game_menu_get(gm::kHudArt) == 0 && app.menu_settings().hud_art_new && app.hud().art() != nullptr && app.hud().art() == &app.hud_art(), "the HUD art starts New, and the HUD draws it");
+        check(app.game_menu_set(gm::kHudArt, 1) && app.game_menu_get(gm::kHudArt) == 1 && !app.menu_settings().hud_art_new && app.hud().art() == nullptr && has(read_file(file), "hud_art=classic\n"), "Classic takes the art away at once, and is written");
+        check(!app.game_menu_set(gm::kHudArt, 2) && !app.game_menu_set(gm::kHudArt, -1) && app.game_menu_get(gm::kHudArt) == 1 && app.hud().art() == nullptr, "a word that the row does not have is refused");
+        check(app.game_menu_set(gm::kHudArt, 0) && app.game_menu_get(gm::kHudArt) == 0 && app.hud().art() != nullptr && has(read_file(file), "hud_art=new\n"), "New gives it back, and is written");
+        check(app.game_menu_set(gm::kHudArt, 1), "(Classic again, for the file)");
         check(app.game_menu_get(gm::kHealthChanges) == 1 && app.menu_settings().health_changes, "the damage and heal numbers start On");
         check(app.game_menu_set(gm::kHealthChanges, 0) && app.game_menu_get(gm::kHealthChanges) == 0 && !app.menu_settings().health_changes && has(read_file(file), "health_changes=off\n"), "...go off, and that is written");
         check(!app.game_menu_set(gm::kHealthChanges, 2) && !app.game_menu_set(gm::kHealthChanges, -1) && app.game_menu_get(gm::kHealthChanges) == 0, "a word that the row does not have is refused");
@@ -468,23 +527,99 @@ void test_values() {
         app.run_frame_with_delta(0.016f);
         check(app.menu_settings().ant_health.when == health::When::Off, "...and off");
         const std::string saved = read_file(file);
-        check(has(saved, "master=41\n") && has(saved, "mute=on\n") && has(saved, "ant_health=off\n") && has(saved, "ant_health_style=number\n") && has(saved, "health_changes=off\n") && !has(saved, "hp_numbers"),
-              "the file has master=41, mute=on, ant_health=off, ant_health_style=number, health_changes=off, and no old key");
+        check(has(saved, "master=41\n") && has(saved, "mute=on\n") && has(saved, "ant_health=off\n") && has(saved, "ant_health_style=number\n") && has(saved, "health_changes=off\n") && has(saved, "hud_art=classic\n") && !has(saved, "hp_numbers"),
+              "the file has master=41, mute=on, ant_health=off, ant_health_style=number, health_changes=off, hud_art=classic, and no old key");
         check(has(saved, "Music Volume=30\n") && has(saved, "Sound Volume=77\n") && has(saved, "Scroll Speed=12\n") && has(saved, "Participate In Chat=0\n") && has(saved, "Show Quick Help at Startup=0\n"), "the original's keep their own names");
     }
     {
-        AppRig again(Aspect::Wide16x9, 1.0f, false, file.string(), true, true);
+        AppRig again(Aspect::Wide16x9, 1.0f, false, file.string(), true, true, false);
         check(again.ok, "the game starts again");
         if (again.ok) {
             Application& app = again.app;
             check(app.game_menu_get(gm::kMaster) == 41 && app.game_menu_get(gm::kMute) == 1 && app.game_menu_get(gm::kAntHealth) == 2 && app.game_menu_get(gm::kHealthStyle) == 1 &&
                       app.hud().ant_health() == health::Setting{health::When::Off, health::Style::Number}, "Master, Mute and the health marks come back");
             check(app.game_menu_get(gm::kHealthChanges) == 0, "...and so does the switch of the damage and heal numbers");
+            check(app.game_menu_get(gm::kHudArt) == 1 && app.hud().art() == nullptr, "...and the choice of the original's HUD art, which the HUD then draws");
             check(app.game_menu_get(gm::kMusic) == 30 && app.game_menu_get(gm::kScroll) == 12, "and the original's");
         }
     }
     std::error_code ignored;
     std::filesystem::remove(file, ignored);
+}
+
+void test_hud_art() {
+    std::printf("[hud art] the art is the HUD's while the setting says New and the files are there\n");
+    const auto start = [](Application& app, const std::string& dir, bool given, bool new_art, const std::string& settings) {
+        const QuietStdout quiet;
+        SDL_Init(SDL_INIT_VIDEO);
+        ApplicationConfig cfg = base_config(Aspect::Wide16x9);
+        cfg.screenshot_path = "never_written.png";
+        cfg.screenshot_frames = 1 << 30;
+        cfg.hud_art_dir = dir;
+        cfg.hud_art_given = given;
+        cfg.hud_art_new = new_art;
+        cfg.settings_path = settings;
+        return app.init(cfg);
+    };
+    const std::string folder = std::string(ANTS_SOURCE_DIR) + "/assets/hud_art";
+    {
+        Application app;
+        check(start(app, folder, false, true, std::string()) && app.hud().art() != nullptr && app.hud_art().loaded() && app.menu_settings().hud_art_new, "by default the HUD draws the new art");
+    }
+    {
+        Application app;
+        check(start(app, folder, true, false, std::string()) && app.hud().art() == nullptr && !app.menu_settings().hud_art_new && app.game_menu_get(gm::kHudArt) == 1, "--hud-art classic: the original's art, and the menu says Classic");
+    }
+    {
+        Application app;
+        check(start(app, folder, true, true, std::string()) && app.hud().art() != nullptr, "--hud-art new: the new art");
+    }
+    {
+        Application app;
+        check(start(app, "/nonexistent/hud_art", false, true, std::string()) && app.hud().art() == nullptr && !app.hud_art().loaded() && app.menu_settings().hud_art_new && app.game_menu_get(gm::kHudArt) == 0,
+              "no art where it should be: the original's art is drawn, the game starts, and the setting is the player's own (still New)");
+    }
+    {
+        const std::filesystem::path file = std::filesystem::temp_directory_path() / ("ants_hud_art_" + std::to_string(static_cast<long long>(SDL_GetTicks())) + ".ini");
+        {
+            std::ofstream out(file);
+            out << "hud_art=classic\n";
+        }
+        {
+            Application app;
+            check(start(app, folder, false, true, file.string()) && app.hud().art() == nullptr && app.game_menu_get(gm::kHudArt) == 1, "the settings file says classic: the original's art");
+        }
+        {
+            Application app;
+            check(start(app, folder, true, true, file.string()) && app.hud().art() != nullptr, "...and --hud-art new says new for this run");
+            check(app.game_menu_get(gm::kHudArt) == 0 && read_file(file) == "hud_art=classic\n", "...and the file is not changed by it");
+        }
+        std::error_code ignored;
+        std::filesystem::remove(file, ignored);
+    }
+    {   // the command line
+        std::vector<std::string> args;
+        std::vector<char*> st;
+        const auto parse = [&](std::vector<std::string> a) {
+            args = std::move(a);
+            st.clear();
+            for (std::string& x : args) st.push_back(x.data());
+            st.push_back(nullptr);
+            return Application::parse_arguments(static_cast<int>(args.size()), st.data());
+        };
+        ApplicationConfig c = parse({"ants"});
+        check(c.hud_art_new && !c.hud_art_given && c.startup_error.empty(), "the command line says nothing: the settings decide");
+        c = parse({"ants", "--hud-art", "classic"});
+        check(!c.hud_art_new && c.hud_art_given && c.startup_error.empty(), "--hud-art classic");
+        c = parse({"ants", "--hud-art", "new"});
+        check(c.hud_art_new && c.hud_art_given && c.startup_error.empty(), "--hud-art new");
+        c = parse({"ants", "--hud-art", "retro"});
+        check(c.startup_error == "--hud-art needs new or classic" && !c.hud_art_given, "--hud-art with another word is refused with the reason");
+        c = parse({"ants", "--hud-art"});
+        check(c.startup_error == "--hud-art needs new or classic", "--hud-art with no word is refused");
+        c = parse({"ants", "--hud-art", "classic", "--hud-art", "new"});
+        check(c.hud_art_new && c.hud_art_given, "the last one wins");
+    }
 }
 
 void test_input() {
@@ -655,6 +790,7 @@ int main(int argc, char* argv[]) {
     test_settings();
     test_esc();
     test_values();
+    test_hud_art();
     test_input();
     test_acts();
     std::printf("\ngame menu: %d checks, %d failures\n", g_checks, g_failures);

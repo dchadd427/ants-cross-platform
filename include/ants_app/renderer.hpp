@@ -40,6 +40,10 @@
 
 namespace ants::app {
 
+namespace hud_art {
+class Art;
+}
+
 /// The size of a text is the original's: a GDI font cell height in pixels. Ants.exe creates its "Franklin Gothic Medium" fonts with `lfHeight` = the
 /// height given to the label (FUN_0102b05f); a positive lfHeight is the cell height (ascent + descent), which is also the distance between the lines
 /// of a multi-line label. The renderer opens its TrueType font so that its cell height is exactly this number. Heights and where they are used:
@@ -232,6 +236,11 @@ public:
     /// not draw sprites (the test renderers that only count calls) may ignore it.
     virtual void draw_sprite_region(uint32_t sprite_id, int32_t x, int32_t y, int32_t w, int32_t h, int32_t sx, int32_t sy, int32_t sw, int32_t sh) {
         (void)sprite_id; (void)x; (void)y; (void)w; (void)h; (void)sx; (void)sy; (void)sw; (void)sh;
+    }
+    /// A part of a piece of the HUD art (hud_art.hpp): the rectangle (sx, sy, sw, sh) of the sprite `sprite` of `art` (canvas pixels of the sprite itself) fills the rectangle (x, y, w, h). The renderer
+    /// copies it from the sheet of the output's scale. A renderer that does not draw (the test renderers that only count calls) may ignore it.
+    virtual void draw_art(const hud_art::Art& art, int32_t sprite, int32_t x, int32_t y, int32_t w, int32_t h, int32_t sx, int32_t sy, int32_t sw, int32_t sh) {
+        (void)art; (void)sprite; (void)x; (void)y; (void)w; (void)h; (void)sx; (void)sy; (void)sw; (void)sh;
     }
     /// Everything that is drawn afterwards is moved by (x, y), until set_origin(0, 0): a window of the original's own 640 x 480 screen (the options screen, the quick help, a dialog) is drawn
     /// with its own numbers and put where the picture wants it. Not a clip: nothing is cut. A renderer that records its calls sees them as they are given (without the move).
@@ -467,6 +476,15 @@ public:
     void draw_sprite(uint32_t sprite_id, int32_t x, int32_t y, bool mirrored = false) override;
     void draw_named_sprite(const std::string& name, int32_t x, int32_t y, bool mirrored = false) override;
     void draw_sprite_region(uint32_t sprite_id, int32_t x, int32_t y, int32_t w, int32_t h, int32_t sx, int32_t sy, int32_t sw, int32_t sh) override;
+    /// The HUD art's sheets are made into textures when a piece is first drawn (the sheet of the output's scale: hud_art.hpp Art::scale_for), and kept until another set is drawn. Linear filter when
+    /// the output's scale is not the sheet's (a window of another size), nearest when it is (a copy that is exact). (renderer_art.cpp)
+    void draw_art(const hud_art::Art& art, int32_t sprite, int32_t x, int32_t y, int32_t w, int32_t h, int32_t sx, int32_t sy, int32_t sw, int32_t sh) override;
+    /// Makes the texture of the sheet that the output needs now, so that the first frame that draws a piece of `art` does not wait for the file's decoding (the window's scale may change later: the
+    /// sheet of the new scale is then made when it is first needed). False when the sheet cannot be read.
+    bool preload_art(const hud_art::Art& art);
+    /// (for the tests) the scale of the sheet that a piece would be drawn from now, and how many sheets are textures (0 until a piece is drawn)
+    int32_t art_scale_now() const;
+    size_t art_textures() const noexcept;
     void set_origin(int32_t x, int32_t y) override { origin_ = LayoutPoint{x, y}; }
     const LayoutPoint& origin() const noexcept { return origin_; }
     void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) override;
@@ -656,6 +674,12 @@ private:
 
     SDL_Renderer* renderer_{nullptr};
     SDL_Texture* rgba_texture_{nullptr};   // streaming texture for draw_rgba_image
+    uint64_t art_generation_{0};                           // the HUD art that art_textures_ were made from (hud_art::Art::generation; 0: none)
+    std::array<bool, 3> art_failed_{};                     // a sheet that could not be read or made a texture: said once, and not tried again until another set comes
+    std::array<SDL_Texture*, 3> art_textures_{};           // its sheets at 1x, 2x and 3x, made when first needed
+    void drop_art_textures();
+    SDL_Texture* art_texture(const hud_art::Art& art, int32_t scale);
+    int32_t art_scale_for_output(double* output_scale = nullptr) const;
     std::array<SDL_Texture*, 12> fixed_glyphs_{};   // draw_fixed_text: '0' .. '9', '-' and '+', built on first use
     int32_t rgba_texture_w_{0};
     int32_t rgba_texture_h_{0};

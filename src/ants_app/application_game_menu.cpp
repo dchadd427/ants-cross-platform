@@ -4,6 +4,7 @@
 // hashes are what they were.
 
 #include <algorithm>
+#include <iostream>
 #include <string>
 
 #include "ants_app/application.hpp"
@@ -25,8 +26,24 @@ namespace ants::app {
 // The new settings come back from the settings file; the ant health marks are the HUD's (hurt ants with a bar, until a player chooses otherwise)
 void Application::load_game_menu_settings() {
     menu_settings_.load(config_store_);
+    if (config_.hud_art_given) menu_settings_.hud_art_new = config_.hud_art_new;            // (--hud-art says it for this run; the settings file is not changed by it)
     hud_.set_ant_health(menu_settings_.ant_health);
     audio_mixer_.set_output_gain(menu_settings_.gain());
+}
+
+// The HUD art: the manifest is read once; the sheets are decoded when the renderer first needs the sheet of its output's scale (renderer_art.cpp), which preload_art does now, before the first match frame.
+// A folder without the art (a build that was moved without it) leaves the original's art, with a word on stderr; the setting is not changed by that.
+void Application::load_hud_art() {
+    if (!hud_art_.load(config_.hud_art_dir) && menu_settings_.hud_art_new) {
+        std::cerr << "[Application] The HUD art is not available (" << hud_art_.what() << "): the original's art is drawn" << std::endl;
+    }
+    apply_hud_art();
+}
+
+void Application::apply_hud_art() {
+    const bool show = menu_settings_.hud_art_new && hud_art_.loaded();
+    hud_.set_art(show ? &hud_art_ : nullptr);
+    if (show && renderer_) renderer_->preload_art(hud_art_);
 }
 
 // Ctrl+L flips the HUD's marks: the menu's setting follows it, and what changed is written, once a frame
@@ -124,6 +141,7 @@ int Application::game_menu_get(int what) {
         case gm::kAntHealth:       return static_cast<int>(hud_.ant_health().when);
         case gm::kHealthStyle:     return static_cast<int>(hud_.ant_health().style);
         case gm::kHealthChanges:   return menu_settings_.health_changes ? 1 : 0;
+        case gm::kHudArt:          return menu_settings_.hud_art_new ? 0 : 1;
         case gm::kScroll:          return hud_.get_scroll_speed();
         case gm::kChat:            return hud_.is_chat_enabled() ? 1 : 0;
         case gm::kQuickHelpAtStart: return hud_.is_quick_help_enabled() ? 1 : 0;
@@ -150,6 +168,12 @@ bool Application::game_menu_set(int id, int value, bool save) {
             menu_settings_.health_changes = value != 0;
             menu_settings_.write(config_store_, id);
             if (!menu_settings_.health_changes) health_changes_.reset();                 // (Off: nothing is kept, and what comes back starts from the hit points of that moment)
+            return true;
+        case gm::kHudArt:
+            if (value != 0 && value != 1) return false;                                  // (a word that the row does not have)
+            menu_settings_.hud_art_new = value == 0;
+            menu_settings_.write(config_store_, id);
+            apply_hud_art();
             return true;
         case gm::kAntHealth:
         case gm::kHealthStyle: {

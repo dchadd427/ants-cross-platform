@@ -24,7 +24,7 @@ void HUD::render_radar(IRenderer& renderer, const assets::AssetArchive& archive,
     const int32_t rx = mini.x, ry = mini.y;
     const int32_t rw = mini.w, rh = mini.h;
 
-    if (mini != full) {
+    if (mini != full && art() == nullptr) {         // (the original's pieces adapt its bevel to a map that is not square; the art's well is black all round, so the picture simply lies in it)
         const int32_t s_top = archive.find_sprite_id("x458y22.bmp");
         const int32_t s_left = archive.find_sprite_id("x458y35.bmp");
         const int32_t s_right = archive.find_sprite_id("x599y35.bmp");
