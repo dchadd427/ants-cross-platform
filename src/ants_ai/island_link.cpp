@@ -64,26 +64,19 @@ void FlowerLinkTask::start(TaskContext& c) {
             if (pile != nullptr) worth = std::max<uint32_t>(worth, static_cast<uint32_t>(pile->units) * pile->value);
         }
         if (worth < params_.min_pile_worth) continue;
-        const Channel* best = nullptr;
-        int32_t strip = -1;
-        for (const Channel& ch : info.channels()) {
+        for (const Channel& ch : info.channels()) {                                                 // (every strip within reach of the ring half is a link: the spare ants of the crew wait at all of them)
             if (ch.a != ring.id && ch.b != ring.id) continue;
             const int32_t other = ch.a == ring.id ? ch.b : ch.a;
-            const IslandComponent* s = info.component(other);
-            if (s == nullptr || s->hill || s->flowers.empty() || ch.length() < 1 || ch.length() > static_cast<int32_t>(params_.max_tiles)) continue;
-            if (best == nullptr || ch.length() < best->length() || (ch.length() == best->length() && other < strip)) {
-                best = &ch;
-                strip = other;
-            }
+            const IslandComponent* strip = info.component(other);
+            if (strip == nullptr || strip->hill || strip->flowers.empty() || ch.length() < 1 || ch.length() > static_cast<int32_t>(params_.max_tiles)) continue;
+            Tactics::FlowerLink link;
+            link.ring = ring.id;
+            link.strip = other;
+            link.drop = flower_drop_tile(strip->flowers.front());
+            link.tiles = ch.tiles;
+            if (ch.a != ring.id) std::reverse(link.tiles.begin(), link.tiles.end());
+            tactics_.flower_links.push_back(std::move(link));
         }
-        if (best == nullptr) continue;
-        Tactics::FlowerLink link;
-        link.ring = ring.id;
-        link.strip = strip;
-        link.drop = flower_drop_tile(info.component(strip)->flowers.front());
-        link.tiles = best->tiles;
-        if (best->a != ring.id) std::reverse(link.tiles.begin(), link.tiles.end());
-        tactics_.flower_links.push_back(std::move(link));
     }
 }
 
@@ -132,20 +125,16 @@ void FlowerLinkTask::step(TaskContext& c) {
         }
         return std::max<int64_t>(least, 0);
     };
-    // nothing is dug for ants that would take nothing over there: the bot has the Swimmers that it wants (and no Thief to take, when the plan takes one)
+    // nothing is dug for ants that would take nothing over there: the bot has the Swimmers that it wants
     uint32_t swimmers = 0;
-    bool thief = false;
-    for (const AntView& a : v.mine()) {
-        swimmers += a.type == sim::AntType::Swimmer ? 1u : 0u;
-        thief = thief || a.type == sim::AntType::Thief;
-    }
-    const bool lacking = swimmers < tactics_.plan.island_swimmers + tactics_.plan.island_flower_swimmers || (tactics_.plan.island_flower_thief && !thief);
+    for (const AntView& a : v.mine()) swimmers += a.type == sim::AntType::Swimmer ? 1u : 0u;
+    const bool lacking = swimmers < tactics_.plan.island_swarm_swimmers;
     int wanted = -1;                                                                                // the link that a free plain ant waits to cross
     for (size_t i = 0; i < tactics_.flower_links.size() && lacking; ++i) {
         const Tactics::FlowerLink& l = tactics_.flower_links[i];
         if (life_left(l) >= params_.min_life) continue;
         for (const AntView& a : v.mine()) {                                                         // the ant that waits: plain, empty-handed, on the ring half, nobody's but the economy's
-            if ((a.type != v.default_ant_type() && a.type != sim::AntType::Fire) || a.holding || a.carried_points > 0 || a.hp < 5 || !a.takes_orders()) continue;
+            if ((a.type != v.default_ant_type() && a.type != sim::AntType::Fire && a.type != sim::AntType::Bomber) || a.holding || a.carried_points > 0 || a.hp < tactics_.plan.island_swarm_hp || !a.takes_orders()) continue;
             if (c.map.ant_component(c.seat, a.tile) != l.ring) continue;
             const TaskId owner = c.ledger.owner(a.id);
             if (owner != kNoTask && c.ledger.rank(owner) >= c.ledger.rank(id())) continue;

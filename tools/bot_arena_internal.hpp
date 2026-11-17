@@ -33,6 +33,7 @@ struct Options {
     bool rotate{false};
     uint32_t repeat{1};
     bool replay_check{false};
+    bool swimmer_trace{false};                     // --swimmer-trace: after every match one line per seat (its Swimmers, score, idle ants and power-ups taken) and one of the power-ups left on the ground
     sim::GameMode game_mode{sim::GameMode::HighestScore};   // --game-mode: the rules of every match of the run
     std::string save_replays;                      // a folder: every match is kept there as a replay (the server's store names and keeps them; the site's list shows them)
     unsigned threads{1};

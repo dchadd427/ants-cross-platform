@@ -377,9 +377,12 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "iflink") return flag(p.island_flower_link);
     if (key == "imreach") return flag(p.island_mine_reach);
     if (key == "iwb") return flag(p.island_walker_bridge);
-    if (key == "iflower") { p.island_flower_swimmers = static_cast<uint32_t>(v); return true; }
-    if (key == "ifthief") return flag(p.island_flower_thief);
     if (key == "icrew") { p.island_crew_spare = static_cast<uint32_t>(v); return true; }
+    if (key == "iswarmn") { p.island_swarm_swimmers = static_cast<uint32_t>(v); return true; }
+    if (key == "iswarmstage") { p.island_swarm_stage = static_cast<uint32_t>(v); return true; }
+    if (key == "iswarmrows") { p.island_swarm_rows = static_cast<uint32_t>(v); return true; }
+    if (key == "iswarmidle") { p.island_swarm_idle = static_cast<uint32_t>(v); return true; }
+    if (key == "iswarmhp") { p.island_swarm_hp = static_cast<uint32_t>(v); return true; }
     if (key == "iferrypile") { p.island_ferry_per_pile = static_cast<uint32_t>(v); return true; }
     err = "unknown tuning key '" + key + "' (the keys are those of apply_tune in tools/bot_arena_tune.cpp)";
     return false;
