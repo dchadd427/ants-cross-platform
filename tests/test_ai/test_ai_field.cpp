@@ -23,6 +23,10 @@
 //            crosses one; in the engine the dig is faster and the breach banks as before
 //   AI29.17  a seat that has no ant to start the work: a plain ant sets ONE bomb off to get to a power-up of the kind (the throw lands on ground, the ant keeps 3 hit points), after 300 ticks
 //            and not before; a hurt ant, a throw into water or a second bomb on the way do not
+//   AI29.18  an ant takes only a power-up whose kind has a way, with its own moves, to the ground the work is done on: a Swimmer power-up on a strip that fire cuts off from all of it is none
+//   AI29.19  a Bomber that no single hop brings to the work (a fire wall and a lake lie between) hops first to ground from which a second hop reaches it
+//   AI29.20  no bomb is planted on a tile that an ant stands on, one in its death clip too (the engine plants none, and the click of the special order is refused)
+//   AI29.21  a Stuck step gets one fresh plan before its ant is given up
 #include <algorithm>
 #include <cstdlib>
 #include <string>
@@ -64,6 +68,7 @@ struct FieldWorld {
                                      // ant of a kind of its own is not shut in by taking it), where only a bomb is in the way
         bool vault{false};           // a second pile on the hill's side: a crackers pile on (21 .. 22, 4 .. 5) in a ring of rock (x 20 .. 23, y 3 .. 6) whose way in, (21, 6) and
                                      // (21, 7), holds two bombs of another team (a wall of one kind: the gate goals' own)
+        bool strip{false};           // a Swimmer power-up on (30, 6) in a ring of fire cells (x 28 .. 32, y 4 .. 8): a strip that cuts a Swimmer off from all of the work
         uint8_t owner{255};          // the bombs' owner
     };
     sim::SimulationEngine sim;
@@ -139,6 +144,14 @@ struct FieldWorld {
                 const TileCoord c = w.at(21, 3);
                 sim.grid_mut().place_bomb(static_cast<uint32_t>(c.x), static_cast<uint32_t>(c.y), 255);
             }
+        }
+        if (o.strip) {
+            for (int y = 4; y <= 8; ++y) {
+                for (int x = 28; x <= 32; ++x) {
+                    if (x == 28 || x == 32 || y == 4 || y == 8) sim.set_fire_at(w.at(x, y), 1000000);
+                }
+            }
+            place(30, 6, sim::AntType::Swimmer);
         }
         sim.spawn_unit(w.seat, sim::AntType::Worker, w.at(8, 10));
     }
@@ -1101,6 +1114,120 @@ void run_field_tests() {
             ASSERT_EQ(bomber, set_off);
             if (set_off) ASSERT_TRUE(stalled_at >= 300);                                      // not before 300 ticks
             else ASSERT_EQ(stalled_at, 0u);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI29.18 An Ant Takes Only A Power-Up Whose Kind Has A Way, With Its Own Moves, To The Ground The Work Is Done On: A Swimmer Power-Up On A Strip That Fire Cuts Off From All Of It Is None (Every Seat, Straight And Transposed)") {
+        for (uint8_t d = 0; d < 8; ++d) {
+            const Drawing w{static_cast<uint8_t>(d >> 1), (d & 1) != 0};
+            FieldWorld::Options o;
+            o.strip = true;
+            FieldWorld f(w, o);
+            const FieldPlan first = f.plan();
+            ASSERT_TRUE(first.feasible());
+            const FieldHints kept = FieldWorld::kept_of(first);
+            f.clear_bombs(first.bombs);                                                    // the Bomber's work done: the next work is the bridge, a Swimmer's
+            const FieldPlan p = f.plan(kept);
+            ASSERT_EQ(p.work(), FieldWork::Bridges);
+            ASSERT_TRUE(p.serving_known);
+            ASSERT_TRUE(p.serves(w.at(13, 25)));                                           // the island's Swimmer power-up: its Swimmer swims to the water that is to be bridged
+            ASSERT_FALSE(p.serves(w.at(30, 6)));                                           // the strip's: a Swimmer cannot cross the fire ring
+            FieldHints as_it_was = kept;
+            as_it_was.rules.serve = false;
+            ASSERT_TRUE(f.plan(as_it_was).serves(w.at(30, 6)));
+            f.clear_bombs({w.at(3, 30)});                                                  // a Swimmer power-up in the middle of the field's bombs serves: the bombs on its way are the Bomber's work,
+            f.place(3, 30, sim::AntType::Swimmer);                                         // done before a Swimmer is needed
+            ASSERT_TRUE(f.plan(kept).serves(w.at(3, 30)));
+            const uint32_t id = f.sim.spawn_unit(w.seat, sim::AntType::Bomber, w.at(29, 5));   // a Bomber inside the ring, next to the strip's power-up
+            for (const bool serve : {true, false}) {
+                FieldHints h = kept;
+                h.rules.serve = serve;
+                const FieldStep st = f.step_for(id, 10, h);
+                if (serve) {
+                    ASSERT_TRUE(st.action != FieldAction::Take);
+                } else {
+                    ASSERT_EQ(st.action, FieldAction::Take);                                // (as it was: the ant becomes a Swimmer that can do nothing)
+                    ASSERT_EQ(st.tile, w.at(30, 6));
+                }
+                const MapInfo map(f.sim);
+                const BotView view = BotView::build(f.sim, w.seat, &map);
+                const FieldPlan plan = plan_field(view, map, w.seat, h);
+                bool seen = false;
+                for (const AntView& a : view.mine()) {
+                    if (a.id != id) continue;
+                    seen = true;
+                    ASSERT_EQ(field_ant_cost(plan, view, map, w.seat, a, h) >= 0, !serve);   // it is no ant to start the work either
+                }
+                ASSERT_TRUE(seen);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI29.19 A Bomber That No Single Hop Brings To The Work (A Fire Wall And A Lake Lie Between) Hops First To Ground From Which A Second Hop Reaches It (Every Seat, Straight And Transposed)") {
+        const auto on_island = [](const Drawing& w, TileCoord c) {
+            const TileCoord a = seat0_of(w, c);
+            return a.x >= 13 && a.x <= 16 && a.y >= 22 && a.y <= 25;
+        };
+        for (uint8_t d = 0; d < 8; ++d) {
+            const Drawing w{static_cast<uint8_t>(d >> 1), (d & 1) != 0};
+            FieldWorld::Options o;                                                          // no bombs in the field: open ground between the fire wall and the lake, so a chain of bombs
+            o.bombs = false;                                                                // does not carry the ant over both
+            FieldWorld f(w, o);
+            const FieldPlan first = f.plan();
+            ASSERT_TRUE(first.feasible());
+            const FieldHints kept = FieldWorld::kept_of(first);
+            const FieldStep a = f.step_of(sim::AntType::Bomber, TileCoord{16, 11}, 10, kept);          // a Swimmer is next, and its power-ups lie on the island
+            ASSERT_EQ(a.work, FieldWork::Bridges);
+            ASSERT_EQ(a.hop.bombs, 1);
+            ASSERT_TRUE(seat0_of(w, a.hop.land()).y >= 13);                                // over the fire wall into the field ...
+            ASSERT_FALSE(on_island(w, a.hop.land()));                                      // ... not onto the island: no one hop lands there
+            const FieldStep b = f.step_of(sim::AntType::Bomber, seat0_of(w, a.hop.land()), 8, kept);   // from there the island is one hop away
+            ASSERT_EQ(b.work, FieldWork::Bridges);
+            ASSERT_TRUE(b.hop.bombs >= 1);
+            ASSERT_TRUE(on_island(w, b.hop.land()));
+        }
+    } TEST_END();
+
+    TEST_CASE("AI29.20 No Bomb Is Planted On A Tile That An Ant Stands On: The Engine Plants None There, And The Click Of The Special Order Is Refused (Every Seat, Straight And Transposed)") {
+        for (uint8_t d = 0; d < 8; ++d) {
+            const Drawing w{static_cast<uint8_t>(d >> 1), (d & 1) != 0};
+            TileCoord target{-1, -1};
+            {
+                FieldWorld f(w, FieldWorld::Options{});
+                const FieldStep st = f.step_of(sim::AntType::Bomber, TileCoord{16, 11}, 10);
+                ASSERT_EQ(st.hop.bombs, 1);
+                target = st.hop.bomb;
+            }
+            for (int who = 0; who < 3; ++who) {                                            // an ant of the seat, of another team, or one of the seat in its death clip (the view does not list it,
+                FieldWorld f(w, FieldWorld::Options{});                                    // the pointer still finds it): any one stands on the tile
+                const uint32_t id = f.sim.spawn_unit(who == 1 ? static_cast<uint8_t>((w.seat + 1) % 4) : w.seat, sim::AntType::Worker, target);
+                if (who == 2) {
+                    f.sim.get_unit(id).state = sim::UnitState::Dead;
+                    f.sim.tick();
+                }
+                const FieldStep st = f.step_of(sim::AntType::Bomber, TileCoord{16, 11}, 10);
+                ASSERT_TRUE(st.hop.bombs == 0 || st.hop.bomb != target);
+                ASSERT_TRUE(!(st.action == FieldAction::Plant && st.tile == target));
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI29.21 A Stuck Step Gets One Fresh Plan, The Ways And Sources Kept From Before Dropped, Before Its Ant Is Given Up (In The Engine: The Home Bomber Power-Up Is Taken By Another Team While The Ant Walks To It)") {
+        for (const bool replan : {true, false}) {
+            const Drawing w{0, false};
+            FieldWorld f(w, FieldWorld::Options{});
+            LevelPlan plan = field_plan_of();
+            plan.field_replan = replan;
+            Rig rig(f.sim, w.seat, Level::Hard, std::make_unique<StandardBot>(plan));
+            auto& bot = rig.as<StandardBot>();
+            rig.run(12);
+            ASSERT_TRUE(bot.tactics().field_map);
+            ASSERT_TRUE(bot.field().orders() >= 1u);                                         // the worker is on its way to the home Bomber power-up ...
+            const TileCoord home = w.at(12, 8);
+            f.sim.grid_mut().clear_powerup(home.x, home.y);                                  // ... and it is gone when the ant arrives: nothing the ant can do reaches the work
+            rig.run(600);
+            ASSERT_TRUE(bot.field().given_up() >= 1u);                                       // the ant is given up either way ...
+            ASSERT_EQ(bot.field().replans() > 0, replan);                                    // ... after a fresh plan, or at once
         }
     } TEST_END();
 }
