@@ -47,10 +47,10 @@
    "expect": "[scale]"
   },
   {
-   "id": "slice_one_copy_too_many",
+   "id": "slice_run_stops_a_pixel_short",
    "file": "src/ants_app/hud_art.cpp",
    "old": "tile > 0 && pos < length - sl.end;",
-   "new": "tile > 0 && pos <= length - sl.end;",
+   "new": "tile > 0 && pos < length - sl.end - 1;",
    "build": "test_hud_art",
    "test": "./build/tests/test_app/test_hud_art",
    "expect": "[slices]"
