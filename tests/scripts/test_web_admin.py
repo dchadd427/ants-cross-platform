@@ -205,6 +205,12 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
         for name in ("sitemap.xml", "robots.txt"):
             self.assertFalse(os.path.exists(os.path.join(REPO, "web", name)), name + " would list it")
 
+    def test_the_one_link_to_it_is_a_line_of_the_front_pages_account_menu_for_an_administrator(self):
+        chat = read("web", "home", "chat.js")
+        self.assertEqual(re.findall(r"/admin\b[^\n]*", chat), ["/admin'); adminLink.hidden = true; slot.insertBefore(adminLink, outBtn);        // (a plain link, for an administrator or the owner only: the page decides again who may come in)"])
+        self.assertIn("adminLink.hidden = !(you && you.role === 'admin');", chat)                 # (the role of the hub's own frame: an administrator or the owner; a moderator and everybody else do not see it)
+        self.assertRegex(read("web", "home", "chat.css"), r"\.gc-admin\[hidden\] \{ display: none; \}")        # (a button's display would show a hidden link)
+
     def test_the_page_has_the_bar_and_no_other_link_and_loads_only_its_own_files(self):
         page = read("web", "admin.html")
         bar = re.search(r'<header class="sb".*?</header>', page, re.S).group(0)

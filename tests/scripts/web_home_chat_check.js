@@ -1119,7 +1119,7 @@ function bring(env) {                                     // the two files arriv
 // 7. The source of the script
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
-    const code = chatSource.replace(/\/\/.*/g, '').replace(/\ba\.setAttribute\('href', p\.url\);/, '').replace(/\bimg\.setAttribute\(\s*'src',\s*PICDIR\s*\+\s*\w+\s*\+\s*PICEXT\s*\);/, '');       // (the one address of a picture: made of a checked name and two constants, checked in section 11)
+    const code = chatSource.replace(/\/\/.*/g, '').replace(/\ba\.setAttribute\('href', p\.url\);/, '').replace(/\badminLink\.setAttribute\('href', '\/admin'\);/, '').replace(/\bimg\.setAttribute\(\s*'src',\s*PICDIR\s*\+\s*\w+\s*\+\s*PICEXT\s*\);/, '');       // (the one address of a picture: made of a checked name and two constants, checked in section 11)
     check('chat.js builds nothing from markup, runs nothing from text, keeps nothing in the browser and makes no link', !/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|srcdoc|localStorage|sessionStorage|indexedDB|document\.cookie|createElement\(['"]a['"]\)|setAttribute\(['"](href|src|style|on)/.test(code));
     check('chat.js names no other site (no http:// or https:// address at all) and loads nothing', !/https?:\/\//.test(code) && !/XMLHttpRequest|importScripts|\bimport\b/.test(code));
     check('the one thing that it asks for is a POST of the page itself to the two pages of the login (/hub/logout, /hub/forget): `fetch` is in one line, and it is that one', (code.match(/\bfetch\b/g) || []).length === 2 && code.indexOf('var f = env.fetch || win.fetch;') !== -1
@@ -1518,11 +1518,16 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
         r.rows().map((x) => [cls(x).filter((c) => c === 'gc-admin' || c === 'gc-mod').join('+'), one(x, 'gc-sr') ? one(x, 'gc-sr').textContent : '', one(x, 'gc-who').getAttribute('title'), one(x, 'gc-badge') === null]),
         [['gc-mod+gc-admin', 'administrator ', 'administrator', true], ['gc-mod', 'moderator ', 'moderator', true], ['', '', null, true], ['', '', null, true]]);
     same('... the text of a line is the text (it has its own class and no role class: its color is the page\'s)', r.rows().map((x) => [one(x, 'gc-text').textContent, cls(one(x, 'gc-text')).join(' ')]), [['hello', 'gc-text'], ['a room', 'gc-text'], ['hi', 'gc-text'], ['not a moderator', 'gc-text']]);
+    const adminLine = one(r.dock.slot, 'gc-admin');
+    check('the dropdown of an administrator has the line Admin page: a plain link of this tab to /admin, shown, before Log out', adminLine !== null && adminLine.tagName === 'a' && adminLine.hidden === false && adminLine.getAttribute('href') === '/admin' && adminLine.textContent === 'Admin page' && adminLine.getAttribute('target') === null
+          && (adminLine.listeners.click || []).length === 0 && r.dock.slot.children.indexOf(adminLine) < r.dock.slot.children.indexOf(one(r.dock.slot, 'gc-out')));
     const m = menuOf(rig({ chip: true }));
     m.live(W({ login: true, you: asRole('mod') }));
     check('a moderator\'s chip: yellow (the class), the title and label say moderator, and the dropdown says it', cls(one(m.chip, 'gc-cn')).indexOf('gc-r-mod') !== -1 && cls(one(m.chip, 'gc-cn')).indexOf('gc-r-admin') === -1 && one(m.chip, 'gc-cn').getAttribute('title') === 'moderator' && m.chip.getAttribute('aria-label') === 'Chatting as maple.leaf, moderator' && one(m.dock.slot, 'gc-yt') === null && one(m.dock.slot, 'gc-yr').textContent === 'You are a moderator');
+    check('a moderator\'s dropdown has no line Admin page (it is hidden)', one(m.dock.slot, 'gc-admin').hidden === true);
     const n = menuOf(rig({ chip: true }));
     n.live(W({ login: true, you: asRole('none') }));
+    check('nor has the dropdown of a person who holds no role, and a hub that says another word for the role shows none', one(n.dock.slot, 'gc-admin').hidden === true);
     check('a person who holds no role has plain names: no class, no title, no role line', one(n.chip, 'gc-cn').className === 'gc-cn' && one(n.chip, 'gc-cn').getAttribute('title') === null && one(n.chip, 'gc-av').className === 'gc-av' && one(n.dock.slot, 'gc-an').className === 'gc-an' && one(n.dock.slot, 'gc-yr').hidden === true);
 }
 {   // the numbers and the usernames of a moderator, and nobody else's
