@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the hotkey buttons (web/touch_keys.js: which key a button sends, when the buttons show, one key for one press, the remembered setting, None's dimming, the list under More, where the rail stands on short windows, a key held on an Apple keyboard) and the layer under the list (web/touch_keys.css, run in a browser), of the page's call that hands them the game (web/shell.html) and of the settings menu's Touch buttons row (web/game_menu.js), for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: tools/mutate.py tests/data/touch_keys_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_touch_keys.py runs them on copies.",
+ "note": "Mutants of the hotkey buttons (web/touch_keys.js: which key a button sends, the Shift button's latch, lock, key and the fingers that use it up, when the buttons show, one key for one press, the remembered setting, None's dimming, the list under More, where the rail stands on short windows, a key held on an Apple keyboard) and the layer under the list (web/touch_keys.css, run in a browser), of the page's call that hands them the game (web/shell.html) and of the settings menu's Touch buttons row (web/game_menu.js), for tools/mutate.py (the ones that need a browser come last: a machine without one skips from the first of them) (docs/TESTING.md, 'Mutation checks'). Run from the checkout: tools/mutate.py tests/data/touch_keys_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_touch_keys.py runs them on copies.",
  "mutants": [
   {
    "id": "button_sends_another_key",
@@ -109,8 +109,8 @@
   {
    "id": "key_press_is_a_repeat",
    "file": "web/touch_keys.js",
-   "old": "ctrlKey: ctrl, repeat: false,",
-   "new": "ctrlKey: ctrl, repeat: true,",
+   "old": "ctrlKey: ctrl, shiftKey: !!shift, repeat: false,",
+   "new": "ctrlKey: ctrl, shiftKey: !!shift, repeat: true,",
    "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
   },
   {
@@ -228,15 +228,15 @@
   {
    "id": "two_columns_in_the_page",
    "file": "web/touch_keys.js",
-   "old": "five = true;                                   // (inside the stage",
+   "old": "level = 1;                                     // (inside the stage",
    "new": "two = true;                                    // (inside the stage",
    "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
   },
   {
    "id": "five_not_folded_under_more",
    "file": "web/touch_keys.js",
-   "old": "if (side && !full) fold(five);",
-   "new": "if (side && !full) fold(false);",
+   "old": "if (side && !full) fold(level);",
+   "new": "if (side && !full) fold(0);",
    "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
   },
   {
@@ -247,10 +247,10 @@
    "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
   },
   {
-   "id": "six_targets_where_they_do_not_fit",
+   "id": "seven_targets_where_they_do_not_fit",
    "file": "web/touch_keys.js",
-   "old": "if (railH >= 294) five = false;",
-   "new": "if (true) five = false;",
+   "old": "if (railH >= 344) level = 0;",
+   "new": "if (true) level = 0;",
    "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
   },
   {
@@ -401,10 +401,10 @@
    "test": "node tests/scripts/web_touch_keys_wiring_check.js web/shell.html"
   },
   {
-   "id": "six_targets_need_294_not_306",
+   "id": "seven_targets_need_344_not_356",
    "file": "web/touch_keys.js",
-   "old": "if (railH >= 294) five = false;",
-   "new": "if (railH >= 306) five = false;",
+   "old": "if (railH >= 344) level = 0;",
+   "new": "if (railH >= 356) level = 0;",
    "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
   },
   {
@@ -431,15 +431,15 @@
   {
    "id": "targets_never_shrink",
    "file": "web/touch_keys.js",
-   "old": "Math.max(40, Math.min(44,",
-   "new": "Math.max(44, Math.min(44,",
+   "old": "Math.max(40, Math.min(44, Math.floor((railH - (rim ? 0 : 12) - 24) / 5)))",
+   "new": "Math.max(44, Math.min(44, Math.floor((railH - (rim ? 0 : 12) - 24) / 5)))",
    "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
   },
   {
    "id": "targets_shrink_below_forty",
    "file": "web/touch_keys.js",
-   "old": "Math.max(40, Math.min(44,",
-   "new": "Math.max(30, Math.min(44,",
+   "old": "Math.max(40, Math.min(44, Math.floor((railH - (rim ? 0 : 12) - 24) / 5)))",
+   "new": "Math.max(30, Math.min(44, Math.floor((railH - (rim ? 0 : 12) - 24) / 5)))",
    "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
   },
   {
@@ -473,8 +473,295 @@
   {
    "id": "fullscreen_keeps_next_folded",
    "file": "web/touch_keys.js",
-   "old": "                    fold(false);\n",
+   "old": "                    fold(0);\n",
    "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "relayout_leaves_the_buttons_for_later",
+   "file": "web/shell.html",
+   "old": "            if (antsTouchKeys) antsTouchKeys.refresh(true);\n            measureChrome();",
+   "new": "            measureChrome();\n            if (antsTouchKeys) antsTouchKeys.refresh(true);",
+   "test": "node tests/scripts/web_touch_keys_wiring_check.js web/shell.html"
+  },
+  {
+   "id": "six_targets_need_294_not_306",
+   "file": "web/touch_keys.js",
+   "old": "else if (railH >= 294) level = 1;",
+   "new": "else if (railH >= 306) level = 1;",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "home_stays_in_the_rail_of_five",
+   "file": "web/touch_keys.js",
+   "old": "if (level >= 2) {",
+   "new": "if (level >= 3) {",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "all_seven_in_a_row_on_a_stage_of_363",
+   "file": "web/touch_keys.js",
+   "old": "stage.clientWidth < 364",
+   "new": "stage.clientWidth < 316",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "six_in_a_row_on_a_stage_of_293",
+   "file": "web/touch_keys.js",
+   "old": "stage.clientWidth < 294",
+   "new": "stage.clientWidth < 250",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shift_events_say_no_shiftkey",
+   "file": "web/touch_keys.js",
+   "old": "makeEvent(win, 'keydown', SHIFT, ctrlDown(), true)",
+   "new": "makeEvent(win, 'keydown', SHIFT, ctrlDown(), false)",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shift_goes_down_after_the_finger",
+   "file": "web/touch_keys.js",
+   "old": "            shiftDown();                                                   // (before SDL's own touchstart on the canvas: the key state is Shift's when the game sees the finger)\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shift_goes_up_with_the_lift",
+   "file": "web/touch_keys.js",
+   "old": "if (cancelled) shiftUp(); else if (shiftSent) settle = after(function () { settle = 0; shiftUp(); }, SETTLE_MS);",
+   "new": "shiftUp();",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shift_goes_up_after_60_ms",
+   "file": "web/touch_keys.js",
+   "old": "var SETTLE_MS = 120;",
+   "new": "var SETTLE_MS = 60;",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shift_goes_up_with_the_first_finger_of_two",
+   "file": "web/touch_keys.js",
+   "old": "if (!pic || fingers(e.touches) > 0) return;",
+   "new": "if (!pic) return;",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shift_lingers_after_a_cancel",
+   "file": "web/touch_keys.js",
+   "old": "if (cancelled) shiftUp(); else if (shiftSent) settle",
+   "new": "if (shiftSent) settle",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "hold_uses_the_latch_up",
+   "file": "web/touch_keys.js",
+   "old": "(done.cls === 'drag' || (!done.cls && now() - done.t0 < TAP_MS))",
+   "new": "true",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "two_fingers_use_the_latch_up",
+   "file": "web/touch_keys.js",
+   "old": "!cancelled && !done.multi &&",
+   "new": "!cancelled &&",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "tap_leaves_the_latch",
+   "file": "web/touch_keys.js",
+   "old": "if (used && shiftMode === 'latched') setShift('off');",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "tap_puts_a_lock_out",
+   "file": "web/touch_keys.js",
+   "old": "if (used && shiftMode === 'latched') setShift('off');",
+   "new": "if (used && shiftMode !== 'off') setShift('off');",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "second_finger_is_not_noted",
+   "file": "web/touch_keys.js",
+   "old": "if (fingers(e.touches) > 1) { if (pic) pic.multi = true; return; }",
+   "new": "if (fingers(e.touches) > 1) { return; }",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "slop_of_3",
+   "file": "web/touch_keys.js",
+   "old": "SLOP = 8;",
+   "new": "SLOP = 3;",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "slop_of_50",
+   "file": "web/touch_keys.js",
+   "old": "SLOP = 8;",
+   "new": "SLOP = 50;",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "hold_time_of_300",
+   "file": "web/touch_keys.js",
+   "old": "HOLD_MS = 450,",
+   "new": "HOLD_MS = 300,",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "tap_time_of_500",
+   "file": "web/touch_keys.js",
+   "old": "TAP_MS = 400,",
+   "new": "TAP_MS = 500,",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shift_sent_over_a_dialog",
+   "file": "web/touch_keys.js",
+   "old": "if (shiftMode === 'off' || why()) { shiftUp(); return; }",
+   "new": "if (shiftMode === 'off') { shiftUp(); return; }",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shift_waits_through_a_new_finger",
+   "file": "web/touch_keys.js",
+   "old": "if (shiftMode === 'off' || why()) { shiftUp(); return; }",
+   "new": "if (shiftMode === 'off' || why()) { return; }",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "new_finger_does_not_cancel_the_release",
+   "file": "web/touch_keys.js",
+   "old": "            if (settle) { cancel(settle); settle = 0; }\n            shiftDown();",
+   "new": "            shiftDown();",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shift_left_down_on_a_blur",
+   "file": "web/touch_keys.js",
+   "old": "        win.addEventListener('blur', shiftReset);\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shift_left_down_on_a_hidden_page",
+   "file": "web/touch_keys.js",
+   "old": "        doc.addEventListener('visibilitychange', function () { if (doc.hidden || doc.visibilityState === 'hidden') shiftReset(); });\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shift_left_down_on_pagehide",
+   "file": "web/touch_keys.js",
+   "old": "        win.addEventListener('pagehide', shiftReset);\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shift_left_down_on_a_touchcancel",
+   "file": "web/touch_keys.js",
+   "old": "        win.addEventListener('touchcancel', function (e) { pictureEnd(e, true); }, { capture: true, passive: true });\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shift_left_down_when_the_buttons_hide",
+   "file": "web/touch_keys.js",
+   "old": "                if (!visible) shiftReset();\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "keyboards_shift_pressed_again",
+   "file": "web/touch_keys.js",
+   "old": "if (shiftSent || shiftHeld()) return;",
+   "new": "if (shiftSent) return;",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "lock_on_a_press_of_200_ms",
+   "file": "web/touch_keys.js",
+   "old": "var LOCK_MS = 450;",
+   "new": "var LOCK_MS = 200;",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "lock_click_is_a_tap",
+   "file": "web/touch_keys.js",
+   "old": "                if (lockFired) { lockFired = false; return; }              // (the press that locked it: its click is not a tap)\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "lock_survives_the_lift",
+   "file": "web/touch_keys.js",
+   "old": "['pointerup', 'pointercancel', 'pointerleave']",
+   "new": "[]",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "tap_never_puts_shift_out",
+   "file": "web/touch_keys.js",
+   "old": "setShift(shiftMode === 'off' ? 'latched' : 'off');",
+   "new": "setShift('latched');",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shift_tap_over_a_dialog",
+   "file": "web/touch_keys.js",
+   "old": "                if (why()) { refresh(); return; }\n                setShift(shiftMode === 'off'",
+   "new": "                setShift(shiftMode === 'off'",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "pressed_state_not_said",
+   "file": "web/touch_keys.js",
+   "old": "b.setAttribute('aria-pressed', shiftMode === 'off' ? 'false' : 'true');",
+   "new": "b.setAttribute('aria-pressed', 'false');",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "lock_looks_like_the_latch",
+   "file": "web/touch_keys.js",
+   "old": "b.setAttribute('data-state', shiftMode);\n        }\n        function setShift",
+   "new": "b.setAttribute('data-state', shiftMode === 'off' ? 'off' : 'latched');\n        }\n        function setShift",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "touchstart_in_the_bubble_phase",
+   "file": "web/touch_keys.js",
+   "old": "multi: false, cls: '' };\n        }, { capture: true, passive: true });",
+   "new": "multi: false, cls: '' };\n        }, { capture: false, passive: true });",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "shift_press_sends_a_key",
+   "file": "web/touch_keys.js",
+   "old": "return d && d.id !== 'shift' ? press(d, built[id]) : false;",
+   "new": "return d ? press(d, built[id]) : false;",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "chord_forgets_the_shift_that_is_down",
+   "file": "web/touch_keys.js",
+   "old": "seq[s][2], shiftSent || shiftHeld()));",
+   "new": "seq[s][2], false));",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "touchstart_may_cancel",
+   "file": "web/touch_keys.js",
+   "old": "multi: false, cls: '' };\n        }, { capture: true, passive: true });",
+   "new": "multi: false, cls: '' };\n        }, { capture: true });",
+   "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
+  },
+  {
+   "id": "touchend_in_the_bubble_phase",
+   "file": "web/touch_keys.js",
+   "old": "win.addEventListener('touchend', function (e) { pictureEnd(e, false); }, { capture: true, passive: true });",
+   "new": "win.addEventListener('touchend', function (e) { pictureEnd(e, false); }, { capture: false, passive: true });",
    "test": "node tests/scripts/web_touch_keys_check.js web/touch_keys.js"
   },
   {
@@ -485,11 +772,60 @@
    "test": "node tests/scripts/web_touch_keys_shield_check.js web/touch_keys.js web/touch_keys.css"
   },
   {
-   "id": "relayout_leaves_the_buttons_for_later",
-   "file": "web/shell.html",
-   "old": "            if (antsTouchKeys) antsTouchKeys.refresh(true);\n            measureChrome();",
-   "new": "            measureChrome();\n            if (antsTouchKeys) antsTouchKeys.refresh(true);",
-   "test": "node tests/scripts/web_touch_keys_wiring_check.js web/shell.html"
+   "id": "shift_latched_is_not_lit",
+   "file": "web/touch_keys.css",
+   "old": "background-color: var(--gold, #f6d058); color:",
+   "new": "color:",
+   "test": "node tests/scripts/web_touch_keys_shield_check.js web/touch_keys.js web/touch_keys.css"
+  },
+  {
+   "id": "shift_locked_has_no_ring",
+   "file": "web/touch_keys.css",
+   "old": "0 0 0 3px var(--cream, #f4ece2), 0 0 0 5px var(--edge, #050a08), ",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_shield_check.js web/touch_keys.js web/touch_keys.css"
+  },
+  {
+   "id": "shift_locked_has_no_bar",
+   "file": "web/touch_keys.css",
+   "old": ".tk-shift[data-state=\"locked\"]::after { content: \"\";",
+   "new": ".tk-shift[data-state=\"locked\"]::after { content: none;",
+   "test": "node tests/scripts/web_touch_keys_shield_check.js web/touch_keys.js web/touch_keys.css"
+  },
+  {
+   "id": "browser_shift_goes_up_with_the_lift",
+   "file": "web/touch_keys.js",
+   "old": "if (cancelled) shiftUp(); else if (shiftSent) settle = after(function () { settle = 0; shiftUp(); }, SETTLE_MS);",
+   "new": "shiftUp();",
+   "test": "node tests/scripts/web_touch_keys_shift_check.js web/touch_keys.js web/touch_keys.css"
+  },
+  {
+   "id": "browser_shift_goes_up_after_60_ms",
+   "file": "web/touch_keys.js",
+   "old": "var SETTLE_MS = 120;",
+   "new": "var SETTLE_MS = 60;",
+   "test": "node tests/scripts/web_touch_keys_shift_check.js web/touch_keys.js web/touch_keys.css"
+  },
+  {
+   "id": "browser_shift_goes_down_after_the_finger",
+   "file": "web/touch_keys.js",
+   "old": "            shiftDown();                                                   // (before SDL's own touchstart on the canvas: the key state is Shift's when the game sees the finger)\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_shift_check.js web/touch_keys.js web/touch_keys.css"
+  },
+  {
+   "id": "browser_shift_stays_after_a_blur",
+   "file": "web/touch_keys.js",
+   "old": "        win.addEventListener('blur', shiftReset);\n",
+   "new": "",
+   "test": "node tests/scripts/web_touch_keys_shift_check.js web/touch_keys.js web/touch_keys.css"
+  },
+  {
+   "id": "browser_hold_uses_the_latch_up",
+   "file": "web/touch_keys.js",
+   "old": "(done.cls === 'drag' || (!done.cls && now() - done.t0 < TAP_MS))",
+   "new": "true",
+   "test": "node tests/scripts/web_touch_keys_shift_check.js web/touch_keys.js web/touch_keys.css"
   }
  ]
 }

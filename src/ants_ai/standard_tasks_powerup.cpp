@@ -18,8 +18,8 @@ using standard_detail::tile_index;
 namespace {
 
 // A worker that may be sent for a power-up: empty hands, healthy, takes orders, is not on a power-up tile
-bool usable_for_powerup(const BotView& view, const AntView& a, bool fire_too = false) {
-    if ((a.type != view.default_ant_type() && !(fire_too && a.type == sim::AntType::Fire)) || a.holding || a.carried_points > 0 || a.hp < 5) return false;
+bool usable_for_powerup(const BotView& view, const AntView& a) {
+    if (a.type != view.default_ant_type() || a.holding || a.carried_points > 0 || a.hp < 5) return false;
     if (!a.takes_orders() || a.state == sim::UnitState::Stunned) return false;
     return view.powerup_at(a.tile) == nullptr;
 }
@@ -43,13 +43,6 @@ bool PowerUpTask::is_link_flower(sim::TileCoord drop) const noexcept {
         if (l.drop == drop) return true;
     }
     return false;
-}
-
-// The Swimmers that the bot wants beyond the level's own number while a flower link is set: the drops of the strip are taken for them
-size_t PowerUpTask::extra_want(sim::AntType kind) const noexcept {
-    if (kind == sim::AntType::Thief && tactics_.plan.island_flower_link && tactics_.plan.island_flower_thief && !tactics_.flower_links.empty()) return 1;       // (one Thief of the strip: the plan's own want of the Thief, where it has one, counts first)
-    if (kind != sim::AntType::Swimmer || !tactics_.plan.island_flower_link || tactics_.flower_links.empty() || tactics_.wants[static_cast<size_t>(kind)] == 0) return 0;
-    return tactics_.plan.island_flower_swimmers;
 }
 
 std::vector<std::pair<uint32_t, sim::AntType>> PowerUpTask::on_their_way() const {
@@ -104,7 +97,7 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
     for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) present = static_cast<uint8_t>(present | (v.rows()[t].present ? 1u << t : 0u));
     for (const PowerUpView& p : v.powerups()) {
         if (p.kind != kind || p.standing_ant != 0 || tile_blacklisted(p.tile, now)) continue;
-        if (kind == sim::AntType::Thief && !tactics_.plan.island_flower_thief && is_link_flower(p.tile)) continue;       // (a Thief of the strip: nothing uses it there yet)
+        if (kind == sim::AntType::Thief && is_link_flower(p.tile)) continue;       // (a Thief of the strip: nothing uses it there)
         const int side = power_up_side(c.map, p.tile, present);
         if (side >= 0 && side != c.seat && (!(tactics_.plan.steals || tactics_.gate_map) || (v.ally() < sim::MAX_PLAYERS && side == v.ally()))) continue;       // another side's power-up is a theft: Hard's alone (and a gate map's: the start ants of a walled map stand beside the power-ups of the hill that cannot reach them), and never the ally's
         bool taken = false;
@@ -114,7 +107,7 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
     if (cands.empty()) return false;
     std::vector<const AntView*> ants;
     for (const AntView& a : v.mine()) {
-        if (!usable_for_powerup(v, a, a.id == watch_.ant && watch_.fire_ok) || takes_.count(a.id) != 0) continue;
+        if (!usable_for_powerup(v, a) || takes_.count(a.id) != 0) continue;
         const TaskId owner = c.ledger.owner(a.id);
         if (owner != kNoTask && owner != id() && c.ledger.rank(owner) >= c.ledger.rank(id())) continue;     // the ants of a fight, the walls and the raids are not taken
         ants.push_back(&a);
@@ -169,7 +162,7 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
                                   (c.map.ant_component(c.seat, p.tile) == c.map.hill_component(c.seat) ||
                                    c.map.ant_component(c.seat, p.tile) == c.map.ant_component(c.seat, best->tile));
         bool lost = false;
-        const bool link_drop = is_link_flower(p.tile);                                  // (a strip that two hills of a ring half share: the watchers stand side by side, and each would give the drop up to the other; the first click wins)
+        const bool link_drop = is_link_flower(p.tile);                                  // (a strip that two hills of a ring half share: the free ants of both go for its drop, and each would give it up to the other; the first click wins)
         for (const AntView& e : v.others()) {
             if (skip_contest || link_drop || e.holding || !grid.in_bounds(e.tile) || (v.ally() < sim::MAX_PLAYERS && e.team == v.ally())) continue;
             if (e.state == sim::UnitState::EnteringBase || e.state == sim::UnitState::PoweringUp) continue;
@@ -335,100 +328,6 @@ sim::TileCoord PowerUpTask::free_spot(TaskContext& c, sim::TileCoord drop, const
     return spot;
 }
 
-// The watcher of a flower strip that the flower link opens (island_link.hpp): a plain ant of the crew that stands idle on the ring half walks over the finished tiles to the tile beside the drop tile
-// and stays there, whatever the time to the next landing is (nothing waits for it at home: the island has no way back), and takes the Swimmer that falls next. No landing is predicted.
-void PowerUpTask::watch_link(TaskContext& c) {
-    const LevelPlan& plan = tactics_.plan;
-    const BotView& v = c.view;
-    const uint64_t now = v.tick();
-    const auto give_up = [&]() {
-        if (watch_.ant == 0 || takes_.count(watch_.ant) != 0) return;
-        c.ledger.release(watch_.ant, id());
-        watch_ = Watch{};
-    };
-    if (watch_.ant != 0) {
-        const AntView* w = find_ant(v.mine(), watch_.ant);
-        const TaskId owner = w != nullptr ? c.ledger.owner(watch_.ant) : kNoTask;
-        if (w != nullptr && w->hp < watch_.hp) watch_off_until_ = now + kWatchHoldAfterHit;
-        if (w == nullptr || (w->type != v.default_ant_type() && w->type != sim::AntType::Fire) || (owner != id() && owner != kNoTask) || w->holding || w->carried_points > 0) {
-            if (w != nullptr && owner == id() && takes_.count(watch_.ant) == 0) c.ledger.release(watch_.ant, id());
-            watch_ = Watch{};
-        } else if (owner == kNoTask && !c.ledger.take(watch_.ant, id())) {
-            watch_ = Watch{};
-        }
-    }
-    if (v.ticks_left() < 900u || now < watch_off_until_) {
-        give_up();
-        return;
-    }
-    // what the bot lacks: Swimmers up to the level's number and the flower link's, and (when the plan takes it) a Thief
-    uint32_t swimmers = 0;
-    bool thief = false;
-    for (const AntView& a : v.mine()) {
-        swimmers += a.type == sim::AntType::Swimmer ? 1u : 0u;
-        thief = thief || a.type == sim::AntType::Thief;
-    }
-    for (const auto& t : takes_) {
-        swimmers += t.second.kind == sim::AntType::Swimmer ? 1u : 0u;
-        thief = thief || t.second.kind == sim::AntType::Thief;
-    }
-    const bool want_swimmer = swimmers < plan.island_swimmers + plan.island_flower_swimmers;
-    const bool want_thief = plan.island_flower_thief && !thief;
-    if (!want_swimmer && !want_thief) {
-        give_up();
-        return;
-    }
-    const sim::Grid& grid = v.grid();
-    // the strip and the ant: the link whose drop tile some free plain ant reaches on the map as it is now (the walk from the ant's own tile over the tiles that stand), the nearest ant
-    const AntView* best = nullptr;
-    const Tactics::FlowerLink* link = nullptr;
-    const std::vector<int32_t>* best_field = nullptr;
-    int32_t best_cost = 0;
-    for (const Tactics::FlowerLink& l : tactics_.flower_links) {
-        if (watch_.ant != 0 && watch_.drop != l.drop) continue;
-        const std::vector<int32_t>& f = field_for(c, l.drop);
-        if (f.empty()) continue;
-        for (const AntView& a : v.mine()) {
-            if (watch_.ant != 0 && a.id != watch_.ant) continue;
-            if (!usable_for_powerup(v, a, true) || (takes_.count(a.id) != 0 && a.id != watch_.ant) || !grid.in_bounds(a.tile)) continue;
-            const TaskId owner = c.ledger.owner(a.id);
-            if (owner != kNoTask && owner != id() && c.ledger.rank(owner) >= c.ledger.rank(id())) continue;
-            const int32_t cost = f[tile_index(grid, a.tile)];
-            if (cost < 0 || (best != nullptr && cost >= best_cost)) continue;
-            best = &a;
-            best_cost = cost;
-            link = &l;
-            best_field = &f;
-        }
-    }
-    if (best == nullptr) {
-        if (watch_.ant != 0 && find_ant(v.mine(), watch_.ant) != nullptr && find_ant(v.mine(), watch_.ant)->tile == watch_.spot) return;     // (it stands at its place: the bridge may be gone, it stays)
-        give_up();
-        return;
-    }
-    if (watch_.ant == 0) {
-        const uint64_t walk = static_cast<uint64_t>(MapInfo::walking_ticks(best_cost)) + 5u;
-        if (walk > params_.link_trip_ticks) return;
-        const sim::TileCoord spot = free_spot(c, link->drop, *best_field, best->tile, best->id);
-        if (spot.x < 0 || !c.ledger.take(best->id, id())) return;
-        watch_ = Watch{best->id, link->drop, spot, 0, best->hp, true};
-        ++watched_;
-    }
-    const AntView* w = find_ant(v.mine(), watch_.ant);
-    if (w == nullptr || w->tile == watch_.spot) return;
-    if (takes_.count(watch_.ant) == 0 && w->takes_orders() && (watch_.ordered == 0 || (w->idle() && now >= watch_.ordered + 80u))) {
-        bool free = v.powerup_at(watch_.spot) == nullptr;                                          // (a typed ant leaves its old hat on a free tile beside the drop tile: no click names a hat but a pick-up)
-        for (const AntView& a : v.others()) free = free && a.tile != watch_.spot;
-        if (!free) {
-            const sim::TileCoord spot = free_spot(c, watch_.drop, field_for(c, watch_.drop), w->tile, w->id);
-            if (spot.x < 0) return;
-            watch_.spot = spot;
-        }
-        c.orders.move({watch_.ant}, watch_.spot, Priority::Normal);
-        watch_.ordered = now;
-    }
-}
-
 // A typed ant that took a drop from the watcher's place and still stands on the drop tile steps off it once (a standing ant locks the flower: no drop is made on a tile that an ant stands on)
 void PowerUpTask::step_off(TaskContext& c) {
     const uint64_t now = c.view.tick();
@@ -520,13 +419,12 @@ void PowerUpTask::step(TaskContext& c) {
         }
     }
     if (!call_back.empty()) c.orders.stop(call_back);
-    if (tactics_.plan.island_flower_link && !tactics_.flower_links.empty()) watch_link(c);
-    else watch(c);
+    if (!(tactics_.plan.island_flower_link && !tactics_.flower_links.empty())) watch(c);          // (with the flower link the swarm waits at the strips, island_swarm.hpp)
     step_off(c);
 
     // 2. new trips for what is wanted and missing, in the order of value (Fire, Bomber, Thief, Combat, Swimmer), as many as max_active allows: the opening sends them all at the first look
     for (const sim::AntType kind : tactics_.plan.opening_order) {
-        const size_t want = tactics_.wants[static_cast<size_t>(kind)] + extra_want(kind);
+        const size_t want = tactics_.wants[static_cast<size_t>(kind)];
         if (want == 0) continue;
         size_t have = 0;
         for (const AntView& a : v.mine()) have += a.type == kind ? 1u : 0u;

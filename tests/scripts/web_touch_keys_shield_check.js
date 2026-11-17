@@ -56,6 +56,19 @@ const PAGE = '<!doctype html><meta name="viewport" content="width=device-width">
             }
             await page.mouse.click(w / 2, h - 2);
             expect(w + 'x' + h + ': a tap on the layer closes the list', await page.evaluate(() => window.keys.isOpen()), false);
+            // the Shift button's three looks (off, latched, locked) in the style that the page loads: the lit face, the ring and the bar that make a lock differ from a latch in shape
+            const looks = await page.evaluate(() => {
+                const b = document.querySelector('[data-key=shift]'), read = () => ({ bg: getComputedStyle(b).backgroundColor, ink: getComputedStyle(b).color, shadow: getComputedStyle(b).boxShadow, bar: getComputedStyle(b, '::after').content });
+                const off = read();
+                b.setAttribute('aria-pressed', 'true'); b.setAttribute('data-state', 'latched');
+                const latched = read();
+                b.setAttribute('data-state', 'locked');
+                const locked = read();
+                return { off, latched, locked };
+            });
+            expect(w + 'x' + h + ': Shift latched is a lit gold face with a dark word', [looks.latched.bg, looks.latched.ink], ['rgb(246, 208, 88)', 'rgb(12, 8, 5)']);
+            expect(w + 'x' + h + ': Shift off is not lit, and has neither ring nor bar', [looks.off.bg !== looks.latched.bg, looks.off.shadow.indexOf('rgb(244, 236, 226)') < 0, looks.off.bar !== '""'], [true, true, true]);
+            expect(w + 'x' + h + ': Shift locked is the same face with a ring (the cream line) and a bar under the word, which latched has not', [looks.locked.bg === looks.latched.bg, looks.locked.shadow.indexOf('rgb(244, 236, 226)') >= 0, looks.latched.shadow.indexOf('rgb(244, 236, 226)') < 0, looks.locked.bar, looks.latched.bar !== '""'], [true, true, true, '""', true]);
             await context.close();
         }
     } finally { await browser.close(); }
