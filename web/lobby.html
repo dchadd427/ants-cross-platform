@@ -165,7 +165,7 @@
     .side { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; }
     .maprow { display: grid; gap: 14px; }
     .tv { margin: 4px auto 6px; width: 300px; max-width: 100%; border: 3px solid var(--edge); background: var(--edge); box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px var(--edge), 4px 6px 0 5px var(--shadow); }
-    .tv img { display: block; width: 100%; height: auto; aspect-ratio: 1; }
+    .tv img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; }
     .mapcard { display: grid; gap: 8px; justify-items: center; min-width: 0; text-align: center; }
     .map-name { font-size: 28px; line-height: 1.1; overflow-wrap: anywhere; } .map-facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; } .map-facts:empty { display: none; }
     .map-facts span { padding: 1px 9px; font-size: 14px; color: var(--cream); background: #0f1820; border: 1px solid #28493e; border-radius: 10px; } .map-facts .tag { color: #1a1405; background: var(--gold); border-color: var(--gold); text-transform: uppercase; letter-spacing: .06em; font-size: 12px; }
@@ -726,8 +726,10 @@
         function paintSide(side) {
             var shownMap = side.mapKey || side.mapFile + '|' + side.mapThumb;
             if ($('preview').getAttribute('data-map') !== shownMap) {
-                var src = side.mapKey ? 'front/preview_' + side.mapKey + '.png' : side.mapThumb;      // (a map of the players: its picture comes with the list; none until then)
-                if (src) $('preview').src = src; else $('preview').removeAttribute('src');
+                var Pk = window.AntsMapPicker;
+                var src = side.mapKey ? 'front/preview_' + side.mapKey + '.png' : side.mapThumb || (side.mapFile && Pk ? Pk.previewPath(side.mapFile) : '');      // (a map of the players: the list's picture when the list has come, else the address that its name makes)
+                if (src && Pk) Pk.showPicture($('preview'), src, function (img) { img.removeAttribute('src'); img.style.visibility = 'hidden'; });      // (an address that does not answer is tried in the other ending once)
+                else if (src) $('preview').src = src; else $('preview').removeAttribute('src');
                 $('preview').style.visibility = src ? '' : 'hidden';
                 $('preview').alt = 'The map: ' + side.mapName;
                 $('preview').setAttribute('data-map', shownMap);
