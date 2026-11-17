@@ -29,6 +29,11 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "cg") return flag(p.cantgo_aware);                                    // the can't-go fixes of docs/BOTS.md, "The can't-go loop" (0: the bot as it was before them)
     if (key == "gatebombs") return flag(p.gate_spare_map_bombs);                     // the counters leave a gate map's own bombs alone (0: they counter them, as before)
     if (key == "field") return flag(p.gate_field);                                   // the field breach (0: the gate goals' shore breach, as before)
+    if (key == "fpick") return flag(p.field_pick);                                   // the field breach's click on the power-up under the ant (0: off the power-up and back on)
+    if (key == "fwalk") return flag(p.field_walk);                                   // the field breach's walks by the engine's own walk (0: one tile where a bomb is next to the way)
+    if (key == "freplan") return flag(p.field_replan);                               // the field breach plans afresh once before it gives up a Stuck ant (0: it gives it up at once)
+    if (key == "fserve") return flag(p.field_serve);                                 // the field breach takes only a power-up whose kind reaches the work from it (0: any power-up of the kind)
+    if (key == "fsetoff") return flag(p.field_set_off);                              // the field breach's set-off by a plain ant when no ant can start the work (0: it waits)
     if (key == "styled") return true;                                                // not a field of the plan: a tuned bot of a spec with no style draws its style like the registry's bot (arena_factory)
     if (key == "contest") return flag(p.contest_aware);
     if (key == "clow") { p.contest_low = static_cast<uint32_t>(v); return true; }

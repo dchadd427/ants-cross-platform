@@ -449,6 +449,7 @@ SPELLING_KEPT = {              # file -> patterns that may keep the British word
     "src/ants_server/control_history.cpp": [_QUOTED, _PARAM], "src/ants_server/history_record.cpp": [_QUOTED], "include/ants_server/control.hpp": [_PARAM],
     "docker/nginx.conf": [_PARAM], "web/history_page.js": [_QUOTED, _PARAM, _PROP], "docs/REPLAYS.md": [_QUOTED, _PARAM],
     "tests/test_server/test_history_record.cpp": [_QUOTED], "tests/test_server/test_history_store.cpp": [_QUOTED, _PARAM],
+    "tests/test_server/test_history_service.cpp": [_QUOTED, _PARAM],
     "tests/scripts/test_nginx_history.py": [_QUOTED, _PARAM], "tests/scripts/web_history_check.js": [_PARAM, _OBJKEY],
     "tests/scripts/web_matches_check.py": [_QUOTED], "tests/scripts/test_web_matches.py": [_PROP, _QUOTED],
 }

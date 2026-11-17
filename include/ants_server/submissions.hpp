@@ -1,7 +1,7 @@
 #pragma once
 
 // The map submissions of the game server (docs/MAP_SUBMISSIONS.md): a player sends a map, it waits, and only the owner makes it public. This is the store: the rules, the database rows and the
-// files. The HTTP side (the routes, the owner's session, the rate limits by address) is submissions_http.hpp. One thread, like everything else of the server.
+// files. The HTTP side (the routes, the admin page's pass, the rate limits by address) is submissions_http.hpp. One thread, like everything else of the server.
 //
 // What the store promises:
 //  * A submission is accepted only when the server's own check says so (check_map of the map core, under the limits of a new Classic map or of an Extended map): the client's claim is never trusted.
@@ -40,6 +40,9 @@ struct SubmissionConfig {
     uint32_t declined_file_days{30};                  // a declined map's file is deleted after this long (the owner can look at it until then)
     uint32_t old_row_days{90};                        // a declined or withdrawn submission's row is deleted after this long
 };
+
+/// Where the canonical file of a submission is: `<dir>/files/<file>` (SubmissionConfig::dir, the `file` column of its row). The history service reads the approved maps' files by it.
+std::string submission_file_path(const std::string& dir, const std::string& file);
 
 /// One row of map_submissions
 struct Submission {
@@ -92,7 +95,7 @@ public:
     bool get_for_token(const std::string& id, const std::string& token, Submission& out, Failure& why);
     bool withdraw(const std::string& id, const std::string& token, int64_t now, Submission& out, Failure& why);
 
-    // the owner's side
+    // the admin page's side
     bool list(const std::string& state, std::vector<Submission>& out, Failure& why);
     ReviewCounts counts();
     bool get(const std::string& id, Submission& out);
@@ -149,7 +152,7 @@ private:
     bool approved_changed_{true};
 };
 
-/// The maker's view of a submission, and the owner's, as JSON (docs/MAP_SUBMISSIONS.md has the members)
+/// The maker's view of a submission, and the admin page's, as JSON (docs/MAP_SUBMISSIONS.md has the members)
 ctl::JsonValue maker_view(const Submission& s);
 ctl::JsonValue owner_view(const Submission& s, bool name_is_taken);
 

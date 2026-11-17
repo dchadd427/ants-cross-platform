@@ -9,7 +9,7 @@ and to nothing else. The text of the file is checked everywhere:
     or the JSON 503 of the chat door (for the three that the page calls with fetch);
   - ten a minute for each address on /hub/login and /hub/callback (429 and a page, and the hub is not asked), twenty on the others;
   - the visitor's request is not passed on but the headers each page needs; the cookie is picked out of the whole header by name and shape, so that no other cookie reaches the hub, and the hub's
-    cookies reach no other place: every other proxy block drops the Cookie header, or sets the one cookie that it needs (the admin page's API: its own);
+    cookies reach no other place: every other proxy block drops the Cookie header, or sets the one cookie that it needs (the admin page's gate, an internal question to the hub: the login's);
   - no access log of these pages (the callback's address holds the code and the state), and the error log of the two that carry a query holds the serious errors only (nginx writes the whole request
     line of a request that a missing upstream fails).
 
@@ -46,6 +46,7 @@ CONF = stats.strip_comments(stats.read("docker", "nginx.conf"))
 HEAD = CONF[:CONF.index("server {")]
 LOGIN, CALLBACK, ME, LOGOUT, FORGET = (stats.block_of(CONF, "location = /hub/%s " % n) for n in ("login", "callback", "me", "logout", "forget"))
 WS_HUB = stats.block_of(CONF, "location = /hub/ws ")
+GATE = stats.block_of(CONF, "location = /hub/admin/gate ")
 OFF = stats.block_of(CONF, "location @hub_off ")
 PAGE_OFF = stats.block_of(CONF, "location @hub_page_off ")
 PAGE_LIMIT = stats.block_of(CONF, "location @hub_page_limit ")
@@ -135,18 +136,21 @@ class TheText(unittest.TestCase):
         for block in (ME, LOGOUT, FORGET, WS_HUB):
             self.assertIn("proxy_set_header Cookie $hub_cookie_session;", block)                # (the login)
         self.assertIn("proxy_set_header Origin $http_origin;", ME)
+        self.assertEqual(headers_set(GATE), sorted(base + ["Cookie"]))                       # (the admin's gate, asked by nginx itself: the login's cookie and the address, no body, no length)
+        for line in ("proxy_pass_request_headers off;", "proxy_pass_request_body off;", 'proxy_set_header Content-Length "";', "proxy_set_header X-Client-Address $remote_addr;", "proxy_set_header Cookie $hub_cookie_session;", "access_log off;", "internal;"):
+            self.assertIn(line, GATE, line)
 
     def test_the_cookies_are_picked_out_by_the_names_and_shapes_that_the_hub_makes(self):
         self.assertEqual(loginmod.COOKIE, "__Host-ants_hub")
         self.assertEqual(loginmod.STATE_COOKIE, "__Host-ants_oauth")
         self.assertRegex(HEAD, r"map \$http_cookie \$hub_cookie_session \{[^}]*__Host-ants_hub=\[0-9a-f\]\{32\}")
         self.assertRegex(HEAD, r"map \$http_cookie \$hub_cookie_state \{[^}]*__Host-ants_oauth=\[0-9a-f\]\{32\}")
-        self.assertRegex(HEAD, r"map \$http_cookie \$admin_cookie \{[^}]*ants_admin=")
+        self.assertNotIn("admin_cookie", CONF)                                                # (the game server's own sign-in cookie is gone: no map picks it out any more)
 
     def test_the_hubs_cookies_reach_no_other_place_and_no_other_cookie_reaches_the_hub(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
         allowed = {"= /hub/ws": "$hub_cookie_session", "= /hub/login": None, "= /hub/callback": "$hub_cookie_state", "= /hub/me": "$hub_cookie_session", "= /hub/logout": "$hub_cookie_session",
-                   "= /hub/forget": "$hub_cookie_session", "^~ /admin/api/": "$admin_cookie"}
+                   "= /hub/forget": "$hub_cookie_session", "= /hub/admin/gate": "$hub_cookie_session", "^~ /admin/api/": None, "^~ /hub/admin/api/": "$hub_cookie_session"}
         checked = 0
         for location in locations:
             block = stats.block_of(CONF, "location %s " % location)
@@ -241,7 +245,7 @@ def mini_conf(tmp, port, hub_port, stand_port, dead_port, error_level="error"):
     zones += "\n  " + re.search(r"log_format ants_noquery [^;]+;", HEAD).group(0)
     zones += "\n  map $request_uri $ants_path {%s}" % stats.block_of(HEAD, "map $request_uri $ants_path ")                              # (the format writes the path that was asked for)
     zones += "\n  map \"$http_origin|$host\" $ants_ws_origin_ok {%s}" % stats.block_of(HEAD, "map \"$http_origin|$host\" $ants_ws_origin_ok ")      # (the game door refuses the origin of another site)
-    maps = "\n  ".join("map $http_cookie $%s {%s}" % (name, stats.block_of(HEAD, "map $http_cookie $%s " % name)) for name in ("hub_cookie_session", "hub_cookie_state", "admin_cookie"))
+    maps = "\n  ".join("map $http_cookie $%s {%s}" % (name, stats.block_of(HEAD, "map $http_cookie $%s " % name)) for name in ("hub_cookie_session", "hub_cookie_state"))
 
     def block(header, where):
         text = stats.block_of(CONF, header)
@@ -250,7 +254,7 @@ def mini_conf(tmp, port, hub_port, stand_port, dead_port, error_level="error"):
         text = text.replace("set $ants_server ants-server:4002;", "set $ants_server 127.0.0.1:%d;" % stand_port)
         text = text.replace("set $ants_submit ants-server:4030;", "set $ants_submit 127.0.0.1:%d;" % stand_port)
         text = text.replace("error_log /dev/stderr crit;", "error_log %s/loc%d.log crit;" % (tmp, port))
-        text = re.sub(r"limit_req zone=ants_(?:hub_req|busy|admin_api|admin_login) [^;]*;", "", text)         # (the other doors have their own tests, and their zones are not in this small server)
+        text = re.sub(r"limit_req zone=ants_(?:hub_req|busy|admin_api) [^;]*;", "", text)         # (the other doors have their own tests, and their zones are not in this small server)
         return "location %s {%s}" % (header[len("location "):].strip(), text)
 
     blocks = []
@@ -266,6 +270,9 @@ def mini_conf(tmp, port, hub_port, stand_port, dead_port, error_level="error"):
     blocks.append("location @hub_page_site {%s}" % stats.block_of(CONF, "location @hub_page_site "))
     for header in ("location = /ws ", "location = /busy ", "location ^~ /admin/api/ "):
         blocks.append(block(header, stand_port))
+    blocks.append(block("location = /hub/admin/gate ", hub_port))                                            # (the admin API's question to the hub)
+    for name in ("admin_not_signed_in", "admin_not_allowed", "admin_door_off"):
+        blocks.append("location @%s {%s}" % (name, stats.block_of(CONF, "location @%s " % name)))
     blocks.append("location @submit_off {return 503 'off';}")
     # a control: a request that the stand-in's own location sends to a hub that is not there, with the DEFAULT error log and access log, shows that those logs would write the query
     blocks.append("location = /probe { error_page 502 504 = @probe_off; set $x 127.0.0.1:%d; proxy_pass http://$x; }\n    location @probe_off { return 503 'off'; }" % dead_port)
@@ -396,7 +403,7 @@ class TheBlocksRun(unittest.TestCase):
         front = self.more(hub_port=self.stand.server_address[1])                                  # (the stand-in is the hub: it records what arrives)
         session, state = "__Host-ants_hub=" + "ab" * 16, "__Host-ants_oauth=" + "cd" * 16
         site = {"Sec-Fetch-Site": "same-origin", "Origin": "https://chat.example.org", "Authorization": "Bearer canary-auth", "X-Forwarded-For": "6.6.6.6", "User-Agent": "canary-agent",
-                "Referer": "https://evil.example/", "X-Client-Address": "9.9.9.9", "Cookie": "a=b; ants_admin=v2.canary-admin-6f; %s; z=1; %s; track=canary-track" % (session, state)}
+                "Referer": "https://evil.example/", "X-Client-Address": "9.9.9.9", "Cookie": "a=b; ants_other=v2.canary-other-6f; %s; z=1; %s; track=canary-track" % (session, state)}
         expect = {
             "/hub/login": ("GET", None, ["connection", "host", "sec-fetch-site", "x-client-address"]),
             "/hub/callback?code=%s&state=%s" % (CANARY, "cd" * 16): ("GET", state, ["connection", "cookie", "host", "x-client-address"]),
@@ -416,19 +423,26 @@ class TheBlocksRun(unittest.TestCase):
             self.assertEqual(sorted({k for k, _ in got}), names, path)
             self.assertEqual(dict(got).get("cookie"), cookie, path)
             self.assertEqual(dict(got)["x-client-address"], "127.0.0.1", path)               # (nginx's own: not the one of the visitor's header)
-            for canary in ("canary-admin", "canary-track", "canary-auth", "canary-agent", "6.6.6.6", "9.9.9.9", "evil.example"):
+            for canary in ("canary-other", "canary-track", "canary-auth", "canary-agent", "6.6.6.6", "9.9.9.9", "evil.example"):
                 self.assertNotIn(canary, str(got), (path, canary))
-        # the hub's cookies reach no other door of the site, and the admin page's API gets its own cookie and no other
+        # the hub's cookies reach no other door of the site; the admin page's API shows the login's cookie to the hub's gate only (the stand-in is the hub and the game server in one: the gate's question comes first)
         for path, extra in (("/ws", {"Upgrade": "websocket", "Connection": "Upgrade"}), ("/busy", {}), ("/admin/api/maps", {"X-Ants-Csrf": "tok"})):
             self.stand.seen.clear()
             r = hc.request(front.port, "GET", path, dict(site, **extra), send_length=False)
             self.assertEqual(r.status, 200, (path, r.text()))
-            got = dict(self.stand.seen[0][2])
             if path.startswith("/admin"):
-                self.assertEqual(got.get("cookie"), "ants_admin=v2.canary-admin-6f")
+                (_, gate_path, gate), (_, api_path, got) = self.stand.seen
+                self.assertEqual((gate_path, api_path), ("/hub/admin/gate", "/admin/api/maps"))
+                self.assertEqual(sorted({k for k, _ in gate}), ["connection", "cookie", "host", "x-client-address"])
+                self.assertEqual(dict(gate).get("cookie"), session)                           # (the login's cookie, picked out of the whole header)
+                self.assertNotIn("canary", str(gate))
+                got = dict(got)
+                self.assertNotIn("cookie", got)                                                # (the game server is shown none)
             else:
+                got = dict(self.stand.seen[0][2])
                 self.assertNotIn("cookie", got, path)
             self.assertNotIn("__Host", str(got), path)
+            self.assertNotIn("canary-other", str(got), path)
 
     # ---- a hub that is not there, and a visitor over the limit --------------------------------------------------------------------------
 

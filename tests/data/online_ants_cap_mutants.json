@@ -298,8 +298,8 @@
   {
    "id": "replay_over_the_cap_is_counted_by_the_feeder",
    "file": "src/ants_server/history_store.cpp",
-   "old": "if (!load_level(rep.head, level, why)) {\n        skip(id, why);",
-   "new": "if (!load_map_of(rep.head, level, why)) {\n        skip(id, why);",
+   "old": "if (!load_level(rep.head, level, why)) {\n        skip(id, why, true);",
+   "new": "if (!load_map_of(rep.head, level, why)) {\n        skip(id, why, true);",
    "build": [
     "test_map_plays"
    ],

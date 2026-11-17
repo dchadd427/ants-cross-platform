@@ -125,6 +125,15 @@ RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitin
         grep -Eq "data-build=\"${BUILD_ID}\"" /src/web/${BARRED}.html && grep -Eq "data-built=\"${BUILD_DATE}\"" /src/web/${BARRED}.html || exit 1; \
     done
 
+# The admin page has the bar too (docs/SITE_NAV.md): the same three stamps as the other pages with a bar, from the same places (the file VERSION and the two files that the layer above wrote), so that the Menu and
+# the page's Status show which build this is. The build stops if a placeholder is left.
+RUN GAME_VERSION="v$(head -n 1 VERSION | tr -d '[:space:]')" && \
+    BUILD_ID="$(cat /src/build_id.txt)" && \
+    BUILD_DATE="$(cat /src/build_date.txt)" && \
+    sed -i "s/@@GAME_VERSION@@/${GAME_VERSION}/g; s/@@BUILD_ID@@/${BUILD_ID}/g; s/@@BUILD_DATE@@/${BUILD_DATE}/g" /src/web/admin.html && \
+    ! grep -q '@@' /src/web/admin.html && \
+    grep -Eq "data-version=\"${GAME_VERSION}\" data-build=\"${BUILD_ID}\" data-built=\"${BUILD_DATE}\"" /src/web/admin.html
+
 # The pages carry two placeholders for a site label, which the production site does not use: they become nothing (the same layer as the build id: the compile layers above do not depend on it).
 RUN cp /src/web/lobby.html /src/lobby.html && \
     cp /src/web/matches.html /src/matches.html && cp /src/web/match.html /src/match.html && cp /src/web/legal.html /src/legal.html && if [ -f /src/web/mapmaker.html ]; then cp /src/web/mapmaker.html /src/mapmaker.html; fi && \
@@ -225,6 +234,9 @@ COPY web/map_files.js /usr/share/nginx/html/map_files.js
 # The countdown's Fullscreen button (docs/MATCH_COUNTDOWN.md): the game page lays it over the card that opens a match of two or more people (countdown_button.js)
 COPY web/countdown_button.js /usr/share/nginx/html/countdown_button.js
 
+# The screen stays on while a match is played or a recording plays (docs/PLAY_IN_BROWSER.md "The screen stays on"): the game page asks the browser for a Screen Wake Lock (wake_lock.js)
+COPY web/wake_lock.js /usr/share/nginx/html/wake_lock.js
+
 # The touch buttons for the game's hotkeys (docs/TOUCH.md "The hotkey buttons"): the game page makes them on a touch screen during a match (touch_keys.js, touch_keys.css)
 COPY web/touch_keys.js /usr/share/nginx/html/touch_keys.js
 COPY web/touch_keys.css /usr/share/nginx/html/touch_keys.css
@@ -253,7 +265,7 @@ COPY --from=builder /src/changelog/changelog.html /usr/share/nginx/html/
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/
 
 # The admin page (docs/MAP_SUBMISSIONS.md "The admin page"): the address /admin is typed, nothing links to it; its API and the logon are paths of docker/nginx.conf
-COPY web/admin.html /usr/share/nginx/html/admin.html
+COPY --from=builder /src/web/admin.html /usr/share/nginx/html/admin.html
 COPY web/admin.css /usr/share/nginx/html/admin.css
 COPY web/admin_page.js /usr/share/nginx/html/admin_page.js
 

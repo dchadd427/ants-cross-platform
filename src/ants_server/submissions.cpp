@@ -23,6 +23,8 @@ namespace fs = std::filesystem;
 
 namespace ants::server {
 
+std::string submission_file_path(const std::string& dir, const std::string& file) { return (fs::path(dir) / "files" / file).string(); }
+
 namespace {
 
 using ctl::JsonValue;
@@ -75,7 +77,7 @@ Submission read_row(db::Statement& st) {
     return s;
 }
 
-std::string path_of(const SubmissionConfig& c, const std::string& file) { return (fs::path(c.dir) / "files" / file).string(); }
+std::string path_of(const SubmissionConfig& c, const std::string& file) { return submission_file_path(c.dir, file); }
 
 void remove_quietly(const std::string& path) {
     std::error_code ec;
@@ -431,7 +433,7 @@ bool SubmissionStore::withdraw(const std::string& id, const std::string& token, 
     return true;
 }
 
-// ------------------------------------------------------------------------------------------------ the owner's side
+// ------------------------------------------------------------------------------------------------ the admin page's side
 
 bool SubmissionStore::list(const std::string& state, std::vector<Submission>& out, Failure& why) {
     out.clear();

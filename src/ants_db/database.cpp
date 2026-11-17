@@ -52,8 +52,8 @@ Error Database::open(const std::string& path, const OpenOptions& options) {
     if (db_ != nullptr) return make_error(kErrNested, "open " + path, "this object has a database open already");
     if (path.empty()) return make_error(SQLITE_CANTOPEN, "open", "no file name");
     const bool memory = path == ":memory:";
-    int flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX;
-    if (options.create) flags |= SQLITE_OPEN_CREATE;
+    int flags = (options.read_only ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE) | SQLITE_OPEN_NOMUTEX;
+    if (options.create && !options.read_only) flags |= SQLITE_OPEN_CREATE;
     sqlite3* handle = nullptr;
     const int rc = sqlite3_open_v2(path.c_str(), &handle, flags, nullptr);
     if (rc != SQLITE_OK) {
@@ -76,7 +76,7 @@ Error Database::open(const std::string& path, const OpenOptions& options) {
     if (!e.ok()) return fail("foreign keys", e);
     e = exec("SELECT count(*) FROM sqlite_master");                 // reads the schema: a damaged file says so here (nothing has been written yet)
     if (!e.ok()) return fail("reading the file", e);
-    if (options.wal && !memory) {
+    if (options.wal && !memory && !options.read_only) {
         std::string mode;
         e = use_journal(options.journal_request, mode);
         if (!e.ok()) return fail("journal mode", e);                 // (a mode other than the one asked for is no error: the file keeps its rollback journal)

@@ -147,8 +147,8 @@
   {
    "id": "fetch_trouble_fails_the_login",
    "file": "hub/pictures.py",
-   "old": "        except Exception as e:                                # (a bug or a refusing database costs one picture, never the login)\n            self.log.event(\"picture\", kind=\"bug\", error=type(e).__name__)\n\n    def enqueue",
-   "new": "        except ZeroDivisionError as e:\n            self.log.event(\"picture\", kind=\"bug\", error=type(e).__name__)\n\n    def enqueue",
+   "old": "        except Exception as e:                                # (a bug or a refusing database costs one picture, never the login)\n            self.tell(\"bug\", error=type(e).__name__)\n\n    def enqueue",
+   "new": "        except ZeroDivisionError as e:\n            self.tell(\"bug\", error=type(e).__name__)\n\n    def enqueue",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheStoreAndTheHub"
   },
   {
@@ -168,8 +168,8 @@
   {
    "id": "a_status_that_is_not_200_is_kept",
    "file": "hub/pictures.py",
-   "old": "        if status != 200:\n            return self.log.event(\"picture\", kind=\"down\")",
-   "new": "        if False:\n            return self.log.event(\"picture\", kind=\"down\")",
+   "old": "        if status != 200:\n            return self.tell(\"down\")",
+   "new": "        if False:\n            return self.tell(\"down\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheLoginWithAPicture"
   },
   {
@@ -182,8 +182,8 @@
   {
    "id": "a_failure_takes_the_old_copy",
    "file": "hub/pictures.py",
-   "old": "        if status != 200:\n            return self.log.event(\"picture\", kind=\"down\")",
-   "new": "        if status != 200:\n            self.store.clear_picture(account)\n            return self.log.event(\"picture\", kind=\"down\")",
+   "old": "        if status != 200:\n            return self.tell(\"down\")",
+   "new": "        if status != 200:\n            self.store.clear_picture(account)\n            return self.tell(\"down\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheLoginWithAPicture"
   },
   {
@@ -252,22 +252,22 @@
   {
    "id": "picture_id_in_the_log",
    "file": "hub/pictures.py",
-   "old": "        self.log.event(\"picture\", kind=\"ok\" if kept else \"none\")",
-   "new": "        self.log.event(\"picture\", kind=\"ok\" if kept else \"none\", code=avatar)",
+   "old": "        self.tell(\"ok\" if kept else \"none\")",
+   "new": "        self.tell(\"ok\" if kept else \"none\", code=avatar)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheLog"
   },
   {
    "id": "picture_name_in_the_log",
    "file": "hub/pictures.py",
-   "old": "        self.log.event(\"picture\", kind=\"ok\" if kept else \"none\")",
-   "new": "        self.log.event(\"picture\", kind=\"ok\" if kept else \"none\", name=png[:0] or secrets.token_hex(0) or self.names())",
+   "old": "        self.tell(\"ok\" if kept else \"none\")",
+   "new": "        self.tell(\"ok\" if kept else \"none\", name=png[:0] or secrets.token_hex(0) or self.names())",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheLog"
   },
   {
    "id": "error_of_the_fetch_in_the_log",
    "file": "hub/pictures.py",
-   "old": "        except discordmod.DiscordError as e:\n            if e.kind == \"big\":\n                self.give_up(key, avatar)\n            return self.log.event(\"picture\", kind=\"big\" if e.kind == \"big\" else \"down\")",
-   "new": "        except discordmod.DiscordError as e:\n            if e.kind == \"big\":\n                self.give_up(key, avatar)\n            return self.log.event(\"picture\", kind=\"big\" if e.kind == \"big\" else \"down\", status=account)",
+   "old": "        except discordmod.DiscordError as e:\n            if e.kind == \"big\":\n                self.give_up(key, avatar)\n            return self.tell(\"big\" if e.kind == \"big\" else \"down\")",
+   "new": "        except discordmod.DiscordError as e:\n            if e.kind == \"big\":\n                self.give_up(key, avatar)\n            return self.tell(\"big\" if e.kind == \"big\" else \"down\", status=account)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheLog"
   },
   {
@@ -651,7 +651,7 @@
   {
    "id": "a_bug_in_the_worker_is_not_caught",
    "file": "hub/pictures.py",
-   "old": "        except Exception as e:\n            self.log.event(\"picture\", kind=\"bug\", error=type(e).__name__)\n        finally:",
+   "old": "        except Exception as e:\n            self.tell(\"bug\", error=type(e).__name__)\n        finally:",
    "new": "        finally:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheWorker"
   },

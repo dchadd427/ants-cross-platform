@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.17.4 - 2026-11-17 - The screen stays on, steadier Menu, bots that cross bomb fields, a Discord admin page
+
+**For players:**
+- **The screen stays on.** A phone or tablet no longer goes dark while you play a match or watch a replay (where the browser supports it); a paused replay lets it sleep again.
+- **The front page's Menu button stays put** while the page loads on a phone, instead of jumping from the left to the right.
+- **Computer players handle bomb fields better.** They walk several tiles per order through a bomb field instead of one, take a power-up they are standing on by clicking their own tile, hop over a fire wall and a lake to reach a power-up, never plant a bomb under an ant, and try a fresh plan when they get stuck (POPcOrN, the CrUnChY BiTe maps and the other bomb-field maps).
+- **A new admin page.** Site admins sign in with Discord on the admin page to review the maps players send, handle chat bans and mutes, read the moderators' log and see how the site is doing; the old admin passwords are gone. Players see no change.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.3 page or game still joins. Under the hood: the game server's database moves to version 8 (the old admin accounts are removed; an older server cannot open the new file), and the chat hub and the web pages are rebuilt.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/433de635...4fb44bf6)
+
 ## v0.17.3 - 2026-11-16 - A Shift button for touch screens, moderation from the Players list, cleaner scores
 
 **For players:**
@@ -446,16 +458,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/aa8c3591...79aab92d)
 
-## v0.12.139 - 2026-10-26 - Show health as: Number is the original's number
+## Older versions (v0.12.139 and before)
 
-**For players:**
-- **Show health as: Number is now the original's number:** white digits in the original's own small fixed font, at the lower right of the ant, as its Ctrl+L prints them. The colored, outlined numbers of v0.12.134 are gone; the numbers are as they were before it, at every zoom and one size (small on a phone, as in the original).
-- **Ant health still says which ants** (Hurt ants, All ants, Off; Ctrl+L flips it), and a dying ant shows its 0 as it does in the original. The bar and its three colors are as they were.
-
-**Rules / network:** none: drawing only; the rules, replays and network protocol 21 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1e36d1f6...89f64530)
-
-## Older versions (v0.12.138 and before)
-
-Every release before v0.12.139, and the long notes of v0.12.138 - v0.12.136 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.140, and the long notes of v0.12.139 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

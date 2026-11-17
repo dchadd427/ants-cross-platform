@@ -285,6 +285,7 @@
         put(acct, [el('i', 'gc-dc'), el('span', 'gc-as', TEXT.chatting), acctName]);
         var yr = el('p', 'gc-yr'); yr.hidden = true;       // (the role, in words, in the dropdown of the account)
         put(slot, [acct, yr, pickNote, pickBtn, swRow, outBtn, el('p', 'gc-mnote', TEXT.forgetNote), forgetBtn]);
+        var adminLink = el('a', 'btn gc-admin', 'Admin page'); adminLink.setAttribute('href', '/admin'); adminLink.hidden = true; slot.insertBefore(adminLink, outBtn);        // (a plain link, for an administrator or the owner only: the page decides again who may come in)
         var chipMark = null, chipAv = null, chipName = null;                   // the bar's chip (home.js makes the button and hides it): Log in, or who the visitor is
         if (chip) { chipMark = el('i', 'gc-dc'); chipAv = el('span', 'gc-av'); chipName = el('span', 'gc-cn'); chip.textContent = ''; put(chip, [chipMark, chipAv, chipName]); }
         var hint = el('p', 'gc-hint gc-news', TEXT.hint); hint.id = 'gchat-hint';       // (read with the field's name, drawn nowhere: a text area is "multi-line" to a screen reader, and this says that Enter sends)
@@ -396,6 +397,7 @@
             note.setAttribute('data-removed', removed && !notice ? removed : '');
             slot.hidden = !(live && you && login && menuOn); acctName.textContent = you ? you.name : '';
             acctName.className = 'gc-an' + roleClass(you ? you.role : 'none'); if (you && you.role !== 'none') acctName.setAttribute('title', wordOfRole(you.role)); else acctName.removeAttribute('title');
+            adminLink.hidden = !(you && you.role === 'admin');
             yr.hidden = !(you && you.role !== 'none'); yr.textContent = yr.hidden ? '' : TEXT.youAre[you.role];       // (the role in words, as well as in the color of the name)
             if (slot.hidden && chip && slot.contains && slot.contains(doc.activeElement)) { if (live && login) chip.focus(); else refocus = true; }       // (the dropdown goes under the focus: a Log out, a Forget me: the focus goes to the chip, not to nowhere; a name that is picked closes the socket and hides the chip too, so the focus waits for the dropdown to come back)
             outBtn.disabled = forgetBtn.disabled = busy;

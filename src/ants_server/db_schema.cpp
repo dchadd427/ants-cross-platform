@@ -1,4 +1,4 @@
-// The migrations of the server's database (docs/SERVER.md "The database"). Version 1 is the foundation (`meta`); version 2 holds the match history (docs/REPLAYS.md "The match history"); version 3 the play counts of the maps; version 4 the site statistics; version 7 the map of deaths of a match.
+// The migrations of the server's database (docs/SERVER.md "The database"). Version 1 is the foundation (`meta`); version 2 holds the match history (docs/REPLAYS.md "The match history"); version 3 the play counts of the maps; version 4 the site statistics; version 7 the map of deaths of a match; version 8 retires the accounts of the admin page.
 #include "ants_server/db_schema.hpp"
 
 namespace ants::server {
@@ -213,19 +213,61 @@ const char* const kDeathsSql =
     ") WITHOUT ROWID;"
     "CREATE INDEX history_deaths_map ON history_deaths (map, hash, ended, id);";
 
+// Version 1 (of either file): the foundation, a `meta` table with the time the file was made (and, in the history service's file, the row that says the import was done)
+const char* const kMetaSql =
+    "CREATE TABLE meta (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL) WITHOUT ROWID;"
+    "INSERT INTO meta (key, value) VALUES ('created_at', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'));";
+
+// Version 8. The admin page has no accounts of its own any more: who may use it is decided by the chat hub (docs/MAP_SUBMISSIONS.md, "The admin page"). The tables of the accounts, the counts of wrong tries, the
+// remembered addresses and the signed-out sessions are dropped, and with them the salt that keyed the address hashes (meta 'admin_salt'). The log keeps its lines about decisions on maps and nothing about sign-ins or
+// users, with the administrator's reference in a column of its own (`actor_ref`; '' for a line of before) and no address; every decision made under the old accounts is signed "earlier admin" in the log, in
+// map_submissions.decided_by and in review_log (the names and numbers of those accounts are not kept).
+const char* const kAdminPassSql =
+    "DROP TABLE admin_revoked;"
+    "DROP TABLE admin_known_addr;"
+    "DROP TABLE admin_locks;"
+    "DROP TABLE admin_users;"
+    "DELETE FROM meta WHERE key = 'admin_salt';"
+    "CREATE TABLE admin_audit_new ("
+    " id INTEGER PRIMARY KEY,"
+    " at INTEGER NOT NULL,"
+    " actor TEXT NOT NULL,"
+    " actor_ref TEXT NOT NULL DEFAULT '',"
+    " action TEXT NOT NULL,"
+    " target TEXT NOT NULL DEFAULT '',"
+    " detail TEXT NOT NULL DEFAULT ''"
+    ");"
+    "INSERT INTO admin_audit_new (id, at, actor, actor_ref, action, target, detail)"
+    " SELECT id, at, 'earlier admin', '', action, target, detail FROM admin_audit WHERE action IN ('map_approved', 'map_declined', 'map_taken_down', 'map_put_back');"
+    "DROP TABLE admin_audit;"
+    "ALTER TABLE admin_audit_new RENAME TO admin_audit;"
+    "CREATE INDEX admin_audit_at ON admin_audit (at, id);"
+    "UPDATE map_submissions SET decided_by = 'earlier admin' WHERE state IN ('approved', 'declined', 'taken_down');"
+    "UPDATE review_log SET actor_id = '', actor_name = 'earlier admin';";
+
 }  // namespace
 
 const std::vector<db::Migration>& db_migrations() {
     static const std::vector<db::Migration> list = {
-        {1, "meta",
-         "CREATE TABLE meta (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL) WITHOUT ROWID;"
-         "INSERT INTO meta (key, value) VALUES ('created_at', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'));"},
+        {1, "meta", kMetaSql},
         {2, "history", kHistorySql},
         {3, "map_plays", kMapPlaysSql},
         {4, "site_stats", kSiteStatsSql},
         {5, "map_submissions", kSubmissionsSql},
         {6, "admin_accounts", kAccountsSql},
         {7, "history_deaths", kDeathsSql},
+        {8, "admin_pass", kAdminPassSql, true},                // (the old password hashes and names are in free pages of the file until it is rewritten)
+    };
+    return list;
+}
+
+// The history service's own file (docs/HISTORY_SERVICE.md) holds the match history and nothing else: the same tables as the game server's (the same SQL), under numbers of its own.
+const std::vector<db::Migration>& history_db_migrations() {
+    static const std::vector<db::Migration> list = {
+        {1, "meta", kMetaSql},
+        {2, "history", kHistorySql},
+        {3, "map_plays", kMapPlaysSql},
+        {4, "history_deaths", kDeathsSql},
     };
     return list;
 }

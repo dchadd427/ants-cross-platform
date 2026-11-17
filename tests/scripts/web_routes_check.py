@@ -219,6 +219,8 @@ def main():
         check(status in (200, 404) and "location" not in headers and (status != 200 or bool(GAME.search(body))), "%s is no page: it is what any unknown address is (%s)" % (path, status))
     status, headers, names, body = get("/admin.html")
     check(status == 404, "/admin.html is still a 404 (the admin page is /admin) (%s)" % status)
+    status, headers, names, body = get("/hub/admin/gate", {"Cookie": "__Host-ants_hub=" + "a" * 32})
+    check(status == 404 and "x-ants-admin-pass" not in headers, "the hub's gate for the admin page is internal: a browser that asks for it gets a 404 (%s)" % status)
     status, headers, names, body = get("/nothing.html")
     check(status == 404, "an .html file that is not there is a 404 (%s)" % status)
     print("[web routes] no version of the web server: the Server header has no number, on a page, a redirect, a file and an error")

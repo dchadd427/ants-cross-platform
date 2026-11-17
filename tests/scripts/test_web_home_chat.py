@@ -79,7 +79,7 @@ class ThePageAndTheOtherPages(unittest.TestCase):
                     naming_the_socket.add(rel)
         self.assertEqual(sorted(naming_the_dock), ["web/home/chat.css", "web/home/chat.js", "web/home/home.js"], "the front page's own script asks for the dock; no other page does")
         self.assertEqual(sorted(naming_the_socket), ["web/home/chat.js", "web/hub_here.js"], "only the dock's script knows the address of the hub's socket: a page that opens a socket to it is a page that has a chat")
-        self.assertEqual(sorted(naming_the_door), ["web/front/player_name.js", "web/home/chat.js", "web/hub_here.js"], "the one other script that names the hub is the one that asks for the name to play under: its one page, GET /hub/me (tests/scripts/test_web_player_name.py)")
+        self.assertEqual(sorted(naming_the_door), ["web/admin_page.js", "web/front/player_name.js", "web/home/chat.js", "web/hub_here.js"], "the other scripts that name the hub: the one that asks for the name to play under (its one page, GET /hub/me: tests/scripts/test_web_player_name.py) and the admin page, whose one link is the hub's Discord login (tests/scripts/test_web_admin.py)")
 
     def test_the_game_server_and_the_game_never_open_the_hub(self):
         for rel in (("web", "shell.html"), ("web", "front", "lobby_net.js"), ("web", "front", "lobby_chat.js")):
@@ -151,7 +151,9 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertEqual(len(picture_address.findall(self.code)), 1, "one statement sets an address, and it is made of the two constants and a name")
         link_address = re.compile(r"\ba\.setAttribute\('href', p\.url\);")       # (the one address of a link: the checked, normalized http or https address that partsOf made; tests/scripts/web_home_chat_check.js)
         self.assertEqual(len(link_address.findall(self.code)), 1, "one statement sets a link's address")
-        self.assertNotRegex(link_address.sub("", picture_address.sub("", self.code)), r"\.href\b|\.src\b|setAttribute\(\s*['\"](href|src|style|on\w+|srcdoc)")
+        admin_address = re.compile(r"\badminLink\.setAttribute\('href', '/admin'\);")       # (the account menu's line for an administrator: a fixed address, nothing from the hub; tests/scripts/test_web_admin.py)
+        self.assertEqual(len(admin_address.findall(self.code)), 1, "one statement sets the address of the line Admin page, and it is a constant")
+        self.assertNotRegex(admin_address.sub("", link_address.sub("", picture_address.sub("", self.code))), r"\.href\b|\.src\b|setAttribute\(\s*['\"](href|src|style|on\w+|srcdoc)")
         made = sorted(set(re.findall(r"\bel\('(\w+)'", self.code)))
         self.assertEqual(made, ["a", "bdi", "button", "div", "form", "h2", "i", "input", "label", "p", "section", "span", "textarea"], "no script, iframe, style or link element: the dock makes text, boxes, the switch and the checked links of a line (the picture's img is made by one helper)")
         self.assertEqual(sorted(set(re.findall(r"\bmake\('(\w+)'", self.code))), ["img"])
@@ -551,7 +553,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     copy with nothing changed must pass"""
     FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/hub_here.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/talk.css", "web/home/players.css", "web/home/players.js", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
               "tests/scripts/web_home_chat_hub_check.js", "tests/scripts/web_page_harness.js", "tests/scripts/fake_hub.js", "tests/scripts/mini_websocket.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
-              "docs/HOME_SCREEN.md", "docs/HOME_CHAT.md", "hub/__init__.py", "hub/text.py", "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html"]
+              "docs/HOME_SCREEN.md", "docs/HOME_CHAT.md", "hub/__init__.py", "hub/text.py", "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html", "web/admin_page.js"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])
 
     @classmethod

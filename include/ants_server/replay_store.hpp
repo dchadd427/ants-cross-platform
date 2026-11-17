@@ -48,6 +48,9 @@ struct ReplayConfig {
     /// A file (or the folder) that changed less than this many seconds ago is not trusted yet by rescan(): a copy that is still growing would be read as a damaged file, and a folder that changed within
     /// the time stamp's grain may change again unseen. It is looked at again at the next look. The tests set 0.
     uint32_t settle_s{2};
+    /// The store only looks at a folder that another program keeps (the history service, docs/HISTORY_SERVICE.md): it makes no folder, deletes no half-written file, applies no age or size limit, and keeps and
+    /// deletes nothing (save() and remove() say no). A file that the keeper deletes is forgotten at the next rescan(). keep_days and max_bytes are then only what the readers show.
+    bool read_only{false};
 };
 
 /// What the store knows about one file: from its name, and from its head and end (read once, when the file was made or the store was opened)

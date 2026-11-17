@@ -44,6 +44,7 @@ void FieldTask::give_up(TaskContext& context, uint64_t now) {
     }
     ant_ = 0;
     pending_ = false;
+    replanned_ = false;
     hints_.hop = BombHop{};
     ++given_up_;
     if (params_.ants_max == 0 || given_up_ % params_.ants_max == 0) {                                              // (ants_max ants in a row could do nothing: wait for a change)
@@ -66,7 +67,7 @@ uint32_t FieldTask::choose_ant(TaskContext& context, const FieldPlan& plan, uint
         if (rest != rest_until_.end() && now < rest->second) continue;
         const TaskId owner = context.ledger.owner(a.id);
         if (owner != kNoTask && owner != id() && context.ledger.rank(owner) >= context.ledger.rank(id())) continue;
-        const int32_t cost = field_ant_cost(plan, context.view, context.map, context.seat, a);
+        const int32_t cost = field_ant_cost(plan, context.view, context.map, context.seat, a, hints_);
         if (cost < 0) continue;
         if (best == nullptr || cost < best_cost) {
             best = &a;
@@ -120,6 +121,8 @@ void FieldTask::step(TaskContext& context) {
     hints_.map_bombs.erase(std::remove_if(hints_.map_bombs.begin(), hints_.map_bombs.end(), gone), hints_.map_bombs.end());
     hints_.ant = ant_;
     hints_.piles = tactics_.field_piles;
+    hints_.rules = FieldRules{tactics_.plan.field_pick, tactics_.plan.field_walk, tactics_.plan.field_set_off, tactics_.plan.field_serve, tactics_.plan.field_replan};
+    hints_.stalled = hints_.rules.set_off && ant_ != 0 && ant_ == stalled_ant_;
     const FieldPlan plan = plan_field(view, context.map, context.seat, hints_);
     work_ = plan.work();
     hints_.pile = plan.pile;
@@ -132,6 +135,7 @@ void FieldTask::step(TaskContext& context) {
         if (work_ == FieldWork::None && plan.field && done_tick_ == 0) done_tick_ = now;
         if (ant_ != 0) context.ledger.release(ant_, id());
         ant_ = 0;
+        stalled_since_ = 0;
         active_ = false;
         hints_.hop = BombHop{};
         next_look_ = now + params_.look_every;
@@ -139,7 +143,13 @@ void FieldTask::step(TaskContext& context) {
     }
     active_ = true;
     if (ant == nullptr) {
+        FieldHints strict = hints_;                                                       // (no ant starts the work without a set-off for long enough: the seat is stalled)
+        strict.stalled = false;
+        if (field_startable(plan, view, context.map, context.seat, strict)) stalled_since_ = 0;
+        else if (stalled_since_ == 0) stalled_since_ = now;
+        hints_.stalled = hints_.rules.set_off && stalled_since_ != 0 && now >= stalled_since_ + params_.stalled_ticks;
         ant_ = choose_ant(context, plan, now);
+        stalled_ant_ = hints_.stalled ? ant_ : 0;
         for (const AntView& a : view.mine()) {
             if (a.id == ant_) ant = &a;
         }
@@ -149,6 +159,8 @@ void FieldTask::step(TaskContext& context) {
             return;
         }
         progress_ = now;
+        replanned_ = false;
+        replans_left_ = params_.replans_max;
         hints_.hop = BombHop{};
     }
     if (ant->tile != seen_tile_ || ant->hp != seen_hp_ || ant->type != seen_type_) progress_ = now;
@@ -183,6 +195,19 @@ void FieldTask::order(TaskContext& context, const AntView& ant, const FieldStep&
             ant_ = 0;
             return;
         case FieldAction::Stuck:
+            if (hints_.rules.replan && !replanned_ && replans_left_ > 0) {                                     // the plan kept from before may be what leads nowhere (the work moved on while the ways stayed): one fresh plan, then the ant is given up
+                replanned_ = true;
+                --replans_left_;
+                ++replans_;
+                hints_.route.clear();
+                hints_.fire_way.clear();
+                hints_.swim_way.clear();
+                hints_.fire_source = sim::TileCoord{-1, -1};
+                hints_.swim_source = sim::TileCoord{-1, -1};
+                hints_.hop = BombHop{};
+                return;
+            }
+            replanned_ = false;
             give_up(context, now);
             return;
         case FieldAction::Take:
@@ -203,6 +228,16 @@ void FieldTask::order(TaskContext& context, const AntView& ant, const FieldStep&
         case FieldAction::Fly:
             context.orders.move({ant.id}, step.tile, Priority::Urgent);
             break;
+        case FieldAction::SetOff:
+            while (!set_off_ticks_.empty() && set_off_ticks_.front() + params_.set_off_window <= now) set_off_ticks_.erase(set_off_ticks_.begin());
+            if (set_off_ticks_.size() >= params_.set_offs_max) {                            // (two set-offs lately: the bombs here are more than a plain ant can take)
+                give_up(context, now);
+                return;
+            }
+            set_off_ticks_.push_back(now);
+            ++set_offs_;
+            context.orders.move({ant.id}, step.tile, Priority::Urgent);
+            break;
         case FieldAction::Heal:
             context.orders.move({ant.id}, context.map.hill(context.seat).entrance, Priority::Urgent);
             break;
@@ -213,6 +248,7 @@ void FieldTask::order(TaskContext& context, const AntView& ant, const FieldStep&
             context.orders.special(ant.id, step.tile, Priority::Urgent);
             break;
     }
+    replanned_ = false;
     ++orders_;
     pending_ = true;
     proposed_at_ = now;

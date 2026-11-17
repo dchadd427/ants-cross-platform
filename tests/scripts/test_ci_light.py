@@ -65,7 +65,7 @@ FULL = ["VERSION", "CMakeLists.txt", "cmake/x.cmake", "src/ants_sim/a.cpp", "inc
         "tests/test_sim/test_x.cpp", "tests/common/x.hpp", "tests/e2e/x.cpp", "tests/CMakeLists.txt",
         "tests/scripts/test_hub_login.py", "tests/scripts/test_ants_server.sh", "tests/scripts/test_start_game.sh", "tests/scripts/e2e_deadlines.sh", "tests/scripts/quick_http.py",
         "tests/scripts/run_python_tests.py", "tests/scripts/test_ci_workflow.py", "tests/scripts/fake_hub.js", "tests/scripts/lvl_core_check.js", "tests/scripts/sub/web_x.js",
-        "tests/scripts/sub/test_web_x.py", "tests/scripts/README", "tests/scripts/test_web_x.txt.orig/y", "tests/data/pbkdf2_vectors.json", "tests/data/game_menu_match.json", "tests/data/x.csv",
+        "tests/scripts/sub/test_web_x.py", "tests/scripts/README", "tests/scripts/test_web_x.txt.orig/y", "tests/data/game_menu_match.json", "tests/data/x.csv",
         "tests/data/lvl_core/x_mutants.json", "tests/data/sub/x_mutants.json", "tests/data/mutants.json", "tests/data/x_mutants.json.bak", "webx/a.js", "docsx/a.md", "README.md.old",
         "CHANGELOG.md/x", "x/web/a.js", "x/docs/a.md", "Web/a.js", "DOCS/a.md", "asset_catalog/x.png", "tools/web/x.js", "tests/scripts/mini_websocket.js"] + sorted(NATIVE_READS)
 

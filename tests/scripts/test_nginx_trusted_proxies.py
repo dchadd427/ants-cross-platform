@@ -194,7 +194,7 @@ class TheWiring(unittest.TestCase):
         self.assertEqual(set(told), {"$remote_addr"})
         self.assertEqual(len(re.findall(r"X-Client-Address", CONF)), len(told))                 # (no other use of the name: nothing reads a header that a visitor wrote)
         keys = set(re.findall(r"limit_(?:req|conn)_zone\s+(\S+)\s+zone=", CONF))
-        self.assertEqual(keys - {"$binary_remote_addr"}, {"$history_plain_key", "$history_query_key", "$submit_post_key", "$admin_login_key", "$test_map_post_key"})
+        self.assertEqual(keys - {"$binary_remote_addr"}, {"$history_plain_key", "$history_query_key", "$submit_post_key", "$test_map_post_key"})
         for key in keys - {"$binary_remote_addr"}:
             self.assertLessEqual(map_values(key[1:]), {"$binary_remote_addr", '""'}, key)         # (a key is the address, or nothing)
 
@@ -315,21 +315,29 @@ def peer_available(address):
 
 
 def get_from(rig, source, lines=(), extra=None, path="/admin/api/me"):
-    """The address that the stand-in door was told (its X-Client-Address) for one GET from the address `source`, with these lines of X-Forwarded-For (a header may come more than once) and these other headers."""
+    """The address that the stand-in door was told (its X-Client-Address) for one GET from the address `source`, with these lines of X-Forwarded-For (a header may come more than once) and these other headers.
+    A call of /admin/api/ goes in as an admin's: the stand-in gate is asked first, and it must have been told the same address (and one request, once)."""
     with rig.door.lock:
         before = len(rig.door.seen)
+    with rig.gate.lock:
+        gate_before = len(rig.gate.seen)
     conn = http.client.HTTPConnection("127.0.0.1", rig.port, timeout=20, source_address=(source, 0))
     try:
         conn.putrequest("GET", path)
         for line in lines:
             conn.putheader("X-Forwarded-For", line)
-        for name, value in (extra or {}).items():
+        for name, value in dict(sub.ADMIN, **(extra or {})).items():
             conn.putheader(name, value)
         conn.endheaders()
         conn.getresponse().read()
     finally:
         conn.close()
-    return sub.seen_after(rig.door, before)[2].get("x-client-address")
+    told = sub.seen_after(rig.door, before)[2].get("x-client-address")
+    with rig.gate.lock:
+        asked = rig.gate.seen[gate_before:]
+    assert len(asked) == 1, "the gate was asked %d times for one request" % len(asked)
+    assert dict((k.lower(), v) for k, v in asked[0][2]).get("x-client-address") == told, "the gate and the game server were told different addresses"
+    return told
 
 
 def without_peer(text, address):
@@ -412,15 +420,16 @@ class TheListRuns(unittest.TestCase):
             self.assertEqual(get_from(rig, "127.0.0.2", [visitor]), "127.0.0.2", visitor)
 
     def test_the_limits_count_each_visitor_apart(self):
-        for trusted, expected in ((LIST, 201), ("", 503)):                          # (an empty list: the two visitors are one address)
+        for trusted, expected, sent in ((LIST, 200, 201), ("", 429, 503)):          # (an empty list: the two visitors are one address)
             rig = sub.Rig(trusted=trusted, relaxed=False)
             self.addCleanup(rig.stop)
-            flood = [rig.ask("POST", "/admin/api/login", {"X-Forwarded-For": "198.51.100.10", "Content-Type": "application/json"}, b"{}")[0] for _ in range(9)]
-            self.assertEqual(flood, [201] * 6 + [503] * 3, "six a minute for one visitor (a burst of five more)")
-            self.assertEqual(rig.ask("POST", "/admin/api/login", {"X-Forwarded-For": "198.51.100.11", "Content-Type": "application/json"}, b"{}")[0], expected, "another visitor, right after")
+            flood = [rig.admin("GET", "/admin/api/me", {"X-Forwarded-For": "198.51.100.10"})[0] for _ in range(60)]
+            self.assertEqual(flood[:51], [200] * 51, "one a second for one visitor (a burst of fifty more)")
+            self.assertEqual(flood[-1], 429)
+            self.assertEqual(rig.admin("GET", "/admin/api/me", {"X-Forwarded-For": "198.51.100.11"})[0], expected, "another visitor, right after")
             sends = [rig.ask("POST", "/submissions?kind=classic&name=Abc&maker=Mia", {"X-Forwarded-For": "198.51.100.12", "Content-Type": "application/octet-stream"}, b"m" * 100)[0] for _ in range(8)]
             self.assertEqual(sends, [201] * 4 + [503] * 4)
-            self.assertEqual(rig.ask("POST", "/submissions?kind=classic&name=Abc&maker=Mia", {"X-Forwarded-For": "198.51.100.13", "Content-Type": "application/octet-stream"}, b"m" * 100)[0], expected)
+            self.assertEqual(rig.ask("POST", "/submissions?kind=classic&name=Abc&maker=Mia", {"X-Forwarded-For": "198.51.100.13", "Content-Type": "application/octet-stream"}, b"m" * 100)[0], sent)
 
 
 @unittest.skipUnless(shutil.which("nginx"), "nginx is not installed: the operator's list was NOT run in front of docker/nginx.conf (tests/scripts/test_nginx_trusted_proxies.py)")
