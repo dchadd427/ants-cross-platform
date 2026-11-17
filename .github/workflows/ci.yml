@@ -675,8 +675,10 @@ jobs:
 
   # Not one of the five required checks: it runs for a pull request that changes a Dockerfile or this check, and proves that the images did not change with it (tools/image_files_diff.sh builds the web image and the
   # game server's image from the pull request's base Dockerfiles and from this tree's, with one build context and one build id, and compares every file and the image's configuration, and for the web image what its
-  # link reads; about 25 minutes). It is behind no required name, on purpose: a pull request that adds a COPY line (a new page file) changes the images by design and would turn the name red, and the small
-  # job of a name can say "skipped is fine" only for all the jobs behind it together, never for one of them.
+  # link reads; about 25 minutes). A change that moves what the build copies in is told apart from a difference that nothing explains: a file that only the new image has and that a COPY line of the change accounts for
+  # is a note, and a base Dockerfile that cannot build this tree because the change adds or drops a copied file (a new input of the link) is a note and that image is not compared; a file that both images have and that
+  # differs, a file that only the base image has, an unexplained new file and a base build that fails with no such change are red (docs/BUILD_AND_RUN.md, "The check that the images did not change"). It is behind no
+  # required name, on purpose: only a person can say that a change of the images was meant, and the small job of a name can say "skipped is fine" only for all the jobs behind it together, never for one of them.
   image_files:
     name: Image files unchanged by a Dockerfile change
     runs-on: ubuntu-latest
