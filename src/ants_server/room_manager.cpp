@@ -666,7 +666,8 @@ void RoomManager::update(uint32_t now_ms) {
     if (bot_every_ms_ != 0 && net::time_reached(now_ms, next_bot_match_ms_)) {
         next_bot_match_ms_ = now_ms + bot_every_ms_;
         std::string code, why;
-        if (start_bot_match(now_ms, code, why)) bot_notes_.push_back("bot match: room " + code + " started");
+        uint8_t mode = 0;
+        if (start_bot_match(now_ms, code, why, &mode)) bot_notes_.push_back("bot match: room " + code + " started (" + sim::game_mode_name(static_cast<sim::GameMode>(mode)) + ")");
         else bot_notes_.push_back("bot match: not started (" + why + ")");
     }
     // 4. the rooms (a lobby room whose match the rules have just ended is opened again below, the rematch)
@@ -758,7 +759,10 @@ void RoomManager::enable_bot_matches(uint32_t every_minutes, uint32_t now_ms, ui
 // against bottom, left against right and across the corners (TINY, SMALL, TREASURE and ISLANDS; MEDIUM's hills sit north, east, south and west and GAUNTLET's along a diagonal); with three, any two of them and the third
 // alone; with two, free for all), each choice for the seats that play as likely as any other. The teams are drawn last, so the first match of a seed still chooses the same map, seats, levels and seed as before. The room has no person, plays at the normal speed (the maps' own time limits make it 6 to 12 minutes), and ends by the rules or at its own time limit; the recording keeps it like any other
 // match (the 30 seconds, the store's limits), and the live list shows it. Rooms of this kind do not pile up: while one runs, the timer makes no other.
-bool RoomManager::start_bot_match(uint32_t now_ms, std::string& code, std::string& why) {
+// The rules: the original's highest score or the remake's 187, each match by a fair coin of its own, drawn after the teams, so the first match of a seed has the map, seats, levels, seed and teams that it had without
+// the coin (a 187 match on ISLANDS excepted, below) and each later match of a seed draws from a stream that is one draw further for each match before it. No memory of the last match: two or three of a kind in a row come
+// up as often as chance gives them. A 187 match is never on ISLANDS (nobody can be struck there): its map is drawn again from the other five, one more draw in that case only; the original's game is played on all six.
+bool RoomManager::start_bot_match(uint32_t now_ms, std::string& code, std::string& why, uint8_t* mode) {
     code.clear();
     if (replays_ == nullptr) {
         why = "the server keeps no replays";
@@ -771,6 +775,7 @@ bool RoomManager::start_bot_match(uint32_t now_ms, std::string& code, std::strin
         }
     }
     static const char* const kMaps[] = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "ISLANDS.LVL"};
+    static const char* const kNoMeetingIn187 = "ISLANDS.LVL";
     std::vector<std::string> maps;
     for (const char* name : kMaps) {
         MapEntry entry;
@@ -799,18 +804,29 @@ bool RoomManager::start_bot_match(uint32_t now_ms, std::string& code, std::strin
     for (const ai::BotSpec& bot : spec.bots) roster = static_cast<uint8_t>(roster | (1u << bot.seat));
     const std::vector<sim::StartTeams> team_choices = sim::roster_team_choices(roster);
     spec.teams = team_choices[bot_rng_() % team_choices.size()];                // (the room starts with them: Room::update, sim::start_teams_for; the replay's head and the live match carry them)
+    spec.mode = static_cast<uint8_t>(bot_rng_() % 2 == 0 ? sim::GameMode::HighestScore : sim::GameMode::Kills187);      // (the coin: the room's mode reaches the lobby, the start data, the engine of the referee and the replay's head)
+    if (spec.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && spec.map == kNoMeetingIn187) {          // (the water of ISLANDS joins no two hills by a walk and 187 has no Swimmer: nobody could ever be struck there, docs/BOT_187.md; so a 187 match is made on another map)
+        std::vector<std::string> meeting;
+        for (const std::string& name : maps) {
+            if (name != kNoMeetingIn187) meeting.push_back(name);
+        }
+        if (meeting.empty()) spec.mode = static_cast<uint8_t>(sim::GameMode::HighestScore);                 // (a store with that map alone)
+        else spec.map = meeting[bot_rng_() % meeting.size()];
+    }
     spec.bots_only = true;
     spec.early_start = false;
     spec.reconnect = false;                                                // (it holds no seat, so no restart record: a server that stops ends it)
     spec.wait_ms = 30u * 1000u;
     spec.run_ms = 25u * 60u * 1000u;                                       // (the longest map's limit is 12 minutes: this is only the room's own guard)
     spec.keep_ms = 30u * 1000u;
+    const uint8_t made_mode = spec.mode;
     const CreateResult made = create_room(std::move(spec), now_ms);
     if (!made.ok) {
         why = made.error;
         return false;
     }
     code = made.code;
+    if (mode != nullptr) *mode = made_mode;
     return true;
 }
 
