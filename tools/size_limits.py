@@ -54,6 +54,7 @@ GAME_MENU_BUDGET, GAME_MENU_GZIP_BUDGET = 53_000, 15_500  # the settings menu
 SHAPES_BUDGET, SHAPES_GZIP_BUDGET = 12_000, 4_400       # the one table of the picture's shapes
 REJOIN_KEY_BUDGET, REJOIN_KEY_GZIP_BUDGET = 5_900, 2_400    # the seat-key reader (web/rejoin_key.js), shared by the front page and the game page
 PICKER_BUDGET, PICKER_GZIP_BUDGET = 17_000, 5_500      # the picture's dropdown
+WAKE_LOCK_BUDGET, WAKE_LOCK_GZIP_BUDGET = 6_900, 2_500   # the screen lock of a match and a replay (web/wake_lock.js)
 TOUCH_KEYS_BUDGET, TOUCH_KEYS_GZIP_BUDGET = 35_700, 11_200   # the hotkey buttons of a touch screen, with the Shift button (web/touch_keys.js and web/touch_keys.css together)
 # the front page (web/home/, web/front/player_name.js)
 HOME_BUDGET, HOME_GZIP_BUDGET = 50_600, 15_000
