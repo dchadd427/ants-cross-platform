@@ -40,6 +40,10 @@ cmake-build-*/
 !web/front/**
 !web/app/
 !web/app/**
+!assets/hud_art/
+!assets/hud_art/**
+!tests/data/hud_art/
+!tests/data/hud_art/**
 
 # Test artifacts and temporary captures
 tests/temp/
