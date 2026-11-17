@@ -257,7 +257,7 @@ void StandardBot::decide_gate_map(TaskContext& context) {
     tactics_.gate_map = true;
     if (tactics_.plan.gate_field) {
         FieldHints first;
-        first.rules = FieldRules{tactics_.plan.field_pick, tactics_.plan.field_walk, tactics_.plan.field_set_off};
+        first.rules = FieldRules{tactics_.plan.field_pick, tactics_.plan.field_walk, tactics_.plan.field_set_off, tactics_.plan.field_serve, tactics_.plan.field_replan};
         const FieldPlan field = plan_field(context.view, context.map, seat_, first);
         tactics_.field_map = field.feasible() && field_startable(field, context.view, context.map, seat_, first);
         FerryTask::Params ferry = ferry_.params();

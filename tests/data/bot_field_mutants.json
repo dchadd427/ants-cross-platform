@@ -422,6 +422,94 @@
    "new": "(false && ant.type != sim::AntType::Worker && ant.type != view.default_ant_type())",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI29.17 ' ./build/tests/test_ai/test_ai",
    "expect": "AI29.17"
+  },
+  {
+   "id": "serving_ignored_when_taking",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "!shuts_in(t, view, ant, p.tile, kind) && plan.serves(p.tile)) tokens.push_back(p.tile);",
+   "new": "!shuts_in(t, view, ant, p.tile, kind) && (plan.serves(p.tile) || true)) tokens.push_back(p.tile);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.18 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.18"
+  },
+  {
+   "id": "serving_ignored_in_the_cost",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "shuts_in(t, view, ant, p.tile, need) || !plan.serves(p.tile)) continue;",
+   "new": "shuts_in(t, view, ant, p.tile, need)) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.18 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.18"
+  },
+  {
+   "id": "serving_without_a_way_to_the_work",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "if (u.kind == kind && back.reaches(t, u.tile)) p.serving.push_back(u.tile);",
+   "new": "if (u.kind == kind) p.serving.push_back(u.tile);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.18 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.18"
+  },
+  {
+   "id": "serving_switch_ignored",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "if (hints.rules.serve && (work == FieldWork::Bridges",
+   "new": "if ((work == FieldWork::Bridges",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.18 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.18"
+  },
+  {
+   "id": "second_hop_dropped",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "if (best.cost >= kFar) best = best_launch(one_more());",
+   "new": "if (false) best = best_launch(one_more());",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.19 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.19"
+  },
+  {
+   "id": "plant_on_an_ant",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "(t.of(c) != kClear && t.of(c) != kBomb) || t.occupied[t.at(c)] != 0) return false;",
+   "new": "(t.of(c) != kClear && t.of(c) != kBomb)) return false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.20 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.20"
+  },
+  {
+   "id": "plant_on_an_ant_of_the_seat",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "if (a.id != hints.ant && t.in(a.tile)) t.occupied[t.at(a.tile)] = 1;",
+   "new": "if (false && a.id != hints.ant && t.in(a.tile)) t.occupied[t.at(a.tile)] = 1;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.20 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.20"
+  },
+  {
+   "id": "plant_on_an_ant_of_another_team",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "    for (const AntView& a : view.others()) {\n        if (t.in(a.tile)) t.occupied[t.at(a.tile)] = 1;",
+   "new": "    for (const AntView& a : view.others()) {\n        if (false && t.in(a.tile)) t.occupied[t.at(a.tile)] = 1;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.20 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.20"
+  },
+  {
+   "id": "serving_with_the_bombs_closed",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "            mover.dig = kDefuse;\n            if (kind == sim::AntType::Fire) mover.bridge = kBridgeCost;",
+   "new": "            if (kind == sim::AntType::Fire) mover.bridge = kBridgeCost;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.18 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.18"
+  },
+  {
+   "id": "stuck_without_a_fresh_plan",
+   "file": "src/ants_ai/field_task.cpp",
+   "old": "if (hints_.rules.replan && !replanned_) {",
+   "new": "if (false && hints_.rules.replan && !replanned_) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.21 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.21"
+  },
+  {
+   "id": "fresh_plan_switch_ignored",
+   "file": "src/ants_ai/field_task.cpp",
+   "old": "if (hints_.rules.replan && !replanned_) {",
+   "new": "if (!replanned_) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.21 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.21"
   }
  ]
 }
