@@ -380,6 +380,13 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "ibridge") { p.island_bridge_ants = static_cast<uint32_t>(v); return true; }
     if (key == "iguard") return flag(p.island_guard);
     if (key == "iflink") return flag(p.island_flower_link);
+    if (key == "ilinkcost") return flag(p.island_link_cost);
+    if (key == "iret") return flag(p.island_return);
+    if (key == "ifeed") return flag(p.island_feeder);
+    if (key == "ipower") return flag(p.island_power_bridge);
+    if (key == "ipowerkinds") { p.island_power_kinds = static_cast<uint8_t>(v); return true; }
+    if (key == "ibidle") { p.island_bridge_idle = static_cast<uint32_t>(v); return true; }
+    if (key == "ibtiles") { p.island_bridge_tiles = static_cast<uint32_t>(v); return true; }
     if (key == "imreach") return flag(p.island_mine_reach);
     if (key == "iwb") return flag(p.island_walker_bridge);
     if (key == "icrew") { p.island_crew_spare = static_cast<uint32_t>(v); return true; }
