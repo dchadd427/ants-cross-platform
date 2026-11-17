@@ -453,6 +453,25 @@ int main() {
         ASSERT_EQ(board.remembered(), size_t{1});
     } TEST_END();
 
+    TEST_CASE("LB1.8 An Entry Of The List Says The Game Mode Of Its Match As The Replay's Head Has It (0 For Highest Score, 1 For 187), For Each Match Of The Board, And A Match Keeps Its Mode While It Runs") {
+        Clock clock;
+        LiveBoard board([&clock]() { return clock.now; });
+        replay::Header kills = head_of("TREASURE.LVL");
+        kills.set_mode(static_cast<uint8_t>(sim::GameMode::Kills187));
+        Rec plain(f, 650), fight(f, 650, kills);
+        const std::string plain_id = board.begin(*plain.rec);
+        clock.now += 1;
+        const std::string fight_id = board.begin(*fight.rec);
+        std::vector<LiveMatch> list = board.list();
+        ASSERT_EQ(list.size(), size_t{2});
+        ASSERT_TRUE(list[0].id == fight_id && list[0].mode == 1);                  // (newest first: the 187 match)
+        ASSERT_TRUE(list[1].id == plain_id && list[1].mode == 0);
+        plain.run(f, 40);
+        fight.run(f, 40);
+        list = board.list();
+        ASSERT_TRUE(list.size() == 2 && list[0].mode == 1 && list[1].mode == 0 && list[0].turns == 690 && list[1].turns == 690);
+    } TEST_END();
+
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures
               << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;
