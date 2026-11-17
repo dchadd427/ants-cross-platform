@@ -1,11 +1,13 @@
 /* The moderation sheet of Home's chat (web/home/mod.js, docs/HOME_CHAT.md "Roles and commands"), loaded only for a visitor with a role. The colors, .btn, .leave and the frames are the page's own (web/lobby.html,
    games.css, talk.css). Every target is at least 44 px; the sheet is a card in the middle of the window, and a bottom sheet on a phone held upright; nothing scrolls sideways. */
 
-/* ---- the lines of the log that a staff member may act on ---- */
-@media (pointer: coarse) { .gc-line[data-act] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; } }       /* (a long press opens the sheet: the phone's own callout and text selection are held back on these lines only, and only on a touch screen) */
+/* ---- the lines of the log and the rows of the players list that a staff member may act on ---- */
+@media (pointer: coarse) { .gc-line[data-act], .pl-card[data-act] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; } }       /* (a long press opens the sheet: the phone's own callout and text selection are held back on these lines only, and only on a touch screen) */
 .gc-line.gm-on { background: rgba(246, 208, 88, .10); box-shadow: -8px 0 0 0 rgba(246, 208, 88, .10); border-radius: 3px; }       /* (the line that is pressed, chosen with the keys, or has its sheet open: a gold bar at its left) */
 .gc-line.gm-on::before { content: ""; position: absolute; left: -9px; top: 0; bottom: 0; width: 4px; border-radius: 2px; background: var(--gold); }
 @media (forced-colors: active) { .gc-line.gm-on { outline: 2px solid Highlight; } .gc-line.gm-on::before { display: none; } }
+.pl-card.gm-on { position: relative; background: #17180f; border-color: #6a5d22; box-shadow: inset 4px 0 0 var(--gold); }       /* (a row of the players list, pressed, chosen with the keys, or with its sheet open: the bar is inside the row, the list clips what is outside it) */
+@media (forced-colors: active) { .pl-card.gm-on { outline: 2px solid Highlight; box-shadow: none; } }
 
 /* ---- the scrim and the box ---- */
 .gm-shade { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 16px; background: rgba(5, 10, 8, .68); }
