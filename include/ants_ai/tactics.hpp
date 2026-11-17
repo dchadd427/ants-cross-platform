@@ -304,10 +304,13 @@ struct LevelPlan {
     bool island_fly_on{true};            // the Bomber of an expedition's leg flies on after the crew (`--tune ifly=0`: it stays behind and every island of the route needs a Bomber to take, as before; the quicker hops stay)
     bool island_mine_reach{false};       // (Hard) a mine is laid by a Bomber that can walk to its tile: a Bomber on another island is not sent (it stood where it was and was not free for the flight to the ring pile; `--tune imreach=0`: off)
     bool island_walker_bridge{false};    // (Hard) the walkers eat over bridges: a Swimmer digs the chain from the hill to a pile only while a free ant has no pile and the plan has a chain, and goes back to the ferry when it is dug (`--tune iwb=1`)
-    bool island_flower_link{false};      // (Hard) a ferry Swimmer digs the one or two tiles from the ring half where the crew landed to a flower strip, and renews them while an ant waits to cross; an idle plain ant on the ring half walks over and takes the Swimmer drops (`--tune iflink=0`: off)
-    uint32_t island_flower_swimmers{0};  // ... Swimmers that the flower link wants beyond island_swimmers (`--tune iflower=N`)
-    bool island_flower_thief{false};     // ... the ant that waits at the strip also takes a Thief drop and holds it (nothing uses a Thief there yet; `--tune ifthief=1`)
+    bool island_flower_link{false};      // (Hard) the swarm (docs/BOTS.md, "The swarm"): a ferry Swimmer digs the one or two tiles from the ring half where the crew landed to the flower strips and renews them while an ant waits to cross, and the spare ants wait beside the drop tile of every strip and take the Swimmers that fall (`--tune iflink=0`: off)
     uint32_t island_crew_spare{1};       // plain ants beyond the tokens' number that the expedition flies (ExpeditionTask::Params::crew_spare; `--tune icrew=N`)
+    uint32_t island_swarm_swimmers{8};   // ... the Swimmers that the bot wants in all (the row's three and the drops of the strips; `--tune iswarmn=N`)
+    uint32_t island_swarm_stage{2};      // ... ants that wait beside the drop tile of one strip (`--tune iswarmstage=N`)
+    uint32_t island_swarm_rows{0};       // ... from this tick on a corner row whose Swimmers are all still there and that no seat which plays would go for is taken on foot by the plain ants that a walk reaches it from (ExpeditionTask::Params::rows_after; 0: never; `--tune iswarmrows=N`)
+    uint32_t island_swarm_idle{2400};    // ... the tick from which the row that another seat which plays would go for (the nearest to its hill) is taken as well, if its Swimmers are all there (a player who does not play; `--tune iswarmidle=N`)
+    uint32_t island_swarm_hp{3};         // ... the least hit points of an ant that waits there: a drop is taken by walking onto it, and the crew's hops leave an ant with 4 (`--tune iswarmhp=N`)
     // the gate goals (docs/reverse_engineering/bomb_gates.md, "Gate goals"): where walls (fire, bombs, rock) shut every pile off from the hill (HELLRAISER, POPcOrN) the bot gets the right ant first (a Fire ant to
     // put a wall out, a Bomber to bomb itself over it) and does it. There is no switch: Medium and Hard play it on a walled map (Tactics::gate_map, decided from the analysis of the start), Easy never;
     // the times are the owner's numbers (ticks of 50 ms)

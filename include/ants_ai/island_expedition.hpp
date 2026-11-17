@@ -13,6 +13,10 @@
 //           ended by the next click (a plain order across hats finds no path, the planner treats hats as solid). The ant stands at rest in front of the row; its clicks are chained (Orders::chain)
 //           to the hats one after the other, each applied about when the ant's tile became the hat's tile (docs/BOTS.md, "Timed clicks"). A late click takes the hat, which is the old row as it was
 //
+//   on foot (swarm) from a tick on, a row whose Swimmers are all still there belongs to nobody (the corner of an empty seat, of a player who does not play): the bot wants Swimmers beyond the level's
+//           number, and the plain ants that a walk reaches the row from (the crew's spares that stand on the same side of the lake, the ants that wait at a strip) go in over the hats like the
+//           crew of a flight, one for every Swimmer, with no flight and no Bomber. Nothing is done before that tick, so that no row of a seat that plays is taken while its own crew is on the way
+//
 // Everything is read from the BotView and nothing is a promise: an ant that died, a bomb that is gone, an enemy on the shore are seen at the next look and the leg or the row is planned
 // again. Idle where a Swimmer lies within a walk (SMALL), where no row has a Swimmer left, and while the bot has the Swimmers it wants.
 
@@ -24,6 +28,7 @@
 #include <vector>
 
 #include "ants_ai/island_info.hpp"
+#include "ants_ai/island_swarm.hpp"
 #include "ants_ai/island_tasks.hpp"
 #include "ants_ai/tactics.hpp"
 #include "ants_ai/tasks.hpp"
@@ -46,6 +51,13 @@ public:
         bool timed_row{false};               // (Hard) timed clicks through the hats of the row: one ant for a Swimmer, the Fire hats stay (see "timed" above)
         uint32_t chain_slack{1};             // a click of a chain is applied from the ticks that the model gives to that many more (the window of the cancel is 3 ticks wide; the early edge is the harmless one)
         uint32_t chain_ticks{90};            // an ant that a chain was ordered for is left alone this long (the chain takes about 60 ticks); then it has made its token or the chain missed
+        bool release_spares{false};          // (swarm) a plain crew ant that stands on the island of the row and is not needed for a Swimmer still to be taken goes free at once (the swarm sends it to a flower strip); one spare stays until two Swimmers are made
+        uint32_t rows_after{0};              // (swarm) from this tick on the rows whose Swimmers are all still there are taken on foot, and the bot wants rows_swimmers Swimmers in all while one is left (0: never)
+        uint32_t rows_swimmers{8};
+        uint32_t rows_idle_after{2400};      // a row that a seat which plays would go for (the nearest to its hill) counts as nobody's only from this tick on (a player who does not play); the rows of seats that do not play, at once
+        uint32_t foot_hp{3};                 // an ant that goes for a row on foot has at least this many hit points (a walk costs none; the swarm's number)
+        uint32_t foot_walk_ticks{1500};      // ... and is at most this far from the end of the row by the walk
+        uint32_t foot_block_ticks{3000};     // a row on foot that an ant far from it answers with "Can't go there." (the engine finds no way where the map analysis does) is left alone this long
         uint32_t chain_misses_max{2};        // chains in a row that missed (the ant took a hat, or stood still with nothing taken) before the row goes back to one ant for every hat; a Swimmer taken by a chain ends the run
     };
 
@@ -58,6 +70,8 @@ public:
 
     /// The island task whose analysis the expedition reads (set by the bot); null: the task does nothing
     void attach(const IslandTask* islands) noexcept { islands_ = islands; }
+    /// The swarm whose waiting ants a row on foot may take (null: none)
+    void attach_swarm(SwarmTask* swarm) noexcept { swarm_ = swarm; }
     void set_params(const Params& params) { params_ = params; }
     const Params& params() const noexcept { return params_; }
 
@@ -68,7 +82,13 @@ public:
     }
 
     // ---- for the tests and the reports ----
-    bool active() const noexcept { return !route_.empty(); }
+    /// Flights are planned or under way (a row on foot has none)
+    bool active() const noexcept { return route_.size() > 1; }
+    /// A row is being worked on foot (see "on foot" above), and how many were planned that way
+    bool on_foot() const noexcept { return foot_ && !route_.empty(); }
+    uint32_t foot_rows() const noexcept { return foot_rows_; }
+    /// Rows on foot that were given up because a crew ant on its way to the row said "Can't go there."
+    uint32_t foot_blocks() const noexcept { return foot_blocks_; }
     /// The islands of the route (the hill's first, the island with the row last), the row (IslandInfo::token_groups index) and the end of it that the crew goes in at; -1 when none
     const std::vector<int32_t>& route() const noexcept { return route_; }
     int32_t group() const noexcept { return group_; }
@@ -131,6 +151,11 @@ private:
     };
 
     bool plan(TaskContext& context);
+    bool plan_on_foot(TaskContext& context);
+    bool intact_row(const TaskContext& context, size_t group) const;
+    void note_claims(const TaskContext& context);
+    bool rows_open(const TaskContext& context) const;
+    bool at_row(const TaskContext& context, const AntView& ant) const;
     void stations(const TaskContext& context, Stations& out) const;
     void drive_leg(TaskContext& context, size_t leg);
     void note_taken(TaskContext& context);
@@ -157,12 +182,20 @@ private:
     bool steps_in(const TaskContext& context, sim::TileCoord entrance, std::vector<ChainStep>& steps, sim::TileCoord* target) const;
     bool steps_out(const TaskContext& context, const AntView& ant, sim::TileCoord leave, std::vector<ChainStep>& steps, sim::TileCoord* goal) const;
     void release_all(TaskContext& context);
+    void release_spares(TaskContext& context);
     bool may_order(uint32_t ant, uint64_t now) const;
     uint32_t swimmers_wanted() const;
 
     Tactics& tactics_;
     Params params_;
     const IslandTask* islands_{nullptr};
+    SwarmTask* swarm_{nullptr};
+    bool rows_open_{false};                  // swarm: a row that nobody works is left, from tick rows_after on (set at every look)
+    bool foot_{false};                       // the row that is worked now is worked on foot: the crew was not flown, it walks to the end of the row
+    uint32_t foot_rows_{0};
+    uint32_t foot_blocks_{0};
+    std::map<int32_t, uint64_t> foot_blocked_;   // token group -> the tick until which no row on foot is planned there
+    std::vector<uint8_t> claimed_;           // by token group: it is the row that another seat which plays would go for (the nearest to its hill)
     int32_t hill_comp_{-1};
     uint32_t gap_{0};                        // the ticks before a second order to one ant: the latency of the level and 20 (set at every look)
     std::vector<int32_t> route_;             // the islands of the route (empty: no expedition)
