@@ -306,7 +306,7 @@ class TheText(unittest.TestCase):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
         mine = [l for l in locations if "admin" in l or "submi" in l or "approved" in l]
         self.assertEqual(sorted(mine), sorted(["= /submissions", "^~ /submissions/", "@submit_off", "= /admin", "= /admin.html", "= /admin/", "^~ /admin/api/", "= /hub/admin/gate", "@admin_not_signed_in", "@admin_not_allowed",
-                                               "@admin_door_off", "^~ /admin/", "@approved_files"]))
+                                               "@admin_door_off", "^~ /admin/", "@approved_files", "^~ /hub/admin/api/", "= /hub/admin/api"]))
         for header in ("location = /submissions {", "location ^~ /submissions/ {", "location = /admin {", "location ^~ /admin/api/ {", "location ^~ /admin/ {"):
             self.assertEqual(CONF.count(header), 1, header)
         # (a regular-expression location would win over a prefix one only without ^~; the extension rule of scripts and styles must not answer for /admin.js either: /admin_page.js is a file of the page)

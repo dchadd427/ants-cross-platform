@@ -30,12 +30,13 @@ import hashlib
 import hmac
 import io
 import json
+import os
 import re
 import secrets
 
 from . import admin as adminmod, chat as chatmod, http, limits as limitmod, pseudo, roles as rolesmod
 from .store import StoreError
-from .store.base import SHOW_BLOCKED
+from .store.base import SHOW_BLOCKED, SHOW_OFF
 
 GATE_PATH = "/hub/admin/gate"
 API_PREFIX = "/hub/admin/api/"
@@ -85,6 +86,22 @@ def untyped_id(name):
     return "" if ID_SHAPED.match(name or "") else name
 
 
+def code_stamp():
+    """Eight hex characters that name the program that this hub runs: the SHA-256 of the bytes of its own source files (the image carries no version of its own, so that a deploy that changes nothing here
+    does not restart the chat). The admin page's Status shows it beside the time the hub started. Nothing else is read; a file that cannot be read gives an empty text."""
+    digest, here = hashlib.sha256(), os.path.dirname(os.path.abspath(__file__))
+    try:
+        for base, folders, names in os.walk(here):
+            folders.sort()
+            for name in sorted(names):
+                if name.endswith(".py"):
+                    with open(os.path.join(base, name), "rb") as f:
+                        digest.update(os.path.relpath(os.path.join(base, name), here).encode("utf-8") + b"\0" + f.read() + b"\0")
+    except OSError:
+        return ""
+    return digest.hexdigest()[:8]
+
+
 def by_name(store, by):
     """Who made a ban or a mute, as the page is told: the reference that the row holds (16 hex characters, which may happen to be all digits, and are not then an id to be hashed again), else what
     the command line prints (`command line`, or a reference made of an id that an older row holds)."""
@@ -113,6 +130,7 @@ class Door:
         self.flights = {}                                # the hub's key of an account -> the lookup in flight for it, which every parallel request waits for
         self.next_address_log = float("-inf")
         self.next_budget_log = float("-inf")
+        self.version = {"code": code_stamp(), "started": int(hub.store.clock())}          # (what this hub is, and since when: the Status of the page)
 
     def forget_idle(self, now):
         self.rate.forget_idle(now)
@@ -319,20 +337,17 @@ class Door:
         if name == "me":
             return http.response(200, {"name": who.username, "role": role, "csrf": self.token(who), "untrusted": True, "untrusted_fields": ["name"]})
         if name == "status":
-            out = io.StringIO()
-            adminmod.show_usage(store, self.hub.limits.db_max_bytes, out)                       # (what `hub.admin status` prints, line by line)
-            adminmod.show_pictures(store, self.hub.limits, out)
-            return http.response(200, {"status": out.getvalue().splitlines(), "health": self.health()})
+            return http.response(200, self.status())
         if name == "bans":
             rows = list(reversed(store.bans()))
-            names = store.usernames_by_reference({chat.ref(a) for a, _, _, _ in rows})
-            out = [{"ref": chat.ref(a), "name": untyped_id(names.get(chat.ref(a), n)), "at": at, "by": by_name(store, by)} for a, n, at, by in rows]
-            return http.response(200, {"bans": out, "untrusted": True, "untrusted_fields": ["name"]})
+            names = store.usernames_by_reference({chat.ref(a) for a, _, _, _ in rows} | {by_name(store, by) for _, _, _, by in rows})
+            out = [{"ref": chat.ref(a), "name": untyped_id(names.get(chat.ref(a), n)), "at": at, "by": by_name(store, by), "by_name": untyped_id(names.get(by_name(store, by), ""))} for a, n, at, by in rows]
+            return http.response(200, {"bans": out, "untrusted": True, "untrusted_fields": ["name", "by_name"]})
         if name == "mutes":
             rows = store.mutes()
-            names = store.usernames_by_reference({chat.ref(a) for a, _, _, _ in rows})
-            out = [{"ref": chat.ref(a), "name": untyped_id(names.get(chat.ref(a), n)), "until": until, "by": by_name(store, by)} for a, n, until, by in rows]
-            return http.response(200, {"mutes": out, "untrusted": True, "untrusted_fields": ["name"]})
+            names = store.usernames_by_reference({chat.ref(a) for a, _, _, _ in rows} | {by_name(store, by) for _, _, _, by in rows})
+            out = [{"ref": chat.ref(a), "name": untyped_id(names.get(chat.ref(a), n)), "until": until, "by": by_name(store, by), "by_name": untyped_id(names.get(by_name(store, by), ""))} for a, n, until, by in rows]
+            return http.response(200, {"mutes": out, "untrusted": True, "untrusted_fields": ["name", "by_name"]})
         if name == "hidden":
             blocked = sorted(r for r, state in store.picture_marks().items() if state == SHOW_BLOCKED)
             names = store.usernames_by_reference(blocked)
@@ -342,17 +357,32 @@ class Door:
         out = [{"at": r.at, "action": r.action, "actor": r.actor, "actor_name": names.get(r.actor, ""), "target": r.target, "target_name": names.get(r.target, ""), "detail": r.detail} for r in rows]
         return http.response(200, {"modlog": out, "untrusted": True, "untrusted_fields": ["actor_name", "target_name"]})
 
+    def status(self):
+        """What the page's Status shows, as numbers (the page draws the meter and the words from them): the store (`hub.admin status` says the same in lines), the roles' health, the last fetch of a
+        picture and which program this is. No account, no id, no name."""
+        store, limits = self.hub.store, self.hub.limits
+        used, (count, size), marks = store.usage(), store.picture_usage(), list(store.picture_marks().values())
+        pictures = getattr(self.hub.chat, "pictures", None)
+        last = pictures.last_fetch() if pictures is not None else None
+        return {"store": {"bytes": used.bytes, "limit": limits.db_max_bytes, "log": used.log, "free": used.free, "lines": used.lines, "oldest": used.oldest if used.lines else None,
+                          "pictures": count, "pictures_max": limits.pictures_rows_max, "picture_bytes": size, "picture_bytes_max": limits.pictures_bytes_max, "off": marks.count(SHOW_OFF), "blocked": marks.count(SHOW_BLOCKED)},
+                "health": self.health(), "last_picture": {"kind": last[0], "age": last[1]} if last else None, "version": dict(self.version)}
+
     def health(self):
         """What the roles' lookups are doing, in words (no account, no id): `off` when no role is asked of Discord, `refused` while Discord refuses the token, the server or the access, `down` while
-        a lookup fails, else `ok`; and how many accounts the hub holds an answer for."""
+        a lookup fails, else `ok`; how many accounts the hub holds an answer for; and, while refused, which refusal (`guild`, `token` or `access`), the HTTP status that Discord gave and the seconds until the
+        hub asks again (`kind`, `status` and `retry` are null otherwise)."""
         roles = self.hub.chat.roles
+        kind = status = retry = None
         if not getattr(roles, "on", False):
             state = "off"
         elif self.hub.clock() < getattr(roles, "pause_until", float("-inf")):
             state = "refused"
+            kind, status = getattr(roles, "problem", (None, None))
+            retry = max(0, int(roles.pause_until - self.hub.clock()) + 1)
         else:
             state = "down" if getattr(roles, "down", False) else "ok"
-        return {"roles": state, "roles_known": len(getattr(roles, "entries", ()))}
+        return {"roles": state, "roles_known": len(getattr(roles, "entries", ())), "kind": kind, "status": status, "retry": retry}
 
     # ---- the page's changes ------------------------------------------------------------------------------------------------------------------
 

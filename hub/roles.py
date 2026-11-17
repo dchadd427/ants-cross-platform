@@ -93,6 +93,7 @@ class Roles:
         self.pause_until = float("-inf")        # no call before this (a refused token, server or access)
         self.hold_until = float("-inf")         # no call before this (Discord said wait)
         self.down = False
+        self.problem = (None, None)             # (kind, HTTP status) of the last refusal of the token, the server or the access (the admin page's Status says them; no account, no id)
         self.next_log = float("-inf")
         self.next_error_log = float("-inf")
         self.wake = None
@@ -444,6 +445,7 @@ class Roles:
     def refused(self, kind, status, now):
         """Discord refuses the token, the access or the server: no call for `roles_pause_seconds`, and nobody holds a role (the owner account's stays); one line."""
         self.pause_until = now + self.limits.roles_pause_seconds
+        self.problem = (kind, status)
         self.log.event("warning", what="discord_roles_refused", kind=kind, status=status)
         for account, entry in list(self.entries.items()):
             entry.ok_at = None

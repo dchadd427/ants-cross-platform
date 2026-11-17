@@ -732,8 +732,8 @@ class TheChanges(DoorTest):
         self.assertTrue(self.rig.call(self.rig.store.is_banned, TARGET))
         self.assertEqual(target.recv_json()["t"], "bye")
         rows = self.get("bans").json()
-        self.assertEqual([(b["ref"], b["name"], b["by"]) for b in rows["bans"]], [(self.ref(TARGET), NAMES[TARGET], self.ref(ADMIN))])
-        self.assertEqual((rows["untrusted"], rows["untrusted_fields"]), (True, ["name"]))
+        self.assertEqual([(b["ref"], b["name"], b["by"], b["by_name"]) for b in rows["bans"]], [(self.ref(TARGET), NAMES[TARGET], self.ref(ADMIN), NAMES[ADMIN])])
+        self.assertEqual((rows["untrusted"], rows["untrusted_fields"]), (True, ["name", "by_name"]))
         log = self.row("ban")
         self.assertEqual([(a.actor, a.target, a.detail) for a in log], [(self.ref(ADMIN), self.ref(TARGET), "")])
         self.assertEqual(self.post("ban", {"account": NAMES[TARGET]}).status, 409, "banned already")
@@ -750,8 +750,8 @@ class TheChanges(DoorTest):
         until = r.json()["until"]
         self.assertAlmostEqual(until, time.time() + 1800, delta=5)
         rows = self.get("mutes").json()
-        self.assertEqual([(m["ref"], m["name"], m["until"], m["by"]) for m in rows["mutes"]], [(self.ref(TARGET), NAMES[TARGET], until, self.ref(ADMIN))])
-        self.assertEqual(rows["untrusted_fields"], ["name"])
+        self.assertEqual([(m["ref"], m["name"], m["until"], m["by"], m["by_name"]) for m in rows["mutes"]], [(self.ref(TARGET), NAMES[TARGET], until, self.ref(ADMIN), NAMES[ADMIN])])
+        self.assertEqual(rows["untrusted_fields"], ["name", "by_name"])
         self.assertEqual([(a.actor, a.target, a.detail) for a in self.row("mute")], [(self.ref(ADMIN), self.ref(TARGET), "30")])
         self.assertEqual(self.post("mute", {"account": NAMES[TARGET], "minutes": 10080}).status, 200)
         self.assertEqual(self.post("mute", {"account": NAMES[TARGET], "minutes": 1}).status, 200)
@@ -775,8 +775,10 @@ class TheChanges(DoorTest):
         digits = "1234567890123456"                                  # (a reference that happens to be all digits: one in about two thousand is)
         self.rig.call(self.rig.store.ban, TARGET, digits, NAMES[TARGET])
         self.rig.call(self.rig.store.mute, ADMIN2, 5, digits, NAMES[ADMIN2])
-        self.assertEqual([b["by"] for b in self.get("bans").json()["bans"]], [digits])
-        self.assertEqual([b["by"] for b in self.get("mutes").json()["mutes"]], [digits])
+        self.assertEqual([(b["by"], b["by_name"]) for b in self.get("bans").json()["bans"]], [(digits, "")])
+        self.assertEqual([(b["by"], b["by_name"]) for b in self.get("mutes").json()["mutes"]], [(digits, "")])
+        self.rig.call(self.rig.store.ban, ADMIN2, "terminal", NAMES[ADMIN2])
+        self.assertEqual(sorted((b["by"], b["by_name"]) for b in self.get("bans").json()["bans"]), [(digits, ""), ("terminal", "")], "the command line is no one's username")
 
     def test_nopic_and_pic_block_and_lift_a_picture_and_the_list_shows_the_block(self):
         self.assertEqual(self.post("nopic", {"account": NAMES[TARGET]}).status, 200)
@@ -917,29 +919,79 @@ class TheChanges(DoorTest):
         details = [r["detail"] for r in self.get("modlog").json()["modlog"]]
         self.assertEqual(details, ["6"])
 
-    def test_the_status_is_what_the_command_line_prints_and_the_health_of_the_roles(self):
-        from hub import admin
-        import io
+    def test_the_status_is_numbers_for_the_store_the_health_of_the_roles_the_last_picture_and_the_program(self):
         self.line()
         body = self.get("status").json()
-        self.assertEqual(sorted(body), ["health", "status"])
-        out = io.StringIO()
-        self.rig.call(admin.show_usage, self.rig.store, self.rig.limits.db_max_bytes, out)
-        self.rig.call(admin.show_pictures, self.rig.store, self.rig.limits, out)
-        self.assertEqual(body["status"], out.getvalue().splitlines())
-        self.assertRegex(body["status"][0], r"^database: [0-9.]+ MB of 64\.0 MB used \(0%\), log file [0-9.]+ MB; [0-9.]+ MB free to reuse; 1 lines, the oldest from ")
-        self.assertRegex(body["status"][1], r"^pictures: 0 of [0-9,]+ kept, 0\.0 MB of [0-9.]+ MB; 0 switched off, 0 blocked$")
-        self.assertEqual(body["health"]["roles"], "ok")
+        self.assertEqual(sorted(body), ["health", "last_picture", "store", "version"])
+        store = body["store"]
+        self.assertEqual(sorted(store), ["blocked", "bytes", "free", "limit", "lines", "log", "off", "oldest", "picture_bytes", "picture_bytes_max", "pictures", "pictures_max"])
+        self.assertEqual((store["limit"], store["lines"], store["pictures"], store["off"], store["blocked"]), (self.rig.limits.db_max_bytes, 1, 0, 0, 0))
+        self.assertTrue(all(type(store[k]) is int and store[k] >= 0 for k in store if k != "oldest"))
+        self.assertEqual(store["pictures_max"], self.rig.limits.pictures_rows_max)
+        self.assertEqual(store["picture_bytes_max"], self.rig.limits.pictures_bytes_max)
+        self.assertAlmostEqual(store["oldest"], time.time(), delta=60)
+        self.assertEqual(body["health"], {"roles": "ok", "roles_known": body["health"]["roles_known"], "kind": None, "status": None, "retry": None})
+        self.assertEqual(body["last_picture"], None, "no picture was fetched since the hub started")
+        self.assertRegex(body["version"]["code"], r"^[0-9a-f]{8}\Z")
+        self.assertAlmostEqual(body["version"]["started"], time.time(), delta=300)
+        self.assertEqual(sorted(body["version"]), ["code", "started"])
         self.fake.member_mode = "status:500"
         self.gate(PLAIN)
         time.sleep(0.4)
         self.assertEqual(self.get("status", OWNER).json()["health"]["roles"], "down")
 
-    def test_the_status_says_refused_while_discord_refuses_the_token(self):
+    def test_the_status_says_which_refusal_and_when_the_hub_asks_again_while_discord_refuses(self):
         self.fake.member_mode = "err:401"
         self.gate(PLAIN)
         time.sleep(0.4)
-        self.assertEqual(self.get("status", OWNER).json()["health"]["roles"], "refused")
+        health = self.get("status", OWNER).json()["health"]
+        self.assertEqual((health["roles"], health["kind"], health["status"]), ("refused", "token", 401))
+        self.assertTrue(0 < health["retry"] <= 61, health)
+        self.assertEqual(sorted(health), ["kind", "retry", "roles", "roles_known", "status"])
+        roles = self.rig.hub.chat.roles
+        for kind, status in (("access", 403), ("guild", 404)):          # (the other two refusals of Discord, said the way the check says them)
+            self.rig.call(lambda: roles.refused(kind, status, roles.clock()))
+            health = self.get("status", OWNER).json()["health"]
+            self.assertEqual((health["roles"], health["kind"], health["status"]), ("refused", kind, status))
+        self.rig.call(setattr, roles, "pause_until", float("-inf"))
+        self.assertEqual(self.get("status", OWNER).json()["health"]["kind"], None, "no refusal is told once the hub asks again")
+
+    def test_the_name_of_who_did_it_is_not_told_when_it_is_as_long_as_an_id_and_the_program_is_named_by_its_files(self):
+        self.rig.call(self.rig.store.set_profile, ADMIN2, "1234567890123456789", "", 1000)           # (a username of digits, as long as an id: such a name is never told, in any list)
+        self.rig.call(self.rig.store.ban, TARGET, self.ref(ADMIN2), NAMES[TARGET])
+        self.rig.call(self.rig.store.mute, PLAIN, 5, self.ref(ADMIN2), NAMES[PLAIN])
+        self.assertEqual([b["by_name"] for b in self.get("bans").json()["bans"]], [""])
+        self.assertEqual([m["by_name"] for m in self.get("mutes").json()["mutes"]], [""])
+        import tempfile
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as one, tempfile.TemporaryDirectory() as two:
+            for folder, text in ((one, "a = 1\n"), (two, "a = 2\n")):
+                with open(os.path.join(folder, "x.py"), "w") as f:
+                    f.write(text)
+            stamps = []
+            for folder in (one, two, one):
+                with mock.patch.object(admindoor, "__file__", os.path.join(folder, "admindoor.py")):
+                    stamps.append(admindoor.code_stamp())
+            self.assertEqual(stamps[0], stamps[2], "the same files, the same eight characters")
+            self.assertNotEqual(stamps[0], stamps[1], "another file, another eight")
+            self.assertTrue(all(re.match(r"[0-9a-f]{8}\Z", x) for x in stamps), stamps)
+
+    def test_the_status_says_the_last_picture_fetch_by_its_kind_and_its_age_and_nothing_else(self):
+        from hub import pictures as picmod
+        hub = self.rig.hub
+        pictures = picmod.Pictures(hub.store, None, hub.limits, hub.log, hub.clock)                # (this rig has no login with Discord, which is what makes the pictures: the same object, by hand)
+        self.rig.call(setattr, hub.chat, "pictures", pictures)
+        self.rig.call(pictures.tell, "down")
+        self.rig.call(pictures.tell, "ok")
+        last = self.get("status").json()["last_picture"]
+        self.assertEqual(sorted(last), ["age", "kind"])
+        self.assertEqual(last["kind"], "ok")
+        self.assertTrue(0 <= last["age"] < 5, last)
+        self.rig.call(setattr, pictures, "last", ("down", pictures.clock() - 90))                # (a fetch that ended a minute and a half ago)
+        last = self.get("status").json()["last_picture"]
+        self.assertEqual(last["kind"], "down")
+        self.assertTrue(90 <= last["age"] < 95, last)
+        self.assertNotIn(self.ref(ADMIN), json.dumps(self.get("status").json()))
 
 
 class TheIdIsLikeAPassword(DoorTest):

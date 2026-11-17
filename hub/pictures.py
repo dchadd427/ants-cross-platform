@@ -144,6 +144,7 @@ class Pictures:
         self.queued = set()                                  # the references of the accounts whose fetch waits or runs: one each, so a burst of logins of one account is one fetch
         self.dropped = 0                                     # fetches dropped since the last line of the log
         self.stopping = False                                # the hub is stopping: nothing new is started
+        self.last = None                                     # (kind, when) of the last fetch that ended, for the admin page's Status (hub/admindoor.py): a kind of the log's `picture kind=` line and nothing else
         self.dropped_at = float("-inf")
         self.bucket = limitmod.TokenBucket(limits.picture_burst, limits.picture_refill_seconds, clock())
         self.rate = limitmod.RateByAddress(limits.picture_serve_burst, limits.picture_serve_refill_seconds)
@@ -155,6 +156,15 @@ class Pictures:
         self.on_change = None                                # called with the set of references whose name or state changed, each time sync() finds a change (the chat tells their sockets)
 
     # ---- the fetch ---------------------------------------------------------------------------------------------------------------------------
+
+    def tell(self, kind, **fields):
+        """The one line of the log for a fetch that ended (`picture kind=ok|none|down|type|big|shape|busy|bug`), and the kind and the time of the last one, which the admin page's Status shows. No id, no name, no reference."""
+        self.last = (kind, self.clock())
+        self.log.event("picture", kind=kind, **fields)
+
+    def last_fetch(self):
+        """(kind, seconds ago) of the last fetch that ended since the hub started, or None."""
+        return None if self.last is None else (self.last[0], max(0, int(self.clock() - self.last[1])))
 
     def offer(self, account, avatar):
         """What a finished login hands over: the account and the short code of its picture (None for none). It decides at once, never waits and never raises: an account whose picture is off, hidden or banned or that has no login (`allowed`), one
@@ -168,11 +178,11 @@ class Pictures:
                 return
             if avatar is None:
                 self.store.clear_picture(account)
-                self.log.event("picture", kind="none")
+                self.tell("none")
                 return self.sync()
             self.enqueue(account, avatar, pseudo.reference(self.store.secret(), account))
         except Exception as e:                                # (a bug or a refusing database costs one picture, never the login)
-            self.log.event("picture", kind="bug", error=type(e).__name__)
+            self.tell("bug", error=type(e).__name__)
 
     def enqueue(self, account, avatar, key, quiet=False):
         """One fetch (or lookup, `avatar` is LOOKUP) waits for its turn: one for an account at a time, at most `picture_waiting` in all (the rest is dropped, and counted unless `quiet`)."""
@@ -194,7 +204,7 @@ class Pictures:
             if self.settle(account, avatar, key):
                 self.enqueue(account, avatar, key, quiet=True)
         except Exception as e:
-            self.log.event("picture", kind="bug", error=type(e).__name__)
+            self.tell("bug", error=type(e).__name__)
 
     def want(self, account):
         """A logged-in person connected. Where the roles' check will say what the picture is (roles on, and the person is not the owner account that is never checked) nothing is done here; else the person's
@@ -205,14 +215,14 @@ class Pictures:
                 return
             self.ask(account)
         except Exception as e:
-            self.log.event("picture", kind="bug", error=type(e).__name__)
+            self.tell("bug", error=type(e).__name__)
 
     def absent(self, account):
         """The roles' check says that the person is not in the server: their profile is asked for, if that is due (`ask`)."""
         try:
             self.ask(account)
         except Exception as e:
-            self.log.event("picture", kind="bug", error=type(e).__name__)
+            self.tell("bug", error=type(e).__name__)
 
     def ask(self, account):
         """Queue a lookup of the person's profile when it is due: no look at Discord was made for the account within `picture_lookup_seconds` (one a day), there is a bot token, nothing is stopped (the picture
@@ -243,7 +253,7 @@ class Pictures:
             self.codes.pop(key, None)
             if have:
                 self.store.clear_picture(account)
-                self.log.event("picture", kind="none")
+                self.tell("none")
                 self.sync()
             return False
         mark, failed = self.mark(avatar), self.failed.get(key)
@@ -295,7 +305,7 @@ class Pictures:
         try:
             status, data, rl = await self.discord.user(account, self.token)
         except discordmod.DiscordError:
-            self.log.event("picture", kind="down")
+            self.tell("down")
             return False, None
         now = self.clock()
         remaining, reset = rl.get("remaining"), rl.get("reset_after")
@@ -312,7 +322,7 @@ class Pictures:
             self.hold_until = max(self.hold_until, now + 600.0)
         valid, code = discordmod.Discord.avatar_code(data.get("avatar")) if status == 200 and "avatar" in data and data.get("id") == account else (False, None)
         if not valid:
-            self.log.event("picture", kind="down")
+            self.tell("down")
             return False, None
         return True, code
 
@@ -324,7 +334,7 @@ class Pictures:
 
     def tell_drops(self, now):
         if self.dropped:
-            self.log.event("picture", kind="busy", dropped=self.dropped)
+            self.tell("busy", dropped=self.dropped)
             self.dropped, self.dropped_at = 0, now
 
     def pump(self):
@@ -350,7 +360,7 @@ class Pictures:
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            self.log.event("picture", kind="bug", error=type(e).__name__)
+            self.tell("bug", error=type(e).__name__)
         finally:
             self.inflight -= 1
             self.queued.discard(key)
@@ -368,30 +378,30 @@ class Pictures:
         except discordmod.DiscordError as e:
             if e.kind == "big":
                 self.give_up(key, avatar)
-            return self.log.event("picture", kind="big" if e.kind == "big" else "down")
+            return self.tell("big" if e.kind == "big" else "down")
         if status == 404:
             self.codes.pop(key, None)
             self.store.clear_picture(account)
             self.sync()
             self.give_up(key, avatar)                                # (after the look at the pictures: it forgets what it held for an account whose copy went)
-            return self.log.event("picture", kind="none")
+            return self.tell("none")
         if status != 200:
-            return self.log.event("picture", kind="down")
+            return self.tell("down")
         if content_type != "image/png":
             self.give_up(key, avatar)
-            return self.log.event("picture", kind="type")
+            return self.tell("type")
         if len(body) > self.limits.picture_bytes_max:
             self.give_up(key, avatar)
-            return self.log.event("picture", kind="big")
+            return self.tell("big")
         try:
             png = rewrite(body)
         except ShapeError:
             self.give_up(key, avatar)
-            return self.log.event("picture", kind="shape")
+            return self.tell("shape")
         kept = self.store.set_picture(account, png, secrets.token_hex(16), self.store.clock() + self.limits.session_seconds, self.limits.pictures_rows_max, self.limits.pictures_bytes_max)
         if kept and key is not None:
             self.remember(key, avatar)
-        self.log.event("picture", kind="ok" if kept else "none")       # (not kept: the person switched it off, the login ended or the account was banned while it was on its way)
+        self.tell("ok" if kept else "none")       # (not kept: the person switched it off, the login ended or the account was banned while it was on its way)
         self.sync()
 
     def forget_idle(self, now):

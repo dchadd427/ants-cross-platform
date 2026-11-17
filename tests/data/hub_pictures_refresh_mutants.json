@@ -28,7 +28,7 @@
   {
    "id": "no_picture_at_discord_keeps_the_copy",
    "file": "hub/pictures.py",
-   "old": "                self.store.clear_picture(account)\n                self.log.event(\"picture\", kind=\"none\")\n                self.sync()\n            return False",
+   "old": "                self.store.clear_picture(account)\n                self.tell(\"none\")\n                self.sync()\n            return False",
    "new": "                pass\n            return False",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheRolesCheckRefreshes"
   },
@@ -175,8 +175,8 @@
   {
    "id": "lookup_failure_logs_the_reference",
    "file": "hub/pictures.py",
-   "old": "        except discordmod.DiscordError:\n            self.log.event(\"picture\", kind=\"down\")\n            return False, None\n        now",
-   "new": "        except discordmod.DiscordError:\n            self.log.event(\"picture\", kind=\"down\", ref=pseudo.reference(self.store.secret(), account))\n            return False, None\n        now",
+   "old": "        except discordmod.DiscordError:\n            self.tell(\"down\")\n            return False, None\n        now",
+   "new": "        except discordmod.DiscordError:\n            self.tell(\"down\", ref=pseudo.reference(self.store.secret(), account))\n            return False, None\n        now",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheLookupFails"
   },
   {

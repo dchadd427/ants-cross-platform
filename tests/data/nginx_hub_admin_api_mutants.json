@@ -1,0 +1,135 @@
+{
+ "note": "Mutants of the door for the admin page's calls to the chat hub in docker/nginx.conf (/hub/admin/api/: the map of the calls that the hub has, the checks, the headers that go on, the body's size, the allowance and the log; docs/HUB.md 'The admin page's door') for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose, and tests/scripts/test_nginx_hub_admin_api.py must notice, running the real blocks in front of a stand-in hub and in front of the real hub. Run from the checkout, no build needed, where the program nginx is installed: python3 tools/mutate.py tests/data/nginx_hub_admin_api_mutants.json --keep-going --jobs 1.",
+ "defaults": {
+  "test": "python3 -I tests/scripts/test_nginx_hub_admin_api.py",
+  "build": []
+ },
+ "mutants": [
+  {
+   "id": "page_check_is_gone",
+   "file": "docker/nginx.conf",
+   "old": "        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        limit_req zone=ants_admin_api burst=50 nodelay;\n        limit_req_status 429;\n        client_max_body_size 512;",
+   "new": "        access_log off;\n        limit_req zone=ants_admin_api burst=50 nodelay;\n        limit_req_status 429;\n        client_max_body_size 512;"
+  },
+  {
+   "id": "any_name_goes_through",
+   "file": "docker/nginx.conf",
+   "old": "    default \"\";\n    \"~^GET /hub/admin/api/",
+   "new": "    default read;\n    \"~^GET /hub/admin/api/"
+  },
+  {
+   "id": "a_change_name_is_a_read",
+   "file": "docker/nginx.conf",
+   "old": "(?:me|bans|mutes|hidden|modlog|status)\\z\" read;",
+   "new": "(?:me|bans|mutes|hidden|modlog|status|ban)\\z\" read;"
+  },
+  {
+   "id": "any_method_goes_through",
+   "file": "docker/nginx.conf",
+   "old": "\"~^GET /hub/admin/api/(?:me",
+   "new": "\"~^[A-Z]+ /hub/admin/api/(?:me"
+  },
+  {
+   "id": "the_query_is_not_checked",
+   "file": "docker/nginx.conf",
+   "old": "        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        limit_req zone=ants_admin_api",
+   "new": "        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        limit_req zone=ants_admin_api"
+  },
+  {
+   "id": "the_name_is_not_checked",
+   "file": "docker/nginx.conf",
+   "old": "        if ($hub_admin_call = \"\") { return 404; }\n        if ($is_args) { return 404; }",
+   "new": "        if ($is_args) { return 404; }"
+  },
+  {
+   "id": "the_visitors_cookies_go_on",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header Cookie $hub_cookie_session;\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header Content-Type $content_type;\n        proxy_set_header X-Ants-Csrf",
+   "new": "        proxy_set_header Cookie $http_cookie;\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header Content-Type $content_type;\n        proxy_set_header X-Ants-Csrf"
+  },
+  {
+   "id": "the_visitors_address_is_believed",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header X-Client-Address $remote_addr;\n        proxy_redirect off;\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 15s;\n        proxy_send_timeout 15s;\n        proxy_hide_header X-Content-Type-Options;\n    }\n\n    # (the address without",
+   "new": "        proxy_set_header X-Client-Address $http_x_client_address;\n        proxy_redirect off;\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 15s;\n        proxy_send_timeout 15s;\n        proxy_hide_header X-Content-Type-Options;\n    }\n\n    # (the address without"
+  },
+  {
+   "id": "every_header_of_the_visitor_goes_on",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_next_upstream off;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;",
+   "new": "        proxy_next_upstream off;\n        proxy_pass_request_headers on;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;"
+  },
+  {
+   "id": "the_origin_is_not_passed",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header Origin $http_origin;\n        proxy_set_header Cookie $hub_cookie_session;\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header Content-Type",
+   "new": "        proxy_set_header Cookie $hub_cookie_session;\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header Content-Type"
+  },
+  {
+   "id": "the_token_is_not_passed",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header X-Ants-Csrf $http_x_ants_csrf;\n        proxy_set_header X-Client-Address $remote_addr;\n        proxy_redirect off;\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 15s;\n        proxy_send_timeout 15s;\n        proxy_hide_header X-Content-Type-Options;\n    }\n\n    # (the address without",
+   "new": "        proxy_set_header X-Client-Address $remote_addr;\n        proxy_redirect off;\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 15s;\n        proxy_send_timeout 15s;\n        proxy_hide_header X-Content-Type-Options;\n    }\n\n    # (the address without"
+  },
+  {
+   "id": "the_type_of_the_body_is_not_passed",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header Content-Type $content_type;\n        proxy_set_header X-Ants-Csrf $http_x_ants_csrf;\n        proxy_set_header X-Client-Address $remote_addr;\n        proxy_redirect off;\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 15s;\n        proxy_send_timeout 15s;\n        proxy_hide_header X-Content-Type-Options;\n    }\n\n    # (the address without",
+   "new": "        proxy_set_header X-Ants-Csrf $http_x_ants_csrf;\n        proxy_set_header X-Client-Address $remote_addr;\n        proxy_redirect off;\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 15s;\n        proxy_send_timeout 15s;\n        proxy_hide_header X-Content-Type-Options;\n    }\n\n    # (the address without"
+  },
+  {
+   "id": "a_big_body_goes_on",
+   "file": "docker/nginx.conf",
+   "old": "        client_max_body_size 512;\n        error_page 502 504 = @hub_off;",
+   "new": "        client_max_body_size 8k;\n        error_page 502 504 = @hub_off;"
+  },
+  {
+   "id": "there_is_no_allowance",
+   "file": "docker/nginx.conf",
+   "old": "        access_log off;\n        limit_req zone=ants_admin_api burst=50 nodelay;\n        limit_req_status 429;\n        client_max_body_size 512;",
+   "new": "        access_log off;\n        limit_req_status 429;\n        client_max_body_size 512;"
+  },
+  {
+   "id": "the_allowance_is_a_zone_of_its_own",
+   "file": "docker/nginx.conf",
+   "old": "        limit_req zone=ants_admin_api burst=50 nodelay;\n        limit_req_status 429;\n        client_max_body_size 512;",
+   "new": "        limit_req zone=ants_hub_session burst=50 nodelay;\n        limit_req_status 429;\n        client_max_body_size 512;"
+  },
+  {
+   "id": "the_allowance_is_spent_before_the_checks",
+   "file": "docker/nginx.conf",
+   "old": "        if ($hub_admin_call = \"\") { return 404; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        limit_req zone=ants_admin_api burst=50 nodelay;\n        limit_req_status 429;\n        client_max_body_size 512;",
+   "new": "        access_log off;\n        limit_req zone=ants_admin_api burst=50 nodelay;\n        limit_req_status 429;\n        client_max_body_size 512;\n        if ($hub_admin_call = \"\") { return 404; }\n        if ($is_args) { return 404; }\n        if ($http_sec_fetch_site != \"same-origin\") { return 403; }"
+  },
+  {
+   "id": "the_hub_is_retried",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_next_upstream off;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;",
+   "new": "        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Origin $http_origin;"
+  },
+  {
+   "id": "the_calls_are_logged",
+   "file": "docker/nginx.conf",
+   "old": "        access_log off;\n        limit_req zone=ants_admin_api burst=50 nodelay;\n        limit_req_status 429;\n        client_max_body_size 512;",
+   "new": "        access_log /dev/stdout ants_noquery;\n        limit_req zone=ants_admin_api burst=50 nodelay;\n        limit_req_status 429;\n        client_max_body_size 512;"
+  },
+  {
+   "id": "a_hub_that_is_not_there_is_a_page",
+   "file": "docker/nginx.conf",
+   "old": "        client_max_body_size 512;\n        error_page 502 504 = @hub_off;",
+   "new": "        client_max_body_size 512;"
+  },
+  {
+   "id": "the_raw_request_line_is_passed_on",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_pass http://$ants_hub$uri;                          # (the normalized path, never the raw request line: the map above has let nothing else through)",
+   "new": "        proxy_pass http://$ants_hub$request_uri;"
+  },
+  {
+   "id": "the_address_without_a_slash_is_redirected",
+   "file": "docker/nginx.conf",
+   "old": "    location = /hub/admin/api {\n        return 404;\n    }\n\n",
+   "new": ""
+  }
+ ]
+}

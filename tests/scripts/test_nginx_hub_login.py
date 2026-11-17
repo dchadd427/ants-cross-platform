@@ -150,7 +150,7 @@ class TheText(unittest.TestCase):
     def test_the_hubs_cookies_reach_no_other_place_and_no_other_cookie_reaches_the_hub(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
         allowed = {"= /hub/ws": "$hub_cookie_session", "= /hub/login": None, "= /hub/callback": "$hub_cookie_state", "= /hub/me": "$hub_cookie_session", "= /hub/logout": "$hub_cookie_session",
-                   "= /hub/forget": "$hub_cookie_session", "= /hub/admin/gate": "$hub_cookie_session", "^~ /admin/api/": None}
+                   "= /hub/forget": "$hub_cookie_session", "= /hub/admin/gate": "$hub_cookie_session", "^~ /admin/api/": None, "^~ /hub/admin/api/": "$hub_cookie_session"}
         checked = 0
         for location in locations:
             block = stats.block_of(CONF, "location %s " % location)
