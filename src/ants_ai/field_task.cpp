@@ -66,7 +66,7 @@ uint32_t FieldTask::choose_ant(TaskContext& context, const FieldPlan& plan, uint
         if (rest != rest_until_.end() && now < rest->second) continue;
         const TaskId owner = context.ledger.owner(a.id);
         if (owner != kNoTask && owner != id() && context.ledger.rank(owner) >= context.ledger.rank(id())) continue;
-        const int32_t cost = field_ant_cost(plan, context.view, context.map, context.seat, a);
+        const int32_t cost = field_ant_cost(plan, context.view, context.map, context.seat, a, hints_);
         if (cost < 0) continue;
         if (best == nullptr || cost < best_cost) {
             best = &a;
@@ -120,6 +120,8 @@ void FieldTask::step(TaskContext& context) {
     hints_.map_bombs.erase(std::remove_if(hints_.map_bombs.begin(), hints_.map_bombs.end(), gone), hints_.map_bombs.end());
     hints_.ant = ant_;
     hints_.piles = tactics_.field_piles;
+    hints_.rules = FieldRules{tactics_.plan.field_pick, tactics_.plan.field_walk, tactics_.plan.field_set_off};
+    hints_.stalled = hints_.rules.set_off && ant_ != 0 && ant_ == stalled_ant_;
     const FieldPlan plan = plan_field(view, context.map, context.seat, hints_);
     work_ = plan.work();
     hints_.pile = plan.pile;
@@ -132,6 +134,7 @@ void FieldTask::step(TaskContext& context) {
         if (work_ == FieldWork::None && plan.field && done_tick_ == 0) done_tick_ = now;
         if (ant_ != 0) context.ledger.release(ant_, id());
         ant_ = 0;
+        stalled_since_ = 0;
         active_ = false;
         hints_.hop = BombHop{};
         next_look_ = now + params_.look_every;
@@ -139,7 +142,13 @@ void FieldTask::step(TaskContext& context) {
     }
     active_ = true;
     if (ant == nullptr) {
+        FieldHints strict = hints_;                                                       // (no ant starts the work without a set-off for long enough: the seat is stalled)
+        strict.stalled = false;
+        if (field_startable(plan, view, context.map, context.seat, strict)) stalled_since_ = 0;
+        else if (stalled_since_ == 0) stalled_since_ = now;
+        hints_.stalled = hints_.rules.set_off && stalled_since_ != 0 && now >= stalled_since_ + params_.stalled_ticks;
         ant_ = choose_ant(context, plan, now);
+        stalled_ant_ = hints_.stalled ? ant_ : 0;
         for (const AntView& a : view.mine()) {
             if (a.id == ant_) ant = &a;
         }
@@ -201,6 +210,16 @@ void FieldTask::order(TaskContext& context, const AntView& ant, const FieldStep&
         case FieldAction::Step:
         case FieldAction::Walk:
         case FieldAction::Fly:
+            context.orders.move({ant.id}, step.tile, Priority::Urgent);
+            break;
+        case FieldAction::SetOff:
+            while (!set_off_ticks_.empty() && set_off_ticks_.front() + params_.set_off_window <= now) set_off_ticks_.erase(set_off_ticks_.begin());
+            if (set_off_ticks_.size() >= params_.set_offs_max) {                            // (two set-offs lately: the bombs here are more than a plain ant can take)
+                give_up(context, now);
+                return;
+            }
+            set_off_ticks_.push_back(now);
+            ++set_offs_;
             context.orders.move({ant.id}, step.tile, Priority::Urgent);
             break;
         case FieldAction::Heal:

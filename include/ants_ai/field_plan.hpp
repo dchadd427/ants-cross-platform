@@ -16,8 +16,10 @@
 //               Bomber that no dig brings to its work hops with a bomb of its own (the fewest bombs first: where a chain over the map's bombs stops at a dud the ant stays).
 //               An ant that took a power-up leaves its own on a free land tile beside the one it takes: it never takes one where that would shut it in.
 //               The engine's paths walk over bombs, and an ability is worked from the first free side of the target nearest the ant (N, S, W, E; a bomb counts as free):
-//               so in the field the ant only ever steps to a tile next to it, and works a target from the side it stands on. A walk of several tiles is ordered only over
-//               ground with no bomb on or next to it.
+//               so in the field the ant steps to a tile next to it when the engine's own walk (the port of its A*, EngineWalks) to a tile further on would cross a bomb, and
+//               walks several tiles when that walk crosses none; a bomb ahead is defused with ONE order (the engine walks to the side it takes) when the walk to that side
+//               crosses none either. An ant that stands on the power-up it needs takes it with a click on its own tile. A plain ant of a seat that has no ant to start the work
+//               crosses ONE bomb of another team by setting it off (FieldHints::stalled; the rule is `set_off_ok` in field_plan.cpp).
 
 #include <cstdint>
 #include <vector>
@@ -32,14 +34,15 @@ namespace ants::ai {
 /// What the breach ant does next
 enum class FieldAction : uint8_t {
     None,         // nothing: no pile behind the field, or the work is done
-    Take,         // a move onto the power-up at `tile` (next to the ant): the ant becomes its kind
+    Take,         // a move onto the power-up at `tile` (next to the ant, or the ant's own tile: the click of a person on the power-up under an ant): the ant becomes its kind
     Step,         // a move onto `tile`, next to the ant
-    Walk,         // a move to `tile` over safe ground (no bomb on or next to the way)
+    Walk,         // a move to `tile`, several tiles away, by a walk that the engine's own search finds clear of bombs of other teams (EngineWalks)
     Defuse,       // a special order on the bomb at `tile`: the ant stands on a side of it
     Bridge,       // a special order on the water at `tile`: a Swimmer stands on a side of it
     Extinguish,   // a special order on the fire cell at `tile`: a Fire Ant stands on a side of it
     Plant,        // a special order on the free tile `tile` (the bomb of `hop`): a Bomber stands on a side of it
     Fly,          // a move onto the own bomb at `tile` (hop.bomb) from hop.from, where the ant stands: the throw of `hop`
+    SetOff,       // a move onto the bomb of another team at `tile`, next to the ant: a plain ant sets it off (2 hit points, thrown back; the bomb is gone) to get across
     Heal,         // into the hill: the ant is on the hill's side and has not the hit points of a full ant for the hop it needs
     Stuck,        // nothing this ant can do reaches the work
 };
@@ -75,6 +78,13 @@ struct FieldPlan {
     bool feasible() const noexcept { return field && (fires.empty() || !fire_way.empty()) && (waters.empty() || !swim_way.empty()); }
 };
 
+/// The rules of the breach that a plan switch can turn off (LevelPlan::field_*, `bot_arena --tune fpick=0,fwalk=0,fsetoff=0`): all on is the bot that ships
+struct FieldRules {
+    bool pick{true};                     // an ant that stands on the power-up it needs takes it with a click on its own tile (else it steps off and back on, and a boxed-in ant is Stuck)
+    bool walk{true};                     // the walks and the defuses of the dig are ordered by the engine's own walk (EngineWalks), several tiles at a time (else: over ground with no bomb on or next to it)
+    bool set_off{true};                  // a seat that has no ant to start the work lets a plain ant set one bomb off to get to a power-up of the kind (FieldHints::stalled)
+};
+
 /// What the task keeps from one step to the next. The plan of one look depends on what the work has done (a dug corridor makes other fire cells and sources cheaper): the route and the
 /// sources chosen are kept while they hold, so the work goes on toward the same targets, and the hop under way is kept while it holds
 struct FieldHints {
@@ -91,6 +101,9 @@ struct FieldHints {
     /// look of the task): every bomb of the seat counts as one of them
     std::vector<sim::TileCoord> map_bombs;
     bool map_bombs_known{false};
+    FieldRules rules;
+    /// No ant of the bot could start the work for FieldTask::Params::stalled_ticks: a plain ant may cross one bomb by setting it off (rules.set_off)
+    bool stalled{false};
 };
 
 /// The pile, its route and the work, from the grid of the look (`view.grid()`). Empty (field false) without a grid or a hill, or when no pile is behind the field.
@@ -101,9 +114,9 @@ FieldStep next_field_step(const FieldPlan& plan, const BotView& view, const MapI
 
 /// What it costs `ant` to become the breach ant for the work of `plan`: 0 for an ant of the kind the work needs, else its way to the nearest power-up of that kind; more for an ant
 /// away from the hill's side or hurt. -1: it cannot get one.
-int32_t field_ant_cost(const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat, const AntView& ant);
+int32_t field_ant_cost(const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat, const AntView& ant, const FieldHints& hints = FieldHints{});
 
 /// The breach can start: an ant of the bot gets the kind of the first work (field_ant_cost)
-bool field_startable(const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat);
+bool field_startable(const FieldPlan& plan, const BotView& view, const MapInfo& map, uint8_t seat, const FieldHints& hints = FieldHints{});
 
 }  // namespace ants::ai

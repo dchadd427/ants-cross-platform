@@ -739,6 +739,58 @@ int main() {
 
     // ---- the flower droppers: FDTASK (0x100fc0d) polls every 3000 ms (+ its run time), the first poll only stamps, a posting needs more than `interval` seconds
     // since the stamp, the stamp is renewed at the posting, the drop effect lasts 820 ms and its last frame sets the tile (0x100fe50) ---------------------------
+    TEST_CASE("1.18 Stop (Ctrl+S) inside the window, then a click on the tile the ant is on while it moves, takes the power-up; Stop alone never does, and the click alone does for a standing ant") {
+        {   // Stop inside the window, then the click at once: the ant is on its way to a neighbor tile and walks back onto the power-up
+            Walk w;
+            start_walk(w, TileCoord{10, 10}, TileCoord{11, 10}, 3);
+            make_island(w.sim);
+            w.run_to(500);
+            ASSERT_EQ(tile_of(w.u()), (TileCoord{11, 10}));
+            ASSERT_TRUE(w.sim.stop_ant(w.ant));                              // Ctrl+S: the ant starts to move off (the own tile is no goal without the player flag)
+            ASSERT_EQ(w.u().type, AntType::Worker);
+            w.sim.issue_move_order(w.ant, TileCoord{11, 10});                // the click on the tile it is on, the power-up's
+            run_ms(w.sim, 3000);
+            ASSERT_EQ(w.u().type, AntType::Thief);
+            ASSERT_EQ(tile_of(w.u()), (TileCoord{11, 10}));
+            ASSERT_FALSE(w.sim.grid().has_powerup_at(TileCoord{11, 10}));
+        }
+        {   // the click a little later, when the ant has left the tile: it walks back onto the power-up
+            Walk w;
+            start_walk(w, TileCoord{10, 10}, TileCoord{11, 10}, 3);
+            w.run_to(500);
+            ASSERT_TRUE(w.sim.stop_ant(w.ant));
+            ASSERT_TRUE(wait_ms(w.sim, 3000, [&]() { return tile_of(w.u()) != TileCoord{11, 10}; }) >= 0);
+            ASSERT_TRUE(w.sim.grid().has_powerup_at(TileCoord{11, 10}));
+            w.sim.issue_move_order(w.ant, TileCoord{11, 10});
+            run_ms(w.sim, 3000);
+            ASSERT_EQ(w.u().type, AntType::Thief);
+            ASSERT_FALSE(w.sim.grid().has_powerup_at(TileCoord{11, 10}));
+        }
+        {   // Stop alone: the power-up stays where it is
+            Walk w;
+            start_walk(w, TileCoord{10, 10}, TileCoord{11, 10}, 3);
+            w.run_to(500);
+            ASSERT_TRUE(w.sim.stop_ant(w.ant));
+            run_ms(w.sim, 4000);
+            ASSERT_EQ(w.u().type, AntType::Worker);
+            ASSERT_TRUE(w.sim.grid().has_powerup_at(TileCoord{11, 10}));
+        }
+        {   // an ant that stands on a power-up (its walk was cancelled in the window): the click on its own tile takes it, with no Stop before
+            Walk w;
+            start_walk(w, TileCoord{10, 10}, TileCoord{11, 10}, 3);
+            make_island(w.sim);
+            w.run_to(500);
+            w.sim.issue_move_order(w.ant, TileCoord{30, 30});                // cancels the pick-up: "Can't go there."
+            run_ms(w.sim, 3000);
+            ASSERT_EQ(w.u().type, AntType::Worker);
+            ASSERT_EQ(tile_of(w.u()), (TileCoord{11, 10}));
+            ASSERT_FALSE(w.sim.stop_ant(w.ant));                             // nothing to stop
+            w.sim.issue_move_order(w.ant, TileCoord{11, 10});
+            run_ms(w.sim, 1000);
+            ASSERT_EQ(w.u().type, AntType::Thief);
+        }
+    } TEST_END();
+
     TEST_CASE("2.1 SMALL (interval 15 s): the first poll stamps, the drop is posted at the fifth poll (15005 ms), lands 820 ms later, and every 15005 ms after") {
         SimulationEngine sim;
         ants::assets::LevelData lvl;
