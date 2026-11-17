@@ -36,6 +36,7 @@ STAMPED = {                                                                     
     HTML + "match.html": (BAR,),
     HTML + "legal.html": (BAR,),
     HTML + "mapmaker.html": (BAR,),
+    HTML + "admin.html": (BAR,),
     HTML + "changelog.html": (BAR,),
 }
 LINKED = (HTML + "index.js", HTML + "index.js.gz", HTML + "index.wasm", HTML + "index.wasm.gz", HTML + "lvl_core.js", HTML + "lvl_core.wasm")      # the files that a link makes (and the gzip copies of two)
