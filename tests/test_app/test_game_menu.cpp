@@ -272,7 +272,7 @@ void test_settings() {
         m.load(each);
         check(m.health_changes, "a value that is not exactly off reads as on: '" + odd + "'");
     }
-    {   // HUD art: New unless the file says classic; it round-trips; a store that cannot be read (the browser refuses its storage) is New
+    {   // HUD art: New unless the file says classic; it round-trips; a store that gives nothing (the browser refuses its storage) is New
         check(defaults.hud_art_new, "the HUD art is the new one when the file says nothing");
         for (const bool new_art : {true, false}) {
             ConfigStore each;
@@ -298,12 +298,12 @@ void test_settings() {
             m.load(each);
             check(m.hud_art_new, "a value that is not exactly classic reads as new: '" + odd + "'");
         }
-        ConfigStore refused;                                                   // a "file" that is a folder: it exists and cannot be read
-        refused.set_location(std::filesystem::temp_directory_path().string());
+        ConfigStore refused;                                                   // a store that gives nothing: a settings file that is not there (the browser's refused storage reads as an empty text the same way)
+        refused.set_location((std::filesystem::temp_directory_path() / "ants_no_such_settings_file.ini").string());
         gm::MenuSettings m;
         m.hud_art_new = false;
-        refused.load();                                                          // (whether this platform says no or reads nothing, nothing comes out of it)
-        check(refused.values().empty(), "a store that cannot be read gives nothing");
+        refused.load();
+        check(refused.values().empty(), "a store that gives nothing has no values");
         m.load(refused);
         check(m.hud_art_new, "...and the HUD art is the new one");
         s.hud_art_new = false;
