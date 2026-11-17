@@ -640,7 +640,8 @@ class TheBlocksRun(Rig, unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("docker"), "docker is not installed: the cache of /stats was NOT run (tests/scripts/test_nginx_stats.py)")
 class TheCacheRuns(Rig, unittest.TestCase):
-    """The cache of the numbers. Its time is real: five seconds. The stand-in answers from a file, and takes three seconds when the file `slow` is there."""
+    """The cache of the numbers. Its time is real: five seconds. The stand-in answers from a file, and takes three seconds when the file `slow` is there. A test changes those files and waits until the stand-in
+    sees the change (change()), so that no machine's shared folder decides what a request meets. The mutants of the cache that this must notice are tests/data/nginx_stats_cache_mutants.json."""
     STUB = SLOW_STUB
     STUB_FILES = {"stats.json": stub_body(1)}
 
@@ -652,23 +653,40 @@ class TheCacheRuns(Rig, unittest.TestCase):
     def tearDownClass(cls):
         cls.stop_rig()
 
+    CHANGE_WAIT = 10.0                                                                     # (seconds that a change of the stand-in's folder may take to reach the stand-in)
+
+    def stand_in_sees(self, name):
+        """What the stand-in itself sees of /srv/stub/<name> right now: None when the file is not there, else its text. The folder is a bind mount of this machine's: on Docker Desktop (a shared
+        file system between the machine and its virtual machine) a file that the test removes is still there for the stand-in for a few milliseconds, and a Linux host shows a change at once."""
+        done = subprocess.run(["docker", "exec", self.stub, "sh", "-c", 'if [ -e "/srv/stub/$0" ]; then echo present; cat "/srv/stub/$0"; else echo absent; fi', name], capture_output=True)
+        text = done.stdout.decode("utf-8", "replace")
+        state, _, content = text.partition("\n")
+        return content if state == "present" else None
+
+    def change(self, name, content):
+        """Makes the file `name` of the stand-in's folder hold `content` (None: removes it), and returns once the stand-in sees that, so that the request which follows meets the change on every
+        machine. The test says what the stand-in does next; how long the shared folder takes to show it is not what it tests."""
+        path = os.path.join(self.stubdir, name)
+        if content is None:
+            if os.path.exists(path):
+                os.remove(path)
+        else:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+        deadline = time.monotonic() + self.CHANGE_WAIT
+        while self.stand_in_sees(name) != content:
+            if time.monotonic() > deadline:
+                self.fail("the stand-in did not see the change of %s" % name)
+            time.sleep(0.005)
+
     def numbers(self, n):
-        with open(os.path.join(self.stubdir, "stats.json"), "w", encoding="utf-8") as f:
-            f.write(stub_body(n))
+        self.change("stats.json", stub_body(n))
 
     def slow(self, on):
-        path = os.path.join(self.stubdir, "slow")
-        if on:
-            open(path, "w").close()
-        elif os.path.exists(path):
-            os.remove(path)
+        self.change("slow", "" if on else None)
 
     def broken(self, on):
-        path = os.path.join(self.stubdir, "fail")
-        if on:
-            open(path, "w").close()
-        elif os.path.exists(path):
-            os.remove(path)
+        self.change("fail", "" if on else None)
 
     def asked(self, at_least=0):
         return len(self.stub_requests("/stats", at_least))
