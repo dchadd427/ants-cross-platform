@@ -14,11 +14,18 @@
 #touch-keys .tk-more { display: none; position: absolute; z-index: 6; box-sizing: border-box; grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: 6px; padding: 6px; background: rgba(0, 0, 0, 0.82); border: 2px solid var(--edge, #000); border-radius: 10px; }
 #touch-keys.tk-open .tk-more { display: grid; }
 
+/* Shift (the one button that is lit): off is the teal of the others; latched (aria-pressed, data-state) a lit gold face with a dark word; locked the same with a ring and a bar under the word, so that the two differ in shape
+   as well as in color. The colors are the page's own tokens (web/shell.html), with the same values here for a page that has none. */
+#touch-keys .tk-shift[aria-pressed="true"] { background-color: var(--gold, #f6d058); color: var(--ink, #0c0805); text-shadow: none; }
+#touch-keys .tk-shift[data-state="locked"] { position: relative; padding-bottom: 9px; box-shadow: var(--bevel, 0 0 0 0 transparent), 0 0 0 3px var(--cream, #f4ece2), 0 0 0 5px var(--edge, #050a08), 3px 4px 0 5px var(--shadow, #9d0d17); }
+#touch-keys .tk-shift[data-state="locked"]::after { content: ""; position: absolute; left: 22%; right: 22%; bottom: 7px; height: 3px; border-radius: 2px; background: var(--ink, #0c0805); }
+
 /* upright: a row under the picture (in the page: below the stage, in the room that the stage's bottom margin leaves; fullscreen: along the bottom of the stage) */
 #game-stage.tk-up #touch-keys { flex-direction: row; flex-wrap: wrap; left: 0; right: 0; }
 #game-stage.tk-up #touch-keys .tk-btn { flex: 1 1 44px; min-height: 48px; }
 #game-stage.tk-up #touch-keys .tk-all { flex: 2 1 64px; }
 #game-stage.tk-up.tk-wrap #touch-keys .tk-all { flex: 1 1 100%; }
+#game-stage.tk-up.tk-narrow #touch-keys .tk-btn:not(.tk-all) { flex: 1 1 calc((100% - 12px) / 3); }
 #game-stage.tk-up #touch-keys .tk-more { right: 0; width: min(100%, 300px); }
 #game-stage.tk-up.tk-page #touch-keys { top: calc(100% + var(--reach, 14px) + 8px); }
 #game-stage.tk-up.tk-page #touch-keys .tk-more { top: calc(100% + 6px); }

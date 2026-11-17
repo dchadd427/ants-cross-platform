@@ -1,0 +1,37 @@
+{
+ "note": "Mutants of Shift with a finger for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the game reads Shift from SDL's modifier state at the left release only (src/ants_app/hud_pointer.cpp, hud_input.cpp: the Shift tap that adds or removes an ant, the Shift drag that adds the ants in the box and makes a group of one) against the Shift group of tests/test_app/test_touch_app.cpp, which sets the modifier state itself the way the page's Shift button makes it (web/touch_keys.js, docs/TOUCH.md). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/touch_shift_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "shift_not_read_at_the_release",
+   "file": "src/ants_app/hud_pointer.cpp",
+   "old": "pointer_release(sim, camera, x, y, is_shift_held() || (mod & KMOD_SHIFT) != 0);",
+   "new": "pointer_release(sim, camera, x, y, (mod & 0) != 0);",
+   "build": "test_touch_app",
+   "test": "timeout 600 ./build/tests/test_app/test_touch_app"
+  },
+  {
+   "id": "shift_tap_does_not_toggle",
+   "file": "src/ants_app/hud_input.cpp",
+   "old": "if (shift && (panel == PanelMode::OneAnt || panel == PanelMode::Ants)) {",
+   "new": "if ((shift && false) && (panel == PanelMode::OneAnt || panel == PanelMode::Ants)) {",
+   "build": "test_touch_app",
+   "test": "timeout 600 ./build/tests/test_app/test_touch_app"
+  },
+  {
+   "id": "shift_drag_does_not_add",
+   "file": "src/ants_app/hud_pointer.cpp",
+   "old": "if (additive && (panel == PanelMode::OneAnt || panel == PanelMode::Ants)) {",
+   "new": "if ((additive && false) && (panel == PanelMode::OneAnt || panel == PanelMode::Ants)) {",
+   "build": "test_touch_app",
+   "test": "timeout 600 ./build/tests/test_app/test_touch_app"
+  },
+  {
+   "id": "shift_drag_makes_no_group_of_one",
+   "file": "src/ants_app/hud_pointer.cpp",
+   "old": "is_multi_select_mode_ = true;                      // panel 4 whatever the count",
+   "new": "is_multi_select_mode_ = selected_ant_ids_.size() > 1;                      // panel 4 whatever the count",
+   "build": "test_touch_app",
+   "test": "timeout 600 ./build/tests/test_app/test_touch_app"
+  }
+ ]
+}

@@ -8,7 +8,10 @@
   - the mutants (tests/data/touch_keys_mutants.json): each broken copy of the script, the page's call or the menu is noticed by those checks;
   - the page's layout round (run as the page writes it, in the wiring check): the buttons first, then the chrome, then the fit in what the stage's padding leaves;
   - the size budgets and the files that the image and the build carry (a list of names: no run can tell a missing COPY line);
-  - the layer under the list, run in Chromium when the machine has it (tests/scripts/web_touch_keys_shield_check.js): it covers the whole window after the page is scrolled;
+  - the layer under the list and the Shift button's three looks, run in Chromium when the machine has it (tests/scripts/web_touch_keys_shield_check.js): the layer covers the whole window after the page is
+    scrolled; Shift off, latched and locked differ in color and in shape;
+  - the Shift button with a browser's own touch events, run in Chromium when the machine has it (tests/scripts/web_touch_keys_shift_check.js): Shift is down when a model of the game reads it at the finger's
+    lift, for a tap and a drag, and up 120 ms after it; a hold and two fingers leave the latch; a blur, a hidden page and the setting turned off let it go;
   - the browser check (tests/scripts/web_touch_keys_browser_check.js, opt-in: tests/scripts/test_web_touch_keys.sh): its skip without a page.
 """
 import gzip
@@ -77,6 +80,7 @@ class ThePagesOwnCode(unittest.TestCase):
 
 
 SHIELD = os.path.join(REPO, "tests", "scripts", "web_touch_keys_shield_check.js")
+SHIFT = os.path.join(REPO, "tests", "scripts", "web_touch_keys_shift_check.js")
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the layer under the list was NOT run in a browser")
@@ -89,12 +93,22 @@ class TheLayerInABrowser(unittest.TestCase):
         self.assertRegex(done.stdout, r"\d+ checks, 0 failures")
 
 
+@unittest.skipUnless(shutil.which("node"), "node is not installed: the Shift button was NOT run in a browser")
+class TheShiftButtonInABrowser(unittest.TestCase):
+    def test_shift_is_down_when_the_game_reads_it_at_the_lift(self):
+        done = subprocess.run([shutil.which("node"), SHIFT, SCRIPT, STYLE], capture_output=True, text=True, timeout=240)
+        if done.returncode == 3:
+            self.skipTest(done.stdout.strip() or "no browser")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertRegex(done.stdout, r"\d+ checks, 0 failures")
+
+
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the mutants of the hotkey buttons were NOT run")
 class TheMutants(unittest.TestCase):
     def test_the_checks_fail_on_every_broken_copy(self):
         """tests/data/touch_keys_mutants.json (tools/mutate.py runs it too): each mutant on a copy of its file, noticed by the node check that its spec names"""
         spec = json.loads(read(MUTANTS))
-        self.assertGreaterEqual(len(spec["mutants"]), 20)
+        self.assertGreaterEqual(len(spec["mutants"]), 100)
         with tempfile.TemporaryDirectory() as tmp:
             for m in spec["mutants"]:
                 with self.subTest(m["id"]):
