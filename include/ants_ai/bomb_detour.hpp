@@ -12,8 +12,10 @@
 // The ants are looked at again at every look: a bomb that appears on a walk that is under way (a new foreign bomb, seen when the set of them grows) sends the ant round it as well, and so does a
 // carrier that walks home on the engine's own order (level 2, Hard). The tasks are told about the orders that left as they proposed them (proposed()): they never see the waypoint.
 
+#include <cstddef>
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <set>
 #include <vector>
 
@@ -82,6 +84,28 @@ private:
     uint32_t reissued_{0};
     uint32_t carriers_{0};
     uint32_t refused_long_{0};
+};
+
+/// The engine's own walk (the same port of its A* that BombDetour uses) for the tasks that order a walk themselves and have to know where it goes: the field breach. One look of the map, any
+/// number of questions. The walk of a Swimmer is water (none is answered for it), and a tile that the engine's search does not enter for the ant has no walk.
+class EngineWalks {
+public:
+    /// A walk that the engine finds: it meets a bomb of another team (the ant steps on it and is thrown) or it does not; none: there is no walk, or none that this class knows
+    enum class Walk : uint8_t { None, Clear, Crosses };
+
+    explicit EngineWalks(const BotView& view);
+    ~EngineWalks();
+    EngineWalks(const EngineWalks&) = delete;
+    EngineWalks& operator=(const EngineWalks&) = delete;
+
+    /// A plain click of `ant` on the free tile `tile` (Clear for the tile it stands on); `steps` (when given) is the number of tiles the walk has
+    Walk click(const AntView& ant, sim::TileCoord tile, size_t* steps = nullptr);
+    /// A special order of `ant` on the tile `target` (a bomb, a fire cell, water): the walk to the side of it that the engine takes first (Clear when the ant stands on that side)
+    Walk special(const AntView& ant, sim::TileCoord target, size_t* steps = nullptr);
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
 };
 
 }  // namespace ants::ai

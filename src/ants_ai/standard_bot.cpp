@@ -256,8 +256,10 @@ void StandardBot::decide_gate_map(TaskContext& context) {
     if (tactics_.plan.islands && island_.probe(context)) return;                           // the island play owns the water maps (ISLANDS)
     tactics_.gate_map = true;
     if (tactics_.plan.gate_field) {
-        const FieldPlan field = plan_field(context.view, context.map, seat_, FieldHints{});
-        tactics_.field_map = field.feasible() && field_startable(field, context.view, context.map, seat_);
+        FieldHints first;
+        first.rules = FieldRules{tactics_.plan.field_pick, tactics_.plan.field_walk, tactics_.plan.field_set_off, tactics_.plan.field_serve, tactics_.plan.field_replan};
+        const FieldPlan field = plan_field(context.view, context.map, seat_, first);
+        tactics_.field_map = field.feasible() && field_startable(field, context.view, context.map, seat_, first);
         FerryTask::Params ferry = ferry_.params();
         ferry.reorder_ended = tactics_.field_map;
         ferry_.set_params(ferry);

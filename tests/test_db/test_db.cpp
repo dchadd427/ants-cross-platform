@@ -3,8 +3,10 @@
 #include "ants_db/database.hpp"
 #include "db_check.hpp"
 
+#include <atomic>
 #include <cstdint>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace ants::db;
@@ -104,6 +106,108 @@ void open_and_close_cases() {
         const Error p = b.prepare(st, "SELECT * FROM missing_table");
         DB_CHECK(!p.ok() && p.message.find("missing_table") != std::string::npos);
         DB_CHECK(!st.valid());
+    } DB_END;
+
+    DB_CASE("DB1.7 A read-only connection reads what another connection committed and writes nothing, makes no file and never asks for a journal mode") {
+        TempDir dir;
+        Database writer;
+        DB_CHECK(writer.open(dir.file("r.db")).ok());
+        DB_CHECK(writer.exec("CREATE TABLE t (a INTEGER); INSERT INTO t VALUES (1)").ok());
+        OpenOptions ro;
+        ro.read_only = true;
+        ro.create = true;                                    // (ignored: a read-only open never makes a file)
+        Database reader;
+        DB_CHECK(reader.open(dir.file("r.db"), ro).ok());
+        DB_CHECK(count_rows(reader, "t") == 1);
+        DB_CHECK(writer.exec("INSERT INTO t VALUES (2)").ok());
+        DB_CHECK(count_rows(reader, "t") == 2);              // (a commit of the other connection is seen at once)
+        const Error refused = reader.exec("INSERT INTO t VALUES (3)");
+        DB_CHECK(!refused.ok() && refused.message.find("readonly") != std::string::npos);
+        DB_CHECK(count_rows(writer, "t") == 2);
+        DB_CHECK(reader.journal_mode() == "wal");            // (the file's own: the reader did not change it)
+        Database none;
+        DB_CHECK(!none.open(dir.file("absent.db"), ro).ok());
+        DB_CHECK(!std::filesystem::exists(dir.file("absent.db")));
+        OpenOptions plain;
+        plain.wal = false;
+        Database rollback;
+        DB_CHECK(rollback.open(dir.file("d.db"), plain).ok() && rollback.exec("CREATE TABLE u (a)").ok());
+        rollback.close();
+        Database looked;
+        ro.wal = true;                                       // (asked for, and ignored: the journal of a read-only file is not changed)
+        DB_CHECK(looked.open(dir.file("d.db"), ro).ok());
+        DB_CHECK(looked.journal_mode() == "delete");
+    } DB_END;
+
+    DB_CASE("DB1.8 Two threads with a connection each: a writer commits while a reader reads (a read transaction is one state of the file, and PRAGMA data_version says that another connection committed)") {
+        TempDir dir;
+        Database writer;
+        DB_CHECK(writer.open(dir.file("two.db")).ok());
+        DB_CHECK(writer.exec("CREATE TABLE t (a INTEGER)").ok());
+        OpenOptions ro;
+        ro.read_only = true;
+        Database reader;
+        DB_CHECK(reader.open(dir.file("two.db"), ro).ok());
+        const auto version = [&]() {
+            Statement st;
+            return reader.prepare(st, "PRAGMA data_version").ok() && st.step() == Statement::Step::Row ? st.column_int64(0) : int64_t{-1};
+        };
+        // Nothing below depends on which thread is faster: the writer commits only after `go`, and it sets `finished` at its end even when an insert failed, so no wait is endless.
+        std::atomic<bool> go{false};
+        std::atomic<bool> finished{false};
+        std::atomic<bool> writer_ok{true};
+        const auto write_rows = [&](int from, int to) {
+            while (!go) std::this_thread::yield();
+            for (int i = from; i <= to; ++i) {
+                if (!writer.exec("INSERT INTO t VALUES (" + std::to_string(i) + ")").ok()) {
+                    writer_ok = false;
+                    break;
+                }
+            }
+            finished = true;
+        };
+
+        // Part 1: the reader opens a read transaction and takes its first version and its first count; only then does the writer start, and the reader stays in that transaction until the writer
+        // has committed all 300 rows. So every commit falls inside the reader's transaction, which must go on seeing the state that it began with; the next transaction sees them all, and
+        // data_version (read before the writer started) is not the same any more.
+        std::thread first_batch(write_rows, 1, 300);
+        const bool began = reader.exec("BEGIN").ok();
+        const int64_t rows_at_start = count_rows(reader, "t");
+        const int64_t version_at_start = version();
+        go = true;
+        bool one_state = true;
+        for (bool last_pass = false; !last_pass;) {
+            last_pass = finished;                                  // (and one more read after the writer is done)
+            one_state = one_state && count_rows(reader, "t") == rows_at_start;
+            std::this_thread::yield();
+        }
+        const bool ended = reader.exec("COMMIT").ok();
+        first_batch.join();
+        DB_CHECK(began && ended && writer_ok);
+        DB_CHECK(rows_at_start == 0);                              // (the snapshot is older than every commit, so the commits did fall inside it)
+        DB_CHECK(one_state);                                       // a read transaction is one state of the file, while another connection commits
+        DB_CHECK(count_rows(reader, "t") == 300);                  // (a new transaction sees what was committed)
+        DB_CHECK(version() != version_at_start);                   // PRAGMA data_version says that another connection committed
+
+        // Part 2: short read transactions while the writer commits another 300 rows: each one reads the same count twice (the writer may commit between the two reads, and the transaction
+        // does not see it), and what the reader sees never goes back. The pass that follows the writer's end sees all of it.
+        finished = false;
+        std::thread second_batch(write_rows, 301, 600);
+        bool whole_states = true;
+        int64_t last_rows = 300;
+        for (bool last_pass = false; !last_pass;) {
+            last_pass = finished;
+            whole_states = whole_states && reader.exec("BEGIN").ok();
+            const int64_t first = count_rows(reader, "t");
+            const int64_t second = count_rows(reader, "t");
+            whole_states = whole_states && first == second && first >= last_rows && first <= 600;
+            last_rows = first;
+            whole_states = whole_states && reader.exec("COMMIT").ok();
+        }
+        second_batch.join();
+        DB_CHECK(writer_ok);
+        DB_CHECK(whole_states);
+        DB_CHECK(last_rows == 600);
     } DB_END;
 }
 

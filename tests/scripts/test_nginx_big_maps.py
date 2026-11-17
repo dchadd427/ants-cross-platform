@@ -42,10 +42,8 @@ class BigMapsThroughNginx(unittest.TestCase):
             assert done.returncode == 0, done.stdout + done.stderr
             with open(path, "rb") as f:
                 cls.files[side] = f.read()
-        starting, _ = live.create_admin(cls.results)
         cls.server = live.Server(cls.results)
-        owner = live.Session(cls.server, "Owner", starting)
-        owner.change_password("", live.CHOSEN)
+        owner = live.Admin(cls.server)
         cls.names = {}
         for index, side in enumerate(SIZES):
             name = "Big Map %d" % side

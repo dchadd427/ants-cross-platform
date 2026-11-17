@@ -6,6 +6,8 @@
 //   2. wide windows and a phone held sideways keep what they were: the badge alone below 1280 px, the badge and the name at 1280;
 //   2b. a window under 640 px wide, wider than high and taller than 500 px (620 x 560, 600 x 520, 639 x 600, 350 x 300): the chip and the Menu at the right edge on the first row, Quick host and Quick join under them, My room on a third row of its own;
 //   3. the chip's accessible name holds the name ("Chatting as <name>"); a visitor who is not logged in sees the mark of Discord alone on a phone (the text "Log in" is not drawn) and "Log in" on a desktop;
+//   4. nothing on the bar moves when the login chip comes (it is hidden until the hub answers; a hub that never answers keeps it hidden): on a real load the Menu is at the same x on every animation frame, and with the chip hidden and then shown
+//      (with and without My room) the Menu, Quick host and Quick join stand where they stood, at the widths above and held sideways 500 x 400 and 639 x 500;
 //   --shots DIR takes the pictures (topbar_*.png).
 //
 //   node tests/scripts/web_home_topbar_browser.js [--shots DIR]      (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox; ANTS_SERVER is not needed)
@@ -170,6 +172,34 @@ async function main() {
             check(s[0] + ' a room: the X is a round badge on the top right corner of My room (name "Leave my room"), its press target 44 px or more, over no other button and not over the count, inside the window and not under the frame', (await page.evaluate(BADGE)) === '' && (await page.evaluate(() => document.querySelector('.hbar .minex').getAttribute('aria-label'))) === 'Leave my room' && (await page.evaluate(() => document.querySelector('.hbar .minex').getAttribute('title'))) === 'Leave my room', (await page.evaluate(BADGE)) + ' ' + JSON.stringify(room));
             if (['w390', 'w1280', 'side667'].indexOf(s[0]) !== -1) await shot(page, 'room_' + s[0]);
             if (['w390', 'w1280', 'side667'].indexOf(s[0]) !== -1) await shot(page, 'guest_' + s[0]);
+            await page.close();
+        }
+        await context.close();
+    }
+
+    // ---- nothing on the bar moves when the login chip comes: the chip is hidden until the hub answers (and for good where it never does) ----
+    {
+        const BOX = () => { const r = (q) => { const e = document.querySelector(q); if (!e || !e.getClientRects().length) return null; const b = e.getBoundingClientRect(); return [b.left, b.top, b.width]; }; return { menu: r('.hbar .hmenu'), host: r('.hbar .quick.host'), join: r('.hbar .quick.join') }; };
+        const chip = (page, hidden) => page.evaluate((h) => { document.querySelector('.hbar .hlogin').hidden = h; }, hidden);
+        const context = await browser.newContext({ deviceScaleFactor: 1 });
+        for (const s of SIZES.concat([['side500', 500, 400], ['side639', 639, 500]])) {
+            const page = await openAt(context, s[1], s[2]);
+            await page.addInitScript(() => { window.__menuX = []; const f = () => { const m = document.querySelector('.hbar .hmenu'); if (m && m.getClientRects().length) window.__menuX.push(Math.round(m.getBoundingClientRect().left * 10) / 10); requestAnimationFrame(f); }; requestAnimationFrame(f); });
+            await page.goto(info.site + '/', { waitUntil: 'load' });
+            await live(page, 'no');
+            await sleep(150);                                   // (a few frames with the chip shown are in the list)
+            const xs = await page.evaluate(() => window.__menuX);
+            check(s[0] + ' a real load: the Menu is at the same place on every frame from the first one that has a bar to the one after the hub answered', xs.length > 0 && Math.max(...xs) - Math.min(...xs) < 0.5, JSON.stringify([...new Set(xs)]));
+            for (const held of [false, true]) {
+                if (held) await page.evaluate(SHOW_COUNT);
+                await chip(page, true);
+                const without = await page.evaluate(BOX);
+                await chip(page, false);
+                const withChip = await page.evaluate(BOX);
+                const L = s[0] + (held ? ' with My room: ' : ': ');
+                check(L + 'the Menu stands where it will stand with the chip', !!without.menu && !!withChip.menu && Math.abs(without.menu[0] - withChip.menu[0]) < 0.5 && Math.abs(without.menu[1] - withChip.menu[1]) < 0.5, JSON.stringify([without.menu, withChip.menu]));
+                check(L + 'Quick host and Quick join do not change place or size when the chip comes', ['host', 'join'].every((k) => !!without[k] && !!withChip[k] && without[k].every((v, i) => Math.abs(v - withChip[k][i]) < 0.5)), JSON.stringify([without, withChip]));
+            }
             await page.close();
         }
         await context.close();

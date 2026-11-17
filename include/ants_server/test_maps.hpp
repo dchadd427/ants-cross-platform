@@ -1,7 +1,7 @@
 #pragma once
 
 // The test maps of the Map Maker's "With other players" (docs/MAP_SUBMISSIONS.md, "Test maps"): a draft map that a player puts on the server for a lobby room of their own. This is the store: the same core
-// checker as a real submission, a folder, a list in memory and the limits. It knows no database, no account and no owner's queue, so it works on a server where the submissions door is switched off, and
+// checker as a real submission, a folder, a list in memory and the limits. It knows no database, no account and no review queue, so it works on a server where the submissions door is switched off, and
 // a test map can never become a library map: nothing here writes a row, and the folder is its own. The HTTP side (the one route, the limits by address) is test_maps_http.hpp. One thread, like everything else
 // of the server.
 //

@@ -27,7 +27,7 @@ constexpr size_t kMinNameChars = 3;
 constexpr size_t kMaxNameChars = 60;           // "<name>.lvl" is at most 64 characters, the protocol's limit
 constexpr size_t kMaxMakerChars = 24;
 constexpr size_t kMaxNoteChars = 280;
-constexpr size_t kMaxReasonChars = 200;        // the owner's decline reason or message to a maker
+constexpr size_t kMaxReasonChars = 200;        // an admin's decline reason or message to a maker
 constexpr size_t kMaxDescriptionChars = 100;   // the map's description as the database and the lists keep it
 
 /// What a cleaning answers: `ok` and the cleaned text, or not ok and a stable reason code: "not_utf8", "empty", "too_short", "too_long", "characters", "control", "reserved", "link".

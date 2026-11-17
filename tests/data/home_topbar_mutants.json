@@ -72,6 +72,20 @@
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
   },
   {
+   "id": "topbar_menu_waits_for_the_chip",
+   "file": "web/home/home.css",
+   "old": ".hbar .hlogin[hidden] ~ .hmenu { margin-left: auto; }",
+   "new": "",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "topbar_sideways_chip_column_not_kept",
+   "file": "web/home/home.css",
+   "old": "repeat(2, minmax(0, 1fr)) 46px auto;",
+   "new": "repeat(2, minmax(0, 1fr)) auto auto;",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
    "id": "topbar_chip_not_to_the_right",
    "file": "web/home/home.css",
    "old": "grid-area: 1 / 1 / 2 / -1; min-width: 0; margin-left: 0; justify-content: flex-end; }",

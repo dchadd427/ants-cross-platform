@@ -1333,6 +1333,45 @@ int main() {
         ASSERT_TRUE(read.empty());
     } TEST_END();
 
+    TEST_CASE("RS11.1 A Store That Only Reads (read_only: The History Service's) Lists The Folder Of Another Program And Changes Nothing In It: No Folder Is Made, No Half-Written File Or Old File Is Deleted, Nothing Is Kept Or Removed, A File That Goes Is Forgotten") {
+        Fixture f;
+        ReplayConfig c = f.config();
+        c.read_only = true;
+        ReplayStore store(c);
+        std::string why;
+        ASSERT_FALSE(store.prepare(why));                                                    // (the folder is not there: a clear reason, and no folder is made)
+        ASSERT_TRUE(contains(why, f.dir.string()) && contains(why, "not there") && !fs::exists(f.dir));
+        fs::create_directories(f.dir);
+        const std::string old_name = "ants-TINY-20200101-000000Z.antsrep";                      // (six years older than the clock of the test: a store that keeps would delete it at once)
+        write_file(f.dir / kName0, make_file());
+        write_file(f.dir / old_name, make_file("TINY.LVL", 700, true, 0, 5));
+        write_text(f.dir / "ants-TINY-20261007-120000Z.antsrep.tmp", "half of a write that a crash cut off");
+        write_text(f.dir / "notes.txt", "private notes");
+        ASSERT_TRUE(store.prepare(why));
+        ASSERT_TRUE(store.count() == 2 && store.readable_count() == 2 && store.find(old_name) != nullptr);
+        ASSERT_TRUE(fs::exists(f.dir / old_name) && fs::exists(f.dir / "ants-TINY-20261007-120000Z.antsrep.tmp") && fs::exists(f.dir / "notes.txt"));
+        ASSERT_EQ(store.purge(), size_t{0});
+        f.now += 400 * kDay;
+        store.update();                                                                      // (the hourly purge of a store that keeps: nothing here)
+        ASSERT_TRUE(store.count() == 2 && fs::exists(f.dir / old_name) && fs::exists(f.dir / kName0));
+        const ReplaySave refused = store.save(make_file("TINY.LVL", 700, true, 0, 8));
+        ASSERT_TRUE(!refused.kept && contains(refused.note, "only reads"));
+        ASSERT_EQ(names_in(f.dir).size(), size_t{4});                                        // (nothing was written)
+        ASSERT_FALSE(store.remove(kName0));
+        ASSERT_TRUE(fs::exists(f.dir / kName0) && store.find(kName0) != nullptr);
+        std::vector<uint8_t> bytes;
+        ASSERT_TRUE(store.read(kName0, bytes) && bytes == slurp(f.dir / kName0));            // (it reads, and lists with its keep days as given)
+        ASSERT_EQ(store.config().keep_days, uint32_t{30});
+        fs::remove(f.dir / old_name);                                                        // (the keeper's purge: the store forgets what is gone, and says nothing was deleted by it)
+        fs::last_write_time(f.dir, fs::file_time_type(std::chrono::hours(100000)));
+        ASSERT_EQ(store.rescan(), size_t{1});
+        ASSERT_TRUE(store.count() == 1 && store.find(old_name) == nullptr);
+        write_file(f.dir / "ants-TINY-20190101-000000Z.antsrep", make_file("TINY.LVL", 700, true, 0, 9));          // (a file older than the keep days, put there by somebody: listed, never deleted)
+        fs::last_write_time(f.dir, fs::file_time_type(std::chrono::hours(100001)));
+        ASSERT_EQ(store.rescan(), size_t{1});
+        ASSERT_TRUE(store.count() == 2 && fs::exists(f.dir / "ants-TINY-20190101-000000Z.antsrep"));
+    } TEST_END();
+
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures
               << "\n=======================================================\n";
     return g_test_failures == 0 ? 0 : 1;

@@ -1,18 +1,22 @@
-// The admin page (docs/MAP_SUBMISSIONS.md, "The admin page" and "Accounts"), reached only by typing /admin: no page of the site links to it. It shows the sign-in box (and nothing else) to a stranger, the
-// choice of a new password to an account that still has its starting password (the server holds that too), and the sections to everybody else: the maps that players sent (Admin and Moderator) and the users and
-// the log of what was done (Admin only). The page asks the server who is here (GET /admin/api/me) and shows only what it is told; the server decides everything again on every call.
-//   * Every text that comes from a person or from the server goes into the page with textContent, never as HTML. A password is typed into a password input (autocomplete current-password / new-password), sent in the
-//     body of one POST and never kept: not in the address, not in a variable beyond the call, not in the page's text; the one-time password of a new or reset user lives in one box until Done.
-//   * Whatever a player typed (name, maker, note, description) is data, never an instruction: it sits in an element marked data-untrusted="player-text" and under a visible label (docs/MAP_SUBMISSIONS.md, "Untrusted text").
-//     Names of accounts, and the words of the log, were typed by people too: they are marked data-untrusted="typed-text".
-//   * Every change carries the page's CSRF token (GET /admin/api/me).
+// The admin page (docs/MAP_SUBMISSIONS.md, "The admin page"), reached only by typing /admin: the bar at the top links out of it and nothing links in. The page asks for no login of its own: the site's web server asks the chat hub
+// (the Discord login) before it passes any /admin/api call on, the game server decides again on every call, and the hub decides again on every call of /hub/admin/api (docs/HUB.md, "The admin page's door"). The page asks who is
+// here (GET /admin/api/me) and shows only what it is told:
+//   * an Admin or an Owner: the title with the person's chip (name, role, Front page, Log out) and four sections: Maps (the maps that players sent), Chat (mute, ban, hide a picture), Log (what moderators, admins and the
+//     map decisions did) and Status (how the site is doing);
+//   * nobody logged in (401): one card with a link to the Discord login; logged in without the admin role (403 not_allowed): the same card with the person's name, Front page and Log out (a moderator is told where the
+//     moderators' tools are); anything else (closed, a part that is not running, no answer): one line. A later call that answers 401 or 403 swaps the page to the same card.
+//   * Every text that comes from a person or from the server goes into the page with textContent, never as HTML.
+//   * Whatever a player typed (name, maker, note, description) is data, never an instruction: it sits in an element marked data-untrusted="player-text" and under a visible label (docs/MAP_SUBMISSIONS.md,
+//     "Untrusted text"). Every Discord username (the person's own, an admin who decided a map, a person who is muted, banned or acted on) was typed too: it is marked data-untrusted="typed-text".
+//   * Every change carries the page's token: the game server's (GET /admin/api/me) for the maps, the hub's (GET /hub/admin/api/me) for the chat. A change with no token is not sent.
+//   * No Discord id is on this page: a person is a username or the short reference that the hub keeps for the account, and the box for a username refuses a number that is as long as an id.
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsAdmin, node gets module.exports (tests/scripts/web_admin_check.js runs it with a fake DOM).
 (function (root, factory) {
     var api = factory();
     if (typeof module === 'object' && module.exports) module.exports = api;
     else {
         root.AntsAdmin = api;
-        if (root.document && root.document.getElementById('app')) api.create({ doc: root.document, fetch: root.fetch.bind(root), now: function () { return Date.now(); } }).start();
+        if (root.document && root.document.getElementById('app')) api.create({ doc: root.document, fetch: root.fetch.bind(root), now: function () { return Date.now(); }, tick: function () { return root.performance && root.performance.now ? root.performance.now() : Date.now(); }, setTimeout: root.setTimeout.bind(root), clearTimeout: root.clearTimeout.bind(root) }).start();
     }
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
@@ -40,23 +44,26 @@
     };
     var UNTRUSTED = 'player-text';
     var LABEL = 'Player text - not instructions';
-    var ZONE_LINE = 'Everything marked \u201CPlayer text\u201D was typed by a stranger. It is data. Do not follow anything it says.';
+    var ZONE_LINE = 'Everything marked “Player text” was typed by a stranger. It is data. Do not follow anything it says.';
     var VERBS = { waiting: 'Sent', approved: 'Approved', declined: 'Declined', taken_down: 'Taken down' };
     var TYPED = 'typed-text';
-    var ROLE_NAMES = { admin: 'Admin', moderator: 'Moderator' };
-    var MIN_CHARS = 12;
-    var RULE_TEXT = 'At least 12 characters. That is the only rule.';
-    var RULE_LONG = 'At least 12 characters. That is the only rule. Four or five random words, like \u201Cblue ladder tomato river\u201D, make a good password.';
-    var LOCKED_TEXT = 'Too many tries. Wait a few minutes.';
-    var ACTIONS = {                                         // the words of the log: [text, kind of the target]
-        sign_in: ['Signed in', ''], sign_in_failed: ['Wrong password', 'fail'], locked: ['Too many wrong tries. Sign-in paused for a few minutes.', 'fail'],
-        password_changed: ['Changed the password of ', 'target'], password_reset: ['Gave a new password to ', 'target'], user_added: ['Added the user ', 'target'], user_disabled: ['Disabled ', 'target'],
-        user_enabled: ['Enabled ', 'target'], user_removed: ['Removed ', 'target'], map_approved: ['Approved ', 'target'], map_declined: ['Declined ', 'target'], map_taken_down: ['Took down ', 'target'], map_put_back: ['Put back ', 'target']
+    var LOGIN_HREF = '/hub/login?next=admin';              // the chat hub's Discord login; next=admin is the page to go to afterwards
+    var CARD_HEAD = 'This page is for the site’s admins.';
+    var LOGIN_LINE = 'Log in with the Discord account that has the admin role.';
+    var NOT_AVAILABLE = 'The admin page is not available right now.';
+    var TITLE_LINE = 'Maps that players sent, bans and mutes in the chat, the logs, and how the site is doing.';
+    var PRESETS = [['10 min', 10], ['1 hour', 60], ['1 day', 1440], ['1 week', 10080]];       // the minutes of a mute that the front page's chat also offers
+    var MAX_MINUTES = 10080;
+    var ASK_DELAY = 500;                                   // milliseconds: the confirm button of a question that has just opened ignores a press (the second click of a double click lands on it)
+    var REFERENCE = /^[0-9a-f]{16}$/;                      // the hub's short name for an account (never a Discord id)
+    var ID_SHAPED = /^[0-9]{15,20}$/;                      // as long as a Discord id: never typed into this page's boxes, never sent
+    var HUB_API = '/hub/admin/api/';
+    var CHAT_ACTIONS = { mute: 'Muted', unmute: 'Unmuted', ban: 'Banned', unban: 'Unbanned', kick: 'Kicked', nopic: 'Hid the picture of', pic: 'Showed the picture of' };
+    var MAP_ACTIONS = { map_approved: 'Approved ', map_declined: 'Declined ', map_taken_down: 'Took down ', map_put_back: 'Put back ' };
+    var PICTURE_KINDS = {
+        ok: ['active', 'Saved'], none: ['active', 'Discord has no picture to keep'], down: ['warn', 'Discord did not answer'], type: ['warn', 'Not a picture that the hub accepts'],
+        big: ['warn', 'The picture was too big'], shape: ['warn', 'The picture had a shape that the hub refuses'], busy: ['warn', 'Too many at once: some were dropped'], bug: ['bad', 'An error in the hub (its log says which kind)']
     };
-
-    function roleName(role) { return ROLE_NAMES[role] || String(role); }
-    function chars(text) { return Array.from(String(text)).length; }
-    function strengthOf(n) { return n === 0 ? null : n < MIN_CHARS ? ['Too short', 1, 'bad'] : n < 16 ? ['Okay', 2, 'warn'] : n < 20 ? ['Good', 3, 'ok'] : ['Strong', 4, 'ok']; }
 
     // The date as the pictures write it: "today, 09:41", "yesterday", "16 Oct" (Pacific time)
     function pacificParts(ms) {
@@ -65,13 +72,41 @@
         f.formatToParts(new Date(ms)).forEach(function (x) { p[x.type] = x.value; });
         return { y: +p.year, m: +p.month, d: +p.day, hh: p.hour, mm: p.minute };
     }
+    function isTime(seconds) { return typeof seconds === 'number' && isFinite(seconds); }           // (a row of the server with no time says nothing for it, and the rest is drawn)
     function when(seconds, nowMs) {
+        if (!isTime(seconds)) return '';
         var a = pacificParts(seconds * 1000), b = pacificParts(nowMs);
         var days = Math.round((Date.UTC(b.y, b.m - 1, b.d) - Date.UTC(a.y, a.m - 1, a.d)) / 86400000);
         if (days === 0) return 'today, ' + a.hh + ':' + a.mm;
         if (days === 1) return 'yesterday';
         return a.d + ' ' + MONTHS[a.m - 1];
     }
+    // The end of a mute: "today, 14:51", "tomorrow, 09:00", "23 Nov, 11:40" (Pacific time), and how long is left of it
+    function untilWords(seconds, nowMs) {
+        if (!isTime(seconds)) return '';
+        var a = pacificParts(seconds * 1000), b = pacificParts(nowMs);
+        var days = Math.round((Date.UTC(a.y, a.m - 1, a.d) - Date.UTC(b.y, b.m - 1, b.d)) / 86400000);
+        if (days <= 0) return 'today, ' + a.hh + ':' + a.mm;
+        if (days === 1) return 'tomorrow, ' + a.hh + ':' + a.mm;
+        return a.d + ' ' + MONTHS[a.m - 1] + ', ' + a.hh + ':' + a.mm;
+    }
+    function leftWords(seconds, nowMs) {
+        if (!isTime(seconds)) return '';
+        var left = Math.max(0, Math.round(seconds - nowMs / 1000));
+        if (left < 3600) return Math.max(1, Math.ceil(left / 60)) + ' min left';
+        if (left < 86400) { var m = Math.floor((left % 3600) / 60); return Math.floor(left / 3600) + ' h' + (m ? ' ' + m + ' min' : '') + ' left'; }
+        var d = Math.floor(left / 86400);
+        return d + (d === 1 ? ' day' : ' days') + ' left';
+    }
+    function ago(seconds) {
+        if (seconds < 60) return 'just now';
+        if (seconds < 3600) { var m = Math.floor(seconds / 60); return m + (m === 1 ? ' minute ago' : ' minutes ago'); }
+        if (seconds < 86400) { var h = Math.floor(seconds / 3600); return h + (h === 1 ? ' hour ago' : ' hours ago'); }
+        var d = Math.floor(seconds / 86400);
+        return d + (d === 1 ? ' day ago' : ' days ago');
+    }
+    function megabytes(bytes, whole) { var v = bytes / 1048576; return whole && v === Math.round(v) ? String(Math.round(v)) : v.toFixed(1); }
+    function minutesWords(n) { return n + (n === 1 ? ' minute' : ' minutes'); }
 
     // The description as the admin sees it: one line, no control or invisible characters, at most 100 characters (the file keeps its own bytes; the server cleans it too)
     function cleanDescription(text) {
@@ -81,14 +116,31 @@
         return a.length > 100 ? a.slice(0, 100).join('') : t;
     }
 
+    // What a username box holds, as the hub is asked for it: {account} or {why}. A number as long as an id is refused here (an id is like a password: it is never typed into this page, shown by it or sent);
+    // a shorter number is a username made of digits, which the hub wants written with an @ in front.
+    function accountOf(text) {
+        var t = String(text === undefined || text === null ? '' : text).replace(/^\s+|\s+$/g, '');
+        if (!t) return { why: 'Type a username first.' };
+        if (ID_SHAPED.test(t)) return { why: 'That looks like an account number. Type the username instead.' };
+        if (!/^[!-~]{1,40}$/.test(t)) return { why: 'A username has no spaces and is at most 40 characters.' };
+        return { account: /^[0-9]+$/.test(t) ? '@' + t : t, shown: t };
+    }
+
     function create(env) {
         var doc = env.doc;
         var app = doc.getElementById('app');
-        var me = null;                                      // GET /admin/api/me: { signed_in, name, role, must_change, csrf }
-        var section = null;
-        var modal = null;                                   // the box that is open (account menu items, Users), or null
-        var menuOff = null;
+        var me = null;                                      // GET /admin/api/me: { name, ref, role, csrf }
+        var hub = null;                                     // GET /hub/admin/api/me: { csrf } (asked once, when the Chat section needs the token of a change)
+        var hubAsk = null;                                  // the call for it, while it is on its way
+        var current = null;                                 // the section that is shown
+        var host = null;                                    // where the section is drawn
+        var tabsBox = null, select = null, waiting = 0;     // the tabs, the select of a phone, and the number of maps that wait (the badge)
+        var cleanup = null;                                 // what a section must undo when another screen takes its place (the key listener of a question)
         var toastTimer = null;
+        function tick() { return (env.tick || env.now)(); }                      // a clock that only goes forward, in milliseconds (the page's other clock, now, says the time of day and can be frozen)
+        var inerted = [];                                   // the nodes that a question made inert
+        var menu = null;                                    // the person's menu while it is open: { node, off }
+        var cardSeq = 0;                                    // a card that waits for the name of the person is not drawn over a page that came after it
 
         function el(tag, cls, text) {
             var n = doc.createElement(tag);
@@ -102,11 +154,12 @@
             n.setAttribute('data-untrusted', UNTRUSTED);
             return n;
         }
-        function typed(tag, cls, text) {                    // a name that a person typed (an account, a word of the log): data too, never an instruction
+        function typed(tag, cls, text) {                    // a name that a person typed (a Discord username, an admin who decided a map): data too, never an instruction
             var n = el(tag, cls, String(text === undefined || text === null ? '' : text).replace(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, ''));
             n.setAttribute('data-untrusted', TYPED);
             return n;
         }
+        function ref(text) { return typed('code', 'refn', text); }          // the short reference of an account that has no username left
         function ptag() { return el('span', 'ptag', 'Player text'); }
         function add(parent) { for (var i = 1; i < arguments.length; i++) if (arguments[i]) parent.appendChild(arguments[i]); return parent; }
         function button(label, cls, onclick) {
@@ -116,16 +169,33 @@
             return b;
         }
 
+        function isHub(path) { return path.indexOf(HUB_API) === 0; }
+        // One call. A change carries the token of the part that it goes to (the hub's for /hub/admin/api, the game server's for /admin/api); with no token nothing is sent.
         function call(method, path, body) {
             var init = { method: method, credentials: 'same-origin', headers: {} };
             if (method === 'POST') {
+                var token = isHub(path) ? hub && hub.csrf : me && me.csrf;
+                if (!token) return Promise.resolve({ status: 0, json: {} });
                 init.headers['Content-Type'] = 'application/json';
-                init.headers['X-Ants-Csrf'] = me && me.csrf ? me.csrf : '';
+                init.headers['X-Ants-Csrf'] = token;
                 init.body = JSON.stringify(body || {});
             }
             return env.fetch(path, init).then(function (r) {
                 return r.json().then(function (j) { return { status: r.status, json: j }; }, function () { return { status: r.status, json: {} }; });
             });
+        }
+        // The hub's token, asked for once (a failure is forgotten, so the next change asks again)
+        function hubToken() {
+            if (hub) return Promise.resolve(hub);
+            if (!hubAsk) {
+                hubAsk = call('GET', HUB_API + 'me').then(function (r) {
+                    hubAsk = null;
+                    if (r.status === 200 && r.json && typeof r.json.csrf === 'string' && r.json.csrf !== '') hub = { csrf: r.json.csrf };
+                    else refused(r);
+                    return hub;
+                }, function () { hubAsk = null; return null; });
+            }
+            return hubAsk;
         }
 
         function toast(text) {
@@ -139,225 +209,140 @@
                 toastTimer = env.setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 6000);
             }
         }
-
-        function header(title) {
-            var head = el('div', 'mhead');
-            var img = el('img');
-            img.src = '/front/logo.png';
-            img.alt = '';
-            add(head, img);
-            if (title) add(head, el('div', 'banner gold', title));
-            return head;
-        }
-
-        // ---- small parts of the new screens ----
-        function field(label, id, attrs) {                  // a labelled input (a text box); attrs: type, autocomplete, maxlength
-            var f = el('div', 'f');
-            var lab = el('label', null, label);
-            lab.setAttribute('for', id);
-            var inw = el('div', 'inw');
-            var input = el('input');
-            input.type = attrs.type || 'text';
-            input.id = id;
-            input.setAttribute('autocomplete', attrs.autocomplete || 'off');
-            input.setAttribute('autocapitalize', 'off');
-            input.setAttribute('autocorrect', 'off');
-            input.setAttribute('spellcheck', 'false');
-            if (attrs.maxlength) input.maxLength = attrs.maxlength;
-            add(inw, input);
-            if (attrs.type === 'password') {                  // (the eye shows or hides what was typed: a button, 46 px wide)
-                var eye = el('button', 'eye');
-                eye.type = 'button';
-                eye.setAttribute('aria-label', 'Show password');
-                eye.setAttribute('aria-pressed', 'false');
-                add(eye, eyeIcon());
-                eye.addEventListener('click', function () {
-                    var shown = input.type === 'password';
-                    input.type = shown ? 'text' : 'password';
-                    eye.setAttribute('aria-pressed', shown ? 'true' : 'false');
-                    eye.setAttribute('aria-label', shown ? 'Hide password' : 'Show password');
-                });
-                add(inw, eye);
-            } else {
-                input.className = 'plain';
-            }
-            add(f, lab, inw);
-            return { box: f, input: input, bad: function (on) { input.className = (attrs.type === 'password' ? '' : 'plain ') + (on ? 'err' : ''); } };
-        }
-        function eyeIcon() {
-            if (typeof doc.createElementNS !== 'function') return doc.createTextNode('◉');
-            var ns = 'http://www.w3.org/2000/svg';
-            var svg = doc.createElementNS(ns, 'svg');
-            svg.setAttribute('viewBox', '0 0 24 24');
-            svg.setAttribute('width', '28');
-            svg.setAttribute('height', '28');
-            svg.setAttribute('aria-hidden', 'true');
-            var p = doc.createElementNS(ns, 'path');
-            p.setAttribute('d', 'M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z');
-            p.setAttribute('fill', 'none');
-            p.setAttribute('stroke', 'currentColor');
-            p.setAttribute('stroke-width', '2');
-            var c = doc.createElementNS(ns, 'circle');
-            c.setAttribute('cx', '12');
-            c.setAttribute('cy', '12');
-            c.setAttribute('r', '3.2');
-            c.setAttribute('fill', 'none');
-            c.setAttribute('stroke', 'currentColor');
-            c.setAttribute('stroke-width', '2');
-            svg.appendChild(p);
-            svg.appendChild(c);
-            return svg;
-        }
-        function message(text, kind) {
-            var m = el('div', 'msg ' + kind, text);
-            m.setAttribute('role', 'alert');
+        function message(text, cls) {                       // the page's own line: an error (an alert) or a done (a status)
+            var m = el('div', 'msg ' + (cls || 'bad'));
+            if (text !== null && text !== undefined) m.textContent = text;
+            m.setAttribute('role', cls === 'ok' ? 'status' : 'alert');
             return m;
         }
-        function meter(text) {                              // the bars and the word of the strength of a password (nothing is shown for an empty box)
-            var n = chars(text);
-            var box = el('div', 'str');
-            var s = strengthOf(n);
-            if (!s) return box;
-            var bars = el('span', 'bars');
-            for (var i = 1; i <= 4; i++) add(bars, el('i', i <= s[1] ? 'on ' + s[2] : ''));
-            add(box, bars, add(el('span'), doc.createTextNode('Strength: '), el('b', null, s[0])));
-            if (n < MIN_CHARS) add(box, el('span', null, n + ' of ' + MIN_CHARS + ' characters'));
-            return box;
-        }
-        // The two boxes for a new password, the strength under the first, the rule, and what the Save button needs: 12 characters and both the same
-        function newPasswordPair(prefix, ruleText, onChange) {
-            var first = field('New password', prefix + '-new', { type: 'password', autocomplete: 'new-password', maxlength: 256 });
-            var second = field('New password again', prefix + '-again', { type: 'password', autocomplete: 'new-password', maxlength: 256 });
-            var strength = el('div', 'strengthslot');
-            var hint = el('div', 'fh bad');
-            hint.hidden = true;
-            var rules = el('div', 'rules', ruleText);
-            function ready() { return chars(first.input.value) >= MIN_CHARS && first.input.value === second.input.value; }
-            function update() {
-                strength.textContent = '';
-                add(strength, meter(first.input.value));
-                var mismatch = second.input.value !== '' && first.input.value !== second.input.value;
-                hint.hidden = !mismatch;
-                hint.textContent = mismatch ? 'The two passwords are not the same.' : '';
-                second.bad(mismatch);
-                if (onChange) onChange(ready());
+
+        // ---- the page behind a question is inert: the keyboard cannot walk into it and a screen reader does not read it ----
+        function inertOthers(keep) {
+            clearInert();
+            for (var node = keep; node && node !== doc.body && node.parentNode; node = node.parentNode) {
+                Array.prototype.slice.call(node.parentNode.children).forEach(function (n) { if (n !== node) { n.setAttribute('inert', ''); inerted.push(n); } });
             }
-            first.input.addEventListener('input', update);
-            second.input.addEventListener('input', update);
-            add(second.box, hint);
-            return { nodes: [first.box, strength, second.box, rules], first: first, second: second, ready: ready, update: update, clear: function () { first.input.value = ''; second.input.value = ''; update(); } };
         }
-        function passwordProblem(json, current) {
+        function clearInert() {
+            inerted.forEach(function (n) { n.removeAttribute('inert'); });
+            inerted = [];
+        }
+
+        // ---- the person's chip and its menu ----
+        function closeMenu(focusBack) {
+            if (!menu) return;
+            menu.off();
+            if (menu.node.parentNode) menu.node.parentNode.removeChild(menu.node);
+            menu.chip.className = 'acct';
+            menu.chip.setAttribute('aria-expanded', 'false');
+            var back = menu.chip;
+            menu = null;
+            if (focusBack) back.focus();
+        }
+        function logOut() {
+            closeMenu(false);
+            return env.fetch('/hub/logout', { method: 'POST', credentials: 'same-origin' }).then(function (r) {
+                if (r.status !== 200) { toast('That did not work. Reload the page.'); return null; }
+                return start();
+            }, function () { toast('The server did not answer. Try again.'); });
+        }
+        function openMenu(chip, wrap) {
+            var node = el('div', 'amenu');
+            node.setAttribute('role', 'menu');
+            add(node, add(el('div', 'mtop'), typed('b', null, me.name), el('small', null, String(me.role))));
+            var home = el('a', null, 'Front page');
+            home.setAttribute('href', '/');
+            home.setAttribute('role', 'menuitem');
+            var out = el('button', null, 'Log out');
+            out.type = 'button';
+            out.setAttribute('role', 'menuitem');
+            out.addEventListener('click', logOut);
+            add(node, home, el('hr'), out);
+            add(wrap, node);
+            chip.className = 'acct open';
+            chip.setAttribute('aria-expanded', 'true');
+            function onKey(e) { if (e.key === 'Escape') closeMenu(true); }
+            function onPress(e) { if (!wrap.contains(e.target)) closeMenu(false); }
+            doc.addEventListener('keydown', onKey, true);
+            doc.addEventListener('click', onPress, true);
+            menu = { node: node, chip: chip, off: function () { doc.removeEventListener('keydown', onKey, true); doc.removeEventListener('click', onPress, true); } };
+            home.focus();
+        }
+        function whoChip() {
+            var wrap = el('div', 'acctw');
+            var name = typed('b', null, me.name);
+            var chip = el('button', 'acct');
+            chip.type = 'button';
+            chip.setAttribute('aria-haspopup', 'menu');
+            chip.setAttribute('aria-expanded', 'false');
+            add(chip, el('span', 'av', Array.from(name.textContent)[0] || '?'), add(el('span', 'wn'), name, el('small', me.role === 'owner' ? 'own' : null, String(me.role))), el('span', 'car', '\u25be'));
+            chip.addEventListener('click', function () { if (menu) closeMenu(false); else openMenu(chip, wrap); });
+            return add(wrap, chip);
+        }
+
+        // ---- a visitor the door does not let in: one card in the middle of the page ----
+        function leave() {                                  // another screen takes the place of a section: what it listens to goes, and so does the dimming
+            if (cleanup) { cleanup(); cleanup = null; }
+            clearInert();
+        }
+        function card(inner) {
+            leave();
+            closeMenu(false);
+            app.textContent = '';
+            return add(app, add(el('div', 'alg'), inner));
+        }
+        function discordMark() {                            // the mark of the bar's Discord button, as it is there
+            var src = doc.querySelector ? doc.querySelector('.sb svg.dc') : null;
+            if (!src || !src.cloneNode) return null;
+            var c = src.cloneNode(true);
+            c.setAttribute('width', '24');
+            c.setAttribute('height', '24');
+            return c;
+        }
+        function cardOf(kind, name) {                       // kind: out (nobody), none (a person with no role), mod (a moderator), bare (a person whom nobody has named yet), line (no way in)
+            var c = el('div', 'lcard');
+            if (kind === 'line') return add(c, message(NOT_AVAILABLE));
+            add(c, el('h1', null, CARD_HEAD));
+            if (kind === 'out') {                           // nobody is logged in: a plain link to the Discord login
+                var go = el('a', 'btn big', null);
+                go.setAttribute('href', LOGIN_HREF);
+                add(go, discordMark(), doc.createTextNode('Log in with Discord'));
+                return add(c, el('div', 'l2', LOGIN_LINE), add(el('div', 'btnrow'), go));
+            }
+            if (kind === 'bare') return c;
+            var l2 = el('div', 'l2');
+            add(l2, doc.createTextNode('You are logged in as '), typed('b', null, name), doc.createTextNode(kind === 'mod' ? ', a moderator. The tools for moderators are on the front page.' : '.'));
+            var home = el('a', 'btn big', 'Front page');
+            home.setAttribute('href', '/');
+            add(c, l2, add(el('div', 'btnrow'), home, button('Log out', 'big ghost', logOut)));
+            if (kind === 'none') add(c, el('p', 'small', 'Made an admin just now? Wait a minute and reload this page.'));
+            return c;
+        }
+        // The card that /admin/api/me and every later refusal give. A person who is logged in and not allowed is named by the hub's own answer (GET /hub/me), which comes a moment after the heading.
+        function showRefusal(status, json) {
+            me = null;
+            hub = null;
+            current = null;
             var e = json && json.error;
-            if (e === 'locked') return LOCKED_TEXT;
-            if (e === 'bad_password') return current ? 'The current password is not right. Nothing was changed.' : 'That did not work.';
-            if (e === 'bad_new_password') {
-                var r = json.reason;
-                return r === 'too_short' ? 'The new password needs at least 12 characters.' : r === 'same_as_name' ? 'The new password cannot be your username.' : r === 'same_as_old' ? 'Choose a password that is not the old one.' : 'That password cannot be used. Choose another.';
-            }
-            if (e === 'busy') return 'The server is busy. Try again in a minute.';
-            return 'The password could not be changed. Nothing was changed. Try again in a moment.';
+            var seq = ++cardSeq;
+            if (status === 401) { card(cardOf('out')); return Promise.resolve(); }
+            if (!(status === 403 && (e === 'not_allowed' || e === 'admin'))) { card(cardOf('line')); return Promise.resolve(); }         // closed, a part that is not running, no answer, anything else
+            card(cardOf('bare'));
+            env.fetch('/hub/me', { credentials: 'same-origin' }).then(function (r) { return r.status === 200 ? r.json() : null; }).then(function (j) {
+                if (seq !== cardSeq) return;
+                var you = j && j.you;
+                if (j && j.login === true && !you) { card(cardOf('out')); return; }                      // (the login ended in the meantime)
+                if (you && typeof you.name === 'string') card(cardOf(you.role === 'mod' ? 'mod' : 'none', you.name));
+            }, function () {});
+            return Promise.resolve();
         }
-        // The session is over (or never was): the page asks again who is here. True when that was the answer.
-        function ended(r) {
-            if (r.status === 404 || r.status === 401 || (r.status === 403 && r.json && r.json.error === 'password_change_required')) { closeModal(); start(); return true; }
+        // A call that the door refuses (the login ended, the role was taken away, the door closed): the page swaps to the card that GET /admin/api/me would give. True when it did.
+        function refused(r) {
+            var e = r.json && r.json.error;
+            if (r.status === 401 || (r.status === 403 && (e === 'not_allowed' || e === 'closed' || e === 'admin'))) { showRefusal(r.status, r.json); return true; }
             return false;
         }
 
-        // ---- the screens that need no sign-in ----
-        function header(title, withAccount) {
-            var head = el('div', 'mhead');
-            var img = el('img');
-            img.src = '/front/logo.png';
-            img.alt = '';
-            add(head, img);
-            if (title) add(head, el('div', 'banner gold', title));
-            if (withAccount) add(head, accountMenu());
-            return head;
-        }
-        function card(inner) {
-            app.textContent = '';
-            return add(app, header('', false), add(el('div', 'mwrap lg'), inner));
-        }
-
-        function showLogin(note, locked, name) {
-            var form = el('form', 'lcard form');
-            add(form, el('h1', null, 'Sign in'));
-            if (note) add(form, message(note, 'bad'));
-            var user = field('Username', 'login-user', { type: 'text', autocomplete: 'username', maxlength: 64 });
-            var pass = field('Password', 'login-pass', { type: 'password', autocomplete: 'current-password', maxlength: 256 });
-            var go = el('button', 'btn big full', 'Sign in');
-            go.type = 'submit';
-            if (locked) { go.disabled = true; go.className += ' dis'; }
-            if (note && !locked) { user.bad(true); pass.bad(true); }
-            if (name) user.input.value = name;
-            user.input.addEventListener('input', function () { go.disabled = false; go.className = 'btn big full'; });          // (a lock is of one name: another name may try)
-            var busy = false;
-            form.addEventListener('submit', function (e) {
-                if (e && e.preventDefault) e.preventDefault();
-                if (busy || go.disabled) return;
-                busy = true;
-                var typedName = user.input.value;
-                call('POST', '/admin/api/login', { username: typedName, password: pass.input.value }).then(function (r) {
-                    busy = false;
-                    pass.input.value = '';
-                    if (r.status === 200) return start();
-                    if (r.status === 429) showLogin(LOCKED_TEXT, true, typedName);
-                    else if (r.status === 401) showLogin('Wrong username or password', false, typedName);
-                    else if (r.status === 503) showLogin('The server is busy. Please try again in a minute.', false, typedName);
-                    else if (r.status === 404) return start();
-                    else showLogin('Signing in did not work. Try again in a moment.', false, typedName);
-                    return null;
-                }, function () { busy = false; pass.input.value = ''; showLogin('The server did not answer. Try again in a moment.', false, typedName); });
-            });
-            add(form, user.box, pass.box, go);
-            card(form);
-            (name ? pass.input : user.input).focus();
-        }
-
-        function showOff() {                                // the admin page is off on this server (every call is a 404): the page says only that it is the admin's
-            var c = el('div', 'lcard');
-            add(c, el('h1', null, 'This page is for the owner only'));
-            card(c);
-        }
-
-        function showChoose() {                             // the account has a starting password: nothing else can be done until a new one is chosen (the server holds that too)
-            var form = el('form', 'lcard form');
-            add(form, el('h1', null, 'Choose your own password'), el('div', 'l2', 'You signed in with a starting password. Choose a password that only you know. You cannot go on until you do.'));
-            var note = el('div', 'noteslot');
-            var save = el('button', 'btn big full dis', 'Save and continue');
-            save.type = 'submit';
-            save.disabled = true;
-            var pair = newPasswordPair('choose', RULE_LONG, function (ok) { save.disabled = !ok; save.className = 'btn big full' + (ok ? '' : ' dis'); });
-            var out = el('button', 'linkbtn', 'Sign out');
-            out.type = 'button';
-            out.addEventListener('click', signOut);
-            var busy = false;
-            form.addEventListener('submit', function (e) {
-                if (e && e.preventDefault) e.preventDefault();
-                if (busy || !pair.ready()) return;
-                busy = true;
-                note.textContent = '';
-                call('POST', '/admin/api/password', { current: '', new: pair.first.input.value }).then(function (r) {
-                    busy = false;
-                    if (r.status === 200) { pair.clear(); return start(); }
-                    if (ended(r)) return null;
-                    add(note, message(passwordProblem(r.json, false), 'bad'));
-                    return null;
-                }, function () { busy = false; add(note, message('The server did not answer. Try again in a moment.', 'bad')); });
-            });
-            add(form, note);
-            pair.nodes.forEach(function (n) { add(form, n); });
-            add(form, save, add(el('div', 'linkrow'), out));
-            card(form);
-            pair.first.input.focus();
-        }
-
-        function signOut() {
-            call('POST', '/admin/api/logout', {}).then(function () { me = null; section = null; closeModal(); showLogin('', false); }, function () { toast('The server did not answer. Try again.'); });
-        }
-
-        // ---- boxes (the account menu's Change password, the Users page's questions): one at a time, the page behind is inert, Escape and Tab stay in it ----
         function onBackdrop(node, close) {         // a press that starts and ends on the backdrop itself closes the box as its Cancel does (a drag from inside the box, a text selection or a scroll does not)
             var down = false, hit = false;
             node.addEventListener('pointerdown', function (e) { down = e.target === node; hit = false; });
@@ -365,163 +350,115 @@
             node.addEventListener('pointercancel', function () { down = hit = false; });
             node.addEventListener('click', function (e) { var h = hit; hit = false; if (h && e.target === node) close(); });
         }
-        function openModal(title, nodes, foot, focusNode, sticky) {
-            closeModal();
+        // The box of a question: the dimmed page, the box in it, and the keys (Escape is Cancel; the focus stays inside the box: Tab from the last button goes to the first, Shift+Tab the other way)
+        function questionBox(dlg, cancel, go, closeDialog) {
             var scrim = el('div', 'scrim');
-            var dlg = el('div', 'dlg');
-            dlg.setAttribute('role', 'dialog');
-            dlg.setAttribute('aria-modal', 'true');
-            dlg.setAttribute('aria-labelledby', 'dlg-title');
-            var inner = el('div', 'dlg-in');
-            var h = el('h2', null, title);
-            h.id = 'dlg-title';
-            add(inner, h);
-            nodes.forEach(function (n) { add(inner, n); });
-            add(dlg, inner);
-            if (foot && foot.length) { var f = el('div', 'dlg-foot'); foot.forEach(function (b) { add(f, b); }); add(dlg, f); }
-            add(scrim, dlg);
-            if (!sticky) onBackdrop(scrim, closeModal);       // (not the box that shows a password once: only its Done button or Escape closes that)
-            var back = doc.activeElement;
-            Array.prototype.slice.call(app.children).forEach(function (n) { n.setAttribute('inert', ''); });
-            add(app, scrim);
-            function focusable() { return Array.prototype.slice.call(dlg.querySelectorAll('button, input')).filter(function (n) { return !n.disabled; }); }          // (a NodeList has no filter)
+            // the keys are heard on the document (a click on plain text moves the focus to the body, and Escape must still close the box)
             function onKey(e) {
-                if (e.key === 'Escape') { closeModal(); return; }
+                if (e.key === 'Escape') { closeDialog(); return; }
                 if (e.key !== 'Tab') return;
-                var list = focusable();
-                if (!list.length) return;
-                var first = list[0], last = list[list.length - 1], cur = doc.activeElement;
-                if (!dlg.contains(cur)) { e.preventDefault(); first.focus(); }
-                else if (e.shiftKey && cur === first) { e.preventDefault(); last.focus(); }
-                else if (!e.shiftKey && cur === last) { e.preventDefault(); first.focus(); }
+                var now = doc.activeElement;
+                if (!dlg.contains(now) || (e.shiftKey && now === cancel)) { e.preventDefault(); (e.shiftKey ? go : cancel).focus(); }
+                else if (!e.shiftKey && now === go) { e.preventDefault(); cancel.focus(); }
             }
-            doc.addEventListener('keydown', onKey, true);
-            modal = { scrim: scrim, onKey: onKey, back: back };
-            var begin = focusNode || focusable()[0];
-            if (begin) begin.focus();
-            return scrim;
-        }
-        function closeModal() {
-            if (!modal) return;
-            var m = modal;
-            modal = null;
-            doc.removeEventListener('keydown', m.onKey, true);
-            if (m.scrim.parentNode) m.scrim.parentNode.removeChild(m.scrim);
-            Array.prototype.slice.call(app.children).forEach(function (n) { n.removeAttribute('inert'); });
-            if (m.back && m.back.focus && m.back !== doc.body) m.back.focus();
+            add(scrim, dlg);
+            onBackdrop(scrim, closeDialog);
+            return { node: scrim, focus: cancel, onKey: onKey };
         }
 
-        // ---- the account menu: name and role; Change password, Users (Admin only), Sign out ----
-        function accountMenu() {
-            var wrap = el('div', 'acctw');
-            var btn = el('button', 'acct');
-            btn.type = 'button';
-            btn.setAttribute('aria-haspopup', 'menu');
-            btn.setAttribute('aria-expanded', 'false');
-            var wn = el('span', 'wn');
-            add(wn, typed('b', null, me.name), el('small', null, roleName(me.role)));
-            add(btn, el('span', 'av', Array.from(String(me.name))[0] || '?'), wn, el('span', 'car', '▾'));
-            var menu = null;
-            function shut() {
-                if (!menu) return;
-                if (menu.parentNode) menu.parentNode.removeChild(menu);
-                menu = null;
-                btn.className = 'acct';
-                btn.setAttribute('aria-expanded', 'false');
-                if (menuOff) { menuOff(); menuOff = null; }
-            }
-            function item(label, extra, fn) {
-                var b = el('button', null, label);
-                b.type = 'button';
-                b.setAttribute('role', 'menuitem');
-                if (extra) add(b, el('span', 'own', extra));
-                b.addEventListener('click', function () { shut(); fn(); });
-                return b;
-            }
-            btn.addEventListener('click', function () {
-                if (menu) { shut(); return; }
-                menu = el('div', 'amenu');
-                menu.setAttribute('role', 'menu');
-                add(menu, add(el('div', 'mtop'), typed('b', null, me.name), el('small', null, roleName(me.role))));
-                add(menu, item('Change password', '', openChangePassword));
-                if (me.role === 'admin') add(menu, item('Users', 'Admin only', function () { goSection('users'); }));
-                add(menu, el('hr'), item('Sign out', '', signOut));
-                add(wrap, menu);
-                btn.className = 'acct open';
-                btn.setAttribute('aria-expanded', 'true');
-                var onKey = function (e) { if (e.key === 'Escape') { shut(); btn.focus(); } };
-                var onClick = function (e) { if (!wrap.contains(e.target)) shut(); };
-                doc.addEventListener('keydown', onKey, true);
-                doc.addEventListener('click', onClick, true);
-                menuOff = function () { doc.removeEventListener('keydown', onKey, true); doc.removeEventListener('click', onClick, true); };
-                var first = menu.querySelector('button');
-                if (first) first.focus();
-            });
-            add(wrap, btn);
-            return wrap;
-        }
-
-        function openChangePassword() {
-            var note = el('div', 'noteslot');
-            var current = field('Current password', 'change-current', { type: 'password', autocomplete: 'current-password', maxlength: 256 });
-            var save = button('Save', 'ok big dis', null);
-            save.disabled = true;
-            var pair = newPasswordPair('change', RULE_TEXT, function (ok) { save.disabled = !ok || current.input.value === ''; save.className = 'btn ok big' + (save.disabled ? ' dis' : ''); });
-            current.input.addEventListener('input', function () { pair.update(); });
-            var cancel = button('Cancel', 'ghost', closeModal);
-            var busy = false;
-            save.addEventListener('click', function () {
-                if (busy || save.disabled) return;
-                busy = true;
-                note.textContent = '';
-                current.bad(false);
-                call('POST', '/admin/api/password', { current: current.input.value, new: pair.first.input.value }).then(function (r) {
-                    busy = false;
-                    if (r.status === 200) {
-                        me.csrf = r.json && r.json.csrf ? r.json.csrf : me.csrf;
-                        current.input.value = '';
-                        pair.clear();
-                        var done = button('Close', 'big', closeModal);
-                        openModal('Change password', [message('Your password was changed. Use the new one the next time you sign in.', 'ok')], [done], done);
-                        return;
-                    }
-                    if (ended(r)) return;
-                    if (r.json && r.json.error === 'bad_password') current.bad(true);
-                    add(note, message(passwordProblem(r.json, true), 'bad'));
-                }, function () { busy = false; add(note, message('The password could not be changed. Nothing was changed. Try again in a moment.', 'bad')); });
-            });
-            openModal('Change password', [note, current.box].concat(pair.nodes), [cancel, save], current.input);
-        }
-
-        // ---- the admin's shell: the sections, one of which is shown ----
+        // ---- the admin's shell: the title and the chip, the sections as tabs (a select on a phone), and the section that is shown ----
         var SECTIONS = [
-            { id: 'maps', title: 'Maps players sent', render: renderMaps, roles: ['admin', 'moderator'] },
-            { id: 'users', title: 'Users', render: renderUsers, roles: ['admin'] }
+            { id: 'maps', title: 'Maps', render: renderMaps },
+            { id: 'chat', title: 'Chat', render: renderChat },
+            { id: 'log', title: 'Log', render: renderLog },
+            { id: 'status', title: 'Status', render: renderStatus }
         ];
-        function sectionFor(id) { for (var i = 0; i < SECTIONS.length; i++) if (SECTIONS[i].id === id && SECTIONS[i].roles.indexOf(me.role) >= 0) return SECTIONS[i]; return SECTIONS[0]; }
-        function goSection(id) { section = sectionFor(id); showShell(); }
 
-        function showShell() {
-            section = section && section.roles.indexOf(me.role) >= 0 ? section : SECTIONS[0];
-            closeModal();
-            if (menuOff) { menuOff(); menuOff = null; }
-            app.textContent = '';
-            var wrap = el('div', 'mwrap');
-            var host = el('div');
-            add(app, header(section.title, true), add(wrap, host));
+        function paintTabs() {
+            Array.prototype.slice.call(tabsBox.children).forEach(function (b, i) {
+                var s = SECTIONS[i];
+                b.textContent = '';
+                b.setAttribute('aria-selected', s === current ? 'true' : 'false');
+                add(b, el('span', null, s.title));
+                if (s.id === 'maps' && waiting > 0) add(b, el('span', 'cnt', String(waiting)));
+            });
+            Array.prototype.slice.call(select.children).forEach(function (o, i) {
+                var s = SECTIONS[i];
+                o.textContent = s.title + (s.id === 'maps' && waiting > 0 ? ' (' + waiting + ' waiting)' : '');
+                o.selected = s === current;
+            });
+            select.value = current.id;
+        }
+        function show(section) {
+            if (section === current && host.children.length) return;
+            leave();
+            current = section;
+            paintTabs();
+            host.textContent = '';
             section.render(host);
         }
+        function sectionBox() {
+            var wrap = el('div');
+            tabsBox = el('div', 'atabs');
+            tabsBox.setAttribute('role', 'tablist');
+            tabsBox.setAttribute('aria-label', 'Sections');
+            select = el('select');
+            select.id = 'asec';
+            SECTIONS.forEach(function (s, i) {
+                var b = el('button', 'atab');
+                b.type = 'button';
+                b.id = 'tab-' + s.id;
+                b.setAttribute('role', 'tab');
+                b.setAttribute('aria-controls', 'secpanel');
+                b.addEventListener('click', function () { show(s); });
+                b.addEventListener('keydown', function (e) {                    // (the arrow keys move between the tabs, as a tab list does)
+                    var to = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : -1;
+                    if (to < 0 || to >= SECTIONS.length) return;
+                    e.preventDefault();
+                    show(SECTIONS[to]);
+                    tabsBox.children[to].focus();
+                });
+                add(tabsBox, b);
+                var o = el('option');
+                o.value = s.id;
+                add(select, o);
+            });
+            select.addEventListener('change', function () { SECTIONS.forEach(function (s) { if (s.id === select.value) show(s); }); });
+            var label = el('label', null, 'Section');
+            label.setAttribute('for', 'asec');
+            add(wrap, tabsBox, add(el('div', 'asel'), label, select));
+            return wrap;
+        }
+        function showShell() {
+            leave();
+            closeMenu(false);
+            cardSeq++;
+            app.textContent = '';
+            var pt = el('div', 'pt apt');
+            add(pt, el('h1', null, 'Admin'), el('p', null, TITLE_LINE), whoChip());
+            host = el('div');
+            host.id = 'secpanel';
+            host.setAttribute('role', 'tabpanel');
+            add(app, pt, sectionBox(), host);
+            current = null;
+            waiting = 0;
+            show(SECTIONS[0]);
+        }
 
-        // ---- the section "Maps players sent" ----
+        // ---- the section "Maps" (the maps that players sent) ----
         function renderMaps(host) {
-            var st = { tab: 'waiting', data: null, open: null, busy: false, dialog: null, dialogKind: null, dialogBody: null, keyOff: null, focusBack: null };
+            var st = { tab: 'waiting', data: null, open: null, busy: false, dialog: null, dialogAt: null, dialogKind: null, dialogBody: null, keyOff: null, focusBack: null, dead: false };
+            cleanup = function () { st.dead = true; if (st.keyOff) { st.keyOff(); st.keyOff = null; } };          // (another screen took the page: nothing of this one is drawn or heard any more)
 
             function load(tab) {
                 st.tab = tab || st.tab;
                 return call('GET', '/admin/api/maps?state=' + encodeURIComponent(st.tab)).then(function (r) {
-                    if (r.status === 404 || r.status === 401) return start();             // (the session ended: the page asks again who is here)
+                    if (refused(r)) return null;
                     if (r.status !== 200) { toast('The list could not be loaded. Reload the page.'); return null; }
+                    if (st.dead) return null;
                     st.data = r.json;
+                    waiting = (r.json.counts && r.json.counts.waiting) || 0;
+                    paintTabs();
                     st.open = null;
                     draw();
                     return null;
@@ -540,7 +477,7 @@
                         return;
                     }
                     release();
-                    if (r.status === 404) return start();
+                    if (refused(r)) return;
                     if (done && done(r)) return;
                     toast(r.json && r.json.message ? r.json.message : 'That did not work. Reload the page.');
                 }, function () { release(); toast('The server did not answer. Try again.'); });
@@ -566,7 +503,7 @@
                 var stamp = m.state === 'waiting' ? m.sent_at : m.decided_at;
                 var line = el('span');
                 add(line, doc.createTextNode('By '), player('span', 'who', m.maker), doc.createTextNode(' '), ptag(), doc.createTextNode(' · ' + m.width + ' x ' + m.height + ' · ' + VERBS[st.tab] + ' ' + when(stamp, env.now())));
-                if (st.tab !== 'waiting' && m.decided_by) add(line, doc.createTextNode(' by '), typed('span', 'who', m.decided_by));          // (the account that decided: a name that was typed, so it is marked)
+                if (st.tab !== 'waiting' && m.decided_by) add(line, doc.createTextNode(' by '), typed('span', 'who', m.decided_by));          // (the admin who decided, by the name of the Discord login, or the words "earlier admin": a name that was typed, so it is marked)
                 return line;
             }
 
@@ -586,6 +523,7 @@
                 if (st.open.why) why.textContent = st.open.why;
                 function nextName() {
                     call('GET', '/admin/api/next-name?name=' + encodeURIComponent(input.value)).then(function (r) {
+                        if (refused(r)) return;
                         if (r.status === 200) { input.value = r.json.name; why.hidden = true; }
                         else { why.textContent = r.json && r.json.message ? r.json.message : 'No free name was found.'; why.hidden = false; }
                     });
@@ -633,6 +571,7 @@
                     add(acts, button('Rename and approve', 'big', function () {
                         if (m.name_taken) {
                             call('GET', '/admin/api/next-name?name=' + encodeURIComponent(m.name)).then(function (res) {
+                                if (refused(res)) return;
                                 st.open = { id: m.id, kind: 'rename', suggestion: res.status === 200 ? res.json.name : '' };
                                 draw();
                             });
@@ -655,7 +594,6 @@
             // The one small question for Approve and Take down: the map as the maintainer will decide on it (name, maker, picture, cleaned description), then the button
             function confirmDialog(m, kind, body) {
                 var approve = kind === 'approve';
-                var scrim = el('div', 'scrim');
                 var dlg = el('div', 'dlg');
                 dlg.setAttribute('role', 'dialog');
                 dlg.setAttribute('aria-modal', 'true');
@@ -676,6 +614,7 @@
                 function closeDialog() { st.focusBack = m.id; st.dialog = null; draw(); }
                 var cancel = button('Cancel', 'ghost', closeDialog);
                 var go = button(approve ? 'Approve' : 'Take down', approve ? 'ok' : 'bad', function () {
+                    if (tick() - st.dialogAt < ASK_DELAY) return;                 // (a press that comes at once is the second click of a double click, not an answer)
                     if (!approve) return act(m.id, 'take-down', {});
                     act(m.id, 'approve', body || {}, function (res) {
                         var sug = res.json && res.json.suggestion ? res.json.suggestion : '';
@@ -691,22 +630,16 @@
                     });
                 });
                 add(dlg, inner, add(el('div', 'dlg-foot'), cancel, go));
-                // the keys are heard on the document (a click on plain text moves the focus to the body, and Escape must still close the box)
-                function onKey(e) {
-                    if (e.key === 'Escape') { closeDialog(); return; }
-                    if (e.key !== 'Tab') return;                                  // (the focus stays inside the box: Tab from the last button goes to the first, Shift+Tab the other way)
-                    var now = doc.activeElement;
-                    if (!dlg.contains(now) || (e.shiftKey && now === cancel)) { e.preventDefault(); (e.shiftKey ? go : cancel).focus(); }
-                    else if (!e.shiftKey && now === go) { e.preventDefault(); cancel.focus(); }
-                }
-                add(scrim, dlg);
-                onBackdrop(scrim, closeDialog);
-                return { node: scrim, focus: cancel, onKey: onKey };
+                return questionBox(dlg, cancel, go, closeDialog);
             }
 
             function draw() {
+                if (st.dead) return;
                 if (st.keyOff) { st.keyOff(); st.keyOff = null; }
+                clearInert();
                 if (!st.dialog) st.dialogBody = null;
+                if (!st.dialog) st.dialogAt = null;
+                else if (st.dialogAt === null) st.dialogAt = tick();
                 host.textContent = '';
                 var counts = st.data ? st.data.counts : { waiting: 0, approved: 0, declined: 0, taken_down: 0 };
                 var tools = el('div', 'mtools');
@@ -738,9 +671,7 @@
                 if (st.dialog) {
                     var d = confirmDialog(st.dialog, st.dialogKind, st.dialogBody);
                     add(host, d.node);
-                    [host.children, app.children, host.parentNode ? host.parentNode.parentNode.children : []].forEach(function (list) {          // (the page behind the box is inert: Tab cannot walk into it)
-                        Array.prototype.slice.call(list).forEach(function (n) { if (n !== d.node && n !== host.parentNode && n !== app) n.setAttribute('inert', ''); });
-                    });
+                    inertOthers(d.node);
                     doc.addEventListener('keydown', d.onKey, true);
                     st.keyOff = function () { doc.removeEventListener('keydown', d.onKey, true); };
                     d.focus.focus();
@@ -755,245 +686,373 @@
             return load('waiting');
         }
 
-        // ---- the section "Users": the accounts and, on the second tab, the log of what was done (Admin only; the server refuses everybody else) ----
-        function oncePassword(label, who, password, extra) {          // the one-time box: shown once, with Copy; nothing of it is kept after Done
-            var box = el('div', 'once');
-            add(box, add(el('div', 'ol'), doc.createTextNode(label), typed('b', null, who)));
-            var row = el('div', 'pw');
-            var code = el('code', null, password);
-            var copy = el('button', 'btn big', 'Copy');
-            copy.type = 'button';
-            copy.addEventListener('click', function () {
-                var cb = env.clipboard || (typeof navigator !== 'undefined' ? navigator.clipboard : null);
-                if (cb && cb.writeText) cb.writeText(password).then(function () { copy.textContent = '✓ Copied'; copy.className = 'btn big copied'; }, function () { copy.textContent = 'Copy by hand'; });
-                else copy.textContent = 'Copy by hand';
+        // ---- the section "Chat": mute or ban someone, the lists of the banned and the muted, and the pictures that are hidden ----
+        function panel(title, hint) {
+            var p = el('section', 'panel');
+            var h = el('h2', null, title);
+            add(p, h);
+            if (hint) add(p, el('p', 'ph', hint));
+            return p;
+        }
+        function field(label, id, placeholder, after) {                                      // a box to type in under its label; `after` (the presets of the minutes) sits beside it
+            var f = el('div', 'f');
+            var l = el('label', null, label);
+            l.setAttribute('for', id);
+            var inw = el('div', 'inw');
+            var i = el('input', 'plain');
+            i.type = 'text';
+            i.id = id;
+            if (placeholder) i.setAttribute('placeholder', placeholder);
+            i.setAttribute('autocomplete', 'off');
+            i.setAttribute('autocapitalize', 'off');
+            i.setAttribute('spellcheck', 'false');
+            add(inw, i);
+            add(f, l, after ? add(el('div', 'minrow'), inw, after) : inw);
+            return { box: f, input: i };
+        }
+        function personName(x) { return x.name ? typed('div', 'pn', x.name) : add(el('div', 'pn'), ref(x.ref)); }
+        // who did it, as a small line says it: the username that the hub knows, else the short reference; the command line is the terminal
+        function byNode(x) {
+            if (x.by === 'command line') return doc.createTextNode('terminal');
+            return x.by_name ? typed('span', null, x.by_name) : REFERENCE.test(x.by || '') ? ref(x.by) : doc.createTextNode('someone');
+        }
+        function personRows(list, label, line, onPress) {
+            var box = el('div', 'plist');
+            list.forEach(function (x) {
+                var r = el('div', 'prow');
+                add(r, add(el('div'), personName(x), line(x)), button(label, '', function () { onPress(x); }));
+                add(box, r);
             });
-            add(row, code, copy);
-            add(box, row, add(el('div', 'on'), el('b', null, 'Shown once.'), doc.createTextNode(' Give it to the person; they must change it at their first sign-in.')));
-            if (extra) add(box, extra);
-            return { node: box, code: code };
-        }
-        function showPassword(title, line, label, who, password, extra, after) {
-            var shown = oncePassword(label, who, password, extra);
-            var done = button('Done', 'big', function () { shown.code.textContent = ''; closeModal(); if (after) after(); });
-            var nodes = [];
-            if (line) nodes.push(line);
-            nodes.push(shown.node);
-            openModal(title, nodes, [done], done, true);
+            return box;
         }
 
-        function renderUsers(host) {
-            var st = { tab: 'users', users: null, entries: null, notice: null, busy: false };
+        function renderChat(host) {
+            var st = { busy: false, keyOff: null };
+            var msgBox = el('div'), bannedBox = el('div'), mutedBox = el('div'), hiddenBox = el('div');
+            cleanup = function () { if (st.keyOff) { st.keyOff(); st.keyOff = null; } };
 
-            function load() {
-                return call('GET', '/admin/api/users').then(function (r) {
-                    if (ended(r)) return null;
-                    if (r.status !== 200) { toast('The list could not be loaded. Reload the page.'); return null; }
-                    st.users = r.json.users || [];
-                    draw();
-                    return null;
-                }, function () { toast('The server did not answer. Reload the page.'); });
+            // the form that mutes or bans
+            var presets = el('span', 'chips');
+            var user = field('Username', 'cm-user', 'for example clover.4782');
+            var minutes = field('Minutes (a mute only)', 'cm-min', null, presets);
+            minutes.input.value = '60';
+            minutes.input.setAttribute('inputmode', 'numeric');
+            PRESETS.forEach(function (p) {
+                var c = el('button', 'chip', p[0]);
+                c.type = 'button';
+                c.addEventListener('click', function () { minutes.input.value = String(p[1]); });
+                add(presets, c);
+            });
+            add(minutes.box, el('div', 'fh', '1 to ' + MAX_MINUTES + ' (one week). A mute ends by itself.'));
+            var banButton = button('Ban', 'big bad', function () { askBan(); });
+            var form = panel('Mute or ban someone');
+            form.className += ' p-form';
+            add(form, msgBox, user.box, minutes.box, add(el('div', 'acts'), button('Mute', 'big', function () { mute(); }), banButton));
+
+            // the lists, and the box that hides a picture
+            var banned = panel('Banned', 'They can read the chat but cannot write.'), muted = panel('Muted', 'A mute ends by itself at the time shown.'), pics = panel('Hide a picture', 'Hides a person’s Discord picture in the chat; their letter shows instead.');
+            banned.className += ' p-banned';
+            muted.className += ' p-muted';
+            pics.className += ' p-pics';
+            var picUser = field('Username', 'hp-user', 'for example marlow.old');
+            var hiddenHead = el('h2', 'sub', 'Hidden now');
+            add(banned, bannedBox);
+            add(muted, mutedBox);
+            add(pics, picUser.box, add(el('div', 'acts'), button('Hide picture', 'big', function () { hidePicture(); })), hiddenHead, hiddenBox, el('p', 'ph', 'After “Show again” the picture stays off until the person turns it on themselves.'));
+            var left = el('div', 'cc'), right = el('div', 'cc');
+            add(left, form, pics);
+            add(right, banned, muted);
+            add(host, add(el('div', 'cgrid'), left, right));
+
+            function say(parts, cls) {                                                                      // the line in the form: an error or a done (words and names)
+                msgBox.textContent = '';
+                if (!parts) return;
+                var m = message(null, cls);
+                parts.forEach(function (n) { add(m, typeof n === 'string' ? doc.createTextNode(n) : n); });
+                add(msgBox, m);
             }
-            function loadLog() {
-                return call('GET', '/admin/api/audit').then(function (r) {
-                    if (ended(r)) return null;
-                    if (r.status !== 200) { toast('The list could not be loaded. Reload the page.'); return null; }
-                    st.entries = r.json.entries || [];
-                    draw();
-                    return null;
-                }, function () { toast('The server did not answer. Reload the page.'); });
+            function paint(box, head, title, rows, none, build) {                                           // a list: its count in the heading, its rows or the words for none, or that it could not be had
+                box.textContent = '';
+                var old = head.querySelector('.n');
+                if (old) head.removeChild(old);
+                if (rows === null) { add(box, message('The list could not be loaded.')); return; }
+                add(head, el('span', 'n', '(' + rows.length + ')'));
+                add(box, rows.length ? build(rows) : el('p', 'none', none));
             }
-            function act(user, action, done) {
+            function loadLists() {
+                return Promise.all([call('GET', HUB_API + 'bans'), call('GET', HUB_API + 'mutes'), call('GET', HUB_API + 'hidden')]).then(function (rs) {
+                    for (var i = 0; i < rs.length; i++) if (refused(rs[i])) return;
+                    var bans = rs[0].status === 200 ? rs[0].json.bans || [] : null, mutes = rs[1].status === 200 ? rs[1].json.mutes || [] : null, hidden = rs[2].status === 200 ? rs[2].json.hidden || [] : null;
+                    var now = env.now();
+                    paint(bannedBox, banned.children[0], 'Banned', bans, 'Nobody is banned.', function (rows) {
+                        return personRows(rows, 'Unban', function (x) { return add(el('div', 'ps'), doc.createTextNode('banned ' + when(x.at, now) + ' · by '), byNode(x)); }, function (x) { rowChange('unban', x, 'is unbanned'); });
+                    });
+                    paint(mutedBox, muted.children[0], 'Muted', mutes, 'Nobody is muted.', function (rows) {
+                        return personRows(rows, 'Unmute', function (x) { return add(el('div', 'ps'), doc.createTextNode('until ' + untilWords(x.until, now) + ' (' + leftWords(x.until, now) + ') · by '), byNode(x)); }, function (x) { rowChange('unmute', x, 'is unmuted'); });
+                    });
+                    paint(hiddenBox, hiddenHead, 'Hidden now', hidden, 'No picture is hidden.', function (rows) {
+                        return personRows(rows, 'Show again', function () { return el('div', 'ps', 'picture hidden'); }, function (x) { rowChange('pic', x, 'has the picture shown again'); });
+                    });
+                }, function () {
+                    paint(bannedBox, banned.children[0], 'Banned', null);
+                    paint(mutedBox, muted.children[0], 'Muted', null);
+                    paint(hiddenBox, hiddenHead, 'Hidden now', null);
+                });
+            }
+
+            // One change: the words for what the hub answers, and the lists asked again afterwards
+            function change(name, body, who, doneWords, box) {
                 if (st.busy) return;
                 st.busy = true;
                 function release() { st.busy = false; }
-                call('POST', '/admin/api/users/' + user.id + '/' + action, {}).then(function (r) {
-                    release();
-                    if (ended(r)) return;
-                    if (r.status === 200) { st.notice = null; if (done) done(r.json); if (user.you && action === 'reset') return; load(); return; }          // (a reset of one's own password ends one's own session: the box is read first, Done asks again who is here)
-                    if (r.json && r.json.error === 'last_admin') { st.notice = user; draw(); return; }
-                    toast(r.json && r.json.message ? r.json.message : 'That did not work. Reload the page.');
-                }, function () { release(); toast('The server did not answer. Try again.'); });
-            }
-
-            function userCard(u) {
-                var src = el('div', 'srcrow');
-                var info = el('div');
-                add(info, add(el('div', 'nm'), typed('span', null, u.name), doc.createTextNode(' '), el('span', 'tg ' + u.role, roleName(u.role))), el('div', 'sm', 'Last sign-in: ' + (u.last_login_at ? when(u.last_login_at, env.now()) : 'Never')));
-                add(src, info);
-                return src;
-            }
-
-            function askRemove(u) {
-                var cancel = button('Cancel', 'ghost', closeModal);
-                var go = button('Remove', 'bad big', function () { closeModal(); act(u, 'remove'); });
-                openModal('Remove this user?', [userCard(u), el('div', 'lead', 'They can no longer sign in. This cannot be undone. Maps they approved stay approved.')], [cancel, go], cancel);
-            }
-
-            // (a reset ends the person's sessions and gives them a new password: asked first, like Remove, so that one click by mistake changes nothing)
-            function askReset(u) {
-                var cancel = button('Cancel', 'ghost', closeModal);
-                var go = button('Reset password', 'bad big', function () {
-                    closeModal();
-                    act(u, 'reset', function (j) {
-                        showPassword('New password for ' + u.name, null, 'New password for ', u.name, j.password, add(el('div', 'ptnote'), doc.createTextNode('The old password no longer works. If '), typed('b', null, u.name), doc.createTextNode(' is signed in now, they are signed out.')), u.you ? start : null);
-                    });
-                });
-                openModal('Reset this password?', [userCard(u), el('div', 'lead', 'A new password is made and you see it once. The old one stops working at once, and if they are signed in now, they are signed out.')], [cancel, go], cancel);
-            }
-
-            function askAdd() {
-                var note = el('div', 'noteslot');
-                var name = field('Username', 'add-user', { type: 'text', autocomplete: 'off', maxlength: 32 });
-                add(name.box, el('div', 'fh', '3 to 32 letters, numbers, dots, dashes or underscores. It cannot be changed later.'));
-                var role = 'moderator';
-                var roles = el('div', 'roles');
-                roles.setAttribute('role', 'radiogroup');
-                var cards = {};
-                function choose(r) { role = r; Object.keys(cards).forEach(function (k) { cards[k].className = 'rcard' + (k === r ? ' on' : ''); cards[k].setAttribute('aria-checked', k === r ? 'true' : 'false'); }); }
-                [['moderator', 'Moderator', 'Approves, declines and takes down maps.'], ['admin', 'Admin', 'Does all that, and also manages users.']].forEach(function (d) {
-                    var c = el('button', 'rcard');
-                    c.type = 'button';
-                    c.setAttribute('role', 'radio');
-                    add(c, el('span', 'rd'), add(el('span'), el('b', null, d[1]), doc.createTextNode(d[2])));
-                    c.addEventListener('click', function () { choose(d[0]); });
-                    cards[d[0]] = c;
-                    add(roles, c);
-                });
-                choose('moderator');
-                var rolebox = el('div', 'f');
-                add(rolebox, el('label', null, 'Role'), roles);
-                var cancel = button('Cancel', 'ghost', closeModal);
-                var create = button('Create', 'ok big', function () {
-                    if (st.busy) return;
-                    st.busy = true;
-                    note.textContent = '';
-                    name.bad(false);
-                    var typedName = name.input.value;
-                    call('POST', '/admin/api/users', { username: typedName, role: role }).then(function (r) {
-                        st.busy = false;
-                        if (ended(r)) return;
-                        if (r.status === 201) {
-                            var made = r.json.user;
-                            var password = r.json.password;
-                            st.notice = null;                                   // (the note about a refused removal of the last Admin is old news once a user is added)
-                            closeModal();
-                            load();
-                            showPassword('User created', add(el('div', 'okline'), doc.createTextNode('✓ The ' + roleName(made.role) + ' account '), typed('b', null, made.name), doc.createTextNode(' was created.')), 'Starting password for ', made.name, password, null);
+                hubToken().then(function () {
+                    return call('POST', HUB_API + name, body).then(function (r) {                  // (with no token of the hub this sends nothing and answers with status 0)
+                        if (r.status === 200) {
+                            if (box) box.value = '';
+                            say(['Done: ', who, ' ' + doneWords + '.'], 'ok');
+                            Promise.resolve(loadLists()).then(release, release);
                             return;
                         }
-                        name.bad(true);
-                        var e = r.json && r.json.error;
-                        add(note, message(e === 'username_taken' ? 'That username is already taken. Choose another.' : r.json && r.json.message ? r.json.message : 'The user could not be made. Try again in a moment.', 'bad'));
-                    }, function () { st.busy = false; add(note, message('The server did not answer. Try again in a moment.', 'bad')); });
+                        release();
+                        if (refused(r)) return;
+                        say(failure(name, r, who), 'bad');
+                    }, function () { release(); say(['The server did not answer. Try again.'], 'bad'); });
                 });
-                add(rolebox, el('div', 'fh', 'A random starting password is made for the new person. You see it once.'));
-                openModal('Add user', [note, name.box, rolebox], [cancel, create], name.input);
             }
-
-            function userRow(u) {
-                var r = el('div', 'urow' + (u.disabled ? ' off' : ''));
-                var left = el('div');
-                var un = el('div', 'un');
-                add(un, typed('span', null, u.name));
-                if (u.you) add(un, el('span', 'tg you', 'You'));
-                add(left, un);
-                if (u.has_not_chosen_password) add(left, el('div', 'unsub', 'Has not chosen a password yet'));
-                var ul = el('div', 'ul');
-                add(ul, el('span', 'k', 'Last sign-in: '), doc.createTextNode(u.last_login_at ? when(u.last_login_at, env.now()) : 'Never'));
-                var ua = el('div', 'ua');
-                add(ua, button('Reset password', 'sm', function () { askReset(u); }));
-                add(ua, button(u.disabled ? 'Enable' : 'Disable', 'sm', function () { act(u, u.disabled ? 'enable' : 'disable'); }));
-                add(ua, button('Remove', 'sm bad', function () { askRemove(u); }));
-                add(r, left, add(el('div'), el('span', 'tg ' + u.role, roleName(u.role))), ul, add(el('div'), el('span', 'tg ' + (u.disabled ? 'disabled' : 'active'), u.disabled ? 'Disabled' : 'Active')), ua);
-                return r;
-            }
-
-            function logLine(e) {
-                var def = ACTIONS[e.action];
-                var row = el('div', 'arow2' + (def && def[1] === 'fail' ? ' fail' : ''));
-                var wt = el('span', 'wt');
-                if (!def) {
-                    add(wt, typed('span', null, e.action));
-                } else if (e.action === 'user_added') {
-                    add(wt, doc.createTextNode('Added the ' + roleName(e.detail) + ' user '), typed('em', null, e.target));
-                } else {
-                    add(wt, doc.createTextNode(def[0]));
-                    if (def[1] === 'target' && e.target) add(wt, typed('em', null, e.target));
-                    if (e.action === 'map_declined' && e.detail) add(wt, doc.createTextNode(' — “'), typed('span', 'why', e.detail), doc.createTextNode('”'));
+            function failure(name, r, who) {
+                var e = r.json && r.json.error;
+                if (r.status === 404 && e === 'who') return ['No account has the username “', who, '”. Check the spelling in the lists below.'];
+                if (r.status === 403 && e === 'power') return ['You may not do that to this person.'];
+                if (r.status === 409 && e === 'bad') {
+                    var words = { ban: ' is banned already.', unban: ' is not banned.', unmute: ' is not muted.', nopic: ': the picture is hidden already.', pic: ': the picture is not hidden.' };
+                    return [who, words[name] || ': nothing changed.'];
                 }
-                add(row, el('span', 'tm', when(e.at, env.now())), typed('span', 'wh', e.who), wt);
-                return row;
+                if (r.status === 503 && e === 'role') return ['Discord did not confirm the roles just now, so nothing was done. Try again in a minute.'];
+                if (r.status === 403 && (e === 'csrf' || e === 'origin')) return ['The page’s token is old. Reload the page.'];
+                if (r.status === 429) return ['Too many requests. Wait a few seconds and try again.'];
+                return ['That did not work. Reload the page.'];
+            }
+            function rowChange(name, x, words) {                                                            // a button of a list: the account is its reference, never a name that could mean another person
+                change(name, { account: x.ref }, x.name ? typed('span', null, x.name) : ref(x.ref), words);
+            }
+            function named(input) {                                                                          // the username of a box, or the line that says what is wrong with it
+                var a = accountOf(input.value);
+                input.className = a.why ? 'plain err' : 'plain';
+                if (a.why) say([a.why], 'bad');
+                return a.why ? null : a;
+            }
+            function mute() {
+                var a = named(user.input);
+                if (!a) return;
+                var text = String(minutes.input.value).replace(/^\s+|\s+$/g, '');
+                var n = /^[0-9]{1,5}$/.test(text) ? parseInt(text, 10) : 0;
+                minutes.input.className = n >= 1 && n <= MAX_MINUTES ? 'plain' : 'plain err';
+                if (n < 1 || n > MAX_MINUTES) { say(['Minutes: a whole number from 1 to ' + MAX_MINUTES + '.'], 'bad'); return; }
+                change('mute', { account: a.account, minutes: n }, typed('span', null, a.shown), 'is muted for ' + minutesWords(n), user.input);
+            }
+            function hidePicture() {
+                var a = named(picUser.input);
+                if (!a) return;
+                change('nopic', { account: a.account }, typed('span', null, a.shown), 'has the picture hidden', picUser.input);
+            }
+            // The question before a ban: the name as it was typed, then Cancel or the red Ban
+            function askBan() {
+                var a = named(user.input);
+                if (!a || st.keyOff) return;
+                var dlg = el('div', 'dlg');
+                dlg.setAttribute('role', 'dialog');
+                dlg.setAttribute('aria-modal', 'true');
+                dlg.setAttribute('aria-labelledby', 'dlg-title');
+                var h = el('h2', null);
+                h.id = 'dlg-title';
+                add(h, doc.createTextNode('Ban '), typed('span', null, a.shown), doc.createTextNode('?'));
+                var src = el('div', 'srcrow');
+                add(src, add(el('div'), typed('div', 'nm', a.shown), el('div', 'sm', 'as typed in the Username box')));
+                add(dlg, add(el('div', 'dlg-in'), h, src, el('div', 'lead', 'They can still read the chat but cannot write until an admin lifts the ban.')));
+                var shell, opened = tick();
+                function closeAsk() {
+                    if (st.keyOff) { st.keyOff(); st.keyOff = null; }
+                    if (shell.node.parentNode) shell.node.parentNode.removeChild(shell.node);
+                    clearInert();
+                    banButton.focus();
+                }
+                var cancel = button('Cancel', 'ghost', closeAsk);
+                var go = button('Ban', 'bad', function () { if (tick() - opened < ASK_DELAY) return; closeAsk(); change('ban', { account: a.account }, typed('span', null, a.shown), 'is banned', user.input); });
+                add(dlg, add(el('div', 'dlg-foot'), cancel, go));
+                shell = questionBox(dlg, cancel, go, closeAsk);
+                add(host, shell.node);
+                inertOthers(shell.node);
+                doc.addEventListener('keydown', shell.onKey, true);
+                st.keyOff = function () { doc.removeEventListener('keydown', shell.onKey, true); };
+                shell.focus.focus();
             }
 
+            return hubToken().then(function () { return loadLists(); });
+        }
+
+        // ---- the section "Log": what moderators and admins did in the chat, and the decisions on maps, newest first ----
+        function renderLog(host) {
+            var st = { mode: 'all', chat: null, maps: null };
+            var tools = el('div', 'mtools lhead'), lead = el('p', 'alead'), body = el('div');
+            add(host, tools, lead, body);
+
+            function who(actor, name) {                                                                 // a person is a username, else the short code that the hub keeps; the command line is the terminal
+                var w = el('span', 'wh');
+                if (actor === 'terminal') return add(w, doc.createTextNode('terminal'));
+                if (name) return add(w, typed('span', null, name));
+                return add(w, REFERENCE.test(actor || '') ? ref(actor) : doc.createTextNode('someone'));
+            }
+            function tag(src, tagged) { return tagged ? el('span', 'src ' + src, src === 'chat' ? 'Chat' : 'Map') : null; }         // (the filter All says which list a row came from)
+            function chatText(r, tagged) {
+                var wt = add(el('span', 'wt'), tag('chat', tagged));
+                var target = r.target ? (r.target_name ? typed('span', null, r.target_name) : ref(r.target)) : null;
+                if (r.action === 'del') {
+                    add(wt, doc.createTextNode(r.detail === 'purge' ? 'Deleted the recent lines of ' : 'Deleted line ' + r.detail + (target ? ' by ' : '')), target);
+                } else if (r.action === 'mute') {
+                    add(wt, doc.createTextNode('Muted '), target, doc.createTextNode(' for ' + minutesWords(parseInt(r.detail, 10) || 0)));
+                } else if (CHAT_ACTIONS[r.action]) {
+                    add(wt, doc.createTextNode(CHAT_ACTIONS[r.action] + ' '), target);
+                } else {
+                    add(wt, typed('span', null, r.action), doc.createTextNode(' '), target);
+                }
+                return wt;
+            }
+            function mapText(r, tagged) {
+                var wt = add(el('span', 'wt'), tag('map', tagged));
+                add(wt, doc.createTextNode(MAP_ACTIONS[r.action] || ''), typed('em', null, r.target));
+                if (r.detail) add(wt, doc.createTextNode(' '), r.action === 'map_declined' ? add(el('span', 'why', 'Reason: '), typed('span', null, r.detail)) : typed('span', 'why', r.detail));
+                if (!MAP_ACTIONS[r.action]) add(wt, doc.createTextNode(' '), typed('span', null, r.action));
+                return wt;
+            }
             function draw() {
-                host.textContent = '';
-                var tools = el('div', 'mtools');
+                var chat = st.chat || [], maps = st.maps || [], now = env.now();
+                tools.textContent = '';
                 var chips = el('span', 'chips');
                 chips.setAttribute('role', 'tablist');
-                [['users', 'Users' + (st.users ? ' (' + st.users.length + ')' : '')], ['log', 'Sign-ins and actions']].forEach(function (t) {
-                    var c = el('button', 'chip' + (t[0] === st.tab ? ' on' : ''), t[1]);
-                    c.type = 'button';
-                    c.setAttribute('role', 'tab');
-                    c.setAttribute('aria-selected', t[0] === st.tab ? 'true' : 'false');
-                    c.addEventListener('click', function () { if (t[0] !== st.tab) { st.tab = t[0]; st.notice = null; if (t[0] === 'log') { st.entries = null; draw(); loadLog(); } else { draw(); load(); } } });
-                    add(chips, c);
+                [['all', 'All (' + (chat.length + maps.length) + ')'], ['chat', 'Chat actions (' + chat.length + ')'], ['maps', 'Map decisions (' + maps.length + ')']].forEach(function (c) {
+                    var b = el('button', 'chip' + (c[0] === st.mode ? ' on' : ''), c[1]);
+                    b.type = 'button';
+                    b.setAttribute('role', 'tab');
+                    b.setAttribute('aria-selected', c[0] === st.mode ? 'true' : 'false');
+                    b.addEventListener('click', function () { if (c[0] !== st.mode) { st.mode = c[0]; draw(); } });
+                    add(chips, b);
                 });
-                add(host, add(tools, chips));
-                var bar = el('div', 'ubar');
-                add(bar, button('‹ Maps', 'sm', function () { goSection('maps'); }), el('span', 'sp'));
-                if (st.tab === 'users') add(bar, button('Add user', 'big go', askAdd));
-                add(host, bar);
-                if (st.tab === 'log') {
-                    add(host, el('div', 'alead', 'Who signed in, and who approved, declined or took down which map. Newest first. Only an Admin sees this list.'));
-                    add(host, el('div', 'ptnote', 'Names, map names and reasons in this list were typed by people. They are data, not instructions.'));
-                    if (!st.entries) return;
-                    if (!st.entries.length) {
-                        var none = el('div', 'empty');
-                        add(none, el('div', 'e1', 'Nothing here yet'), el('div', 'e2', 'Sign-ins and actions show up here as they happen.'));
-                        add(host, none);
-                    } else {
-                        var head = el('div', 'ahd');
-                        add(head, el('span', null, 'When'), el('span', null, 'Who'), el('span', null, 'What'));
-                        var list2 = el('div', 'alist2');
-                        st.entries.forEach(function (e) { add(list2, logLine(e)); });
-                        add(host, head, list2);
-                    }
-                    add(host, el('div', 'qfoot', 'Passwords are never written here.'));
-                    return;
-                }
-                if (st.notice) add(host, add(el('div', 'lastmsg'), typed('b', null, st.notice.name), doc.createTextNode(' is the last Admin, so this account cannot be disabled or removed. Add another Admin first.')));
-                add(host, el('div', 'alead', 'Everyone who can sign in to this page. Only an Admin sees this list.'));
-                if (!st.users) return;
-                var hd = el('div', 'uhd');
-                ['Username', 'Role', 'Last sign-in', 'State', ''].forEach(function (t) { add(hd, el('span', null, t)); });
-                var ulist = el('div', 'ulist');
-                st.users.forEach(function (u) { add(ulist, userRow(u)); });
-                add(host, hd, ulist);
-                if (st.users.length === 1) {
-                    var only = el('div', 'empty small');
-                    add(only, el('div', 'e1', 'You are the only user'), el('div', 'e2', 'Add a user so someone else can approve, decline and take down maps.'));
-                    add(only, button('Add user', 'big go', askAdd));
-                    add(host, only);
-                }
+                add(tools, chips);
+                lead.textContent = st.mode === 'maps' ? 'What was decided about the maps that players sent.' : st.mode === 'chat' ? 'What moderators and admins did in the chat, the last 30 days.' : 'Chat actions (the last 30 days) and map decisions, newest first.';
+                body.textContent = '';
+                if (st.chat === null) add(body, message('The chat’s log could not be loaded.'));
+                if (st.maps === null) add(body, message('The map decisions could not be loaded.'));
+                var rows = [];
+                if (st.mode !== 'maps') chat.forEach(function (r) { rows.push({ at: r.at, src: 'chat', who: who(r.actor, r.actor_name), what: chatText(r, st.mode === 'all') }); });
+                if (st.mode !== 'chat') maps.forEach(function (r) { rows.push({ at: r.at, src: 'map', who: who(r.ref, r.who), what: mapText(r, st.mode === 'all') }); });
+                rows.sort(function (a, b) { return b.at - a.at; });                                        // (newest first; a stable sort keeps the order of the log for one second)
+                var hd = el('div', 'ahd');
+                add(hd, el('span', null, 'When'), el('span', null, 'Who'), el('span', null, 'What'));
+                var list = el('div', 'alist2');
+                rows.forEach(function (r) {
+                    add(list, add(el('div', 'arow2'), el('span', 'tm', when(r.at, now)), r.who, r.what));
+                });
+                if (rows.length) add(body, hd, list);
+                else if (st.chat !== null && st.maps !== null) add(body, el('p', 'none', 'Nothing was done in this time.'));
+                add(body, el('div', 'logfoot', 'People are shown by their Discord username. A person with no profile left is shown by the short code that the hub keeps for them.'));
             }
-
             draw();
+            return Promise.all([call('GET', HUB_API + 'modlog'), call('GET', '/admin/api/audit')]).then(function (rs) {
+                for (var i = 0; i < rs.length; i++) if (refused(rs[i])) return;
+                st.chat = rs[0].status === 200 ? rs[0].json.modlog || [] : null;
+                st.maps = rs[1].status === 200 ? rs[1].json.entries || [] : null;
+                draw();
+            }, function () { st.chat = st.maps = null; draw(); });
+        }
+
+        // ---- the section "Status": matches and players, the role checks, the pictures, the chat's store and the versions ----
+        function renderStatus(host) {
+            var top = el('div', 'stop'), upd = el('span', 'upd'), grid = el('div', 'sgrid'), refresh = button('Refresh', 'sm', function () { load(); });
+            add(top, upd, refresh);
+            add(host, top, grid);
+
+            function kv(k, v, small, cls) {
+                var r = el('div', 'kv' + (cls ? ' ' + cls : ''));
+                var vv = el('span', 'v', v);
+                if (small) add(vv, doc.createTextNode(' '), el('small', null, small));
+                return add(r, el('span', 'k', k), vv);
+            }
+            function stamp() {                                                                           // the site's own version, from the stamps of the bar (the build wrote them in; a page that nobody stamped has none)
+                var bar = doc.querySelector ? doc.querySelector('.sb') : null;
+                function got(k) { var v = bar && bar.getAttribute(k) || ''; return v && v.indexOf('@') < 0 ? v : ''; }
+                return { version: got('data-version'), build: got('data-build'), built: got('data-built') };
+            }
+            function state(cls, word, line) { return add(el('div', 'state'), el('span', 'tg ' + cls + ' big', word), doc.createTextNode(line)); }
+            function rightNow(busy) {
+                var p = panel('Right now');
+                if (!busy) return add(p, message('The game server did not answer.'));
+                return add(p, kv('Matches running', String(busy.matches)), kv('Players on the game server', String(busy.players), 'in matches and lobbies'));
+            }
+            function roles(s) {
+                var p = panel('Role checks', 'The chat asks Discord who has the admin and moderator roles, about every 3 minutes.');
+                var h = s.health;
+                if (h.roles === 'ok') add(p, state('active', 'Working', 'Roles known for ' + h.roles_known + ' accounts'), el('div', 'note', 'If this says Refused or Not answering, the page stays shut for everyone but the owner’s account.'));
+                else if (h.roles === 'refused') {
+                    var minutes = Math.max(1, Math.ceil((h.retry || 0) / 60));
+                    add(p, state('bad', 'Refused', 'Discord said no (' + (h.kind || 'unknown') + ', status ' + h.status + ')'), el('div', 'note bad', 'Nobody holds a role while Discord refuses. This page and the moderators’ tools stay shut, except for the owner’s account. The hub tries again in about ' + minutes + (minutes === 1 ? ' minute.' : ' minutes.')));
+                } else if (h.roles === 'down') add(p, state('warn', 'Not answering', 'Discord did not answer the last check'), el('div', 'note', 'Roles that are not a few minutes old are not believed: the page stays shut for everyone but the owner’s account until Discord answers.'));
+                else add(p, state('warn', 'Off', 'No role is asked of Discord'), el('div', 'note', 'Nobody holds a role: only the owner’s account gets in.'));
+                return p;
+            }
+            function pictures(s) {
+                var p = panel('Pictures from Discord', 'The last time the hub fetched a person’s picture.');
+                var l = s.last_picture, k = l && PICTURE_KINDS[l.kind];
+                if (!l) return add(p, state('', 'none yet', 'No picture was fetched since the hub started'));
+                return add(p, state(k ? k[0] : 'warn', String(k ? l.kind : 'unknown'), (k ? k[1] : 'Something that this page does not know') + ' · ' + ago(l.age)));
+            }
+            function store(s) {
+                var p = panel('Chat store', 'The hub’s own database: the lines, bans, mutes and the log.');
+                var t = s.store, pct = t.limit ? Math.floor(t.bytes * 100 / t.limit) : 0;
+                var meter = el('div', 'meter'), fill = el('i', pct >= 90 ? 'b' : pct >= 70 ? 'w' : '');
+                fill.style.width = Math.min(100, pct) + '%';
+                add(meter, fill);
+                add(p, kv('Database', megabytes(t.bytes) + ' of ' + megabytes(t.limit, true) + ' MB', pct + '%'), meter,
+                    kv('Log file', megabytes(t.log) + ' MB'), kv('Lines kept', String(t.lines), t.oldest ? 'the oldest from ' + when(t.oldest, env.now()) : null),
+                    kv('Pictures kept', String(t.pictures), megabytes(t.picture_bytes) + ' of ' + megabytes(t.picture_bytes_max, true) + ' MB'), kv('Switched off / blocked', t.off + ' / ' + t.blocked));
+                return p;
+            }
+            function versions(s) {
+                var p = panel('Versions'), site = stamp();
+                if (site.version) add(p, kv('Site', site.version, site.build ? 'build ' + site.build + (site.built ? ' · built ' + site.built : '') : null, 'stack'));
+                var v = s.version;
+                if (v) add(p, kv('Chat hub', 'code ' + v.code, 'running since ' + when(v.started, env.now()), 'stack'));
+                return p;
+            }
+            function draw(busy, hubStatus) {
+                grid.textContent = '';
+                upd.textContent = 'Checked ' + when(env.now() / 1000, env.now()) + ' (Pacific time)';
+                var c1 = el('div', 'cc'), c2 = el('div', 'cc');
+                add(c1, rightNow(busy));
+                if (hubStatus) { add(c1, roles(hubStatus), pictures(hubStatus)); add(c2, store(hubStatus), versions(hubStatus)); }
+                else { var p = panel('The chat hub'); add(c2, add(p, message('The chat hub did not answer.'))); }
+                add(grid, c1, c2);
+            }
+            function load() {
+                refresh.disabled = true;
+                return Promise.all([env.fetch('/busy', { credentials: 'omit' }).then(function (r) { return r.status === 200 ? r.json() : null; }).catch(function () { return null; }), call('GET', HUB_API + 'status')]).then(function (rs) {
+                    refresh.disabled = false;
+                    if (refused(rs[1])) return;
+                    var busy = rs[0] && typeof rs[0].matches === 'number' && typeof rs[0].players === 'number' ? rs[0] : null;
+                    draw(busy, rs[1].status === 200 && rs[1].json && rs[1].json.health && rs[1].json.store ? rs[1].json : null);
+                }, function () { refresh.disabled = false; draw(null, null); });
+            }
             return load();
         }
 
         function start() {
             return call('GET', '/admin/api/me').then(function (r) {
-                me = r.status === 200 ? r.json : null;
-                if (!me) return showOff();                                     // (an answer of 404: the admin page is off here; the page says only that it is the admin's)
-                if (!me.signed_in) return showLogin('', false);
-                if (me.must_change) return showChoose();
-                return showShell();
-            }, function () { app.textContent = ''; add(app, header('', false), add(el('div', 'mwrap lg'), add(el('div', 'lcard'), el('div', 'l2', 'The server did not answer. Reload the page.')))); });
+                if (r.status === 200 && r.json && typeof r.json.csrf === 'string' && r.json.csrf !== '') { me = r.json; hub = null; return showShell(); }
+                return showRefusal(r.status, r.json);
+            }, function () { return showRefusal(0, {}); });
         }
 
         return { start: start, when: when, state: function () { return { me: me }; }, sections: function () { return SECTIONS.map(function (x) { return x.id; }); } };
     }
 
-    return { create: create, when: when, cleanDescription: cleanDescription };
+    return { create: create, when: when, cleanDescription: cleanDescription, untilWords: untilWords, leftWords: leftWords, accountOf: accountOf };
 });

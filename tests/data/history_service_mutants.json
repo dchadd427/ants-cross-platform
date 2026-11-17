@@ -1,0 +1,157 @@
+{
+ "note": "Mutants of the history service's rules (src/ants_history/history_service.cpp and the feeder and store parts of src/ants_server/history_store.cpp that it uses) for tools/mutate.py (docs/TESTING.md). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/history_service_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: each breaks one rule of docs/HISTORY_SERVICE.md (the service deletes no marker, so a folder that is empty or not the game server's cannot make a match that the operator took out public again; a service that starts on an empty folder with a history says so; a recording that was left out for want of its map is counted when the list of approved maps can be read again or has the map; a store that lost its database looks again within seconds). Each mutant names the one case that has to catch it (ANTS_TEST_FILTER), and the baseline is the whole of both test programs.",
+ "defaults": {
+  "build": "ants_history test_history_service test_history_store",
+  "test": "./build/tests/test_server/test_history_service && ./build/tests/test_server/test_history_store"
+ },
+ "baseline": {
+  "build": "ants_history test_history_service test_history_store",
+  "test": "./build/tests/test_server/test_history_service && ./build/tests/test_server/test_history_store"
+ },
+ "mutants": [
+  {
+   "id": "service_prunes_markers",
+   "file": "src/ants_history/history_service.cpp",
+   "old": "feeder_->set_prune_markers(false);",
+   "new": "feeder_->set_prune_markers(true);",
+   "test": "ANTS_TEST_FILTER=HV2.5 ./build/tests/test_server/test_history_service",
+   "expect": "HV2.5"
+  },
+  {
+   "id": "feeder_prune_switch_ignored",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "if (prune_markers_ && (!prune_armed_ || net::time_reached(now_ms, next_prune_ms_))) {",
+   "new": "if (!prune_armed_ || net::time_reached(now_ms, next_prune_ms_)) {",
+   "test": "ANTS_TEST_FILTER=HS5.8 ./build/tests/test_server/test_history_store",
+   "expect": "HS5.8"
+  },
+  {
+   "id": "empty_folder_not_noticed",
+   "file": "src/ants_history/history_service.cpp",
+   "old": "if (counter_replays_->count() == 0 && counter_history_->count() > 0) {",
+   "new": "if (false) {",
+   "test": "ANTS_TEST_FILTER=HV2.5 ./build/tests/test_server/test_history_service",
+   "expect": "HV2.5"
+  },
+  {
+   "id": "empty_folder_noticed_with_recordings",
+   "file": "src/ants_history/history_service.cpp",
+   "old": "if (counter_replays_->count() == 0 && counter_history_->count() > 0) {",
+   "new": "if (counter_history_->count() > 0) {",
+   "test": "ANTS_TEST_FILTER=HV2.5 ./build/tests/test_server/test_history_service",
+   "expect": "HV2.5"
+  },
+  {
+   "id": "empty_folder_noticed_without_history",
+   "file": "src/ants_history/history_service.cpp",
+   "old": "if (counter_replays_->count() == 0 && counter_history_->count() > 0) {",
+   "new": "if (counter_replays_->count() == 0) {",
+   "test": "ANTS_TEST_FILTER=HV3.1 ./build/tests/test_server/test_history_service",
+   "expect": "HV3.1"
+  },
+  {
+   "id": "empty_folder_not_said",
+   "file": "src/ants_history/history_service.cpp",
+   "old": "say(\"WARNING: the recordings folder '\"",
+   "new": "(void)std::string(\"WARNING: the recordings folder '\"",
+   "test": "ANTS_TEST_FILTER=HV2.5 ./build/tests/test_server/test_history_service",
+   "expect": "HV2.5"
+  },
+  {
+   "id": "retry_never_asked",
+   "file": "src/ants_history/history_service.cpp",
+   "old": "feeder_->retry_skipped_maps();",
+   "new": "(void)0;",
+   "test": "ANTS_TEST_FILTER=HV3.5 ./build/tests/test_server/test_history_service",
+   "expect": "HV3.5"
+  },
+  {
+   "id": "approved_list_not_polled",
+   "file": "src/ants_history/history_service.cpp",
+   "old": "approved_->poll(steady_ms());",
+   "new": "(void)0;",
+   "test": "ANTS_TEST_FILTER=HV3.5 ./build/tests/test_server/test_history_service",
+   "expect": "HV3.5"
+  },
+  {
+   "id": "approved_change_not_seen",
+   "file": "src/ants_history/history_service.cpp",
+   "old": "if (found != files_) ++generation_;",
+   "new": "if (false) ++generation_;",
+   "test": "ANTS_TEST_FILTER=HV3.5 ./build/tests/test_server/test_history_service",
+   "expect": "HV3.5"
+  },
+  {
+   "id": "approved_failed_read_waits_a_minute",
+   "file": "src/ants_history/history_service.cpp",
+   "old": "return failing_ ? std::min(refresh_ms_, kApprovedMissLookMs) : refresh_ms_;",
+   "new": "return refresh_ms_;",
+   "test": "ANTS_TEST_FILTER=HV3.5 ./build/tests/test_server/test_history_service",
+   "expect": "HV3.5"
+  },
+  {
+   "id": "feeder_map_skip_not_marked",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "skip(id, why, true);",
+   "new": "skip(id, why);",
+   "test": "ANTS_TEST_FILTER=HS5.9 ./build/tests/test_server/test_history_store",
+   "expect": "HS5.9"
+  },
+  {
+   "id": "feeder_retry_keeps_skipped",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "for (const std::string& id : map_skipped_) skipped_.erase(id);",
+   "new": "",
+   "test": "ANTS_TEST_FILTER=HS5.9 ./build/tests/test_server/test_history_store",
+   "expect": "HS5.9"
+  },
+  {
+   "id": "feeder_retry_no_new_line",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "seen_revision_ = ~uint64_t{0};",
+   "new": "(void)0;",
+   "test": "ANTS_TEST_FILTER=HS5.9 ./build/tests/test_server/test_history_store",
+   "expect": "HS5.9"
+  },
+  {
+   "id": "feeder_retry_summary_wraps",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "reported_skipped_ = std::min(reported_skipped_, skipped_.size());",
+   "new": "(void)0;",
+   "test": "ANTS_TEST_FILTER=HS5.9 ./build/tests/test_server/test_history_store",
+   "expect": "HS5.9"
+  },
+  {
+   "id": "store_retry_not_given",
+   "file": "src/ants_history/history_service.cpp",
+   "old": "hc.retry_ms = cfg_.store_retry_ms;",
+   "new": "hc.retry_ms = server::HistoryStore::kRetryMs;",
+   "test": "ANTS_TEST_FILTER=HV7.3 ./build/tests/test_server/test_history_service",
+   "expect": "HV7.3"
+  },
+  {
+   "id": "store_retry_default_a_minute",
+   "file": "include/ants_history/history_service.hpp",
+   "old": "uint32_t store_retry_ms{5000};",
+   "new": "uint32_t store_retry_ms{60000};",
+   "test": "ANTS_TEST_FILTER=HV7.3 ./build/tests/test_server/test_history_service",
+   "expect": "HV7.3"
+  },
+  {
+   "id": "store_retry_first_look_a_minute",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "retry_at_ms_ = now_ms + cfg_.retry_ms;\n        return;",
+   "new": "retry_at_ms_ = now_ms + kRetryMs;\n        return;",
+   "test": "ANTS_TEST_FILTER=HV7.3 ./build/tests/test_server/test_history_service",
+   "expect": "HV7.3"
+  },
+  {
+   "id": "store_retry_next_look_a_minute",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "if (!net::time_reached(now_ms, retry_at_ms_)) return;\n    retry_at_ms_ = now_ms + cfg_.retry_ms;",
+   "new": "if (!net::time_reached(now_ms, retry_at_ms_)) return;\n    retry_at_ms_ = now_ms + kRetryMs;",
+   "test": "ANTS_TEST_FILTER=HV7.3 ./build/tests/test_server/test_history_service",
+   "expect": "HV7.3"
+  }
+ ]
+}

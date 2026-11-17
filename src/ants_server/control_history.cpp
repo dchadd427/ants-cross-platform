@@ -236,9 +236,7 @@ ctl::HttpResponse history_deaths_response(const HistoryStore& history, const ctl
 }
 
 // GET /history[?query], GET /history/<id> and GET /history/deaths?map=NAME, on both doors (`owner`: the control door, which also says 405 where the public one says 404)
-ctl::HttpResponse history_read(const RoomManager& rooms, const ctl::HttpRequest& request, bool owner) {
-    const HistoryStore* history = rooms.history_store();
-    const ReplayStore* replays = rooms.replay_store();
+ctl::HttpResponse history_read(const HistoryStore* history, const ReplayStore* replays, const ctl::HttpRequest& request, bool owner) {
     if (history == nullptr) return error_reply(404, "this server keeps no match history");
     if (request.path == "/history") {
         if (request.method != "GET") return error_reply(owner ? 405 : 404, owner ? "method not allowed" : "not found");
@@ -263,12 +261,12 @@ ctl::HttpResponse history_read(const RoomManager& rooms, const ctl::HttpRequest&
 
 }  // namespace
 
-ctl::HttpResponse handle_public_history(const RoomManager& rooms, const ctl::HttpRequest& request) { return history_read(rooms, request, false); }
+ctl::HttpResponse public_history_response(const HistoryStore* history, const ReplayStore* replays, const ctl::HttpRequest& request) { return history_read(history, replays, request, false); }
 
 // GET /history[?query], GET /history/<id> and DELETE /history/<id> of the control interface (the secret is checked before this is called)
 ctl::HttpResponse handle_history(RoomManager& rooms, const ctl::HttpRequest& request) {
     static const std::string kPrefix = "/history/";
-    if (request.method != "DELETE" || request.path.compare(0, kPrefix.size(), kPrefix) != 0) return history_read(rooms, request, true);
+    if (request.method != "DELETE" || request.path.compare(0, kPrefix.size(), kPrefix) != 0) return history_read(rooms.history_store(), rooms.replay_store(), request, true);
     HistoryStore* history = rooms.history_store();
     if (history == nullptr) return error_reply(404, "this server keeps no match history");
     if (!history->available()) return unavailable(*history, true);

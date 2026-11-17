@@ -336,7 +336,7 @@
   {
    "id": "the_list_of_bans_is_not_marked_as_typed",
    "file": "hub/admindoor.py",
-   "old": "            return http.response(200, {\"bans\": out, \"untrusted\": True, \"untrusted_fields\": [\"name\"]})",
+   "old": "            return http.response(200, {\"bans\": out, \"untrusted\": True, \"untrusted_fields\": [\"name\", \"by_name\"]})",
    "new": "            return http.response(200, {\"bans\": out})",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   },
@@ -399,7 +399,7 @@
   {
    "id": "a_bad_key_stops_the_hub",
    "file": "hub/config.py",
-   "old": "    cfg.admin_gate_secret = gate if GATE_SECRET.match(gate) and len(set(gate)) >= GATE_DISTINCT else \"\"",
+   "old": "    cfg.admin_gate_secret = gate if GATE_SECRET.match(gate) and len(set(gate)) >= GATE_DISTINCT and not cfg.admin_gate_sample else \"\"",
    "new": "    if gate and not GATE_SECRET.match(gate):\n        raise ConfigError(\"ANTS_HUB_ADMIN_GATE_SECRET is not good\")\n    cfg.admin_gate_secret = gate",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   },
@@ -562,6 +562,104 @@
    "file": "hub/admindoor.py",
    "old": "            self.hub.log.event(\"warning\", what=\"admin_door_lookup_budget_empty\")",
    "new": "            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_sample_key_opens_the_door",
+   "file": "hub/config.py",
+   "old": "len(set(gate)) >= GATE_DISTINCT and not cfg.admin_gate_sample else \"\"",
+   "new": "len(set(gate)) >= GATE_DISTINCT else \"\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_sample_key_is_found_before_the_blanks_are_cut",
+   "file": "hub/config.py",
+   "old": "    cfg.admin_gate_sample = gate == SAMPLE_GATE_KEY",
+   "new": "    cfg.admin_gate_sample = env.get(\"ANTS_HUB_ADMIN_GATE_SECRET\", \"\") == SAMPLE_GATE_KEY",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_sample_key_is_told_as_a_short_key",
+   "file": "hub/admindoor.py",
+   "old": "(\"secret_is_the_sample_key\" if cfg.admin_gate_sample else \"secret_too_short_or_not_printable\" if cfg.admin_gate_given else \"no_secret_set\")",
+   "new": "(\"secret_too_short_or_not_printable\" if cfg.admin_gate_given else \"no_secret_set\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "status_does_not_say_which_refusal",
+   "file": "hub/admindoor.py",
+   "old": "            kind, status = getattr(roles, \"problem\", (None, None))",
+   "new": "            kind, status = None, None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "status_does_not_say_when_the_hub_asks_again",
+   "file": "hub/admindoor.py",
+   "old": "            retry = max(0, int(roles.pause_until - self.hub.clock()) + 1)",
+   "new": "            retry = None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "status_says_refused_for_a_failing_lookup",
+   "file": "hub/admindoor.py",
+   "old": "        elif self.hub.clock() < getattr(roles, \"pause_until\", float(\"-inf\")):\n            state = \"refused\"",
+   "new": "        elif getattr(roles, \"down\", False):\n            state = \"refused\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "status_forgets_the_last_picture",
+   "file": "hub/admindoor.py",
+   "old": "        last = pictures.last_fetch() if pictures is not None else None",
+   "new": "        last = None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_fetch_that_ended_is_not_remembered",
+   "file": "hub/pictures.py",
+   "old": "        self.last = (kind, self.clock())\n",
+   "new": "        pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_refusal_is_not_remembered",
+   "file": "hub/roles.py",
+   "old": "        self.problem = (kind, status)\n",
+   "new": "        pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_picture_fetch_says_a_wrong_age",
+   "file": "hub/pictures.py",
+   "old": "max(0, int(self.clock() - self.last[1]))",
+   "new": "0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_store_limit_is_not_told",
+   "file": "hub/admindoor.py",
+   "old": "\"limit\": limits.db_max_bytes,",
+   "new": "\"limit\": 0,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_ban_does_not_say_who_did_it",
+   "file": "hub/admindoor.py",
+   "old": "\"by\": by_name(store, by), \"by_name\": untyped_id(names.get(by_name(store, by), \"\"))} for a, n, at, by in rows]\n            return http.response(200, {\"bans\"",
+   "new": "\"by\": by_name(store, by), \"by_name\": \"\"} for a, n, at, by in rows]\n            return http.response(200, {\"bans\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "an_id_shaped_name_of_who_did_it_is_told",
+   "file": "hub/admindoor.py",
+   "old": "\"until\": until, \"by\": by_name(store, by), \"by_name\": untyped_id(names.get(by_name(store, by), \"\"))}",
+   "new": "\"until\": until, \"by\": by_name(store, by), \"by_name\": names.get(by_name(store, by), \"\")}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_version_is_not_made_from_the_files",
+   "file": "hub/admindoor.py",
+   "old": "    return digest.hexdigest()[:8]",
+   "new": "    return \"00000000\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   }
  ]

@@ -6,7 +6,8 @@
 //   Statement st; db.prepare(st, "INSERT INTO t(a) VALUES (?)"); st.bind_int64(1, 7); st.step();
 //   { Transaction tx(db); db.exec("..."); tx.commit(); }          // rolled back by the destructor unless committed
 //
-// One thread at a time: the library is built without mutexes (third_party/sqlite/CMakeLists.txt). Paths are UTF-8. A file that is not a database, or is damaged, makes open() fail and is
+// One thread at a time for a Database object (the library is built for threads, but a connection is not shared: a second thread opens a connection of its own, as the history service does,
+// third_party/sqlite/CMakeLists.txt). Paths are UTF-8. A file that is not a database, or is damaged, makes open() fail and is
 // never changed or deleted by this layer: the caller decides what to do with it.
 #pragma once
 
@@ -28,6 +29,7 @@ constexpr int kErrNested = -3;              // a transaction is open already
 constexpr int kErrNotOpen = -4;             // the database (or statement) is not open
 constexpr int kErrInterrupted = 9;          // SQLite's SQLITE_INTERRUPT: a statement stopped by the progress handler
 constexpr int kErrForeign = -6;             // a database that this program did not make (it has tables and no schema_version)
+constexpr int kErrCleaning = -7;            // a migration was applied and committed, but the VACUUM or the checkpoint that must follow it failed (the file has the new schema; see Migration::vacuum_after)
 
 struct Error {
     int code{0};                           // 0 = no error; SQLite's result code, or one of the kErr values
@@ -37,6 +39,7 @@ struct Error {
 
 struct OpenOptions {
     bool create{true};                     // make the file when it does not exist (false: a missing file is an error)
+    bool read_only{false};                 // open the file for reading only (nothing can be written through the connection; `create` and `wal` are ignored: the journal mode is never asked for)
     int busy_timeout_ms{5000};             // how long a statement waits for another connection's lock
     bool wal{true};                        // ask for journal_mode=WAL with synchronous=NORMAL right at open (not for ":memory:"). A file system that cannot do WAL (it needs a shared-memory file)
                                            // is NOT an error: the file keeps its rollback journal and journal_mode() says so. open_and_migrate() asks AFTER the version check instead

@@ -119,7 +119,7 @@ class TheBlockRuns(unittest.TestCase):
     def test_a_map_goes_to_the_test_door_with_the_few_headers_and_nothing_else_of_the_visitor(self):
         rig = self.rig
         before_real = self.count(rig.door)
-        status, headers, body = rig.ask("POST", QUERY, {"Content-Type": "application/octet-stream", "Cookie": "ants_admin=abc", "Authorization": "Bearer secret", "X-Client-Address": "6.6.6.6",
+        status, headers, body = rig.ask("POST", QUERY, {"Content-Type": "application/octet-stream", "Cookie": "theme=dark; " + rig_module.HUB_COOKIE + rig_module.ADMIN_SESSION, "Authorization": "Bearer secret", "X-Client-Address": "6.6.6.6",
                                                          "X-Forwarded-For": "7.7.7.7", "Referer": "http://evil.example/", "User-Agent": "attacker/1", "Sec-Fetch-Site": "same-origin", "X-Real-IP": "8.8.8.8"}, b"m" * 1000)
         self.assertEqual(status, 201)
         self.assertEqual(names(headers, "set-cookie"), [])                                            # (a player's call never gets a cookie, whatever the game server sent)

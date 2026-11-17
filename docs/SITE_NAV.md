@@ -1,6 +1,6 @@
 # The bar at the top of every page
 
-Every page of the site except the game itself and the admin page starts with one bar (the game page, which holds the game, has it too: ["The game page"](#the-game-page)), so that each page has a way to the others: **Matches** (`/matches`), **Match** (`/match`), **Legal** (`/legal`), **Changelog** (`/changelog`), **Map maker** (`/mapmaker`) and **Sprites and sounds** (`/asset_catalog/`). The front page has its own top bar and its own Menu (`web/home/home.js`), which lists the same links. The files are `web/site_nav.css` and `web/site_nav.js` (at the root of `web/`, like `matches.css`: the folder `web/front/` has no room left), each copied once by the `Dockerfile`.
+Every page of the site except the game itself starts with one bar (the game page, which holds the game, has it too: ["The game page"](#the-game-page)), so that each page has a way to the others: **Matches** (`/matches`), **Match** (`/match`), **Legal** (`/legal`), **Changelog** (`/changelog`), **Map maker** (`/mapmaker`) and **Sprites and sounds** (`/asset_catalog/`). The front page has its own top bar and its own Menu (`web/home/home.js`), which lists the same links. The files are `web/site_nav.css` and `web/site_nav.js` (at the root of `web/`, like `matches.css`: the folder `web/front/` has no room left), each copied once by the `Dockerfile`.
 
 ## The markup
 
@@ -23,7 +23,7 @@ Every button is 44 px tall at least. A forced-colors window gets an outline for 
 - Map maker (`web/mapmaker.html`): the bar is above the editor's own row (the map's name and its buttons); the editor has no footer line any more (its version, and the site's, are the last line of the Menu), and its panels keep a margin at the foot that clears the screen's frame. The editor's own phone button, which was called Menu, is called **File**, so that a page has one Menu.
 - The Map maker's own screens cover or replace the bar: **My maps** lies over the whole editor from 601 px up, so the bar is taken out of the Tab order and away from a screen reader while it is up (a `:has()` rule on the editor in `web/front/mapmaker.css`), and the screen has its own **Home** button beside **Back to the map** (a phone's My maps is in the page's flow, with the bar and its Home in view, so it has no second one). **Crop to fit** hides the whole editor, bar included, and is a step that is left by **Cancel** (or Escape): it has no link to the front page, and nothing behind it can be reached with the Tab key.
 - Sprites and sounds (`asset_catalog/index.html`): the bar is above the catalog's own header (its title and its three tabs); the page had no footer and is not stamped, so its Menu has no version line. The catalog's Play and GitHub buttons are in the bar's Menu now.
-- The admin page has no bar on purpose: only its logo, and nothing on the site links to it.
+- The admin page (`web/admin.html`) has the bar too, with the same markup and the stamps that the Dockerfile and `build_web.sh` write into the others' (the Menu shows the build; the page's Status reads the same stamps). The bar links out of it and nothing links to it. Its title block, the person's chip and the tabs are drawn by its script for a visitor who is let in, so a visitor who is not sees the bar and one card ([`MAP_SUBMISSIONS.md`](MAP_SUBMISSIONS.md#the-admin-page)).
 
 ## The game page
 
