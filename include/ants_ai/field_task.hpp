@@ -40,6 +40,7 @@ public:
         uint32_t stalled_ticks{300};         // no ant of the bot can get the kind the work needs for this long: a plain ant may set a bomb off to get to a power-up of it (FieldRules::set_off)
         uint32_t set_off_window{600};        // the most set-offs of the task in this many ticks ...
         uint32_t set_offs_max{2};            // ... are this many (each costs 2 hit points and a stun)
+        uint32_t replans_max{3};             // the fresh plans that a Stuck step of one ant gets in all (FieldRules::replan): then it is given up, whatever the orders in between
     };
 
     FieldTask(TaskId id, Tactics& tactics) : FieldTask(id, tactics, Params{}) {}
@@ -101,6 +102,7 @@ private:
     std::vector<uint64_t> set_off_ticks_;   // the ticks of the latest set-off orders
     uint64_t done_tick_{0};                 // when the work was first found done
     sim::TileCoord takes_[4]{{-1, -1}, {-1, -1}, {-1, -1}, {-1, -1}};   // the last power-ups taken, the latest first
+    uint32_t replans_left_{0};              // the fresh plans that the ant has left (Params::replans_max when it is chosen)
     bool replanned_{false};                 // a Stuck step has had its fresh plan (the ways and sources kept from before are dropped once before the ant is given up)
     uint32_t repeats_{0};                   // the same order in a row with the ant unchanged
     sim::TileCoord ordered_tile_{-1, -1};   // the ant when it was last ordered

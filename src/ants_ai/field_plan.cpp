@@ -69,6 +69,7 @@ Tiles read_tiles(const BotView& view, uint8_t seat, const FieldHints& hints) {
     for (int32_t y = 0; y < t.h; ++y) {
         for (int32_t x = 0; x < t.w; ++x) {
             const sim::TileCoord c{x, y};
+            if (view.dying_at(c)) t.occupied[t.at(c)] = 1;                              // (an ant in its death clip is still under the pointer: the controller refuses a special order on its tile too)
             const bool water = grid.terrain_class_at(c) == sim::movement::kTerrainWater;
             uint8_t k = kBlocked;
             if (grid.has_powerup_at(c)) {
@@ -490,23 +491,29 @@ FieldStep hop_step(const Tiles& t, const Search& reach, const BotView& view, con
         }
         return top;
     };
+    const auto keep = [&](const Search& to_work) {                                        // the hop under way, while it still holds
+        Launch kept;
+        const BombHop& h = hints.hop;
+        for (int f = 0; f < 8; ++f) {
+            if (h.from.x + kDx[f] != h.bomb.x || h.from.y + kDy[f] != h.bomb.y) continue;
+            const Launch again = value_launch(grid, t, reach, to_work, h.from, f, ant.hp);
+            if (again.cost < kFar && again.hop.land() == h.land()) kept = again;
+        }
+        return kept;
+    };
     Launch best;
-    if (hints.hop.bombs > 0) {                                                            // the hop under way
+    if (hints.hop.bombs > 0) {
         const BombHop& h = hints.hop;
         if (has_bomb_of(view, h.bomb, seat) && reach.reaches(t, h.from)) {
             best.hop = h;
             best.plant_from = h.from;
             best.cost = 0;
         } else {
-            for (int f = 0; f < 8; ++f) {
-                if (h.from.x + kDx[f] != h.bomb.x || h.from.y + kDy[f] != h.bomb.y) continue;
-                Launch again = value_launch(grid, t, reach, back, h.from, f, ant.hp);
-                if (again.cost >= kFar || again.hop.land() != h.land()) again = value_launch(grid, t, reach, one_more(), h.from, f, ant.hp);
-                if (again.cost < kFar && again.hop.land() == h.land()) best = again;
-            }
+            best = keep(back);
         }
     }
     if (best.cost >= kFar) best = best_launch(back);
+    if (best.cost >= kFar && hints.hop.bombs > 0) best = keep(one_more());              // the first of two hops under way
     if (best.cost >= kFar) best = best_launch(one_more());                               // the first of two hops: over a fire wall to ground from which a dig or a hop reaches the work
     if (best.cost >= kFar) return step_of(at_home && ant.hp < sim::AntUnit::MAX_HP ? FieldAction::Heal : FieldAction::Stuck, work, map.hill(seat).entrance);
     if (at_home && ant.hp < kLeaveHp && !has_bomb_of(view, best.hop.bomb, seat)) {     // a hop leaves the hill's side with the hit points the field will need (a dud there costs two)

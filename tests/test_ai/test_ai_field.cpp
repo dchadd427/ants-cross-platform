@@ -25,7 +25,7 @@
 //            and not before; a hurt ant, a throw into water or a second bomb on the way do not
 //   AI29.18  an ant takes only a power-up whose kind has a way, with its own moves, to the ground the work is done on: a Swimmer power-up on a strip that fire cuts off from all of it is none
 //   AI29.19  a Bomber that no single hop brings to the work (a fire wall and a lake lie between) hops first to ground from which a second hop reaches it
-//   AI29.20  no bomb is planted on a tile that an ant stands on (the engine plants none, and the click of the special order is refused)
+//   AI29.20  no bomb is planted on a tile that an ant stands on, one in its death clip too (the engine plants none, and the click of the special order is refused)
 //   AI29.21  a Stuck step gets one fresh plan before its ant is given up
 #include <algorithm>
 #include <cstdlib>
@@ -1198,9 +1198,13 @@ void run_field_tests() {
                 ASSERT_EQ(st.hop.bombs, 1);
                 target = st.hop.bomb;
             }
-            for (const bool other : {false, true}) {                                       // an ant of the seat, or of another team: either one stands on the tile
-                FieldWorld f(w, FieldWorld::Options{});
-                f.sim.spawn_unit(other ? static_cast<uint8_t>((w.seat + 1) % 4) : w.seat, sim::AntType::Worker, target);
+            for (int who = 0; who < 3; ++who) {                                            // an ant of the seat, of another team, or one of the seat in its death clip (the view does not list it,
+                FieldWorld f(w, FieldWorld::Options{});                                    // the pointer still finds it): any one stands on the tile
+                const uint32_t id = f.sim.spawn_unit(who == 1 ? static_cast<uint8_t>((w.seat + 1) % 4) : w.seat, sim::AntType::Worker, target);
+                if (who == 2) {
+                    f.sim.get_unit(id).state = sim::UnitState::Dead;
+                    f.sim.tick();
+                }
                 const FieldStep st = f.step_of(sim::AntType::Bomber, TileCoord{16, 11}, 10);
                 ASSERT_TRUE(st.hop.bombs == 0 || st.hop.bomb != target);
                 ASSERT_TRUE(!(st.action == FieldAction::Plant && st.tile == target));

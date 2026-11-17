@@ -498,18 +498,26 @@
   {
    "id": "stuck_without_a_fresh_plan",
    "file": "src/ants_ai/field_task.cpp",
-   "old": "if (hints_.rules.replan && !replanned_) {",
-   "new": "if (false && hints_.rules.replan && !replanned_) {",
+   "old": "if (hints_.rules.replan && !replanned_ && replans_left_ > 0) {",
+   "new": "if (false && hints_.rules.replan && !replanned_ && replans_left_ > 0) {",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI29.21 ' ./build/tests/test_ai/test_ai",
    "expect": "AI29.21"
   },
   {
    "id": "fresh_plan_switch_ignored",
    "file": "src/ants_ai/field_task.cpp",
-   "old": "if (hints_.rules.replan && !replanned_) {",
-   "new": "if (!replanned_) {",
+   "old": "if (hints_.rules.replan && !replanned_ && replans_left_ > 0) {",
+   "new": "if (!replanned_ && replans_left_ > 0) {",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI29.21 ' ./build/tests/test_ai/test_ai",
    "expect": "AI29.21"
+  },
+  {
+   "id": "plant_on_a_dying_ant",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "if (view.dying_at(c)) t.occupied[t.at(c)] = 1;",
+   "new": "if (false && view.dying_at(c)) t.occupied[t.at(c)] = 1;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.20 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.20"
   }
  ]
 }

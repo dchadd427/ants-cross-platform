@@ -75,7 +75,7 @@ struct FieldPlan {
     std::vector<sim::TileCoord> fire_way;
     std::vector<sim::TileCoord> swim_way;
     /// The power-ups of the kind the work needs that SERVE it: the ant that takes one has a way, with the moves of its new kind (a Swimmer swims, a Fire Ant walks through fire; the bombs on the way
-    /// are the Bomber's work and the water a Swimmer's, both done by then), to the ground the work is done on (a tile of the route or of the ways). A Swimmer power-up on a strip that fire walls cut
+    /// count as work that a Bomber does and the water on a Fire Ant's way as work that a Swimmer does), to the ground the work is done on (a tile of the route or of the ways). A Swimmer power-up on a strip that fire walls cut
     /// off from all of it is not one: the Bomber that hopped there would be a Swimmer that can do nothing. Only meaningful with `serving_known` (the Bomber's work is reached by a hop as well as by
     /// a dig: every Bomber power-up serves).
     std::vector<sim::TileCoord> serving;
@@ -87,7 +87,7 @@ struct FieldPlan {
     bool feasible() const noexcept { return field && (fires.empty() || !fire_way.empty()) && (waters.empty() || !swim_way.empty()); }
 };
 
-/// The rules of the breach that a plan switch can turn off (LevelPlan::field_*, `bot_arena --tune fpick=0,fwalk=0,fsetoff=0,fserve=0,freplan=0`): all on is the bot that ships
+/// The rules of the breach that a plan switch can turn off (LevelPlan::field_*, `bot_arena --tune fpick=0,fwalk=0,fsetoff=0,fserve=0,freplan=0`): all on is the bot that ships (the second hop and the planted tile have no switch)
 struct FieldRules {
     bool pick{true};                     // an ant that stands on the power-up it needs takes it with a click on its own tile (else it steps off and back on, and a boxed-in ant is Stuck)
     bool walk{true};                     // the walks and the defuses of the dig are ordered by the engine's own walk (EngineWalks), several tiles at a time (else: over ground with no bomb on or next to it)

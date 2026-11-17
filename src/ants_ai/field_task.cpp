@@ -160,6 +160,7 @@ void FieldTask::step(TaskContext& context) {
         }
         progress_ = now;
         replanned_ = false;
+        replans_left_ = params_.replans_max;
         hints_.hop = BombHop{};
     }
     if (ant->tile != seen_tile_ || ant->hp != seen_hp_ || ant->type != seen_type_) progress_ = now;
@@ -194,8 +195,9 @@ void FieldTask::order(TaskContext& context, const AntView& ant, const FieldStep&
             ant_ = 0;
             return;
         case FieldAction::Stuck:
-            if (hints_.rules.replan && !replanned_) {                                     // the plan kept from before may be what leads nowhere (the work moved on while the ways stayed): one fresh plan, then the ant is given up
+            if (hints_.rules.replan && !replanned_ && replans_left_ > 0) {                                     // the plan kept from before may be what leads nowhere (the work moved on while the ways stayed): one fresh plan, then the ant is given up
                 replanned_ = true;
+                --replans_left_;
                 ++replans_;
                 hints_.route.clear();
                 hints_.fire_way.clear();
