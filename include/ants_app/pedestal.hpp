@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "ants_app/hud_art.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_assets/asset_archive.hpp"
 
@@ -48,6 +49,13 @@ public:
     // Draws the current frame (parts last-first at their absolute coordinates, moved by (dx, dy): the panel of a bigger picture). Returns true if anything was drawn.
     bool draw(IRenderer& renderer, const assets::AssetArchive& archive, uint32_t now_ms, int32_t dx = 0, int32_t dy = 0);
 
+    /// The HUD art (hud_art.hpp) that draws the frames in place of the original's pieces, and the layout that places them: null is the original's art. A chain that the art has an animation for
+    /// follows the art's own frames and times (the same names as the original's animations); every other chain is the original's.
+    void set_art(const hud_art::Art* art, const ScreenLayout& layout) {
+        art_ = art;
+        layout_ = layout;
+    }
+
     PedestalKind resting_kind() const noexcept { return kind_; }
     bool is_settled_and_visible() const noexcept { return !running_ && kind_ != PedestalKind::Hidden; }
     void reset() noexcept { *this = PedestalSlot{}; }
@@ -55,6 +63,7 @@ public:
 private:
     void advance(const assets::AssetArchive& archive, uint32_t now_ms);
     void start_if_needed(uint32_t now_ms);
+    const hud_art::Animation* art_animation(const std::string& name) const noexcept { return art_ != nullptr ? art_->find_animation(name) : nullptr; }
 
     PedestalKind kind_{PedestalKind::Hidden};   // state the slot is in once the running chain ends
     int mode_{1};
@@ -65,6 +74,8 @@ private:
     uint32_t start_ms_{0};
     bool running_{false};
     std::string rest_anim_;                     // animation shown when no chain runs (empty: nothing)
+    const hud_art::Art* art_{nullptr};
+    ScreenLayout layout_{};
 };
 
 } // namespace ants::app

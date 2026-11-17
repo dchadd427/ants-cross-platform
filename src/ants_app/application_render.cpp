@@ -20,6 +20,7 @@ static constexpr bool kPhoneDigits = false;
 
 void Application::render_frame() {
     renderer_->begin_frame();
+    check_hud_art();                                     // (the sheet of the new HUD art for this output is a texture before anything is drawn with it)
     last_latency_layout_.reset();                        // (set again when this frame draws the network's readout)
     update_picture();
     renderer_->set_picture(picture_);                    // the screens are the picture (the whole canvas; a match of a smaller layout is centred in it)

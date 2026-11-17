@@ -106,7 +106,11 @@ void PedestalSlot::advance(const assets::AssetArchive& archive, uint32_t now_ms)
         }
         const auto* seq = archive.find_animation(chain_.animations[index_]);
         uint32_t total = 0;
-        if (seq) for (const auto& sub : seq->subitems) total += (sub.val3 > 0 ? sub.val3 : 1);
+        if (const hud_art::Animation* art = art_animation(chain_.animations[index_])) {
+            for (const hud_art::Frame& f : art->frames) total += static_cast<uint32_t>(f.ms > 0 ? f.ms : 1);       // (the art's own frames and times)
+        } else if (seq) {
+            for (const auto& sub : seq->subitems) total += (sub.val3 > 0 ? sub.val3 : 1);
+        }
         if (total == 0) total = 1;
         if (now_ms - start_ms_ < total) return; // still playing this animation
         start_ms_ += total;
@@ -125,6 +129,16 @@ bool PedestalSlot::draw(IRenderer& renderer, const assets::AssetArchive& archive
         name = &rest_anim_;
     }
     if (!name) return false;
+    if (const hud_art::Animation* art = art_animation(*name)) {
+        size_t frame = art->frames.size() - 1;
+        uint32_t end = 0;
+        for (size_t i = 0; i < art->frames.size(); ++i) {
+            end += static_cast<uint32_t>(art->frames[i].ms > 0 ? art->frames[i].ms : 1);
+            if (elapsed < end) { frame = i; break; }
+        }
+        hud_art::draw_all(renderer, *art_, hud_art::frame_part_draws(*art_, art->frames[frame], layout_));
+        return true;
+    }
     const auto* seq = archive.find_animation(*name);
     if (!seq || seq->subitems.empty()) return false;
     size_t frame = seq->subitems.size() - 1;

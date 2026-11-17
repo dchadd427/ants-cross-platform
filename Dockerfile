@@ -23,7 +23,7 @@ RUN cd /warm && \
 # =============================================================================
 # The layers of this stage are ordered by how often their input changes, so that a release that changes no C++ does not compile the game again:
 #   1. the build files and the sources: the compile reads nothing else (CMakeLists.txt, cmake/, include/, src/; the web build has no third_party/ and no tools/ in it);
-#   2. the file VERSION, web/shell.html and Original-Ants/: only the link reads them (the page's template and the data package). They are stubs in layer 1, which compiles and links with them, and the
+#   2. the file VERSION, web/shell.html, Original-Ants/ and assets/hud_art/ (the HUD's new pictures): only the link reads them (the page's template and the data package). They are stubs in layer 1, which compiles and links with them, and the
 #      real ones replace them here: the version is a constant in a header that CMake generates from VERSION, so the few files that include it (the four files src/ants_app/application*.cpp, and the generated build id file) are compiled again,
 #      then the game is linked again (the map core is not: nothing of it reads these);
 #   3. everything else (the pages, the stamps, the changelog), below.
@@ -39,7 +39,7 @@ COPY include/ ./include/
 COPY src/ ./src/
 
 # The stubs of what only the link reads (CMake checks the format of VERSION, and the stub is a number that no release has, so that the guard below can tell it from the real one; emcc wants {{{ SCRIPT }}} in the template)
-RUN echo 999.999.999 > VERSION && mkdir -p web Original-Ants && echo '{{{ SCRIPT }}}' > web/shell.html && echo stub > Original-Ants/stub.txt
+RUN echo 999.999.999 > VERSION && mkdir -p web Original-Ants assets/hud_art && echo '{{{ SCRIPT }}}' > web/shell.html && echo stub > Original-Ants/stub.txt && echo stub > assets/hud_art/stub.txt
 
 # Configure and compile using default Makefiles
 RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web \
@@ -51,12 +51,13 @@ RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web \
     (ccache -s || true)
 
 # The real version, template of the game page and data package: the link's outputs are removed so that CMake links again (it does not know that these three are inputs of the link). The checks after the link look at
-# the product and not only at the header: the program holds the real version text and not the stub's, the data package is the real one (about 14 MB; the stub's is a few bytes) and the page is the real template (it still has the placeholders
+# the product and not only at the header: the program holds the real version text and not the stub's, the data package is the real one (about 19 MB; the stub's is a few bytes) and the page is the real template (it still has the placeholders
 # that the stamps below fill in).
-RUN rm -rf VERSION web Original-Ants
+RUN rm -rf VERSION web Original-Ants assets
 COPY VERSION ./VERSION
 COPY web/shell.html ./web/shell.html
 COPY Original-Ants/ ./Original-Ants/
+COPY assets/hud_art/ ./assets/hud_art/
 RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web \
     if command -v ccache > /dev/null 2>&1; then export EM_COMPILER_WRAPPER="$(command -v ccache)"; ccache -z > /dev/null; fi && \
     rm -f build_web/src/ants_app/index.html build_web/src/ants_app/index.js build_web/src/ants_app/index.wasm build_web/src/ants_app/index.data && \
@@ -73,7 +74,7 @@ RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web \
     (ccache -s || true)
 
 # The three big files of the game are compressed once, here, and nginx sends the compressed copy to a browser that accepts gzip (gzip_static in docker/nginx.conf; the plain files stay, for a browser that does not): compressing
-# index.data (14 MB) and index.wasm (4 MB) again for every request cost nginx half a second and a fifth of a second of one core each time. -9 makes them smaller than nginx's own level 6, -n leaves the name and the time out of the
+# index.data (19 MB) and index.wasm (4 MB) again for every request cost nginx half a second and a fifth of a second of one core each time. -9 makes them smaller than nginx's own level 6, -n leaves the name and the time out of the
 # file. The COPY of index.* below takes the .gz files with the rest. The build stops if one is missing or empty.
 RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n -k "$f" && test -s "$f.gz" || exit 1; done
 
