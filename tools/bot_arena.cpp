@@ -22,6 +22,8 @@
 //   --repeat N        play every match N times and require identical results (finds any nondeterminism)
 //   --game-mode M     the rules of every match: highest-score (the original's game, the default) or 187 (no food, the kills are the score, docs/GAMEPLAY.md); the report names the mode only when it is 187
 //   --replay-check    re-feed the commands that were applied into a FRESH engine with no bot at all and require the same state hash at every 20th tick and at the end
+//   --swimmer-trace   after every match one SWT line per seat (the ticks of its 3rd, 5th and 8th Swimmer, the most it had alive, the Swimmers alive and the score at every minute, its idle ants
+//                     from the third minute on, the power-ups its ants took by kind) and one SWL line (the power-ups left on the ground at every minute); nothing is sent, the match is the same
 //   --tune K=V,...    the same tuning for every standard bot of the run (the keys of apply_tune). BOT_DIAG=1 in the environment makes the standard bots print what their tasks did (counts of attack orders, raids, walls, ...) to stderr when a match is over.
 //   --ally-standard   the first two standard bots of a match team up (the lower seat invites at its first look, the other accepts by its accept rule); --ally-pairs: every two seats with the same standard spec team up (2 + 2 for [A, A, B, B]). Test-only: no bot of the game invites.
 //   --threads N       matches played at the same time (default 1; every match is independent, the report is sorted by map, seed and arrangement)
@@ -231,6 +233,7 @@ void print_usage(std::FILE* to) {
         "  --ally-pairs       every two seats that have the same standard spec team up (2 + 2 for [A, A, B, B]; the lower seat of a pair invites; test-only)\n"
         "  --repeat N         play every match N times and require identical results\n"
         "  --replay-check     replay the applied commands into a fresh engine without any bot: same hash at every 20th tick and at the end\n"
+        "  --swimmer-trace    one SWT line per seat after every match (Swimmers, score, idle ants, power-ups taken) and one SWL line (power-ups left on the ground): see the top of tools/bot_arena.cpp\n"
         "  --save-replays DIR keep every match that was played as a replay file (.antsrep) in DIR, named as the game server names its own (ants-MAP-DATE-TIMEZ.antsrep; docs/REPLAYS.md): the\n"
         "                     players are \"Bot (Level)\". Pointed at the replay folder of a game server, the matches show in the site's list of matches (Matches) like any other\n"
         "  --threads N        matches at the same time (default 1)\n"
@@ -385,6 +388,7 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
         else if (s == "--ally-standard") o.ally_standard = true;
         else if (s == "--ally-pairs") o.ally_pairs = true;
         else if (s == "--replay-check") o.replay_check = true;
+        else if (s == "--swimmer-trace") o.swimmer_trace = true;
         else if (s == "--save-replays") {
             if (!value("--save-replays", v)) return false;
             if (v.empty()) { err = "--save-replays needs a folder"; return false; }
@@ -722,6 +726,89 @@ void save_replay(const LoadedMap& m, const Job& job, const ai::ArenaSpec& spec, 
     else g_replay_sink->notes.push_back("not saved: " + result.note);
 }
 
+// --swimmer-trace: what the seats' Swimmers did, and where their ants stood (read from the engine every 10th tick; nothing is sent and the match is the same). A Swimmer counts while it lives.
+// The idle count is the ants of a seat that stand still (state Idle) from the third minute on; `off_strip` leaves out those within two tiles of a flower's drop tile (the ants that wait for a drop)
+struct SwimmerTrace {
+    static constexpr size_t kMinutes = 12;
+    static constexpr uint64_t kIdleFrom = 2400;               // ticks: the first two minutes are the opening
+    std::array<std::array<uint64_t, 9>, 4> reached{};        // seat -> tick at which it first had n Swimmers alive (index n, 1..8; 0 = never)
+    std::array<uint32_t, 4> most{};
+    std::array<std::array<int32_t, kMinutes>, 4> score{};    // seat -> score at the end of each minute
+    std::array<std::array<uint32_t, kMinutes>, 4> alive{};   // seat -> Swimmers alive at the end of each minute
+    std::array<uint64_t, 4> idle{};                          // seat -> ant-looks (10 ticks each) of ants that stood idle from kIdleFrom on
+    std::array<uint64_t, 4> idle_off_strip{};                // ... of them, not near a drop tile
+    std::array<uint64_t, 4> ants{};                          // seat -> all ant-looks from kIdleFrom on
+    std::array<std::array<uint32_t, kMinutes>, 2> left{};    // [0] power-ups on the ground at the end of each minute (the flowers' drops left out), [1] of them Swimmers
+    void look(const sim::SimulationEngine& sim) {
+        const uint64_t tick = sim.current_tick();
+        if (tick % 10 != 0) return;
+        std::array<uint32_t, 4> n{};
+        const sim::WorldState& ws = sim.get_world_state();
+        for (const sim::AntSnapshot& a : ws.ants) {
+            if (a.player_id >= 4 || a.hp <= 0 || a.state == sim::UnitState::Dead || a.state == sim::UnitState::Drowning) continue;
+            if (a.raw_type == sim::AntType::Swimmer) ++n[a.player_id];
+            if (tick < kIdleFrom) continue;
+            ++ants[a.player_id];
+            if (a.state != sim::UnitState::Idle) continue;
+            ++idle[a.player_id];
+            bool near_drop = false;
+            for (const sim::FlowerDropperSnapshot& d : ws.flower_droppers) near_drop = near_drop || std::max(std::abs(a.tile_x - d.drop_x), std::abs(a.tile_y - d.drop_y)) <= 2;
+            if (!near_drop) ++idle_off_strip[a.player_id];
+        }
+        for (size_t t = 0; t < 4; ++t) {
+            most[t] = std::max(most[t], n[t]);
+            for (size_t k = 1; k <= 8 && k <= n[t]; ++k) {
+                if (reached[t][k] == 0) reached[t][k] = tick;
+            }
+            if (tick % 1200 == 0 && tick / 1200 >= 1 && tick / 1200 <= kMinutes) {
+                score[t][tick / 1200 - 1] = sim.get_player_score(static_cast<uint8_t>(t));
+                alive[t][tick / 1200 - 1] = n[t];
+            }
+        }
+        if (tick % 1200 == 0 && tick / 1200 >= 1 && tick / 1200 <= kMinutes) {
+            const sim::Grid& grid = sim.grid();
+            uint32_t all = 0;
+            uint32_t swimmers = 0;
+            for (int32_t y = 0; y < static_cast<int32_t>(grid.height()); ++y) {
+                for (int32_t x = 0; x < static_cast<int32_t>(grid.width()); ++x) {
+                    const sim::TileCoord t{x, y};
+                    if (!grid.has_powerup_at(t)) continue;
+                    bool flower = false;
+                    for (const sim::FlowerDropperSnapshot& d : ws.flower_droppers) flower = flower || (d.drop_x == x && d.drop_y == y);
+                    if (flower) continue;
+                    ++all;
+                    swimmers += grid.get_powerup_type(t) == static_cast<uint8_t>(sim::AntType::Swimmer) ? 1u : 0u;
+                }
+            }
+            left[0][tick / 1200 - 1] = all;
+            left[1][tick / 1200 - 1] = swimmers;
+        }
+    }
+};
+
+void print_swimmer_trace(const LoadedMap& m, const Job& job, const SwimmerTrace& t, const ai::ArenaResult& result) {
+    for (const ai::BotSpec& b : job.bots) {
+        if (b.seat >= 4) continue;
+        std::string line = fmt("SWT %s seed=%u rot=%u seat=%u kind=%s sw3=%llu sw5=%llu sw8=%llu most=%u alive=", m.name.c_str(), job.seed, job.rotation, static_cast<unsigned>(b.seat), b.kind.c_str(),
+                               static_cast<unsigned long long>(t.reached[b.seat][3]), static_cast<unsigned long long>(t.reached[b.seat][5]), static_cast<unsigned long long>(t.reached[b.seat][8]), t.most[b.seat]);
+        for (size_t k = 0; k < SwimmerTrace::kMinutes; ++k) line += fmt("%s%u", k == 0 ? "" : ",", t.alive[b.seat][k]);
+        line += " score=";
+        for (size_t k = 0; k < SwimmerTrace::kMinutes; ++k) line += fmt("%s%d", k == 0 ? "" : ",", t.score[b.seat][k]);
+        line += fmt(" idle=%llu idle_off=%llu ants=%llu", static_cast<unsigned long long>(t.idle[b.seat]), static_cast<unsigned long long>(t.idle_off_strip[b.seat]), static_cast<unsigned long long>(t.ants[b.seat]));
+        for (const ai::ArenaSeatResult& s : result.seats) {
+            if (s.spec.seat != b.seat) continue;
+            line += " took=";
+            for (size_t k = 1; k < s.took.size(); ++k) line += fmt("%s%u", k == 1 ? "" : ",", s.took[k]);   // Bomber, Fire, Thief, Combat, Swimmer
+        }
+        std::fprintf(g_out, "%s\n", line.c_str());
+    }
+    std::string line = fmt("SWL %s seed=%u rot=%u left=", m.name.c_str(), job.seed, job.rotation);
+    for (size_t k = 0; k < SwimmerTrace::kMinutes; ++k) line += fmt("%s%u", k == 0 ? "" : ",", t.left[0][k]);
+    line += " left_swimmers=";
+    for (size_t k = 0; k < SwimmerTrace::kMinutes; ++k) line += fmt("%s%u", k == 0 ? "" : ",", t.left[1][k]);
+    std::fprintf(g_out, "%s\n", line.c_str());
+}
+
 MatchReport run_job(const Options& o, const std::vector<LoadedMap>& maps, const Job& job, std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)> factory) {
     MatchReport r;
     r.job = job;
@@ -733,7 +820,10 @@ MatchReport run_job(const Options& o, const std::vector<LoadedMap>& maps, const 
     const Clock::time_point started = Clock::now();
     ai::ArenaSpec spec = spec_of(o, m, job, o.replay_check || g_replay_sink != nullptr);
     spec.factory = factory ? factory : o.ally_pairs ? ally_pairs_factory(job) : o.ally_standard ? ally_factory(job) : std::function<std::unique_ptr<ai::Bot>(const ai::BotSpec&)>(arena_factory);
+    SwimmerTrace trace;
+    if (o.swimmer_trace) spec.on_tick = [&trace](const sim::SimulationEngine& sim) { trace.look(sim); };
     r.result = ai::play_match(spec);
+    if (o.swimmer_trace && r.result.error.empty()) print_swimmer_trace(m, job, trace, r.result);
     r.plays = 1;
     if (r.result.error.empty() && o.replay_check) {
         r.replay_checked = true;

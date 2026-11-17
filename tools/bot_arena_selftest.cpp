@@ -1015,10 +1015,14 @@ int selftest() {
         t.check(cg.island_timed_row && !ai::plan_for(ai::Level::Medium).island_timed_row && !ai::plan_for(ai::Level::Easy).island_timed_row && apply_tune(cg, "itimed", 0, tune_err) && !cg.island_timed_row &&
                     apply_tune(cg, "itimed", 1, tune_err) && cg.island_timed_row,
                 "the key itimed switches the timed clicks through the hats of the rows of ISLANDS (on at Hard only)");
-        t.check(cg.island_flower_link && cg.island_flower_swimmers == 2u && cg.island_flower_thief && cg.island_crew_spare == 2u && !ai::plan_for(ai::Level::Medium).island_flower_link && !ai::plan_for(ai::Level::Easy).island_flower_link &&
+        t.check(cg.island_flower_link && cg.island_crew_spare == 2u && !ai::plan_for(ai::Level::Medium).island_flower_link && !ai::plan_for(ai::Level::Easy).island_flower_link &&
                     ai::plan_for(ai::Level::Medium).island_crew_spare == 1u && apply_tune(cg, "iflink", 0, tune_err) && !cg.island_flower_link && apply_tune(cg, "iflink", 1, tune_err) && cg.island_flower_link &&
-                    apply_tune(cg, "iflower", 0, tune_err) && cg.island_flower_swimmers == 0u && apply_tune(cg, "ifthief", 0, tune_err) && !cg.island_flower_thief && apply_tune(cg, "icrew", 1, tune_err) && cg.island_crew_spare == 1u,
-                "the keys iflink, iflower, ifthief and icrew set the flower link of ISLANDS (the link, two more Swimmers, a held Thief and one more crew ant at Hard only)");
+                    apply_tune(cg, "icrew", 1, tune_err) && cg.island_crew_spare == 1u,
+                "the keys iflink and icrew set the swarm of ISLANDS (the flower link and its waiting ants, and one more crew ant: at Hard only)");
+        t.check(cg.island_swarm_swimmers == 8u && cg.island_swarm_stage == 2u && cg.island_swarm_hp == 3u && cg.island_swarm_rows == 1300u && cg.island_swarm_idle == 2400u && ai::plan_for(ai::Level::Medium).island_swarm_rows == 0u &&
+                    apply_tune(cg, "iswarmn", 5, tune_err) && cg.island_swarm_swimmers == 5u && apply_tune(cg, "iswarmstage", 1, tune_err) && cg.island_swarm_stage == 1u && apply_tune(cg, "iswarmhp", 4, tune_err) && cg.island_swarm_hp == 4u &&
+                    apply_tune(cg, "iswarmrows", 0, tune_err) && cg.island_swarm_rows == 0u && apply_tune(cg, "iswarmidle", 3000, tune_err) && cg.island_swarm_idle == 3000u,
+                "the keys iswarmn, iswarmstage, iswarmhp, iswarmrows and iswarmidle set the Swimmers wanted, the ants at a strip, their least hit points and the ticks of the rows on foot (Hard's plan: 8, 2, 3, 1,300, 2,400)");
         ai::LevelPlan hm = ai::plan_for(ai::Level::Hard);
         t.check(!hm.home_on_route && !hm.home_first && hm.home_route_lane == 60 && ai::plan_for(ai::Level::Medium).home_route_lane == 20 && apply_tune(hm, "homemines", 1, tune_err) && hm.home_on_route && hm.home_first &&
                     apply_tune(hm, "homemines", 0, tune_err) && !hm.home_on_route && !hm.home_first && apply_tune(hm, "homeonroute", 1, tune_err) && hm.home_on_route && !hm.home_first &&

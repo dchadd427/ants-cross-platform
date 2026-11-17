@@ -1,6 +1,6 @@
 #pragma once
 
-// A small picture of a map for the owner's review page and for the lobby's list (docs/MAP_SUBMISSIONS.md, "Pictures"): the same colors that the map maker's canvas uses (web/front/mapmaker_tiles.js:
+// A small picture of a map for the admin page's review and for the lobby's list (docs/MAP_SUBMISSIONS.md, "Pictures"): the same colors that the map maker's canvas uses (web/front/mapmaker_tiles.js:
 // a color for each kind of ground and a few for the kinds of object, the four teams' hills marked), not the game's own pictures. A PNG with a palette and uncompressed blocks, written here
 // without a library: it is a few kilobytes, and a map is read once.
 

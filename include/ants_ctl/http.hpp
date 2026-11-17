@@ -77,7 +77,6 @@ struct HttpResponse {
     std::string content_type{"application/json"};              // visible ASCII only, else replaced by application/json
     std::string body;                                          // at most HttpServer::kMaxResponseBytes (a door's own limit, DoorOptions::max_response_bytes), else 500; a map or replay file (`file`) may be up to kMaxFileResponseBytes
     bool file{false};                                          // a map file (the format allows up to 4 MiB) or a replay file (up to about 2 MiB when it carries its map): its body may be up to HttpServer::kMaxFileResponseBytes, whatever the limit of the door; every other answer keeps the door's
-    std::vector<std::string> set_cookies;                      // the value of one Set-Cookie header each (the owner's session: docs/MAP_SUBMISSIONS.md); a value with a control character or a non-ASCII byte is dropped
 };
 
 /// What a door (HttpServer::listen_door) allows beyond the public read-only door. A door has no secret: the handler decides who may do what, so it is only for a program that checks every request itself.
@@ -164,7 +163,7 @@ int parse_http_head(std::string_view head, HttpHead& out, std::string* error, si
 
 /// True when the two texts are equal; the time depends on the longer of them and not on where they differ
 bool constant_time_equal(std::string_view a, std::string_view b);
-/// How many times constant_time_equal has run (tests: the owner's cookie signature and CSRF token are compared with it, and a comparison written as == would give the same answers)
+/// How many times constant_time_equal has run (tests: the admin page's pass and CSRF token are compared with it, and a comparison written as == would give the same answers)
 uint64_t constant_time_equal_calls();
 
 }  // namespace ants::ctl

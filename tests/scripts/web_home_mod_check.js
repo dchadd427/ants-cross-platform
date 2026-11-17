@@ -12,6 +12,9 @@
 //   5b. the recent messages: a row on the sheet with the count of the person's lines that are in the page's log (matched by the hub's key, never a name; not on a line of one's own; not for a visitor with no role),
 //      the list (newest first, the log's own times and day words, text only, the line that was opened marked, one stop for Tab, Up, Down, Home and End walk it, Escape and Back), the sheet of a line of the list,
 //      Delete from it (back to the list, the focus on the next line, else the one before, else Back), and the live follow (a new line, a deleted line, the log's 100 lines, a role that goes);
+//   5c. the person sheet of the players list (the real web/home/players.js on the same dock): the rows that carry a number and a mark, the same ways in (right click, long press, keys; a press that starts on a button of a
+//      row is that button's), the sheet (where the person is, Mute, Kick, Ban; no line to delete, no recent messages), `/mutes` asked when it opens (Mute is not offered until the answer; Unmute and "Muted until"; a
+//      failure and a retry), the exact commands by the number of the ROW (`row:4`, never a name), a sheet that does not outlive the socket or the person, and the toast;
 //   6. the page (web/lobby.html with web/home/home.js): the two files come once, after the dock names a visitor with a role, and never for a person with none; a broken or missing one changes nothing.
 // tests/scripts/test_web_home_mod.py runs this with node (the quick tier). usage: node web_home_mod_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
@@ -26,6 +29,7 @@ const modPath = path.join(lobbyDir, 'home', 'mod.js');
 const modSource = fs.readFileSync(modPath, 'utf8');
 const Pure = require(modPath);
 const Chat = require(path.join(lobbyDir, 'home', 'chat.js'));
+const playersSource = fs.readFileSync(path.join(lobbyDir, 'home', 'players.js'), 'utf8');
 const H = require('./web_page_harness.js')(lobbyPath);
 const { El, runLobby } = H;
 
@@ -114,7 +118,7 @@ const HISTORY = [
     line(149, 'Juniper', 'that looks like spam, see https://example.org/x now', { u: 'juniper.berry' }),
     line(150, 'Me', 'looking at it', { u: 'me.r' }),
 ];
-// o.role ('admin', 'mod', 'none'), o.history, o.size, o.noMod (the sheet is not mounted), o.vibrate (a function, or false for a browser with none)
+// o.role ('admin', 'mod', 'none'), o.history, o.size, o.noMod (the sheet is not mounted), o.vibrate (a function, or false for a browser with none), o.people (the players list is there too: the visitor's own row is number 3; the sheet is told of it unless o.noLink)
 function rig(o) {
     o = o || {};
     const role = o.role || 'admin';
@@ -142,7 +146,8 @@ function rig(o) {
     const dock = ChatApi.mount({ doc, win, host, chip: null, screen: () => 'home', fetch: undefined, now: () => clock.t, random: () => 0, WebSocket: HubSocket, error: (e) => { throw e; } });
     dock.shown(true);
     const mine = (l) => (l.who === 'Me' ? Object.assign({}, l, { role: role === 'none' ? undefined : role, mod: role !== 'none' }) : l);       // (the viewer's own line says the viewer's own role)
-    sockets[0].open().recv({ t: 'welcome', v: 1, you: { name: 'Me', mod: role !== 'none', role, k: 'k-me' }, login: false, online: 3, history: (o.history || HISTORY).map(mine) });
+    win.AntsHomeChat = ChatApi; win.AntsLobbyRules = H.RULES0;
+    sockets[0].open().recv(Object.assign({ t: 'welcome', v: 1, you: { name: 'Me', mod: role !== 'none', role, k: 'k-me' }, login: false, online: 3, history: (o.history || HISTORY).map(mine) }, o.people ? { presence: true, me: 3 } : {}));
     const Mod = loadScript(modSource, 'AntsHomeMod', clock);
     const r = { env, doc, win, body, host, dock, sockets, clock, buzzes, Mod, HubSocket };
     r.sock = () => sockets[sockets.length - 1];
@@ -151,8 +156,18 @@ function rig(o) {
     r.row = (id) => r.rows().find((c) => c.getAttribute('data-n') === String(id));
     r.acts = () => r.rows().filter((c) => c.getAttribute('data-act') === 'true').map((c) => Number(c.getAttribute('data-n')));
     r.marked = () => r.rows().filter((c) => cls(c).indexOf('gm-on') !== -1).map((c) => Number(c.getAttribute('data-n')));
-    r.mount = () => { r.mod = Mod.mount({ doc, win, dock, now: () => clock.t, error: (e) => { throw e; } }); return r.mod; };
-    if (!o.noMod) r.mount();
+    const taps = [], spyDock = Object.assign({}, dock, { tap: (fn) => { taps.push(fn); return dock.tap(fn); } });       // (the sheet's own taps, so that a test can tell it what the dock would)
+    r.tell = (kind, m) => taps.forEach((fn) => fn(kind, m));
+    r.mount = () => { r.mod = Mod.mount({ doc, win, dock: spyDock, now: () => clock.t, error: (e) => { throw e; } }); return r.mod; };
+    if (!o.noMod && !o.modLast) r.mount();
+    if (o.people) {
+        const yard = new El(env, 'main'), quick = new El(env, 'button'), games = new El(env, 'button');
+        host.appendChild(yard);
+        const PlayersApi = loadScript(playersSource, 'AntsHomePlayers', clock);
+        r.players = PlayersApi.mount({ doc, win, host, yard, quickHost: quick, games, dock, page: { client: () => null, info: () => ({ client: false, model: null }), handing: () => false }, now: () => clock.t, error: (e) => { throw e; } });
+        if (o.modLast) r.mount();       // (the list came first: its taps are told of a socket that goes before the sheet's are)
+        if (r.mod && !o.noLink) r.mod.people(r.players);
+    }
     r.said = () => r.sockets.reduce((all, s) => all.concat(s.sent.map((x) => JSON.parse(x)).filter((m) => m.t === 'say').map((m) => m.text)), []);
     r.shade = () => body.children.find((c) => cls(c).indexOf('gm-shade') !== -1) || null;
     r.box = () => { const s = r.shade(); return s ? one(s, 'gm-box') : null; };
@@ -172,6 +187,19 @@ function rig(o) {
     r.press = (name) => { const b = r.named(name); if (!b) throw new Error('no button ' + name + ' in ' + r.names().join('|')); b.click(); };
     r.you = (role2) => r.recv({ t: 'you', you: { name: 'Me', mod: role2 !== 'none', role: role2, k: 'k-me' } });
     r.open = (id) => { r.menu(id); return r.shade() !== null; };
+    // the players list: its rows (the number of a row is the hub's own), and the ways in on it
+    r.who = (rows, extra) => r.recv(Object.assign({ t: 'who', full: true, n: rows.length, g: 0, more: 0, rows }, extra));
+    r.cards = () => r.players ? r.players.list.querySelectorAll('.pl-card[data-i]') : [];
+    r.card = (i) => r.cards().find((c) => c.getAttribute('data-i') === String(i));
+    r.pacts = () => r.cards().filter((c) => c.getAttribute('data-act') === 'true').map((c) => Number(c.getAttribute('data-i')));
+    r.pmarked = () => r.cards().filter((c) => cls(c).indexOf('gm-on') !== -1).map((c) => Number(c.getAttribute('data-i')));
+    r.pmenu = (i) => r.event(r.players.list, 'contextmenu', { target: typeof i === 'object' ? i : r.card(i) });
+    r.pkey = (k, extra) => r.event(r.players.list, 'keydown', Object.assign({ key: k, target: r.players.list }, extra));
+    r.pdown = (i, ev) => r.event(r.players.list, 'pointerdown', Object.assign({ target: typeof i === 'object' ? i : r.card(i), pointerType: 'touch', isPrimary: true, clientX: 100, clientY: 100 }, ev));
+    r.pmove = (dx, dy) => r.event(r.players.list, 'pointermove', { clientX: 100 + dx, clientY: 100 + dy });
+    r.pup = () => r.event(r.players.list, 'pointerup', {});
+    r.popen = (i) => { r.pmenu(i); return r.shade() !== null; };
+    r.mutes = (rows) => r.recv({ t: 'mutes', rows });
     return r;
 }
 
@@ -903,6 +931,262 @@ function rig(o) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 5c. The person sheet of the players list
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+const ROWS = [
+    { i: 1, name: 'Tess', at: 'look', mod: true, role: 'admin' }, { i: 2, name: 'Sage', at: 'look', mod: true, role: 'mod' }, { i: 3, name: 'Me', at: 'look', mod: true, role: 'admin' },
+    { i: 4, name: 'Clover', at: 'wait', pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr' }, { i: 5, name: 'Juniper', at: 'look' }, { i: 6, name: 'Hazel', at: 'play', priv: true },
+    { i: 7, name: 'Rowan', at: 'away' }, { i: 9, name: 'Clover', at: 'look' }];       // (two people called Clover: a name is not one person)
+const withPeople = (role, o) => { const r = rig(Object.assign({ role, people: true }, o || {})); r.who(ROWS); return r; };
+const sortedIds = (list) => list.slice().sort((a, b) => a - b).join();
+const statusIn = (root) => root.findAll((e) => cls(e).indexOf('gc-news') !== -1 && e.getAttribute('role') === 'status').pop().textContent;
+const statusOf = (r) => statusIn(r.players.root);       // (the list's own words for a screen reader: the chat dock is not shown on a phone's Players view)
+const answer = (r, code) => (code === 'ok' ? r.recv({ t: 'ok', c: 'x' }) : r.recv({ t: 'err', code }));
+{   // the pure parts
+    const P = Pure;
+    const person = (o) => Object.assign({ id: 4, who: 'Clover', role: 'none', person: true, where: 'Waiting', own: false, sys: false, text: '' }, o);
+    same('a person of the list: an administrator is offered Mute, Kick and Ban (never Delete: there is no line), a moderator no Ban', [P.actionsOf('admin', person({})), P.actionsOf('mod', person({}))], [['mute', 'kick', 'ban'], ['mute', 'kick']]);
+    same('...on a moderator: an administrator all three, a moderator nothing; on an administrator: nobody anything', [P.actionsOf('admin', person({ role: 'mod' })), P.actionsOf('mod', person({ role: 'mod' })), P.actionsOf('admin', person({ role: 'admin' })), P.actionsOf('mod', person({ role: 'admin' }))], [['mute', 'kick', 'ban'], [], [], []]);
+    same('the commands name the ROW, `row:4`, never the name', [P.commandOf('mute', person({}), 60), P.commandOf('unmute', person({})), P.commandOf('kick', person({})), P.commandOf('ban', person({})), P.commandOf('banpurge', person({}))], ['/mute row:4 60', '/unmute row:4', '/kick row:4', '/ban row:4', '/ban row:4 purge']);
+    same('...a person has no line to delete, and the sheet of a line never unmutes', [P.commandOf('del', person({})), P.commandOf('unmute', { id: 148, who: 'Clover' })], ['', '']);
+    check('...whatever the person is called', ['mute', 'unmute', 'kick', 'ban', 'banpurge'].every((k) => !/clover/i.test(P.commandOf(k, person({ who: 'Clover' }), 5))));
+    same('the words of Unmute: done; a person who is not muted any more; a person who has gone (for every action but a kick)', [P.doneWords('unmute', 'Clover'), P.refusedWords('bad', 'unmute', 'Clover', 'none'), P.refusedWords('who', 'unmute', 'Clover', 'none'), P.refusedWords('who', 'mute', 'Clover', 'none')],
+        ['Done: Clover can write again.', 'Clover is not muted any more.', 'That person is not here any more.', 'That person is not here any more.']);
+}
+{   // the dock's `/mutes`
+    const r = rig({ noMod: true }), got = [];
+    r.dock.mutes((code, rows) => got.push([code, rows]));
+    same('the dock asks `/mutes` as a line of the chat, as a staff member would type it', r.said(), ['/mutes']);
+    r.mutes([{ u: 'clover.4782', until: 1700000900, i: 4 }, { u: 'old.name', until: 1700000800 }]);
+    same('the hub\'s list answers it: the end of each mute and the row of the person, never a name', got, [['ok', [{ until: 1700000900, i: 4 }, { until: 1700000800, i: -1 }]]]);
+    r.mutes([{ until: 5, i: 1 }]);
+    check('...once, and the dock adds nothing to the log', got.length === 1 && r.privates().length === 0);
+    r.dock.say('/mutes'); r.mutes([{ u: 'clover.4782', until: 1700000900, i: 4 }]);
+    check('a `/mutes` that a person typed has nothing to show here: no line, nobody waiting', r.privates().length === 0 && got.length === 1);
+    const wrong = [{ t: 'mutes' }, { rows: 'x' }, { rows: new Array(51).fill({ until: 5 }) }, { rows: [null] }, { rows: [{ until: 'soon' }] }, { rows: [{ until: -5 }] }, { rows: [{ until: 5, i: -1 }] }, { rows: [{ until: 5, i: 1.5 }] }, { rows: [{ until: 5, i: 'x' }] }, { rows: [{ until: 1e15 }] }];
+    wrong.forEach((m, n) => {
+        const w = rig({ noMod: true }), seen = [];
+        w.dock.mutes((c) => seen.push(c)); w.recv(Object.assign({ t: 'mutes' }, m));
+        const before = seen.length; w.clock.advance(8001);
+        same('a list that is wrong in any part is not an answer (' + n + '): nobody is told it, and the wait ends as any other', [before, seen], [0, ['silent']]);
+    });
+    for (const code of ['power', 'role', 'rate']) { const q = rig({ noMod: true }), seen = []; q.dock.mutes((c) => seen.push(c)); q.recv({ t: 'err', code }); same('the hub\'s `' + code + '` answers it', seen, [code]); }
+    const n = rig({ noMod: true, role: 'none' }), nope = []; n.dock.mutes((c) => nope.push(c));
+    same('a visitor with no role gets `power` at once, and nothing is sent', [nope, n.said()], [['power'], []]);
+    const o = rig({ noMod: true }), off = []; o.sock().readyState = 3; o.sock().onclose({}); o.dock.mutes((c) => off.push(c));
+    same('a socket that is down: offline, at once', off, ['offline']);
+    const b = rig({ noMod: true }), two = []; b.dock.command('/del 148', () => {}); b.dock.mutes((c) => two.push(c));
+    same('one command at a time: `/mutes` while another waits is `rate`', [two, b.said()], [['rate'], ['/del 148']]);
+}
+{   // the rows, and who gets a mark
+    const r = withPeople('admin');
+    same('every person of the list but the visitor carries the hub\'s number of the row', sortedIds(r.cards().map((c) => Number(c.getAttribute('data-i')))), '1,2,4,5,6,7,9');
+    same('an administrator: a mark on everyone but another administrator (a moderator, a person who looks, waits or plays) and a person who is away (the hub takes a row only for an open socket: every command would be refused)', sortedIds(r.pacts()), '2,4,5,6,9');
+    check('...an Away row has a number and no mark; a right click on it is the browser\'s own, and nothing opens', r.card(7) !== undefined && r.card(7).getAttribute('data-act') === null && r.pmenu(7) === false && r.shade() === null && !r.popen(7));
+    check('...each marked row has the description for a screen reader, the others none, and the list is described by its hint (one stop, not one per row)', r.card(4).getAttribute('aria-description') !== null && r.card(1).getAttribute('aria-description') === null && r.players.list.getAttribute('aria-describedby') === 'gchat-mod-list-hint' && r.players.list.getAttribute('tabindex') === '0');
+    same('a moderator: no mark on a moderator or an administrator', sortedIds(withPeople('mod').pacts()), '4,5,6,9');
+    const n = withPeople('none');
+    check('a visitor with no role: no mark, no description, the browser\'s own menu, no press, nothing', n.pacts().length === 0 && n.players.list.getAttribute('aria-describedby') === null && !n.pmenu(4) && n.shade() === null && (n.pdown(4), n.clock.advance(700), n.shade() === null && n.pmarked().length === 0));
+    r.pkey('ArrowDown');
+    check('the keys say which row is chosen', statusOf(r) !== '' && r.players.list.findAll((e) => e.id === 'gchat-mod-list-hint')[0] === undefined && r.players.root.findAll((e) => e.id === 'gchat-mod-list-hint')[0].hidden === false);
+    r.you('none');
+    check('a `you` that takes the role away: the marks and the description go at once, the words of the keys with them', r.pacts().length === 0 && r.players.list.getAttribute('aria-describedby') === null && statusOf(r) === '' && r.players.root.findAll((e) => e.id === 'gchat-mod-list-hint')[0].hidden === true);
+    r.you('mod');
+    same('...and one that gives a role brings them back (for that role)', sortedIds(r.pacts()), '4,5,6,9');
+    r.who(ROWS.concat([{ i: 11, name: 'Fern', at: 'look' }]));
+    check('a list that is drawn again is marked again', sortedIds(r.pacts()) === '4,5,6,9,11');
+    const s = withPeople('admin');
+    s.mod.people(s.players);
+    check('the sheet is told of the list once (a second time changes nothing)', s.dock.root.findAll((e) => e.id === 'gchat-mod-list-hint').length === 0 && s.players.root.findAll((e) => e.id === 'gchat-mod-list-hint').length === 1);
+    const q = withPeople('admin', { noLink: true });
+    check('until the sheet is told of the list nothing is marked and nothing opens', q.pacts().length === 0 && !q.pmenu(4) && q.shade() === null);
+}
+{   // the ways in
+    const r = withPeople('admin');
+    check('a right click on a row that has an action opens the sheet, holds the browser\'s menu back, and marks the row', r.pmenu(4) === true && r.shade() !== null && r.pmarked().join() === '4' && r.marked().length === 0 && r.mod.state() === 'line');
+    r.event(r.shade(), 'keydown', { key: 'Escape' });
+    check('Escape: the sheet and the mark are gone, and the focus is on the list', r.shade() === null && r.pmarked().length === 0 && r.doc.activeElement === r.players.list);
+    check('a right click on an administrator\'s row, or on the visitor\'s own place in the list, is the browser\'s own', r.pmenu(1) === false && r.shade() === null);
+    const b = new El(r.env, 'button'); r.card(4).appendChild(b);
+    check('a right click on a button of the row (its Join) is the button\'s: the browser\'s menu, no sheet', r.pmenu(b) === false && r.shade() === null);
+    r.pdown(b); r.clock.advance(700);
+    check('a long press that starts on a button of the row is the button\'s: no mark, no sheet', r.pmarked().length === 0 && r.shade() === null);
+    r.pup();
+    r.pdown(4); r.clock.advance(200);
+    check('a touch held on a row marks it from 150 ms on, and opens nothing yet', r.pmarked().join() === '4' && r.shade() === null);
+    r.clock.advance(400);
+    check('...at 500 ms the sheet opens, the phone buzzes, the mark stays for the sheet', r.shade() !== null && r.pmarked().join() === '4' && r.buzzes.join() === '10');
+    r.press('Cancel');
+    check('the finger is still down: the sheet takes no press', r.shade() !== null);
+    r.pup(); r.press('Cancel');
+    check('...nor for 400 ms after it lifts (the browser\'s click is not an answer)', r.shade() !== null);
+    r.clock.advance(401); r.press('Cancel');
+    check('...then it does', r.shade() === null && r.pmarked().length === 0);
+    r.pdown(4); r.pmove(20, 0); r.clock.advance(700);
+    check('a finger that moves more than 10 px is a scroll: no sheet, no mark', r.shade() === null && r.pmarked().length === 0);
+    r.pdown(4); r.event(r.players.list, 'scroll', {}); r.clock.advance(700);
+    check('...and so is a scroll of the list', r.shade() === null && r.pmarked().length === 0);
+    r.pdown(4, { pointerType: 'mouse' }); r.clock.advance(700);
+    check('a mouse button held is no long press', r.shade() === null && r.pmarked().length === 0);
+    r.pdown(1); r.clock.advance(700);
+    check('a long press on an administrator\'s row (no action) does nothing', r.shade() === null && r.pmarked().length === 0);
+    r.pkey('ArrowDown');
+    same('the keys: Down from nothing chooses the first row that has an action (the list is read from the top)', r.pmarked(), [2]);
+    check('...and says so for a screen reader, with how to open it, in the list\'s own words (not in the chat dock, which is hidden on a phone\'s Players view)', /^Sage: Looking\. /.test(statusOf(r)) && /Enter/.test(statusOf(r)) && statusIn(r.dock.root) === '');
+    r.pkey('ArrowDown'); r.pkey('ArrowDown'); r.pkey('ArrowUp');
+    same('Down and Up walk the rows that have an action, one at a time', r.pmarked(), [9]);
+    for (let i = 0; i < 9; i++) r.pkey('ArrowDown');
+    same('...and stop at the last (not the Away row: Hazel is the last row that has an action)', r.pmarked(), [6]);
+    const chosen = r.pmarked().join();
+    check('Up and Down on a button of a row are the button\'s (the arrows scroll the list): not held back, no row is chosen by them', r.event(r.players.list, 'keydown', { key: 'ArrowDown', target: b }) === false && r.event(r.players.list, 'keydown', { key: 'ArrowUp', target: b }) === false && r.pmarked().join() === chosen);
+    check('Enter on a button of a row is the button\'s (Join joins): no sheet, the key is not held back', r.event(r.players.list, 'keydown', { key: 'Enter', target: b }) === false && r.shade() === null);
+    r.pkey('Enter');
+    check('Enter opens the sheet of the chosen row', r.shade() !== null && one(r.box(), 'gm-name').textContent === 'Hazel' && r.pmarked().join() === '6');
+    r.event(r.shade(), 'keydown', { key: 'Escape' });
+    check('...and when it closes the row stays the chosen one (the keys go on from there)', r.pmarked().join() === '6');
+    r.pkey('Escape');
+    r.pkey('ArrowUp');
+    same('Up from nothing chooses the last row that has an action', r.pmarked(), [6]);
+    r.pkey('Escape');
+    check('Escape lets the chosen row go', r.pmarked().length === 0);
+    r.pkey('ContextMenu');
+    check('the menu key with no row chosen opens the first row that has an action', r.shade() !== null && one(r.box(), 'gm-name').textContent === 'Sage');
+    r.event(r.shade(), 'keydown', { key: 'Escape' });
+    r.pkey('F10', { shiftKey: true });
+    check('Shift and F10 does too', r.shade() !== null);
+    r.event(r.shade(), 'keydown', { key: 'Escape' });
+    r.pkey('ArrowDown'); r.pdown(4);
+    check('a press on the list lets the row that the keys chose go (one row is marked at a time)', r.pmarked().length === 0);
+}
+{   // a link in a line of the log keeps its keys too
+    const r = rig(), link = r.row(149).findAll((e) => e.tagName === 'a')[0];
+    check('Up and Down on a link of a line are the link\'s: not held back, no line is chosen', !!link && r.event(r.log, 'keydown', { key: 'ArrowUp', target: link }) === false && r.marked().length === 0 && r.event(r.log, 'keydown', { key: 'Enter', target: link }) === false && r.shade() === null);
+}
+{   // the sheet
+    const r = withPeople('admin');
+    r.popen(4);
+    const box = r.box();
+    same('a person who waits: Mute, Kick, Ban, Cancel (no line to delete, no recent messages: a name is not one person), each named by its verb and the person', r.names(), ['Mute Clover…', 'Kick Clover', 'Ban Clover', 'Cancel']);
+    same('the header: the person, and where they are in the list\'s own words', [one(box, 'gm-name').textContent, one(box, 'gm-sub').textContent], ['Clover', 'Waiting · Treasure · 2 of 4']);
+    check('it is a dialog, modal, labelled by the title and described by where the person is; no quote, no username, no line number', box.getAttribute('role') === 'dialog' && box.getAttribute('aria-modal') === 'true' && box.getAttribute('aria-labelledby') === 'gm-title' && box.getAttribute('aria-describedby') === 'gm-sub' && one(box, 'gm-quote') === null && !/line #|@/.test(box.textContent));
+    check('the row is marked while its sheet is open, what stands behind is inert, and the focus is on the first action', r.pmarked().join() === '4' && r.host.hasAttribute('inert') && r.doc.activeElement === r.buttons()[0]);
+    same('`/mutes` is asked when it opens, once', r.said(), ['/mutes']);
+    const wait = r.buttons()[0];
+    same('...until the hub answers, Mute is not offered: the row is off, busy, and says why', [wait.getAttribute('aria-disabled'), wait.getAttribute('aria-busy'), wait.textContent.indexOf('Checking whether Clover is muted') !== -1], ['true', 'true', true]);
+    wait.click();
+    check('...a press on it does nothing: no second step, nothing sent', r.mod.state() === 'line' && r.said().length === 1);
+    r.mutes([{ u: 'juniper.berry', until: 5000, i: 5 }]);
+    const free = r.buttons()[0];
+    check('the answer (this person is not muted): Mute is there, with its chevron, and the focus stayed on it', free.getAttribute('aria-disabled') === null && free.textContent.indexOf('Cannot write for a while') !== -1 && r.doc.activeElement === free && free.findAll((e) => e.tagName === 'svg' && cls(e).indexOf('gm-chev') !== -1).length === 1 && r.names()[0] === 'Mute Clover…');
+    r.press('Mute Clover…'); r.press('1 hour');
+    same('Mute, 1 hour: `/mute row:4 60` (the row, not the name), after the `/mutes`', r.said(), ['/mutes', '/mute row:4 60']);
+    r.recv({ t: 'ok', c: 'mute' });
+    check('the answer: the sheet is gone, the focus is on the list, the toast and the private line say the same words', r.shade() === null && r.doc.activeElement === r.players.list && r.toastText() === 'Done: Clover is muted for 1 hour.' && r.privates().join() === 'Done: Clover is muted for 1 hour.');
+    const m = withPeople('admin');
+    m.popen(4); m.mutes([{ u: 'clover.4782', until: 5000, i: 4 }]);
+    same('a person who is muted: Unmute in place of Mute, with the end of the mute in the log\'s own words', [m.names(), m.buttons()[0].textContent.indexOf('Muted until ' + m.dock.when(5000).time + ' today') !== -1], [['Unmute Clover', 'Kick Clover', 'Ban Clover', 'Cancel'], true]);
+    m.press('Unmute Clover');
+    same('Unmute asks nothing more (it only gives back): `/unmute row:4`', m.said(), ['/mutes', '/unmute row:4']);
+    m.recv({ t: 'ok', c: 'unmute' });
+    check('...and the toast says so', m.shade() === null && m.toastText() === 'Done: Clover can write again.');
+    const d = withPeople('admin');
+    d.popen(4); d.mutes([{ until: 1700000500, i: 4 }]);
+    check('a mute that ends on another day says the day', d.buttons()[0].textContent.indexOf('Muted until ' + d.dock.when(1700000500).time + ', ' + d.dock.when(1700000500).day) !== -1);
+    const t = withPeople('admin');
+    t.mutes([{ until: 5000, i: 9 }]); t.popen(4); t.mutes([{ until: 5000, i: 9 }]);
+    check('the mute is matched by the number of the row, not by the name: the other Clover is the one who is muted', t.names()[0] === 'Mute Clover…' && t.buttons()[0].getAttribute('aria-disabled') === null);
+    t.press('Cancel'); t.popen(9); t.mutes([{ until: 5000, i: 9 }]);
+    check('...and on the other row it is Unmute', t.names()[0] === 'Unmute Clover');
+    const fifty = (extra) => Array.from({ length: 50 }, (_, n) => ({ until: 5000 + n, i: 100 + n })).slice(extra ? 1 : 0).concat(extra ? [{ until: 6000, i: 4 }] : []);
+    const full = withPeople('admin');
+    full.popen(4); full.mutes(fifty(false));
+    same('a full list (the hub lists 50 mutes at most, the ones that end soonest) that does not name the person tells nothing about them: "Check again", never Mute', [full.names()[0], full.buttons()[0].getAttribute('aria-disabled')], ['Check again', null]);
+    const named = withPeople('admin');
+    named.popen(4); named.mutes(fifty(true));
+    check('...a full list that names the person is Unmute, as any other', named.names()[0] === 'Unmute Clover');
+    const short = withPeople('admin');
+    short.popen(4); short.mutes(fifty(false).slice(1));
+    check('...49 mutes that do not name the person is Mute (nothing is cut off)', short.names()[0] === 'Mute Clover\u2026' && short.buttons()[0].getAttribute('aria-disabled') === null);
+    const f = withPeople('admin');
+    f.popen(4); f.recv({ t: 'err', code: 'role' });
+    same('a `/mutes` that fails: a row that says so, and asks again when pressed (never Mute before the state is known)', [f.names()[0], f.buttons()[0].textContent.indexOf('Could not tell whether Clover is muted') !== -1, f.buttons()[0].getAttribute('aria-disabled')], ['Check again', true, null]);
+    f.press('Check again');
+    same('...the second time is a new `/mutes`, and the row waits again', [f.said(), f.names()[0], f.buttons()[0].getAttribute('aria-disabled')], [['/mutes', '/mutes'], 'Mute Clover…', 'true']);
+    f.mutes([]);
+    check('...and its answer gives Mute', f.buttons()[0].getAttribute('aria-disabled') === null && f.names()[0] === 'Mute Clover…');
+    const q = withPeople('admin');
+    q.popen(4); q.clock.advance(8001);
+    check('no answer in 8 s: the same, "Check again"', q.names()[0] === 'Check again');
+    const k = withPeople('admin');
+    k.popen(4); k.mutes([]); k.press('Kick Clover');
+    check('Kick asks once more: the card names the person (no username: the list has none), and nothing is sent', k.mod.state() === 'confirm' && one(one(k.box(), 'gm-chip'), 'gm-cn').textContent === 'Clover' && k.said().length === 1);
+    k.press('Kick');
+    check('...the red button takes no press for 400 ms', k.said().length === 1);
+    k.clock.advance(401); k.press('Kick');
+    same('...then it sends `/kick row:4`', k.said(), ['/mutes', '/kick row:4']);
+    k.recv({ t: 'ok', c: 'kick' });
+    check('...and the toast says it', k.toastText() === 'Done: Clover was kicked.' && k.shade() === null);
+    const a = withPeople('admin');
+    a.popen(9); a.mutes([]); a.press('Ban Clover'); a.clock.advance(401); a.press('Ban and delete their lines from the last hour');
+    same('Ban and delete their lines: `/ban row:9 purge`, by the number of THAT row (the other Clover keeps their place)', a.said(), ['/mutes', '/ban row:9 purge']);
+    const e = withPeople('admin');
+    e.popen(4); e.mutes([]); e.press('Kick Clover'); e.clock.advance(401); e.press('Kick'); e.recv({ t: 'err', code: 'who' });
+    check('a person who is gone: the hub says `who`, and a kick says what to do instead', e.toastText() === 'Clover is not on the front page now, so there is nobody to kick. Mute or ban instead.' && e.shade() === null);
+    const u = withPeople('admin');
+    u.popen(4); u.mutes([{ until: 5000, i: 4 }]); u.press('Unmute Clover'); u.recv({ t: 'err', code: 'bad' });
+    check('an Unmute of a person who is not muted any more says so', u.toastText() === 'Clover is not muted any more.');
+    const w = withPeople('mod');
+    w.popen(4);
+    same('a moderator: no Ban', w.names(), ['Mute Clover…', 'Kick Clover', 'Cancel']);
+    const s = withPeople('admin');
+    s.popen(2);
+    same('an administrator on a moderator: all three, the header says what the person is, the name has the role\'s color', [s.names().slice(1), one(s.box(), 'gm-sub').textContent, cls(one(s.box(), 'gm-name')).indexOf('gc-r-mod') !== -1], [['Kick Sage', 'Ban Sage', 'Cancel'], 'moderator · Looking', true]);
+    const h = withPeople('admin');
+    h.popen(6);
+    same('a person in a private game: the list\'s own words', one(h.box(), 'gm-sub').textContent, 'Playing · Private game');
+}
+{   // the sheet of a person does not outlive what it was opened on
+    const r = withPeople('admin');
+    r.popen(4); r.mutes([]);
+    r.who(ROWS.filter((x) => x.i !== 4));
+    check('a person who leaves the list while the sheet is open: the sheet goes, the toast says so', r.shade() === null && r.toastText() === 'That person is not here any more.' && r.pmarked().length === 0);
+    const b = withPeople('admin');
+    b.popen(4); b.mutes([]); b.press('Kick Clover'); b.clock.advance(401); b.press('Kick');
+    b.who(ROWS.filter((x) => x.i !== 4));
+    check('...not while a command waits (the hub answers it)', b.shade() !== null);
+    const g = withPeople('admin');
+    g.popen(4); g.mutes([]);
+    g.recv({ t: 'who', n: 8, g: 0, more: 0, rows: [], gone: [4] });
+    check('...also when only that row is taken off the list', g.shade() === null);
+    const l = withPeople('admin', { modLast: true });
+    l.popen(4); l.mutes([]);
+    l.sock().readyState = 3; l.sock().onclose({});
+    check('the numbers of the rows are the hub\'s for one run: a socket that goes closes the sheet of a person, without a word (it is not that the person has gone)', l.shade() === null && l.toastText() === null);
+    const c = withPeople('admin');
+    c.popen(4); c.mutes([]);
+    c.sock().readyState = 3; c.sock().onclose({}); c.clock.advance(60000);
+    c.sock().open().recv({ t: 'welcome', v: 1, you: { name: 'Me', mod: true, role: 'admin', k: 'k-me' }, login: false, online: 3, history: HISTORY, presence: true, me: 3 });
+    check('...and the welcome that follows never finds it open (the same number may be another person then)', c.shade() === null);
+    const rr = withPeople('admin');
+    rr.who(ROWS.concat([{ i: 148, name: 'Clover', at: 'look' }])); rr.popen(148);
+    check('a row whose number is the number of a line of the log has no recent messages: the lines are found by the key of an account, and a row has none', rr.mod.state() === 'line' && rr.names().every((n) => !/^Recent/.test(n)));
+    const tl = withPeople('admin');
+    tl.popen(4); tl.mutes([]); tl.tell('live', {});
+    check('a welcome tapped to the sheet closes the sheet of a person without a word (a row number is the hub\'s for one run, and a line of that number is no judge of it)', tl.shade() === null && tl.toastText() === null);
+    const y = withPeople('admin');
+    y.popen(4); y.mutes([]); y.you('none');
+    check('a `you` that takes the role away closes it, and the focus is not sent anywhere the viewer should not be', y.shade() === null && y.pacts().length === 0);
+    const x = withPeople('admin');
+    x.popen(4); x.mutes([]); x.recv({ t: 'del', id: 4 });
+    check('a line that goes whose number is the person\'s row number is not the person\'s', x.shade() !== null);
+    const v = withPeople('admin');
+    v.popen(4); v.mutes([]);
+    v.press('Mute Clover…'); v.press('10 min');
+    v.press('Back');
+    check('while the mute waits for the hub the sheet takes no other press', v.shade() !== null && v.mod.state() === 'mute' && v.said().length === 2);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 6. The page
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const filesOf = (env, name) => env.body.children.filter((c) => (c.tagName === 'script' || c.tagName === 'link') && new RegExp('^home/' + name + '\\.(js|css)$').test(String(c.src || c.href || '')));
@@ -956,6 +1240,32 @@ function welcomeWith(sock, role) {
     const s2 = hubFor(none); none.advance(0); bring(none, 'chat', 'AntsHomeChat'); none.advance(0); welcomeWith(s2[0], 'mod'); none.advance(0);
     filesOf(none, 'mod').forEach((n) => { if (n.onload) n.onload(); });
     check('a script that is not there when the files "load": nothing mounts and nothing breaks', none.$('home').children.find((c) => c.id === 'gchat') !== undefined);
+}
+
+{   // the sheet and the players list find each other, whichever of them comes second
+    for (const first of ['the sheet', 'the list', 'a sheet that cannot take the list']) {
+        const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
+        const socks = hubFor(env), told = [];
+        env.advance(0); bring(env, 'chat', 'AntsHomeChat'); env.advance(0);
+        const list = { root: new El(env, 'div'), list: new El(env, 'div'), person: () => null, drawn() {} };
+        env.win.AntsHomeMod = { mount() { return first === 'a sheet that cannot take the list' ? {} : { people: (p) => told.push(p) }; } };
+        env.win.AntsHomePlayers = { mount() { return list; } };
+        const loaded = (name) => filesOf(env, name).forEach((n) => { if (n.onload) n.onload(); });
+        if (first !== 'the sheet') loaded('players');
+        welcomeWith(socks[0], 'admin'); env.advance(0);
+        loaded('mod');
+        if (first === 'the sheet') loaded('players');
+        env.advance(0);
+        same('the sheet is told of the list once, when ' + first + ' came first (and a sheet that cannot take it changes nothing)', told.length, first === 'a sheet that cannot take the list' ? 0 : 1);
+        check('...and it is that list', told.length === 0 || told[0] === list);
+    }
+    const none = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
+    const s3 = hubFor(none), told = [];
+    none.advance(0); bring(none, 'chat', 'AntsHomeChat'); none.advance(0);
+    none.win.AntsHomePlayers = { mount() { return { root: new El(none, 'div'), list: new El(none, 'div'), person: () => null, drawn() {} }; } };
+    welcomeWith(s3[0], 'none'); none.advance(0);
+    filesOf(none, 'players').forEach((n) => { if (n.onload) n.onload(); });
+    check('a visitor with no role: the list comes, no sheet is asked for, nobody is told of anything', filesOf(none, 'mod').length === 0 && told.length === 0);
 }
 
 console.log(failures === 0 ? 'OK: ' + checks + ' checks' : failures + ' of ' + checks + ' checks FAILED');

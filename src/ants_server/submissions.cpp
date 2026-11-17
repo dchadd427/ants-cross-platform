@@ -433,7 +433,7 @@ bool SubmissionStore::withdraw(const std::string& id, const std::string& token, 
     return true;
 }
 
-// ------------------------------------------------------------------------------------------------ the owner's side
+// ------------------------------------------------------------------------------------------------ the admin page's side
 
 bool SubmissionStore::list(const std::string& state, std::vector<Submission>& out, Failure& why) {
     out.clear();

@@ -169,7 +169,7 @@ std::string folder_listing(const fs::path& dir) {
 }
 
 bool same_answer(const ctl::HttpResponse& a, const ctl::HttpResponse& b) {
-    return a.status == b.status && a.content_type == b.content_type && a.body == b.body && a.file == b.file && a.set_cookies == b.set_cookies;
+    return a.status == b.status && a.content_type == b.content_type && a.body == b.body && a.file == b.file;
 }
 
 struct Request {

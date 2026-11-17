@@ -9,7 +9,9 @@
 //   5. no fold: the panel has no minus button, no folded state, and Escape in it does nothing to it (it is always open);
 //   6. what the hub may send: unknown kinds, a wrong frame, an odd name, a flood of rows: nothing breaks, nothing becomes markup;
 //   7. the page (web/lobby.html with web/home/home.js): the list is loaded once, after the dock, a missing or broken one changes nothing, the hand-off makes it inert;
-//   8. the source of the script: no markup, no storage, no link, no address.
+//   8. the source of the script: no markup, no storage, no link, no address;
+//   10. what it gives the moderation sheet (web/home/mod.js): the number of each row but the visitor's own as `data-i`, `person(i)` (a row as { i, name, role, at, where }; none for the visitor's own row, a number that
+//      is not a row, a hub that is gone), `where` in words ("Waiting · Treasure · 2 of 4"), the list's box, and `drawn(fn)` (told each time the list is made again, and only then).
 // tests/scripts/test_web_home_players.py runs this with node (the quick tier). usage: node web_home_players_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const fs = require('fs');
@@ -631,6 +633,12 @@ function bringPlayers(env) {
     broken.win.AntsHomePlayers = { mount() { throw new Error('a list that breaks'); } };
     filesOf(broken, 'players').forEach((n) => { if (n.onload) n.onload(); });
     check('a list that throws when it mounts: Home goes on (My room still makes the room, the dock is there)', broken.$('home').children[4].id === 'gchat' && (broken.home('mine').click(), broken.sockets.length === 1) && broken.screen() === 'room');
+    const seen = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
+    hubFor(seen); seen.advance(0); bringChat(seen);
+    let given = null;
+    seen.win.AntsHomePlayers = { mount(o) { given = o; return null; } };
+    filesOf(seen, 'players').forEach((n) => { if (n.onload) n.onload(); });
+    same('the list is given the document, the window, Home\'s box and body, the two buttons of the bar that it uses, the dock and the page\'s bridge, and nothing else', given && Object.keys(given).sort(), ['doc', 'dock', 'games', 'host', 'page', 'quickHost', 'win', 'yard']);
     const none = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
     hubFor(none); none.advance(0); bringChat(none);
     filesOf(none, 'players').forEach((n) => { if (n.onload) n.onload(); });
@@ -851,6 +859,39 @@ function bringPlayers(env) {
 }
 same('a note of a private room is only that, whatever it is given; no room, or one that is not a code: none', [Pure.noteOf({ at: 'play', pub: false, map: 'SECRET.LVL', n: 2, of: 3 }, true, 'k7m2xq'), Pure.noteOf({ at: 'look' }, true, 'k7m2xq'), Pure.noteOf({ at: 'wait', pub: true }, true, 'A B'), Pure.noteOf(null, true, 'k7m2xq')], [{ v: 1, named: 1, r: Pure.hashOf('k7m2xq'), pub: false }, null, null, null]);
 check('the hash of the note is the game page\'s own', ['c1v3rr', 'a', 'k7m2xq', 'zzz999'].every((c) => Pure.hashOf(c) === require(path.join(lobbyDir, 'hub_here.js')).hashOf(c)));
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 10. What the list gives the moderation sheet
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const P = Pure, m = (o) => Object.assign({ at: 'look', pub: false, priv: false, solo: false, mapName: '', n: -1, of: -1 }, o);
+    same('where a person is, in words: the group, then what the row says under the name (nothing under it for a person who looks or is away)', [P.whereOf(m({})), P.whereOf(m({ at: 'away' })), P.whereOf(m({ at: 'wait', pub: true, mapName: 'Treasure', n: 2, of: 4 })), P.whereOf(m({ at: 'wait', priv: true })), P.whereOf(m({ at: 'wait' })), P.whereOf(m({ at: 'play', pub: true, mapName: 'Gauntlet', n: 2 })), P.whereOf(m({ at: 'play', priv: true })), P.whereOf(m({ at: 'play', solo: true, mapName: 'Treasure' })), P.whereOf(m({ at: 'play' }))],
+        ['Looking', 'Away', 'Waiting \u00b7 Treasure \u00b7 2 of 4', 'Waiting \u00b7 Private room', 'Waiting \u00b7 In a room', 'Playing \u00b7 Gauntlet \u00b7 2 players', 'Playing \u00b7 Private game', 'Playing \u00b7 Treasure \u00b7 vs computer', 'Playing \u00b7 In a game']);
+    const r = rig();
+    const drawn = [];
+    r.list.drawn(() => drawn.push(r.names().length));
+    check('the list hands over its scrolling box (the sheet\'s way in), and nothing is drawn or said yet', r.list.list !== undefined && cls(r.list.list).indexOf('pl-list') !== -1 && r.list.list.getAttribute('tabindex') === '0' && drawn.length === 0 && r.list.person(4) === null);
+    r.live(W({ me: 1, you: { name: 'maple', mod: true, role: 'admin' } }));
+    r.who(FULL([row(1, 'maple', 'look', { mod: true, role: 'admin' }), row(2, 'zed', 'look', { mod: true, role: 'mod' }), row(4, 'clover', 'wait', { pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr' }), row(5, 'sage'), row(6, 'sage', 'away')], { n: 6 }));
+    same('a row of the list carries the hub\'s number of the row as data-i; the visitor\'s own place does not (it has no number to act on)', [byClass(r.panel(), 'pl-card').map((c) => c.getAttribute('data-i')).filter((x) => x !== null).sort().join(), byClass(r.panel(), 'pl-card').filter((c) => c.getAttribute('data-i') === null).length], ['2,4,5,6', 1]);
+    same('person(i): the number, the name, the role, what the person does and where, in words', [r.list.person(4), r.list.person(2), r.list.person(5)], [{ i: 4, name: 'clover', role: 'none', at: 'wait', where: 'Waiting \u00b7 Treasure \u00b7 2 of 4' }, { i: 2, name: 'zed', role: 'mod', at: 'look', where: 'Looking' }, { i: 5, name: 'sage', role: 'none', at: 'look', where: 'Looking' }]);
+    same('...a person who is Away has a row (and a number) and no sheet: the hub takes `row:` only for a person with an open socket, so every command would be refused', [byClass(r.panel(), 'pl-card').some((c) => c.getAttribute('data-i') === '6'), r.list.person(5).name, r.list.person(6)], [true, 'sage', null]);
+    same('...the visitor\'s own row (number 1 here), a number that is not a row, and anything that is not a number are nobody', [r.list.person(1), r.list.person(99), r.list.person('4'), r.list.person(-1), r.list.person(1.5), r.list.person(null)], [null, null, null, null, null, null]);
+    check('drawn(fn) is told when the list was made again (a change in it), with the list already drawn', drawn.length >= 1 && drawn[drawn.length - 1] === 5 && r.list.list.parent !== null);
+    const before = drawn.length;
+    r.tick(1000); r.tick(1000);
+    check('...and not when nothing changed (the one-second look makes nothing again)', drawn.length === before);
+    r.who({ t: 'who', full: false, n: 6, g: 0, more: 0, rows: [row(5, 'sage', 'wait')], gone: [] });
+    check('...a change draws it again, and the person\'s place follows at once', drawn.length === before + 1 && r.list.person(5).where === 'Waiting \u00b7 In a room');
+    r.who({ t: 'who', full: false, n: 5, g: 0, more: 0, rows: [], gone: [4] });
+    check('a person who leaves has no row any more', r.list.person(4) === null && drawn.length === before + 2);
+    r.lost();
+    check('a hub that is gone: nobody (the numbers were the hub\'s for that run)', r.list.person(2) === null && r.list.person(5) === null);
+    const broken = rig({});
+    broken.list.drawn(() => { throw new Error('a sheet that breaks'); });
+    broken.live(); broken.who(FULL(CROWD, { n: 13, g: 4 }));
+    check('a hook that throws is the error handler\'s, and the list is drawn all the same', broken.errors.length >= 1 && byClass(broken.panel(), 'pl-card').length > 0);
+}
 
 console.log('players list: ' + checks + ' checks, ' + failures + ' failed');
 process.exit(failures === 0 ? 0 : 1);

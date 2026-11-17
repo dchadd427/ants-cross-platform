@@ -1,7 +1,7 @@
 #pragma once
 
 // The test-map door (docs/MAP_SUBMISSIONS.md, "Test maps"): ONE route, POST /test-maps?kind=classic|extended&name=<name>, for the Map Maker's "With other players". A handler for a door of its own
-// (HttpServer::listen_door, --test-map-port) behind the site's nginx, which sets the real client address. It has no secret, no account, no owner's page and no database: it answers that one route and
+// (HttpServer::listen_door, --test-map-port) behind the site's nginx, which sets the real client address. It has no secret, no account, no admin page and no database: it answers that one route and
 // a 404 (or a 405 for another method on that path) for everything else, so a mistake in front of it can at worst send a test upload to a handler that only knows test uploads.
 //
 // The limits are its own: an address may send attempts_per_hour an hour, all addresses together total_per_hour (429 too_many_tests, whatever came of the tries), and the checks have a window of

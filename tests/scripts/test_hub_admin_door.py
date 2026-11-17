@@ -41,7 +41,8 @@ from login_flow import Visitor  # noqa: E402
 from test_hub_server import read_text, start_process, wait_for_port  # noqa: E402
 from hub import admindoor, config as configmod, log as logmod  # noqa: E402
 
-SECRET = "canary-gate-key-5d8f0c1e7a9b4263-q"            # 34 characters
+SECRET = "testing-gate-key-0b8e2d71a4c6f395-z"           # 35 characters (a made-up key)
+SAMPLE_SECRET = "canary-gate-key-5d8f0c1e7a9b4263-q"     # the made-up key of the known answer in docs/HUB.md: published, so refused as a key
 OWNER = "9100000000000001"
 ADMIN = "9100000000000002"
 ADMIN2 = "9100000000000007"
@@ -228,7 +229,7 @@ class TheRule(DoorTest):
             self.assertEqual(self.fake.member_ids.count(MOD), 2, "a person that no answer is known of makes the hub ask a burst and then waits")
 
     def test_the_door_is_shut_for_everybody_without_a_good_key(self):
-        for secret in (None, "", "x" * 31, "a b" * 20, "caf\u00e9-" * 8):
+        for secret in (None, "", "x" * 31, "a b" * 20, "caf\u00e9-" * 8, SAMPLE_SECRET):
             with self.subTest(secret=len(secret or "")):
                 env = {"ANTS_HUB_ADMIN_GATE_SECRET": secret} if secret is not None else {}
                 with hub_rig.Rig(member_fake=self.fake, owner=OWNER, recheck=1, env=env, **OPTIONS) as rig:
@@ -527,11 +528,13 @@ class TheRequestsThatAreNotWhatTheDoorIsFor(DoorTest):
         self.assertNotEqual(header.rsplit(".", 1)[1], hmac.new(raw, body.encode(), hashlib.sha256).hexdigest(), "the pass is not signed with the secret itself")
 
     def test_the_keys_are_the_raw_digests_of_the_secret_as_the_key_and_the_label_as_the_message_known_answer(self):
-        pass_key = hmac.new(SECRET.encode("ascii"), b"ants-admin-pass-v1", hashlib.sha256).digest()
+        sample_pass_key = hmac.new(SAMPLE_SECRET.encode("ascii"), b"ants-admin-pass-v1", hashlib.sha256).digest()       # (the document's known answer, for the document's made-up key)
+        sample_csrf_key = hmac.new(SAMPLE_SECRET.encode("ascii"), b"ants-admin-csrf-v1", hashlib.sha256).digest()
+        self.assertEqual(sample_pass_key.hex(), "13be5dab7dcbeb06e979f0fa5e5f817d178fa6b40da7c92bc02588e80ae3dd25")
+        self.assertEqual(sample_csrf_key.hex(), "03a2b6b94fabcf8ae018852e8e6c0b1ec691375286a0263168238796556e3018")
+        pass_key = hmac.new(SECRET.encode("ascii"), b"ants-admin-pass-v1", hashlib.sha256).digest()                 # (the same rule for the key that this hub runs with)
         csrf_key = hmac.new(SECRET.encode("ascii"), b"ants-admin-csrf-v1", hashlib.sha256).digest()
         self.assertEqual(len(pass_key), 32)
-        self.assertEqual(pass_key.hex(), "13be5dab7dcbeb06e979f0fa5e5f817d178fa6b40da7c92bc02588e80ae3dd25")
-        self.assertEqual(csrf_key.hex(), "03a2b6b94fabcf8ae018852e8e6c0b1ec691375286a0263168238796556e3018")
         header = self.gate(ADMIN).get("x-ants-admin-pass")
         body, mac = header.rsplit(".", 1)
         self.assertEqual(mac, hmac.new(pass_key, body.encode("ascii"), hashlib.sha256).hexdigest(), "the hub signs with exactly this key")
@@ -1093,6 +1096,19 @@ class TheKey(unittest.TestCase):
         cfg = self.load(ANTS_HUB_ADMIN_GATE_SECRET="  " + "abcdefgh" * 4 + "\n")
         self.assertEqual(cfg.admin_gate_secret, "abcdefgh" * 4, "surrounding whitespace is cut: the game server must cut it too (docs/HUB.md)")
 
+    def test_the_published_sample_key_is_no_key_however_it_is_padded(self):
+        self.assertTrue(configmod.GATE_SECRET.match(SAMPLE_SECRET) and len(set(SAMPLE_SECRET)) >= configmod.GATE_DISTINCT, "it has the shape of a key: only its being published refuses it")
+        for text in (SAMPLE_SECRET, "  " + SAMPLE_SECRET + "\n", "\t" + SAMPLE_SECRET):
+            cfg = self.load(ANTS_HUB_ADMIN_GATE_SECRET=text)
+            self.assertFalse(cfg.admin_gate_on)
+            self.assertEqual(cfg.admin_gate_secret, "")
+            self.assertTrue(cfg.admin_gate_given and cfg.admin_gate_sample)
+        for text in (SAMPLE_SECRET + "x", "x" + SAMPLE_SECRET, SECRET):
+            cfg = self.load(ANTS_HUB_ADMIN_GATE_SECRET=text)
+            self.assertTrue(cfg.admin_gate_on and not cfg.admin_gate_sample, "a key that only contains or extends it is a key")
+        for text in ("", "short", "k" * 40):
+            self.assertFalse(self.load(ANTS_HUB_ADMIN_GATE_SECRET=text).admin_gate_sample)
+
     def test_a_malformed_key_never_stops_the_load_and_the_key_is_in_no_text(self):
         cfg = self.load(ANTS_HUB_ADMIN_GATE_SECRET=SECRET)
         for text in (repr(cfg), str(cfg), json.dumps(cfg.summary())):
@@ -1102,7 +1118,7 @@ class TheKey(unittest.TestCase):
 
     def test_the_warning_is_one_line_and_never_holds_the_key(self):
         import io
-        for key, word in (("", "no_secret_set"), ("tiny-" * 2, "secret_too_short_or_not_printable"), ("a b " * 20, "secret_too_short_or_not_printable")):
+        for key, word in (("", "no_secret_set"), ("tiny-" * 2, "secret_too_short_or_not_printable"), ("a b " * 20, "secret_too_short_or_not_printable"), (SAMPLE_SECRET, "secret_is_the_sample_key")):
             stream = io.StringIO()
             admindoor.warn(self.load(ANTS_HUB_ADMIN_GATE_SECRET=key), logmod.Log(stream))
             lines = stream.getvalue().splitlines()

@@ -94,7 +94,7 @@ bool kind_of_file(const std::string& claimed, const std::string& bytes, std::str
     return true;
 }
 
-// The warnings of a check, as the owner's page shows them (the notes are not kept)
+// The warnings of a check, as the admin page shows them (the notes are not kept)
 JsonValue kept_findings(const JsonValue& report) {
     JsonValue out = JsonValue::make_array();
     const JsonValue& findings = report.get("findings");
@@ -131,7 +131,7 @@ HttpResponse error_reply(int status, const char* code, const char* message) {
     return json_reply(status, o);
 }
 
-// The path of a call that does not exist, and the answer to anything of the owner's that a visitor must not learn about
+// The path of a call that does not exist, and the answer to anything of the admin page's that a visitor must not learn about
 HttpResponse not_found() { return error_reply(404, "not_found", "Not found."); }
 
 HttpResponse failure_reply(const Failure& f) {

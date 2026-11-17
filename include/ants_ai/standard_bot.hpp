@@ -45,6 +45,7 @@
 #include "ants_ai/island_expedition.hpp"
 #include "ants_ai/island_ferry.hpp"
 #include "ants_ai/island_link.hpp"
+#include "ants_ai/island_swarm.hpp"
 #include "ants_ai/island_tasks.hpp"
 #include "ants_ai/miner_flight_task.hpp"
 #include "ants_ai/opportunity_task.hpp"
@@ -95,12 +96,15 @@ private:
           miner_flight_(kMinerFlight, tactics_),
           heal_(kHeal, tactics_),
           flower_link_(kFlowerLink, tactics_),
-          thief_guard_(kThiefGuard, tactics_) {
+          thief_guard_(kThiefGuard, tactics_),
+          swarm_(kSwarm, tactics_) {
         thief_guard_.attach(&walls_);
         island_.attach(&harvest_);
         expedition_.attach(&island_);
         miner_flight_.attach(&island_, &expedition_);
         flower_link_.attach(&island_);
+        swarm_.attach(&island_);
+        expedition_.attach_swarm(&swarm_);
     }
 
 public:
@@ -140,6 +144,7 @@ public:
     const ThiefGuardTask& thief_guard() const noexcept { return thief_guard_; }
     const MinerFlightTask& miner_flight() const noexcept { return miner_flight_; }
     const FlowerLinkTask& flower_link() const noexcept { return flower_link_; }
+    const SwarmTask& swarm() const noexcept { return swarm_; }
     const HealTask& heal() const noexcept { return heal_; }
     /// Whether the bot plays the gate goals on this map (Medium and Hard, a walled map that the island play does not own; known after the first look)
     bool gate_map() const noexcept { return tactics_.gate_map; }
@@ -190,6 +195,7 @@ public:
     static constexpr TaskId kMinerFlight = 24;
     static constexpr TaskId kFlowerLink = 25;
     static constexpr TaskId kThiefGuard = 26;
+    static constexpr TaskId kSwarm = 27;
     static constexpr TaskId kHeal = kHealTaskId;                  // (23: tasks.hpp names it for the tasks that leave a carrier to it)
 
 private:
@@ -250,6 +256,11 @@ private:
         p.fly_on = plan.island_fly_on;
         p.timed_row = plan.island_timed_row;
         p.crew_spare = plan.island_crew_spare;
+        p.release_spares = plan.island_flower_link;
+        p.rows_after = plan.island_flower_link ? plan.island_swarm_rows : 0u;
+        p.rows_swimmers = plan.island_swarm_swimmers;
+        p.rows_idle_after = plan.island_swarm_idle;
+        p.foot_hp = plan.island_swarm_hp;
         return p;
     }
     static FerryTask::Params ferry_params(const LevelPlan& plan) {
@@ -335,6 +346,7 @@ private:
     HealTask heal_;
     FlowerLinkTask flower_link_;
     ThiefGuardTask thief_guard_;
+    SwarmTask swarm_;
     void note_repeat(const sim::Command& command, uint64_t tick);
     void update_progress(const BotView& view);
     bool detect_stall(const BotView& view);
