@@ -6,7 +6,7 @@ What this holds the bar to, without a browser (tests/scripts/web_site_nav_browse
     web/site_nav.js (one list: the two files name the same links);
   - the files are in the image (the Dockerfile copies each once), are plain ES5 and CSS, carry no copy of the colors, and the pages put no inline style or script into the bar (the CSP of /admin
     has none, and the other pages keep to it);
-  - the byte budgets of the two files, and the pages that are meant to stay without the bar (the admin page);
+  - the byte budgets of the two files, and that nothing but the bar links to the admin page (the page has the bar, as every page of the site but the editor's and the catalog's own screens);
   - the Menu run in node on the real markup of the pages (web/site_nav.js with a small fake of the DOM: tests/scripts/web_site_nav_menu_check.js): its last line is the stamped version and build as
     text, a page that nobody stamped shows no line (never "@@GAME_VERSION@@"), every link that the old footers had is in it, and the pages with the bar have no footer (the front page keeps its own; the game page, with the bar, has none and a hidden stamp).
 """
@@ -50,6 +50,7 @@ PAGES = {
     "legal": (read("web", "legal.html"), None, "menu"),
     "changelog": (changelog_page(), None, "menu"),
     "mapmaker": (read("web", "mapmaker.html"), "/mapmaker", "menu"),
+    "admin": (read("web", "admin.html"), None, "menu"),                                                       # (its title and its tabs are drawn by its script, for a visitor who is let in: tests/scripts/test_web_admin.py)
     "catalog": (read("asset_catalog", "index.html"), None, "menu"),
     "game": (read("web", "shell.html"), None, "menu"),                                                        # (the game page: a bot game, a joined match, a recording, a live view; its tools and its stamp are tests/scripts/test_web_game.py's)
 }
@@ -102,8 +103,8 @@ class ThePages(unittest.TestCase):
 
     def test_the_title_and_its_line_are_one_block_under_the_bar_with_the_only_h1(self):
         for name, (page, marked, live) in PAGES.items():
-            if name in ("mapmaker", "catalog", "game"):
-                continue                                                                                      # (the editor and the catalog keep their own title rows)
+            if name in ("mapmaker", "catalog", "game", "admin"):
+                continue                                                                                      # (the editor and the catalog keep their own title rows, and the admin page draws its title for an admin only)
             self.assertEqual(len(re.findall(r"<h1[ >]", page)), 1, name)
             self.assertRegex(page, r'</header>\n(    )?<div class="pt">(<a class="crumb"[^>]*>[^<]*</a>)?<h1>[^<]+</h1><p>[^<]+</p></div>', name)
 
@@ -118,11 +119,13 @@ class ThePages(unittest.TestCase):
         self.assertNotIn(">Menu</button>", PAGES["mapmaker"][0].replace('aria-label="Menu"', ""))
         self.assertIn("label: 'File'", read("web", "front", "mapmaker_dialog.js"))
 
-    def test_the_admin_page_stays_without_the_bar_and_without_a_link_to_it(self):
+    def test_the_admin_page_has_the_bar_and_no_other_page_links_to_it(self):
         for name in ("admin.html", "admin_page.js", "admin.css"):
-            self.assertNotIn("site_nav", read("web", name), name)
+            self.assertTrue(read("web", name))
+        self.assertIn("site_nav", read("web", "admin.html"))
         for name, (page, marked, live) in PAGES.items():
-            self.assertNotIn("/admin", re.sub(r"[a-z]+-[a-z]+/admin", "", page), name)                       # (nothing on the site links to it: docker/nginx.conf)
+            if name != "admin":
+                self.assertNotIn("/admin", re.sub(r"[a-z]+-[a-z]+/admin", "", page), name)                   # (nothing on the site links to it: docker/nginx.conf)
         self.assertNotIn("/admin", JS)
 
 
@@ -216,7 +219,7 @@ class TheFiles(unittest.TestCase):
 
 STAMPS = {"@@GAME_VERSION@@": "v9.8.7", "@@BUILD_ID@@": "abc1234", "@@BUILD_DATE@@": "2026-01-02 09:30 PT"}
 LINKS_OF_THE_OLD_FOOTERS = ["/", "/matches", "/asset_catalog/", "/changelog", "https://github.com/dchadd427/ants-cross-platform", "https://github.com/dchadd427/ants-cross-platform/issues", "/legal"]
-BAR_PAGES = ("matches", "match", "legal", "mapmaker", "shell")             # (shell: the game page)
+BAR_PAGES = ("matches", "match", "legal", "mapmaker", "shell", "admin")      # (shell: the game page)
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed: the Menu is not run here")
