@@ -414,6 +414,14 @@
    "new": "hints_.stalled = hints_.rules.set_off && stalled_since_ != 0;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI29.17 ' ./build/tests/test_ai/test_ai",
    "expect": "AI29.17"
+  },
+  {
+   "id": "set_off_a_typed_ant",
+   "file": "src/ants_ai/field_plan.cpp",
+   "old": "(ant.type != sim::AntType::Worker && ant.type != view.default_ant_type())",
+   "new": "(false && ant.type != sim::AntType::Worker && ant.type != view.default_ant_type())",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.17 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.17"
   }
  ]
 }

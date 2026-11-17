@@ -473,11 +473,13 @@ bool shuts_in(const Tiles& t, const BotView& view, const AntView& ant, sim::Tile
     return free_land <= 1 && other == 0;
 }
 
-// A seat that has no ant to start the work (FieldHints::stalled): a plain ant crosses a bomb of another team by setting it off. Not a Bomber (it defuses), not an ant that carries food.
-void allow_set_off(Mover& m, const sim::Grid& grid, const AntView& ant, const FieldHints& hints) {
-    if (!hints.stalled || !hints.rules.set_off || ant.type == sim::AntType::Bomber || ant.holding || ant.carried_points > 0) return;
+// A seat that has no ant to start the work (FieldHints::stalled): a PLAIN ant (one that took no power-up: the level's own kind, a Worker, on POPcOrN a Combat Ant) crosses a bomb of
+// another team by setting it off. A typed ant never does: the one that then takes the Bomber power-up would lose its kind (a Fire Ant, the carrier's Swimmer), and a Bomber defuses.
+// Not an ant that carries food.
+void allow_set_off(Mover& m, const BotView& view, const AntView& ant, const FieldHints& hints) {
+    if (!hints.stalled || !hints.rules.set_off || (ant.type != sim::AntType::Worker && ant.type != view.default_ant_type()) || ant.holding || ant.carried_points > 0) return;
     m.set_off = kSetOff;
-    m.grid = &grid;
+    m.grid = &view.grid();
     m.hp = ant.hp;
 }
 
@@ -503,7 +505,6 @@ FieldStep take_step(const Tiles& t, const BotView& view, const MapInfo& map, uin
     if (std::find(tokens.begin(), tokens.end(), ant.tile) != tokens.end()) {             // a flight put it on the power-up, which a flight does not take
         if (hints.rules.pick) return step_of(FieldAction::Take, work, ant.tile);        // (a click on the own tile takes it, as a person's click does)
         for (int dir = 0; dir < 8; ++dir) {                                              // off and back on
-
             const sim::TileCoord n{ant.tile.x + kDx[dir], ant.tile.y + kDy[dir]};
             if (t.of(n) == kClear) return step_of(FieldAction::Step, work, n);
         }
@@ -515,7 +516,7 @@ FieldStep take_step(const Tiles& t, const BotView& view, const MapInfo& map, uin
         return step_of(FieldAction::Stuck, work, ant.tile);
     }
     Mover mover = mover_of(ant.type);
-    allow_set_off(mover, view.grid(), ant, hints);
+    allow_set_off(mover, view, ant, hints);
     const Search reach = search(t, mover, {{ant.tile, 0}}, crowd(t, view, ant.id));
     int32_t best = kFar;
     sim::TileCoord best_token{-1, -1};
@@ -1010,7 +1011,7 @@ int32_t field_ant_cost(const FieldPlan& plan, const BotView& view, const MapInfo
     if (ant.type != need) {
         Mover m = mover_of(ant.type);
         m.token = -1;
-        allow_set_off(m, view.grid(), ant, hints);
+        allow_set_off(m, view, ant, hints);
         const Search reach = search(t, m, {{ant.tile, 0}});
         cost = kFar;
         for (const PowerUpView& p : view.powerups()) {

@@ -60,6 +60,8 @@ struct FieldWorld {
         bool bomber_power_up{true};  // the Bomber power-up at home
         bool dead_end{false};        // a Bomber power-up at the end of a corridor of rock on the hill's side: (21 .. 23, 3), its way in from (20, 3), the power-up on (23, 3)
         bool plug{false};            // with dead_end: one bomb of no team on (21, 3), the corridor's mouth: the power-up lies where only a bomb is in the way
+        bool room{false};            // a Bomber power-up on (24, 4) in a room of rock (x 20 .. 26, y 2 .. 6) whose one door, (20, 4), holds a bomb of no team: a power-up with free ground all round it (an
+                                     // ant of a kind of its own is not shut in by taking it), where only a bomb is in the way
         bool vault{false};           // a second pile on the hill's side: a crackers pile on (21 .. 22, 4 .. 5) in a ring of rock (x 20 .. 23, y 3 .. 6) whose way in, (21, 6) and
                                      // (21, 7), holds two bombs of another team (a wall of one kind: the gate goals' own)
         uint8_t owner{255};          // the bombs' owner
@@ -114,6 +116,16 @@ struct FieldWorld {
                 vault_anchor = TileCoord{std::max(vault_anchor.x, c.x), std::max(vault_anchor.y, c.y)};
             }
             place_crackers(sim, vault_anchor.x, vault_anchor.y, 25);
+        }
+        if (o.room) {
+            for (int y = 2; y <= 6; ++y) {
+                for (int x = 20; x <= 26; ++x) {
+                    const TileCoord c = w.at(x, y);
+                    if (x == 20 && y == 4) sim.grid_mut().place_bomb(static_cast<uint32_t>(c.x), static_cast<uint32_t>(c.y), 255);
+                    else if (x == 20 || x == 26 || y == 2 || y == 6) sim.set_terrain(c.x, c.y, sim::TERRAIN_OBSTACLE);
+                }
+            }
+            place(24, 4, sim::AntType::Bomber);
         }
         if (o.dead_end) {
             for (int y = 2; y <= 4; ++y) {
@@ -726,6 +738,7 @@ void run_field_tests() {
                 const TileCoord bomb = w.at(2, 9);                                           // a map bomb of no team by the hill, off the breach's ways
                 f.sim.grid_mut().place_bomb(static_cast<uint32_t>(bomb.x), static_cast<uint32_t>(bomb.y), 255);
                 f.sim.spawn_unit(w.seat, sim::AntType::Bomber, w.at(3, 10));
+                f.sim.spawn_unit(w.seat, sim::AntType::Bomber, w.at(3, 11));                 // (two Bombers: the breach takes one, the other is the counters' to act with when they are not spared)
                 LevelPlan plan = field_plan_of();
                 plan.gate_field = field;
                 Rig rig(f.sim, w.seat, Level::Hard, std::make_unique<StandardBot>(plan));
@@ -1006,6 +1019,33 @@ void run_field_tests() {
                         ASSERT_EQ(field_ant_cost(plan, view, map, w.seat, a, stalled), -1);
                         ASSERT_EQ(next_field_step(plan, view, map, w.seat, a, stalled).action, FieldAction::Stuck);
                     }
+                }
+            }
+            {   // only a plain ant sets a bomb off: the room's power-up has free ground all round it, so the one thing that keeps a typed ant out is its kind (the one that then took the
+                // Bomber power-up would lose its own: a Fire Ant, the carrier's Swimmer, a Thief)
+                FieldWorld::Options r;
+                r.room = true;
+                r.bomber_power_up = false;
+                {
+                    FieldWorld f(w, r);
+                    const FieldStep st = f.step_of(sim::AntType::Worker, TileCoord{19, 4}, 10, stalled);
+                    ASSERT_EQ(st.action, FieldAction::SetOff);
+                    ASSERT_EQ(st.tile, w.at(20, 4));
+                }
+                for (const sim::AntType kind : {sim::AntType::Fire, sim::AntType::Swimmer, sim::AntType::Thief, sim::AntType::Combat}) {
+                    FieldWorld f(w, r);
+                    const uint32_t id = f.sim.spawn_unit(w.seat, kind, w.at(19, 4));
+                    const MapInfo map(f.sim);
+                    const BotView view = BotView::build(f.sim, w.seat, &map);
+                    const FieldPlan plan = plan_field(view, map, w.seat, stalled);
+                    bool seen = false;
+                    for (const AntView& a : view.mine()) {
+                        if (a.id != id) continue;
+                        seen = true;
+                        ASSERT_EQ(field_ant_cost(plan, view, map, w.seat, a, stalled), -1);                    // never the one that is chosen,
+                        ASSERT_TRUE(next_field_step(plan, view, map, w.seat, a, stalled).action != FieldAction::SetOff);   // and never one that steps onto the bomb
+                    }
+                    ASSERT_TRUE(seen);
                 }
             }
             {   // the rule is off with its switch

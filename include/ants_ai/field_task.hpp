@@ -11,8 +11,8 @@
 //              gives the ant up: it is not taken again for `rest_ticks`, and after `ants_max` ants given up the task waits until the bot's ants or the power-ups change
 //   bombs      the bombs of the seat (or its ally) at the task's first look are the map's own: work like any other bomb; one is forgotten once it is gone (a bomb planted on its
 //              tile later is the ant's own, a hop's)
-//   stalled    no ant of the bot can get the kind the work needs (every power-up of it lies where only a bomb is in the way) for `stalled_ticks`: the ant that is nearest to one, but not
-//              a Bomber or an ant with food, crosses ONE bomb of another team by setting it off (a step onto it from a side; the throw must land on ground and the ant keeps 3
+//   stalled    no ant of the bot can get the kind the work needs (every power-up of it lies where only a bomb is in the way) for `stalled_ticks`: the plain ant (one that took no power-up: a
+//              typed ant would lose its kind) with no food that is nearest to one crosses ONE bomb of another team by setting it off (a step onto it from a side; the throw must land on ground and the ant keeps 3
 //              hit points), at most `set_offs_max` in `set_off_window` ticks (FieldRules::set_off)
 //   end        the work done (no fire cell or bomb on the route, and a Swimmer for a route that swims): the ant is free again, and the task looks again every `look_every` ticks
 
