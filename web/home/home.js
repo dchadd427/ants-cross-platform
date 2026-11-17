@@ -359,14 +359,15 @@
         function wantPlayers() {                            // the players list (players.js, players.css), after the dock: it uses its socket
             if (askedPlayers || !dock) return;
             askedPlayers = true;
-            lazy('home/players', function () { if (win.AntsHomePlayers) players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: main, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); inert(held); var c = players && players.root.querySelector ? players.root.querySelector('.pl-count') : null; if (c) mirror(c, tabBtns.players.pill); });
+            lazy('home/players', function () { if (win.AntsHomePlayers) players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: main, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); meet(); inert(held); var c = players && players.root.querySelector ? players.root.querySelector('.pl-count') : null; if (c) mirror(c, tabBtns.players.pill); });
         }
 
         function wantSplit() {                              // the two drag handles (split.js, split.css): sizes kept in this browser, put on Home before the lists come
             lazy('home/split', function () { if (win.AntsHomeSplit) split = win.AntsHomeSplit.mount({ doc: doc, win: win, host: host, main: main }); });
         }
 
-        var askedMod = false, askedSheet = false;
+        var askedMod = false, askedSheet = false, mod = null;
+        function meet() { if (mod && players && mod.people) mod.people(players); }       // (the sheet and the list, whichever is second)
         function wantMod() {                                // the moderation sheet (mod.js, mod.css): once, and only after the dock names a visitor with a role; a person with no role never asks for it
             if (askedMod || !dock || !dock.tap || !dock.you) return;
             askedMod = true;
@@ -374,7 +375,7 @@
                 var y;
                 if (askedSheet || (kind !== 'live' && kind !== 'you') || !(y = dock.you()) || y.role === 'none') return;
                 askedSheet = true;
-                lazy('home/mod', function () { if (win.AntsHomeMod) win.AntsHomeMod.mount({ doc: doc, win: win, dock: dock }); });
+                lazy('home/mod', function () { if (win.AntsHomeMod) mod = win.AntsHomeMod.mount({ doc: doc, win: win, dock: dock }); meet(); });
             });
         }
         function wantTalk() {                               // the emoji and microphone buttons (talk.js, talk.css), after the dock: they stand in its form
