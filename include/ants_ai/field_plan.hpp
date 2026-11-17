@@ -20,6 +20,8 @@
 //               walks several tiles when that walk crosses none; a bomb ahead is defused with ONE order (the engine walks to the side it takes) when the walk to that side
 //               crosses none either. An ant that stands on the power-up it needs takes it with a click on its own tile. A plain ant of a seat that has no ant to start the work
 //               crosses ONE bomb of another team by setting it off (FieldHints::stalled; the rule is `set_off_ok` in field_plan.cpp).
+//               An ant takes only a power-up that SERVES the work (FieldPlan::serving: the kind it then is has a way to the ground the work is done on), and a Bomber that no single
+//               hop brings to such a power-up hops first to ground from which a second hop does (a fire wall, then a lake). No bomb is planted on a tile that an ant stands on.
 
 #include <cstdint>
 #include <vector>
@@ -72,17 +74,26 @@ struct FieldPlan {
     sim::TileCoord swim_source{-1, -1};  // where the Swimmer comes from
     std::vector<sim::TileCoord> fire_way;
     std::vector<sim::TileCoord> swim_way;
+    /// The power-ups of the kind the work needs that SERVE it: the ant that takes one has a way, with the moves of its new kind (a Swimmer swims, a Fire Ant walks through fire; the bombs on the way
+    /// count as work that a Bomber does and the water on a Fire Ant's way as work that a Swimmer does), to the ground the work is done on (a tile of the route or of the ways). A Swimmer power-up on a strip that fire walls cut
+    /// off from all of it is not one: the Bomber that hopped there would be a Swimmer that can do nothing. Only meaningful with `serving_known` (the Bomber's work is reached by a hop as well as by
+    /// a dig: every Bomber power-up serves).
+    std::vector<sim::TileCoord> serving;
+    bool serving_known{false};
+    bool serves(sim::TileCoord token) const noexcept;
     /// The work that is next: the bombs, then the bridges, then the fire, then (a route that swims, with no Swimmer) a Swimmer
     FieldWork work() const noexcept;
     /// Every kind of work has a source: a Fire Ant's way to the route's fire, a Swimmer's way to the fire way's water (the bot decides at the start whether it plays the breach)
     bool feasible() const noexcept { return field && (fires.empty() || !fire_way.empty()) && (waters.empty() || !swim_way.empty()); }
 };
 
-/// The rules of the breach that a plan switch can turn off (LevelPlan::field_*, `bot_arena --tune fpick=0,fwalk=0,fsetoff=0`): all on is the bot that ships
+/// The rules of the breach that a plan switch can turn off (LevelPlan::field_*, `bot_arena --tune fpick=0,fwalk=0,fsetoff=0,fserve=0,freplan=0`): all on is the bot that ships (the second hop and the planted tile have no switch)
 struct FieldRules {
     bool pick{true};                     // an ant that stands on the power-up it needs takes it with a click on its own tile (else it steps off and back on, and a boxed-in ant is Stuck)
     bool walk{true};                     // the walks and the defuses of the dig are ordered by the engine's own walk (EngineWalks), several tiles at a time (else: over ground with no bomb on or next to it)
     bool set_off{true};                  // a seat that has no ant to start the work lets a plain ant set one bomb off to get to a power-up of the kind (FieldHints::stalled)
+    bool serve{true};                    // an ant takes only a power-up whose kind then reaches the work from it (FieldPlan::serving); else any power-up of the kind
+    bool replan{true};                   // a Stuck step gets one fresh plan (the ways and sources kept from before dropped) before its ant is given up; else it is given up at once
 };
 
 /// What the task keeps from one step to the next. The plan of one look depends on what the work has done (a dug corridor makes other fire cells and sources cheaper): the route and the
