@@ -206,13 +206,14 @@ public:
     /// deleted: a record is deleted when its room is over, never because the server stops.
     size_t shutdown(uint32_t now_ms);
     /// The server's own matches of computer players (docs/SERVER.md "Matches of computer players"): every `every_minutes` the manager makes one room whose seats are all bots (RoomSpec::bots_only), on one of
-    /// the original's six maps, with two to four standard bots of the Medium or Hard level on random seats, played at the normal speed. The first one begins `first_after_ms` after this call. Nothing is made while
+    /// the original's six maps, with two to four standard bots of the Medium or Hard level on random seats, in the original's game or in 187 (a fair coin for each match), played at the normal speed. The first one begins `first_after_ms` after this call. Nothing is made while
     /// the server keeps no replays (a match that nobody could watch or look at again), while a match of this kind still runs, or while the manager has no room for another room. `every_minutes` 0 switches it off.
     /// `seed` 0: the choices come from the system's entropy; else from `seed` (the tests).
     void enable_bot_matches(uint32_t every_minutes, uint32_t now_ms, uint32_t first_after_ms = 60u * 1000u, uint32_t seed = 0);
     bool bot_matches_enabled() const noexcept { return bot_every_ms_ != 0; }
-    /// One match of computer players now (what the timer does): the room's code when it was made, else the reason in `why`
-    bool start_bot_match(uint32_t now_ms, std::string& code, std::string& why);
+    /// One match of computer players now (what the timer does): the room's code when it was made, else the reason in `why`. `mode`, when given, gets the rules that the match was dealt (sim::GameMode as a byte): each match
+    /// draws them by a fair coin of its own, the original's highest score or 187, with no memory of the matches before it
+    bool start_bot_match(uint32_t now_ms, std::string& code, std::string& why, uint8_t* mode = nullptr);
     /// Lines for the server's log about the restart records (a record that was written no more, a room that was restored or not), the replays (files purged, a match that was not kept) and the seats that a room dropped
     /// for a state that differed from the referee's: once each, never a key
     std::vector<std::string> take_notices();
