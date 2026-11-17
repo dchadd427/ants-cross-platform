@@ -1,0 +1,111 @@
+{
+ "note": "Mutants of the admin page's door in docker/nginx.conf (the internal gate, the auth_request of /admin/api/, its answers and its allowance; docs/HUB.md 'The admin page's door') for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose, and tests/scripts/test_nginx_submissions.py must notice, running the real blocks in front of a stand-in gate and a stand-in game server. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/nginx_admin_door_mutants.json --keep-going --jobs 1. Not listed on purpose: the gate's query and its body. nginx's auth_request makes its subrequest with no query and with an empty body whatever the block says, so the gate's explicit address and `proxy_pass_request_body off;` are second locks, and a mutant of either is equivalent (nothing a test can see changes). The mutants need an nginx program on the machine (without one they cannot be caught and show as survived).",
+ "defaults": {
+  "test": "python3 -I tests/scripts/test_nginx_submissions.py",
+  "build": []
+ },
+ "mutants": [
+  {
+   "id": "gate_is_open_to_a_browser",
+   "file": "docker/nginx.conf",
+   "old": "location = /hub/admin/gate {\n        internal;\n",
+   "new": "location = /hub/admin/gate {\n"
+  },
+  {
+   "id": "gate_believes_the_visitors_address",
+   "file": "docker/nginx.conf",
+   "old": "Cookie $hub_cookie_session;\n        proxy_set_header X-Client-Address $remote_addr;",
+   "new": "Cookie $hub_cookie_session;\n        proxy_set_header X-Client-Address $http_x_client_address;"
+  },
+  {
+   "id": "gate_is_asked_with_the_visitors_headers",
+   "file": "docker/nginx.conf",
+   "old": "location = /hub/admin/gate {\n        internal;\n        access_log off;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_hub ants-hub:4040;\n        proxy_pass http://$ants_hub/hub/admin/gate;               # (an explicit address: the visitor's query is not passed on)\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;",
+   "new": "location = /hub/admin/gate {\n        internal;\n        access_log off;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_hub ants-hub:4040;\n        proxy_pass http://$ants_hub/hub/admin/gate;               # (an explicit address: the visitor's query is not passed on)\n        proxy_http_version 1.1;"
+  },
+  {
+   "id": "admin_api_is_not_asked_of_the_gate",
+   "file": "docker/nginx.conf",
+   "old": "        auth_request /hub/admin/gate;\n",
+   "new": ""
+  },
+  {
+   "id": "admin_api_takes_the_pass_from_the_visitor",
+   "file": "docker/nginx.conf",
+   "old": "proxy_set_header X-Ants-Admin-Pass $admin_pass;",
+   "new": "proxy_set_header X-Ants-Admin-Pass $http_x_ants_admin_pass;"
+  },
+  {
+   "id": "admin_api_passes_the_visitors_headers",
+   "file": "docker/nginx.conf",
+   "old": "proxy_http_version 1.1;\n        proxy_next_upstream off;\n        proxy_pass_request_headers off;",
+   "new": "proxy_http_version 1.1;\n        proxy_next_upstream off;"
+  },
+  {
+   "id": "admin_api_lets_a_cookie_come_back",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_hide_header Set-Cookie;\n    }\n\n    # The gate:",
+   "new": "    }\n\n    # The gate:"
+  },
+  {
+   "id": "admin_not_logged_in_is_a_page",
+   "file": "docker/nginx.conf",
+   "old": "        error_page 401 = @admin_not_signed_in;\n",
+   "new": ""
+  },
+  {
+   "id": "admin_not_allowed_is_a_page",
+   "file": "docker/nginx.conf",
+   "old": "        error_page 403 = @admin_not_allowed;\n",
+   "new": ""
+  },
+  {
+   "id": "admin_gate_in_trouble_is_a_page",
+   "file": "docker/nginx.conf",
+   "old": "        error_page 500 = @admin_door_off;\n",
+   "new": ""
+  },
+  {
+   "id": "admin_other_sites_are_let_in",
+   "file": "docker/nginx.conf",
+   "old": "        if ($http_sec_fetch_site ~ \"^(cross-site|same-site)$\") {          # (a text",
+   "new": "        if ($http_sec_fetch_site ~ \"^(none)$\") {          # (a text"
+  },
+  {
+   "id": "admin_sibling_sites_are_let_in",
+   "file": "docker/nginx.conf",
+   "old": "\"^(cross-site|same-site)$\") {          # (a text",
+   "new": "\"^cross-site$\") {          # (a text"
+  },
+  {
+   "id": "admin_allowance_burst_is_over_the_gates",
+   "file": "docker/nginx.conf",
+   "old": "limit_req zone=ants_admin_api burst=50 nodelay;",
+   "new": "limit_req zone=ants_admin_api burst=200 nodelay;"
+  },
+  {
+   "id": "admin_allowance_is_twenty_a_second",
+   "file": "docker/nginx.conf",
+   "old": "zone=ants_admin_api:1m rate=1r/s;",
+   "new": "zone=ants_admin_api:1m rate=100r/s;"
+  },
+  {
+   "id": "admin_allowance_is_gone",
+   "file": "docker/nginx.conf",
+   "old": "        limit_req zone=ants_admin_api burst=50 nodelay;\n",
+   "new": ""
+  },
+  {
+   "id": "admin_body_limit_is_gone",
+   "file": "docker/nginx.conf",
+   "old": "        limit_req_status 429;\n        client_max_body_size 8k;\n        auth_request",
+   "new": "        limit_req_status 429;\n        auth_request"
+  },
+  {
+   "id": "admin_put_goes_through",
+   "file": "docker/nginx.conf",
+   "old": "if ($request_method !~ \"^(GET|POST)\\z\") { return 405; }\n        # (the decoded and normalized path is what goes on upstream, so only plain characters may be in it)\n        if ($uri !~ \"^/admin/api/",
+   "new": "# (the decoded and normalized path is what goes on upstream, so only plain characters may be in it)\n        if ($uri !~ \"^/admin/api/"
+  }
+ ]
+}

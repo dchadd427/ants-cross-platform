@@ -1272,17 +1272,17 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
   },
   {
-   "id": "nginx_admin_api_gets_every_cookie",
+   "id": "nginx_admin_gate_gets_every_cookie",
    "file": "docker/nginx.conf",
-   "old": "proxy_set_header Cookie $admin_cookie;",
-   "new": "proxy_set_header Cookie $http_cookie;",
+   "old": "Cookie $hub_cookie_session;\n        proxy_set_header X-Client-Address $remote_addr;",
+   "new": "Cookie $http_cookie;\n        proxy_set_header X-Client-Address $remote_addr;",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
   },
   {
-   "id": "nginx_admin_cookie_map_takes_any",
+   "id": "nginx_admin_api_passes_a_cookie_to_the_game_server",
    "file": "docker/nginx.conf",
-   "old": "\"~(?:^|;[ ]*)(?<admin_c>ants_admin=[^; ]*)\" $admin_c;",
-   "new": "\"~(?<admin_c>.*)\" $admin_c;",
+   "old": "proxy_set_header X-Ants-Admin-Pass $admin_pass;",
+   "new": "proxy_set_header Cookie $http_cookie;\n        proxy_set_header X-Ants-Admin-Pass $admin_pass;",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
   },
   {
