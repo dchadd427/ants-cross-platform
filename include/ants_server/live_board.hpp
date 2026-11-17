@@ -10,7 +10,7 @@
 //    `-2`, `-3` ... when two matches of one map began in one second (the id is unique among the matches that run and the ones that ended lately). It is made of nothing else: never of the room's code, a
 //    name, an address or a key;
 //  * the list: the matches that have run at least kReplayMinTurns (the length that the store keeps; a shorter one may never be a replay) and whose recording has not failed, newest start first, at most 50, with
-//    the players in the strings of the replay list ("Green (Ann)", "Green", "Red (Bot (Medium))");
+//    the players in the strings of the replay list ("Green (Ann)", "Green", "Red (Bot (Medium))") and the match's game mode;
 //  * the snapshot of one of them: the recorder's incomplete file with its `live` chunk (Recorder::snapshot), cached for as long as the board's clock stays in one second, so a crowd of viewers costs one
 //    snapshot a second and the same bytes go to all of them meanwhile;
 //  * the fate of a match that ended lately: the name that the store kept it under ("" when it was not kept), for 15 minutes, 256 matches at most, so that a page that watched it finds the replay when it ends.
@@ -31,6 +31,7 @@ namespace ants::server {
 struct LiveMatch {
     std::string id;
     std::string map;                                 // the map's file name as the match named it ("TREASURE.LVL")
+    uint8_t mode{0};                                 // the room's game mode as the replay's head holds it (sim::GameMode: 0 highest score, 1 for 187)
     int64_t started{0};                              // seconds since 1970 UTC when the recording began
     uint32_t turns{0};                               // the turns run so far
     std::vector<std::string> players;                // the seats that play, "Green (Ann)", "Green" (no name) or "Red (Bot (Medium))", in seat order
@@ -77,6 +78,7 @@ private:
     struct Running {
         std::string id;
         std::string map;
+        uint8_t mode{0};
         int64_t started{0};
         std::vector<std::string> players;
         const replay::Recorder* recorder{nullptr};

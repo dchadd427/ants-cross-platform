@@ -79,6 +79,7 @@ std::string LiveBoard::begin(const replay::Recorder& recorder) {
     Running match;
     match.id = id;
     match.map = head.map_name;
+    match.mode = head.mode;
     match.started = now;
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if ((head.roster & (1u << seat)) != 0) match.players.push_back(replay::seat_label(head, seat));
@@ -114,6 +115,7 @@ std::vector<LiveMatch> LiveBoard::list() const {
         LiveMatch m;
         m.id = it->id;
         m.map = it->map;
+        m.mode = it->mode;
         m.started = it->started;
         m.turns = it->recorder->turns();
         m.players = it->players;

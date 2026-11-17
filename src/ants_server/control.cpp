@@ -463,6 +463,7 @@ ctl::HttpResponse handle_public_live(const RoomManager& rooms, const ctl::HttpRe
             JsonValue e = JsonValue::make_object();
             e.set("id", JsonValue::make_string(m.id));
             e.set("map", JsonValue::make_string(m.map));
+            e.set("mode", JsonValue::make_string(sim::game_mode_name(static_cast<sim::GameMode>(m.mode))));       // "highest-score" or "187", as in the list of games
             e.set("started", JsonValue::make_int(m.started));
             e.set("turns", JsonValue::make_int(m.turns));
             e.set("seconds", JsonValue::make_int(m.turns / net::kTurnsPerSecond));

@@ -52,7 +52,7 @@
         noneLine: 'Nobody is waiting for a player. Host one, and others can join you.', noneYours: 'Your room goes public with its map and your friends in it.', noneNew: 'A new room opens for you, and it goes public.', joiningCode: 'Joining the room…', joinFirst: ' Wait for it, or cancel it in the list.', opening: 'The game is opening. If it does not, reload this page.',
         already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went private after 30 minutes. Make it public again?',
         hostChanged: 'This room is private again because the host changed.', stillPrivate: 'Your room is still private. Use the Public switch in the room.',
-        watch: 'Watch', liveMark: 'Live', inProgress: 'In progress', soFar: ' so far', nobodyNamed: 'Players not named',
+        watch: 'Watch', liveMark: 'Live', mode187: '187', inProgress: 'In progress', soFar: ' so far', nobodyNamed: 'Players not named',
         full: 'That room is full.', started: 'The match in that room has already started.', gone: 'That game is not open any more.', silent: 'The server did not answer. Try again in a moment.'
     };
 
@@ -72,7 +72,8 @@
         return { code: raw.code, host: raw.host.replace(/^ +| +$/g, '') || 'Player', map: raw.map, mapKey: known ? known.key : '', mapName: known ? known.name : rules.communityName(raw.map).slice(0, 28), people: raw.people, bots: raw.bots, free: raw.free, size: raw.size, age: raw.age };
     }
     // One match of the door's answer to GET /live as the page may show it, or null: the id of the server's shape, the map as the door sends it (the whole file name, like a room's: 'TREASURE.LVL', 'DRY LAND.lvl'; else the one in the id), the seconds it has run (or its turns / 20), and at most four
-    // players as the door writes them ("Green (Ann)", "Red", "Blue (Bot (Medium))"): a color word and the name, printable ASCII only. Everything is text, and the only address that is made is /play?live=<id> from the checked id.
+    // players as the door writes them ("Green (Ann)", "Red", "Blue (Bot (Medium))"): a color word and the name, printable ASCII only, and the game mode (the word '187' marks a match of mode 187; any other value, or none, is a plain match).
+    // Everything is text, and the only address that is made is /play?live=<id> from the checked id.
     function liveOf(raw, rules) {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw) || typeof raw.id !== 'string' || !LIVE_ID.test(raw.id)) return null;
         var file = typeof raw.map === 'string' ? raw.map : raw.id.replace(/-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/, '') + '.LVL';
@@ -83,7 +84,7 @@
             var m = /^(Green|Red|Blue|Black)(?: \(([\s\S]*)\))?$/.exec(list[i]);
             who.push(m ? { seat: SEATS.indexOf(m[1]), name: m[2] || m[1] } : { seat: -1, name: list[i] });
         }
-        return { id: raw.id, map: file, mapKey: known ? known.key : '', mapName: known ? known.name : rules.communityName(file).slice(0, 28), seconds: isFinite(secs) && secs > 0 ? Math.min(Math.floor(secs), 359999) : 0, who: who };
+        return { id: raw.id, map: file, mapKey: known ? known.key : '', mapName: known ? known.name : rules.communityName(file).slice(0, 28), seconds: isFinite(secs) && secs > 0 ? Math.min(Math.floor(secs), 359999) : 0, who: who, mode187: raw.mode === '187' };
     }
     // The matches of an answer ({ live: [...] }), at most 50, an id once, in the door's order (newest first); null when the answer is not that shape (the section is hidden)
     function parseLive(data, rules) {
@@ -515,21 +516,22 @@
             }
             return li;
         }
-        // One match that runs now: the map's square, the map (the room's host is not known: the door carries no room), a red Live mark, the players (a dot of their color and their names) and how long it has run; Watch opens the
+        // One match that runs now: the map's square, the map (the room's host is not known: the door carries no room), a red Live mark (and the tag 187 beside it for a match of mode 187), the players (a dot of their color and their names) and how long it has run; Watch opens the
         // player on it in a NEW tab, so the seat in the room that this page holds stays
         function liveNode(e) {
             var li = el('li', 'gitem glive'), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots'), who = el('span', 'gwho'), len = el('span', 'glen', clockText(e.seconds) + TEXT.soFar);
-            var names = e.who.map(function (w) { return w.name; }).join(', ') || TEXT.nobodyNamed, go = el('a', 'btn gwatch', TEXT.watch);
+            var names = e.who.map(function (w) { return w.name; }).join(', ') || TEXT.nobodyNamed, go = el('a', 'btn gwatch', TEXT.watch), marks = el('span', 'gmarks'), kind = e.mode187 ? TEXT.mode187 + ' match' : 'match';
             dots.setAttribute('aria-hidden', 'true');
             e.who.forEach(function (w) { var d = el('i', 'gdot ' + (BOT_NAME.test(w.name) ? 'bot' : 'player')); d.className += w.seat < 0 ? ' cn' : ' c' + w.seat; dots.appendChild(d); });          // (a computer player is a ring, as in the open rooms; a color that the door does not know is a neutral dot)
             who.textContent = names; who.setAttribute('title', names);
-            top.appendChild(el('span', 'gname', e.mapName)); top.appendChild(el('span', 'glive-mark', TEXT.liveMark));
+            marks.appendChild(el('span', 'glive-mark', TEXT.liveMark)); if (e.mode187) marks.appendChild(el('span', 'gmode', TEXT.mode187));          // (the mark and the tag are one pair: a narrow row moves them down together)
+            top.appendChild(el('span', 'gname', e.mapName)); top.appendChild(marks);
             line.appendChild(dots); line.appendChild(who); line.appendChild(len);
             text.appendChild(top); text.appendChild(line); li.appendChild(picOf(e)); li.appendChild(text);
             go.setAttribute('href', '/play?live=' + encodeURIComponent(e.id)); go.setAttribute('target', '_blank'); go.setAttribute('rel', 'noopener'); go.setAttribute('data-live', e.id);
-            go.setAttribute('aria-label', 'Watch the match on ' + e.mapName + ', ' + names + ', ' + clockText(e.seconds) + TEXT.soFar);
+            go.setAttribute('aria-label', 'Watch the ' + kind + ' on ' + e.mapName + ', ' + names + ', ' + clockText(e.seconds) + TEXT.soFar);
             li.appendChild(go);
-            liveLens.push({ id: e.id, node: len, link: go, names: names, map: e.mapName });
+            liveLens.push({ id: e.id, node: len, link: go, names: names, map: e.mapName, kind: kind });
             return li;
         }
         function liveShown() { return liveLoaded && !liveOff && loaded; }          // (the section stands only with an answer of /live that was good and the list's own first look done)
@@ -537,7 +539,7 @@
             var on = liveShown(), active = doc.activeElement, focusId = active && active.getAttribute ? active.getAttribute('data-live') : null;
             liveBox.hidden = !on || !live.length;                             // (no match running: no box at all, so an empty list does not grow the panel)
             if (!on) { liveSig = null; liveLens = []; while (liveList.firstChild) liveList.removeChild(liveList.firstChild); return; }          // (nothing of a match stays in the page while the section is away)
-            var sig = JSON.stringify(live.map(function (e) { return [e.id, e.map, e.who]; }));
+            var sig = JSON.stringify(live.map(function (e) { return [e.id, e.map, e.who, e.mode187]; }));
             if (sig !== liveSig) {                                              // (made again only when a match, its map or its players came or went: a focus stays, and the clocks tick in place)
                 liveSig = sig; liveLens = [];
                 while (liveList.firstChild) liveList.removeChild(liveList.firstChild);
@@ -546,7 +548,7 @@
             }
             live.forEach(function (e, i) {
                 var l = liveLens[i];
-                if (l) { l.node.textContent = clockText(e.seconds) + TEXT.soFar; l.link.setAttribute('aria-label', 'Watch the match on ' + l.map + ', ' + l.names + ', ' + clockText(e.seconds) + TEXT.soFar); }
+                if (l) { l.node.textContent = clockText(e.seconds) + TEXT.soFar; l.link.setAttribute('aria-label', 'Watch the ' + l.kind + ' on ' + l.map + ', ' + l.names + ', ' + clockText(e.seconds) + TEXT.soFar); }
             });
         }
         function countLine(n) {                            // the list's head: "3 open, 2 in progress" while the matches are shown, else "3 waiting - updates live"
