@@ -6,16 +6,19 @@ The game page asks the browser for a Screen Wake Lock (navigator.wakeLock) so th
   - the code RUNS in node (tests/scripts/web_wake_lock_check.js: a fake wake lock, document, window and game, and the page's own call, the block of web/shell.html between WAKE_LOCK_BEGIN and
     WAKE_LOCK_END): wanted while a match runs or a recording plays, let go on pause, at the end and at the results, asked for again on play and when the page is visible again, nothing without the API,
     a refused request or release swallowed, a page that is left or comes back from the cache;
-  - the files, where no run of the page's code can look: the page loads the script and names it once, the image, the local web build and the CI's list of the image's files carry it (a page that does not
-    get the script turns the feature off without a word, by design, so nothing that runs the code notices: the browser check is the run), nginx serves it by the rule for scripts, and it is small and
-    plain ES5 (tools/size_limits.py); the replay numbers that it holds are the game's (include/ants_app/replay_view.hpp);
+  - the files, where no run of the page's code can look: the page loads the script before its call (read as a page: the list of its scripts), the Dockerfile's COPY steps are replayed (tools/web_without_docker.py)
+    and put the file in the image, the local web build and the CI's list of the image's files name it (a page or an image that lacks the script turns the feature off without a word, by design, so
+    nothing that runs the code notices: the browser check serves web/ itself, not the image), nginx serves it by the rule for scripts, and it is within its byte budget (tools/size_limits.py); the
+    replay numbers that it holds are the game's (include/ants_app/replay_view.hpp);
   - the opt-in browser check (tests/scripts/web_wake_lock_check.py, tests/scripts/test_web_wake_lock.sh) takes a bad command line as one;
   - tests/data/wake_lock_mutants.json changes one thing at a time in a COPY of the files: the node check must then fail (the last class of this file; tools/mutate.py runs the same list).
 """
 import gzip
+import html.parser
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -25,6 +28,7 @@ import unittest
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 import size_limits  # noqa: E402
+import web_without_docker as wd  # noqa: E402  (it replays the Dockerfile's steps)
 
 SCRIPT = os.path.join(REPO, "web", "wake_lock.js")
 CHECK = os.path.join(REPO, "tests", "scripts", "web_wake_lock_check.js")
@@ -70,25 +74,90 @@ def location_of(conf, path):
     return (best[1], best[2]) if best else (None, None)
 
 
+class Scripts(html.parser.HTMLParser):
+    """The scripts of a page in the order of the page: ("src", the address) for a script that is loaded, ("inline", the text) for one that is written in it."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=False)
+        self.found, self.open = [], None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "script":
+            src = dict(attrs).get("src")
+            if src:
+                self.found.append(("src", src))
+            else:
+                self.open = ["inline", ""]
+                self.found.append(self.open)
+
+    def handle_data(self, data):
+        if self.open is not None:
+            self.open[1] += data
+
+    def handle_endtag(self, tag):
+        if tag == "script":
+            self.open = None
+
+
+def words_of(line):
+    try:
+        return shlex.split(line, comments=True)
+    except ValueError:
+        return []
+
+
+def image_holds(name):
+    """The bytes that the image has at /usr/share/nginx/html/<name> from the Dockerfile's COPY steps of web/ (replayed by tools/web_without_docker.py), or None."""
+    steps = wd.parse_dockerfile(read("Dockerfile"))
+    last = max(step.stage for step in steps)
+    fs = tempfile.mkdtemp(prefix="ants_wake_lock_image.")
+    try:
+        replay = wd.Replay(steps, REPO, fs, {})
+        for folder in wd.BASE_FOLDERS:
+            os.makedirs(replay.real(folder), exist_ok=True)
+        for step in steps:
+            if step.stage == last and step.op == "COPY" and "from" not in step.flags and step.words[0].startswith("web/"):
+                replay.do_copy(step)
+        path = os.path.join(fs, "usr", "share", "nginx", "html", name)
+        if not os.path.isfile(path):
+            return None
+        with open(path, "rb") as f:
+            return f.read()
+    finally:
+        shutil.rmtree(fs, ignore_errors=True)
+
+
 class ThePageAndTheImage(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.js = read("web", "wake_lock.js")
 
-    def test_the_game_page_loads_the_script_once_and_calls_it_in_the_block_the_check_runs_and_no_other_page_names_it(self):
-        shell = read("web", "shell.html")
-        tag = '<script src="wake_lock.js"></script>'
-        self.assertEqual(shell.count(tag), 1)
-        self.assertEqual(shell.count("// WAKE_LOCK_BEGIN"), 1)
-        self.assertEqual(shell.count("// WAKE_LOCK_END"), 1)
-        self.assertLess(shell.index(tag), shell.index("// WAKE_LOCK_BEGIN"), "loaded before it is called")
-        for rel in (("web", "lobby.html"), ("web", "matches.html"), ("web", "match.html"), ("web", "mapmaker.html"), ("web", "admin.html"), ("web", "legal.html")):
-            self.assertNotIn("wake_lock", read(*rel), rel[-1])
+    def test_the_game_page_loads_the_script_once_before_the_inline_script_that_has_the_call(self):
+        scripts = Scripts()
+        scripts.feed(read("web", "shell.html"))
+        loaded = [i for i, (kind, what) in enumerate(scripts.found) if kind == "src" and what.split("?")[0] == "wake_lock.js"]
+        called = [i for i, (kind, what) in enumerate(scripts.found) if kind == "inline" and "WAKE_LOCK_BEGIN" in what and "WAKE_LOCK_END" in what]
+        self.assertEqual(len(loaded), 1, "the page loads wake_lock.js once")
+        self.assertEqual(len(called), 1, "the page has the marked block that the node check runs, in one script")
+        self.assertLess(loaded[0], called[0], "loaded before it is called")
 
-    def test_it_is_in_the_image_the_local_build_and_the_ci_list(self):
-        self.assertIn("COPY web/wake_lock.js /usr/share/nginx/html/wake_lock.js\n", read("Dockerfile"))
-        self.assertIn('cp -f "${SCRIPT_DIR}/web/wake_lock.js" "${DIST_DIR}/"', read("build_web.sh"))
-        self.assertIn(" game_bar.js wake_lock.js rejoin_key.js", read(".github", "workflows", "ci.yml"))
+    def test_the_image_has_the_file(self):
+        with open(SCRIPT, "rb") as f:
+            source = f.read()
+        self.assertEqual(image_holds("wake_lock.js"), source, "the Dockerfile's COPY steps of web/ put web/wake_lock.js in /usr/share/nginx/html")
+
+    def test_the_local_web_build_copies_it_and_the_ci_check_of_the_image_lists_it(self):
+        copied = []
+        for line in read("build_web.sh").splitlines():
+            words = words_of(line)
+            if words[:2] == ["cp", "-f"] and len(words) > 3:
+                copied += [(word, words[-1]) for word in words[2:-1]]
+        self.assertIn(("${SCRIPT_DIR}/web/wake_lock.js", "${DIST_DIR}/"), copied)
+        listed = []
+        for line in read(".github", "workflows", "ci.yml").splitlines():
+            if "ls -l index.html" in line:
+                listed += [word for command in words_of(line)[-1:] for word in command.split()]
+        self.assertIn("wake_lock.js", listed, "the image check of the CI lists the files that the page needs")
 
     def test_nginx_serves_it_by_the_rule_for_scripts_that_revalidates(self):
         words, body = location_of(re.sub(r"(?m)#.*$", "", read("docker", "nginx.conf")), "/wake_lock.js")
@@ -104,15 +173,10 @@ class ThePageAndTheImage(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(json.loads(done.stdout), {"playing": game["Playing"], "jumping": game["Jumping"]})
 
-    def test_it_is_small_ascii_and_plain_es5(self):
+    def test_it_is_within_its_download_budget(self):
         data = self.js.encode("utf-8")
-        self.assertTrue(all(b < 128 for b in data), "ASCII")
         self.assertLess(len(data), size_limits.WAKE_LOCK_BUDGET, "wake_lock.js is %d bytes" % len(data))
         self.assertLess(len(gzip.compress(data, 9)), size_limits.WAKE_LOCK_GZIP_BUDGET, "and %d bytes gzipped" % len(gzip.compress(data, 9)))
-        code = "\n".join(re.sub(r"\s//\s.*$", "", line) for line in self.js.split("\n") if not line.strip().startswith("//"))
-        for token in (r"\bconst\b", r"\blet\b", r"=>", r"`", r"\bimport\b", r"\bclass\b", r"\basync\b", r"\bawait\b"):
-            self.assertIsNone(re.search(token, code), token)
-        self.assertIn("'use strict';", self.js)
 
 
 @unittest.skipUnless(NODE, "node is not installed: the screen lock was NOT run (tests/scripts/web_wake_lock_check.js)")

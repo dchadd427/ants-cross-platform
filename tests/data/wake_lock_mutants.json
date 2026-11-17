@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the screen lock (web/wake_lock.js and the call in web/shell.html; docs/PLAY_IN_BROWSER.md 'The screen stays on') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_wake_lock_check.js (a fake wake lock, document, window and game, and the page's own call): a paused, ended, cut short, failed or unknown recording that holds the screen, a jump that lets it go, the match's answer read for a recording and the recording's for a match, a game that is not ready or answers -1 that holds it, a request made while the page is hidden or while another waits, a refusal that is asked again at once or never or that is not swallowed, a request or a release that throws, a lock that comes late and is kept, a browser without the API that gets a poll, a page that leaves and keeps the lock or the poll, a page from the cache that does not ask or one that was not kept that does, the browser's release not noticed, a game whose answer throws, and the page's call made wrongly; every one must be caught (tools/mutate.py tests/data/wake_lock_mutants.json --keep-going --jobs 1).",
+ "note": "Mutants of the screen lock (web/wake_lock.js and the call in web/shell.html; docs/PLAY_IN_BROWSER.md 'The screen stays on') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_wake_lock_check.js (a fake wake lock, document, window and game, and the page's own call): a paused, ended, cut short, failed or unknown recording that holds the screen, a jump that lets it go, the match's answer read for a recording and the recording's for a match, a game that is not ready or answers -1 that holds it, a request made while the page is hidden or while another waits, a refusal that is asked again at once or never or that is not swallowed, a request that is never answered and blocks the next, a late refusal or a late answer of a request that was given up on, a request or a release that throws, a lock that comes late and is kept or replaces the one that is held, a browser without the API that gets a poll, a page that leaves and keeps the lock or the poll, a page from the cache or one that was left and lives on that does not ask again, a tab that is shown and waits for a request made while it was hidden, the browser's release not noticed, a game whose answer throws, and the page's call made wrongly or not isolated; every one must be caught (tools/mutate.py tests/data/wake_lock_mutants.json --keep-going --jobs 1).",
  "baseline": {
   "test": "node tests/scripts/web_wake_lock_check.js web/wake_lock.js web/shell.html"
  },
@@ -112,22 +112,22 @@
   {
    "id": "a_visible_page_waits_for_the_poll",
    "file": "web/wake_lock.js",
-   "old": "function () { blockedUntil = 0; sync(); });",
-   "new": "function () { blockedUntil = 0; });",
+   "old": "            blockedUntil = 0;\n            sync();\n",
+   "new": "            blockedUntil = 0;\n",
    "test": "node tests/scripts/web_wake_lock_check.js web/wake_lock.js web/shell.html"
   },
   {
    "id": "a_visible_page_keeps_the_wait_of_a_refusal",
    "file": "web/wake_lock.js",
-   "old": "function () { blockedUntil = 0; sync(); });",
-   "new": "function () { sync(); });",
+   "old": "            blockedUntil = 0;\n            sync();\n",
+   "new": "            sync();\n",
    "test": "node tests/scripts/web_wake_lock_check.js web/wake_lock.js web/shell.html"
   },
   {
    "id": "a_refusal_is_not_swallowed",
    "file": "web/wake_lock.js",
-   "old": "            }, refused);",
-   "new": "            });",
+   "old": "}, function () { if (mine === asks) refused(); });",
+   "new": "});",
    "test": "node tests/scripts/web_wake_lock_check.js web/wake_lock.js web/shell.html"
   },
   {
@@ -154,8 +154,8 @@
   {
    "id": "a_lock_that_comes_late_is_kept",
    "file": "web/wake_lock.js",
-   "old": "if (!wanted()) { letGo(sentinel); return; }",
-   "new": "if (false) { letGo(sentinel); return; }",
+   "old": "if (held || !wanted()) { letGo(sentinel); return; }",
+   "new": "if (held) { letGo(sentinel); return; }",
    "test": "node tests/scripts/web_wake_lock_check.js web/wake_lock.js web/shell.html"
   },
   {
@@ -182,15 +182,8 @@
   {
    "id": "a_page_from_the_cache_does_not_ask",
    "file": "web/wake_lock.js",
-   "old": "if (ev && ev.persisted && away) {",
-   "new": "if (false) {",
-   "test": "node tests/scripts/web_wake_lock_check.js web/wake_lock.js web/shell.html"
-  },
-  {
-   "id": "a_page_that_was_not_kept_asks_again",
-   "file": "web/wake_lock.js",
-   "old": "if (ev && ev.persisted && away) {",
-   "new": "if (ev && away) {",
+   "old": "win.addEventListener('pageshow', function () { back(); sync(); });",
+   "new": "win.addEventListener('pageshow', function () {});",
    "test": "node tests/scripts/web_wake_lock_check.js web/wake_lock.js web/shell.html"
   },
   {
@@ -212,13 +205,6 @@
    "file": "web/wake_lock.js",
    "old": "try { return !away && !!wantedOf(page); } catch (e) { return false; }",
    "new": "return !away && !!wantedOf(page);",
-   "test": "node tests/scripts/web_wake_lock_check.js web/wake_lock.js web/shell.html"
-  },
-  {
-   "id": "the_page_calls_it_with_no_script",
-   "file": "web/shell.html",
-   "old": "if (window.AntsWakeLock) window.AntsWakeLock.forPage(",
-   "new": "window.AntsWakeLock.forPage(",
    "test": "node tests/scripts/web_wake_lock_check.js web/wake_lock.js web/shell.html"
   },
   {
@@ -247,6 +233,55 @@
    "file": "web/shell.html",
    "old": "Module._ants_match_running ? Module._ants_match_running() : -1;",
    "new": "Module._ants_match_running ? Module._ants_match_running() : 1;",
+   "test": "node tests/scripts/web_wake_lock_check.js web/wake_lock.js web/shell.html"
+  },
+  {
+   "id": "a_page_that_is_left_and_lives_on_never_asks",
+   "file": "web/wake_lock.js",
+   "old": "if (visible()) { back(); if (asking) abandon(); }",
+   "new": "if (visible()) { if (asking) abandon(); }",
+   "test": "node tests/scripts/web_wake_lock_check.js web/wake_lock.js web/shell.html"
+  },
+  {
+   "id": "a_tab_that_is_shown_waits_for_a_request_made_while_it_was_hidden",
+   "file": "web/wake_lock.js",
+   "old": "if (visible()) { back(); if (asking) abandon(); }",
+   "new": "if (visible()) { back(); }",
+   "test": "node tests/scripts/web_wake_lock_check.js web/wake_lock.js web/shell.html"
+  },
+  {
+   "id": "a_request_that_is_never_answered_blocks_the_next",
+   "file": "web/wake_lock.js",
+   "old": "if (asking && clock() - askedAt >= ASK_MS) { abandon(); refused(); }",
+   "new": "if (false) { abandon(); refused(); }",
+   "test": "node tests/scripts/web_wake_lock_check.js web/wake_lock.js web/shell.html"
+  },
+  {
+   "id": "a_late_refusal_of_a_request_given_up_on_adds_a_wait",
+   "file": "web/wake_lock.js",
+   "old": "}, function () { if (mine === asks) refused(); });",
+   "new": "}, function () { refused(); });",
+   "test": "node tests/scripts/web_wake_lock_check.js web/wake_lock.js web/shell.html"
+  },
+  {
+   "id": "a_second_lock_replaces_the_first",
+   "file": "web/wake_lock.js",
+   "old": "if (held || !wanted()) { letGo(sentinel); return; }",
+   "new": "if (!wanted()) { letGo(sentinel); return; }",
+   "test": "node tests/scripts/web_wake_lock_check.js web/wake_lock.js web/shell.html"
+  },
+  {
+   "id": "a_late_answer_ends_the_waiting_for_the_request_that_replaced_it",
+   "file": "web/wake_lock.js",
+   "old": "if (mine === asks) asking = false;",
+   "new": "asking = false;",
+   "test": "node tests/scripts/web_wake_lock_check.js web/wake_lock.js web/shell.html"
+  },
+  {
+   "id": "a_throw_in_the_call_stops_the_pages_script",
+   "file": "web/shell.html",
+   "old": "} catch (err) { /* the page goes on without it: what follows must not wait for a screen lock */ }",
+   "new": "} catch (err) { throw err; }",
    "test": "node tests/scripts/web_wake_lock_check.js web/wake_lock.js web/shell.html"
   }
  ]

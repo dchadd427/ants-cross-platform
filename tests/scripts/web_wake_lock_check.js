@@ -9,10 +9,12 @@
 //   * a request that is refused or that throws (or that answers with no promise): dropped quietly, not asked again for 15 s, asked again when the page becomes visible; a release that is refused or throws;
 //     no rejection is left unhandled; no error reaches the page's timer;
 //   * a lock that arrives when it is not wanted any more (the match ended, the page went) is let go at once;
-//   * pagehide lets the lock go and stops the poll; a page that comes back from the browser's cache (pageshow, persisted) asks again, one that does not does not;
+//   * pagehide lets the lock go and stops the poll; a page that comes back (pageshow from the browser's cache) or that was left and lives on (the tab becomes visible) starts again;
+//   * a request that is never answered (10 s) counts as refused and does not block the next; what a request that was given up on, or made while the tab was hidden, says later changes nothing
+//     (a refusal adds no wait, a lock is kept only when none is held); a tab that is shown again asks at once;
 //   * a game that does not answer (the call throws) wants nothing;
 //   * the page's own call (the block of web/shell.html between WAKE_LOCK_BEGIN and WAKE_LOCK_END, run on a page of fakes): the right answers of the game for a match and for a recording, a game with no
-//     exports, no Module at all, a page without the script and a browser without the API.
+//     exports, no Module at all, a page without the script, a browser without the API, and a call that throws (the page's script goes on).
 // tests/scripts/test_web_wake_lock.py runs this with node (the quick tier). usage: node web_wake_lock_check.js web/wake_lock.js [web/shell.html]     (exit 0: every check holds; every failure is printed)
 'use strict';
 
@@ -65,7 +67,7 @@ function lock() {
         if (api.mode === 'plain') return undefined;
         const s = sentinel(api);
         api.sentinels.push(s);
-        if (api.mode === 'pending') return new Promise((resolve) => { api.pending.push(() => resolve(s)); });
+        if (api.mode === 'pending') return new Promise((resolve, reject) => { api.pending.push({ sentinel: s, grant: () => resolve(s), refuse: () => reject(new Error('NotAllowedError')) }); });
         return Promise.resolve(s);
     };
     return api;
@@ -153,7 +155,7 @@ async function look(r) { r.poll(); await flush(); }               // one look of
             r.api.mode = 'pending';
             r.poll(); r.poll(); r.poll(); await flush();
             expect('a request that is not answered yet is not made again', [r.api.calls.length, r.lock.state().asking, r.lock.state().held], [1, true, false]);
-            r.api.pending[0](); await flush();
+            r.api.pending[0].grant(); await flush();
             expect('and the lock is held when it comes', [r.lock.state().asking, r.lock.state().held, r.api.calls.length], [false, true, 1]);
         }
 
@@ -299,14 +301,14 @@ async function look(r) { r.poll(); await flush(); }               // one look of
             r.api.mode = 'pending';
             r.poll(); await flush();
             r.game.match = 0;
-            r.api.pending[0](); await flush();
+            r.api.pending[0].grant(); await flush();
             expect('a lock that arrives after the match: let go at once, not held', [r.api.sentinels[0].released, r.api.sentinels[0].releaseCalls, r.lock.state().held], [true, 1, false]);
             const p = rig();
             p.game.match = 1;
             p.api.mode = 'pending';
             p.poll(); await flush();
             p.fireWin('pagehide');
-            p.api.pending[0](); await flush();
+            p.api.pending[0].grant(); await flush();
             expect('and one that arrives after the page was left', [p.api.sentinels[0].released, p.lock.state().held], [true, false]);
         }
 
@@ -320,15 +322,127 @@ async function look(r) { r.poll(); await flush(); }               // one look of
             expect('pagehide: the lock is let go and the poll stops', [held.released, r.lock.state().held, r.timers[0].on, r.lock.state().polling, r.lock.state().away], [true, false, false, false, true]);
             r.lock.sync(); await flush();
             expect('a page that has gone asks for nothing', r.api.calls.length, 1);
-            r.fireWin('pageshow', { persisted: false });
-            await flush();
-            expect('a page that is shown again but was not kept (not persisted) does nothing', [r.api.calls.length, r.lock.state().away], [1, true]);
             r.fireWin('pageshow', { persisted: true });
             await flush();
             expect('a page that comes back from the browser\'s cache asks again, and polls again', [r.api.calls.length, r.lock.state().held, r.lock.state().polling, r.lock.state().away, r.timers.length], [2, true, true, false, 2]);
             const fresh = rig();
             fresh.fireWin('pageshow', { persisted: true });
-            expect('a first show (persisted, never left) makes no second poll', fresh.timers.length, 1);
+            expect('a first show (never left) makes no second poll', fresh.timers.length, 1);
+            const alive = rig();
+            alive.game.match = 1;
+            await look(alive);
+            alive.fireWin('pagehide', { persisted: false });
+            expect('a page that was left', [alive.lock.state().away, alive.lock.state().polling, alive.lock.state().held], [true, false, false]);
+            alive.fireDoc('visibilitychange');
+            await flush();
+            expect('and lives on (the tab is visible again, no pageshow came) starts again: it polls and asks', [alive.lock.state().away, alive.lock.state().polling, alive.timers.length, alive.api.calls.length, alive.lock.state().held], [false, true, 2, 2, true]);
+            alive.game.match = 0;
+            await look(alive);
+            alive.game.match = 1;
+            await look(alive);
+            expect('and goes on as a page does', [alive.api.calls.length, alive.lock.state().held], [3, true]);
+            const hiddenOnly = rig();
+            hiddenOnly.game.match = 1;
+            await look(hiddenOnly);
+            hiddenOnly.fireWin('pagehide');
+            hiddenOnly.doc.visibilityState = 'hidden';
+            hiddenOnly.fireDoc('visibilitychange');
+            await flush();
+            expect('a page that is left and hidden stays quiet', [hiddenOnly.lock.state().away, hiddenOnly.lock.state().polling, hiddenOnly.api.calls.length], [true, false, 1]);
+        }
+
+        // ---- a request that is never answered, and what a request that was given up on says later
+        {
+            const r = rig();
+            r.game.match = 1;
+            r.api.mode = 'pending';
+            await look(r);
+            r.advance(9999);
+            await look(r);
+            expect('a request that is not answered for 9.999 s is still waited for', [r.api.calls.length, r.lock.state().asking], [1, true]);
+            r.advance(1);
+            await look(r);
+            expect('at 10 s it counts as refused: not waited for, and the wait of a refusal starts', [r.api.calls.length, r.lock.state().asking, r.lock.state().blockedUntil > 0], [1, false, true]);
+            r.api.mode = 'grant';
+            await look(r);
+            expect('no new request during that wait', r.api.calls.length, 1);
+            r.advance(15000);
+            await look(r);
+            expect('after it the lock is asked for again and held (the first request did not block it)', [r.api.calls.length, r.lock.state().held], [2, true]);
+            r.api.pending[0].grant(); await flush();
+            expect('the first request answers at last: its lock is let go (one is held)', [r.api.pending[0].sentinel.released, r.api.sentinels[1].released, r.lock.state().held], [true, false, true]);
+            const q = rig();
+            q.game.match = 1;
+            q.api.mode = 'pending';
+            await look(q);
+            q.advance(10000);
+            await look(q);
+            q.api.pending[0].grant(); await flush();
+            expect('a request that was given up on and answers while nothing else is held is kept', [q.lock.state().held, q.api.pending[0].sentinel.released], [true, false]);
+            const refusedLate = rig();
+            refusedLate.game.match = 1;
+            refusedLate.api.mode = 'pending';
+            await look(refusedLate);
+            refusedLate.advance(10000);
+            await look(refusedLate);
+            const wait = refusedLate.lock.state().blockedUntil;
+            refusedLate.advance(15000);
+            refusedLate.api.pending[0].refuse(); await flush();
+            expect('a request that was given up on and is refused later adds no wait', refusedLate.lock.state().blockedUntil, wait);
+        }
+        {
+            const r = rig();
+            r.game.match = 1;
+            r.api.mode = 'pending';
+            await look(r);
+            r.doc.visibilityState = 'hidden';
+            r.fireDoc('visibilitychange');
+            r.doc.visibilityState = 'visible';
+            r.fireDoc('visibilitychange');
+            await flush();
+            expect('a tab that is hidden and shown while a request is waiting asks again at once', [r.api.calls.length, r.lock.state().asking], [2, true]);
+            r.api.pending[0].refuse(); await flush();
+            expect('the late refusal of the first request adds no wait and does not end the second', [r.lock.state().blockedUntil, r.lock.state().asking], [0, true]);
+            r.api.pending[1].grant(); await flush();
+            expect('the second is held', [r.lock.state().held, r.api.calls.length], [true, 2]);
+            const early = rig();
+            early.game.match = 1;
+            early.api.mode = 'pending';
+            await look(early);
+            early.doc.visibilityState = 'hidden';
+            early.fireDoc('visibilitychange');
+            early.api.pending[0].refuse(); await flush();
+            expect('a request that is refused because the tab was hidden waits...', [early.lock.state().asking, early.lock.state().blockedUntil > 0], [false, true]);
+            early.doc.visibilityState = 'visible';
+            early.api.mode = 'grant';
+            early.fireDoc('visibilitychange');
+            await flush();
+            expect('... until the tab is shown, which asks at once', [early.api.calls.length, early.lock.state().held], [2, true]);
+            const stale = rig();
+            stale.game.match = 1;
+            stale.api.mode = 'pending';
+            await look(stale);
+            stale.doc.visibilityState = 'hidden';
+            stale.fireDoc('visibilitychange');
+            stale.doc.visibilityState = 'visible';
+            stale.fireDoc('visibilitychange');
+            await flush();
+            stale.api.pending[1].grant(); await flush();
+            stale.api.pending[0].grant(); await flush();
+            expect('the first request answers after the second was: its lock is let go, one is held', [stale.api.pending[0].sentinel.released, stale.api.pending[1].sentinel.released, stale.lock.state().held], [true, false, true]);
+            const first = rig();
+            first.game.match = 1;
+            first.api.mode = 'pending';
+            await look(first);
+            first.doc.visibilityState = 'hidden';
+            first.fireDoc('visibilitychange');
+            first.doc.visibilityState = 'visible';
+            first.fireDoc('visibilitychange');
+            await flush();
+            first.api.pending[0].grant(); await flush();
+            expect('the first request answers while the second still waits: its lock is kept, and the second is still waited for', [first.lock.state().held, first.lock.state().asking, first.api.calls.length], [true, true, 2]);
+            first.api.pending[1].grant(); await flush();
+            expect('and the second, when it answers, is let go: one lock is held', [first.api.pending[0].sentinel.released, first.api.pending[1].sentinel.released, first.lock.state().asking], [false, true, false]);
         }
 
         // ---- a game that does not answer
@@ -353,7 +467,7 @@ async function look(r) { r.poll(); await flush(); }               // one look of
             const block = text.slice(begin, end);
             const pageOf = (opts) => {
                 const rr = rig({ replay: opts.replay, bare: true });
-                const winOf = { AntsWakeLock: opts.noScript ? undefined : W, addEventListener: rr.win.addEventListener, setInterval: (fn, ms) => { rr.timers.push({ fn, ms, on: true }); return rr.timers.length; }, clearInterval: (id) => { rr.timers[id - 1].on = false; } };
+                const winOf = { AntsWakeLock: opts.noScript ? undefined : opts.lock || W, addEventListener: rr.win.addEventListener, setInterval: (fn, ms) => { rr.timers.push({ fn, ms, on: true }); return rr.timers.length; }, clearInterval: (id) => { rr.timers[id - 1].on = false; } };
                 const module = opts.noExports ? {} : {
                     _ants_match_running: () => rr.game.match,
                     _ants_replay_get: (what) => (what === 0 ? rr.game.state : 2),         // (anything but the state is 2, a number that would hold the lock)
@@ -396,6 +510,9 @@ async function look(r) { r.poll(); await flush(); }               // one look of
             let missing = null, s = null;
             try { s = pageOf({ replay: false, noScript: true }); } catch (err) { missing = String(err); }
             expect('a page that did not get the script makes nothing and throws nothing', [missing, s && s.timers.length, s && s.api.calls.length], [null, 0, 0]);
+            let broke = null;
+            try { pageOf({ replay: false, lock: { forPage() { throw new Error('the lock broke'); } } }); } catch (err) { broke = String(err); }
+            expect('a call that throws does not stop the page\'s script (what follows it still runs)', broke, null);
             const a = pageOf({ replay: false, noApi: true });
             expect('a browser without the API gets no timer from the page\'s call', a.timers.length, 0);
         }
