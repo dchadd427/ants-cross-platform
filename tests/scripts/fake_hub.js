@@ -10,7 +10,7 @@
 // person of the same or a higher rank, or oneself, gets `power`; `o.roleDown` makes every command `role`; a done one is answered `ok`, a kick and a ban also make the hub's own line `<name> was kicked.` with
 // `sys: true`, a line of a moderator or an administrator carries `role`, and /bans answers the private `bans` frame from `o.bans`); `hub.bye(why)` sends the `bye` frame and closes the sockets (a kick also ends the login: the next welcome names nobody).
 // A person may be named by `#<number>` (the author of that line: `hub.lines` keeps who wrote each line, from the history and from `say`) or `row:<number>` (the person of that row of the players list: `o.rows`, { number: name }),
-// `/ban who purge` also takes the person's lines of the last hour (the hub's own `del` frames are sent for the lines of `hub.lines` of that person), `/mutes` is answered the private `mutes` frame from `o.mutes`, and a done `/del`
+// `/ban who purge` also takes the person's lines of the last hour (the hub's own `del` frames are sent for the lines of `hub.lines` of that person), `/mutes` is answered the private `mutes` frame from `o.mutes` (after `o.mutesDelay` ms, if it is set), and a done `/del`
 // sends the `del` frame to every socket before the `ok`, as the hub does. A line that is not there is `bad`, a line of the hub's own is `power`, a row that is not there is `who`.
 //   const hub = await startHub({ you: { name: 'maple.leaf', mod: false }, login: true, history: [line(1, 'pebble', 'hello')] });  hub.url; hub.say('pebble', 'hi'); hub.drop(); await hub.close();
 'use strict';
@@ -128,7 +128,7 @@ function startHub(options) {
         if (RANK[mine] < NEEDS[word]) { err('power'); return; }
         if (o.roleDown) { err('role'); return; }
         if (word === 'bans') { hub.send(peer, { t: 'bans', rows: o.bans || [] }); return; }
-        if (word === 'mutes') { hub.send(peer, { t: 'mutes', rows: o.mutes || [] }); return; }
+        if (word === 'mutes') { const answer = () => hub.send(peer, { t: 'mutes', rows: o.mutes || [] }); if (o.mutesDelay) setTimeout(answer, o.mutesDelay); else answer(); return; }       // (o.mutesDelay: the list comes late)
         if (word === 'del') { if (!/^\d+$/.test(parts[1])) { err('bad'); return; } hub.broadcast({ t: 'del', id: Number(parts[1]) }); hub.send(peer, { t: 'ok', c: 'del' }); return; }
         if (word === 'mute' && !/^\d+$/.test(parts[2])) { err('bad'); return; }
         let name = parts[1];

@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the numbers in the game's font for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the output-resolution drawing in src/ants_app/renderer_numbers.cpp (SDL's logical size and the clip put back, the size of what shows against the old ink, the outline, the score number's width, the shrink about the number's middle, the bounds of the cache) and the shrink curve in include/ants_app/health_changes.hpp, against tests/test_app/test_font_numbers.cpp. Run from the checkout: tools/mutate.py tests/data/font_numbers_mutants.json --keep-going --jobs 1; every mutant must be caught. The numbers' face (Libre Franklin Black, the fallback to the face of the labels), the thick outline that grows outward, and the team scores in the HUD boxes and on the results page are pinned too.",
+  "note": "Mutants of the numbers in the game's font for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the output-resolution drawing in src/ants_app/renderer_numbers.cpp (SDL's logical size and the clip put back, the size of what shows against the old ink, the outline, the score number's width, the shrink about the number's middle, the bounds of the cache) and the shrink curve in include/ants_app/health_changes.hpp, against tests/test_app/test_font_numbers.cpp. Run from the checkout: tools/mutate.py tests/data/font_numbers_mutants.json --keep-going --jobs 1; every mutant must be caught. The numbers' face (Libre Franklin Black, the fallback to the face of the labels), the thick outline that grows outward, the team scores in the HUD boxes (plain glyphs, no outline) and the match clock (a centred cell for every character, plain, inside its box) and the results page's numbers (outlined) are pinned too.",
   "mutants": [
     {
       "id": "native_logical_size_not_restored",
@@ -64,8 +64,8 @@
     {
       "id": "no_outline",
       "file": "src/ants_app/renderer_numbers.cpp",
-      "old": "        TTF_SetFontOutline(edge, o);",
-      "new": "        TTF_SetFontOutline(edge, 0);",
+      "old": "        if (edge != nullptr) TTF_SetFontOutline(edge, o);",
+      "new": "        if (edge != nullptr) TTF_SetFontOutline(edge, 0);",
       "build": [
         "test_font_numbers"
       ],
@@ -214,8 +214,8 @@
     {
       "id": "hud_score_box_too_wide",
       "file": "src/ants_app/hud.cpp",
-      "old": "slot.box_left + 52, slot.top + 2, 51, 10, true,",
-      "new": "slot.box_left + 52, slot.top + 2, 510, 10, true,",
+      "old": "slot.box_left + 52, slot.top + 2, 51, 10, NumberAlign::Right,",
+      "new": "slot.box_left + 52, slot.top + 2, 510, 10, NumberAlign::Right,",
       "build": [
         "test_font_numbers"
       ],
@@ -224,8 +224,8 @@
     {
       "id": "results_counters_are_the_labels",
       "file": "src/ants_app/scorecard.cpp",
-      "old": "    if (!renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, false, kLabelColor)) {",
-      "new": "    if (false && !renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, false, kLabelColor)) {",
+      "old": "    if (!renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, NumberAlign::Left, kLabelColor, true)) {",
+      "new": "    if (false && !renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, NumberAlign::Left, kLabelColor, true)) {",
       "build": [
         "test_font_numbers"
       ],
@@ -284,8 +284,8 @@
     {
       "id": "results_counter_ignores_its_column",
       "file": "src/ants_app/scorecard.cpp",
-      "old": "    if (!renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, false, kLabelColor)) {",
-      "new": "    if (!renderer.draw_number_text(text, x + 1, y + 3, 500, 12, false, kLabelColor)) {",
+      "old": "    if (!renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, NumberAlign::Left, kLabelColor, true)) {",
+      "new": "    if (!renderer.draw_number_text(text, x + 1, y + 3, 500, 12, NumberAlign::Left, kLabelColor, true)) {",
       "build": [
         "test_font_numbers"
       ],
@@ -294,8 +294,138 @@
     {
       "id": "results_narrow_columns_are_labels",
       "file": "src/ants_app/scorecard.cpp",
-      "old": "    if (!renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, false, kLabelColor)) {",
-      "new": "    if (box_w > 30 ? !renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, false, kLabelColor) : true) {",
+      "old": "    if (!renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, NumberAlign::Left, kLabelColor, true)) {",
+      "new": "    if (box_w > 30 ? !renderer.draw_number_text(text, x + 1, y + 3, box_w - 1, 12, NumberAlign::Left, kLabelColor, true) : true) {",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "hud_score_has_the_outline",
+      "file": "src/ants_app/hud.cpp",
+      "old": "slot.top + 2, 51, 10, NumberAlign::Right, {255, 255, 255, 255}, false)",
+      "new": "slot.top + 2, 51, 10, NumberAlign::Right, {255, 255, 255, 255}, true)",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "hud_clock_is_the_sprites",
+      "file": "src/ants_app/hud.cpp",
+      "old": "    bool numbers = true;\n",
+      "new": "    bool numbers = false;\n",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "hud_clock_without_the_face_draws_nothing",
+      "file": "src/ants_app/hud.cpp",
+      "old": "    if (!numbers) {\n        auto digit",
+      "new": "    if (false) {\n        auto digit",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "hud_clock_has_the_outline",
+      "file": "src/ants_app/hud.cpp",
+      "old": "cells[i].w, 10, NumberAlign::Centre, {255, 255, 255, 255}, false);",
+      "new": "cells[i].w, 10, NumberAlign::Centre, {255, 255, 255, 255}, true);",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "hud_clock_cell_follows_the_digit",
+      "file": "src/ants_app/hud.cpp",
+      "old": "cells[i].x + cells[i].w / 2, 6,",
+      "new": "cells[i].x + cells[i].w / 2 + (cells[i].ch == '1' ? 3 : 0), 6,",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "hud_clock_not_centred_in_its_cell",
+      "file": "src/ants_app/hud.cpp",
+      "old": "cells[i].x + cells[i].w / 2, 6, cells[i].w, 10, NumberAlign::Centre,",
+      "new": "cells[i].x, 6, cells[i].w, 10, NumberAlign::Left,",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "hud_clock_loses_the_tens_of_minutes",
+      "file": "src/ants_app/hud.cpp",
+      "old": "for (size_t i = mm >= 10 ? 0 : 1; i < 5 && numbers; ++i) {",
+      "new": "for (size_t i = 1; i < 5 && numbers; ++i) {",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "hud_clock_colon_cell_too_wide",
+      "file": "src/ants_app/hud.cpp",
+      "old": "{':', 90, 7}",
+      "new": "{':', 90, 70}",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "plain_number_keeps_the_outline",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "outlined ? health::number_outline_px(f.scale) : 0);",
+      "new": "outlined ? health::number_outline_px(f.scale) : health::number_outline_px(f.scale));",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "plain_glyph_edges_darker_than_the_box",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "row[x] = (row[x] & 0xFF000000u) | 0x00FFFFFFu;",
+      "new": "row[x] = row[x];",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "plain_glyph_is_the_old_ink_less_the_outline",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "    const int32_t base = plain ? 0 : std::max(1, o / health::kNumberOutlineFactor);",
+      "new": "    const int32_t base = std::max(1, o / health::kNumberOutlineFactor);",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "centred_number_starts_at_its_x",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "(align == NumberAlign::Centre ? shown_w / 2 : 0)",
+      "new": "(align == NumberAlign::Centre ? 0 : 0)",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "results_numbers_lose_the_outline",
+      "file": "src/ants_app/scorecard.cpp",
+      "old": "box_w - 1, 12, NumberAlign::Left, kLabelColor, true)) {\n        renderer.draw_text_squeezed",
+      "new": "box_w - 1, 12, NumberAlign::Left, kLabelColor, false)) {\n        renderer.draw_text_squeezed",
       "build": [
         "test_font_numbers"
       ],

@@ -466,6 +466,9 @@ int main(int, char**) {
     scorecases::test_hud(arc);
     scorecases::test_results(arc);
     scorecases::test_fit(arc);
+    scorecases::test_clock(arc);
+    scorecases::test_hud_pixels(arc);
+    scorecases::test_clock_pixels(arc);
     std::printf("\nnumbers in the game's font: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

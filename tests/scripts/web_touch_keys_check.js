@@ -1,6 +1,6 @@
 // Runs the page's OWN code for the hotkey buttons (web/touch_keys.js, AntsTouchKeys.forPage, which web/shell.html calls), without a browser, with fakes for the page and a model of the game's
 // answers (Module._ants_match_running, _ants_menu_get 100 / 101, _ants_probe 5 / 50 / 60), and checks:
-//   * the buttons: All ants, Stop, Home, Next, None, More in that order, real buttons with the page's look and a name for a screen reader; More opens a list (Previous ant, Health marks, Quick help,
+//   * the buttons: All ants, Stop, Home, Next, None, Shift, More in that order, real buttons with the page's look and a name for a screen reader; More opens a list (Previous ant, Health marks, Quick help,
 //     Quick chat 1 - 4) that closes after a choice, on a tap elsewhere and when the buttons hide;
 //   * a press is exactly the key events of a keyboard on the game's canvas, in a keyboard's order (a chord: Control down, the letter down and up, Control up; a single key: down, up), never a repeat,
 //     and nothing else; one click is one key (nothing listens to a finger that rests);
@@ -11,7 +11,11 @@
 //   * where they stand: classes on the stage (upright or sideways, in the page or fullscreen, in the page's free margin or one column of five inside the stage, a narrow stage), the room kept for the
 //     whole match (only the buttons hide for a dialog, the settings panel, the chat field: the classes and sizes stay), and the page's layout is asked for only when it changes;
 //   * a button never sends a key that is physically down (Control held: the letter alone; the key itself held: nothing), and the tap that closes the list is the list's alone;
-//   * the mouse events that follow a touch stop at the buttons, and the touch events are not listened to.
+//   * the mouse events that follow a touch stop at the buttons, and the touch events are not listened to (the window's capture listeners hear the fingers of the picture, for Shift);
+//   * Shift: a tap lights it, a second tap puts it out, a press of 450 ms locks it, with no key of its own; with a latch or a lock a finger on the picture puts a keyboard's Shift down before the game sees it and up
+//     120 ms after the last finger left; a tap and a drag of one finger use a latch up (a hold, a lingering finger and two fingers do not: the game's own tap, hold and slop), a lock stays; a finger within the
+//     120 ms keeps the key down; a used latch lets go before the next finger; Shift is let go at once by a blur, a hidden page, a touchcancel, the buttons hiding and the setting off; a keyboard's own Shift is
+//     never pressed again; a chord sent while Shift is down says so (shiftKey);
 // tests/scripts/test_web_touch_keys.py runs this with node (the quick tier). usage: node web_touch_keys_check.js web/touch_keys.js     (exit 0: every check holds; every failure is printed)
 'use strict';
 
@@ -67,11 +71,12 @@ function page(opts) {
         constructor(type, init) { this.type = type; Object.assign(this, init); if (opts.noLegacy) { delete this.keyCode; delete this.which; } }
     }
     const insets = { left: 0, top: 0, bottom: 0 };
-    const win = { innerWidth: 390, innerHeight: 844, pageYOffset: 0, KeyboardEvent: KE, listeners: [], addEventListener(type, fn, cap) { win.listeners.push({ type, fn, cap: !!cap }); }, getComputedStyle: () => ({ paddingLeft: insets.left + 'px', paddingBottom: insets.bottom + 'px' }) };
+    const win = { innerWidth: 390, innerHeight: 844, pageYOffset: 0, KeyboardEvent: KE, listeners: [], addEventListener(type, fn, cap) { const o = cap && typeof cap === 'object' ? cap : { capture: !!cap }; win.listeners.push({ type, fn, cap: !!o.capture, passive: !!o.passive }); }, getComputedStyle: () => ({ paddingLeft: insets.left + 'px', paddingBottom: insets.bottom + 'px' }) };
     barHeightFn = () => (stage.classList.contains('tk-side') && stage.classList.contains('tk-full') ? stage.clientHeight - insets.top - insets.bottom : 48);
     const state = { setting: opts.setting === undefined ? null : opts.setting, writes: [], touch: opts.touch !== false, ready: opts.ready !== false, watching: !!opts.watching, fullscreen: false };
     const store = opts.noStore ? () => { throw new Error('blocked'); } : () => ({ getItem: () => state.setting, setItem: (k, v) => { state.writes.push([k, v]); state.setting = v; } });
-    const p = { g, stage, canvas, doc, win, state, calls, byId, body, insets };
+    const clock = { t: 1000, timers: [], next: 1 };
+    const p = { g, stage, canvas, doc, win, state, calls, byId, body, insets, clock };
     p.start = () => {
         p.keys = T.forPage({
             doc, win, stage, canvas, store,
@@ -80,6 +85,7 @@ function page(opts) {
             menu: (n) => (n === 100 ? g.where : n === 101 ? g.needs : -1),
             isFullscreen: () => state.fullscreen, relayout: () => { calls.relayout++; },
             every: (fn, ms) => { calls.intervals.push({ fn, ms }); return calls.intervals.length; },
+            now: () => clock.t, after: (fn, ms) => { const h = clock.next++; clock.timers.push({ h, at: clock.t + ms, fn }); return h; }, cancel: (h) => { clock.timers = clock.timers.filter((x) => x.h !== h); },
         });
         p.bar = p.keys.bar;
         p.btn = (id) => p.bar.children.concat(p.bar.children[p.bar.children.length - 1].children).filter((c) => c.attrs['data-key'] === id)[0];
@@ -99,6 +105,39 @@ function page(opts) {
         return e;
     };
     p.blurWindow = () => win.listeners.forEach((l) => { if (l.type === 'blur') l.fn({ type: 'blur' }); });
+    p.pageHide = () => win.listeners.forEach((l) => { if (l.type === 'pagehide') l.fn({ type: 'pagehide' }); });
+    p.visibility = (hidden) => { doc.hidden = hidden; doc.listeners.forEach((l) => { if (l.type === 'visibilitychange') l.fn({ type: 'visibilitychange' }); }); };
+    // time passes: the timers that fall due run, in order, at their own moments
+    p.advance = (ms) => {
+        const end = clock.t + ms;
+        for (;;) {
+            const due = clock.timers.filter((x) => x.at <= end).sort((a, b) => a.at - b.at)[0];
+            if (!due) break;
+            clock.timers = clock.timers.filter((x) => x !== due);
+            clock.t = due.at;
+            due.fn();
+        }
+        clock.t = end;
+    };
+    // what SDL's key state says about Shift now (a model: the state changes when the key event arrives; the game reads it when it handles the finger's lift, a frame after the lift)
+    p.sdlShift = () => { const k = canvas.dispatched.filter((e) => e.code === 'ShiftLeft'); return k.length > 0 && k[k.length - 1].type === 'keydown'; };
+    // the fingers: the browser's list of touches, the window's capture listeners first (the page), then the game's own handler on the canvas (SDL), which notes what its key state says
+    p.live = [];
+    p.seen = [];
+    p.touchEvent = (type, changed) => {
+        const e = { type, changedTouches: changed, touches: p.live.slice(), isTrusted: true };
+        win.listeners.forEach((l) => { if (l.type === type && l.cap) l.fn(e); });
+        if (type === 'touchstart' || type === 'touchend') p.seen.push({ type, shift: p.sdlShift() });
+        return e;
+    };
+    p.down = (id, x, y, target) => { const t = { identifier: id, target: target || canvas, clientX: x, clientY: y }; p.live.push(t); return p.touchEvent('touchstart', [t]); };
+    p.move = (id, x, y) => { const t = p.live.filter((f) => f.identifier === id)[0]; t.clientX = x; t.clientY = y; return p.touchEvent('touchmove', [t]); };
+    p.up = (id) => { const t = p.live.filter((f) => f.identifier === id)[0]; p.live = p.live.filter((f) => f !== t); return p.touchEvent('touchend', [t]); };
+    p.cancelTouch = (id) => { const t = p.live.filter((f) => f.identifier === id)[0]; p.live = p.live.filter((f) => f !== t); return p.touchEvent('touchcancel', [t]); };
+    // the Shift button's own pointer events and click
+    p.shiftBtn = () => p.btn('shift');
+    p.pointer = (type) => p.shiftBtn().fire(type);
+    p.shiftSent = () => canvas.dispatched.filter((e) => e.code === 'ShiftLeft').map((e) => [e.type, e.key, e.keyCode, e.which, e.location, e.shiftKey, e.ctrlKey, e.repeat]);
     p.sent = () => canvas.dispatched.map((e) => [e.type, e.key, e.code, e.keyCode, e.which, e.ctrlKey, e.repeat]);
     p.clear = () => { canvas.dispatched.length = 0; };
     return p;
@@ -120,12 +159,14 @@ try {
         const p = page().start();
         expect('one group in the stage, named for a screen reader (beside the layer under its list and a probe of the safe area)', [p.stage.children.map((c) => c.className.split(' ')[0]), p.bar.id, p.bar.getAttribute('role'), p.bar.getAttribute('aria-label')], [['tk-shield', 'tk-probe', 'tk'], 'touch-keys', 'group', 'Game keys']);
         const main = p.bar.children.filter((c) => c.tag === 'button');
-        expect('the buttons in order: All ants, Stop, Home, Next, None, More', main.map((b) => b.textContent), ['All ants', 'Stop', 'Home', 'Next', 'None', 'More']);
+        expect('the buttons in order: All ants, Stop, Home, Next, None, Shift, More', main.map((b) => b.textContent), ['All ants', 'Stop', 'Home', 'Next', 'None', 'Shift', 'More']);
         expect('the list: Previous ant, Health marks, Quick help, Quick chat 1 - 4', p.more.children.map((b) => b.textContent), ['Previous ant', 'Health marks', 'Quick help', 'Quick chat 1', 'Quick chat 2', 'Quick chat 3', 'Quick chat 4']);
         const all = main.concat(p.more.children);
         expect('every one is a real button of the page\'s look with a name for a screen reader', all.every((b) => b.tag === 'button' && b.type === 'button' && /(^| )btn( |$)/.test(b.className) && b.getAttribute('aria-label')), true);
         expect('the names say what the key does', ['all', 'none', 'stop'].map((k) => p.btn(k).getAttribute('aria-label')), ['Select all ants', 'Select none', 'Stop the selected ants']);
-        expect('a button listens to its click and nothing else (a finger that rests sends nothing: one click, one key)', all.filter((b) => b.id !== 'x').map((b) => b.listeners.map((l) => l.type).join()).filter((t) => t !== 'click').length, 0);
+        expect('a key button listens to its click and nothing else (a finger that rests sends nothing: one click, one key)', all.filter((b) => b.attrs['data-key'] !== 'shift').map((b) => b.listeners.map((l) => l.type).join()).filter((t) => t !== 'click').length, 0);
+        expect('Shift sends no key by itself: it listens to its click and to the press that locks it (the pointer), and to no touch', Array.from(new Set(all.filter((b) => b.attrs['data-key'] === 'shift')[0].listeners.map((l) => l.type))).sort(), ['click', 'pointercancel', 'pointerdown', 'pointerleave', 'pointerup']);
+        expect('the window hears the fingers of the picture in the capture phase and never stops them (a listener that cannot cancel)', p.win.listeners.filter((l) => /^touch/.test(l.type)).map((l) => l.type + (l.cap ? ':capture' : ':bubble') + (l.passive ? ':passive' : ':active')).sort(), ['touchcancel:capture:passive', 'touchend:capture:passive', 'touchmove:capture:passive', 'touchstart:capture:passive']);
         expect('the bar listens to the mouse events that follow a touch (to stop them), the contextmenu and Esc, and never to a touch event',
             Array.from(new Set(p.bar.listeners.map((l) => l.type))).sort(), ['contextmenu', 'dblclick', 'keydown', 'mousedown', 'mousemove', 'mouseout', 'mouseover', 'mouseup']);
         expect('the poll is 250 ms', p.calls.intervals.map((i) => i.ms), [250]);
@@ -322,23 +363,26 @@ try {
         expect('sideways in fullscreen on a short stage: two columns', [cls(p), p.stage.style.props['--tk-rail']], [['tk-full', 'tk-on', 'tk-side', 'tk-two'], '138px']);
         p.stage.clientHeight = 390; p.insets.top = 30; p.insets.bottom = 60;
         p.poll();
-        expect('...the rail stands inside the safe areas, so they count: six targets do not fit in the 300 px that are left of 390 (two columns)', cls(p).indexOf('tk-two') >= 0, true);
-        p.insets.top = 0; p.insets.bottom = 40;
+        expect('...the rail stands inside the safe areas, so they count: seven targets do not fit in the 300 px that are left of 390 (two columns)', cls(p).indexOf('tk-two') >= 0, true);
+        p.insets.top = 0; p.insets.bottom = 35;
         p.poll();
-        expect('...and 350 px left is enough for one column', cls(p).indexOf('tk-two') < 0, true);
+        expect('...355 px left is not enough for seven in one column (44 px each, six gaps of 6 and the rail\'s padding of 12: 356)', cls(p).indexOf('tk-two') >= 0, true);
+        p.insets.bottom = 34;
+        p.poll();
+        expect('...and 356 px left is', cls(p).indexOf('tk-two') < 0, true);
         p.insets.bottom = 0;
 
         // sideways in the page: the rail in the free margin left of the stage (outside it: the picture keeps its size), one column
         sideways(p, 111, 60);
         expect('sideways in the page with 111 px of free margin: the rail stands in the margin (tk-rim), the stage keeps its size', [cls(p), p.stage.style.props['--tk-rail-h']], [['tk-on', 'tk-page', 'tk-rim', 'tk-side'], '330px']);
-        expect('...six buttons in the bar, in order', p.bar.children.filter((c) => c.tag === 'button').map((c) => c.attrs['data-key'] || 'more'), ['all', 'stop', 'home', 'next', 'none', 'more']);
+        expect('...330 px is room for six (not seven): six buttons in the bar, in order, with Next first in the list under More', [p.bar.children.filter((c) => c.tag === 'button').map((c) => c.attrs['data-key'] || 'more'), p.more.children[0].attrs['data-key']], [['all', 'stop', 'home', 'none', 'shift', 'more'], 'next']);
         sideways(p, 76, 60);
         expect('76 px of margin is enough (a rail of 60 px, 6 px of air and the page\'s 10 px frame)', cls(p).indexOf('tk-rim') >= 0, true);
         sideways(p, 75, 60);
-        expect('75 px is not: the rail would lie under the frame (one column of five inside the stage)', cls(p).indexOf('tk-rim') < 0, true);
+        expect('75 px is not: the rail would lie under the frame (one column inside the stage)', cls(p).indexOf('tk-rim') < 0, true);
         sideways(p, 65, 60);
-        expect('65 px: one column of five inside the stage (no tk-rim, never tk-two)', [cls(p), p.stage.style.props['--tk-rail']], [['tk-on', 'tk-page', 'tk-side'], '72px']);
-        expect('...Next stands first in the list under More, and the bar has five buttons', [p.more.children[0].attrs['data-key'], p.bar.children.filter((c) => c.tag === 'button').map((c) => c.attrs['data-key'] || 'more')], ['next', ['all', 'stop', 'home', 'none', 'more']]);
+        expect('65 px: one column of six inside the stage (no tk-rim, never tk-two)', [cls(p), p.stage.style.props['--tk-rail']], [['tk-on', 'tk-page', 'tk-side'], '72px']);
+        expect('...Next stands first in the list under More, and the bar has six buttons (Shift is one of them)', [p.more.children[0].attrs['data-key'], p.bar.children.filter((c) => c.tag === 'button').map((c) => c.attrs['data-key'] || 'more')], ['next', ['all', 'stop', 'home', 'none', 'shift', 'more']]);
         p.insets.left = 10;
         sideways(p, 86, 60);
         expect('the phone\'s left safe area counts in the margin (86 - 10 is 76: enough)', cls(p).indexOf('tk-rim') >= 0, true);
@@ -346,57 +390,81 @@ try {
         expect('...85 - 10 is not', cls(p).indexOf('tk-rim') < 0, true);
         p.insets.left = 0;
         sideways(p, 111, 100);
-        expect('in the margin but the window leaves only 290 px below the stage\'s top (under 294: six targets do not fit): five, Next under More, still one column', [cls(p).indexOf('tk-rim') >= 0, cls(p).indexOf('tk-two') < 0, p.more.children[0].attrs['data-key'], p.stage.style.props['--tk-rail-h']], [true, true, 'next', '290px']);
+        expect('in the margin but the window leaves only 290 px below the stage\'s top (under 294: six targets do not fit): five, Home and Next under More (Home first), still one column', [cls(p).indexOf('tk-rim') >= 0, cls(p).indexOf('tk-two') < 0, p.more.children.slice(0, 2).map((c) => c.attrs['data-key']), p.stage.style.props['--tk-rail-h']], [true, true, ['home', 'next'], '290px']);
         p.moreBtn.click();
         p.btn('next').click();
         expect('Next from the list: its key (Ctrl+N) and the list closes', [p.sent(), p.keys.isOpen()], [chord('n', 'KeyN', 78), false]);
-        // the rail uses its real height (the rim rail has no padding): six targets are 294 px, five are 244
+        // the rail uses its real height (the rim rail has no padding): seven targets are 344 px, six are 294, five are 244
         const win = (w, h, left, top, stageH) => { sideways(p, left, top); p.win.innerWidth = w; p.win.innerHeight = h; p.stage.clientHeight = stageH; p.poll(); };
-        const bar6 = () => p.bar.children.filter((c) => c.tag === 'button').length;
+        const barCount = () => p.bar.children.filter((c) => c.tag === 'button').length;
+        const listHead = () => p.more.children.slice(0, 2).map((c) => c.attrs['data-key']);
         const prop = (n) => p.stage.style.props[n];
+        win(844, 400, 111, 56, 250);
+        expect('344 px of room: all seven in the margin, nothing under More but its own list', [cls(p).indexOf('tk-rim') >= 0, barCount(), p.more.children[0].attrs['data-key'], prop('--tk-rail-h'), prop('--tk-btn-h')], [true, 7, 'prev', '344px', '44px']);
+        win(844, 400, 111, 49, 250);
+        expect('351 px: seven', [barCount(), prop('--tk-rail-h')], [7, '351px']);
+        win(844, 400, 111, 57, 250);
+        expect('343 px: six, Next under More, the targets still 44 px', [barCount(), listHead()[0], prop('--tk-btn-h')], [6, 'next', '44px']);
         win(740, 360, 111, 66, 250);
-        expect('294 px of room (740 x 360): six in the margin, Next in the bar', [cls(p).indexOf('tk-rim') >= 0, bar6(), prop('--tk-rail-h'), prop('--tk-btn-h')], [true, 6, '294px', '44px']);
+        expect('294 px of room (740 x 360): six in the margin, Next under More', [cls(p).indexOf('tk-rim') >= 0, barCount(), listHead()[0], prop('--tk-rail-h'), prop('--tk-btn-h')], [true, 6, 'next', '294px', '44px']);
         win(667, 375, 111, 74, 250);
-        expect('301 px (667 x 375): six', [bar6(), prop('--tk-rail-h')], [6, '301px']);
+        expect('301 px (667 x 375): six', [barCount(), prop('--tk-rail-h')], [6, '301px']);
         win(740, 360, 111, 67, 250);
-        expect('293 px: five, Next under More', [bar6(), p.more.children[0].attrs['data-key'], prop('--tk-btn-h')], [5, 'next', '44px']);
+        expect('293 px: five, Home and Next under More', [barCount(), listHead(), prop('--tk-btn-h')], [5, ['home', 'next'], '44px']);
+        win(740, 360, 173, 67, 250);
+        expect('293 px with 173 px of margin: two columns instead (seven buttons)', [cls(p).indexOf('tk-two') >= 0, barCount()], [true, 7]);
         p.insets.bottom = 20;
         win(740, 360, 111, 66, 250);
-        expect('the phone\'s bottom edge is not room: 294 - 20 is five', [bar6(), prop('--tk-rail-h')], [5, '274px']);
+        expect('the phone\'s bottom edge is not room: 294 - 20 is five', [barCount(), prop('--tk-rail-h')], [5, '274px']);
         p.insets.bottom = 0;
         // a short window: More never stands below it
         win(800, 304, 173, 66, 194);
-        expect('800 x 304 with 173 px of margin: two columns in the margin (six buttons, All ants across both), as high as the window leaves', [cls(p).indexOf('tk-two') >= 0, cls(p).indexOf('tk-rim') >= 0, bar6(), prop('--tk-rail-h')], [true, true, 6, '238px']);
+        expect('800 x 304 with 173 px of margin: two columns in the margin (seven buttons, All ants across both), as high as the window leaves', [cls(p).indexOf('tk-two') >= 0, cls(p).indexOf('tk-rim') >= 0, barCount(), prop('--tk-rail-h')], [true, true, 7, '238px']);
         win(732, 320, 163, 102, 174);
-        expect('732 x 320 (the header wraps): 218 px: two columns', [cls(p).indexOf('tk-two') >= 0, bar6(), prop('--tk-rail-h')], [true, 6, '218px']);
+        expect('732 x 320 (the header wraps): 218 px: two columns', [cls(p).indexOf('tk-two') >= 0, barCount(), prop('--tk-rail-h')], [true, 7, '218px']);
         win(800, 304, 142, 66, 194);
         expect('142 px of margin is enough for two columns (126 px, 6 of air, the 10 px frame)', cls(p).indexOf('tk-two') >= 0, true);
         win(800, 304, 141, 66, 194);
-        expect('141 px is not: five in one column, the targets 42 px so they fit the 238', [cls(p).indexOf('tk-two') < 0, cls(p).indexOf('tk-rim') >= 0, bar6(), prop('--tk-btn-h')], [true, true, 5, '42px']);
+        expect('141 px is not: five in one column, the targets 42 px so they fit the 238', [cls(p).indexOf('tk-two') < 0, cls(p).indexOf('tk-rim') >= 0, barCount(), prop('--tk-btn-h')], [true, true, 5, '42px']);
         win(640, 300, 101, 74, 190);
         expect('640 x 300 with 101 px of margin: five targets of 40 px in the 226', [cls(p).indexOf('tk-two') < 0, prop('--tk-btn-h'), prop('--tk-rail-h')], [true, '40px', '226px']);
         win(640, 260, 101, 74, 150);
         expect('the targets are never under 40 px', prop('--tk-btn-h'), '40px');
         win(568, 320, 40, 74, 217);
-        expect('568 x 320 in a wide shape (no margin): the column of five stands in the window, 246 px, targets of 42', [cls(p).indexOf('tk-rim') < 0, bar6(), prop('--tk-rail-h'), prop('--tk-btn-h')], [true, 5, '246px', '42px']);
+        expect('568 x 320 in a wide shape (no margin): the column of five (Home and Next under More) stands in the window, 246 px, targets of 42', [cls(p).indexOf('tk-rim') < 0, barCount(), prop('--tk-rail-h'), prop('--tk-btn-h')], [true, 5, '246px', '42px']);
         win(568, 320, 40, 74, 290);
         expect('...a stage that is high enough keeps its own height and the full targets', [prop('--tk-rail-h'), prop('--tk-btn-h')], ['290px', '44px']);
-        // a page's five in one column gets Next back in the bar in fullscreen (it stood under More)
+        win(700, 420, 40, 74, 300);
+        expect('700 x 420 in a wide shape (no margin): 306 px is room for a column of six (Next under More)', [cls(p).indexOf('tk-rim') < 0, barCount(), listHead()[0], prop('--tk-rail-h'), prop('--tk-btn-h')], [true, 6, 'next', '306px', '44px']);
+        // a page's column that folds gets Home and Next back in the bar in fullscreen (they stood under More)
         win(568, 320, 40, 74, 217);
-        expect('Next stands under More in the page\'s five', p.more.children[0].attrs['data-key'], 'next');
+        expect('Home and Next stand under More in the page\'s column of five', listHead(), ['home', 'next']);
         p.state.fullscreen = true; p.win.innerWidth = 844; p.win.innerHeight = 390; p.stage.clientHeight = 390;
         p.poll();
-        expect('...and in fullscreen it is in the bar again (six buttons, seven in the list)', [bar6(), p.more.children.length, p.btn('next').className.indexOf('tk-item') < 0], [6, 7, true]);
+        expect('...and in fullscreen they are in the bar again (seven buttons, seven in the list)', [barCount(), p.more.children.length, p.btn('next').className.indexOf('tk-item') < 0, p.btn('home').className.indexOf('tk-item') < 0], [7, 7, true, true]);
         p.state.fullscreen = false;
         p.win.innerWidth = 390; p.win.innerHeight = 844;
         p.poll();
-        expect('back upright: Next is in the row again, in its place', [p.bar.children.filter((c) => c.tag === 'button').map((c) => c.attrs['data-key'] || 'more'), p.more.children.length, p.btn('next').className.indexOf('tk-item') < 0], [['all', 'stop', 'home', 'next', 'none', 'more'], 7, true]);
+        expect('back upright: Home and Next are in the row again, in their places', [p.bar.children.filter((c) => c.tag === 'button').map((c) => c.attrs['data-key'] || 'more'), p.more.children.length, p.btn('next').className.indexOf('tk-item') < 0], [['all', 'stop', 'home', 'next', 'none', 'shift', 'more'], 7, true]);
         p.stage.clientWidth = 280;
         p.poll();
-        expect('a narrow upright stage: All ants has a row of its own (tk-wrap)', cls(p).indexOf('tk-wrap') >= 0, true);
+        expect('a narrow upright stage: All ants has a row of its own (tk-wrap), and under 294 the other six stand three to a row (tk-narrow)', [cls(p).indexOf('tk-wrap') >= 0, cls(p).indexOf('tk-narrow') >= 0], [true, true]);
         p.stage.clientWidth = 350;
         p.poll();
-        expect('a wide one does not', cls(p).indexOf('tk-wrap') < 0, true);
+        expect('350 (a phone 390 wide): All ants still has a row of its own, the other six fit in one', [cls(p).indexOf('tk-wrap') >= 0, cls(p).indexOf('tk-narrow') >= 0], [true, false]);
+        p.stage.clientWidth = 294;
+        p.poll();
+        expect('294 is the narrowest for six in a row (six targets of 44 px and five gaps)', cls(p).indexOf('tk-narrow') < 0, true);
+        p.stage.clientWidth = 293;
+        p.poll();
+        expect('293 is not', cls(p).indexOf('tk-narrow') >= 0, true);
+        p.stage.clientWidth = 363;
+        p.poll();
+        expect('363: one short of the width for All ants at twice a target and six more (364): its own row', cls(p).indexOf('tk-wrap') >= 0, true);
+        p.stage.clientWidth = 364;
+        p.poll();
+        expect('364: all seven in one row', cls(p).indexOf('tk-wrap') < 0, true);
+        p.stage.clientWidth = 400;
         p.g.running = 0;
         p.poll();
         expect('no match: no class on the stage (the room is given back)', cls(p), []);
@@ -571,6 +639,234 @@ try {
         p.path('keyup', 'Escape', 'Escape');
         p.btn('none').click();
         expect('...after the real lift (which the panel stops at the document\'s capture phase, so only a capture listener on the window hears it) None is an Esc again', p.sent(), EXPECT.none);
+    }
+
+    // ---- Shift: a tap lights it, a second tap puts it out, a press of 450 ms locks it; the key goes with the finger on the picture (down before the game sees the finger, up 120 ms after the last one left)
+    {
+        const KEYDOWN = ['keydown', 'Shift', 16, 16, 1, true, false, false];
+        const KEYUP = ['keyup', 'Shift', 16, 16, 1, false, false, false];
+        const fresh = () => { const p = page().start(); p.poll(); return p; };
+        const tap = (p, ms) => { p.down(1, 100, 100); p.advance(ms === undefined ? 80 : ms); p.up(1); };
+        {
+            const p = fresh(), b = p.shiftBtn();
+            expect('Shift: a real button named Shift, off', [b.tag, b.type, b.getAttribute('aria-label'), b.textContent, b.getAttribute('aria-pressed'), b.getAttribute('data-state'), p.keys.shift()], ['button', 'button', 'Shift', 'Shift', 'false', 'off', 'off']);
+            b.click();
+            expect('a tap lights it (latched, pressed) and sends no key', [p.keys.shift(), b.getAttribute('aria-pressed'), b.getAttribute('data-state'), p.sent()], ['latched', 'true', 'latched', []]);
+            b.click();
+            expect('a second tap puts it out', [p.keys.shift(), b.getAttribute('aria-pressed'), b.getAttribute('data-state'), p.sent()], ['off', 'false', 'off', []]);
+            expect('Shift is no key of the exposed press (it goes with a finger)', [p.keys.press('shift'), p.sent()], [false, []]);
+            // the press that locks
+            p.pointer('pointerdown'); p.advance(449);
+            expect('a press of 449 ms has not locked it', p.keys.shift(), 'off');
+            p.advance(1);
+            expect('450 ms locks it (lit differently: data-state locked, still pressed)', [p.keys.shift(), b.getAttribute('data-state'), b.getAttribute('aria-pressed')], ['locked', 'locked', 'true']);
+            p.pointer('pointerup'); b.click();
+            expect('the click that follows the lock is not a tap: it stays locked', p.keys.shift(), 'locked');
+            b.click();
+            expect('a tap on a locked Shift puts it out', p.keys.shift(), 'off');
+            p.pointer('pointerdown'); p.advance(300); p.pointer('pointerup'); p.advance(300); b.click();
+            expect('a press that ends before 450 ms never locks: its click latches', p.keys.shift(), 'latched');
+            p.pointer('pointerdown'); p.advance(450); p.pointer('pointerup'); b.click();
+            expect('a press of 450 ms on a latched Shift locks it', p.keys.shift(), 'locked');
+            b.click();
+            p.pointer('pointerdown'); p.pointer('pointercancel'); p.advance(600);
+            expect('a press that the browser takes (pointercancel) never locks', p.keys.shift(), 'off');
+            p.pointer('pointerdown'); p.pointer('pointerleave'); p.advance(600);
+            expect('...nor one that leaves the button', p.keys.shift(), 'off');
+            p.pointer('pointerdown'); p.advance(450); p.pointer('pointerup');                     // (locked; the browser made no click)
+            p.pointer('pointerdown'); p.pointer('pointerup'); b.click();
+            expect('a lock whose click never came does not swallow the next tap: that tap puts it out', p.keys.shift(), 'off');
+            p.pointer('pointerdown'); p.g.needs = 1; p.advance(450);
+            expect('the buttons are not usable when the time is up (a dialog): nothing is locked', p.keys.shift(), 'off');
+            p.g.needs = 0;
+            expect('a tap asks again too: with a dialog up it lights nothing', (p.g.needs = 1, b.click(), p.g.needs = 0, p.keys.shift()), 'off');
+            expect('...and the whole of it sent nothing', p.sent(), []);
+        }
+        // a latched Shift and one finger that taps
+        {
+            const p = fresh();
+            p.shiftBtn().click();
+            p.down(1, 100, 100);
+            expect('latched, a finger lands on the picture: Shift goes down first, as a keyboard\'s, before the game sees the finger', [p.shiftSent(), p.seen[0].shift, p.keys.shiftDown()], [[KEYDOWN], true, true]);
+            p.advance(80);
+            p.up(1);
+            expect('the finger lifts: the latch is used up at once (the button is dark again) and Shift is still down', [p.keys.shift(), p.sdlShift(), p.shiftSent().length], ['off', true, 1]);
+            p.advance(16);
+            expect('a frame later, when the game handles the lift: Shift is down', p.sdlShift(), true);
+            p.advance(103);
+            expect('119 ms after the lift: still down', p.sdlShift(), true);
+            p.advance(1);
+            expect('120 ms after the lift: Shift goes up, once', [p.shiftSent(), p.sdlShift(), p.keys.shiftDown()], [[KEYDOWN, KEYUP], false, false]);
+            p.advance(5000);
+            expect('...and nothing comes later', p.shiftSent().length, 2);
+            expect('the events are a keyboard\'s: they bubble, can be cancelled and are never repeats', p.canvas.dispatched.every((e) => e.bubbles === true && e.cancelable === true && e.composed === true && e.repeat === false), true);
+            tap(p);
+            p.advance(200);
+            expect('a tap with Shift off sends no Shift', p.shiftSent().length, 2);
+        }
+        // which one-finger sequences use a latch up: a tap and a drag; not a hold, a lingering finger, or two fingers
+        {
+            const used = (label, play, want) => { const p = fresh(); p.shiftBtn().click(); play(p); expect(label, p.keys.shift(), want ? 'off' : 'latched'); return p; };
+            used('a tap (up at 399 ms) uses it up', (p) => tap(p, 399), true);
+            used('up at 400 ms is not the game\'s tap: it does not', (p) => tap(p, 400), false);
+            used('a finger that lingers (420 ms, between the tap and the hold) does not', (p) => tap(p, 420), false);
+            used('a hold (a right click: Shift plays no part) does not', (p) => tap(p, 600), false);
+            used('a wobble of 5 px is no drag: a finger that wobbles and lingers (up at 420 ms) uses nothing', (p) => { p.down(1, 100, 100); p.advance(100); p.move(1, 105, 100); p.advance(320); p.up(1); }, false);
+            used('a wobble inside the slop (8 px) is still a tap', (p) => { p.down(1, 100, 100); p.advance(40); p.move(1, 108, 100); p.advance(40); p.up(1); }, true);
+            used('a drag (out of the slop at 9 px) uses it up, however long it goes on', (p) => { p.down(1, 100, 100); p.advance(40); p.move(1, 109, 100); p.advance(3000); p.move(1, 300, 300); p.up(1); }, true);
+            used('a finger that leaves the slop at 449 ms is a drag', (p) => { p.down(1, 100, 100); p.advance(449); p.move(1, 150, 100); p.advance(200); p.up(1); }, true);
+            used('...and at 450 ms the hold has fired: it is not', (p) => { p.down(1, 100, 100); p.advance(450); p.move(1, 150, 100); p.advance(200); p.up(1); }, false);
+            used('a finger on the picture that the browser takes (touchcancel) does not', (p) => { p.down(1, 100, 100); p.advance(50); p.cancelTouch(1); }, false);
+            used('two fingers (pan, zoom) do not, the first lifting first', (p) => { p.down(1, 100, 100); p.advance(30); p.down(2, 200, 100); p.advance(50); p.move(1, 150, 100); p.up(1); p.advance(50); p.up(2); }, false);
+            used('...nor the second lifting first', (p) => { p.down(1, 100, 100); p.advance(30); p.down(2, 200, 100); p.advance(50); p.up(2); p.advance(20); p.up(1); }, false);
+            used('...nor a pinch whose second finger lands after a drag began', (p) => { p.down(1, 100, 100); p.advance(30); p.move(1, 150, 100); p.down(2, 200, 100); p.advance(50); p.up(1); p.up(2); }, false);
+            const p = fresh();
+            p.shiftBtn().click();
+            p.down(1, 100, 100); p.advance(30); p.down(2, 200, 100); p.advance(50); p.up(1); p.advance(50);
+            expect('two fingers: Shift went down once, and stays down while a finger is on the picture', [p.shiftSent().length, p.sdlShift()], [1, true]);
+            p.up(2); p.advance(119);
+            expect('...it goes up 120 ms after the LAST finger left, not the first', [p.shiftSent().length, p.sdlShift()], [1, true]);
+            p.advance(1);
+            expect('...(a keyup, once)', [p.shiftSent(), p.keys.shift()], [[KEYDOWN, KEYUP], 'latched']);
+            tap(p);
+            expect('the latch was kept for the next tap: it is used up there, with Shift down again', [p.keys.shift(), p.shiftSent().length, p.sdlShift()], ['off', 3, true]);
+        }
+        // a hold leaves it latched until the next tap or drag (the maintainer's rule)
+        {
+            const p = fresh();
+            p.shiftBtn().click();
+            tap(p, 700); p.advance(120);
+            tap(p, 700); p.advance(120);
+            expect('two holds in a row: still latched, Shift down and up around each', [p.keys.shift(), p.shiftSent().map((e) => e[0])], ['latched', ['keydown', 'keyup', 'keydown', 'keyup']]);
+            tap(p, 60);
+            expect('...and the next tap uses it', p.keys.shift(), 'off');
+        }
+        // locked: every sequence is a Shift-click, and a finger within the 120 ms of the last keeps the same key down
+        {
+            const p = fresh();
+            p.pointer('pointerdown'); p.advance(450); p.pointer('pointerup'); p.shiftBtn().click();
+            tap(p, 60); p.advance(60);
+            expect('locked: a tap, and 60 ms later: Shift is still down', [p.keys.shift(), p.sdlShift(), p.shiftSent().length], ['locked', true, 1]);
+            tap(p, 60);
+            expect('...a finger within the 120 ms keeps the same key down (no second keydown)', [p.shiftSent().length, p.sdlShift()], [1, true]);
+            p.advance(119);
+            expect('...and the 120 ms count from this lift', p.sdlShift(), true);
+            p.advance(1);
+            expect('...then it goes up, once', [p.shiftSent(), p.keys.shift()], [[KEYDOWN, KEYUP], 'locked']);
+            tap(p, 300); p.advance(120);
+            expect('a later tap: down and up again (locked stays locked, for a tap, a drag or a hold alike)', [p.shiftSent().map((e) => e[0]), p.keys.shift()], [['keydown', 'keyup', 'keydown', 'keyup'], 'locked']);
+            p.shiftBtn().click();
+            expect('a tap on Shift puts a lock out', p.keys.shift(), 'off');
+        }
+        // a latch that was used up lets go before the next finger lands (a quick second tap is not a Shift-click)
+        {
+            const p = fresh();
+            p.shiftBtn().click();
+            tap(p, 60); p.advance(50);
+            p.down(1, 100, 100);
+            expect('a finger lands 50 ms after a Shift tap: Shift goes up before it, and the game sees it without Shift', [p.shiftSent(), p.seen[p.seen.length - 1].shift], [[KEYDOWN, KEYUP], false]);
+            p.advance(60); p.up(1); p.advance(1000);
+            expect('...and nothing more comes', p.shiftSent().length, 2);
+        }
+        // nothing happens with Shift off, and a finger that is not the picture's is nobody's
+        {
+            const p = fresh();
+            tap(p); p.down(1, 5, 5); p.move(1, 90, 90); p.up(1); p.advance(1000);
+            expect('Shift off: fingers on the picture send nothing', [p.sent(), p.shiftSent()], [[], []]);
+            p.shiftBtn().click();
+            const other = element('div');
+            p.down(7, 50, 50, other); p.advance(100); p.up(7); p.advance(1000);
+            expect('latched, a finger that is not on the picture (the page, a button) sends nothing and keeps the latch', [p.sent(), p.keys.shift()], [[], 'latched']);
+            p.down(1, 100, 100);
+            p.down(9, 50, 50, p.btn('stop')); p.up(9);
+            p.advance(100);
+            expect('a finger of the page ends nobody\'s sequence: Shift is still down with the picture\'s finger', [p.sdlShift(), p.shiftSent().length], [true, 1]);
+            p.up(1);
+            expect('...and the picture\'s own lift ends it as a tap', p.keys.shift(), 'off');
+            p.advance(120);
+            expect('...Shift goes up', p.sdlShift(), false);
+            // a touchend that the browser never delivered: its list says that this finger is alone
+            const q = fresh();
+            q.shiftBtn().click();
+            q.down(1, 100, 100);
+            q.live = [];
+            q.down(2, 100, 100); q.advance(60); q.up(2);
+            expect('a lift that never came does not make the next finger a second one: it is a tap and uses the latch up', q.keys.shift(), 'off');
+        }
+        // Shift is never left down
+        {
+            const causes = [
+                ['the window loses the focus', (p) => p.blurWindow(), true],
+                ['the page is hidden', (p) => p.visibility(true), true],
+                ['the page is left', (p) => p.pageHide(), true],
+                ['the browser takes the finger (touchcancel)', (p) => p.cancelTouch(1), false],
+                ['the match ends (the buttons hide)', (p) => { p.g.running = 0; p.poll(); }, true],
+                ['a dialog opens (the buttons hide)', (p) => { p.g.needs = 1; p.poll(); }, true],
+                ['the setting is turned off', (p) => p.keys.set(false), true],
+            ];
+            causes.forEach((c) => {
+                const p = fresh();
+                p.shiftBtn().click();
+                p.down(1, 100, 100);
+                expect(c[0] + ': Shift is down with the finger', p.sdlShift(), true);
+                c[1](p);
+                expect(c[0] + ': Shift goes up at once', [p.sdlShift(), p.shiftSent().map((e) => e[0])], [false, ['keydown', 'keyup']]);
+                expect(c[0] + ': ' + (c[2] ? 'the latch is let go too' : 'the latch stays (no click was made)'), p.keys.shift(), c[2] ? 'off' : 'latched');
+                p.live = [];
+                p.advance(5000);
+                expect(c[0] + ': and no second keyup comes later', p.shiftSent().length, 2);
+                if (!c[2]) return;                                   // (a finger that the browser takes is not a lifted finger)
+                const q = fresh();
+                q.shiftBtn().click();
+                tap(q, 60); q.advance(10);
+                expect(c[0] + ': Shift waits to go up (the finger already lifted)', q.sdlShift(), true);
+                c[1](q);
+                expect(c[0] + ': ...and goes at once', [q.sdlShift()], [false]);
+            });
+            const p = fresh();
+            p.pointer('pointerdown'); p.advance(450); p.pointer('pointerup'); p.shiftBtn().click();
+            p.down(1, 100, 100);
+            p.blurWindow();
+            expect('a lock is let go when the window loses the focus, with its key', [p.keys.shift(), p.sdlShift()], ['off', false]);
+        }
+        // the buttons hiding or a dialog between the polls
+        {
+            const p = fresh();
+            p.shiftBtn().click();
+            p.g.needs = 1;                                           // (a dialog opened since the last poll)
+            p.down(1, 100, 100); p.advance(60); p.up(1); p.advance(200);
+            expect('a finger while a dialog is up (between polls) is not a Shift-click: no key, and it uses nothing', [p.shiftSent(), p.keys.shift()], [[], 'latched']);
+            p.poll();
+            expect('the poll that hides the buttons lets the latch go', p.keys.shift(), 'off');
+            p.g.needs = 0;
+            p.poll();
+            expect('...and it is off when they come back', p.keys.shift(), 'off');
+        }
+        // a keyboard's Shift that is down: nothing of ours (a keyboard cannot press a key that is down)
+        {
+            ['ShiftLeft', 'ShiftRight'].forEach((code) => {
+                const p = fresh();
+                p.physical('keydown', code, 'Shift');
+                p.shiftBtn().click();
+                tap(p, 60); p.advance(1000);
+                expect('the keyboard\'s ' + code + ' is down: a Shift tap sends no Shift of ours (down or up), and uses the latch up', [p.shiftSent(), p.keys.shift()], [[], 'off']);
+            });
+            const p = fresh();
+            p.physical('keydown', 'ShiftLeft', 'Shift');
+            p.btn('all').click();
+            expect('...and the chord of a button carries shiftKey, as a keyboard\'s would', p.canvas.dispatched.every((e) => e.shiftKey === true), true);
+        }
+        // a chord while Shift is down carries it
+        {
+            const p = fresh();
+            p.shiftBtn().click();
+            p.down(1, 100, 100);
+            p.btn('all').click();
+            expect('a chord while our Shift is down carries shiftKey on its four events', p.canvas.dispatched.filter((e) => e.code !== 'ShiftLeft').map((e) => e.shiftKey), [true, true, true, true]);
+            p.up(1); p.advance(120); p.clear();
+            p.btn('all').click();
+            expect('...and once Shift is up it does not', p.canvas.dispatched.map((e) => e.shiftKey), [false, false, false, false]);
+        }
     }
 
     // ---- a finger on a button reaches the game as nothing

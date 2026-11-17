@@ -116,8 +116,8 @@ struct Match {
             std::unique_ptr<StandardBot> bot;
             if (styled) {
                 bot = std::make_unique<StandardBot>(level, ants::ai::Style::Random, [tweak](LevelPlan& p) {
-                    p.island_crew_spare = 1;                                                                  // (the expedition alone: the ant that Hard sends for the flower strip, AI44, would take a Swimmer more in the tests that count them)
-                    p.island_flower_swimmers = 0;
+                    p.island_crew_spare = 1;                                                                  // (the expedition alone: the swarm that Hard sends to the flower strips, AI44, would take Swimmers more in the tests that count them)
+                    p.island_flower_link = false;
                     if (tweak) tweak(p);
                 });
             } else {
@@ -125,8 +125,8 @@ struct Match {
                 plan.island_expedition = expedition;
                 plan.island_ferry = ferry;
                 plan.island_builders = builders;
-                plan.island_crew_spare = 1;                                                               // (the expedition alone: the extra ant that Hard sends for the flower strip, AI44, would take a Swimmer more in the tests that count them)
-                plan.island_flower_swimmers = 0;
+                plan.island_crew_spare = 1;                                                               // (the expedition alone: the swarm that Hard sends to the flower strips, AI44, would take Swimmers more in the tests that count them)
+                plan.island_flower_link = false;
                 if (tweak) tweak(plan);
                 bot = std::make_unique<StandardBot>(plan);
             }

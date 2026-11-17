@@ -10,7 +10,9 @@
 //   * a cancel (the browser took the touch, the window lost the focus) leaves no press held and no finger tracked; a press that waited on the map is not made on a dialog that opened
 //     meanwhile; a lifted finger leaves no pointer and no edge scroll behind;
 //   * the screens that are not the map view (the quick help, the setup screen, the start menu) take taps and drags as the emulation gave them;
-//   * the places that SDL's renderer maps (a window of another shape than the canvas), the slop's size, and `pan_view`.
+//   * the places that SDL's renderer maps (a window of another shape than the canvas), the slop's size, and `pan_view`;
+//   * SHIFT with a finger (the page's Shift button, web/touch_keys.js, puts Shift down in SDL's modifier state; the game reads it at the lift): a Shift tap and a Shift drag are the keyboard's Shift-click
+//     and Shift-drag, point by point, and a Shift drag around a lone Bomber makes the group of one whose tap on a bomb is a move (a lone Bomber's tap on it is the special order).
 // Usage: test_touch_app. Exit code 0 when every check passes.
 #include <SDL.h>
 
@@ -2448,6 +2450,142 @@ void test_every_shape() {
     }
 }
 
+/// Shift down in SDL's modifier state, as the page's Shift button makes it (down before the finger lands, up 120 ms after the lift: the game reads it when it handles the lift)
+struct ShiftKey {
+    ShiftKey() { SDL_SetModState(KMOD_LSHIFT); }
+    ~ShiftKey() { SDL_SetModState(KMOD_NONE); }
+    ShiftKey(const ShiftKey&) = delete;
+    ShiftKey& operator=(const ShiftKey&) = delete;
+    void up() { SDL_SetModState(KMOD_NONE); }
+};
+
+std::vector<uint32_t> sorted(std::vector<uint32_t> v) {
+    std::sort(v.begin(), v.end());
+    return v;
+}
+
+void test_shift_with_a_finger() {
+    group("shift", "Shift with a finger: a Shift tap and a Shift drag are the keyboard's, and a Shift drag around a lone Bomber makes the group of one whose tap on a bomb is a move");
+    Match m;
+    if (!m.ok) return check(false, "the match is up");
+    Application& app = m.app();
+    Scene& s = *m.scene;
+    Hand hand(app);
+    const sim::AntSnapshot* b = s.ant(s.bomber);
+    if (b == nullptr) return check(false, "the Bomber is there");
+    const Pt around_a = s.screen_of(b->px - 30, b->py - 40);
+    const Pt around_z = s.screen_of(b->px + 30, b->py + 24);
+    const sim::TileCoord bomb = s.tile_under(s.ground(4, 1));
+    app.sim().grid_mut().place_bomb(static_cast<uint32_t>(bomb.x), static_cast<uint32_t>(bomb.y), 0);          // (an own bomb on the ground a few tiles from the Bomber)
+    const Pt on_bomb = s.screen_of(bomb.x * 32 + 16, bomb.y * 32 + 16);
+    check(app.sim().has_bomb_at(bomb), "the own bomb is on its tile");
+    const auto tap_the_bomb = [&]() {
+        s.sink.commands.clear();
+        hand.tap(on_bomb);
+        return s.sink.commands;
+    };
+    const auto is_order = [&](const std::vector<sim::Command>& c, sim::CommandType type) {
+        return c.size() == 1 && c[0].type == type && c[0].tile_x == bomb.x && c[0].tile_y == bomb.y && c[0].ants == std::vector<uint32_t>{s.bomber};
+    };
+
+    // a lone Bomber's tap on its bomb is the special order (it defuses it); a Shift in the same tap changes nothing (an order ignores Shift)
+    s.clear();
+    s.select({s.bomber});
+    const auto plain = tap_the_bomb();
+    check(is_order(plain, sim::CommandType::GroupSpecial), "one Bomber, a tap on its own bomb: the special order");
+    s.clear();
+    s.select({s.bomber});
+    {
+        ShiftKey shift;
+        check(is_order(tap_the_bomb(), sim::CommandType::GroupSpecial), "...with Shift down at the tap it is the same order");
+    }
+
+    // a Shift drag around the one selected Bomber: it stays selected, as a group of one; the tap on the bomb is then a move to its tile
+    s.clear();
+    s.select({s.bomber});
+    {
+        ShiftKey shift;
+        hand.drag(around_a, around_z, 4);
+    }
+    check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.bomber} && app.hud().is_multi_select() && s.sink.commands.empty(), "a Shift drag around the selected Bomber keeps it, as a group of one");
+    check(is_order(tap_the_bomb(), sim::CommandType::GroupMove), "...and its tap on the bomb is a move to the bomb's tile (the Bomber steps on it and sets it off)");
+
+    // the same drag with Shift let go BEFORE the lift is a plain drag (the game reads Shift at the lift: the page holds it past it)
+    s.clear();
+    s.select({s.bomber});
+    {
+        ShiftKey shift;
+        hand.down(1, around_a);
+        hand.frame();
+        hand.wait(16);
+        hand.move(1, around_z);
+        hand.frame();
+        shift.up();
+        hand.wait(16);
+        hand.up(1, around_z);
+        hand.frame();
+    }
+    check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.bomber} && !app.hud().is_multi_select(), "Shift up before the lift: a plain drag, the one Bomber again, not a group");
+    check(is_order(tap_the_bomb(), sim::CommandType::GroupSpecial), "...and its tap on the bomb is the special order");
+    // Shift down at the press only, and the lift with Shift down: the drag adds
+    s.clear();
+    s.select({s.bomber});
+    hand.drag(around_a, around_z, 4);
+    check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.bomber} && !app.hud().is_multi_select(), "a plain drag around the Bomber: one Bomber, no group");
+
+    // a Shift tap on one of your ants adds it to a selection of yours, and takes it out again; a Shift drag over another ant adds it
+    s.clear();
+    s.select({s.bomber});
+    {
+        ShiftKey shift;
+        hand.tap(s.on_ant(s.worker));
+        check(sorted(app.hud().get_selected_ant_ids()) == sorted({s.bomber, s.worker}) && app.hud().is_multi_select(), "a Shift tap on your worker adds it to the selected Bomber");
+        hand.tap(s.on_ant(s.worker));
+        check(app.hud().get_selected_ant_ids() == std::vector<uint32_t>{s.bomber}, "...and a second Shift tap takes it out");
+        hand.tap(s.on_ant(s.bomber));
+        check(app.hud().get_selected_ant_ids().empty(), "a Shift tap on the one selected Bomber takes it out (it is how it would not make a group of one)");
+    }
+    s.clear();
+    s.select({s.bomber});
+    {
+        ShiftKey shift;
+        const sim::AntSnapshot* w = s.ant(s.worker);
+        hand.drag(s.screen_of(w->px - 30, w->py - 40), s.screen_of(w->px + 30, w->py + 24), 4);
+    }
+    const auto has = [&](uint32_t id) {
+        const auto ids = app.hud().get_selected_ant_ids();
+        return std::find(ids.begin(), ids.end(), id) != ids.end();
+    };
+    check(has(s.bomber) && has(s.worker) && app.hud().get_selected_ant_ids().size() >= 2, "a Shift drag over your worker (and the ants of the hill beside it) adds them to the selected Bomber, which stays");
+    s.clear();
+    s.select({s.bomber});
+    hand.drag(s.screen_of(s.ant(s.worker)->px - 30, s.ant(s.worker)->py - 40), s.screen_of(s.ant(s.worker)->px + 30, s.ant(s.worker)->py + 24), 4);
+    check(has(s.worker) && !has(s.bomber), "...and without Shift the same drag selects them instead: the Bomber is no longer selected");
+
+    // THE DIFFERENTIAL: with Shift down, a finger's tap is the mouse's Shift-click, over the ants and the ground, with each kind of selection
+    const std::vector<std::vector<uint32_t>> selections = {{}, {s.worker}, {s.bomber}, {s.worker, s.bomber}};
+    const Pt points[] = {s.on_ant(s.worker), s.on_ant(s.bomber), s.on_ant(s.second), s.on_ant(s.foe), s.ground(2, 1), s.ground(5, 3), on_bomb};
+    int compared = 0;
+    for (const auto& selection : selections) {
+        for (const Pt& p : points) {
+            ShiftKey shift;
+            s.clear();
+            s.select(selection);
+            hand.tap(p);
+            const Outcome by_finger = outcome_of(s);
+            s.clear();
+            s.select(selection);
+            mouse_click(app, SDL_BUTTON_LEFT, p, p);
+            forget_pointer(app);
+            const Outcome by_mouse = outcome_of(s);
+            ++compared;
+            check(same(by_finger, by_mouse), "a Shift tap at " + show(p) + " is the mouse's Shift-click: " + describe(by_finger) + " against " + describe(by_mouse));
+        }
+    }
+    check(compared == 28, "28 Shift taps were compared with the mouse's Shift-clicks");
+    check((static_cast<uint16_t>(SDL_GetModState()) & KMOD_SHIFT) == 0, "(no Shift is left down in SDL's state)");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -2472,6 +2610,7 @@ int main(int argc, char* argv[]) {
     test_inset_picture();
     test_slop();
     test_every_shape();
+    test_shift_with_a_finger();
     std::printf("\ntouch application: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

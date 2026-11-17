@@ -55,6 +55,9 @@ enum class FontSize : uint8_t {
     Px96 = 96    // the countdown's count (protocol 21: the remake's own, the original has no such label)
 };
 
+/// Where a number of IRenderer::draw_number_text stands at the `x` it is given: starting at it (Left), ending at it (Right) or with it in the middle (Centre)
+enum class NumberAlign : uint8_t { Left, Right, Centre };
+
 /// The cell height of a font size in pixels (the enumerator's value)
 inline constexpr int32_t font_cell_height(FontSize size) noexcept { return static_cast<int32_t>(size); }
 
@@ -256,10 +259,11 @@ public:
         return 7;
     }
     virtual void set_hud_team(uint8_t team_id) = 0;
-    /// A score number in the numbers' heavy face with a thick outline (Libre Franklin Black), `ink_h` canvas pixels tall (outline counted), squeezed to `box_w` when wider, ending at the right edge of the box
-    /// at `x` (right_align) or starting at `x`. Returns false when it drew nothing (a renderer that cannot, or the classic numbers): the caller then draws the old way.
-    virtual bool draw_number_text(const std::string& text, int32_t x, int32_t y, int32_t box_w, int32_t ink_h, bool right_align, ants::assets::ColorRGBA color) {
-        (void)text; (void)x; (void)y; (void)box_w; (void)ink_h; (void)right_align; (void)color;
+    /// A number in the numbers' heavy face (Libre Franklin Black), `ink_h` canvas pixels tall, squeezed to `box_w` when wider, starting at `x`, ending there or centred on it (`align`). `outlined`: with the
+    /// thick outline (the results page; `ink_h` then counts the outline of the old drawing, see docs/VIEW_AND_HUD.md), else the plain glyphs (the HUD's score boxes and match clock; `ink_h` is the glyphs' own
+    /// height). Returns false when it drew nothing (a renderer that cannot, or the classic numbers): the caller then draws the old way.
+    virtual bool draw_number_text(const std::string& text, int32_t x, int32_t y, int32_t box_w, int32_t ink_h, NumberAlign align, ants::assets::ColorRGBA color, bool outlined) {
+        (void)text; (void)x; (void)y; (void)box_w; (void)ink_h; (void)align; (void)color; (void)outlined;
         return false;
     }
     /// Restricts everything that is drawn afterwards to a rectangle until clear_clip_rect(): the original draws a label into a surface of the label's own
@@ -503,9 +507,10 @@ public:
     static std::string choose_number_face(const std::string& text_face, const std::string& black_file);
     /// The font's numbers are the ones drawn now (not the classic switch, and a face was found)
     bool font_numbers() const noexcept { return !classic_numbers_ && !number_path_.empty(); }
-    /// A team's score number or a results column's score, in the numbers' face (white or `color`, the thick outline), as tall as `ink_h` canvas pixels (outline counted) and never wider than `box_w`
-    /// (squeezed to it when wider: the draw_text_squeezed rule); `right_align` ends it at the box's right edge, else it starts at the left. false when the font numbers are off: the caller draws the old way
-    bool draw_number_text(const std::string& text, int32_t x, int32_t y, int32_t box_w, int32_t ink_h, bool right_align, ants::assets::ColorRGBA color) override;
+    /// A team's score number, a results column's number or a digit of the match clock, in the numbers' face (white or `color`; the thick outline when `outlined`), as tall as `ink_h` canvas pixels
+    /// (the outline counted when there is one) and never wider than `box_w` (squeezed to it when wider: the draw_text_squeezed rule); `align` puts it at `x` (starting, ending or centred). false when
+    /// the font numbers are off: the caller draws the old way
+    bool draw_number_text(const std::string& text, int32_t x, int32_t y, int32_t box_w, int32_t ink_h, NumberAlign align, ants::assets::ColorRGBA color, bool outlined) override;
     /// (public for the tests) The output's own pixels: SDL's logical size is switched off while the numbers are drawn (`NativeFrame` keeps what to put back)
     struct NativeFrame {
         double scale{1.0};                         // output pixels per canvas pixel

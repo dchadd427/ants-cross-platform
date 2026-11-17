@@ -129,7 +129,8 @@ class TheStyle(unittest.TestCase):
                 if re.search(r"user-select|touch-callout", body):
                     held += 1
                     self.assertIn("pointer: coarse", m.group(1), "only on a touch screen")
-                    self.assertIn("[data-act]", selector, "only on the lines that have an action")
+                    for part in selector.split(","):
+                        self.assertIn("[data-act]", part, "only on the lines and the rows that have an action")
         self.assertGreaterEqual(held, 1, "the style holds them back where a long press opens the sheet")
 
     def test_nothing_is_loaded_from_another_site_and_there_is_no_picture(self):
@@ -158,7 +159,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_mod_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/hub_here.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/mod.js", "web/home/mod.css",
+    FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/hub_here.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/players.js", "web/home/mod.js", "web/home/mod.css",
               "tests/scripts/test_web_home_mod.py", "tests/scripts/web_home_mod_check.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
               "web/matches.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html"]
              + ["web/front/" + n for n in ("classic.css", "lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])

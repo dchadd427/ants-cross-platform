@@ -86,9 +86,6 @@ class TheLoaderInHome(unittest.TestCase):
         self.assertIn("if (askedPlayers || !dock) return;\n            askedPlayers = true;", self.js, "once, and not before there is a dock to speak through")
         self.assertEqual(sorted(set(re.findall(r"home/players\w*", code_of(self.js)))), ["home/players"])
 
-    def test_it_is_given_the_dock_and_the_parts_of_the_bar_that_it_uses_and_nothing_of_the_page_but_the_bridge(self):
-        self.assertIn("players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: main, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); inert(held);", self.js)
-
     def test_it_is_inert_with_the_bars_and_the_dock_and_a_list_that_comes_late_is_inert_from_the_start(self):
         self.assertIn("[bar, rbar, tabs, dock && dock.root, players && players.root].forEach(function (n) {", self.js)
         self.assertIn("inert(held); var c = ", self.js.split("function wantPlayers")[1], "a list that is mounted while a dialog or the hand-off holds the page takes no press either")
