@@ -26,6 +26,7 @@ const File = load('mapmaker_file.js'), Edit = load('mapmaker_edit.js'), Blocks =
 
 let failures = 0, checks = 0;
 function check(ok, what) { checks++; if (!ok) { failures++; console.log('    FAILED: ' + what); } }
+function equal(a, b, what) { check(JSON.stringify(a) === JSON.stringify(b), what + ': ' + JSON.stringify(a) + ' is not ' + JSON.stringify(b)); }
 function same(a, b) { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; }
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 function open(rel) { const f = File.parse(new Uint8Array(fs.readFileSync(path.join(ROOT, rel)))); if (!f.ok) throw new Error(rel); return f; }
@@ -209,8 +210,23 @@ for (const rel of MAPS) {
     part.painter.begin({ row: 0, column: 0 });
     btn('group').click(); btn('clump').click();
     check(!part.mine(), 'page: Clump is the tool\'s own (the box does not take the tap)');
+    // typing in the number box of the clump: the keys change nothing on the page, and what the box says is taken when it is left or Enter is pressed, which makes the panel again; the box that the person
+    // is in is then the new one, with the focus and the number (the panel puts the focus back on the control that had it)
+    const numberBox = (k) => () => part.panel.querySelector('input[data-k="' + k + '"]');
+    numberBox('clump')().value = '';
+    equal(doc.typeCheck(numberBox('clump'), '12'), '', 'page: the clump\'s number box: every key stays in the same box with the focus');
+    equal(doc.caretCheck(numberBox('clump'), 1, '3'), '', 'page: a key in the middle of the number keeps the caret after it');
+    equal(doc.composeCheck(numberBox('clump'), ['9']), '', 'page: an input method in the number box is not cut off');
+    numberBox('clump')().value = '30'; numberBox('clump')().fire('change', {});
+    check(clump === 30 && numberBox('clump')().value === '30' && doc.activeElement === numberBox('clump')() && numberBox('clump')().isConnected, 'page: when the number is taken, the focus is on the number box (' + clump + ')');
+    numberBox('clump')().value = '4'; numberBox('clump')().fire('change', {});
+    check(clump === 4 && doc.activeElement === numberBox('clump')(), 'page: and again');
     btn('mix').click();
     check(part.mine() && !part.painter.tapOnly(), 'page: Mix takes the drag');
+    numberBox('per')().value = '';
+    equal(doc.typeCheck(numberBox('per'), '40'), '', 'page: the mix\'s number box (ants for each team): every key stays in the same box with the focus');
+    numberBox('per')().value = '25'; numberBox('per')().fire('change', {});
+    check(part.state().per === 25 && doc.activeElement === numberBox('per')(), 'page: when the number is taken, the focus is on the number box');
     part.painter.begin({ row: 4, column: 4 }); part.painter.extend({ row: 4, column: 4 }, { row: 40, column: 50 }); part.painter.end();
     check(part.state().plan && part.state().plan.ok && !btn('put-mix').disabled && /Put 100 ants/.test(btn('put-mix').textContent), 'page: a box gives a plan and the button "Put 100 ants"');
     btn('put-mix').click();

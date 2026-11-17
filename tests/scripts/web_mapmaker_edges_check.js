@@ -498,6 +498,11 @@ function dialogChecks() {
     check(p.host.querySelectorAll('button')[1].disabled === true, 'and Fix edges is off');
     p.host.querySelectorAll('input')[1].checked = true; p.host.querySelectorAll('input')[1].fire('change', {});
     check(p.host.querySelectorAll('button')[1].disabled === false && p.host.querySelectorAll('figcaption')[1].textContent === 'After: 20 cells change', 'the whole map has them, and Fix edges is on again');
+    // a choice made with the keyboard or the pointer redraws the pictures, not the choice: the same box stays in the page with the focus
+    { const r = p.host.querySelectorAll('input'); r[0].focus(); r[0].checked = true; r[0].fire('change', {});
+      check(p.host.querySelectorAll('input')[0] === r[0] && r[0].isConnected && p.doc.activeElement === r[0], 'Fix edges: choosing the part you see leaves the same radio box in the page with the focus');
+      r[1].focus(); r[1].checked = true; r[1].fire('change', {});
+      check(p.host.querySelectorAll('input')[1] === r[1] && r[1].isConnected && p.doc.activeElement === r[1], 'and choosing the whole map too'); }
     p.host.querySelectorAll('button')[0].click();
     check(!p.dialogs.isOpen() && p.applied.length === 0, 'Cancel closes it and changes nothing');
     // Fix edges: one change, the cells of the plan, then it closes
