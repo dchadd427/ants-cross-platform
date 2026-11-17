@@ -226,6 +226,64 @@ void run_migration_tests() {
         DB_CHECK(open_and_migrate(db, ":memory:", ants::server::db_migrations(), OpenOptions(), &v, &mode).ok() && mode == "memory");
     } DB_END;
 
+    DB_CASE("DB6.11 A migration that asks for vacuum_after leaves none of the rows it dropped in the file or its WAL (while the database is open, WAL or rollback journal); the same migration without it leaves them, so the flag is what cleans") {
+        const std::string row = "SECRETMARKER-0123456789-abcdefghijklmnopqrstuvwxyz";
+        const std::string fill = "CREATE TABLE secrets (v TEXT); INSERT INTO secrets VALUES ('" + row + "'), ('" + row + "-two');";
+        for (const bool wal : {true, false}) {
+            for (const bool vacuum : {true, false}) {
+                TempDir dir;
+                const std::string path = dir.file("clean.db");
+                OpenOptions options;
+                options.wal = wal;
+                const Migration first[] = {{1, "fill", fill.c_str()}};
+                const Migration both[] = {{1, "fill", fill.c_str()}, {2, "drop", "DROP TABLE secrets; CREATE TABLE other (z INTEGER)", vacuum}};
+                {
+                    Database db;
+                    DB_CHECK(open_and_migrate(db, path, std::vector<Migration>(first, first + 1), options).ok());
+                    db.close();
+                }
+                DB_CHECK(dbtest::read_all(path).find(row) != std::string::npos);                     // (the rows are in the file before)
+                Database db;
+                int v = 0;
+                DB_CHECK(open_and_migrate(db, path, std::vector<Migration>(both, both + 2), options, &v).ok() && v == 2);
+                bool left = dbtest::read_all(path).find(row) != std::string::npos;
+                for (const char* suffix : {"-wal", "-journal"}) left = left || dbtest::read_all(path + suffix).find(row) != std::string::npos;
+                DB_CHECK(left == !vacuum);
+                DB_CHECK(has_table(db, "other") && !has_table(db, "secrets") && rows_in(db, "schema_version") == 2);
+            }
+        }
+    } DB_END;
+
+    DB_CASE("DB6.12 A cleaning that fails after a migration is committed is kErrCleaning: the migration stays applied (the version says so) and the message says what failed; a failing migration is still the earlier error") {
+        TempDir dir;
+        const std::string path = dir.file("fail.db");
+        const Migration list[] = {
+            {1, "fill", "CREATE TABLE t (x INTEGER); INSERT INTO t VALUES (1), (2), (3)"},
+            {2, "more", "CREATE TABLE u (y INTEGER)", true},
+        };
+        OpenOptions options;
+        options.wal = false;
+        Database db;
+        DB_CHECK(db.open(path, options).ok());
+        int v = 0;
+        DB_CHECK(migrate(db, list, 1, &v).ok() && v == 1);
+        Statement reading;                                                  // (a statement of the program that is still reading: SQLite will not VACUUM while one runs)
+        DB_CHECK(db.prepare(reading, "SELECT x FROM t ORDER BY x").ok() && reading.step() == Statement::Step::Row);
+        const Error e = migrate(db, list, 2, &v);
+        DB_CHECK(!e.ok() && e.code == kErrCleaning);
+        DB_CHECK(e.message.find("migration 2 (more)") != std::string::npos && e.message.find("was applied") != std::string::npos && e.message.find("cleaning") != std::string::npos);
+        DB_CHECK(v == 2 && version_of(db) == 2 && has_table(db, "u") && rows_in(db, "schema_version") == 2);          // (committed: the schema is there)
+        reading = Statement();
+        db.close();
+        Database again;
+        DB_CHECK(open_and_migrate(again, path, std::vector<Migration>(list, list + 2), options, &v).ok() && v == 2);      // (the next start finds version 2 and does not clean again: the copy made before the update is the way back)
+        // a migration that fails is not the cleaning error
+        const Migration bad[] = {{1, "bad", "CREATE TABLE w (x INTEGER); THIS IS NOT SQL", true}};
+        Database other;
+        const Error failed = open_and_migrate(other, dir.file("bad.db"), std::vector<Migration>(bad, bad + 1), options);
+        DB_CHECK(!failed.ok() && failed.code != kErrCleaning);
+    } DB_END;
+
     DB_CASE("SV1.1 The server's schema: version 1 makes the meta table with created_at; version 2 the match history tables; version 3 the play counts of the maps; version 4 the site statistics; version 5 the map submissions; version 6 the accounts of the admin page; version 8 ends them (the log stays)") {
         const auto& list = ants::server::db_migrations();
         DB_CHECK(list.size() == 8 && list.front().version == 1 && list.back().version == 8);

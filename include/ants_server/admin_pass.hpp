@@ -5,8 +5,9 @@
 // "The admin page's door"); this file only checks them. Nobody types a password anywhere, and there is no account in this program.
 //
 // What this file promises:
-//  * The key is the setting ANTS_ADMIN_GATE_SECRET, the same value as the hub's: cut of the blanks at both ends, 32 to 256 printable ASCII characters without a blank and at least 8 different ones. Anything else (or nothing) is
-//    NO key, and with no key every pass is refused (the admin page is closed); a wrong value never stops the server.
+//  * The key is the setting ANTS_ADMIN_GATE_SECRET, the same value as the hub's: cut of the blanks at both ends, 32 to 256 printable ASCII characters without a blank and at least 8 different ones, and not the made-up
+//    key of the documents' known answer (kSampleGateKey: a setting copied from the documents stays closed). Anything else (or nothing) is NO key, and with no key every pass is refused (the admin page is closed); a wrong
+//    value never stops the server.
 //  * A pass is `v1.<payload>.<mac>`. The pass key is the RAW 32 bytes of HMAC-SHA-256 with the secret as the KEY and `ants-admin-pass-v1` as the MESSAGE (never the hex text, never the two swapped); the mac is the hex HMAC-SHA-256
 //    of `v1.<payload>` under that key, compared in constant time before anything else is looked at. The payload is base64url (no padding) of a JSON object with exactly the members ref (16 lower-case hex characters: the
 //    account's reference), name (the Discord username), role ("admin" or "owner", no other word), exp (seconds since 1970, an integer) and nonce (16 hex characters).
@@ -30,6 +31,8 @@ namespace ants::server {
 constexpr size_t kGateSecretMinChars = 32;
 constexpr size_t kGateSecretMaxChars = 256;
 constexpr size_t kGateSecretMinDistinct = 8;
+/// The made-up key whose derived keys docs/HUB.md prints as the known answer: published, so never a key (the hub refuses it as well)
+constexpr std::string_view kSampleGateKey = "canary-gate-key-5d8f0c1e7a9b4263-q";
 constexpr int64_t kPassSeconds = 60;                 // how long the hub makes a pass last
 constexpr int64_t kPassSlackSeconds = 30;            // a pass that ends later than this past kPassSeconds is not one that the hub made
 constexpr size_t kPassNoncesMax = 50000;             // the passes of the last minute and a half that are remembered (an administrator's own page makes a handful a minute)
@@ -59,6 +62,8 @@ public:
     bool open() const { return open_; }
     /// Whether the setting was there at all (to tell "not set" from "not good" in the log)
     bool given() const { return given_; }
+    /// Whether the setting is the documents' sample key (said in the log, apart from "not good")
+    bool sample() const { return sample_; }
 
     /// Checks the whole value of the header X-Ants-Admin-Pass at the time `now` (seconds since 1970). Ok fills `out`, and the pass's nonce is remembered, so that the same pass is refused the next time.
     PassVerdict check(std::string_view header, int64_t now, AdminIdentity& out);
@@ -72,6 +77,7 @@ public:
 private:
     bool open_{false};
     bool given_{false};
+    bool sample_{false};
     size_t max_remembered_{kPassNoncesMax};
     std::string pass_key_;                           // 32 raw bytes
     std::string csrf_key_;                           // 32 raw bytes

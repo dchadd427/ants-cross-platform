@@ -11,8 +11,8 @@ import json
 import os
 import time
 
-TEST_SECRET = "canary-gate-key-5d8f0c1e7a9b4263-q"          # a made-up key: the known answers below are the ones of docs/HUB.md
-KNOWN_PASS_KEY_HEX = "13be5dab7dcbeb06e979f0fa5e5f817d178fa6b40da7c92bc02588e80ae3dd25"
+TEST_SECRET = "testing-gate-key-0b8e2d71a4c6f395-z"         # a made-up key for the tests that play the gate
+SAMPLE_SECRET = "canary-gate-key-5d8f0c1e7a9b4263-q"        # the made-up key of the known answers of docs/HUB.md: published, so both services refuse it as a key (a test that sets it checks that they stay closed)
 PASS_HEADER = "X-Ants-Admin-Pass"
 TEST_REF = "0123456789abcdef"                              # an account's reference: 16 hex characters (a made-up one)
 

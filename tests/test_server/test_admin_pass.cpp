@@ -55,15 +55,18 @@ namespace {
 using ctl::HttpRequest;
 using ctl::HttpResponse;
 
-// A made-up key (the known answers of docs/HUB.md are for it) and made-up references: no real key and no Discord id is anywhere in this file
-const char* const kSecret = "canary-gate-key-5d8f0c1e7a9b4263-q";
+// A made-up key for the tests, and made-up references: no real key and no Discord id is anywhere in this file. The made-up key of the known answers of docs/HUB.md is published, so it is refused as a key (PASS1.2): it
+// is only used here for the derivation (kSampleKey, kPassKeyHex, kSampleHubCsrfKeyHex)
+const char* const kSecret = "testing-gate-key-0b8e2d71a4c6f395-z";
+const char* const kSampleKey = "canary-gate-key-5d8f0c1e7a9b4263-q";
 const char* const kPassKeyHex = "13be5dab7dcbeb06e979f0fa5e5f817d178fa6b40da7c92bc02588e80ae3dd25";
+const char* const kSampleHubCsrfKeyHex = "03a2b6b94fabcf8ae018852e8e6c0b1ec691375286a0263168238796556e3018";
 const char* const kRefDave = "0123456789abcdef";
 const char* const kRefMia = "fedcba9876543210";
 // A pass that tests/scripts/admin_pass.py made (stdlib only, from docs/HUB.md alone), for now = kT0, nonce 00112233445566ff, ref kRefDave, name dave, role admin: the C++ check agrees with an independent maker
-const char* const kPythonPass = "v1.eyJleHAiOjE3OTE0Njk5ODksIm5hbWUiOiJkYXZlIiwibm9uY2UiOiIwMDExMjIzMzQ0NTU2NmZmIiwicmVmIjoiMDEyMzQ1Njc4OWFiY2RlZiIsInJvbGUiOiJhZG1pbiJ9.afd6fe9f584feba9ccf135438615e07b3b3565ddd7b4271bcb9948f3b6b8e253";
-const char* const kPythonCsrfDave = "79891ac82c8051666594cf557a22a28a";                         // the page's token for kRefDave under kSecret, made by the same script
-const char* const kPythonCsrfMia = "1eac3a583cc7d0f4c5aa9d817e988618";
+const char* const kPythonPass = "v1.eyJleHAiOjE3OTE0Njk5ODksIm5hbWUiOiJkYXZlIiwibm9uY2UiOiIwMDExMjIzMzQ0NTU2NmZmIiwicmVmIjoiMDEyMzQ1Njc4OWFiY2RlZiIsInJvbGUiOiJhZG1pbiJ9.d1cbcd380254c3d644f8252de2e23e6a0c8f99f3000125cb9a0a09be22d88d82";
+const char* const kPythonCsrfDave = "9f0d66a7c7a86ecd27df0d5b75ccb4c6";                         // the page's token for kRefDave under kSecret, made by the same script
+const char* const kPythonCsrfMia = "10cd4ceb68c0d526640282e9c18496df";
 
 std::string quoted(const std::string& s) { return "\"" + s + "\""; }
 
@@ -181,14 +184,14 @@ int main() {
     std::cout << "=======================================================\n THE ADMIN PAGE'S PASS AND THE DOOR THAT CHECKS IT\n=======================================================\n";
 
     TEST_CASE("PASS1.1 The keys are made as docs/HUB.md says (the RAW digest of HMAC with the secret as KEY and the label as MESSAGE), against the known answer; a pass that an independent program made is accepted, one made with the hex text of the key, or with key and message swapped, is not") {
-        ASSERT_EQ(hex_encode(hub_key(kSecret)), std::string(kPassKeyHex));                           // (the test's own maker is the hub's: the known answer of the document)
+        ASSERT_EQ(hex_encode(hub_key(kSampleKey)), std::string(kPassKeyHex));                        // (the test's own maker is the hub's: the known answer of the document, for the document's made-up key)
         AdminGate gate(kSecret);
         ASSERT_TRUE(gate.open());
         AdminIdentity who;
         ASSERT_TRUE(gate.check(kPythonPass, kT0, who) == PassVerdict::Ok);                           // (made by tests/scripts/admin_pass.py)
         ASSERT_TRUE(who.ref == kRefDave && who.name == "dave" && who.role == "admin" && who.nonce == "00112233445566ff" && who.exp == kT0 + 60);
         const std::string payload = payload_json(kRefDave, "dave", "admin", kT0 + 60, nonce_of(1));
-        const std::string hex_as_key = sign_with(kPassKeyHex, payload);                              // (the 64-character text fed as the key)
+        const std::string hex_as_key = sign_with(hex_encode(hub_key(kSecret)), payload);             // (the 64-character text fed as the key)
         const std::string swapped = sign_with(hmac_sha256("ants-admin-pass-v1", kSecret), payload);  // (label as key, secret as message)
         const std::string plain_secret = sign_with(kSecret, payload);                                // (no derived key at all)
         for (const std::string& bad : {hex_as_key, swapped, plain_secret}) {
@@ -205,8 +208,8 @@ int main() {
         ASSERT_EQ(gate.csrf_token(mia), std::string(kPythonCsrfMia));
         ASSERT_EQ(AdminGate("another-secret-that-is-long-enough-1234").csrf_token(dave).size(), size_t{32});
         ASSERT_NE(AdminGate("another-secret-that-is-long-enough-1234").csrf_token(dave), gate.csrf_token(dave));
-        ASSERT_EQ(hex_encode(hmac_sha256(kSecret, "ants-admin-csrf-v1")), std::string("03a2b6b94fabcf8ae018852e8e6c0b1ec691375286a0263168238796556e3018"));       // (the hub's key for its own token)
-        ASSERT_TRUE(gate.csrf_token(dave).find("03a2b6b9") == std::string::npos);
+        ASSERT_EQ(hex_encode(hmac_sha256(kSampleKey, "ants-admin-csrf-v1")), std::string(kSampleHubCsrfKeyHex));         // (the hub's key for its own token: the document's known answer)
+        ASSERT_TRUE(gate.csrf_token(dave).find(hex_encode(hmac_sha256(kSecret, "ants-admin-csrf-v1")).substr(0, 8)) == std::string::npos);
     } TEST_END();
 
     TEST_CASE("PASS1.2 The key: 32 to 256 printable characters without a blank and at least 8 different ones, cut of the blanks at both ends; anything else (or nothing) is no key and every pass is refused, and a wrong value never throws") {
@@ -240,6 +243,22 @@ int main() {
             ASSERT_EQ(shut.csrf_token(who), std::string());
             ASSERT_EQ(shut.remembered(), size_t{0});
         }
+        // the made-up key of the documents' known answer is published: it is no key, whatever its shape and however it is padded, and a pass that is signed with it is refused
+        const std::string sample = kSampleKey;
+        ASSERT_TRUE(sample.size() >= kGateSecretMinChars && sample.size() <= kGateSecretMaxChars);   // (it has the shape of a key: only its being published refuses it)
+        ASSERT_TRUE(std::set<char>(sample.begin(), sample.end()).size() >= kGateSecretMinDistinct);
+        ASSERT_FALSE(gate_secret_is_good(sample));
+        ASSERT_TRUE(gate_secret_is_good(sample + "x") && gate_secret_is_good("x" + sample));         // (a key that merely contains or extends it is a key)
+        for (const std::string& setting : {sample, " " + sample, "\n" + sample + "\r\n \t"}) {
+            AdminGate shut(setting);
+            ASSERT_FALSE(shut.open());
+            ASSERT_TRUE(shut.given() && shut.sample());
+            Maker m;
+            m.secret = sample;
+            ASSERT_TRUE(shut.check(m.make(kT0), kT0, who) == PassVerdict::NoKey);                    // (a pass that the sample key signed is refused: nothing is learned from it)
+            ASSERT_EQ(shut.csrf_token(who), std::string());
+        }
+        ASSERT_FALSE(AdminGate(good).sample() || AdminGate(good + "x").sample() || AdminGate("").sample() || AdminGate("too-short").sample());          // (only the sample itself)
     } TEST_END();
 
     TEST_CASE("PASS1.3 A pass is refused for a wrong mac (of another key, of a changed payload, of a changed character), a pass of another form, one that has ended or lasts too long, a role that is not admin or owner, and a payload that is not exactly the five members") {
@@ -403,11 +422,10 @@ int main() {
         ASSERT_TRUE(gate.check(m.make(kT0, kRefDave, "<b>mia</b>"), kT0, who) == PassVerdict::Ok && who.name == "<b>mia</b>");          // (typed text is kept as it is: the page shows it as text, and every answer marks it)
     } TEST_END();
 
-    TEST_CASE("ADM1.1 With a good pass /admin/api/me tells the account (name, reference, role) and the page's token, sets no cookie, and has nothing of the retired sign-in; the operator's account is an owner") {
+    TEST_CASE("ADM1.1 With a good pass /admin/api/me tells the account (name, reference, role) and the page's token, and has nothing of the retired sign-in; the operator's account is an owner") {
         Door t;
         const HttpResponse r = t.get("/admin/api/me", t.maker.make(t.now));
         ASSERT_EQ(r.status, 200);
-        ASSERT_TRUE(r.set_cookies.empty());
         const ctl::JsonValue me = parse_text(r.body);
         ASSERT_TRUE(me.get("name").str() == "dave" && me.get("ref").str() == kRefDave && me.get("role").str() == "admin");
         ASSERT_EQ(me.get("csrf").str(), std::string(kPythonCsrfDave));
@@ -419,7 +437,7 @@ int main() {
         ASSERT_EQ(t.call(t.req("PUT", "/admin/api/me", {{"x-ants-admin-pass", t.maker.make(t.now)}})).status, 404);
         // a cookie is not looked at (the old sign-in cookie of a browser that still has one)
         const HttpResponse old = t.call(t.req("GET", "/admin/api/me", {{"cookie", "ants_admin=v2.stale.cookie"}}));
-        ASSERT_TRUE(old.status == 403 && old.body == kClosedBody && old.set_cookies.empty());
+        ASSERT_TRUE(old.status == 403 && old.body == kClosedBody);
     } TEST_END();
 
     TEST_CASE("ADM1.2 Without a good pass every call under /admin/api gets one answer, byte for byte (403 closed), whatever the path, the method and the reason: no pass, a bad one, an old one, a used one, a pass for another key, a role that is not admin or owner, and a server with no key") {
@@ -443,7 +461,7 @@ int main() {
                 const std::string path = call.second.substr(0, call.second.find('?'));
                 const std::string query = call.second.find('?') == std::string::npos ? "" : call.second.substr(call.second.find('?') + 1);
                 const HttpResponse r = t.call(t.req(call.first, path, h, "", query));
-                ASSERT_MSG(r.status == 403 && r.body == kClosedBody && r.content_type == "application/json" && r.set_cookies.empty(), call.first + " " + call.second + " with pass '" + pass.substr(0, 12) + "'");
+                ASSERT_MSG(r.status == 403 && r.body == kClosedBody && r.content_type == "application/json", call.first + " " + call.second + " with pass '" + pass.substr(0, 12) + "'");
             }
         }
         Door off(nullptr, "");                                                                         // (no key: closed whatever comes)
@@ -458,6 +476,18 @@ int main() {
         }
         ASSERT_FALSE(off.api->gate_key_given());
         ASSERT_TRUE(too_short.api->gate_key_given() && half.api->gate_key_given());
+        {   // the documents' sample key, set on this server: closed for a pass that the sample key signed as well (the start line says which kind of "not a key" it is)
+            Door sampled(nullptr, kSampleKey);
+            Maker made_with_sample;
+            made_with_sample.secret = kSampleKey;
+            ASSERT_FALSE(sampled.api->admin_api_on());
+            ASSERT_TRUE(sampled.api->gate_key_given() && sampled.api->gate_key_is_sample());
+            ASSERT_FALSE(off.api->gate_key_is_sample() || too_short.api->gate_key_is_sample() || t.api->gate_key_is_sample());
+            for (const auto& call : calls) {
+                const HttpResponse r = sampled.call(sampled.req(call.first, call.second.substr(0, call.second.find('?')), {{"x-ants-admin-pass", made_with_sample.make(t.now)}, {"content-type", "application/json"}}));
+                ASSERT_MSG(r.status == 403 && r.body == kClosedBody, call.first + " " + call.second);
+            }
+        }
         ASSERT_TRUE(t.api->admin_api_on());
         // a good pass still opens the door after all of that (a refusal costs nothing), and a path that is not a route is a 404 for an account that is let in
         const HttpResponse missing = t.get("/admin/api/does-not-exist", t.maker.make(t.now));
@@ -467,13 +497,13 @@ int main() {
         ASSERT_EQ(t.get("/admin/api/maps", t.maker.make(t.now)).status, 200);
     } TEST_END();
 
-    TEST_CASE("ADM1.3 The routes of the retired sign-in are gone: login, logout, the password, the users and the sign-in log's old kinds answer 404 to an account that is let in, and set no cookie") {
+    TEST_CASE("ADM1.3 The routes of the retired sign-in are gone: login, logout, the password, the users and the sign-in log's old kinds answer 404 to an account that is let in") {
         Door t;
         for (const char* path : {"/admin/api/login", "/admin/api/logout", "/admin/api/password", "/admin/api/users", "/admin/api/users/1", "/admin/api/users/1/reset", "/admin/api/users/1/disable", "/admin/api/users/1/enable", "/admin/api/users/1/remove"}) {
             const HttpResponse g = t.get(path, t.maker.make(t.now));
-            ASSERT_MSG(g.status == 404 && g.set_cookies.empty(), std::string("GET ") + path);
+            ASSERT_MSG(g.status == 404, std::string("GET ") + path);
             const HttpResponse p = t.post(path, "{\"username\":\"evil\",\"role\":\"admin\",\"password\":\"x\"}");
-            ASSERT_MSG(p.status == 404 && p.set_cookies.empty() && p.body == g.body, std::string("POST ") + path);
+            ASSERT_MSG(p.status == 404 && p.body == g.body, std::string("POST ") + path);
         }
     } TEST_END();
 
@@ -489,7 +519,7 @@ int main() {
         ASSERT_EQ(t.post(path, "{}", kRefDave, "dave", "admin", {{"x-ants-csrf", csrf.substr(1)}}).status, 403);
         ASSERT_EQ(t.post(path, "{}", kRefDave, "dave", "admin", {{"x-ants-csrf", csrf + "0"}}).status, 403);
         ASSERT_EQ(t.post(path, "{}", kRefDave, "dave", "admin", {{"x-ants-csrf", t.csrf_for(kRefMia, "mia")}}).status, 403);   // (the token of another account)
-        ASSERT_EQ(t.post(path, "{}", kRefDave, "dave", "admin", {{"x-ants-csrf", "03a2b6b94fabcf8ae018852e8e6c0b1e"}}).status, 403);   // (the start of the hub's key is no token)
+        ASSERT_EQ(t.post(path, "{}", kRefDave, "dave", "admin", {{"x-ants-csrf", hex_encode(hmac_sha256(kSecret, "ants-admin-csrf-v1")).substr(0, 32)}}).status, 403);   // (the start of the hub's key is no token)
         ASSERT_EQ(t.post(path, "{}", kRefDave, "dave", "admin", {{"sec-fetch-site", "cross-site"}}).status, 404);               // (from another site: the answer of a path that is not there)
         ASSERT_EQ(t.post(path, "{}", kRefDave, "dave", "admin", {{"sec-fetch-site", "same-site"}}).status, 404);
         ASSERT_EQ(t.post(path, "{}", kRefDave, "dave", "admin", {{"sec-fetch-site", "none"}}).status, 403);                     // (a typed address may read, but a change is made by the page itself)

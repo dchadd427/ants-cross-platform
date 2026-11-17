@@ -64,7 +64,7 @@ namespace core = ants::assets::lvl_core;
 using ctl::HttpRequest;
 using ctl::HttpResponse;
 
-const char* const kSecret = "canary-gate-key-5d8f0c1e7a9b4263-q";            // (a made-up key: the test plays the hub's gate and signs the passes)
+const char* const kSecret = "testing-gate-key-0b8e2d71a4c6f395-z";           // (a made-up key: the test plays the hub's gate and signs the passes)
 const char* const kOwnerRef = "0123456789abcdef";
 
 // The checking budget of every Api below, unless a test sets its own: SubmissionApiConfig::check_budget_ms is real time (1,500 ms in a window by default, spent by the sends themselves), so a slow or busy
@@ -161,12 +161,12 @@ struct Api {
         return call(r);
     }
 
-    // A new pass for the owner's account (each request needs its own: a pass is used once)
+    // A new pass for the admin's account (each request needs its own: a pass is used once)
     std::string pass() { char nonce[32]; std::snprintf(nonce, sizeof nonce, "%016llx", static_cast<unsigned long long>(++passes)); return make_pass(kSecret, kOwnerRef, "dave", "admin", now + 60, nonce); }
 
     ctl::JsonValue me() { return parse_text(call(req("GET", "/admin/api/me", "", {{"x-ants-admin-pass", pass()}})).body); }
 
-    // an owner's call: a pass of its own and, for a change, the page's token of the account
+    // an admin's call: a pass of its own and, for a change, the page's token of the account
     HttpResponse owner(const std::string& method, const std::string& path, const std::string& query = "", const std::string& body = "") {
         std::map<std::string, std::string> h = {{"x-ants-admin-pass", pass()}};
         if (method == "POST") {
@@ -180,7 +180,7 @@ struct Api {
 }  // namespace
 
 int main() {
-    std::cout << "=======================================================\n MAP SUBMISSIONS: THE ROUTES AND THE OWNER'S SESSION\n=======================================================\n";
+    std::cout << "=======================================================\n MAP SUBMISSIONS: THE ROUTES AND THE ADMIN PAGE'S PASS\n=======================================================\n";
 
     TEST_CASE("API1.1 A player sends a map, finds it again by the token, and withdraws it: the shapes of the answers, and nothing else is a route") {
         Api t;
@@ -348,7 +348,7 @@ int main() {
         ASSERT_EQ(t.submit("Quick%20Map", "203.0.113.2").status, 201);                               // (the next window: the time is counted again from nothing)
     } TEST_END();
 
-    TEST_CASE("API2.4 The owner's page's whole job through the API: the four lists and their counts, the next name, approve with and without a new name, decline, take down, put back, the picture, and the lobby is told when it changes") {
+    TEST_CASE("API2.4 The admin page's whole job through the API: the four lists and their counts, the next name, approve with and without a new name, decline, take down, put back, the picture, and the lobby is told when it changes") {
         Api t;
         std::vector<SubmitOutcome> sent;
         for (const char* name : {"First%20Map", "Second%20Map", "Third%20Map", "Tiny"}) {
@@ -415,7 +415,7 @@ int main() {
         ASSERT_EQ(t.owner("POST", "/admin/api/elsewhere", "", "{}").status, 404);
     } TEST_END();
 
-    TEST_CASE("API2.5 What the owner's page is given holds only what was cleaned (no angle bracket, no control character), so that even a page that forgot to escape would show text; a note with quotes and an ampersand is JSON-escaped") {
+    TEST_CASE("API2.5 What the admin page is given holds only what was cleaned (no angle bracket, no control character), so that even a page that forgot to escape would show text; a note with quotes and an ampersand is JSON-escaped") {
         Api t;
         HttpResponse r = t.submit("Quote%20Map", "203.0.113.5", "", "", "");
         ASSERT_EQ(r.status, 201);
@@ -445,7 +445,7 @@ int main() {
         }
     } TEST_END();
 
-    TEST_CASE("API2.6 Player text that looks like an order or like the owner is refused with a reason and a sentence, and the owner's list shows the description in its cleaned form only") {
+    TEST_CASE("API2.6 Player text that looks like an order or like the owner is refused with a reason and a sentence, and the admin page's list shows the description in its cleaned form only") {
         Api t;
         HttpRequest q = t.req("POST", "/submissions", "", {{"content-type", "application/octet-stream"}, {"x-client-address", "203.0.113.9"}}, tiny());
         const auto answer = [&](const std::string& query) {

@@ -265,8 +265,8 @@ target_include_directories(test_map_names PRIVATE
 add_test(NAME test_map_names COMMAND test_map_names)
 set_tests_properties(test_map_names PROPERTIES COST 1)
 
-# The routes of the map submissions (ants_server/submissions_http.hpp): what a player may do and how it is limited by address, the owner's cookie that the login helper signs (forged, changed, aged), the CSRF
-# token, the answer of a path that does not exist for everything of the owner's that a visitor asks, the owner's decisions through the API. Requests made by hand: no network
+# The routes of the map submissions (ants_server/submissions_http.hpp): what a player may do and how it is limited by address, the admin page's pass that the test signs (forged, changed, old, used twice), the CSRF
+# token, the answer of a path that does not exist for everything of the admin page's that a visitor asks, the admins' decisions through the API. Requests made by hand: no network
 add_executable(test_submissions_api
     test_submissions_api.cpp
 )

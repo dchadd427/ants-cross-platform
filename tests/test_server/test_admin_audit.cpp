@@ -222,6 +222,59 @@ int main() {
         }
     } TEST_END();
 
+    TEST_CASE("AUD2.2 After the migration the old password hashes, names and addresses are in no byte of the file or of its WAL (the file is rewritten and the WAL cut, in WAL mode as the live file is and in the rollback journal); what is kept is kept; the copy made before still holds them") {
+        const std::vector<std::string> markers = {"pbkdf2-sha256$600000$MARKERSALT7$HASHMARKER9f8e7d6c5b4a", "Marker Old Owner", "marker old owner", "MARKERADDRKEY0123456789", "MARKERSALTVALUE", "MARKERDROPPEDDETAIL"};
+        const auto holds = [&](const std::string& bytes) {
+            std::string found;
+            for (const std::string& marker : markers) {
+                if (bytes.find(marker) != std::string::npos) found += marker + "; ";
+            }
+            return found;
+        };
+        for (const bool wal : {true, false}) {
+            const std::string what = wal ? "WAL" : "rollback journal";
+            TempDir dir;
+            const std::string live = (dir.path / "live.db").string();
+            const std::string copy = (dir.path / "copy.db").string();
+            const std::vector<db::Migration> every = db_migrations();
+            const std::vector<db::Migration> v7(every.begin(), every.begin() + 7);
+            db::OpenOptions options;
+            options.wal = wal;
+            {
+                db::Database db7;
+                ASSERT_TRUE(db::open_and_migrate(db7, live, v7, options).ok());
+                const std::string id(32, 'a');
+                ASSERT_TRUE(db7.exec("INSERT INTO map_submissions (id, token_hash, state, kind, name, name_key, final_name, final_key, renamed, maker, note, owner_message, width, height, minutes, players, description, size, hash, findings, file, "
+                                     "file_kept, created_at, decided_at, decided_by) VALUES ('" + id + "', '" + std::string(64, '1') + "', 'approved', 'classic', 'N', 'n', 'na', 'na', 0, 'Mia', '', '', 31, 31, 5, 2, 'd', 100, '0123456789abcdef', '[]', 'fa', 1, 1000, 2000, 'Marker Old Owner')").ok());
+                ASSERT_TRUE(db7.exec("INSERT INTO review_log (at, actor_id, actor_name, action, submission, detail) VALUES (1500, '1', 'Marker Old Owner', 'approve', '" + id + "', '')").ok());
+                ASSERT_TRUE(db7.exec("INSERT INTO meta (key, value) VALUES ('submission_salt', 'keepme'), ('admin_salt', 'MARKERSALTVALUE')").ok());
+                ASSERT_TRUE(db7.exec("INSERT INTO admin_users (name, name_key, role, pw_hash, created_at) VALUES ('Marker Old Owner', 'marker old owner', 'admin', 'pbkdf2-sha256$600000$MARKERSALT7$HASHMARKER9f8e7d6c5b4a', 1)").ok());
+                ASSERT_TRUE(db7.exec("INSERT INTO admin_audit (at, actor, actor_id, action, target, detail, addr_key) VALUES (10, 'Marker Old Owner', 1, 'sign_in', '', 'MARKERDROPPEDDETAIL', 'MARKERADDRKEY0123456789'), (12, 'Marker Old Owner', 1, 'map_approved', 'na', '', 'MARKERADDRKEY0123456789')").ok());
+                ASSERT_TRUE(db7.exec("INSERT INTO admin_known_addr VALUES (1, 'MARKERADDRKEY0123456789', 5)").ok());
+                db7.close();
+            }
+            fs::copy_file(live, copy);                                                              // (what the operator backs up before the first start: it is a file of its own, which nothing here can clean)
+            ASSERT_MSG(holds(slurp(live)).find("HASHMARKER") != std::string::npos, what);            // (the markers are really in the file before: the test can tell a clean file from a dirty one)
+            ASSERT_MSG(holds(slurp(copy)) == holds(slurp(live)) && !holds(slurp(copy)).empty(), what);
+            db::Database db8;
+            int version = 0;
+            ASSERT_TRUE(db::open_and_migrate(db8, live, db_migrations(), options, &version).ok() && version == db_schema_version());
+            ASSERT_MSG(holds(slurp(live)).empty(), what + ", the file (still open, as the server keeps it) holds: " + holds(slurp(live)));
+            for (const char* suffix : {"-wal", "-journal"}) {
+                if (fs::exists(live + suffix)) ASSERT_MSG(holds(slurp(live + suffix)).empty(), what + ", " + suffix + " holds: " + holds(slurp(live + suffix)));
+            }
+            // what is kept is kept
+            ASSERT_EQ(scalar(db8, "SELECT COUNT(*) FROM admin_audit"), int64_t{1});
+            ASSERT_EQ(text_of(db8, "SELECT actor || '|' || action || '|' || target FROM admin_audit"), std::string("earlier admin|map_approved|na"));
+            ASSERT_EQ(text_of(db8, "SELECT decided_by FROM map_submissions"), std::string("earlier admin"));
+            ASSERT_EQ(text_of(db8, "SELECT value FROM meta WHERE key = 'submission_salt'"), std::string("keepme"));
+            ASSERT_EQ(text_of(db8, "PRAGMA integrity_check"), std::string("ok"));
+            db8.close();
+            ASSERT_MSG(holds(slurp(live)).empty(), what + ", the closed file holds: " + holds(slurp(live)));
+            ASSERT_MSG(!holds(slurp(copy)).empty(), what);                                          // (the copy is as it was)
+        }
+    } TEST_END();
+
     TEST_CASE("AUD3.1 The database and its side files are private to the user (0600), the results folder too (0700): made so even with a loose umask, and tightened with a line for the log when they were looser") {
 #ifndef _WIN32
         const auto mode = [](const fs::path& p) {

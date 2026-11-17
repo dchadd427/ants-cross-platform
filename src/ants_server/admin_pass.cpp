@@ -63,6 +63,7 @@ const char* pass_verdict_word(PassVerdict verdict) {
 }
 
 bool gate_secret_is_good(std::string_view cut_setting) {
+    if (cut_setting == kSampleGateKey) return false;                  // (published in the documents: anybody could make passes with it)
     if (cut_setting.size() < kGateSecretMinChars || cut_setting.size() > kGateSecretMaxChars) return false;
     bool seen[256] = {false};
     size_t distinct = 0;
@@ -80,6 +81,7 @@ bool gate_secret_is_good(std::string_view cut_setting) {
 AdminGate::AdminGate(std::string_view setting, size_t max_remembered) : max_remembered_(max_remembered) {
     const std::string secret = cut_blanks(setting);
     given_ = !secret.empty();
+    sample_ = secret == kSampleGateKey;
     if (!gate_secret_is_good(secret)) return;
     pass_key_ = hmac_sha256(secret, kPassLabel);                      // (the raw digest: key = the secret, message = the label)
     csrf_key_ = hmac_sha256(secret, kCsrfLabel);

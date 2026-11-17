@@ -253,7 +253,7 @@ const std::vector<db::Migration>& db_migrations() {
         {5, "map_submissions", kSubmissionsSql},
         {6, "admin_accounts", kAccountsSql},
         {7, "history_deaths", kDeathsSql},
-        {8, "admin_pass", kAdminPassSql},
+        {8, "admin_pass", kAdminPassSql, true},                // (the old password hashes and names are in free pages of the file until it is rewritten)
     };
     return list;
 }

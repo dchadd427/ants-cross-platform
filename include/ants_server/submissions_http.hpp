@@ -50,6 +50,7 @@ public:
     bool admin_api_on() const { return gate_.open(); }
     /// Whether the setting of the key was there at all (the start line tells "not set" from "not good")
     bool gate_key_given() const { return gate_.given(); }
+    bool gate_key_is_sample() const { return gate_.sample(); }
     /// Lines for the operator's log (`admin_gate kind=<word>`: a pass that was refused, at most one line a minute for each kind; never the pass, a name or an address)
     std::vector<std::string> take_notices();
 

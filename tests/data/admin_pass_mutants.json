@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the admin page's pass and its door (src/ants_server/admin_pass.cpp and .hpp, the admin part of submissions_http.cpp, the version 8 migration of db_schema.cpp) for tools/mutate.py (docs/TESTING.md). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/admin_pass_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: each breaks one rule of docs/MAP_SUBMISSIONS.md, 'The admin page' (the key and its shape, the raw derived keys and their order, the mac compared in constant time before anything is read, the time, the role, exactly the five members and their kinds, a pass used once and the bound of the table, a name that is an id never shown, the one answer without a good pass, the page's token and the checks of a change, what a decision is signed with and logged as, the lines for the operator's log, the migration that retires the accounts). Not listed on purpose, because no program can tell them apart from the real one: the 1,024-byte and 512-byte caps on a pass and its payload (a pass of the hub is far under both; a larger one fails the mac or the five members as well).",
+ "note": "Mutants of the admin page's pass and its door (src/ants_server/admin_pass.cpp and .hpp, the admin part of submissions_http.cpp, the version 8 migration of db_schema.cpp) for tools/mutate.py (docs/TESTING.md). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/admin_pass_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: each breaks one rule of docs/MAP_SUBMISSIONS.md, 'The admin page' (the key and its shape, the raw derived keys and their order, the mac compared in constant time before anything is read, the time, the role, exactly the five members and their kinds, a pass used once and the bound of the table, a name that is an id never shown, the one answer without a good pass, the page's token and the checks of a change, what a decision is signed with and logged as, the lines for the operator's log, the migration that retires the accounts and the file rewritten after it so that no old hash or name is left, the published sample key that is no key). Not listed on purpose, because no program can tell them apart from the real one: the 1,024-byte and 512-byte caps on a pass and its payload (a pass of the hub is far under both; a larger one fails the mac or the five members as well).",
  "defaults": {
   "build": "test_admin_pass test_admin_audit test_submissions_api",
   "test": "./build/tests/test_server/test_admin_pass && ./build/tests/test_server/test_admin_audit && ./build/tests/test_server/test_submissions_api"
@@ -418,6 +418,81 @@
    "file": "src/ants_server/db_schema.cpp",
    "old": "    \"UPDATE review_log SET actor_id = '', actor_name = 'earlier admin';\";",
    "new": "    \"\";"
+  },
+  {
+   "id": "the_sample_key_is_a_key",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    if (cut_setting == kSampleGateKey) return false;                  // (published in the documents: anybody could make passes with it)\n",
+   "new": "",
+   "expect": "PASS1.2"
+  },
+  {
+   "id": "the_sample_key_is_refused_inside_a_longer_key",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    if (cut_setting == kSampleGateKey) return false;",
+   "new": "    if (cut_setting.find(kSampleGateKey) != std::string_view::npos) return false;",
+   "expect": "PASS1.2"
+  },
+  {
+   "id": "the_sample_key_is_not_told",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    sample_ = secret == kSampleGateKey;",
+   "new": "    sample_ = false;",
+   "expect": "PASS1.2"
+  },
+  {
+   "id": "the_sample_key_is_found_before_the_blanks_are_cut",
+   "file": "src/ants_server/admin_pass.cpp",
+   "old": "    sample_ = secret == kSampleGateKey;",
+   "new": "    sample_ = setting == kSampleGateKey;",
+   "expect": "PASS1.2"
+  },
+  {
+   "id": "the_start_line_does_not_name_the_sample_key",
+   "file": "src/ants_server/main.cpp",
+   "old": "             submit_api->gate_key_is_sample() ? std::string(\"the admin page is CLOSED (ANTS_ADMIN_GATE_SECRET is the sample key of the documents, which is no key: make one with openssl rand -hex 32)\") :\n",
+   "new": "",
+   "build": "ants_server lvl_tool",
+   "test": "BUILD_DIR=build python3 tests/scripts/submissions_server_check.py"
+  },
+  {
+   "id": "migration_8_does_not_ask_for_the_cleaning",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "{8, \"admin_pass\", kAdminPassSql, true},",
+   "new": "{8, \"admin_pass\", kAdminPassSql, false},",
+   "expect": "AUD2.2"
+  },
+  {
+   "id": "the_cleaning_is_skipped",
+   "file": "src/ants_db/migrations.cpp",
+   "old": "        if (m.vacuum_after) {",
+   "new": "        if (false && m.vacuum_after) {",
+   "build": "test_admin_pass test_admin_audit test_submissions_api test_db",
+   "test": "./build/tests/test_server/test_admin_pass && ./build/tests/test_server/test_admin_audit && ./build/tests/test_server/test_submissions_api && env -u ANTS_TEST_FILTER ./build/tests/test_db/test_db"
+  },
+  {
+   "id": "the_wal_is_not_cut_after_the_cleaning",
+   "file": "src/ants_db/migrations.cpp",
+   "old": "            if (e.ok()) e = db.exec(\"PRAGMA wal_checkpoint(TRUNCATE)\");\n",
+   "new": "",
+   "build": "test_admin_pass test_admin_audit test_submissions_api test_db",
+   "test": "./build/tests/test_server/test_admin_pass && ./build/tests/test_server/test_admin_audit && ./build/tests/test_server/test_submissions_api && env -u ANTS_TEST_FILTER ./build/tests/test_db/test_db"
+  },
+  {
+   "id": "the_cleaning_that_fails_is_not_told",
+   "file": "src/ants_db/migrations.cpp",
+   "old": "            if (!e.ok()) return fail(kErrCleaning,",
+   "new": "            if (false) return fail(kErrCleaning,",
+   "build": "test_admin_pass test_admin_audit test_submissions_api test_db",
+   "test": "./build/tests/test_server/test_admin_pass && ./build/tests/test_server/test_admin_audit && ./build/tests/test_server/test_submissions_api && env -u ANTS_TEST_FILTER ./build/tests/test_db/test_db"
+  },
+  {
+   "id": "the_cleaning_that_fails_is_any_error",
+   "file": "src/ants_db/migrations.cpp",
+   "old": "            if (!e.ok()) return fail(kErrCleaning,",
+   "new": "            if (!e.ok()) return fail(e.code,",
+   "build": "test_admin_pass test_admin_audit test_submissions_api test_db",
+   "test": "./build/tests/test_server/test_admin_pass && ./build/tests/test_server/test_admin_audit && ./build/tests/test_server/test_submissions_api && env -u ANTS_TEST_FILTER ./build/tests/test_db/test_db"
   }
  ]
 }

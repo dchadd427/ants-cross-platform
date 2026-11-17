@@ -668,7 +668,8 @@ int main(int argc, char** argv) {
             const ants::server::PrivateCreation private_files;                           // (the database, and the -wal and -shm that SQLite makes after it, are for this user only)
             const ants::db::Error err = ants::db::open_and_migrate(database, path, ants::server::db_migrations(), ants::db::OpenOptions(), &version, &journal);
             if (!err.ok()) {
-                std::fprintf(stderr, "database %s: %s\n(the file was not changed; --no-db starts the server without a database)\n", path.c_str(), err.message.c_str());
+                std::fprintf(stderr, "database %s: %s\n(%s; --no-db starts the server without a database)\n", path.c_str(), err.message.c_str(),
+                             err.code == ants::db::kErrCleaning ? "the file has the new schema, but its old bytes were not cleaned out: put back the copy that was made before the update and start again" : "the file was not changed");
                 return 1;
             }
             log("database " + path + ": schema version " + std::to_string(version) + " (journal mode " + journal + ")" +
@@ -801,6 +802,7 @@ int main(int argc, char** argv) {
         submit_api->set_on_approved_changed(refresh);
         log("map submissions on: files in " + sc.dir + ", at most " + std::to_string(sc.max_waiting) + " waiting and " + std::to_string(sc.per_address_per_day) + " a day from one address; " +
             (submit_api->admin_api_on() ? std::string("the admin page's API is on (it answers a visitor whom the hub's gate lets in)") :
+             submit_api->gate_key_is_sample() ? std::string("the admin page is CLOSED (ANTS_ADMIN_GATE_SECRET is the sample key of the documents, which is no key: make one with openssl rand -hex 32)") :
              submit_api->gate_key_given() ? std::string("the admin page is CLOSED (ANTS_ADMIN_GATE_SECRET is not 32 to 256 printable characters without a blank)") : std::string("the admin page is CLOSED (ANTS_ADMIN_GATE_SECRET is not set)")) +
             "; " + std::to_string(submissions->approved_maps().size()) + " approved maps in the lobby's list");
         for (const std::string& line : submissions->take_notices()) log(line);

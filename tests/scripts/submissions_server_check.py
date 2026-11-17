@@ -315,7 +315,8 @@ class TheSettings(unittest.TestCase):
             self.assertIn("map submissions:", done.stderr)
             # without a good key the server runs, says that the admin page is closed, and every call under /admin/api is the one answer, even with a pass that the right key made
             for tag, setting, words in (("none", None, "the admin page is CLOSED (ANTS_ADMIN_GATE_SECRET is not set)"), ("short", "too-short-for-a-key", "the admin page is CLOSED (ANTS_ADMIN_GATE_SECRET is not 32 to 256 printable characters without a blank)"),
-                                        ("blank", "a key with blanks inside it is not a key 12345", "the admin page is CLOSED (ANTS_ADMIN_GATE_SECRET is not 32 to 256 printable characters without a blank)")):
+                                        ("blank", "a key with blanks inside it is not a key 12345", "the admin page is CLOSED (ANTS_ADMIN_GATE_SECRET is not 32 to 256 printable characters without a blank)"),
+                                        ("sample", admin_pass.SAMPLE_SECRET, "the admin page is CLOSED (ANTS_ADMIN_GATE_SECRET is the sample key of the documents")):
                 env = {"PATH": os.environ.get("PATH", "")}
                 if setting is not None:
                     env["ANTS_ADMIN_GATE_SECRET"] = setting
@@ -330,9 +331,10 @@ class TheSettings(unittest.TestCase):
                         except OSError:
                             time.sleep(0.05)
                     c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
-                    c.request("GET", "/admin/api/me", headers={admin_pass.PASS_HEADER: admin_pass.make_pass(SECRET)})
-                    r = c.getresponse()
-                    self.assertEqual((r.status, r.read()), (403, CLOSED), tag)
+                    for signer in (SECRET, setting or SECRET):                                         # (a pass that the right key made, and one that the odd key itself made: neither opens it)
+                        c.request("GET", "/admin/api/me", headers={admin_pass.PASS_HEADER: admin_pass.make_pass(signer)})
+                        r = c.getresponse()
+                        self.assertEqual((r.status, r.read()), (403, CLOSED), tag)
                     c.close()
                 finally:
                     proc.send_signal(signal.SIGTERM)
