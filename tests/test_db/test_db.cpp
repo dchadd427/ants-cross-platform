@@ -148,38 +148,66 @@ void open_and_close_cases() {
         ro.read_only = true;
         Database reader;
         DB_CHECK(reader.open(dir.file("two.db"), ro).ok());
-        std::atomic<bool> done{false};
-        std::atomic<int> committed{0};
-        std::thread writing([&]() {
-            for (int i = 1; i <= 300; ++i) {
-                if (!writer.exec("INSERT INTO t VALUES (" + std::to_string(i) + ")").ok()) break;
-                committed = i;
-            }
-            done = true;
-        });
         const auto version = [&]() {
             Statement st;
             return reader.prepare(st, "PRAGMA data_version").ok() && st.step() == Statement::Step::Row ? st.column_int64(0) : int64_t{-1};
         };
-        bool consistent = true;
-        bool moved = false;
-        int64_t last_version = version();
-        int64_t last_rows = 0;
-        while (!done || last_rows < 300) {
-            DB_CHECK(reader.exec("BEGIN").ok());
-            const int64_t v = version();
-            const int64_t first = count_rows(reader, "t");
-            const int64_t second = count_rows(reader, "t");    // (the same state: the writer may have committed between the two, and this transaction does not see it)
-            consistent = consistent && first == second && first >= last_rows;
-            moved = moved || v != last_version;
-            last_version = v;
-            last_rows = first;
-            DB_CHECK(reader.exec("COMMIT").ok());
-            if (done && last_rows < 300 && committed == 300) last_rows = count_rows(reader, "t");
+        // Nothing below depends on which thread is faster: the writer commits only after `go`, and it sets `finished` at its end even when an insert failed, so no wait is endless.
+        std::atomic<bool> go{false};
+        std::atomic<bool> finished{false};
+        std::atomic<bool> writer_ok{true};
+        const auto write_rows = [&](int from, int to) {
+            while (!go) std::this_thread::yield();
+            for (int i = from; i <= to; ++i) {
+                if (!writer.exec("INSERT INTO t VALUES (" + std::to_string(i) + ")").ok()) {
+                    writer_ok = false;
+                    break;
+                }
+            }
+            finished = true;
+        };
+
+        // Part 1: the reader opens a read transaction and takes its first version and its first count; only then does the writer start, and the reader stays in that transaction until the writer
+        // has committed all 300 rows. So every commit falls inside the reader's transaction, which must go on seeing the state that it began with; the next transaction sees them all, and
+        // data_version (read before the writer started) is not the same any more.
+        std::thread first_batch(write_rows, 1, 300);
+        const bool began = reader.exec("BEGIN").ok();
+        const int64_t rows_at_start = count_rows(reader, "t");
+        const int64_t version_at_start = version();
+        go = true;
+        bool one_state = true;
+        for (bool last_pass = false; !last_pass;) {
+            last_pass = finished;                                  // (and one more read after the writer is done)
+            one_state = one_state && count_rows(reader, "t") == rows_at_start;
+            std::this_thread::yield();
         }
-        writing.join();
-        DB_CHECK(consistent && moved);
-        DB_CHECK(count_rows(reader, "t") == 300);
+        const bool ended = reader.exec("COMMIT").ok();
+        first_batch.join();
+        DB_CHECK(began && ended && writer_ok);
+        DB_CHECK(rows_at_start == 0);                              // (the snapshot is older than every commit, so the commits did fall inside it)
+        DB_CHECK(one_state);                                       // a read transaction is one state of the file, while another connection commits
+        DB_CHECK(count_rows(reader, "t") == 300);                  // (a new transaction sees what was committed)
+        DB_CHECK(version() != version_at_start);                   // PRAGMA data_version says that another connection committed
+
+        // Part 2: short read transactions while the writer commits another 300 rows: each one reads the same count twice (the writer may commit between the two reads, and the transaction
+        // does not see it), and what the reader sees never goes back. The pass that follows the writer's end sees all of it.
+        finished = false;
+        std::thread second_batch(write_rows, 301, 600);
+        bool whole_states = true;
+        int64_t last_rows = 300;
+        for (bool last_pass = false; !last_pass;) {
+            last_pass = finished;
+            whole_states = whole_states && reader.exec("BEGIN").ok();
+            const int64_t first = count_rows(reader, "t");
+            const int64_t second = count_rows(reader, "t");
+            whole_states = whole_states && first == second && first >= last_rows && first <= 600;
+            last_rows = first;
+            whole_states = whole_states && reader.exec("COMMIT").ok();
+        }
+        second_batch.join();
+        DB_CHECK(writer_ok);
+        DB_CHECK(whole_states);
+        DB_CHECK(last_rows == 600);
     } DB_END;
 }
 
