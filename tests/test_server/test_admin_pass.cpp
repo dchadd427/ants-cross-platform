@@ -275,6 +275,8 @@ int main() {
             const PassVerdict v = verdict(odd);
             ASSERT_MSG(v == PassVerdict::Malformed || v == PassVerdict::BadPass, odd.substr(0, 40));
         }
+        const std::string v2_body = "v2." + base64url_encode(base);
+        ASSERT_TRUE(verdict(v2_body + "." + hex_encode(hmac_sha256(key, v2_body))) == PassVerdict::Malformed);                    // (another version, signed rightly: a version that this server does not know)
         ASSERT_TRUE(verdict(sign_with(key, base) + "x") == PassVerdict::Malformed);                      // (a mac of 65 characters)
         const auto signed_text = [&](const std::string& payload) { return sign_with(key, payload); };
         ASSERT_TRUE(verdict(signed_text("not json")) == PassVerdict::Malformed);

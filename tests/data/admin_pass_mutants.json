@@ -27,7 +27,7 @@
    "id": "key_distinct_not_required",
    "file": "src/ants_server/admin_pass.cpp",
    "old": "    return distinct >= kGateSecretMinDistinct;",
-   "new": "    return true;"
+   "new": "    (void)distinct;\n    return true;"
   },
   {
    "id": "key_distinct_7",
@@ -63,13 +63,13 @@
    "id": "pass_key_is_the_secret",
    "file": "src/ants_server/admin_pass.cpp",
    "old": "pass_key_ = hmac_sha256(secret, kPassLabel);",
-   "new": "pass_key_ = secret;"
+   "new": "pass_key_ = secret;\n    (void)kPassLabel;"
   },
   {
    "id": "csrf_key_is_the_pass_key",
    "file": "src/ants_server/admin_pass.cpp",
    "old": "csrf_key_ = hmac_sha256(secret, kCsrfLabel);",
-   "new": "csrf_key_ = pass_key_;"
+   "new": "csrf_key_ = pass_key_;\n    (void)kCsrfLabel;"
   },
   {
    "id": "csrf_label_is_the_hubs",
@@ -93,7 +93,7 @@
    "id": "mac_over_the_payload_only",
    "file": "src/ants_server/admin_pass.cpp",
    "old": "hex_encode(hmac_sha256(pass_key_, signed_part))",
-   "new": "hex_encode(hmac_sha256(pass_key_, payload_text))"
+   "new": "hex_encode(hmac_sha256(pass_key_, payload_text)) + std::string(signed_part.substr(0, 0))"
   },
   {
    "id": "version_not_checked",
@@ -146,13 +146,7 @@
   {
    "id": "member_count_not_checked",
    "file": "src/ants_server/admin_pass.cpp",
-   "old": "    if (v.size() != 5) return PassVerdict::BadFields;\n",
-   "new": ""
-  },
-  {
-   "id": "member_names_not_checked",
-   "file": "src/ants_server/admin_pass.cpp",
-   "old": "    for (const char* key : kMembers) {\n        if (!v.has(key)) return PassVerdict::BadFields;\n    }\n",
+   "old": "    if (v.size() != 5) return PassVerdict::BadFields;                  // (exactly five members; a member that is missing is null below, which is of no kind that is asked for)\n",
    "new": ""
   },
   {
@@ -171,19 +165,19 @@
    "id": "reference_shape_not_checked",
    "file": "src/ants_server/admin_pass.cpp",
    "old": "if (!all_lower_hex(ref, kReferenceChars) || ",
-   "new": "if ("
+   "new": "if ((void)all_lower_hex(ref, kReferenceChars), "
   },
   {
    "id": "nonce_shape_not_checked",
    "file": "src/ants_server/admin_pass.cpp",
    "old": " || !all_lower_hex(nonce, kNonceChars) || ",
-   "new": " || "
+   "new": " || ((void)all_lower_hex(nonce, kNonceChars), false) || "
   },
   {
    "id": "name_not_checked",
    "file": "src/ants_server/admin_pass.cpp",
    "old": " || !plain_name(name)) return PassVerdict::BadFields;",
-   "new": ") return PassVerdict::BadFields;"
+   "new": " || ((void)plain_name(name), false)) return PassVerdict::BadFields;"
   },
   {
    "id": "name_limit_65",
@@ -195,7 +189,7 @@
    "id": "name_control_characters_allowed",
    "file": "src/ants_server/admin_pass.cpp",
    "old": "static_cast<unsigned char>(c) < 0x20 || c == 0x7f",
-   "new": "false"
+   "new": "(void)c, false"
   },
   {
    "id": "replay_not_checked",
@@ -213,7 +207,7 @@
    "id": "table_not_bounded",
    "file": "src/ants_server/admin_pass.cpp",
    "old": "    if (seen_.size() >= max_remembered_) return PassVerdict::Full;\n",
-   "new": ""
+   "new": "    (void)max_remembered_;\n"
   },
   {
    "id": "nonces_never_forgotten",
@@ -231,7 +225,7 @@
    "id": "an_id_shaped_name_is_shown",
    "file": "src/ants_server/admin_pass.cpp",
    "old": "out.name = name.empty() || looks_like_an_id(name) ? ref : name;",
-   "new": "out.name = name.empty() ? ref : name;"
+   "new": "out.name = ((void)looks_like_an_id(name), name.empty()) ? ref : name;"
   },
   {
    "id": "id_shape_from_16",
@@ -261,7 +255,7 @@
    "id": "a_visitor_without_a_pass_is_let_in",
    "file": "src/ants_server/submissions_http.cpp",
    "old": "    if (!admitted(request, now_s, who)) return closed_reply();\n",
-   "new": "    admitted(request, now_s, who);\n"
+   "new": "    admitted(request, now_s, who);\n    (void)closed_reply;\n"
   },
   {
    "id": "closed_is_a_404",
@@ -279,7 +273,7 @@
    "id": "a_change_needs_no_token",
    "file": "src/ants_server/submissions_http.cpp",
    "old": "    if (token == nullptr || !ctl::constant_time_equal(*token, gate_.csrf_token(who))) {",
-   "new": "    if (token == nullptr) {"
+   "new": "    if (token == nullptr || ((void)who, false)) {"
   },
   {
    "id": "the_token_is_compared_with_not_equal",
@@ -291,7 +285,7 @@
    "id": "a_change_from_any_site",
    "file": "src/ants_server/submissions_http.cpp",
    "old": "    if (site != nullptr && *site != \"same-origin\") {",
-   "new": "    if (false) {"
+   "new": "    if ((void)site, false) {"
   },
   {
    "id": "json_not_required",
@@ -333,7 +327,7 @@
    "id": "a_decision_is_not_logged",
    "file": "src/ants_server/submissions_http.cpp",
    "old": "    audit_.record(actor, now_s, logged, s.final_name.empty() ? s.name : s.final_name, detail);\n",
-   "new": ""
+   "new": "    (void)logged;\n    (void)actor;\n"
   },
   {
    "id": "the_log_says_nothing_of_the_reason",
@@ -345,13 +339,13 @@
    "id": "every_refusal_is_told",
    "file": "src/ants_server/submissions_http.cpp",
    "old": "    if (last == 0 || now_s - last >= kNoticeEveryS) {",
-   "new": "    if (true) {"
+   "new": "    if ((void)kNoticeEveryS, true) {"
   },
   {
    "id": "a_refusal_is_never_told",
    "file": "src/ants_server/submissions_http.cpp",
    "old": "    if (last == 0 || now_s - last >= kNoticeEveryS) {",
-   "new": "    if (false) {"
+   "new": "    if ((void)kNoticeEveryS, false) {"
   },
   {
    "id": "me_hides_the_reference",

@@ -104,11 +104,7 @@ PassVerdict AdminGate::check(std::string_view header, int64_t now, AdminIdentity
     std::string payload;
     ctl::JsonValue v;
     if (!base64url_decode(payload_text, payload) || payload.size() > kMaxPayloadBytes || !ctl::parse_json(payload, v, nullptr) || !v.is_object()) return PassVerdict::Malformed;
-    static const char* const kMembers[] = {"exp", "name", "nonce", "ref", "role"};
-    if (v.size() != 5) return PassVerdict::BadFields;
-    for (const char* key : kMembers) {
-        if (!v.has(key)) return PassVerdict::BadFields;
-    }
+    if (v.size() != 5) return PassVerdict::BadFields;                  // (exactly five members; a member that is missing is null below, which is of no kind that is asked for)
     if (!v.get("exp").is_int() || !v.get("name").is_string() || !v.get("nonce").is_string() || !v.get("ref").is_string() || !v.get("role").is_string()) return PassVerdict::BadFields;
 
     const int64_t exp = v.get("exp").as_int_or(0);
