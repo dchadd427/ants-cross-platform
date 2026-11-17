@@ -1,7 +1,7 @@
 // The hotkey buttons (web/touch_keys.js, docs/TOUCH.md "The hotkey buttons") against a REAL game in a phone-sized browser (opt-in: tests/scripts/test_web_touch_keys.sh; Playwright, which CI does not install).
 // It opens the game page of a running web image (a match for one against a computer player), emulates a phone with touch, and reads what the GAME believes through its probes (ants_probe 50: the ants that
 // are picked, plus 1000 for a hill, plus 100000 for an ant that is inspected; 3 and 4: the view's origin; 5: a dialog is open; 30 - 34: the touch model's counters; 0 and 1: the pointer):
-//   * upright (390 x 844, 360 x 640, 320 x 568): the buttons are one row under the picture (two rows on 320), every target at least 44 x 44 CSS px with at least 6 px between, and the picture's box is
+//   * upright (390 x 844, 360 x 640, 320 x 568): seven buttons, one row under the picture (All ants on a row of its own under 364 px, the other six three to a row under 294), every target at least 44 x 44 CSS px with at least 6 px between, and the picture's box is
 //     the size that it has with the buttons off (the row takes no room from it);
 //   * All ants picks the ants (the count is the game's own), None clears, Home picks the hill, Next picks one ant and moves the view, Stop leaves the selection as it is, None is dimmed with nothing picked and
 //     then sends nothing, More opens the list and a choice sends its key (Quick help opens the game's dialog, and the buttons are hidden while it is up and come back when it closes);
@@ -11,7 +11,7 @@
 //     browser's, and the page's own where there is no Fullscreen API) a rail at the left edge inside the stage, the box beside it with the shape of the game's canvas to the pixel; turning upright
 //     moves the buttons to the row and back;
 //   * short sideways windows (800 x 304, 780 x 300, 732 x 320, 720 x 320, 640 x 300, 568 x 320 in a wide shape): More never stands below the window; two columns in the margin where it is 142 px or more
-//     wide, else one column of five with targets of at least 40 px;
+//     wide, else one column of five with targets of at least 40 px (Home and Next under More);
 //   * the picture never moves or changes size when the buttons hide (a dialog, the settings panel, the chat field) and come back, upright and sideways, in the page and in fullscreen;
 //   * a mouse over the rail never scrolls the map; a tap that closes the More list is not a tap of the game; a button with Control held on the keyboard is the letter alone;
 //   * a mouse as the primary pointer (a computer): no buttons.
@@ -61,7 +61,7 @@ const setting = (page, on) => page.evaluate((x) => { antsTouchKeys.set(x); retur
 
 async function targets(page, label, count) {
     const list = await page.evaluate(() => [].map.call(document.querySelectorAll('#touch-keys > .tk-btn'), (b) => { const r = b.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; }));
-    expect(label + ': ' + (count || 6) + ' buttons in the bar', list.length, count || 6);
+    expect(label + ': ' + (count || 7) + ' buttons in the bar', list.length, count || 7);
     ok(label + ': every target is at least 44 x 44 CSS px', list.every((r) => r[2] >= 43.9 && r[3] >= 43.9), list);
     let gap = 1e9;
     for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
@@ -183,6 +183,35 @@ async function run(engine) {
             await context.close();
         }
 
+        // ---- Shift against the real game (Chromium's touch protocol): the page puts a keyboard's Shift down for the finger and the game reads it when the finger lifts. With All ants picked, a band of the finger over a
+        // bit of ground adds to the selection (and clears nothing) when Shift is latched, and clears the selection first when it is not; the latch is used up by the band. NOT here: a Bomber (no Bomber stands in this
+        // match: the group of one that a Shift band makes, and a tap on its own bomb that then moves it, is test_touch_app)
+        if (engine === 'chromium') {
+            ({ context, page } = await open(browser, 390, 844));
+            const cdp = await context.newCDPSession(page);
+            const view = await page.evaluate(() => { const b = document.getElementById('canvas').getBoundingClientRect(); return [b.x, b.y, b.width, b.height]; });
+            const band = async () => {
+                const x = view[0] + view[2] * 0.12, y = view[1] + view[3] * 0.3;
+                await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 1 }] });
+                await sleep(60);
+                for (let i = 1; i <= 6; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + 6 * i, y: y + 6 * i, id: 1 }] }); await sleep(24); }
+                await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+                await sleep(500);
+            };
+            await tap(page, 'all');
+            const picked = ants((await probes(page)).sel);
+            ok(tag + 'Shift: All ants picks at least two ants (the game counts ' + picked + ')', picked >= 2);
+            await tap(page, 'shift');
+            expect(tag + 'a tap on Shift lights it (latched) and the selection is as it was', [await page.evaluate(() => antsTouchKeys.shift()), ants((await probes(page)).sel)], ['latched', picked]);
+            await band();
+            expect(tag + 'Shift latched: a band over a bit of ground adds and clears nothing (the game read Shift at the lift): the same ants are picked', ants((await probes(page)).sel), picked);
+            expect(tag + '...the latch is used up by the band, and Shift is let go', [await page.evaluate(() => antsTouchKeys.shift()), await page.evaluate(() => antsTouchKeys.shiftDown())], ['off', false]);
+            await band();
+            const plain = ants((await probes(page)).sel);
+            ok(tag + 'the same band without Shift clears the selection first: fewer ants than before (' + plain + ' of ' + picked + ')', plain < picked, [plain, picked]);
+            await context.close();
+        }
+
         // ---- other widths
         for (const [w, h] of [[360, 640], [320, 568]]) {
             ({ context, page } = await open(browser, w, h));
@@ -203,7 +232,7 @@ async function run(engine) {
             const r = await bar(page), st = await rect(page, '#game-stage');
             const count = await page.evaluate(() => document.querySelectorAll('#touch-keys > .tk-btn').length);
             ok(tag + w + ' x ' + h + ' in the page: one column in the margin (' + count + ' buttons), left of the stage, never two columns', cls.indexOf('tk-rim') >= 0 && cls.indexOf('tk-two') < 0 && r.x >= 0 && r.x + r.w <= st.x + 0.5 && r.w < 70, [cls, r, st]);
-            expect(tag + w + ' x ' + h + ' in the page: six buttons (the margin rail is 294 px or less high: six targets fit)', count, 6);
+            expect(tag + w + ' x ' + h + ' in the page: six buttons (the margin rail is under 344 px high: seven targets do not fit, six do), with Next first in the list under More', [count, await page.evaluate(() => document.querySelector('.tk-more > .tk-btn').getAttribute('data-key'))], [6, 'next']);
             await targets(page, tag + w + ' x ' + h + ' page', count);
             const on = await boxSize(page);
             await setting(page, false); await sleep(600);
@@ -221,7 +250,7 @@ async function run(engine) {
             const more = await page.evaluate(() => { const r = document.querySelector('#touch-keys .tk-morebtn').getBoundingClientRect(); return [r.top, r.bottom, innerHeight]; });
             const st = await rect(page, '#game-stage');
             const tag2 = tag + w + ' x ' + h + (aspect ? ' (' + aspect + ')' : '') + ' in the page: ';
-            expect(tag2 + (shape === 'two' ? 'two columns in the margin, six buttons' : 'one column of five'), [cls.indexOf('tk-two') >= 0, list.length], [shape === 'two', shape === 'two' ? 6 : 5]);
+            expect(tag2 + (shape === 'two' ? 'two columns in the margin, seven buttons' : 'one column of five (Home and Next under More)'), [cls.indexOf('tk-two') >= 0, list.length], [shape === 'two', shape === 'two' ? 7 : 5]);
             ok(tag2 + 'More ends inside the window (' + more[1].toFixed(1) + ' of ' + more[2] + ')', more[1] <= more[2] + 0.5, more);
             ok(tag2 + 'every target is at least 40 px high and 44 wide', list.every((r) => r[3] >= 39.9 && r[2] >= 43.9), list);
             if (cls.indexOf('tk-rim') >= 0) ok(tag2 + 'the rail is in the margin, clear of the page\'s 10 px frame', list.every((r) => r[0] >= 10 && r[0] + r[2] <= st.x + 0.5), [list, st]);
@@ -315,7 +344,7 @@ async function run(engine) {
             ok(tag + 'sideways in the page: a rail', cls.indexOf('tk-side') >= 0 && cls.indexOf('tk-up') < 0, cls);
             let r = await bar(page), b = await rect(page, '#game-container');
             ok(tag + '...outside the picture\'s box (the box starts where the rail ends)', r.x + r.w <= b.x + 0.5 && r.h > 0, [r, b]);
-            await targets(page, tag + '844 x 390 page');
+            await targets(page, tag + '844 x 390 page', 6);
             ok(tag + 'sideways in the page: the rail stands in the free margin left of the stage (tk-rim), outside it, on the screen', cls.indexOf('tk-rim') >= 0 && r.x >= 0 && r.x + r.w <= (await rect(page, '#game-stage')).x + 0.5, [cls, r]);
             const sideOn = await boxSize(page);
             await setting(page, false); await sleep(600);
