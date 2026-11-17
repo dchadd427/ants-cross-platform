@@ -43,7 +43,16 @@ void Application::load_hud_art() {
 void Application::apply_hud_art() {
     const bool show = menu_settings_.hud_art_new && hud_art_.loaded();
     hud_.set_art(show ? &hud_art_ : nullptr);
-    if (show && renderer_) renderer_->preload_art(hud_art_);
+    check_hud_art();
+}
+
+// The new art needs the texture of the sheet of the output's scale. A sheet whose file is damaged after its header (a cut copy), or that the device cannot make a texture of, would draw nothing at all, not even
+// the original's pieces: the HUD is given the original's art instead, with a word on stderr (the renderer says which sheet). Once a frame (a window that moves to another screen needs another sheet), and when the art is given.
+// The setting is not changed by it; choosing New again tries again.
+void Application::check_hud_art() {
+    if (hud_.art() == nullptr || !renderer_ || renderer_->preload_art(hud_art_)) return;
+    std::cerr << "[Application] The HUD art's sheet of this output cannot be used: the original's art is drawn" << std::endl;
+    hud_.set_art(nullptr);
 }
 
 // Ctrl+L flips the HUD's marks: the menu's setting follows it, and what changed is written, once a frame

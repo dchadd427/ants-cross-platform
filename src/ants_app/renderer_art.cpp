@@ -45,7 +45,7 @@ int32_t Renderer::art_scale_now() const {
     return art_scale_for_output(nullptr);
 }
 
-// The texture of a sheet: read and decoded from its file once (the pixels are not kept: the card has them), made static with the alpha blend. Null when the file cannot be read (nothing is drawn then)
+// The texture of a sheet: read and decoded from its file once (the pixels are not kept: the card has them), made static with the alpha blend. Null when the file cannot be read or decoded, or the device cannot make the texture (nothing is drawn then: Application::check_hud_art gives the HUD the original's art)
 SDL_Texture* Renderer::art_texture(const hud_art::Art& art, int32_t scale) {
     if (art_generation_ != art.generation()) {
         drop_art_textures();
@@ -60,9 +60,13 @@ SDL_Texture* Renderer::art_texture(const hud_art::Art& art, int32_t scale) {
         std::cerr << "[Renderer] The HUD art's sheet " << art.sheet_file(scale) << " cannot be read" << std::endl;
         return nullptr;
     }
+    if (art_texture_limit_ > 0 && (image.width > art_texture_limit_ || image.height > art_texture_limit_)) {
+        std::cerr << "[Renderer] The HUD art's sheet " << art.sheet_file(scale) << " is larger than a texture of this device" << std::endl;
+        return nullptr;
+    }
     SDL_Texture* tex = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, image.width, image.height);
     if (!tex) {
-        std::cerr << "[Renderer] The HUD art's sheet cannot be made a texture: " << SDL_GetError() << std::endl;
+        std::cerr << "[Renderer] The HUD art's sheet " << art.sheet_file(scale) << " cannot be made a texture: " << SDL_GetError() << std::endl;
         return nullptr;
     }
     art_failed_[static_cast<size_t>(scale - 1)] = false;

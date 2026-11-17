@@ -480,11 +480,14 @@ public:
     /// the output's scale is not the sheet's (a window of another size), nearest when it is (a copy that is exact). (renderer_art.cpp)
     void draw_art(const hud_art::Art& art, int32_t sprite, int32_t x, int32_t y, int32_t w, int32_t h, int32_t sx, int32_t sy, int32_t sw, int32_t sh) override;
     /// Makes the texture of the sheet that the output needs now, so that the first frame that draws a piece of `art` does not wait for the file's decoding (the window's scale may change later: the
-    /// sheet of the new scale is then made when it is first needed). False when the sheet cannot be read.
+    /// sheet of the new scale is then made when it is first needed). False when the sheet cannot be read or decoded, or the device cannot make it a texture: nothing of the art can be drawn then, and
+    /// the application gives the HUD the original's art (Application::check_hud_art). Asked again, it does not read the file again.
     bool preload_art(const hud_art::Art& art);
     /// (for the tests) the scale of the sheet that a piece would be drawn from now, and how many sheets are textures (0 until a piece is drawn)
     int32_t art_scale_now() const;
     size_t art_textures() const noexcept;
+    /// (for the tests) pretends that the device takes no texture with a side above `limit` pixels (0: the device's own limit), as a small phone's does
+    void set_art_texture_limit(int32_t limit) noexcept { art_texture_limit_ = limit; }
     void set_origin(int32_t x, int32_t y) override { origin_ = LayoutPoint{x, y}; }
     const LayoutPoint& origin() const noexcept { return origin_; }
     void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) override;
@@ -677,6 +680,7 @@ private:
     uint64_t art_generation_{0};                           // the HUD art that art_textures_ were made from (hud_art::Art::generation; 0: none)
     std::array<bool, 3> art_failed_{};                     // a sheet that could not be read or made a texture: said once, and not tried again until another set comes
     std::array<SDL_Texture*, 3> art_textures_{};           // its sheets at 1x, 2x and 3x, made when first needed
+    int32_t art_texture_limit_{0};                         // (for the tests) the largest side of a texture that is made; 0: the device's own
     void drop_art_textures();
     SDL_Texture* art_texture(const hud_art::Art& art, int32_t scale);
     int32_t art_scale_for_output(double* output_scale = nullptr) const;

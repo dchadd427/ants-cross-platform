@@ -823,6 +823,7 @@ private:
     void confirm_quit();                                  // the quit dialog's Yes (FUN_0101453f): the quit ends the match while one other side is left, else the player leaves
     void load_hud_art();                                  // reads the HUD art's manifest from config_.hud_art_dir (a folder without it leaves the original's art) and applies the setting
     void apply_hud_art();                                 // gives the HUD the art while the setting is New and it is loaded, else none
+    void check_hud_art();                                 // the HUD has the art only while the sheet of the output's scale is a texture (else the original's art, with a word on stderr)
     void load_game_menu_settings();                       // the settings menu's new settings (game_menu::MenuSettings) from the settings file; the HUD's ant health marks and the mixer take them
     void sync_game_menu_settings();                       // Ctrl+L flipped the ant health marks: remembered
     int game_menu_where() const;                          // -1 no match screen, 0 a match, 1 a recording or a live match that is watched

@@ -51,7 +51,7 @@ RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web \
     (ccache -s || true)
 
 # The real version, template of the game page and data package: the link's outputs are removed so that CMake links again (it does not know that these three are inputs of the link). The checks after the link look at
-# the product and not only at the header: the program holds the real version text and not the stub's, the data package is the real one (about 14 MB; the stub's is a few bytes) and the page is the real template (it still has the placeholders
+# the product and not only at the header: the program holds the real version text and not the stub's, the data package is the real one (about 19 MB; the stub's is a few bytes) and the page is the real template (it still has the placeholders
 # that the stamps below fill in).
 RUN rm -rf VERSION web Original-Ants assets
 COPY VERSION ./VERSION
@@ -74,7 +74,7 @@ RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web \
     (ccache -s || true)
 
 # The three big files of the game are compressed once, here, and nginx sends the compressed copy to a browser that accepts gzip (gzip_static in docker/nginx.conf; the plain files stay, for a browser that does not): compressing
-# index.data (14 MB) and index.wasm (4 MB) again for every request cost nginx half a second and a fifth of a second of one core each time. -9 makes them smaller than nginx's own level 6, -n leaves the name and the time out of the
+# index.data (19 MB) and index.wasm (4 MB) again for every request cost nginx half a second and a fifth of a second of one core each time. -9 makes them smaller than nginx's own level 6, -n leaves the name and the time out of the
 # file. The COPY of index.* below takes the .gz files with the rest. The build stops if one is missing or empty.
 RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n -k "$f" && test -s "$f.gz" || exit 1; done
 

@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the HUD art's choice of the sheet by the output's scale, of the nine-slice (a long piece: start, repeated run, end) and of the frame's pieces at every shape (src/ants_app/hud_art.cpp, renderer_art.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: python3 tools/mutate.py tests/data/hud_art_mutants.json --keep-going --jobs 1; every mutant must be caught by the group of test_hud_art named in it.",
+ "note": "Mutants of the HUD art's choice of the sheet by the output's scale, of the nine-slice (a long piece: start, repeated run, end), of the frame's pieces at every shape and of the fall back to the original's art when a sheet cannot be used (src/ants_app/hud_art.cpp, renderer_art.cpp, application_game_menu.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: python3 tools/mutate.py tests/data/hud_art_mutants.json --keep-going --jobs 1; every mutant must be caught by the test and the text named in it.",
  "mutants": [
   {
    "id": "scale_one_to_one_is_not_exact",
@@ -144,6 +144,33 @@
    "build": "test_hud_art",
    "test": "./build/tests/test_app/test_hud_art",
    "expect": "[frame]"
+  },
+  {
+   "id": "unusable_sheet_is_not_given_up",
+   "file": "src/ants_app/application_game_menu.cpp",
+   "old": "if (hud_.art() == nullptr || !renderer_ || renderer_->preload_art(hud_art_)) return;",
+   "new": "if (hud_.art() == nullptr || !renderer_ || (renderer_->preload_art(hud_art_) || true)) return;",
+   "build": "test_game_menu",
+   "test": "./build/tests/test_app/test_game_menu",
+   "expect": "sheets cut after their header"
+  },
+  {
+   "id": "unusable_sheet_is_not_looked_at_every_frame",
+   "file": "src/ants_app/application_render.cpp",
+   "old": "    check_hud_art();                                     // (the sheet of the new HUD art for this output is a texture before anything is drawn with it)\n",
+   "new": "",
+   "build": "test_game_menu",
+   "test": "./build/tests/test_app/test_game_menu",
+   "expect": "gives the original's art at its next frame"
+  },
+  {
+   "id": "preload_says_yes_without_a_texture",
+   "file": "src/ants_app/renderer_art.cpp",
+   "old": "return art_texture(art, art_scale_for_output(nullptr)) != nullptr;",
+   "new": "return art_texture(art, art_scale_for_output(nullptr)) != nullptr || true;",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "preload_art says"
   }
  ]
 }

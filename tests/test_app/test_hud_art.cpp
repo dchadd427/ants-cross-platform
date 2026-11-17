@@ -5,6 +5,7 @@
 //   [frame]     at all seven shapes the frame's pieces tile the picture but the map view, once; every piece of every animation is inside the canvas; the buttons are the hit zones' size and place
 //   [slices]    a long piece is the kept start, the repeated run (the last copy cut) and the kept end, whatever the length
 //   [scale]     the sheet is the nearest scale at or above the output's, and the renderer takes it
+//   [unusable]  a sheet that cannot be decoded, or that the device cannot make a texture, is said by the renderer and draws nothing (the application then gives the HUD the original's art: test_game_menu.cpp)
 //   [look] [classic] [pieces]   (test_hud_art_look.cpp) the real renderer's frame against the reference pictures, the original's art unchanged, the pieces that change with what happens
 // (the setting that chooses between this art and the original's is a row of the settings menu: its cases are in test_game_menu.cpp)
 // Usage: test_hud_art. Exit code 0 when every check passes.
@@ -295,6 +296,7 @@ void test_classic(const assets::AssetArchive& arc, const hud_art::Art& art);
 void test_pieces(const assets::AssetArchive& arc, const hud_art::Art& art);
 void test_slices();
 void test_scale();
+void test_unusable();
 
 int main(int argc, char* argv[]) {
     (void)argc;
@@ -305,6 +307,7 @@ int main(int argc, char* argv[]) {
     test_frame();
     test_slices();
     test_scale();
+    test_unusable();
     assets::AssetArchive arc;
     hud_art::Art art;
     if (!arc.load_chd(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd") || !load_art(art)) {

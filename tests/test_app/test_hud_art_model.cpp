@@ -355,3 +355,80 @@ void test_scale() {
         if (win != nullptr) SDL_DestroyWindow(win);
     }
 }
+
+// A copy of the shipped art in a new folder, in which the sheets of the scales in `cut` are cut a few bytes after their header: the header is a good one, the picture cannot be decoded
+static std::vector<std::string> g_cut_folders;                                          // (removed at the end of test_unusable)
+static std::string cut_art_folder(const std::string& tag, const std::vector<int32_t>& cut) {
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / ("ants_hud_art_" + tag + "_" + std::to_string(static_cast<long long>(SDL_GetTicks())));
+    std::error_code ignored;
+    fs::remove_all(dir, ignored);
+    fs::create_directories(dir, ignored);
+    fs::copy_file(art_folder() + "/hud_art.txt", dir / "hud_art.txt", fs::copy_options::overwrite_existing, ignored);
+    for (int32_t scale = 1; scale <= 3; ++scale) {
+        const std::string name = "sheet_" + std::to_string(scale) + "x.png";
+        if (std::find(cut.begin(), cut.end(), scale) == cut.end()) {
+            fs::copy_file(art_folder() + "/" + name, dir / name, fs::copy_options::overwrite_existing, ignored);
+            continue;
+        }
+        std::ifstream in(art_folder() + "/" + name, std::ios::binary);
+        std::vector<char> head(80);
+        in.read(head.data(), static_cast<std::streamsize>(head.size()));
+        std::ofstream out(dir / name, std::ios::binary | std::ios::trunc);
+        out.write(head.data(), in.gcount());
+    }
+    g_cut_folders.push_back(dir.string());
+    return dir.string();
+}
+
+void test_unusable() {
+    group("unusable", "a sheet that cannot be decoded, or that the device cannot make a texture, is said by preload_art and draws nothing; the same art is used again when a whole set is given");
+    hud_art::Art art;
+    assets::AssetArchive arc;
+    if (!load_art(art) || !arc.load_chd(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd")) {
+        check(false, "the art and the archive are read");
+        return;
+    }
+    const QuietStdout quiet;
+    ensure_sdl();
+    SDL_Window* win = SDL_CreateWindow("hud-art-unusable", 0, 0, 960, 540, SDL_WINDOW_HIDDEN);
+    Renderer renderer;
+    if (win == nullptr || !renderer.init(win, arc)) {
+        check(false, "the renderer is up");
+        return;
+    }
+    renderer.set_canvas_size(960, 540);
+    const auto drawn = [&](const hud_art::Art& what) {                          // (how many sheets are textures after one piece is asked for)
+        renderer.begin_frame();
+        renderer.draw_art(what, what.card, 0, 0, 182, 116, 0, 0, 182, 116);
+        return renderer.art_textures();
+    };
+
+    // a sheet cut after its header passes the manifest (the header is right), and cannot be decoded when it is needed
+    hud_art::Art cut;
+    check(cut.load(cut_art_folder("cut1", {1})) && cut.loaded(), "a sheet with a good header and no body is read with the manifest");
+    check(!renderer.preload_art(cut) && renderer.art_textures() == 0, "...preload_art says that its sheet cannot be made, and no texture is made");
+    check(drawn(cut) == 0, "...a piece of it draws nothing, and nothing is thrown");
+    check(!renderer.preload_art(cut), "...asked again it says the same");
+
+    // only the sheet that the output needs counts: the cut one is the 1x sheet, and a window of 2x does not read it
+    hud_art::Art cut_other;
+    check(cut_other.load(cut_art_folder("cut3", {3})), "a folder with only its 3x sheet cut is read");
+    check(renderer.art_scale_now() == 1 && renderer.preload_art(cut_other) && drawn(cut_other) == 1, "...and a window of 1x, which draws from the 1x sheet, makes its texture");
+
+    // a whole set after a damaged one: another set is another generation, and is tried
+    check(art.load(art_folder()) && renderer.preload_art(art) && drawn(art) == 1, "the whole art after a damaged set is used");
+
+    // a device that takes no texture as large as the sheet
+    renderer.set_art_texture_limit(500);
+    hud_art::Art small_device;
+    check(small_device.load(art_folder()) && !renderer.preload_art(small_device) && drawn(small_device) == 0, "a device whose largest texture is smaller than the sheet: preload_art says so, and nothing is drawn");
+    renderer.set_art_texture_limit(0);
+    check(small_device.load(art_folder()) && renderer.preload_art(small_device) && drawn(small_device) == 1, "(a device without a limit takes it)");
+
+    renderer.shutdown();
+    SDL_DestroyWindow(win);
+    std::error_code ignored;
+    for (const std::string& folder : g_cut_folders) std::filesystem::remove_all(folder, ignored);
+    g_cut_folders.clear();
+}

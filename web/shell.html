@@ -1549,7 +1549,7 @@
 
             // Is what came back for index.data the data? A captive portal or an error page is served with "200 OK" and a body that is not the package: its type is HTML and it is far
             // smaller than the package. null: it is the data; else the reason. `expected` is the package's exact size in bytes when the build knows it (the Dockerfile writes it into
-            // the page; 0 when it does not), else anything under a megabyte (the package is 14.7 MB) is not it.
+            // the page; 0 when it does not), else anything under a megabyte (the package is 19.3 MB) is not it.
             function badDownload(contentType, got, expected) {
                 if (/^\s*text\/html/i.test(contentType || '')) return 'the server sent a web page, not the game data';
                 if (typeof got !== 'number') return null;                   // (the size is not known yet: only the type was asked about)

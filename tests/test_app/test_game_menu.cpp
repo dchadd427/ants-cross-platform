@@ -559,6 +559,33 @@ void test_values() {
     std::filesystem::remove(file, ignored);
 }
 
+/// A copy of the shipped art in a new folder, in which the sheets of the scales in `cut` are cut a few bytes after their header (the header is a good one, the picture cannot be decoded);
+/// the folders are removed at the end of test_hud_art
+static std::vector<std::string> g_art_copies;
+static std::string art_copy_with_cut_sheets(const std::string& tag, const std::vector<int>& cut) {
+    namespace fs = std::filesystem;
+    const fs::path from = fs::path(ANTS_SOURCE_DIR) / "assets" / "hud_art";
+    const fs::path dir = fs::temp_directory_path() / ("ants_hud_art_" + tag + "_" + std::to_string(static_cast<long long>(SDL_GetTicks())));
+    std::error_code ignored;
+    fs::remove_all(dir, ignored);
+    fs::create_directories(dir, ignored);
+    fs::copy_file(from / "hud_art.txt", dir / "hud_art.txt", fs::copy_options::overwrite_existing, ignored);
+    for (int scale = 1; scale <= 3; ++scale) {
+        const std::string name = "sheet_" + std::to_string(scale) + "x.png";
+        if (std::find(cut.begin(), cut.end(), scale) == cut.end()) {
+            fs::copy_file(from / name, dir / name, fs::copy_options::overwrite_existing, ignored);
+            continue;
+        }
+        std::ifstream in((from / name).string(), std::ios::binary);
+        std::vector<char> head(80);
+        in.read(head.data(), static_cast<std::streamsize>(head.size()));
+        std::ofstream out((dir / name).string(), std::ios::binary | std::ios::trunc);
+        out.write(head.data(), in.gcount());
+    }
+    g_art_copies.push_back(dir.string());
+    return dir.string();
+}
+
 void test_hud_art() {
     std::printf("[hud art] the art is the HUD's while the setting says New and the files are there\n");
     const auto start = [](Application& app, const std::string& dir, bool given, bool new_art, const std::string& settings) {
@@ -591,6 +618,47 @@ void test_hud_art() {
         check(start(app, "/nonexistent/hud_art", false, true, std::string()) && app.hud().art() == nullptr && !app.hud_art().loaded() && app.menu_settings().hud_art_new && app.game_menu_get(gm::kHudArt) == 0,
               "no art where it should be: the original's art is drawn, the game starts, and the setting is the player's own (still New)");
     }
+    {   // sheets whose header is good and whose body is not (a cut copy) would draw nothing, not even the original's pieces: the HUD has the original's art instead, and the setting stays the player's own
+        const std::string all_cut = art_copy_with_cut_sheets("allcut", {1, 2, 3});
+        const auto size_window = [](Application& app, int w, int h) {
+            SDL_Window* window = SDL_RenderGetWindow(app.renderer().get_sdl_renderer());
+            if (window != nullptr) SDL_SetWindowSize(window, w, h);
+        };
+        {
+            Application app;
+            check(start(app, all_cut, false, true, std::string()) && app.hud_art().loaded() && app.hud().art() == nullptr && app.menu_settings().hud_art_new && app.game_menu_get(gm::kHudArt) == 0,
+                  "sheets cut after their header: the art is read, the original's art is drawn, and the setting is still New");
+            const QuietStdout quiet;
+            app.render_frame();
+            check(app.hud().art() == nullptr, "...and a frame of it is drawn");
+            check(app.game_menu_set(gm::kHudArt, 1) && app.game_menu_set(gm::kHudArt, 0) && app.hud().art() == nullptr && app.game_menu_get(gm::kHudArt) == 0, "...choosing New again tries again, and falls back again");
+        }
+        {   // the sheet of another scale than the window's is the cut one: it is found when the window needs it
+            Application app;
+            check(start(app, art_copy_with_cut_sheets("cut3x", {3}), false, true, std::string()) && app.hud().art() != nullptr, "only the 3x sheet cut: the new art, for a window that draws from the 2x sheet");
+            const QuietStdout quiet;
+            size_window(app, 3000, 1700);
+            app.render_frame();
+            check(app.renderer().art_scale_now() == 3 && app.hud().art() == nullptr && app.menu_settings().hud_art_new, "...and the window that needs the 3x sheet gives the original's art at its next frame");
+        }
+        {
+            Application app;
+            check(start(app, folder, false, true, std::string()) && app.hud().art() != nullptr, "whole sheets: the new art");
+            const QuietStdout quiet;
+            size_window(app, 3000, 1700);
+            app.render_frame();
+            check(app.renderer().art_scale_now() == 3 && app.hud().art() != nullptr, "...and the window that needs the 3x sheet keeps it");
+        }
+        {   // a device that takes no texture as large as the sheet
+            Application app;
+            check(start(app, folder, false, true, std::string()) && app.hud().art() != nullptr, "a device that cannot hold the sheet of a larger window: the new art until the window needs it");
+            const QuietStdout quiet;
+            app.renderer().set_art_texture_limit(500);
+            size_window(app, 3000, 1700);
+            app.render_frame();
+            check(app.hud().art() == nullptr && app.menu_settings().hud_art_new, "...the sheet that the window needs cannot be made: the original's art");
+        }
+    }
     {
         const std::filesystem::path file = std::filesystem::temp_directory_path() / ("ants_hud_art_" + std::to_string(static_cast<long long>(SDL_GetTicks())) + ".ini");
         {
@@ -608,6 +676,8 @@ void test_hud_art() {
         }
         std::error_code ignored;
         std::filesystem::remove(file, ignored);
+        for (const std::string& copy : g_art_copies) std::filesystem::remove_all(copy, ignored);
+        g_art_copies.clear();
     }
     {   // the command line
         std::vector<std::string> args;
