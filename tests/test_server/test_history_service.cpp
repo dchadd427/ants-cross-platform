@@ -750,13 +750,27 @@ int main() {
             ASSERT_FALSE(service.recordings_folder_empty_with_history());                                       // (a folder with recordings: nothing to say)
             service.stop();
         }
-        const size_t lines_before = log->all().size();
+        size_t quiet_lines = 0;                                                                                  // (the lines that name an empty folder when nothing is to be said: a new file, no history)
         {
-            HistoryService service(wrong);                                                                       // (the same file, a folder with no recording)
+            ServiceConfig fresh = wrong;
+            fresh.db_path = (work.path / "fresh.db").string();
+            fresh.game_db_path.clear();
+            fresh.submissions_dir.clear();
+            const size_t before = log->with(wrong.recordings_dir);
+            HistoryService service(fresh);
+            std::string why;
+            ASSERT_TRUE(service.start(why));
+            ASSERT_FALSE(service.recordings_folder_empty_with_history());
+            service.stop();
+            quiet_lines = log->with(wrong.recordings_dir) - before;
+        }
+        {
+            const size_t before = log->with(wrong.recordings_dir);
+            HistoryService service(wrong);                                                                       // (the same file as the real one, a folder with no recording)
             std::string why;
             ASSERT_TRUE(service.start(why));
             ASSERT_TRUE(service.recordings_folder_empty_with_history());
-            ASSERT_TRUE(log->all().size() > lines_before && log->with(wrong.recordings_dir) >= 1);               // (it is told in the log, and the line names the folder)
+            ASSERT_EQ(log->with(wrong.recordings_dir) - before, quiet_lines + 1);                                // (one line more than for a new file: it says so, and names the folder)
             ASSERT_TRUE(wait_for([&]() { return service.stats().passes >= 5; }, 20000));                          // (the counter has had its passes: the old code deleted the marker in the first)
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
             ASSERT_EQ(service.stats().matches, size_t{2});
