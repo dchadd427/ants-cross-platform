@@ -172,6 +172,10 @@ const type = (app, id, value) => { const i = all(app, 'input').filter((n) => n.i
 const HEAD = 'This page is for the site\u2019s admins.';
 const LOGIN_LINE = 'Log in with the Discord account that has the admin role.';
 const UNAVAILABLE = 'The admin page is not available right now.';
+// the lines that an admin is given when the page can tell which part is off (names of settings, never a value)
+const OFF_DOOR = 'The admin page\u2019s door is shut: the chat hub has no good ANTS_ADMIN_GATE_SECRET.';
+const OFF_SUBMISSIONS = 'The map submissions door is off or not running on the game server (it is on when ANTS_SUBMIT_PORT is 4030).';
+const OFF_KEY = 'The game server did not accept the admin page\u2019s pass: its ANTS_ADMIN_GATE_SECRET is probably missing or is not the same as the chat hub\u2019s.';
 function noMarkup(label, app) {
     const allowed = new Set(['div', 'span', 'img', 'button', 'a', 'label', 'input', 'textarea', 'h1', 'h2', '#text', 'b', 'small', 'p', 'section', 'select', 'option', 'code', 'em', 'hr', 'i']);
     for (const t of new Set(app.all().map((n) => n.tagName))) check(label + ': only the page\'s own kinds of node (' + t + ')', allowed.has(t));
@@ -401,9 +405,6 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
     }
     // ---- everything else: one line
     for (const [label, reply] of [
-        ['403 closed', { status: 403, json: { error: 'closed', message: 'The admin page is closed.' } }],
-        ['503 door_off', { status: 503, json: { error: 'door_off', message: 'The words of the server.' } }],
-        ['503 submissions_off', { status: 503, json: { error: 'submissions_off', message: 'The words of the server.' } }],
         ['429 with a body that is not JSON', notJson(429)],
         ['500', { status: 500, json: { error: 'x' } }],
         ['404 not_found', { status: 404, json: { error: 'not_found' } }],
@@ -416,6 +417,73 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
         same(label + ': the one line and nothing else', [texts(app, '.msg'), app.textContent, all(app, 'h1').length, all(app, 'a').length, all(app, 'button').length, all(app, '.chip').length, all(app, '.acct').length], [[UNAVAILABLE], UNAVAILABLE, 0, 0, 0, 0, 0]);
         check(label + ': the line is an alert', all(app, '.msg')[0].getAttribute('role') === 'alert');
         same(label + ': only the question who is here is asked', w.calls.map((c) => c.url), ['/admin/api/me']);
+    }
+    // ---- a part that is off, said plainly to the admin who is looking (the answer proves it: the site's gate let this person in before the game server was asked)
+    for (const [label, reply, words] of [
+        ['403 closed (the game server does not accept the pass)', { status: 403, json: { error: 'closed', message: 'The words of the server, which the page does not show.' } }, OFF_KEY],
+        ['503 submissions_off (the game server\u2019s submissions door is not running)', { status: 503, json: { error: 'submissions_off', message: 'The words of the server, which the page does not show.' } }, OFF_SUBMISSIONS]]) {
+        const w = world({ replies: { 'GET /admin/api/me': reply } });
+        const { app } = await open(w);
+        same(label + ': the line of that part and nothing else', [texts(app, '.msg'), app.textContent, all(app, 'h1').length, all(app, 'a').length, all(app, 'button').length, all(app, '.chip').length, all(app, '.acct').length], [[words], words, 0, 0, 0, 0, 0]);
+        check(label + ': the line is an alert', all(app, '.msg')[0].getAttribute('role') === 'alert');
+        same(label + ': only the question who is here is asked', w.calls.map((c) => c.url), ['/admin/api/me']);
+        check(label + ': the line is short, names a setting and holds no value, id or address', words.length < 160 && /ANTS_[A-Z_]+/.test(words) && !/[0-9a-f]{16}|https?:|[0-9]{15}/.test(words.replace('4030', '')));
+    }
+    // ---- the gate does not answer (503 door_off): nginx cannot tell a hub that is not running from a door that is shut. An admin whom the hub knows, and whose own call to the hub says door_off, is told that the door is
+    // shut; everybody else, and every other answer, gets the plain line
+    {
+        const DOOR_OFF = { status: 503, json: { error: 'door_off', message: 'The words of the server, which the page does not show.' } };
+        const admin = { status: 200, json: { login: true, you: { name: 'Dave', mod: true, role: 'admin', k: 'abc' } } };
+        const hubShut = { status: 503, json: { error: 'door_off' } };
+        const tries = [
+            ['an admin and a hub whose door is shut', admin, hubShut, OFF_DOOR, ['/admin/api/me', '/hub/me', '/hub/admin/api/me']],
+            ['the operator (the hub says admin) and a hub whose door is shut', { status: 200, json: { login: true, you: { name: 'Olive', mod: true, role: 'admin', k: 'abc' } } }, hubShut, OFF_DOOR, ['/admin/api/me', '/hub/me', '/hub/admin/api/me']],
+            ['nobody logged in', { status: 200, json: { login: false } }, hubShut, UNAVAILABLE, ['/admin/api/me', '/hub/me']],
+            ['a person with no role', { status: 200, json: { login: true, you: { name: 'Pat', mod: false, role: 'none', k: 'abc' } } }, hubShut, UNAVAILABLE, ['/admin/api/me', '/hub/me']],
+            ['a moderator', { status: 200, json: { login: true, you: { name: 'Sage', mod: true, role: 'mod', k: 'abc' } } }, hubShut, UNAVAILABLE, ['/admin/api/me', '/hub/me']],
+            ['an answer of the hub that has no person in it', { status: 200, json: {} }, hubShut, UNAVAILABLE, ['/admin/api/me', '/hub/me']],
+            ['a hub that does not answer who is here', { status: 503, json: { error: 'hub_off' } }, hubShut, UNAVAILABLE, ['/admin/api/me', '/hub/me']],
+            ['an admin, and a hub whose own call works (the gate was in trouble, the door is not shut)', admin, { status: 200, json: { name: 'Dave', role: 'admin', csrf: 'hub-token-1' } }, UNAVAILABLE, ['/admin/api/me', '/hub/me', '/hub/admin/api/me']],
+            ['an admin, and a hub that is not running', admin, { status: 503, json: { error: 'hub_off', message: 'Chat is not available right now.' } }, UNAVAILABLE, ['/admin/api/me', '/hub/me', '/hub/admin/api/me']],
+            ['an admin, and a hub whose answer is not JSON', admin, notJson(503), UNAVAILABLE, ['/admin/api/me', '/hub/me', '/hub/admin/api/me']],
+            ['an admin, and a hub that refuses the person (a 403 is not a door that is shut)', admin, { status: 403, json: { error: 'admin' } }, UNAVAILABLE, ['/admin/api/me', '/hub/me', '/hub/admin/api/me']],
+            ['an admin, and a hub that says login (a 401 is not a door that is shut)', admin, { status: 401, json: { error: 'login' } }, UNAVAILABLE, ['/admin/api/me', '/hub/me', '/hub/admin/api/me']],
+            ['an admin, and a hub call that fails', admin, () => { throw new Error('network'); }, UNAVAILABLE, ['/admin/api/me', '/hub/me', '/hub/admin/api/me']],
+            ['a hub call for who is here that fails', () => { throw new Error('network'); }, hubShut, UNAVAILABLE, ['/admin/api/me', '/hub/me']]];
+        for (const [label, you, hubReply, words, urls] of tries) {
+            const w = world({ replies: { 'GET /admin/api/me': DOOR_OFF, 'GET /hub/admin/api/me': hubReply, 'GET /hub/me': you } });
+            const { app } = await open(w);
+            same('503 door_off, ' + label + ': the line', [texts(app, '.msg'), app.textContent, all(app, 'h1').length, all(app, 'a').length, all(app, 'button').length], [[words], words, 0, 0, 0]);
+            same('503 door_off, ' + label + ': what was asked, in order', w.calls.map((c) => c.url), urls);
+            check('503 door_off, ' + label + ': the hub\u2019s own call is a plain GET of the hub, with the cookie and no body and no token', w.calls.slice(2).every((c) => c.method === 'GET' && c.body === undefined && c.credentials === 'same-origin' && !c.headers['X-Ants-Csrf']));
+            noId('503 door_off, ' + label, app, w.calls);
+        }
+        {   // a late answer is not drawn over a card that came after it
+            const w = world({ replies: { 'GET /admin/api/me': DOOR_OFF, 'GET /hub/admin/api/me': hubShut } });
+            let release = null;
+            w.replies['GET /hub/me'] = () => new Promise((resolve) => { release = () => resolve({ status: 200, json: async () => admin.json }); });
+            const { app, page } = await open(w);
+            same('503 door_off, a late answer: the plain line while the hub is asked', [shown(app), app.textContent], ['line', UNAVAILABLE]);
+            w.replies['GET /admin/api/me'] = { status: 401, json: { error: 'not_signed_in' } };
+            await page.start();
+            await settle();
+            same('503 door_off, a late answer: another card takes its place', shown(app), 'login');
+            release();
+            await settle();
+            same('503 door_off, a late answer: it is not drawn over the card, and the hub is not asked for more', [shown(app), app.textContent.indexOf('ANTS_') < 0, w.calls.filter((c) => c.url === '/hub/admin/api/me').length], ['login', true, 0]);
+        }
+        {   // the line that the hub's own answer makes is not drawn over a card that came while that answer was on its way
+            const w = world({ replies: { 'GET /admin/api/me': DOOR_OFF, 'GET /hub/me': admin } });
+            let release = null;
+            w.replies['GET /hub/admin/api/me'] = () => new Promise((resolve) => { release = () => resolve({ status: 503, json: async () => ({ error: 'door_off' }) }); });
+            const { app, page } = await open(w);
+            w.replies['GET /admin/api/me'] = { status: 401, json: { error: 'not_signed_in' } };
+            await page.start();
+            await settle();
+            release();
+            await settle();
+            same('503 door_off, the hub\u2019s own answer comes late: it is not drawn over the card', [shown(app), app.textContent.indexOf('ANTS_') < 0], ['login', true]);
+        }
     }
     // ---- the Maps page: the Waiting tab, as drawn
     {
@@ -726,6 +794,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             ['403 not_allowed', { status: 403, json: { error: 'not_allowed', message: 'The words of the server, which the page does not show.' } }, 'heading'],
             ['403 closed', { status: 403, json: { error: 'closed', message: 'The words of the server, which the page does not show.' } }, 'line'],
             ['401 with a body that is not JSON', notJson(401), 'login']];
+        const WORDS = { line: OFF_KEY };                      // (the one line that a refusal of the game server gives: the same as /me gives for it)
         const scenarios = [
             ['switching a tab', 'GET /admin/api/maps?state=approved', async (app) => { await press(app, 'Approved (1)'); }],
             ['Approve', 'POST /admin/api/maps/', async (app) => { await press(app, 'Approve', 0); await press(app, 'Approve', 2); }],
@@ -745,7 +814,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
                 check(label + ' answered ' + why + ': nothing of the page is dimmed or listened to any more', (doc.listeners.keydown || []).length === 0 && !doc.key('Tab').prevented && app.all().every((n) => n.getAttribute('inert') === null));
                 if (want === 'login') same(label + ' answered ' + why + ': the same card as /me gives, with the link', [texts(app, 'h1'), texts(app, '.l2'), all(app, 'a').map((a) => a.getAttribute('href'))], [[HEAD], [LOGIN_LINE], ['/hub/login?next=admin']]);
                 if (want === 'heading') same(label + ' answered ' + why + ': the heading and the name of the person', [texts(app, 'h1'), texts(app, '.l2')], [[HEAD], ['You are logged in as Dave.']]);
-                if (want === 'line') same(label + ' answered ' + why + ': the one line', app.textContent, UNAVAILABLE);
+                if (want === 'line') same(label + ' answered ' + why + ': the one line, the one that /me gives for it', app.textContent, WORDS.line);
             }
         }
     }

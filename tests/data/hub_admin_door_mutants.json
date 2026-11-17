@@ -400,7 +400,7 @@
    "id": "a_bad_key_stops_the_hub",
    "file": "hub/config.py",
    "old": "    cfg.admin_gate_secret = gate if GATE_SECRET.match(gate) and len(set(gate)) >= GATE_DISTINCT and not cfg.admin_gate_sample else \"\"",
-   "new": "    if gate and not GATE_SECRET.match(gate):\n        raise ConfigError(\"ANTS_HUB_ADMIN_GATE_SECRET is not good\")\n    cfg.admin_gate_secret = gate",
+   "new": "    if gate and not GATE_SECRET.match(gate):\n        raise ConfigError(\"ANTS_ADMIN_GATE_SECRET is not good\")\n    cfg.admin_gate_secret = gate",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   },
   {
@@ -575,7 +575,7 @@
    "id": "the_sample_key_is_found_before_the_blanks_are_cut",
    "file": "hub/config.py",
    "old": "    cfg.admin_gate_sample = gate == SAMPLE_GATE_KEY",
-   "new": "    cfg.admin_gate_sample = env.get(\"ANTS_HUB_ADMIN_GATE_SECRET\", \"\") == SAMPLE_GATE_KEY",
+   "new": "    cfg.admin_gate_sample = env.get(GATE_SETTING, \"\") == SAMPLE_GATE_KEY",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   },
   {
@@ -660,6 +660,48 @@
    "file": "hub/admindoor.py",
    "old": "    return digest.hexdigest()[:8]",
    "new": "    return \"00000000\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_shut_door_is_a_no_at_the_gate",
+   "file": "hub/admindoor.py",
+   "old": "        if verdict == \"closed\":\n            return http.response(503)",
+   "new": "        if verdict == \"closed\":\n            return http.response(403)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_shut_door_is_not_an_admin_on_the_pages_calls",
+   "file": "hub/admindoor.py",
+   "old": "        if verdict == \"closed\":\n            return self.fail(503, \"door_off\")",
+   "new": "        if verdict == \"closed\":\n            return self.fail(403, \"admin\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_old_name_of_the_key_is_not_read",
+   "file": "hub/config.py",
+   "old": "    gate = env.get(GATE_SETTING, \"\").strip() or env.get(GATE_SETTING_OLD, \"\").strip()",
+   "new": "    gate = env.get(GATE_SETTING, \"\").strip()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_shared_name_of_the_key_is_not_read",
+   "file": "hub/config.py",
+   "old": "    gate = env.get(GATE_SETTING, \"\").strip() or env.get(GATE_SETTING_OLD, \"\").strip()",
+   "new": "    gate = env.get(GATE_SETTING_OLD, \"\").strip()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "the_old_name_wins_over_the_shared_one",
+   "file": "hub/config.py",
+   "old": "    gate = env.get(GATE_SETTING, \"\").strip() or env.get(GATE_SETTING_OLD, \"\").strip()",
+   "new": "    gate = env.get(GATE_SETTING_OLD, \"\").strip() or env.get(GATE_SETTING, \"\").strip()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_shared_name_that_is_no_good_falls_back_to_the_old_one",
+   "file": "hub/config.py",
+   "old": "    gate = env.get(GATE_SETTING, \"\").strip() or env.get(GATE_SETTING_OLD, \"\").strip()",
+   "new": "    gate = env.get(GATE_SETTING, \"\").strip() if GATE_SECRET.match(env.get(GATE_SETTING, \"\").strip()) else env.get(GATE_SETTING_OLD, \"\").strip()",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   }
  ]

@@ -2,6 +2,7 @@
 """The admin page's door (hub/admindoor.py, hub/admin.py `resolve`, docs/HUB.md "The admin page's door"): who may use it, the pass that the site's nginx hands on, and the hub's side of what the page does.
 
   TheRule          the one rule: nobody / no role / moderator / administrator / the operator's account, each with a fresh answer, an old one and a Discord that is down; no key, a short key, a key with a blank
+                   (a shut door is a 503 `door_off` at the gate and on the page's calls, for everybody, and never the 403 that says "not an administrator")
   TheFreshCheck    the door wants an answer a minute old for an administrator; an action asks for both
   TheLookupInFlight  requests of one account that come together wait for one lookup and share its answer
   TheDoorsOwnShare the door's lookups come from its own share, not the moderators' actions'
@@ -13,6 +14,7 @@
   TheChanges       every change and its row of the moderators' log, the powers, the fresh check, the lists and the status
   TheIdIsLikeAPassword   an id that is planted is in no answer, pass, log line or frame
   TheRealLogin     the same through the Discord login's cookie, and `next=admin`
+  TheOneSecret     the key is the one setting ANTS_ADMIN_GATE_SECRET (the game server's name too); the hub's old name is read only when it is not set
   TheStart         a missing, short or malformed key does not stop the hub and is said once at the start
 
 The fake Discord holds the roles (tests/scripts/fake_discord.py); the intervals are short (a check every second, a grace of a third of a second more). Every id here is made up.
@@ -86,7 +88,7 @@ class DoorTest(unittest.TestCase):
         self.fake = fd.FakeDiscord()
         self.addCleanup(self.fake.close)
         self.fake.members = {OWNER: [], ADMIN: [fd.ROLE_ADMIN], ADMIN2: [fd.ROLE_ADMIN], MOD: [fd.ROLE_MOD], PLAIN: [], TARGET: [], AWAY: []}
-        env = {"ANTS_HUB_ADMIN_GATE_SECRET": self.secret} if self.secret is not None else {}
+        env = {"ANTS_ADMIN_GATE_SECRET": self.secret} if self.secret is not None else {}
         self.rig = hub_rig.Rig(member_fake=self.fake, owner=OWNER, recheck=self.recheck, env=env, **dict(OPTIONS, **self.options))
         self.rig.__enter__()
         self.addCleanup(self.rig.__exit__, None, None, None)
@@ -220,7 +222,7 @@ class TheRule(DoorTest):
             for _ in range(times):
                 r = hc.request(rig.port, "GET", "/hub/admin/gate", [("X-Client-Address", "198.51.100.77"), ("X-Hub-Test-Login", "%s:%s" % (account, NAMES[account]))])
                 self.assertEqual(r.status, 403)
-        with hub_rig.Rig(member_fake=self.fake, owner=OWNER, recheck=1, env={"ANTS_HUB_ADMIN_GATE_SECRET": SECRET},
+        with hub_rig.Rig(member_fake=self.fake, owner=OWNER, recheck=1, env={"ANTS_ADMIN_GATE_SECRET": SECRET},
                          **dict(OPTIONS, admin_lookups_burst=2, admin_lookups_refill_seconds=60.0, roles_grace_seconds=30.0, admin_door_new_burst=10)) as rig:
             ask(rig, PLAIN, 10)
             self.assertEqual(self.fake.member_ids.count(PLAIN), 1, "an answer of `none` is an answer, and a fresh one is believed")
@@ -231,17 +233,32 @@ class TheRule(DoorTest):
     def test_the_door_is_shut_for_everybody_without_a_good_key(self):
         for secret in (None, "", "x" * 31, "a b" * 20, "caf\u00e9-" * 8, SAMPLE_SECRET):
             with self.subTest(secret=len(secret or "")):
-                env = {"ANTS_HUB_ADMIN_GATE_SECRET": secret} if secret is not None else {}
+                env = {"ANTS_ADMIN_GATE_SECRET": secret} if secret is not None else {}
                 with hub_rig.Rig(member_fake=self.fake, owner=OWNER, recheck=1, env=env, **OPTIONS) as rig:
-                    for account in (OWNER, ADMIN):
+                    for account in (OWNER, ADMIN, MOD, PLAIN):
                         pairs = [("X-Client-Address", "198.51.100.5"), ("X-Hub-Test-Login", "%s:%s" % (account, NAMES[account])), ("Sec-Fetch-Site", "same-origin")]
                         r = hc.request(rig.port, "GET", "/hub/admin/gate", pairs)
-                        self.assertEqual((r.status, r.get("x-ants-admin-pass")), (403, None))
+                        self.assertEqual((r.status, r.get("x-ants-admin-pass"), r.body), (503, None, b""), "a shut door is not a 'no': nginx says door_off and the page says it is not available")
                         r = hc.request(rig.port, "GET", "/hub/admin/api/me", pairs)
-                        self.assertEqual(r.status, 403)
-                        self.assertNotIn(b"csrf", r.body)
+                        self.assertEqual((r.status, r.json()), (503, {"error": "door_off"}), "the page's own calls say the same, never 'admin'")
                     r = hc.request(rig.port, "GET", "/hub/admin/gate", [("X-Client-Address", "198.51.100.5")])
-                    self.assertEqual(r.status, 403, "a door that is shut is shut for everybody, nobody logged in too")
+                    self.assertEqual(r.status, 503, "a door that is shut is shut for everybody, nobody logged in too")
+                    pairs = [("X-Client-Address", "198.51.100.5"), ("Sec-Fetch-Site", "same-origin")]
+                    for name in sorted(admindoor.READS):
+                        r = hc.request(rig.port, "GET", "/hub/admin/api/" + name, pairs)
+                        self.assertEqual((r.status, r.json()), (503, {"error": "door_off"}), name)
+                        self.assertNotIn(b"csrf", r.body)
+                    for name in sorted(admindoor.WRITES):
+                        r = hc.request(rig.port, "POST", "/hub/admin/api/" + name, pairs + [("Origin", hc.SITE), ("Content-Type", "application/json")], body=b"{}")
+                        self.assertEqual((r.status, r.json()), (503, {"error": "door_off"}), name)
+
+    def test_a_door_that_is_open_still_says_who_is_not_allowed(self):
+        """The other side of the rule: with a good key, nobody logged in is 401 and a person who may not is 403 (a shut door is not mistaken for either)."""
+        self.assertEqual(self.gate().status, 401)
+        self.assertEqual(self.gate(PLAIN).status, 403)
+        self.assertEqual(self.get("me", None).status, 401)
+        r = self.get("me", PLAIN)
+        self.assertEqual((r.status, r.json()), (403, {"error": "admin"}))
 
 
 class ThePass(DoorTest):
@@ -415,7 +432,7 @@ class TheDoorsOwnShare(DoorTest):
                 del NAMES[account]
 
     def test_the_door_has_a_share_of_its_own_and_it_runs_out(self):
-        with hub_rig.Rig(member_fake=self.fake, owner=OWNER, recheck=1, env={"ANTS_HUB_ADMIN_GATE_SECRET": SECRET},
+        with hub_rig.Rig(member_fake=self.fake, owner=OWNER, recheck=1, env={"ANTS_ADMIN_GATE_SECRET": SECRET},
                          **dict(OPTIONS, admin_burst=1000, admin_door_burst=2, admin_door_refill_seconds=600.0, admin_door_new_burst=2, admin_door_new_refill_seconds=600.0, admin_lookups_burst=100)) as rig:
             seen = 0
             for account in (ADMIN, ADMIN2, MOD, PLAIN):
@@ -1068,7 +1085,7 @@ class TheRealLogin(unittest.TestCase):
         self.fake = fd.FakeDiscord(hc.SITE + "/hub/callback", user=(BOSS, "maple.leaf"))
         self.fake.consent = False
         self.addCleanup(self.fake.close)
-        self.rig = hub_rig.Rig(discord=self.fake, member_fake=self.fake, env={"ANTS_HUB_ADMIN_GATE_SECRET": SECRET}, **dict(OPTIONS, sockets_per_address=100))
+        self.rig = hub_rig.Rig(discord=self.fake, member_fake=self.fake, env={"ANTS_ADMIN_GATE_SECRET": SECRET}, **dict(OPTIONS, sockets_per_address=100))
         self.rig.__enter__()
         self.addCleanup(self.rig.__exit__, None, None, None)
         self.count = 0
@@ -1114,7 +1131,7 @@ class TheRealLogin(unittest.TestCase):
 
     def test_the_owner_of_the_hub_needs_no_role_through_the_cookie_either(self):
         owner_id = OLDOWNER
-        with hub_rig.Rig(discord=self.fake, member_fake=self.fake, owner=owner_id, env={"ANTS_HUB_ADMIN_GATE_SECRET": SECRET}, **dict(OPTIONS, sockets_per_address=100)) as rig:
+        with hub_rig.Rig(discord=self.fake, member_fake=self.fake, owner=owner_id, env={"ANTS_ADMIN_GATE_SECRET": SECRET}, **dict(OPTIONS, sockets_per_address=100)) as rig:
             self.fake.redirect = hc.SITE + "/hub/callback"
             self.fake.user = (owner_id, "olive.owner")
             v = Visitor(rig.port, self.fake, address="198.51.100.180")
@@ -1139,47 +1156,99 @@ class TheKey(unittest.TestCase):
 
     def test_a_key_of_thirty_two_printable_characters_or_more_opens_the_door(self):
         for key in ("abcdefgh" * 4, "abcdefgh" * 32, "a1!~xyzw" * 5, "kjhgfedc" + "k" * 24):
-            self.assertTrue(self.load(ANTS_HUB_ADMIN_GATE_SECRET=key).admin_gate_on, len(key))
+            self.assertTrue(self.load(ANTS_ADMIN_GATE_SECRET=key).admin_gate_on, len(key))
         for key in ("", "k" * 40, "ab" * 20, "abcdefg" * 6, "abcdefgh" * 3 + "a" * 7, "abcdefgh" * 32 + "x", "k" * 31, "k" * 257, "abcdefgh" * 2 + " " + "abcdefgh" * 2, "caf\u00e9" * 10, "abcdefgh" * 2 + "\t" + "abcdefgh" * 2):
-            cfg = self.load(ANTS_HUB_ADMIN_GATE_SECRET=key)
+            cfg = self.load(ANTS_ADMIN_GATE_SECRET=key)
             self.assertFalse(cfg.admin_gate_on, repr(len(key)))
             self.assertEqual(cfg.admin_gate_secret, "")
         self.assertFalse(self.load().admin_gate_on)
-        cfg = self.load(ANTS_HUB_ADMIN_GATE_SECRET="  " + "abcdefgh" * 4 + "\n")
+        cfg = self.load(ANTS_ADMIN_GATE_SECRET="  " + "abcdefgh" * 4 + "\n")
         self.assertEqual(cfg.admin_gate_secret, "abcdefgh" * 4, "surrounding whitespace is cut: the game server must cut it too (docs/HUB.md)")
 
     def test_the_published_sample_key_is_no_key_however_it_is_padded(self):
         self.assertTrue(configmod.GATE_SECRET.match(SAMPLE_SECRET) and len(set(SAMPLE_SECRET)) >= configmod.GATE_DISTINCT, "it has the shape of a key: only its being published refuses it")
         for text in (SAMPLE_SECRET, "  " + SAMPLE_SECRET + "\n", "\t" + SAMPLE_SECRET):
-            cfg = self.load(ANTS_HUB_ADMIN_GATE_SECRET=text)
+            cfg = self.load(ANTS_ADMIN_GATE_SECRET=text)
             self.assertFalse(cfg.admin_gate_on)
             self.assertEqual(cfg.admin_gate_secret, "")
             self.assertTrue(cfg.admin_gate_given and cfg.admin_gate_sample)
         for text in (SAMPLE_SECRET + "x", "x" + SAMPLE_SECRET, SECRET):
-            cfg = self.load(ANTS_HUB_ADMIN_GATE_SECRET=text)
+            cfg = self.load(ANTS_ADMIN_GATE_SECRET=text)
             self.assertTrue(cfg.admin_gate_on and not cfg.admin_gate_sample, "a key that only contains or extends it is a key")
         for text in ("", "short", "k" * 40):
-            self.assertFalse(self.load(ANTS_HUB_ADMIN_GATE_SECRET=text).admin_gate_sample)
+            self.assertFalse(self.load(ANTS_ADMIN_GATE_SECRET=text).admin_gate_sample)
 
     def test_a_malformed_key_never_stops_the_load_and_the_key_is_in_no_text(self):
-        cfg = self.load(ANTS_HUB_ADMIN_GATE_SECRET=SECRET)
+        cfg = self.load(ANTS_ADMIN_GATE_SECRET=SECRET)
         for text in (repr(cfg), str(cfg), json.dumps(cfg.summary())):
             self.assertNotIn(SECRET, text)
-        self.load(ANTS_HUB_ADMIN_GATE_SECRET="\x01\x02")
-        self.load(ANTS_HUB_ADMIN_GATE_SECRET="x" * 100000)
+        self.load(ANTS_ADMIN_GATE_SECRET="\x01\x02")
+        self.load(ANTS_ADMIN_GATE_SECRET="x" * 100000)
 
     def test_the_warning_is_one_line_and_never_holds_the_key(self):
         import io
         for key, word in (("", "no_secret_set"), ("tiny-" * 2, "secret_too_short_or_not_printable"), ("a b " * 20, "secret_too_short_or_not_printable"), (SAMPLE_SECRET, "secret_is_the_sample_key")):
             stream = io.StringIO()
-            admindoor.warn(self.load(ANTS_HUB_ADMIN_GATE_SECRET=key), logmod.Log(stream))
+            admindoor.warn(self.load(ANTS_ADMIN_GATE_SECRET=key), logmod.Log(stream))
             lines = stream.getvalue().splitlines()
             self.assertEqual(len(lines), 1, key)
             self.assertIn("warning what=admin_page_door_shut_" + word, lines[0])
             self.assertNotIn(key.strip() or "\0", lines[0])
         stream = io.StringIO()
-        admindoor.warn(self.load(ANTS_HUB_ADMIN_GATE_SECRET=SECRET), logmod.Log(stream))
+        admindoor.warn(self.load(ANTS_ADMIN_GATE_SECRET=SECRET), logmod.Log(stream))
         self.assertEqual(stream.getvalue(), "")
+
+
+class TheOneSecret(unittest.TestCase):
+    """The key is ONE setting, ANTS_ADMIN_GATE_SECRET, which the stack hands to the chat hub and to the game server alike; the hub's old name for it is read only when the new one is not set, so that a stack that
+    still has the old name keeps its door. The values here are made up."""
+    OLD = "ANTS_HUB_ADMIN_GATE_SECRET"
+    NEW = "ANTS_ADMIN_GATE_SECRET"
+    OTHER_KEY = "another-gate-key-6c3a9e1f0b7d4825-w"
+
+    def load(self, **env):
+        return configmod.load(dict(ANTS_HUB_PORT="0", **env))
+
+    def test_the_shared_name_alone_is_the_key(self):
+        cfg = self.load(**{self.NEW: SECRET})
+        self.assertTrue(cfg.admin_gate_on)
+        self.assertEqual(cfg.admin_gate_secret, SECRET)
+
+    def test_the_old_name_alone_still_is_the_key(self):
+        cfg = self.load(**{self.OLD: SECRET})
+        self.assertTrue(cfg.admin_gate_on)
+        self.assertEqual(cfg.admin_gate_secret, SECRET)
+
+    def test_a_stack_with_both_names_and_one_value_has_one_key(self):
+        cfg = self.load(**{self.OLD: SECRET, self.NEW: SECRET})
+        self.assertEqual((cfg.admin_gate_on, cfg.admin_gate_secret), (True, SECRET))
+
+    def test_the_old_name_is_read_when_the_new_one_is_empty_or_blank(self):
+        for blank in ("", "   ", "\n", "\t \n"):
+            cfg = self.load(**{self.NEW: blank, self.OLD: SECRET})
+            self.assertEqual(cfg.admin_gate_secret, SECRET, repr(blank))
+
+    def test_the_shared_name_wins_when_both_are_set_so_that_both_services_hold_the_same_key(self):
+        """The game server reads only the shared name: a hub that took the old one beside it would hold another key and the page would stay closed."""
+        cfg = self.load(**{self.OLD: self.OTHER_KEY, self.NEW: SECRET})
+        self.assertEqual(cfg.admin_gate_secret, SECRET)
+        cfg = self.load(**{self.OLD: SECRET, self.NEW: self.OTHER_KEY})
+        self.assertEqual(cfg.admin_gate_secret, self.OTHER_KEY)
+
+    def test_a_shared_name_that_is_no_good_does_not_fall_back_to_the_old_one(self):
+        """The two services must agree: the game server, which reads only the shared name, would have no key, so the hub keeps the door shut as well."""
+        for bad in ("tiny-key", "k" * 40, SAMPLE_SECRET):
+            cfg = self.load(**{self.NEW: bad, self.OLD: SECRET})
+            self.assertEqual((cfg.admin_gate_on, cfg.admin_gate_secret), (False, ""), bad)
+
+    def test_the_sample_key_is_refused_under_either_name(self):
+        for name in (self.NEW, self.OLD):
+            cfg = self.load(**{name: SAMPLE_SECRET})
+            self.assertEqual((cfg.admin_gate_on, cfg.admin_gate_secret, cfg.admin_gate_sample), (False, "", True), name)
+
+    def test_neither_name_is_no_key_and_is_said_so(self):
+        cfg = self.load()
+        self.assertEqual((cfg.admin_gate_on, cfg.admin_gate_given), (False, False))
 
 
 class TheStart(unittest.TestCase):
@@ -1200,15 +1269,15 @@ class TheStart(unittest.TestCase):
         self.assertIsNotNone(port, "the hub did not start:\n" + read_text(log_path))
         return port, log_path
 
-    def test_a_hub_with_a_missing_or_short_or_malformed_key_starts_answers_403_and_says_so_once(self):
+    def test_a_hub_with_a_missing_or_short_or_malformed_key_starts_answers_503_and_says_so_once(self):
         for key, word in ((None, "no_secret_set"), ("tiny-key", "secret_too_short_or_not_printable"), ("\x01" * 40, "secret_too_short_or_not_printable")):
             with self.subTest(key=key and len(key)):
                 extra = {"ANTS_HUB_TEST_LOGIN": "1", "ANTS_HUB_OWNER": OWNER}
                 if key is not None:
-                    extra["ANTS_HUB_ADMIN_GATE_SECRET"] = key
+                    extra["ANTS_ADMIN_GATE_SECRET"] = key
                 port, log_path = self.run_hub(extra)
                 r = hc.request(port, "GET", "/hub/admin/gate", [("X-Client-Address", "198.51.100.9"), ("X-Hub-Test-Login", "%s:%s" % (OWNER, NAMES[OWNER]))])
-                self.assertEqual(r.status, 403)
+                self.assertEqual(r.status, 503)
                 r = hc.request(port, "GET", "/hub/healthz")
                 self.assertEqual(r.status, 200)
                 text = read_text(log_path)
@@ -1217,15 +1286,17 @@ class TheStart(unittest.TestCase):
                 self.assertNotIn(key or "\0", text)
 
     def test_a_hub_with_a_good_key_opens_the_door_for_the_operator_and_says_nothing(self):
-        port, log_path = self.run_hub({"ANTS_HUB_TEST_LOGIN": "1", "ANTS_HUB_OWNER": OWNER, "ANTS_HUB_ADMIN_GATE_SECRET": SECRET})
-        r = hc.request(port, "GET", "/hub/admin/gate", [("X-Client-Address", "198.51.100.9"), ("X-Hub-Test-Login", "%s:%s" % (OWNER, NAMES[OWNER]))])
-        self.assertEqual(r.status, 204)
-        self.assertEqual(verify(r.get("x-ants-admin-pass"), SECRET, time.time())["role"], "owner")
-        text = read_text(log_path)
-        self.assertNotIn("admin_page_door_shut", text)
-        self.assertNotIn(SECRET, text)
-        for account in EVERY_ID:
-            self.assertNotIn(account, text)
+        for name in ("ANTS_ADMIN_GATE_SECRET", "ANTS_HUB_ADMIN_GATE_SECRET"):          # (the shared name, and the old one that a stack may still carry)
+            with self.subTest(setting=name):
+                port, log_path = self.run_hub({"ANTS_HUB_TEST_LOGIN": "1", "ANTS_HUB_OWNER": OWNER, name: SECRET})
+                r = hc.request(port, "GET", "/hub/admin/gate", [("X-Client-Address", "198.51.100.9"), ("X-Hub-Test-Login", "%s:%s" % (OWNER, NAMES[OWNER]))])
+                self.assertEqual(r.status, 204)
+                self.assertEqual(verify(r.get("x-ants-admin-pass"), SECRET, time.time())["role"], "owner")
+                text = read_text(log_path)
+                self.assertNotIn("admin_page_door_shut", text)
+                self.assertNotIn(SECRET, text)
+                for account in EVERY_ID:
+                    self.assertNotIn(account, text)
 
 
 class TheCommandLineStillWorks(unittest.TestCase):
