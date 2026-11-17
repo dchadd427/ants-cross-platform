@@ -411,4 +411,22 @@ void run_bot_match_tests() {
             ASSERT_MSG(islands ? killed == 0 : killed > 0, std::string(map) + ": killed " + std::to_string(killed));
         }
     } TEST_END();
+
+    TEST_CASE("S3.184e The Match History Is Let In While A Room Of Computer Players Alone Runs (Nobody Waits On It), And Not While A Room With A Person In It Loads Or Runs") {
+        World w;
+        ASSERT_TRUE(w.mgr.history_may_run());                                   // (no room)
+        ASSERT_TRUE(w.mgr.create_room(bots_only_spec("BM-GATEB", 2), w.now).ok);
+        ASSERT_TRUE(run_until(w, [&] { return w.status("BM-GATEB").state == RoomState::Running; }, 12000));
+        ASSERT_TRUE(w.mgr.history_may_run());                                   // (the server's own match runs: the history counts a match that a person played)
+        ASSERT_TRUE(w.mgr.create_room(spec_of("BM-GATEP", 2), w.now).ok);
+        Client& gus = w.connect("Gus", "BM-GATEP");
+        Client& hal = w.connect("Hal", "BM-GATEP");
+        gus.next_order_ms = hal.next_order_ms = 0xFFFFFFFFu;
+        const auto person_room_is = [&](RoomState state) { return w.status("BM-GATEP").state == state; };
+        ASSERT_TRUE(run_until(w, [&] { return person_room_is(RoomState::Loading) || person_room_is(RoomState::Running); }, 12000));
+        ASSERT_FALSE(w.mgr.history_may_run());                                  // (a room that loads is about to start: it gets the thread too)
+        ASSERT_TRUE(run_until(w, [&] { return person_room_is(RoomState::Running); }, 12000));
+        ASSERT_FALSE(w.mgr.history_may_run());                                  // (a person's match runs, whatever else runs)
+        ASSERT_TRUE(w.status("BM-GATEB").state == RoomState::Running);
+    } TEST_END();
 }

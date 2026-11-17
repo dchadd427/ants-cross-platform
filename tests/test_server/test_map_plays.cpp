@@ -333,6 +333,57 @@ int main() {
         }
     } TEST_END();
 
+    TEST_CASE("MP2.4 A recording that names an approved map in another letter case than the server lists it is counted like any other, and the play shows on the map's entry of the lists (the lobby's rule: the same letters in another case are the same map); another name is not guessed") {
+        MatchSpec spec;
+        spec.seed = 41;
+        spec.turns = 1000;
+        spec.roster = 0x03;
+        spec.names = {"Ann", "Bob", "", ""};
+        TempDir nowhere;                                                                             // (a maps folder with no map in it: the approved list is the only place the map is)
+        Server srv(nowhere.path.string());
+        ASSERT_TRUE(srv.open());
+        uint64_t hash = 0;
+        ASSERT_TRUE(net::hash_file(maps_dir() + "/TINY.LVL", hash));
+        ApprovedMap one;
+        one.name = "Approved One.lvl";                                                               // (the name as the list shows it: the operator's cleaned name)
+        one.path = maps_dir() + "/TINY.LVL";
+        one.hash = hash;
+        one.size = 1;
+        one.width = one.height = 31;
+        one.kind = "extended";
+        srv.mgr.mutable_store().set_approved({one});
+        const auto keep_named = [&](uint32_t seed, const char* name) {                              // (TINY's match under another map name: the head names what the lobby named)
+            spec.seed = seed;
+            const std::vector<uint8_t> bytes = record_match(spec);
+            replay::Replay rep;
+            std::string why, error;
+            if (bytes.empty() || !replay::decode(bytes.data(), bytes.size(), rep, why)) return false;
+            rep.head.map_name = name;
+            const std::vector<uint8_t> renamed = replay::encode(rep, error);
+            return !renamed.empty() && !srv.keep(renamed).empty();
+        };
+        const auto plays_of_one = [&]() {                                                            // (what the public list /maps/all says for the map)
+            const ctl::JsonValue list = parse_text(srv.door("GET", "/maps/all").body);
+            for (size_t i = 0; i < list.get("maps").size(); ++i) {
+                if (list.get("maps").at(i).get("file").str() == "Approved One.lvl") return list.get("maps").at(i).get("plays").as_int_or(-1);
+            }
+            return int64_t{-1};
+        };
+        ASSERT_EQ(plays_of_one(), int64_t{0});
+        ASSERT_TRUE(keep_named(41, "approved one.lvl"));                                            // (another case)
+        srv.run_updates(40);
+        ASSERT_EQ(srv.mgr.history_store()->count(), size_t{1});
+        ASSERT_EQ(plays_of_one(), int64_t{1});
+        ASSERT_TRUE(keep_named(42, "Approved One.lvl"));                                            // (the exact name)
+        srv.run_updates(40);
+        ASSERT_EQ(srv.mgr.history_store()->count(), size_t{2});
+        ASSERT_EQ(plays_of_one(), int64_t{2});
+        ASSERT_TRUE(keep_named(43, "Approved_One.lvl"));                                            // (a different name: not a map of the list, left out as ever)
+        srv.run_updates(40);
+        ASSERT_EQ(srv.mgr.history_store()->count(), size_t{2});
+        ASSERT_EQ(plays_of_one(), int64_t{2});
+    } TEST_END();
+
     TEST_CASE("MP2.3 A recording on a map that starts more ants than a room plays (1,000, the four colors added up) is not played by the feeder (one piece on the one thread, seconds for 40,000 ants): it is left out; one at the cap is counted as ever") {
         TempDir maps;
         const auto keep_map = [&](const char* name, uint32_t per_color) {

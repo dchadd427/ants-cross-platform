@@ -329,6 +329,15 @@ const ApprovedMap* MapStore::approved(const std::string& file_name) const {
     return nullptr;
 }
 
+const ApprovedMap* MapStore::approved_any_case(const std::string& name) const {
+    if (const ApprovedMap* exact = approved(name)) return exact;
+    const std::string folded = lower(name);
+    for (const ApprovedMap& a : approved_) {
+        if (lower(a.name) == folded) return &a;
+    }
+    return nullptr;
+}
+
 bool MapStore::is_test_map_name(const std::string& file_name) noexcept {
     if (file_name.size() < 20 || !net::valid_map_name(file_name)) return false;
     const size_t suffix = file_name.size() - 19;
@@ -417,7 +426,7 @@ uint64_t MapStore::cells_of(const std::string& name) const { return counts_of(na
 std::string MapStore::list_json(const std::vector<MapPlays>* plays, bool with_extended) const {
     std::map<std::pair<std::string, std::string>, int64_t> counts;
     if (plays != nullptr) {
-        for (const MapPlays& p : *plays) counts[{p.map, p.hash}] = p.plays;
+        for (const MapPlays& p : *plays) counts[{lower(p.map), p.hash}] += p.plays;       // (a recording that names a map in another letter case counts for the map, as the lobby finds it)
     }
     ctl::JsonValue maps = ctl::JsonValue::make_array();
     std::vector<const MapListing*> shown;
@@ -434,7 +443,7 @@ std::string MapStore::list_json(const std::vector<MapPlays>* plays, bool with_ex
         o.set("minutes", ctl::JsonValue::make_int(m.minutes));
         o.set("players", ctl::JsonValue::make_int(m.players));
         o.set("description", ctl::JsonValue::make_string(m.description));
-        const auto found = counts.find({m.file, map_hash_text(m.hash)});
+        const auto found = counts.find({lower(m.file), map_hash_text(m.hash)});
         o.set("plays", ctl::JsonValue::make_int(found == counts.end() ? 0 : found->second));
         if (!m.thumb.empty()) o.set("thumb", ctl::JsonValue::make_string(m.thumb));
         if (m.original) o.set("original", ctl::JsonValue::make_bool(true));

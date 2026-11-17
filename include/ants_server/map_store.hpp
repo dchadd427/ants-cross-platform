@@ -122,6 +122,9 @@ public:
     bool library_has_name(const std::string& key) const;
     /// The approved map that has this file name (exactly), or nullptr. Used to serve its file and picture; a name that is not approved or is taken down is not found.
     const ApprovedMap* approved(const std::string& file_name) const;
+    /// The approved map that `name` names under the lobby's rule (listed_name): the exact file name, else the one that differs in letter case only (a name is unique by its lower-case key, so there is one at most).
+    /// What the history reads a recording's map by; the file is the store's own, never a path made from the name.
+    const ApprovedMap* approved_any_case(const std::string& name) const;
 
     /// Ephemeral unlisted test maps from the Map Maker ("<Name> ~test-<8hex>.lvl"): playable in rooms and served at /maps/files/ and /maps/previews/, never listed in GET /maps or GET /maps/all.
     static bool is_test_map_name(const std::string& file_name) noexcept;
