@@ -265,7 +265,7 @@ class TheCodeRuns(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("0 failed", done.stdout)
         for part in ("A the words", "B the change", "C the dialog on a Classic map", "C2 a description of 30 bytes", "C3 the numbers and the ants", "D the dialog on an Extended map", "D2 a text the core refuses",
-                     "E Apply and Cancel", "F text is text"):
+                     "E Apply and Cancel", "F text is text", "G typing in the boxes"):
             self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
 
     def test_the_properties_check_can_fail_on_broken_copies_of_the_scripts(self):
@@ -315,7 +315,7 @@ class TheCodeRuns(unittest.TestCase):
         done = run_check(script=CONVERT_CHECK)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("0 failed", done.stdout)
-        for part in ("A the frame", "B the names", "C the Crop to fit screen", "D Copy this map", "E Start an Extended map, Make a Classic map, the reasons", "F Crop it to fit", "G the rules word of a new Extended map", "H New map and Save as a new map"):
+        for part in ("A the frame", "B the names", "C the Crop to fit screen", "D Copy this map", "E Start an Extended map, Make a Classic map, the reasons", "F Crop it to fit", "G the rules word of a new Extended map", "H New map and Save as a new map", "I typing in the name of a copy"):
             self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
 
     def test_the_convert_check_can_fail_on_broken_copies_of_the_scripts(self):
@@ -968,7 +968,7 @@ class ThePage(unittest.TestCase):
         done = run_check(script=SUBMIT_CHECK)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn(" 0 failed", done.stdout)
-        for part in ("A the words", "B the sent store", "C the dialog", "D what is sent, and the answers", "F My submissions", "G a send that may have arrived, twins, a 404"):
+        for part in ("A the words", "B the sent store", "C the dialog", "D what is sent, and the answers", "F My submissions", "G a send that may have arrived, twins, a 404", "H typing in the boxes"):
             self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
 
     def test_the_submit_check_can_fail_on_the_broken_copies_of_the_words_the_call_the_dialog_the_list_and_the_tabs(self):
@@ -980,6 +980,31 @@ class ThePage(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
         with tempfile.TemporaryDirectory() as tmp:
             for name in SCRIPTS + ("mapmaker_submit.js",):
+                shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+            for m in spec["mutants"]:
+                with self.subTest(m["id"]):
+                    name = os.path.basename(m["file"])
+                    text = read(*m["file"].split("/"))
+                    self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in %s exactly once" % (m["id"], name))
+                    script = os.path.join(REPO, m["test"].split(" ", 1)[1])
+                    with open(os.path.join(tmp, name), "w", encoding="utf-8", newline="") as f:
+                        f.write(text.replace(m["old"], m["new"]))
+                    try:
+                        done = run_check(tmp, script)
+                    finally:
+                        shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+                    self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
+
+    def test_the_checks_can_fail_on_the_broken_copies_of_the_typing_in_the_boxes(self):
+        """tests/data/mapmaker_focus_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`): a box that a re-render takes out of the page (or moves: a browser counts that as taken out) loses the focus
+        and the composition of an input method with it, a caret that is not put back, a focus that goes to another control: each broken copy must fail the check of its dialog"""
+        with open(os.path.join(REPO, "tests", "data", "mapmaker_focus_mutants.json"), encoding="utf-8") as f:
+            spec = json.load(f)
+        self.assertGreaterEqual(len(spec["mutants"]), 20)
+        ids = [m["id"] for m in spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ALL_SCRIPTS + ("mapmaker_submit.js", "mapmaker_play.js"):
                 shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
             for m in spec["mutants"]:
                 with self.subTest(m["id"]):

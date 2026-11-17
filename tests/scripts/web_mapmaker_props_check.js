@@ -385,8 +385,42 @@ function caseF() {
     check(back.prevented && t.doc.activeElement === items[items.length - 1], 'and Shift+Tab goes back');
 }
 
+// ---- G: typing in the boxes ----
+// Every key is one `input` event. The boxes are never made again, and when the page changes what was typed (a line break becomes a space, a text that does not fit is not taken, only digits stay in a
+// number box) the caret stays where the person had it (setting a box's value puts the caret at its end, as a browser does: web_mapmaker_fake_dom.js)
+function caseG() {
+    let p = setup('classic', '', 12, 9, 0x7FFE);
+    equal(p.doc.typeCheck(() => p.q('#p-desc'), 'Ants at play'), '', 'the description of a Classic map: every key stays in the same box with the focus');
+    equal(p.doc.caretCheck(() => p.q('#p-desc'), 4, 'X'), '', 'a key in the middle of the description keeps the caret after it');
+    equal(p.doc.composeCheck(() => p.q('#p-desc'), ['n', 'ni', 'n\u01d0']), '', 'an input method in the description is not cut off');
+    p.q('#p-desc').value = 'a'.repeat(29); p.q('#p-desc').fire('input', {});
+    p.q('#p-desc').focus(); p.q('#p-desc').setSelectionRange(10, 10);
+    p.doc.typeKey('Z');
+    check(p.q('#p-desc').value === 'a'.repeat(10) + 'Z' + 'a'.repeat(18) && p.q('#p-desc').selectionStart === 11 && p.doc.activeElement === p.q('#p-desc'), 'a key that makes the text too long: the end is cut and the caret is after the key (' + p.q('#p-desc').selectionStart + ')');
+    p.q('#p-desc').setSelectionRange(5, 5); p.doc.typeKey('Backspace');
+    check(p.q('#p-desc').value.length === 28 && p.q('#p-desc').selectionStart === 4 && p.doc.activeElement === p.q('#p-desc'), 'a key that takes a letter away keeps the caret');
+    const old = setup('classic', 'a'.repeat(30), 12, 9, 0x7FFE);                                              // (a text that came in too long: it cannot grow)
+    old.q('#p-desc').focus(); old.q('#p-desc').setSelectionRange(7, 7); old.doc.typeKey('Z');
+    check(old.q('#p-desc').value === 'a'.repeat(30) && old.q('#p-desc').selectionStart === 7 && old.doc.activeElement === old.q('#p-desc'), 'a key that a text that is too long cannot take is not taken, and the caret stays where it was (' + old.q('#p-desc').selectionStart + ')');
+    p = setup('extended', 'ab cd', 20, 12, 62);
+    equal(p.doc.typeCheck(() => p.q('#p-desc'), ' ef'), '', 'the description of an Extended map (a box of lines): every key stays in the same box with the focus');
+    p.q('#p-desc').value = 'ab cd'; p.q('#p-desc').fire('input', {});
+    p.q('#p-desc').focus(); p.q('#p-desc').setSelectionRange(2, 2);
+    p.doc.typeKey('Enter');
+    check(p.q('#p-desc').value === 'ab  cd' && p.q('#p-desc').selectionStart === 3 && p.doc.activeElement === p.q('#p-desc'), 'a line break in the middle becomes a space and the caret is after it (' + p.q('#p-desc').selectionStart + ')');
+    p = setup('classic', DESC, 12, 9, 0x7FFE);
+    for (const id of ['#p-minutes', '#p-eggs']) {
+        p.q(id).value = '';
+        equal(p.doc.typeCheck(() => p.q(id), '45'), '', id + ': the number box keeps the focus with every key');
+        p.q(id).setSelectionRange(1, 1); p.doc.typeKey('x');
+        check(p.q(id).value === '45' && p.q(id).selectionStart === 1 && p.doc.activeElement === p.q(id), id + ': a key that is no digit is not taken and the caret stays (' + p.q(id).selectionStart + ')');
+        p.q(id).fire('change', {});
+        check(p.q(id).isConnected && p.doc.activeElement === p.q(id) && p.q(id).value === '45', id + ': what the box says is taken and the box and its focus are as they were');
+    }
+}
+
 for (const [name, fn] of [['A the words', caseA], ['B the change', caseB], ['C the dialog on a Classic map', caseC], ['C2 a description of 30 bytes', caseC2], ['C3 the numbers and the ants', caseC3], ['D the dialog on an Extended map', caseD],
-    ['D2 a text the core refuses', caseD2], ['E Apply and Cancel', caseE], ['F text is text', caseF]]) {
+    ['D2 a text the core refuses', caseD2], ['E Apply and Cancel', caseE], ['F text is text', caseF], ['G typing in the boxes', caseG]]) {
     process.stdout.write('  RUNNING: ' + name + ' ... ');
     const before = failures;
     try { fn(); } catch (e) { failures++; console.log('\n    FAILED: threw ' + (e && e.stack ? e.stack : e)); }
