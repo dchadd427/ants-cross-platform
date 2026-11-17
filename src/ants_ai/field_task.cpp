@@ -44,6 +44,7 @@ void FieldTask::give_up(TaskContext& context, uint64_t now) {
     }
     ant_ = 0;
     pending_ = false;
+    replanned_ = false;
     hints_.hop = BombHop{};
     ++given_up_;
     if (params_.ants_max == 0 || given_up_ % params_.ants_max == 0) {                                              // (ants_max ants in a row could do nothing: wait for a change)
@@ -120,7 +121,7 @@ void FieldTask::step(TaskContext& context) {
     hints_.map_bombs.erase(std::remove_if(hints_.map_bombs.begin(), hints_.map_bombs.end(), gone), hints_.map_bombs.end());
     hints_.ant = ant_;
     hints_.piles = tactics_.field_piles;
-    hints_.rules = FieldRules{tactics_.plan.field_pick, tactics_.plan.field_walk, tactics_.plan.field_set_off};
+    hints_.rules = FieldRules{tactics_.plan.field_pick, tactics_.plan.field_walk, tactics_.plan.field_set_off, tactics_.plan.field_serve, tactics_.plan.field_replan};
     hints_.stalled = hints_.rules.set_off && ant_ != 0 && ant_ == stalled_ant_;
     const FieldPlan plan = plan_field(view, context.map, context.seat, hints_);
     work_ = plan.work();
@@ -158,6 +159,8 @@ void FieldTask::step(TaskContext& context) {
             return;
         }
         progress_ = now;
+        replanned_ = false;
+        replans_left_ = params_.replans_max;
         hints_.hop = BombHop{};
     }
     if (ant->tile != seen_tile_ || ant->hp != seen_hp_ || ant->type != seen_type_) progress_ = now;
@@ -192,6 +195,19 @@ void FieldTask::order(TaskContext& context, const AntView& ant, const FieldStep&
             ant_ = 0;
             return;
         case FieldAction::Stuck:
+            if (hints_.rules.replan && !replanned_ && replans_left_ > 0) {                                     // the plan kept from before may be what leads nowhere (the work moved on while the ways stayed): one fresh plan, then the ant is given up
+                replanned_ = true;
+                --replans_left_;
+                ++replans_;
+                hints_.route.clear();
+                hints_.fire_way.clear();
+                hints_.swim_way.clear();
+                hints_.fire_source = sim::TileCoord{-1, -1};
+                hints_.swim_source = sim::TileCoord{-1, -1};
+                hints_.hop = BombHop{};
+                return;
+            }
+            replanned_ = false;
             give_up(context, now);
             return;
         case FieldAction::Take:
@@ -232,6 +248,7 @@ void FieldTask::order(TaskContext& context, const AntView& ant, const FieldStep&
             context.orders.special(ant.id, step.tile, Priority::Urgent);
             break;
     }
+    replanned_ = false;
     ++orders_;
     pending_ = true;
     proposed_at_ = now;
