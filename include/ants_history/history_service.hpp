@@ -8,7 +8,8 @@
 //   - the COUNTER thread owns the writer connection to the service's database, a replay store that looks at the recordings folder, the feeder, and (with a game database) the list of approved maps. It looks at the folder every
 //     look_ms and counts what is new; it is the only writer of the file.
 //   - the HTTP thread (the caller of handle()) owns a read-only connection to the same file and a replay store of its own. Every /history answer is made in one read transaction, so a list and its counts are of one state of the file.
-// The two meet in the file (SQLite's WAL: a reader never waits for the writer) and in the log callback, which the service serializes. The recordings folder is only read: the service deletes nothing.
+// The two meet in the file (SQLite's WAL: a reader never waits for the writer) and in the log callback, which the service serializes. The recordings folder is only read: the service deletes nothing, and it deletes no
+// marker of its own file either (the markers of matches that the operator took out stay: a folder that is empty or not the right one must not make a deleted match public again).
 
 #include <atomic>
 #include <condition_variable>
@@ -40,7 +41,8 @@ struct ServiceConfig {
     uint32_t look_ms{250};                            // how often the counter looks at the folder and for work
     uint32_t pace_ms{0};                              // the least gap after a recording (HistoryFeeder::set_pace) ...
     uint32_t pace_factor{1};                          // ... and how many times what it took: the counter has a thread of its own, the game server's loop is not held up
-    uint32_t approved_refresh_s{60};                  // how often the approved maps are read again from the game database
+    uint32_t approved_refresh_s{60};                  // how often the approved maps are read again from the game database (while a read has failed, or a recording waits for its map, at most every 5 s of it)
+    uint32_t store_retry_ms{5000};                    // how long a store that lost its database waits before it looks again (both threads' stores; the game server's own is 60 s: its loop has the games to run)
     uint32_t http_look_ms{200};                       // the HTTP thread looks at the folder at most this often (once at the start of a request that is due)
     std::function<void(const std::string&)> log;      // lines for the log, from both threads (the service calls it one at a time); empty: none
     std::function<int64_t()> clock_s;                 // the replay stores' clock, seconds since 1970 UTC (empty: the system clock; tests give their own)
@@ -94,6 +96,8 @@ public:
     Stats stats() const;
     /// The result of the copy at the start (empty report: no game database was given, or the service has not started)
     const ImportReport& import_report() const noexcept { return import_report_; }
+    /// True when, at the start, the recordings folder held no recording and the history held records: the folder may be the wrong one or a mount that is empty (the log says so). Nothing is deleted for it either way.
+    bool recordings_folder_empty_with_history() const noexcept { return folder_empty_with_history_; }
 
 private:
     class ApprovedMaps;
@@ -103,6 +107,7 @@ private:
 
     ServiceConfig cfg_;
     bool started_{false};
+    bool folder_empty_with_history_{false};
     ImportReport import_report_;
     std::mutex log_mutex_;
 

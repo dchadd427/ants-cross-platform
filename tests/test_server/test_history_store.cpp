@@ -1398,6 +1398,61 @@ int main() {
         ASSERT_EQ(none.history.count(), size_t{2});
     } TEST_END();
 
+    TEST_CASE("HS5.8 A feeder that is told not to prune keeps the markers of recordings that have gone, however long it runs (the history service's: an empty or wrong folder must not make a match that the operator took out public again); the default feeder deletes them once an hour") {
+        if (match_file(1).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        for (const bool prune : {false, true}) {
+            Rig rig;
+            ASSERT_TRUE(rig.open());
+            rig.feeder.set_prune_markers(prune);
+            const std::string a = rig.keep(match_file(1));
+            rig.keep(match_file(2));
+            rig.drain(6);
+            std::string why;
+            ASSERT_TRUE(rig.history.remove(a, true, why) == HistoryStore::Removal::Done);
+            ASSERT_TRUE(rig.replays.remove(history_recording_file(a)));                    // (the recording is gone: its folder is empty of it, or is not the right one)
+            for (int hour = 0; hour < 3; ++hour) {
+                rig.ms += HistoryFeeder::kPruneEveryMs;
+                rig.drain(3);
+            }
+            ASSERT_EQ(rig.history.marker_count(), prune ? size_t{0} : size_t{1});
+            ASSERT_EQ(rig.history.count(), size_t{1});
+        }
+    } TEST_END();
+
+    TEST_CASE("HS5.9 A recording that was left out for want of its map is put back in the line by retry_skipped_maps(): counted once the map is there, left out again while it is not, and the summary never counts below zero") {
+        if (match_file(1).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        TempDir empty_maps;
+        Rig rig(empty_maps.path.string());
+        ASSERT_TRUE(rig.open());
+        const std::string id = rig.keep(match_file(1));
+        rig.drain(4);
+        ASSERT_TRUE(rig.history.count() == 0 && rig.feeder.left_out() == 1 && rig.feeder.left_out_for_map() == 1);
+        ASSERT_EQ(rig.feeder.retry_skipped_maps(), size_t{1});                          // (the list of maps changed: put back)
+        ASSERT_TRUE(rig.feeder.left_out() == 0 && rig.feeder.left_out_for_map() == 0);
+        rig.drain(4);
+        ASSERT_TRUE(rig.history.count() == 0 && rig.feeder.left_out() == 1 && rig.feeder.left_out_for_map() == 1);      // (the map is still not there: left out again, and nothing is played over and over)
+        ASSERT_EQ(rig.feeder.retry_skipped_maps(), size_t{1});
+        std::filesystem::copy_file(maps_dir() + "/TINY.LVL", empty_maps.path / "TINY.LVL");                              // (the map is there now)
+        rig.drain(6);
+        ASSERT_TRUE(rig.history.count() == 1 && rig.history.knows(id) && rig.feeder.counted() == 1 && rig.feeder.left_out() == 0);
+        ASSERT_EQ(rig.feeder.retry_skipped_maps(), size_t{0});                          // (nothing waits any more)
+        rig.drain(4);
+        ASSERT_EQ(rig.history.count(), size_t{1});
+        for (const std::string& line : rig.history.take_notes()) {                      // (the lines that say what a run came to carry no number that wrapped below zero)
+            size_t run = 0;
+            for (const char c : line) {
+                run = (c >= '0' && c <= '9') ? run + 1 : 0;
+                ASSERT_LT(run, size_t{15});
+            }
+        }
+    } TEST_END();
+
     TEST_CASE("HS7.1 A store that only reads a file that another connection writes (the history service's HTTP side): a read scope sees what was committed before it, keeps one state to its end, and the next one sees the rest; the counts and the sums are made again") {
         TempDir temp;
         const std::string path = (temp.path / "shared.db").string();

@@ -253,6 +253,8 @@ std::string map_hash_text(uint64_t hash) {
 // The store
 // ---------------------------------------------------------------------------------------------------------------------------------
 
+HistoryStore::HistoryStore(db::Database& database) : HistoryStore(database, Config()) {}
+
 HistoryStore::HistoryStore(db::Database& database, Config config) : db_(database), cfg_(std::move(config)) {}
 
 int64_t HistoryStore::now_s() const { return cfg_.clock_s ? cfg_.clock_s() : static_cast<int64_t>(std::time(nullptr)); }
@@ -272,7 +274,7 @@ void HistoryStore::fail(const std::string& what, const db::Error& error) const {
     retry_armed_ = false;
     if (!up_) return;                                      // (one line for as long as it stays down)
     up_ = false;
-    note("history: " + reason_ + "; the match history is unavailable until the database answers again (tried again every " + std::to_string(kRetryMs / 1000) + " s)");
+    note("history: " + reason_ + "; the match history is unavailable until the database answers again (tried again every " + std::to_string((cfg_.retry_ms + 999) / 1000) + " s)");
 }
 
 db::Error HistoryStore::refresh_counts() const {
@@ -309,11 +311,11 @@ void HistoryStore::maintain(uint32_t now_ms) {
     if (up_) return;
     if (!retry_armed_) {
         retry_armed_ = true;
-        retry_at_ms_ = now_ms + kRetryMs;
+        retry_at_ms_ = now_ms + cfg_.retry_ms;
         return;
     }
     if (!net::time_reached(now_ms, retry_at_ms_)) return;
-    retry_at_ms_ = now_ms + kRetryMs;
+    retry_at_ms_ = now_ms + cfg_.retry_ms;
     if (!db_.is_open() || !refresh_counts().ok()) return;       // (still down: no new line)
     up_ = true;
     reason_.clear();
@@ -868,9 +870,20 @@ bool HistoryFeeder::load_level(const replay::Header& head, assets::LevelData& le
     return true;
 }
 
-void HistoryFeeder::skip(const std::string& id, const std::string& why) {
+void HistoryFeeder::skip(const std::string& id, const std::string& why, bool for_map) {
     skipped_.insert(id);
+    if (for_map) map_skipped_.insert(id);
     if (++skip_lines_ <= kMaxSkipLines) history_.report("history: " + id + " is not counted: " + why);
+}
+
+size_t HistoryFeeder::retry_skipped_maps() {
+    const size_t n = map_skipped_.size();
+    if (n == 0) return 0;
+    for (const std::string& id : map_skipped_) skipped_.erase(id);
+    map_skipped_.clear();
+    reported_skipped_ = std::min(reported_skipped_, skipped_.size());                    // (the summary counts what was left out since the last one: it must not go below zero)
+    seen_revision_ = ~uint64_t{0};                                                       // (the next pass builds the line again, and the ids are in it)
+    return n;
 }
 
 // The files of the index that are not in the history yet, the oldest at the front of the list that is worked from its back: the newest first. A file of another simulation's rules cannot be played here and is
@@ -916,7 +929,7 @@ bool HistoryFeeder::work(const std::string& file) {
         return true;
     }
     if (!load_level(rep.head, level, why)) {
-        skip(id, why);
+        skip(id, why, true);
         return true;
     }
     HistoryRecord record;
@@ -1017,7 +1030,7 @@ bool HistoryFeeder::backfill(const std::string& file) {
 bool HistoryFeeder::step(const std::function<bool()>& idle, uint32_t now_ms) {
     history_.maintain(now_ms);
     if (!history_.available()) return false;
-    if (!prune_armed_ || net::time_reached(now_ms, next_prune_ms_)) {                     // (cheap: only the markers of matches that the owner took out are looked at)
+    if (prune_markers_ && (!prune_armed_ || net::time_reached(now_ms, next_prune_ms_))) {  // (cheap: only the markers of matches that the owner took out are looked at)
         prune_armed_ = true;
         next_prune_ms_ = now_ms + kPruneEveryMs;
         history_.prune_markers([this](const std::string& id) { return replays_.find(history_recording_file(id)) != nullptr; });

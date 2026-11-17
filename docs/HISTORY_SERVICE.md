@@ -32,7 +32,7 @@ ants_history --db FILE --recordings DIR --maps DIR --port N
 
 ## What it serves
 
-The routes and their answers are the game server's public door's, made by the same code (`public_history_service_response` in `ants_server/control.cpp`): the lists, the one match, the map of deaths, the recordings, the errors and the other methods. Everything else is the door's own `404 {"error":"not found"}`; the game server's `/live`, `/lobbies`, `/busy` and `/maps` need its live memory and stay there. The limits are the same numbers: a list that runs past its time box answers 503 "too heavy", the visitor's budget of query time answers 503 "busy", the plain list is not held back by it, and a database that does not answer gives 503 `the match history is unavailable` with no word of SQLite's. A request that is not a GET is answered 405 (`Allow: GET`) by the HTTP layer, as on the game server's public door.
+The routes and their answers are the game server's public door's, made by the same code (`public_history_service_response` in `ants_server/control.cpp`): the lists, the one match, the map of deaths, the recordings, the errors and the other methods. Everything else is the door's own `404 {"error":"not found"}`; the game server's `/live`, `/lobbies`, `/busy` and `/maps` need its live memory and stay there. The limits are the same numbers: a list that runs past its time box answers 503 "too heavy", the visitor's budget of query time answers 503 "busy", the plain list is not held back by it, and a database that does not answer gives 503 `the match history is unavailable` with no word of SQLite's (each side's store looks again every 5 seconds, not the game server's minute, and says in the log when the database answers again). A request that is not a GET is answered 405 (`Allow: GET`) by the HTTP layer, as on the game server's public door.
 
 ## Two threads, nothing shared in memory
 
@@ -53,11 +53,15 @@ The columns copied are listed in `src/ants_history/history_import.cpp`; a column
 
 ## Maps of the players
 
-A match on a map of a player that the operator approved is counted like any other, the way the game server counts it: the file of the approved map is looked up by the name that the recording gives, in the game database's `map_submissions` (state `approved`) and the folder `--submissions-dir/files`, read again every minute and when a name is not known. Without `--game-db` such a recording is left out with one line in the log. A recording that cannot be counted for any reason (another simulation's rules, a map that is not here, a file that does not play out the same) is left out with one line, once, and tried again when the service starts.
+A match on a map of a player that the operator approved is counted like any other, the way the game server counts it: the file of the approved map is looked up by the name that the recording gives, in the game database's `map_submissions` (state `approved`) and the folder `--submissions-dir/files`, read again every minute and when a name is not known. Without `--game-db` such a recording is left out with one line in the log. A recording that cannot be counted for any reason (another simulation's rules, a map that is not here, a file that does not play out the same) is left out with one line, once, and tried again when the service starts. One that was left out only for want of its map (the list of approved maps could not be read, or did not hold the map yet) is tried again as soon as the list can be read or has changed: while such a recording waits, the list is read again every 5 seconds after a read that failed, and every minute otherwise.
 
 ## Files that are not whole
 
 The store looks only at names the game server's store could have made. A file that is not a whole replay (cut, empty, not a replay) is neither counted nor listed, and is read again when the folder changes and its size is not the one that was read: a whole file put over it by a rename is counted at the next look. A `.tmp` of a write that was cut off, and every file with another name, are left alone, as are files older than the keep days.
+
+## Recordings that go away
+
+The service deletes no record, no recording and no marker. A marker (the row that keeps a match that the operator took out from being counted again while its recording is still kept) is deleted by the game server once the recording is gone, because only the game server knows that its folder is the right one; the service keeps the markers it has, a few bytes each. So a recordings folder that is empty, or is not the game server's, cannot make a deleted match public again. When the service starts on an empty folder while its history is not empty, the log says so in a line that names the folder (a quiet month looks the same, so it is a warning and not a refusal); every match is then shown as removed and nothing is counted until recordings appear.
 
 ## What it does not do yet
 
@@ -65,4 +69,4 @@ The game server keeps these until they move: the operator's `DELETE /history/<id
 
 ## Tests
 
-`test_history_service` (`tests/test_server/test_history_service.cpp`, [`TESTING.md`](TESTING.md), 2.19.20): the same recordings give byte-identical JSON from the game server's door and the service for every route and query of the door's tests, with live recordings and with only the copied history; the same limits; the copy (row for row, markers, idempotent, refused cases); the counting latency; damaged and half-written files; a folder of thousands; the counter and the HTTP side at the same time; the failures at start and a database that stops answering; and the real program as a child process. The read-only modes and the read scope are tested where their code is: `test_db` (DB1.7, DB1.8, SV1.8), `test_replay_store` (RS11.1), `test_history_store` (HS5.7, HS7.1).
+The cases are in [`TESTING.md`](TESTING.md), 2.19.20; the mutants of the service's rules are in `tests/data/history_service_mutants.json`.

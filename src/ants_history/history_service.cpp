@@ -1,5 +1,6 @@
 #include "ants_history/history_service.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <map>
@@ -28,7 +29,7 @@ uint32_t steady_ms() {
 bool is_history_path(const std::string& path) { return path == "/history" || path.compare(0, 9, "/history/") == 0; }
 
 constexpr uint32_t kBusyShortMs = 250;                 // how long the HTTP side waits for a lock (only a file without WAL has one): a request must not hold the loop for seconds
-constexpr uint32_t kApprovedMissLookMs = 5000;         // a map name that the list does not know makes the list be read again at most this often (a map approved a moment ago)
+constexpr uint32_t kApprovedMissLookMs = 5000;         // a map name that the list does not know makes the list be read again at most this often (a map approved a moment ago); a read that failed, or a recording that waits for its map, the same
 constexpr uint32_t kPendingWaitMs = 5;                 // the counter's wait between passes while recordings wait for their pace
 
 }  // namespace
@@ -41,7 +42,7 @@ public:
 
     /// The file of the approved map `name` ("" when there is none), the list read again when it is old, or when it does not know the name and has not been read for a moment
     std::string path_of(const std::string& name, uint32_t now_ms) {
-        if (!loaded_ || net::time_reached(now_ms, loaded_ms_ + refresh_ms_)) load(now_ms);
+        if (!loaded_ || net::time_reached(now_ms, loaded_ms_ + interval_ms())) load(now_ms);
         auto it = files_.find(name);
         if (it == files_.end() && net::time_reached(now_ms, loaded_ms_ + kApprovedMissLookMs)) {
             load(now_ms);
@@ -50,7 +51,16 @@ public:
         return it == files_.end() ? std::string() : it->second;
     }
 
+    /// Reads the list again when it is due (the counter asks while a recording waits for its map: the list is read when a name is asked for, and that is not asked while the recording is left out)
+    void poll(uint32_t now_ms) {
+        if (!loaded_ || net::time_reached(now_ms, loaded_ms_ + interval_ms())) load(now_ms);
+    }
+    /// Moves up whenever a read finds another list than the one before (also the first list that is read after reads that failed): a recording that was left out for want of its map may be countable now
+    uint64_t generation() const noexcept { return generation_; }
+
 private:
+    uint32_t interval_ms() const { return failing_ ? std::min(refresh_ms_, kApprovedMissLookMs) : refresh_ms_; }
+
     void load(uint32_t now_ms) {
         loaded_ = true;
         loaded_ms_ = now_ms;
@@ -60,7 +70,7 @@ private:
             options.read_only = true;
             options.busy_timeout_ms = 1000;
             const db::Error e = db_.open(game_db_, options);
-            if (!e.ok()) return trouble("the approved maps of the players cannot be looked up (the game server's database cannot be read: " + e.message + "); a match on one is not counted until it can");
+            if (!e.ok()) return trouble("the approved maps of the players cannot be looked up (the game server's database cannot be read: " + e.message + "); a match on one is left out until it can, then counted");
         }
         db::Statement st;
         db::Error e = db_.prepare(st, "SELECT final_name, file FROM map_submissions WHERE state = 'approved' AND final_name IS NOT NULL");
@@ -73,8 +83,9 @@ private:
         }
         if (!e.ok()) {
             db_.close();                                                     // (opened again at the next look)
-            return trouble("the approved maps of the players cannot be looked up (" + e.message + "); a match on one is not counted until they can");
+            return trouble("the approved maps of the players cannot be looked up (" + e.message + "); a match on one is left out until they can, then counted");
         }
+        if (found != files_) ++generation_;
         files_ = std::move(found);
         if (failing_) say_("the approved maps of the players can be looked up again");
         failing_ = false;
@@ -93,6 +104,7 @@ private:
     std::map<std::string, std::string> files_;
     bool loaded_{false};
     bool failing_{false};
+    uint64_t generation_{0};
     uint32_t loaded_ms_{0};
 };
 
@@ -182,6 +194,7 @@ bool HistoryService::start(std::string& why) {
     http_replays_ = std::make_unique<server::ReplayStore>(rc);
     server::HistoryStore::Config hc;
     hc.clock_us = cfg_.history_clock_us;
+    hc.retry_ms = cfg_.store_retry_ms;
     counter_history_ = std::make_unique<server::HistoryStore>(writer_db_, hc);
     http_history_ = std::make_unique<server::HistoryStore>(reader_db_, hc);
     std::string store_why;
@@ -195,9 +208,16 @@ bool HistoryService::start(std::string& why) {
     flush_notes(counter_replays_.get(), counter_history_.get());
     http_history_->take_notes();                                                     // (the HTTP side's start says the same as the counter's: only what goes wrong on this side is said later)
     http_replays_->take_notes();
+    // A history and no recording at all: a quiet month, or a folder that is not the game server's (a mount that is empty). Nothing is deleted for it (the service deletes no record and no marker); the operator is told
+    if (counter_replays_->count() == 0 && counter_history_->count() > 0) {
+        folder_empty_with_history_ = true;
+        say("WARNING: the recordings folder '" + cfg_.recordings_dir + "' holds no recording, and the history holds " + std::to_string(counter_history_->count()) +
+            " match(es): is this the folder that the game server keeps its recordings in? Every match is shown as removed until its recording is there; nothing is deleted from the history");
+    }
     if (!cfg_.game_db_path.empty()) approved_ = std::make_unique<ApprovedMaps>(cfg_, [this](const std::string& line) { say(line); });
     feeder_ = std::make_unique<server::HistoryFeeder>(*counter_history_, *counter_replays_, cfg_.maps_dir, cfg_.work_clock_us, cfg_.community_dir);
     feeder_->set_pace(cfg_.pace_ms, cfg_.pace_factor);
+    feeder_->set_prune_markers(false);                                               // (the service never deletes: only the folder's owner knows that its folder is the right one)
     if (approved_) {
         ApprovedMaps* approved = approved_.get();
         feeder_->set_approved_map_path([approved](const std::string& name) { return approved->path_of(name, steady_ms()); });
@@ -210,8 +230,16 @@ bool HistoryService::start(std::string& why) {
 
 void HistoryService::counter_main() {
     const auto idle = []() { return true; };                                         // (the counter's thread is its own: nothing is held up while it plays a recording)
+    uint64_t seen_approved = approved_ ? approved_->generation() : 0;
     while (!stop_) {
         counter_replays_->rescan();                                                  // (one look at the folder's time when nothing changed)
+        if (approved_ && feeder_->left_out_for_map() > 0) {                          // (a recording that was left out for want of its map: the list of approved maps may have changed, or can be read again)
+            approved_->poll(steady_ms());
+            if (approved_->generation() != seen_approved) {
+                seen_approved = approved_->generation();
+                feeder_->retry_skipped_maps();
+            }
+        }
         const bool played = feeder_->step(idle, steady_ms());
         flush_notes(counter_replays_.get(), counter_history_.get());
         matches_ = counter_history_->count();
