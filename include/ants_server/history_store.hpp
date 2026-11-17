@@ -12,8 +12,9 @@
 // new match that HistoryRecord::counts_as_map_play, so a match is counted once, however often the server restarts, and a match that is kept again, or that the owner took out, is not counted twice). A request's words never reach the SQL text: the text of a statement
 // is made of fixed pieces, and every value is a bound parameter.
 //
-// One thread: the server's main loop (SQLite is built without mutexes). The store never throws and never stops the server: the first database error is logged once and the store is UNAVAILABLE (the routes answer
-// 503, the feeder waits); it tries again after kRetryMs, and says so in the log when it works again. The match path does not use the store at all.
+// One thread for each store object (a connection is not shared between threads). The game server uses one, on its main loop; the history service (docs/HISTORY_SERVICE.md) has two connections to its file, a writer on
+// the counter thread and a reader on the HTTP thread, each with a store of its own. The store never throws and never stops the server: the first database error is logged once and the store is UNAVAILABLE (the routes answer
+// 503, the feeder waits); it tries again after Config::retry_ms (kRetryMs by default), and says so in the log when it works again. The match path does not use the store at all.
 
 #include <cstddef>
 #include <cstdint>
@@ -104,10 +105,12 @@ public:
     struct Config {
         std::function<int64_t()> clock_s;                   // seconds since 1970 UTC (empty: the system clock); the time a marker was made
         std::function<uint64_t()> clock_us;                 // a steady clock in microseconds (empty: std::chrono::steady_clock); the time box and the budget (the tests make it deterministic)
+        uint32_t retry_ms{kRetryMs};                        // how long an unavailable store waits before it looks again (the game server's own loop keeps the default; the history service's counter asks for less)
     };
 
     /// `database` must stay open and outlive the store (the server's main keeps it for its whole run); it must have the schema of migration 3.
-    explicit HistoryStore(db::Database& database, Config config = Config());
+    explicit HistoryStore(db::Database& database);
+    HistoryStore(db::Database& database, Config config);
 
     /// Looks at the tables once (they are made by the migrations) and counts the records. False, with the reason, when the database cannot be read: the caller keeps no history then.
     bool prepare(std::string& why);
@@ -116,7 +119,7 @@ public:
     bool available() const noexcept { return up_; }
     /// Why it is not (for the owner: SQLite's own words), "" while it is
     const std::string& unavailable_reason() const noexcept { return reason_; }
-    /// An unavailable store tries again once every kRetryMs (a cheap read); `now_ms` is the server's clock. Cheap and safe to call every pass.
+    /// An unavailable store tries again once every Config::retry_ms (a cheap read); `now_ms` is the server's clock. Cheap and safe to call every pass.
     void maintain(uint32_t now_ms);
 
     /// Keeps a record in one transaction (a record of the same id is replaced; a marker of that id goes). False, with the reason, when the id is not one or the database refuses; a record that the database
@@ -162,6 +165,25 @@ public:
     /// the public door's is paid from the budget (see Door); a page that could not be made has `ok` false and says why.
     HistoryPage query(const HistoryQuery& query, const std::function<Recording(const std::string& id)>& recording, Door door = Door::Public) const;
 
+    /// For a store that only READS a file that another connection writes (the history service's HTTP side): begin_read() opens a read transaction, so that everything one request asks is from one state of the file, and
+    /// looks whether another connection committed since the last look (PRAGMA data_version): if so, the counts are read again and the sums of the maps of deaths are made again. False when the store is unavailable (or the
+    /// database did not answer). end_read() closes it. A store that writes its file itself (the game server's, the service's counter) does not need them.
+    bool begin_read() const;
+    void end_read() const;
+    class ReadScope {
+    public:
+        explicit ReadScope(const HistoryStore& store) : store_(store), open_(store.begin_read()) {}
+        ~ReadScope() {
+            if (open_) store_.end_read();
+        }
+        ReadScope(const ReadScope&) = delete;
+        ReadScope& operator=(const ReadScope&) = delete;
+
+    private:
+        const HistoryStore& store_;
+        bool open_;
+    };
+
     /// Lines for the server's log (a failure of the database, the way back), once each
     std::vector<std::string> take_notes();
     void report(const std::string& line) { note(line); }
@@ -192,6 +214,9 @@ private:
     mutable uint64_t deaths_cached_at_{~uint64_t{0}};
     mutable std::vector<std::string> deaths_names_;  // the maps that have a map of deaths, sorted
     mutable std::unordered_map<std::string, std::string> deaths_cache_;
+    mutable bool reading_{false};                    // a read transaction is open (begin_read)
+    mutable bool version_seen_{false};
+    mutable int64_t data_version_{0};                // PRAGMA data_version at the last begin_read()
 };
 
 /// Counts the matches that the replay store keeps and the history does not know yet, one at a time. A file is played again with no screen (0.4 - 0.5 s for a match of 10 - 12 minutes, more for a longer one) and its numbers go to the
@@ -199,7 +224,8 @@ private:
 /// recording is still kept and plays here, get theirs the same way, newest first (a recording that is read and cannot be played gets the marker, so that it is not tried again; one that cannot be tried, its map not being here, gets nothing and is tried at the next start). The work is never done on the server's loop in a burst: one file at most per call, the gap after it at least kPaceMs and kPaceFactor times what the file took, and only when the caller says the server is idle (no room
 /// runs or restores a match). The files that the replay store holds when the server starts (up to 30 days of them) are counted the same way, the newest first, and so are the matches that arrive later (the
 /// room's own, and the files that the bot arena puts in the folder). A file that cannot be counted (another simulation's rules, a map that is not here, a file that does not play out the same here) is left out
-/// with one line in the log, and tried again only when the server starts again. While the store is unavailable nothing is played.
+/// with one line in the log, and tried again only when the server starts again (a file that was left out because its map was not there is tried again when the caller says that the maps may have changed:
+/// retry_skipped_maps()). While the store is unavailable nothing is played.
 class HistoryFeeder {
 public:
     static constexpr uint32_t kPaceMs = 250;          // the least gap between two recordings
@@ -215,6 +241,24 @@ public:
     /// (its plays, its stats) like any other; the server gives only the maps that a room plays (OnlineLimits), because the recording is played in one piece on the one thread. Unset: no approved map is known.
     using ApprovedMapPath = std::function<std::string(const std::string& map_name)>;
     void set_approved_map_path(ApprovedMapPath fn) { approved_path_ = std::move(fn); }
+
+    /// The pace: the least gap after a recording and how many times what it took (the defaults are kPaceMs and kPaceFactor, made for a server whose one thread must stay free). The history service, whose counter has a thread
+    /// of its own, asks for less.
+    void set_pace(uint32_t min_gap_ms, uint32_t factor) {
+        pace_ms_ = min_gap_ms;
+        pace_factor_ = factor;
+    }
+
+    /// Whether the feeder deletes the markers whose recording has gone (once an hour; the default). A marker keeps a match that the operator took out from being counted again while its recording is still kept. The program that
+    /// owns the recordings folder (the game server) deletes them, because it knows that its folder is the right one; a program that only reads the folder (the history service) must not: a folder that is empty or is not the
+    /// right one would make every marker useless, and the matches the operator took out would be counted and shown again.
+    void set_prune_markers(bool on) { prune_markers_ = on; }
+
+    /// Puts the recordings that were left out because their map could not be found (not in the folders, not an approved map, or an approved map that could not be looked up) back in the line: the caller says that the
+    /// list of approved maps has changed or can be read again. A recording left out for another reason (damaged, another simulation's rules, a play that did not end alike) is not tried again. The number put back.
+    size_t retry_skipped_maps();
+    /// How many recordings wait to be tried again by retry_skipped_maps()
+    size_t left_out_for_map() const noexcept { return map_skipped_.size(); }
 
     /// Makes the `details` of a counted match (make_history_details by default); a test hands a maker that throws, to see that the counters of a match are written whatever the pass does
     using DetailsMaker = std::function<std::string(const replay::MatchStats&, const HistoryRecord&)>;
@@ -239,7 +283,7 @@ private:
     bool work(const std::string& file);
     void build_backfill();
     bool backfill(const std::string& file);
-    void skip(const std::string& id, const std::string& why);
+    void skip(const std::string& id, const std::string& why, bool for_map = false);
     bool load_map_of(const replay::Header& head, assets::LevelData& level, std::string& why) const;          // (the map of a recording: an approved map or the folders)
     bool load_level(const replay::Header& head, assets::LevelData& level, std::string& why) const;
 
@@ -252,7 +296,8 @@ private:
     std::function<uint64_t()> clock_us_;
     uint64_t seen_revision_{~uint64_t{0}};
     std::vector<std::string> queue_;                  // file names, the next one at the back (the newest are counted first)
-    std::set<std::string> skipped_;                   // ids that were left out since the server started
+    std::set<std::string> skipped_;                   // ids that are left out (since the server started, less those that retry_skipped_maps() put back)
+    std::set<std::string> map_skipped_;               // those of them that were left out for want of their map: the ones that retry_skipped_maps() puts back
     size_t other_rules_{0};                           // files of the replay store that another build's rules made: never queued
     size_t counted_{0};                               // records made since the server started
     std::vector<std::string> backfill_;               // files of the counted matches that have no details yet, the next one at the back (the newest first); built once, when the new files are done
@@ -263,8 +308,11 @@ private:
     size_t reported_skipped_{0};
     size_t skip_lines_{0};
     bool paced_{false};
+    uint32_t pace_ms_{kPaceMs};
+    uint32_t pace_factor_{kPaceFactor};
     uint32_t next_ms_{0};
     bool prune_armed_{false};
+    bool prune_markers_{true};
     uint32_t next_prune_ms_{0};
 };
 

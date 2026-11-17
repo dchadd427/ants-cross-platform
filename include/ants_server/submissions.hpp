@@ -41,6 +41,9 @@ struct SubmissionConfig {
     uint32_t old_row_days{90};                        // a declined or withdrawn submission's row is deleted after this long
 };
 
+/// Where the canonical file of a submission is: `<dir>/files/<file>` (SubmissionConfig::dir, the `file` column of its row). The history service reads the approved maps' files by it.
+std::string submission_file_path(const std::string& dir, const std::string& file);
+
 /// One row of map_submissions
 struct Submission {
     std::string id, state, kind, name, final_name, maker, note, owner_message, description, hash, file, findings_json, decided_by;

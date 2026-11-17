@@ -335,3 +335,33 @@ target_include_directories(test_admin_pass PRIVATE
 
 add_test(NAME test_admin_pass COMMAND test_admin_pass)
 set_tests_properties(test_admin_pass PROPERTIES COST 4)
+
+# The history service (ants_history/history_service.hpp, docs/HISTORY_SERVICE.md): the same JSON as the game server's public door from the same recordings, the copy of the game server's history at the first start, the
+# counter's thread beside the HTTP side, damaged and half written files, a folder of thousands, and (not on Windows, where the test has no fork) the real program as a child process of the test: built with the test, and the
+# folder that it is built into goes into ONE tiny source that CMake generates, as for the game server above
+add_executable(test_history_service
+    test_history_service.cpp
+)
+
+target_link_libraries(test_history_service PRIVATE
+    ants_history_core
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_history_service PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+if(NOT WIN32)
+    add_dependencies(test_history_service ants_history)
+    set(ANTS_PATH_HISTORY_DIR "${CMAKE_BINARY_DIR}/src/ants_history")
+    string(REPLACE "\\" "\\\\" ANTS_PATH_HISTORY_DIR "${ANTS_PATH_HISTORY_DIR}")
+    string(REPLACE "\"" "\\\"" ANTS_PATH_HISTORY_DIR "${ANTS_PATH_HISTORY_DIR}")
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/ants_history_binary.cpp.in" "${ANTS_GENERATED_DIR}/ants_history_binary.cpp" @ONLY)
+    target_sources(test_history_service PRIVATE "${ANTS_GENERATED_DIR}/ants_history_binary.cpp")
+    target_compile_definitions(test_history_service PRIVATE ANTS_HAS_HISTORY_BINARY)
+endif()
+
+add_test(NAME test_history_service COMMAND test_history_service)
+set_tests_properties(test_history_service PROPERTIES COST 20)

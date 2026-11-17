@@ -561,11 +561,39 @@ static ctl::HttpResponse approved_map_file(const MapStore& store, const ctl::Htt
     return r;
 }
 
+// GET /replays and GET /replays/<file> of the public door, and the 404 that every other request gets there once it is none of the routes above: a function of the replay store alone, so that the game server's door and the
+// history service (docs/HISTORY_SERVICE.md) give the same answers
+ctl::HttpResponse public_replays_response(const ReplayStore* store, const ctl::HttpRequest& request) {
+    if (request.method != "GET" || store == nullptr || !request.query.empty()) return error_response(404, "not found");
+    if (request.path == "/replays") {
+        JsonValue list = JsonValue::make_array();
+        const std::vector<ReplayEntry>& index = store->entries();                        // (oldest first: the newest that can be read, from the end, as many as the list holds; no copy, no pass over all)
+        for (auto it = index.rbegin(); it != index.rend() && list.items().size() < kDefaultReplayList; ++it) {
+            if (it->readable) list.push_back(replay_entry_json(*it, false));
+        }
+        JsonValue o = JsonValue::make_object();
+        o.set("replays", std::move(list));
+        o.set("count", JsonValue::make_int(static_cast<int64_t>(store->readable_count())));
+        o.set("keep_days", JsonValue::make_int(store->config().keep_days));
+        o.set("sim_rules", JsonValue::make_int(replay::kSimRules));             // (the server's own build: the list page marks the files of other rules)
+        return json_response(200, o);
+    }
+    static const std::string kPrefix = "/replays/";
+    if (request.path.compare(0, kPrefix.size(), kPrefix) != 0) return error_response(404, "not found");
+    return replay_file_response(*store, request.path.substr(kPrefix.size()), false);
+}
+
+// The history service's public door: the history, the replays, and 404 for anything else (the game server's other routes, /live, /lobbies and /maps, are not its)
+ctl::HttpResponse public_history_service_response(const HistoryStore* history, const ReplayStore* replays, const ctl::HttpRequest& request) {
+    if (request.path == "/history" || request.path.compare(0, 9, "/history/") == 0) return public_history_response(history, replays, request);
+    return public_replays_response(replays, request);
+}
+
 // The public door (ants_server --replay-port): the list and the files of the replays, and the matches that run now, read only, no secret. The list holds the newest kDefaultReplayList files that this build can read. The
 // players' names are public here (the names that were typed, "Green (Ann)"); no address or room code is in the list or in a file.
 ctl::HttpResponse handle_public_replays(const RoomManager& rooms, const ctl::HttpRequest& request, uint32_t now_ms) {
     if (request.path == "/lobbies") return handle_public_lobbies(rooms, request, now_ms);
-    if (request.path == "/history" || request.path.compare(0, 9, "/history/") == 0) return handle_public_history(rooms, request);
+    if (request.path == "/history" || request.path.compare(0, 9, "/history/") == 0) return public_history_response(rooms.history_store(), rooms.replay_store(), request);
     if (request.path == "/live" || request.path.compare(0, 6, "/live/") == 0) return handle_public_live(rooms, request);
     if (request.path == "/maps/all") {                                                       // the newest version's list: the same and the approved Extended maps (docs/MAP_SUBMISSIONS.md "The lists")
         if (request.method != "GET" || !request.query.empty()) return error_response(404, "not found");
@@ -590,24 +618,7 @@ ctl::HttpResponse handle_public_replays(const RoomManager& rooms, const ctl::Htt
         r.body = rooms.store().list_json(counted ? &plays : nullptr);
         return r;
     }
-    const ReplayStore* store = rooms.replay_store();
-    if (request.method != "GET" || store == nullptr || !request.query.empty()) return error_response(404, "not found");
-    if (request.path == "/replays") {
-        JsonValue list = JsonValue::make_array();
-        const std::vector<ReplayEntry>& index = store->entries();                        // (oldest first: the newest that can be read, from the end, as many as the list holds; no copy, no pass over all)
-        for (auto it = index.rbegin(); it != index.rend() && list.items().size() < kDefaultReplayList; ++it) {
-            if (it->readable) list.push_back(replay_entry_json(*it, false));
-        }
-        JsonValue o = JsonValue::make_object();
-        o.set("replays", std::move(list));
-        o.set("count", JsonValue::make_int(static_cast<int64_t>(store->readable_count())));
-        o.set("keep_days", JsonValue::make_int(store->config().keep_days));
-        o.set("sim_rules", JsonValue::make_int(replay::kSimRules));             // (the server's own build: the list page marks the files of other rules)
-        return json_response(200, o);
-    }
-    static const std::string kPrefix = "/replays/";
-    if (request.path.compare(0, kPrefix.size(), kPrefix) != 0) return error_response(404, "not found");
-    return replay_file_response(*store, request.path.substr(kPrefix.size()), false);
+    return public_replays_response(rooms.replay_store(), request);
 }
 
 ctl::HttpResponse handle_control(RoomManager& rooms, const ctl::HttpRequest& request, uint32_t now_ms) {

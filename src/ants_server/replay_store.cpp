@@ -293,9 +293,9 @@ bool ReplayStore::prepare(std::string& why) {
         return false;
     }
     std::error_code ec;
-    fs::create_directories(cfg_.dir, ec);
+    if (!cfg_.read_only) fs::create_directories(cfg_.dir, ec);
     if (!fs::is_directory(cfg_.dir, ec)) {
-        why = "the replays folder '" + cfg_.dir + "' cannot be made or is not a folder";
+        why = cfg_.read_only ? "the replays folder '" + cfg_.dir + "' is not there or is not a folder" : "the replays folder '" + cfg_.dir + "' cannot be made or is not a folder";
         return false;
     }
     size_t temps = 0;
@@ -314,7 +314,7 @@ bool ReplayStore::prepare(std::string& why) {
         const std::string name = it->path().filename().string();
         const std::string temp_ext = kTempExtension;
         if (name.size() > temp_ext.size() && name.compare(name.size() - temp_ext.size(), temp_ext.size(), temp_ext) == 0 && valid_file_name(name.substr(0, name.size() - temp_ext.size()))) {
-            if (!changed_within(it->path(), cfg_.settle_s)) {                        // (one that changed a moment ago is the write of another program in this folder, the bot arena's, that is not done yet)
+            if (!cfg_.read_only && !changed_within(it->path(), cfg_.settle_s)) {     // (one that changed a moment ago is the write of another program in this folder, the bot arena's, that is not done yet)
                 fs::remove(it->path(), entry_ec);                                    // the file of a write that a crash interrupted
                 ++temps;
             }
@@ -365,6 +365,7 @@ bool ReplayStore::delete_file(ReplayEntry& entry, bool say) {
 // The files that are older than keep_days go, then the oldest ones until `incoming` more bytes would fit under max_bytes. A file that cannot be deleted stays in the index (it is still on the disk)
 // and is tried again at the next purge.
 size_t ReplayStore::trim(uint64_t incoming) {
+    if (cfg_.read_only) return 0;                                                    // (the files belong to the program that keeps them)
     size_t deleted = 0;
     size_t failed = 0;                                                               // (the first file that cannot be deleted is told, the others are counted: a volume that refuses every delete must not fill the log)
     const int64_t now = now_s();
@@ -503,8 +504,8 @@ ReplaySave ReplayStore::save(const std::vector<uint8_t>& bytes) {
         note("replays: a match was not kept: " + why);
         return result;
     };
-    if (!ready_) {
-        result.note = "this server keeps no replays";
+    if (!ready_ || cfg_.read_only) {
+        result.note = cfg_.read_only ? "this store only reads the folder" : "this server keeps no replays";
         return result;
     }
     ReplayEntry entry;
@@ -596,6 +597,7 @@ bool ReplayStore::read(const std::string& file, std::vector<uint8_t>& out) const
 }
 
 bool ReplayStore::remove(const std::string& file) {
+    if (cfg_.read_only) return false;
     const ReplayEntry* found = find(file);
     if (found == nullptr) return false;
     const size_t i = static_cast<size_t>(found - entries_.data());
