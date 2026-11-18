@@ -801,7 +801,7 @@ std::string RoomManager::bot_match_map_refusal(const std::string& file, bool app
 // the teams: free for all or any way to make teams of the seats that play (roster_team_choices: with four, the three ways to split them in two, which on a map whose hills sit at the corners of a square are top
 // against bottom, left against right and across the corners (TINY, SMALL, TREASURE and ISLANDS; MEDIUM's hills sit north, east, south and west and GAUNTLET's along a diagonal); with three, any two of them and the third
 // alone; with two, free for all), each choice for the seats that play as likely as any other. The map's draw is the first of the match, as it always was, and its list is known after the coin, so the first match of a seed
-// still chooses the same seats, levels, seed, teams and rules as before, and every match draws a stream that is the same number of draws further. The room has no person, plays at the normal speed (the maps' own time limits
+// still chooses the same seats, levels, seed, teams and rules as before, and every match takes the same number of draws. The room has no person, plays at the normal speed (the maps' own time limits
 // make it 6 to 20 minutes or more: its own guard is the longer of 25 minutes and the map's limit and five more), and ends by the rules or at its own time limit; the recording keeps it like any other
 // match (the 30 seconds, the store's limits), and the live list shows it. Rooms of this kind do not pile up: while one runs, the timer makes no other.
 // The coin has no memory of the last match: two or three of a kind in a row come up as often as chance gives them.

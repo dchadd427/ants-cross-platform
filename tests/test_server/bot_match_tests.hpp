@@ -261,7 +261,7 @@ void run_bot_match_tests() {
         for (const std::string& one : seen) all_seen += one + "; ";
         // two bots: free for all only; three: free for all and every pair of seats that the draw gave (the third plays alone); four: free for all and each of the three splits
         ASSERT_EQ(all_seen, std::string("2 ffa; 3 0+1; 3 0+2; 3 0+3; 3 1+2; 3 1+3; 3 2+3; 3 ffa; 4 0+1; 4 0+2; 4 0+3; 4 ffa; "));
-        ASSERT_EQ(pinned, std::string("GAUNTLET.LVL players 3 0:medium 1:hard 3:medium teams 0+3"));      // (seed 7: the map, seats and levels that the timer chose before it drew teams, and the teams drawn after them)
+        ASSERT_EQ(pinned, std::string("TINY.LVL players 3 0:medium 1:hard 3:medium teams 0+3"));      // (seed 7: the seats and levels that the timer chose before it drew teams, and the teams drawn after them; the map is a draw from the list of the rules that the coin dealt, so it is one of that list)
     } TEST_END();
 
     TEST_CASE("S3.184 A Room Of Computer Players With Teams Starts As A Match Of Those Teams (Every Engine Of The Match Has Them Before The First Turn), The Third Of Three Plays Alone, And The Replay Has Them In Its Head And Plays Out") {
@@ -537,7 +537,7 @@ void run_bot_match_tests() {
             }
         }
         {
-            ListedWorld w("botmatch-skip-down");
+            ListedWorld w("botmatch-skip-down-maps");
             ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-skip-down", &clock), false, why));
             (void)w.mgr.take_notices();
             w.mgr.enable_bot_matches(0, w.now, 0u, 20261120u);
@@ -549,10 +549,10 @@ void run_bot_match_tests() {
             maps.clear();
             deal(w, 100, maps, notes);
             ASSERT_TRUE(maps.count("Fight Island.lvl") == 0 && skip_lines(notes, "Fight Island.lvl") == 1 && notes.size() == 1);
-            w.mgr.mutable_store().set_approved({made_up_fight_island("botmatch-skip-down")});      // and approves it again
+            w.mgr.mutable_store().set_approved({made_up_fight_island("botmatch-skip-down-maps")});      // and approves it again
             deal(w, 100, maps, notes);
             ASSERT_TRUE(maps.count("Fight Island.lvl") == 1 && notes.size() == 1);
-            w.mgr.mutable_store().set_approved({made_up_fight_island("botmatch-skip-down", 300, 300)});      // a bigger map under the name: 90,000 cells are over what a room plays online
+            w.mgr.mutable_store().set_approved({made_up_fight_island("botmatch-skip-down-maps", 300, 300)});      // a bigger map under the name: 90,000 cells are over what a room plays online
             maps.clear();
             deal(w, 100, maps, notes);
             ASSERT_TRUE(maps.count("Fight Island.lvl") == 0 && skip_lines(notes, "Fight Island.lvl") == 2 && notes.size() == 2);       // (named again: it was back, and it is gone again)
