@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.17.5 - 2026-11-17 - A new look for the match screen, faster match history, 187 computer-player matches
+
+**For players:**
+- **A new look for the match screen.** The frame, the panel, the pedestals and the buttons are redrawn, sharp on phones and big screens, in the original's colors and shapes. The original's art stays one setting away (the settings menu: HUD art, New or Classic).
+- **Matches show up in the history within seconds** of their end, also while the server's own computer-player matches run, and a player's own approved map shows its picture in the history and in Open games.
+- **The server's computer-player matches play 187 too:** a coin decides each one, and the Live list marks a 187 match.
+- **Map Maker:** typing in a box (the maker's name, the numbers of the Ants panel, the description) keeps the cursor in it.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.4 page or game still joins. Under the hood: the game server and the web pages are rebuilt; the web download is larger (the new art: about 12 MB on the wire).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1ec8e125...dd11f9f7)
+
 ## v0.17.4 - 2026-11-17 - The screen stays on, steadier Menu, bots that cross bomb fields, a Discord admin page
 
 **For players:**
@@ -447,17 +459,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/aa8c3591...2e3cea5f)
 
-## v0.12.140 - 2026-10-26 - Map Maker: the bar under the map stays one row, and the tools fit
+## Older versions (v0.12.140 and before)
 
-**For players:**
-- **Map Maker: the map no longer jumps when the pointer first touches it, and a whole 60 x 60 map keeps its pictures.** The bar under the map wrapped to a second row as soon as it had words to show, which made the map 40 pixels lower and a whole map under 10 pixels a cell, where the page draws flat colors. The position ("Row 30, column 30", "Whole map") is now a small label in the top left corner of the map, so the bar stays one row.
-- On a desktop window under 861 pixels high (a 1280 x 800 screen, a laptop's 1366 x 768 or 1280 x 720) the tools column, with Ground, Objects, Hills or Food chosen, and the side panel with a long description are no longer cut off: the tool buttons are a little shorter and show the short note, the side panel leaves out the kind tags (the top bar shows them) and shows two lines of the description (all of it is in Edit).
-- On a phone held sideways the tile button (Gravel and the like) sits beside Pan and shows the picture and the arrow, so it is inside the tools card; the tile's name is in the sheet that it opens. A phone held upright looks as before. Map Maker v1.5.10.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the web page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/aa8c3591...79aab92d)
-
-## Older versions (v0.12.139 and before)
-
-Every release before v0.12.140, and the long notes of v0.12.139 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.141, and the long notes of v0.12.140 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
