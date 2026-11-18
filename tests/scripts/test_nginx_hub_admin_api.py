@@ -302,6 +302,40 @@ class TheHubIsNotThere(unittest.TestCase):
             rig.stop()
 
 
+@unittest.skipUnless(shutil.which("nginx"), "nginx is not installed: a real hub whose door is shut was NOT run (tests/scripts/test_nginx_hub_admin_api.py)")
+class TheDoorThatIsShut(unittest.TestCase):
+    """The real hub with no key (its door is shut: docs/HUB.md "The admin page's door") behind the real blocks of /admin/api/ (its gate) and /hub/admin/api/ (the page's calls to the hub): every answer says that
+    the door is off, for a visitor with a login and for one with none, and none of them says "not an admin"; the game server is not asked."""
+
+    def test_a_hub_with_no_key_is_door_off_for_everybody_and_never_not_allowed(self):
+        with hub_rig.Rig(env={}) as hub:
+            rig = sub.Rig(hub_port=hub.port)
+            try:
+                for cookie in (None, COOKIE, sub.ADMIN["Cookie"]):
+                    headers = dict(PAGE, **({"Cookie": cookie} if cookie else {}))
+                    for method, body in (("GET", None), ("POST", b"{}")):
+                        status, answered, text = rig.ask(method, "/admin/api/me", dict(headers, **{"Content-Type": "application/json"}), body)
+                        self.assertEqual((status, json.loads(text)["error"]), (503, "door_off"), (cookie, method))
+                    status, answered, text = rig.ask("GET", "/hub/admin/api/me", headers)
+                    self.assertEqual((status, json.loads(text)), (503, {"error": "door_off"}), cookie)
+                    self.assertNotIn(b"csrf", text)
+                    self.assertEqual(sub.names(answered, "cache-control"), ["no-store"])
+                self.assertEqual(len(rig.door.seen), 0, "the game server is not asked")
+            finally:
+                rig.stop()
+
+    def test_a_hub_with_a_key_still_says_who_is_not_logged_in(self):
+        with hub_rig.Rig(env={"ANTS_ADMIN_GATE_SECRET": SECRET}) as hub:
+            rig = sub.Rig(hub_port=hub.port)
+            try:
+                status, answered, text = rig.ask("GET", "/admin/api/me", {})
+                self.assertEqual((status, json.loads(text)["error"]), (401, "not_signed_in"))
+                status, answered, text = rig.ask("GET", "/hub/admin/api/me", dict(PAGE, Cookie=COOKIE))
+                self.assertEqual((status, json.loads(text)), (401, {"error": "login"}))
+            finally:
+                rig.stop()
+
+
 def door_conf(tmp, port, hub_port, stand_port, dead_port):
     """The small server of tests/scripts/test_nginx_hub_login.py with the real text of the map and of this door added to it (and the zone that the door spends)."""
     text = MINI_CONF(tmp, port, hub_port, stand_port, dead_port)
@@ -328,7 +362,7 @@ class TheWholeWay(unittest.TestCase):
         self.fake.consent = False
         self.fake.members = {OWNER: [], PLAIN: [], TARGET: []}
         self.addCleanup(self.fake.close)
-        self.rig = hub_rig.Rig(discord=self.fake, member_fake=self.fake, origin=self.site, owner=OWNER, env={"ANTS_HUB_ADMIN_GATE_SECRET": SECRET}, recheck=1, roles_grace_seconds=0.3, roles_refill_seconds=0.01,
+        self.rig = hub_rig.Rig(discord=self.fake, member_fake=self.fake, origin=self.site, owner=OWNER, env={"ANTS_ADMIN_GATE_SECRET": SECRET}, recheck=1, roles_grace_seconds=0.3, roles_refill_seconds=0.01,
                                roles_jitter=0.0, tick_seconds=0.05, sockets_per_address=100, frame_burst=1000, frame_refill_seconds=0.001, discord_seconds=1.0, discord_connect_seconds=1.0,
                                admin_lookups_burst=50, admin_lookups_refill_seconds=0.01)
         self.rig.__enter__()
