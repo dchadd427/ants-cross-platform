@@ -636,11 +636,12 @@ target_link_libraries(test_wide_hud PRIVATE ants_test_paths)
 add_test(NAME test_wide_hud COMMAND test_wide_hud)
 set_tests_properties(test_wide_hud PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
-# The HUD art (hud_art.hpp): the new pictures of the match screen, the png reader, the manifest, the nine-slice, the sheet by scale, and the real renderer's frame against the committed reference pictures
+# The HUD art (hud_art.hpp): the new pictures of the match screen, the png reader, the manifest, the nine-slice, the sheet by scale, the real renderer's frame against the committed reference pictures, and the new cursors
 add_executable(test_hud_art
     test_hud_art.cpp
     test_hud_art_model.cpp
     test_hud_art_look.cpp
+    test_hud_art_cursors.cpp
 )
 
 target_include_directories(test_hud_art PRIVATE

@@ -25,10 +25,11 @@ def main():
     ap.add_argument('--chrome', default=None, help="the browser's program")
     args = ap.parse_args()
     common.configure(work=args.work, chrome=args.chrome)
+    import cursors
     import sprites
     import pack
     images, rows, anims = sprites.export()
-    sizes = pack.pack(images, rows, anims, args.out)
+    sizes = pack.pack(images, rows, anims, args.out, cursor_anims=cursors.CURSORS)
     for name, size in sizes.items():
         print('%-14s %9d bytes' % (name, size))
     print('%d sprites, %d animations' % (len(rows), len(anims)))

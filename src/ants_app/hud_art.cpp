@@ -129,9 +129,9 @@ bool Art::parse(const std::string& manifest) {
             sprite_index_[s.name] = static_cast<int32_t>(sprites_.size());
             sprites_.push_back(std::move(s));
         } else if (w[0] == "anim") {
-            if (w.size() != 2 || animation_index_.count(w[1]) != 0) return fail(where + "an animation record that is bad or twice");
+            if ((w.size() != 2 && !(w.size() == 3 && w[2] == "cursor")) || animation_index_.count(w[1]) != 0) return fail(where + "an animation record that is bad or twice");
             animation_index_[w[1]] = animations_.size();
-            animations_.push_back(Animation{w[1], {}});
+            animations_.push_back(Animation{w[1], w.size() == 3, {}});
             current = &animations_.back();
         } else if (w[0] == "frame") {
             if (current == nullptr || w.size() < 5 || (w.size() - 2) % 3 != 0) return fail(where + "a frame that is bad or has no animation");
@@ -295,6 +295,42 @@ std::vector<Draw> animation_draws(const Art& art, const std::string& name, size_
     const Animation* a = art.find_animation(name);
     if (a == nullptr || frame >= a->frames.size()) return {};
     return frame_part_draws(art, a->frames[frame], layout);
+}
+
+std::vector<Draw> cursor_draws(const Art& art, const Animation& cursor, size_t frame, int32_t x, int32_t y) {
+    std::vector<Draw> out;
+    if (frame >= cursor.frames.size()) return out;
+    for (const Part& part : cursor.frames[frame].parts) {
+        const Sprite* s = art.sprite_at(part.sprite);
+        if (s == nullptr) continue;
+        out.push_back(Draw{part.sprite, LayoutRect{x + part.x, y + part.y, s->w, s->h}, LayoutRect{0, 0, s->w, s->h}});
+    }
+    return out;
+}
+
+size_t frame_at(const Animation& animation, uint32_t ms) noexcept {
+    if (animation.frames.empty()) return 0;
+    uint64_t total = 0;
+    for (const Frame& f : animation.frames) total += static_cast<uint64_t>(f.ms > 0 ? f.ms : 1);
+    uint64_t now = ms % total;
+    for (size_t i = 0; i < animation.frames.size(); ++i) {
+        const uint64_t duration = static_cast<uint64_t>(animation.frames[i].ms > 0 ? animation.frames[i].ms : 1);
+        if (now < duration) return i;
+        now -= duration;
+    }
+    return animation.frames.size() - 1;
+}
+
+bool cursor_fits(const Art& art, const Animation& art_cursor, const std::vector<OriginalCursorFrame>& original) noexcept {
+    if (!art_cursor.cursor || art_cursor.frames.size() != original.size() || original.empty()) return false;
+    for (size_t i = 0; i < original.size(); ++i) {
+        const Frame& f = art_cursor.frames[i];
+        if (f.ms != original[i].ms || f.parts.size() != 1) return false;
+        const Part& part = f.parts[0];
+        const Sprite* s = art.sprite_at(part.sprite);
+        if (s == nullptr || part.x != original[i].dx || part.y != original[i].dy || s->w != original[i].w || s->h != original[i].h) return false;
+    }
+    return true;
 }
 
 void draw_all(IRenderer& renderer, const Art& art, const std::vector<Draw>& draws) {

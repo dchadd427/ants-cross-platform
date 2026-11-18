@@ -572,7 +572,9 @@ public:
     // Software Cursor & Transient Effects
     void spawn_transient_effect(const std::string& anim_name, int32_t px, int32_t py, bool is_screen_space = false);
     void update_transient_effects(float dt);
-    void render_software_cursor(CursorType type, int32_t screen_x, int32_t screen_y, uint32_t anim_tick = 0);
+    /// The game's own pointer at the click point (screen_x, screen_y): the original's sprites, or, when `art` is given (the HUD art that is in use: hud_art.hpp), its cursor of the same name drawn from
+    /// the sheet of the output's scale. The art's cursor is used only while it keeps the original's click point, frame times and sprite sizes (hud_art::cursor_fits); otherwise the original's is drawn.
+    void render_software_cursor(CursorType type, int32_t screen_x, int32_t screen_y, uint32_t anim_tick = 0, const hud_art::Art* art = nullptr);
 
 private:
     void render_terrain_layer1(const ants::sim::Grid& grid);
@@ -603,6 +605,8 @@ private:
     AntClipPrediction predict_ant_clip(const ants::sim::AntSnapshot& ant, const ants::assets::AnimationSequence* seq) const;
     const ants::assets::AnimationSequence* ant_loco_sequence(const ants::sim::AntSnapshot& ant) const;
     void render_tile_grid(const ants::sim::Grid& grid, int32_t mouse_x, int32_t mouse_y);
+    /// Draws the art's replacement of the cursor `type` (whose original is `original`); false, and nothing drawn, when the art has none that fits
+    bool draw_cursor_art(const hud_art::Art& art, CursorType type, const ants::assets::AnimationSequence& original, int32_t screen_x, int32_t screen_y);
     // Draws all parts of one animation frame, last stored part first (original order), at screen position (sx, sy).
     void draw_frame_parts(const ants::assets::AnimationSubItem& sub, int32_t sx, int32_t sy, bool mirrored = false,
                           uint8_t color = TEAM_NONE);
@@ -678,6 +682,8 @@ private:
     SDL_Renderer* renderer_{nullptr};
     SDL_Texture* rgba_texture_{nullptr};   // streaming texture for draw_rgba_image
     uint64_t art_generation_{0};                           // the HUD art that art_textures_ were made from (hud_art::Art::generation; 0: none)
+    uint64_t cursor_art_generation_{0};                    // the HUD art that cursor_art_fit_ was asked for
+    std::array<int8_t, 14> cursor_art_fit_{};              // for each CursorType: whether that art's cursor fits the original's (-1: not asked yet, 0: no, 1: yes)
     std::array<bool, 3> art_failed_{};                     // a sheet that could not be read or made a texture: said once, and not tried again until another set comes
     std::array<SDL_Texture*, 3> art_textures_{};           // its sheets at 1x, 2x and 3x, made when first needed
     int32_t art_texture_limit_{0};                         // (for the tests) the largest side of a texture that is made; 0: the device's own
