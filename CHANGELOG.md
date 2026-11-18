@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.17.10 - 2026-11-18 - Bot matches on the administration page, longer replay storage
+
+**For players:**
+- **Replays are kept longer.** The server now keeps up to 1 GB of matches for up to 90 days, and matches of computer players have their own smaller share, so they do not push out matches played by people.
+- **Computer-player matches can be started and scheduled from the site's administration page.** Start one or several at once, stop them, and set repeating schedules in Pacific time. Setting `ANTS_BOT_MATCH_EVERY_MIN=0` switches schedules off on the server.
+- **The database moves to schema 9 on the first start.** An older server cannot open it afterward.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.9 page or game still joins. Under the hood: the game server and the web pages are rebuilt.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/109000f6...4a6b395e)
+
 ## v0.17.9 - 2026-11-18 - New pointers, Map Maker clumps and real map pictures
 
 **For players:**
