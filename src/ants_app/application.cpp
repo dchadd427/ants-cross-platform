@@ -822,7 +822,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
             if (game == nullptr) return 0;
             return game->prediction_cooling_down() ? 2 : (game->predicting() ? 1 : 0);
         }
-        case 10: {                                                              // (no game: -1; a game that has no prediction (the default is off: it is never made) predicted nothing: 0)
+        case 10: {                                                              // (no game: -1; a game that has no prediction (told --no-prediction: it is never made) predicted nothing: 0)
             const net::NetGame* game = g_web_app->net();
             if (game == nullptr) return -1;
             return game->prediction() != nullptr ? static_cast<int>(game->prediction()->stats().commands_predicted) : 0;

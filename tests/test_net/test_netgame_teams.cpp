@@ -1259,4 +1259,36 @@ void run_prediction_tests() {
         ASSERT_TRUE(bob.net.prediction() == nullptr);
         ASSERT_EQ(dropped, 2);
     } TEST_END();
+
+    TEST_CASE("N3.34 Prediction: An Order That The Host's Own Sequencer Refuses At Once (More Orders In A Turn Than It Will Carry) Is Not Predicted: The Answer Is Ignored, The Picture Never Shows It, And Nothing Waits For A Turn That Will Not Come") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 1));
+        Machine& host = *t.machines[0];
+        Machine& bob = *t.machines[1];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(34, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t) && host.net.predicting(); }, kUntilRunning));
+        t.run(500);
+        const uint32_t ant = first_ant(host, 0);
+        int16_t gx = 0, gy = 0;
+        ASSERT_TRUE(open_goal_near_hill(host.sim, 0, gx, gy));
+        int accepted = 0;
+        int refused = 0;
+        for (int i = 0; i < 1500; ++i) {                                                       // (all in one frame: no turn is sealed between them, and the sequencer takes 1024 and refuses the rest)
+            const sim::CommandResult r = host.net.submit(order(0, ant, static_cast<int16_t>(gx + (i % 2)), gy));
+            if (r.status == sim::CommandResult::Status::Ignored) ++refused;
+            else ++accepted;
+        }
+        ASSERT_TRUE(refused > 0 && accepted > 0);
+        ASSERT_EQ(host.net.prediction()->stats().commands_predicted, static_cast<uint64_t>(accepted));       // (what the host refused was never given to the predicted engine)
+        t.run(3000);
+        ASSERT_EQ(host.net.prediction()->stats().commands_lost, 0u);
+        ASSERT_EQ(host.net.prediction()->pending_orders(), 0u);
+        host.net.freeze();
+        t.run(3000);
+        ASSERT_TRUE(all_equal(t));
+        (void)bob;
+    } TEST_END();
 }

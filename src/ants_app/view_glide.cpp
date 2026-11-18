@@ -1,5 +1,7 @@
 #include "ants_app/view_glide.hpp"
 
+#include "ants_app/health_changes.hpp"
+
 #include <algorithm>
 #include <cstdlib>
 
@@ -46,6 +48,21 @@ bool ViewGlide::offset_of(uint32_t ant, int32_t& dx, int32_t& dy) const {
         return dx != 0 || dy != 0;
     }
     return false;
+}
+
+sim::AntSnapshot glided_ant(const ViewGlide& glide, const sim::WorldState& world, uint8_t viewer_team, const sim::AntSnapshot& ant) {
+    int32_t dx = 0;
+    int32_t dy = 0;
+    if (!glide.offset_of(ant.id, dx, dy)) return ant;
+    sim::AntSnapshot drawn = ant;
+    drawn.px += dx;
+    drawn.py += dy;
+    drawn.tile_x = drawn.px / 32;                                    // (the gate of the picture looks at the tile: the one that the ant is drawn on)
+    drawn.tile_y = drawn.py / 32;
+    if (!health::ant_drawn(world, viewer_team, drawn)) return ant;
+    drawn.tile_x = ant.tile_x;                                       // (everything else reads the engine's tile)
+    drawn.tile_y = ant.tile_y;
+    return drawn;
 }
 
 }  // namespace ants::app

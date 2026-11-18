@@ -251,12 +251,7 @@ void Renderer::draw_anthill_selection_brackets(int32_t cx, int32_t cy, uint32_t 
 
 void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
     for (const auto& engine_ant : world.ants) {
-        ants::sim::AntSnapshot a = engine_ant;                         // (drawn where the picture had it a moment ago while a rebuild's correction slides: view_glide.hpp)
-        int32_t glide_x = 0, glide_y = 0;
-        if (view_glide_.offset_of(a.id, glide_x, glide_y)) {
-            a.px += glide_x;
-            a.py += glide_y;
-        }
+        const ants::sim::AntSnapshot a = glided_ant(view_glide_, world, hud_team_id_, engine_ant);      // (drawn where the picture had it a moment ago while a rebuild's correction slides: view_glide.hpp)
         // The original shows the local player's and the allies' ants always (0x101aa0d); every other ant only on explored ground
         if (!health::ant_drawn(world, hud_team_id_, a)) {              // Concealed enemy ant under fog of war
             if (changes_ != nullptr && changes_->count() > 0) changes_->note_hidden(a.id);       // (and no damage or heal number over it)
@@ -434,9 +429,8 @@ void Renderer::collect_selection_markers(const ants::sim::WorldState& world, int
         OverlayItem item{};
         item.created_ms = st.start_ms;
         const AntClipPrediction pred = predict_ant_clip(*ant, ant_loco_sequence(*ant));     // the marker follows the sprite, which steps when a frame ends
-        int32_t glide_x = 0, glide_y = 0;
-        view_glide_.offset_of(ant->id, glide_x, glide_y);                                   // (and the sprite's slide, view_glide.hpp)
-        const int32_t px = ant->px + pred.dx + glide_x, py = ant->py + pred.dy + glide_y;
+        const ants::sim::AntSnapshot slid = glided_ant(view_glide_, world, hud_team_id_, *ant);        // (and the sprite's slide, view_glide.hpp)
+        const int32_t px = slid.px + pred.dx, py = slid.py + pred.dy;
         const int64_t start = st.start_ms;
         item.draw = [this, &seq, px, py, start]() {
             int32_t sx = 0, sy = 0;

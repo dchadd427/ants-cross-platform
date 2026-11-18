@@ -110,8 +110,9 @@ struct Ids {
     std::vector<uint32_t> ants[sim::MAX_PLAYERS];
 };
 
-Ids build_world(sim::SimulationEngine& sim, uint32_t seed, uint32_t match_ms = 720000, uint32_t extra_workers = 0) {
+Ids build_world(sim::SimulationEngine& sim, uint32_t seed, uint32_t match_ms = 720000, uint32_t extra_workers = 0, bool fog = false) {
     Ids ids;
+    if (fog) sim.set_fog_of_war_enabled(true);                                       // (the viewer is seat 0: the player whose orders are predicted)
     sim.init_test_world(60, 60, seed, match_ms);
     const TileCoord hills[sim::MAX_PLAYERS] = {{4, 4}, {50, 4}, {4, 50}, {50, 50}};
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) sim.grid_mut().set_anthill(p, hills[p]);
@@ -187,6 +188,7 @@ struct Scenario {
     bool oracle_hashes{true};      // record the oracle's hash of every tick (the tests that compare with the oracle); off: only the engine runs (the property tests)
     uint32_t match_ms{720000};
     uint32_t extra_workers{0};     // workers added to every player beyond the six ants (the tests of a selection of more than 32 ants)
+    bool fog{false};               // Fog of War: the views are also compared with the oracle's explored ground (it is no part of the state hash)
     Prediction::Config prediction{rig_config()};
     // The rig's prediction has the lead that the scenario names and keeps it (the tests hold a wrong lead to account, and the exact one to exactness): it does not learn its lead and has no bias
     // (the tests of the learning and of the bias switch them on), and no budget (the tests run on busy machines: a stall of the test process is not the prediction's cost; the tests of the
@@ -196,6 +198,7 @@ struct Scenario {
         c.budget_ns = UINT64_MAX;
         c.learn_lead = false;
         c.lead_bias_ticks = 0;
+        c.track_shifts = true;                                                       // (what the application asks for: the property tests run with the shipped switches)
         return c;
     }
 };
@@ -205,14 +208,15 @@ struct View {
     uint64_t display{0};
     std::vector<Command> applied;
     uint64_t hash{0};
+    std::vector<uint8_t> fog;
 };
 
 class Rig {
 public:
     explicit Rig(const Scenario& sc)
         : sc_(sc), runner_(confirmed_, runner_config(sc)) {
-        ids = build_world(confirmed_, sc.seed, sc.match_ms, sc.extra_workers);
-        build_world(oracle_, sc.seed, sc.match_ms, sc.extra_workers);
+        ids = build_world(confirmed_, sc.seed, sc.match_ms, sc.extra_workers, sc.fog);
+        build_world(oracle_, sc.seed, sc.match_ms, sc.extra_workers, sc.fog);
         if (sc.predict) {
             Prediction::Config pc = sc.prediction;
             pc.seat = 0;
@@ -263,6 +267,7 @@ public:
         std::stable_sort(t.commands.begin(), t.commands.end(), [](const Command& a, const Command& b) { return a.issuer < b.issuer; });     // (canonical order)
         sealed.push_back(t);
         pre.push_back(sc_.oracle_hashes ? oracle_.state_hash().total : 0u);
+        if (sc_.fog) pre_fog.push_back(oracle_.get_world_state().fog_revealed);
         for (const Command& c : t.commands) oracle_.apply_command(c);
         post.push_back(sc_.oracle_hashes ? oracle_.state_hash().total : 0u);
         oracle_.tick();
@@ -286,6 +291,7 @@ public:
             v.applied = pred_->applied_at_display();
             const bool check_now = derived_every_ != 0 && step_ % derived_every_ == 0;
             v.hash = (sc_.oracle_hashes || check_now) ? e.state_hash().total : 0u;
+            if (sc_.fog) v.fog = e.get_world_state().fog_revealed;
             views.push_back(std::move(v));
             if (check_now) {
                 ++derived_checks;
@@ -322,6 +328,7 @@ public:
             if (v.display >= pre.size()) continue;
             ++checked;
             if (verified != nullptr) *verified = checked;
+            if (sc_.fog && v.fog != pre_fog[v.display]) return "step " + std::to_string(v.step) + ": the predicted engine at tick " + std::to_string(v.display) + " has explored ground that the oracle's has not (or the other way)";
             if (v.applied.empty()) {
                 if (v.hash != pre[v.display]) return "step " + std::to_string(v.step) + ": the predicted engine at tick " + std::to_string(v.display) + " is not the oracle's";
             } else {
@@ -335,6 +342,7 @@ public:
 
     Ids ids;
     std::vector<TurnMsg> sealed;
+    std::vector<std::vector<uint8_t>> pre_fog;      // the oracle's explored ground before each tick (Scenario::fog)
     std::vector<uint64_t> pre;      // the oracle's hash before the commands of each tick
     std::vector<uint64_t> post;     // ... and after them (before the tick runs)
     std::vector<View> views;
@@ -381,6 +389,26 @@ void run_basic_tests() {
                               CommandType::AllianceBreak, CommandType::Quit, CommandType::Drop}) {
             ASSERT_FALSE(Prediction::predicts(t));
         }
+    } TEST_END();
+
+    TEST_CASE("RP1.4 Only The Player's Own Orders Are Predicted: A Command Of Another Seat Is Left To The Caller (Nothing Applied, The Answer Untouched), Even Of A Kind That Is Predicted; An Own Order Is Applied To The Predicted Engine And Never To The Confirmed One") {
+        Scenario sc;
+        Rig rig(sc);
+        rig.run(10);
+        Prediction& p = *rig.prediction();
+        ASSERT_TRUE(p.active());
+        const uint32_t ant = rig.ids.ants[1][0];                                            // (seat 1's ant: this player is seat 0)
+        sim::CommandResult r;
+        r.status = sim::CommandResult::Status::RejectedMalformed;
+        ASSERT_FALSE(p.submit(make_command(CommandType::GroupMove, 1, 255, 20, 40, {ant}), r));
+        ASSERT_TRUE(r.status == sim::CommandResult::Status::RejectedMalformed);
+        ASSERT_EQ(p.stats().commands_predicted, 0u);
+        ASSERT_TRUE(p.engine().get_unit(ant).orig_order != sim::AntUnit::kOrderMove);       // (the other seat's ant is not ordered by this player's prediction)
+        const uint32_t own = rig.ids.ants[0][0];
+        ASSERT_TRUE(p.submit(make_command(CommandType::GroupMove, 0, 255, 20, 40, {own}), r));
+        ASSERT_EQ(p.stats().commands_predicted, 1u);
+        ASSERT_EQ(p.engine().get_unit(own).orig_order, sim::AntUnit::kOrderMove);
+        ASSERT_TRUE(rig.confirmed().get_unit(own).orig_order != sim::AntUnit::kOrderMove);   // (the confirmed engine waits for the turn)
     } TEST_END();
 
     TEST_CASE("RP1.2 Nothing Is Predicted Before The First Tick Has Run (the \"Get ready\" dialog), And Every Order Is Left To The Caller") {
@@ -517,6 +545,37 @@ void run_exactness_tests() {
             ASSERT_EQ(rig.prediction()->stats().rebuilds, 0u);
             ASSERT_TRUE(rig.prediction()->stats().turns_checked > 250);
             ASSERT_OK(verify_min(rig, 0, 250));
+        }
+    } TEST_END();
+
+    TEST_CASE("RP2.5 Fog Of War: The Explored Ground That The Predicted Engine Shows Is The Oracle's At The Same Tick At Every Frame (The Hash Does Not Hold It): With A Buffer Deeper Than The Lead Whatever The Other Seats Order, And With The Right Lead For The Player's Own Orders: The Prediction Reveals Nothing That The Engine Would Not At That Tick, And Hides Nothing") {
+        for (const bool deep : {true, false}) {
+            Scenario sc;
+            sc.seed = deep ? 51u : 52u;
+            sc.fog = true;
+            if (deep) {
+                sc.buffer_turns = 4;
+                sc.down_delay = 1;
+                sc.lead_ms = 50;
+            }
+            Rig rig(sc);
+            Lcg rng(sc.seed);
+            rig.run(12);
+            for (uint32_t s = 0; s < 260; ++s) {
+                if (deep) {
+                    if (s % 5 == 0) rig.schedule(rig.step_no() + 2, random_order(rng, rig.ids, static_cast<uint8_t>(1 + rng.below(3))));
+                    if (s % 9 == 0) rig.schedule(rig.step_no() + 2, random_order(rng, rig.ids, 0));
+                } else if (s % 7 == 0) {
+                    rig.issue(random_order(rng, rig.ids, 0));
+                }
+                rig.step();
+            }
+            rig.run_quiet(30);
+            ASSERT_TRUE(rig.prediction()->stats().turns_checked > 200);
+            ASSERT_OK(verify_min(rig, 0, 200));
+            size_t explored = 0;
+            for (uint8_t cell : rig.confirmed().get_world_state().fog_revealed) explored += cell != 0 ? 1u : 0u;
+            ASSERT_TRUE(explored > 200);                                                      // (the player's ants walked and revealed ground: the comparison is not about an empty map)
         }
     } TEST_END();
 

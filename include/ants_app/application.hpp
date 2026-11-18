@@ -232,7 +232,7 @@ struct ApplicationConfig {
 /**
  * @brief Master application lifecycle coordinator handling loop, events, sim, and audio.
  */
-/// The text of a switch: on / off, yes / no, true / false, 1 / 0, in any case (the command line's --prediction and the settings key `prediction`). False, and `out` untouched, for any other text.
+/// The text of a switch: on / off, yes / no, true / false, 1 / 0, in any case (the command line's --prediction). False, and `out` untouched, for any other text.
 bool parse_switch(const std::string& text, bool& out);
 
 class Application {
@@ -637,8 +637,8 @@ private:
     bool wake_may_step();                                 // the wake-ups drive the match now: hidden page, network, no step running, and the frame loop slower than the turns
     void background_run(double elapsed);                  // the step itself: the network for `elapsed` seconds (at most kMaxWakeSeconds for the clock, see there), no sound
     uint64_t now_counter() const { return clock_ ? clock_() : SDL_GetPerformanceCounter(); }   // the clock of frames and wake-ups (set_clock)
-    void note_orders();
-    void feed_view_glide();                               // the ants that the prediction's rebuilds have moved slide in the picture (view_glide.hpp)                                   // the orders that input gave the predicted engine since the last look begin to be felt (net::FeltDelayMeter)
+    void note_orders();                                   // the orders that input gave the predicted engine since the last look begin to be felt (net::FeltDelayMeter)
+    void feed_view_glide();                               // the ants that the prediction's rebuilds have moved slide in the picture (view_glide.hpp)
     struct OrdersNoted {                                  // (the end of an input handler: whatever it ordered is looked at, by whichever way the handler leaves)
         Application& app;
         ~OrdersNoted() { app.note_orders(); }

@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "ants_sim/sim_engine.hpp"
+
 namespace ants::app {
 
 class ViewGlide {
@@ -40,5 +42,9 @@ private:
 
     std::vector<Entry> entries_;
 };
+
+/// The ant as the picture draws it: where the engine has it plus what is left of its slide. Except an ant of another team (not the viewer's, not its ally's) while the slide would draw it on ground that
+/// Fog of War still covers: the engine has it on explored ground, the place it slides from is not explored, and the picture shows it where the engine has it (the slide never shows what the fog hides).
+sim::AntSnapshot glided_ant(const ViewGlide& glide, const sim::WorldState& world, uint8_t viewer_team, const sim::AntSnapshot& ant);
 
 }  // namespace ants::app

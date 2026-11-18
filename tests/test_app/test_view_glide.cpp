@@ -43,6 +43,11 @@ int main(int argc, char* argv[]) {
     (void)argv;
     std::cout << "\n=======================================================\n [VIEW GLIDE] the slide of an ant that a rebuild moved\n=======================================================\n";
 
+    TEST_CASE("VG0 The Slide Lasts As Long As A Few Ticks Of Walking And Reads As Walking, Not As A Jump Or A Lag: Between A Tenth And A Quarter Of A Second") {
+        ASSERT_TRUE(ViewGlide::kDurationMs >= 100 && ViewGlide::kDurationMs <= 250);
+        ASSERT_EQ(ViewGlide::kMaxShiftPx, 64);                                              // (two tiles: the most that a few ticks of a walking ant's correction can be)
+    } TEST_END();
+
     TEST_CASE("VG1 An Ant That Was Shown Elsewhere Starts The Slide Where It Was Shown, Is Half Way After Half Of The Time, And Is Where The Engine Has It When The Time Is Over") {
         ViewGlide glide;
         int32_t dx = 0;
@@ -128,6 +133,39 @@ int main(int argc, char* argv[]) {
                 ASSERT_TRUE(drawn_before == engine);                                                       // at the end the picture is the engine's
             }
         }
+    } TEST_END();
+
+    TEST_CASE("VG5 The Slide Never Shows What The Fog Hides: An Ant Of Another Team Whose Engine Tile Is Explored But Whose Slide Would Draw It On Unexplored Ground Is Drawn Where The Engine Has It; An Own Ant, An Ally's, And Every Ant Without Fog Slide As They Are") {
+        ants::sim::WorldState world;
+        world.width = 10;
+        world.height = 10;
+        world.fog_of_war_enabled = true;
+        world.fog_revealed.assign(100, 0);
+        for (int32_t x = 4; x <= 6; ++x) world.fog_revealed[static_cast<size_t>(5 * 10 + x)] = 1;      // tiles 4 to 6 of row 5 are explored
+        world.player_alliances.fill(255);
+        ants::sim::AntSnapshot ant;
+        ant.id = 9;
+        ant.player_id = 1;
+        ant.tile_x = 5;
+        ant.tile_y = 5;
+        ant.px = 5 * 32 + 16;
+        ant.py = 5 * 32 + 16;
+        ViewGlide glide;
+        glide.add(9, -30, 0);                                                              // shown 30 px to the left of the engine: on tile 4 (explored)
+        ASSERT_EQ(ants::app::glided_ant(glide, world, 0, ant).px, ant.px - 30);
+        ViewGlide far;
+        far.add(9, -64, 0);                                                                // 64 px to the left: tile 3, which the fog covers
+        ASSERT_EQ(ants::app::glided_ant(far, world, 0, ant).px, ant.px);                   // the enemy is drawn where the engine has it
+        ASSERT_EQ(ants::app::glided_ant(far, world, 0, ant).tile_x, 5);
+        ASSERT_EQ(ants::app::glided_ant(far, world, 1, ant).px, ant.px - 64);              // (its own team sees its own ground)
+        world.player_alliances[0] = 1;
+        world.player_alliances[1] = 0;
+        ASSERT_EQ(ants::app::glided_ant(far, world, 0, ant).px, ant.px - 64);              // (an ally's too)
+        world.player_alliances[0] = 255;
+        world.player_alliances[1] = 255;
+        world.fog_of_war_enabled = false;
+        ASSERT_EQ(ants::app::glided_ant(far, world, 0, ant).px, ant.px - 64);              // (no fog: nothing is hidden)
+        ASSERT_EQ(ants::app::glided_ant(far, world, 0, ant).id, 9u);
     } TEST_END();
 
     std::cout << "\n=======================================================\n"

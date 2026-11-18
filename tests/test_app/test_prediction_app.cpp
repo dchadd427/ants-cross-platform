@@ -589,6 +589,48 @@ int main(int argc, char* argv[]) {
         }
     } TEST_END();
 
+    TEST_CASE("PA9 The Frame Draws An Ant That A Rebuild Moved Where It Was Shown And Slides It: With A Slide Of 40 px Left Over The Ant Is Not At The Engine's Place Any More, It Is 40 px Further, And When The Slide Is Over The Frame Is The Plain One Again") {
+        Application app;
+        Peer bob;
+        Duo duo{app, bob};
+        ASSERT_TRUE(predicting_match(app, bob, duo));
+        const std::vector<uint32_t> mine = ants_of(app.sim(), 0);
+        ASSERT_FALSE(mine.empty());
+        app.net()->freeze();                                                               // (no tick runs between the frames: they are one frame of one engine)
+        duo.step(400);
+        const uint32_t ant = mine[0];
+        const sim::AntSnapshot* shown = ant_in(app.view_sim(), ant);
+        ASSERT_TRUE(shown != nullptr);
+        const int32_t wx = shown->px;
+        const int32_t wy = shown->py;
+        ASSERT_TRUE(place_camera(app, wx, wy, 110, 90));
+        int32_t sx = 0;
+        int32_t sy = 0;
+        ASSERT_TRUE(app.renderer().camera().world_to_screen(wx, wy, sx, sy));
+        const LayoutRect view = app.layout().view();
+        SDL_MouseMotionEvent motion{};
+        motion.type = SDL_MOUSEMOTION;
+        motion.x = view.x + 30;
+        motion.y = view.y + view.h - 30;
+        app.handle_mouse_motion(motion);                                                   // (the pointer far from the ant)
+        const int32_t kSlide = 40;
+        const std::vector<uint8_t> before_old = (app.render_frame(), canvas_region(app, sx - 12, sy - 12, 24, 24));
+        const std::vector<uint8_t> before_new = canvas_region(app, sx + kSlide - 12, sy - 12, 24, 24);
+        app.renderer().view_glide().add(ant, kSlide, 0);                                    // the ant was shown 40 px to the right of where the engine has it
+        app.render_frame();
+        const std::vector<uint8_t> during_old = canvas_region(app, sx - 12, sy - 12, 24, 24);
+        const std::vector<uint8_t> during_new = canvas_region(app, sx + kSlide - 12, sy - 12, 24, 24);
+        ASSERT_FALSE(before_old.empty() || before_new.empty());
+        ASSERT_TRUE(during_old != before_old);                                             // the ant has left the engine's place ...
+        ASSERT_TRUE(during_new != before_new);                                             // ... and stands 40 px to the right
+        app.renderer().update_transient_effects(1.0f);                                      // (a second of frames: the slide is over)
+        app.render_frame();
+        ASSERT_TRUE(canvas_region(app, sx - 12, sy - 12, 24, 24) == before_old);
+        ASSERT_TRUE(canvas_region(app, sx + kSlide - 12, sy - 12, 24, 24) == before_new);
+        duo.step(1500);
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());                        // (drawing only: the confirmed engines are the same)
+    } TEST_END();
+
     TEST_CASE("PA5 A Hidden Page Shows Nothing: The Prediction Is Suspended While It Is Hidden (The Wake-Ups Step The Match, No Picture Needs The Predicted Engine) And Begins Again, With The Next Tick, When The Page Is Shown") {
         Application app;
         Peer bob;
