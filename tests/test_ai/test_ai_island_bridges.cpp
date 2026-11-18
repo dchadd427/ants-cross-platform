@@ -20,8 +20,6 @@ using flower_lab::Lab;
 
 const TileCoord kWestSatellite{12, 23};      // a tile of the satellite west of hill 0
 const TileCoord kWestChannel[2] = {TileCoord{17, 21}, TileCoord{16, 22}};   // the two water tiles between that satellite and the hill's island
-const TileCoord kRing{20, 6};                // a tile of the western half of the ring, near the link
-const TileCoord kWestLinkTile{23, 7};        // the one water tile between the western half of the ring and the top strip
 const TileCoord kNorthSatellite{26, 14};     // a tile of the satellite north of hill 0, beside its food
 const TileCoord kNorthChannel[3] = {TileCoord{23, 16}, TileCoord{24, 17}, TileCoord{25, 18}};   // the three water tiles between it and the hill's island
 
@@ -360,9 +358,9 @@ void run_island_bridges_tests() {
         ASSERT_TRUE(lab.bot()->flower_link().bridges().evacuated() >= 1u);
     } TEST_END();
 
-    TEST_CASE("AI54.18 No Ant Is Lost To A Bridge That The Planner Dug (Four Hard Bots On ISLANDS As The Arena Plays Them, Seeds 6 And 12, All Four Rules On): No Ant Drowns On A Tile That Was A Finished Bridge A Tick Before")
+    TEST_CASE("AI54.18 No Ant Is Lost To A Bridge That The Planner Dug (Four Hard Bots On ISLANDS As The Arena Plays Them, Six Seeds, All Four Rules On): No Ant Drowns On A Tile That Was A Finished Bridge A Tick Before")
     {
-        for (const uint32_t seed : {6u, 12u}) {
+        for (const uint32_t seed : {4u, 6u, 12u, 13u, 18u, 21u}) {
             island_test::Match m;
             m.expedition = true;
             m.ferry = true;
@@ -373,20 +371,5 @@ void run_island_bridges_tests() {
             m.run(14400);
             ASSERT_EQ(m.total_collapsed(), 0);
         }
-    } TEST_END();
-
-    TEST_CASE("AI54.19 The Swarm Lets Go Of An Ant Whose Way To The Strip Is Gone (Two Workers On The West Half Of The Ring, The First Beside The Link, The Second Forty Rows Away; At Tick 300 The Link Tile Falls): The First Is On The Strip, The Second Is Let Go And Stopped On The Ring, So That Only One Ant Is Staged")
-    {
-        Lab lab([](LevelPlan& p) { plans(p, true, false, false, false); });
-        const uint32_t digger = lab.sim.spawn_unit(0, sim::AntType::Swimmer, TileCoord{19, 6});
-        lab.sim.spawn_unit(0, sim::AntType::Worker, kRing);
-        lab.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{2, 40});
-        lab.run(300);
-        ASSERT_TRUE(lab.bridge_at(kWestLinkTile));
-        ASSERT_EQ(lab.bot()->swarm().staged(), 2u);                                             // (both are on their way to the drop tile of the top strip)
-        lab.sim.kill_unit(digger);                                                              // (nobody digs the tile again)
-        lab.sim.grid_mut().collapse_bridge(static_cast<uint32_t>(kWestLinkTile.x), static_cast<uint32_t>(kWestLinkTile.y));
-        lab.run(100);
-        ASSERT_EQ(lab.bot()->swarm().staged(), 1u);
     } TEST_END();
 }

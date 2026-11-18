@@ -149,8 +149,8 @@
    "file": "src/ants_ai/island_swarm.cpp",
    "old": "if (f.empty() || f[static_cast<size_t>(index_of(grid, a->tile))] < 0) {",
    "new": "if (false && (f.empty() || f[static_cast<size_t>(index_of(grid, a->tile))] < 0)) {",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.19 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI54.19"
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.18 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.18"
   },
   {
    "id": "healed_ant_kept",

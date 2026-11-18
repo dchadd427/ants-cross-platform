@@ -82,14 +82,26 @@ void SwarmTask::step(TaskContext& c) {
     const sim::Grid& grid = v.grid();
     uint32_t swimmers = 0;
     for (const AntView& a : v.mine()) swimmers += a.type == sim::AntType::Swimmer ? 1u : 0u;
+    // a tile that the island task has retired (a bridge that will not last another trip: Tactics::shut_tiles) within `shut_radius` tiles of `tile`
+    const auto near_shut = [&](const sim::Grid& g, sim::TileCoord tile) {
+        for (int32_t dy = -params_.shut_radius; dy <= params_.shut_radius; ++dy) {
+            for (int32_t dx = -params_.shut_radius; dx <= params_.shut_radius; ++dx) {
+                const sim::TileCoord t{tile.x + dx, tile.y + dy};
+                if (!g.in_bounds(t)) continue;
+                const size_t idx = static_cast<size_t>(index_of(g, t));
+                if (idx < tactics_.shut_tiles.size() && tactics_.shut_tiles[idx] != 0) return true;
+            }
+        }
+        return false;
+    };
     // the ants that wait: still there, still ours; one that is a Swimmer now is made (the ferry takes it)
     for (auto it = staged_.begin(); it != staged_.end();) {
         const AntView* a = find_ant(v.mine(), it->first);
         bool keep = a != nullptr && c.ledger.owner(it->first) == id();
         const bool bridges = plan.island_link_cost || plan.island_return || plan.island_feeder || plan.island_power_bridge;
-        if (keep && bridges && grid.in_bounds(a->tile) && a->tile != it->second.spot) {                       // no walk over the bridges that will last reaches the ant's place any more (docs/BOTS.md, "Bridges for ants"): ...
+        if (keep && bridges && grid.in_bounds(a->tile) && a->tile != it->second.spot && near_shut(grid, a->tile)) {      // no walk over the bridges that will last reaches the ant's place any more, and it is by a bridge that falls (docs/BOTS.md, "Bridges for ants"): ...
             const std::vector<int32_t>& f = field_for(c, it->second.link);
-            if (f.empty() || f[static_cast<size_t>(index_of(grid, a->tile))] < 0) {                         // ... it is let go and stopped (an order that is under way would take it onto a bridge that falls), not sent on
+            if (f.empty() || f[static_cast<size_t>(index_of(grid, a->tile))] < 0) {                         // ... it is let go and stopped (an order that is under way would take it onto the bridge), not sent on
                 c.ledger.release(it->first, id());
                 if (a->takes_orders()) c.orders.stop({a->id}, Priority::Urgent);
                 keep = false;

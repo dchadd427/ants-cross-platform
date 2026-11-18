@@ -27,6 +27,7 @@ public:
         uint32_t order_gap{80};              // an ant that stands still away from its place is told again after this long
         uint32_t take_wait{240};             // a pick-up that has not ended in a Swimmer after this long is given up (the walk from the place is a tile or two)
         uint32_t max_walk_ticks{1500};       // an ant that is farther than this from a strip (by the walk) is not sent
+        int32_t shut_radius{6};              // with the bridge rules on, an ant whose way is shut and that stands within this many tiles of a retired bridge tile is let go and stopped
     };
 
     SwarmTask(TaskId id, Tactics& tactics) : SwarmTask(id, tactics, Params{}) {}
