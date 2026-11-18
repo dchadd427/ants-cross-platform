@@ -823,6 +823,7 @@ void run_persist_server_tests_4() {
             RestartLoaded before = w.read_record("B-1");
             ASSERT_TRUE(before.ok() && commands_of_seat(before, 0, 1) > 0 && s.bot_decisions >= 10);          // the bot gives orders (its harvest order, once: the ants go on by themselves)
             ASSERT_TRUE(before.head.bots.size() == 1 && before.head.fill_mask == 0 && before.head.keys[1] == net::SeatKey{});     // (no key for a bot's seat)
+            ASSERT_TRUE(s.bot_lag_ticks >= 1 && s.bot_lag_ticks <= 2);                         // the person is 40 to 60 ms of round trip away: the bot's commands wait a tick or two (bot_lag.hpp)
             const size_t sealed = before.turns.size();
             w.stop_server(false);
             w.start_server(500);
@@ -835,6 +836,7 @@ void run_persist_server_tests_4() {
             ASSERT_TRUE(after.ok() && after.turns.size() > sealed + 200);
             s = w.status("B-1");
             ASSERT_TRUE(s.bot_controller && s.bot_decisions >= 10);                            // the bot looks at the match again, from the restored tick on (a new controller: it counts from 0; a Medium bot looks every 20 ticks)
+            ASSERT_TRUE(s.bot_lag_ticks >= 1 && s.bot_lag_ticks <= 2);                         // ... and wait again in the room that the restart brought back (a new sink and a new hold, read from the person's link once it is back)
             sim::Command quit;
             quit.type = sim::CommandType::Quit;
             quit.issuer = seat_person;

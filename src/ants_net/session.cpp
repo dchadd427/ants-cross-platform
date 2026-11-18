@@ -551,6 +551,7 @@ bool HostSession::accept_rejoin(Connection* conn, const HelloMsg& hello, uint32_
             old.conn->send(encode(RejectMsg{RejectReason::Superseded}));
             old.conn->close();
         }
+        trip_.reset(seat);                                   // (the seat's next acknowledgements come over another link: what the old one read is not about it)
         old.present = false;
         sequencer_.set_active(seat, false);
     }

@@ -1,7 +1,8 @@
 // Tests of the network handicap of a room's computer players (docs/BOTS.md, "Fairness in detail"; ants_server/bot_lag.hpp): the hold that the people's links give (its rounding, cap, median, hysteresis and
 // dwell), the sink that holds a bot's commands back (order, no loss, the pass-through at a hold of 0, the turn that applied_at names), and whole rooms: a person on a link of 30, 90, 180 and 300 ms
 // round trip gets a bot that waits 1, 2, 4 and 6 ticks; a person on a LAN link, or nobody, a bot that does not; two people give the median; a pause, a slow machine and a person who leaves leave the room
-// right; and a match with held commands plays out on a fresh engine to the same hashes (the replay case, S3.290, is in replay_tests.hpp, and a match of bots alone holds nothing: S3.180).
+// right; a second window that takes a seat is read on its own link; and a match with held commands plays out on a fresh engine to the same hashes (the replay case, S3.290, is in replay_tests.hpp, a match of
+// bots alone holds nothing: S3.180, and a room that a restart of the server brought back holds its bots again: S3.93).
 #include "server_fixtures.hpp"
 
 namespace {
@@ -414,5 +415,24 @@ void run_bot_lag_tests() {
             ASSERT_TRUE(s.state == RoomState::Running);
             ASSERT_TRUE(s.ticks >= 170);                                                 // 10 s of play at 20 ticks a second: nothing here slows the match
         }
+    } TEST_END();
+
+    TEST_CASE("S3.291 A Second Window Takes A Person's Seat Over A Nearer Link While The First Window's Link Is Still Alive: The First Is Told So, The Match Goes On, And Half A Second Later The Hold Is The New Link's (What The Old Link Read Is Forgotten With It, Not Mixed In)") {
+        LagRoom r("LAG-W", 150);                                                         // 300 ms of round trip
+        r.w.run(kPre + 8000);
+        ASSERT_EQ(r.w.status("LAG-W").bot_lag_ticks, 6u);
+        const net::SeatKey key = r.ann->lobby->key();
+        r.ann->reconnects = false;                                                       // (the first window stops when it is told that another took its seat)
+        r.w.link = {20, 0};                                                              // the second window is 40 ms of round trip away
+        RClient& again = r.w.connect("Ann", "LAG-W", 255, key);
+        ASSERT_TRUE(r.w.until([&]() { return again.session != nullptr && again.session->mode() == net::ClientSession::Mode::Normal && !r.w.status("LAG-W").paused; }, 20000));
+        r.w.run(450);
+        ASSERT_TRUE(r.ann->was_rejected && r.ann->rejected == net::RejectReason::Superseded);
+        RoomStatus s = r.w.status("LAG-W");
+        ASSERT_TRUE(s.state == RoomState::Running && !s.paused);
+        ASSERT_EQ(s.bot_lag_ticks, 1u);                                                  // three acknowledgements over the new link are a reading; eleven would be needed to outvote what the old link said
+        r.w.play_to_the_end("LAG-W");
+        ASSERT_TRUE(r.w.status("LAG-W").state == RoomState::Finished);
+        ASSERT_FALSE(again.session->desynced());
     } TEST_END();
 }

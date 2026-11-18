@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the network handicap of a room's computer players (docs/BOTS.md, 'The network handicap of a room's bots'): the hold's rounding, cap, median, the band and the dwell that keep it from flickering, nobody connected, nobody readable (kept ten seconds, then 0), the order of the held commands, the pass-through at a hold of 0, the turn that applied_at names, the sink that waits for a match that waits, the host's reading of a person's turns (the readings it needs, how old one may be, the cap of a reading, a turn it has not run, a turn twice), the calls that feed the reading, and the room's use of it, against test_server S3.285 - S3.290 and test_latency N9.40 - N9.44. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_lag_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by the case named in expect. Left out as equivalent: the cap of bot_lag_ticks_for without its early return's twin (std::min alone gives the same number for every reading that does not wrap, which the overflow mutant covers), the seat forgetting its readings when its link goes (TurnTripMeter::reset at loss and drop: the 1.5 s rule clears them at the next reading all the same, but for a seat taken back within 1.5 s), and the check that a seat is present in HostSession::turn_trip_ms (the reset at loss and drop leaves such a seat no reading; the check stays as a second guard).",
+ "note": "Mutants of the network handicap of a room's computer players (docs/BOTS.md, 'The network handicap of a room's bots'): the hold's rounding, cap, median, the band and the dwell that keep it from flickering, nobody connected, nobody readable (kept ten seconds, then 0), the order of the held commands, the pass-through at a hold of 0, the turn that applied_at names, the sink that waits for a match that waits, the host's reading of a person's turns (the readings it needs, how old one may be, the cap of a reading, a turn it has not run, a turn twice), the calls that feed the reading, a second window that takes a seat over a link that is still alive (its readings start again), and the room's use of it, against test_server S3.285 - S3.291 and test_latency N9.40 - N9.44. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_lag_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by the case named in expect. Left out as equivalent: the cap of bot_lag_ticks_for without its early return's twin (std::min alone gives the same number for every reading that does not wrap, which the overflow mutant covers), the seat forgetting its readings when its link goes (TurnTripMeter::reset at loss and drop: the 1.5 s rule clears them at the next reading all the same, but for a seat taken back within 1.5 s), and the check that a seat is present in HostSession::turn_trip_ms (the reset at loss and drop leaves such a seat no reading; the check stays as a second guard).",
  "baseline": [
   {
    "build": "test_server",
@@ -315,6 +315,14 @@
    "build": "test_latency",
    "test": "timeout 900 env ANTS_TEST_FILTER='N9.4' ./build/tests/test_net/test_latency",
    "expect": "N9.44"
+  },
+  {
+   "id": "a_second_window_keeps_the_first_links_readings",
+   "file": "src/ants_net/session.cpp",
+   "old": "        trip_.reset(seat);                                   // (the seat's next acknowledgements",
+   "new": "        // (the seat's next acknowledgements",
+   "test": "timeout 900 env ANTS_TEST_FILTER='S3.291' ./build/tests/test_server/test_server",
+   "expect": "S3.291"
   },
   {
    "id": "the_room_never_updates_the_hold",
