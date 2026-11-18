@@ -329,6 +329,11 @@ class ThePictures(unittest.TestCase):
 
     def test_every_box_that_is_built_again_forgets_its_old_squares(self):
         self.assertIn("pics.forget('list');", read("web", "matches.html"))
+        page = read("web", "matches.html")
+        script = page[page.index("<script>"):]
+        render = function_body(script, "function render(data, plan, scroll)")
+        self.assertLess(render.index("pics.forget('list');"), render.index("card(rec)"), "the old squares are forgotten BEFORE the new cards are made: a square that is forgotten after it was made is never corrected when the list of the maps comes (an approved map's card stayed the dark square)")
+        self.assertNotIn("pics.forget", function_body(script, "function show(node, count, pager)"), "show() runs after the cards are made: it must not forget their squares")
         self.assertIn("pics.node(rec.map, 'list')", read("web", "matches.html"))
         self.assertIn("pics.node(rec.map, 'page')", read("web", "match.html"))
 
@@ -337,8 +342,8 @@ class ThePictures(unittest.TestCase):
         broken = {
             "the list never corrects an address": ("list.forEach(function (item) { if (picker.thumbFor(item.map, maps) !== item.tried) fill(item.tv, item.map, item); });", "list.forEach(function (item) { if (false) fill(item.tv, item.map, item); });"),
             "every square is redone when the list comes": ("if (picker.thumbFor(item.map, maps) !== item.tried) fill(", "if (true) fill("),
-            "the picture is the map's name": ("                img.src = url;\n", "                img.src = map;\n"),
-            "a failed picture stays": ("img.addEventListener('error', function () { if (img.parentNode === tv) { tv.textContent = ''; tv.appendChild(el('div', 'blank')); } });", "img.addEventListener('error', function () {});"),
+            "the picture is the map's name": ("picker.showPicture(img, url, function () {", "picker.showPicture(img, map, function () {"),
+            "a failed picture stays": ("picker.showPicture(img, url, function () { if (img.parentNode === tv) { tv.textContent = ''; tv.appendChild(el('div', 'blank')); } });", "picker.showPicture(img, url, function () {});"),
             "a failed picture leaves an empty square": ("if (img.parentNode === tv) { tv.textContent = ''; tv.appendChild(el('div', 'blank')); }", "if (img.parentNode === tv) { tv.textContent = ''; }"),
             "a map with no address gets an image": ("if (!key && !url) {", "if (false) {"),
             "the list of the maps is never asked for": ("if (item) { list.push(item); lookMaps(); }", "if (item) { list.push(item); }"),

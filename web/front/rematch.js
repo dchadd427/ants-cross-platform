@@ -387,7 +387,7 @@
                 if (!isTestFile(file)) return null;
                 var m = known[file], title = (m && m.name) || testTitle(file);
                 var details = m && m.width && m.height ? (m.kind === 'extended' ? 'Extended' : 'Classic') + ' \u00b7 ' + m.width + ' \u00d7 ' + m.height + ' \u00b7 Unlisted test map from Map Maker' : 'Unlisted test map from Map Maker';
-                return { name: title, info: details, thumb: '/maps/previews/' + encodeURIComponent(file.replace(/\.(lvl|LVL)$/, '')) + '.png' };
+                return { name: title, info: details };      // (its picture is the address that AntsMapPicker.previewPath makes of the file name)
             },
             sync: function (model, sendPlan, warmMap) {
                 if (pendingTest && !pendingTest.sent && model && !model.guest && !model.starting && model.mapFile !== pendingTest.file) {

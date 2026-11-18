@@ -493,6 +493,23 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
         const c = runLobby('', { 'ants.name': 'Maya' }, { picker: true, fetch: () => now({ ok: true, json: () => list }) });
         c.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']], room: { map: 'BackYard.lvl' } });
         same('a players\' map: its name, its picture, and chips with what the list knows (kind, players, minutes, size)', [c.$('map-name').textContent, c.$('preview').src, c.$('map-facts').children.map((x) => x.textContent)], ['BackYard', '/maps/previews/BackYard.webp', ["Players' map", '4 players', '12 min', '60\u00d750']]);
+        {   // the room's picture of a map of the players: the list's address when the list has come, else the address that the file name makes; a 404 is answered with the other ending, once
+            const offline = () => { throw new Error('offline'); };
+            const lib = runLobby('', { 'ants.name': 'Maya' }, { picker: true, fetch: offline });
+            lib.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']], room: { map: 'Fight Island.lvl' } });
+            const shown = lib.$('preview');
+            same('no list: a room on a map of the players shows the library\'s picture by its name', [shown.src, shown.style.visibility], ['/maps/previews/Fight%20Island.webp', '']);
+            shown.fire('error');
+            same('... a 404 of it is answered with the other ending (an approved map\'s picture is a PNG)', [shown.src, shown.style.visibility], ['/maps/previews/Fight%20Island.png', '']);
+            shown.fire('error');
+            same('... and when that does not come either, the picture is hidden (no broken image)', shown.style.visibility, 'hidden');
+            const test = runLobby('', { 'ants.name': 'Maya' }, { picker: true, fetch: offline });
+            test.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']], room: { map: 'Fight Island ~test-0a1b2c3d.lvl' } });
+            same('a test map of the Map Maker has only the server\'s PNG: asked at once', test.$('preview').src, '/maps/previews/Fight%20Island%20~test-0a1b2c3d.png');
+            const approved = runLobby('', { 'ants.name': 'Maya' }, { picker: true, fetch: () => now({ ok: true, json: () => ({ format: 2, maps: [{ file: 'Run One.lvl', kind: 'extended', width: 90, height: 40, minutes: 12, players: 4, description: 'x', plays: 1, thumb: '/maps/previews/Run%20One.png' }] }) }) });
+            approved.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']], room: { map: 'Run One.lvl' } });
+            same('with the list: the list\'s address, the approved map\'s PNG', approved.$('preview').src, '/maps/previews/Run%20One.png');
+        }
         // an original's chips are its kind only, whether or not this page has the list (the host who has opened it, a guest and the approved picture show the same card)
         const known = { format: 2, maps: [{ file: 'TREASURE.LVL', original: true, width: 60, height: 60, minutes: 12, players: 4, description: 'x', plays: 3, thumb: '/front/preview_treasure.png' }, { file: 'BackYard.lvl', width: 60, height: 50, minutes: 12, players: 4, description: 'A yard', plays: 5, thumb: '/maps/previews/BackYard.webp' }] };
         const o = runLobby('', { 'ants.name': 'Maya' }, { picker: true, fetch: () => now({ ok: true, json: () => known }) });
