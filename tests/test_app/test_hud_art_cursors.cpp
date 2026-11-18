@@ -291,7 +291,7 @@ void test_cursor_draw(const assets::AssetArchive& arc, const Art& art) {
             uint32_t at_ms = 0;
             for (size_t i = 0; i < orig.size(); ++i) {
                 const std::string at = std::to_string(k) + "x " + used.name + " frame " + std::to_string(i) + ": ";
-                for (const std::pair<int32_t, int32_t> click : {std::make_pair(301, 207), std::make_pair(100, 80)}) {
+                for (const auto& click : {std::make_pair(301, 207), std::make_pair(100, 80)}) {
                     // the original's sprite of the frame, put where the original puts it: the click point plus the frame's offset
                     rig.blank();
                     rig.renderer.draw_named_sprite(orig[i].sprite, click.first + orig[i].dx, click.second + orig[i].dy);
