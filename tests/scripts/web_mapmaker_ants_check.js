@@ -353,7 +353,9 @@ for (const rel of MAPS) {
     check(Blocks.markerTile(f9, 1, 5) === Blocks.TEAMS[1].marker + 5 * 4096 && Blocks.markerTile(tiny, 1, 5) === Blocks.TEAMS[1].marker, 'v9: only a version 9 file carries the type in the tile');
     check(!!ed9.act(Ants.clearTeam(ed9.file, 1)) && !!ed9.act(Ants.clearTeam(ed9.file, 2)) && ants(ed9.file)[1] === 0, 'v9: clearTeam removes typed markers');
     check(!!ed9.act(Ants.putOne(ed9.file, 1, c1[0], c1[1], 4)) && !!ed9.act(Ants.putOne(ed9.file, 1, c2[0], c2[1], 2)), 'v9: put mixed Red Combat + Fire ants');
-    check(!!ed9.act(Blocks.eraseAt(ed9.file, c1[0] * ed9.file.columns + c1[1])) && ants(ed9.file)[1] === 0, 'v9: eraseAt on one ant removes all starting ants of that team even with mixed types');
+    const [far9] = free(ed9.file, 1, ed9.file.cells - 40);
+    check(!!ed9.act(Ants.putOne(ed9.file, 1, far9[0], far9[1], 3)) && ants(ed9.file)[1] === 3, 'v9: a third Red ant, far from the two');
+    check(!!ed9.act(Blocks.eraseAt(ed9.file, c1[0] * ed9.file.columns + c1[1])) && ants(ed9.file)[1] === 1 && Ants.teamAt(ed9.file, far9[0], far9[1]) === 1, 'v9: eraseAt on one ant takes its clump of two, even with mixed types, and not the Red ant far away');
     let pickedType = 0;
     const part9 = Ants.create({
         doc, win: {}, host: { tools, hint, side }, file: () => ed9.file, act: (c) => { const d = ed9.act(c); part9.refresh(); return !!d; }, say: () => {},
