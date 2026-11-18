@@ -323,7 +323,7 @@ function caseG(core) {
         check(digestOf(ed.file.bytes) === digestOf(finished), 'undo of the whole drag gives the same bytes' + tag);
         let steps = 0;
         while (ed.history.canUndo()) { ed.undo(); steps++; }
-        check(steps === 4 + 4 + 5 && messages(ed.file.bytes).filter((m) => !/not for the original/.test(m)).join() === first.join(), 'all ' + steps + ' steps undone: the blank map\'s eight sentences are back' + tag);
+        check(steps === 4 + 4 + 8 + 5 && messages(ed.file.bytes).filter((m) => !/not for the original/.test(m)).join() === first.join(), 'all ' + steps + ' steps undone: the blank map\'s eight sentences are back' + tag);
         equal(core.sameLevel(made.bytes, ed.file.bytes, 'extended').json.same === true || /dictionary name/.test(core.sameLevel(made.bytes, ed.file.bytes, 'extended').json.difference), true, 'and it is the blank map\'s level (only the names that the dictionary got may differ)' + tag);
     }
     // the library: every whole hill taken away and put back is the same level, in both kinds; a team's ants moved and put back by another path are the level that they were
