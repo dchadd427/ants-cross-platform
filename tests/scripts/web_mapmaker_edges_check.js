@@ -20,6 +20,7 @@
 //   E  the dialog on a fake page: the part you see or the whole map, the count, before and after drawn from the same cells, Cancel does nothing, Fix edges makes one change, nothing to fix
 //   F  Auto edges step by step (the real stroke of mapmaker_edit.js): after every move of a stroke each piece has its name in the dictionary (no black cell while the pointer is down), one Undo
 //      gives back the exact bytes and one Redo the same ones, and the cost of a move on a 512 x 512 map
+//      and a stroke without water leaves the very bytes that the way before (names put in at the lift) left, with the same Undo and Redo steps
 //   G  the mud ring beside new water: one cell of mud on the sides of painted water where it meets gravel, dirt or slate (never at a diagonal), the same for any path, a Fill, the edge of the map,
 //      mud and water left alone, erasing the water leaves the ring, one Undo takes the lake and the ring together
 //   H  the places that the game has no piece for (a strip one cell wide with a strip one cell wide beside it): which cells are marked, which are not (a strip that a neighbor can wear, a wide lake,
@@ -147,8 +148,8 @@ function ruleChecks() {
 // ---- the lower kind wears where the higher cannot ----
 
 // A made-up map for the real stroke of mapmaker_edit.js: `rows` x `columns` of plain `fill` ground, version 8 (a dictionary of 700 names: the five plain tiles are named, the pieces are not)
-function strokeMap(rows, columns, fill) {
-    const names = 700, cells = rows * columns, head = 8 + 2 + 30, out = new Uint8Array(head + 2 + 11 * names + 8 + 12 * cells + 12), view = new DataView(out.buffer);
+function strokeMap(rows, columns, fill, count) {
+    const names = count || 700, cells = rows * columns, head = 8 + 2 + 30, out = new Uint8Array(head + 2 + 11 * names + 8 + 12 * cells + 12), view = new DataView(out.buffer);
     let at = 0;
     const dword = (v) => { view.setUint32(at, v, true); at += 4; }, word = (v) => { view.setUint16(at, v, true); at += 2; };
     dword(8); dword(1); word(10); at += 30; word(names - 1);
@@ -159,8 +160,8 @@ function strokeMap(rows, columns, fill) {
     word(0); word(0); word(0); word(0x7FFE); word(0); word(6);
     return Edit.create(File.parse(out), { rebase: (bytes) => File.parse(bytes) });          // (the page's own rebase: a dictionary that gets a name is a new array)
 }
-// one stroke with Auto edges On, as mapmaker_tools.js does it (the stroke's tile is named first, then each move is MapEdges.strokeStep: the brush's square and the cells round it): `path` is the cells
-// that the pointer comes to, the first is where it goes down; `after` (optional) is called after every move, with the pointer still down
+// one stroke with Auto edges On, as mapmaker_tools.js does it (the stroke's tile is named first, each move is MapEdges.strokeStep: the brush's square and the cells round it, and the lift is
+// MapEdges.strokeEnd): `path` is the cells that the pointer comes to, the first is where it goes down; `after` (optional) is called after every move, with the pointer still down
 function paintStroke(ed, tile, path, brush, after) {
     Edit.ensureTile(ed.file, tile, Ground.name(tile));
     const stroke = ed.begin('ground', tile);
@@ -174,7 +175,9 @@ function paintStroke(ed, tile, path, brush, after) {
         auto({ r0: Math.min(a.r0, b.r0), r1: Math.max(a.r1, b.r1), c0: Math.min(a.c0, b.c0), c1: Math.max(a.c1, b.c1) });
         if (after) after();
     }
+    const tidied = Edges.strokeEnd(() => ed.file, Ground, stroke);          // (what the page does when the pointer lifts)
     stroke.end();
+    stroke.tidied = tidied;
     return stroke;
 }
 // paint the cells of `picture` (rows of letters) that hold `letter`, row by row with a brush of 1 (a run of cells is one stroke)
@@ -342,6 +345,53 @@ function stepChecks() {
     ed.undo(); equal(digest(ed.file.bytes), d0, 'one Undo takes the stroke, its pieces and their names out again: the bytes are the ones before');
 }
 
+// The way Auto edges worked before the pieces were named move by move: each move planned the pieces (no names), and the lift named the pieces of the cells that differ from before, in one splice. A
+// stroke of any ground but water must leave the very same bytes now (the file that is saved does not depend on the order in which the names were put in).
+function paintStrokeOld(ed, tile, path, brush) {
+    Edit.ensureTile(ed.file, tile, Ground.name(tile));
+    const stroke = ed.begin('ground', tile);
+    const auto = (rect) => {
+        const made = Edges.strokePlan(ed.file, { r0: rect.r0 - 2, r1: rect.r1 + 2, c0: rect.c0 - 2, c1: rect.c1 + 2 }, Ground, tile, stroke.painted, stroke.beforeTile);
+        if (made.count) stroke.change({ names: [], cells: [], solid: [], splices: [], ground: made.cells });
+    };
+    stroke.stamp(path[0][0], path[0][1], brush); auto(Edit.brushRect(ed.file, path[0][0], path[0][1], brush));
+    for (let i = 1; i < path.length; i++) {
+        const [r0, c0] = path[i - 1], [r1, c1] = path[i];
+        stroke.segment(r0, c0, r1, c1, brush);
+        const a = Edit.brushRect(ed.file, r0, c0, brush), b = Edit.brushRect(ed.file, r1, c1, brush);
+        auto({ r0: Math.min(a.r0, b.r0), r1: Math.max(a.r1, b.r1), c0: Math.min(a.c0, b.c0), c1: Math.max(a.c1, b.c1) });
+    }
+    const b = stroke.box(), f = ed.file, cells = [];
+    for (let r = Math.max(0, b.r0 - 2); r <= Math.min(f.rows - 1, b.r1 + 2); r++) for (let c = Math.max(0, b.c0 - 2); c <= Math.min(f.columns - 1, b.c1 + 2); c++) { const k = r * f.columns + c, now = f.tile1(r, c); if (now !== stroke.beforeTile(k)) cells.push([k, now]); }
+    const sp = cells.length ? Edges.dictionary(f, { cells }, Ground) : null;
+    if (sp) stroke.change({ names: [], cells: [], solid: [], splices: [sp], ground: [] });
+    stroke.end();
+}
+
+function sameBytesChecks() {
+    const rnd = seeded(20261119), pick = (n) => Math.floor(rnd() * n), kinds = [485, 487, 571, 439];
+    let strokes = 0, tidied = 0, differ = 0, first = null, hist = 0;
+    for (let k = 0; k < 160; k++) {
+        const rs = 6 + pick(10), cs = 6 + pick(10), short = k % 2 ? 486 : 0, a = strokeMap(rs, cs, 485, short), b = strokeMap(rs, cs, 485, short);          // (half of the maps have a dictionary that ends at gravel and has to grow)
+        for (let s = 1 + pick(5); s > 0; s--) {
+            const path = [[pick(rs), pick(cs)]];
+            for (let i = pick(8); i > 0; i--) path.push([Math.max(0, Math.min(rs - 1, path[path.length - 1][0] + pick(5) - 2)), Math.max(0, Math.min(cs - 1, path[path.length - 1][1] + pick(5) - 2))]);
+            const tile = kinds[pick(4)], brush = [1, 1, 1, 2, 3, 5][pick(6)], now = paintStroke(a, tile, path, brush);
+            paintStrokeOld(b, tile, path, brush);
+            strokes++; if (now.tidied) tidied++;
+            if (digest(a.file.bytes) !== digest(b.file.bytes)) { differ++; first = first || [rs, cs, tile, brush, JSON.stringify(path)]; }
+        }
+        // the same history: every stroke can be taken back to the bytes that the old way had before it
+        let ok = true;
+        while (a.history.canUndo()) { a.undo(); b.undo(); if (digest(a.file.bytes) !== digest(b.file.bytes)) ok = false; }
+        while (a.history.canRedo()) { a.redo(); b.redo(); if (digest(a.file.bytes) !== digest(b.file.bytes)) ok = false; }
+        if (ok) hist++;
+    }
+    equal([differ, first], [0, null], 'strokes of gravel, dirt, slate and mud with Auto edges leave the same bytes as before the names were put in move by move, in a dictionary of 700 names and in one that grows (' + strokes + ' strokes: the names of the pieces that a later move replaced are taken out again, and the slots made for them)');
+    check(tidied >= 20, 'and the check is not idle: at the lift ' + tidied + ' of the strokes had a name to take out');
+    equal(hist, 160, 'Undo and Redo of those strokes give the same bytes as before the names were put in move by move, step by step');
+}
+
 function stepSpeedChecks() {
     // a 512 x 512 map, a brush of 9 dragged 115 cells along the middle: each move is the stroke's own step (the ring, the plan and the names); a move that brings a new piece also splices the dictionary
     const n = 512;
@@ -445,7 +495,7 @@ function gapChecks() {
     let f = grid(LADDER), g = Edges.gaps(f, Ground, null);
     const want = []; for (let r = 3; r <= 11; r++) for (let c = 2; c <= 4; c++) want.push([r, c]);
     equal([markedCells(g), g.count], [want, 27], 'the ladder (water, mud, water, each one cell wide): its three columns are marked and nothing else, a strip beside a wide lake is not');
-    equal(Edges.places(g), [{ r0: 3, r1: 11, c0: 2, c1: 4, cells: 27, row: 3, column: 4 }], 'one place, with the cell for its badge at the right end of its top row');
+    equal(Edges.places(g), [{ r0: 3, r1: 11, c0: 2, c1: 4, row: 3, column: 4 }], 'one place, with the cell for its badge at the right end of its top row');
     apply(f, Edges.plan(f, null, Ground));
     equal(markedCells(Edges.gaps(f, Ground, null)), want, 'the same after Fix edges: the rule has no piece for them either (and the places that it can fix are never marked)');
     // a strip one cell wide that a neighbor can wear, a wide lake, a strip of water in mud, an inlet: all fine
@@ -510,7 +560,9 @@ function gapDialogChecks() {
     Edges.open(p.env);
     let got = where(p);
     equal([got.hidden, got.title, got.items, got.shows.length], [false, '1 place has no piece in the game', ['Rows 3 to 11, columns 2 to 4: water, mud, water (each one cell wide)'], 1], 'the box lists the place of the ladder, with where it is and what is across it, and a button to show it');
-    check(p.host.querySelectorAll('p').some((q) => /strip one cell wide/.test(q.textContent)), 'and says why: the game has no piece for a strip one cell wide');
+    check(p.host.querySelectorAll('p').some((q) => q.textContent === Edges.GAP_NOTE), 'and says why, in the words of the line on the map');
+    // (a text read: the page's line over the map is static markup, so no run can show that it has drifted from the words of the box; it must be the same sentence)
+    check(fs.readFileSync(path.join(ROOT, 'web', 'mapmaker.html'), 'utf8').indexOf('>' + Edges.GAP_NOTE + '<') >= 0, 'the line over the map in web/mapmaker.html is the same sentence');
     got.shows[0].click();
     equal([p.dialogs.isOpen(), p.shows], [false, [[7, 3]]], 'Show closes the box and asks the page to bring the middle of the place into view');
     // the part you can see decides the list: the ladder is in it, or only the wide lake is
@@ -860,6 +912,7 @@ dialogChecks();
 randomChecks();
 strokeChecks();
 stepChecks();
+sameBytesChecks();
 ringChecks();
 gapChecks();
 gapDialogChecks();

@@ -26,7 +26,7 @@
         food: 'Tap to put a food pile.', erase: 'Tap to take something away.', pickup: 'Tap something to pick it up. Drag empty ground to look around.', pan: 'Drag to look around.'
     };
 
-    var GAP_MAX = 90000;             // the most cells that the places without a piece are worked out for at once (a part of the map, with a margin)
+    var GAP_MAX = 40000;             // the most cells that the places without a piece are worked out for at once (a part of the map, with a margin): about 30 milliseconds
 
     function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
 
@@ -466,22 +466,48 @@
         // One step of Auto edges on the stroke (mapmaker_edges.js, strokeStep: the mud ring beside new water, the pieces, their names)
         function applyAuto(rect) { return !current || !canAuto() || !rect ? 0 : edges.strokeStep(env.file, rect, ground, state.ground, current); }
 
-        // The places that the game has no piece for, for the canvas (docs/MAP_EDITOR.md, "Cells with no piece"): only while the Ground tool is chosen and no stroke is going on. The answer is worked out for
-        // the part of the map on the screen and a good deal round it, and kept for the map as it is (`rev` counts its changes; a map that was read again is another file), so a pan inside that part asks nothing again.
-        var rev = 0, gapKept = null;
+        // The places that the game has no piece for, for the canvas (docs/MAP_EDITOR.md, "Cells with no piece"): only while the Ground tool is chosen and no stroke is going on. The answer is kept for the map as
+        // it is (`rev` counts its changes; a map that was read again is another file) and for the part that it was worked out for, so a pan inside that part asks nothing again.
+        var rev = 0, gapKept = null, gapWant = null, gapWaiting = false;
+        // the part of the map that the places are worked out for: the part on the screen and a good deal round it, or just the part when that is too big for a margin; null when it is too big at all
+        function gapRegion(f, vis) {
+            var dr = Math.max(8, (vis.r1 - vis.r0) >> 1), dc = Math.max(8, (vis.c1 - vis.c0) >> 1);
+            var region = { r0: Math.max(0, vis.r0 - dr), r1: Math.min(f.rows - 1, vis.r1 + dr), c0: Math.max(0, vis.c0 - dc), c1: Math.min(f.columns - 1, vis.c1 + dc) };
+            var area = function (g) { return (g.r1 - g.r0 + 1) * (g.c1 - g.c0 + 1); };
+            if (area(region) > GAP_MAX) region = { r0: vis.r0, r1: vis.r1, c0: vis.c0, c1: vis.c1 };          // (a big part: no margin)
+            return area(region) > GAP_MAX ? null : region;                                                   // (a whole big map: the plan takes too long)
+        }
+        // `fn` when the page is idle (a short timer where it has no idle time to give); false when the page has neither, and the caller works at once
+        function whenIdle(fn) {
+            var w = env.win, run = function () { gapWaiting = false; fn(); };
+            if (w && w.requestIdleCallback) w.requestIdleCallback(run, { timeout: 250 });
+            else if (w && w.setTimeout) w.setTimeout(run, 30);
+            else return false;
+            return true;
+        }
+        // works the places out for the part that was asked for last, and has the canvas show them
+        function workOutGaps() {
+            var region = gapWant;
+            gapWant = null;
+            if (!region || !editor || !edges || !ground || state.tool !== 'ground' || current) return;          // (a stroke that has begun: asked again when it ends)
+            var f = env.file(), g = edges.gaps(f, ground, region);
+            gapKept = { rev: rev, file: f, r0: region.r0, r1: region.r1, c0: region.c0, c1: region.c1, answer: g.count ? { g: g, places: edges.places(g) } : null };
+            canvas.refresh();
+        }
+        // The answer for the canvas, at once: what is kept when it is right for this map and covers this part. Otherwise the work is asked for (once for all the asks until the page is idle, so a stroke, an Undo
+        // or a pan never waits for it) and the answer is what is kept while the map is still the same (right for the cells that it covers), or none.
         function gapsNow(vis) {
             if (!editor || !edges || !ground || state.tool !== 'ground' || current || !vis) return null;
-            var f = env.file(), k = gapKept;
-            if (!k || k.rev !== rev || k.file !== f || vis.r0 < k.r0 || vis.r1 > k.r1 || vis.c0 < k.c0 || vis.c1 > k.c1) {
-                var dr = Math.max(8, (vis.r1 - vis.r0) >> 1), dc = Math.max(8, (vis.c1 - vis.c0) >> 1);
-                var region = { r0: Math.max(0, vis.r0 - dr), r1: Math.min(f.rows - 1, vis.r1 + dr), c0: Math.max(0, vis.c0 - dc), c1: Math.min(f.columns - 1, vis.c1 + dc) };
-                var area = function (g) { return (g.r1 - g.r0 + 1) * (g.c1 - g.c0 + 1); };
-                if (area(region) > GAP_MAX) region = { r0: vis.r0, r1: vis.r1, c0: vis.c0, c1: vis.c1 };          // (a big part: no margin)
-                if (area(region) > GAP_MAX) return null;                                                          // (a whole big map at once: the plan takes too long to work out for each change)
-                var g = edges.gaps(f, ground, region);
-                k = gapKept = { rev: rev, file: f, r0: region.r0, r1: region.r1, c0: region.c0, c1: region.c1, answer: g.count ? { g: g, places: edges.places(g) } : null };
+            var f = env.file(), k = gapKept, fresh = !!k && k.rev === rev && k.file === f;
+            if (fresh && vis.r0 >= k.r0 && vis.r1 <= k.r1 && vis.c0 >= k.c0 && vis.c1 <= k.c1) return k.answer;
+            var region = gapRegion(f, vis);
+            if (!region) return null;
+            gapWant = region;
+            if (!gapWaiting) {
+                gapWaiting = true;
+                if (!whenIdle(workOutGaps)) { gapWaiting = false; workOutGaps(); return gapKept && gapKept.rev === rev ? gapKept.answer : null; }
             }
-            return k.answer;
+            return fresh ? k.answer : null;
         }
 
         // A whole hill, a team's ants, a food pile, a plant or a bigger object, put with one tap
@@ -562,6 +588,7 @@
             end: function () {
                 if (mine()) return mine().end();
                 if (!current) return;
+                if (edges && ground && current.kind === 'ground') edges.strokeEnd(env.file, ground, current);          // (the dictionary of a stroke of Auto edges keeps the names of the finished stroke only)
                 var n = current.end();
                 current = null; rev++;
                 if (n) { canvas.refreshMini(); showButtons(); showInfo(); env.onEdit(); }
@@ -645,7 +672,7 @@
 
         return {
             // A map is open (a new one, or one from the disk): the history starts empty
-            setMap: function (file) { rev++; editor = Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt, guard: Blocks.blockedText }); current = null; if (ants) ants.setMap(); if (pick) pick.setMap(); showButtons(); showInfo(); },
+            setMap: function (file) { rev++; gapKept = gapWant = null; editor = Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt, guard: Blocks.blockedText }); current = null; if (ants) ants.setMap(); if (pick) pick.setMap(); showButtons(); showInfo(); },
             choose: chooseTool, undo: undo, redo: redo,
             // The lazily loaded parts came in (mapmaker_ground.js: the sheets of the kinds; mapmaker_sprites.js: the pictures, or null when the atlas failed): the palette and the tool buttons show them
             use: function (g, s, e) {

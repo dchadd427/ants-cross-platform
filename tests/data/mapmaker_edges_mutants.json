@@ -679,6 +679,34 @@
       "old": "ghost: ghostNow(cell), gaps: gaps });",
       "new": "ghost: ghostNow(cell) });",
       "test": "python3 tests/scripts/web_mapmaker_browser.py --web \"$ANTS_WEB_URL\" --only edges"
+    },
+    {
+      "id": "edges_end_leaves_the_names_of_replaced_pieces",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "if (!box || !list.length) return 0;",
+      "new": "return 0;",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_end_blanks_the_names_of_the_pieces_in_use",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "{ used[id] = 1; top = Math.max(top, id); }",
+      "new": "{ top = Math.max(top, id); }",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_end_looks_only_at_the_strokes_box",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "var PAD = 4;",
+      "new": "var PAD = 0;",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_end_keeps_what_the_stroke_named_as_found",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "var first = list[0].removed,",
+      "new": "var first = list[list.length - 1].inserted,",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
     }
   ]
 }

@@ -12,7 +12,7 @@
 
     var WINDOW = { columns: 48, rows: 32 };               // the most cells that a preview shows (the cells around the first change)
     var NOTE = 'Edge pieces you placed by hand stay, unless the rule has a better one for that cell. Where the game has no edge piece (for example water beside gravel, dirt or slate) the plain tile stays. One Undo brings everything back.';
-    var GAP_NOTE = 'The game has no piece for a strip one cell wide. Make it two wide.';          // (the line on the map says the same, shorter on a phone: web/mapmaker.html)
+    var GAP_NOTE = 'No piece in the game for a strip one cell wide: make it two wide';          // (the line on the map, web/mapmaker.html, says the same words)
     var GAP_LIST = 6;                                                                              // (the most places that the box lists)
 
     // Who wears the piece where two kinds meet: only ONE of the two cells gets it (the game's own maps do it that way: almost every boundary that has a piece has it on one side only), the kind of
@@ -229,6 +229,35 @@
         return made.count ? n + stroke.change(change(f, made, G)) : n;
     }
 
+    // The end of a stroke of Auto edges: the dictionary is put as the old way left it, the names of the pieces that the FINISHED stroke uses and no other. A move names a piece the first time it shows, and
+    // a later move of the same stroke may replace it (a turn, an overlap, the edge of the map): that name would stay, unused, in the saved file. So the names that the stroke added and no changed cell
+    // uses are blanked again (and a run of new, unused slots at the end is cut), by one more splice of the stroke: Undo and Redo stay exact. The cells that the stroke changed are looked for round its
+    // box (its pieces, and the ring, lie within `PAD` cells of it). Returns how many changes it made (0: nothing to tidy).
+    var PAD = 4;
+    function strokeEnd(file, G, stroke) {
+        var box = stroke.box && stroke.box(), f = file(), list = stroke.spliced().filter(function (s) { return s.abs && s.at === f.dictAt; });
+        if (!box || !list.length) return 0;
+        var first = list[0].removed, count0 = (first[0] | (first[1] << 8)) + 1, b = f.bytes, at = f.dictAt, used = {}, top = count0 - 1, r, c, id;
+        var r0 = Math.max(0, box.r0 - PAD), r1 = Math.min(f.rows - 1, box.r1 + PAD), c0 = Math.max(0, box.c0 - PAD), c1 = Math.min(f.columns - 1, box.c1 + PAD);
+        for (r = r0; r <= r1; r++) for (c = c0; c <= c1; c++) {
+            id = f.tile1(r, c);
+            if (id !== stroke.beforeTile(r * f.columns + c)) { used[id] = 1; top = Math.max(top, id); }
+        }
+        var want = new Uint8Array(2 + 11 * (top + 1)), i, k;
+        for (i = 0; i < first.length && i < want.length; i++) want[i] = first[i];             // (the dictionary as the stroke found it)
+        for (i = count0; i <= top; i++) want[2 + 11 * i] = 0x2E;
+        want[0] = top & 255; want[1] = top >> 8;
+        Object.keys(used).forEach(function (key) {
+            var slot = 2 + 11 * (+key), name = G.name(+key);
+            if (+key < count0 && !(first[slot] === 0x2E && first[slot + 1] === 0)) return;     // (named already)
+            for (k = 0; k < 11; k++) want[slot + k] = 0;
+            for (k = 0; k < name.length; k++) want[slot + k] = name.charCodeAt(k);
+        });
+        var old = b.slice(at, at + 2 + 11 * f.names), same = old.length === want.length;
+        for (i = 0; same && i < want.length; i++) if (old[i] !== want[i]) same = false;
+        return same ? 0 : stroke.change({ names: [], cells: [], solid: [], splices: [{ abs: true, at: at, removed: old, inserted: want }], ground: [] });
+    }
+
     // ---- the places that the game has no piece for (look only: nothing in the file changes) ----
     // A boundary between two kinds that the game has pieces for, where neither cell wears a piece that faces the other, even when the rule is done (a strip one cell wide between two others: strip, gap,
     // strip, each with the other kind outside; the end of such a strip): the game has no edge piece for a cell with the other kind on opposite sides, so the boundary stays a hard cut. The cells that
@@ -269,17 +298,17 @@
         return out;
     }
 
-    // The places in `g` (what `gaps` gave): marked cells that touch side by side make one place. [{r0, r1, c0, c1, cells, row, column}] in reading order of the top row and left column; (row, column) is the
+    // The places in `g` (what `gaps` gave): marked cells that touch side by side make one place. [{r0, r1, c0, c1, row, column}] in reading order of the top row and left column; (row, column) is the
     // right end of the top row of the place (where the page puts its badge).
     function places(g) {
         var w = g.columns, h = g.rows, seen = new Uint8Array(g.bits.length), list = [], stack = [], i;
         for (i = 0; i < g.bits.length; i++) {
             if (!g.bits[i] || seen[i]) continue;
-            var p = { r0: h, r1: -1, c0: w, c1: -1, cells: 0, row: h, column: -1 };
+            var p = { r0: h, r1: -1, c0: w, c1: -1, row: h, column: -1 };
             seen[i] = 1; stack.push(i);
             while (stack.length) {
                 var k = stack.pop(), row = (k / w) | 0, col = k - row * w;
-                p.cells++; p.r0 = Math.min(p.r0, row); p.r1 = Math.max(p.r1, row); p.c0 = Math.min(p.c0, col); p.c1 = Math.max(p.c1, col);
+                p.r0 = Math.min(p.r0, row); p.r1 = Math.max(p.r1, row); p.c0 = Math.min(p.c0, col); p.c1 = Math.max(p.c1, col);
                 if (row < p.row || (row === p.row && col > p.column)) { p.row = row; p.column = col; }
                 [[row - 1, col], [row + 1, col], [row, col - 1], [row, col + 1]].forEach(function (q) {
                     if (q[0] < 0 || q[1] < 0 || q[0] >= h || q[1] >= w) return;
@@ -423,5 +452,5 @@
         return ctl;
     }
 
-    return { plan: plan, strokePlan: strokePlan, strokeStep: strokeStep, change: change, dictionary: dictionary, gaps: gaps, places: places, open: open, shapeOf: shapeOf, primary: primary, lowered: lowered, RANK: RANK, WINDOW: WINDOW };
+    return { plan: plan, strokePlan: strokePlan, strokeStep: strokeStep, strokeEnd: strokeEnd, change: change, dictionary: dictionary, gaps: gaps, places: places, open: open, shapeOf: shapeOf, primary: primary, lowered: lowered, RANK: RANK, WINDOW: WINDOW, GAP_NOTE: GAP_NOTE };
 });
