@@ -719,36 +719,55 @@ void run_correction_tests() {
         ASSERT_OK(verify_min(rig, t + sc.down_delay + 1, 20));                                  // from the frame of the turn's arrival on, every frame is the oracle's
     } TEST_END();
 
-    TEST_CASE("RP3.5 The Ants That A Rebuild Moves Are Told To The Picture With How Far: Only The Ants Of The Other Player's Order (Never The Player's Own, Exact Ones), By A Few Ticks Of Walking At Most, One Entry For Each Ant Whatever The Number Of Rebuilds; Nothing Is Kept Unless The Prediction Is Asked To") {
-        for (const bool track : {true, false}) {
+    TEST_CASE("RP3.5 The Ants That A Rebuild Moves Are Told To The Picture With How Far: Only The Ants Of The Other Player's Order (Never The Player's Own, Exact Ones), By A Few Ticks Of Walking At Most, One Entry For Each Ant, What Two Rebuilds Moved It By Added Up (The Same As Taking It After Each); Nothing Is Kept Unless The Prediction Is Asked To") {
+        // the same match twice: the shifts taken after each of two rebuilds, and taken once after both
+        using Sums = std::map<uint32_t, std::pair<int32_t, int32_t>>;
+        const auto play = [](bool track, bool take_between, Sums& sums, size_t& entries) {
             Scenario sc;
             sc.seed = 31;
             sc.lead_ms = 400;
             sc.uplink = 6;
             sc.prediction.track_shifts = track;
             Rig rig(sc);
-            rig.prediction()->set_measure_corrections(true);
             rig.run(12);
             rig.issue(make_command(CommandType::GroupMove, 0, 255, 50, 50, rig.ids.ants[0]));
             rig.run(6);
             const uint32_t t = rig.step_no() + 3;
             rig.schedule(t, make_command(CommandType::GroupMove, 1, 255, 20, 40, rig.ids.ants[1]));
-            rig.schedule(t + 2, make_command(CommandType::GroupMove, 1, 255, 40, 20, rig.ids.ants[1]));        // (a second order for the same ants, two turns later: a second rebuild before anybody asked)
-            rig.run(8);
-            ASSERT_TRUE(rig.prediction()->stats().rebuilds >= 2u);
-            const std::vector<Prediction::Shift> shifts = rig.prediction()->take_shifts();
-            if (!track) {
-                ASSERT_TRUE(shifts.empty());
-                continue;
-            }
-            ASSERT_FALSE(shifts.empty());
-            std::set<uint32_t> seen;
-            for (const Prediction::Shift& s : shifts) {
-                ASSERT_TRUE(seen.insert(s.ant).second);                                              // (one entry for each ant: the two rebuilds are added up)
-                ASSERT_TRUE(std::find(rig.ids.ants[1].begin(), rig.ids.ants[1].end(), s.ant) != rig.ids.ants[1].end());      // (the other player's ants, none of the player's own)
-                ASSERT_TRUE(std::max(std::abs(s.dx), std::abs(s.dy)) > 0 && std::max(std::abs(s.dx), std::abs(s.dy)) <= 128);      // (a tile of walking at most for each of the two rebuilds, in the one direction or the other)
-            }
-            ASSERT_TRUE(rig.prediction()->take_shifts().empty());                                    // (taken once)
+            rig.schedule(t + 4, make_command(CommandType::GroupMove, 1, 255, 40, 20, rig.ids.ants[1]));         // (a second order for the same ants, a little later: a second rebuild)
+            const auto add = [&](const std::vector<Prediction::Shift>& list) {
+                entries += list.size();
+                for (const Prediction::Shift& sh : list) {
+                    sums[sh.ant].first += sh.dx;
+                    sums[sh.ant].second += sh.dy;
+                }
+            };
+            while (rig.prediction()->stats().rebuilds < 1u && rig.step_no() < t + 20) rig.step();
+            if (take_between) add(rig.prediction()->take_shifts());
+            rig.run(12);
+            add(rig.prediction()->take_shifts());
+            for (auto it = sums.begin(); it != sums.end();) it = (it->second.first == 0 && it->second.second == 0) ? sums.erase(it) : std::next(it);      // (two that cancel are no entry)
+            return rig.prediction()->stats().rebuilds;
+        };
+        Sums off_sums;
+        size_t off_entries = 0;
+        ASSERT_TRUE(play(false, false, off_sums, off_entries) >= 2u);
+        ASSERT_TRUE(off_entries == 0 && off_sums.empty());                                           // (nothing is kept unless asked for)
+        Sums once;
+        Sums twice;
+        size_t once_entries = 0;
+        size_t twice_entries = 0;
+        ASSERT_TRUE(play(true, false, once, once_entries) >= 2u);
+        ASSERT_TRUE(play(true, true, twice, twice_entries) >= 2u);
+        ASSERT_FALSE(once.empty());
+        ASSERT_TRUE(once == twice);                                                                  // (what two rebuilds moved an ant by, added up, is what each moved it by)
+        ASSERT_TRUE(once_entries <= twice_entries);                                                  // (one entry for each ant when taken once)
+        sim::SimulationEngine probe;
+        const Ids probe_ids = build_world(probe, 31);
+        const std::vector<uint32_t>& seat1 = probe_ids.ants[1];
+        for (const auto& entry : once) {
+            ASSERT_TRUE(std::find(seat1.begin(), seat1.end(), entry.first) != seat1.end());   // (the other player's ants, none of the player's own)
+            ASSERT_TRUE(std::max(std::abs(entry.second.first), std::abs(entry.second.second)) <= 128);        // (a tile of walking at most for each of the two rebuilds, in the one direction or the other)
         }
     } TEST_END();
 

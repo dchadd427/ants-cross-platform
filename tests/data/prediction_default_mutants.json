@@ -126,7 +126,7 @@
       "id": "glide_fog_gate_removed",
       "file": "src/ants_app/view_glide.cpp",
       "old": "    if (!health::ant_drawn(world, viewer_team, drawn)) return ant;",
-      "new": "",
+      "new": "    if (false && !health::ant_drawn(world, viewer_team, drawn)) return ant;",
       "build": [
         "test_view_glide"
       ],
