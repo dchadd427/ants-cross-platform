@@ -580,6 +580,19 @@ class TheCodeRuns(unittest.TestCase):
             "a Resize that gives back the low byte of the word only": ("mapmaker_blocks.js", "removed: file.bytes.slice(14, 16), inserted: new Uint8Array([rules & 255, rules >> 8])", "removed: new Uint8Array([file.bytes[14], 0]), inserted: new Uint8Array([rules & 255, rules >> 8])"),
             "a Resize that writes the word the map has again": ("mapmaker_blocks.js", "if (file.version === 9 && rules !== undefined && rules !== rd(file.bytes, 14)) {", "if (file.version === 9 && rules !== undefined) {"),
             "a change of the properties that is put in while a stroke goes on": ("mapmaker_tools.js", "function act(change) { if (!editor || canvas.isStroking()) return false;", "function act(change) { if (!editor) return false;"),
+            "a frame with places that have no piece that is painted cell by cell": ("mapmaker_canvas.js", "!View.useSprites(view, sprites) && !gaps && !gapsShown ? cellsToPaint(rect) : null;", "!View.useSprites(view, sprites) ? cellsToPaint(rect) : null;"),
+            "a frame after the places went that keeps their lines": ("mapmaker_canvas.js", "!View.useSprites(view, sprites) && !gaps && !gapsShown ? cellsToPaint(rect) : null;", "!View.useSprites(view, sprites) && !gaps ? cellsToPaint(rect) : null;"),
+            "a note about the places that is never hidden": ("mapmaker_canvas.js", "if (env.gapNote) env.gapNote.hidden = !gaps;", "if (env.gapNote) env.gapNote.hidden = false;"),
+            "places asked for at tiles too small to show them": ("mapmaker_canvas.js", "view.scale >= View.GAPS_FROM ? painter.gaps(", "true ? painter.gaps("),
+            "places told to the canvas while a stroke goes on": ("mapmaker_tools.js", "|| current || !vis) return null;", "|| !vis) return null;"),
+            "places told to the canvas for every tool": ("mapmaker_tools.js", "|| !ground || state.tool !== 'ground' || current", "|| !ground || current"),
+            "places kept for the map as it was before an undo": ("mapmaker_tools.js", "            rev++;\n            canvas.markDirty(dirty);", "            canvas.markDirty(dirty);"),
+            "places kept for the map as it was before a stroke": ("mapmaker_tools.js", "current = null; rev++;\n                if (n) {", "current = null;\n                if (n) {"),
+            "places kept for a part of the map that is no longer on the screen": ("mapmaker_tools.js", "|| vis.r0 < k.r0 || vis.r1 > k.r1 || vis.c0 < k.c0 || vis.c1 > k.c1) {", ") {"),
+            "places that are not told for a big part of the map that has no room for a margin": ("mapmaker_tools.js", "if (area(region) > GAP_MAX) region = { r0: vis.r0, r1: vis.r1, c0: vis.c0, c1: vis.c1 };          // (a big part: no margin)", "void 0;"),
+            "places that are worked out for a part of the map that is too big": ("mapmaker_tools.js", "if (area(region) > GAP_MAX) return null;", "void 0;"),
+            "places kept for a map that was read again": ("mapmaker_tools.js", "if (!k || k.rev !== rev || k.file !== f || vis.r0 < k.r0", "if (!k || k.rev !== rev || vis.r0 < k.r0"),
+            "a stroke that gives no ring to water": ("mapmaker_tools.js", "edges.strokeStep(env.file, rect, ground, state.ground, current)", "edges.strokeStep(env.file, rect, ground, 485, current)"),
         }
         for what, (name, old, new) in mutants.items():
             with self.subTest(what):

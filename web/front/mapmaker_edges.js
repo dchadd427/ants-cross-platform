@@ -1,7 +1,8 @@
 // Fix edges (docs/MAP_EDITOR.md, "Fix edges"): the button that puts the game's edge and corner pieces where two kinds of ground meet. The game does not blend the ground by itself: a map file
 // must hold the edge tiles (gd03a is gravel with dirt on its north side), so the page picks them from the kinds of the neighbors, with the table of mapmaker_ground.js. `plan` is the rule (a
 // pure function of a map's layer 1), `change` makes a CHANGE of mapmaker_edit.js of it (one step of the history: one Undo brings all of it back) and `open` is the dialog with a before and an
-// after. Nothing changes what a cell is (its kind, its solid bit, its layer 2): an edge tile walks like the plain tile of its first letter. A lazily loaded, plain ES5 script (a page and node can load it).
+// after. Nothing changes what a cell is (its kind, its solid bit, its layer 2): an edge tile walks like the plain tile of its first letter. It also has the Auto edges step of a ground stroke
+// (`strokeStep`: the mud ring beside new water, the pieces and their names) and the places that the game has no piece for (`gaps`, `places`: looked at, never written). A lazily loaded, plain ES5 script (a page and node can load it).
 (function (root, factory) {
     'use strict';
     if (typeof module === 'object' && module.exports) module.exports = factory(require('./mapmaker_file.js'), require('./mapmaker_tiles.js'));
@@ -11,6 +12,8 @@
 
     var WINDOW = { columns: 48, rows: 32 };               // the most cells that a preview shows (the cells around the first change)
     var NOTE = 'Edge pieces you placed by hand stay, unless the rule has a better one for that cell. Where the game has no edge piece (for example water beside gravel, dirt or slate) the plain tile stays. One Undo brings everything back.';
+    var GAP_NOTE = 'The game has no piece for a strip one cell wide. Make it two wide.';          // (the line on the map says the same, shorter on a phone: web/mapmaker.html)
+    var GAP_LIST = 6;                                                                              // (the most places that the box lists)
 
     // Who wears the piece where two kinds meet: only ONE of the two cells gets it (the game's own maps do it that way: almost every boundary that has a piece has it on one side only), the kind of
     // the higher rank. The order is what those maps show for each pair (gravel, dirt and slate wear it toward mud 93 to 96 times in 100, water 75, gravel toward slate 75, slate toward dirt 88;
@@ -20,6 +23,9 @@
     // The cells round a stroke's area that its plan works out as well, so that no cell it changes rests on an out-of-date piece of the stroke's earlier steps (none: about 2 random stroke maps in 100
     // end wrong; one was enough for every map tried; three keep a margin)
     var CONTEXT = 3;
+    // The same for the places that a window of the map shows (`gaps`): the plan is worked out this many cells beyond the window, because a cell's piece depends on the pieces of its neighbors (the lower
+    // kind wears where the higher cannot), and the answer for the cells of the window must be the one that the whole map gives (a test holds every library map to it; two was enough there)
+    var BEYOND = 4;
 
     // The piece for a cell that has the other kind on these orthogonal sides (n, s, w, e): one side makes an edge piece, two sides that meet a corner piece (02 NW, 03 N, 04 NE, 05 W, 06 E,
     // 07 SW, 08 S, 09 SE); a cell with the other kind on opposite sides, on three sides or only at a diagonal gets none (0: the game has no piece for it)
@@ -115,15 +121,17 @@
         return { cells: cells, count: cells.length, region: { r0: r0, r1: r1, c0: c0, c1: c1 } };
     }
 
-    // Auto edges on the cells of a ground stroke (`painted` cells painted with `tileId`, and their border `region`): hand-placed tiles outside `painted` stay as they were. The rule is worked out
+    // Auto edges on the cells of a ground stroke (`painted` cells painted with `tileId` (or, where the value is a tile number above 1, with that tile: the mud ring), and their border `region`): hand-placed tiles outside `painted` stay as they were. The rule is worked out
     // over CONTEXT more cells all round (a piece that the rule made earlier is worked out again there too); only the cells of `region` can change.
     function strokePlan(file, region, G, tileId, painted, beforeTile) {
         var rows = file.rows, columns = file.columns, R0 = Math.max(0, region.r0), R1 = Math.min(rows - 1, region.r1), C0 = Math.max(0, region.c0), C1 = Math.min(columns - 1, region.c1), cells = [], r, c;
         var r0 = Math.max(0, region.r0 - CONTEXT), r1 = Math.min(rows - 1, region.r1 + CONTEXT), c0 = Math.max(0, region.c0 - CONTEXT), c1 = Math.min(columns - 1, region.c1 + CONTEXT);
         var span = c1 - c0 + 1, prims = new Int32Array((r1 - r0 + 1) * span).fill(-1), starts = new Int32Array((r1 - r0 + 1) * span).fill(-1);
+        // the tile of a cell that the stroke made: its own tile where it painted (1), the mud's tile where Auto edges put the ring beside new water (a tile number)
+        function ownAt(k) { return painted[k] > 1 ? painted[k] : tileId; }
         function oldAt(row, col) { return row < 0 || col < 0 || row >= rows || col >= columns ? 0 : beforeTile(row * columns + col); }
         function oldKind(row, col) { return row < 0 || col < 0 || row >= rows || col >= columns ? null : G.kindOf(oldAt(row, col)); }
-        function baseAt(row, col) { if (row < 0 || col < 0 || row >= rows || col >= columns) return 0; var k = row * columns + col; return painted[k] ? tileId : beforeTile(k); }
+        function baseAt(row, col) { if (row < 0 || col < 0 || row >= rows || col >= columns) return 0; var k = row * columns + col; return painted[k] ? ownAt(k) : beforeTile(k); }
         function kindAt(row, col) { return row < 0 || col < 0 || row >= rows || col >= columns ? null : G.kindOf(baseAt(row, col)); }
         function inArea(row, col) { return row >= r0 && row <= r1 && col >= c0 && col <= c1; }
         // The tile that the rule starts from: the stroke's tile where it painted, the plain tile where the cell is plain or holds a piece that the rule would have put there on the map as it was,
@@ -134,7 +142,7 @@
             if (!inArea(row, col)) return bId;
             var idx = (row - r0) * span + (col - c0);
             if (starts[idx] >= 0) return starts[idx];
-            if (painted[k]) return (starts[idx] = tileId);
+            if (painted[k]) return (starts[idx] = ownAt(k));
             var t = G.info(bId), plain = t ? G.kind(t.kind).plain : bId;
             return (starts[idx] = !t || bId === plain || (t.variant === 'a' && ends(oldKind, G, row, col, primary(oldKind, G, row, col, plain, oldAt), oldAt) === bId) ? plain : bId);
         }
@@ -185,6 +193,106 @@
         return { names: [], cells: [], solid: [], splices: splice ? [splice] : [], ground: made.cells };
     }
 
+    // The ring of mud beside new water (Auto edges): gravel, dirt and slate have no piece toward water and water has pieces toward mud only, so a lake painted on them would end in a straight cut. The
+    // game's own maps never put water against them: there is mud between, one cell of it in about 85 places in 100 and on the sides only (a cell at a lake's corner is land in two cases in three: it
+    // wears its own corner piece toward the mud). The cells (indexes) that are gravel, dirt or slate and touch, side by side, a cell of `rect` that the stroke painted with water (`painted[k] === 1`; a
+    // ring cell of an earlier step holds the mud's tile and is never asked again). A step paints inside its `rect` only, so the cells that it can give a ring are the ones beside it.
+    var LAND = { gravel: 1, dirt: 1, slate: 1 };
+    function ring(file, rect, G, painted) {
+        var rows = file.rows, columns = file.columns, out = [], seen = {}, r, c, d;
+        var r0 = Math.max(0, rect.r0), r1 = Math.min(rows - 1, rect.r1), c0 = Math.max(0, rect.c0), c1 = Math.min(columns - 1, rect.c1);
+        for (r = r0; r <= r1; r++) for (c = c0; c <= c1; c++) {
+            if (painted[r * columns + c] !== 1) continue;
+            for (d = 0; d < 4; d++) {
+                var rr = r + (d === 0 ? -1 : d === 1 ? 1 : 0), cc = c + (d === 2 ? -1 : d === 3 ? 1 : 0), kk = rr * columns + cc;
+                if (rr < 0 || cc < 0 || rr >= rows || cc >= columns || painted[kk] || seen[kk] || !LAND[G.kindOf(file.tile1(rr, cc))]) continue;
+                seen[kk] = 1; out.push(kk);
+            }
+        }
+        return out;
+    }
+
+    // One step of Auto edges on a ground stroke, after the brush was put on `rect` ({r0, r1, c0, c1}, the cells it covered): the mud ring beside new water, then the edge pieces in and round the
+    // painted cells, each piece named in the dictionary as it appears (the page draws a tile by its name: an unnamed piece would show as a black square until the stroke ends). Everything goes into
+    // the stroke (`stroke`, from mapmaker_edit.js: `painted`, `beforeTile`, `change`), so one Undo takes it all back. `file()` gives the reader's view as it is now (a name that is added makes a new
+    // one). Returns how many changes it made.
+    function strokeStep(file, rect, G, tileId, stroke) {
+        var n = 0, pad = 2, cells = G.kindOf(tileId) === 'water' ? ring(file(), rect, G, stroke.painted) : [], f;
+        if (cells.length) {
+            var mud = G.kind('mud').plain, mudCells = cells.map(function (k) { return [k, mud]; });
+            cells.forEach(function (k) { stroke.painted[k] = mud; });
+            n += stroke.change(change(file(), { cells: mudCells }, G));
+            pad = 3;                                                            // (the pieces round the ring reach one cell further)
+        }
+        f = file();
+        var made = strokePlan(f, { r0: rect.r0 - pad, r1: rect.r1 + pad, c0: rect.c0 - pad, c1: rect.c1 + pad }, G, tileId, stroke.painted, stroke.beforeTile);
+        return made.count ? n + stroke.change(change(f, made, G)) : n;
+    }
+
+    // ---- the places that the game has no piece for (look only: nothing in the file changes) ----
+    // A boundary between two kinds that the game has pieces for, where neither cell wears a piece that faces the other, even when the rule is done (a strip one cell wide between two others: strip, gap,
+    // strip, each with the other kind outside; the end of such a strip): the game has no edge piece for a cell with the other kind on opposite sides, so the boundary stays a hard cut. The cells that
+    // stand there are those with the other kind on opposite sides.
+
+    // The cells of `region` ({r0, r1, c0, c1}, both ends in; null: the whole map) as they would be after the rule, from `made` (the plan of Fix edges for that region, worked out here when not given):
+    // {r0, c0, rows, columns, bits (1 for a cell at such a boundary, row by row), count}
+    function gaps(file, G, region, made) {
+        var rows = file.rows, columns = file.columns, box = region || { r0: 0, r1: rows - 1, c0: 0, c1: columns - 1 }, r, c;
+        var r0 = Math.max(0, box.r0), r1 = Math.min(rows - 1, box.r1), c0 = Math.max(0, box.c0), c1 = Math.min(columns - 1, box.c1);
+        var out = { r0: r0, c0: c0, rows: Math.max(0, r1 - r0 + 1), columns: Math.max(0, c1 - c0 + 1), count: 0 };
+        out.bits = new Uint8Array(out.rows * out.columns);
+        if (!out.rows || !out.columns) return out;
+        if (!made) made = plan(file, region ? { r0: r0 - BEYOND, r1: r1 + BEYOND, c0: c0 - BEYOND, c1: c1 + BEYOND } : null, G);
+        var by = {};
+        made.cells.forEach(function (p) { by[p[0]] = p[1]; });
+        function kindAt(row, col) { if (row < 0 || col < 0 || row >= rows || col >= columns) return null; var k = row * columns + col; return G.kindOf(by[k] !== undefined ? by[k] : file.tile1(row, col)); }
+        function tileAt(row, col) { var k = row * columns + col; return by[k] !== undefined ? by[k] : file.tile1(row, col); }
+        // the cell at (row, col) wears a piece toward `other` that faces its neighbor on side d (0 north, 1 south, 2 west, 3 east)
+        function faces(row, col, other, d) { var t = G.info(tileAt(row, col)); return !!(t && t.other === other && TOWARD[d ^ 1].indexOf(t.shape) >= 0); }
+        function between(a, b) { return G.others(a).indexOf(b) >= 0 || G.others(b).indexOf(a) >= 0; }
+        function opposite(row, col, k) { var n = kindAt(row - 1, col), s = kindAt(row + 1, col), w = kindAt(row, col - 1), e = kindAt(row, col + 1); return !!((n && n === s && n !== k) || (w && w === e && w !== k)); }
+        function mark(row, col) {
+            if (row < r0 || row > r1 || col < c0 || col > c1) return;
+            var at = (row - r0) * out.columns + (col - c0);
+            if (!out.bits[at]) { out.bits[at] = 1; out.count++; }
+        }
+        for (r = r0 - 1; r <= r1; r++) for (c = c0 - 1; c <= c1; c++) {            // (one row and column before the window: a boundary on its north or west side is looked at from there)
+            var a = kindAt(r, c);
+            if (!a) continue;
+            for (var d = 1; d <= 3; d += 2) {                                   // (the south and the east side: each boundary once)
+                var rr = r + (d === 1 ? 1 : 0), cc = c + (d === 3 ? 1 : 0), b = kindAt(rr, cc);
+                if (!b || b === a || !between(a, b) || faces(r, c, b, d) || faces(rr, cc, a, d ^ 1)) continue;
+                if (opposite(r, c, a)) mark(r, c);
+                if (opposite(rr, cc, b)) mark(rr, cc);
+            }
+        }
+        return out;
+    }
+
+    // The places in `g` (what `gaps` gave): marked cells that touch side by side make one place. [{r0, r1, c0, c1, cells, row, column}] in reading order of the top row and left column; (row, column) is the
+    // right end of the top row of the place (where the page puts its badge).
+    function places(g) {
+        var w = g.columns, h = g.rows, seen = new Uint8Array(g.bits.length), list = [], stack = [], i;
+        for (i = 0; i < g.bits.length; i++) {
+            if (!g.bits[i] || seen[i]) continue;
+            var p = { r0: h, r1: -1, c0: w, c1: -1, cells: 0, row: h, column: -1 };
+            seen[i] = 1; stack.push(i);
+            while (stack.length) {
+                var k = stack.pop(), row = (k / w) | 0, col = k - row * w;
+                p.cells++; p.r0 = Math.min(p.r0, row); p.r1 = Math.max(p.r1, row); p.c0 = Math.min(p.c0, col); p.c1 = Math.max(p.c1, col);
+                if (row < p.row || (row === p.row && col > p.column)) { p.row = row; p.column = col; }
+                [[row - 1, col], [row + 1, col], [row, col - 1], [row, col + 1]].forEach(function (q) {
+                    if (q[0] < 0 || q[1] < 0 || q[0] >= h || q[1] >= w) return;
+                    var j = q[0] * w + q[1];
+                    if (g.bits[j] && !seen[j]) { seen[j] = 1; stack.push(j); }
+                });
+            }
+            list.push(p);
+        }
+        list.forEach(function (p) { p.row += g.r0; p.r0 += g.r0; p.r1 += g.r0; p.column += g.c0; p.c0 += g.c0; p.c1 += g.c0; });
+        return list;
+    }
+
     // ---- the dialog ----
 
     function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
@@ -197,12 +305,54 @@
         return { r0: r0, c0: c0, w: w, h: h };
     }
 
+    // "Rows 3 to 11, columns 2 to 4: water, mud, water (each one cell wide)": where a place is, and the kinds across it (the line through the middle of its narrow side), or the kinds in it
+    function describe(file, G, p) {
+        var w = p.c1 - p.c0 + 1, h = p.r1 - p.r0 + 1, runs = [], kinds = [], r, c;
+        function label(k) { return G.kind(k).label.toLowerCase(); }
+        function span(a, b, one, many) { return a === b ? one + ' ' + a : many + ' ' + a + ' to ' + b; }
+        function add(k) { if (!k) return; if (runs.length && runs[runs.length - 1].kind === k) runs[runs.length - 1].n++; else runs.push({ kind: k, n: 1 }); if (kinds.indexOf(k) < 0) kinds.push(k); }
+        if (w <= 7 || h <= 7) {
+            if (w <= h) { r = (p.r0 + p.r1) >> 1; for (c = p.c0; c <= p.c1; c++) add(G.kindOf(file.tile1(r, c))); }
+            else { c = (p.c0 + p.c1) >> 1; for (r = p.r0; r <= p.r1; r++) add(G.kindOf(file.tile1(r, c))); }
+        }
+        var text;
+        if (runs.length > 1 && runs.length <= 6) text = runs.map(function (x) { return label(x.kind); }).join(', ') + (runs.every(function (x) { return x.n === 1; }) ? ' (each one cell wide)' : '');
+        else {
+            kinds = [];
+            for (r = p.r0; r <= p.r1 && w * h <= 10000; r++) for (c = p.c0; c <= p.c1; c++) { var k = G.kindOf(file.tile1(r, c)); if (k && kinds.indexOf(k) < 0) kinds.push(k); }
+            text = kinds.length > 1 ? kinds.slice(0, -1).map(label).join(', ') + ' and ' + label(kinds[kinds.length - 1]) : (kinds.length ? label(kinds[0]) : 'ground');
+        }
+        return span(p.r0, p.r1, 'Row', 'Rows') + ', ' + span(p.c0, p.c1, 'column', 'columns') + ': ' + text;
+    }
+
     // env: {doc, dialogs (MapDialog.create), ground (MapGround), file() -> the open map's reader view, visible() -> {r0, r1, c0, c1} or null, sprites() -> MapSprites (ready) or null,
-    //       apply(change) -> true when it was made (one step of the history)}
+    //       apply(change) -> true when it was made (one step of the history), show(row, column) (optional: the map is brought to that cell; the box closes first)}
     function open(env) {
-        var doc = env.doc, G = env.ground, file = env.file(), vis = env.visible(), plans = {}, cards = {}, scope = vis ? 'part' : 'all', ctl, count, sample, before, after, shown;
+        var doc = env.doc, G = env.ground, file = env.file(), vis = env.visible(), plans = {}, cards = {}, scope = vis ? 'part' : 'all', ctl, count, sample, before, after, shown, spots = {}, gapBox, gapTitle, gapList;
         function el(tag, cls, text) { var n = doc.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
         function made(which) { return plans[which] || (plans[which] = plan(file, which === 'part' ? vis : null, G)); }
+        // the places of this scope that the game has no piece for (as the map would be after Fix edges), worked out once for each scope
+        function spotsOf(which) { return spots[which] || (spots[which] = places(gaps(file, G, which === 'part' ? vis : null, made(which)))); }
+
+        // the box with the places that have no piece in the game: nothing in the file changes, so it is a list and a way to see each place
+        function showGaps() {
+            var list = spotsOf(scope), i;
+            gapBox.hidden = !list.length;
+            while (gapList.firstChild) gapList.removeChild(gapList.firstChild);
+            if (!list.length) return;
+            gapTitle.textContent = list.length === 1 ? '1 place has no piece in the game' : list.length + ' places have no piece in the game';
+            list.slice(0, GAP_LIST).forEach(function (p) {
+                var li = el('li'), b = el('button', 'btn sm', 'Show');
+                li.appendChild(el('span', '', describe(file, G, p)));
+                if (env.show) {
+                    b.type = 'button'; b.setAttribute('aria-label', 'Show ' + describe(file, G, p));
+                    b.addEventListener('click', function () { ctl.close(); env.show((p.r0 + p.r1) >> 1, (p.c0 + p.c1) >> 1); });
+                    li.appendChild(b);
+                }
+                gapList.appendChild(li);
+            });
+            if (list.length > GAP_LIST) gapList.appendChild(el('li', 'more', 'And ' + (list.length - GAP_LIST) + ' more.'));
+        }
 
         function paint(cv, made, win, applied) {
             var s = Math.max(2, Math.min(16, Math.floor(480 / win.w), Math.floor(320 / win.h))), ctx = cv.getContext('2d'), sprites = env.sprites && env.sprites(), tab = Tiles.tableOf(file), by = {}, i, r, c;          // (the table of the dictionary once, not for each tile)
@@ -225,6 +375,7 @@
             sample.hidden = !sample.textContent;
             ctl.setDisabled('fix', !m.count);
             shown = m;
+            showGaps();
         }
 
         function card(which, title, line) {
@@ -256,6 +407,9 @@
                 pair.appendChild(a); pair.appendChild(b);
                 body.appendChild(pair);
                 sample = el('p', 'edsample'); body.appendChild(sample);
+                gapBox = el('div', 'edgaps'); gapTitle = el('h3'); gapList = el('ul');
+                gapBox.hidden = true; gapBox.appendChild(gapTitle); gapBox.appendChild(el('p', 'ednote', GAP_NOTE)); gapBox.appendChild(gapList);
+                body.appendChild(gapBox);
                 body.appendChild(el('p', 'ednote', NOTE));
                 show();
             },
@@ -269,5 +423,5 @@
         return ctl;
     }
 
-    return { plan: plan, strokePlan: strokePlan, change: change, dictionary: dictionary, open: open, shapeOf: shapeOf, primary: primary, lowered: lowered, RANK: RANK, WINDOW: WINDOW };
+    return { plan: plan, strokePlan: strokePlan, strokeStep: strokeStep, change: change, dictionary: dictionary, gaps: gaps, places: places, open: open, shapeOf: shapeOf, primary: primary, lowered: lowered, RANK: RANK, WINDOW: WINDOW };
 });

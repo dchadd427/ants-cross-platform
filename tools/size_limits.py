@@ -42,7 +42,7 @@ SPLIT_PENDING = frozenset({
 FRONT_BUDGET = 1_650_000
 EDITOR_BUDGET, EDITOR_GZIP_BUDGET = 430_000, 125_000
 # scripts that load on first use (raw bytes, gzipped; both files of a pair together unless a script is named alone)
-LAZY_BUDGET, LAZY_GZIP_BUDGET = 66_000, 21_500          # the three lazy map maker scripts together
+LAZY_BUDGET, LAZY_GZIP_BUDGET = 80_000, 25_500          # the three lazy map maker scripts together
 SUBMIT_BUDGET, SUBMIT_GZIP_BUDGET = 35_000, 11_000      # mapmaker_submit.js
 ANTS_BUDGET, ANTS_GZIP_BUDGET = 46_500, 14_000          # the Ants tool
 CONVERT_BUDGET, CONVERT_GZIP_BUDGET = 33_500, 10_500    # Copy, convert and Crop

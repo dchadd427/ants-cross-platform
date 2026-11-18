@@ -26,6 +26,8 @@
         food: 'Tap to put a food pile.', erase: 'Tap to take something away.', pickup: 'Tap something to pick it up. Drag empty ground to look around.', pan: 'Drag to look around.'
     };
 
+    var GAP_MAX = 90000;             // the most cells that the places without a piece are worked out for at once (a part of the map, with a margin)
+
     function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
 
     // env: {doc, win, canvas (MapCanvas), host: {tools (buttons with data-tool), box, title, swatches, name, tile (the phone's one button for the palette), hint, brushes (inputs or buttons with data-brush), fill, undo, redo,
@@ -431,6 +433,7 @@
         // ---- undo and redo ----
         function changed(dirty) {
             if (!dirty) return;
+            rev++;
             canvas.markDirty(dirty);
             canvas.refreshMini();
             showButtons();
@@ -460,22 +463,25 @@
             var item = itemOf('ground', state.ground);
             return !!(item && !item.custom);
         }
-        function applyAuto(rect) {
-            if (!current || !canAuto() || !rect) return 0;
-            var region = { r0: rect.r0 - 2, r1: rect.r1 + 2, c0: rect.c0 - 2, c1: rect.c1 + 2 };
-            var made = edges.strokePlan(env.file(), region, ground, state.ground, current.painted, current.beforeTile);
-            return made.count ? current.change({ names: [], cells: [], solid: [], splices: [], ground: made.cells }) : 0;
-        }
-        function finishAuto() {
-            var b = current && current.box && current.box();
-            if (!b || !canAuto()) return;
-            var f = env.file(), r0 = Math.max(0, b.r0 - 2), r1 = Math.min(f.rows - 1, b.r1 + 2), c0 = Math.max(0, b.c0 - 2), c1 = Math.min(f.columns - 1, b.c1 + 2), cells = [], r, c;
-            for (r = r0; r <= r1; r++) for (c = c0; c <= c1; c++) {
-                var k = r * f.columns + c, now = f.tile1(r, c);
-                if (now !== current.beforeTile(k)) cells.push([k, now]);
+        // One step of Auto edges on the stroke (mapmaker_edges.js, strokeStep: the mud ring beside new water, the pieces, their names)
+        function applyAuto(rect) { return !current || !canAuto() || !rect ? 0 : edges.strokeStep(env.file, rect, ground, state.ground, current); }
+
+        // The places that the game has no piece for, for the canvas (docs/MAP_EDITOR.md, "Cells with no piece"): only while the Ground tool is chosen and no stroke is going on. The answer is worked out for
+        // the part of the map on the screen and a good deal round it, and kept for the map as it is (`rev` counts its changes; a map that was read again is another file), so a pan inside that part asks nothing again.
+        var rev = 0, gapKept = null;
+        function gapsNow(vis) {
+            if (!editor || !edges || !ground || state.tool !== 'ground' || current || !vis) return null;
+            var f = env.file(), k = gapKept;
+            if (!k || k.rev !== rev || k.file !== f || vis.r0 < k.r0 || vis.r1 > k.r1 || vis.c0 < k.c0 || vis.c1 > k.c1) {
+                var dr = Math.max(8, (vis.r1 - vis.r0) >> 1), dc = Math.max(8, (vis.c1 - vis.c0) >> 1);
+                var region = { r0: Math.max(0, vis.r0 - dr), r1: Math.min(f.rows - 1, vis.r1 + dr), c0: Math.max(0, vis.c0 - dc), c1: Math.min(f.columns - 1, vis.c1 + dc) };
+                var area = function (g) { return (g.r1 - g.r0 + 1) * (g.c1 - g.c0 + 1); };
+                if (area(region) > GAP_MAX) region = { r0: vis.r0, r1: vis.r1, c0: vis.c0, c1: vis.c1 };          // (a big part: no margin)
+                if (area(region) > GAP_MAX) return null;                                                          // (a whole big map at once: the plan takes too long to work out for each change)
+                var g = edges.gaps(f, ground, region);
+                k = gapKept = { rev: rev, file: f, r0: region.r0, r1: region.r1, c0: region.c0, c1: region.c1, answer: g.count ? { g: g, places: edges.places(g) } : null };
             }
-            var sp = cells.length ? edges.dictionary(f, { cells: cells }, ground) : null;
-            if (sp) current.change({ names: [], cells: [], solid: [], splices: [sp], ground: [] });
+            return k.answer;
         }
 
         // A whole hill, a team's ants, a food pile, a plant or a bigger object, put with one tap
@@ -488,7 +494,7 @@
             else change = Blocks.placePile(file, cell.row, cell.column, state.stages, state.food || state.units || state.points ? { id: state.food, units: foodUnits(), points: foodPoints() } : null);
             if (change.error) { if (env.say) env.say('It cannot be put there', change.error); return; }
             var was = env.file(), dirty = editor.act(change);
-            fits = '';
+            fits = ''; rev++;
             if (state.tool === 'ants') { var put = Blocks.facts(env.file(), false).ants[state.team]; if (put < state.ants) fits = ' (only ' + put + ' fit)'; }
             if (dirty) changed(dirty);
             else { showInfo(); if (env.file() !== was) env.onEdit(); }                    // (nothing changed on the map, but the dictionary may have got a name: the page is told)
@@ -556,11 +562,12 @@
             end: function () {
                 if (mine()) return mine().end();
                 if (!current) return;
-                finishAuto();
                 var n = current.end();
-                current = null;
+                current = null; rev++;
                 if (n) { canvas.refreshMini(); showButtons(); showInfo(); env.onEdit(); }
             },
+            // the places that have no piece in the game, for the part {r0, r1, c0, c1} of the map on the screen: {g: {r0, c0, rows, columns, bits}, places: [{row, column}]} or null (nothing to draw)
+            gaps: gapsNow,
             // where the pointer is during a stroke (Pick up)
             away: function (where) { if (mine() && mine().away) mine().away(where); },
             // the pointer was lost without a lift (the window lost the focus): Pick up takes the thing back, the painting tools keep the stroke
@@ -569,7 +576,7 @@
                 if (mine()) return mine().cancel();
                 if (!current) return;
                 var d = current.cancel();
-                current = null;
+                current = null; rev++;
                 canvas.markDirty(d);
             }
         };
@@ -638,7 +645,7 @@
 
         return {
             // A map is open (a new one, or one from the disk): the history starts empty
-            setMap: function (file) { editor = Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt, guard: Blocks.blockedText }); current = null; if (ants) ants.setMap(); if (pick) pick.setMap(); showButtons(); showInfo(); },
+            setMap: function (file) { rev++; editor = Edit.create(file, { rebase: env.rebase, erase: Blocks.eraseAt, guard: Blocks.blockedText }); current = null; if (ants) ants.setMap(); if (pick) pick.setMap(); showButtons(); showInfo(); },
             choose: chooseTool, undo: undo, redo: redo,
             // The lazily loaded parts came in (mapmaker_ground.js: the sheets of the kinds; mapmaker_sprites.js: the pictures, or null when the atlas failed): the palette and the tool buttons show them
             use: function (g, s, e) {
