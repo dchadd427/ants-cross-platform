@@ -164,7 +164,7 @@ class TheSkipsAreThere(unittest.TestCase):
 
 class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
     def test_the_documents_name_the_route_the_zone_and_the_tests(self):
-        server = read("docs", "SERVER.md")
+        server = read("docs", "SERVER.md") + read("docs", "SERVER_REPLAYS.md")
         for needle in ("`/lobbies`", "ants_lobbies", "lobbies_off"):
             self.assertIn(needle, server, needle)
         testing = read("docs", "TESTING.md")

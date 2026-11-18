@@ -24,7 +24,7 @@ ants_history --db FILE --recordings DIR --maps DIR --port N
 | `--game-db FILE`, `--submissions-dir DIR` | The game server's database (its `--db`) and its folder of submitted maps (its `--submissions-dir`). The database is opened read only. See "The first start" and "Maps of the players". |
 | `--port N` | The port of the public pages (0: any free port, the log line says which). They listen on this machine only unless `--any-interface` is given (for a container; the host must restrict it). |
 | `--replays-days N`, `--replays-max-mb N` | The game server's own numbers (default 30 and 100). `keep_days` in the lists is the first; the game server's purge does the deleting. |
-| `--settle-seconds N` | A recording that changed less than this many seconds ago is not trusted yet (default 1; [`SERVER.md`](SERVER.md#replays), the store's `settle_s`). A new recording is counted this late at the least. |
+| `--settle-seconds N` | A recording that changed less than this many seconds ago is not trusted yet (default 1; [`SERVER.md`](SERVER_REPLAYS.md#replays), the store's `settle_s`). A new recording is counted this late at the least. |
 | `--look-ms N` | How often the counter looks at the folder (default 250). |
 | `--pace-factor N` | After a recording the counter waits this many times what it took (default 1), so that a backlog of old recordings does not take a whole core. |
 

@@ -85,7 +85,7 @@ Nobody types a name on the web. A person who is logged in with Discord plays und
 
 - **A link that somebody sends you asks first, every time**, except on a reload of a page whose seat this browser holds (it takes the seat back and asks nobody). A card over the page, titled "Join the room k7m 2xq", shows the name in a field that cannot be typed in, a line under it that says whose name it is (a guest gets a link to log in), the recording notice, a **Join** button (or Enter) and **Start a room of my own instead**, for a link that was opened by mistake. The page behind it shows no names and no map ("Joining a room"); the lobby does not connect before you press Join. **Join by code** brings the same card. The game page's own `?join=...&room=...` link asks the same, in its own card; the address that START leads to does not, because this browser holds the key of its seat.
 - A visitor who opens the plain page is not asked: Home opens, and Quick host makes the room at once.
-- The line about recorded online matches (its words, where the pages show it and what an operator who runs the server with other settings changes) is described in [`SERVER.md`](SERVER.md#replays), "The notice on the pages".
+- The line about recorded online matches (its words, where the pages show it and what an operator who runs the server with other settings changes) is described in [`SERVER.md`](SERVER_REPLAYS.md#replays), "The notice on the pages".
 
 ### Rejoin your match (CODE)
 

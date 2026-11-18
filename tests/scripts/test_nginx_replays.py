@@ -264,8 +264,8 @@ class TheLocations(unittest.TestCase):
         self.assertEqual(len(re.findall(r"Recordings are kept for \d+ days", lobby)), 2)       # (no page says another number)
         self.assertEqual(len(re.findall(r"Recordings are kept for \d+ days", shell)), 1)
         self.assertNotIn("Anybody can watch them", lobby)                                       # (the old second sentence is the game page's only)
-        self.assertIn("`ANTS_REPLAY_DAYS`). A server with other settings", read("docs", "SERVER.md"))     # (the document that names the variable says that the pages repeat its number and what to change)
-        self.assertIn("changes the words in `web/lobby.html` and `web/shell.html`", read("docs", "SERVER.md"))
+        self.assertIn("`ANTS_REPLAY_DAYS`). A server with other settings", read("docs", "SERVER_REPLAYS.md"))     # (the document that names the variable says that the pages repeat its number and what to change)
+        self.assertIn("changes the words in `web/lobby.html` and `web/shell.html`", read("docs", "SERVER_REPLAYS.md"))
 
     def test_the_stack_files_say_what_is_kept_which_port_to_leave_alone_and_who_can_reach_the_door(self):
         for name, needles in (("docker-compose.stack.yml", ("ran 30 seconds or more", "Leave it at 4020", "or set 0", "restarts again and again", "is not published on the host at all", "put only containers you trust on it")),
