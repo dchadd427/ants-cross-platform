@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the rematch of a lobby room for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the reserved seats of net::HostLobby against test_lobby N4.41 - N4.49b, the room manager's rematch against test_server S3.194 - S3.203 (the restart record of a code that comes back: S3.203), the game's word to its page against test_network_app N5.98 - N5.99, and the pages (web/front/rematch.js, lobby_net.js, lobby_rules.js) against tests/scripts/web_rematch_check.js, web_lobby_rules_check.js, web_lobby_client_check.js and web_lobby_net_check.js. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/rematch_mutants.json --keep-going --jobs 2. Every mutant must be caught; tests/scripts/test_web_rematch.py runs the pages' ones (those with no build) in the quick tier on a copy of the files.",
+ "note": "Mutants of the rematch of a lobby room for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the reserved seats of net::HostLobby against test_lobby N4.41 - N4.49d, the room manager's rematch against test_server S3.194 - S3.203 (the restart record of a code that comes back: S3.203), the game's word to its page against test_network_app N5.98 - N5.99, and the pages (web/front/rematch.js, lobby_net.js, lobby_rules.js) against tests/scripts/web_rematch_check.js, web_lobby_rules_check.js, web_lobby_client_check.js and web_lobby_net_check.js. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/rematch_mutants.json --keep-going --jobs 2. Every mutant must be caught; tests/scripts/test_web_rematch.py runs the pages' ones (those with no build) in the quick tier on a copy of the files.",
  "mutants": [
   {
    "id": "lobby_reserved_seat_leads",
@@ -849,6 +849,82 @@
    "old": "notice.textContent = isTest ? TEST_NOTICE : noticeWas;",
    "new": "notice.textContent = TEST_NOTICE;",
    "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "lobby_rematch_gives_no_public_choice",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "r.public_by = public_ ? public_by_ : 0u;",
+   "new": "r.public_by = 0u;",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_rematch_lobby_starts_private",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "        public_ = true;",
+   "new": "        public_ = false;",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_public_rematch_private_when_another_leads_first",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "(best == kNoLeader || of_match(best))",
+   "new": "(best == kNoLeader)",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_public_rematch_private_while_nobody_is_back",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "(chooser_kept && (best == kNoLeader || of_match(best)))",
+   "new": "(chooser_kept && best != kNoLeader && of_match(best))",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "lobby_rematch_listing_age_not_restarted",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "        public_by_ = r.public_by;\n        listed_ms_ = now_ms;",
+   "new": "        public_by_ = r.public_by;",
+   "build": "test_lobby",
+   "test": "timeout 300 env ANTS_TEST_FILTER=N4.4 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "leave_game_never_goes_to_the_room",
+   "file": "web/front/rematch.js",
+   "old": "            if (!st.shown || !st.over || !st.key || st.removed || st.blocked) return false;\n            back();\n            return !st.blocked;",
+   "new": "            return false;",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "leave_game_goes_without_the_strip",
+   "file": "web/front/rematch.js",
+   "old": "            if (!st.shown || !st.over || !st.key || st.removed || st.blocked) return false;\n            back();",
+   "new": "            if (!st.over || !st.key || st.removed || st.blocked) return false;\n            back();",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "leave_game_goes_for_a_seat_that_is_gone",
+   "file": "web/front/rematch.js",
+   "old": "            if (!st.shown || !st.over || !st.key || st.removed || st.blocked) return false;\n            back();",
+   "new": "            if (!st.shown || !st.over || !st.key || st.blocked) return false;\n            back();",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "leave_game_says_yes_when_the_storage_refused",
+   "file": "web/front/rematch.js",
+   "old": "            back();\n            return !st.blocked;",
+   "new": "            back();\n            return true;",
+   "test": "node tests/scripts/web_rematch_check.js web/front/rematch.js web/front/lobby_net.js tests/data/match_over.txt web/lobby.html"
+  },
+  {
+   "id": "server_rematch_lobby_of_a_public_room_is_private",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "r.public_by = public_ ? public_by_ : 0u;",
+   "new": "r.public_by = 0u;",
+   "build": "test_server",
+   "test": "timeout 600 env ANTS_TEST_FILTER=S3.241 ./build/tests/test_server/test_server"
   }
  ]
 }
