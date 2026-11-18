@@ -19,8 +19,14 @@
 #if !defined(_WIN32)
 #include <csignal>
 #include <fcntl.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
+#if defined(__linux__)
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+#endif
 extern char** environ;
 #endif
 
@@ -120,7 +126,8 @@ int fake_thumbnailer(int argc, char** argv) {
         for (char** e = environ; *e != nullptr; ++e) names.insert(std::string(*e).substr(0, std::string(*e).find('=')));
         for (const std::string& n : names) report += " " + n;
         char byte = 0;
-        report += "\nstdin: " + std::to_string(read(0, &byte, 1)) + "\nargc: " + std::to_string(argc) + "\n";
+        char here[4096] = {0};
+        report += "\nstdin: " + std::to_string(read(0, &byte, 1)) + "\nargc: " + std::to_string(argc) + "\ncwd: " + (getcwd(here, sizeof here) != nullptr ? here : "?") + "\nnice: " + std::to_string(getpriority(PRIO_PROCESS, 0)) + "\n";
     }
     {
         std::ofstream runs(dir / "runs.log", std::ios::app);
@@ -152,6 +159,8 @@ int fake_thumbnailer(int argc, char** argv) {
         write_file(out, framed_png(10, 10, MapPictures::kMaxPictureBytes + 1));
     } else if (mode == "nothing") {
         return 0;
+    } else if (mode == "code126") {
+        return 126;                                                    // (what the server's own child code says when it could not set itself up)
     } else {
         return 4;
     }
@@ -296,6 +305,30 @@ int main(int argc, char* argv[]) {
         }
     } TEST_END();
 
+    TEST_CASE("MP2.3 Paths that are relative to the server's folder work although the child's folder is the root: the program, the archive, the pictures' folder and the map file are made absolute") {
+        const fs::path here = fs::current_path();
+        TempDir dir;
+        const fs::path inside = fs::path("ants_pictures_relative_" + std::to_string(reinterpret_cast<uintptr_t>(&dir)));     // (a folder under the current one, taken away at the end)
+        fs::create_directories(here / inside);
+        struct Away { fs::path p; ~Away() { std::error_code ec; fs::remove_all(p, ec); } } away{here / inside};
+        write_file(here / inside / "mode-ok", "x");
+        write_file(here / inside / "relative.lvl", "map bytes");
+        MapPicturesConfig c;
+        c.dir = (inside / "pictures").string();
+        c.program = fs::relative(g_self, here).string();
+        c.archive = (inside / "mode-ok").string();
+        MapPictures p(c);
+        std::string why;
+        ASSERT_TRUE(p.open(why) && p.enabled());
+        p.want((inside / "relative.lvl").string());
+        const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+        while ((p.busy() || p.queued() > 0) && std::chrono::steady_clock::now() < until) {
+            p.poll();
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        ASSERT_TRUE(p.ready((inside / "relative.lvl").string()) && p.failures() == 0);
+    } TEST_END();
+
     TEST_CASE("MP3.1 A map that is asked for gets its picture from a child process, once: the picture is kept under the map's name, asking again starts nothing, and get() hands over the bytes") {
         PictureRig rig;
         ASSERT_TRUE(rig.opened && rig.pictures->enabled());
@@ -364,6 +397,76 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(rig.pictures->queued(), size_t{1});
         ASSERT_TRUE(rig.settle());
         ASSERT_TRUE(rig.pictures->ready(a) && rig.pictures->ready(b) && rig.pictures->ready(c));
+    } TEST_END();
+
+    TEST_CASE("MP3.4 A test map is never kept out by the maps that wait for the sweep of the start: its own allowance, its own line in the log, and it goes before them") {
+        PictureRig rig("ok", [](MapPicturesConfig& c) { c.max_queue = 2; c.max_test_queue = 3; });
+        for (const char* stem : {"0000000000000001", "0000000000000002", "0000000000000003"}) rig.pictures->want(rig.map(stem));          // (the third is one too many)
+        ASSERT_EQ(rig.pictures->queued(), size_t{2});
+        for (const char* stem : {"test-00000001", "test-00000002", "test-00000003", "test-00000004"}) rig.pictures->want(rig.map(stem));
+        ASSERT_EQ(rig.pictures->queued(), size_t{5});                                  // (three test maps came in although the maps of the sweep are as many as may wait; the fourth is one too many)
+        const std::vector<std::string> notices = rig.pictures->take_notices();
+        ASSERT_TRUE(notices.size() == 2 && notices[0].find("2 maps") != std::string::npos && notices[1].find("3 test maps") != std::string::npos);
+        ASSERT_EQ(rig.pictures->queue_order(), (std::vector<std::string>{"test-00000003", "test-00000002", "test-00000001", "0000000000000001", "0000000000000002"}));
+        ASSERT_TRUE(rig.settle());
+        ASSERT_EQ(rig.pictures->made(), size_t{5});
+        rig.pictures->want(rig.map("test-00000004"));                                    // (the allowance is free again as the maps are made)
+        ASSERT_EQ(rig.pictures->queued(), size_t{1});
+    } TEST_END();
+
+    TEST_CASE("MP3.5 A process that cannot be started now is no failure of the map: the job goes back to the front, the queue waits and is not drained, the log says so once, and the pictures come when a process can be started") {
+        int calls = 0;
+        bool failing = true;
+        PictureRig rig("ok", [&](MapPicturesConfig& c) {
+            c.fork_retry_ms = 150;
+            c.fork_hook = [&]() -> long {
+                ++calls;
+                if (failing) {
+                    errno = EAGAIN;
+                    return -1;
+                }
+                return static_cast<long>(fork());
+            };
+        });
+        const std::string a = rig.map("fork-a"), b = rig.map("fork-b"), c = rig.map("fork-c");
+        rig.pictures->want(a);
+        rig.pictures->want(b);
+        rig.pictures->want(c);
+        rig.pictures->poll();
+        ASSERT_EQ(calls, 1);                                                             // (one try, not one for every map of the queue)
+        ASSERT_TRUE(rig.pictures->failures() == 0 && !rig.pictures->busy());
+        ASSERT_EQ(rig.pictures->queue_order(), (std::vector<std::string>{"fork-a", "fork-b", "fork-c"}));          // (the first keeps its place at the front)
+        const std::vector<std::string> notices = rig.pictures->take_notices();
+        ASSERT_TRUE(notices.size() == 1 && notices[0].find("cannot be started now") != std::string::npos && notices[0].find("fork-") == std::string::npos);
+        rig.pictures->poll();
+        rig.pictures->poll();
+        ASSERT_EQ(calls, 1);                                                             // (it waits: no second try before the pause is over)
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        rig.pictures->poll();
+        ASSERT_EQ(calls, 2);
+        ASSERT_TRUE(rig.pictures->failures() == 0 && rig.pictures->queued() == 3);
+        ASSERT_TRUE(rig.pictures->take_notices().empty());                               // (said once)
+        failing = false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ASSERT_TRUE(rig.settle());
+        ASSERT_TRUE(rig.pictures->ready(a) && rig.pictures->ready(b) && rig.pictures->ready(c));
+        ASSERT_EQ(rig.runs(), std::string("ok fork-a.lvl\nok fork-b.lvl\nok fork-c.lvl\n"));
+        ASSERT_EQ(rig.pictures->failures(), size_t{0});
+    } TEST_END();
+
+    TEST_CASE("MP3.6 A child that could not set itself up (its exit code 126) is not the map's failure either: the job waits and is tried again, nothing is marked failed") {
+        PictureRig rig("code126", [](MapPicturesConfig& c) { c.fork_retry_ms = 40; });
+        rig.pictures->want(rig.map("setup-a"));
+        const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(700);
+        while (std::chrono::steady_clock::now() < until) {
+            rig.pictures->poll();
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        ASSERT_EQ(rig.pictures->failures(), size_t{0});
+        ASSERT_TRUE(rig.run_count() >= 3);                                               // (tried again and again, at the pause's pace)
+        ASSERT_TRUE(rig.pictures->busy() || rig.pictures->queued() == 1);
+        const std::vector<std::string> notices = rig.pictures->take_notices();
+        ASSERT_TRUE(notices.size() == 1 && notices[0].find("could not be set up") != std::string::npos);
     } TEST_END();
 
     TEST_CASE("MP4.1 A picture maker that fails leaves no picture, costs one line (its own first line, cut to printable text) and is not asked about the same map again for a while") {
@@ -455,6 +558,9 @@ int main(int argc, char* argv[]) {
             for (const char* name : {"SDL_AUDIODRIVER", "SDL_RENDER_DRIVER", "SDL_VIDEODRIVER"}) ASSERT_TRUE(report.find(name) != std::string::npos);
             for (const char* name : {"PATH", "HOME", "USER", "ANTS_"}) ASSERT_TRUE(report.substr(report.find("env:"), report.find("stdin:") - report.find("env:")).find(name) == std::string::npos);          // (nothing of the server's)
             ASSERT_TRUE(report.find("stdin: 0\n") != std::string::npos);
+            ASSERT_TRUE(report.find("cwd: /\n") != std::string::npos);                  // (the root folder, never the server's own: /results holds the control secret and the database)
+            const size_t nice_at = report.find("nice: ");
+            ASSERT_TRUE(nice_at != std::string::npos && std::atoi(report.c_str() + nice_at + 6) >= 10);          // (the lowest priority: the rooms come first)
             ASSERT_TRUE(report.find("argc: 10\n") != std::string::npos);                 // (program, --chd, archive, --out, file, --memory-mb, N, --seconds, N, map: ten)
         }
         close(fds[0]);
@@ -475,6 +581,45 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(rig.settle());
         ASSERT_EQ(rig.run_count(), size_t{1});
     } TEST_END();
+
+#if defined(__linux__)
+    TEST_CASE("MP5.3 A child does not outlive the server: when the server dies without any clean up, the picture maker gets a SIGKILL (Linux)") {
+        TempDir dir;
+        const fs::path folder = dir.path / "pictures";
+        write_file(dir.path / "mode-hang", "x");
+        write_file(dir.path / "stand-in-map.lvl", "map bytes");
+        const pid_t stand_in = fork();
+        ASSERT_TRUE(stand_in >= 0);
+        if (stand_in == 0) {                                                             // (a stand-in for the server: it starts the picture maker that hangs, and dies at once, as a killed server does)
+            MapPicturesConfig c;
+            c.dir = folder.string();
+            c.program = g_self;
+            c.archive = (dir.path / "mode-hang").string();
+            MapPictures p(c);
+            std::string why;
+            if (!p.open(why)) _exit(2);
+            p.want((dir.path / "stand-in-map.lvl").string());
+            p.poll();
+            for (int i = 0; i < 500 && !fs::exists(folder / "hung.pid"); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            _exit(fs::exists(folder / "hung.pid") ? 0 : 3);                              // (no destructor: it would kill the child itself)
+        }
+        int status = 0;
+        waitpid(stand_in, &status, 0);
+        ASSERT_TRUE(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+        const long pid = std::strtol(read_file(folder / "hung.pid").c_str(), nullptr, 10);
+        ASSERT_TRUE(pid > 1);
+        const auto gone = [&]() {                                                        // (a process that is dead but not yet collected by its new parent is gone too)
+            std::ifstream in("/proc/" + std::to_string(pid) + "/stat");
+            std::string line((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            const size_t close_paren = line.rfind(')');
+            return line.empty() || (close_paren != std::string::npos && close_paren + 2 < line.size() && line[close_paren + 2] == 'Z');
+        };
+        for (int i = 0; i < 300 && !gone(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        const bool died = gone();
+        if (!died) kill(static_cast<pid_t>(pid), SIGKILL);                               // (do not leave it asleep for a minute)
+        ASSERT_TRUE(died);
+    } TEST_END();
+#endif
 
     TEST_CASE("MP6.1 prune() deletes the pictures of maps that are gone (and what a failed run left), keeps the others, and forgets the failure of a map that is gone") {
         PictureRig rig;
@@ -589,6 +734,58 @@ int main(int argc, char* argv[]) {
             ASSERT_EQ(std::system((quoted + " --chd \"" + (fs::temp_directory_path() / "no-archive.chd").string() + "\" --out \"" + out.string() + "\" \"" + tiny + "\" > /dev/null 2>&1").c_str()) >> 8, 3);
             ASSERT_FALSE(fs::exists(out));
         } TEST_END();
+
+#if defined(__linux__)
+        TEST_CASE("MP7.5 The program's own limits are in force (Linux): a limit of address space below what the program already holds gives it nothing more, and no picture comes; the same command without that limit draws the map") {
+            TempDir dir;
+            const std::string tiny = (fs::path(maps_dir()) / "TINY.LVL").string();
+            const std::string common = "\"" + thumb + "\" --chd \"" + archive + "\" --out ";
+            const fs::path limited = dir.path / "limited.png", free_run = dir.path / "free.png";
+            const int limited_status = std::system((common + "\"" + limited.string() + "\" --memory-mb 16 \"" + tiny + "\" > /dev/null 2>&1").c_str());
+            ASSERT_TRUE(limited_status != 0);
+            ASSERT_TRUE(!fs::exists(limited) || fs::file_size(limited) == 0);
+            ASSERT_EQ(std::system((common + "\"" + free_run.string() + "\" --memory-mb 1536 \"" + tiny + "\" > /dev/null 2>&1").c_str()), 0);
+            uint32_t w = 0, h = 0;
+            ASSERT_TRUE(size_of_png(read_file(free_run), w, h) && w == 300 && h == 300);
+        } TEST_END();
+
+        // what this kernel and this container allow, asked by the test itself: the program must then have it (a program that took nothing away would otherwise pass as "not available here")
+        const bool landlock_here = syscall(444, nullptr, size_t{0}, 1u) >= 1;
+#if defined(__x86_64__) || defined(__aarch64__)
+        const bool seccomp_here = prctl(PR_GET_SECCOMP) >= 0;
+#else
+        const bool seccomp_here = false;
+#endif
+        TEST_CASE("MP7.6 What the program takes away from itself (Linux, where the kernel allows it): after it holds what it needs, a file that it could read a moment before is refused, and so is a socket; a secret beside the pictures stays unread") {
+            TempDir dir;
+            write_file(dir.path / "control-secret", "a secret that only the server may read");
+            const fs::path report = dir.path / "probe.txt";
+            ASSERT_EQ(std::system(("\"" + thumb + "\" --sandbox-probe \"" + (dir.path / "control-secret").string() + "\" > \"" + report.string() + "\" 2>&1").c_str()), 0);
+            const std::string text = read_file(report);
+            ASSERT_TRUE(text.find("before: opened\n") != std::string::npos);            // (the file is there and readable: the refusal below is the sandbox's, not a mistake of the test)
+            if (!landlock_here && !seccomp_here) std::cout << "(this kernel or container allows no sandbox) ";
+            if (landlock_here) ASSERT_TRUE(text.find("landlock") != std::string::npos && text.find("after: refused\n") != std::string::npos);
+            else ASSERT_TRUE(text.find("after: opened\n") != std::string::npos);
+            if (seccomp_here) ASSERT_TRUE(text.find("seccomp") != std::string::npos && text.find("inet: refused\n") != std::string::npos && text.find("unix: refused\n") != std::string::npos);
+            else ASSERT_TRUE(text.find("inet: made\n") != std::string::npos);
+        } TEST_END();
+
+        TEST_CASE("MP7.7 The sandbox is in force in a real run, before the bytes of the map are read: a map that is no map is refused after the sandbox line, and a real map is still drawn under it") {
+            TempDir dir;
+            write_file(dir.path / "garbage.lvl", std::string(3000, '\x5a'));
+            const std::string common = "\"" + thumb + "\" --chd \"" + archive + "\" --say-sandbox --out \"" + (dir.path / "out.png").string() + "\" ";
+            const int garbage_status = std::system((common + "\"" + (dir.path / "garbage.lvl").string() + "\" > /dev/null 2> \"" + (dir.path / "garbage.txt").string() + "\"").c_str());
+            ASSERT_EQ(garbage_status >> 8, 3);
+            const std::string said = read_file(dir.path / "garbage.txt");
+            const size_t at = said.find("sandbox: ");
+            ASSERT_TRUE(at != std::string::npos && said.find("cannot be read") != std::string::npos && at < said.find("cannot be read"));     // (the sandbox line first: the parse came after it)
+            if (landlock_here) ASSERT_TRUE(said.find("landlock") != std::string::npos);
+            if (seccomp_here) ASSERT_TRUE(said.find("seccomp") != std::string::npos);
+            ASSERT_EQ(std::system((common + "\"" + (fs::path(maps_dir()) / "TINY.LVL").string() + "\" > /dev/null 2>&1").c_str()), 0);
+            uint32_t w = 0, h = 0;
+            ASSERT_TRUE(size_of_png(read_file(dir.path / "out.png"), w, h) && w == 300 && h == 300);
+        } TEST_END();
+#endif
     }
 #endif
 

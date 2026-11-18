@@ -812,6 +812,7 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(pictures.queued(), size_t{0});
         rig.store->want_pictures();
         ASSERT_EQ(pictures.queued(), size_t{2});                                         // (the waiting one and the approved one; the taken-down map is in neither list, the declined one has no file)
+        ASSERT_EQ(pictures.queue_order(), (std::vector<std::string>{approved.submission.id, waiting.submission.id}));          // (the approved map first: it is on the lists that people look at)
         rig.store->want_pictures();
         ASSERT_EQ(pictures.queued(), size_t{2});
         ASSERT_FALSE(pictures.ready((fs::path(rig.config.dir) / "files" / waiting.submission.file).string()));

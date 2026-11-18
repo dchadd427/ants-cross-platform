@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the pictures of the players' maps (src/ants_app/png_encode.cpp, map_thumbnail.cpp, src/ants_server/map_pictures.cpp and the three places that ask for a picture: submissions.cpp, test_maps.cpp and the door in control.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/map_pictures_mutants.json --keep-going --jobs 1 --timeout 600. Every mutant must be caught: each breaks one rule of docs/MAP_SUBMISSIONS.md, 'Pictures' (a picture that every PNG reader decodes, the same picture as the setup screen's, what the server keeps and refuses, one picture maker at a time with a time limit and nothing of the server's in it, a map that is sent, approved or tried gets its picture asked for). The case test_map_pictures runs the real picture maker too, so the build line has ants_thumb.",
+ "note": "Mutants of the pictures of the players' maps (src/ants_app/png_encode.cpp, map_thumbnail.cpp, src/ants_server/map_pictures.cpp and the three places that ask for a picture: submissions.cpp, test_maps.cpp and the door in control.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/map_pictures_mutants.json --keep-going --jobs 1 --timeout 600. Every mutant must be caught: each breaks one rule of docs/MAP_SUBMISSIONS.md, 'Pictures' (a picture that every PNG reader decodes, the same picture as the setup screen's, what the server keeps and refuses, one picture maker at a time with a time limit and nothing of the server's in it, a map that is sent, approved or tried gets its picture asked for). The case test_map_pictures runs the real picture maker too, so the build line has ants_thumb. The mutants of the program's own limits and of its sandbox (program_limit_*, sandbox_*, child_outlives_the_server, map_parsed_before_the_sandbox) are Linux code (RLIMIT_AS is not enforced on macOS, Landlock, seccomp and the parent-death signal are Linux only): run them in a Linux build (docs/TESTING.md, the pictures row). child_keeps_the_servers_priority needs a test run that is not itself started with a nice value of 10 or more.",
  "baseline": [
   {
    "build": "test_png_encode test_map_pictures test_map_preview test_submissions test_test_maps test_map_list ants_thumb",
@@ -219,8 +219,8 @@
   {
    "id": "start_asks_for_maps_that_have_no_file",
    "file": "src/ants_server/submissions.cpp",
-   "old": "    for (const char* state : {\"waiting\", \"approved\"}) {\n        std::vector<Submission> kept;\n        Failure why;\n        if (!list(state, kept, why)) continue;\n        for (const Submission& s : kept) {\n            if (s.file_kept) pictures_->want(path_of(config_, s.file));",
-   "new": "    for (const char* state : {\"waiting\", \"approved\", \"declined\"}) {\n        std::vector<Submission> kept;\n        Failure why;\n        if (!list(state, kept, why)) continue;\n        for (const Submission& s : kept) {\n            pictures_->want(path_of(config_, s.file));",
+   "old": "    for (const char* state : {\"approved\", \"waiting\"}) {                           // (the approved ones first: they are on the lists that people look at; a waiting map is looked at by the admin only)\n        std::vector<Submission> kept;\n        Failure why;\n        if (!list(state, kept, why)) continue;\n        for (const Submission& s : kept) {\n            if (s.file_kept) pictures_->want(path_of(config_, s.file));",
+   "new": "    for (const char* state : {\"approved\", \"waiting\", \"declined\"}) {\n        std::vector<Submission> kept;\n        Failure why;\n        if (!list(state, kept, why)) continue;\n        for (const Submission& s : kept) {\n            pictures_->want(path_of(config_, s.file));",
    "build": "test_submissions",
    "test": "./build/tests/test_server/test_submissions",
    "expect": "SUB6.2"
@@ -255,11 +255,155 @@
   {
    "id": "test_map_waits_behind_the_sweep",
    "file": "src/ants_server/map_pictures.cpp",
-   "old": "    if (stem.compare(0, 5, \"test-\") == 0) queue_.push_front(Job{stem, map_path});",
-   "new": "    if (false) queue_.push_front(Job{stem, map_path});",
+   "old": "    if (test) {\n        queue_.push_front(Job{stem, map_path});",
+   "new": "    if (false) {\n        queue_.push_front(Job{stem, map_path});",
    "build": "test_map_pictures ants_thumb",
    "test": "ANTS_THUMB=./build/src/ants_thumb/ants_thumb ./build/tests/test_server/test_map_pictures",
    "expect": "MP3.2b"
+  },
+  {
+   "id": "no_process_drains_the_queue",
+   "file": "src/ants_server/map_pictures.cpp",
+   "old": "        if (start(job) == Start::Transient) {",
+   "new": "        if (false) {",
+   "build": "test_map_pictures ants_thumb",
+   "test": "ANTS_THUMB=./build/src/ants_thumb/ants_thumb ./build/tests/test_server/test_map_pictures",
+   "expect": "MP3.5"
+  },
+  {
+   "id": "no_process_is_tried_again_at_once",
+   "file": "src/ants_server/map_pictures.cpp",
+   "old": "    if (Clock::now() < retry_at_) return;\n",
+   "new": "",
+   "build": "test_map_pictures ants_thumb",
+   "test": "ANTS_THUMB=./build/src/ants_thumb/ants_thumb ./build/tests/test_server/test_map_pictures",
+   "expect": "MP3.5"
+  },
+  {
+   "id": "child_set_up_failure_marks_the_map",
+   "file": "src/ants_server/map_pictures.cpp",
+   "old": "    if (!exited_ok && how.find(\"code 126\") != std::string::npos) {",
+   "new": "    if (false) {",
+   "build": "test_map_pictures ants_thumb",
+   "test": "ANTS_THUMB=./build/src/ants_thumb/ants_thumb ./build/tests/test_server/test_map_pictures",
+   "expect": "MP3.6"
+  },
+  {
+   "id": "test_maps_share_the_sweeps_allowance",
+   "file": "src/ants_server/map_pictures.cpp",
+   "old": "    if (test ? test_queued_ >= config_.max_test_queue : queue_.size() - test_queued_ >= config_.max_queue) {",
+   "new": "    if (queue_.size() >= config_.max_queue) {",
+   "build": "test_map_pictures ants_thumb",
+   "test": "ANTS_THUMB=./build/src/ants_thumb/ants_thumb ./build/tests/test_server/test_map_pictures",
+   "expect": "MP3.4"
+  },
+  {
+   "id": "waiting_maps_before_approved_ones",
+   "file": "src/ants_server/submissions.cpp",
+   "old": "    for (const char* state : {\"approved\", \"waiting\"}) {",
+   "new": "    for (const char* state : {\"waiting\", \"approved\"}) {",
+   "build": "test_submissions",
+   "test": "./build/tests/test_server/test_submissions",
+   "expect": "SUB6.2"
+  },
+  {
+   "id": "child_keeps_the_servers_folder",
+   "file": "src/ants_server/map_pictures.cpp",
+   "old": "        if (chdir(\"/\") != 0) _exit(126);\n",
+   "new": "",
+   "build": "test_map_pictures ants_thumb",
+   "test": "ANTS_THUMB=./build/src/ants_thumb/ants_thumb ./build/tests/test_server/test_map_pictures",
+   "expect": "MP5.1"
+  },
+  {
+   "id": "child_keeps_the_servers_priority",
+   "file": "src/ants_server/map_pictures.cpp",
+   "old": "        setpriority(PRIO_PROCESS, 0, child_nice);\n",
+   "new": "        (void)child_nice;\n",
+   "build": "test_map_pictures ants_thumb",
+   "test": "ANTS_THUMB=./build/src/ants_thumb/ants_thumb ./build/tests/test_server/test_map_pictures",
+   "expect": "MP5.1"
+  },
+  {
+   "id": "child_outlives_the_server",
+   "file": "src/ants_server/map_pictures.cpp",
+   "old": "        prctl(PR_SET_PDEATHSIG, SIGKILL);\n",
+   "new": "",
+   "build": "test_map_pictures ants_thumb",
+   "test": "ANTS_THUMB=./build/src/ants_thumb/ants_thumb ./build/tests/test_server/test_map_pictures",
+   "expect": "MP5.3"
+  },
+  {
+   "id": "program_limit_memory_removed",
+   "file": "src/ants_thumb/main.cpp",
+   "old": "    set(RLIMIT_AS, static_cast<rlim_t>(o.memory_mb) * 1024u * 1024u);\n",
+   "new": "",
+   "build": "test_map_pictures ants_thumb",
+   "test": "ANTS_THUMB=./build/src/ants_thumb/ants_thumb ./build/tests/test_server/test_map_pictures",
+   "expect": "MP7.5"
+  },
+  {
+   "id": "sandbox_no_files_taken_away",
+   "file": "src/ants_thumb/sandbox.cpp",
+   "old": "    apply_landlock(out);\n",
+   "new": "",
+   "build": "test_map_pictures ants_thumb",
+   "test": "ANTS_THUMB=./build/src/ants_thumb/ants_thumb ./build/tests/test_server/test_map_pictures",
+   "expect": "MP7.6"
+  },
+  {
+   "id": "sandbox_reading_is_still_allowed",
+   "file": "src/ants_thumb/sandbox.cpp",
+   "old": "    uint64_t rights = (uint64_t{1} << 13) - 1;",
+   "new": "    uint64_t rights = ((uint64_t{1} << 13) - 1) & ~(uint64_t{1} << 2);",
+   "build": "test_map_pictures ants_thumb",
+   "test": "ANTS_THUMB=./build/src/ants_thumb/ants_thumb ./build/tests/test_server/test_map_pictures",
+   "expect": "MP7.6"
+  },
+  {
+   "id": "sandbox_no_filter_for_sockets",
+   "file": "src/ants_thumb/sandbox.cpp",
+   "old": "    out.seccomp = apply_seccomp();",
+   "new": "    out.seccomp = false;",
+   "build": "test_map_pictures ants_thumb",
+   "test": "ANTS_THUMB=./build/src/ants_thumb/ants_thumb ./build/tests/test_server/test_map_pictures",
+   "expect": "MP7.6"
+  },
+  {
+   "id": "sandbox_sockets_not_in_the_filter",
+   "file": "src/ants_thumb/sandbox.cpp",
+   "old": "        SYS_socket,\n",
+   "new": "",
+   "build": "test_map_pictures ants_thumb",
+   "test": "ANTS_THUMB=./build/src/ants_thumb/ants_thumb ./build/tests/test_server/test_map_pictures",
+   "expect": "MP7.6"
+  },
+  {
+   "id": "sandbox_without_no_new_privs",
+   "file": "src/ants_thumb/sandbox.cpp",
+   "old": "    out.no_new_privs = prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0;",
+   "new": "    out.no_new_privs = true;",
+   "build": "test_map_pictures ants_thumb",
+   "test": "ANTS_THUMB=./build/src/ants_thumb/ants_thumb ./build/tests/test_server/test_map_pictures",
+   "expect": "MP7.6"
+  },
+  {
+   "id": "map_parsed_before_the_sandbox",
+   "file": "src/ants_thumb/main.cpp",
+   "old": "            const ants_thumb::Sandbox sandbox = ants_thumb::apply_sandbox();     // (what is not here now is not reached by the bytes of the map: sandbox.hpp)\n            if (o.say_sandbox) std::cerr << \"ants_thumb: sandbox: \" << ants_thumb::describe(sandbox) << \"\\n\";\n            ants::assets::LevelData level;\n            ants::assets::LevelValidation verdict;\n            if (!level.load_from_memory(map_bytes.data(), map_bytes.size(), &verdict, ants::assets::LevelLimits::for_play_extended())) {",
+   "new": "            ants::assets::LevelData level;\n            ants::assets::LevelValidation verdict;\n            const bool read_it = level.load_from_memory(map_bytes.data(), map_bytes.size(), &verdict, ants::assets::LevelLimits::for_play_extended());\n            if (!read_it) std::cerr << \"ants_thumb: the map cannot be read\\n\";          // (the diagnostics of the parse come when it is done: before the sandbox)\n            const ants_thumb::Sandbox sandbox = ants_thumb::apply_sandbox();\n            if (o.say_sandbox) std::cerr << \"ants_thumb: sandbox: \" << ants_thumb::describe(sandbox) << \"\\n\";\n            if (!read_it) {",
+   "build": "test_map_pictures ants_thumb",
+   "test": "ANTS_THUMB=./build/src/ants_thumb/ants_thumb ./build/tests/test_server/test_map_pictures",
+   "expect": "MP7.7"
+  },
+  {
+   "id": "relative_program_stays_relative",
+   "file": "src/ants_server/map_pictures.cpp",
+   "old": "    if (!config_.program.empty()) config_.program = fs::absolute(config_.program, ec).string();\n",
+   "new": "",
+   "build": "test_map_pictures ants_thumb",
+   "test": "ANTS_THUMB=./build/src/ants_thumb/ants_thumb ./build/tests/test_server/test_map_pictures",
+   "expect": "MP2.3"
   }
  ]
 }

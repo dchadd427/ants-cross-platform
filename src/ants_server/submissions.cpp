@@ -605,7 +605,7 @@ std::string SubmissionStore::preview_png(const std::string& id) {
 
 void SubmissionStore::want_pictures() {
     if (pictures_ == nullptr || !open_) return;
-    for (const char* state : {"waiting", "approved"}) {
+    for (const char* state : {"approved", "waiting"}) {                           // (the approved ones first: they are on the lists that people look at; a waiting map is looked at by the admin only)
         std::vector<Submission> kept;
         Failure why;
         if (!list(state, kept, why)) continue;

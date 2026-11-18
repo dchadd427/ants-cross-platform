@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -10,11 +11,13 @@
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <signal.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #if defined(__linux__)
+#include <sys/prctl.h>
 #include <sys/syscall.h>
 #endif
 #endif
@@ -29,6 +32,8 @@ namespace {
 constexpr int kPictureVersion = 1;
 constexpr const char* kVersionFile = "version";
 
+bool is_test_stem(const std::string& stem) { return stem.compare(0, 5, "test-") == 0; }
+
 bool good_stem(const std::string& stem) {
     if (stem.empty() || stem.size() > 64) return false;
     return std::all_of(stem.begin(), stem.end(), [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '-' || c == '_'; });
@@ -36,6 +41,7 @@ bool good_stem(const std::string& stem) {
 
 #if !defined(_WIN32)
 constexpr uint64_t kMaxMapFileBytes = 4u * 1024u * 1024u;       // MapStore::kMaxMapBytes: a larger file is no map of the server's
+constexpr int kChildNice = 10;                                  // the picture maker never competes with the rooms: at least this nice value
 
 std::string printable(std::string text, size_t most) {
     for (char& c : text) {
@@ -131,6 +137,11 @@ bool MapPictures::open(std::string& why) {
         return false;
     }
     std::error_code ec;
+    // every path is made absolute now: the child's working folder is the root folder, so that a relative path of the operator's would not name the same file there
+    config_.dir = fs::absolute(config_.dir, ec).string();
+    if (!config_.program.empty()) config_.program = fs::absolute(config_.program, ec).string();
+    if (!config_.archive.empty()) config_.archive = fs::absolute(config_.archive, ec).string();
+    ec.clear();
     fs::create_directories(config_.dir, ec);
     if (ec || !fs::is_directory(config_.dir, ec)) {
         why = "the folder of the pictures cannot be made: " + (ec ? ec.message() : std::string("not a folder"));
@@ -199,14 +210,21 @@ void MapPictures::want(const std::string& map_path) {
     if (running_pid_ != 0 && running_.stem == stem) return;
     const auto failed = failed_.find(stem);
     if (failed != failed_.end() && std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - failed->second).count() < static_cast<int64_t>(kRetryAfterMs)) return;
-    if (queue_.size() >= config_.max_queue) {
-        if (!queue_full_said_) notices_.push_back("map pictures: " + std::to_string(config_.max_queue) + " maps are waiting for their picture, no more are queued for now");
-        queue_full_said_ = true;
+    // two allowances: the sweep of the start (hundreds of maps) must never keep out a test map that a person waits for
+    const bool test = is_test_stem(stem);
+    if (test ? test_queued_ >= config_.max_test_queue : queue_.size() - test_queued_ >= config_.max_queue) {
+        bool& said = test ? test_queue_full_said_ : queue_full_said_;
+        if (!said) notices_.push_back("map pictures: " + std::to_string(test ? config_.max_test_queue : config_.max_queue) + (test ? " test maps" : " maps") + " are waiting for their picture, no more are queued for now");
+        said = true;
         return;
     }
-    queue_full_said_ = false;
-    if (stem.compare(0, 5, "test-") == 0) queue_.push_front(Job{stem, map_path});         // (a test map's picture has a person waiting for it: it goes before the maps that the start asks for)
-    else queue_.push_back(Job{stem, map_path});
+    (test ? test_queue_full_said_ : queue_full_said_) = false;
+    if (test) {
+        queue_.push_front(Job{stem, map_path});                     // (a test map's picture has a person waiting for it: it goes before the maps that the start asks for)
+        ++test_queued_;
+    } else {
+        queue_.push_back(Job{stem, map_path});
+    }
     queued_.insert(stem);
 }
 
@@ -236,18 +254,19 @@ void MapPictures::fail(const std::string& stem, const std::string& why) {
 
 #if !defined(_WIN32)
 
-bool MapPictures::start(const Job& job) {
+MapPictures::Start MapPictures::start(const Job& job) {
     std::error_code ec;
     const uint64_t size = fs::is_regular_file(job.map_path, ec) ? fs::file_size(job.map_path, ec) : 0;
     if (ec || size == 0 || size > kMaxMapFileBytes) {
         fail(job.stem, "the map file is gone or is not a map file of the server");
-        return false;
+        return Start::MapFailed;
     }
     running_temp_ = (fs::path(config_.dir) / (job.stem + ".tmp")).string();
     running_log_ = (fs::path(config_.dir) / (job.stem + ".err")).string();
     // everything that the child needs is made before the fork: between fork and exec only calls that are safe there are made
+    const std::string map_path = fs::absolute(job.map_path, ec).string();                      // (the child's folder is the root: the path must not depend on the server's own)
     const std::vector<std::string> args = {config_.program, "--chd", config_.archive, "--out", running_temp_, "--memory-mb", std::to_string(config_.memory_mb),
-                                           "--seconds", std::to_string(std::max<uint32_t>(1, config_.timeout_ms / 1000u)), job.map_path};
+                                           "--seconds", std::to_string(std::max<uint32_t>(1, config_.timeout_ms / 1000u)), map_path};
     std::vector<char*> argv;
     for (const std::string& a : args) argv.push_back(const_cast<char*>(a.c_str()));
     argv.push_back(nullptr);
@@ -258,13 +277,29 @@ bool MapPictures::start(const Job& job) {
     long open_max = sysconf(_SC_OPEN_MAX);
     if (open_max < 0 || open_max > 4096) open_max = 4096;
     const char* const log_path = running_log_.c_str();
+    const pid_t server = getpid();
+    errno = 0;
+    const int own_nice = getpriority(PRIO_PROCESS, 0);
+    const int child_nice = errno == 0 && own_nice > kChildNice ? own_nice : kChildNice;          // (never a better priority than the server's own)
 
-    const pid_t pid = fork();
+    const pid_t pid = config_.fork_hook ? static_cast<pid_t>(config_.fork_hook()) : fork();
     if (pid < 0) {
-        fail(job.stem, "a process could not be started");
-        return false;
+        const int why = errno;
+        if (!transient_said_) notices_.push_back(std::string("map pictures: a process cannot be started now (") + std::strerror(why) + "); the pictures wait and are tried again in " + std::to_string(config_.fork_retry_ms / 1000u + (config_.fork_retry_ms % 1000u != 0 ? 1u : 0u)) + " s");
+        transient_said_ = true;
+        return Start::Transient;
     }
     if (pid == 0) {
+        // the child, before it is the picture maker: its own folder is the root (never the results folder, which holds the control secret and the database), the lowest priority, and a SIGKILL when the
+        // server dies (Linux; a server that died between the fork and here leaves a parent that is no longer the server)
+        if (chdir("/") != 0) _exit(126);
+        setpriority(PRIO_PROCESS, 0, child_nice);
+#if defined(__linux__)
+        prctl(PR_SET_PDEATHSIG, SIGKILL);
+        if (getppid() != server) _exit(126);
+#else
+        (void)server;
+#endif
         const int in = ::open("/dev/null", O_RDONLY);
         const int out = ::open("/dev/null", O_WRONLY);
         const int err = ::open(log_path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
@@ -273,20 +308,39 @@ bool MapPictures::start(const Job& job) {
         execve(argv[0], argv.data(), envp);
         _exit(127);
     }
+    transient_said_ = false;
     running_pid_ = static_cast<long>(pid);
     running_ = job;
     started_ = Clock::now();
-    return true;
+    return Start::Started;
+}
+
+void MapPictures::put_back(const Job& job, const std::string& why) {
+    queue_.push_front(job);
+    queued_.insert(job.stem);
+    if (is_test_stem(job.stem)) ++test_queued_;
+    retry_at_ = Clock::now() + std::chrono::milliseconds(config_.fork_retry_ms);
+    if (!why.empty() && !setup_said_) {
+        notices_.push_back("map pictures: " + why + "; the pictures wait and are tried again");
+        setup_said_ = true;
+    }
 }
 
 void MapPictures::finish(bool exited_ok, const std::string& how) {
     const Job job = running_;
     running_pid_ = 0;
     std::error_code ec;
+    if (!exited_ok && how.find("code 126") != std::string::npos) {        // (the child could not set itself up: descriptors, folder; nothing about the map)
+        fs::remove(running_temp_, ec);
+        fs::remove(running_log_, ec);
+        put_back(job, "the picture maker could not be set up");
+        return;
+    }
     if (exited_ok && is_good_png(running_temp_)) {
         fs::rename(running_temp_, picture_path(job.stem), ec);
         if (!ec) {
             ready_.insert(job.stem);
+            setup_said_ = false;
             failed_.erase(job.stem);
             fs::remove(running_log_, ec);
             return;
@@ -316,17 +370,24 @@ void MapPictures::poll() {
         }
         return;
     }
+    if (Clock::now() < retry_at_) return;
     while (!queue_.empty() && running_pid_ == 0) {
         const Job job = queue_.front();
         queue_.pop_front();
         queued_.erase(job.stem);
-        if (ready_.count(job.stem) == 0) start(job);
+        if (is_test_stem(job.stem)) --test_queued_;
+        if (ready_.count(job.stem) != 0) continue;
+        if (start(job) == Start::Transient) {                          // (no process now: not the map's fault; it keeps its place, the queue waits, nothing is drained)
+            put_back(job, std::string());
+            break;
+        }
     }
 }
 
 #else
 
-bool MapPictures::start(const Job&) { return false; }
+MapPictures::Start MapPictures::start(const Job&) { return Start::MapFailed; }
+void MapPictures::put_back(const Job&, const std::string&) {}
 void MapPictures::finish(bool, const std::string&) {}
 void MapPictures::poll() {}
 
@@ -353,6 +414,12 @@ size_t MapPictures::prune(const std::function<bool(const std::string& stem)>& ke
         it = keep(it->first) ? std::next(it) : failed_.erase(it);
     }
     return gone;
+}
+
+std::vector<std::string> MapPictures::queue_order() const {
+    std::vector<std::string> out;
+    for (const Job& j : queue_) out.push_back(j.stem);
+    return out;
 }
 
 std::vector<std::string> MapPictures::take_notices() {

@@ -594,7 +594,9 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
         const pic = first(box, 'gmap').children[0];
         pic.fire('error');
         same('... a picture that does not come is asked in the other ending, once (a map of the players only; an original has none)', [first(box, 'gmap').children.length, pic.src], src.startsWith('front/') ? [0, src] : [1, src.replace(/\.webp$/, '.png')]);
-        pic.fire('error');
+            // (the picker asks a picture of a map of the players again after a pause before it gives it up: the pauses are the page's timers, run by moving its clock)
+        const giveUp = async (image) => { image.fire('error'); for (let i = 0; i < 6; i++) { await wait(env, 21000); image.fire('error'); } };   // (the page's clock: the picker's pauses run as time goes by, each followed by the error of a picture that is still not there)
+        if (src.startsWith('front/')) pic.fire('error'); else await giveUp(pic);
         same('... and when that does not come either it is taken away there too (the square stays)', [first(box, 'gmap').children.length, find(box, 'gmap').length], [0, 1]);
     }
 }

@@ -10,7 +10,10 @@
 //    every map (the core checker, twice) before they write it, and the program reads it again under the game's own limits.
 //  * The picture is the program's output, checked again here before it is kept: a PNG of at most kMaxSide pixels a side and kMaxPictureBytes bytes, written under a temporary name and renamed. A picture is
 //    named for the map file ("<file name without .lvl>.png": the id of a submission or "test-<8 hex>"), which never changes, so a picture is made once and kept; prune() drops the pictures whose file is gone.
-//  * A failure leaves no picture (get gives nothing): the pages show their empty square. A map that failed is not tried again for kRetryAfterMs, and the log says so once.
+//  * A failure leaves no picture (get gives nothing): the pages show their empty square. A map that failed is not tried again for kRetryAfterMs, and the log says so once. What is not the map's fault (the
+//    server cannot start a process now) is no failure of the map: the job goes back to the front of the queue, the queue waits fork_retry_ms, and the log says so once.
+//  * What the child is given beyond the above: the lowest priority (nice 10 at least), the root folder as its working folder (not the results folder, which holds the control secret and the database), and, on
+//    Linux, a SIGKILL when the server dies. The program itself closes the filesystem and the network to itself before it reads the map (src/ants_thumb/sandbox.hpp).
 //  * POSIX only: another platform (Windows) has no pictures, and says so when it starts.
 
 #include <chrono>
@@ -30,7 +33,10 @@ struct MapPicturesConfig {
     std::string archive;                              // the game's archive (ants.chd) that the program reads
     uint32_t timeout_ms{30000};                       // one picture may take this long, then the process is killed
     uint32_t memory_mb{1536};                         // the address space that the program limits itself to (--memory-mb)
-    size_t max_queue{256};                            // maps waiting for their picture; more are not queued (the next request or the next start asks again)
+    size_t max_queue{256};                            // maps waiting for their picture (the approved and waiting ones); more are not queued (the next request or the next start asks again)
+    size_t max_test_queue{64};                        // test maps waiting for their picture: a limit of their own, so that the sweep of the start never keeps a person's test map out (the server holds 64 at most)
+    uint32_t fork_retry_ms{5000};                     // when the server cannot start a process (no room for one now): the picture is tried again after this long, the others wait behind it
+    std::function<long()> fork_hook;                  // for the tests: stands in for fork() (the child continues in the hook's own call of fork); empty: fork()
 };
 
 class MapPictures {
@@ -65,6 +71,8 @@ public:
     std::vector<std::string> take_notices();
 
     size_t queued() const { return queue_.size(); }
+    /// The stems of the maps that wait, in the order in which they will be made (for the tests)
+    std::vector<std::string> queue_order() const;
     bool busy() const { return running_pid_ != 0; }
     size_t made() const { return ready_.size(); }
     size_t failures() const { return failures_; }
@@ -78,8 +86,10 @@ private:
         std::string map_path;
     };
     using Clock = std::chrono::steady_clock;
+    enum class Start { Started, MapFailed, Transient };
     std::string picture_path(const std::string& stem) const;
-    bool start(const Job& job);
+    Start start(const Job& job);
+    void put_back(const Job& job, const std::string& why);
     void finish(bool exited_ok, const std::string& how);
     void fail(const std::string& stem, const std::string& why);
     bool is_good_png(const std::string& path) const;
@@ -97,7 +107,12 @@ private:
     std::string running_log_;
     std::vector<std::string> notices_;
     size_t failures_{0};
+    size_t test_queued_{0};                           // how many of queue_ are test maps
     bool queue_full_said_{false};
+    bool test_queue_full_said_{false};
+    bool transient_said_{false};
+    bool setup_said_{false};                          // the log has said that the child cannot set itself up (until a picture is made again)
+    Clock::time_point retry_at_{};
 };
 
 }  // namespace ants::server
