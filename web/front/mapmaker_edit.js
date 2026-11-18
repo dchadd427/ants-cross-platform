@@ -260,6 +260,8 @@
                 box: function () { return box; },
                 beforeTile: function (idx) { return seen[idx * 2] ? firstTile[idx] : tile(f, 1, idx); },
                 change: change,
+                // the splices that this stroke has made so far (a copy), for the dictionary that Auto edges tidies when the stroke ends (mapmaker_edges.js, strokeEnd)
+                spliced: function () { return splices.slice(); },
                 // the brush put on a cell; returns the number of cells that changed
                 stamp: function (row, column, size) {
                     var rect = brushRect(f, row, column, size || 1), n = 0;

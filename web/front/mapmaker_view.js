@@ -12,6 +12,8 @@
     var MARGIN = 8;                 // the space kept round a map that is shown whole
     var GRID_FROM = 12;             // a tile of this many pixels or more is drawn with a thin line round it
     var RECTS_FROM = 5;             // below this the canvas is filled pixel by pixel
+    var GAPS_FROM = 4;              // a tile of this many pixels or more shows the places that have no piece in the game
+    var GOLD = '#f6d058', INK = '#0b2a22';      // the gold of the marked square, and the dark of the badge's wand
 
     function fitScale(file, w, h) { return Math.max(0.05, Math.min((w - MARGIN) / file.columns, (h - MARGIN) / file.rows)); }
     function minScale(file, w, h) { return Math.min(fitScale(file, w, h), MAX_SCALE); }
@@ -147,6 +149,44 @@
         }
     }
 
+    // The places that the game has no piece for (mapmaker_edges.js, gaps and places; docs/MAP_EDITOR.md, "Cells with no piece"): a gold dashed line round each group of marked cells (no line between two
+    // cells of a group) and a badge, a little wand, at the right end of the top row of each place. `gaps`: {g: {r0, c0, rows, columns, bits}, places: [{row, column}]}. Look only.
+    function drawGaps(ctx, view, w, h, vis, gaps) {
+        var g = gaps.g, s = view.scale, x0 = w / 2 - view.cx * s, y0 = h / 2 - view.cy * s, r, c, i;
+        var lw = Math.max(1.5, Math.min(4, s * 0.09)), ins = lw / 2;
+        function on(row, col) { var rr = row - g.r0, cc = col - g.c0; return rr >= 0 && cc >= 0 && rr < g.rows && cc < g.columns && g.bits[rr * g.columns + cc] === 1; }
+        ctx.save();
+        ctx.lineWidth = lw; ctx.strokeStyle = GOLD; ctx.setLineDash([Math.max(4, s * 0.28), Math.max(3, s * 0.18)]); ctx.lineCap = 'butt'; ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 2;
+        ctx.beginPath();
+        for (r = vis.r0; r <= vis.r1; r++) for (c = vis.c0; c <= vis.c1; c++) {
+            if (!on(r, c)) continue;
+            var x = x0 + c * s, y = y0 + r * s;
+            if (!on(r - 1, c)) { ctx.moveTo(x, y + ins); ctx.lineTo(x + s, y + ins); }
+            if (!on(r + 1, c)) { ctx.moveTo(x, y + s - ins); ctx.lineTo(x + s, y + s - ins); }
+            if (!on(r, c - 1)) { ctx.moveTo(x + ins, y); ctx.lineTo(x + ins, y + s); }
+            if (!on(r, c + 1)) { ctx.moveTo(x + s - ins, y); ctx.lineTo(x + s - ins, y + s); }
+        }
+        ctx.stroke();
+        ctx.restore();
+        var rad = Math.max(5, Math.min(16, s * 0.3));
+        for (i = 0; i < gaps.places.length; i++) {
+            var p = gaps.places[i];
+            if (p.row < vis.r0 || p.row > vis.r1 || p.column < vis.c0 || p.column > vis.c1) continue;
+            drawBadge(ctx, x0 + (p.column + 1) * s - rad * 0.9, y0 + p.row * s + rad * 0.9, rad);
+        }
+    }
+
+    // the badge: a gold disc with a dark wand and its spark
+    function drawBadge(ctx, x, y, r) {
+        ctx.save(); ctx.translate(x, y);
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.2832); ctx.fillStyle = GOLD; ctx.fill(); ctx.lineWidth = Math.max(1, r * 0.12); ctx.strokeStyle = INK; ctx.stroke();
+        ctx.fillStyle = INK; ctx.lineCap = 'round'; ctx.lineWidth = r * 0.2;
+        ctx.beginPath(); ctx.moveTo(-r * 0.5, r * 0.5); ctx.lineTo(r * 0.12, -r * 0.12); ctx.stroke();
+        var sx = r * 0.3, sy = -r * 0.3, a = r * 0.34, b = r * 0.1;
+        ctx.beginPath(); ctx.moveTo(sx, sy - a); ctx.lineTo(sx + b, sy - b); ctx.lineTo(sx + a, sy); ctx.lineTo(sx + b, sy + b); ctx.lineTo(sx, sy + a); ctx.lineTo(sx - b, sy + b); ctx.lineTo(sx - a, sy); ctx.lineTo(sx - b, sy - b); ctx.closePath(); ctx.fill();
+        ctx.restore();
+    }
+
     // The marked square (a black line under a gold one), as wide as the brush that is on it: the cells that the brush would cover when it is put on `cur` ({row, column}), cut by the map's edge.
     // `shape` ({r0, r1, c0, c1}: the rows and columns, counted from the cell, that a bigger object covers) marks the box of that object instead.
     function cursorRect(file, cur, brush, shape) {
@@ -215,7 +255,7 @@
     function useSprites(view, sprites) { return !!sprites && sprites.ready(); }
 
     // One frame. `opts`: scratch (a canvas for the pixel way), cursor ({row, column} or null), brush (the size of the brush on the cursor), sprites (mapmaker_sprites.js, when loaded), dpr, ghost ({id, row,
-    // column}: a bigger object's picture under the pointer). Returns {rects, pixels, sprites}: what was drawn, for the tests.
+    // column}: a bigger object's picture under the pointer), gaps (the places that have no piece in the game: drawGaps). Returns {rects, pixels, sprites}: what was drawn, for the tests.
     function draw(ctx, view, file, w, h, opts) {
         opts = opts || {};
         ctx.fillStyle = '#0b1612'; ctx.fillRect(0, 0, w, h);
@@ -229,6 +269,7 @@
             done.rects = drawRects(ctx, view, file, w, h, vis, Tiles.tableOf(file));
             if (view.scale >= 6) drawMarks(ctx, view, file, w, h, vis);
         } else done.pixels = drawPixels(ctx, view, file, w, h, opts.scratch || document.createElement('canvas'), Tiles.tableOf(file));
+        if (opts.gaps && view.scale >= GAPS_FROM) drawGaps(ctx, view, w, h, vis, opts.gaps);
         if (opts.cursor) drawCursor(ctx, view, file, w, h, opts.cursor, opts.brush, opts.door, opts.shape);
         return done;
     }
@@ -283,7 +324,7 @@
     }
 
     return {
-        MAX_SCALE: MAX_SCALE, create: create, clamp: clamp, fitScale: fitScale, minScale: minScale, isWhole: isWhole, toScreen: toScreen, cellAt: cellAt, zoomAt: zoomAt, panBy: panBy,
+        MAX_SCALE: MAX_SCALE, GAPS_FROM: GAPS_FROM, create: create, clamp: clamp, fitScale: fitScale, minScale: minScale, isWhole: isWhole, toScreen: toScreen, cellAt: cellAt, zoomAt: zoomAt, panBy: panBy,
         centerOn: centerOn, reveal: reveal, visible: visible, draw: draw, useSprites: useSprites, cursorRect: cursorRect, drawCursor: drawCursor, redrawCell: redrawCell, redrawPixelCell: redrawPixelCell, blitPixels: blitPixels, stamp: stamp, table: table, miniSize: miniSize, miniBase: miniBase, miniFrame: miniFrame, miniPoint: miniPoint
     };
 });

@@ -23,7 +23,7 @@
 //   --game-mode M     the rules of every match: highest-score (the original's game, the default) or 187 (no food, the kills are the score, docs/GAMEPLAY.md); the report names the mode only when it is 187
 //   --replay-check    re-feed the commands that were applied into a FRESH engine with no bot at all and require the same state hash at every 20th tick and at the end
 //   --swimmer-trace   after every match one SWT line per seat (the ticks of its 3rd, 5th and 8th Swimmer, the most it had alive, the Swimmers alive and the score at every minute, its idle ants
-//                     from the third minute on, the power-ups its ants took by kind) and one SWL line (the power-ups left on the ground at every minute); nothing is sent, the match is the same
+//                     from the third minute on, the water tiles its Swimmers finished as bridges, the power-ups its ants took by kind) and one SWL line (the power-ups left on the ground at every minute); nothing is sent, the match is the same
 //   --tune K=V,...    the same tuning for every standard bot of the run (the keys of apply_tune). BOT_DIAG=1 in the environment makes the standard bots print what their tasks did (counts of attack orders, raids, walls, ...) to stderr when a match is over.
 //   --ally-standard   the first two standard bots of a match team up (the lower seat invites at its first look, the other accepts by its accept rule); --ally-pairs: every two seats with the same standard spec team up (2 + 2 for [A, A, B, B]). Test-only: no bot of the game invites.
 //   --threads N       matches played at the same time (default 1; every match is independent, the report is sorted by map, seed and arrangement)
@@ -739,9 +739,19 @@ struct SwimmerTrace {
     std::array<uint64_t, 4> idle_off_strip{};                // ... of them, not near a drop tile
     std::array<uint64_t, 4> ants{};                          // seat -> all ant-looks from kIdleFrom on
     std::array<std::array<uint32_t, kMinutes>, 2> left{};    // [0] power-ups on the ground at the end of each minute (the flowers' drops left out), [1] of them Swimmers
+    std::array<uint32_t, 4> bridged{};                       // seat -> water tiles that its Swimmers finished as bridges (a tile that is dug again after it went counts again)
+    std::vector<uint8_t> standing_;                          // the finished bridge tiles at the last look (index y * width + x)
     void look(const sim::SimulationEngine& sim) {
         const uint64_t tick = sim.current_tick();
         if (tick % 10 != 0) return;
+        const std::vector<sim::TileCell>& cells = sim.grid().cells();
+        const bool first = standing_.size() != cells.size();                                 // (the bridge pieces that the map file holds are there at the first look: nobody finished them)
+        if (first) standing_.assign(cells.size(), 0);
+        for (size_t i = 0; i < cells.size(); ++i) {
+            const bool done = cells[i].has_completed_bridge();
+            if (!first && done && standing_[i] == 0 && cells[i].interactive_owner < 4) ++bridged[cells[i].interactive_owner];
+            standing_[i] = done ? 1 : 0;
+        }
         std::array<uint32_t, 4> n{};
         const sim::WorldState& ws = sim.get_world_state();
         for (const sim::AntSnapshot& a : ws.ants) {
@@ -794,7 +804,7 @@ void print_swimmer_trace(const LoadedMap& m, const Job& job, const SwimmerTrace&
         for (size_t k = 0; k < SwimmerTrace::kMinutes; ++k) line += fmt("%s%u", k == 0 ? "" : ",", t.alive[b.seat][k]);
         line += " score=";
         for (size_t k = 0; k < SwimmerTrace::kMinutes; ++k) line += fmt("%s%d", k == 0 ? "" : ",", t.score[b.seat][k]);
-        line += fmt(" idle=%llu idle_off=%llu ants=%llu", static_cast<unsigned long long>(t.idle[b.seat]), static_cast<unsigned long long>(t.idle_off_strip[b.seat]), static_cast<unsigned long long>(t.ants[b.seat]));
+        line += fmt(" idle=%llu idle_off=%llu ants=%llu bridges=%u", static_cast<unsigned long long>(t.idle[b.seat]), static_cast<unsigned long long>(t.idle_off_strip[b.seat]), static_cast<unsigned long long>(t.ants[b.seat]), t.bridged[b.seat]);
         for (const ai::ArenaSeatResult& s : result.seats) {
             if (s.spec.seat != b.seat) continue;
             line += " took=";

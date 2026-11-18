@@ -718,7 +718,7 @@ void run_rematch_tests() {
         fs::remove_all(dir, ignore);
     } TEST_END();
 
-    TEST_CASE("S3.241 A Public Lobby And Its Rematch (Protocol 22): The Match Of A Public Room Keeps \"public\" In Its Status; The Lobby That Follows It Is A New Room, Private; When Its First Person Back Makes It Public It Is Not Listed While A Seat Is Kept For A Person Who Is Not Back, And It Is Once That Person Is Back, Or Was Removed") {
+    TEST_CASE("S3.241 A Public Lobby And Its Rematch (Protocol 22): The Match Of A Public Room Keeps \"public\" In Its Status; The Lobby That Follows It Is Public Too (The Leader's Choice Stands: Nobody Is Asked To Make It Public Again); It Is Not Listed While A Seat Is Kept For A Person Who Is Not Back, And It Is Once That Person Is Back, Or Was Removed; A Private Room's Rematch Is Private") {
         const auto listed = [](World& w) {
             ctl::HttpRequest rq;
             rq.method = "GET";
@@ -739,17 +739,16 @@ void run_rematch_tests() {
             ASSERT_TRUE(end.state == RoomState::Finished && end.lobby && end.lobby_public);
             ASSERT_TRUE(ctl::to_json(status_to_json(end)).find("\"public\":true") != std::string::npos);
             std::optional<RoomStatus> lobby = lobby_of(w, code);
-            ASSERT_TRUE(lobby.has_value() && lobby->reopened && !lobby->lobby_public);
-            ASSERT_EQ(listed(w), "");
-            // Pia's page comes back with her key (she leads) and makes the room public: Bob's seat is kept for him (the START waits for him), and the room is not listed
+            ASSERT_TRUE(lobby.has_value() && lobby->reopened && lobby->lobby_public);              // (the lobby that follows is public too: its leader of the match chose that)
+            ASSERT_EQ(listed(w), "");                                                               // (and not listed: both seats are kept, nobody is back)
+            // Pia's page comes back with her key (she leads): the room is public as it was, with no word of hers; Bob's seat is kept for him (the START waits for him), and the room is not listed
             w.next_key = p.pia;
             Client& pia_back = w.connect_page("Pia", code, lobby_block_of());
             w.next_key = net::SeatKey{};
             w.run(300);
-            ASSERT_TRUE(pia_back.lobby->is_leader() && !pia_back.lobby->room_is_public());
-            ASSERT_TRUE(pia_back.lobby->request_visibility(true));
+            ASSERT_TRUE(pia_back.lobby->is_leader() && pia_back.lobby->room_is_public());
             w.run(300);
-            ASSERT_TRUE(pia_back.lobby->room_is_public() && lobby_of(w, code)->lobby_public && lobby_of(w, code)->reserved == 0x2);
+            ASSERT_TRUE(lobby_of(w, code)->lobby_public && lobby_of(w, code)->reserved == 0x2);
             ASSERT_EQ(listed(w), "");
             if (removes) {
                 ASSERT_TRUE(pia_back.lobby->request_remove(1));                                  // the leader removes the person who is not back: the kept seat is gone
@@ -763,6 +762,22 @@ void run_rematch_tests() {
             }
             ASSERT_TRUE(lobby_of(w, code)->reserved == 0);
             ASSERT_EQ(listed(w), code);
+        }
+        {   // a room that was private: its rematch is private, and nothing lists it
+            World w(rematch_limits());
+            const std::string code = "rmt00042";
+            Played p;
+            play_and_quit(w, code, plan_of({K::Open, K::Open, K::Open, K::Nobody}), p, true, 0, std::string(), false);
+            const RoomStatus end = w.ended(code);
+            ASSERT_TRUE(end.state == RoomState::Finished && end.lobby && !end.lobby_public);
+            std::optional<RoomStatus> lobby = lobby_of(w, code);
+            ASSERT_TRUE(lobby.has_value() && lobby->reopened && !lobby->lobby_public);
+            w.next_key = p.pia;
+            Client& pia_back = w.connect_page("Pia", code, lobby_block_of());
+            w.next_key = net::SeatKey{};
+            w.run(300);
+            ASSERT_TRUE(pia_back.lobby->is_leader() && !pia_back.lobby->room_is_public() && !lobby_of(w, code)->lobby_public);
+            ASSERT_EQ(listed(w), "");
         }
     } TEST_END();
 }

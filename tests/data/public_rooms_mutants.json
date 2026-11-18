@@ -1051,8 +1051,8 @@
   {
    "id": "leader_change_keeps_public",
    "file": "src/ants_net/lobby.cpp",
-   "old": "guests_[best].join_order != public_by_)) public_ = false;",
-   "new": "guests_[best].join_order != public_by_)) {}",
+   "old": "if (!leads_now && !(chooser_kept && (best == kNoLeader || of_match(best)))) public_ = false;",
+   "new": "if (!leads_now && !(chooser_kept && (best == kNoLeader || of_match(best)))) {}",
    "build": [
     "test_lobby"
    ],
@@ -1061,8 +1061,8 @@
   {
    "id": "leader_change_unlists_always",
    "file": "src/ants_net/lobby.cpp",
-   "old": "(best == kNoLeader || guests_[best].join_order != public_by_)",
-   "new": "(best == kNoLeader || true)",
+   "old": "const bool leads_now = best != kNoLeader && guests_[best].join_order == public_by_;",
+   "new": "const bool leads_now = false;",
    "build": [
     "test_lobby"
    ],
@@ -1071,8 +1071,8 @@
   {
    "id": "no_leader_keeps_public",
    "file": "src/ants_net/lobby.cpp",
-   "old": "(best == kNoLeader || guests_[best].join_order != public_by_)",
-   "new": "(best != kNoLeader && guests_[best].join_order != public_by_)",
+   "old": "if (!leads_now && !(chooser_kept",
+   "new": "if (best != kNoLeader && !leads_now && !(chooser_kept",
    "build": [
     "test_lobby"
    ],
@@ -1141,8 +1141,8 @@
   {
    "id": "earlier_leader_keeps_public",
    "file": "src/ants_net/lobby.cpp",
-   "old": "guests_[best].join_order != public_by_)",
-   "new": "guests_[best].join_order > public_by_)",
+   "old": "guests_[best].join_order == public_by_;",
+   "new": "guests_[best].join_order <= public_by_;",
    "build": [
     "test_lobby"
    ],

@@ -8,7 +8,8 @@ screen: the codec of every message of the protocol and the client that keeps the
   - tests/scripts/web_lobby_client_check.js runs the client against a scripted server and a fake browser (sockets and timers): the Hello it sends, the Welcome and Room messages it takes in, the answers
     to the server's pings, what changed between two Room messages (who joined, left, was renamed, was moved, changed places, leads now), the requests that only the leader may make and the bytes they
     put on the wire (a color move's guard is the room's seating hash), the way back with the key after a lost link (the waits grow, a link that says nothing is given up), what each refusal means, and
-    the entry that the game page reads to take the seat over;
+    the entry that the game page reads to take the seat over, the Welcome that says "replaced" (a key that found no seat) and the note that a page leaves when it goes (ants.lobbyseat, taken back within
+    55 seconds; TheReturnChecksAreNotVacuous below runs the mutants of tests/data/lobby_return_mutants.json);
   - the entry that the client writes for the game page (ants.rejoin.<room>.<seat>) is read by the game page's own code (tests/scripts/web_lobby_entry_check.js runs the blocks REJOINKEY and NAMEGATE of
     web/shell.html): the seat is held, so the game asks no name and takes the seat over with the key, on both schemes, and not for another scheme, host, room or seat, or for a key that is too old;
   - the pace of every kind of request (a color move, a plan, a rename, a removal, a line of chat) keeps a margin under the server's bucket of that kind (include/ants_net/flood.hpp, which the client check
@@ -169,6 +170,26 @@ class ThePublicRoomChecksAreNotVacuous(TheBudgetChecksAreNotVacuous):
         ids = [m["id"] for m in self.spec["mutants"]]
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
         for needed in ("page_protocol_still_23", "page_public_without_lobby", "page_setpublic_anybody", "page_setpublic_while_starting", "page_setpublic_at_the_servers_bucket", "page_setpublic_burst_without_reserve"):
+            self.assertIn(needed, ids)
+
+
+@unittest.skipUnless(NODE, "node is not installed: the page that comes back to its room was NOT run (tests/scripts/web_lobby_client_check.js, web_name_check.js)")
+class TheReturnChecksAreNotVacuous(TheBudgetChecksAreNotVacuous):
+    """the mutants of tests/data/lobby_return_mutants.json (the Welcome that says "replaced", the note that a page leaves when it goes, and what the front page does with them: docs/PLAY_IN_BROWSER.md, "Going
+    away and coming back") on a COPY of the files, as the class above does for the paces; the same three tests run on this list. The real server's own scenarios (web_lobby_server_check.js 5b and 5c) are run by test_ants_server.sh."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        with open(os.path.join(REPO, "tests", "data", "lobby_return_mutants.json"), encoding="utf-8") as f:
+            cls.spec = json.load(f)
+
+    def test_the_list_is_whole(self):
+        ids = [m["id"] for m in self.spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        for needed in ("net_replaced_never_said", "net_replaced_for_every_key", "net_seat_memory_a_little_long", "net_seat_memory_never_old", "net_seat_memory_any_server", "page_replaced_keeps_the_host_claim",
+                       "page_replaced_says_nothing", "page_gone_room_of_a_key_is_silent", "page_gone_room_in_a_restart_speaks", "page_memory_is_not_read", "page_memory_before_the_session",
+                       "page_memory_written_on_the_way_to_a_game", "page_memory_not_written_at_pagehide", "page_memory_kept_when_the_seat_is_given_up", "page_memory_of_another_room_dropped"):
             self.assertIn(needed, ids)
 
 

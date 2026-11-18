@@ -16,6 +16,7 @@ add_library(ants_ai STATIC
     island_expedition.cpp
     island_ferry.cpp
     island_link.cpp
+    island_bridge.cpp
     island_swarm.cpp
     bot_controller.cpp
     tasks.cpp
