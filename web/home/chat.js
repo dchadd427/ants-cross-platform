@@ -285,7 +285,7 @@
         put(acct, [el('i', 'gc-dc'), el('span', 'gc-as', TEXT.chatting), acctName]);
         var yr = el('p', 'gc-yr'); yr.hidden = true;       // (the role, in words, in the dropdown of the account)
         put(slot, [acct, yr, pickNote, pickBtn, swRow, outBtn, el('p', 'gc-mnote', TEXT.forgetNote), forgetBtn]);
-        var adminLink = el('a', 'btn gc-admin', 'Admin page'); adminLink.setAttribute('href', '/admin'); adminLink.hidden = true; slot.insertBefore(adminLink, outBtn);        // (a plain link, for an administrator or the owner only: the page decides again who may come in)
+        var adminLink = el('a', 'btn gc-adminpage', 'Admin page'); adminLink.setAttribute('href', '/admin'); adminLink.hidden = true; slot.insertBefore(adminLink, outBtn);        // (a plain link, for an administrator or the owner only: the page decides again who may come in)
         var chipMark = null, chipAv = null, chipName = null;                   // the bar's chip (home.js makes the button and hides it): Log in, or who the visitor is
         if (chip) { chipMark = el('i', 'gc-dc'); chipAv = el('span', 'gc-av'); chipName = el('span', 'gc-cn'); chip.textContent = ''; put(chip, [chipMark, chipAv, chipName]); }
         var hint = el('p', 'gc-hint gc-news', TEXT.hint); hint.id = 'gchat-hint';       // (read with the field's name, drawn nowhere: a text area is "multi-line" to a screen reader, and this says that Enter sends)
