@@ -1,8 +1,10 @@
 // The tests of the server's own matches of computer players (RoomSpec::bots_only, RoomManager::enable_bot_matches / start_bot_match; docs/SERVER.md "Matches of computer players"): a room whose seats are
 // all bots starts with nobody in it, is not closed for lack of people and is kept like any other match; the specification that cannot be such a room is refused; the timer makes one match at a time, only
-// when the server keeps replays, and chooses the same things from the same seed; each match is dealt the original's game or 187 by a coin of its own, and a match in 187 plays on every map with every seating
-// of the computer players. Included by test_server_files.cpp, which holds (through server_fixtures.hpp) the harness (TEST_CASE, ASSERT_*, World); test_server.cpp calls run_bot_match_tests().
+// when the server keeps replays, and chooses the same things from the same seed; each match is dealt the original's game or 187 by a coin of its own and then a map of that rules' list (each map of a list as likely
+// as any other; a map that the store lacks is skipped with one line in the log), and a match in 187 plays on every map with every seating of the computer players. Included by test_server_files.cpp, which holds (through server_fixtures.hpp) the harness (TEST_CASE, ASSERT_*, World); test_server.cpp calls run_bot_match_tests().
 #pragma once
+
+#include "big_map_fixtures.hpp"
 
 namespace {
 
@@ -76,6 +78,36 @@ RoomSpec bot_seating_spec(const std::string& code, const char* map, const BotSea
 
 const char* const kBotMatchMaps[] = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "ISLANDS.LVL"};
 
+// The lists that the timer draws from (docs/SERVER.md "Matches of computer players"): the original's game on the six and on three library maps, 187 on five of the six and on a map of the players
+const char* const kScoreListMaps[] = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "ISLANDS.LVL", "POPcOrN.lvl", "HELLRAISER.lvl", "Bombz Away.lvl"};
+const char* const k187ListMaps[] = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "Fight Island.lvl"};
+
+std::string bot_match_community() { return std::string(ANTS_SOURCE_DIR) + "/Community-Maps"; }
+
+// The map of the players on the 187 list, made up (the real one is not in this repository): TINY grown to 150 x 150 as an Extended map, four hills, kept in a folder of its own as the submissions store keeps an approved file
+ApprovedMap made_up_fight_island(const char* tag, uint32_t rows = 150, uint32_t columns = 150) {
+    const std::string bytes = grown_tiny(rows, columns);
+    const fs::path path = fs::path(temp_dir_for(tag)) / "Fight Island.lvl.bin";
+    { std::ofstream out(path, std::ios::binary); out << bytes; }
+    ApprovedMap a;
+    a.name = "Fight Island.lvl";
+    a.path = path.string();
+    a.size = bytes.size();
+    a.width = columns;
+    a.height = rows;
+    a.minutes = 20;
+    a.players = 4;
+    a.maker = "Mia";
+    a.kind = "extended";
+    net::hash_file(a.path, a.hash);
+    return a;
+}
+
+// A server that has every map of the two lists: the original's six, the community folder of the repository and the made-up approved map
+struct ListedWorld : World {
+    explicit ListedWorld(const char* tag) : World(ServerLimits(), maps_dir(), bot_match_community()) { mgr.mutable_store().set_approved({made_up_fight_island(tag)}); }
+};
+
 }  // namespace
 
 void run_bot_match_tests() {
@@ -145,7 +177,7 @@ void run_bot_match_tests() {
         std::string why;
         std::string first;
         for (int round = 0; round < 2; ++round) {                            // (the same seed twice: the same choices)
-            World w;
+            ListedWorld w("botmatch-timer-maps");
             ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-timer", &clock), false, why));
             ASSERT_TRUE(w.mgr.take_notices().size() == 1);                   // (what the store found when it opened)
             w.mgr.enable_bot_matches(5, w.now, 60u * 1000u, 20261009u);
@@ -158,7 +190,9 @@ void run_bot_match_tests() {
             ASSERT_TRUE(made != nullptr);
             ASSERT_TRUE(made->bots.size() >= 2 && made->bots.size() <= 4 && made->joined == made->bots.size() && !made->public_room && !made->lobby && !made->reconnect);
             for (const RoomStatus::Bot& b : made->bots) ASSERT_TRUE(b.seat < 4 && (b.level == "medium" || b.level == "hard") && b.kind == "standard" && !b.fill);
-            ASSERT_TRUE(made->map == "TINY.LVL" || made->map == "SMALL.LVL" || made->map == "MEDIUM.LVL" || made->map == "GAUNTLET.LVL" || made->map == "TREASURE.LVL" || made->map == "ISLANDS.LVL");
+            const char* const* list = made->mode == 1 ? k187ListMaps : kScoreListMaps;      // (the map is one of the rules' list)
+            const size_t listed = made->mode == 1 ? std::size(k187ListMaps) : std::size(kScoreListMaps);
+            ASSERT_TRUE(std::find_if(list, list + listed, [&](const char* name) { return made->map == name; }) != list + listed);
             const std::string choice = bot_match_choice(*made) + " rules " + std::to_string(static_cast<unsigned>(made->mode));      // (the rules are drawn from the seed too)
             if (round == 0) first = choice;
             else ASSERT_EQ(choice, first);
@@ -227,7 +261,7 @@ void run_bot_match_tests() {
         for (const std::string& one : seen) all_seen += one + "; ";
         // two bots: free for all only; three: free for all and every pair of seats that the draw gave (the third plays alone); four: free for all and each of the three splits
         ASSERT_EQ(all_seen, std::string("2 ffa; 3 0+1; 3 0+2; 3 0+3; 3 1+2; 3 1+3; 3 2+3; 3 ffa; 4 0+1; 4 0+2; 4 0+3; 4 ffa; "));
-        ASSERT_EQ(pinned, std::string("GAUNTLET.LVL players 3 0:medium 1:hard 3:medium teams 0+3"));      // (seed 7: the map, seats and levels that the timer chose before it drew teams, and the teams drawn after them)
+        ASSERT_EQ(pinned, std::string("TINY.LVL players 3 0:medium 1:hard 3:medium teams 0+3"));      // (seed 7: the seats and levels that the timer chose before it drew teams, and the teams drawn after them; the map is a draw from the list of the rules that the coin dealt, so it is one of that list)
     } TEST_END();
 
     TEST_CASE("S3.184 A Room Of Computer Players With Teams Starts As A Match Of Those Teams (Every Engine Of The Match Has Them Before The First Turn), The Third Of Three Plays Alone, And The Replay Has Them In Its Head And Plays Out") {
@@ -283,15 +317,15 @@ void run_bot_match_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.184b Each Match Of The Timer Is Dealt The Original's Game Or 187 By A Coin Of Its Own: About Half Are 187, What The Last Match Had Does Not Matter (Runs Of Two And Three Of Each Kind Come Up, It Is No Alternation), The Room Says The Rules It Was Dealt, And A 187 Match Is Never On ISLANDS") {
+    TEST_CASE("S3.184b Each Match Of The Timer Is Dealt The Original's Game Or 187 By A Coin Of Its Own: About Half Are 187, What The Last Match Had Does Not Matter (Runs Of Two And Three Of Each Kind Come Up, It Is No Alternation), The Room Says The Rules It Was Dealt, A Map Of Its Rules' List Follows (Nine For The Original's Game, Six For 187, Each As Likely As Any Other Of Its List) And A 187 Match Is Never On ISLANDS") {
         ReplayClock clock;
-        World w;
+        ListedWorld w("botmatch-coin-maps");
         std::string why;
         ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-coin", &clock), false, why));
         (void)w.mgr.take_notices();
         w.mgr.enable_bot_matches(0, w.now, 0u, 20261117u);                   // (0 minutes: no timer, only the seed: the matches are the ones that the test asks for)
         std::string deals;                                                   // '1' for 187, '0' for the original's game, in the order of the matches
-        std::set<std::string> maps_in_187, maps_in_score;
+        std::map<std::string, size_t> maps_in_187, maps_in_score;               // (how often each map was dealt in each rules)
         for (int match = 0; match < 300; ++match) {
             std::string code, reason;
             uint8_t mode = 9;
@@ -299,7 +333,7 @@ void run_bot_match_tests() {
             const RoomStatus s = w.status(code);
             ASSERT_TRUE(mode <= 1 && s.mode == mode && s.bots_only);        // (what the room says is what was dealt)
             deals += mode == 1 ? '1' : '0';
-            (mode == 1 ? maps_in_187 : maps_in_score).insert(s.map);
+            ++(mode == 1 ? maps_in_187 : maps_in_score)[s.map];
             ASSERT_TRUE(w.mgr.close_room(code, w.now));                      // (the last one is no longer going: the next one may be made)
             if (match % 100 == 99) w.run(31000);                             // (a closed room is forgotten after its keep time)
         }
@@ -318,10 +352,21 @@ void run_bot_match_tests() {
             ++after[before];
             if (deals[i] == deals[i - 1]) ++same_after[before];
         }
-        // the maps: the original's game on all six, 187 on the five where an ant can strike another (the water of ISLANDS joins no two hills by a walk, and 187 has no Swimmer)
-        ASSERT_EQ(maps_in_score.size(), size_t{6});
-        ASSERT_EQ(maps_in_187.size(), size_t{5});
+        // the maps: the original's game on the nine of its list, 187 on the six of its own (the water of ISLANDS joins no two hills by a walk and 187 has no Swimmer, so no 187 match is made there; the map of the players is
+        // in 187 only), and each map of a list as likely as any other of it: the draw is a map of the list for the rules that the coin dealt, never one list for both
+        ASSERT_EQ(maps_in_score.size(), std::size(kScoreListMaps));
+        ASSERT_EQ(maps_in_187.size(), std::size(k187ListMaps));
+        for (const char* name : kScoreListMaps) ASSERT_TRUE(maps_in_score.count(name) == 1);
+        for (const char* name : k187ListMaps) ASSERT_TRUE(maps_in_187.count(name) == 1);
         ASSERT_TRUE(maps_in_187.count("ISLANDS.LVL") == 0 && maps_in_score.count("ISLANDS.LVL") == 1);
+        ASSERT_TRUE(maps_in_score.count("Fight Island.lvl") == 0);
+        ASSERT_TRUE(maps_in_187.count("POPcOrN.lvl") == 0 && maps_in_187.count("HELLRAISER.lvl") == 0 && maps_in_187.count("Bombz Away.lvl") == 0);
+        for (const auto* counted : {&maps_in_score, &maps_in_187}) {
+            size_t total = 0;
+            for (const auto& kv : *counted) total += kv.second;
+            const size_t mean = total / counted->size();
+            for (const auto& kv : *counted) ASSERT_MSG(kv.second * 10 > mean * 4 && kv.second * 10 < mean * 20, kv.first + " " + std::to_string(kv.second) + " of " + std::to_string(total) + " in " + std::to_string(counted->size()) + " maps");
+        }
         ASSERT_MSG(longest[0] >= 3 && longest[1] >= 3, "the longest runs: " + std::to_string(longest[0]) + " and " + std::to_string(longest[1]));      // (two or three of a kind in a row are expected)
         for (size_t kind = 0; kind < 2; ++kind) {                            // (after a match of either kind the next one is a coin again: about half the same, never none)
             ASSERT_MSG(after[kind] > 100 && same_after[kind] * 100 > after[kind] * 35 && same_after[kind] * 100 < after[kind] * 65, "after " + std::to_string(kind) + ": " + std::to_string(same_after[kind]) + " of " + std::to_string(after[kind]));
@@ -428,5 +473,124 @@ void run_bot_match_tests() {
         ASSERT_TRUE(run_until(w, [&] { return person_room_is(RoomState::Running); }, 12000));
         ASSERT_FALSE(w.mgr.history_may_run());                                  // (a person's match runs, whatever else runs)
         ASSERT_TRUE(w.status("BM-GATEB").state == RoomState::Running);
+    } TEST_END();
+
+    TEST_CASE("S3.184f A Map Of A List That This Server Cannot Play Is Skipped With One Line In The Log, Never A Failed Match: A Server With Neither The Library Maps Nor The Players' Map, One That Has The Players' Map Under A Name That Is Another File Of The Library, One That Took The Map Down, One Whose Map Is Over A Limit Of A Room, And One With None Of The Maps That Makes No Match And Says Why; The Others Stay As Likely As Before, And A Map That Comes Back Is Played Again") {
+        ReplayClock clock;
+        std::string why;
+        const auto skip_lines = [](const std::vector<std::string>& notes, const std::string& map) {
+            size_t n = 0;
+            for (const std::string& line : notes) n += line.find("bot match: the map " + map + " is skipped (") == 0 ? 1u : 0u;
+            return n;
+        };
+        const auto deal = [&](World& w, int matches, std::map<std::string, size_t>& maps, std::vector<std::string>& notes) {
+            for (int match = 0; match < matches; ++match) {
+                std::string code, reason;
+                uint8_t mode = 9;
+                ASSERT_MSG(w.mgr.start_bot_match(w.now, code, reason, &mode), "match " + std::to_string(match) + ": " + reason);      // (never a failed match)
+                ++maps[w.status(code).map];
+                ASSERT_TRUE(w.mgr.close_room(code, w.now));
+                if (match % 100 == 99) w.run(31000);
+            }
+            for (std::string& line : w.mgr.take_notices()) {
+                if (line.find("bot match: ") == 0) notes.push_back(line);       // (what the timer says: the rooms' own notes are another matter)
+            }
+        };
+        {                                                                    // the original's six alone: no community folder, no map of the players (the door of the submissions is off)
+            World w;
+            ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-skip-bare", &clock), false, why));
+            (void)w.mgr.take_notices();
+            w.mgr.enable_bot_matches(0, w.now, 0u, 20261118u);
+            std::map<std::string, size_t> maps;
+            std::vector<std::string> notes;
+            deal(w, 200, maps, notes);
+            ASSERT_EQ(maps.size(), size_t{6});                               // (the six of the original: every one of them is on a list, ISLANDS in the original's game only)
+            for (const char* name : {"POPcOrN.lvl", "HELLRAISER.lvl", "Bombz Away.lvl", "Fight Island.lvl"}) {
+                ASSERT_TRUE(maps.count(name) == 0);
+                ASSERT_MSG(skip_lines(notes, name) == 1, std::string(name) + ": " + std::to_string(skip_lines(notes, name)) + " lines in " + std::to_string(notes.size()));       // (one line for the whole run, not one for each match)
+            }
+            for (const char* name : kBotMatchMaps) ASSERT_TRUE(skip_lines(notes, name) == 0);
+            ASSERT_EQ(notes.size(), size_t{4});                              // (nothing else was said: no match was refused)
+        }
+        {                                                                    // none of the maps: no match is made, and the reason is told
+            World none(ServerLimits(), temp_dir_for("botmatch-skip-none"));
+            ASSERT_TRUE(none.mgr.enable_replays(replay_config("botmatch-skip-none", &clock), false, why));
+            std::string code, reason;
+            ASSERT_FALSE(none.mgr.start_bot_match(none.now, code, reason));
+            ASSERT_TRUE(code.empty() && reason.find("none of the maps") != std::string::npos && none.mgr.list(none.now).empty());
+        }
+        {                                                                    // a map of the players of that name that a file of the library shadows is not the approved map: skipped; taken down: skipped; over a limit of a room: skipped; back: played
+            const std::string shadow = temp_dir_for("botmatch-skip-names-community");
+            fs::copy_file(fs::path(maps_dir()) / "TINY.LVL", fs::path(shadow) / "Fight Island.lvl");
+            World w(ServerLimits(), maps_dir(), shadow);
+            ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-skip-names", &clock), false, why));
+            (void)w.mgr.take_notices();
+            w.mgr.enable_bot_matches(0, w.now, 0u, 20261119u);
+            w.mgr.mutable_store().set_approved({made_up_fight_island("botmatch-skip-names-maps")});
+            std::map<std::string, size_t> maps;
+            std::vector<std::string> notes;
+            deal(w, 200, maps, notes);
+            ASSERT_TRUE(maps.count("Fight Island.lvl") == 0);                // (the file of the library is on the path of that name: the approved map is not the one the store reads)
+            ASSERT_TRUE(skip_lines(notes, "Fight Island.lvl") == 1);
+            for (const char* name : k187ListMaps) {
+                if (std::string(name) != "Fight Island.lvl") ASSERT_TRUE(maps.count(name) == 1);       // (the others of the 187 list are as likely as ever)
+            }
+        }
+        {
+            ListedWorld w("botmatch-skip-down-maps");
+            ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-skip-down", &clock), false, why));
+            (void)w.mgr.take_notices();
+            w.mgr.enable_bot_matches(0, w.now, 0u, 20261120u);
+            std::map<std::string, size_t> maps;
+            std::vector<std::string> notes;
+            deal(w, 100, maps, notes);
+            ASSERT_TRUE(maps.count("Fight Island.lvl") == 1 && notes.empty());          // (every map of both lists is there: nothing is said)
+            w.mgr.mutable_store().set_approved({});                          // the maintainer takes the map down
+            maps.clear();
+            deal(w, 100, maps, notes);
+            ASSERT_TRUE(maps.count("Fight Island.lvl") == 0 && skip_lines(notes, "Fight Island.lvl") == 1 && notes.size() == 1);
+            w.mgr.mutable_store().set_approved({made_up_fight_island("botmatch-skip-down-maps")});      // and approves it again
+            deal(w, 100, maps, notes);
+            ASSERT_TRUE(maps.count("Fight Island.lvl") == 1 && notes.size() == 1);
+            w.mgr.mutable_store().set_approved({made_up_fight_island("botmatch-skip-down-maps", 300, 300)});      // a bigger map under the name: 90,000 cells are over what a room plays online
+            maps.clear();
+            deal(w, 100, maps, notes);
+            ASSERT_TRUE(maps.count("Fight Island.lvl") == 0 && skip_lines(notes, "Fight Island.lvl") == 2 && notes.size() == 2);       // (named again: it was back, and it is gone again)
+            ASSERT_TRUE(notes.back().find("too big") != std::string::npos);
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.184g A Match Of Computer Players Starts On Each New Map Of The Lists (POPcOrN, HELLRAISER And Bombz Away In The Original's Game, The Players' Map In 187) With Seatings Of Two, Three And Four Bots In Teams And Free For All, And Plays: The Bots Look At It And The Match Runs For A Minute") {
+        ReplayClock clock;
+        const std::vector<BotSeating> seatings = every_bot_seating();
+        const size_t chosen[] = {1, 4, 10, 12};                              // two bots on the last seats; three with a pair; four free for all; four across the corners
+        struct Case {
+            const char* map;
+            uint8_t mode;
+        };
+        for (const Case c : {Case{"POPcOrN.lvl", 0}, Case{"HELLRAISER.lvl", 0}, Case{"Bombz Away.lvl", 0}, Case{"Fight Island.lvl", 1}}) {
+            ListedWorld w("botmatch-new-maps");
+            std::string why;
+            ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-new-play", &clock), false, why));
+            std::vector<std::string> codes;
+            for (const size_t index : chosen) {
+                const std::string code = "BNEW-" + std::to_string(index);
+                const CreateResult made = w.mgr.create_room(bot_seating_spec(code, c.map, seatings[index], c.mode), w.now);
+                ASSERT_MSG(made.ok, std::string(c.map) + " seating " + std::to_string(index) + ": " + made.error);
+                codes.push_back(code);
+            }
+            ASSERT_TRUE(run_until(w, [&] {
+                for (const std::string& code : codes) {
+                    if (w.status(code).state != RoomState::Running) return false;
+                }
+                return true;
+            }, 15000));
+            w.run(60000);
+            for (const std::string& code : codes) {
+                const RoomStatus s = w.status(code);
+                ASSERT_MSG(s.state == RoomState::Running && s.turns > 1000 && s.bot_decisions > 0, std::string(c.map) + " " + code + ": " + s.reason);
+                ASSERT_TRUE(s.mode == c.mode && s.map == c.map && s.bots_only);
+            }
+        }
     } TEST_END();
 }
