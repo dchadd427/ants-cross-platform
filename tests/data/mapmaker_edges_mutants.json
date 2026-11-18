@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the map maker's Fix edges for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the rule and the dialog of web/front/mapmaker_edges.js and the `ground` list of a change in web/front/mapmaker_edit.js against tests/scripts/web_mapmaker_edges_check.js; the ones that start with browser_ (five) only the real browser notices (they run `web_mapmaker_browser.py --only edges`, so ANTS_WEB_URL must name a page served from this checkout). Run from the checkout: tools/mutate.py tests/data/mapmaker_edges_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker.py runs the same list on a copy of the files.",
+  "note": "Mutants of the map maker's Fix edges for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the rule, the Auto edges step (the names, the mud ring), the places that have no piece and the dialog of web/front/mapmaker_edges.js, the look of those places in web/front/mapmaker_view.js and the `ground` list of a change in web/front/mapmaker_edit.js against tests/scripts/web_mapmaker_edges_check.js; the ones that start with browser_ (seven) only the real browser notices (they run `web_mapmaker_browser.py --only edges`, so ANTS_WEB_URL must name a page served from this checkout). Run from the checkout: tools/mutate.py tests/data/mapmaker_edges_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker.py runs the same list on a copy of the files.",
   "mutants": [
     {
       "id": "edges_rank_mud_dirt_swapped",
@@ -503,6 +503,209 @@
       "file": "web/front/mapmaker_edges.js",
       "old": "for (r = R0; r <= R1; r++) for (c = C0; c <= C1; c++) {",
       "new": "for (r = r0; r <= r1; r++) for (c = c0; c <= c1; c++) {",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_step_names_nothing",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "return made.count ? n + stroke.change(change(f, made, G)) : n;",
+      "new": "return made.count ? n + stroke.change({ names: [], cells: [], solid: [], splices: [], ground: made.cells }) : n;",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_ring_includes_diagonals",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "cc = c + (d === 2 ? -1 : d === 3 ? 1 : 0)",
+      "new": "cc = c + (d === 2 || d === 0 ? -1 : 1)",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_ring_only_on_gravel",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "var LAND = { gravel: 1, dirt: 1, slate: 1 };",
+      "new": "var LAND = { gravel: 1 };",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_ring_over_mud",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "var LAND = { gravel: 1, dirt: 1, slate: 1 };",
+      "new": "var LAND = { gravel: 1, dirt: 1, slate: 1, mud: 1 };",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_ring_for_every_kind",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "G.kindOf(tileId) === 'water' ? ring(file(), rect, G, stroke.painted) : []",
+      "new": "ring(file(), rect, G, stroke.painted)",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_ring_pieces_reach_short",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "pad = 3;",
+      "new": "pad = 2;",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_ring_cells_not_the_strokes",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "cells.forEach(function (k) { stroke.painted[k] = mud; });",
+      "new": "cells.forEach(function (k) { stroke.painted[k] = 0; });",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_stroke_ring_seen_as_water",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "function ownAt(k) { return painted[k] > 1 ? painted[k] : tileId; }",
+      "new": "function ownAt(k) { return tileId; }",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_gaps_one_wearer_is_enough",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "faces(r, c, b, d) || faces(rr, cc, a, d ^ 1)",
+      "new": "faces(r, c, b, d) && faces(rr, cc, a, d ^ 1)",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_gaps_ignore_the_rule",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "by[p[0]] = p[1];",
+      "new": "by[p[0]] = file.tile1((p[0] / columns) | 0, p[0] % columns);",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_gaps_window_misses_north_and_west",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "for (r = r0 - 1; r <= r1; r++) for (c = c0 - 1; c <= c1; c++) {",
+      "new": "for (r = r0; r <= r1; r++) for (c = c0; c <= c1; c++) {",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_gaps_window_plan_ends_at_the_window",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "var BEYOND = 4;",
+      "new": "var BEYOND = 0;",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_gaps_east_side_never_looked_at",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "for (var d = 1; d <= 3; d += 2) {",
+      "new": "for (var d = 1; d <= 1; d += 2) {",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_places_badge_at_the_left",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "if (row < p.row || (row === p.row && col > p.column))",
+      "new": "if (row < p.row || (row === p.row && col < p.column))",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_places_not_joined_downward",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "[[row - 1, col], [row + 1, col], [row, col - 1], [row, col + 1]]",
+      "new": "[[row - 1, col], [row, col - 1], [row, col + 1]]",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_dialog_lists_every_place",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "var GAP_LIST = 6;",
+      "new": "var GAP_LIST = 60;",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_dialog_show_keeps_the_box",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "ctl.close(); env.show((p.r0 + p.r1) >> 1, (p.c0 + p.c1) >> 1);",
+      "new": "env.show((p.r0 + p.r1) >> 1, (p.c0 + p.c1) >> 1);",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_dialog_show_top_left",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "env.show((p.r0 + p.r1) >> 1, (p.c0 + p.c1) >> 1)",
+      "new": "env.show(p.r0, p.c0)",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_dialog_gap_box_always_there",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "gapBox.hidden = !list.length;",
+      "new": "gapBox.hidden = false;",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_dialog_places_of_the_whole_map_for_a_part",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "places(gaps(file, G, which === 'part' ? vis : null, made(which)))",
+      "new": "places(gaps(file, G, null, made('all')))",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_look_line_between_cells",
+      "file": "web/front/mapmaker_view.js",
+      "old": "if (!on(r - 1, c)) { ctx.moveTo(x, y + ins); ctx.lineTo(x + s, y + ins); }",
+      "new": "{ ctx.moveTo(x, y + ins); ctx.lineTo(x + s, y + ins); }",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_look_tiny_tiles_marked",
+      "file": "web/front/mapmaker_view.js",
+      "old": "if (opts.gaps && view.scale >= GAPS_FROM) drawGaps(",
+      "new": "if (opts.gaps) drawGaps(",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_look_no_badge",
+      "file": "web/front/mapmaker_view.js",
+      "old": "drawBadge(ctx, x0 + (p.column + 1) * s - rad * 0.9, y0 + p.row * s + rad * 0.9, rad);",
+      "new": "void 0;",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_look_badge_off_screen",
+      "file": "web/front/mapmaker_view.js",
+      "old": "if (p.row < vis.r0 || p.row > vis.r1 || p.column < vis.c0 || p.column > vis.c1) continue;",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "browser_edges_gaps_not_given_to_the_frame",
+      "file": "web/front/mapmaker_canvas.js",
+      "old": "ghost: ghostNow(cell), gaps: gaps });",
+      "new": "ghost: ghostNow(cell) });",
+      "test": "python3 tests/scripts/web_mapmaker_browser.py --web \"$ANTS_WEB_URL\" --only edges"
+    },
+    {
+      "id": "edges_end_leaves_the_names_of_replaced_pieces",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "if (!box || !list.length) return 0;",
+      "new": "return 0;",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_end_blanks_the_names_of_the_pieces_in_use",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "{ used[id] = 1; top = Math.max(top, id); }",
+      "new": "{ top = Math.max(top, id); }",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_end_looks_only_at_the_strokes_box",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "var PAD = 4;",
+      "new": "var PAD = 0;",
+      "test": "node tests/scripts/web_mapmaker_edges_check.js"
+    },
+    {
+      "id": "edges_end_keeps_what_the_stroke_named_as_found",
+      "file": "web/front/mapmaker_edges.js",
+      "old": "var first = list[0].removed,",
+      "new": "var first = list[list.length - 1].inserted,",
       "test": "node tests/scripts/web_mapmaker_edges_check.js"
     }
   ]

@@ -66,7 +66,7 @@ Parts:
              and the whole map, counts the cells (the part is fewer than the whole) and draws before and after from the pictures (the two canvases differ); Cancel changes nothing (the bytes
              that Download hands over and every pixel of the map are as before); Fix edges on the visible part changes only tile words of layer 1 inside it and the check line stays "Works in the
              original game"; a second one on the whole map brings the total to the count that the rule says; ONE Undo takes back each fix (the bytes are the exact ones that went before, and the
-             pixels too), Redo makes it again, and the fixed map has nothing left to fix (also run alone by the mutants of tests/data/mapmaker_edges_mutants.json);
+             pixels too), Redo makes it again, and the fixed map has nothing left to fix (also run alone by the mutants of tests/data/mapmaker_edges_mutants.json); then, in tests/scripts/web_mapmaker_browser_edges.py, Auto edges with the pointer held down (no cell drawn black, the ring of mud, one Undo; at 1 and 2 pixels a pixel) and the places that have no piece (the dashed line, the note, the box in Fix edges, Show; a phone);
   * play     1280 x 800 and a touch screen (390 x 844), Play this map (tests/scripts/web_mapmaker_play_browser.py, which says what it covers): a game is started from the map maker against bots in a tab of its own,
              really played (the roster, the ants, the clock on the screen), with the open file's own bytes; the way back asks once and closes the tab; the map comes back as it was, history included;
              the refusals are plain words
