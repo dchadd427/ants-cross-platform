@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.17.7 - 2026-11-17 - Back to the room after a match, ISLANDS bridges, Map Maker edges
+
+**For players:**
+- **Back to the room after a match.** The game's own Leave Game on the results screen now brings you back to your room, like the button under the game, and a public room stays public for the rematch.
+- **Hosting and watching a replay.** While you are in a room, Matches opens in a new tab, so your room stays yours; a page that comes back within a minute takes its seat again, and a seat that ended says so.
+- **Computer players on ISLANDS dig bridges** (Hard): a Swimmer digs the cheapest flower link first, a bridge home for hurt or stranded ants, to food on another island and to a Fire or Bomber power-up.
+- **Map Maker:** edge pieces show while you paint (no black squares), new water gets a ring of mud beside it with Auto edges on, and places where the game has no edge piece are marked.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.6 page or game still joins. Under the hood: the game server and the web pages are rebuilt.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b7ff8ec0...845c2214)
+
 ## v0.17.6 - 2026-11-17 - One admin secret, and a closed admin page says why
 
 **For players:**
@@ -458,17 +470,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ea2c4cc5...26810844)
 
-## v0.12.141 - 2026-10-26 - Faster: orders after a fight no longer look at every ant
+## Older versions (v0.12.141 and before)
 
-**For players:**
-- **Faster: the one slow moment of a huge map is about half as long.** When many combat ants end their fight in the same instant, each looks for its goal tile again, and each of them used to look at every ant of the map to do it. Measured here, slowest tick in milliseconds before and after, on the real 6,000-ant map (about 1.4 s into the match): 67 and 36 on the desktop, 94 and 56 in the web build (run in Node here, not in a browser); 4 x 1,500 combat ants packed on 120 x 120: 31 and 11.5. The average tick of that map goes from 2.2 to 1.8.
-- That tick is still over the web build's 50 ms budget; the next step (a team-mate's claim on a tile is still found by looking at every ant) is a separate change.
-- Nothing about a match changes: every tick has the same state as before (all 540 maps of the library play identically on the desktop build, and the web build gives the same state as the desktop on the 6,000-ant map and two big combat worlds).
-
-**Rules / network:** none; the rules and network protocol 21 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/aa8c3591...2e3cea5f)
-
-## Older versions (v0.12.140 and before)
-
-Every release before v0.12.141, and the long notes of v0.12.140 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.142, and the long notes of v0.12.141 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
