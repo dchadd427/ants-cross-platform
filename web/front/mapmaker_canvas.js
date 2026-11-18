@@ -311,12 +311,13 @@
         env.mini.addEventListener('pointermove', function (e) { if (miniDown) miniGo(e); });
         env.mini.addEventListener('pointerup', function () { miniDown = false; });
         env.mini.addEventListener('pointercancel', function () { miniDown = false; });
-        if (win.ResizeObserver) new win.ResizeObserver(function () {
-            if (!file) return;
+        // The canvas has another size than the one that was measured: the view keeps its middle, and a map that was whole stays whole
+        function resized() {
             var keep = { cx: view.cx, cy: view.cy, scale: view.scale }, whole = View.isWhole(view, file, w, h);
-            measure(); view.cx = keep.cx; view.cy = keep.cy; view.scale = whole ? 0 : keep.scale;       // (a map that was whole stays whole when the canvas changes size)
+            measure(); view.cx = keep.cx; view.cy = keep.cy; view.scale = whole ? 0 : keep.scale;
             View.clamp(view, file, w, h); paint();
-        }).observe(canvas);
+        }
+        if (win.ResizeObserver) new win.ResizeObserver(function () { if (file) resized(); }).observe(canvas);
 
         return {
             setFile: setFile, redraw: redraw,
@@ -348,6 +349,8 @@
                 var r = canvas.getBoundingClientRect();
                 if (!file || Math.round(r.width) === w && Math.round(r.height) === h) return;
                 measure(); look(view, w, h); View.clamp(view, file, w, h); paint();
+                // (the layout may not be done: the observer tells of a change from the size it saw last, so a size measured between two layouts that is the same again at the end is never told: look again a frame later)
+                if (win.requestAnimationFrame) win.requestAnimationFrame(function () { var q = canvas.getBoundingClientRect(); if (file && (Math.round(q.width) !== w || Math.round(q.height) !== h)) resized(); });
             },
             state: function () { return { view: view, cursor: cursor, width: w, height: h }; }
         };
