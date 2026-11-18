@@ -340,7 +340,7 @@ check "--bot-match-every-min below 0 is refused" "$([ "$(exit_of --bot-match-eve
 check "--bot-match-every-min that is no number is refused" "$([ "$(exit_of --bot-match-every-min hourly)" = "2" ]; echo $?)"
 check "--bot-match-every-min without a value is refused" "$([ "$(exit_of --bot-match-every-min)" = "2" ]; echo $?)"
 check "--bot-match-every-min 0 (none: the default), 5 and 1440 start the server" "$([ "$(exit_of --bot-match-every-min 0)" = "142" ] && [ "$(exit_of --bot-match-every-min 5 --replays-dir "$WORK/rp_a")" = "142" ] && [ "$(exit_of --bot-match-every-min 1440 --replays-dir "$WORK/rp_a")" = "142" ]; echo $?)"
-check "--bot-match-every-min with a replays folder says that the server plays its own matches" "$(log_of --bot-match-every-min 5 --replays-dir "$WORK/rp_a" | grep -q 'plays a match of computer players every 5 minutes'; echo $?)"
+check "--bot-match-every-min with a replays folder says that it made the schedule of the server's own matches" "$(log_of --bot-match-every-min 5 --replays-dir "$WORK/rp_a" | grep -q 'was made: one every 5 minutes, the first one in a minute'; echo $?)"
 check "--bot-match-every-min without any replays folder is ignored, and the log says why" "$(log_of --bot-match-every-min 5 | grep -q 'bot-match-every-min is ignored'; echo $?)"
 check "--replays-dir with an empty folder name is refused" "$([ "$(exit_of --replays-dir '')" = "2" ]; echo $?)"
 check "--replays-dir together with --no-replays is refused" "$([ "$(exit_of --replays-dir "$WORK/rp_none" --no-replays)" = "2" ]; echo $?)"

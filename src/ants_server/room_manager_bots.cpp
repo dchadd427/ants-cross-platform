@@ -218,7 +218,7 @@ ai::Level bot_level_of(BotLevelChoice choice, std::mt19937& rng) {
         case BotLevelChoice::Medium: return ai::Level::Medium;
         case BotLevelChoice::Hard: return ai::Level::Hard;
         case BotLevelChoice::RandomAny: {
-            const uint32_t draw = rng() % 3;
+            const uint32_t draw = static_cast<uint32_t>(rng() % 3);          // (the generator's own type is 64 bits on Linux)
             return draw == 0 ? ai::Level::Easy : draw == 1 ? ai::Level::Medium : ai::Level::Hard;
         }
         case BotLevelChoice::RandomMediumHard: break;

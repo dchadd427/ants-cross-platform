@@ -210,7 +210,7 @@ class TheLocations(unittest.TestCase):
     def test_the_stack_gives_the_door_and_the_documents_say_so(self):
         stack = read("docker-compose.stack.yml")
         for text in (stack,):
-            self.assertIn('"--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-30}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-100}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]', text)
+            self.assertIn('"--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-90}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-1024}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]', text)
         for name, text in (("docker-compose.stack.yml", stack),):
             for line in published_port_lines(text):
                 self.assertNotIn("4020", line, name)                                          # (the replay port is not published on the host, whatever the way to write it)
@@ -224,7 +224,7 @@ class TheLocations(unittest.TestCase):
         main = read("src", "ants_server", "main.cpp")
         for option in ("--replay-port", "--replay-any-interface", "--replay-demo", "--replays-days", "--replays-max-mb", "--replays-dir", "--no-replays"):
             self.assertIn('"%s"' % option, main, option)
-        for document, needles in (("REPLAYS.md", ("public", "30 days", "/replays")), ("SERVER.md", ("ANTS_REPLAY_PORT", "30 days", "--replay-port")), ("NETWORK_PORT.md", ("/replays", "replay-port"))):
+        for document, needles in (("REPLAYS.md", ("public", "90 days", "/replays")), ("SERVER.md", ("ANTS_REPLAY_PORT", "90 days", "--replay-port")), ("NETWORK_PORT.md", ("/replays", "replay-port"))):
             for needle in needles:
                 self.assertIn(needle, read("docs", document), document + ": " + needle)           # (each document says its own part, not all of them together)
 
