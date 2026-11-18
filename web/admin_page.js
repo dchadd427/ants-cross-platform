@@ -929,7 +929,7 @@
 
         // ---- the section "Log": what moderators and admins did in the chat, and the decisions on maps, newest first ----
         function renderLog(host) {
-            var st = { mode: 'all', chat: null, maps: null };
+            var st = { mode: 'all', chat: null, maps: null, bots: null };
             var tools = el('div', 'mtools lhead'), lead = el('p', 'alead'), body = el('div');
             add(host, tools, lead, body);
 
@@ -969,7 +969,7 @@
                 return wt;
             }
             function draw() {
-                var chat = st.chat || [], all = st.maps || [], now = env.now(), maps = all.filter(function (r) { return String(r.action).indexOf('bot_') !== 0; }), bots = all.filter(function (r) { return String(r.action).indexOf('bot_') === 0; });
+                var chat = st.chat || [], maps = st.maps || [], bots = st.bots || [], now = env.now();
                 tools.textContent = '';
                 var chips = el('span', 'chips');
                 chips.setAttribute('role', 'tablist');
@@ -986,6 +986,7 @@
                 body.textContent = '';
                 if (st.chat === null) add(body, message('The chat’s log could not be loaded.'));
                 if (st.maps === null) add(body, message('The map decisions could not be loaded.'));
+                if (st.bots === null) add(body, message('The bot matches’ log could not be loaded.'));
                 var rows = [];
                 if (st.mode === 'all' || st.mode === 'chat') chat.forEach(function (r) { rows.push({ at: r.at, src: 'chat', who: who(r.actor, r.actor_name), what: chatText(r, st.mode === 'all') }); });
                 if (st.mode === 'all' || st.mode === 'bots') bots.forEach(function (r) { rows.push({ at: r.at, src: 'bot', who: who(r.ref, r.who), what: botText(r, st.mode === 'all') }); });
@@ -998,16 +999,18 @@
                     add(list, add(el('div', 'arow2'), el('span', 'tm', when(r.at, now)), r.who, r.what));
                 });
                 if (rows.length) add(body, hd, list);
-                else if (st.chat !== null && st.maps !== null) add(body, el('p', 'none', 'Nothing was done in this time.'));
+                else if (st.chat !== null && st.maps !== null && st.bots !== null) add(body, el('p', 'none', 'Nothing was done in this time.'));
                 add(body, el('div', 'logfoot', 'People are shown by their Discord username. A person with no profile left is shown by the short code that the hub keeps for them.'));
             }
             draw();
-            return Promise.all([call('GET', HUB_API + 'modlog'), call('GET', '/admin/api/audit')]).then(function (rs) {
+            // the server filters the log by the kind of line (maps, bots), so that a kind that is busy never pushes the other kind out of the newest lines that each call gives
+            return Promise.all([call('GET', HUB_API + 'modlog'), call('GET', '/admin/api/audit?kind=maps'), call('GET', '/admin/api/audit?kind=bots')]).then(function (rs) {
                 for (var i = 0; i < rs.length; i++) if (refused(rs[i])) return;
                 st.chat = rs[0].status === 200 ? rs[0].json.modlog || [] : null;
                 st.maps = rs[1].status === 200 ? rs[1].json.entries || [] : null;
+                st.bots = rs[2].status === 200 ? rs[2].json.entries || [] : null;
                 draw();
-            }, function () { st.chat = st.maps = null; draw(); });
+            }, function () { st.chat = st.maps = st.bots = null; draw(); });
         }
 
         // ---- the section "Status": matches and players, the role checks, the pictures, the chat's store and the versions ----

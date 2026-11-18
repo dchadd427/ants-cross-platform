@@ -86,11 +86,12 @@ function world() {
 
 // ---- the matches of computer players of the pictures: four that go, the maps that may be named, the schedules; the calls of the section answer as the game server does (docs/MAP_SUBMISSIONS.md "Bot matches on the admin page")
 const BOT_MAPS = [
-    { file: 'TINY.LVL', name: 'TINY', group: 'original', width: 32, height: 32, places: 1 }, { file: 'SMALL.LVL', name: 'SMALL', group: 'original', width: 48, height: 48, places: 1 }, { file: 'MEDIUM.LVL', name: 'MEDIUM', group: 'original', width: 64, height: 64, places: 1 },
-    { file: 'GAUNTLET.LVL', name: 'GAUNTLET', group: 'original', width: 64, height: 64, places: 1 }, { file: 'TREASURE.LVL', name: 'TREASURE', group: 'original', width: 96, height: 96, places: 1 }, { file: 'ISLANDS.LVL', name: 'ISLANDS', group: 'original', width: 96, height: 96, places: 1 },
-    { file: 'POPcOrN.lvl', name: 'POPcOrN', group: 'library', width: 64, height: 64, places: 1 }, { file: 'HELLRAISER.lvl', name: 'HELLRAISER', group: 'library', width: 64, height: 64, places: 1 }, { file: 'Bombz Away.lvl', name: 'Bombz Away', group: 'library', width: 64, height: 64, places: 1 },
-    { file: 'Cave Crossing.lvl', name: 'Cave Crossing', group: 'players', width: 31, height: 31, places: 1 }, { file: 'Fight Island.lvl', name: 'Fight Island', group: 'players', width: 150, height: 150, places: 3 },
-    { file: 'Mossy Ridge.lvl', name: 'Mossy Ridge', group: 'players', width: 31, height: 31, places: 1 }, { file: 'Old Bridge.lvl', name: 'Old Bridge', group: 'players', width: 128, height: 128, places: 2 }
+    { file: 'TINY.LVL', name: 'TINY', group: 'original', width: 32, height: 32, places: 1 , minutes: 6, random: true }, { file: 'SMALL.LVL', name: 'SMALL', group: 'original', width: 48, height: 48, places: 1 , minutes: 8, random: true }, { file: 'MEDIUM.LVL', name: 'MEDIUM', group: 'original', width: 64, height: 64, places: 1 , minutes: 10, random: true },
+    { file: 'GAUNTLET.LVL', name: 'GAUNTLET', group: 'original', width: 64, height: 64, places: 1 , minutes: 12, random: true }, { file: 'TREASURE.LVL', name: 'TREASURE', group: 'original', width: 96, height: 96, places: 1 , minutes: 12, random: true }, { file: 'ISLANDS.LVL', name: 'ISLANDS', group: 'original', width: 96, height: 96, places: 1 , minutes: 20, random: true },
+    { file: 'POPcOrN.lvl', name: 'POPcOrN', group: 'library', width: 64, height: 64, places: 1 , minutes: 12, random: true }, { file: 'HELLRAISER.lvl', name: 'HELLRAISER', group: 'library', width: 64, height: 64, places: 1 , minutes: 15, random: true }, { file: 'Bombz Away.lvl', name: 'Bombz Away', group: 'library', width: 64, height: 64, places: 1 , minutes: 10, random: true },
+    { file: 'Cave Crossing.lvl', name: 'Cave Crossing', group: 'players', width: 31, height: 31, places: 1 , minutes: 12, random: true }, { file: 'Fight Island.lvl', name: 'Fight Island', group: 'players', width: 150, height: 150, places: 3 , minutes: 20, random: true },
+    { file: 'Mossy Ridge.lvl', name: 'Mossy Ridge', group: 'players', width: 31, height: 31, places: 1 , minutes: 10, random: true }, { file: 'Old Bridge.lvl', name: 'Old Bridge', group: 'players', width: 128, height: 128, places: 2 , minutes: 14, random: true },
+    { file: 'Ultimate Chess.lvl', name: 'Ultimate Chess', group: 'players', width: 120, height: 120, places: 2, minutes: 60, random: false }
 ];
 const BOT_ROTATION = { count: 1, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' };
 function botMatch(id, name, rules, seats, teams, startedIso, extra) { return Object.assign({ id, name, rules, seats, teams, started: at(startedIso), live: id + '-live' }, extra); }
@@ -125,8 +126,8 @@ function fullHouse() {
 function botApi(req, p, json) {
     const B = W.bots;
     if (p === '/admin/api/bot-matches' && req.method === 'GET') { json(200, { matches: B.matches, cap: 8, places: { people: B.people, bots: B.matches.length, total: B.total, bots_max: 16 }, replays: true, untrusted: true, untrusted_fields: ['name', 'by', 'schedule'] }); return true; }
-    if (p === '/admin/api/bot-options') { json(200, { maps: BOT_MAPS, rotation: { 'highest-score': 9, '187': 6 }, untrusted: true, untrusted_fields: ['name'] }); return true; }
-    if (p === '/admin/api/bot-schedules' && req.method === 'GET') { json(200, { schedules: B.schedules, max: 20, untrusted: true, untrusted_fields: ['name'] }); return true; }
+    if (p === '/admin/api/bot-options') { json(200, { maps: BOT_MAPS, rotation: { 'highest-score': 9, '187': 6 }, random_max_minutes: 30, untrusted: true, untrusted_fields: ['name'] }); return true; }
+    if (p === '/admin/api/bot-schedules' && req.method === 'GET') { json(200, { schedules: B.schedules, max: 20, scheduling: B.scheduling !== false, untrusted: true, untrusted_fields: ['name'] }); return true; }
     if (p.indexOf('/admin/api/bot-') !== 0 || req.method !== 'POST') return false;
     let raw = '';
     req.on('data', (c) => { raw += c; });
@@ -142,8 +143,9 @@ function botApi(req, p, json) {
             if (body.map === 'ISLANDS.LVL' && body.rules === '187') return json(409, { error: 'map_187' });
             const names = ['SMALL', 'GAUNTLET', 'TREASURE', 'POPcOrN', 'MEDIUM', 'TINY'];
             const file = BOT_MAPS.filter((x) => x.file === body.map)[0];
-            for (let i = 0; i < body.count; i++) B.matches.push(botMatch('n' + (B.nextId++), file ? file.name : names[i % names.length], body.rules === '187' ? '187' : 'highest-score', [{ seat: 0, level: 'hard' }, { seat: 2, level: 'hard' }], 'ffa', '2026-11-16T21:20:00Z', { by: 'basil', live: null }));
-            return json(200, { started: body.count, asked: body.count });
+            const made = B.stopShort ? 1 : body.count;
+            for (let i = 0; i < made; i++) B.matches.push(botMatch('n' + (B.nextId++), file ? file.name : names[i % names.length], body.rules === '187' ? '187' : 'highest-score', [{ seat: 0, level: 'hard' }, { seat: 2, level: 'hard' }], 'ffa', '2026-11-16T21:20:00Z', { by: 'basil', live: null }));
+            return json(200, B.stopShort ? { started: made, asked: body.count, stopped_for: B.stopShort } : { started: body.count, asked: body.count });
         }
         if (p === '/admin/api/bot-matches/stop-all') { const n = B.matches.length; B.matches = []; return json(200, { stopped: n }); }
         if ((m = /^\/admin\/api\/bot-matches\/([A-Za-z0-9_-]+)\/stop$/.exec(p))) { B.matches = B.matches.filter((x) => x.id !== m[1]); return json(200, { stopped: 1 }); }
@@ -193,7 +195,11 @@ const server = http.createServer((req, res) => {
     if (p === '/hub/me') return json(who.you[0], who.you[1]);
     if (p === '/live') return json(200, { live: [] });
     if (p === '/busy') return json(200, W.busy);
-    if (p === '/admin/api/audit') return json(200, { entries: W.audit.concat(W.bots.audit).sort((a, b) => b.at - a.at), untrusted: true });
+    if (p === '/admin/api/audit') {                        // (the server filters by the kind of line: maps = every action that is not a bot's, bots = the actions that start with bot_)
+        const kind = url.searchParams.get('kind');
+        const isBot = (e) => String(e.action).indexOf('bot_') === 0;
+        return json(200, { entries: W.audit.concat(W.bots.audit).filter((e) => kind === 'bots' ? isBot(e) : kind === 'maps' ? !isBot(e) : true).sort((a, b) => b.at - a.at), untrusted: true });
+    }
     if (p.indexOf('/admin/api/bot-') === 0 && botApi(req, p, json)) return undefined;
     if (p === '/admin/api/maps') { const st = url.searchParams.get('state') || 'waiting'; return json(200, { state: st, counts: W.counts, maps: MAPS[st] || [] }); }
     if ((m = /^\/admin\/api\/maps\/([a-f]{32})\/picture$/.exec(p))) { const row = [].concat(MAPS.waiting, MAPS.approved).filter((x) => x.id === m[1])[0]; return thumb(res, row ? row.thumb : 'a'); }
@@ -279,6 +285,8 @@ const BOT_SCENES = [
     ['1e_start_now_refused_over_the_limit', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); const plus = pg.locator('.b-now .step button').nth(1); for (let i = 0; i < 5; i++) await plus.click(); await pg.click('.b-now .startrow .btn'); await pg.waitForSelector('.b-now .msg.bad'); }],
     ['1f_start_now_all_places_taken', { who: 'admin', crop: '.b-now', setup: fullHouse }, async (pg) => { await openBots(pg); await pg.waitForSelector('.b-now .msg.bad'); }],
     ['1g_start_now_islands_in_187', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); await pg.selectOption('#now-map', 'ISLANDS.LVL'); await chipOf(pg, 'now-rules', '187'); }],
+    ['1h_start_now_long_map', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); await pg.selectOption('#now-map', 'Ultimate Chess.lvl'); }],
+    ['1i_start_now_stopped_short', { who: 'admin', crop: '.b-now', setup: () => { W.bots.stopShort = 'budget'; } }, async (pg) => { await openBots(pg); await pg.locator('.b-now .step button').nth(1).click(); await pg.locator('.b-now .step button').nth(1).click(); await pg.click('.b-now .startrow .btn'); await pg.waitForSelector('.b-now .msg.ok'); await pg.waitForTimeout(300); }],
     ['2_running', { who: 'admin', crop: '.b-run' }, openBots],
     ['2b_running_none', { who: 'admin', crop: '.b-run', setup: () => { W.bots.matches = []; } }, openBots],
     ['2c_running_all_places_taken', { who: 'admin', crop: '.b-run', setup: fullHouse }, openBots],
@@ -302,6 +310,7 @@ const BOT_SCENES = [
         await chipOf(pg, 'sc-teams', 'A split');
         await pg.selectOption('#sc-split', '3-12');
     }],
+    ['3f_schedules_switched_off', { who: 'admin', crop: '.b-sched', setup: () => { W.bots.scheduling = false; } }, openBots],
     ['3d_schedule_refused_by_the_form', { who: 'admin', crop: '.b-sched' }, async (pg) => { await openBots(pg); await pg.click('.b-sched .sfoot .btn'); await pg.waitForSelector('.sform'); await pg.fill('#sc-min', '3'); await pg.locator('.sform .sfoot .btn', { hasText: 'Save' }).click(); await pg.waitForSelector('.sform .msg.bad'); }],
     ['3e_schedule_delete_question', { who: 'admin', dialog: true }, async (pg) => { await openBots(pg); await pg.locator('.b-sched .brow .bb button', { hasText: 'Delete' }).first().click(); await pg.waitForSelector('.dlg'); await pg.waitForTimeout(150); }],
     ['4_log_bot_matches', { who: 'admin', crop: '#secpanel', width: 1000 }, async (pg) => { await openSection(pg, 'log'); await pg.waitForSelector('.alist2 .arow2'); await pg.locator('.lhead .chip', { hasText: 'Bot matches' }).click(); await pg.waitForTimeout(150); }]

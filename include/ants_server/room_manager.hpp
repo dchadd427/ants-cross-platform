@@ -228,12 +228,12 @@ public:
     void seed_bot_matches(uint32_t seed);
     /// One match of computer players now, with the choices of `spec`: the room's code when it was made, else the reason in `why` (and in `refusal`, when asked, the kind of reason). Nothing is made while the server keeps
     /// no replays (a match that nobody could watch or look at again), while kBotMatchesMax matches of this kind are going, while the people's matches use more than their share of the server's places
-    /// (kBotPeopleShareNumerator / kBotPeopleShareDenominator of --demo-rooms), or while the match would take the places of the matches of computer players past kBotPlacesMax. `mode`, when given, gets the rules that the
+    /// (kBotPeopleShareNumerator / kBotPeopleShareDenominator of --demo-rooms), while the match would take the places of the matches of computer players past kBotPlacesMax, or while the replay store has no room left this hour for the recording of another one (ReplayStore::bot_saves_left: a match that would not be kept is not played). A random choice of the map never takes a map of more than kBotRandomMaxMinutes. `mode`, when given, gets the rules that the
     /// match was dealt (sim::GameMode as a byte). A choice that is a draw is drawn in an order that never changes (the map first, then the number of bots, each seat and its level, the seed, the teams, the rules), so
     /// the first match of a seed with the default choices is the same as it was before there were choices (docs/SERVER_REPLAYS.md "Matches of computer players").
     bool start_bot_match(uint32_t now_ms, const BotMatchSpec& spec, std::string& code, std::string& why, BotRefusal* refusal = nullptr, uint8_t* mode = nullptr);
-    /// The same with the default choices (a map of the rotation, random rules, two to four bots of the Medium or Hard level, free for all or teams by a draw)
-    bool start_bot_match(uint32_t now_ms, std::string& code, std::string& why, uint8_t* mode = nullptr);
+    /// How many map files were loaded and judged for the lists of the matches of computer players since the server started (a verdict that is kept is not loaded again)
+    size_t bot_map_loads() const noexcept { return bot_map_loads_; }
     /// The maps that a match of computer players may be asked to play: the original's six, three maps of the library and every approved map of the players, in that order, each with its size and its places; only
     /// those that a room can play now (a map that the server lacks or cannot play is not in it)
     std::vector<BotMapOption> bot_map_options() const;
@@ -336,8 +336,10 @@ private:
     /// "" when the map of the head is on this server, is the file that the match was played on and can be played by its seats (entry and level are made); else the refusal
     std::string map_refusal(const RestartHead& head, MapEntry& entry, assets::LevelData& level) const;
     void refuse_record(const std::string& path, const RestartHead& head, RestoreItem item, const std::string& refusal, bool has_place, uint32_t now_ms);
-    /// "" when a room can play this map of a list of the server's own matches now (`approved`: it must be one of the approved maps of the players), else why not; `minutes` gets the map's own time limit
-    std::string bot_match_map_refusal(const std::string& file, bool approved, uint32_t& minutes) const;
+    /// "" when a room can play this map of a list of the server's own matches now (`approved`: it must be one of the approved maps of the players), else why not; `minutes` gets the map's own time limit and
+    /// `places` (when asked) what a match on it takes (OnlineLimits::weight). The file is loaded and judged once: the verdict is kept by the file's path, size and time (and the approved record's hash), so that the
+    /// admin page's lists and the draw of a map do not load every map of the server at every call; a map that was taken down is never answered from it, one that was replaced is judged again.
+    std::string bot_match_map_refusal(const std::string& file, bool approved, uint32_t& minutes, uint32_t* places = nullptr) const;
     void restore_step(uint32_t now_ms);
     size_t next_to_restore() const;
     JobEnd advance(Restoring& job, uint32_t slice_ms, const std::function<uint32_t()>& clock, uint32_t now_ms);
@@ -403,6 +405,17 @@ private:
     uint32_t next_bot_start_ms_{0};
     std::vector<std::string> bot_notes_;         // what the timer did, for the log (take_notices)
     std::set<std::string> bot_maps_skipped_;     // the maps of the lists that the last match found that a room cannot play (each is named in the log once, not at every match)
+    struct BotMapVerdict {
+        std::string path;
+        uint64_t size{0};
+        int64_t stamp{0};
+        uint64_t hash{0};
+        std::string refusal;
+        uint32_t minutes{0};
+        uint32_t places{1};
+    };
+    mutable std::map<std::string, BotMapVerdict> bot_map_verdicts_;      // by the map's file name (see bot_match_map_refusal)
+    mutable size_t bot_map_loads_{0};
     std::vector<std::string> room_notes_;        // what the rooms said (Room::take_notes), for the log (take_notices)
 };
 

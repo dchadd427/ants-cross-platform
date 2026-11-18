@@ -138,7 +138,7 @@
         var game = rec ? text(rec.game) : '';
         if (kind === 'watch') return { kind: 'watch', label: 'Replay', file: file, note: '' };
         if (kind === 'old') return { kind: 'old', label: 'Older version', file: file, note: 'The recording was made by an older version (' + (game || 'unknown') + ') and this version of the game cannot play it. The totals below are complete.' };
-        return { kind: 'removed', label: 'Replay removed', file: '', note: 'Replay removed: recordings are kept for 90 days. The stats below stay.' };
+        return { kind: 'removed', label: 'Replay removed', file: '', note: 'Replay removed: recordings are kept for up to 90 days. The stats below stay.' };
     }
     // What a replay pass may add later to a record (docs/REPLAYS.md): the keys of `details`, read as plain data and never trusted: a value that is not an object is nothing
     function detailsOf(rec) {

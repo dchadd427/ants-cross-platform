@@ -45,14 +45,16 @@ struct BotDoor {
     uint64_t counter{0x3000};
     int64_t wall{kBotWall0};
 
-    explicit BotDoor(const char* tag, ServerLimits limits = ServerLimits(), bool replays = true, bool hook = true) : w((std::string(tag) + "-maps").c_str(), limits) {          // (the folder of the map of the players is not the folder of the replays: temp_dir_for makes its folder new)
+    explicit BotDoor(const char* tag, ServerLimits limits = ServerLimits(), bool replays = true, bool hook = true, uint32_t bot_saves_per_hour = 30) : w((std::string(tag) + "-maps").c_str(), limits) {          // (the folder of the map of the players is not the folder of the replays: temp_dir_for makes its folder new)
         std::string why;
         const auto need = [](bool ok, const char* what) {                     // (a constructor cannot return from a failed assertion: it is told, and the test fails where it uses the door)
             ++g_assert_count;
             if (!ok) ANTS_TEST_REPORT(what);
         };
         if (replays) {
-            need(w.mgr.enable_replays(replay_config(tag, &clock), false, why), "the door's replays");
+            ReplayConfig rc = replay_config(tag, &clock);
+            rc.max_bot_saves_per_hour = bot_saves_per_hour;
+            need(w.mgr.enable_replays(rc, false, why), "the door's replays");
             (void)w.mgr.take_notices();
         }
         w.mgr.seed_bot_matches(20261118u);
@@ -79,7 +81,9 @@ struct BotDoor {
     ctl::HttpRequest req(const std::string& method, const std::string& tail, const std::map<std::string, std::string>& headers = {}, const std::string& body = "") {
         ctl::HttpRequest r;
         r.method = method;
-        r.path = "/admin/api/" + tail;
+        const size_t question = tail.find('?');
+        r.path = "/admin/api/" + tail.substr(0, question);
+        if (question != std::string::npos) r.query = tail.substr(question + 1);
         r.headers.insert(headers.begin(), headers.end());
         r.body = body;
         r.peer = "172.18.0.4";
@@ -164,9 +168,9 @@ void run_bot_admin_tests() {
             ASSERT_TRUE(w.mgr.stop_bot_match(codes[3], w.now));                          // (a stopped match is no longer one that goes: its place is free at once)
             ASSERT_EQ(w.mgr.bot_match_count(), kBotMatchesMax - 1);
             std::string code, reason;
-            ASSERT_TRUE(w.mgr.start_bot_match(w.now, code, reason));
+            ASSERT_TRUE(w.mgr.start_bot_match(w.now, BotMatchSpec(), code, reason));
             ASSERT_EQ(w.mgr.bot_match_count(), kBotMatchesMax);
-            ASSERT_FALSE(w.mgr.start_bot_match(w.now, code, reason));
+            ASSERT_FALSE(w.mgr.start_bot_match(w.now, BotMatchSpec(), code, reason));
         }
         {   // sixteen places: a match on a big map takes more than one
             ListedWorld w("botadmin-places-maps");
@@ -203,7 +207,7 @@ void run_bot_admin_tests() {
             }
             ASSERT_TRUE(w.mgr.people_places() == 6 && w.mgr.place_total() == 8 && !w.mgr.people_busy());      // (six of eight is exactly three of every four: not more)
             std::string code, reason;
-            ASSERT_TRUE(w.mgr.start_bot_match(w.now, code, reason));
+            ASSERT_TRUE(w.mgr.start_bot_match(w.now, BotMatchSpec(), code, reason));
             RoomSpec seventh = spec_of("pub-6", 2);
             seventh.public_room = true;
             ASSERT_TRUE(w.mgr.create_room(seventh, w.now).ok);
@@ -938,4 +942,279 @@ void run_bot_admin_tests() {
             ASSERT_EQ(d.schedules->find(s.id)->next_run, first + 25 * 3600);                                                    // (the next day's 01:30, in standard time: 09:30 UTC of the 2nd)
         }
     } TEST_END();
+
+    TEST_CASE("S3.278 A Schedule Has Four Levels Whatever The Number Of Bots: The List Gives Four For Two Bots (Also For A Row That Was Kept With Two), So That Raising The Bots And Saving Is Not Refused; A Level That Is Missing Is Still Refused") {
+        BotDoor d("botadmin-levels");
+        const std::string two = "{\"name\":\"Two bots\",\"on\":true,\"when\":{\"kind\":\"every\",\"minutes\":30},\"what\":" + batch_body(1, "TINY.LVL", "highest-score", "2", "ffa", "", "[\"hard\",\"easy\"]") + "}";
+        const ctl::HttpResponse made = d.post("bot-schedules", two);
+        ASSERT_EQ(made.status, 200);
+        const ctl::JsonValue row = BotDoor::json(made).get("schedule");
+        ASSERT_EQ(row.get("what").get("levels").size(), size_t{4});
+        std::vector<std::string> levels;
+        for (size_t i = 0; i < 4; ++i) levels.push_back(row.get("what").get("levels").at(i).str());
+        ASSERT_TRUE(levels == (std::vector<std::string>{"hard", "easy", "rmh", "rmh"}));
+        // the page takes what the list gave, raises the bots to four and saves: not refused
+        const std::string id = std::to_string(row.get("id").as_int_or(0));
+        const std::string raised = "{\"what\":" + batch_body(1, "TINY.LVL", "highest-score", "4", "ffa", "", "[\"hard\",\"easy\",\"rmh\",\"rmh\"]") + "}";
+        ASSERT_EQ(d.post("bot-schedules/" + id, raised).status, 200);
+        ASSERT_EQ(BotDoor::json(d.get("bot-schedules")).get("schedules").at(0).get("what").get("bots").str(), std::string("4"));
+        // a list that holds a hole (what a page that did not pad would send) is refused, and changes nothing
+        const std::string hole = "{\"what\":" + batch_body(1, "TINY.LVL", "highest-score", "4", "ffa", "", "[\"hard\",\"easy\",null,null]") + "}";
+        const ctl::HttpResponse refused = d.post("bot-schedules/" + id, hole);
+        ASSERT_TRUE(refused.status == 400 && BotDoor::json(refused).get("error").str() == "bad_levels");
+        // a row of the table that was kept with two levels (before the list gave four) is read, and listed with four
+        BotDoor old("botadmin-levels-old");
+        db::Statement st;
+        ASSERT_TRUE(old.database.prepare(st, "INSERT INTO bot_schedules (name, enabled, is_default, kind, minutes, times, what, last_run, next_run, created_at) VALUES ('Old two', 1, 0, 'every', 30, '[]', ?, 0, 0, 1)").ok());
+        ASSERT_TRUE(st.bind_text(1, "{\"count\":1,\"map\":\"TINY.LVL\",\"rules\":\"highest-score\",\"bots\":\"2\",\"levels\":[\"hard\",\"easy\"],\"teams\":\"ffa\",\"split\":\"\"}").ok() && st.step() == db::Statement::Step::Done);
+        std::string why;
+        BotScheduleStore reopened(&old.database);
+        ASSERT_TRUE(reopened.open(kBotWall0, why) && reopened.list().size() == 1);
+        const ctl::JsonValue listed = bot_what_json(reopened.list()[0].what);
+        ASSERT_TRUE(listed.get("levels").size() == 4 && listed.get("levels").at(0).str() == "hard" && listed.get("levels").at(1).str() == "easy" && listed.get("levels").at(2).str() == "rmh");
+    } TEST_END();
+
+    TEST_CASE("S3.279 The Operator's Off Switch (--bot-match-every-min 0): With Scheduling Off No Schedule Starts A Match, Whatever Is Due Or Stored; The List Says So And Promises No Next Start; Start Now Still Works; Switched On Again The Due Schedule Runs") {
+        BotDoor d("botadmin-off");
+        std::string why;
+        BotSchedule s;
+        BotSchedulePatch p;
+        p.has_name = true;
+        p.name = "Quick";
+        p.has_when = true;
+        p.kind = BotSchedule::Kind::Every;
+        p.minutes = 5;
+        p.has_what = true;
+        p.what.count = 2;
+        p.what.spec.map = "TINY.LVL";
+        p.what.spec.bots = 2;
+        ASSERT_TRUE(d.schedules->create(p, kBotWall0, s, why));
+        ASSERT_TRUE(d.bots->scheduling());
+        d.bots->set_scheduling(false);
+        d.bots->update(kBotWall0 + 300, d.w.now);
+        d.bots->update(kBotWall0 + 4000, d.w.now);
+        ASSERT_TRUE(d.w.mgr.bot_match_count() == 0 && d.bots->take_notices().empty());                                         // (due for an hour, and nothing started)
+        const ctl::JsonValue list = BotDoor::json(d.get("bot-schedules"));
+        ASSERT_TRUE(!list.get("scheduling").as_bool_or(true) && list.get("schedules").size() == 1 && list.get("schedules").at(0).get("on").as_bool_or(false) && list.get("schedules").at(0).get("next").is_null());
+        ASSERT_EQ(d.post("bot-matches", batch_body(1, "TINY.LVL", "highest-score", "2")).status, 200);                           // (Start now is not a schedule)
+        ASSERT_EQ(d.w.mgr.bot_match_count(), size_t{1});
+        ASSERT_EQ(d.post("bot-schedules", "{\"name\":\"Added while off\",\"when\":{\"kind\":\"every\",\"minutes\":60},\"what\":" + batch_body(1) + "}").status, 200);          // (they can still be edited)
+        d.bots->set_scheduling(true);
+        d.bots->update(kBotWall0 + 4001, d.w.now);
+        ASSERT_EQ(d.w.mgr.bot_match_count(), size_t{4});                                                                       // (one from Start now, the two of "Quick" and the one of the schedule that was added while it was off: both are due)
+        const ctl::JsonValue again = BotDoor::json(d.get("bot-schedules"));
+        ASSERT_TRUE(again.get("scheduling").as_bool_or(false) && !again.get("schedules").at(0).get("next").is_null());
+    } TEST_END();
+
+    TEST_CASE("S3.280 A Change That Changes Nothing Is Not Logged: Stopping Nothing, Saving The Same Schedule Again, Turning On What Is On, Turning Off What Is Off; The Same Save Twice In A Moment (A Double Click) Is One Schedule With One Line; A Different Schedule Is Another") {
+        BotDoor d("botadmin-noop");
+        ASSERT_EQ(d.post("bot-matches/stop-all").status, 200);
+        ASSERT_TRUE(d.log().empty());                                                                                          // (nothing ran: nothing to say)
+        ASSERT_EQ(d.post("bot-matches", batch_body(2, "TINY.LVL", "highest-score", "2")).status, 200);
+        ASSERT_EQ(d.post("bot-matches/stop-all").status, 200);
+        ASSERT_EQ(d.post("bot-matches/stop-all").status, 200);
+        size_t stopped = 0;
+        for (const AuditEntry& e : d.log()) stopped += e.action == "bot_stopped_all" ? 1 : 0;
+        ASSERT_EQ(stopped, size_t{1});                                                                                         // (the second call stopped nothing)
+        const std::string body = "{\"name\":\"Evening\",\"on\":true,\"when\":{\"kind\":\"times\",\"times\":[\"18:00\"]},\"what\":" + batch_body(1) + "}";
+        const ctl::HttpResponse first = d.post("bot-schedules", body);
+        const ctl::HttpResponse second = d.post("bot-schedules", body);                                                         // (the double click)
+        ASSERT_TRUE(first.status == 200 && second.status == 200);
+        ASSERT_EQ(BotDoor::json(first).get("schedule").get("id").as_int_or(-1), BotDoor::json(second).get("schedule").get("id").as_int_or(-2));
+        ASSERT_EQ(BotDoor::json(d.get("bot-schedules")).get("schedules").size(), size_t{1});
+        size_t added = 0;
+        for (const AuditEntry& e : d.log()) added += e.action == "bot_schedule_added" ? 1 : 0;
+        ASSERT_EQ(added, size_t{1});
+        const std::string id = std::to_string(BotDoor::json(first).get("schedule").get("id").as_int_or(0));
+        const size_t before = d.log().size();
+        ASSERT_EQ(d.post("bot-schedules/" + id, "{\"on\":true}").status, 200);                                                  // (on, and it is on)
+        ASSERT_EQ(d.post("bot-schedules/" + id, body).status, 200);                                                             // (the same name, time and choices)
+        ASSERT_EQ(d.log().size(), before);
+        ASSERT_EQ(d.post("bot-schedules/" + id, "{\"on\":false}").status, 200);
+        ASSERT_EQ(d.post("bot-schedules/" + id, "{\"on\":false}").status, 200);
+        ASSERT_EQ(d.log().size(), before + 1);
+        ASSERT_EQ(d.log()[0].action, std::string("bot_schedule_off"));
+        const std::string other = "{\"name\":\"Evening\",\"on\":true,\"when\":{\"kind\":\"times\",\"times\":[\"19:00\"]},\"what\":" + batch_body(1) + "}";
+        ASSERT_EQ(d.post("bot-schedules", other).status, 200);                                                                  // (another time: another schedule)
+        ASSERT_EQ(BotDoor::json(d.get("bot-schedules")).get("schedules").size(), size_t{2});
+        // the same save a good while later is a second schedule too: the window is for the double click
+        d.wall += 60;
+        ASSERT_EQ(d.post("bot-schedules", other).status, 200);
+        ASSERT_EQ(BotDoor::json(d.get("bot-schedules")).get("schedules").size(), size_t{3});
+        // a change of the time keeps the next run when only the name changes, and moves it when the time changes
+        const int64_t next = BotDoor::json(d.get("bot-schedules")).get("schedules").at(1).get("next").as_int_or(0);
+        const std::string second_id = std::to_string(BotDoor::json(d.get("bot-schedules")).get("schedules").at(1).get("id").as_int_or(0));
+        ASSERT_EQ(d.post("bot-schedules/" + second_id, "{\"name\":\"Evening 2\"}").status, 200);
+        ASSERT_EQ(BotDoor::json(d.get("bot-schedules")).get("schedules").at(1).get("next").as_int_or(-1), next);
+    } TEST_END();
+
+    TEST_CASE("S3.281 The Log Is Asked For By Kind In The Query: A Hundred And Fifty Lines About The Matches Never Push The Decisions On Maps Out Of The Newest Lines, Nor The Other Way; A Kind That Is None Is Refused; The Door Is The Same") {
+        BotDoor d("botadmin-kinds");
+        const Actor who{kBotRefDave, "dave"};
+        d.audit->record(who, kBotWall0 + 1, "map_approved", "Mossy Ridge", "");
+        d.audit->record(who, kBotWall0 + 2, "map_declined", "Test 1", "Same as an existing map.");
+        d.audit->record(who, kBotWall0 + 3, "map_taken_down", "Old Bridge", "");
+        for (int i = 0; i < 250; ++i) d.audit->record(who, kBotWall0 + 10 + i, i % 2 == 0 ? "bot_started" : "bot_stopped", "TINY", "");
+        const auto actions = [&](const std::string& tail) {
+            std::vector<std::string> out;
+            const ctl::HttpResponse r = d.get(tail);
+            const ctl::JsonValue entries = BotDoor::json(r).get("entries");
+            for (size_t i = 0; i < entries.size(); ++i) out.push_back(entries.at(i).get("action").str());
+            return out;
+        };
+        const std::vector<std::string> maps = actions("audit?kind=maps");
+        ASSERT_TRUE(maps == (std::vector<std::string>{"map_taken_down", "map_declined", "map_approved"}));                      // (newest first, and all three, though 250 lines of the other kind are newer)
+        const std::vector<std::string> bots = actions("audit?kind=bots");
+        ASSERT_EQ(bots.size(), size_t{200});
+        for (const std::string& a : bots) ASSERT_TRUE(a.compare(0, 4, "bot_") == 0);
+        const std::vector<std::string> all = actions("audit");
+        ASSERT_TRUE(all.size() == 200 && all.back().compare(0, 4, "bot_") == 0);                                                  // (without a kind: the newest 200 of everything, as before)
+        ASSERT_EQ(d.get("audit?kind=chat").status, 400);
+        ASSERT_EQ(BotDoor::json(d.get("audit?kind=chat")).get("error").str(), std::string("bad_kind"));
+        const ctl::HttpResponse closed = d.get("audit?kind=bots", "");
+        ASSERT_TRUE(closed.status == 403 && closed.body == kBotClosed);
+    } TEST_END();
+
+    TEST_CASE("S3.282 A Match Of Computer Players Is Not Played When The Store Has No Room To Keep It This Hour: The Start Is Refused With The Reason (409 budget, The Number An Hour), A Batch Starts As Many As The Room Allows, And The Room Is Used By A Match That Was Kept, Not By One That Was Stopped At Once") {
+        BotDoor d("botadmin-budget", ServerLimits(), true, true, 2);
+        ASSERT_EQ(d.w.mgr.replay_store()->bot_saves_left(), size_t{2});
+        const ctl::HttpResponse batch = d.post("bot-matches", batch_body(3, "TINY.LVL", "highest-score", "2"));
+        ASSERT_EQ(batch.status, 200);
+        const ctl::JsonValue answer = BotDoor::json(batch);
+        ASSERT_TRUE(answer.get("started").as_int_or(0) == 2 && answer.get("asked").as_int_or(0) == 3 && answer.get("stopped_for").str() == "budget");
+        const ctl::HttpResponse over = d.post("bot-matches", batch_body(1, "TINY.LVL", "highest-score", "2"));
+        ASSERT_TRUE(over.status == 409 && BotDoor::json(over).get("error").str() == "budget" && BotDoor::json(over).get("per_hour").as_int_or(0) == 2);
+        std::string code, reason;
+        BotRefusal refusal = BotRefusal::None;
+        ASSERT_FALSE(d.w.mgr.start_bot_match(d.w.now, BotMatchSpec(), code, reason, &refusal));
+        ASSERT_TRUE(refusal == BotRefusal::Budget && reason.find("2 recordings") != std::string::npos);
+        ASSERT_EQ(d.post("bot-matches/stop-all").status, 200);                                                                  // (stopped at once: nothing was kept, nothing was used)
+        ASSERT_EQ(d.w.mgr.replay_store()->bot_saves_left(), size_t{2});
+        ASSERT_EQ(d.post("bot-matches", batch_body(1, "TINY.LVL", "highest-score", "2")).status, 200);
+        d.w.run(40000);                                                                                                         // (it plays 40 s of its 6 minutes)
+        d.clock.now += 40;
+        ASSERT_EQ(d.post("bot-matches/stop-all").status, 200);                                                                  // (stopped after 30 s: kept as a replay up to there)
+        ASSERT_EQ(d.w.mgr.replay_store()->count(), size_t{1});
+        ASSERT_EQ(d.w.mgr.replay_store()->bot_saves_left(), size_t{1});                                                         // (this hour's room is used by what was kept)
+        ASSERT_EQ(d.w.mgr.replay_store()->bot_count(), size_t{1});
+        ASSERT_EQ(BotDoor::json(d.post("bot-matches", batch_body(2, "TINY.LVL", "highest-score", "2"))).get("started").as_int_or(0), 1);
+        d.clock.now += 3700;                                                                                                    // (the hour has passed)
+        ASSERT_EQ(d.w.mgr.replay_store()->bot_saves_left(), size_t{2});
+    } TEST_END();
+
+    TEST_CASE("S3.283 What A Room Can Do With A Map Is Judged Once: The Lists Load Each Map File One Time (Not At Every Call, Every Start And Every Page), A File That Was Replaced Is Judged Again, A Map That Was Taken Down Is Never Answered From What Was Kept, And A File That Went Bad Is Not Played On Its Old Verdict") {
+        BotDoor d("botadmin-verdicts");
+        const std::vector<BotMapOption> first = d.w.mgr.bot_map_options();
+        const size_t loads = d.w.mgr.bot_map_loads();
+        ASSERT_TRUE(loads >= first.size() && loads > 0);
+        (void)d.w.mgr.bot_map_options();
+        (void)d.w.mgr.bot_rotation_maps(false);
+        (void)d.w.mgr.bot_rotation_maps(true);
+        ASSERT_EQ(d.w.mgr.bot_map_loads(), loads);                                                                              // (asked again: nothing is loaded)
+        std::string code, reason;
+        for (int i = 0; i < 10; ++i) {
+            ASSERT_TRUE(d.w.mgr.start_bot_match(d.w.now, BotMatchSpec(), code, reason));
+            d.w.mgr.stop_bot_matches(d.w.now);
+            d.w.run(2000);
+        }
+        ASSERT_EQ(d.w.mgr.bot_map_loads(), loads);                                                                              // (ten starts from the lists: still none)
+        BotMatchSpec players;
+        players.map = kBotMapPlayers;
+        ASSERT_TRUE(d.w.mgr.start_bot_match(d.w.now, players, code, reason) && d.w.mgr.bot_map_loads() == loads);
+        d.w.mgr.stop_bot_matches(d.w.now);
+        bool found = false;
+        for (const BotMapOption& o : first) found = found || o.file == "Fight Island.lvl";
+        ASSERT_TRUE(found);
+        // the file is replaced by another one (a bigger map): judged again, once, and the new size is what the list says
+        ApprovedMap bigger = made_up_fight_island("botadmin-verdicts-b", 170, 170);
+        d.w.mgr.mutable_store().set_approved({bigger});
+        const std::vector<BotMapOption> second = d.w.mgr.bot_map_options();
+        ASSERT_EQ(d.w.mgr.bot_map_loads(), loads + 1);
+        uint32_t width = 0;
+        for (const BotMapOption& o : second) width = o.file == "Fight Island.lvl" ? o.width : width;
+        ASSERT_EQ(width, 170u);
+        (void)d.w.mgr.bot_map_options();
+        ASSERT_EQ(d.w.mgr.bot_map_loads(), loads + 1);
+        // the same name and path, the file rewritten as bytes that are no map: the old "can be played" is not trusted
+        { std::ofstream out(bigger.path, std::ios::binary | std::ios::trunc); out << "this is not a map of the game"; }
+        bigger.size = 29;
+        d.w.mgr.mutable_store().set_approved({bigger});
+        bool still = false;
+        for (const BotMapOption& o : d.w.mgr.bot_map_options()) still = still || o.file == "Fight Island.lvl";
+        ASSERT_FALSE(still);
+        BotRefusal refusal = BotRefusal::None;
+        BotMatchSpec named;
+        named.map = "Fight Island.lvl";
+        named.rules = BotRules::Kills187;
+        ASSERT_FALSE(d.w.mgr.start_bot_match(d.w.now, named, code, reason, &refusal));
+        ASSERT_TRUE(refusal == BotRefusal::NoMap);
+        // the owner takes the map down: it is gone from the list and a named choice is refused, though the file is still on the disk and was judged to be good before
+        ApprovedMap good = made_up_fight_island("botadmin-verdicts-c");
+        d.w.mgr.mutable_store().set_approved({good});
+        bool back = false;
+        for (const BotMapOption& o : d.w.mgr.bot_map_options()) back = back || o.file == "Fight Island.lvl";
+        ASSERT_TRUE(back);
+        d.w.mgr.mutable_store().set_approved({});
+        bool gone = true;
+        for (const BotMapOption& o : d.w.mgr.bot_map_options()) gone = gone && o.file != "Fight Island.lvl";
+        ASSERT_TRUE(gone);
+        ASSERT_FALSE(d.w.mgr.start_bot_match(d.w.now, named, code, reason, &refusal));
+        ASSERT_TRUE(refusal == BotRefusal::NoMap);
+        d.w.mgr.mutable_store().set_approved({good});                                                                            // (approved again: judged again, and playable)
+        ASSERT_TRUE(d.w.mgr.start_bot_match(d.w.now, named, code, reason));
+    } TEST_END();
+
+    TEST_CASE("S3.284 A Random Pick Keeps To Maps Of 30 Minutes Or Less: A Map Of The Players That Plays Longer Is Never Drawn (From The Players' Maps, The Rotation Or The Original's) But A Choice That Names It Plays It; The List Gives Each Map's Minutes And Whether A Random Pick May Take It") {
+        BotDoor d("botadmin-minutes");
+        ApprovedMap longer = made_up_fight_island("botadmin-minutes-long", 60, 60, "Long Haul.lvl", 45);
+        ApprovedMap shorter = made_up_fight_island("botadmin-minutes-short", 60, 60, "Short Hop.lvl", 12);
+        d.w.mgr.mutable_store().set_approved({longer, shorter, d.w.mgr.store().approved_maps().empty() ? shorter : d.w.mgr.store().approved_maps()[0]});
+        d.w.mgr.mutable_store().set_approved({longer, shorter});
+        std::map<std::string, BotMapOption> by_file;
+        for (const BotMapOption& o : d.w.mgr.bot_map_options()) by_file[o.file] = o;
+        ASSERT_TRUE(by_file.count("Long Haul.lvl") == 1 && by_file["Long Haul.lvl"].minutes == 45 && !by_file["Long Haul.lvl"].random);
+        ASSERT_TRUE(by_file.count("Short Hop.lvl") == 1 && by_file["Short Hop.lvl"].minutes == 12 && by_file["Short Hop.lvl"].random);
+        for (const char* file : {"TINY.LVL", "ISLANDS.LVL", "POPcOrN.lvl"}) ASSERT_TRUE(by_file[file].minutes > 0 && by_file[file].minutes <= kBotRandomMaxMinutes && by_file[file].random);
+        const ctl::JsonValue options = BotDoor::json(d.get("bot-options"));
+        ASSERT_EQ(options.get("random_max_minutes").as_int_or(0), 30);
+        bool long_in_page = false;
+        for (size_t i = 0; i < options.get("maps").size(); ++i) {
+            const ctl::JsonValue& m = options.get("maps").at(i);
+            if (m.get("file").str() == "Long Haul.lvl") long_in_page = m.get("minutes").as_int_or(0) == 45 && !m.get("random").as_bool_or(true);
+        }
+        ASSERT_TRUE(long_in_page);
+        BotMatchSpec players;
+        players.map = kBotMapPlayers;
+        players.bots = 2;
+        std::set<std::string> drawn;
+        std::string code, reason;
+        for (int i = 0; i < 40; ++i) {
+            ASSERT_TRUE(d.w.mgr.start_bot_match(d.w.now, players, code, reason));
+            for (const BotMatchInfo& m : d.w.mgr.bot_matches(d.w.now)) drawn.insert(m.map);
+            d.w.mgr.stop_bot_matches(d.w.now);
+            d.w.run(1200);
+        }
+        ASSERT_TRUE(drawn.count("Short Hop.lvl") == 1 && drawn.count("Long Haul.lvl") == 0 && drawn.size() == 1);
+        BotMatchSpec named;
+        named.map = "Long Haul.lvl";
+        named.rules = BotRules::HighestScore;
+        named.bots = 2;
+        ASSERT_TRUE(d.w.mgr.start_bot_match(d.w.now, named, code, reason));                                                      // (named: played, and the room's own guard is longer than its minutes)
+        ASSERT_EQ(d.w.mgr.bot_matches(d.w.now).size(), size_t{1});
+        d.w.mgr.stop_bot_matches(d.w.now);
+        d.w.run(2000);
+        // only a long map of the players: a random pick of theirs has nothing to play
+        d.w.mgr.mutable_store().set_approved({longer});
+        BotRefusal refusal = BotRefusal::None;
+        ASSERT_FALSE(d.w.mgr.start_bot_match(d.w.now, players, code, reason, &refusal));
+        ASSERT_TRUE(refusal == BotRefusal::NoMap);
+        // the rotation of 187 draws the players' map of its list only when that map is short enough
+        ApprovedMap fight_long = made_up_fight_island("botadmin-minutes-fi", 60, 60, "Fight Island.lvl", 45);
+        d.w.mgr.mutable_store().set_approved({fight_long});
+        ASSERT_EQ(d.w.mgr.bot_rotation_maps(true), size_t{5});                                                                  // (five of its six: the sixth plays 45 minutes)
+        ApprovedMap fight_short = made_up_fight_island("botadmin-minutes-fs", 60, 60, "Fight Island.lvl", 20);
+        d.w.mgr.mutable_store().set_approved({fight_short});
+        ASSERT_EQ(d.w.mgr.bot_rotation_maps(true), size_t{6});
+    } TEST_END();
+
 }

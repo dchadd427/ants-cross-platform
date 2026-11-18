@@ -70,10 +70,11 @@
 //                      here (the names that the players typed are in it, with no address or room code). Default: the folder "replays" in --results-dir; without a results folder the server keeps none
 //   --no-replays       keep no replays, whatever --results-dir says
 //   --bot-match-every-min N
-//                      makes the first schedule of the server's own matches of computer players (5 - 1440 minutes; 0 = none, the default): one match every N minutes, two to four standard bots on random seats of a map of
-//                      the rotation, at the normal speed, so that anybody can watch it live on the site and again afterwards (docs/SERVER_REPLAYS.md "Matches of computer players"). It only starts the list of schedules: a server
-//                      with a database makes the schedule once (when it has none and has never made it), and from then on the admin page edits the schedules (the option is kept for two releases); a server without one makes it
-//                      at every start. Needs the replays (without them nothing is played): the first match begins a minute after the start.
+//                      the server's own matches of computer players that run by schedule (docs/SERVER_REPLAYS.md "Matches of computer players"). 5 - 1440 makes the first schedule: one match every N minutes, two to four standard
+//                      bots on random seats of a map of the rotation, at the normal speed, so that anybody can watch it live on the site and again afterwards. It only starts the list of schedules: a server with a database makes
+//                      the schedule once (when it has none and has never made it), and from then on the admin page edits the schedules (the number is kept for two releases); a server without one makes it at every start.
+//                      Needs the replays (without them nothing is played): the first match begins a minute after the start. Left out: no schedule is made and the ones the admin page has run as they are set.
+//                      0 is the OFF SWITCH: no schedule starts a match on this server, whatever the database holds (the admin page still shows and edits them, and says that they are switched off; its Start now still works).
 //   --db FILE          the database file (SQLite, docs/SERVER.md "The database"). Default: ants.db in --results-dir; without a results folder the server keeps none. A file that cannot be opened (not a database,
 //                      damaged, not writable) or that a newer program made stops the server; the file is never changed or deleted by that
 //   --no-db            keep no database, whatever --results-dir says
@@ -82,7 +83,8 @@
 //   --replay-demo      keep the matches of the demo rooms too (the games of the front page, bots only included); off by default, so that only the rooms of the control interface are kept
 //   --replays-days N   a replay is deleted N days after its match ended (1 - 3650, default 30)
 //   --replays-max-mb N all the replays together may take N MiB, the oldest are deleted first (1 - 4096, default 100); by default the folder is on the volume that also holds the control secret and the
-//                      restart records, so a match is also not kept when the disk has less than 256 MiB free, or when 120 matches were kept in the last hour
+//                      restart records, so a match is also not kept when the disk has less than 256 MiB free (the oldest files are deleted for it first, as far as that helps), or when 120 matches were kept in the
+//                      last hour. The server's own matches of computer players have a budget inside these: at most 30 of the hour's 120 and a quarter of the MiB, and their files go before any file of a person
 //   --replay-port N    a PUBLIC, read-only door for the list and the files of the replays, the match history and the matches that run now (GET /replays, GET /replays/<file>, GET /history, GET /history/<id>,
 //                      GET /live, GET /live/<id>, GET /maps, GET /lobbies (the public list of games, network protocol 22); no secret, nothing else answers): 0 = off, the default. This machine only; the site's reverse proxy passes the paths to it (docker/nginx.conf). The control interface
 //                      lists and gives the files and the history too (all of them), and deletes them, behind its secret whatever this says
@@ -199,7 +201,7 @@ struct Options {
     long replays_max_mb{100};
     uint16_t replay_port{0};                   // --replay-port: the public read-only door of the replays (0: none)
     bool replay_any_interface{false};
-    long bot_match_every_min{0};             // --bot-match-every-min (0: none)
+    long bot_match_every_min{-1};            // --bot-match-every-min (-1: not given; 0: the schedules are switched off; 5 - 1440: the first schedule's minutes)
     std::string db_file;                       // --db (empty: ants.db in the results folder, when there is one)
     bool no_db{false};
     bool no_history{false};                    // --no-history
@@ -423,7 +425,7 @@ int main(int argc, char** argv) {
             char* end = nullptr;
             const long n = std::strtol(text, &end, 10);
             if (end == text || *end != '\0' || n < 0 || n > 1440 || (n != 0 && n < 5)) {
-                std::fprintf(stderr, "--bot-match-every-min takes 0 (none) or a whole number of minutes from 5 to 1440\n");
+                std::fprintf(stderr, "--bot-match-every-min takes 0 (the schedules are off) or a whole number of minutes from 5 to 1440\n");
                 return 2;
             }
             o.bot_match_every_min = n;
@@ -724,6 +726,7 @@ int main(int argc, char** argv) {
         }
         rc.keep_days = static_cast<uint32_t>(o.replays_days);
         rc.max_bytes = static_cast<uint64_t>(o.replays_max_mb) * 1024u * 1024u;
+        rc.index_in_background = true;                      // (the heads of the files are read a few at a time by the loop: opening a store of a gibibyte must not hold the server back)
         rc.game_version = std::string(ants::VERSION_STRING);
         rc.build_id = std::string(ants::BUILD_ID);
         std::string why;
@@ -816,13 +819,17 @@ int main(int argc, char** argv) {
                 log("the schedule of matches of computer players that --bot-match-every-min asks for was made: one every " + std::to_string(o.bot_match_every_min) + " minutes, the first one in a minute");
             }
             bot_matches = std::make_unique<ants::server::BotMatches>(rooms, bot_store, audit.get());
+            if (o.bot_match_every_min == 0) {
+                bot_matches->set_scheduling(false);
+                log("scheduled matches of computer players are OFF (--bot-match-every-min 0): no schedule starts a match; the admin page's Start now still works");
+            }
             if (submit_api) {
                 submit_api->set_bot_routes([&bot_matches](const ants::ctl::HttpRequest& request, const ants::server::AdminIdentity& who, const std::string& tail, const ants::ctl::JsonValue& body, int64_t now_s, uint32_t now) {
                     return bot_matches->handle(request, who, tail, body, now_s, now);
                 });
             }
             for (const ants::server::BotSchedule& s : bot_store.list()) {
-                if (s.on) log("matches of computer players: schedule " + std::to_string(s.id) + " is on, the next run is in " + std::to_string(std::max<int64_t>(0, s.next_run - static_cast<int64_t>(std::time(nullptr)))) + " s");
+                if (s.on && bot_matches->scheduling()) log("matches of computer players: schedule " + std::to_string(s.id) + " is on, the next run is in " + std::to_string(std::max<int64_t>(0, s.next_run - static_cast<int64_t>(std::time(nullptr)))) + " s");
             }
             for (const std::string& line : bot_matches->take_notices()) log(line);
         }

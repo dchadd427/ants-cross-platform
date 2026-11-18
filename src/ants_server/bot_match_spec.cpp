@@ -139,8 +139,7 @@ ctl::JsonValue bot_what_json(const BotWhat& what) {
     o.set("rules", ctl::JsonValue::make_string(rules_word(what.spec.rules)));
     o.set("bots", ctl::JsonValue::make_string(what.spec.bots == 0 ? std::string("random") : std::to_string(what.spec.bots)));
     ctl::JsonValue levels = ctl::JsonValue::make_array();
-    const size_t shown = what.spec.bots == 0 ? 4u : what.spec.bots;
-    for (size_t i = 0; i < shown; ++i) levels.push_back(ctl::JsonValue::make_string(level_word(what.spec.levels[i])));
+    for (size_t i = 0; i < what.spec.levels.size(); ++i) levels.push_back(ctl::JsonValue::make_string(level_word(what.spec.levels[i])));          // (four, whatever the number of bots: a page that raises it finds a level for each)
     o.set("levels", std::move(levels));
     o.set("teams", ctl::JsonValue::make_string(teams_word(what.spec.teams)));
     const std::vector<BotSplit>& splits = bot_splits(what.spec.bots);

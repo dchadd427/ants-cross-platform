@@ -8,7 +8,7 @@
 // The calls (all under /admin/api; the tail is what follows it):
 //   GET  bot-matches                      the matches that go now, the limit and the places
 //   GET  bot-options                      the maps that a batch may name
-//   GET  bot-schedules                    the schedules
+//   GET  bot-schedules                    the schedules (and whether the server runs them at all: `scheduling`)
 //   POST bot-matches                      start now: the choices of one batch (bot_match_spec.hpp), 1 - 8 matches
 //   POST bot-matches/<id>/stop            end one match (the id is this object's own, never the room's code)
 //   POST bot-matches/stop-all             end every match of computer players
@@ -41,6 +41,11 @@ public:
 
     /// The main loop's pass: the schedules that are due start their matches (within the limits: a run that a limit holds back is skipped, never queued)
     void update(int64_t now_s, uint32_t now_ms);
+
+    /// Whether the schedules run at all. The operator's off switch is --bot-match-every-min 0 (ANTS_BOT_MATCH_EVERY_MIN=0): the schedules can still be seen and edited on the admin page, and none of them starts a match;
+    /// the admin page's Start now is not a schedule and still works. On by default.
+    void set_scheduling(bool on) { scheduling_ = on; }
+    bool scheduling() const noexcept { return scheduling_; }
 
     /// Lines for the server's log: what a schedule did when it ran, by the schedule's number (never its name)
     std::vector<std::string> take_notices();
@@ -78,6 +83,7 @@ private:
     AdminAudit* audit_;
     std::vector<Started> started_;
     uint64_t next_id_{1};
+    bool scheduling_{true};
     int64_t last_prune_s_{0};                   // the matches that ended are forgotten once a minute (a page that is never asked would leave them for ever)
     std::vector<std::string> notices_;
 };

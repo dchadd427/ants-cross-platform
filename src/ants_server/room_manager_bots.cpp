@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <filesystem>
 #include <random>
 #include <set>
 
@@ -100,10 +101,12 @@ bool RoomManager::people_busy() const {
 
 std::vector<BotMapOption> RoomManager::bot_map_options() const {
     std::vector<BotMapOption> out;
+    std::set<std::string> known;                                // (the maps of the lists now: a verdict for any other name is dropped at the end)
     const std::vector<BotMatchMap>& fixed = bot_match_maps(false);
     for (size_t i = 0; i < fixed.size(); ++i) {
-        uint32_t minutes = 0;
-        if (!bot_match_map_refusal(fixed[i].file, false, minutes).empty()) continue;
+        known.insert(fixed[i].file);
+        uint32_t minutes = 0, places = 1;
+        if (!bot_match_map_refusal(fixed[i].file, false, minutes, &places).empty()) continue;
         BotMapOption o;
         o.file = fixed[i].file;
         o.group = i < kOriginalMaps ? "original" : "library";
@@ -113,20 +116,29 @@ std::vector<BotMapOption> RoomManager::bot_map_options() const {
                 o.height = listed.height;
             }
         }
-        o.places = OnlineLimits::weight(store_.cells_of(o.file), store_.start_ants_of(o.file));
+        o.places = places;
+        o.minutes = minutes;
+        o.random = minutes <= kBotRandomMaxMinutes;
         out.push_back(std::move(o));
     }
     for (const ApprovedMap& map : store_.approved_maps()) {
-        uint32_t minutes = 0;
+        known.insert(map.name);
+        uint32_t minutes = 0, places = 1;
         size_t at = 0;
-        if (is_fixed_map(map.name, at) || !bot_match_map_refusal(map.name, true, minutes).empty()) continue;
+        if (is_fixed_map(map.name, at) || !bot_match_map_refusal(map.name, true, minutes, &places).empty()) continue;
         BotMapOption o;
         o.file = map.name;
         o.group = "players";
         o.width = map.width;
         o.height = map.height;
-        o.places = OnlineLimits::weight(store_.cells_of(map.name), store_.start_ants_of(map.name));
+        o.places = places;
+        o.minutes = minutes;
+        o.random = minutes <= kBotRandomMaxMinutes;
         out.push_back(std::move(o));
+    }
+    for (auto it = bot_map_verdicts_.begin(); it != bot_map_verdicts_.end();) {      // (a map that was taken down leaves nothing behind)
+        if (known.count(it->first) == 0) it = bot_map_verdicts_.erase(it);
+        else ++it;
     }
     return out;
 }
@@ -135,7 +147,7 @@ size_t RoomManager::bot_rotation_maps(bool kills_187) const {
     size_t n = 0;
     for (const BotMatchMap& entry : bot_match_maps(kills_187)) {
         uint32_t minutes = 0;
-        if (bot_match_map_refusal(entry.file, entry.approved, minutes).empty()) ++n;
+        if (bot_match_map_refusal(entry.file, entry.approved, minutes).empty() && minutes <= kBotRandomMaxMinutes) ++n;
     }
     return n;
 }
@@ -193,21 +205,53 @@ size_t RoomManager::stop_bot_matches(uint32_t now_ms) {
 }
 
 // "" when a room can play the map of a list now, else why not (the store does not have it, the approved map is gone or is another file, this engine cannot play it with four seats, a limit of a room: OnlineLimits). `minutes`
-// gets the map's own time limit.
-std::string RoomManager::bot_match_map_refusal(const std::string& file, bool approved, uint32_t& minutes) const {
+// gets the map's own time limit and `places`, when asked, what a match on it takes. Loading a map and judging it is the costly part (the file is read, parsed and walked); the verdict is therefore kept by the file's name and
+// the path, size and time of the file (and the hash of the approved record, which a new approval changes): the same file is not loaded again, one that was replaced is. A map that is not approved (any more) is refused
+// before the verdict is looked at, so a take-down is never answered from it.
+std::string RoomManager::bot_match_map_refusal(const std::string& file, bool approved, uint32_t& minutes, uint32_t* places) const {
     const ApprovedMap* player_map = approved ? store_.approved(file) : nullptr;
     if (approved && player_map == nullptr) return "it is not an approved map of this server";
-    MapEntry entry;
-    std::string why;
-    if (!store_.find(file, entry, &why)) return why;
-    if (player_map != nullptr && entry.path != player_map->path) return "the file of that name is not the approved map";
+    std::string path, why;
+    uint64_t size = 0;
+    if (!store_.locate(file, path, size, &why)) {
+        bot_map_verdicts_.erase(file);
+        return why;
+    }
+    if (player_map != nullptr && path != player_map->path) return "the file of that name is not the approved map";
+    std::error_code ec;
+    const auto written = std::filesystem::last_write_time(path, ec);
+    const int64_t stamp = ec ? 0 : static_cast<int64_t>(written.time_since_epoch().count());
+    const uint64_t hash = player_map != nullptr ? player_map->hash : 0;
+    const auto kept = bot_map_verdicts_.find(file);
+    if (kept != bot_map_verdicts_.end() && kept->second.path == path && kept->second.size == size && kept->second.stamp == stamp && kept->second.hash == hash) {
+        minutes = kept->second.minutes;
+        if (places != nullptr) *places = kept->second.places;
+        return kept->second.refusal;
+    }
+    ++bot_map_loads_;
+    BotMapVerdict verdict;
+    verdict.path = path;
+    verdict.size = size;
+    verdict.stamp = stamp;
+    verdict.hash = hash;
     assets::LevelData level;
-    if (!level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended())) return "this engine cannot play it";
-    const Term over = OnlineLimits::first_over(OnlineLimits::counts_of(level));
-    if (over != Term::None) return std::string("it ") + OnlineLimits::info(over).phrase + " for a room";
-    if (!level.validate(static_cast<uint8_t>(0x0F), assets::LevelLimits::for_play_extended()).playable) return "it has no place for four seats";
-    minutes = level.default_minutes;
-    return std::string();
+    if (!level.load_from_file(path, nullptr, assets::LevelLimits::for_play_extended())) {
+        verdict.refusal = "this engine cannot play it";
+    } else {
+        const MapCounts counts = OnlineLimits::counts_of(level);
+        const Term over = OnlineLimits::first_over(counts);
+        if (over != Term::None) verdict.refusal = std::string("it ") + OnlineLimits::info(over).phrase + " for a room";
+        else if (!level.validate(static_cast<uint8_t>(0x0F), assets::LevelLimits::for_play_extended()).playable) verdict.refusal = "it has no place for four seats";
+        else {
+            verdict.minutes = level.default_minutes;
+            verdict.places = OnlineLimits::weight(counts.cells, counts.start_ants);
+        }
+    }
+    if (bot_map_verdicts_.size() > 8192) bot_map_verdicts_.clear();          // (a bound for a store whose names come and go; bot_map_options() drops the ones that are gone)
+    bot_map_verdicts_[file] = verdict;
+    minutes = verdict.minutes;
+    if (places != nullptr) *places = verdict.places;
+    return verdict.refusal;
 }
 
 namespace {
@@ -237,10 +281,6 @@ ai::Level bot_level_of(BotLevelChoice choice, std::mt19937& rng) {
 // normal speed (the maps' own time limits make it 6 to 20 minutes or more: its own guard is the longer of 25 minutes and the map's limit and five more), and ends by the rules or at its own time limit; the recording keeps it
 // like any other match (the 30 seconds, the store's limits), and the live list shows it. Limits: at most kBotMatchesMax of these rooms at once and kBotPlacesMax of the places together, and none while the matches of people
 // use most of the places (docs/SERVER_REPLAYS.md). The coin has no memory of the last match: two or three of a kind in a row come up as often as chance gives them.
-bool RoomManager::start_bot_match(uint32_t now_ms, std::string& code, std::string& why, uint8_t* mode) {
-    return start_bot_match(now_ms, BotMatchSpec(), code, why, nullptr, mode);
-}
-
 bool RoomManager::start_bot_match(uint32_t now_ms, const BotMatchSpec& choice, std::string& code, std::string& why, BotRefusal* refusal, uint8_t* mode) {
     code.clear();
     if (refusal != nullptr) *refusal = BotRefusal::None;
@@ -252,6 +292,7 @@ bool RoomManager::start_bot_match(uint32_t now_ms, const BotMatchSpec& choice, s
     if (replays_ == nullptr) return refuse(BotRefusal::NoReplays, "the server keeps no replays");
     if (bot_match_count() >= kBotMatchesMax) return refuse(BotRefusal::Cap, std::to_string(kBotMatchesMax) + " matches of computer players go already");
     if (people_busy()) return refuse(BotRefusal::PeopleBusy, places_words(public_places(), limits_.demo_rooms));
+    if (replays_->bot_saves_left() <= bot_match_count()) return refuse(BotRefusal::Budget, "the store keeps at most " + std::to_string(replays_->config().max_bot_saves_per_hour) + " recordings of matches of computer players an hour, and that many are kept or about to be: a match that would not be kept is not played");
     size_t fixed_at = 0;
     const bool named = choice.map != kBotMapRotation && choice.map != kBotMapOriginal && choice.map != kBotMapPlayers;
     if (named && choice.rules == BotRules::Kills187 && choice.map == kIslands) return refuse(BotRefusal::Islands187, "ISLANDS is not played in 187: its water joins no two hills, so nobody could be struck there");
@@ -307,13 +348,16 @@ bool RoomManager::start_bot_match(uint32_t now_ms, const BotMatchSpec& choice, s
     }
     std::vector<std::string> maps;                                         // (the maps of the choice that a room can play now, in the list's order)
     std::vector<uint32_t> minutes;
+    std::vector<uint32_t> weights;
     std::string named_refusal;
     for (const BotMatchMap& entry : listed) {
-        uint32_t limit = 0;
-        const std::string refusal_text = bot_match_map_refusal(entry.file, entry.approved, limit);
+        uint32_t limit = 0, places = 1;
+        std::string refusal_text = bot_match_map_refusal(entry.file, entry.approved, limit, &places);
+        if (refusal_text.empty() && !named && limit > kBotRandomMaxMinutes) refusal_text = "it plays " + std::to_string(limit) + " minutes, and a random pick keeps to " + std::to_string(kBotRandomMaxMinutes);
         if (refusal_text.empty()) {
             maps.push_back(entry.file);
             minutes.push_back(limit);
+            weights.push_back(places);
             bot_maps_skipped_.erase(entry.file);
         } else if (named) {
             named_refusal = refusal_text;
@@ -324,7 +368,7 @@ bool RoomManager::start_bot_match(uint32_t now_ms, const BotMatchSpec& choice, s
     if (maps.empty()) return refuse(BotRefusal::NoMap, named ? "that map cannot be played now (" + named_refusal + ")" : "the server has none of the maps of this choice");
     const size_t picked = map_draw % maps.size();
     spec.map = maps[picked];
-    const uint32_t weight = OnlineLimits::weight(store_.cells_of(spec.map), store_.start_ants_of(spec.map));
+    const uint32_t weight = weights[picked];
     if (bot_places() + weight > kBotPlacesMax) return refuse(BotRefusal::Places, "the matches of computer players would take " + std::to_string(bot_places() + weight) + " of the " + std::to_string(kBotPlacesMax) + " places that they may have");
     spec.bots_only = true;
     spec.early_start = false;

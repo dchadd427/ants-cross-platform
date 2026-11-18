@@ -10,6 +10,8 @@
 //    its last start (from now when it never started), and never starts inside the request that saved it: the first run is a minute away at the soonest;
 //  * at times of the day: the next time of the list by the Pacific clock after now, on the day of the clock change too (pacific_time.hpp).
 // A run that is due while a limit holds it back (the matches that go, the places, the matches of people) is skipped, not queued: the next run is the next one by the rule above. A run that was due while the server was down is not made up.
+// A time that cannot be true is mended when the rows are read and once a minute: a last run that is more than kClockSlackS after now is ignored (as if the schedule never ran), and a next run that is later than the schedule's period
+// from now (every N minutes: N minutes; at times: the next time of the list) is brought back to it, so that a clock that was far ahead once, or a damaged row, cannot keep a schedule away for good.
 
 #include <cstdint>
 #include <string>
@@ -57,6 +59,8 @@ constexpr size_t kMaxBotSchedules = 20;
 constexpr size_t kMaxBotScheduleTimes = 12;
 constexpr int kMinBotEveryMinutes = 5;
 constexpr int kMaxBotEveryMinutes = 1440;
+constexpr int64_t kClockSlackS = 3600;               // a last run more than this far after now was never made
+constexpr int64_t kSameScheduleWindowS = 10;         // a schedule that is saved again within this many seconds with all the same choices is the same save (a double click), not a second schedule
 
 /// The name as it is kept: control, invisible and direction characters taken out, the blanks at the ends cut, runs of blanks made one; false when it is not UTF-8 or has no characters or more than 40 left
 bool clean_schedule_name(const std::string& in, std::string& out);
@@ -71,6 +75,10 @@ bool parse_schedule_patch(const ctl::JsonValue& body, bool create, BotSchedulePa
 int64_t bot_schedule_planned_next(const BotSchedule& schedule, int64_t now_s);
 int64_t bot_schedule_next_after_run(const BotSchedule& schedule, int64_t ran_s);
 int64_t bot_schedule_resumed_next(const BotSchedule& schedule, int64_t now_s);
+/// Brings the two times of a schedule that is on back to what can be true at `now_s` (see the top). True when something was changed.
+bool bot_schedule_repair_clock(BotSchedule& schedule, int64_t now_s);
+/// Whether two schedules are the same in everything that an admin chooses (the name, whether it is on, when and what), not in the times the server keeps
+bool bot_schedule_same_choices(const BotSchedule& a, const BotSchedule& b);
 
 class BotScheduleStore {
 public:
@@ -86,11 +94,15 @@ public:
     /// every choice drawn: the match the old timer made) and remembers that it did, so that a schedule that was deleted is not made again. Without a database it is made at every start. False when nothing was made.
     bool seed_default(int every_minutes, int64_t now_s);
 
-    /// A new schedule (the patch holds all of it). False with the error code: `too_many`, `db`.
-    bool create(const BotSchedulePatch& patch, int64_t now_s, BotSchedule& out, std::string& error);
-    /// A change. False with the error code: `gone`, `db`. A schedule that is turned on, or whose time or choices change, has its next run planned again.
-    bool update(int64_t id, const BotSchedulePatch& patch, int64_t now_s, BotSchedule& out, std::string& error);
+    /// A new schedule (the patch holds all of it). False with the error code: `too_many`, `db`. A schedule that is the same in every choice as the newest one, made within kSameScheduleWindowS, is not made again: `out` is
+    /// the one that is there and `repeated` (when asked) is true.
+    bool create(const BotSchedulePatch& patch, int64_t now_s, BotSchedule& out, std::string& error, bool* repeated = nullptr);
+    /// A change. False with the error code: `gone`, `db`. A schedule that is turned on, or whose time changes, has its next run planned again. `changed` (when asked) says whether anything an admin chooses is different
+    /// now; a change that changes nothing writes nothing and keeps the next run.
+    bool update(int64_t id, const BotSchedulePatch& patch, int64_t now_s, BotSchedule& out, std::string& error, bool* changed = nullptr);
     bool remove(int64_t id, std::string& error);
+    /// Mends the times that cannot be true (bot_schedule_repair_clock) in every row, once a minute; the rows that changed are written. Returns how many rows changed.
+    size_t repair_clock(int64_t now_s);
     /// A due run was made (or skipped): its time and the next one are kept
     void note_run(int64_t id, int64_t last_run_s, int64_t next_run_s);
 
@@ -103,6 +115,7 @@ private:
     db::Database* db_;
     std::vector<BotSchedule> rows_;
     std::vector<std::string> notices_;
+    int64_t last_id_{0};                              // the highest number that a schedule had in this run of the server: a number is not used again, with a database or without
 };
 
 }  // namespace ants::server

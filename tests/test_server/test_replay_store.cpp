@@ -231,6 +231,26 @@ std::vector<uint8_t> with_filler_chunk(const std::vector<uint8_t>& file, size_t 
     return out;
 }
 
+// A small replay of a match of computer players alone (every seat that played has a name that a person cannot take), or, with another name for a seat, a mixed one
+std::vector<uint8_t> make_bot_file(uint32_t seed, size_t at_least = 0, const std::string& seat0 = "Pip (bot, Hard)", const std::string& seat2 = "Rex (bot, Medium)") {
+    const std::vector<uint8_t> base = make_file("TREASURE.LVL", 700, true, at_least, seed);
+    replay::Replay r;
+    std::string error;
+    if (!replay::decode(base.data(), base.size(), r, error)) return std::vector<uint8_t>();
+    r.head.names[0] = seat0;
+    r.head.names[2] = seat2;
+    return replay::encode(r, error);
+}
+
+// The bytes that the files of a folder take, the free space of a disk of `capacity` bytes that holds nothing else
+uint64_t folder_bytes(const fs::path& dir) {
+    uint64_t total = 0;
+    for (const auto& e : fs::directory_iterator(dir)) {
+        if (e.is_regular_file()) total += static_cast<uint64_t>(e.file_size());
+    }
+    return total;
+}
+
 // A store in a folder of the test, on the test's clock and disk
 struct Fixture {
     TempDir temp;
@@ -1370,6 +1390,348 @@ int main() {
         fs::last_write_time(f.dir, fs::file_time_type(std::chrono::hours(100001)));
         ASSERT_EQ(store.rescan(), size_t{1});
         ASSERT_TRUE(store.count() == 2 && fs::exists(f.dir / "ants-TINY-20190101-000000Z.antsrep"));
+    } TEST_END();
+
+    // ---- the budget of the matches of computer players, the disk's free space, and the background pass -----------------------------
+
+    TEST_CASE("RS12.1 A Match Whose Every Seat Has A Name That A Person Cannot Take Is A Match Of Computer Players (The Server's Own); One Person Among Them, A Seat With No Name Or A File That Is Read Again Later Says The Same") {
+        Fixture f;
+        ReplayStore store(f.config());
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        const ReplaySave bots = store.save(make_bot_file(1));
+        f.now += 1;
+        const ReplaySave legacy = store.save(make_bot_file(2, 0, "Bot (Hard)", "Bot (Easy)"));                 // (the names of the matches that were kept before the bots had names)
+        f.now += 1;
+        const ReplaySave mixed = store.save(make_bot_file(3, 0, "Ann", "Rex (bot, Medium)"));                  // (a person and a bot)
+        f.now += 1;
+        const ReplaySave nameless = store.save(make_file("TREASURE.LVL", 700, true, 0, 4));                     // (seat 0 has no name: a person who typed none)
+        ASSERT_TRUE(bots.kept && legacy.kept && mixed.kept && nameless.kept);
+        ASSERT_TRUE(store.find(bots.file)->bots_only && store.find(legacy.file)->bots_only);
+        ASSERT_TRUE(!store.find(mixed.file)->bots_only && !store.find(nameless.file)->bots_only);
+        ASSERT_TRUE(store.bot_count() == 2 && store.bot_bytes() == bots.bytes + legacy.bytes);
+        ReplayStore again(f.config());
+        ASSERT_TRUE(again.prepare(why));
+        ASSERT_TRUE(again.bot_count() == 2 && again.bot_bytes() == store.bot_bytes() && again.find(bots.file)->bots_only && !again.find(mixed.file)->bots_only);
+        ASSERT_TRUE(store.remove(bots.file) && store.bot_count() == 1 && store.bot_bytes() == legacy.bytes);
+    } TEST_END();
+
+    TEST_CASE("RS12.2 The Matches Of Computer Players Have Their Own Hour: At Most max_bot_saves_per_hour Of Them Are Kept, They Count Among The Hour's Saves, People Always Keep The Rest Of The Hour, And bot_saves_left() Says How Many Could Still Be Kept") {
+        Fixture f;
+        ReplayConfig cfg = f.config();
+        cfg.max_saves_per_hour = 5;
+        cfg.max_bot_saves_per_hour = 2;
+        ReplayStore store(cfg);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        ASSERT_EQ(store.bot_saves_left(), size_t{2});
+        for (uint32_t i = 1; i <= 2; ++i) {
+            ASSERT_TRUE(store.save(make_bot_file(i)).kept);
+            f.now += 1;
+        }
+        ASSERT_EQ(store.bot_saves_left(), size_t{0});
+        const uint64_t total = store.total_bytes();
+        const ReplaySave refused = store.save(make_bot_file(3));
+        ASSERT_TRUE(!refused.kept && contains(refused.note, "2 kept matches of computer players an hour"));
+        ASSERT_TRUE(store.total_bytes() == total && store.count() == 2);
+        for (uint32_t i = 1; i <= 3; ++i) {                                                 // (the three that remain of the hour's five are people's, however many bots came before)
+            ASSERT_TRUE(store.save(make_file("TREASURE.LVL", 700, true, 0, 10 + i)).kept);
+            f.now += 1;
+        }
+        const ReplaySave full = store.save(make_file("TREASURE.LVL", 700, true, 0, 20));
+        ASSERT_TRUE(!full.kept && contains(full.note, "5 kept matches an hour"));
+        f.now = kT0 + kHour + 10;                                                            // (the hour has passed: the room is there again)
+        ASSERT_EQ(store.bot_saves_left(), size_t{2});
+        ASSERT_TRUE(store.save(make_bot_file(4)).kept);
+        ASSERT_EQ(store.bot_saves_left(), size_t{1});
+        // the hour's whole limit also holds the bots back, whatever their own says
+        ReplayConfig tight = f.config();
+        tight.max_saves_per_hour = 2;
+        tight.max_bot_saves_per_hour = 30;
+        Fixture g;
+        tight.dir = g.dir.string();
+        tight.clock_s = [&g]() { return g.now; };
+        ReplayStore small(tight);
+        ASSERT_TRUE(small.prepare(why));
+        ASSERT_EQ(small.bot_saves_left(), size_t{2});
+        ASSERT_TRUE(small.save(make_file("TREASURE.LVL", 700, true, 0, 30)).kept);
+        ASSERT_EQ(small.bot_saves_left(), size_t{1});
+        ASSERT_EQ(ReplayStore(ReplayConfig()).bot_saves_left(), size_t{0});                  // (a store that was not prepared keeps nothing)
+    } TEST_END();
+
+    TEST_CASE("RS12.3 The Matches Of Computer Players Together Take At Most bot_share_percent Of The Store: A Match That Would Pass It Deletes The Oldest Of Their Own Files, Never A Person's, However Old") {
+        Fixture f;
+        ReplayConfig cfg = f.config();
+        cfg.max_bytes = 40000;
+        cfg.bot_share_percent = 25;
+        ReplayStore store(cfg);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        ASSERT_EQ(store.bot_cap_bytes(), uint64_t{10000});
+        const ReplaySave person = store.save(make_file("TREASURE.LVL", 700, true, 3000, 1));
+        f.now += 1;
+        std::vector<std::string> bots;
+        for (uint32_t i = 1; i <= 3; ++i) {
+            const ReplaySave s = store.save(make_bot_file(i, 3000));
+            ASSERT_TRUE(s.kept);
+            bots.push_back(s.file);
+            f.now += 1;
+        }
+        ASSERT_TRUE(store.bot_count() == 3 && store.bot_bytes() <= store.bot_cap_bytes());
+        const ReplaySave fourth = store.save(make_bot_file(4, 3000));                        // (12,000 bytes of bots: the oldest of them goes)
+        ASSERT_TRUE(fourth.kept);
+        ASSERT_TRUE(store.bot_count() == 3 && store.bot_bytes() <= store.bot_cap_bytes());
+        ASSERT_TRUE(!fs::exists(f.dir / bots[0]) && fs::exists(f.dir / bots[1]) && fs::exists(f.dir / fourth.file) && fs::exists(f.dir / person.file));
+        // a match of bots that is bigger than their whole share is refused, and nothing is deleted for it
+        const size_t before = store.count();
+        const ReplaySave huge = store.save(make_bot_file(5, 12000));
+        ASSERT_TRUE(!huge.kept && contains(huge.note, "share of the store for matches of computer players"));
+        ASSERT_TRUE(store.count() == before && fs::exists(f.dir / bots[1]));
+        // the share is held at the hourly look too: a lower share (the operator changed it) takes effect at the next purge, the bots' oldest first
+        ReplayConfig lower = f.config();
+        lower.max_bytes = 40000;
+        lower.bot_share_percent = 10;
+        ReplayStore reopened(lower);
+        ASSERT_TRUE(reopened.prepare(why));
+        ASSERT_TRUE(reopened.bot_bytes() <= reopened.bot_cap_bytes() && reopened.find(person.file) != nullptr);
+        ASSERT_EQ(reopened.bot_count(), size_t{1});
+    } TEST_END();
+
+    TEST_CASE("RS12.4 When The Store Is Full The Files Of Computer Players Go First, Whatever Their Age, And A Person's File Only When No Bot's Is Left; A Match Of Computer Players Never Takes A Person's Place, And Is Refused Without Deleting Anything In Vain") {
+        Fixture f;
+        ReplayConfig cfg = f.config();
+        cfg.max_bytes = 13000;
+        cfg.bot_share_percent = 100;                                                         // (the share is not what is tested here)
+        cfg.max_bot_saves_per_hour = 100;
+        cfg.max_saves_per_hour = 1000;
+        ReplayStore store(cfg);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        const auto person = [&](uint32_t seed) { const ReplaySave s = store.save(make_file("TREASURE.LVL", 700, true, 3000, seed)); f.now += 1; return s; };
+        const auto bot = [&](uint32_t seed) { const ReplaySave s = store.save(make_bot_file(seed, 3000)); f.now += 1; return s; };
+        const ReplaySave p0 = person(1), b1 = bot(2), p1 = person(3), b2 = bot(4);          // (the oldest file is a person's)
+        ASSERT_TRUE(p0.kept && b1.kept && p1.kept && b2.kept);
+        const ReplaySave p2 = person(5);                                                     // (full: a bot's file goes, not the oldest file)
+        ASSERT_TRUE(p2.kept && !fs::exists(f.dir / b1.file) && fs::exists(f.dir / p0.file) && fs::exists(f.dir / b2.file));
+        const ReplaySave p3 = person(6);
+        ASSERT_TRUE(p3.kept && !fs::exists(f.dir / b2.file) && fs::exists(f.dir / p0.file) && store.bot_count() == 0);
+        const ReplaySave p4 = person(7);                                                     // (no bot's file is left: now the oldest person's goes)
+        ASSERT_TRUE(p4.kept && !fs::exists(f.dir / p0.file) && fs::exists(f.dir / p1.file) && fs::exists(f.dir / p4.file));
+        // the store is full of people's matches: a bots' match is not kept, and nothing is deleted for it
+        const size_t count = store.count();
+        const ReplaySave refused = store.save(make_bot_file(8, 3000));
+        ASSERT_TRUE(!refused.kept && contains(refused.note, "never takes a place from them"));
+        ASSERT_TRUE(store.count() == count && fs::exists(f.dir / p1.file) && fs::exists(f.dir / p2.file) && fs::exists(f.dir / p3.file) && fs::exists(f.dir / p4.file));
+        // room that a bot's file makes for a bot's match: the oldest bot's file goes and no person's
+        Fixture g;
+        ReplayConfig two = g.config();
+        two.max_bytes = 13000;
+        two.bot_share_percent = 100;
+        two.max_bot_saves_per_hour = 100;
+        two.max_saves_per_hour = 1000;
+        ReplayStore mixed(two);
+        ASSERT_TRUE(mixed.prepare(why));
+        std::vector<std::string> people;
+        for (uint32_t i = 1; i <= 3; ++i) {
+            people.push_back(mixed.save(make_file("TREASURE.LVL", 700, true, 3000, i)).file);
+            g.now += 1;
+        }
+        const ReplaySave first_bot = mixed.save(make_bot_file(9, 3000));
+        g.now += 1;
+        ASSERT_TRUE(first_bot.kept);
+        const ReplaySave second_bot = mixed.save(make_bot_file(10, 3000));
+        ASSERT_TRUE(second_bot.kept && !fs::exists(g.dir / first_bot.file));
+        for (const std::string& file : people) ASSERT_TRUE(fs::exists(g.dir / file));
+        // the files of bots cannot be deleted (a volume that refuses it): a bots' match is not kept, and a person's file is not deleted in their place
+        Fixture h;
+        ReplayConfig three = h.config();
+        three.max_bytes = 13000;
+        three.bot_share_percent = 100;
+        three.max_bot_saves_per_hour = 100;
+        three.max_saves_per_hour = 1000;
+        std::string refused_file;                                                           // (the bot's file that cannot be deleted: the others can)
+        three.remove_file = [&refused_file](const std::string& path, std::error_code& ec) {
+            if (!refused_file.empty() && path.find(refused_file) != std::string::npos) ec = std::make_error_code(std::errc::permission_denied);
+            else fs::remove(path, ec);
+        };
+        ReplayStore stuck(three);
+        ASSERT_TRUE(stuck.prepare(why));
+        std::vector<std::string> mine;
+        for (uint32_t i = 1; i <= 3; ++i) {
+            mine.push_back(stuck.save(make_file("TREASURE.LVL", 700, true, 3000, i)).file);
+            h.now += 1;
+        }
+        const ReplaySave stays = stuck.save(make_bot_file(20, 3000));
+        h.now += 1;
+        ASSERT_TRUE(stays.kept);
+        refused_file = stays.file;
+        const ReplaySave not_kept = stuck.save(make_bot_file(21, 3000));
+        ASSERT_TRUE(!not_kept.kept);
+        for (const std::string& file : mine) ASSERT_TRUE(fs::exists(h.dir / file));
+        ASSERT_TRUE(fs::exists(h.dir / stays.file));
+    } TEST_END();
+
+    TEST_CASE("RS12.5 People's Matches Stay As Long As Their Days Say Whatever The Bots Do: Forty Matches Of Computer Players Over Many Hours Delete Not One Of Three Matches Of People That Are Only A Few Days Old, In A Store That Holds Little More Than They Do") {
+        Fixture f;
+        ReplayConfig cfg = f.config();
+        cfg.max_bytes = 13000;
+        cfg.bot_share_percent = 25;
+        ReplayStore store(cfg);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        std::vector<std::string> people;
+        for (uint32_t i = 1; i <= 3; ++i) {
+            people.push_back(store.save(make_file("TREASURE.LVL", 700, true, 3000, i)).file);
+            f.now += 1;
+        }
+        uint32_t kept = 0;
+        for (uint32_t i = 0; i < 40; ++i) {
+            f.now += 400;
+            if (store.save(make_bot_file(100 + i, 3000)).kept) ++kept;
+        }
+        ASSERT_TRUE(kept > 0);                                                              // (the bots were kept as far as their share goes: one file at a time)
+        for (const std::string& file : people) ASSERT_TRUE(fs::exists(f.dir / file) && store.find(file) != nullptr);
+        ASSERT_TRUE(store.bot_bytes() <= store.bot_cap_bytes());
+        f.now += 31 * kDay;                                                                  // (their days are over: the age limit, which applies to every kind, takes them)
+        store.update();
+        for (const std::string& file : people) ASSERT_TRUE(!fs::exists(f.dir / file));
+    } TEST_END();
+
+    TEST_CASE("RS12.6 A Disk That Cannot Give The Free Space Before The Size Limit Is Reached Gets It From The Store: The Files Of Computer Players Are Deleted First, A Person's Oldest Only When No Bot's Is Left And Only As Far As It Helps; When Deleting Could Not Help, Nothing Is Deleted And The Refusal Says Why") {
+        const auto disk = [](Fixture& f, uint64_t capacity) {
+            ReplayConfig cfg = f.config();
+            cfg.min_free_bytes = 5000;
+            cfg.max_bytes = 100000;
+            cfg.bot_share_percent = 100;
+            cfg.max_bot_saves_per_hour = 100;
+            cfg.max_saves_per_hour = 1000;
+            const fs::path dir = f.dir;
+            cfg.free_bytes = [dir, capacity](const std::string&, uint64_t& available) {
+                const uint64_t used = folder_bytes(dir);
+                available = capacity > used ? capacity - used : 0;
+                return true;
+            };
+            return cfg;
+        };
+        std::string why;
+        {   // a person's match: the bots' files go first, and only as many as the disk needs
+            Fixture f;
+            ReplayStore store(disk(f, 19000));
+            ASSERT_TRUE(store.prepare(why));
+            const auto put = [&](bool bot, uint32_t seed) { const ReplaySave s = store.save(bot ? make_bot_file(seed, 3000) : make_file("TREASURE.LVL", 700, true, 3000, seed)); f.now += 1; return s; };
+            const ReplaySave p0 = put(false, 1), b1 = put(true, 2), p1 = put(false, 3), b2 = put(true, 4);     // (12,000 bytes: 7,000 free, a 3,000 byte match needs 8,000)
+            ASSERT_TRUE(p0.kept && b1.kept && p1.kept && b2.kept);
+            (void)store.take_notes();
+            const ReplaySave kept = put(false, 5);
+            ASSERT_TRUE(kept.kept);
+            ASSERT_TRUE(!fs::exists(f.dir / b1.file) && fs::exists(f.dir / b2.file) && fs::exists(f.dir / p0.file) && fs::exists(f.dir / p1.file));
+            ASSERT_TRUE(any_line_has(store.take_notes(), "older file(s) were deleted to keep a match"));
+        }
+        {   // a bots' match: only bots' files may go; none is there, so it is refused and nothing is deleted
+            Fixture f;
+            ReplayStore store(disk(f, 19000));
+            ASSERT_TRUE(store.prepare(why));
+            for (uint32_t i = 1; i <= 4; ++i) {
+                ASSERT_TRUE(store.save(make_file("TREASURE.LVL", 700, true, 3000, i)).kept);
+                f.now += 1;
+            }
+            const ReplaySave refused = store.save(make_bot_file(9, 3000));
+            ASSERT_TRUE(!refused.kept && contains(refused.note, "would not make room"));
+            ASSERT_EQ(store.count(), size_t{4});
+        }
+        {   // a person's match when the bots' files are gone: the oldest person's file goes, one is enough
+            Fixture f;
+            ReplayStore store(disk(f, 19000));
+            ASSERT_TRUE(store.prepare(why));
+            std::vector<std::string> people;
+            for (uint32_t i = 1; i <= 4; ++i) {
+                people.push_back(store.save(make_file("TREASURE.LVL", 700, true, 3000, i)).file);
+                f.now += 1;
+            }
+            ASSERT_TRUE(store.save(make_file("TREASURE.LVL", 700, true, 3000, 9)).kept);
+            ASSERT_TRUE(!fs::exists(f.dir / people[0]) && fs::exists(f.dir / people[1]) && fs::exists(f.dir / people[2]) && fs::exists(f.dir / people[3]));
+        }
+        {   // deleting the whole store would not give the disk what it needs: the match is refused and the store is left whole
+            Fixture f;
+            ReplayStore store(disk(f, 6000));
+            ASSERT_TRUE(store.prepare(why));
+            write_file(f.dir / "ants-TINY-20261007-120000Z.antsrep", make_file("TINY.LVL", 700, true, 1000, 6));
+            fs::last_write_time(f.dir, fs::file_time_type(std::chrono::hours(100000)));
+            ASSERT_EQ(store.rescan(), size_t{1});
+            const ReplaySave refused = store.save(make_file("TREASURE.LVL", 700, true, 3000, 7));
+            ASSERT_TRUE(!refused.kept && contains(refused.note, "would not make room") && contains(refused.note, "too small"));
+            ASSERT_TRUE(store.count() == 1 && fs::exists(f.dir / "ants-TINY-20261007-120000Z.antsrep"));
+        }
+        {   // the log says it once: the volume cannot hold the limit
+            Fixture f;
+            ReplayConfig cfg = f.config();
+            cfg.min_free_bytes = 256ull << 20;
+            cfg.max_bytes = 1024ull << 20;
+            cfg.free_bytes = [](const std::string&, uint64_t& available) { available = 600ull << 20; return true; };
+            ReplayStore store(cfg);
+            ASSERT_TRUE(store.prepare(why));
+            const std::vector<std::string> notes = store.take_notes();
+            ASSERT_TRUE(any_line_has(notes, "can grow by 344 MiB") && any_line_has(notes, "limit of 1024 MiB"));
+            Fixture g;
+            ReplayConfig roomy = g.config();
+            roomy.min_free_bytes = 256ull << 20;
+            roomy.max_bytes = 1024ull << 20;
+            roomy.free_bytes = [](const std::string&, uint64_t& available) { available = 5000ull << 20; return true; };
+            ReplayStore enough(roomy);
+            ASSERT_TRUE(enough.prepare(why));
+            ASSERT_FALSE(any_line_has(enough.take_notes(), "can grow by"));
+        }
+    } TEST_END();
+
+    TEST_CASE("RS12.7 A Store That Indexes In The Background Opens At Once On The Names And Sizes And Reads The Heads A Few At A Time, The Newest First: Ages And Limits Work Before Any File Is Read, A File Asked For By Name Is Read Then, And The Result Is The Index That Reading At Once Gives") {
+        Fixture f;
+        fs::create_directories(f.dir);
+        const std::string old_name = "ants-TINY-20190101-000000Z.antsrep";
+        write_file(f.dir / old_name, make_file("TINY.LVL", 700, true, 0, 99));              // (older than the days: deleted when the store opens, with no look inside)
+        std::vector<std::string> names;
+        for (uint32_t i = 0; i < 50; ++i) {
+            const std::string name = "ants-TREASURE-" + ReplayStore::time_stamp(kT0 - 5000 + static_cast<int64_t>(i) * 60) + ".antsrep";
+            write_file(f.dir / name, i % 3 == 0 ? make_bot_file(i + 1) : make_file("TREASURE.LVL", 700, true, 0, i + 1));
+            names.push_back(name);
+        }
+        write_text(f.dir / "ants-TREASURE-20261008-010101Z.antsrep.tmp", "a crash");
+        ReplayConfig cfg = f.config();
+        cfg.index_in_background = true;
+        ReplayStore store(cfg);
+        std::string why;
+        ASSERT_TRUE(store.prepare(why));
+        ASSERT_TRUE(store.count() == 50 && !fs::exists(f.dir / old_name));
+        ASSERT_TRUE(store.unindexed() == 50 && store.readable_count() == 0);
+        ASSERT_TRUE(store.entries().front().pending && store.entries().back().pending && store.entries().back().file == names.back());
+        ASSERT_TRUE(any_line_has(store.take_notes(), "read in the background"));
+        const uint64_t revision = store.revision();
+        const ReplayEntry* oldest = store.find(names.front());                                // (somebody asks for the oldest file by its name: it is read now)
+        ASSERT_TRUE(oldest != nullptr && !oldest->pending && oldest->readable && oldest->map == "TREASURE.LVL" && store.unindexed() == 49 && store.readable_count() == 1);
+        store.update();                                                                       // (one pass of the loop: a batch, the newest first)
+        ASSERT_TRUE(store.unindexed() < 49 && !store.entries().back().pending);
+        for (int pass = 0; pass < 20 && store.unindexed() > 0; ++pass) store.update();
+        ASSERT_TRUE(store.unindexed() == 0 && store.readable_count() == 50 && store.revision() > revision);
+        ReplayConfig now = f.config();
+        ReplayStore at_once(now);
+        ASSERT_TRUE(at_once.prepare(why));
+        ASSERT_TRUE(at_once.count() == store.count() && at_once.bot_count() == store.bot_count() && at_once.bot_bytes() == store.bot_bytes() && at_once.total_bytes() == store.total_bytes());
+        ASSERT_TRUE(store.bot_count() == 17);                                                 // (every third file, from the first)
+        for (size_t i = 0; i < store.entries().size(); ++i) {
+            const ReplayEntry& a = store.entries()[i];
+            const ReplayEntry& b = at_once.entries()[i];
+            ASSERT_TRUE(a.file == b.file && a.readable == b.readable && a.bots_only == b.bots_only && a.map == b.map && a.players == b.players && a.turns == b.turns && !a.pending);
+        }
+        // a file that cannot be read is listed as such when its turn comes, and is not asked for again
+        Fixture g;
+        fs::create_directories(g.dir);
+        write_text(g.dir / kName0, "not a replay at all");
+        ReplayConfig bad = g.config();
+        bad.index_in_background = true;
+        ReplayStore damaged(bad);
+        ASSERT_TRUE(damaged.prepare(why));
+        ASSERT_TRUE(damaged.entries().front().pending);
+        damaged.update();
+        ASSERT_TRUE(damaged.unindexed() == 0 && !damaged.entries().front().pending && !damaged.entries().front().readable && damaged.readable_count() == 0);
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures

@@ -10,6 +10,7 @@ const { makeDocument } = require('./web_mapmaker_fake_dom.js');
 global.AntsAdminBots = require(process.argv[3] ? path.resolve(process.argv[3]) : path.join(__dirname, '..', '..', 'web', 'admin_bots.js'));
 const A = require(path.resolve(process.argv[2]));
 
+const seenUrls = [];                                  // every address that any page of this run asked for (the check at the end looks at all of them)
 let checks = 0;
 let failures = 0;
 function check(label, ok, detail) { checks++; if (!ok) { failures++; console.log('FAIL ' + label + (detail === undefined ? '' : ' (' + detail + ')')); } }
@@ -62,9 +63,10 @@ function botWorld() {
             { id: 'm4', name: 'TINY', rules: 'highest-score', seats: seats(['medium', 'medium', 'hard', 'hard']), teams: '02-13', started: at('2026-10-18T19:59:00Z'), live: null, by: 'tess' }
         ],
         maps: [
-            { file: 'TINY.LVL', name: 'TINY', group: 'original', width: 32, height: 32, places: 1 }, { file: 'ISLANDS.LVL', name: 'ISLANDS', group: 'original', width: 96, height: 96, places: 1 },
-            { file: 'POPcOrN.lvl', name: 'POPcOrN', group: 'library', width: 64, height: 64, places: 1 },
-            { file: 'Fight Island.lvl', name: 'Fight Island', group: 'players', width: 150, height: 150, places: 3 }, { file: 'Evil.lvl', name: '<img src=x onerror=alert(1)>', group: 'players', width: 31, height: 31, places: 1 }
+            { file: 'TINY.LVL', name: 'TINY', group: 'original', width: 32, height: 32, places: 1, minutes: 6, random: true }, { file: 'ISLANDS.LVL', name: 'ISLANDS', group: 'original', width: 96, height: 96, places: 1, minutes: 20, random: true },
+            { file: 'POPcOrN.lvl', name: 'POPcOrN', group: 'library', width: 64, height: 64, places: 1, minutes: 12, random: true },
+            { file: 'Fight Island.lvl', name: 'Fight Island', group: 'players', width: 150, height: 150, places: 3, minutes: 20, random: true }, { file: 'Evil.lvl', name: '<img src=x onerror=alert(1)>', group: 'players', width: 31, height: 31, places: 1, minutes: 12, random: true },
+            { file: 'Ultimate Chess.lvl', name: 'Ultimate Chess', group: 'players', width: 120, height: 120, places: 2, minutes: 60, random: false }
         ],
         rotation: { 'highest-score': 9, '187': 6 },
         schedules: [
@@ -113,6 +115,7 @@ function world(overrides) {
     }, overrides || {});
     w.fetch = async (url, init) => {
         init = init || {};
+        seenUrls.push((init.method || 'GET') + ' ' + url);
         w.calls.push({ method: init.method || 'GET', url, headers: init.headers || {}, body: init.body === undefined ? undefined : JSON.parse(init.body), credentials: init.credentials });
         const reply = (status, json) => ({ status, json: async () => json });
         const method = init.method || 'GET';
@@ -122,14 +125,18 @@ function world(overrides) {
         }
         if (url.indexOf('/admin/api/bot-') === 0 && w.botsOff) return reply(503, { error: 'bots_off', message: 'Bot matches are not available on this server.' });
         if (method === 'GET' && url === '/admin/api/bot-matches') return reply(200, { matches: w.bots.matches, cap: 8, places: w.bots.places, replays: w.bots.replays, untrusted: true, untrusted_fields: ['name', 'by', 'schedule'] });
-        if (method === 'GET' && url === '/admin/api/bot-options') return reply(200, { maps: w.bots.maps, rotation: w.bots.rotation, untrusted: true, untrusted_fields: ['name'] });
-        if (method === 'GET' && url === '/admin/api/bot-schedules') return reply(200, { schedules: w.bots.schedules, max: 20, untrusted: true, untrusted_fields: ['name'] });
+        if (method === 'GET' && url === '/admin/api/bot-options') return reply(200, { maps: w.bots.maps, rotation: w.bots.rotation, random_max_minutes: 30, untrusted: true, untrusted_fields: ['name'] });
+        if (method === 'GET' && url === '/admin/api/bot-schedules') return reply(200, { schedules: w.bots.schedules, max: 20, scheduling: w.bots.scheduling !== false, untrusted: true, untrusted_fields: ['name'] });
         if (method === 'POST' && url.indexOf('/admin/api/bot-') === 0) return reply(200, url === '/admin/api/bot-matches' ? { started: JSON.parse(init.body).count, asked: JSON.parse(init.body).count } : url.endsWith('/stop-all') ? { stopped: w.bots.matches.length } : { ok: true });
         if (url === '/admin/api/me') return reply(w.me.status, w.me.json);
         if (url === '/hub/admin/api/me') return reply(w.hubMe.status, w.hubMe.json);
         if (url === '/hub/me') return reply(w.hubYou.status, w.hubYou.json);
         if (url === '/busy') return reply(200, w.busy);
-        if (url === '/admin/api/audit') return reply(200, { entries: w.audit, untrusted: true, untrusted_fields: ['who', 'target', 'detail'] });
+        if (url.indexOf('/admin/api/audit') === 0) {                                              // (the server filters by the kind of line: maps = every action that is not a bot's, bots = the actions that start with bot_)
+            const kind = (/[?&]kind=([a-z]*)/.exec(url) || [])[1];
+            const bot = (e) => String(e.action).indexOf('bot_') === 0;
+            return reply(200, { entries: w.audit.filter((e) => kind === 'bots' ? bot(e) : kind === 'maps' ? !bot(e) : true), untrusted: true, untrusted_fields: ['who', 'target', 'detail'] });
+        }
         if (url === '/hub/admin/api/bans') return reply(200, { bans: w.bans, untrusted: true, untrusted_fields: ['name', 'by_name'] });
         if (url === '/hub/admin/api/mutes') return reply(200, { mutes: w.mutes, untrusted: true, untrusted_fields: ['name', 'by_name'] });
         if (url === '/hub/admin/api/hidden') return reply(200, { hidden: w.hidden, untrusted: true, untrusted_fields: ['name'] });
@@ -1224,7 +1231,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
         const { app } = await open(w);
         w.calls.length = 0;
         await section(app, 'Log');
-        same('Log: the hub\'s log and the map decisions are asked for, both reads, and nothing else', w.calls.map((c) => c.method + ' ' + c.url), ['GET /hub/admin/api/modlog', 'GET /admin/api/audit']);
+        same('Log: the hub\'s log and the two kinds of the server\'s log (the server filters them) are asked for, all reads, and nothing else', w.calls.map((c) => c.method + ' ' + c.url), ['GET /hub/admin/api/modlog', 'GET /admin/api/audit?kind=maps', 'GET /admin/api/audit?kind=bots']);
         same('Log: the four filters with their counts, All chosen, and the lead of All', [texts(app, '.lhead .chip'), all(app, '.lhead .chip').map((c) => c.getAttribute('aria-selected')), texts(app, '.alead')], [['All (9)', 'Chat actions (6)', 'Map decisions (3)', 'Bot matches (0)'], ['true', 'false', 'false', 'false'], ['Chat actions (the last 30 days), map decisions and bot matches, newest first.']]);
         same('Log: the rows are in one list, newest first, each with its time (Pacific), who and what', texts(app, '.arow2 .tm'), ['today, 12:02', 'today, 11:47', 'today, 11:30', 'today, 10:02', 'today, 09:12', 'yesterday', 'yesterday', '13 Oct', '12 Oct']);
         const rows = all(app, '.arow2').map((r) => r.children.map((c) => c.textContent));
@@ -1241,7 +1248,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
         same('Chat actions: only the hub\'s rows, no tag, the lead says 30 days', [all(app, '.arow2').length, all(app, '.arow2 .src').length, texts(app, '.alead'), all(app, '.lhead .chip').map((c) => c.getAttribute('aria-selected'))], [6, 0, ['What moderators and admins did in the chat, the last 30 days.'], ['false', 'true', 'false', 'false']]);
         await press(app, 'Map decisions (3)');
         same('Map decisions: only the maps, with the decider as a username (the words earlier admin for the old accounts)', [all(app, '.arow2').length, all(app, '.arow2 .wh').map((n) => n.textContent), texts(app, '.alead')], [3, ['basil', 'tess', 'earlier admin'], ['What was decided about the maps that players sent.']]);
-        same('and nothing was asked again for a filter', w.calls.length, 2);
+        same('and nothing was asked again for a filter', w.calls.length, 3);
         noMarkup('Log', app);
         noId('Log', app, w.calls);
         // every action word, and a word that this page does not know
@@ -1252,7 +1259,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
         same('every action of the hub has its words, an unknown one is shown as the word it is, a purge is not a line number', texts(x.app, '.arow2 .wt'), ['ChatMuted hazel_b for 1 minute', 'ChatUnmuted hazel_b', 'ChatBanned hazel_b', 'ChatUnbanned hazel_b', 'ChatKicked hazel_b', 'ChatHid the picture of hazel_b', 'ChatShowed the picture of hazel_b', 'ChatDeleted the recent lines of hazel_b', 'Chatsomething_new hazel_b']);
         same('and with nothing in either list the page says so', (await (async () => { const e = await open(world({ modlog: [], audit: [] })); await section(e.app, 'Log'); return [texts(e.app, '.none'), all(e.app, '.alist2').length]; })()), [['Nothing was done in this time.'], 0]);
         // one of the two lists that cannot be had: the other is shown, and the page says which is missing
-        for (const [label, key, said, left] of [['the hub\'s log', 'GET /hub/admin/api/modlog', 'The chat\u2019s log could not be loaded.', 3], ['the map decisions', 'GET /admin/api/audit', 'The map decisions could not be loaded.', 6]]) {
+        for (const [label, key, said, left] of [['the hub\'s log', 'GET /hub/admin/api/modlog', 'The chat\u2019s log could not be loaded.', 3], ['the map decisions', 'GET /admin/api/audit?kind=maps', 'The map decisions could not be loaded.', 6], ['the bot matches\u2019 log', 'GET /admin/api/audit?kind=bots', 'The bot matches\u2019 log could not be loaded.', 9]]) {
             const f = world({ replies: { [key]: { status: 500, json: { error: 'x' } } } });
             const o = await open(f);
             await section(o.app, 'Log');
@@ -1261,7 +1268,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
         const none = world({ replies: { 'GET /hub/admin/api/modlog': () => { throw new Error('network'); } } });
         const n = await open(none);
         await section(n.app, 'Log');
-        same('no answer at all is said too, and the page does not call it empty', [texts(n.app, '.msg'), texts(n.app, '.none')], [['The chat\u2019s log could not be loaded.', 'The map decisions could not be loaded.'], []]);
+        same('no answer at all is said too, and the page does not call it empty', [texts(n.app, '.msg'), texts(n.app, '.none')], [['The chat\u2019s log could not be loaded.', 'The map decisions could not be loaded.', 'The bot matches\u2019 log could not be loaded.'], []]);
         // names that carry markup
         const evil = '<img src=x onerror=alert(1)>';
         const bad = world({ modlog: [{ at: at('2026-10-18T19:00:00Z'), action: 'ban', actor: '22b2222222222222', actor_name: evil, target: '66f6666666666666', target_name: '"><script>alert(2)</script>', detail: '' }], audit: [{ at: at('2026-10-18T18:00:00Z'), who: evil, ref: 'x', action: 'map_declined', target: evil, detail: evil }] });
@@ -1373,7 +1380,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
         await section(app, 'Status');
         await section(app, 'Maps');
         const urls = w.calls.map((c) => c.url);
-        same('every address that the page asked for is one of the known ones, and none holds a query but the maps\'', urls.filter((u) => !/^(\/admin\/api\/(me|audit|bot-matches|maps\?state=\w+)|\/hub\/admin\/api\/(me|bans|mutes|hidden|modlog|status)|\/busy)$/.test(u)), []);
+        same('every address that the page asked for is one of the known ones, and none holds a query but the maps\'', urls.filter((u) => !/^(\/admin\/api\/(me|audit\?kind=(maps|bots)|bot-matches|maps\?state=\w+)|\/hub\/admin\/api\/(me|bans|mutes|hidden|modlog|status)|\/busy)$/.test(u)), []);
         noId('the whole visit', app, w.calls);
     }
     // ---- the section "Bot matches": Start now, Running and Schedules, what each button sends, what the server's refusals are told as, and that every typed word is text
@@ -1400,7 +1407,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
                 [['Random from the rotation', 'Random from the original maps', 'Random from the players’ maps', 'The original’s maps', 'The library (in the rotation)', 'The players’ maps (approved)'], '8 at the most, with the ones that run now.']);
             const players = all(app, '.b-now optgroup').filter((g) => g.label === 'The players’ maps (approved)')[0].children;
             same('a map of a player is player text and its name is text: no markup is made of it', [players.map((o) => o.textContent), players.map((o) => o.getAttribute('data-untrusted')), all(app, '.b-now optgroup').filter((g) => g.label === 'The original’s maps')[0].children.map((o) => o.getAttribute('data-untrusted'))],
-                [['Fight Island (150 x 150)', '<img src=x onerror=alert(1)> (31 x 31)'], ['player-text', 'player-text'], [null, null]]);
+                [['Fight Island (150 x 150)', '<img src=x onerror=alert(1)> (31 x 31)', 'Ultimate Chess (120 x 120)'], ['player-text', 'player-text', 'player-text'], [null, null]]);
             same('the hint under the map says what the rotation is', texts(app, '.b-now .f .fh').filter((s) => /rotation/.test(s)), ['The rotation: 9 maps for Highest score, 6 for 187.']);
             same('every control that can be touched is a button or a field of its own, and Start is a green big button', [all(app, '.b-now .startrow .btn')[0].className, all(app, '.b-now .step .btn').map((b) => b.getAttribute('aria-label'))], ['btn big ok', ['One less', 'One more']]);
             same('a split cannot be chosen while the number of bots is drawn, and the page says why', [chipsOf(app, 'now-teams').children[1].getAttribute('aria-disabled'), chipsOf(app, 'now-teams').children[1].className, texts(app, '.b-now .fh').filter((s) => /split/i.test(s))], ['true', 'chip dis', ['A split needs a number of bots: choose 2, 3 or 4.']]);
@@ -1418,7 +1425,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             same('and at least one', [texts(app, '.b-now .stepv'), all(app, '.b-now .startrow .btn')[0].textContent], [['1'], 'Start 1 bot match']);
             plus.click(); plus.click(); await settle();
             await pick(app, 'now-map', 'Fight Island.lvl');
-            same('a big map says how many places a match on it takes', texts(app, '.b-now .f .fh').filter((s) => /big map/.test(s)), ['Fight Island is a big map: each match on it counts as 3 places of the server.']);
+            same('a big map says how many places a match on it takes', texts(app, '.b-now .f .fh').filter((s) => /big map/.test(s)), ['Fight Island plays up to 20 minutes. It is a big map: each match on it counts as 3 places of the server.']);
             await chip(app, 'now-rules', '187');
             await chip(app, 'now-bots', '4');
             await pick(app, 'now-lv0', 'hard'); await pick(app, 'now-lv1', 'hard'); await pick(app, 'now-lv2', 'medium'); await pick(app, 'now-lv3', 'easy');
@@ -1587,6 +1594,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             w.bots.schedules.push({ id: 9, name: '<b>Loud</b>', default: false, on: true, last: 0, next: at('2026-10-18T21:00:00Z'), when: { kind: 'every', minutes: 120 }, what: { count: 1, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' } });
             await press(app, 'Refresh');
             same('a name that is markup is text, marked as typed', [all(app, '.b-sched .brow .bn [data-untrusted]').map((n) => n.textContent).slice(-1), all(app, '.b-sched .brow .bn [data-untrusted]').every((n) => n.getAttribute('data-untrusted') === 'typed-text'), texts(app, '.b-sched .brow .bs').slice(-3)[2]], [['<b>Loud</b>'], true, 'Next start today, 14:00 · no start yet']);
+            noMarkup('Bot matches with markup in the name of a schedule, of a map and of a match', app);
             // Cancel
             w.calls.length = 0;
             await press(app, 'Add a schedule');
@@ -1594,13 +1602,93 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             same('Cancel closes the form and sends nothing', [all(app, '.sform').length, posts(w).length], [0, 0]);
             // Delete
             await press(app, 'Delete', 0);
-            same('Delete asks first, naming the schedule (as text), and the default says that nothing then starts by itself', [texts(app, '.dlg h2'), texts(app, '.dlg .lead'), posts(w).length], [['Delete Hourly rotation?'], ['It starts nothing from now on. This is the schedule that the server began with (one match every hour): until you add another, nothing starts by itself. Matches that it started and that still run go on.'], 0]);
+            same('Delete asks first, naming the schedule (as text), and the default says that nothing then starts by itself', [texts(app, '.dlg h2'), texts(app, '.dlg .lead'), posts(w).length], [['Delete Hourly rotation?'], ['It starts nothing from now on. This is the schedule that the server began with (every 60 minutes): until you add another, nothing starts by itself. Matches that it started and that still run go on.'], 0]);
             await press(app, 'Cancel');
             same('Cancel of that question sends nothing', [all(app, '.dlg').length, posts(w).length], [0, 0]);
             await press(app, 'Delete', 1);
             same('Delete of another schedule has the shorter lead', texts(app, '.dlg .lead'), ['It starts nothing from now on. Matches that it started and that still run go on.']);
             await press(app, 'Delete', button(app, 'Delete').length - 1);
             same('the question\'s Delete sends the call for that schedule', posts(w).map((c) => c.url), ['/admin/api/bot-schedules/2/delete']);
+        }
+        {   // the findings of the review: levels of a schedule with fewer than four bots, a double click, why a batch stopped short, the minutes of a map, the operator's off switch, the default's question
+            const sched = (id, name, rest) => Object.assign({ id, name, default: false, on: true, last: 0, next: at('2026-10-18T21:00:00Z'), when: { kind: 'every', minutes: 60 }, what: { count: 1, map: 'random:rotation', rules: 'highest-score', bots: '2', levels: ['hard', 'easy'], teams: 'ffa', split: '' } }, rest);
+            for (const [label, bots, levels, wanted] of [['two bots', '2', ['hard', 'easy'], ['hard', 'easy', 'rmh', 'rmh']], ['three bots', '3', ['medium', 'hard', 'easy'], ['medium', 'hard', 'easy', 'rmh']], ['a list with a word that is none', '2', ['hard', 'loud'], ['hard', 'rmh', 'rmh', 'rmh']]]) {
+                const w = botWorld();
+                w.schedules = [sched(7, 'Short list', { what: { count: 1, map: 'random:rotation', rules: 'highest-score', bots, levels, teams: 'ffa', split: '' } })];
+                const o = await opened({ bots: w });
+                await press(o.app, 'Edit');
+                await chip(o.app, 'sc-bots', '4');
+                const boxes = all(o.app, '.sform select').filter((n) => /^sc-lv\d$/.test(n.id));
+                same('a schedule with ' + label + ' raised to four bots: four level boxes, each with a level that exists', [boxes.length, boxes.map((b) => b.value)], [4, wanted]);
+                await press(o.app, 'Save');
+                const sent = posts(o.w)[0] ? posts(o.w)[0].body.what.levels : null;
+                same('...and Save sends four levels that the server knows, never an empty one (' + label + ')', sent, wanted);
+                same('...and the server did not refuse (no line above Save, the form is closed)', [texts(o.app, '.sform .msg.bad'), all(o.app, '.sform').length], [[], 0]);
+            }
+            {   // the same page, the server giving four levels for two bots (what it does now)
+                const w = botWorld();
+                w.schedules = [sched(7, 'Four levels', { what: { count: 1, map: 'random:rotation', rules: 'highest-score', bots: '2', levels: ['hard', 'easy', 'rmh', 'rmh'], teams: 'ffa', split: '' } })];
+                const o = await opened({ bots: w });
+                same('a schedule row for two bots says the levels of the two', texts(o.app, '.b-sched .brow .bs')[1], '1 match · a random map of the rotation · rules Highest score · 2 bots · levels Hard, Easy · free for all');
+            }
+            {   // a double click on Save is one save
+                const o = await opened();
+                await press(o.app, 'Add a schedule');
+                const save = button(o.app, 'Save')[0];
+                save.click();
+                save.click();
+                await settle();
+                same('a double click on Save sends one call', posts(o.w).map((c) => c.url), ['/admin/api/bot-schedules']);
+                const again = await opened();
+                await press(again.app, 'Add a schedule');
+                again.w.replies['POST /admin/api/bot-schedules'] = { status: 400, json: { error: 'bad_every' } };
+                const second = button(again.app, 'Save')[0];
+                second.click();
+                await settle();
+                same('a save that the server refused leaves Save usable again, and the next press sends again', [second.disabled, (second.click(), await settle(), posts(again.w).length)], [false, 2]);
+                const turn = await opened();
+                const off = button(turn.app, 'Turn off')[0];
+                off.click();
+                off.click();
+                await settle();
+                same('a double click on Turn off sends one call', posts(turn.w).map((c) => c.url), ['/admin/api/bot-schedules/1']);
+            }
+            {   // why a batch stopped short is the server's word, and a refusal for the store's room is told
+                for (const [why, words] of [['places', 'The rest would take more places than bot matches may have.'], ['busy', 'People’s matches began to use most of the server’s places, so the rest were not started.'], ['cap', 'The limit of 8 bot matches at once was reached, so the rest were not started.'], ['budget', 'The store has no room left this hour for more recordings of bot matches, so the rest were not started.'], ['other', 'The rest could not be started.']]) {
+                    const { w, app } = await opened();
+                    w.replies['POST /admin/api/bot-matches'] = { status: 200, json: { started: 1, asked: 3, stopped_for: why } };
+                    await press(app, 'Start 1 bot match');
+                    same('a batch that stopped short, ' + why + ': its own sentence', texts(app, '.b-now .msg.ok'), ['Started 1 of 3 bot matches. ' + words + ' They show on the live list in about 30 seconds.']);
+                }
+                const { w, app } = await opened();
+                w.replies['POST /admin/api/bot-matches'] = { status: 409, json: { error: 'budget', per_hour: 30 } };
+                await press(app, 'Start 1 bot match');
+                same('a start that the store has no room for is told with the number', texts(app, '.b-now .msg.bad'), ['Not started: the store keeps only 30 recordings of bot matches an hour, and that many are kept or on their way. A match that would not be kept is not played. Try again later.']);
+            }
+            {   // the minutes of a map are shown before it is started; a random pick leaves out the long ones
+                const { app } = await opened();
+                await pick(app, 'now-map', 'Ultimate Chess.lvl');
+                same('a map chosen by name: its minutes, its places, and that a random pick never takes it', texts(app, '.b-now .f .fh').filter((t) => /Ultimate Chess/.test(t)), ['Ultimate Chess plays up to 60 minutes. It is a big map: each match on it counts as 2 places of the server. A random pick never takes it (over 30 minutes); only a choice that names it does.']);
+                await pick(app, 'now-map', 'TINY.LVL');
+                same('a map of 6 minutes says so', texts(app, '.b-now .f .fh').filter((t) => /^TINY plays/.test(t)), ['TINY plays up to 6 minutes.']);
+                await pick(app, 'now-map', 'random:players');
+                same('the players’ maps: how many, and how many of them a random pick may take', texts(app, '.b-now .f .fh').filter((t) => /players that you approved/.test(t)), ['The maps of the players that you approved: 3 now, 2 of them for a random pick (the others play over 30 minutes: name one to play it).']);
+            }
+            {   // the operator's off switch: the schedules are shown and kept, and the page says that none of them runs
+                const w = botWorld();
+                w.scheduling = false;
+                const o = await opened({ bots: w });
+                same('with the schedules switched off by the server: one line above them', texts(o.app, '.b-sched .msg'), ['Scheduled bot matches are switched off on this server: its settings say so (the operator set ANTS_BOT_MATCH_EVERY_MIN to 0). The schedules below are kept and can be edited, but none of them starts a match. Start now still works.']);
+                same('...and no row promises a next start', texts(o.app, '.b-sched .brow .bs').filter((t) => /Next start|Not running/.test(t)).map((t) => t.split(' · ')[0]), ['Not running: the server’s settings switch every schedule off', 'Not running: the server’s settings switch every schedule off', 'Not running: the server’s settings switch every schedule off']);
+                same('...while Start now is on', button(o.app, 'Start 1 bot match')[0].disabled, false);
+            }
+            {   // the question for the schedule that the server began with names the way it runs now
+                const w = botWorld();
+                w.schedules = [sched(1, 'Rotation, every 90 minutes', { default: true, when: { kind: 'every', minutes: 90 } })];
+                const o = await opened({ bots: w });
+                await press(o.app, 'Delete');
+                same('Delete of a default that runs every 90 minutes says 90, not an hour', texts(o.app, '.dlg .lead'), ['It starts nothing from now on. This is the schedule that the server began with (every 90 minutes): until you add another, nothing starts by itself. Matches that it started and that still run go on.']);
+            }
         }
         {   // a server with no way to run them, and an answer that is no list
             const { app } = await opened({ botsOff: true });
@@ -1635,6 +1723,11 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             noMarkup('Log with bot lines', app);
         }
     }
+    // what the whole run sent, seen from outside: the bot calls of the page went to the routes of the admin API and to no other address, with the methods that those routes take
+    const botCalls = seenUrls.filter((u) => /\/admin\/api\/bot-/.test(u));
+    check('the run made bot calls', botCalls.length > 50, botCalls.length);
+    check('every bot call went to one of the routes of the admin API, with the method that the route takes', botCalls.every((u) => /^GET \/admin\/api\/bot-(matches|options|schedules)$/.test(u) || /^POST \/admin\/api\/bot-matches(\/stop-all|\/m\d+\/stop)?$/.test(u) || /^POST \/admin\/api\/bot-schedules(\/\d+(\/delete)?)?$/.test(u)), botCalls.filter((u) => !/^(GET \/admin\/api\/bot-(matches|options|schedules)|POST \/admin\/api\/bot-matches(\/stop-all|\/m\d+\/stop)?|POST \/admin\/api\/bot-schedules(\/\d+(\/delete)?)?)$/.test(u))[0]);
+    check('no page of the run asked for an address outside the site (every address is a path of its own)', seenUrls.every((u) => /^(GET|POST|DELETE) \/[^/]/.test(u)), seenUrls.filter((u) => !/^(GET|POST|DELETE) \/[^/]/.test(u))[0]);
     console.log(checks + ' checks, ' + failures + ' failed');
     process.exit(failures === 0 ? 0 : 1);
 })();

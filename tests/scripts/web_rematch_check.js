@@ -611,7 +611,7 @@ async function main() {
         const handoff = (name) => ({ closed: false, antsTestGameHandoff: () => ({ name, bytes: new Uint8Array([8, 0, 0, 0, 1, 2]) }), antsTestGameBack: () => {} });
         const okReply = { status: 201, json: () => Promise.resolve({ test_map: { file: 'Again Map ~test-5566aabb.lvl', name: 'Again Map', kind: 'classic', width: 31, height: 31, usable: [true, true, true, true] } }) };
         const noteDoc = Object.assign({}, doc);
-        const footer = node('p'); footer.textContent = 'Online matches are recorded. Recordings are kept for 90 days.';
+        const footer = node('p'); footer.textContent = 'Online matches are recorded. Recordings are kept for up to 90 days.';
         noteDoc.getElementById = (id) => (id === 'room-notice' ? footer : null);
         function testStrip(win, replies, theDoc) {
             const body = node('body'), screen = node('div');
@@ -707,7 +707,7 @@ async function main() {
         const noteStrip = testStrip(mkWin('notice1234567', handoff('Again Map')), [okReply], noteDoc);
         noteStrip.s.begin(() => {});
         await flush(); await flush();
-        const OWN = 'Online matches are recorded. Recordings are kept for 90 days.';
+        const OWN = 'Online matches are recorded. Recordings are kept for up to 90 days.';
         noteStrip.s.sync({ guest: false, starting: false, you: 0, mapFile: 'TREASURE.LVL' }, () => true);
         same('before the room has the test map the page\'s own line stays', footer.textContent, OWN);
         noteStrip.s.sync({ guest: true, starting: false, you: 1, mapFile: 'Again Map ~test-5566aabb.lvl' });

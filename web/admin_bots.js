@@ -26,6 +26,12 @@
     var NO_REPLAYS_LINE = 'This server keeps no replays, so it plays no bot matches: a match that nobody could look at again is not played.';
 
     function defaults() { return { count: 1, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' }; }
+    // the levels of four bots, whatever the list that came has (a schedule that was saved with two or three bots may carry only those): a level that is missing or unknown is the draw of Medium or Hard
+    function paddedLevels(list) {
+        var out = [], known = LEVELS.map(function (c) { return c[0]; });
+        for (var i = 0; i < 4; i++) out.push(list && known.indexOf(list[i]) >= 0 ? list[i] : 'rmh');
+        return out;
+    }
     function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
     function minutesAgo(seconds, nowMs) { return Math.max(0, Math.floor((nowMs / 1000 - seconds) / 60)); }
     function sidesWords(teams) {                               // "ffa", or the sides by seat: "03-12" is Green and Black against Red and Blue
@@ -99,9 +105,9 @@
         }
 
         // The choices of one batch of bot matches, as Start now and a schedule both have them: { node, value(), set(v), onChange, setCountLabel }
-        function choices(pre, maps, rotation, init, countLabel, countWords) {
+        function choices(pre, maps, rotation, init, countLabel, countWords, randomMax) {
             var v = {}, listeners = [];
-            Object.keys(init).forEach(function (k) { v[k] = k === 'levels' ? init[k].slice() : init[k]; });
+            Object.keys(init).forEach(function (k) { v[k] = k === 'levels' ? paddedLevels(init[k]) : init[k]; });
             var node = el('div');
             function changed() { sync(); listeners.forEach(function (fn) { fn(v); }); }
             var count = stepper(countLabel, pre + '-count', 1, CAP, v.count, function (n) { v.count = n; changed(); });
@@ -166,10 +172,13 @@
                 mapS.select.value = v.map;
                 mapHint.className = 'fh';
                 if (mp && mp.file === 'ISLANDS.LVL' && v.rules === '187') { mapHint.textContent = 'ISLANDS is not played in 187: its water joins no two hills, so nobody could be struck. Choose another map or the rules Highest score.'; mapHint.className = 'fh bad'; }
-                else if (mp && mp.places > 1) mapHint.textContent = mp.name + ' is a big map: each match on it counts as ' + mp.places + ' places of the server.';
+                else if (mp) mapHint.textContent = mp.name + ' plays ' + (mp.minutes ? 'up to ' + plural(mp.minutes, 'minute', 'minutes') : 'its own time limit') + '.' + (mp.places > 1 ? ' It is a big map: each match on it counts as ' + mp.places + ' places of the server.' : '') + (mp.random === false ? ' A random pick never takes it (over ' + (randomMax || 30) + ' minutes); only a choice that names it does.' : '');
                 else if (v.map === 'random:rotation') mapHint.textContent = 'The rotation: ' + (rotation['highest-score'] || 0) + ' maps for Highest score, ' + (rotation['187'] || 0) + ' for 187.';
                 else if (v.map === 'random:original') mapHint.textContent = 'TINY, SMALL, MEDIUM, GAUNTLET, TREASURE and ISLANDS (ISLANDS only in Highest score).';
-                else if (v.map === 'random:players') mapHint.textContent = 'The maps of the players that you approved: ' + maps.filter(function (m) { return m.group === 'players'; }).length + ' now.';
+                else if (v.map === 'random:players') {
+                    var mine = maps.filter(function (m) { return m.group === 'players'; }), picked = mine.filter(function (m) { return m.random !== false; }).length;
+                    mapHint.textContent = 'The maps of the players that you approved: ' + mine.length + ' now' + (picked < mine.length ? ', ' + picked + ' of them for a random pick (the others play over ' + (randomMax || 30) + ' minutes: name one to play it)' : '') + '.';
+                }
                 else mapHint.textContent = '';
                 botsHint.textContent = v.bots === 'random' ? 'A random number from 2 to 4, on random seats.' : 'On random seats of the four.';
                 lvSel.forEach(function (row, i) { row.hidden = i >= nb; row.querySelector('select').value = v.levels[i]; });
@@ -196,14 +205,14 @@
             return {
                 node: node,
                 value: function () { var o = {}; Object.keys(v).forEach(function (k) { o[k] = k === 'levels' ? v.levels.slice(0, nbots()) : v[k]; }); if (o.teams !== 'split') o.split = ''; return o; },
-                set: function (w) { Object.keys(w).forEach(function (k) { v[k] = k === 'levels' ? w[k].slice() : w[k]; }); rules.set(v.rules); bots.set(v.bots); teams.set(v.teams); sync(); },
+                set: function (w) { Object.keys(w).forEach(function (k) { v[k] = k === 'levels' ? paddedLevels(w[k]) : w[k]; }); rules.set(v.rules); bots.set(v.bots); teams.set(v.teams); sync(); },
                 onChange: function (fn) { listeners.push(fn); },
                 setCountLabel: function (t) { count.label.textContent = t; }
             };
         }
 
         function render(host) {
-            var st = { matches: [], schedules: null, maps: [], rotation: {}, places: null, replays: true, off: false, busy: false, keyOff: null, editing: null, loaded: false, dead: false, capShown: false };
+            var st = { matches: [], schedules: null, maps: [], rotation: {}, randomMax: 30, scheduling: true, places: null, replays: true, off: false, busy: false, saving: false, keyOff: null, editing: null, loaded: false, dead: false, capShown: false };
             h.setCleanup(function () { st.dead = true; if (st.keyOff) { st.keyOff(); st.keyOff = null; } });
             var startMsg = el('div'), runBox = el('div'), schedBox = el('div');
 
@@ -216,7 +225,7 @@
             function startLabel() { var n = picked ? picked.value().count : 1; return 'Start ' + plural(n, 'bot match', 'bot matches'); }
             function drawNow() {
                 nowForm.textContent = '';
-                picked = choices('now', st.maps, st.rotation, defaults(), 'Matches to start', CAP + ' at the most, with the ones that run now.');
+                picked = choices('now', st.maps, st.rotation, defaults(), 'Matches to start', CAP + ' at the most, with the ones that run now.', st.randomMax);
                 startBtn = button(startLabel(), 'big ok', function () { start(); });
                 picked.onChange(function () { startBtn.textContent = startLabel(); });
                 add(nowForm, picked.node, startMsg, add(el('div', 'startrow'), startBtn));
@@ -237,6 +246,14 @@
                 parts.forEach(function (n) { add(m, typeof n === 'string' ? doc.createTextNode(n) : n); });
                 add(startMsg, m);
             }
+            // why a batch started fewer matches than it asked for (the server says it in stopped_for)
+            function stoppedWords(why) {
+                if (why === 'places') return 'The rest would take more places than bot matches may have.';
+                if (why === 'busy') return 'People’s matches began to use most of the server’s places, so the rest were not started.';
+                if (why === 'cap') return 'The limit of ' + CAP + ' bot matches at once was reached, so the rest were not started.';
+                if (why === 'budget') return 'The store has no room left this hour for more recordings of bot matches, so the rest were not started.';
+                return 'The rest could not be started.';
+            }
             function failure(r) {
                 var e = r.json && r.json.error, j = r.json || {};
                 if (r.status === 409 && e === 'cap') return ['Not started: ' + plural(j.running, 'bot match runs', 'bot matches run') + ' and ' + plural(j.asked, 'more would', 'more would') + ' be over the limit of ' + CAP + '. Start ' + j.free + ' or fewer, or stop some first.'];
@@ -244,6 +261,7 @@
                 if (r.status === 409 && e === 'places') return ['Not started: these matches would take more places than bot matches may have (' + j.used + ' of ' + j.max + ' are taken). Choose a smaller map or fewer matches, or stop some first.'];
                 if (r.status === 409 && e === 'map_187') return ['Not started: ISLANDS is not played in 187 (nobody could be struck there). Choose another map or the rules Highest score.'];
                 if (r.status === 409 && e === 'no_map') return ['Not started: that map cannot be played now. Choose another.'];
+                if (r.status === 409 && e === 'budget') return ['Not started: the store keeps only ' + (j.per_hour || 30) + ' recordings of bot matches an hour, and that many are kept or on their way. A match that would not be kept is not played. Try again later.'];
                 if (r.status === 503 && e === 'no_replays') return ['Not started: the server keeps no replays, and a match that nobody could look at again is not played.'];
                 if (r.status === 503 && e === 'bots_off') return [OFF_LINE];
                 if (r.status === 403 && e === 'csrf') return ['The page’s token is old. Reload the page.'];
@@ -259,7 +277,7 @@
                     if (st.dead) return;
                     if (r.status === 200) {
                         var j = r.json || {}, n = j.started || 0;
-                        say('ok', [(j.asked && n < j.asked ? 'Started ' + n + ' of ' + plural(j.asked, 'bot match', 'bot matches') + '. The rest would take more places than bot matches may have. ' : 'Started ' + plural(n, 'bot match', 'bot matches') + '. ') + 'They show on the live list in about 30 seconds.']);
+                        say('ok', [(j.asked && n < j.asked ? 'Started ' + n + ' of ' + plural(j.asked, 'bot match', 'bot matches') + '. ' + stoppedWords(j.stopped_for) + ' ' : 'Started ' + plural(n, 'bot match', 'bot matches') + '. ') + 'They show on the live list in about 30 seconds.']);
                         return loadAll(true);
                     }
                     if (refused(r)) return;
@@ -373,16 +391,20 @@
                 return 'Every day at ' + (t.length > 1 ? t.slice(0, -1).join(', ') + ' and ' + t[t.length - 1] : t[0]) + ' (Pacific time)';
             }
             function nextWords(s) {
+                if (!st.scheduling) return 'Not running: the server’s settings switch every schedule off' + (s.last ? ' · last start ' + when(s.last, env.now()) : '');
                 if (!s.on) return 'Off: it starts nothing' + (s.last ? ' · last start ' + when(s.last, env.now()) : '');
                 return 'Next start ' + untilWords(s.next, env.now()) + (s.last ? ' · last start ' + when(s.last, env.now()) : ' · no start yet');
             }
             function sendSchedule(s, patch) {
+                if (st.switching) return;
+                st.switching = true;
                 call('POST', '/admin/api/bot-schedules/' + s.id, patch).then(function (r) {
+                    st.switching = false;
                     if (st.dead) return;
                     if (r.status === 200) return loadAll(true);
                     if (refused(r)) return;
                     toast('That did not work. Reload the page.');
-                }, function () { toast('The server did not answer. Try again.'); });
+                }, function () { st.switching = false; toast('The server did not answer. Try again.'); });
             }
             function drawSched() {
                 if (st.editing && schedBox.querySelector('.sform')) return;                       // (a form that is open keeps what was typed when the lists are asked again)
@@ -393,6 +415,7 @@
                 if (list === null) { add(schedBox, message('The schedules could not be loaded.')); return; }
                 add(title, el('span', 'n', '(' + list.length + ')'));
                 if (st.editing) { add(schedBox, scheduleForm(st.editing)); return; }
+                if (!st.scheduling) add(schedBox, message('Scheduled bot matches are switched off on this server: its settings say so (the operator set ANTS_BOT_MATCH_EVERY_MIN to 0). The schedules below are kept and can be edited, but none of them starts a match. Start now still works.'));
                 if (!list.length) add(schedBox, el('p', 'none', 'No schedule. Nothing starts by itself.'));
                 else {
                     var box = el('div', 'blist');
@@ -412,7 +435,7 @@
             function askDelete(s) {
                 var t = el('span');
                 add(t, doc.createTextNode('Delete '), typed('span', null, s.name), doc.createTextNode('?'));
-                ask(t, 'It starts nothing from now on.' + (s.default ? ' This is the schedule that the server began with (one match every hour): until you add another, nothing starts by itself.' : '') + ' Matches that it started and that still run go on.', 'Delete', 'bad', function () {
+                ask(t, 'It starts nothing from now on.' + (s.default ? ' This is the schedule that the server began with (' + whenWords(s).toLowerCase() + '): until you add another, nothing starts by itself.' : '') + ' Matches that it started and that still run go on.', 'Delete', 'bad', function () {
                     call('POST', '/admin/api/bot-schedules/' + s.id + '/delete', {}).then(function (r) {
                         if (st.dead) return;
                         if (r.status === 200 || (r.status === 404 && r.json && r.json.error === 'gone')) return loadAll(true);
@@ -470,18 +493,23 @@
                 }
                 drawWhen();
                 function sayForm(cls, parts) { msgBox.textContent = ''; if (!parts) return; var m = message(null, cls); parts.forEach(function (n) { add(m, doc.createTextNode(n)); }); add(msgBox, m); }
-                var what = choices('sc', st.maps, st.rotation, s.what, 'Matches each time', '1 to ' + CAP + '. When fewer places are free at that time, it starts as many as fit.');
+                var what = choices('sc', st.maps, st.rotation, s.what, 'Matches each time', '1 to ' + CAP + '. When fewer places are free at that time, it starts as many as fit.', st.randomMax);
                 var onG = chipGroup('The schedule is', 'sc-on', [['on', 'On'], ['off', 'Off']], on ? 'on' : 'off', function (x) { on = x === 'on'; });
                 var save = button('Save', 'big ok', function () {
+                    if (st.saving) return;                                                                     // (a second click while the first is on its way is the same save, not another schedule)
                     var typedMinutes = kind === 'every' ? String(minBox ? minBox.value : minutes).replace(/^\s+|\s+$/g, '') : '';
                     var body = { name: nameI.value, on: on, when: kind === 'every' ? { kind: 'every', minutes: /^[0-9]{1,4}$/.test(typedMinutes) ? parseInt(typedMinutes, 10) : -1 } : { kind: 'times', times: times }, what: what.value() };
+                    st.saving = true;
+                    save.disabled = true;
                     call('POST', '/admin/api/bot-schedules' + (s.id === null ? '' : '/' + s.id), body).then(function (r) {
+                        st.saving = false;
                         if (st.dead) return;
+                        save.disabled = false;
                         if (r.status === 200) { st.editing = null; return loadAll(true); }
                         if (refused(r)) return;
                         var e = r.json && r.json.error;
                         sayForm('bad', [e === 'bad_every' ? 'Every N minutes: a whole number from 5 to 1440.' : e === 'no_times' ? 'Add at least one time of the day.' : e === 'bad_name' ? 'Give the schedule a name of 1 to 40 characters.' : e === 'too_many' ? 'There are 20 schedules already. Delete one first.' : e === 'gone' ? 'That schedule is not there any more. Cancel and reload the page.' : 'That did not work. Reload the page.']);
-                    }, function () { sayForm('bad', ['The server did not answer. Try again.']); });
+                    }, function () { st.saving = false; save.disabled = false; sayForm('bad', ['The server did not answer. Try again.']); });
                 });
                 add(form, nameF, whenG.box, whenBox, el('hr'), el('div', 'flab', 'What it starts'), what.node, el('hr'), onG.box, msgBox,
                     add(el('div', 'sfoot'), button('Cancel', 'ghost', function () { st.editing = null; drawSched(); }), save));
@@ -509,7 +537,9 @@
                     st.replays = rs[0].status === 200 ? rs[0].json.replays !== false : true;
                     st.maps = rs[1].status === 200 ? rs[1].json.maps || [] : [];
                     st.rotation = rs[1].status === 200 ? rs[1].json.rotation || {} : {};
+                    st.randomMax = rs[1].status === 200 && rs[1].json.random_max_minutes ? rs[1].json.random_max_minutes : 30;
                     st.schedules = rs[2].status === 200 ? rs[2].json.schedules || [] : null;
+                    st.scheduling = rs[2].status === 200 ? rs[2].json.scheduling !== false : true;
                     if (!st.loaded) { st.loaded = true; drawNow(); } else if (!keepForm) drawNow();
                     else paintStart();
                     drawRun();

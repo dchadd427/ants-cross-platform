@@ -239,7 +239,7 @@ HttpResponse SubmissionApi::admin_routes(const HttpRequest& request, int64_t now
             o.set("untrusted_fields", std::move(fields));
             return json_reply(200, o);
         }
-        if (tail == "audit") return audit_list();
+        if (tail == "audit") return audit_list(request);
         if (tail == "next-name") {
             std::string name, next;
             if (!query_value(request.query, "name", name) || !store_.next_name(name, next, why)) return why.status != 0 ? failure_reply(why) : error_reply(400, "bad_name", "Give a name.");
@@ -304,10 +304,17 @@ HttpResponse SubmissionApi::admin_post(const HttpRequest& request, const AdminId
     return json_reply(200, o);
 }
 
-// The log of what was done: the newest 200 lines
-HttpResponse SubmissionApi::audit_list() {
+// The log of what was done: the newest 200 lines, of all kinds, or (kind=maps, kind=bots) of one kind, chosen in the query: the page asks for each kind, so that the lines of one never push the other's out
+HttpResponse SubmissionApi::audit_list(const HttpRequest& request) {
+    std::string kind;
+    AdminAudit::Kind which = AdminAudit::Kind::All;
+    if (query_value(request.query, "kind", kind) && !kind.empty()) {
+        if (kind == "maps") which = AdminAudit::Kind::Maps;
+        else if (kind == "bots") which = AdminAudit::Kind::Bots;
+        else return error_reply(400, "bad_kind", "The kind of lines is maps or bots.");
+    }
     JsonValue arr = JsonValue::make_array();
-    for (const AuditEntry& e : audit_.list(200)) {
+    for (const AuditEntry& e : audit_.list(200, which)) {
         JsonValue row = JsonValue::make_object();
         row.set("at", JsonValue::make_int(e.at));
         row.set("who", JsonValue::make_string(e.actor));

@@ -87,17 +87,17 @@ const char* const k187ListMaps[] = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUN
 std::string bot_match_community() { return std::string(ANTS_SOURCE_DIR) + "/Community-Maps"; }
 
 // The map of the players on the 187 list, made up (the real one is not in this repository): TINY grown to 150 x 150 as an Extended map, four hills, kept in a folder of its own as the submissions store keeps an approved file
-ApprovedMap made_up_fight_island(const char* tag, uint32_t rows = 150, uint32_t columns = 150) {
-    const std::string bytes = grown_tiny(rows, columns);
-    const fs::path path = fs::path(temp_dir_for(tag)) / "Fight Island.lvl.bin";
+ApprovedMap made_up_fight_island(const char* tag, uint32_t rows = 150, uint32_t columns = 150, const char* name = "Fight Island.lvl", uint32_t minutes = 20) {
+    const std::string bytes = grown_tiny(rows, columns, minutes);
+    const fs::path path = fs::path(temp_dir_for(tag)) / (std::string(name) + ".bin");
     { std::ofstream out(path, std::ios::binary); out << bytes; }
     ApprovedMap a;
-    a.name = "Fight Island.lvl";
+    a.name = name;
     a.path = path.string();
     a.size = bytes.size();
     a.width = columns;
     a.height = rows;
-    a.minutes = 20;
+    a.minutes = minutes;
     a.players = 4;
     a.maker = "Mia";
     a.kind = "extended";
@@ -268,7 +268,7 @@ void run_bot_match_tests() {
             ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-teams", &clock), false, why));
             w.mgr.seed_bot_matches(seed);
             std::string code, reason;
-            ASSERT_TRUE(w.mgr.start_bot_match(w.now, code, reason));
+            ASSERT_TRUE(w.mgr.start_bot_match(w.now, BotMatchSpec(), code, reason));
             w.run(2000);
             const std::vector<RoomStatus> rooms = w.mgr.list(w.now);
             const RoomStatus* made = only_bot_room(rooms);
@@ -354,7 +354,7 @@ void run_bot_match_tests() {
         for (int match = 0; match < 300; ++match) {
             std::string code, reason;
             uint8_t mode = 9;
-            ASSERT_TRUE(w.mgr.start_bot_match(w.now, code, reason, &mode));
+            ASSERT_TRUE(w.mgr.start_bot_match(w.now, BotMatchSpec(), code, reason, nullptr, &mode));
             const RoomStatus s = w.status(code);
             ASSERT_TRUE(mode <= 1 && s.mode == mode && s.bots_only);        // (what the room says is what was dealt)
             deals += mode == 1 ? '1' : '0';
@@ -512,7 +512,7 @@ void run_bot_match_tests() {
             for (int match = 0; match < matches; ++match) {
                 std::string code, reason;
                 uint8_t mode = 9;
-                ASSERT_MSG(w.mgr.start_bot_match(w.now, code, reason, &mode), "match " + std::to_string(match) + ": " + reason);      // (never a failed match)
+                ASSERT_MSG(w.mgr.start_bot_match(w.now, BotMatchSpec(), code, reason, nullptr, &mode), "match " + std::to_string(match) + ": " + reason);      // (never a failed match)
                 ++maps[w.status(code).map];
                 ASSERT_TRUE(w.mgr.close_room(code, w.now));
                 if (match % 100 == 99) w.run(31000);
@@ -541,7 +541,7 @@ void run_bot_match_tests() {
             World none(ServerLimits(), temp_dir_for("botmatch-skip-none"));
             ASSERT_TRUE(none.mgr.enable_replays(replay_config("botmatch-skip-none", &clock), false, why));
             std::string code, reason;
-            ASSERT_FALSE(none.mgr.start_bot_match(none.now, code, reason));
+            ASSERT_FALSE(none.mgr.start_bot_match(none.now, BotMatchSpec(), code, reason));
             ASSERT_TRUE(code.empty() && reason.find("none of the maps") != std::string::npos && none.mgr.list(none.now).empty());
         }
         {                                                                    // a map of the players of that name that a file of the library shadows is not the approved map: skipped; taken down: skipped; over a limit of a room: skipped; back: played

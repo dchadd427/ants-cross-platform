@@ -66,6 +66,18 @@ std::string when_words(const BotSchedule& s) {
     return text + " (Pacific)";
 }
 
+// Why a batch stopped short, in the word that the page has a sentence for
+const char* stopped_word(BotRefusal refusal) {
+    switch (refusal) {
+        case BotRefusal::Places: return "places";
+        case BotRefusal::PeopleBusy: return "busy";
+        case BotRefusal::Cap: return "cap";
+        case BotRefusal::Budget: return "budget";
+        default: break;
+    }
+    return "other";
+}
+
 std::string cut(std::string text, size_t n) {
     if (text.size() > n) {
         text.resize(n);
@@ -185,6 +197,8 @@ HttpResponse BotMatches::list_options() {
         row.set("width", int_value(m.width));
         row.set("height", int_value(m.height));
         row.set("places", int_value(m.places));
+        row.set("minutes", int_value(m.minutes));
+        row.set("random", JsonValue::make_bool(m.random));
         list.push_back(std::move(row));
     }
     JsonValue rotation = JsonValue::make_object();
@@ -193,6 +207,7 @@ HttpResponse BotMatches::list_options() {
     JsonValue o = JsonValue::make_object();
     o.set("maps", std::move(list));
     o.set("rotation", std::move(rotation));
+    o.set("random_max_minutes", int_value(kBotRandomMaxMinutes));
     o.set("untrusted", JsonValue::make_bool(true));
     o.set("untrusted_fields", untrusted_fields({"name"}));
     return json_reply(200, o);
@@ -248,6 +263,11 @@ HttpResponse BotMatches::start_now(const AdminIdentity& who, const JsonValue& bo
             case BotRefusal::NoReplays: return failure(503, "no_replays", "The server keeps no replays, and a match that nobody could look at again is not played.");
             case BotRefusal::Cap: return failure(409, "cap", "That would be over the limit of bot matches.");
             case BotRefusal::PeopleBusy: return failure(409, "busy", "People's matches use most of the server's places.");
+            case BotRefusal::Budget: {
+                JsonValue extra = JsonValue::make_object();
+                extra.set("per_hour", int_value(rooms_.replay_store() != nullptr ? rooms_.replay_store()->config().max_bot_saves_per_hour : 0));
+                return failure(409, "budget", "The store keeps only so many recordings of bot matches an hour, and that many are kept or on their way.", std::move(extra));
+            }
             default: return failure(503, "failed", "The server could not make the matches.");
         }
     }
@@ -255,7 +275,7 @@ HttpResponse BotMatches::start_now(const AdminIdentity& who, const JsonValue& bo
     JsonValue o = JsonValue::make_object();
     o.set("started", int_value(static_cast<int64_t>(batch.started)));
     o.set("asked", int_value(what.count));
-    if (batch.started < what.count) o.set("stopped_for", text_value(batch.refusal == BotRefusal::Places ? "places" : "other"));
+    if (batch.started < what.count) o.set("stopped_for", text_value(stopped_word(batch.refusal)));
     return json_reply(200, o);
 }
 
@@ -277,7 +297,7 @@ HttpResponse BotMatches::stop_one(const AdminIdentity& who, const std::string& i
 
 HttpResponse BotMatches::stop_all(const AdminIdentity& who, int64_t now_s, uint32_t now_ms) {
     const size_t n = rooms_.stop_bot_matches(now_ms);
-    record(who, now_s, "bot_stopped_all", std::to_string(n) + (n == 1 ? " match" : " matches"), std::string());
+    if (n > 0) record(who, now_s, "bot_stopped_all", std::to_string(n) + (n == 1 ? " match" : " matches"), std::string());         // (stopping nothing is not logged)
     JsonValue o = JsonValue::make_object();
     o.set("stopped", int_value(static_cast<int64_t>(n)));
     return json_reply(200, o);
@@ -287,7 +307,7 @@ HttpResponse BotMatches::stop_all(const AdminIdentity& who, int64_t now_s, uint3
 
 namespace {
 
-JsonValue schedule_json(const BotSchedule& s) {
+JsonValue schedule_json(const BotSchedule& s, bool scheduling) {
     JsonValue o = JsonValue::make_object();
     o.set("id", int_value(s.id));
     o.set("name", text_value(s.name));
@@ -306,7 +326,7 @@ JsonValue schedule_json(const BotSchedule& s) {
     o.set("when", std::move(when));
     o.set("what", bot_what_json(s.what));
     o.set("last", int_value(s.last_run));
-    o.set("next", s.on && s.next_run != 0 ? int_value(s.next_run) : JsonValue::make_null());
+    o.set("next", scheduling && s.on && s.next_run != 0 ? int_value(s.next_run) : JsonValue::make_null());       // (a server whose schedules are switched off starts nothing)
     return o;
 }
 
@@ -314,10 +334,11 @@ JsonValue schedule_json(const BotSchedule& s) {
 
 HttpResponse BotMatches::list_schedules() {
     JsonValue list = JsonValue::make_array();
-    for (const BotSchedule& s : schedules_.list()) list.push_back(schedule_json(s));
+    for (const BotSchedule& s : schedules_.list()) list.push_back(schedule_json(s, scheduling_));
     JsonValue o = JsonValue::make_object();
     o.set("schedules", std::move(list));
     o.set("max", int_value(static_cast<int64_t>(kMaxBotSchedules)));
+    o.set("scheduling", JsonValue::make_bool(scheduling_));
     o.set("untrusted", JsonValue::make_bool(true));
     o.set("untrusted_fields", untrusted_fields({"name"}));
     return json_reply(200, o);
@@ -328,13 +349,14 @@ HttpResponse BotMatches::schedule_create(const AdminIdentity& who, const JsonVal
     std::string error;
     if (!parse_schedule_patch(body, true, patch, error)) return bad_what(error);
     BotSchedule made;
-    if (!schedules_.create(patch, now_s, made, error)) {
+    bool repeated = false;
+    if (!schedules_.create(patch, now_s, made, error, &repeated)) {
         if (error == "too_many") return failure(409, "too_many", "There are 20 schedules already. Delete one first.");
         return failure(503, "db", "The database did not take the schedule.");
     }
-    record(who, now_s, "bot_schedule_added", made.name, when_words(made) + ", " + bot_what_words(made.what));
+    if (!repeated) record(who, now_s, "bot_schedule_added", made.name, when_words(made) + ", " + bot_what_words(made.what));         // (the same save a second time is the first: one schedule, one line)
     JsonValue o = JsonValue::make_object();
-    o.set("schedule", schedule_json(made));
+    o.set("schedule", schedule_json(made, scheduling_));
     return json_reply(200, o);
 }
 
@@ -343,15 +365,18 @@ HttpResponse BotMatches::schedule_update(const AdminIdentity& who, int64_t id, c
     std::string error;
     if (!parse_schedule_patch(body, false, patch, error)) return bad_what(error);
     BotSchedule changed;
-    if (!schedules_.update(id, patch, now_s, changed, error)) {
+    bool different = false;
+    if (!schedules_.update(id, patch, now_s, changed, error, &different)) {
         if (error == "gone") return failure(404, "gone", "That schedule is not there any more.");
         return failure(503, "db", "The database did not take the change.");
     }
-    const bool only_on = patch.has_on && !patch.has_name && !patch.has_when && !patch.has_what;
-    if (only_on) record(who, now_s, patch.on ? "bot_schedule_on" : "bot_schedule_off", changed.name, std::string());
-    else record(who, now_s, "bot_schedule_changed", changed.name, when_words(changed) + ", " + bot_what_words(changed.what));
+    if (different) {                                                                 // (a save that changes nothing is not logged)
+        const bool only_on = patch.has_on && !patch.has_name && !patch.has_when && !patch.has_what;
+        if (only_on) record(who, now_s, patch.on ? "bot_schedule_on" : "bot_schedule_off", changed.name, std::string());
+        else record(who, now_s, "bot_schedule_changed", changed.name, when_words(changed) + ", " + bot_what_words(changed.what));
+    }
     JsonValue o = JsonValue::make_object();
-    o.set("schedule", schedule_json(changed));
+    o.set("schedule", schedule_json(changed, scheduling_));
     return json_reply(200, o);
 }
 
@@ -375,7 +400,9 @@ void BotMatches::update(int64_t now_s, uint32_t now_ms) {
     if (now_s < last_prune_s_ || now_s - last_prune_s_ >= 60) {
         last_prune_s_ = now_s;
         forget_ended(rooms_.bot_matches(now_ms));
+        schedules_.repair_clock(now_s);                                              // (a time that cannot be true, from a clock that was wrong or a damaged row, is brought back once a minute)
     }
+    if (!scheduling_) return;                                                        // (the operator switched the schedules off: they are kept and shown, and none of them starts a match)
     std::vector<int64_t> due;
     for (const BotSchedule& s : schedules_.list()) {
         if (s.on && s.next_run != 0 && now_s >= s.next_run) due.push_back(s.id);

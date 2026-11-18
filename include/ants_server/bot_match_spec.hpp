@@ -22,6 +22,8 @@ inline constexpr uint32_t kBotPeopleShareNumerator = 3;
 inline constexpr uint32_t kBotPeopleShareDenominator = 4;
 /// The matches of computer players that are made one after another are started this far apart, so that setting up their engines is spread over the passes of the server's loop (milliseconds)
 inline constexpr uint32_t kBotStartGapMs = 1000;
+/// A map is picked at random (the rotation, the original's maps, the players' maps) only when its own time limit is this many minutes or less; a longer one is played when a choice names it
+inline constexpr uint32_t kBotRandomMaxMinutes = 30;
 
 inline constexpr const char* kBotMapRotation = "random:rotation";       // a map of the list of the rules (docs/SERVER_REPLAYS.md): the default of every schedule
 inline constexpr const char* kBotMapOriginal = "random:original";       // one of the original's six maps
@@ -49,6 +51,7 @@ enum class BotRefusal : uint8_t {
     Cap,              // kBotMatchesMax matches of computer players go already
     Places,           // the match would take the places of the matches of computer players past kBotPlacesMax
     PeopleBusy,       // the matches of people use more than their share of the server's places
+    Budget,           // the replay store has no room left this hour for the recording of another match of computer players (ReplayStore::bot_saves_left): a match that would not be kept is not played
     Islands187,       // ISLANDS in 187: its water joins no two hills, so nobody could be struck
     NoMap,            // none of the maps that the choice names can be played now
     Failed            // a room could not be made
@@ -60,6 +63,8 @@ struct BotMapOption {
     std::string group;                                // "original", "library" or "players"
     uint32_t width{0}, height{0};
     uint32_t places{1};                               // the places that a match on it takes (OnlineLimits::weight)
+    uint32_t minutes{0};                              // the map's own time limit: how long a match on it can play
+    bool random{true};                                // a random pick may take it (its time limit is kBotRandomMaxMinutes or less); false: only a choice that names it plays it
 };
 
 /// A batch of matches: what Start now asks for and what a schedule starts each time it runs

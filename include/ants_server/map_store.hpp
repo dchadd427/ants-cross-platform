@@ -81,6 +81,8 @@ public:
     /// Finds the map file `name`: the name must be a valid map name, the file must be a regular file of 1 .. kMaxMapBytes bytes. False with a reason otherwise.
     /// (the maps folder is asked first, then the community folder)
     bool find(const std::string& name, MapEntry& out, std::string* why = nullptr) const;
+    /// The same without reading the file: which file `name` is (the path) and its size, the checks of find() except the hash. What a caller that keeps its own verdict by path, size and time asks.
+    bool locate(const std::string& name, std::string& path, uint64_t& size, std::string* why = nullptr) const;
 
     /// Lists and hashes every map of both folders (a file that find() would refuse is left out) and reads the community folder's maps.json and previews.json. Returns the number of maps; `notes` gets one line
     /// for each thing that is wrong but not fatal (a bad json file, a map that maps.json describes with another hash). The list: the six originals first, in the order of originals(), then the others by file name.

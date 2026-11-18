@@ -63,7 +63,7 @@ private:
     ctl::HttpResponse maker_routes(const ctl::HttpRequest& request, int64_t now_s, uint32_t now_ms);
     ctl::HttpResponse admin_routes(const ctl::HttpRequest& request, int64_t now_s, uint32_t now_ms);
     ctl::HttpResponse admin_post(const ctl::HttpRequest& request, const AdminIdentity& who, const std::string& tail, int64_t now_s, uint32_t now_ms);
-    ctl::HttpResponse audit_list();
+    ctl::HttpResponse audit_list(const ctl::HttpRequest& request);
     bool post_guard(const ctl::HttpRequest& request, const AdminIdentity& who, ctl::JsonValue& body, ctl::HttpResponse& refusal) const;
     bool admitted(const ctl::HttpRequest& request, int64_t now_s, AdminIdentity& who);
     bool address_allowed(const std::string& identity, int64_t now_s);

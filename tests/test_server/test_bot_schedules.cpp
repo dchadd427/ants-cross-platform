@@ -314,8 +314,11 @@ int main() {
         s.last_run = kNow - 10;
         ASSERT_EQ(bot_schedule_planned_next(s, kNow), kNow + 290);
         ASSERT_EQ(bot_schedule_next_after_run(s, kNow), kNow + 300);
+        s.minutes = 60;
         s.next_run = kNow + 2400;
         ASSERT_EQ(bot_schedule_resumed_next(s, kNow), kNow + 2400);                           // (a restart keeps a run that is still ahead)
+        s.minutes = 5;
+        ASSERT_EQ(bot_schedule_resumed_next(s, kNow), kNow + 300);                            // (...but not one that is further off than the schedule's own period: that time was never made by it)
         s.next_run = kNow - 5000;
         ASSERT_EQ(bot_schedule_resumed_next(s, kNow), kNow + 60);                             // (a run that was due while the server was down is not made up: a minute after it is up)
         s.next_run = kNow + 10;
@@ -363,7 +366,7 @@ int main() {
         ASSERT_FALSE(store.create(patch_every("one too many", 30), kNow, made, why));
         ASSERT_EQ(why, std::string("too_many"));
         ASSERT_TRUE(store.remove(20, why));
-        ASSERT_TRUE(store.create(patch_every("again", 30), kNow, made, why) && made.id == 20);   // (a table that is not kept makes the next number; the database's own never reuses one: BSC5.1)
+        ASSERT_TRUE(store.create(patch_every("again", 30), kNow, made, why) && made.id == 21);   // (a number that a deleted schedule had is not used again, with a database (BSC5.1) or without one)
         const int64_t id = 3;
         BotSchedulePatch rename;
         rename.has_name = true;
@@ -551,6 +554,117 @@ int main() {
             ASSERT_FALSE(database.exec(std::string("INSERT INTO bot_schedules (name, enabled, is_default, kind, minutes, times, what, last_run, next_run, created_at) VALUES (") + bad + ")").ok());
         }
         ASSERT_EQ(scalar(database, "SELECT COUNT(*) FROM bot_schedules"), int64_t{1});
+    } TEST_END();
+
+
+    TEST_CASE("BSC7.1 A time that cannot be true is mended: a last start more than an hour after now was never made and is ignored; a next run later than one period from now (every N minutes) or later than the next time of the list (times of the day) is brought back to it; a schedule that is off has none; when the rows are read and once a minute") {
+        db::Database database;
+        ASSERT_TRUE(open_server_db(database, ""));
+        const int64_t far = kNow + 10 * 365 * 86400;
+        const auto row = [&](const std::string& name, const std::string& kind, int minutes, const std::string& times, int enabled, int64_t last, int64_t next) {
+            db::Statement st;
+            ASSERT_TRUE(database.prepare(st, "INSERT INTO bot_schedules (name, enabled, is_default, kind, minutes, times, what, last_run, next_run, created_at) VALUES (?, ?, 0, ?, ?, ?, '{\"count\":1,\"map\":\"random:rotation\",\"rules\":\"random\",\"bots\":\"random\",\"levels\":[],\"teams\":\"random\",\"split\":\"\"}', ?, ?, 1)").ok());
+            ASSERT_TRUE(st.bind_text(1, name).ok() && st.bind_int64(2, enabled).ok() && st.bind_text(3, kind).ok() && st.bind_int64(4, minutes).ok() && st.bind_text(5, times).ok() && st.bind_int64(6, last).ok() && st.bind_int64(7, next).ok());
+            ASSERT_TRUE(st.step() == db::Statement::Step::Done);
+        };
+        row("far every", "every", 30, "[]", 1, far, far);                                       // 1: both times are ten years away
+        row("slightly ahead", "every", 30, "[]", 1, kNow + 100, kNow + 100 + 1800);              // 2: a clock that was a little ahead: the last start is believed
+        row("far times", "times", 60, "[\"18:00\"]", 1, far, far);                               // 3
+        row("far but off", "every", 30, "[]", 0, far, far);                                      // 4
+        row("none", "every", 30, "[]", 1, 0, 0);                                                 // 5: no next run kept
+        BotScheduleStore store(&database);
+        std::string why;
+        ASSERT_TRUE(store.open(kNow, why) && store.list().size() == 5);
+        ASSERT_TRUE(store.find(1)->last_run == 0 && store.find(1)->next_run >= kNow + 60 && store.find(1)->next_run <= kNow + 30 * 60);
+        ASSERT_TRUE(store.find(2)->last_run == kNow + 100 && store.find(2)->next_run == kNow + 1800);                  // (the last start is believed; the next run is held to one period from now)
+        ASSERT_TRUE(store.find(3)->last_run == 0 && store.find(3)->next_run == next_pacific_run(kNow, {18 * 60}));
+        ASSERT_TRUE(store.find(4)->next_run == 0);
+        ASSERT_TRUE(store.find(5)->next_run >= kNow + 60 && store.find(5)->next_run <= kNow + 30 * 60);
+        // while the server runs: a time that went wrong (a clock that jumped) is mended in the minute, and written
+        store.note_run(2, far, far);
+        store.note_run(3, kNow, far);
+        ASSERT_EQ(store.repair_clock(kNow + 10), size_t{2});
+        ASSERT_TRUE(store.find(2)->last_run == 0 && store.find(2)->next_run <= kNow + 10 + 30 * 60 && store.find(2)->next_run > kNow);
+        ASSERT_TRUE(store.find(3)->next_run == next_pacific_run(kNow + 10, {18 * 60}));
+        ASSERT_EQ(store.repair_clock(kNow + 20), size_t{0});                                      // (nothing is wrong now: nothing is touched)
+        BotScheduleStore again(&database);
+        ASSERT_TRUE(again.open(kNow + 30, why) && again.find(2)->last_run == 0);
+        // the pieces
+        BotSchedule s;
+        s.on = true;
+        s.minutes = 5;
+        s.last_run = far;
+        s.next_run = far;
+        ASSERT_TRUE(bot_schedule_repair_clock(s, kNow) && s.last_run == 0 && s.next_run >= kNow + 60 && s.next_run <= kNow + 300);
+        s.next_run = kNow + 120;
+        ASSERT_FALSE(bot_schedule_repair_clock(s, kNow));
+        ASSERT_EQ(bot_schedule_resumed_next(s, kNow), kNow + 120);
+        s.next_run = far;
+        ASSERT_EQ(bot_schedule_resumed_next(s, kNow), kNow + 300);                                // (the latest: one period)
+        s.next_run = kNow - 5000;
+        ASSERT_EQ(bot_schedule_resumed_next(s, kNow), kNow + 60);                                 // (the earliest: a minute)
+    } TEST_END();
+
+    TEST_CASE("BSC7.2 The same save a moment later is the same schedule: a schedule that is the same in every choice as the newest one, made within kSameScheduleWindowS, is not made again (also when the 20 are there), one that differs in any choice or comes later is another; a save that changes nothing writes nothing and keeps the next run") {
+        BotScheduleStore store(nullptr);
+        std::string why;
+        ASSERT_TRUE(store.open(kNow, why));
+        BotSchedule a, b;
+        bool repeated = true;
+        BotSchedulePatch p = patch_every("Swarm", 30);
+        p.what.count = 3;
+        ASSERT_TRUE(store.create(p, kNow, a, why, &repeated) && !repeated);
+        ASSERT_TRUE(store.create(p, kNow + kSameScheduleWindowS, b, why, &repeated) && repeated && b.id == a.id && store.list().size() == 1);
+        BotSchedulePatch renamed = p;
+        renamed.name = "Swarm 2";
+        ASSERT_TRUE(store.create(renamed, kNow + 1, b, why, &repeated) && !repeated && b.id != a.id);
+        BotSchedulePatch other_time = p;
+        other_time.minutes = 45;
+        ASSERT_TRUE(store.create(other_time, kNow + 2, b, why, &repeated) && !repeated);
+        BotSchedulePatch other_choice = p;
+        other_choice.what.count = 4;
+        ASSERT_TRUE(store.create(other_choice, kNow + 3, b, why, &repeated) && !repeated);
+        BotSchedulePatch off = p;
+        off.has_on = true;
+        off.on = false;
+        ASSERT_TRUE(store.create(off, kNow + 4, b, why, &repeated) && !repeated);                 // (off is not on: another schedule)
+        ASSERT_EQ(store.list().size(), size_t{5});
+        ASSERT_TRUE(store.create(p, kNow + 5 + kSameScheduleWindowS + 1, b, why, &repeated) && !repeated && store.list().size() == 6);        // (later: a schedule of its own)
+        ASSERT_TRUE(store.create(p, kNow + 5 + kSameScheduleWindowS + 2, b, why, &repeated) && repeated && store.list().size() == 6);
+        for (size_t i = store.list().size(); i < kMaxBotSchedules; ++i) ASSERT_TRUE(store.create(patch_every("fill " + std::to_string(i), 30), kNow + 100, b, why, &repeated) && !repeated);
+        ASSERT_EQ(store.list().size(), kMaxBotSchedules);
+        BotSchedule newest;
+        BotSchedulePatch last = patch_every("the last", 30);
+        ASSERT_FALSE(store.create(last, kNow + 101, newest, why, &repeated));                       // (the 21st: refused)
+        ASSERT_EQ(why, std::string("too_many"));
+        // a change that changes nothing: no write, no new plan, and it says so
+        BotScheduleStore s2(nullptr);
+        ASSERT_TRUE(s2.open(kNow, why) && s2.create(p, kNow, a, why));
+        s2.note_run(a.id, kNow + 400, kNow + 400 + 1800);
+        BotSchedulePatch same = p;
+        bool changed = true;
+        BotSchedule out;
+        ASSERT_TRUE(s2.update(a.id, same, kNow + 500, out, why, &changed) && !changed && out.next_run == kNow + 400 + 1800);
+        BotSchedulePatch on_again;
+        on_again.has_on = true;
+        on_again.on = true;
+        ASSERT_TRUE(s2.update(a.id, on_again, kNow + 501, out, why, &changed) && !changed && out.next_run == kNow + 400 + 1800);
+        BotSchedulePatch other_minutes = p;
+        other_minutes.minutes = 31;
+        ASSERT_TRUE(s2.update(a.id, other_minutes, kNow + 600, out, why, &changed) && changed && out.minutes == 31 && out.next_run == kNow + 400 + 31 * 60);                  // (its time changed: planned again, from the last start)
+    } TEST_END();
+
+    TEST_CASE("BSC7.3 Without a database the numbers of the schedules go up and are never used again, as with one: the default is 1, a deleted number stays deleted, a restart of the process starts again (the rows were only in memory)") {
+        BotScheduleStore store(nullptr);
+        std::string why;
+        ASSERT_TRUE(store.open(kNow, why) && store.seed_default(60, kNow) && store.find(1) != nullptr);
+        BotSchedule a, b, c;
+        ASSERT_TRUE(store.create(patch_every("a", 30), kNow, a, why) && a.id == 2);
+        ASSERT_TRUE(store.create(patch_every("b", 30), kNow, b, why) && b.id == 3);
+        ASSERT_TRUE(store.remove(3, why) && store.remove(2, why));
+        ASSERT_TRUE(store.create(patch_every("c", 30), kNow, c, why) && c.id == 4);
+        ASSERT_TRUE(store.remove(4, why));
+        ASSERT_TRUE(store.create(patch_every("d", 30), kNow, c, why) && c.id == 5);
     } TEST_END();
 
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

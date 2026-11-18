@@ -179,7 +179,37 @@ int64_t bot_schedule_next_after_run(const BotSchedule& schedule, int64_t ran_s) 
 int64_t bot_schedule_resumed_next(const BotSchedule& schedule, int64_t now_s) {
     if (!schedule.on) return 0;
     if (schedule.kind == BotSchedule::Kind::Times) return next_pacific_run(now_s, schedule.times);
-    return std::max(schedule.next_run, now_s + kRestartDelayS);
+    const int64_t latest = now_s + static_cast<int64_t>(schedule.minutes) * 60;                 // (a run later than one period from now is not a run that the schedule made: the clock was wrong)
+    return std::min(std::max(schedule.next_run, now_s + kRestartDelayS), latest);
+}
+
+bool bot_schedule_repair_clock(BotSchedule& schedule, int64_t now_s) {
+    bool changed = false;
+    if (schedule.last_run > now_s + kClockSlackS) {
+        schedule.last_run = 0;
+        changed = true;
+    }
+    if (!schedule.on) {
+        if (schedule.next_run != 0) {
+            schedule.next_run = 0;
+            changed = true;
+        }
+        return changed;
+    }
+    int64_t latest = 0;                                                                         // (the latest that the next run may be: one period from now, or the next time of the list)
+    if (schedule.kind == BotSchedule::Kind::Times) latest = next_pacific_run(now_s, schedule.times);
+    else latest = now_s + static_cast<int64_t>(schedule.minutes) * 60;
+    if (schedule.next_run <= 0 || (latest > 0 && schedule.next_run > latest)) {
+        schedule.next_run = bot_schedule_planned_next(schedule, now_s);
+        if (latest > 0 && schedule.next_run > latest) schedule.next_run = latest;
+        changed = true;
+    }
+    return changed;
+}
+
+bool bot_schedule_same_choices(const BotSchedule& a, const BotSchedule& b) {
+    return a.name == b.name && a.on == b.on && a.kind == b.kind && (a.kind == BotSchedule::Kind::Times ? a.times == b.times : a.minutes == b.minutes) &&
+           ctl::to_json(bot_what_json(a.what)) == ctl::to_json(bot_what_json(b.what));
 }
 
 // ------------------------------------------------------------------------------------------------ the store
@@ -203,6 +233,7 @@ std::vector<std::string> BotScheduleStore::take_notices() {
 
 bool BotScheduleStore::open(int64_t now_s, std::string& why) {
     rows_.clear();
+    last_id_ = 0;
     if (!database_on()) return true;
     db::Statement st;
     if (!db_->prepare(st, "SELECT id, name, enabled, is_default, kind, minutes, times, what, last_run, next_run, created_at FROM bot_schedules ORDER BY id").ok()) {
@@ -233,7 +264,9 @@ bool BotScheduleStore::open(int64_t now_s, std::string& why) {
             ++unreadable;
             continue;
         }
+        if (row.last_run > now_s + kClockSlackS) row.last_run = 0;                  // (a time that cannot be true: see the top of bot_schedules.hpp)
         row.next_run = bot_schedule_resumed_next(row, now_s);                      // (a restart: the first run is a minute away at the soonest, and a run that was due while the server was down is not made up)
+        last_id_ = std::max(last_id_, row.id);
         rows_.push_back(std::move(row));
     }
     if (unreadable != 0) notices_.push_back("bot schedules: " + std::to_string(unreadable) + " row(s) of the table could not be read and are left out");
@@ -242,11 +275,7 @@ bool BotScheduleStore::open(int64_t now_s, std::string& why) {
 
 bool BotScheduleStore::write_row(const BotSchedule& row, bool insert, int64_t& new_id) {
     if (!database_on()) {
-        if (insert) {
-            int64_t top = 0;
-            for (const BotSchedule& r : rows_) top = std::max(top, r.id);
-            new_id = top + 1;
-        }
+        if (insert) new_id = ++last_id_;                                            // (a number that a deleted schedule had is not used again)
         return true;
     }
     db::Statement st;
@@ -257,7 +286,10 @@ bool BotScheduleStore::write_row(const BotSchedule& row, bool insert, int64_t& n
     const bool done = db_->prepare(st, sql).ok() && st.bind_text(1, row.name).ok() && st.bind_int64(2, row.on ? 1 : 0).ok() && st.bind_int64(3, row.is_default ? 1 : 0).ok() && st.bind_text(4, kind_word(row.kind)).ok() &&
                       st.bind_int64(5, row.minutes).ok() && st.bind_text(6, times).ok() && st.bind_text(7, what).ok() && st.bind_int64(8, row.last_run).ok() && st.bind_int64(9, row.next_run).ok() &&
                       st.bind_int64(10, row.created_at).ok() && (insert || st.bind_int64(11, row.id).ok()) && st.step() == db::Statement::Step::Done;
-    if (done && insert) new_id = db_->last_insert_rowid();
+    if (done && insert) {
+        new_id = db_->last_insert_rowid();
+        last_id_ = std::max(last_id_, new_id);
+    }
     return done;
 }
 
@@ -290,11 +322,8 @@ bool BotScheduleStore::seed_default(int every_minutes, int64_t now_s) {
     return true;
 }
 
-bool BotScheduleStore::create(const BotSchedulePatch& patch, int64_t now_s, BotSchedule& out, std::string& error) {
-    if (rows_.size() >= kMaxBotSchedules) {
-        error = "too_many";
-        return false;
-    }
+bool BotScheduleStore::create(const BotSchedulePatch& patch, int64_t now_s, BotSchedule& out, std::string& error, bool* repeated) {
+    if (repeated != nullptr) *repeated = false;
     BotSchedule row;
     row.name = patch.name;
     row.on = patch.has_on ? patch.on : true;
@@ -303,6 +332,18 @@ bool BotScheduleStore::create(const BotSchedulePatch& patch, int64_t now_s, BotS
     row.times = patch.times;
     row.what = patch.what;
     row.created_at = now_s;
+    if (!rows_.empty()) {                                                          // (the save pressed twice: the second is the first)
+        const BotSchedule& newest = *std::max_element(rows_.begin(), rows_.end(), [](const BotSchedule& x, const BotSchedule& y) { return x.id < y.id; });
+        if (now_s - newest.created_at >= 0 && now_s - newest.created_at <= kSameScheduleWindowS && bot_schedule_same_choices(newest, row)) {
+            out = newest;
+            if (repeated != nullptr) *repeated = true;
+            return true;
+        }
+    }
+    if (rows_.size() >= kMaxBotSchedules) {
+        error = "too_many";
+        return false;
+    }
     row.next_run = bot_schedule_planned_next(row, now_s);
     int64_t id = 0;
     if (!write_row(row, true, id)) {
@@ -315,7 +356,7 @@ bool BotScheduleStore::create(const BotSchedulePatch& patch, int64_t now_s, BotS
     return true;
 }
 
-bool BotScheduleStore::update(int64_t id, const BotSchedulePatch& patch, int64_t now_s, BotSchedule& out, std::string& error) {
+bool BotScheduleStore::update(int64_t id, const BotSchedulePatch& patch, int64_t now_s, BotSchedule& out, std::string& error, bool* changed) {
     for (BotSchedule& row : rows_) {
         if (row.id != id) continue;
         BotSchedule next = row;
@@ -328,7 +369,14 @@ bool BotScheduleStore::update(int64_t id, const BotSchedulePatch& patch, int64_t
         if (patch.has_what) next.what = patch.what;
         const bool was_on = row.on;
         if (patch.has_on) next.on = patch.on;
-        if (next.on && (!was_on || patch.has_when)) next.next_run = bot_schedule_planned_next(next, now_s);       // (turned on, or its time changed: planned again; a change of the name or the choices keeps the next run)
+        const bool different = !bot_schedule_same_choices(row, next);
+        if (changed != nullptr) *changed = different;
+        if (!different) {                                                          // (nothing an admin chose is different: nothing is written and the next run stays)
+            out = row;
+            return true;
+        }
+        const bool when_changed = next.kind != row.kind || (next.kind == BotSchedule::Kind::Times ? next.times != row.times : next.minutes != row.minutes);
+        if (next.on && (!was_on || when_changed)) next.next_run = bot_schedule_planned_next(next, now_s);       // (turned on, or its time changed: planned again; a change of the name or the choices keeps the next run)
         if (!next.on) next.next_run = 0;
         int64_t unused = 0;
         if (!write_row(next, false, unused)) {
@@ -358,6 +406,17 @@ bool BotScheduleStore::remove(int64_t id, std::string& error) {
     }
     error = "gone";
     return false;
+}
+
+size_t BotScheduleStore::repair_clock(int64_t now_s) {
+    size_t changed = 0;
+    for (BotSchedule& row : rows_) {
+        if (!bot_schedule_repair_clock(row, now_s)) continue;
+        ++changed;
+        int64_t unused = 0;
+        if (!write_row(row, false, unused) && notices_.size() < kNoticesMax) notices_.push_back("bot schedules: the database refused a mended time");
+    }
+    return changed;
 }
 
 void BotScheduleStore::note_run(int64_t id, int64_t last_run_s, int64_t next_run_s) {
