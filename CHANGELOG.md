@@ -30,6 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 - **Matches show up in the history within seconds** of their end, also while the server's own computer-player matches run, and a player's own approved map shows its picture in the history and in Open games.
 - **The server's computer-player matches play 187 too:** a coin decides each one, and the Live list marks a 187 match.
 - **Map Maker:** typing in a box (the maker's name, the numbers of the Ants panel, the description) keeps the cursor in it.
+- **Chat:** an administrator's long message no longer draws over the next one on a phone.
 
 **Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.4 page or game still joins. Under the hood: the game server and the web pages are rebuilt; the web download is larger (the new art: about 12 MB on the wire).
 
