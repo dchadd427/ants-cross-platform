@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.17.8 - 2026-11-17 - Hard computer players keep hitting
+
+**For players:**
+- **Hard computer players keep hitting.** In a fight a Hard bot now gives its next blow far sooner, so an ant it attacks gets away less often. Medium and Easy play as before.
+- **Computer players on ISLANDS** no longer send an ant over a bridge that is about to go.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.7 page or game still joins. Under the hood: the game server and the web pages are rebuilt.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/48c230ad...6c9f09fc)
+
 ## v0.17.7 - 2026-11-17 - Back to the room after a match, ISLANDS bridges, Map Maker edges
 
 **For players:**
@@ -458,18 +468,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f011f5c1...3970dcf6)
 
-## v0.12.142 - 2026-10-27 - Faster: team-mates' claims on a tile found at once
+## Older versions (v0.12.142 and before)
 
-**For players:**
-- **Faster ticks on a huge map.** When many combat ants end a fight in the same instant, each looks for a free goal tile, and each used to look at every ant of the map to see whether a team-mate had already claimed that tile. The game now keeps a list of the ants that claim each tile. Measured here, worst tick in milliseconds before and after, on the real 6,000-ant map (about 1.4 s into the match): 31 and 4.2 on the desktop, 54 and 8.7 in the web build run in Node (not a browser); 4 x 1,500 combat ants on 120 x 120: 11.8 and 5.8. The average tick of that map goes from 3.3 to 2.1 on the desktop.
-- Not changed: an order given by command, outside the tick, still looks at every ant (in bot play about half of the questions come that way), and a mass order to thousands of ants still takes seconds in the command phase (probably the path planner, not scans).
-- In the web build run in Node (not a browser), no tick of the first 100 seconds of that map went over 7 ms in two runs (the budget is 50).
-- Nothing about a match changes: the state is the same as before at every tick that was compared (big worlds and dozens of maps), and the state of all 540 maps of the library is the same at ticks 0, 200 and 2,400; the web build gives the same state as the desktop on the 6,000-ant map and big combat worlds.
-
-**Rules / network:** none; the rules and network protocol 21 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ea2c4cc5...26810844)
-
-## Older versions (v0.12.141 and before)
-
-Every release before v0.12.142, and the long notes of v0.12.141 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.143, and the long notes of v0.12.142 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
