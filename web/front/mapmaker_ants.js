@@ -1,8 +1,8 @@
 // The map maker's starting ants, one at a time and mixed (docs/MAP_EDITOR.md, "Ants: one at a time, group, mix"): the box of the Ants tool (the switch One at a time / Group, the four teams with their
 // counts, Clump and Mix, the plain warnings, "Clear <team> ants...") and the arithmetic under it. A lazily loaded script (the page loads it, with mapmaker_ants.css, the first time the Ants tool is
-// chosen), so the editor's eager scripts stay as they are; without it the Ants tool is the clump of before (mapmaker_tools.js). Everything it does is a CHANGE of the open file's bytes (mapmaker_blocks.js
+// chosen), so the editor's eager scripts stay as they are; without it a tap of the Ants tool puts a clump all the same (mapmaker_tools.js). Everything it does is a CHANGE of the open file's bytes (mapmaker_blocks.js
 // has the lists: block 1 holds one record of six bytes for each ant, and the plants), made of small splices {rel, removed, inserted} (a record put in or taken out and the count word) and given to the
-// history as one step, so one tap, one mix and one clear are one Undo each. Nothing here writes a byte itself. The words that a person reads are put in with textContent. A plain ES5 script that
+// history as one step, so one tap, one clump, one mix and one clear are one Undo each. Nothing here writes a byte itself. The words that a person reads are put in with textContent. A plain ES5 script that
 // a page and node can load.
 (function (root, factory) {
     'use strict';
@@ -12,7 +12,7 @@
     'use strict';
 
     var EMPTY2 = 0x7FFE;
-    var MAX_RECORDS = 65535;                         // block 1 holds a word's worth of records, the ants and the plants together (docs/MAP_FORMAT.md, "Limits")
+    var MAX_RECORDS = Blocks.MAX_RECORDS;            // block 1 holds a word's worth of records, the ants and the plants together (docs/MAP_FORMAT.md, "Limits")
     var ORDER = [3, 2, 0, 1];                        // the buttons' order: Black, Blue, Green, Red (the indexes of Blocks.TEAMS, which has the game's seats)
     var COLORS = ['#2f9a52', '#c0392b', '#4a5fc8', '#262626'];      // (the same colors as mapmaker_tiles.js, by seat)
     var ANT_TYPES = [[0, 'Default / Worker', 811], [4, 'Combat', 897], [3, 'Thief', 1085], [1, 'Bomber', 774], [5, 'Swimmer', 963], [2, 'Fire', 676]];
@@ -54,23 +54,10 @@
         return '';
     }
 
-    function bytesOf(records) {
-        var out = new Uint8Array(6 * records.length), i;
-        for (i = 0; i < records.length; i++) { out.set(word(records[i].tile), 6 * i); out.set(word(records[i].row), 6 * i + 2); out.set(word(records[i].column), 6 * i + 4); }
-        return out;
-    }
-    // The count word and a piece of the list as splices (the later one first: the ones that are listed first are applied first)
-    function listChange(file, lay, piece, count) {
-        var change = { names: [], cells: [], splices: [piece] }, at = file.blocksAt, seen = {};
-        change.splices.push({ rel: 0, removed: file.bytes.slice(at, at + 2), inserted: new Uint8Array(word(count)) });
-        (piece.teams || []).forEach(function (t) { if (!seen[t]) { seen[t] = true; change.names.push([Blocks.TEAMS[t].marker, Blocks.TEAMS[t].markerName]); } });
-        delete piece.teams;
-        return change;
-    }
-    function added(file, lay, records) {
-        var teams = [], i;
-        for (i = 0; i < records.length; i++) { var t = Blocks.teamOfMarker(records[i].tile); if (teams.indexOf(t) < 0) teams.push(t); }
-        return listChange(file, lay, { rel: lay.b1.length, removed: new Uint8Array(0), inserted: bytesOf(records), teams: teams }, lay.records.length + records.length);
+    // A record taken out of the list and the count word as splices (the later one first: the ones that are listed first are applied first)
+    function listChange(file, piece, count) {
+        var at = file.blocksAt;
+        return { names: [], cells: [], splices: [piece, { rel: 0, removed: file.bytes.slice(at, at + 2), inserted: new Uint8Array(word(count)) }] };
     }
     function record(team, row, column, antType, file) { return { tile: Blocks.markerTile ? Blocks.markerTile(file, team, antType) : Blocks.TEAMS[team].marker, row: row, column: column }; }
 
@@ -84,7 +71,7 @@
         var why = whyNot(file, row * file.columns + column);
         if (why) return { error: why };
         if (lay.records.length + 1 > MAX_RECORDS) return { error: 'The file holds at most ' + num(MAX_RECORDS) + ' starting ants and plants together, and it has them. Take some away first.' };
-        return added(file, lay, [record(team, row, column, antType, file)]);
+        return Blocks.appendStarts(file, lay, [record(team, row, column, antType, file)]);
     }
 
     // The ant on (row, column) taken away, whatever its team: a CHANGE, or null when there is none
@@ -92,7 +79,7 @@
         var lay = Blocks.layout(file), at = lay.ok1 && row >= 0 && column >= 0 && row < file.rows && column < file.columns ? antMap(file, lay)[row * file.columns + column] : undefined;
         if (at === undefined) return null;
         var rel = lay.records[at].rel;
-        return listChange(file, lay, { rel: rel, removed: file.bytes.slice(file.blocksAt + rel, file.blocksAt + rel + 6), inserted: new Uint8Array(0) }, lay.records.length - 1);
+        return listChange(file, { rel: rel, removed: file.bytes.slice(file.blocksAt + rel, file.blocksAt + rel + 6), inserted: new Uint8Array(0) }, lay.records.length - 1);
     }
 
     // The ants that stand where they cannot get out: every one of the eight cells round it is outside the map, solid or held by another ant (the cells of `extra` count as ants). A soft hint, never a refusal.
@@ -168,7 +155,7 @@
         if (!lay.ok1) return { error: LIST_ERROR };
         if (!plan || !plan.ok) return { error: plan && plan.text || 'There is nothing to put.' };
         if (lay.records.length + plan.cells.length > MAX_RECORDS) return { error: tooMany(lay.records.length + plan.cells.length) };
-        return added(file, lay, plan.cells.map(function (cell) { return record(cell.team, cell.r, cell.c, cell.antType || antType, file); }));
+        return Blocks.appendStarts(file, lay, plan.cells.map(function (cell) { return record(cell.team, cell.r, cell.c, cell.antType || antType, file); }));
     }
     function tooMany(total) { return num(total) + ' ants. The file holds ' + num(MAX_RECORDS) + ' at most (all teams, plants included). Take ' + num(total - MAX_RECORDS) + (total - MAX_RECORDS === 1 ? ' ant' : ' ants') + ' away. The Put buttons stop.'; }
 
@@ -241,6 +228,17 @@
                 st.note = 'Put one ' + label(env.team()) + (aType ? ' ' + typeLabel(aType) : '') + ' ant at row ' + cell.row + ', column ' + cell.column + '.';
             }
             if (!env.act(change)) { st.note = ''; render(); }
+        }
+
+        // A clump of the number in the stepper, put round the tapped cell (Blocks.placeStart): a NEW clump every time, nothing is moved, one change
+        function clump(cell) {
+            var f = file(), t = env.team(), before = Blocks.facts(f, false).ants[t], want = env.ants();
+            var change = Blocks.placeStart(f, t, cell.row, cell.column, want, f.version === 9 ? st.antType : 0);
+            if (change.error) { st.note = ''; render(); return env.say('It cannot be put there', change.error); }
+            if (!env.act(change)) { st.note = ''; render(); return; }
+            var put = Blocks.facts(file(), false).ants[t] - before;
+            st.note = 'Put ' + plural(put, label(t) + ' ant', label(t) + ' ants') + ' at row ' + cell.row + ', column ' + cell.column + (put < want ? ' (only ' + num(put) + ' fit)' : '') + '. One Undo takes them away.';
+            render();
         }
 
         function putMixNow() {
@@ -351,7 +349,7 @@
                 if (st.mode === 'group') {
                     panel.appendChild(head('Ants in the clump'));
                     panel.appendChild(stepper('clump', env.ants(), Blocks.MIN_ANTS, Blocks.MAX_ANTS, function (v) { env.setAnts(v); render(); }, 'ants in the clump'));
-                    panel.appendChild(el('p', 'am-note', 'A tap starts the clump for the team. Put it again to move it.'));
+                    panel.appendChild(el('p', 'am-note', 'A tap puts a new clump. Pick up moves one.'));
                 }
             }
             if (f.version === 9) {
@@ -438,9 +436,10 @@
         var start = null;
         var painter = {
             size: function () { return 1; },
-            tapOnly: function () { return st.mode === 'one'; },
+            tapOnly: function () { return st.mode === 'one' || st.shape === 'clump'; },
             begin: function (cell) {
                 if (st.mode === 'one') { tap(cell); return false; }
+                if (st.shape === 'clump') { clump(cell); return false; }
                 start = cell; painting = true; st.box = { r0: cell.row, c0: cell.column, r1: cell.row, c1: cell.column }; st.plan = null; st.note = '';
                 render(); drawOver(); watch();
                 return true;
@@ -456,8 +455,6 @@
 
         return {
             painter: painter,
-            // the tool asks whether the box takes the tap and the drag: One at a time and Mix do; Clump is the tool's own (the old tap)
-            mine: function () { return st.mode === 'one' || st.shape === 'mix'; },
             show: function (on) {
                 shown = !!on; panel.hidden = !on; place();
                 if (!on) { clearBox(); } else render();

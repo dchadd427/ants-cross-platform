@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the map maker's Ants tool box for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): web/front/mapmaker_ants.js and its hooks in web/front/mapmaker_tools.js against tests/scripts/web_mapmaker_ants_check.js; the ones that start with browser_ only the real browser notices (they run `web_mapmaker_browser.py --only ants`, so ANTS_WEB_URL must name a page served from this checkout). Run from the checkout: tools/mutate.py tests/data/mapmaker_ants_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker.py runs the same list on a copy of the files.",
+  "note": "Mutants of the map maker's Ants tool box for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): web/front/mapmaker_ants.js, the clump in web/front/mapmaker_blocks.js (the cells, the list, the limits) and the hooks in web/front/mapmaker_tools.js against tests/scripts/web_mapmaker_ants_check.js; the ones that start with browser_ only the real browser notices (they run `web_mapmaker_browser.py --only ants`, so ANTS_WEB_URL must name a page served from this checkout). Run from the checkout: tools/mutate.py tests/data/mapmaker_ants_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker.py runs the same list on a copy of the files.",
   "mutants": [
     {
       "id": "dup_allowed",
@@ -39,22 +39,22 @@
     {
       "id": "max_records_wrong",
       "file": "web/front/mapmaker_ants.js",
-      "old": "var MAX_RECORDS = 65535;",
+      "old": "var MAX_RECORDS = Blocks.MAX_RECORDS;",
       "new": "var MAX_RECORDS = 65536;",
       "test": "node tests/scripts/web_mapmaker_ants_check.js"
     },
     {
       "id": "insert_place_wrong",
-      "file": "web/front/mapmaker_ants.js",
-      "old": "rel: lay.b1.length, removed",
-      "new": "rel: lay.b1.length - 6, removed",
+      "file": "web/front/mapmaker_blocks.js",
+      "old": "rel: lay.b1.length, removed: new Uint8Array(0)",
+      "new": "rel: lay.b1.length - 6, removed: new Uint8Array(0)",
       "test": "node tests/scripts/web_mapmaker_ants_check.js"
     },
     {
       "id": "count_word_wrong",
-      "file": "web/front/mapmaker_ants.js",
-      "old": "lay.records.length + records.length);",
-      "new": "lay.records.length + records.length + 1);",
+      "file": "web/front/mapmaker_blocks.js",
+      "old": "wr(count, 0, lay.records.length + records.length);",
+      "new": "wr(count, 0, lay.records.length + records.length + 1);",
       "test": "node tests/scripts/web_mapmaker_ants_check.js"
     },
     {
@@ -144,15 +144,15 @@
     {
       "id": "tap_only_flipped",
       "file": "web/front/mapmaker_ants.js",
-      "old": "tapOnly: function () { return st.mode === 'one'; }",
+      "old": "tapOnly: function () { return st.mode === 'one' || st.shape === 'clump'; }",
       "new": "tapOnly: function () { return st.mode !== 'one'; }",
       "test": "node tests/scripts/web_mapmaker_ants_check.js"
     },
     {
-      "id": "mine_ignores_mix",
+      "id": "tap_only_clump_off",
       "file": "web/front/mapmaker_ants.js",
-      "old": "return st.mode === 'one' || st.shape === 'mix'; }",
-      "new": "return st.mode === 'one'; }",
+      "old": "tapOnly: function () { return st.mode === 'one' || st.shape === 'clump'; }",
+      "new": "tapOnly: function () { return st.mode === 'one'; }",
       "test": "node tests/scripts/web_mapmaker_ants_check.js"
     },
     {
@@ -272,6 +272,90 @@
       "file": "web/front/mapmaker_ants.js",
       "old": "The game picks a random facing at the start of each match; the editor shows an example.",
       "new": "The ants start facing the way the editor shows them.",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "clump_not_handed_to_box",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "                if (st.shape === 'clump') { clump(cell); return false; }\n",
+      "new": "",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "clump_max_is_64",
+      "file": "web/front/mapmaker_blocks.js",
+      "old": "MAX_ANTS = 250;",
+      "new": "MAX_ANTS = 64;",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "clump_count_unclamped",
+      "file": "web/front/mapmaker_blocks.js",
+      "old": "var n = clampTo(count, MIN_ANTS, MAX_ANTS);",
+      "new": "var n = count;",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "clump_full_list_off_by_one",
+      "file": "web/front/mapmaker_blocks.js",
+      "old": "lay.records.length + n > MAX_RECORDS) return",
+      "new": "lay.records.length + n > MAX_RECORDS + 1) return",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "clump_on_own_ants",
+      "file": "web/front/mapmaker_blocks.js",
+      "old": "if (ix.markers[idx]) continue;",
+      "new": "void 0;",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "clump_on_a_pile",
+      "file": "web/front/mapmaker_blocks.js",
+      "old": "&& !ix.piles[idx]) good.push(item)",
+      "new": ") good.push(item)",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "clump_on_solid_ground",
+      "file": "web/front/mapmaker_blocks.js",
+      "old": "(Edit.flags(file, 1, idx) & 1) === 0 && !ix.piles",
+      "new": "(Edit.flags(file, 1, idx) & 2) === 0 && !ix.piles",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "clump_on_an_object",
+      "file": "web/front/mapmaker_blocks.js",
+      "old": "if (Edit.tile(file, 2, idx) === EMPTY2 && (Edit.flags(file, 1, idx) & 1) === 0 && !ix.piles",
+      "new": "if ((Edit.flags(file, 1, idx) & 1) === 0 && !ix.piles",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "clump_not_nearest_first",
+      "file": "web/front/mapmaker_blocks.js",
+      "old": "function order(a, b) { return a.d - b.d || a.r - b.r || a.c - b.c; }",
+      "new": "function order(a, b) { return a.r - b.r || a.c - b.c; }",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "clump_ignores_the_type",
+      "file": "web/front/mapmaker_blocks.js",
+      "old": "mTile = markerTile(file, teamIndex, antType);",
+      "new": "mTile = t.marker;",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "clump_note_counts_the_team",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "var put = Blocks.facts(file(), false).ants[t] - before;",
+      "new": "var put = Blocks.facts(file(), false).ants[t];",
+      "test": "node tests/scripts/web_mapmaker_ants_check.js"
+    },
+    {
+      "id": "clump_only_fit_note_off",
+      "file": "web/front/mapmaker_ants.js",
+      "old": "(put < want ? ' (only '",
+      "new": "(put > want ? ' (only '",
       "test": "node tests/scripts/web_mapmaker_ants_check.js"
     }
   ]

@@ -294,6 +294,15 @@ function caseG(core) {
         }
         let report = core.checkMap(ed.file.bytes, 'extended').json;
         check(report.works && report.findings.every((f) => f.severity === 'note'), 'every team has its hill and its ants: the map works, nothing to fix (' + report.headline + ')' + tag);
+        // a team's ants are many clumps (a tap of the editor puts a new one each time): the core counts every start marker of them, the map still works, and the writer makes the very same bytes later on
+        const big = kind === 'classic' ? 40 : 250;
+        for (let t = 0; t < 4; t++) for (const dr of [-6, 6]) {
+            const ch = Blocks.placeStart(ed.file, t, 20 + dr, 10 + 8 * t, big);
+            check(!ch.error && ed.act(ch) !== null, Blocks.TEAMS[t].label + ': a clump of ' + big + ' more ants at row ' + (20 + dr) + tag);
+        }
+        equal(teamsOf(ed.file.bytes).map((x) => x.start_markers), [5 + 2 * big, 5 + 2 * big, 5 + 2 * big, 5 + 2 * big], 'the core counts the ants of every clump of every team' + tag);
+        report = core.checkMap(ed.file.bytes, 'extended').json;
+        check(report.works && report.findings.every((f) => f.severity === 'note'), 'and with 8 clumps of ' + big + ' ants the map still works (' + report.headline + ')' + tag);
         for (let n = 2; n <= 6; n++) {
             const ch = Blocks.placePile(ed.file, 15 + n, 20, n);
             check(!ch.error && ed.act(ch) !== null, n + ' stages: the pile is put' + tag);
@@ -314,7 +323,7 @@ function caseG(core) {
         check(digestOf(ed.file.bytes) === digestOf(finished), 'undo of the whole drag gives the same bytes' + tag);
         let steps = 0;
         while (ed.history.canUndo()) { ed.undo(); steps++; }
-        check(steps === 4 + 4 + 5 && messages(ed.file.bytes).filter((m) => !/not for the original/.test(m)).join() === first.join(), 'all ' + steps + ' steps undone: the blank map\'s eight sentences are back' + tag);
+        check(steps === 4 + 4 + 8 + 5 && messages(ed.file.bytes).filter((m) => !/not for the original/.test(m)).join() === first.join(), 'all ' + steps + ' steps undone: the blank map\'s eight sentences are back' + tag);
         equal(core.sameLevel(made.bytes, ed.file.bytes, 'extended').json.same === true || /dictionary name/.test(core.sameLevel(made.bytes, ed.file.bytes, 'extended').json.difference), true, 'and it is the blank map\'s level (only the names that the dictionary got may differ)' + tag);
     }
     // the library: every whole hill taken away and put back is the same level, in both kinds; a team's ants moved and put back by another path are the level that they were
