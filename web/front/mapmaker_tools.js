@@ -15,14 +15,14 @@
         objects: 'Tap or click to put an object or plant. Drag to put a line of rocks or power-ups.',
         bigger: 'Tap or click to put the object whole. The dot is the cell you tap. Erase takes it away whole.',
         hills: 'Tap or click to put the hill. The dot is its door. Put it again to move it.',
-        ants: 'Tap or click to start the team\u2019s ants here. Put them again to move them.',
+        ants: 'Tap or click to put a clump of the team\u2019s ants here. Tap again for another clump. Pick up moves one.',
         food: 'Tap or click to put a food pile. Click the food button above to pick from all 32 foods or change bites and points.',
         erase: 'Tap or click to take something away: an object, a hill, a team\u2019s ants or a pile.',
         pickup: 'Tap an object, hill, ant, food pile or plant to pick it up, then move, copy or delete it. Drag empty ground to look around.',
         pan: 'Drag to look around. Nothing is changed.'
     };
     var PHONE_HINTS = {
-        ground: 'Tap to paint. Drag for a line.', objects: 'Tap to put one. Drag for a line.', bigger: 'Tap to put one whole. Erase takes it whole.', hills: 'Tap to put the hill. Tap again to move it.', ants: 'Tap to start the ants here.',
+        ground: 'Tap to paint. Drag for a line.', objects: 'Tap to put one. Drag for a line.', bigger: 'Tap to put one whole. Erase takes it whole.', hills: 'Tap to put the hill. Tap again to move it.', ants: 'Tap to put a clump of ants here.',
         food: 'Tap to put a food pile.', erase: 'Tap to take something away.', pickup: 'Tap something to pick it up. Drag empty ground to look around.', pan: 'Drag to look around.'
     };
 
@@ -390,7 +390,7 @@
 
         function chooseTeam(id) { state.team = id; fits = ''; showPalette(); }
 
-        // The Ants tool's box is a script of its own (mapmaker_ants.js), asked for the first time the tool is chosen; until it is there (or when it did not load) the tool is the clump of before
+        // The Ants tool's box is a script of its own (mapmaker_ants.js), asked for the first time the tool is chosen; until it is there (or when it did not load) a tap puts a clump (place) and the team and number are the palette's
         function askAnts() {
             if (asked || !env.loadAnts) return;
             asked = true;
@@ -512,7 +512,7 @@
 
         // A whole hill, a team's ants, a food pile, a plant or a bigger object, put with one tap
         function place(cell) {
-            var file = env.file(), change;
+            var file = env.file(), change, antsBefore = state.tool === 'ants' ? Blocks.facts(file, false).ants[state.team] : 0;
             if (state.tool === 'hills') change = Blocks.placeHill(file, state.team, cell.row, cell.column);
             else if (state.tool === 'ants') change = Blocks.placeStart(file, state.team, cell.row, cell.column, state.ants, state.antType);
             else if (state.tool === 'bigger') change = Objects.place(file, bigNow(), cell.row, cell.column);
@@ -521,13 +521,13 @@
             if (change.error) { if (env.say) env.say('It cannot be put there', change.error); return; }
             var was = env.file(), dirty = editor.act(change);
             fits = ''; rev++;
-            if (state.tool === 'ants') { var put = Blocks.facts(env.file(), false).ants[state.team]; if (put < state.ants) fits = ' (only ' + put + ' fit)'; }
+            if (state.tool === 'ants') { var put = Blocks.facts(env.file(), false).ants[state.team] - antsBefore; if (put < state.ants) fits = ' (only ' + put + ' fit)'; }
             if (dirty) changed(dirty);
             else { showInfo(); if (env.file() !== was) env.onEdit(); }                    // (nothing changed on the map, but the dictionary may have got a name: the page is told)
         }
 
-        // the box of the Ants tool takes the canvas's taps and drags (One at a time, and the drag of a Mix); the clump is the tool's own
-        function mine() { return !!ants && state.tool === 'ants' && ants.mine() ? ants.painter : (!!pick && state.tool === 'pickup' ? pick.painter : null); }
+        // the box of the Ants tool takes the canvas's taps and drags (One at a time, Clump and the drag of a Mix)
+        function mine() { return !!ants && state.tool === 'ants' ? ants.painter : (!!pick && state.tool === 'pickup' ? pick.painter : null); }
         var painter = {
             // the size of the square that the canvas marks under the pointer: the brush, a hill (4 x 4), a cell for ants, food and plants (a bigger object marks its own box: shape); 0 for a tool that does not mark
             size: function () { return !editor ? 0 : (mine() ? mine().size() : (paints() ? state.brush : (places() ? (state.tool === 'hills' ? Blocks.HILL : 1) : 0))); },

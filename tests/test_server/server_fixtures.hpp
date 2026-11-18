@@ -308,7 +308,7 @@ struct World {
     std::vector<std::unique_ptr<Client>> clients;
     uint32_t now{1000};
 
-    explicit World(ServerLimits limits = ServerLimits(), const std::string& dir = maps_dir()) : mgr(MapStore(dir), limits) {}
+    explicit World(ServerLimits limits = ServerLimits(), const std::string& dir = maps_dir(), const std::string& community = std::string()) : mgr(MapStore(dir, community), limits) {}
 
     std::vector<std::unique_ptr<Throttled>> throttles;                      // the slow downlinks of connect_throttled (index = the order they were made in)
     std::optional<net::CreateBlock> next_create;                            // the block that the next connect() puts in its Hello (connect_creating sets it for one call)

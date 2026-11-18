@@ -92,6 +92,8 @@ function caseB(maps) {
         if (!rowsOk) continue;
         const r = Math.min(f0.rows - 1, 1), c = Math.min(f0.columns - 1, 1);
         ed.act(Blocks.placeStart(ed.file, 1, r, c, 3));
+        const big = Blocks.placeStart(ed.file, 0, f0.rows >> 1, f0.columns >> 1, 250), had = Blocks.layout(ed.file).records.length;           // (a second clump, the biggest one, in the middle: both stay)
+        if (big.error ? !/no cell left/.test(big.error) : !ed.act(big) || Blocks.layout(ed.file).records.length - had < 1 || Blocks.layout(ed.file).records.length - had > 250 || (f0.cells >= 5000 && Blocks.layout(ed.file).records.length - had !== 250)) check(false, m.rel + ': a clump of 250 (fewer only on a small map) is put after the others');
         if (Blocks.layout(ed.file).ok2) ed.act(Blocks.placePile(ed.file, r, c, 4));
         if (f0.rows > 3 && f0.columns > 3) { const h = Blocks.placeHill(ed.file, 2, 1, 1); if (!h.error) ed.act(h); }           // (a hill that would touch another team's is refused)
         const e = ed.begin('erase', null);
@@ -158,9 +160,9 @@ function caseD(maps) {
         const ed = editorOn(f0), layers = Array.from(f0.bytes.subarray(f0.layer1, f0.blocksAt)), tail = Array.from(f0.bytes.subarray(f0.blocksAt + lay0.b2.rel + lay0.b2.length));
         ed.act(Blocks.placeStart(ed.file, 0, 3, 3, 5));
         let lay = Blocks.layout(ed.file), f = ed.file;
-        const mineAfter = lay.records.filter((r) => r.tile === 154).length, others = lay.records.filter((r) => r.tile !== 154).map((r) => [r.tile, r.row, r.column].join());
+        const had = lay0.records.filter((r) => r.tile === 154).length, mineAfter = lay.records.filter((r) => r.tile === 154).length, others = lay.records.filter((r) => r.tile !== 154).map((r) => [r.tile, r.row, r.column].join());
         const othersBefore = lay0.records.filter((r) => r.tile !== 154).map((r) => [r.tile, r.row, r.column].join());
-        if (mineAfter !== 5 || others.join('|') !== othersBefore.join('|')) check(false, m.rel + ': the ants of Green are 5 and the other records are as they were');
+        if (mineAfter !== had + 5 || others.join('|') !== othersBefore.join('|') || !lay0.records.every((r, i) => lay.records[i].tile === r.tile && lay.records[i].row === r.row && lay.records[i].column === r.column)) check(false, m.rel + ': 5 more ants of Green after the records that were there, which are as they were');
         if (!same(Array.from(f.bytes.subarray(f.blocksAt + lay.b2.rel + lay.b2.length)), tail) || !same(Array.from(f.bytes.subarray(f.layer1, f.blocksAt)), layers)) check(false, m.rel + ': the layers and the blocks after block 2 are as they were after the ants');
         ed.act(Blocks.placePile(ed.file, 3, 3, 5));
         lay = Blocks.layout(ed.file); f = ed.file;
