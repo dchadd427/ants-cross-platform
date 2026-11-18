@@ -74,6 +74,7 @@
 #include "ants_net/transport.hpp"
 #include "ants_net/turnlog.hpp"
 #include "ants_replay/recorder.hpp"
+#include "ants_server/bot_lag.hpp"
 #include "ants_server/map_store.hpp"
 #include "ants_server/online_limits.hpp"
 #include "ants_server/live_board.hpp"
@@ -238,6 +239,9 @@ struct RoomStatus {
     bool bots_only{false};                  // a match of computer players alone, the server's own (RoomSpec::bots_only): not a game that the site's statistics count
     bool bot_controller{false};             // the server built a bot controller for this room's match (only a room with a bot seat has one: a room without bots runs no bot code, docs/BOTS.md rule 8)
     uint32_t bot_start_hold{0};             // ... and its start hold in ticks (BotController::start_hold: ai::kStartHoldTicks, the product's opening; 0 without a controller): for the tests, not shown by the control interface
+    uint32_t bot_lag_ticks{0};              // the ticks that the room holds each command of its bots back now (BotLag::hold_ticks: the people's turn round trip, at most kBotLagMaxTicks): for the tests, not shown by the control interface
+    uint32_t bot_held_commands{0};          // the commands of its bots that have had to wait so far, and the longest wait in turns (LaggedSink::held_total, longest_wait): for the tests, not shown by the control interface
+    uint32_t bot_held_longest{0};
     uint32_t bot_decisions{0};              // how many times the room's bots have looked at the match since its controller was made (the sum of BotController::SeatStats::decisions): a controller that is called after every tick
                                             // counts up, one that is not does not (a room that was restored has a new controller: it starts from 0): for the tests, not shown by the control interface
     RoomState state{RoomState::Waiting};
@@ -478,7 +482,7 @@ private:
     bool finish_replay(const RestartLoaded& rec, size_t next_check, std::string& why);      // every turn was given: the last checks, and what begin_restored() needs
     void build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms = net::kMatchStartDelayMs);      // the session of the match, as begin_match and restore both make it (the engine is made already); `start_delay_ms`: how long the first turn is held (the 5 s dialog, or the countdown of protocol 21)
     // Bots (docs/SERVER.md, "Bots fill the empty seats, and chat in the waiting room"): the specification's are seated in the lobby when the room is made; the leader's fill seats the rest at START and takes them out again when the start is cancelled
-    class BotSink;
+    void update_bot_lag();                                   // after every tick the referee runs: the hold of the bots' commands from the people's links (bot_lag.hpp)
     void unseat_fill();
     void notify_people(const std::string& text);             // the room says a line to every person in it (a notice)
     bool start_bots(uint32_t seed, std::string& why);
@@ -528,7 +532,8 @@ private:
     std::vector<std::unique_ptr<net::Connection>> connections_;
     std::unique_ptr<sim::SimulationEngine> sim_;
     std::unique_ptr<net::HostSession> session_;
-    std::vector<std::unique_ptr<sim::CommandSink>> bot_sinks_;      // (after the session and before the controller: the controller is destroyed first, then the sinks that it holds)
+    BotLag bot_lag_;                         // how long the room holds its bots' commands back (docs/BOTS.md, "Fairness in detail"); 0 for a room without a bot and one whose people are not connected
+    std::vector<std::unique_ptr<LaggedSink>> bot_sinks_;      // (after the session and before the controller: the controller is destroyed first, then the sinks that it holds)
     std::unique_ptr<ai::BotController> bot_controller_;
     ReplayStore* replay_store_{nullptr};
     LiveBoard* live_board_{nullptr};

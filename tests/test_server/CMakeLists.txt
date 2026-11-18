@@ -3,6 +3,7 @@ add_executable(test_server
     test_server_core.cpp
     test_server_reconnect.cpp
     test_server_bots.cpp
+    test_server_bot_lag.cpp
     test_server_persist.cpp
     test_server_process.cpp
     test_server_files.cpp

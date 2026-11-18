@@ -8,6 +8,7 @@ add_library(ants_net STATIC
     turnlog.cpp
     attendance.cpp
     latency.cpp
+    turn_trip.cpp
     loopback.cpp
     session.cpp
     session_client.cpp

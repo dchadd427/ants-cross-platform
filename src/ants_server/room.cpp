@@ -99,24 +99,6 @@ std::string replay_person_name(const std::string& shown) {
     return name;
 }
 
-// Where a bot's commands go: into the sequencer of the room's session for the bot's seat, as the commands of a person do from its connection (the verdict arrives with the turn, like every
-// command's: a bot never sees it). While the match is paused for an absent player the session refuses them (a bot waits like everybody): the controller counts that as a command sent, and the
-// bot finds out in its next look.
-class Room::BotSink final : public sim::CommandSink {
-public:
-    BotSink(Room& room, uint8_t seat) : room_(room), seat_(seat) {}
-    sim::CommandResult submit(const sim::Command& command) override {
-        sim::CommandResult result;
-        if (room_.session_ != nullptr && room_.session_->submit_bot(seat_, command)) result.status = sim::CommandResult::Status::Applied;
-        return result;
-    }
-    uint64_t applied_at(uint64_t now) const override { return room_.session_ != nullptr ? room_.session_->turns_sealed() : now; }
-
-private:
-    Room& room_;
-    uint8_t seat_;
-};
-
 Room::Room(RoomSpec spec, MapEntry map, assets::LevelData level, uint32_t seed, uint32_t now_ms, net::LogBudget* log_budget)
     : spec_(std::move(spec)), map_(std::move(map)), level_(std::move(level)), seed_(seed), created_ms_(now_ms), lobby_(lobby_config(spec_)), log_budget_(log_budget) {
     spec_.players = std::max<uint8_t>(2, std::min<uint8_t>(spec_.players, sim::MAX_PLAYERS));
@@ -280,7 +262,16 @@ bool Room::start_bots(uint32_t seed, std::string& why) {
     bot_controller_ = std::make_unique<ai::BotController>(*sim_, seed);
     for (const ai::BotSpec& spec : bot_specs_) {
         if (spec.seat >= sim::MAX_PLAYERS || lobby_.room().slots[spec.seat].state != net::SlotState::Bot) continue;
-        bot_sinks_.push_back(std::make_unique<BotSink>(*this, spec.seat));
+        // Where a bot's commands go: into the sequencer of the room's session for the bot's seat, as the commands of a person do from its connection, held back by the people's lag (bot_lag.hpp). The verdict
+        // arrives with the turn, like every command's: a bot never sees it. While the match is paused for an absent player the session refuses them (a bot waits like everybody; the controller counts
+        // that as a command sent, and the bot finds out in its next look).
+        const uint8_t seat = spec.seat;
+        LaggedSink::Line line;
+        line.accepts = [this, seat]() { return session_ != nullptr && session_->accepts_bot(seat); };
+        line.deliver = [this, seat](const sim::Command& command) { return session_ != nullptr && session_->submit_bot(seat, command); };
+        line.turns_sealed = [this]() -> uint64_t { return session_ != nullptr ? session_->turns_sealed() : 0u; };
+        line.hold_ticks = [this]() { return bot_lag_.hold_ticks(); };
+        bot_sinks_.push_back(std::make_unique<LaggedSink>(std::move(line)));
         std::string error;
         if (!bot_controller_->add(spec, *bot_sinks_.back(), error)) {
             why = "the bot of seat " + std::to_string(static_cast<unsigned>(spec.seat)) + " could not sit down: " + error;
@@ -288,9 +279,26 @@ bool Room::start_bots(uint32_t seed, std::string& why) {
         }
     }
     session_->runner().set_on_tick([this]() {
-        if (bot_controller_ != nullptr && sim_ != nullptr) bot_controller_->on_tick(*sim_);
+        if (bot_controller_ == nullptr || sim_ == nullptr) return;
+        update_bot_lag();                                            // (the hold first, then the commands whose time has come, then the bots look: what they send now is held by the new hold)
+        for (const std::unique_ptr<LaggedSink>& sink : bot_sinks_) sink->release();
+        bot_controller_->on_tick(*sim_);
     });
     return true;
+}
+
+// The hold of the room's bots, from the people who are connected: each one's turn round trip (HostSession::turn_trip_ms: a person with no fresh reading is left out of the median), see bot_lag.hpp
+void Room::update_bot_lag() {
+    std::array<uint32_t, sim::MAX_PLAYERS> trips{};
+    size_t n = 0;
+    size_t humans = 0;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        if (session_ == nullptr || !session_->client_present(seat)) continue;
+        ++humans;
+        uint32_t ms = 0;
+        if (session_->turn_trip_ms(seat, ms)) trips[n++] = ms;
+    }
+    bot_lag_.update(sim_ != nullptr ? sim_->current_tick() : 0u, humans, trips.data(), n);
 }
 
 // The session of the match, as a match that starts and a match that is restored both make it: a host without a seat that holds seats when the room says so
@@ -1209,6 +1217,11 @@ RoomStatus Room::status(uint32_t now_ms) const {
     s.bots_only = spec_.bots_only;
     s.bot_controller = bot_controller_ != nullptr;
     s.bot_start_hold = bot_controller_ != nullptr ? bot_controller_->start_hold() : 0u;
+    s.bot_lag_ticks = bot_controller_ != nullptr ? bot_lag_.hold_ticks() : 0u;
+    for (const std::unique_ptr<LaggedSink>& sink : bot_sinks_) {
+        s.bot_held_commands += static_cast<uint32_t>(sink->held_total());
+        s.bot_held_longest = std::max(s.bot_held_longest, sink->longest_wait());
+    }
     if (bot_controller_ != nullptr) {
         for (const ai::BotSpec& b : bot_specs_) s.bot_decisions += bot_controller_->stats(b.seat).decisions;
     }

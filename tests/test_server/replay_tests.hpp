@@ -244,6 +244,29 @@ void run_replay_tests() {
         ASSERT_TRUE(played.complete && !played.match_over && played.turns == f.rep.total_turns && played.hashes_checked >= 5);
     } TEST_END();
 
+    TEST_CASE("S3.290 A Match In Which The Bot's Commands Are Held Back For A Person On A Link Of 300 ms (The Hold Is 6 Ticks, Commands Waited) Is Kept And Plays Out On A Fresh Engine To The Same Hashes: The File Holds The Commands As The Turns Carried Them, Not The Handicap, And Nothing Of The Person's Link") {
+        ReplayClock clock;
+        World w;
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("replay-lag", &clock), false, why));
+        RoomSpec spec = spec_of("REC-LAG", 2);
+        spec.bots = {ai::BotSpec{1, "standard", ai::Level::Hard}};
+        ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+        w.connect("Ann", "REC-LAG", 255, net::LoopbackNetwork::Link{150, 0});
+        w.run(1500 + kPre + 38000);
+        RoomStatus s = w.status("REC-LAG");
+        ASSERT_TRUE(s.state == RoomState::Running && s.turns >= 600 && s.bot_controller);
+        ASSERT_TRUE(s.bot_lag_ticks == 6 && s.bot_held_commands > 5);
+        ASSERT_TRUE(w.mgr.close_room("REC-LAG", w.now));
+        s = w.status("REC-LAG");
+        ASSERT_TRUE(s.replay_kept && s.replay_note.empty() && ReplayStore::valid_file_name(s.replay_file));
+        const StoredReplay f = load_stored(*w.mgr.replay_store(), s.replay_file);
+        ASSERT_TRUE(f.ok && f.rep.complete && f.rep.head.roster == 0x03 && f.rep.total_turns >= 600);
+        replay::Outcome played;
+        ASSERT_TRUE(plays_out(f.rep, played));                                                           // (no bot, no link, no clock: the recorded turns alone)
+        ASSERT_TRUE(played.complete && played.turns == f.rep.total_turns && played.hashes_checked >= 5);
+    } TEST_END();
+
     TEST_CASE("S3.162 A Match That Ran Less Than 30 Seconds Is Not Kept Whatever Ended It (Closed, Or Quit So That The Rules End It), And A Room That Never Began Has No Match: The Status Says So, Nothing Is Written; A Match Of Exactly The Length That Counts Is Kept") {
         ReplayClock clock;
         World w;

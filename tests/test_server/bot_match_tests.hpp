@@ -160,6 +160,7 @@ void run_bot_match_tests() {
         ASSERT_TRUE(s.state == RoomState::Running);
         ASSERT_MSG(s.turns > 250 && s.turns < 500, "turns " + std::to_string(s.turns));      // (about 20 turns a second: the normal speed, not the headless arena's)
         ASSERT_TRUE(s.bot_decisions > 0);
+        ASSERT_TRUE(s.bot_lag_ticks == 0 && s.bot_held_commands == 0);       // (nobody is connected: nothing to be level with, and no command waits for it)
         ASSERT_TRUE(run_until(w, [&] { return w.status("BM-ROOM").state != RoomState::Running; }, 40000));
         s = w.status("BM-ROOM");
         ASSERT_TRUE(s.state == RoomState::Finished || s.state == RoomState::Failed);

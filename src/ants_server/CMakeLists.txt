@@ -6,6 +6,7 @@ add_library(ants_server_core STATIC
     bot_matches.cpp
     pacific_time.cpp
     online_limits.cpp
+    bot_lag.cpp
     room.cpp
     room_manager.cpp
     room_manager_bots.cpp

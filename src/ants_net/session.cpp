@@ -46,7 +46,7 @@ void HostSession::add_bot_seat(uint8_t player) {
 }
 
 bool HostSession::submit_bot(uint8_t player, sim::Command command) {
-    if (!started_ || !is_bot_seat(player) || paused()) return false;         // (a bot waits, like everybody, while a seat is away: its orders would only pile up in the first turn after)
+    if (!accepts_bot(player)) return false;                                  // (a bot waits, like everybody, while a seat is away: its orders would only pile up in the first turn after)
     return sequencer_.submit(player, std::move(command));
 }
 
@@ -295,6 +295,7 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
             AckMsg m;
             if (!decode(msg, m)) return violation(player);
             sequencer_.on_ack(player, m.turn);
+            trip_.on_ack(player, m.turn, last_ms_);              // (a reading of the player's link: turn_trip_ms)
             return;
         }
         case MsgType::Hash: {
@@ -416,6 +417,7 @@ void HostSession::police_laggards(uint32_t now_ms) {
 
 void HostSession::run_local(uint32_t dt_ms) {
     for (const LockstepRunner::Executed& e : runner_->update(dt_ms)) {
+        trip_.on_executed(e.turn, last_ms_);                                    // (when this host's own engine ran the turn: the clients' acknowledgements are timed against it)
         sequencer_.on_ack(cfg_.host_player, e.turn);
         for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
             if (is_bot_seat(p)) sequencer_.on_ack(p, e.turn);                  // a bot has no connection to say it: it has executed what this machine has

@@ -79,6 +79,7 @@
 #include "ants_net/protocol.hpp"
 #include "ants_net/sequencer.hpp"
 #include "ants_net/transport.hpp"
+#include "ants_net/turn_trip.hpp"
 #include "ants_net/turnlog.hpp"
 #include "ants_sim/sim_engine.hpp"
 
@@ -178,6 +179,11 @@ public:
     /// A command of a bot seat's bot for the next turn (the issuer is stamped by the sequencer). False unless the match runs, the seat is a bot seat and the
     /// command is one that a player may send (never Drop), and false while the match is paused (a bot waits like everybody; a bot seat is never absent and never votes).
     bool submit_bot(uint8_t player, sim::Command command);
+    /// True when submit_bot would take a command of this seat's bot now (the match runs, the seat is a bot seat and the match is not paused): a room that holds its bots' commands back asks before it accepts one
+    bool accepts_bot(uint8_t player) const noexcept { return started_ && is_bot_seat(player) && !paused(); }
+    /// The round trip of the turn stream of a person's seat (turn_trip.hpp): the median of the last second's readings, in ms. False for a seat that is not connected, a bot's seat, and a person who has not
+    /// acknowledged turns for a moment or has not yet sent three readings (`ms` is left alone). Read-only: it changes nothing that is sent and nothing that any machine computes.
+    bool turn_trip_ms(uint8_t player, uint32_t& ms) const noexcept { return player < sim::MAX_PLAYERS && clients_[player].present && trip_.read(player, last_ms_, ms); }
     /// Begins the match at `now_ms`: turn 0 is sealed Config::start_delay_ms later (at once when that is 0; the LAN host and the server's rooms wait kMatchStartDelayMs, protocol 12).
     void start(uint32_t now_ms);
     /// Continues a match in which the previous host left: the next turn sealed is `resume_turn`, every survivor is told (Resume) and gets the turns
@@ -383,6 +389,7 @@ private:
     bool frozen_{false};
     uint32_t last_ms_{0};
     CommandDelayMeter delay_;
+    TurnTripMeter trip_;                     // the host's engine's turn times against the clients' acknowledgements (turn_trip_ms)
     uint32_t next_seal_ms_{0};
     uint8_t stall_player_{255};              // the seat that holds the match up, and since when (laggard_drop_ms)
     uint32_t stall_since_ms_{0};

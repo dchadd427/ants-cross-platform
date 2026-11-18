@@ -10,6 +10,7 @@
 #include "ants_net/message_age.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_net/session.hpp"
+#include "ants_net/turn_trip.hpp"
 #include "ants_sim/sim_engine.hpp"
 
 #include <algorithm>
@@ -347,6 +348,94 @@ uint32_t expected_host_delay(uint32_t t) {
 }
 
 }  // namespace
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// A dedicated server's session (the host plays no seat; seat 0 may be a computer player's) and one person (seat 1) over a link: the host's loop every 2 ms as the server's is, the
+// person's frames every `frame_ms`. The reading of the host's TurnTripMeter is compared with the link's round trip.
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+// The person's side of the link, with the acknowledgements of turns held back for `delay_ms` (a machine that acknowledges late); everything else goes at once
+class LateAcks final : public Connection {
+public:
+    LateAcks(Connection* inner, const uint32_t* clock, uint32_t delay_ms) : inner_(inner), clock_(clock), delay_ms_(delay_ms) {}
+    bool send(const std::vector<uint8_t>& m) override {
+        if (peek_type(m) != MsgType::TurnAck || delay_ms_ == 0) return inner_->send(m);
+        held_.push_back({*clock_ + delay_ms_, m});
+        return true;
+    }
+    bool poll(std::vector<uint8_t>& m) override {
+        while (!held_.empty() && static_cast<int32_t>(*clock_ - held_.front().first) >= 0) {
+            inner_->send(held_.front().second);
+            held_.erase(held_.begin());
+        }
+        return inner_->poll(m);
+    }
+    State state() const override { return inner_->state(); }
+    void close() override { inner_->close(); }
+
+private:
+    Connection* inner_;
+    const uint32_t* clock_;
+    uint32_t delay_ms_;
+    std::vector<std::pair<uint32_t, std::vector<uint8_t>>> held_;
+};
+
+struct Referee1 {
+    LoopbackNetwork net{5};
+    sim::SimulationEngine host_sim;
+    sim::SimulationEngine guest_sim;
+    std::unique_ptr<HostSession> host;
+    std::unique_ptr<ClientSession> guest;
+    std::unique_ptr<LateAcks> late;
+    Connection* host_end{nullptr};
+    uint32_t now{100000};
+    uint32_t frame_ms;
+    uint32_t next_frame{100000};
+    bool frozen{false};
+    bool open{true};
+
+    explicit Referee1(LoopbackNetwork::Link link, uint32_t frame = 16, uint32_t ack_delay_ms = 0, bool bot_seat = false, bool hold_seats = false) : frame_ms(frame) {
+        uint32_t a = 0;
+        uint32_t b = 0;
+        Duel::build(host_sim, a, b);
+        Duel::build(guest_sim, a, b);
+        auto ends = net.connect(link);
+        HostSession::Config hc;
+        hc.host_player = kNoSeat;
+        hc.hold_seats = hold_seats;                                            // (a lost link pauses the match, as a room that holds seats does: the seat needs a key)
+        host = std::make_unique<HostSession>(host_sim, hc);
+        if (hold_seats) {
+            std::array<SeatKey, sim::MAX_PLAYERS> keys{};
+            keys[1][0] = 7;
+            host->set_seat_keys(keys);
+        }
+        host_end = ends.first;
+        host->add_client(1, ends.first);
+        if (bot_seat) host->add_bot_seat(0);
+        ClientSession::Config cc;
+        cc.player = 1;
+        cc.host = kNoSeat;
+        cc.migration = false;
+        guest = std::make_unique<ClientSession>(guest_sim, cc);
+        late = std::make_unique<LateAcks>(ends.second, &now, ack_delay_ms);
+        guest->set_connection(late.get());
+        host->start(now);
+        guest->start(now);
+    }
+    void run_ms(uint32_t ms) {
+        for (uint32_t i = 0; i < ms; ++i) {
+            ++now;
+            net.set_time(now);
+            if (now % 2 == 0) host->update(now);
+            if (static_cast<int32_t>(now - next_frame) >= 0) {
+                next_frame += frame_ms;
+                if (!frozen) guest->update(now);
+            }
+        }
+    }
+    bool trip(uint8_t seat, uint32_t& ms) const { return host->turn_trip_ms(seat, ms); }
+};
+
 
 int main() {
     std::cout << "\n=======================================================\n [SUITE] Network port: ping and command delay (what the player feels)\n"
@@ -1294,6 +1383,176 @@ int main() {
         m.on_tick_shown();
         m.on_frame_end(3010);
         ASSERT_EQ(m.last_ms(), 61u);                                     // (nothing new was felt: the last number is still the one of the newest of the sixteen)
+    } TEST_END();
+
+    TEST_CASE("N9.40 TurnTripMeter: A Reading Is The Host's Clock At The Acknowledgement Less The Host's Clock When Its Own Engine Ran That Turn; The Number Of A Seat Is The Median Of Its Last 21 Readings And Needs Three Of Them") {
+        TurnTripMeter m;
+        uint32_t ms = 777;
+        const auto exec_at = [](uint32_t t) { return 1000u + t * 50u; };
+        const auto ack = [&](uint8_t seat, uint32_t t, uint32_t trip) { m.on_ack(seat, t, exec_at(t) + trip); };
+        for (uint32_t t = 0; t < 40; ++t) m.on_executed(t, exec_at(t));
+        ack(1, 0, 120);
+        ack(1, 1, 130);
+        ASSERT_FALSE(m.read(1, exec_at(1) + 140, ms));                           // two readings are no number yet
+        ASSERT_EQ(ms, 777u);                                                     // (and the caller's value is left alone)
+        ack(1, 2, 100);
+        ASSERT_TRUE(m.read(1, exec_at(2) + 110, ms));
+        ASSERT_EQ(ms, 120u);                                                     // the median of 120, 130, 100
+        ASSERT_FALSE(m.read(2, exec_at(2) + 110, ms));                           // another seat has none of its own
+        ASSERT_FALSE(m.read(9, exec_at(2) + 110, ms));                           // a seat that does not exist has none
+        ack(2, 5, 40);
+        ack(2, 6, 40);
+        ack(2, 7, 40);
+        ASSERT_TRUE(m.read(2, exec_at(7) + 50, ms));
+        ASSERT_EQ(ms, 40u);
+        ASSERT_TRUE(m.read(1, exec_at(7) + 50, ms));
+        ASSERT_EQ(ms, 120u);                                                     // (the seats do not mix)
+        for (uint32_t t = 3; t < 24; ++t) ack(1, t, 200);                        // 21 readings of 200 push the three old ones out
+        ASSERT_TRUE(m.read(1, exec_at(23) + 210, ms));
+        ASSERT_EQ(ms, 200u);
+        for (uint32_t t = 24; t < 29; ++t) ack(1, t, 900);                       // five late acknowledgements among 21 are not the median
+        ASSERT_TRUE(m.read(1, exec_at(28) + 910, ms));
+        ASSERT_EQ(ms, 200u);
+        for (uint32_t t = 29; t < 40; ++t) ack(1, t, 900);                       // sixteen are
+        ASSERT_TRUE(m.read(1, exec_at(39) + 910, ms));
+        ASSERT_EQ(ms, 900u);
+    } TEST_END();
+
+    TEST_CASE("N9.41 TurnTripMeter: What Is Not A Reading (A Turn The Host Has Not Run, One Too Old, A Turn Again Or An Older One, A Clock That Went Back), What Is Capped (One Second), And A Seat That Goes Quiet (No Number After 1.5 s, A Fresh Start With The Next Reading)") {
+        const auto exec_at = [](uint32_t t) { return 5000u + t * 50u; };
+        uint32_t ms = 0;
+        {
+            TurnTripMeter m;
+            for (uint32_t t = 0; t < 100; ++t) m.on_executed(t, exec_at(t));
+            m.on_ack(1, 100, 9900);                                              // the host has not run turn 100
+            m.on_ack(1, 10, 9900);                                               // turn 10 is older than the 64 that are kept
+            for (uint32_t t = 97; t < 100; ++t) m.on_ack(1, t, exec_at(t) - 1);  // before the host ran them: the clock was set back
+            for (int i = 0; i < 3; ++i) m.on_ack(1, 90, exec_at(90) + 100);      // the same turn again and again counts once
+            ASSERT_FALSE(m.read(1, exec_at(90) + 110, ms));
+            m.on_ack(1, 91, exec_at(91) + 100);
+            m.on_ack(1, 92, exec_at(92) + 100);
+            ASSERT_TRUE(m.read(1, exec_at(92) + 110, ms));                       // 90, 91 and 92: three readings
+            m.on_ack(1, 85, exec_at(85) + 900);                                  // an older turn than the last one read is no reading
+            m.on_ack(1, 92, exec_at(92) + 900);
+            ASSERT_TRUE(m.read(1, exec_at(92) + 1000, ms));
+            ASSERT_EQ(ms, 100u);
+        }
+        {
+            TurnTripMeter m;
+            for (uint32_t t = 0; t < 10; ++t) m.on_executed(t, exec_at(t));
+            for (uint32_t t = 0; t < 5; ++t) m.on_ack(1, t, exec_at(t) + 3000);  // a stalled machine: every reading counts as one second
+            ASSERT_TRUE(m.read(1, exec_at(4) + 3010, ms));
+            ASSERT_EQ(ms, TurnTripMeter::kMaxReadingMs);
+        }
+        {
+            TurnTripMeter m;
+            for (uint32_t t = 0; t < 60; ++t) m.on_executed(t, exec_at(t));
+            for (uint32_t t = 0; t < 5; ++t) m.on_ack(1, t, exec_at(t) + 300);   // readings of 300 ms ...
+            const uint32_t last = exec_at(4) + 300;
+            ASSERT_TRUE(m.read(1, last, ms));
+            ASSERT_EQ(ms, 300u);
+            ASSERT_TRUE(m.read(1, last + TurnTripMeter::kStaleMs, ms));          // ... still a number at the limit
+            ASSERT_FALSE(m.read(1, last + TurnTripMeter::kStaleMs + 1, ms));     // ... none a millisecond later: the seat said nothing for 1.5 s
+            for (uint32_t t = 50; t < 53; ++t) m.on_ack(1, t, exec_at(t) + 80);  // it speaks again: what it said before is forgotten, not mixed in
+            ASSERT_TRUE(m.read(1, exec_at(52) + 90, ms));
+            ASSERT_EQ(ms, 80u);
+            m.reset(1);
+            ASSERT_FALSE(m.read(1, exec_at(52) + 90, ms));                       // a seat that another machine takes starts empty
+        }
+        {
+            TurnTripMeter m;                                                     // the 32-bit clock wraps: differences, never comparisons
+            for (uint32_t t = 0; t < 5; ++t) m.on_executed(t, 0xFFFFFF00u + t * 50u);
+            for (uint32_t t = 0; t < 4; ++t) m.on_ack(1, t, 0xFFFFFF00u + t * 50u + 150u);
+            ASSERT_TRUE(m.read(1, 0x00000060u, ms));
+            ASSERT_EQ(ms, 150u);
+        }
+    } TEST_END();
+
+    TEST_CASE("N9.42 A Server's Session Reads A Person's Link From The Turns Alone: With 30, 100, 180 And 300 ms Of Round Trip The Reading Is That Round Trip And About A Frame; A Computer Player's Seat, An Empty Seat And A Seat Whose Link Closed Have None; A Window That Stops Has None After 1.5 s And Is Read Again When It Runs") {
+        struct Case {
+            uint32_t one_way;
+            uint32_t rtt;
+        };
+        for (const Case c : {Case{15, 30}, Case{50, 100}, Case{90, 180}, Case{150, 300}}) {
+            Referee1 r({c.one_way, 0}, 16, 0, true);
+            uint32_t ms = 0;
+            r.run_ms(60);
+            ASSERT_FALSE(r.trip(1, ms));                                         // too early: no turn has been run and acknowledged
+            r.run_ms(5940);
+            ASSERT_TRUE(r.trip(1, ms));
+            ASSERT_TRUE(ms >= c.rtt && ms <= c.rtt + 40);                         // the round trip, and the person's frame
+            ASSERT_FALSE(r.trip(0, ms));                                         // a computer player's seat: nothing to read
+            ASSERT_FALSE(r.trip(2, ms));                                         // an empty seat
+            ASSERT_FALSE(r.trip(200, ms));
+            r.host_end->close();                                                 // the person's link closes
+            r.run_ms(200);
+            ASSERT_FALSE(r.trip(1, ms));                                         // a seat that is gone has none
+        }
+        Referee1 r({50, 0}, 16, 0, false);
+        r.run_ms(6000);
+        uint32_t ms = 0;
+        ASSERT_TRUE(r.trip(1, ms));
+        r.frozen = true;                                                         // the person's machine stops running: no acknowledgements
+        r.run_ms(TurnTripMeter::kStaleMs - 200);
+        ASSERT_TRUE(r.trip(1, ms));
+        r.run_ms(400);
+        ASSERT_FALSE(r.trip(1, ms));                                             // 1.5 s without an acknowledgement: no number
+        r.frozen = false;
+        r.run_ms(6000);                                                          // it catches up and is read again
+        ASSERT_TRUE(r.trip(1, ms));
+        ASSERT_TRUE(ms >= 100 && ms <= 140);
+    } TEST_END();
+
+    TEST_CASE("N9.43 A Machine That Acknowledges Late Reads High, Never Above One Second; One That Is More Than 3.2 s Late Has No Reading At All (Its Turns Are Too Old To Be Timed): Nobody's Word Is Read, Only The Turns And Their Acknowledgements") {
+        {
+            Referee1 r({25, 0}, 16, 400);                                        // 50 ms of round trip, acknowledgements 400 ms late
+            r.run_ms(8000);
+            uint32_t ms = 0;
+            ASSERT_TRUE(r.trip(1, ms));
+            ASSERT_TRUE(ms >= 450 && ms <= 520);
+        }
+        {
+            Referee1 r({25, 0}, 16, 2500);                                       // two and a half seconds late: capped at one second
+            r.run_ms(12000);
+            uint32_t ms = 0;
+            ASSERT_TRUE(r.trip(1, ms));
+            ASSERT_EQ(ms, TurnTripMeter::kMaxReadingMs);
+        }
+        {
+            Referee1 r({25, 0}, 16, 5000);                                       // five seconds late: each turn is gone from the host's list (64 turns, 3.2 s) before its acknowledgement comes
+            r.run_ms(14000);
+            uint32_t ms = 0;
+            ASSERT_FALSE(r.trip(1, ms));
+        }
+    } TEST_END();
+
+    TEST_CASE("N9.44 HostSession::accepts_bot Is What submit_bot Answers: Not Before The Match Runs, Not For A Seat That Is No Computer Player's, And Not While The Match Waits For An Absent Seat") {
+        Referee1 r({25, 0}, 16, 0, true);
+        ASSERT_TRUE(r.host->accepts_bot(0));                                     // (the fixture started the match)
+        ASSERT_FALSE(r.host->accepts_bot(1));                                    // a person's seat
+        ASSERT_FALSE(r.host->accepts_bot(2));                                    // an empty seat
+        ASSERT_FALSE(r.host->accepts_bot(7));
+        const Command c = order(0, 1, 5, 5);
+        ASSERT_TRUE(r.host->submit_bot(0, c));
+        ASSERT_FALSE(r.host->submit_bot(1, c));
+        sim::SimulationEngine fresh;
+        uint32_t a = 0;
+        uint32_t b = 0;
+        Duel::build(fresh, a, b);
+        HostSession::Config hc;
+        hc.host_player = kNoSeat;
+        HostSession not_started(fresh, hc);
+        not_started.add_bot_seat(0);
+        ASSERT_FALSE(not_started.accepts_bot(0));                                // before start()
+        ASSERT_FALSE(not_started.submit_bot(0, c));
+        Referee1 held({25, 0}, 16, 0, true, true);                               // a room that holds seats: the person's link is lost and the match waits for it
+        held.run_ms(500);
+        ASSERT_TRUE(held.host->accepts_bot(0) && !held.host->paused());
+        held.host_end->close();
+        held.run_ms(300);
+        ASSERT_TRUE(held.host->paused());
+        ASSERT_FALSE(held.host->accepts_bot(0));                                 // (a bot waits like everybody)
+        ASSERT_FALSE(held.host->submit_bot(0, c));
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count

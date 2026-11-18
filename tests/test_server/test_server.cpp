@@ -21,6 +21,7 @@ int main() {
     run_secret_tests();
     run_reconnect_tests();
     run_bot_tests();
+    run_bot_lag_tests();
     run_countdown_tests();
     run_online_limit_tests();
     run_persist_tests();
