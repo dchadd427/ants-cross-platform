@@ -109,7 +109,7 @@ class ThePage(unittest.TestCase):
         mount = mount[:mount.index("// ---- go ----")]
         self.assertIn("leave: function () { if (handing) return; var old = client;", mount, "a page that is on its way to the game gives its seat up to nobody")
         self.assertIn("if (old) old.leave(); forgetSession(); leaveBack(); hideBanner(); render();", mount)
-        self.assertEqual(sorted(set(re.findall(r"\b(info|make|leave|how|stalled):", mount))), ["how", "info", "leave", "make", "stalled"])
+        self.assertEqual(sorted(set(re.findall(r"\b(info|make|leave|how|stalled|holds):", mount))), ["holds", "how", "info", "leave", "make", "stalled"])
         self.assertIn("client: function () { return client; }, join: probe, typed: joinTyped, name: myName, handing: function () { return handing; }, cancel: function () { if (lastProbe && lastProbe !== client) lastProbe.leave(); },", mount, "what the Games list reads of the page (docs/HOME_SCREEN.md): its client, the look at a room, a typed code, the name, whether the page is on its way to a game, and the way to give a look up")
 
     def test_the_words_that_said_that_a_page_makes_a_room_when_it_opens_are_corrected(self):

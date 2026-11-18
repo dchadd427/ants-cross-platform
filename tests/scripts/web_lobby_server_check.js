@@ -244,6 +244,84 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         A2.leave();
     });
 
+    // ---- 5b. the host goes to another page of the site and comes back (a replay, the list of matches): the same seat while the room holds it, the truth when it does not ---------------------------------------------------------
+    await scenario('5b. the host goes away and comes back: the same seat and the same lead while the room holds it; a seat that ended is a new seat, and the page says so', async () => {
+        const A = page('Ada', code('rb'));
+        const B = page('Bea', code('rb'));
+        A.connect();
+        await step('Ada makes the room', () => online(A));
+        B.connect();
+        await step('Bea joins', () => online(B));
+        const first = N.hexOf(A.key);
+        A.ws.close();                                                       // (the host\'s page goes: a link to another page of the site closes the socket, and says no Leave)
+        await step('the room holds the host\'s seat (Bea sees Ada still, and Ada still leads)', () => () => names(B) === 'Ada|Bea|-|-' && B.room.leader === 0 && !B.isLeader());
+        const A2 = page('Ada', code('rb'), { key: A.key });                  // (the page that comes back: the key is in the tab\'s session, or in the note that the page left)
+        const welcomes = A2.of('welcome');
+        A2.connect();
+        await step('the page that comes back is welcomed as the same seat, with the same key, and leads', () => () => online(A2)() && A2.seat === 0 && N.hexOf(A2.key) === first && A2.isLeader());
+        check('... the welcome is not "replaced", Bea heard of nobody leaving or joining, and there are two people', A2.of('welcome')[0].replaced === false && B.count('left') === 0 && B.count('joined') === 0 && B.count('host') === 0 && names(B) === 'Ada|Bea|-|-', names(B));
+        A2.leave();                                                         // (the host gives the seat up: Bea leads)
+        await step('Bea leads when Ada leaves for good', () => () => B.isLeader() && names(B) === '-|Bea|-|-');
+        const A3 = page('Ada', code('rb'), { key: Uint8Array.from(A.key) });  // (the page that comes back with the key of a seat that ended)
+        A3.connect();
+        await step('a key that the room does not know seats the page as a newcomer: a new key, and "replaced"', () => () => online(A3)() && A3.of('welcome').length === 1 && A3.of('welcome')[0].replaced === true && N.hexOf(A3.key) !== first);
+        check('... it is not the host (Bea is, she was there first), and the room has two people, not three', !A3.isLeader() && B.isLeader() && names(B).split('|').filter((n) => n !== '-').length === 2, names(B));
+        A3.leave();
+        B.leave();
+    });
+
+    // ---- 5c. the front page itself (web/lobby.html on a real socket): the seat that a page of this browser left is taken back by the page that opens next; a key whose seat ended is said so, with the host named ---------------------------
+    await scenario('5c. the front page that comes back: the same seat from the note that a page left, a seat that ended is said so with the host named, and a room that is gone is said so', async () => {
+        const webDir = path.join(path.dirname(path.resolve(modulePath)), '..');
+        globalThis.AntsShapes = require(path.join(webDir, 'shapes.js'));
+        const harness = require('./web_page_harness.js')(path.join(webDir, 'lobby.html'));
+        const sockets = [];
+        class ToTheServer extends WS { constructor() { super(wsUrl); sockets.push(this); } }          // (the page connects to wss://play.test/ws: that is this server)
+        const PAGE_SERVER = 'wss://play.test/ws';
+        const words = (env) => (env.$('banner').hidden ? '' : env.$('banner-text').textContent);
+        // Ada\'s page went to another page of the site: her link is closed (no Leave), her seat is held, and the page left the note
+        const room = code('rc1');
+        const A = page('Ada', room);
+        const B = page('Bea', room);
+        A.connect();
+        await step('Ada makes the room', () => online(A));
+        B.connect();
+        await step('Bea joins', () => online(B));
+        const note = N.seatMemory(PAGE_SERVER, room, A.key, 'Ada', true, Date.now());
+        A.ws.close();
+        await step('the room holds Ada\'s seat: Bea sees her, and she still leads', () => () => names(B) === 'Ada|Bea|-|-' && B.room.leader === 0 && !B.isLeader());
+        const back = harness.runLobby('', { 'ants.lobbyseat': note }, { me: login('Ada'), WebSocket: ToTheServer, realTime: true, stayHome: true });
+        await step('the page that opens within a minute takes the seat back: My room is there on Home and the session holds the seat', () => () => !back.home('mine').hidden && !!back.session.data['ants.lobby'] && JSON.parse(back.session.data['ants.lobby']).k === N.hexOf(A.key), 8000);
+        check('... it is Ada\'s seat 0 again and she leads: the room has two people, Bea heard of nobody joining or leaving, no strip, and the note is gone', names(B) === 'Ada|Bea|-|-' && B.room.leader === 0 && B.count('joined') === 0 && B.count('left') === 0 && words(back) === '' && !('ants.lobbyseat' in back.storage.data) && JSON.parse(back.session.data['ants.lobby']).o === 1, names(B) + ' ' + B.count('joined') + ' ' + words(back));
+        for (const ws of sockets) { try { ws.close(); } catch (e) { /* closed already */ } }
+        sockets.length = 0;
+        A.leave();
+        B.leave();
+        // a key whose seat ended: Ada gave her seat up (a Leave: it goes at once, as it does when a minute has passed), Bea leads, and the tab that still holds Ada\'s old key comes back
+        const room2 = code('rc2');
+        const C = page('Ada', room2);
+        const D = page('Bea', room2);
+        C.connect();
+        await step('Ada makes a second room', () => online(C));
+        D.connect();
+        await step('Bea joins it', () => online(D));
+        const oldKey = N.hexOf(C.key);
+        C.leave();
+        await step('Ada\'s seat is gone and Bea leads', () => () => D.isLeader() && names(D) === '-|Bea|-|-');
+        const stale = harness.runLobby('', {}, { me: login('Ada'), WebSocket: ToTheServer, realTime: true, stayHome: true, session: { 'ants.lobby': JSON.stringify({ c: room2, k: oldKey, n: 'Ada', o: 1 }) } });
+        await step('the page that comes back with that key is a newcomer in Bea\'s room: one more person, not the host', () => () => names(D).split('|').filter((n) => n !== '-').length === 2 && !!stale.session.data['ants.lobby'] && JSON.parse(stale.session.data['ants.lobby']).k !== oldKey, 8000);
+        check('... and it says so with the host named: the seat ended, the page joined again, Bea is the host (and the session says that the page did not make this room)', words(stale) === 'Your seat in this room ended while you were away, so you joined again. Bea is the host.' && D.isLeader() && JSON.parse(stale.session.data['ants.lobby']).o === 0, words(stale));
+        for (const ws of sockets) { try { ws.close(); } catch (e) { /* closed already */ } }
+        sockets.length = 0;
+        D.leave();
+        // a room that is gone: a key for a code that no room has (the real server answers NoSuchRoom to a Hello with a key): the page makes the room again and says that the old one was gone
+        const gone = harness.runLobby('', {}, { me: login('Ada'), WebSocket: ToTheServer, realTime: true, stayHome: true, session: { 'ants.lobby': JSON.stringify({ c: code('rc3'), k: '0102030405060708090a0b0c0d0e0f10', n: 'Ada', o: 1 }) } });
+        await step('the page that comes back to a room that is gone makes it again: the session holds a key that is not the old one', () => () => !!gone.session.data['ants.lobby'] && JSON.parse(gone.session.data['ants.lobby']).k !== '0102030405060708090a0b0c0d0e0f10', 8000);
+        check('... and says that the room was gone (the old room\'s own sentence, without the same map)', words(gone) === 'That room is gone, because everybody left, so this one is yours now. Send the link on if you like.', words(gone));
+        for (const ws of sockets) { try { ws.close(); } catch (e) { /* closed already */ } }
+        sockets.length = 0;
+    });
+
     // ---- 6. START waits for the games; the leader can still take a person out ----------------------------------------------------------------------------------------------------------------------
     await scenario('6. START waits for the games; the leader can still take a person out', async () => {
         const A = page('Ada', code('f'));

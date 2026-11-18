@@ -1,5 +1,6 @@
 """The Fix edges part of the real-browser check (tests/scripts/web_mapmaker_browser.py, part `edges`): kept in its own file so that neither passes the line limit of the test files. The page helpers of
-the main file (wait_for, spread, REPO, the screenshot and click helpers of Page) are handed in by `run_edges`."""
+the main file (wait_for, spread, REPO, the screenshot and click helpers of Page) are handed in by `run_edges`. After Fix edges and the maintainer's scene it runs Auto edges with the pointer held down (no cell
+is drawn black while the stroke goes on: `run_midstroke`, at 1 and 2 device pixels a pixel) and the places that the game has no piece for (the dashed line, the note, the box in Fix edges: `run_places`)."""
 import base64
 import json
 import os
@@ -231,6 +232,8 @@ def run_edges_in(page, tab, args, check, scratch, env):
     tab.emulate(1280, 800, 1)
     time.sleep(0.5)
     run_scene(page, tab, args, check)
+    run_midstroke(page, tab, args, check)
+    run_places(page, tab, args, check)
 
 
 # the owner's picture: a blob of mud on gravel with two strips of water one cell wide inside it, the lower one bending (g gravel, m mud, w water), and what Auto edges must leave
@@ -258,6 +261,17 @@ def paint_letter(page, tab, letter):
             c = e + 1
 
 
+def fresh_map(page, check):
+    """a new Classic map (31 x 31 of gravel) with Auto edges on"""
+    page.press_act("new")
+    wait_for(lambda: page.ev("!!document.querySelector('.kinds')"), 8)
+    page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Make map'; })[0].click()")
+    wait_for(lambda: page.state()["rows"] == "31" and not page.ev("!!document.querySelector('.dlg')"), 8)
+    if page.ev("document.getElementById('auto-edges-btn').getAttribute('aria-checked')") != "true":
+        page.ev("document.getElementById('auto-edges-btn').click()")
+    check(page.ev("document.getElementById('auto-edges-btn').getAttribute('aria-checked')") == "true", "Auto edges is On")
+
+
 def scene_names(page):
     got = edges_bytes(page)
     b, d, at, columns = got["bytes"], got["dictAt"], got["layer1"], got["columns"]
@@ -269,13 +283,7 @@ def run_scene(page, tab, args, check):
     """Auto edges on the owner's picture, in both orders of painting, with the mouse: every boundary of the water and the mud has its piece (the strips of water one cell wide have none of their own: the mud
     beside them wears), the map is the one that Fix edges makes (nothing is left to fix), and the pictures are drawn from the game's tiles"""
     for order in (("m", "w"), ("w", "m")):
-        page.press_act("new")
-        wait_for(lambda: page.ev("!!document.querySelector('.kinds')"), 8)
-        page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Make map'; })[0].click()")
-        wait_for(lambda: page.state()["rows"] == "31" and not page.ev("!!document.querySelector('.dlg')"), 8)
-        if page.ev("document.getElementById('auto-edges-btn').getAttribute('aria-checked')") != "true":
-            page.ev("document.getElementById('auto-edges-btn').click()")
-        check(page.ev("document.getElementById('auto-edges-btn').getAttribute('aria-checked')") == "true", "Auto edges is On")
+        fresh_map(page, check)
         page.ev("(function () { var r = document.getElementById('brush-range'); r.value = 1; r.dispatchEvent(new Event('input', {bubbles: true})); })()")
         for letter in order:
             paint_letter(page, tab, letter)
@@ -286,3 +294,131 @@ def run_scene(page, tab, args, check):
         check(got["left"] == 0, "Auto edges, %s first: Fix edges finds nothing left to fix (%d)" % ("mud" if order[0] == "m" else "water", got["left"]))
         page.shot(args.shots, "mapmaker-auto-edges-water-in-mud-" + ("mud-first" if order[0] == "m" else "water-first"))
 
+
+BLACK_JS = r"""
+window.__black = function (r0, r1, c0, c1) {          // the cells whose middle pixel is the page's own back color: a ground cell drawn with no picture
+    var cv = document.getElementById('map'), b = cv.getBoundingClientRect(), k = cv.width / b.width, v = cv.getAttribute('data-view').split(','), cy = +v[0], cx = +v[1], s = +v[2], ctx = cv.getContext('2d');
+    var bk = MapTiles.BACK.replace('#', ''), br = parseInt(bk.slice(0, 2), 16), bg = parseInt(bk.slice(2, 4), 16), bb = parseInt(bk.slice(4, 6), 16), out = [], r, c;
+    for (r = r0; r <= r1; r++) for (c = c0; c <= c1; c++) {
+        var d = ctx.getImageData(Math.round((b.width / 2 + (c + 0.5 - cx) * s) * k), Math.round((b.height / 2 + (r + 0.5 - cy) * s) * k), 1, 1).data;
+        if (Math.abs(d[0] - br) < 6 && Math.abs(d[1] - bg) < 6 && Math.abs(d[2] - bb) < 6) out.push([r, c]);
+    }
+    return out;
+};
+window.__gold = function (x0, y0, x1, y1) {           // how many pixels of the part of the page (x0, y0, x1, y1) are the gold of the dashed line
+    var cv = document.getElementById('map'), b = cv.getBoundingClientRect(), k = cv.width / b.width, ctx = cv.getContext('2d'), n = 0, i;
+    var x = Math.max(0, Math.round((x0 - b.left) * k)), y = Math.max(0, Math.round((y0 - b.top) * k)), w = Math.max(1, Math.round((x1 - x0) * k)), h = Math.max(1, Math.round((y1 - y0) * k));
+    var d = ctx.getImageData(x, y, Math.min(w, cv.width - x), Math.min(h, cv.height - y)).data;
+    for (i = 0; i < d.length; i += 4) if (d[i] > 225 && d[i + 1] > 180 && d[i + 2] < 120) n++;
+    return n;
+};
+"""
+
+
+def hold_stroke(page, tab, row, c0, c1, then):
+    """the pointer goes down at (row, c0), moves along the row to c1 and is still down when `then()` is called; it is lifted after"""
+    x0, y0 = page.cell_point(row, c0)
+    tab.mouse("mouseMoved", x0, y0, button="none")
+    tab.mouse("mousePressed", x0, y0)
+    x1 = y1 = 0
+    for i in range(1, 25):
+        x1, y1 = page.cell_point(row, c0 + (c1 - c0) * i / 24.0)
+        tab.mouse("mouseMoved", x1, y1, buttons=1)
+    time.sleep(0.3)
+    result = then()
+    tab.mouse("mouseReleased", x1, y1)
+    time.sleep(0.3)
+    return result
+
+
+def run_midstroke(page, tab, args, check):
+    """Auto edges with the pointer still down (docs/MAP_EDITOR.md, "Fix edges"): the edge pieces are named in the dictionary as they appear, so no cell is drawn black before the stroke ends; the water
+    has its ring of mud (the diagonals stay gravel); one Undo takes the lake and its ring; at 1 and at 2 device pixels a pixel"""
+    for dpr in (1, 2):
+        print("[web map maker] Auto edges with the pointer down, 1280 x 800 at %d pixel%s a pixel" % (dpr, "" if dpr == 1 else "s"))
+        tab.emulate(1280, 800, dpr)
+        time.sleep(0.6)
+        fresh_map(page, check)
+        page.ev(BLACK_JS)
+        check(wait_for(lambda: spread(page, 5, 5) >= 4, 10), "the pictures are drawn")
+        page.tile(476)
+        page.set_brush(3)
+        before = scene_names(page)[1]
+        mid = hold_stroke(page, tab, 15, 8, 18, lambda: json.loads(page.ev("JSON.stringify(window.__black(10, 20, 4, 24))")))
+        check(mid == [], "in the middle of a stroke of water on gravel (the pointer is down) no cell is drawn black (%s)" % mid[:4])
+        check(not page.ev("document.getElementById('gap-note') && !document.getElementById('gap-note').hidden"), "and no place is marked while the pointer is down")
+        after_stroke = json.loads(page.ev("JSON.stringify(window.__black(10, 20, 4, 24))"))
+        check(after_stroke == [], "after the stroke no cell is black either (%s)" % after_stroke[:4])
+        name, got = scene_names(page)
+        kinds = lambda r, c: name(r, c)[:1]
+        check(kinds(13, 12) in "Mm" and kinds(17, 12) in "Mm" and kinds(15, 6) in "Mm" and kinds(15, 20) in "Mm", "the lake (rows 14 to 16) has its ring of mud on its four sides")
+        check(kinds(13, 6) == "g" and kinds(17, 20) == "g" and kinds(12, 12) == "g", "and the diagonals and the cells two away stay gravel")
+        check(got["left"] == 0, "Fix edges finds nothing left to fix (%d)" % got["left"])
+        page.shot(args.shots, "mapmaker-auto-edges-ring-%dx" % dpr)
+        page.ev("document.getElementById('undo-btn').click()")
+        name2, back = scene_names(page)
+        tiles = lambda g: [struct.unpack_from("<H", g["bytes"], g["layer1"] + 6 * i)[0] for i in range(g["rows"] * g["columns"])]
+        old_names = lambda g, f: [g["bytes"][g["dictAt"] + 2 + 11 * k: g["dictAt"] + 13 + 11 * k].split(b"\0")[0] for k in range(g["names"])]
+        a, b = old_names(before, None), old_names(back, None)
+        check(tiles(back) == tiles(before) and len(a) == len(b) and all(x == y or k == 476 for k, (x, y) in enumerate(zip(a, b))), "one Undo takes the lake, its ring and its pieces: the tiles and the dictionary are as before (the water's own name stays)")
+    tab.emulate(1280, 800, 1)
+    time.sleep(0.5)
+
+
+def run_places(page, tab, args, check):
+    """The places that the game has no piece for (docs/MAP_EDITOR.md, "Cells with no piece"): strip, gap, strip painted with the mouse: a dashed gold line and the note on the map, not while a stroke
+    goes on, gone after Undo; the box in Fix edges lists the place and Show brings it to the middle; on a phone the box is inside the screen with 44 pixel buttons"""
+    print("[web map maker] the places that have no piece in the game")
+    fresh_map(page, check)
+    page.ev(BLACK_JS)
+    check(wait_for(lambda: spread(page, 5, 5) >= 4, 10), "the pictures are drawn")
+    page.tile(476)
+    page.set_brush(1)
+    note = lambda: page.ev("(function () { var n = document.getElementById('gap-note'); return !!n && !n.hidden && n.getBoundingClientRect().width > 0; })()")
+    check(not note(), "a map with no such place shows no note")
+    page.drag(*(page.cell_point(8, 6) + page.cell_point(16, 6)), steps=16)
+    check(not note(), "one strip of water has a piece for every boundary: no note")
+    page.drag(*(page.cell_point(8, 8) + page.cell_point(16, 8)), steps=16)
+    tab.mouse("mouseMoved", 5, 5, button="none")
+    check(wait_for(note, 5), "two strips of water one cell apart: the note says that the game has no piece for them")
+    check("strip" in page.ev("document.getElementById('gap-note').textContent"), "and it speaks of the strip")
+    x0, y0 = page.cell_point(8, 5)
+    x1, y1 = page.cell_point(16, 9)
+    gold = page.ev("window.__gold(%f, %f, %f, %f)" % (x0, y0, x1, y1))
+    check(gold >= 40, "a dashed gold line is drawn round the three columns (%d gold pixels)" % gold)
+    page.shot(args.shots, "mapmaker-places-strip-gap-strip")
+    # the line is not drawn while a stroke goes on
+    seen = hold_stroke(page, tab, 22, 4, 12, lambda: [note(), page.ev("window.__gold(%f, %f, %f, %f)" % (x0, y0, x1, y1))])
+    check(seen[0] is False and seen[1] <= 5, "while the pointer is down the note and the line are gone (%s)" % seen)
+    # the box in Fix edges lists it; Show closes the box and brings the place to the middle
+    tab.mouse("mouseMoved", 5, 5, button="none")
+    check(edges_open(page, whole=True), "the Fix edges dialog opens")
+    text = page.ev("(function () { var b = document.querySelector('.dlg.edges .edgaps'); return b && !b.hidden ? b.textContent : ''; })()")
+    check("1 place has no piece in the game" in text and "Rows 7 to 17, columns 6 to 8" in text, "its box lists the place with where it is (%s)" % text[:140])
+    page.shot(args.shots, "mapmaker-places-fix-edges-box")
+    page.ev("document.querySelector('.dlg.edges .edgaps button').click()")
+    check(wait_for(lambda: not page.ev("!!document.querySelector('.dlg')")), "Show closes the box")
+    look = "(function () { var cv = document.getElementById('map'), b = cv.getBoundingClientRect(), v = cv.getAttribute('data-view').split(','), cy = +v[0], cx = +v[1], s = +v[2]; return Math.abs(12.5 - cy) * s < b.height / 2 && Math.abs(7.5 - cx) * s < b.width / 2 && s >= 22; })()"
+    check(wait_for(lambda: page.ev(look), 5), "and the middle of the place is on the screen, at 22 pixels a cell or more")
+    # Undo (the last stroke is the lake on row 22, then the second strip): the note goes with the places
+    page.ev("document.getElementById('undo-btn').click()")
+    page.ev("document.getElementById('undo-btn').click()")
+    tab.mouse("mouseMoved", 5, 5, button="none")
+    check(wait_for(lambda: not note(), 5), "after Undo the strip is gone and so is the note")
+    page.ev("document.getElementById('redo-btn').click()")
+    check(wait_for(note, 5), "and Redo brings both back")
+    # a phone: the box is inside the screen, its buttons are 44 pixels, nothing scrolls sideways
+    tab.emulate(390, 844, 2, mobile=True)
+    time.sleep(0.5)
+    check(edges_open(page, whole=True), "on a phone (390 x 844) the dialog opens")
+    got = json.loads(page.ev("""JSON.stringify((function () { var d = document.querySelector('.dlg.edges'), b = d.querySelector('.edgaps'), out = [];
+        if (!b || b.hidden) return {box: false};
+        b.scrollIntoView({block: 'center'});
+        [].forEach.call(b.querySelectorAll('li, button'), function (n) { var r = n.getBoundingClientRect(); if (r.left < -0.5 || r.right > innerWidth + 0.5) out.push(n.textContent); });
+        return {box: true, out: out, sideways: document.documentElement.scrollWidth > innerWidth,
+                small: [].filter.call(b.querySelectorAll('button'), function (n) { return n.getBoundingClientRect().height < 43.5; }).length}; })())"""))
+    check(got.get("box") and not got["out"] and not got["sideways"] and got["small"] == 0, "the box and its Show button are inside the screen, 44 pixels high, no sideways scroll (%s)" % got)
+    page.shot(args.shots, "mapmaker-places-phone-box")
+    page.key("Escape")
+    tab.emulate(1280, 800, 1)
+    time.sleep(0.5)

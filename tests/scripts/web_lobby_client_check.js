@@ -924,6 +924,75 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
     check('(and nothing comes later)', w2.sockets.length === 1 && w2.timers.length === 0);
 }
 
+{   // a Hello that brings a key and is answered with another key: the seat of that key had ended, and the room took the page as a newcomer ('replaced': the page says so, and does not act as the seat's old holder)
+    const key = Uint8Array.from(seq(0x40));
+    const seen = (c) => { const out = []; c.on('welcome', (ev) => out.push(ev)); return out; };
+    {
+        const w = world(), c = client(w), got = seen(c);
+        c.connect();
+        w.last().open();
+        w.last().receive(welcome(0, seq(0x30), 2));
+        check('a Hello with no key: the Welcome is not "replaced" (there was no seat to lose)', got.length === 1 && got[0].replaced === false, JSON.stringify(got));
+    }
+    {
+        const w = world(), c = client(w, { key }), got = seen(c);
+        c.connect();
+        w.last().open();
+        w.last().receive(welcome(1, key, 0));
+        check('a Hello with a key that the room knows (the seat is taken back): not replaced, the same key', got.length === 1 && got[0].replaced === false && got[0].seat === 1 && hex(c.key) === hex(key), JSON.stringify(got));
+    }
+    {
+        const w = world(), c = client(w, { key }), got = seen(c);
+        c.connect();
+        w.last().open();
+        w.last().receive(welcome(2, seq(0x90), 0));
+        check('a Hello with a key that the room does not know (the seat ended): replaced, and the key and the seat are the new ones', got.length === 1 && got[0].replaced === true && got[0].created === false && got[0].seat === 2 && hex(c.key) === hex(seq(0x90)), JSON.stringify(got));
+        w.last().receive(room([[C, 'Sam'], [E, ''], [C, 'Priya'], [E, '']], { you: 2, leader: 0 }));
+        w.last().drop();
+        w.advance(500);
+        w.last().open();
+        w.last().receive(welcome(2, seq(0x90), 0));
+        check('... and the way back after a lost link has the new key and is not replaced again', got.length === 2 && got[1].replaced === false && hex(w.sockets[1].sent[0]) === hex(N.encodeHello({ name: 'Priya', room: 'k7m2xq', key: seq(0x90), create: { map: 'TREASURE.LVL' } })), JSON.stringify(got));
+    }
+    {
+        const w = world(), c = client(w, { key }), got = seen(c);
+        c.connect();
+        w.last().open();
+        w.last().receive(welcome(0, seq(0x90), 2));
+        check('a key that the room did not know and a room that this Hello made: replaced too (the page also reads created)', got.length === 1 && got[0].replaced === true && got[0].created === true, JSON.stringify(got));
+    }
+}
+
+// ---- the seat that a page leaves behind when it goes (the note in local storage that a page of this browser takes back within a minute) --------------------------------------------------------------------
+
+{
+    const NOW = 1760000000000, SERVER = 'wss://beta.example/ws';
+    const key = Uint8Array.from(seq(0x50));
+    const text = N.seatMemory(SERVER, 'k7m2xq', key, 'Priya', true, NOW);
+    same('the note holds the server, the room, the key as 32 hex digits, the name, whether the page made the room, and the time (and nothing else)', JSON.parse(text), { s: SERVER, c: 'k7m2xq', k: hex(key), n: 'Priya', o: 1, t: NOW });
+    same('read at once, it is the seat to take back: the room, the key as bytes, the name and who made the room', (() => { const r = N.seatMemoryRead(text, SERVER, NOW); return r && { code: r.code, key: hex(r.key), name: r.name, own: r.own }; })(), { code: 'k7m2xq', key: hex(key), name: 'Priya', own: true });
+    check('a guest\'s seat says so (own is false)', N.seatMemoryRead(N.seatMemory(SERVER, 'abc234', key, 'Sam', false, NOW), SERVER, NOW).own === false);
+    check('it is read until SEAT_MEMORY_MS after it was written (55 s: under the minute that the room holds a seat)', N.SEAT_MEMORY_MS === 55000 && N.seatMemoryRead(text, SERVER, NOW + 55000) !== null && N.seatMemoryRead(text, SERVER, NOW + 55001) === null);
+    check('a note from the future (a clock that was set back) is read for as long, and no longer', N.seatMemoryRead(text, SERVER, NOW - 55000) !== null && N.seatMemoryRead(text, SERVER, NOW - 55001) === null);
+    check('a note of another server is not read', N.seatMemoryRead(text, 'wss://other.example/ws', NOW) === null);
+    check('a key of zeros makes no note, nor does a short key, no key, an empty code, a code with a space or a time that is not whole', [
+        N.seatMemory(SERVER, 'k7m2xq', new Uint8Array(16), 'Priya', true, NOW), N.seatMemory(SERVER, 'k7m2xq', Uint8Array.from(seq(1)).slice(0, 15), 'Priya', true, NOW), N.seatMemory(SERVER, 'k7m2xq', null, 'Priya', true, NOW),
+        N.seatMemory(SERVER, '', key, 'Priya', true, NOW), N.seatMemory(SERVER, 'k7m 2xq', key, 'Priya', true, NOW), N.seatMemory(SERVER, 'k7m2xq', key, 'Priya', true, NOW + 0.5)
+    ].every((t) => t === null));
+    check('a name with a character outside the table is cut to what the server takes', JSON.parse(N.seatMemory(SERVER, 'k7m2xq', key, 'Priéya' + 'x'.repeat(40), true, NOW)).n === ('Priya' + 'x'.repeat(40)).slice(0, 32));
+    const damaged = [
+        ['text that is no JSON', 'not json'], ['an empty object', '{}'], ['a list', '[]'], ['null', 'null'],
+        ['a member too many', JSON.stringify(Object.assign(JSON.parse(text), { x: 1 }))], ['a member too few', JSON.stringify({ s: SERVER, c: 'k7m2xq', k: hex(key), n: 'Priya', o: 1 })],
+        ['a key of zeros', JSON.stringify(Object.assign(JSON.parse(text), { k: '0'.repeat(32) }))], ['a key in capitals', JSON.stringify(Object.assign(JSON.parse(text), { k: hex(key).toUpperCase() }))],
+        ['a key of 31 digits', JSON.stringify(Object.assign(JSON.parse(text), { k: hex(key).slice(1) }))], ['a code with a slash', JSON.stringify(Object.assign(JSON.parse(text), { c: 'k7/m2xq' }))],
+        ['an empty code', JSON.stringify(Object.assign(JSON.parse(text), { c: '' }))], ['own that is a word', JSON.stringify(Object.assign(JSON.parse(text), { o: 'yes' }))], ['own that is 2', JSON.stringify(Object.assign(JSON.parse(text), { o: 2 }))],
+        ['a time that is a word', JSON.stringify(Object.assign(JSON.parse(text), { t: 'now' }))], ['a time with a fraction', JSON.stringify(Object.assign(JSON.parse(text), { t: NOW + 0.5 }))],
+        ['a name with a newline', JSON.stringify(Object.assign(JSON.parse(text), { n: 'a\nb' }))], ['a name of 33 characters', JSON.stringify(Object.assign(JSON.parse(text), { n: 'x'.repeat(33) }))]
+    ];
+    for (const [what, junk] of damaged) check('a note that is ' + what + ' is not read', N.seatMemoryRead(junk, SERVER, NOW) === null);
+    check('the storage key is ants.lobbyseat', N.SEAT_MEMORY === 'ants.lobbyseat');
+}
+
 {   // the key leaves the client for the server and for the entry of the game page, nowhere else
     const w = world();
     const c = client(w);

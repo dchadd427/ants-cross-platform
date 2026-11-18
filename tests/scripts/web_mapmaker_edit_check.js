@@ -430,17 +430,20 @@ function toolsPage(file, opts) {
     for (const n of [1, 3, 5, 9]) { const b = el('button'); b.setAttribute('data-brush', String(n)); host.brushes.push(b); }
     host.box.hidden = true;
     let current = file, stroking = false, painter = null, busy = false;
+    const win = opts.storage ? { localStorage: opts.storage } : {}, timers = [];          // (a fake clock: opts.timers gives the page setTimeout, opts.idle requestIdleCallback; run() lets every call that waits come)
+    if (opts.timers) win.setTimeout = (fn, ms) => { timers.push({ fn, ms, how: 'timer' }); return timers.length; };
+    if (opts.idle) win.requestIdleCallback = (fn, o) => { timers.push({ fn, ms: o && o.timeout, how: 'idle' }); return timers.length; };
     const canvas = {
         setPainter: (p) => { painter = p; }, refresh: () => { log.refreshes++; }, markDirty: (list) => { log.dirty.push(list.slice()); }, refreshMini: () => { log.minis++; },
         isStroking: () => stroking
     };
     const tools = Tools.create({
-        doc, win: opts.storage ? { localStorage: opts.storage } : {}, canvas, host, file: () => current, busy: () => busy,
+        doc, win, canvas, host, file: () => current, busy: () => busy,
         dialogs: { open: (spec) => { const body = el('div'), ctl = { closed: false, close() { ctl.closed = true; } }; spec.build(body, ctl); sheets.push({ spec, body, ctl }); return ctl; } }, say: (title, text) => said.push(title + ': ' + text),
         rebase: (bytes) => { log.rebased++; current = File.parse(bytes); return current; }, onEdit: () => { log.edits++; }
     });
     tools.setMap(current);
-    return { doc, host, tools, sheets, said, painter: () => painter, log, file: () => current, busy: (v) => { busy = v; }, stroking: (v) => { stroking = v; }, button: (id) => host.tools.filter((b) => b.getAttribute('data-tool') === id)[0], brush: (n) => host.brushes.filter((b) => b.getAttribute('data-brush') === String(n))[0] };
+    return { doc, host, tools, sheets, said, painter: () => painter, log, timers, run: () => { let n = 0; while (timers.length && n < 50) { timers.shift().fn(); n++; } return n; }, file: () => current, setFile: (f) => { current = f; }, busy: (v) => { busy = v; }, stroking: (v) => { stroking = v; }, button: (id) => host.tools.filter((b) => b.getAttribute('data-tool') === id)[0], brush: (n) => host.brushes.filter((b) => b.getAttribute('data-brush') === String(n))[0] };
 }
 
 function caseG() {
@@ -577,12 +580,13 @@ function fakeCanvasPage(rows) {
     const doc = Object.assign(listeners(), { createElement: canvasNode, visibilityState: 'visible' }), win = Object.assign(listeners(), { devicePixelRatio: 1, performance: { now: () => 0 } });
     const canvas = canvasNode(), log = [], plain = () => Object.assign(listeners(), { hidden: true, textContent: '', disabled: false });
     const minimap = Object.assign(plain(), { tiny: false, classList: { toggle(name, on) { if (name === 'tiny') minimap.tiny = !!on; } } });          // (what mapmaker.css makes small)
-    const api = Canvas.create({ doc, win, canvas, minimap, mini: canvasNode(), miniCap: plain(), where: plain(), zoomIn: plain(), zoomOut: plain() });
+    const gapNote = plain();
+    const api = Canvas.create({ doc, win, canvas, minimap, mini: canvasNode(), miniCap: plain(), where: plain(), zoomIn: plain(), zoomOut: plain(), gapNote });
     const painter = { size: () => 1, begin: () => { log.push('begin'); return true; }, extend: () => log.push('extend'), end: () => log.push('end'), cancel: () => log.push('cancel') };
     api.setPainter(painter);
     api.setFile(open(9, rows || 31, rows || 31));
     const mouse = (type, extra) => canvas.fire(type, Object.assign({ pointerType: 'mouse', pointerId: 7, button: 0, buttons: 1, clientX: 300, clientY: 200, preventDefault() {} }, extra));
-    return { api, canvas, doc, win, log, mouse, size, minimap };
+    return { api, canvas, doc, win, log, mouse, size, minimap, gapNote };
 }
 
 function caseH() {
@@ -1492,6 +1496,125 @@ function caseN() {
     check(entryAt(ae3.file(), gdNorth) === Ground.name(gdNorth), 'and names the auto-placed edge pieces in the dictionary');
     ae3.doc.key('z', { ctrlKey: true });
     check(digest(ae3.file().bytes) === beforeAutoBytes && ae3.host.undo.disabled === true, 'one Undo restores the stroke, the auto-placed edge pieces and the dictionary byte for byte');
+
+    // The lift of a stroke of Auto edges: the dictionary keeps the names of the finished stroke only (a piece that the first moves put at the edge of the map and a later move replaced is not named
+    // for ever); one Undo takes the names out with the stroke and one Redo puts them in again
+    {
+        const names = 700, from = { row: 1, column: 2 }, to = { row: 1, column: 11 }, what = 'a dirt line to the last column of the map';
+        const pg = toolsPage(open(8, 12, 12, names), { storage: st }), pt = pg.painter();
+        pg.tools.use(Ground, null); pg.tools.useEdges(Edges);
+        pg.host.swatches.children[1].click(); pg.brush(1).click();
+        const list = (f) => { const out = []; for (let i = 0; i < f.names; i++) out.push(entryAt(f, i)); return out; };
+        const blank = (n) => n === '.' || n === '';
+        const before = list(pg.file());
+        // the names that the stroke put in and no cell of the map holds
+        const unused = () => { const f = pg.file(), u = {}, out = []; for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.columns; c++) u[Edit.tile(f, 1, r * f.columns + c)] = 1; list(f).forEach((n, i) => { if (!blank(n) && (i >= before.length || blank(before[i])) && !u[i]) out.push(i); }); return out; };
+        pt.begin(from); pt.extend(from, to);
+        const going = unused().length;
+        pt.end();
+        const rest = unused().length, done = digest(pg.file().bytes);
+        check(going > 0 && rest === 0, what + ': names of pieces that the last moves replaced are in the dictionary while the pointer is down (' + going + ') and are not after the lift (' + rest + ')');
+        pg.doc.key('z', { ctrlKey: true });
+        const back = list(pg.file());
+        check(back.length === before.length && back.every((n, i) => i === 487 || n === before[i]), what + ': one Undo takes the stroke, its pieces and their names out (only the name of the dirt itself stays, as for any stroke)');
+        pg.doc.key('y', { ctrlKey: true });
+        equal(digest(pg.file().bytes), done, what + ': and one Redo makes the same bytes');
+    }
+
+    // Water with Auto edges on the real page: the pieces are named while the pointer is still down (no black cell), a ring of mud goes round the water, one Undo takes it all, and the places that the
+    // game has no piece for (strip, gap, strip) are told to the canvas: only for Ground, never during a stroke, worked out when the page is idle (a fake clock lets the waiting calls come), and again
+    // after an Undo or a Redo
+    {
+        // (every ground tile is named already: no stroke brings a name, so the map's reader is the same object all the time and only the page's own count of changes tells that the map changed)
+        const named = (f) => { for (let id = 431; id <= 669; id++) Edit.ensureTile(f, id, Ground.name(id)); return f; };
+        const pg = toolsPage(named(open(8, 60, 12, 700)), { storage: st, timers: true }), pt = pg.painter(), all = { r0: 0, r1: 13, c0: 0, c1: 11 };
+        pg.tools.use(Ground, null); pg.tools.useEdges(Edges);
+        pg.host.swatches.children[4].click(); pg.brush(1).click();
+        const ask = (v) => { pt.gaps(v); pg.run(); return pt.gaps(v); };          // (asked, the page idle for a moment, asked again)
+        const unnamedNow = () => { const f = pg.file(); let n = 0; for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.columns; c++) { const id = Edit.tile(f, 1, r * f.columns + c); if (id >= 431 && id <= 669 && (id >= f.names || entryAt(f, id) === '.' || entryAt(f, id) === '')) n++; } return n; };
+        const kind = (r, c) => Ground.kindOf(Edit.tile(pg.file(), 1, r * 12 + c));
+        pt.begin({ row: 3, column: 2 }); pt.extend({ row: 3, column: 2 }, { row: 11, column: 2 });
+        equal([unnamedNow(), pt.gaps(all), pg.timers.length], [0, null, 0], 'a stroke of water that is still going on: every piece has its name already, no place is told and nothing is asked for');
+        pt.end();
+        equal([kind(3, 2), kind(3, 1), kind(3, 3), kind(2, 2), kind(12, 2), kind(2, 1), kind(12, 3)], ['water', 'mud', 'mud', 'mud', 'mud', 'gravel', 'gravel'], 'the water has a ring of mud on its sides and ends, and the diagonals stay gravel');
+        equal(ask(all), null, 'one strip of water has a piece for every boundary (the cells beside it wear): nothing is told');
+        const one = digest(pg.file().bytes);
+        pt.begin({ row: 3, column: 4 }); pt.extend({ row: 3, column: 4 }, { row: 11, column: 4 });
+        equal(pt.gaps(all), null, 'while the second strip is being painted (the pointer is down) no place is told, though the strips are one cell apart already');
+        pt.end();
+        // the work is not done in the frame that asks: the first ask after the stroke gets none, one waiting call is made (however often it is asked), and the canvas is told when it is done
+        const painted = pg.log.refreshes;
+        equal([pt.gaps(all), pt.gaps(all), pt.gaps(all), pg.timers.length], [null, null, null, 1], 'after the stroke the places are not told at once: the work waits for the page to be idle, once for all the asks');
+        equal([pg.run(), pg.log.refreshes - painted], [1, 1], 'it is done when the page is idle, and the canvas is asked to paint again');
+        let told = pt.gaps(all);
+        check(told && told.places.length === 1 && told.g.count >= 27 && told.places[0].column === 4, 'two strips of water one cell apart: the places without a piece are told to the canvas');
+        equal([pt.gaps(all) === told, pg.timers.length], [true, 0], 'and asked again for the same map and the same part, the answer is the one that was worked out (nothing is asked for)');
+        pt.begin({ row: 20, column: 8 });
+        equal(pt.gaps(all), null, 'a stroke that has begun: the places are not told (the answer that was kept is not given while the map changes under the pointer)');
+        pt.cancel();
+        check(ask(all) !== null && Edit.tile(pg.file(), 1, 20 * 12 + 8) === 485, 'and the stroke that was taken back changes nothing: they are told again');
+        pg.button('objects').click();
+        equal(pt.gaps(all), null, 'only the Ground tool shows them');
+        pg.button('ground').click();
+        check(ask(all) !== null && ask({ r0: 0, r1: 0, c0: 0, c1: 0 }) !== null, 'and Ground shows them again (a part of the map that holds none of them gets the answer for the part it is asked for plus a margin)');
+        // a pan out of the part that was worked out for: what is kept stays right for the cells that it covers and is told at once, the new part is worked out when the page is idle
+        const far = { r0: 40, r1: 59, c0: 0, c1: 11 }, kept = pt.gaps(all);
+        equal([pt.gaps(far) === kept, pg.timers.length], [true, 1], 'a pan out of the part that was worked out: the answer that was kept is told meanwhile, and the new part is asked for');
+        pg.run();
+        equal([pt.gaps(far), pg.timers.length], [null, 0], 'the part far from them is worked out: it has none');
+        check(ask(all) !== null, 'and the first part, asked again, has them');
+        pg.doc.key('z', { ctrlKey: true });
+        equal([digest(pg.file().bytes), pt.gaps(all), pg.timers.length], [one, null, 1], 'one Undo takes the second strip, its ring and its names (the bytes of the first stroke again): the places of the map as it was are not told for the map as it is');
+        pg.run();
+        equal(pt.gaps(all), null, 'and the part is worked out again: none');
+        pg.doc.key('y', { ctrlKey: true });
+        told = ask(all);
+        check(told && told.places.length === 1, 'one Redo brings the strip back and the places with it');
+        pg.doc.key('z', { ctrlKey: true }); pg.doc.key('z', { ctrlKey: true });
+        check(pg.host.undo.disabled === true && ask(all) === null && unnamedNow() === 0, 'two Undos take both strips: the map is as it was');
+        // a waiting call that comes while a stroke is going on does nothing (the stroke asks again when it ends)
+        pt.begin({ row: 3, column: 2 }); pt.extend({ row: 3, column: 2 }, { row: 11, column: 2 }); pt.end();
+        pt.begin({ row: 3, column: 4 }); pt.extend({ row: 3, column: 4 }, { row: 11, column: 4 }); pt.end();
+        pt.gaps(all);
+        pt.begin({ row: 20, column: 8 });
+        const before = pg.log.refreshes;
+        equal([pg.run(), pg.log.refreshes - before], [1, 0], 'a waiting call that comes while a stroke is going on works nothing out and paints nothing');
+        pt.cancel();
+        check(ask(all) !== null, 'when the stroke is over the places are asked for again');
+        const fresh = named(open(8, 60, 12, 700));
+        pg.setFile(fresh);
+        equal(pt.gaps(all), null, 'a map that was read again is asked again, before the page has told the tools of it: the places of the map before are not told for it');
+        pg.run();
+        pg.tools.setMap(fresh);
+        equal([pt.gaps(all), pg.timers.length], [null, 1], 'and a new map starts with none (what was kept is dropped)');
+        pg.run();
+        equal(pt.gaps(all), null, 'and worked out: none');
+        // a page that has idle time gives the work to it, not to a timer; a page that has neither works at once
+        const idle = toolsPage(named(open(8, 60, 12, 700)), { storage: st, idle: true }), it = idle.painter();
+        idle.tools.use(Ground, null); idle.tools.useEdges(Edges); idle.host.swatches.children[4].click(); idle.brush(1).click();
+        it.begin({ row: 3, column: 2 }); it.extend({ row: 3, column: 2 }, { row: 11, column: 2 }); it.end();
+        it.begin({ row: 3, column: 4 }); it.extend({ row: 3, column: 4 }, { row: 11, column: 4 }); it.end();
+        equal([it.gaps(all), idle.timers.map((t) => t.how)], [null, ['idle']], 'on a page that has idle time the work is given to it');
+        idle.run();
+        check(it.gaps(all) !== null, 'and it is done there');
+        const sync = toolsPage(named(open(8, 60, 12, 700)), { storage: st }), sp = sync.painter();
+        sync.tools.use(Ground, null); sync.tools.useEdges(Edges); sync.host.swatches.children[4].click(); sync.brush(1).click();
+        sp.begin({ row: 3, column: 2 }); sp.extend({ row: 3, column: 2 }, { row: 11, column: 2 }); sp.end();
+        sp.begin({ row: 3, column: 4 }); sp.extend({ row: 3, column: 4 }, { row: 11, column: 4 }); sp.end();
+        check(sp.gaps(all) !== null, 'a page that has no timer at all gets the answer at once');
+    }
+    // a big map: a part of it that is big gets its places without the margin, and a part that is too big for the plan gets none
+    {
+        const pg = toolsPage(open(8, 400, 400, 700), { storage: st, timers: true }), pt = pg.painter();
+        pg.tools.use(Ground, null); pg.tools.useEdges(Edges);
+        pg.host.swatches.children[4].click(); pg.brush(1).click();
+        pt.begin({ row: 3, column: 2 }); pt.extend({ row: 3, column: 2 }, { row: 11, column: 2 }); pt.end();
+        pt.begin({ row: 3, column: 4 }); pt.extend({ row: 3, column: 4 }, { row: 11, column: 4 }); pt.end();
+        const ask = (v) => { pt.gaps(v); pg.run(); return pt.gaps(v); };
+        const small = ask({ r0: 0, r1: 40, c0: 0, c1: 40 }), big = ask({ r0: 0, r1: 150, c0: 0, c1: 150 });
+        check(small && small.places.length === 1 && big && big.places.length === 1, 'on a 400 x 400 map the ladder is told for a small part and for a part of 150 x 150 cells (no margin round it)');
+        equal([ask({ r0: 0, r1: 230, c0: 0, c1: 230 }), pg.timers.length], [null, 0], 'and for a part of 230 x 230 cells (the plan would take too long for every change) none is told, and nothing is asked for');
+    }
 }
 
 // ---- O: the Bridge chip on a fake page ----
@@ -1613,7 +1736,32 @@ function caseO() {
     check(/^Green: /.test(line(r)) && !/bridge/i.test(line(r)), 'and the Hills tool\'s too');
 }
 
-const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['J3 what the first checks left unsaid', caseJ3], ['K Hills, Ants and Food on a fake page', caseK], ['K2 Hills, Ants and Food on water', caseK2], ['L the Bigger tool on a fake page', caseL], ['M the properties of the map as one step', caseM], ['N the kinds of ground on a fake page', caseN], ['O the Bridge chip on a fake page', caseO]];
+// ---- H3: the places that have no piece in the game are drawn over a whole frame, and only then ----
+function caseHGaps() {
+    const p = fakeCanvasPage(), told = { g: { r0: 0, c0: 0, rows: 31, columns: 31, bits: new Uint8Array(961), count: 1 }, places: [{ row: 5, column: 5 }] };
+    told.g.bits[5 * 31 + 5] = 1;
+    let answer = null, asked = 0, last = null;
+    p.api.setPainter({ size: () => 1, begin: () => true, extend() {}, end() {}, cancel() {}, gaps: (vis) => { asked++; last = vis; return answer; } });
+    const way = () => p.canvas.attrs['data-paint'].split(':')[0];
+    p.api.markDirty([40]);
+    equal([way(), p.gapNote.hidden], ['cells', true], 'a painter that has no places: a change is painted cell by cell and the note is hidden');
+    answer = told; p.api.markDirty([41]);
+    equal([way(), p.gapNote.hidden], ['full', false], 'with places the frame is a whole one (the dashed line is drawn over it) and the note shows');
+    check(last && last.r1 > last.r0 && last.c1 > last.c0, 'the painter is told which part of the map is on the screen');
+    p.api.markDirty([42]);
+    equal(way(), 'full', 'and the next frame is a whole one too while they show');
+    answer = null; p.api.markDirty([43]);
+    equal([way(), p.gapNote.hidden], ['full', true], 'when they are gone one more whole frame wipes them, and the note is hidden');
+    p.api.markDirty([44]);
+    equal(way(), 'cells', 'then changes are painted cell by cell again');
+    // tiles smaller than the tile size that shows them are not asked for
+    const q = fakeCanvasPage(); let n = 0;
+    q.api.setPainter({ size: () => 1, begin: () => true, extend() {}, end() {}, cancel() {}, gaps: () => { n++; return told; } });
+    q.size.w = 100; q.size.h = 100; q.api.setFile(open(9, 90, 90));
+    check(n === 0, 'at three pixels a tile the painter is not even asked for places (' + n + ' asks)');
+}
+
+const cases = [['A the brush and the line', caseA], ['A2 anchors', anchors], ['B strokes', caseB], ['C fill', caseC], ['D undo and redo', caseD], ['E the dictionary', caseE], ['F the palette', caseF], ['G the tools on a fake page', caseG], ['H the canvas on a fake page', caseH], ['H2 a tap tool on the canvas', caseH2], ['H3 places that have no piece in the game on the canvas', caseHGaps], ['I hills', caseI], ['J starting ants and food piles', caseJ], ['J2 the history of the lists is bounded', caseJ2], ['J3 what the first checks left unsaid', caseJ3], ['K Hills, Ants and Food on a fake page', caseK], ['K2 Hills, Ants and Food on water', caseK2], ['L the Bigger tool on a fake page', caseL], ['M the properties of the map as one step', caseM], ['N the kinds of ground on a fake page', caseN], ['O the Bridge chip on a fake page', caseO]];
 for (const [name, fn] of cases) {
     const before = failures;
     try { fn(); } catch (e) { failures++; console.log('    FAILED: ' + name + ' stopped: ' + (e && e.stack || e)); }

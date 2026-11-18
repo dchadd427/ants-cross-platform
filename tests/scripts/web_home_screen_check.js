@@ -344,6 +344,37 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     room.roomBar('rhome').click();
     check('going to Home puts the Menu away', roomBox.hidden === true);
 }
+{   // THE LINKS TO THE MATCHES (the masthead's, the footer's and the Menu's): while the page holds a room they open in a new tab (target _blank, rel noopener noreferrer), so that the room's tab stays connected for as long as a
+    // replay is watched (the maintainer's decision of 2026-11-17: before it only the links that leave the site did); with no room, and once the page is on its way to a game, they are plain links of the same tab, as before
+    const NEWTAB = (a) => a.getAttribute('target') === '_blank' && a.getAttribute('rel') === 'noopener noreferrer';
+    const PLAIN = (a) => a.getAttribute('target') === null && a.getAttribute('rel') === null;
+    const boxOf = (env) => env.body.findAll((e) => classes(e).indexOf('hmenubox') !== -1)[0];
+    const matchesLinks = (env) => [env.$('watch-top'), env.$('watch-link')];
+    const stay = runLobby('', {}, { stayHome: true });
+    stay.home('hmenu').click();
+    check('with no room (a plain visit is Home) the masthead\'s, the footer\'s and the Menu\'s links to the matches are plain links: no target, no rel', matchesLinks(stay).every(PLAIN) && PLAIN(boxOf(stay).children[1]) && boxOf(stay).children[1].textContent === 'Matches');
+    const env = runLobby('', {});
+    check('a page that holds a room (My room is there): the masthead\'s and the footer\'s links to the matches open in a new tab, and are those links', env.$('watch-top').getAttribute('href') === '/matches' && env.$('watch-link').getAttribute('href') === '/matches' && matchesLinks(env).every(NEWTAB));
+    env.roomBar('hmenu').click();
+    const box = boxOf(env);
+    check('... and so does the Matches item of the Menu; Home, Map maker and the small links stay as they were (Home is this page, Map maker and the small links of the site are plain, the ones that leave the site open a new tab as ever)', NEWTAB(box.children[1]) && box.children[1].textContent === 'Matches' && PLAIN(box.children[0]) && PLAIN(box.children[2]) && box.children[2].textContent === 'Map maker' && NEWTAB(box.children[4]) && box.children[5].children.filter((a) => a.getAttribute('href') === '/asset_catalog/' || a.getAttribute('href') === '/legal').every(PLAIN));
+    env.roomBar('hmenu').click();
+    env.roomBar('leave').click();
+    check('the page leaves its room (alone: at once): the links are plain again, the masthead\'s and the footer\'s now, the Menu\'s when it opens', env.home('mine').hidden === true && matchesLinks(env).every(PLAIN));
+    env.home('hmenu').click();
+    check('... the Menu\'s Matches item too', PLAIN(boxOf(env).children[1]));
+    const guest = runLobby('?room=k7m2xq', {});
+    guest.$('name-step-go').click();
+    guest.arrive({ seat: 1, key: KEY, flags: 0, seats: [[C, 'Sam'], [C, 'Maya'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
+    check('a guest of a room holds a room too: the links open in a new tab', matchesLinks(guest).every(NEWTAB));
+    const going = runLobby('', {});
+    const s = going.arrive({ key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']] });
+    check('(a room of two before START: the links open in a new tab)', matchesLinks(going).every(NEWTAB));
+    s.receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
+    check('the page is on its way to the game page (START): the links are plain again (the page leaves this tab by itself)', going.assigned.length === 1 && matchesLinks(going).every(PLAIN));
+    const back = runLobby('', {}, { session: { 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: 'Maya', o: 1 }) }, stayHome: true });
+    check('a page that takes its seat back in the background (a reload, a tab that was left) holds a room from its first moment: the links open in a new tab', matchesLinks(back).every(NEWTAB));
+}
 {   // the list of maps is a dialog: everything behind it is inert, Home's bars too (the page calls inert(on) of Home from its own; a second mount here, on a fresh host, shows what it does)
     const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
     const host = new H.El(env, 'div', 'home2'), lobby = new H.El(env, 'div', 'lobby2');
@@ -631,7 +662,7 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
 {   // what Home never does: no network of its own, no storage, no markup, nothing that is the page's room (the client, the model, the session)
     const code = fs.readFileSync(path.join(lobbyDir, 'home', 'home.js'), 'utf8');
     check('home.js makes no request of its own and keeps nothing (no fetch, XMLHttpRequest, WebSocket, localStorage, sessionStorage; the chat dock\'s two files are asked for by a link and a script element) and writes no markup', !/\bfetch\b|XMLHttpRequest|WebSocket|localStorage|sessionStorage|innerHTML|outerHTML|insertAdjacentHTML|document\.write/.test(code.replace(/\/\/.*$/gm, '')));
-    check('... its only calls into the page are info, make, leave, how and stalled', [...code.matchAll(/\bpage\.(\w+)/g)].map((m) => m[1]).filter((v, i, a) => a.indexOf(v) === i).sort().join() === 'how,info,leave,make,stalled');
+    check('... its only calls into the page are info, make, leave, how, stalled and holds (whether it holds a room: the links to the matches)', [...code.matchAll(/\bpage\.(\w+)/g)].map((m) => m[1]).filter((v, i, a) => a.indexOf(v) === i).sort().join() === 'holds,how,info,leave,make,stalled');
 }
 
 console.log('home screens: ' + checks + ' checks, ' + failures + ' failed');

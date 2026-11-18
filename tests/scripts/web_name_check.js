@@ -548,6 +548,146 @@ for (const [what, stored] of [['a remembered name', 'Maya'], ['a remembered name
     check('twenty visits have twenty codes, each of six characters of the alphabet without look-alikes (no i, l, o, 0 or 1)', codes.size === 20 && [...codes].every((c) => /^[abcdefghjkmnpqrstuvwxyz23456789]{6}$/.test(c)), [...codes].slice(0, 3).join(','));
 }
 
+const KEY2 = Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x70 + i));        // (the key of a seat that a room gave to somebody else, or to the same page later)
+const words = (env) => (env.$('banner').hidden ? '' : env.$('banner-text').textContent);      // (the strip's sentence, or '' while there is none)
+const SESSION = (room, own) => ({ 'ants.lobby': JSON.stringify({ c: room, k: hex(KEY), n: 'Maya', o: own }) });      // (what a tab's session holds for the seat of KEY in a room)
+{   // a page that comes back to its room (a reload, a link to another page of the site and back, a tab that was left): the same seat when the room has it, and the truth when it has not
+    const SEATGONE = 'Your seat in this room ended while you were away, so you joined again.';
+    {   // the room still has the seat: it is the same seat, the page is the host again, and says nothing
+        const env = runLobby('', {}, { session: SESSION('k7m2xq', 1) });
+        env.arrive({ key: KEY, flags: 0, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 0, leader: 0 } });
+        check('the key found its seat (the same key comes back): no strip, the page leads, and the session still says that it made the room', words(env) === '' && env.$('room-h').textContent === 'Your room' && JSON.parse(env.session.data['ants.lobby']).o === 1 && JSON.parse(env.session.data['ants.lobby']).k === hex(KEY) && env.sockets.length === 1);
+    }
+    {   // the room went on without the seat: the page is a newcomer in it, says so with the first Room and names the host, keeps one seat, and no longer calls the room its own
+        const env = runLobby('', {}, { session: SESSION('k7m2xq', 1) });
+        const s = env.last().open();
+        s.receive(welcome(1, KEY2, 0));
+        s.receive(roomMessage([[C, 'Sam'], [C, 'Maya'], [E, ''], [E, '']], { you: 1, leader: 0 }));
+        same('the key found no seat: the strip says that the seat ended, who the host is, and has an OK', [words(env), env.$('banner-x').textContent, env.$('banner').className], [SEATGONE + ' Sam is the host.', 'OK', 'banner warn']);
+        check('... the page is a guest in Sam\'s room (one seat, one socket, the new key in the session, and the room is no longer its own)', env.$('room-h').textContent === 'Sam’s room' && env.sockets.length === 1 && JSON.parse(env.session.data['ants.lobby']).k === hex(KEY2) && JSON.parse(env.session.data['ants.lobby']).o === 0);
+        env.$('banner-x').click();
+        check('... and its OK closes the strip', env.$('banner').hidden);
+    }
+    {   // the room had nobody else: the page leads it, and the strip says so (the room is no longer public: it is a room that a person made again)
+        const env = runLobby('', {}, { session: SESSION('k7m2xq', 1) });
+        const s = env.last().open();
+        s.receive(welcome(0, KEY2, 0));
+        s.receive(roomMessage([[C, 'Maya'], [E, ''], [E, ''], [E, '']], { you: 0, leader: 0 }));
+        same('the key found no seat in a room that nobody else holds: the strip says that the page is the host', words(env), SEATGONE + ' You are the host.');
+    }
+    {   // the room is gone: the page says that it is, whoever made it; a room that was lost while the page was there (a restart) is made again without a word, as before
+        const env = runLobby('', {}, { session: SESSION('k7m2xq', 1) });
+        env.last().open().receive(reject(6));
+        env.arrive({ flags: 2, key: KEY2, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']] });
+        same('a key for a room that had ended: the room is made again, and the strip says that it was gone (the old room\'s own sentence, with no "same map": the new room has the default one)', [words(env), env.sockets.length], ['That room is gone, because everybody left, so this one is yours now. Send the link on if you like.', 2]);
+        const there = runLobby('', {});
+        there.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']], room: { you: 0, leader: 0 } });
+        there.last().receive(reject(6));
+        there.arrive({ flags: 2, key: KEY2, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']] });
+        check('a room that is lost while the page is in it (the server restarted) is made again without a word', words(there) === '' && there.sockets.length === 2);
+        const restart = runLobby('', {}, { session: SESSION('k7m2xq', 1) });
+        restart.arrive({ key: KEY, flags: 0, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']], room: { you: 0, leader: 0 } });
+        restart.last().receive(reject(6));
+        restart.arrive({ flags: 2, key: KEY2, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']] });
+        check('... also when the page came back with a key that the room knew: the seat that was welcomed is the page\'s, and what follows it is a restart, not an ended seat', words(restart) === '' && restart.sockets.length === 2);
+    }
+    {   // the words of a seat that ended wait for the first Room of the room: a page that is put out of that room first (the host removed it) says that, and nothing of the seat
+        const env = runLobby('', {}, { session: SESSION('k7m2xq', 1) });
+        const s = env.last().open();
+        s.receive(welcome(1, KEY2, 0));
+        s.receive(reject(4));
+        env.arrive({ flags: 2, key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']] });
+        check('a page whose new seat is taken from it before the first Room has the removal\'s strip and not the strip of the seat that ended', /^The host removed you from the room/.test(words(env)) && env.sockets.length === 2, words(env));
+    }
+    {   // a link to a room that the page's own session holds: the same
+        const env = runLobby('?room=k7m2xq', {}, { session: SESSION('k7m2xq', 0) });
+        const s = env.last().open();
+        s.receive(welcome(2, KEY2, 0));
+        s.receive(roomMessage([[C, 'Sam'], [C, 'Zed'], [C, 'Maya'], [E, '']], { you: 2, leader: 0 }));
+        same('a guest of a room comes back to it by its link after the seat ended: the same strip, and the host is named', words(env), SEATGONE + ' Sam is the host.');
+    }
+}
+{   // the seat that a page leaves behind: a page that goes (pagehide) writes ants.lobbyseat, and a page of this browser that opens within a minute takes the seat back in whatever tab it opens
+    const SERVER_NOW = 'wss://play.test/ws';
+    const near = (t) => Math.abs(t - Date.now()) < 10000;
+    const goes = (env) => (env.win.listeners.pagehide || []).forEach((fn) => fn({ persisted: false }));
+    const note = (code, o) => JSON.stringify(Object.assign({ s: SERVER_NOW, c: code, k: hex(KEY), n: 'Maya', o: 1, t: Date.now() }, o || {}));
+    {
+        const env = runLobby('', {});
+        const s = env.arrive({ key: KEY });
+        const code = helloRoom(s.sent[0]);
+        check('a page that is in a room and goes leaves no note while it is there (the tab\'s own session holds the seat)', !('ants.lobbyseat' in env.storage.data));
+        goes(env);
+        const left = JSON.parse(env.storage.data['ants.lobbyseat'] || 'null');
+        check('... and writes the seat when it goes: this server, the room, the key, the name and that it made the room, and the time', !!left && left.s === SERVER_NOW && left.c === code && left.k === hex(KEY) && left.n === 'Maya' && left.o === 1 && near(left.t) && Object.keys(left).sort().join() === 'c,k,n,o,s,t', JSON.stringify(left));
+        check('... and the key is in no other key of this browser\'s storage', Object.keys(env.storage.data).filter((k) => env.storage.data[k].indexOf(hex(KEY)) !== -1).join() === 'ants.lobbyseat');
+    }
+    {
+        const guest = runLobby('?room=k7m2xq', {});
+        guest.$('name-step-go').click();
+        guest.arrive({ seat: 1, key: KEY, flags: 0, seats: [[C, 'Sam'], [C, 'Maya'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
+        goes(guest);
+        const left = JSON.parse(guest.storage.data['ants.lobbyseat'] || 'null');
+        check('a guest that goes leaves the note too, and the note says that the page did not make the room (o is 0: the page that takes the seat back does not lead it)', !!left && left.c === 'k7m2xq' && left.o === 0 && left.n === 'Maya', JSON.stringify(left));
+        const back = runLobby('', guest.storage.data);
+        back.arrive({ seat: 1, key: KEY, flags: 0, seats: [[C, 'Sam'], [C, 'Maya'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
+        check('... and the page that takes it back is a guest again: the room is Sam\'s, and the session says that the page did not make it', back.$('room-h').textContent === 'Sam’s room' && JSON.parse(back.session.data['ants.lobby']).o === 0 && words(back) === '');
+    }
+    {
+        const none = runLobby('', {});
+        goes(none);
+        check('a page that has no room leaves no note', !('ants.lobbyseat' in none.storage.data));
+        const lone = runLobby('', {});
+        lone.arrive({ key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 0, leader: 0 } });
+        lone.last().receive(roomMessage([[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
+        check('(the leader\'s START reached the page: it is on its way to the game page)', lone.assigned.length === 1);
+        goes(lone);
+        check('a page that is on its way to a game leaves no note: the seat is the game\'s now', !('ants.lobbyseat' in lone.storage.data));
+    }
+    {
+        const env = runLobby('', { 'ants.lobbyseat': note('k7m2xq') });
+        const hello = env.last().open().sent[0];
+        check('a page that opens at once after another went takes its seat back: a Hello with the key, the code and the name that the seat had, and no card', hex(hello) === hex(helloBytes('Maya', 'k7m2xq', { key: KEY })) && env.$('name-step').hidden && env.sockets.length === 1);
+        check('... it opens on Home (a seat that is taken back in the background), with My room there', env.screen() === 'home' && !env.home('mine').hidden);
+        env.arrive({ key: KEY, flags: 0, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 0, leader: 0 } });
+        check('... the room welcomes it as the seat of the key: no strip, it leads, the tab\'s session keeps the seat, and the note is gone (the seat is this page\'s)', words(env) === '' && JSON.parse(env.session.data['ants.lobby']).k === hex(KEY) && JSON.parse(env.session.data['ants.lobby']).o === 1 && !('ants.lobbyseat' in env.storage.data));
+    }
+    {
+        const old = runLobby('', { 'ants.lobbyseat': note('k7m2xq', { t: Date.now() - 56000 }) });
+        const h = old.last().open().sent[0];
+        check('a note that is older than a minute (55 s) is not used: the page makes a room of its own with a new code and no key, and the note is taken away', CODE.test(helloRoom(h)) && helloRoom(h) !== 'k7m2xq' && hex(h) === hex(helloBytes(GUEST, helloRoom(h))) && !('ants.lobbyseat' in old.storage.data));
+        const junk = runLobby('', { 'ants.lobbyseat': 'not json' });
+        check('a note that is damaged is not used and is taken away', CODE.test(helloRoom(junk.last().open().sent[0])) && !('ants.lobbyseat' in junk.storage.data));
+        const other = runLobby('', { 'ants.lobbyseat': note('k7m2xq', { s: 'wss://other.test/ws' }) });
+        check('a note of another server is not used', hex(other.last().open().sent[0]) === hex(helloBytes(GUEST, helloRoom(other.last().sent[0]))));
+        const mine = runLobby('', { 'ants.lobbyseat': note('k7m2xq') }, { session: { 'ants.lobby': JSON.stringify({ c: 'abc234', k: hex(KEY2), n: 'Maya', o: 1 }) } });
+        check('a tab that holds a seat of its own uses that, not a note of another tab (the session comes first)', hex(mine.last().open().sent[0]) === hex(helloBytes('Maya', 'abc234', { key: KEY2 })));
+    }
+    {
+        const link = runLobby('?room=k7m2xq', { 'ants.lobbyseat': note('k7m2xq') });
+        check('a link to the room that the note holds takes the seat back with no card', link.$('name-step').hidden && hex(link.last().open().sent[0]) === hex(helloBytes('Maya', 'k7m2xq', { key: KEY })));
+        const away = runLobby('?room=zzz999', { 'ants.lobbyseat': note('k7m2xq') });
+        check('a link to another room is asked for first, as ever, and sends nothing before the card', !away.$('name-step').hidden && away.sockets.length === 0);
+    }
+    {
+        const env = runLobby('', { 'ants.lobbyseat': note('k7m2xq') }, { session: { 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: 'Maya', o: 1 }) } });
+        env.arrive({ key: KEY, flags: 0, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']], room: { you: 0, leader: 0 } });
+        check('a tab that reloads (its session and the note it wrote are for the same seat) takes the seat from its session, and the note of that seat is gone once the room has it', !('ants.lobbyseat' in env.storage.data));
+        const kept = runLobby('', { 'ants.lobbyseat': note('abc234') }, { session: { 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: 'Maya', o: 1 }) } });
+        kept.arrive({ key: KEY, flags: 0, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']], room: { you: 0, leader: 0 } });
+        check('... and the note of another room stays (it is another page\'s seat)', (JSON.parse(kept.storage.data['ants.lobbyseat'] || 'null') || {}).c === 'abc234');
+    }
+    {
+        const env = runLobby('', { 'ants.lobbyseat': note('k7m2xq') });
+        env.arrive({ key: KEY, flags: 0, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']], room: { you: 0, leader: 0 } });
+        env.home('minex').click();
+        check('a page that took a seat back and gives it up (Leave my room) is no longer that room\'s: no session and no note', !('ants.lobby' in env.session.data) && !('ants.lobbyseat' in env.storage.data));
+        const early = runLobby('', { 'ants.lobbyseat': note('k7m2xq'), 'ants.lobby.unrelated': '1' }, { session: SESSION('k7m2xq', 1) });
+        early.home('minex').click();
+        check('... also before the room has welcomed it: the seat is given up, and so is the note of that room (a page that opens next does not take a seat that was given up); nothing else of the storage is touched', !('ants.lobby' in early.session.data) && !('ants.lobbyseat' in early.storage.data) && early.storage.data['ants.lobby.unrelated'] === '1');
+    }
+}
+
 // ---- 5.1b whose name the page plays under: the login's, else a guest name that this browser keeps (front/player_name.js, tests/scripts/web_player_name_check.js; the hub's page is scripted by options.me)
 const MAYA = { login: true, you: { name: 'maya', mod: false } };                // (the hub's answer for a person who is logged in)
 const ZED = { login: true, you: { name: 'Zed', mod: false } };
