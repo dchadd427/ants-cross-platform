@@ -946,6 +946,56 @@ int main() {
         ASSERT_EQ(without.stats().matches, size_t{0});
     } TEST_END();
 
+    TEST_CASE("HV3.6 A match that names an approved map in another letter case than the operator's list holds it is counted (the lobby's rule), and a name that differs in more than the case is left out") {
+        if (match_file(1).empty()) {
+            std::cout << "SKIPPED (no map)\n";
+            return;
+        }
+        TempDir work, mapdir;
+        fs::create_directories(work.path / "rec");
+        fs::create_directories(work.path / "submissions" / "files");
+        fs::copy_file(maps_dir() + "/TINY.LVL", mapdir.path / "SAMPLE MAP.lvl");                                    // (the recording names the map in capitals; the list says "Sample Map")
+        fs::copy_file(maps_dir() + "/TINY.LVL", mapdir.path / "Sample_Map.lvl");                                    // (and one that names it with an underscore)
+        fs::copy_file(maps_dir() + "/TINY.LVL", work.path / "submissions" / "files" / "0123456789abcdef0123456789abcdef.lvl");
+        const auto recording = [&](const char* file, uint32_t seed, int64_t ended) {
+            MatchSpec spec;
+            spec.map = "Sample Map";
+            spec.file = file;
+            spec.dir = mapdir.path.string();
+            spec.seed = seed;
+            spec.turns = 700;
+            spec.roster = 0x03;
+            spec.names = {"Una", "Vic", "", ""};
+            const std::vector<uint8_t> bytes = record_match(spec);
+            return bytes.empty() ? std::string() : put_recording(work.path / "rec", bytes, ended, "Sample_Map");
+        };
+        const std::string folded = recording("SAMPLE MAP.lvl", 31, kT0);
+        const std::string other = recording("Sample_Map.lvl", 32, kT0 + 1000);
+        ASSERT_TRUE(!folded.empty() && !other.empty());
+        {
+            db::Database game;
+            ASSERT_TRUE(open_server_db(game, (work.path / "game.db").string()));
+            ASSERT_TRUE(game.exec("INSERT INTO map_submissions (id, token_hash, state, kind, name, name_key, final_name, final_key, renamed, maker, note, owner_message, width, height, minutes, players, description,"
+                                  " size, hash, findings, file, file_kept, created_at, decided_at, decided_by) VALUES ('0123456789abcdef0123456789abcdef', '" + std::string(64, 'a') +
+                                  "', 'approved', 'classic', 'Sample Map', 'sample map', 'Sample Map', 'sample map', 0, 'Una', '', '', 10, 10, 5, 2, '', 100, '0123456789abcdef', '[]', "
+                                  "'0123456789abcdef0123456789abcdef.lvl', 1, 1, 2, 'operator')").ok());
+        }
+        TempDir empty_maps;
+        auto log = std::make_shared<Collector>();
+        ServiceConfig cfg = base_config(work.path, work.path / "rec", log);
+        cfg.maps_dir = empty_maps.path.string();
+        cfg.db_path = (work.path / "with.db").string();
+        cfg.game_db_path = (work.path / "game.db").string();
+        cfg.submissions_dir = (work.path / "submissions").string();
+        HistoryService service(cfg);
+        std::string why;
+        ASSERT_TRUE(service.start(why));
+        ASSERT_TRUE(wait_for([&]() { return service.stats().matches == 1 && service.stats().left_out == 1; }, 30000 * kSlow));
+        ASSERT_TRUE(json_of(ask(service, "GET", "/history/" + folded)).get("map").str() == "SAMPLE MAP.lvl");
+        ASSERT_EQ(json_of(ask(service, "GET", "/history/" + other)).get("error").str(), std::string("no such match"));
+        service.stop();
+    } TEST_END();
+
     TEST_CASE("HV3.5 A match on an approved map that was left out because the list of approved maps could not be read, or did not hold the map yet, is counted when the list can be read again or has the map: not only at the next start") {
         if (match_file(1).empty()) {
             std::cout << "SKIPPED (no map)\n";

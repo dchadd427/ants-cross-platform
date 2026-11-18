@@ -1,0 +1,60 @@
+{
+ "note": "Mutants of how the match history finds the map of a recording and when it is let in (docs/REPLAYS.md \"The match history\", docs/MAP_SUBMISSIONS.md \"Older games and big maps\": The history), for tools/mutate.py (docs/TESTING.md). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/history_approved_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: a match on an approved map of the players is counted whatever letter case its recording names the map in and its play shows on the map's entry, a match that a person played is counted while the server's own match of computer players runs, and nothing is counted while a room with a person in it loads or runs.",
+ "mutants": [
+  {
+   "id": "approved_map_found_by_exact_name_only",
+   "file": "src/ants_server/map_store.cpp",
+   "old": "        if (lower(a.name) == folded) return &a;\n    }\n    return nullptr;\n}\n\nbool MapStore::is_test_map_name",
+   "new": "        if (a.name == name) return &a;\n    }\n    return nullptr;\n}\n\nbool MapStore::is_test_map_name",
+   "build": [
+    "test_map_plays"
+   ],
+   "test": "ANTS_TEST_FILTER=MP2.4 ./build/tests/test_server/test_map_plays",
+   "expect": "MP2.4"
+  },
+  {
+   "id": "plays_of_a_map_read_by_exact_name_only",
+   "file": "src/ants_server/map_store.cpp",
+   "old": "counts.find({lower(m.file), map_hash_text(m.hash)})",
+   "new": "counts.find({m.file, map_hash_text(m.hash)})",
+   "build": [
+    "test_map_plays"
+   ],
+   "test": "ANTS_TEST_FILTER=MP2.4 ./build/tests/test_server/test_map_plays",
+   "expect": "MP2.4"
+  },
+  {
+   "id": "service_finds_approved_map_by_exact_name_only",
+   "file": "src/ants_history/history_service.cpp",
+   "old": "const std::string key = server::names::name_key(name);",
+   "new": "const std::string key = name;",
+   "build": [
+    "test_history_service"
+   ],
+   "test": "ANTS_TEST_FILTER=HV3.6 ./build/tests/test_server/test_history_service",
+   "expect": "HV3.6"
+  },
+  {
+   "id": "history_waits_for_a_room_of_computer_players",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": " && !kv.second->bots_only()) return false;",
+   "new": ") return false;",
+   "build": [
+    "test_history_rooms"
+   ],
+   "test": "ANTS_TEST_FILTER=HR2.1 ./build/tests/test_server/test_history_rooms",
+   "expect": "HR2.1"
+  },
+  {
+   "id": "history_never_waits_for_a_room_with_a_person",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": " && !kv.second->bots_only()) return false;",
+   "new": " && !kv.second->bots_only() && false) return false;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.184e timeout 900 ./build/tests/test_server/test_server",
+   "expect": "S3.184e"
+  }
+ ]
+}
