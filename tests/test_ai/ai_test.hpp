@@ -241,5 +241,6 @@ void run_drops_tests();
 void run_thief_tests();
 void run_gang2_tests();
 void run_group_tests();
+void run_hit_tests();
 void run_homemines_tests();
 void run_ownground_tests();

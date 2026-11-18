@@ -56,6 +56,9 @@ bool style_allowed(Level level, Style style) noexcept;
 /// how many the original's selection holds has not been established). A bot never exceeds it, whatever its profile says.
 inline constexpr uint32_t kHudAntCap = 24;
 
+/// The follow-up lane (Intent::follow_up) is for an ant that is in a fight: every ant of the click must have had an attack click released within this many ticks (10 s)
+inline constexpr uint32_t kFollowUpWindow = 200;
+
 /// Everything that makes a level. Times are simulation ticks of 50 ms, rates are thousandths of a command per second.
 struct Profile {
     uint32_t decision_interval{20};      // the bot looks at the world only this often
@@ -68,6 +71,8 @@ struct Profile {
     uint32_t reissue_cooldown{10};       // no second order to the same ant within this many ticks (unless urgent): each order replaces the ant's queued path
     bool value_aware_piles{true};        // economy (the worker bot, B3): pick food piles by points per trip (Medium, Hard), not the nearest (Easy)
     uint32_t max_ants_per_pile{8};
+    uint32_t follow_up_reaction{0};      // the next attack click of an ant that is in a fight (Intent::follow_up) is released this many ticks after the look, not after reaction_delay: a person who has an ant on a
+                                         // victim keeps clicking it, and the reaction time models a surprise, not the next blow of a fight he is in (0: no such lane, the click waits the reaction time like any other; Hard 3)
 };
 
 Profile profile_for(Level level) noexcept;
@@ -121,6 +126,9 @@ struct Intent {
     /// A planned PICK-UP of a power-up: a plain click (GroupMove) of ONE ant on the tile of a power-up (Orders::pick_up). The controller lets a move onto a power-up tile through only
     /// with this mark: a click on one takes it for the ant that arrives, so no other order of a bot (a rally, a guard post, a spread) may name such a tile by accident.
     bool pickup{false};
+    /// A FOLLOW-UP CLICK (Orders::attack with `follow_up`, docs/BOT_FIGHT.md, "Hits without pauses"): the next attack click of an ant that is in a fight, which the controller releases Profile::follow_up_reaction ticks after the look instead of the
+    /// reaction delay, when the profile has the lane and every ant of the intent had an attack click released within kFollowUpWindow ticks. It still costs a token of the budget and leaves in its own order for each ant.
+    bool follow_up{false};
     /// A TIMED CHAIN (Orders::chain, docs/BOTS.md "Timed clicks"): the intents of one chain have the same `chain` number (not 0) and `step` 0, 1, 2, ... The controller releases step 0 like any intent (the
     /// reaction time, the budget); every later step is released at the first tick at which the sink would APPLY it between `gap_lo` and `gap_hi` ticks after the step before was applied, and never
     /// otherwise: a step that would be applied later is dropped with the rest of its chain (Fate::Expired). A chain the first step of which never leaves leaves no step.
@@ -147,7 +155,8 @@ public:
     void move(const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority = Priority::Normal);
     /// A group attack on the ant that stands at `tile`. The controller lets it through only when an ant of another team (not an ally) stands there and the tile is not part of a
     /// hill: what a person's click on an enemy ant sends (the attack cursor shows over an ant of another color, and an ant on a hill tile gets the plain move cursor).
-    void attack(const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority = Priority::Urgent);
+    /// `follow_up` marks the click of an ant that struck and is idle again: the controller's follow-up lane (Intent::follow_up) may release it sooner than a click that comes as a surprise.
+    void attack(const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority = Priority::Urgent, bool follow_up = false);
     /// A planned pick-up: ONE ant is clicked onto the tile of a power-up (a plain GroupMove, the click that takes it when the ant arrives). Nothing else may name a power-up tile.
     void pick_up(uint32_t ant, sim::TileCoord tile, Priority priority = Priority::Normal);
     /// The clicks of ONE ant at moments that are counted from the moment the click before is APPLIED (the sink's own tick of it, CommandSink::applied_at): a person who clicks again the moment the ant

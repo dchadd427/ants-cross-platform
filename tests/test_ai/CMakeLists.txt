@@ -46,6 +46,7 @@ add_executable(test_ai
     test_ai_heal.cpp
     test_ai_gang2.cpp
     test_ai_group.cpp
+    test_ai_hits.cpp
     test_ai_homemines.cpp
     test_ai_ownground.cpp
     test_ai_drops.cpp

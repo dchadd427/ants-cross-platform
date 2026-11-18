@@ -91,7 +91,7 @@ private:
           ferry_(kFerry, ferry_params(plan)),
           gate_goals_(kGateGoals, tactics_, gate_goal_params(plan)),
           field_(kField, tactics_),
-          brawl_(kBrawl, plan.brawl),
+          brawl_(kBrawl, brawl_params(plan)),
           opportunity_(kOpportunity, tactics_),
           miner_flight_(kMinerFlight, tactics_),
           heal_(kHeal, tactics_),
@@ -261,6 +261,11 @@ private:
         p.rows_swimmers = plan.island_swarm_swimmers;
         p.rows_idle_after = plan.island_swarm_idle;
         p.foot_hp = plan.island_swarm_hp;
+        return p;
+    }
+    static BrawlParams brawl_params(const LevelPlan& plan) {
+        BrawlParams p = plan.brawl;
+        p.follow_up = plan.hit_follow_up;
         return p;
     }
     static FerryTask::Params ferry_params(const LevelPlan& plan) {
