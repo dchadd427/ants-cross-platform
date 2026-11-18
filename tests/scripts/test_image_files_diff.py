@@ -9,6 +9,9 @@ The script builds the images from the Dockerfile of a base revision and from thi
     link command lines), and, when the recipe holds, as the programs of a link made deterministic (tools/relink_outputs.sh)
   - the comparison: the same files are the same; a changed byte, a changed mode or owner, a file on one side only, a link that points elsewhere, a stamp that appears or goes, a stamp in a file
     that is not listed, and a changed configuration (user, entrypoint, command, ports, environment) are each a difference with exit status 1; an empty export is refused
+  - a change that adds a COPY line (a new page file) or an input of the build is told apart from a difference that nothing explains: a file that only the new image has and that an added COPY line accounts for is a note; a
+    base Dockerfile that cannot build this tree because the change adds or stops reading a copied file is a note and that image is not compared; a file in both images that differs, a file only the base image has, an
+    unexplained file only the new image has, and a base build that fails with no such change are not (the Dockerfiles are read by tools/image_manifest.py: copies, added_destinations, build_input_changes)
   - the CI job: a job of its own (not one of the five required checks, and nothing waits for it) that runs for a pull request that changes a Dockerfile, the program of the pre-warming or this check, against the pull request's base,
     cannot be made to pass by `|| true` or `continue-on-error`, and has the trigger that it has
   - the script, run against a stand-in `docker` (a small program that builds nothing and exports the files that the test chose) and a real git repository: the same images pass, a difference of one
@@ -600,6 +603,125 @@ class TheCommandLine(unittest.TestCase):
         self.assertEqual(self.run_tool("manifest", "extra").returncode, 2)
 
 
+BASE_DOCKERFILE = """base
+FROM scratch AS builder
+WORKDIR /src
+COPY CMakeLists.txt ./
+COPY src/ ./src/
+FROM nginx:alpine AS runner
+COPY --from=builder /src/out/index.html /usr/share/nginx/html/index.html
+COPY web/a.js /usr/share/nginx/html/a.js
+"""
+
+
+class TheDockerfilesAreRead(unittest.TestCase):
+    def test_a_copy_line_has_its_stage_its_source_stage_its_sources_and_an_absolute_destination(self):
+        text = """FROM one AS first
+COPY a.txt b.txt /dir/
+FROM two
+WORKDIR /w
+WORKDIR sub
+# a comment
+COPY --chown=1:1 --link x/ y/ \\
+    # a comment inside a continued line
+    z
+COPY --from=first /dir/a.txt /usr/a.txt
+ADD ["web/j.js", "/usr/share/j.js"]
+COPY <<EOF /heredoc
+COPY src /$WHERE
+copy lower /usr/lower
+"""
+        found = [(c["stage"], c["last"], c["from"], c["sources"], c["dest"]) for c in im.copies(text)]
+        self.assertEqual(found, [
+            (0, False, None, ["a.txt", "b.txt"], "/dir"),
+            (1, True, None, ["x", "y"], "/w/sub/z"),
+            (1, True, "first", ["/dir/a.txt"], "/usr/a.txt"),
+            (1, True, None, ["web/j.js"], "/usr/share/j.js"),
+            (1, True, None, ["src"], ""),
+            (1, True, None, ["lower"], "/usr/lower"),
+        ])
+
+    def test_only_a_line_of_the_last_stage_adds_a_file_to_the_image(self):
+        new = BASE_DOCKERFILE.replace("COPY src/ ./src/\n", "COPY src/ ./src/\nCOPY assets/hud_art/ ./assets/hud_art/\n") + "COPY web/b.js /usr/share/nginx/html/b.js\n"
+        self.assertEqual(im.added_destinations(BASE_DOCKERFILE, new), ["usr/share/nginx/html/b.js"])
+        self.assertEqual(im.added_destinations(BASE_DOCKERFILE, BASE_DOCKERFILE), [])
+
+    def test_a_line_is_the_same_line_with_other_spacing_a_comment_or_a_continuation(self):
+        again = BASE_DOCKERFILE.replace("COPY web/a.js /usr/share/nginx/html/a.js", "# the page\nCOPY   ./web/a.js \\\n   /usr/share/nginx/html/a.js\n")
+        self.assertEqual(im.added_destinations(BASE_DOCKERFILE, again), [])
+        self.assertEqual(im.build_input_changes(BASE_DOCKERFILE, again), [])
+        moved = BASE_DOCKERFILE.replace("/usr/share/nginx/html/a.js", "/usr/share/nginx/html/other.js")
+        self.assertEqual(im.added_destinations(BASE_DOCKERFILE, moved), ["usr/share/nginx/html/other.js"])
+
+    def test_the_files_of_the_build_context_that_are_added_or_dropped_are_named(self):
+        new = BASE_DOCKERFILE.replace("COPY web/a.js /usr/share/nginx/html/a.js\n", "COPY web/b.js /usr/share/nginx/html/b.js\n") + "COPY assets/hud_art/ /srv/hud/\n"
+        self.assertEqual(im.build_input_changes(BASE_DOCKERFILE, new), ["added assets/hud_art", "added web/b.js", "removed web/a.js"])
+        stage = BASE_DOCKERFILE + "COPY --from=builder /src/x /usr/x\n"
+        self.assertEqual(im.build_input_changes(BASE_DOCKERFILE, stage), [], "a file that comes from another stage is not an input of the build")
+
+    def test_a_destination_accounts_for_itself_what_is_under_it_and_the_folders_on_the_way_and_nothing_next_to_it(self):
+        allowed = ["usr/share/nginx/html/foo"]
+        for path, kind, accounted in (("usr/share/nginx/html/foo", "file", True), ("usr/share/nginx/html/foo/x.js", "file", True), ("usr/share/nginx/html", "dir", True), ("usr", "dir", True),
+                                      ("usr/share/nginx/html/foobar", "file", False), ("usr/share/nginx/html/fo", "dir", False), ("usr/share/nginx/html", "file", False), ("etc/x", "file", False)):
+            with self.subTest(path):
+                self.assertEqual(im.explained(path, {"type": kind}, allowed), accounted)
+        self.assertFalse(im.explained("usr/x", {"type": "file"}, []))
+
+    def test_the_files_that_an_added_line_explains_are_notes_and_the_others_are_differences(self):
+        base = manifest({HTML + "a.js": b"1", "etc/y": b"y"})
+        new = manifest({HTML + "a.js": b"1", "etc/y": b"y", HTML + "b.js": b"2", "srv/z": b"3"})
+        allowed = ["usr/share/nginx/html/b.js"]
+        self.assertEqual(im.differences(base, new, "web files", allowed), ["web files: only in the new image: srv/z"])
+        self.assertEqual(im.additions(base, new, "web files", allowed), ["web files: NOTE only in the new image, added by a COPY line of the change: " + HTML + "b.js"])
+        self.assertEqual(len(im.differences(base, new)), 2, "with no line to account for them both are differences")
+        gone = manifest({"etc/y": b"y"})
+        self.assertEqual(im.differences(base, gone, "x", allowed), ["x: only in the base image: " + HTML + "a.js"], "a file that goes is never explained")
+        replaced = manifest({HTML + "b.js": b"2"})
+        self.assertEqual(im.differences(replaced, manifest({}), "x", allowed), ["x: only in the base image: " + HTML + "b.js"], "not even one that sits where an added line puts a file")
+
+
+class TheDockerfilesOnTheCommandLine(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="ants_imgdiff_cli_")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def write(self, name, data):
+        path = os.path.join(self.tmp, name)
+        with open(path, "wb") as f:
+            f.write(data if isinstance(data, bytes) else data.encode("utf-8"))
+        return path
+
+    def run_tool(self, *args):
+        return subprocess.run([sys.executable, os.path.join(REPO, "tools", "image_manifest.py"), *args], capture_output=True, text=True, timeout=60)
+
+    def test_build_inputs_prints_what_the_change_adds_and_drops_and_nothing_when_it_moves_none(self):
+        old = self.write("old", BASE_DOCKERFILE)
+        new = self.write("new", BASE_DOCKERFILE.replace("web/a.js", "web/b.js"))
+        done = self.run_tool("build-inputs", old, new)
+        self.assertEqual((done.returncode, done.stdout), (0, "added web/b.js\nremoved web/a.js\n"))
+        done = self.run_tool("build-inputs", old, old)
+        self.assertEqual((done.returncode, done.stdout), (0, ""))
+        self.assertEqual(self.run_tool("build-inputs", old, os.path.join(self.tmp, "nothing")).returncode, 2)
+        self.assertEqual(self.run_tool("build-inputs", old).returncode, 2)
+
+    def test_compare_with_the_dockerfiles_passes_an_added_file_and_fails_an_unexplained_one(self):
+        base = self.write("base.json", json.dumps(manifest({HTML + "a.js": b"1"})))
+        added = self.write("added.json", json.dumps(manifest({HTML + "a.js": b"1", HTML + "b.js": b"2"})))
+        stray = self.write("stray.json", json.dumps(manifest({HTML + "a.js": b"1", HTML + "stray.js": b"2"})))
+        old = self.write("old", BASE_DOCKERFILE)
+        new = self.write("new", BASE_DOCKERFILE + "COPY web/b.js /usr/share/nginx/html/b.js\n")
+        done = self.run_tool("compare", base, added, "--label", "web files", "--dockerfiles", old, new)
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertIn("web files: NOTE only in the new image, added by a COPY line of the change: " + HTML + "b.js", done.stdout)
+        self.assertIn("0 difference(s)", done.stdout)
+        done = self.run_tool("compare", base, stray, "--label", "web files", "--dockerfiles", old, new)
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertIn("web files: only in the new image: " + HTML + "stray.js", done.stdout)
+        self.assertEqual(self.run_tool("compare", base, added, "--dockerfiles", old).returncode, 2)
+        self.assertEqual(self.run_tool("compare", base, added, "--dockerfiles", old, os.path.join(self.tmp, "nothing")).returncode, 2)
+        self.assertEqual(self.run_tool("compare", base, added).returncode, 1, "with no Dockerfiles nothing accounts for the file")
+
+
 FAKE_DOCKER = r'''#!/usr/bin/env python3
 """A stand-in for docker: builds nothing; `create` names the image, `export` writes the tar that the test chose (FAKE_STATE/<image>.tar), `image inspect` the configuration that it chose, `run` the listing of the
 link's inputs (or, with setarch, of the programs of a link) that it chose for the builder stage of the image."""
@@ -620,7 +742,7 @@ if args[0] == "build":
     if os.environ.get("FAKE_FAIL") and os.environ["FAKE_FAIL"] in tag:
         sys.exit(1)
     with open(dockerfile, encoding="utf-8") as f:
-        which = f.read().strip()               # the test wrote "base" or "new" plus the image into the Dockerfile
+        which = f.readline().strip()           # the test wrote "base" or "new" as the first line of the Dockerfile (the rest is its instructions)
     with open(os.path.join(state, tag + ".which"), "w") as f:
         f.write(which)
 elif args[0] == "create":
@@ -721,6 +843,18 @@ class TheScript(unittest.TestCase):
             with open(os.path.join(self.state, which + ".config"), "w", encoding="utf-8") as f:
                 f.write(config)
 
+    def set_dockerfiles(self, base_text, new_text):
+        """The Dockerfiles of the base commit and of the working tree (both names, the same text; the first line names the build for the stand-in docker)."""
+        names = ("Dockerfile", "Dockerfile.server")
+        for name in names:
+            with open(os.path.join(self.repo, name), "w", encoding="utf-8") as f:
+                f.write(base_text)
+        for command in (["add", "."], ["-c", "user.name=t", "-c", "user.email=t@example.org", "commit", "-q", "--amend", "-m", "base"]):
+            subprocess.run(["git", "-C", self.repo, *command], check=True, env=self.env, capture_output=True)
+        for name in names:
+            with open(os.path.join(self.repo, name), "w", encoding="utf-8") as f:
+                f.write(new_text)
+
     def run_script(self, *args, **env):
         return subprocess.run(["bash", os.path.join(self.repo, "tools", "image_files_diff.sh"), "--base", "main", *args], cwd=self.repo, env=dict(self.env, **env), capture_output=True, text=True, timeout=120)
 
@@ -755,6 +889,106 @@ class TheScript(unittest.TestCase):
         done = self.run_script("--server")
         self.assertEqual(done.returncode, 1)
         self.assertIn("only in the base image: srv/maps/old.lvl", done.stdout)
+
+    ADDED_LINE = "COPY web/b.js /usr/share/nginx/html/b.js\n"
+    NEW_INPUT = "COPY assets/hud_art/ ./assets/hud_art/\n"
+
+    def test_a_file_that_an_added_copy_line_accounts_for_is_a_note_and_the_images_pass(self):
+        self.set_dockerfiles(BASE_DOCKERFILE.replace("base", "base", 1), BASE_DOCKERFILE.replace("base", "new", 1) + self.ADDED_LINE)
+        self.write_images(new_files={HTML + "b.js": b"added"})
+        done = self.run_script()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("web files: NOTE only in the new image, added by a COPY line of the change: " + HTML + "b.js", done.stdout)
+        self.assertIn("server files: NOTE only in the new image, added by a COPY line of the change: " + HTML + "b.js", done.stdout)
+        self.assertIn("the images are the same", done.stdout)
+        self.assertIn("are listed as notes above", done.stdout)
+        self.assertIn("::notice title=Files added by the change", done.stdout)
+
+    def test_a_file_that_only_the_new_image_has_and_no_added_copy_line_accounts_for_fails(self):
+        self.set_dockerfiles(BASE_DOCKERFILE, BASE_DOCKERFILE.replace("base", "new", 1) + self.ADDED_LINE)
+        self.write_images(new_files={HTML + "b.js": b"added", "srv/stray.txt": b"nobody asked for this"})
+        done = self.run_script("--server")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("server files: only in the new image: srv/stray.txt", done.stdout)
+        self.assertIn("NOTE only in the new image, added by a COPY line of the change: " + HTML + "b.js", done.stdout)
+        self.assertNotIn("the images are the same", done.stdout)
+
+    def test_the_same_dockerfile_accounts_for_no_file_that_only_the_new_image_has(self):
+        self.set_dockerfiles(BASE_DOCKERFILE, BASE_DOCKERFILE.replace("base", "new", 1))
+        self.write_images(new_files={HTML + "a.js": b"it is in the Dockerfile of both"})
+        done = self.run_script("--server")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("server files: only in the new image: " + HTML + "a.js", done.stdout)
+
+    def test_a_file_that_both_images_have_and_that_differs_still_fails_next_to_an_added_file(self):
+        self.set_dockerfiles(BASE_DOCKERFILE, BASE_DOCKERFILE.replace("base", "new", 1) + self.ADDED_LINE)
+        self.write_images(new_files={HTML + "b.js": b"added", "usr/local/bin/ants_server": (b"binarz", 0o755, 0)})
+        done = self.run_script("--server")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("usr/local/bin/ants_server differs in sha256", done.stdout)
+        self.assertIn("NOTE only in the new image, added by a COPY line of the change: " + HTML + "b.js", done.stdout)
+
+    def test_a_file_that_only_the_base_image_has_fails_although_the_change_drops_its_copy_line(self):
+        self.set_dockerfiles(BASE_DOCKERFILE, BASE_DOCKERFILE.replace("base", "new", 1).replace("COPY web/a.js /usr/share/nginx/html/a.js\n", ""))
+        self.write_images(base_files={HTML + "a.js": b"the page that goes"})
+        done = self.run_script("--server")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("server files: only in the base image: " + HTML + "a.js", done.stdout)
+
+    def test_a_base_that_cannot_build_this_tree_because_the_change_adds_an_input_is_a_note_and_the_other_image_is_compared(self):
+        self.set_dockerfiles(BASE_DOCKERFILE, BASE_DOCKERFILE.replace("base", "new", 1) + self.NEW_INPUT)
+        done = self.run_script(FAKE_FAIL="web-base")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("the base Dockerfile cannot build this tree", done.stdout)
+        self.assertIn("    added assets/hud_art", done.stdout)
+        self.assertIn("the web image is NOT compared", done.stdout)
+        self.assertIn("::notice title=The web image was not compared", done.stdout)
+        self.assertIn("server files: ", done.stdout)
+        self.assertNotIn("web files: ", done.stdout)
+        self.assertIn("the web image was NOT compared", done.stdout)
+        self.assertNotIn("the images are the same", done.stdout)
+        self.assertNotIn("could not finish", done.stderr)
+        with open(os.path.join(self.state, "calls.log"), encoding="utf-8") as f:
+            calls = f.read()
+        self.assertEqual(calls.count("-t ants-image-diff-"), 3, "the web base that failed, and the two builds of the server image")
+
+    def test_the_other_image_is_still_compared_when_the_base_cannot_build_this_tree(self):
+        self.set_dockerfiles(BASE_DOCKERFILE, BASE_DOCKERFILE.replace("base", "new", 1) + self.NEW_INPUT)
+        self.write_images(new_files={"usr/local/bin/ants_server": (b"binarz", 0o755, 0)})
+        done = self.run_script(FAKE_FAIL="web-base")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("usr/local/bin/ants_server differs in sha256", done.stdout)
+        self.assertIn("DIFFER", done.stderr)
+
+    def test_a_server_image_whose_base_cannot_build_this_tree_is_a_note_too_and_the_web_image_is_compared(self):
+        self.set_dockerfiles(BASE_DOCKERFILE, BASE_DOCKERFILE.replace("base", "new", 1) + self.NEW_INPUT)
+        done = self.run_script(FAKE_FAIL="server-base")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("the server image is NOT compared", done.stdout)
+        self.assertIn("web files: ", done.stdout)
+        self.assertIn("web link inputs: ", done.stdout)
+
+    def test_a_base_that_cannot_build_this_tree_because_the_change_stops_copying_a_file_is_a_note(self):
+        self.set_dockerfiles(BASE_DOCKERFILE, BASE_DOCKERFILE.replace("base", "new", 1).replace("COPY web/a.js /usr/share/nginx/html/a.js\n", ""))
+        done = self.run_script("--web", FAKE_FAIL="web-base")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("    removed web/a.js", done.stdout)
+        self.assertIn("the web image was NOT compared", done.stdout)
+
+    def test_a_base_that_cannot_be_built_is_an_error_when_the_change_moves_no_copied_file(self):
+        self.set_dockerfiles(BASE_DOCKERFILE, BASE_DOCKERFILE.replace("base", "new", 1).replace("WORKDIR /src", "WORKDIR /src/"))
+        done = self.run_script(FAKE_FAIL="web-base")
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+        self.assertIn("the base build of the web image failed", done.stderr)
+        self.assertIn("could not finish", done.stderr)
+        self.assertNotIn("cannot build this tree", done.stdout)
+        self.assertNotIn("the images are the same", done.stdout)
+
+    def test_a_new_image_that_cannot_be_built_is_an_error_whatever_the_change_adds(self):
+        self.set_dockerfiles(BASE_DOCKERFILE, BASE_DOCKERFILE.replace("base", "new", 1) + self.NEW_INPUT)
+        done = self.run_script(FAKE_FAIL="web-new")
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+        self.assertIn("the new build of the web image failed", done.stderr)
 
     def test_a_changed_configuration_fails(self):
         self.write_images(new_config=self.config.replace('"ants"', '"root"'))
@@ -952,12 +1186,18 @@ class TheCiJob(unittest.TestCase):
         self.assertIn("    timeout-minutes: 60\n", self.job)
         self.assertIn("    runs-on: ubuntu-latest\n", self.job)
 
-    def test_the_docs_say_what_the_job_is_for_and_that_a_new_copy_line_makes_it_red(self):
+    def test_the_docs_say_what_the_job_is_for_and_that_a_new_copy_line_is_a_note(self):
+        """The words of the notes are the tool's own (they are in the output of tools/image_manifest.py); the page of the topic quotes them, the others point to it."""
         with open(os.path.join(REPO, "docs", "TESTING.md"), encoding="utf-8") as f:
             testing = f.read()
+        with open(os.path.join(REPO, "docs", "BUILD_AND_RUN.md"), encoding="utf-8") as f:
+            home = f.read()
         self.assertIn('A sixth job, "Image files unchanged by a Dockerfile change", is not required', testing)
-        self.assertIn("a `COPY` line", testing)
-        self.assertIn("red for it by design", testing)
+        self.assertIn("BUILD_AND_RUN.md", testing[testing.index("A sixth job"):][:2200])
+        self.assertIn("added by a COPY line of the change", home)
+        self.assertIn("build-inputs", home)
+        self.assertIn("could not finish", home)
+        self.assertNotIn("red for it by design", testing + home)
 
 
 if __name__ == "__main__":

@@ -1032,6 +1032,150 @@
    "new": "[ \"$(grep -c '^ *dfs(unsorted.pop())$' \"$ports\")\" -ge 0 ]",
    "test": "python3 tests/scripts/test_image_files_diff.py",
    "expect": "test_relink_makes_emscripten_take_its_ports_by_name_and_stops_when_the_line_is_not_there"
+  },
+  {
+   "id": "explained_matches_a_name_that_only_starts_the_same",
+   "file": "tools/image_manifest.py",
+   "old": "path.startswith(dest + \"/\")",
+   "new": "path.startswith(dest)",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_a_destination_accounts_for_itself_what_is_under_it_and_the_folders_on_the_way_and_nothing_next_to_it"
+  },
+  {
+   "id": "explained_takes_a_folder_that_is_not_on_the_way",
+   "file": "tools/image_manifest.py",
+   "old": "entry.get(\"type\") == \"dir\" and dest.startswith(path + \"/\")",
+   "new": "entry.get(\"type\") == \"dir\"",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_a_destination_accounts_for_itself_what_is_under_it_and_the_folders_on_the_way_and_nothing_next_to_it"
+  },
+  {
+   "id": "added_file_is_never_a_difference",
+   "file": "tools/image_manifest.py",
+   "old": "            if not explained(path, new[path], allowed):\n",
+   "new": "            if False:\n",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_the_files_that_an_added_line_explains_are_notes_and_the_others_are_differences"
+  },
+  {
+   "id": "a_file_that_goes_is_explained_too",
+   "file": "tools/image_manifest.py",
+   "old": "        if path not in new:\n            found.append(\"%sonly in the base image: %s\" % (prefix, path))",
+   "new": "        if path not in new:\n            if not explained(path, base[path], allowed):\n                found.append(\"%sonly in the base image: %s\" % (prefix, path))",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_the_files_that_an_added_line_explains_are_notes_and_the_others_are_differences"
+  },
+  {
+   "id": "every_copy_line_adds_a_file",
+   "file": "tools/image_manifest.py",
+   "old": "if c[\"last\"] and c[\"dest\"].strip(\"/\") and (c[\"from\"], tuple(c[\"sources\"]), c[\"dest\"]) not in known",
+   "new": "if c[\"last\"] and c[\"dest\"].strip(\"/\")",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_a_line_is_the_same_line_with_other_spacing_a_comment_or_a_continuation"
+  },
+  {
+   "id": "a_line_of_the_builder_stage_adds_a_file_to_the_image",
+   "file": "tools/image_manifest.py",
+   "old": "for c in copies(new_text) if c[\"last\"] and c[\"dest\"]",
+   "new": "for c in copies(new_text) if c[\"dest\"]",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_only_a_line_of_the_last_stage_adds_a_file_to_the_image"
+  },
+  {
+   "id": "the_destination_ignores_the_workdir",
+   "file": "tools/image_manifest.py",
+   "old": "dest = posixpath.join(workdir, dest)",
+   "new": "dest = posixpath.join(\"/\", dest)",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_a_copy_line_has_its_stage_its_source_stage_its_sources_and_an_absolute_destination"
+  },
+  {
+   "id": "a_file_from_another_stage_is_an_input_of_the_build",
+   "file": "tools/image_manifest.py",
+   "old": "for c in copies(new_text) if c[\"from\"] is None for path in c[\"sources\"]}",
+   "new": "for c in copies(new_text) for path in c[\"sources\"]}",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_the_files_of_the_build_context_that_are_added_or_dropped_are_named"
+  },
+  {
+   "id": "a_dropped_input_is_not_named",
+   "file": "tools/image_manifest.py",
+   "old": " + [\"removed \" + path for path in sorted(before - after)]",
+   "new": "",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_the_files_of_the_build_context_that_are_added_or_dropped_are_named"
+  },
+  {
+   "id": "an_added_input_is_not_named",
+   "file": "tools/image_manifest.py",
+   "old": "return [\"added \" + path for path in sorted(after - before)] + [\"removed \"",
+   "new": "return [] + [\"removed \"",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_the_files_of_the_build_context_that_are_added_or_dropped_are_named"
+  },
+  {
+   "id": "compare_reads_no_dockerfiles",
+   "file": "tools/image_manifest.py",
+   "old": "allowed = added_destinations(base_text, new_text)",
+   "new": "allowed = []",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_compare_with_the_dockerfiles_passes_an_added_file_and_fails_an_unexplained_one"
+  },
+  {
+   "id": "script_passes_a_base_that_fails_for_no_reason",
+   "file": "tools/image_files_diff.sh",
+   "old": "    [ -n \"$moved\" ] || return 1\n",
+   "new": "    :\n",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_a_base_that_cannot_be_built_is_an_error_when_the_change_moves_no_copied_file"
+  },
+  {
+   "id": "script_treats_a_failed_new_build_as_a_note",
+   "file": "tools/image_files_diff.sh",
+   "old": "{ [ \"$which\" = base ] && base_cannot_build",
+   "new": "{ base_cannot_build",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_a_new_image_that_cannot_be_built_is_an_error_whatever_the_change_adds"
+  },
+  {
+   "id": "script_does_not_say_which_image_was_not_compared",
+   "file": "tools/image_files_diff.sh",
+   "old": "    not_compared=\"$not_compared $1\"\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_a_base_that_cannot_build_this_tree_because_the_change_adds_an_input_is_a_note_and_the_other_image_is_compared"
+  },
+  {
+   "id": "script_stops_at_the_image_that_cannot_be_compared",
+   "file": "tools/image_files_diff.sh",
+   "old": "    not_compared=\"$not_compared $1\"\n    return 0\n",
+   "new": "    not_compared=\"$not_compared $1\"\n    return 1\n",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_a_base_that_cannot_build_this_tree_because_the_change_adds_an_input_is_a_note_and_the_other_image_is_compared"
+  },
+  {
+   "id": "script_leaves_out_the_other_image_after_a_note",
+   "file": "tools/image_files_diff.sh",
+   "old": "if [ \"$want_server\" = 1 ]; then compare server Dockerfile.server || status=2; fi",
+   "new": "if [ \"$want_server\" = 1 ] && [ -z \"$not_compared\" ]; then compare server Dockerfile.server || status=2; fi",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_the_other_image_is_still_compared_when_the_base_cannot_build_this_tree"
+  },
+  {
+   "id": "script_compares_files_without_the_dockerfiles",
+   "file": "tools/image_files_diff.sh",
+   "old": "--label \"$name files\" --dockerfiles \"$work/$file.base\" \"$file\"",
+   "new": "--label \"$name files\"",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_a_file_that_an_added_copy_line_accounts_for_is_a_note_and_the_images_pass"
+  },
+  {
+   "id": "script_says_nothing_of_the_added_files",
+   "file": "tools/image_files_diff.sh",
+   "old": "if grep -q \": NOTE only in the new image\" \"$work/$name-files.compare\"; then added_notes=1; fi",
+   "new": "true",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_a_file_that_an_added_copy_line_accounts_for_is_a_note_and_the_images_pass"
   }
  ]
 }

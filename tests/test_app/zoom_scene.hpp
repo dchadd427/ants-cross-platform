@@ -487,8 +487,9 @@ inline ApplicationConfig base_config(Aspect aspect) {
 }
 
 struct AppRig {
-    /// `many_frames`: a headless application stops after ten frames; with this it is told to take a screenshot that never comes instead, so a test can run as many frames as it needs
-    explicit AppRig(Aspect aspect = Aspect::Wide16x9, float zoom_level = 1.0f, bool given = false, const std::string& settings = std::string(), bool in_match = true, bool many_frames = false) {
+    /// `many_frames`: a headless application stops after ten frames; with this it is told to take a screenshot that never comes instead, so a test can run as many frames as it needs.
+    /// `original_art`: the HUD is the original's (the fingerprints of the match pin that picture); false leaves the choice to the settings, which start New
+    explicit AppRig(Aspect aspect = Aspect::Wide16x9, float zoom_level = 1.0f, bool given = false, const std::string& settings = std::string(), bool in_match = true, bool many_frames = false, bool original_art = true) {
         const QuietStdout quiet;
         SDL_Init(SDL_INIT_VIDEO);
         ApplicationConfig cfg = base_config(aspect);
@@ -496,6 +497,8 @@ struct AppRig {
         cfg.zoom_given = given;
         cfg.settings_path = settings;
         cfg.start_in_map_select = !in_match;
+        cfg.hud_art_given = original_art;
+        cfg.hud_art_new = !original_art;
         if (many_frames) {
             cfg.screenshot_path = "never_written.png";
             cfg.screenshot_frames = 1 << 30;

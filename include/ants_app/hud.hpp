@@ -14,6 +14,7 @@
 #include "ants_app/config_store.hpp"
 #include "ants_app/countdown_card.hpp"
 #include "ants_app/health_marks.hpp"
+#include "ants_app/hud_art.hpp"
 #include "ants_app/edge_scroll.hpp"
 #include "ants_app/options_screen.hpp"
 #include "ants_app/screen_button.hpp"
@@ -121,6 +122,11 @@ public:
     /// The frame of the match screen alone (what render() draws first, after the panel's fill): the 14 pieces of the animation uishell, last stored piece first, each placed by its
     /// anchor in the layout's picture and the stretched ones in parts around one repeated line (shell_layout.hpp). In the original's own picture each is one plain copy at its place.
     void render_shell(IRenderer& renderer, const assets::AssetArchive& assets);
+
+    /// The HUD art (hud_art.hpp): the new pieces of the frame, the buttons, the pedestals, the egg tray and the lunch box, in the place of the original's. Null (the default) draws the
+    /// original's own art exactly as it always was. Not owned: the art outlives the HUD, or is taken away (null) first. Look only: no rectangle, no hit zone and no timing of the game changes.
+    void set_art(const hud_art::Art* art);
+    const hud_art::Art* art() const noexcept { return art_; }
 
     // Mouse & Keyboard Input Dispatch
     bool handle_mouse_down(int32_t x, int32_t y, uint8_t button,
@@ -495,6 +501,12 @@ private:
     void render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_marquee_box(IRenderer& renderer);
     void render_pedestal_glow(IRenderer& renderer, const assets::AssetArchive& assets, int pedestal_idx);
+    /// A piece of the panel or the top bar that the original draws as frame 0 of the animation `name` at (dx, dy): the HUD art's piece of the same name when there is one, else the original's
+    void draw_ui(IRenderer& renderer, const assets::AssetArchive& assets, const char* name, int32_t dx, int32_t dy);
+    /// A button of the top bar (the help, options or quit): the art's pieces are whole buttons (up, hover, down: drawn every frame), the original's resting art is part of its frame (only hover and down are drawn)
+    void draw_top_button(IRenderer& renderer, const assets::AssetArchive& assets, const char* up, const char* hover, const char* down, bool is_down, bool is_hovered);
+    /// Makes what the art needs of the layout: the pieces of the frame at this shape, the pedestal slots' art
+    void refresh_art();
     /// Places every rectangle of the layout (the buttons of the top bar and the panel, the pedestal slots); run by init() and set_layout()
     void apply_layout();
     /// Is the point on pedestal slot 0 (Move / hatch / ally), 1 (ability) or 2 (Stop)? The slots are the three pedestal buttons' rectangles (FUN_01028d30, half-open)
@@ -597,6 +609,8 @@ private:
 
     PedestalSlot left_pedestal_;
     PedestalSlot right_pedestal_;
+    const hud_art::Art* art_{nullptr};            // the HUD art, null: the original's
+    std::vector<hud_art::Draw> art_frame_;        // the pieces of its frame at the layout's shape
     uint32_t (*ticks_fn_)(){nullptr}; // millisecond clock (SDL_GetTicks when null); tests inject a fixed clock
 
     // Chat text input state

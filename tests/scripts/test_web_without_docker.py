@@ -133,7 +133,7 @@ class TheDockerIgnore(unittest.TestCase):
     def test_what_the_image_build_gets_of_the_repository(self):
         ignore = wd.DockerIgnore(read(".dockerignore"))
         for path in (".git/HEAD", ".git/packed-refs", ".git/refs/heads/main", ".gitignore", ".gitattributes", "CHANGELOG.md", "docker/resolve_build_id.sh",
-                     "docker/nginx.conf", "Original-Ants/ants.chd", "src/ants_app/main.cpp", "web/shell.html", "web/front/logo.png", "tools/changelog_to_html.py", "asset_catalog/index.html", "VERSION"):
+                     "docker/nginx.conf", "Original-Ants/ants.chd", "assets/hud_art/hud_art.txt", "assets/hud_art/sheet_1x.png", "src/ants_app/main.cpp", "web/shell.html", "web/front/logo.png", "tools/changelog_to_html.py", "asset_catalog/index.html", "VERSION"):
             self.assertFalse(ignore.excluded(path), path)
         for path in (".git/config", ".git/objects/ab/cdef", ".github/workflows/ci.yml", "tests/scripts/x.py", "docs/WORKFLOW.md", "README.md", "AGENTS.md", "run_tests.sh", "start_game.sh",
                      "build_web/index.js", "build/x", "dist/x", "Original-Ants/Ants.exe", "Original-Ants/ddraw.dll", "Original-Ants/Shaders/a.glsl", "Original-Ants/chat.txt", "scratch/web/x",
@@ -405,7 +405,7 @@ class TheRealDockerfileReplayed(Scratch):
 
     def test_the_builder_got_what_the_dockerignore_lets_through_and_nothing_else(self):
         src = os.path.join(self.site["plain"], "src")
-        for name in ("CMakeLists.txt", "VERSION", "include", "src", "web", "Original-Ants", "docker", "changelog"):
+        for name in ("CMakeLists.txt", "VERSION", "include", "src", "web", "Original-Ants", "assets", "docker", "changelog"):
             self.assertTrue(os.path.exists(os.path.join(src, name)), name)
         for name in ("tests", "docs", "README.md", "run_tests.sh", ".github"):
             self.assertFalse(os.path.exists(os.path.join(src, name)), name)
@@ -425,7 +425,7 @@ class TheStampChecksOfTheRealDockerfile(unittest.TestCase):
         for name in ("CMakeLists.txt", "VERSION", ".gitignore", ".gitattributes", ".dockerignore"):
             os.makedirs(cls.context, exist_ok=True)
             shutil.copy(os.path.join(REPO, name), os.path.join(cls.context, name))
-        for name in ("cmake", "include", "src", "Original-Ants"):
+        for name in ("cmake", "include", "src", "Original-Ants", "assets"):          # (assets/hud_art: the Dockerfile copies it with Original-Ants, for the link)
             shutil.copytree(os.path.join(REPO, name), os.path.join(cls.context, name), ignore=shutil.ignore_patterns("*.exe", "*.dll"))
         os.makedirs(os.path.join(cls.context, "docker"))
         shutil.copy(os.path.join(REPO, "docker", "resolve_build_id.sh"), os.path.join(cls.context, "docker", "resolve_build_id.sh"))

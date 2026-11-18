@@ -178,12 +178,20 @@
             if (ctl) ctl.setDisabled('apply', !verdict.ok);
         }
 
+        // A box that the page changes while a person types in it (setting its value puts the caret at its end): the caret is put back where the person had it
+        function caretAt(box) { return typeof box.selectionStart === 'number' ? box.selectionStart : null; }
+        function putCaret(box, at) { if (at !== null && box.setSelectionRange) { var n = Math.max(0, Math.min(String(box.value).length, at)); box.setSelectionRange(n, n); } }
+
         function onInput() {
-            var value = textBox.value.replace(/[\r\n]+/g, ' '), typed = value, before = lengthOf(st.text), after = lengthOf(value);
+            var at = caretAt(textBox), had = textBox.value, value = textBox.value.replace(/[\r\n]+/g, ' '), typed = value, before = lengthOf(st.text), after = lengthOf(value);
             if (after > limit && after > before) value = before <= limit ? cutTo(value, limit) : st.text;      // the box stops at what fits (a text that came in too long can be cut or made shorter)
+            var back = value === st.text && value !== typed;                                                   // (a key that was not taken: the text is as it was, and the caret too)
             cutNote.hidden = value === typed;                                                                  // a pasted text that was cut says so
             st.text = value;
-            if (textBox.value !== value) textBox.value = value;
+            if (textBox.value !== value) {
+                textBox.value = value;
+                if (at !== null) putCaret(textBox, had.slice(0, at).replace(/[\r\n]+/g, ' ').length - (back ? typed.length - value.length : 0));
+            }
             showText();
         }
 
@@ -201,7 +209,7 @@
             function take() { var v = parseInt(input.value, 10); set(isNaN(v) ? st[name] : (v === now[name] ? v : clamp(v, range))); }
             less.addEventListener('click', function () { set(Math.min(range.max, Math.max(range.min, st[name] - 1))); });
             more.addEventListener('click', function () { set(Math.min(range.max, Math.max(range.min, st[name] + 1))); });
-            input.addEventListener('input', function () { var digits = input.value.replace(/\D/g, ''); if (digits !== input.value) input.value = digits; });
+            input.addEventListener('input', function () { var at = caretAt(input), had = input.value; var digits = input.value.replace(/\D/g, ''); if (digits !== input.value) { input.value = digits; if (at !== null) putCaret(input, had.slice(0, at).replace(/\D/g, '').length); } });
             input.addEventListener('change', take);
             input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); take(); if (ctl.buttons.apply && !ctl.buttons.apply.disabled) ctl.buttons.apply.click(); } });
             box.appendChild(less); box.appendChild(input); box.appendChild(more);

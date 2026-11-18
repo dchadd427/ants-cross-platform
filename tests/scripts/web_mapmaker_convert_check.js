@@ -517,8 +517,27 @@ function caseH() {
     check(r.out === plain && r.dead.length === 1, 'a fault of the core (status 2): the map as it was, and the page is asked whether the core is alive');
 }
 
+// ---- I: typing in the name box of a copy ----
+function caseI() {
+    const src = file('classic', 40, 40, 'ok'), cur = { name: 'Valley', bytes: src, file: { rows: 40, columns: 40 }, kind: 'classic', report: { headline: 'Works in the original game' } };
+    let p = page(cur);
+    p.convert.copy();
+    const box = () => p.all('input').filter((i) => i.getAttribute('type') === 'text')[0];
+    box().value = '';
+    equal(p.doc.typeCheck(box, 'Valley'), '', 'Copy, the name: every key stays in the same box with the focus (the name that is taken on the way is told under it)');
+    check(!!p.q('.note.bad') && p.button('Make new map').disabled, 'and what the keys said is there');
+    equal(p.doc.caretCheck(box, 3, 'X'), '', 'Copy: a key in the middle of the name keeps the caret after it');
+    equal(p.doc.composeCheck(box, ['n', 'ni']), '', 'Copy: an input method in the name box is not cut off');
+    p.dialogs.close();
+    p = page(cur);
+    p.convert.convert();
+    box().value = '';
+    equal(p.doc.typeCheck(box, 'Valley Extended'), '', 'Start an Extended map, the name: every key stays in the same box with the focus');
+    equal(p.doc.caretCheck(box, 3, 'Y'), '', 'Start an Extended map: a key in the middle of the name keeps the caret after it');
+}
+
 function main() {
-    for (const [name, fn] of [['A the frame', caseA], ['B the names', caseB], ['C the Crop to fit screen', caseC], ['D Copy this map', caseD], ['E Start an Extended map, Make a Classic map, the reasons', caseE], ['F Crop it to fit', caseF], ['G the rules word of a new Extended map', caseG], ['H New map and Save as a new map', caseH]]) {
+    for (const [name, fn] of [['A the frame', caseA], ['B the names', caseB], ['C the Crop to fit screen', caseC], ['D Copy this map', caseD], ['E Start an Extended map, Make a Classic map, the reasons', caseE], ['F Crop it to fit', caseF], ['G the rules word of a new Extended map', caseG], ['H New map and Save as a new map', caseH], ['I typing in the name of a copy', caseI]]) {
         process.stdout.write('RUNNING: ' + name + ' ... ');
         const before = failures;
         try { fn(); } catch (e) { failures++; console.log('\n    FAILED: threw ' + (e && e.stack ? e.stack : e)); }

@@ -16,11 +16,17 @@
 # the builder stage's own link output, byte for byte (a copy of it: nothing after the link may have edited it, and a stub link's file of about the same size cannot stand in). Production links as it
 # always did.
 #
+# A pull request that changes what the build copies in changes the images on purpose, and the check tells that apart from a difference that nothing explains (tools/image_manifest.py reads the two Dockerfiles):
+#   - a file that only the new image has and that a COPY or ADD line which the change adds accounts for is a NOTE, not a difference;
+#   - a base Dockerfile that cannot build this tree because the change adds a file that the build copies in (a new input of the link, say) or stops reading one is a NOTE, and that image is NOT compared (the other image still is);
+#   - everything else fails: a file in both images that differs, a file that only the base image has, a file that only the new image has and no added COPY line accounts for, the configuration, the link's inputs and programs,
+#     and a base build that fails although the change moves no copied file (status 2).
+#
 #   tools/image_files_diff.sh [--base REV] [--web] [--server] [--diagnose] [--no-relink]      (both images when neither is named; REV: any revision that has Dockerfile and Dockerfile.server, default origin/main)
 #   --diagnose: when the web images differ, also show how the differing files differ
 #
 # Needs Docker with BuildKit, git and python3, and about 4 GB of disk. The two builds of the web image take 6 to 10 minutes each on a 4-core machine (the base Dockerfile has no cache of ours).
-# Run from the root of the repository. Exit status 0: the same; 1: a difference (listed); 2: something could not be built or read.
+# Run from the root of the repository. Exit status 0: the same (with notes, when the change adds files or an input that the base cannot build); 1: a difference (listed); 2: something could not be built or read.
 set -u
 
 base=origin/main
@@ -35,7 +41,7 @@ while [ $# -gt 0 ]; do
         --server) want_server=1; shift ;;
         --diagnose) diagnose=1; shift ;;
         --no-relink) relink=0; shift ;;
-        -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,/^set -u$/p' "$0" | sed '$d'; exit 0 ;;
         *) echo "image_files_diff: unknown argument $1" >&2; exit 2 ;;
     esac
 done
@@ -60,6 +66,8 @@ trap cleanup EXIT
 status=0
 fail=0
 relink_held=1
+not_compared=""
+added_notes=0
 
 # show_diff A B: how two files differ (byte count, the first bytes, the text that they hold)
 show_diff() {
@@ -137,6 +145,19 @@ web_link() {
     return 0
 }
 
+# base_cannot_build NAME DOCKERFILE-NAME: the base Dockerfile's build failed. True, with a note, when this tree's Dockerfile adds or stops reading a file that the build copies in: the base Dockerfile cannot build
+# this tree then (it does not bring in what the new CMake files read, or copies a file that the tree no longer has), which says nothing about the images. False when it moves none: a build that fails then is an error.
+base_cannot_build() {
+    moved="$(python3 tools/image_manifest.py build-inputs "$work/$2.base" "$2")" || return 1
+    [ -n "$moved" ] || return 1
+    echo "image_files_diff: NOTE: the base Dockerfile cannot build this tree: the change adds or stops reading files that the build copies in:"
+    echo "$moved" | sed 's/^/    /'
+    echo "image_files_diff: NOTE: the $1 image is NOT compared (read the change of the Dockerfile)"
+    echo "::notice title=The $1 image was not compared::The base Dockerfile cannot build this tree because the change adds or stops reading a file that the build copies in."
+    not_compared="$not_compared $1"
+    return 0
+}
+
 # compare NAME DOCKERFILE-NAME: build the base's and this tree's file with the same context and the same build id, then compare
 compare() {
     name="$1"
@@ -146,7 +167,7 @@ compare() {
         dockerfile="$file"
         [ "$which" = base ] && dockerfile="$work/$file.base"
         echo "== building $name image from the $which Dockerfile ($dockerfile)"
-        docker build -f "$dockerfile" --build-arg ANTS_BUILD_ID=image-diff -t "$tag-$name-$which" . || { echo "image_files_diff: the $which build of the $name image failed" >&2; return 2; }
+        docker build -f "$dockerfile" --build-arg ANTS_BUILD_ID=image-diff -t "$tag-$name-$which" . || { [ "$which" = base ] && base_cannot_build "$name" "$file" && return 0; echo "image_files_diff: the $which build of the $name image failed" >&2; return 2; }
         cid="$(docker create "$tag-$name-$which")" || return 2
         containers="$containers $cid"
         docker export "$cid" | python3 tools/image_manifest.py manifest > "$work/$name-$which.manifest" || { echo "image_files_diff: the file list of the $which $name image could not be made" >&2; return 2; }
@@ -155,7 +176,9 @@ compare() {
         [ "$which" = new ] && new_cid="$cid"
     done
     rc=0
-    python3 tools/image_manifest.py compare "$work/$name-base.manifest" "$work/$name-new.manifest" --label "$name files" || rc=$?
+    python3 tools/image_manifest.py compare "$work/$name-base.manifest" "$work/$name-new.manifest" --label "$name files" --dockerfiles "$work/$file.base" "$file" > "$work/$name-files.compare" || rc=$?
+    cat "$work/$name-files.compare"
+    if grep -q ": NOTE only in the new image" "$work/$name-files.compare"; then added_notes=1; fi
     [ "$rc" -ge 2 ] && return 2
     if [ "$rc" = 1 ]; then
         fail=1
@@ -173,6 +196,16 @@ if [ "$want_web" = 1 ]; then compare web Dockerfile || status=2; fi
 if [ "$want_server" = 1 ]; then compare server Dockerfile.server || status=2; fi
 if [ "$status" != 0 ]; then echo "image_files_diff: could not finish" >&2; exit 2; fi
 if [ "$fail" != 0 ]; then echo "image_files_diff: the images DIFFER (listed above)" >&2; exit 1; fi
+if [ "$added_notes" = 1 ]; then
+    echo "::notice title=Files added by the change::A COPY line of the change adds files that only the new image has; they are listed as notes."
+    added_note="; the files that a COPY line of the change adds are listed as notes above"
+else
+    added_note=""
+fi
+if [ -n "$not_compared" ]; then
+    echo "image_files_diff: no difference in what could be compared, but the$not_compared image was NOT compared (the base Dockerfile cannot build this tree: see the note above)$added_note"
+    exit 0
+fi
 if [ "$want_web" = 1 ] && [ "$relink_held" = 0 ]; then link_note="the web image's link outputs were NOT compared (see the warning above)"; else link_note="the web image's link outputs"; fi
-echo "image_files_diff: the images are the same (every file and the configuration, the web image's link inputs and $link_note), apart from the build time stamps of the pages"
+echo "image_files_diff: the images are the same (every file and the configuration, the web image's link inputs and $link_note), apart from the build time stamps of the pages$added_note"
 exit 0

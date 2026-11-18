@@ -359,6 +359,7 @@ void Renderer::shutdown() {
         SDL_DestroyTexture(rgba_texture_);
         rgba_texture_ = nullptr;
     }
+    drop_art_textures();
     for (PassTexture& t : pass_levels_) destroy_texture(t);
     pass_levels_.clear();
     destroy_texture(lattice_);

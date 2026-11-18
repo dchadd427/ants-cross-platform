@@ -3,7 +3,10 @@
 
 usage: image_manifest.py manifest < image.tar > manifest.json        the tar is `docker export CONTAINER`; the manifest lists every entry with its type, mode, owner, size, link target and sha256
        image_manifest.py config < inspect.json > config.json         the part of `docker image inspect IMAGE` that decides how the image runs (user, entrypoint, command, ports, environment, ...)
-       image_manifest.py compare BASE NEW [--label TEXT]             two manifests (or two configs): lists every difference, exit status 1 when there is one, 0 when there is none, 2 when a file cannot be read
+       image_manifest.py compare BASE NEW [--label TEXT] [--dockerfiles BASE-DOCKERFILE NEW-DOCKERFILE]
+                                                                     two manifests (or two configs): lists every difference, exit status 1 when there is one, 0 when there is none, 2 when a file cannot be read; with the
+                                                                     two Dockerfiles, a file that only the new image has and that a COPY line that the change adds explains is a NOTE, not a difference
+       image_manifest.py build-inputs BASE-DOCKERFILE NEW-DOCKERFILE the files that the build copies in (COPY and ADD from the build context) that the change adds ("added PATH") or stops reading ("removed PATH"), one per line
        image_manifest.py inputs BASE NEW [--label TEXT]              two listings made by tools/link_inputs.py (what the web build's link reads): the same, exit status 1 for a difference
        image_manifest.py relink BASE NEW [--label TEXT]              two listings made by tools/relink_outputs.sh (the programs that a deterministic link of those inputs makes)
 
@@ -15,11 +18,15 @@ Two kinds of file are not compared byte for byte, and only these (the lists are 
     so other function numbers in the program and other import names in the JavaScript), and the index.js and the index.wasm of one link always belong together. Of these the final image
     keeps only the type, the mode, the owner and a size within one percent. What they are made of is compared where it is exact: the link's inputs (every object, archive and library that the link reads,
     and the link command lines: `inputs`), taken from the builder stage of both builds, and the programs of a link made deterministic (`relink`).
+A pull request that adds a COPY line changes the image on purpose, and that is told apart from a change that nothing explains (the Dockerfiles are read, `added_destinations`): a file that only the new image has and that lies
+under the destination of a COPY or ADD line that the new Dockerfile has and the base one has not is a note; a file that only the new image has with no such line, a file that only the base image has, and a file in both that differs are differences.
 Modification times are not compared (a COPY keeps the time of the file in the repository, a generated file has the time of its build); everything else is, byte for byte.
 """
 import hashlib
 import json
+import posixpath
 import re
+import shlex
 import sys
 import tarfile
 
@@ -86,15 +93,24 @@ def config(inspected):
     return {key: section.get(key) for key in CONFIG_KEYS}
 
 
-def differences(base, new, label=""):
-    """[text] of what differs between two manifests or two configs of the same shape."""
+def explained(path, entry, allowed):
+    """True for an entry that only the new image has and that one of the destinations in `allowed` (paths with no slash at the ends) accounts for: at the destination, under it, or (a folder) on the way to it."""
+    for dest in allowed:
+        if path == dest or path.startswith(dest + "/") or (isinstance(entry, dict) and entry.get("type") == "dir" and dest.startswith(path + "/")):
+            return True
+    return False
+
+
+def differences(base, new, label="", allowed=()):
+    """[text] of what differs between two manifests or two configs of the same shape. A file that only the new image has is not a difference when `explained` says a COPY line of the change accounts for it."""
     found = []
     prefix = label + ": " if label else ""
     for path in sorted(set(base) | set(new)):
         if path not in new:
             found.append("%sonly in the base image: %s" % (prefix, path))
         elif path not in base:
-            found.append("%sonly in the new image: %s" % (prefix, path))
+            if not explained(path, new[path], allowed):
+                found.append("%sonly in the new image: %s" % (prefix, path))
         elif base[path] != new[path]:
             if isinstance(base[path], dict) and isinstance(new[path], dict):
                 for key in sorted(set(base[path]) | set(new[path])):
@@ -105,6 +121,78 @@ def differences(base, new, label=""):
             else:
                 found.append("%s%s differs: %s -> %s" % (prefix, path, json.dumps(base[path]), json.dumps(new[path])))
     return found
+
+
+def additions(base, new, label="", allowed=()):
+    """[text] of the files that only the new image has and that a COPY line of the change explains (the notes that `differences` leaves out)."""
+    prefix = label + ": " if label else ""
+    return ["%sNOTE only in the new image, added by a COPY line of the change: %s" % (prefix, path) for path in sorted(set(new) - set(base)) if explained(path, new[path], allowed)]
+
+
+def instructions(text):
+    """The instructions of a Dockerfile, one string each: the lines that continue with a backslash joined, the comment lines (also those inside a continued instruction) and the empty lines dropped."""
+    found, pending = [], ""
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("#") or (not line and not pending):
+            continue
+        if line.endswith("\\"):
+            pending += line[:-1] + " "
+            continue
+        found.append((pending + line).strip())
+        pending = ""
+    if pending.strip():
+        found.append(pending.strip())
+    return found
+
+
+def copies(text):
+    """[{"stage": n, "last": whether it is the last stage (the image), "from": the stage that it copies from or None for the build context, "sources": [...], "dest": the absolute destination, "" when it has none that can be known}]
+    of the COPY and ADD instructions of a Dockerfile. A destination that is not absolute is read against the stage's WORKDIR; a heredoc, a variable and an unreadable line are left out or have no destination."""
+    found, stage, workdir = [], -1, "/"
+    for line in instructions(text):
+        word, _, rest = line.partition(" ")
+        word = word.upper()
+        if word == "FROM":
+            stage, workdir = stage + 1, "/"
+        elif word == "WORKDIR":
+            workdir = posixpath.normpath(posixpath.join(workdir, rest.strip().strip("\"'")))
+        elif word in ("COPY", "ADD"):
+            try:
+                tokens = json.loads(rest) if rest.lstrip().startswith("[") else shlex.split(rest)
+            except ValueError:
+                continue
+            tokens = [str(t) for t in tokens] if isinstance(tokens, list) else []
+            origin = None
+            for flag in [t for t in tokens if t.startswith("--")]:
+                if flag.startswith("--from="):
+                    origin = flag[len("--from="):]
+            tokens = [t for t in tokens if not t.startswith("--")]
+            if len(tokens) < 2 or any(t.startswith("<<") for t in tokens):
+                continue
+            dest = tokens[-1]
+            if "$" in dest:
+                dest = ""
+            elif not dest.startswith("/"):
+                dest = posixpath.join(workdir, dest)
+            found.append({"stage": stage, "from": origin, "sources": [posixpath.normpath(t) for t in tokens[:-1]], "dest": posixpath.normpath(dest) if dest else ""})
+    for entry in found:
+        entry["last"] = entry["stage"] == stage
+    return found
+
+
+def added_destinations(base_text, new_text):
+    """The destinations (no slash at the ends) in the final image of the COPY and ADD lines that the new Dockerfile has and the base one has not (a line is the same when its sources, source stage and destination are)."""
+    known = {(c["from"], tuple(c["sources"]), c["dest"]) for c in copies(base_text) if c["last"]}
+    return sorted({c["dest"].strip("/") for c in copies(new_text) if c["last"] and c["dest"].strip("/") and (c["from"], tuple(c["sources"]), c["dest"]) not in known})
+
+
+def build_input_changes(base_text, new_text):
+    """["added PATH" or "removed PATH"]: the files of the build context that a COPY or ADD of any stage reads in the new Dockerfile and not in the base one, and the other way round. A base Dockerfile cannot build
+    this tree when the change moves such a file: the tree has no more the one that the base copies, or has one that the base's build never brings in and that the new CMake files need."""
+    before = {path for c in copies(base_text) if c["from"] is None for path in c["sources"]}
+    after = {path for c in copies(new_text) if c["from"] is None for path in c["sources"]}
+    return ["added " + path for path in sorted(after - before)] + ["removed " + path for path in sorted(before - after)]
 
 
 HEX = re.compile(r"[0-9a-f]{64}$")
@@ -171,6 +259,18 @@ def main(argv):
     if len(argv) >= 2 and argv[1] == "config" and len(argv) == 2:
         json.dump(config(json.load(sys.stdin)), sys.stdout, sort_keys=True, indent=0)
         return 0
+    if len(argv) == 4 and argv[1] == "build-inputs":
+        try:
+            with open(argv[2], encoding="utf-8") as f:
+                base_text = f.read()
+            with open(argv[3], encoding="utf-8") as f:
+                new_text = f.read()
+        except (OSError, ValueError) as e:
+            print("image_manifest: %s" % e, file=sys.stderr)
+            return 2
+        for line in build_input_changes(base_text, new_text):
+            print(line)
+        return 0
     if len(argv) >= 4 and argv[1] == "compare":
         label = argv[argv.index("--label") + 1] if "--label" in argv else ""
         try:
@@ -178,8 +278,22 @@ def main(argv):
         except (OSError, ValueError) as e:
             print("image_manifest: %s" % e, file=sys.stderr)
             return 2
-        found = differences(base, new, label)
+        allowed = []
+        if "--dockerfiles" in argv:
+            at = argv.index("--dockerfiles")
+            try:
+                with open(argv[at + 1], encoding="utf-8") as f:
+                    base_text = f.read()
+                with open(argv[at + 2], encoding="utf-8") as f:
+                    new_text = f.read()
+            except (OSError, IndexError, ValueError) as e:
+                print("image_manifest: --dockerfiles wants two readable Dockerfiles: %s" % e, file=sys.stderr)
+                return 2
+            allowed = added_destinations(base_text, new_text)
+        found = differences(base, new, label, allowed)
         for line in found:
+            print(line)
+        for line in additions(base, new, label, allowed):
             print(line)
         print("%s%d entries compared, %d difference(s)" % (label + ": " if label else "", len(set(base) | set(new)), len(found)))
         return 1 if found else 0

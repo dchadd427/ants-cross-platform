@@ -1,0 +1,57 @@
+{
+ "note": "Mutants of the five-second cache of GET /stats in docker/nginx.conf (docs/SITE_STATS.md) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each must fail TheCacheRuns of tests/scripts/test_nginx_stats.py, which runs the real file in front of a stand-in server and needs docker. Run from the checkout: python3 tools/mutate.py tests/data/nginx_stats_cache_mutants.json --keep-going --jobs 1.",
+ "defaults": {
+  "test": "python3 tests/scripts/test_nginx_stats.py TheCacheRuns",
+  "expect": "TheCacheRuns"
+ },
+ "mutants": [
+  {
+   "id": "cache_never_keeps_an_answer",
+   "file": "docker/nginx.conf",
+   "old": "proxy_cache_key \"ants-stats\";\n        proxy_cache_valid 200 5s;",
+   "new": "proxy_cache_key \"ants-stats\";\n        proxy_cache_valid 200 0s;"
+  },
+  {
+   "id": "cache_keeps_an_answer_for_one_second",
+   "file": "docker/nginx.conf",
+   "old": "proxy_cache_key \"ants-stats\";\n        proxy_cache_valid 200 5s;",
+   "new": "proxy_cache_key \"ants-stats\";\n        proxy_cache_valid 200 1s;"
+  },
+  {
+   "id": "cache_keeps_an_answer_for_ten_seconds",
+   "file": "docker/nginx.conf",
+   "old": "proxy_cache_key \"ants-stats\";\n        proxy_cache_valid 200 5s;",
+   "new": "proxy_cache_key \"ants-stats\";\n        proxy_cache_valid 200 10s;"
+  },
+  {
+   "id": "cache_keeps_an_error_too",
+   "file": "docker/nginx.conf",
+   "old": "proxy_cache_key \"ants-stats\";\n        proxy_cache_valid 200 5s;",
+   "new": "proxy_cache_key \"ants-stats\";\n        proxy_cache_valid any 5s;"
+  },
+  {
+   "id": "cache_obeys_the_servers_no_store",
+   "file": "docker/nginx.conf",
+   "old": "proxy_cache_valid 200 5s;\n        proxy_ignore_headers Cache-Control;\n        proxy_cache_lock on;\n        proxy_cache_use_stale updating error timeout;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_server ants-server:4002;\n        proxy_pass http://$ants_server;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 5s;\n        proxy_send_timeout 5s;\n        proxy_hide_header X-Content-Type-Options;",
+   "new": "proxy_cache_valid 200 5s;\n        proxy_cache_lock on;\n        proxy_cache_use_stale updating error timeout;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_server ants-server:4002;\n        proxy_pass http://$ants_server;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 5s;\n        proxy_send_timeout 5s;\n        proxy_hide_header X-Content-Type-Options;"
+  },
+  {
+   "id": "cache_has_no_lock",
+   "file": "docker/nginx.conf",
+   "old": "proxy_cache_valid 200 5s;\n        proxy_ignore_headers Cache-Control;\n        proxy_cache_lock on;\n        proxy_cache_use_stale updating error timeout;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_server ants-server:4002;\n        proxy_pass http://$ants_server;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 5s;\n        proxy_send_timeout 5s;\n        proxy_hide_header X-Content-Type-Options;",
+   "new": "proxy_cache_valid 200 5s;\n        proxy_ignore_headers Cache-Control;\n        proxy_cache_use_stale updating error timeout;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_server ants-server:4002;\n        proxy_pass http://$ants_server;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 5s;\n        proxy_send_timeout 5s;\n        proxy_hide_header X-Content-Type-Options;"
+  },
+  {
+   "id": "cache_serves_no_old_answer_while_updating",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_cache_lock on;\n        proxy_cache_use_stale updating error timeout;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_server ants-server:4002;\n        proxy_pass http://$ants_server;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 5s;\n        proxy_send_timeout 5s;\n        proxy_hide_header X-Content-Type-Options;                 # (the server's own",
+   "new": "        proxy_cache_lock on;\n        proxy_cache_use_stale error timeout;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_server ants-server:4002;\n        proxy_pass http://$ants_server;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 5s;\n        proxy_send_timeout 5s;\n        proxy_hide_header X-Content-Type-Options;                 # (the server's own"
+  },
+  {
+   "id": "cache_serves_no_old_answer_when_the_server_fails",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_cache_lock on;\n        proxy_cache_use_stale updating error timeout;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_server ants-server:4002;\n        proxy_pass http://$ants_server;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 5s;\n        proxy_send_timeout 5s;\n        proxy_hide_header X-Content-Type-Options;                 # (the server's own",
+   "new": "        proxy_cache_lock on;\n        proxy_cache_use_stale updating;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_server ants-server:4002;\n        proxy_pass http://$ants_server;\n        proxy_http_version 1.1;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 5s;\n        proxy_send_timeout 5s;\n        proxy_hide_header X-Content-Type-Options;                 # (the server's own"
+  }
+ ]
+}

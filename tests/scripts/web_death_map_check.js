@@ -157,6 +157,18 @@ function button(card, label) { return card.byTag('button').filter((b) => text(b)
 const press = (b) => b.fire('click', {});
 const svgOf = (card) => card.byClass('dm-stage')[0].byTag('svg')[0];
 function marks(card) { return svgOf(card).byClass('mkp'); }
+{   // the picture of a map of the players: the picker's address, the other ending (.webp, .png) tried once when it does not come, and taken away when neither does (the dark ground stays)
+    const P = require(path.resolve(__dirname, '..', '..', 'web', 'front', 'map_picker.js'));
+    const D = make({ picker: P, maps: () => null, replay: { mapKey: () => '' } }), card = D.card(record(field(60, 60, ANTS), { map: 'Fight Island.lvl' }), {});
+    host(card);
+    const stage = sized(card, 560), pic = stage.byTag('img')[0];
+    same('with no list yet, an approved map has the library\'s address to begin with', pic && pic.src, '/maps/previews/Fight%20Island.webp');
+    pic.fire('error');
+    same('... and a 404 is answered with the other ending, in the same image', [stage.byTag('img')[0] === pic, pic.src], [true, '/maps/previews/Fight%20Island.png']);
+    pic.fire('error');
+    same('... and when that does not come either, the picture is taken away and the card stays whole', [stage.byTag('img').length, card.byClass('dm-stage').length], [0, 1]);
+    STAGE = 0;
+}
 {
     const D = make(), rec = record(field(60, 60, ANTS)), card = D.card(rec, {}), root = host(card);
     same('the card: a section with its id, labelled by its title, Heat first', [card.tag, card.id, card.attrs['aria-labelledby'], text(card.byTag('h2')[0]), card.className.split(' ').includes('heat')], ['section', 'deaths', 'deaths-h', 'Where ants died', true]);

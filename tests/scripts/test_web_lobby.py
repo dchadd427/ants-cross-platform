@@ -91,7 +91,7 @@ class TheFrontPageMarkup(PageCase):
         default = re.search(r"var DEFAULT_MAP_KEY = '(\w+)';", self.rules).group(1)
         self.assertEqual(len(keys), 6)
         self.assertIn('<img id="preview" src="front/preview_%s.png" alt="The map: %s" width="300" height="300">' % (default, default.capitalize()), self.markup)
-        self.assertIn("var src = side.mapKey ? 'front/preview_' + side.mapKey + '.png' : side.mapThumb;", self.script)
+        self.assertIn("var src = side.mapKey ? 'front/preview_' + side.mapKey + '.png' : side.mapThumb || (side.mapFile && Pk ? Pk.previewPath(side.mapFile) : '');", self.script)
         for key in keys:
             self.assertTrue(os.path.isfile(os.path.join(REPO, "web", "front", "preview_%s.png" % key)), key)
         self.assertIn("originals: Rules.MAPS });", self.script)       # (the map list's fallback is the rules' list of the six, in its order)

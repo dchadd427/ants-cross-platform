@@ -501,7 +501,7 @@ const outsideTouch = (() => { const o = makePage({ touch: true, touchKeys: true 
     p.game.calls.length = 0;
     p.tab('video');
     const video = p.qa('[role=radiogroup]');
-    expect('the Video section: the mouse, the two rows of the ant health and the damage and heal numbers are button groups (the picture\'s shape is a dropdown)', video.map((g) => g.children.map((b) => b.textContent)), [['Locked', 'Free'], ['Hurt ants', 'All ants', 'Off'], ['Bar', 'Number'], ['On', 'Off']]);
+    expect('the Video section: the mouse, the two rows of the ant health, the damage and heal numbers and the HUD art are button groups (the picture\'s shape is a dropdown)', video.map((g) => g.children.map((b) => b.textContent)), [['Locked', 'Free'], ['Hurt ants', 'All ants', 'Off'], ['Bar', 'Number'], ['On', 'Off'], ['New', 'Classic']]);
     const dropdown = p.qa('.pick-select');
     expect('one dropdown in the panel: the picture\'s shape, the page\'s picker (a button), in the row of its own', [dropdown.length, dropdown[0].tagName, dropdown[0].parentNode.className + '/' + dropdown[0].parentNode.parentNode.className, dropdown[0].parentNode.parentNode.parentNode.querySelector('.gm-name').textContent], [1, 'button', 'pick/gm-ctl gm-pick', 'Picture shape']);
     ok('...no native select is in the panel', !p.q('select') && p.qa('option').length === 0);

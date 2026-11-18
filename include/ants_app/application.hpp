@@ -94,6 +94,11 @@ struct ApplicationConfig {
     /// orders at once (net::Prediction, docs/NETWORK_PORT.md). OFF by default (opt-in); a game of one machine never predicts. `prediction_given`: the command line said it (the settings key then does not count).
     bool prediction{false};
     bool prediction_given{false};
+    /// --hud-art new | classic (the settings key `hud_art` when the command line does not say): the look of the match screen's frame, buttons and panel (hud_art.hpp): the new pictures (the default) or the
+    /// original's own. `hud_art_given` is true when the command line said it (the settings key then does not count, and it is not written). `hud_art_dir`: the folder of the new pictures.
+    bool hud_art_new{true};
+    bool hud_art_given{false};
+    std::string hud_art_dir{"assets/hud_art"};
     bool headless{false};
     std::string chd_path{"Original-Ants/ants.chd"};
     std::string maps_dir{"Original-Ants/Maps"};     // the folder whose `*.lvl` files are the map list (the original searches its Maps folder)
@@ -380,6 +385,7 @@ public:
     bool game_menu_is_open() const noexcept { return game_menu_open_; }
     const std::string& game_menu_describe();
     const game_menu::MenuSettings& menu_settings() const noexcept { return menu_settings_; }
+    const hud_art::Art& hud_art() const noexcept { return hud_art_; }
     const health::ChangeTracker& health_changes() const noexcept { return health_changes_; }      // the live damage and heal numbers (empty while the setting is Off)
     /// A PHONE'S KEYBOARD for the match's chat box (application_touch.cpp; the page, web/shell.html "ANTS_CHAT", opens the browser's keyboard when a finger taps the box and hands the
     /// game what is typed, through these and the exports ants_chat_probe / ants_chat_do): the box takes text now (a match is on the screen, no recording, no catch-up screen, chat on, no dialog)
@@ -703,6 +709,7 @@ private:
     health::ChangeTracker health_changes_;                // the damage and heal numbers (health_changes.hpp): read from the confirmed engine after every tick, drawn by the renderer; view only
     double health_clock_ms_{0.0};                         // ... their clock: real milliseconds that pass while the match runs (it stops while a match or a replay is paused)
     game_menu::MenuSettings menu_settings_;               // Master volume, Mute and the hit point numbers (application_game_menu.cpp)
+    hud_art::Art hud_art_;                                // the new pictures of the HUD (hud_art.hpp), read at start; the HUD draws them while the setting says New and they were found
     std::function<void()> on_game_menu_{nullptr};
     std::string game_menu_json_;                          // what ants_menu_describe hands to the page (it stays until the next call)
     bool game_menu_open_{false};                          // the page's settings panel is up: the game takes no input
@@ -814,6 +821,9 @@ private:
     void check_match_over();                              // the match is over and not yet shown: the results screen opens (waiting), the music closes
     void note_seat();                                     // the seat that the room gave this machine, told once to on_seat_known_
     void confirm_quit();                                  // the quit dialog's Yes (FUN_0101453f): the quit ends the match while one other side is left, else the player leaves
+    void load_hud_art();                                  // reads the HUD art's manifest from config_.hud_art_dir (a folder without it leaves the original's art) and applies the setting
+    void apply_hud_art();                                 // gives the HUD the art while the setting is New and it is loaded, else none
+    void check_hud_art();                                 // the HUD has the art only while the sheet of the output's scale is a texture (else the original's art, with a word on stderr)
     void load_game_menu_settings();                       // the settings menu's new settings (game_menu::MenuSettings) from the settings file; the HUD's ant health marks and the mixer take them
     void sync_game_menu_settings();                       // Ctrl+L flipped the ant health marks: remembered
     int game_menu_where() const;                          // -1 no match screen, 0 a match, 1 a recording or a live match that is watched

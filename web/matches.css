@@ -130,7 +130,7 @@ button { font: inherit; color: inherit; }
 .m { position: relative; display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; grid-template-areas: "pic info side" "pic sides side"; gap: 8px 22px; align-items: center; padding: 12px 18px 12px 12px; background: linear-gradient(180deg, #0f1820, #080c11); border: 2px solid var(--edge); border-radius: 6px; box-shadow: 0 0 0 1px #14352b; }
 .m:hover { box-shadow: 0 0 0 1px var(--frame-hi); }
 .m .tv { grid-area: pic; margin: 0; width: 96px; border: 2px solid var(--edge); background: var(--edge); box-shadow: 0 0 0 2px var(--frame), 0 0 0 4px var(--edge), 3px 4px 0 4px var(--shadow); }
-.m .tv img, .m .tv .blank, .hero .tv img, .hero .tv .blank { display: block; width: 100%; height: auto; aspect-ratio: 1; background: #20262a; }
+.m .tv img, .m .tv .blank, .hero .tv img, .hero .tv .blank { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; background: #20262a; }
 .m .info { grid-area: info; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; }
 .m h3 { font-size: 22px; font-weight: 500; line-height: 1.2; white-space: nowrap; }
 .m h3 a { text-decoration: none; }

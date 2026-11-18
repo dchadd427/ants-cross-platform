@@ -1,0 +1,159 @@
+{
+ "note": "Mutants of the typing in the map maker's boxes for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): a box that a re-render takes out of the page (moved, which a browser counts as taken out) loses the focus, the caret that is not put back, the focus that goes to another control, one script at a time against the check of its dialog (tests/scripts/web_mapmaker_*_check.js, which type through the fake DOM of web_mapmaker_fake_dom.js). Run from the checkout: tools/mutate.py tests/data/mapmaker_focus_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_mapmaker.py runs the same list on a copy of the files.",
+ "mutants": [
+  {
+   "id": "submit_everything_made_again_each_key",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "if (box.says === says) return;",
+   "new": "if (false) return;",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "submit_maker_box_made_again_each_key",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "fill(makerBox, editing ? 'edit' : 'show ' + maker,",
+   "new": "fill(makerBox, {},",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "submit_door_line_made_again_each_key",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "fill(doorBox, door === 'off' ? 'off' : twin ? 'twin ' + since : big ? 'big' : '',",
+   "new": "fill(doorBox, {},",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "submit_change_name_gives_no_focus",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "editing = true; paint(); makerIn.focus();",
+   "new": "editing = true; paint();",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "submit_name_box_moved_by_paint",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "            function paint() {\n                var v = values(),",
+   "new": "            function paint() {\n                nameIn.parentNode.insertBefore(nameIn, nameIn.nextSibling);\n                var v = values(),",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "submit_note_box_moved_by_paint",
+   "file": "web/front/mapmaker_submit.js",
+   "old": "            function paint() {\n                var v = values(),",
+   "new": "            function paint() {\n                noteIn.parentNode.insertBefore(noteIn, noteIn.nextSibling);\n                var v = values(),",
+   "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "props_description_moved_by_counter",
+   "file": "web/front/mapmaker_props.js",
+   "old": "textBox.className = over ? 'over' : '';",
+   "new": "textBox.className = over ? 'over' : ''; textBox.parentNode.insertBefore(textBox, textBox.nextSibling);",
+   "test": "node tests/scripts/web_mapmaker_props_check.js"
+  },
+  {
+   "id": "props_stepper_moved_when_taken",
+   "file": "web/front/mapmaker_props.js",
+   "old": "function show() { input.value = String(st[name]);",
+   "new": "function show() { input.parentNode.insertBefore(input, input.nextSibling); input.value = String(st[name]);",
+   "test": "node tests/scripts/web_mapmaker_props_check.js"
+  },
+  {
+   "id": "props_caret_lost_when_text_changed",
+   "file": "web/front/mapmaker_props.js",
+   "old": "                textBox.value = value;\n                if (at !== null) putCaret(textBox,",
+   "new": "                textBox.value = value;\n                if (false) putCaret(textBox,",
+   "test": "node tests/scripts/web_mapmaker_props_check.js"
+  },
+  {
+   "id": "props_caret_of_a_key_not_taken",
+   "file": "web/front/mapmaker_props.js",
+   "old": "- (back ? typed.length - value.length : 0));",
+   "new": "- 0);",
+   "test": "node tests/scripts/web_mapmaker_props_check.js"
+  },
+  {
+   "id": "props_caret_lost_in_number_box",
+   "file": "web/front/mapmaker_props.js",
+   "old": "input.value = digits; if (at !== null) putCaret(input,",
+   "new": "input.value = digits; if (false) putCaret(input,",
+   "test": "node tests/scripts/web_mapmaker_props_check.js"
+  },
+  {
+   "id": "newmap_box_moved_by_the_check",
+   "file": "web/front/mapmaker_dialog.js",
+   "old": "if (fit.rows && fit.columns && fit.cells) {",
+   "new": "if ((rowsIn.parentNode.insertBefore(rowsIn, rowsIn.nextSibling)), (columnsIn.parentNode.insertBefore(columnsIn, columnsIn.nextSibling)), fit.rows && fit.columns && fit.cells) {",
+   "test": "node tests/scripts/web_mapmaker_dialog_check.js"
+  },
+  {
+   "id": "newmap_radio_moved_by_the_choice",
+   "file": "web/front/mapmaker_dialog.js",
+   "old": "cards[k].input.checked = k === kind; });",
+   "new": "cards[k].input.checked = k === kind; cards[k].input.parentNode.insertBefore(cards[k].input, cards[k].input.nextSibling); });",
+   "test": "node tests/scripts/web_mapmaker_dialog_check.js"
+  },
+  {
+   "id": "resize_box_moved_by_the_check",
+   "file": "web/front/mapmaker_dialog.js",
+   "old": "if (!fit.rows || !fit.columns || !fit.cells) {",
+   "new": "if ((rowsIn.parentNode.insertBefore(rowsIn, rowsIn.nextSibling)), (columnsIn.parentNode.insertBefore(columnsIn, columnsIn.nextSibling)), !fit.rows || !fit.columns || !fit.cells) {",
+   "test": "node tests/scripts/web_mapmaker_dialog_check.js"
+  },
+  {
+   "id": "open_search_moved_by_the_list",
+   "file": "web/front/mapmaker_dialog.js",
+   "old": "shown = sortEntries(filterEntries(all));",
+   "new": "searchIn.parentNode.insertBefore(searchIn, searchIn.nextSibling); shown = sortEntries(filterEntries(all));",
+   "test": "node tests/scripts/web_mapmaker_dialog_check.js"
+  },
+  {
+   "id": "name_box_moved_by_the_check",
+   "file": "web/front/mapmaker_convert.js",
+   "old": "status.textContent = ''; input.removeAttribute('aria-invalid');",
+   "new": "input.parentNode.insertBefore(input, input.nextSibling); status.textContent = ''; input.removeAttribute('aria-invalid');",
+   "test": "node tests/scripts/web_mapmaker_convert_check.js"
+  },
+  {
+   "id": "name_box_moved_by_the_check_in_save",
+   "file": "web/front/mapmaker_convert.js",
+   "old": "status.textContent = ''; input.removeAttribute('aria-invalid');",
+   "new": "input.parentNode.insertBefore(input, input.nextSibling); status.textContent = ''; input.removeAttribute('aria-invalid');",
+   "test": "node tests/scripts/web_mapmaker_save_check.js"
+  },
+  {
+   "id": "edges_radio_moved_by_the_choice",
+   "file": "web/front/mapmaker_edges.js",
+   "old": "cards[k].input.checked = k === scope; });",
+   "new": "cards[k].input.checked = k === scope; cards[k].input.parentNode.insertBefore(cards[k].input, cards[k].input.nextSibling); });",
+   "test": "node tests/scripts/web_mapmaker_edges_check.js"
+  },
+  {
+   "id": "play_radio_moved_by_the_choice",
+   "file": "web/front/mapmaker_play.js",
+   "old": "i.checked = choice[g.seat] === i.value;",
+   "new": "i.checked = choice[g.seat] === i.value; i.parentNode.insertBefore(i, i.nextSibling);",
+   "test": "node tests/scripts/web_mapmaker_play_check.js"
+  },
+  {
+   "id": "ants_number_box_taken_each_digit",
+   "file": "web/front/mapmaker_ants.js",
+   "old": "input.addEventListener('change', function () { var v = parseInt(",
+   "new": "input.addEventListener('input', function () { var v = parseInt(",
+   "test": "node tests/scripts/web_mapmaker_ants_check.js"
+  },
+  {
+   "id": "ants_focus_goes_to_the_first_control_of_the_key",
+   "file": "web/front/mapmaker_ants.js",
+   "old": "mark = keep ? String(at.tagName).toLowerCase() + '[data-k=\"' + keep + '\"]' : '',",
+   "new": "mark = keep ? '[data-k=\"' + keep + '\"]' : '',",
+   "test": "node tests/scripts/web_mapmaker_ants_check.js"
+  },
+  {
+   "id": "ants_focus_not_put_back",
+   "file": "web/front/mapmaker_ants.js",
+   "old": "if (again && again.focus) again.focus();",
+   "new": "if (again && again.focus) void again;",
+   "test": "node tests/scripts/web_mapmaker_ants_check.js"
+  }
+ ]
+}

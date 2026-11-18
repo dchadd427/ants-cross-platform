@@ -241,6 +241,12 @@ function caseD() {
     equal(p.all('.dlg-foot button').map((b) => b.textContent), ['Cancel', 'Save as a new map'], 'the two buttons');
     check(!p.button('Save as a new map').disabled, 'a free name can be saved');
     check(p.doc.activeElement === p.input(), 'the name has the focus');
+    // typing: every key checks the name again (the line under the box and its button are made again), the box is the same node with the focus and the caret
+    p.input().value = '';
+    equal(p.doc.typeCheck(() => p.input(), 'Sunny Picnic 2'), '', 'Save as, the name: every key stays in the same box with the focus (a name that is taken on the way)');
+    equal(p.doc.caretCheck(() => p.input(), 6, 'X'), '', 'Save as: a key in the middle of the name keeps the caret after it');
+    equal(p.doc.composeCheck(() => p.input(), ['n', 'ni']), '', 'Save as: an input method in the name box is not cut off');
+    p.input().value = 'Sunny Picnic 3'; p.input().fire('input', {});
     // the open map's name, a draft's and a library map's are taken, in any case and with blanks
     p.type('sunny  PICNIC ');
     check(p.button('Save as a new map').disabled && p.input().getAttribute('aria-invalid') === 'true', 'the open map\'s name is refused');
