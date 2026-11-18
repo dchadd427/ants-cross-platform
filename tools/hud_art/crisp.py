@@ -33,8 +33,9 @@ class Canvas:
         out = np.zeros_like(m); h, w = m.shape; dx, dy = int(round(dx * self.s)), int(round(dy * self.s))
         out[max(dy, 0):h + min(dy, 0), max(dx, 0):w + min(dx, 0)] = m[max(-dy, 0):h + min(-dy, 0), max(-dx, 0):w + min(-dx, 0)]
         return out
-    def out(self, layers):
-        """layers: [(mask, color or an (h, w, 3) array)], drawn in order, hard-edged at the sample grid; averaged to the output pixels"""
+    def out(self, layers, snap=False):
+        """layers: [(mask, color or an (h, w, 3) array)], drawn in order, hard-edged at the sample grid; averaged to the output pixels. `snap`: each output pixel takes the sample at its middle instead
+        (pixel art: no pixel is partly covered, so the bands of a thin stroke stay whole)"""
         H, W = self.size[1], self.size[0]
         rgb = np.zeros((H, W, 3)); al = np.zeros((H, W))
         for m, col in layers:
@@ -44,6 +45,9 @@ class Canvas:
             al[sel] = 1
         p = self.pad; rgb = rgb[p:-p, p:-p]; al = al[p:-p, p:-p]
         h, w = self.h * self.k, self.w * self.k
+        if snap:
+            mid = SS // 2
+            return Image.fromarray(np.dstack([rgb.reshape(h, SS, w, SS, 3)[:, mid, :, mid], al.reshape(h, SS, w, SS)[:, mid, :, mid][..., None] * 255]).round().clip(0, 255).astype(np.uint8), 'RGBA')
         a = al.reshape(h, SS, w, SS).mean(axis=(1, 3))
         c = (rgb * al[..., None]).reshape(h, SS, w, SS, 3).mean(axis=(1, 3)) / np.maximum(a, 1e-6)[..., None]
         return Image.fromarray(np.dstack([c, a * 255]).round().clip(0, 255).astype(np.uint8), 'RGBA')

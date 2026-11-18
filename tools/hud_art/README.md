@@ -32,7 +32,7 @@ The labels are set in **Libre Baskerville Regular** (`fonts/LibreBaskerville-Reg
 
 ## Known limits of the art
 
-- The cursors are drawn in three manners: the hands are shaded renders, everything else is flat and hard-edged. The pointer is a little smaller than its box (its tail ends two pixels short of the original's), food is plainer than the original's, and the last two frames of attack are a white block in a red ring.
+- The cursors are drawn in three manners: the hands are shaded renders, everything else is flat and hard-edged. The pointer is a little smaller than its box (its tail ends two pixels short of the original's), and the last two frames of attack are a white block in a red ring. Food keeps the original's own colors and makes of its chunk and brackets, redrawn by hand rather than copied; at 1x its brackets are pixel art (the other cursors' slanted and round edges are antialiased there).
 
 - The lunch box is a front view; the original's is a three-quarter view of a pail.
 - The latch has no gold side walls inside its band, the seat in the rise and the swap is shallow, and the turning slab is flat.

@@ -118,11 +118,6 @@ YEL = (255, 243, 63)
 RED = (251, 51, 91)
 DRED = (187, 0, 0)
 PINK = (247, 159, 211)
-G_RIM = (255, 255, 97)
-G_LIT = (255, 211, 0)
-G_MID = (228, 195, 54)
-G_DK = (227, 159, 7)
-G_HANDLE = (235, 219, 87)
 ORANGE = (239, 175, 7)
 ORANGE_D = (199, 119, 15)
 RED2 = (255, 0, 0)
@@ -224,37 +219,88 @@ def attack(w, h, k):
     return c.out(layers)
 
 
-BOX = [(5, 0), (9, 0), (12, 3), (12, 10), (9, 13), (7, 14), (2, 14), (0, 12), (0, 5)]
+# The food chunk is a handled lunch box with a bright left face and a light lid, 10 x 12 canvas pixels, as the original's: a stepped, chipped silhouette on whole pixels (so its edges are hard at every
+# scale), a pale highlight along the top, a darker amber edge on its lower right. Rows are (y, from x, to x), half open.
+CHUNK = (10, 12)
+CHUNK_SILHOUETTE = [(0, 4, 7), (1, 3, 9), (2, 3, 10), (3, 1, 10), (4, 0, 10), (5, 0, 10), (6, 0, 9), (7, 0, 10), (8, 0, 10), (9, 0, 9), (10, 1, 8), (11, 2, 6)]
+CHUNK_FACE = [(y, 0, 1) for y in range(5, 12)] + [(y, 2, 4) for y in range(6, 12)] + [(1, 3, 4), (2, 3, 4), (3, 3, 4)]       # the bright left face
+CHUNK_STRIP = [(y, 1, 2) for y in range(6, 12)]                                                                                # the olive strip between its two bright columns
+CHUNK_LID = [(2, 8, 10), (3, 1, 3), (3, 8, 9), (4, 0, 2), (4, 6, 7), (5, 1, 5)]                                                # the light band of the lid
+CHUNK_LIGHT = [(2, 5, 7), (3, 5, 8), (4, 2, 6)]                                                                                # the lid's own highlight
+CHUNK_TOP = [(0, 4, 7), (1, 3, 4)]                                                                                             # the pale edge of the top
+CHUNK_SHADE = [(7, 9, 10), (8, 9, 10), (9, 8, 9), (10, 7, 8), (11, 5, 6)]                                                      # the darker edge of the lower right
+G_RIM = (255, 255, 97)
+G_LIT = (255, 211, 0)
+G_MID = (228, 195, 54)
+G_DK = (227, 159, 7)
+G_HANDLE = (235, 219, 87)
+G_SALMON = (205, 134, 86)
+G_SHADE = (196, 128, 4)
 
 
-def box_layers(c, ox, oy, s, rim):
-    P = lambda pts: c.poly([(ox + x * s, oy + y * s) for x, y in pts])
-    body = P(BOX)
-    inner = c.inset(body, 1.0 * min(s, 1.0)) if rim else body
-    left = P([(0, 4), (5, 4), (5, 15), (0, 15)])
-    lid = P([(0, 5), (4, 1), (5, 0), (9, 0), (12, 3), (9, 5.5), (5, 5.5)])
-    handle = P([(6, 2), (9, 2), (9, 4), (6, 4)])
-    return [(body, rim or G_DK), (inner, G_DK), (inner * left, G_LIT), (inner * lid, G_MID), (inner * handle, G_HANDLE)]
+def pixel_rows(c, ox, oy, rows):
+    m = np.zeros((c.size[1], c.size[0]))
+    for y, x0, x1 in rows:
+        m = np.maximum(m, c.rect(ox + x0, oy + y, ox + x1, oy + y + 1))
+    return m
+
+
+def chunk(c, ox, oy, rim):
+    """the food chunk with its corner at (ox, oy); `rim`: a color for a one pixel rim round it"""
+    sil = pixel_rows(c, ox, oy, CHUNK_SILHOUETTE)
+    layers = []
+    if rim:
+        grown = np.zeros_like(sil)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                grown = np.maximum(grown, c.shift(sil, dx, dy))
+        layers.append((grown, rim))
+    for rows, color in ((CHUNK_SILHOUETTE, G_DK), (CHUNK_FACE, G_LIT), (CHUNK_STRIP, G_MID), (CHUNK_LID, G_MID), (CHUNK_LIGHT, G_HANDLE), (CHUNK_TOP, G_RIM), (CHUNK_SHADE, G_SHADE)):
+        layers.append((pixel_rows(c, ox, oy, rows) * sil, color))
+    return layers
+
+
+def shell(c, cx, cy, r_out, width):
+    return np.clip(c.ellipse(cx, cy, r_out, r_out) - c.ellipse(cx, cy, r_out - width, r_out - width), 0, 1)
+
+
+def brackets(c, w, curved):
+    """four brackets that stand at the edges of the sprite, or the whole ring (`curved` False), as the original's: a tube of four bands, outside in olive, pale yellow, amber and salmon in the middle of
+    a bracket (olive and amber at its ends); the dim first frame is amber and yellow. A bracket is an arc of its own, tighter than a circle round the sprite: the top and bottom ones have a radius of 9 canvas
+    pixels and are 14 wide, the left and right ones a radius of 11 and are 13 tall"""
+    cx = cy = w / 2.0
+    full = np.ones((c.size[1], c.size[0]))
+    if not curved:
+        r = w / 2.0
+        s1, s2, s3, s4 = (shell(c, cx, cy, r - i, 1) for i in range(4))
+        return [(s1, G_MID), (s2, G_RIM), (s3, G_MID), (s3, G_DK), (s4, G_DK), (s4, G_SALMON)]
+    bands = [np.zeros_like(full) for _ in range(6)]           # olive, pale, olive, amber, amber, salmon (each the union over the four brackets)
+    dim = [np.zeros_like(full) for _ in range(2)]             # the first frame: amber, yellow
+    for angle, radius, half_chord, (x, y) in ((-90, 9.0, 7.0, (cx, 9.0)), (90, 9.0, 7.0, (cx, w - 9.0)), (180, 11.0, 6.5, (11.0, cy)), (0, 11.0, 6.5, (w - 11.0, cy))):
+        phi = math.degrees(math.asin(half_chord / radius))
+        span, tip, mid = (wedge(c, x, y, angle - phi * f, angle + phi * f) for f in (1.0, 0.9, 0.68))
+        if w == 32:
+            dim[0] = union(dim[0], shell(c, x, y, radius, 3) * span)
+            dim[1] = union(dim[1], shell(c, x, y, radius - 1, 2) * span)
+            continue
+        s1, s2, s3, s4 = (shell(c, x, y, radius - i, 1) for i in range(4))
+        for n, mask in enumerate((s1 * tip, s2 * tip, s3 * span, s3 * mid, s4 * span, s4 * mid)):
+            bands[n] = union(bands[n], mask)
+    if w == 32:
+        return [(dim[0], G_DK), (dim[1], G_LIT)]
+    return list(zip(bands, (G_MID, G_RIM, G_MID, G_DK, G_DK, G_SALMON)))
 
 
 def food(sprite, w, h, k):
-    """the lunch box, and a ring of four arcs that closes on it; then the box alone (once with a white rim), then small. No outline"""
+    """the food chunk, and four brackets that close on it (then a ring); then the chunk alone (once with a pale rim, once with a white one), then smaller. No outline"""
     c = Canvas(w, h, k)
-    cx, cy = w / 2.0, h / 2.0
-    if w >= 21:
-        half = {32: 26, 30: 33, 26: 41, 21: 46}[w]
-        thickness = 3 if w == 21 else 2
-        rg = ring(c, cx, cy, w / 2.0, thickness)
-        if half < 45:
-            arcs = np.zeros_like(rg)
-            for q in range(4):
-                arcs = union(arcs, wedge(c, cx, cy, q * 90 - 90 - half, q * 90 - 90 + half))
-            rg = rg * arcs
-        s = 10 / 12.0
-        layers = box_layers(c, round(cx - 6 * s), round(cy - 7 * s), s, G_RIM if w == 21 else None)
-        return c.out([(rg, G_DK), (rg * c.shift(rg, -0.75, -0.75), G_LIT)] + layers)
-    s = 1.0 if w == 12 else 10 / 12.0
-    return c.out(box_layers(c, 0, 0, s, WHITE if sprite == 'curfd06' else G_RIM))
+    if sprite == 'curfd05':
+        return c.out(chunk(c, 1, 1, G_RIM))
+    if sprite == 'curfd06':
+        return c.out(chunk(c, 1, 1, WHITE))
+    if sprite == 'curfd08':
+        return c.out(chunk(c, 0, 0, None))
+    return c.out(brackets(c, w, w != 21) + chunk(c, round(w / 2.0 - CHUNK[0] / 2.0), round(h / 2.0 - CHUNK[1] / 2.0), None), snap=k == 1)       # (at 1x the bands are pixel art, as the original's)
 
 
 def no_entry(size, k):
