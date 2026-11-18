@@ -95,7 +95,7 @@
    "id": "bot_match_map_always_first",
    "file": "src/ants_server/room_manager.cpp",
    "old": "const size_t picked = map_draw % maps.size();",
-   "new": "const size_t picked = 0;",
+   "new": "const size_t picked = (map_draw & 0u) % maps.size();",
    "build": "test_server",
    "test": "timeout 300 env ANTS_TEST_FILTER=S3.18 ./build/tests/test_server/test_server",
    "expect": "S3.184b"
@@ -104,7 +104,7 @@
    "id": "bot_match_map_one_list_for_both_rules",
    "file": "src/ants_server/room_manager.cpp",
    "old": "return kills_187 ? k187 : kHighestScore;",
-   "new": "return kHighestScore;",
+   "new": "return (kills_187 && false) ? k187 : kHighestScore;",
    "build": "test_server",
    "test": "timeout 300 env ANTS_TEST_FILTER=S3.18 ./build/tests/test_server/test_server",
    "expect": "S3.184b"
@@ -158,7 +158,7 @@
    "id": "bot_match_over_limit_map_dealt_anyway",
    "file": "src/ants_server/room_manager.cpp",
    "old": "if (over != Term::None) return std::string(\"it \") + OnlineLimits::info(over).phrase + \" for a room\";",
-   "new": "if (false) return std::string();",
+   "new": "if (over != Term::None && false) return std::string(\"it \") + OnlineLimits::info(over).phrase + \" for a room\";",
    "build": "test_server",
    "test": "timeout 300 env ANTS_TEST_FILTER=S3.18 ./build/tests/test_server/test_server",
    "expect": "S3.184f"
