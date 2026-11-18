@@ -317,12 +317,12 @@ void run_island_task_tests() {
         ASSERT_EQ(holds, 0u);
     } TEST_END();
 
-    TEST_CASE("AI15.11 The Guard Does Not Spend The Budget Of The Level On Orders That Are On Their Way: In A Whole Match Of Four Hard Bots On SMALL (Seed 3, 7,200 Ticks) No Ant Is Told To Stop Twice Within 20 Ticks (The Order Of A Bot Needs Its Reaction Time To Work, And A Second One Before That Only Queues Up Behind The First)")
+    TEST_CASE("AI15.11 The Guard Does Not Spend The Budget Of The Level On Orders That Are On Their Way: In A Whole Match Of Four Hard Bots On SMALL (Seed 2, 7,200 Ticks) No Ant Is Told To Stop Twice Within 20 Ticks (The Order Of A Bot Needs Its Reaction Time To Work, And A Second One Before That Only Queues Up Behind The First)")
     {
         Match m;
         m.expedition = true;
         m.ferry = true;
-        m.init("SMALL", 3, 0x0F, Level::Hard, 0, [](LevelPlan& p) {
+        m.init("SMALL", 2, 0x0F, Level::Hard, 0, [](LevelPlan& p) {
             p.gate_leaver_ticks = 0;                                                                                          // (the gate's wait for the ant that leaves is off and the food is eaten in the plain order,
             p.denial_order = false;                                                                                          // not the denial order: the match on which the premise below was counted)
             without_war_batch(p);
@@ -344,7 +344,7 @@ void run_island_task_tests() {
                 last[ant] = e.first;
             }
         }
-        ASSERT_TRUE(stops >= 4 && repeats >= 1);                                                                          // (the premise: the guard did stop ants, some of them more than once: 14 and 8 today)
+        ASSERT_TRUE(stops >= 4 && repeats >= 1);                                                                          // (the premise: the guard did stop ants, some of them more than once: 7 and 2 today; seed 3 gave 14 and 8 until the gate and the carrier aid left the carriers that the guard holds alone, and 3 and 0 since)
         ASSERT_TRUE(least >= 20);
     } TEST_END();
 

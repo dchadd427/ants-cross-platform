@@ -421,18 +421,18 @@ int main() {
             ASSERT_EQ(st.raids.size(), oracle.raids.size());
             for (size_t i = 0; i < st.raids.size(); ++i) ASSERT_TRUE(st.raids[i].turn == oracle.raids[i][0] && st.raids[i].thief == oracle.raids[i][1] && st.raids[i].victim == oracle.raids[i][2]);
             for (const MatchStats::Raid& r : st.raids) ASSERT_TRUE(r.points >= 0 && r.points <= 50);
-            if (k == 5) ASSERT_TRUE(st.wipes[3] == 1 && st.wipe_turn[3] == 6167 && st.out_turn[3] == -1);           // (a seat with no ant gets one for free from an egg)
+            if (k == 5) ASSERT_TRUE(st.wipes[3] == 1 && st.wipe_turn[3] == 5804 && st.out_turn[3] == -1);           // (a seat with no ant gets one for free from an egg)
             if (k != 4) continue;
             // the numbers of this recording are fixed (seed 21, 7000 turns, four Hard computer players): the golden values
             using A4 = std::array<uint32_t, 4>;
             using L4 = std::array<int64_t, 4>;
             uint32_t drowned = 0;
             for (const MatchStats::Kill& kl : st.kills) drowned += kl.drowned ? 1 : 0;
-            ASSERT_TRUE(st.kills.size() == 14 && drowned == 8 && st.raids.size() == 6);
-            ASSERT_TRUE(st.bombs_off == A4({0, 0, 4, 0}) && st.hatch_cost == L4({200, 200, 200, 0}) && st.banked == L4({385, 280, 225, 390}));
-            ASSERT_TRUE(st.food_trips == A4({14, 11, 10, 19}) && st.food_points == L4({380, 285, 240, 355}));
-            ASSERT_TRUE(st.damage_dealt == A4({30, 46, 73, 28}) && st.damage_taken == A4({48, 30, 27, 72}));
-            const std::array<std::array<uint32_t, 5>, 4> power = {{{0, 1, 1, 1, 0}, {1, 1, 1, 1, 0}, {1, 1, 1, 1, 0}, {0, 1, 1, 1, 0}}};
+            ASSERT_TRUE(st.kills.size() == 10 && drowned == 4 && st.raids.size() == 4);
+            ASSERT_TRUE(st.bombs_off == A4({0, 0, 2, 0}) && st.hatch_cost == L4({400, 400, 200, 0}) && st.banked == L4({470, 500, 295, 230}));
+            ASSERT_TRUE(st.food_trips == A4({15, 17, 13, 10}) && st.food_points == L4({450, 450, 375, 230}));
+            ASSERT_TRUE(st.damage_dealt == A4({51, 25, 55, 14}) && st.damage_taken == A4({48, 24, 11, 62}));
+            const std::array<std::array<uint32_t, 5>, 4> power = {{{0, 1, 1, 2, 0}, {0, 1, 1, 1, 0}, {1, 1, 1, 1, 0}, {1, 1, 1, 1, 0}}};
             ASSERT_TRUE(st.powerups == power);
             ASSERT_TRUE(st.wipes == A4({0, 0, 0, 0}) && st.samples.size() == 70 && st.samples.back().turn == 7000);
         }
@@ -440,7 +440,7 @@ int main() {
 
     // ---- the rules of the JSON on hand-made numbers ---------------------------------------------------------------------------------------------
 
-    TEST_CASE("HD1.6 Facts that a world made by hand can show and the matches played in the tests do not: an ant hurt by its own team is nobody's kill and no damage dealt, a seat that runs out of ants twice is wiped out twice, the free hatch of a seat with under 200 points costs what it had, a bomb that was defused did not go off, a Stop is a Stop, and an order names only the ants of its issuer") {
+    TEST_CASE("HD1.6 Facts that a world made by hand can show and the matches played in the tests do not: an ant hurt by its own team is nobody's kill and no damage dealt, a seat that runs out of ants twice is wiped out twice, the free hatch of a seat with under 200 points costs what it had, a bomb that was defused did not go off and one that went off is its planter's, a Stop is a Stop, and an order names only the ants of its issuer") {
         replay::Replay shell;
         shell.head.roster = 0x03;
         // a bench: an engine with no map and a collector that is told each tick, as play() tells it
@@ -517,6 +517,29 @@ int main() {
             const MatchStats st = b.collector.take(b.turns);
             ASSERT_TRUE(st.ok);
             ASSERT_EQ(sum_of(st.bombs_off), int64_t{0});                                       // (taken away by an ant: it did not go off)
+        }
+        {
+            // a bomb that went off is its planter's, whichever seat that is: one of each seat, set off by an ant of the other
+            Bench b(shell);
+            const uint32_t bomber0 = b.engine.spawn_unit(0, sim::AntType::Bomber, {10, 10});
+            const uint32_t bomber1 = b.engine.spawn_unit(1, sim::AntType::Bomber, {30, 30});
+            const uint32_t walker0 = b.engine.spawn_unit(0, sim::AntType::Worker, {32, 30});
+            const uint32_t walker1 = b.engine.spawn_unit(1, sim::AntType::Worker, {12, 10});
+            b.step(2);
+            ASSERT_TRUE(b.engine.plant_bomb(bomber0, {11, 10}));
+            ASSERT_TRUE(b.engine.plant_bomb(bomber1, {31, 30}));
+            b.step(2);
+            ASSERT_TRUE(b.engine.has_bomb_at({11, 10}) && b.engine.has_bomb_at({31, 30}));
+            b.engine.trigger_bomb_detonation(walker1, {11, 10});
+            b.step(2);
+            ASSERT_FALSE(b.engine.has_bomb_at({11, 10}));
+            const MatchStats one = b.collector.take(b.turns);
+            ASSERT_TRUE(one.ok && one.bombs_off[0] == 1 && one.bombs_off[1] == 0);             // (the bomb of seat 0 went off: it is seat 0's, not seat 1's who stepped on it)
+            b.engine.trigger_bomb_detonation(walker0, {31, 30});
+            b.step(2);
+            ASSERT_FALSE(b.engine.has_bomb_at({31, 30}));
+            const MatchStats st = b.collector.take(b.turns);
+            ASSERT_TRUE(st.ok && st.bombs_off[0] == 1 && st.bombs_off[1] == 1 && sum_of(st.bombs_off) == 2);
         }
         {
             Bench b(shell);
