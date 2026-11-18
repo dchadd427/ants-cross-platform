@@ -23,10 +23,13 @@ void AdminAudit::record(const Actor& by, int64_t now, const char* action, const 
     if (!done && notices_.size() < 100) notices_.push_back("admin log: the database refused a line");
 }
 
-std::vector<AuditEntry> AdminAudit::list(size_t limit) {
+std::vector<AuditEntry> AdminAudit::list(size_t limit, Kind kind) {
     std::vector<AuditEntry> out;
     db::Statement st;
-    if (!db_.prepare(st, "SELECT at, actor, actor_ref, action, target, detail FROM admin_audit ORDER BY id DESC LIMIT ?").ok() || !st.bind_int64(1, static_cast<int64_t>(limit)).ok()) return out;
+    const char* sql = kind == Kind::Bots ? "SELECT at, actor, actor_ref, action, target, detail FROM admin_audit WHERE action LIKE 'bot\\_%' ESCAPE '\\' ORDER BY id DESC LIMIT ?"
+                    : kind == Kind::Maps ? "SELECT at, actor, actor_ref, action, target, detail FROM admin_audit WHERE action NOT LIKE 'bot\\_%' ESCAPE '\\' ORDER BY id DESC LIMIT ?"
+                                         : "SELECT at, actor, actor_ref, action, target, detail FROM admin_audit ORDER BY id DESC LIMIT ?";
+    if (!db_.prepare(st, sql).ok() || !st.bind_int64(1, static_cast<int64_t>(limit)).ok()) return out;
     while (st.step() == db::Statement::Step::Row) {
         AuditEntry e;
         e.at = st.column_int64(0);

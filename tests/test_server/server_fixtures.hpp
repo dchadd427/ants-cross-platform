@@ -1421,6 +1421,7 @@ void run_site_stats_tests();
 void run_replay_tests();
 void run_state_hash_tests();
 void run_bot_match_tests();
+void run_bot_admin_tests();
 void run_store_tests();
 void run_manager_tests();
 void run_demo_tests();

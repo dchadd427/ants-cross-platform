@@ -2,8 +2,9 @@
 """The admin page, web/admin.html with web/admin_page.js and web/admin.css (run by ./run_tests.sh --fast and by the CI; docs/MAP_SUBMISSIONS.md "The admin page").
 
   - the page's own code is RUN (node, when it is installed) against a fake of the DOM and a fake of the game server, the hub and /busy (tests/scripts/web_admin_check.js): who is let in and what each of them sees
-    (nobody logged in, a player, a moderator, an admin, the owner, a door that is closed or a part that is not running), the chip and its menu, the four sections (Maps, Chat, Log, Status) as tabs and as a select, the
-    Maps lists and their questions, the Chat form and its Ban question and its lists, the Log and its filters, the Status in every state, what each button sends and with which token (the game server's for the maps, the
+    (nobody logged in, a player, a moderator, an admin, the owner, a door that is closed or a part that is not running), the chip and its menu, the five sections (Maps, Chat, Bot matches, Log, Status) as tabs and as a select, the
+    Maps lists and their questions, the Chat form and its Ban question and its lists, the section Bot matches (Start now, Running, Schedules: what each button sends, the questions, every refusal in words, the badge), the Log
+    and its filters, the Status in every state, what each button sends and with which token (the game server's for the maps, the
     hub's for the chat, none for a change that has no token), that a later call that the door refuses swaps the page to the same card, that nothing a person typed becomes markup and that no Discord id is on the page or
     in a call; the check is shown able to fail: broken copies of the script are refused by it;
   - the page has the site's bar and no other link: nothing else of the site links to it, the script has no way to make markup from text (no innerHTML, no document.write, no eval), no address of another site and
@@ -18,6 +19,7 @@ import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SCRIPT = os.path.join(REPO, "web", "admin_page.js")
+BOTS = os.path.join(REPO, "web", "admin_bots.js")
 CHECK_JS = os.path.join(REPO, "tests", "scripts", "web_admin_check.js")
 
 
@@ -26,8 +28,8 @@ def read(*parts):
         return f.read()
 
 
-def run_check(script=SCRIPT):
-    return subprocess.run([shutil.which("node"), CHECK_JS, script], capture_output=True, text=True, timeout=120)
+def run_check(script=SCRIPT, bots=BOTS):
+    return subprocess.run([shutil.which("node"), CHECK_JS, script, bots], capture_output=True, text=True, timeout=120)
 
 
 class ThePagesOwnCode(unittest.TestCase):
@@ -171,7 +173,7 @@ class ThePagesOwnCode(unittest.TestCase):
             'a short code in a list is not marked as typed text': ("function ref(text) { return typed('code', 'refn', text); }", "function ref(text) { return el('code', 'refn', text); }"),
             'a done line is an alert': ('var m = message(null, cls);', "var m = message(null, 'bad');"),
             'the names of the log are not marked': ("if (name) return add(w, typed('span', null, name));", "if (name) return add(w, el('span', null, name));"),
-            'the map name of the log is not marked': ("typed('em', null, r.target)", "el('em', null, r.target)"),
+            'the map name of the log is not marked': ("add(wt, doc.createTextNode(MAP_ACTIONS[r.action] || ''), typed('em', null, r.target));", "add(wt, doc.createTextNode(MAP_ACTIONS[r.action] || ''), el('em', null, r.target));"),
             'the reason of a decline in the log is not marked': ("add(el('span', 'why', 'Reason: '), typed('span', null, r.detail))", "add(el('span', 'why', 'Reason: '), el('span', null, r.detail))"),
             'a time that is not a number stops the list': ("    function when(seconds, nowMs) {\n        if (!isTime(seconds)) return '';", '    function when(seconds, nowMs) {'),
             'the end of a mute that is not a time stops the list': ("    function untilWords(seconds, nowMs) {\n        if (!isTime(seconds)) return '';", '    function untilWords(seconds, nowMs) {'),
@@ -208,7 +210,7 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
         return out
 
     def test_no_other_file_of_the_site_names_the_address_or_the_file(self):
-        mine = {"admin.html", "admin.css", "admin_page.js"}
+        mine = {"admin.html", "admin.css", "admin_page.js", "admin_bots.js"}
         for path in self.web_files():
             if os.path.basename(path) in mine and os.path.dirname(path) == os.path.join(REPO, "web"):
                 continue
@@ -228,7 +230,7 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
         bar = re.search(r'<header class="sb".*?</header>', page, re.S).group(0)
         self.assertEqual(bar, re.search(r'<header class="sb".*?</header>', read("web", "legal.html"), re.S).group(0))          # (the very markup of the other pages' bar: the build stamps it)
         self.assertEqual(len(re.findall(r"<a\b", page)), len(re.findall(r"<a\b", bar)))                                 # (no link outside the bar)
-        self.assertEqual(re.findall(r'(?:href|src)="([^"]+)"', page.replace(bar, "")), ["/favicon.png?v=f34bea03", "/front/classic.css", "/site_nav.css", "admin.css", "/site_nav.js", "admin_page.js"])
+        self.assertEqual(re.findall(r'(?:href|src)="([^"]+)"', page.replace(bar, "")), ["/favicon.png?v=f34bea03", "/front/classic.css", "/site_nav.css", "admin.css", "/site_nav.js", "admin_bots.js", "admin_page.js"])
         self.assertIn('<meta name="robots" content="noindex, nofollow">', page)
         self.assertNotRegex(page, r"<script>|<style|onclick|onload|javascript:")
         self.assertEqual(len(re.findall(r'<div id="app"></div>', page)), 1)
@@ -244,12 +246,12 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
             self.assertRegex(rule.group(0), r"min-height: (4[4-9]|[5-9][0-9])px", selector)
         self.assertIn("@media (forced-colors: active)", css)
         script = read("web", "admin_page.js")
-        self.assertEqual(sorted(set(re.findall(r"""['"](/[A-Za-z][^'"\s]*)""", script))), ["/admin/api/audit", "/admin/api/maps/", "/admin/api/maps?state=", "/admin/api/me", "/admin/api/next-name?name=", "/busy", "/hub/admin/api/", "/hub/login?next=admin", "/hub/logout", "/hub/me", "/picture"])
+        self.assertEqual(sorted(set(re.findall(r"""['"](/[A-Za-z][^'"\s]*)""", script))), ["/admin/api/audit?kind=bots", "/admin/api/audit?kind=maps", "/admin/api/maps/", "/admin/api/maps?state=", "/admin/api/me", "/admin/api/next-name?name=", "/busy", "/hub/admin/api/", "/hub/login?next=admin", "/hub/logout", "/hub/me", "/picture"])
         self.assertNotRegex(script.replace("http://www.w3.org/2000/svg", ""), r"https?://")          # (the one name that SVG needs is not an address that is loaded)
         for forbidden in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function", "setTimeout('", 'setTimeout("', "localStorage", "sessionStorage", "document.cookie", "location.href"):
             self.assertNotIn(forbidden, script, forbidden)
 
-    def test_the_registry_holds_the_four_sections_and_the_shell_knows_none_by_name(self):
+    def test_the_registry_holds_its_sections_and_the_shell_knows_none_by_name(self):          # (the five sections, with the order of their tabs, are run in node: web_admin_check.js)
         script = read("web", "admin_page.js")
         for entry in ("{ id: 'maps', title: 'Maps', render: renderMaps }", "{ id: 'chat', title: 'Chat', render: renderChat }", "{ id: 'log', title: 'Log', render: renderLog }", "{ id: 'status', title: 'Status', render: renderStatus }"):
             self.assertIn(entry, script)

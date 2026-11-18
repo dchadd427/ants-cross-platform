@@ -72,7 +72,7 @@ bool SubmissionApi::address_allowed(const std::string& identity, int64_t now_s) 
 
 HttpResponse SubmissionApi::handle(const HttpRequest& request, int64_t now_s, uint32_t now_ms) {
     const std::string& path = request.path;
-    if (path == "/admin/api" || path.compare(0, 11, "/admin/api/") == 0) return admin_routes(request, now_s);
+    if (path == "/admin/api" || path.compare(0, 11, "/admin/api/") == 0) return admin_routes(request, now_s, now_ms);
     if (path == "/submissions" && request.method == "POST") return submit(request, now_s, now_ms);
     if (path == "/submissions" || path.compare(0, 13, "/submissions/") == 0) return maker_routes(request, now_s, now_ms);
     return not_found();
@@ -152,6 +152,9 @@ namespace {
 // The one answer to every call under /admin/api that has no good pass, whatever the path, the method or the reason: nothing is learned about what is there
 HttpResponse closed_reply() { return error_reply(403, "closed", "The admin page is closed."); }
 
+// A server that has no way to run matches of computer players from the page (no routes were given)
+HttpResponse bots_off_reply() { return error_reply(503, "bots_off", "Bot matches are not available on this server."); }
+
 }  // namespace
 
 // Checks the pass of a request (once: a pass that was used is refused). The reason a pass is refused goes to the operator's log as a kind and nothing else, once a minute for each kind.
@@ -191,7 +194,7 @@ bool SubmissionApi::post_guard(const HttpRequest& request, const AdminIdentity& 
     return true;
 }
 
-HttpResponse SubmissionApi::admin_routes(const HttpRequest& request, int64_t now_s) {
+HttpResponse SubmissionApi::admin_routes(const HttpRequest& request, int64_t now_s, uint32_t now_ms) {
     AdminIdentity who;
     if (!admitted(request, now_s, who)) return closed_reply();
     const std::string& path = request.path;
@@ -211,6 +214,7 @@ HttpResponse SubmissionApi::admin_routes(const HttpRequest& request, int64_t now
     if (cross_site(request) || path.size() < 11) return not_found();                // ("/admin/api" itself has no route)
     const std::string tail = path.substr(11);
     if (request.method == "GET") {
+        if (tail.compare(0, 4, "bot-") == 0) return bot_routes_ ? bot_routes_(request, who, tail, JsonValue::null_value(), now_s, now_ms) : bots_off_reply();
         Failure why;
         if (tail == "maps") {
             std::string state;
@@ -235,7 +239,7 @@ HttpResponse SubmissionApi::admin_routes(const HttpRequest& request, int64_t now
             o.set("untrusted_fields", std::move(fields));
             return json_reply(200, o);
         }
-        if (tail == "audit") return audit_list();
+        if (tail == "audit") return audit_list(request);
         if (tail == "next-name") {
             std::string name, next;
             if (!query_value(request.query, "name", name) || !store_.next_name(name, next, why)) return why.status != 0 ? failure_reply(why) : error_reply(400, "bad_name", "Give a name.");
@@ -255,13 +259,14 @@ HttpResponse SubmissionApi::admin_routes(const HttpRequest& request, int64_t now
         return not_found();
     }
     if (request.method != "POST") return not_found();
-    return admin_post(request, who, tail, now_s);
+    return admin_post(request, who, tail, now_s, now_ms);
 }
 
-HttpResponse SubmissionApi::admin_post(const HttpRequest& request, const AdminIdentity& who, const std::string& tail, int64_t now_s) {
+HttpResponse SubmissionApi::admin_post(const HttpRequest& request, const AdminIdentity& who, const std::string& tail, int64_t now_s, uint32_t now_ms) {
     JsonValue body;
     HttpResponse refusal;
     if (!post_guard(request, who, body, refusal)) return refusal;
+    if (tail.compare(0, 4, "bot-") == 0) return bot_routes_ ? bot_routes_(request, who, tail, body, now_s, now_ms) : bots_off_reply();
     if (tail.compare(0, 5, "maps/") != 0) return not_found();
     const std::string rest = tail.substr(5);
     const size_t slash = rest.find('/');
@@ -299,10 +304,17 @@ HttpResponse SubmissionApi::admin_post(const HttpRequest& request, const AdminId
     return json_reply(200, o);
 }
 
-// The log of what was done: the newest 200 lines
-HttpResponse SubmissionApi::audit_list() {
+// The log of what was done: the newest 200 lines, of all kinds, or (kind=maps, kind=bots) of one kind, chosen in the query: the page asks for each kind, so that the lines of one never push the other's out
+HttpResponse SubmissionApi::audit_list(const HttpRequest& request) {
+    std::string kind;
+    AdminAudit::Kind which = AdminAudit::Kind::All;
+    if (query_value(request.query, "kind", kind) && !kind.empty()) {
+        if (kind == "maps") which = AdminAudit::Kind::Maps;
+        else if (kind == "bots") which = AdminAudit::Kind::Bots;
+        else return error_reply(400, "bad_kind", "The kind of lines is maps or bots.");
+    }
     JsonValue arr = JsonValue::make_array();
-    for (const AuditEntry& e : audit_.list(200)) {
+    for (const AuditEntry& e : audit_.list(200, which)) {
         JsonValue row = JsonValue::make_object();
         row.set("at", JsonValue::make_int(e.at));
         row.set("who", JsonValue::make_string(e.actor));

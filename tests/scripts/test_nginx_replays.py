@@ -210,7 +210,7 @@ class TheLocations(unittest.TestCase):
     def test_the_stack_gives_the_door_and_the_documents_say_so(self):
         stack = read("docker-compose.stack.yml")
         for text in (stack,):
-            self.assertIn('"--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-30}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-100}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]', text)
+            self.assertIn('"--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-90}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-1024}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]', text)
         for name, text in (("docker-compose.stack.yml", stack),):
             for line in published_port_lines(text):
                 self.assertNotIn("4020", line, name)                                          # (the replay port is not published on the host, whatever the way to write it)
@@ -224,7 +224,7 @@ class TheLocations(unittest.TestCase):
         main = read("src", "ants_server", "main.cpp")
         for option in ("--replay-port", "--replay-any-interface", "--replay-demo", "--replays-days", "--replays-max-mb", "--replays-dir", "--no-replays"):
             self.assertIn('"%s"' % option, main, option)
-        for document, needles in (("REPLAYS.md", ("public", "30 days", "/replays")), ("SERVER.md", ("ANTS_REPLAY_PORT", "30 days", "--replay-port")), ("NETWORK_PORT.md", ("/replays", "replay-port"))):
+        for document, needles in (("REPLAYS.md", ("public", "90 days", "/replays")), ("SERVER.md", ("ANTS_REPLAY_PORT", "90 days", "--replay-port")), ("NETWORK_PORT.md", ("/replays", "replay-port"))):
             for needle in needles:
                 self.assertIn(needle, read("docs", document), document + ": " + needle)           # (each document says its own part, not all of them together)
 
@@ -246,26 +246,26 @@ class TheLocations(unittest.TestCase):
         self.assertIn("      - ants-server-results:/results\n", read("docker-compose.stack.yml"))
 
     def test_the_pages_that_ask_for_a_name_tell_players_the_days_that_the_stack_keeps_the_matches(self):
-        # decided on 2026-10-08 and worded again on 2026-10-15: the front page and the game page's name card say that online matches are recorded, that the recordings are kept for N days, and that the results
+        # decided on 2026-10-08 and worded again on 2026-10-15: the front page and the game page's name card say that online matches are recorded, that the recordings are kept for up to N days, and that the results
         # and the names are kept for good and are public. The pages are static, so N is the stack's default (ANTS_REPLAY_DAYS:-N); an operator who changes the variable changes the line too (docs/SERVER.md
         # says so). The two pages word it a little differently: the game page also says that anybody can watch the recordings, live or later.
         days = re.search(r'"--replays-days", "\$\{ANTS_REPLAY_DAYS:-(\d+)\}"', read("docker-compose.stack.yml")).group(1)
         lobby = read("web", "lobby.html")
         shell = read("web", "shell.html")
-        for page, text, line in (("lobby.html", lobby, "Online matches are recorded. Recordings are kept for %s days. Results and names are kept for good and are public."),
-                                 ("shell.html", shell, "Online matches are recorded. Anybody can watch them, live or later. Recordings are kept for %s days. Results and names are kept for good and are public.")):
+        for page, text, line in (("lobby.html", lobby, "Online matches are recorded. Recordings are kept for up to %s days. Results and names are kept for good and are public."),
+                                 ("shell.html", shell, "Online matches are recorded. Anybody can watch them, live or later. Recordings are kept for up to %s days. Results and names are kept for good and are public.")):
             self.assertIn(line % days, text, page)
         # the front page shows it in two places, both with the stack's number: the footer (for a visitor who is not asked for a name) and under the name field of the card of a link that somebody sent
         # (the element who-notice, which docs/SERVER.md names); the game page shows it once, under its name field
-        words = "Online matches are recorded. Recordings are kept for %s days. Results and names are kept for good and are public." % days
+        words = "Online matches are recorded. Recordings are kept for up to %s days. Results and names are kept for good and are public." % days
         self.assertEqual(lobby.count(words), 2)
         self.assertIn('<p class="room-notice" id="room-notice">' + words + "</p>", lobby)
         self.assertIn('<div class="name-step-hint name-step-notice" id="who-notice">' + words + "</div>", lobby)
-        self.assertEqual(len(re.findall(r"Recordings are kept for \d+ days", lobby)), 2)       # (no page says another number)
-        self.assertEqual(len(re.findall(r"Recordings are kept for \d+ days", shell)), 1)
+        self.assertEqual(len(re.findall(r"Recordings are kept for up to \d+ days", lobby)), 2)       # (no page says another number)
+        self.assertEqual(len(re.findall(r"Recordings are kept for up to \d+ days", shell)), 1)
         self.assertNotIn("Anybody can watch them", lobby)                                       # (the old second sentence is the game page's only)
-        self.assertIn("`ANTS_REPLAY_DAYS`). A server with other settings", read("docs", "SERVER.md"))     # (the document that names the variable says that the pages repeat its number and what to change)
-        self.assertIn("changes the words in `web/lobby.html` and `web/shell.html`", read("docs", "SERVER.md"))
+        self.assertIn("`ANTS_REPLAY_DAYS`). A server with other settings", read("docs", "SERVER_REPLAYS.md"))     # (the document that names the variable says that the pages repeat its number and what to change)
+        self.assertIn("changes the words in `web/lobby.html` and `web/shell.html`", read("docs", "SERVER_REPLAYS.md"))
 
     def test_the_stack_files_say_what_is_kept_which_port_to_leave_alone_and_who_can_reach_the_door(self):
         for name, needles in (("docker-compose.stack.yml", ("ran 30 seconds or more", "Leave it at 4020", "or set 0", "restarts again and again", "is not published on the host at all", "put only containers you trust on it")),

@@ -27,7 +27,7 @@ namespace {
 }
 
 // TINY as an Extended map of `rows` x `columns` (at least its own size): a map that works for all four teams, whatever its size. "" when it cannot be made.
-[[maybe_unused]] std::string grown_tiny(uint32_t rows, uint32_t columns) {
+[[maybe_unused]] std::string grown_tiny(uint32_t rows, uint32_t columns, uint32_t minutes = 0) {
     using namespace ants::assets;
     const std::string base = big_tiny_bytes();
     LevelData t;
@@ -38,7 +38,7 @@ namespace {
     big.tile_dictionary = t.tile_dictionary;
     big.tile_type_count = t.tile_type_count;
     big.description = t.description;
-    big.default_minutes = t.default_minutes;
+    big.default_minutes = minutes != 0 ? static_cast<uint16_t>(minutes) : t.default_minutes;          // (`minutes`: the time limit the map's file says; 0 keeps TINY's)
     big.game_mode = t.game_mode;
     for (uint32_t y = 0; y < t.height(); ++y) {
         for (uint32_t x = 0; x < t.width(); ++x) {

@@ -1,6 +1,6 @@
 #pragma once
 
-// The matches that run now, for the public door (docs/SERVER.md "Replays", the live routes; docs/REPLAYS.md "On the game server"): a live match is a replay that is still growing, read over HTTP. A room that
+// The matches that run now, for the public door (docs/SERVER_REPLAYS.md "Replays", the live routes; docs/REPLAYS.md "On the game server"): a live match is a replay that is still growing, read over HTTP. A room that
 // records its match registers it here when the recording begins (Room::replay_begin) and takes it off when the recording becomes a file or is dropped (Room::replay_end, or the room's destructor), so the
 // board holds a raw pointer to the room's recorder only for as long as the room has it. The board is single threaded like the rest of the server and is owned by the RoomManager next to the replay store. A match
 // played with Fog of War is not registered (a snapshot that anybody can read while it runs would show what the fog hides from its players; the match is public when it is over, like any other).

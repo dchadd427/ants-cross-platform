@@ -94,7 +94,7 @@ const std::vector<std::pair<std::string, std::string>>& MapStore::originals() {
     return kOriginals;
 }
 
-bool MapStore::find(const std::string& name, MapEntry& out, std::string* why) const {
+bool MapStore::locate(const std::string& name, std::string& path_out, uint64_t& size_out, std::string* why) const {
     auto fail = [&](const char* reason) {
         if (why != nullptr) *why = reason;
         return false;
@@ -116,10 +116,22 @@ bool MapStore::find(const std::string& name, MapEntry& out, std::string* why) co
     if (!fs::is_regular_file(path, ec) || ec) return fail("no such map on this server");
     const uint64_t size = static_cast<uint64_t>(fs::file_size(path, ec));
     if (ec || size == 0 || size > kMaxMapBytes) return fail("the map file has an impossible size");
+    path_out = path.string();
+    size_out = size;
+    return true;
+}
+
+bool MapStore::find(const std::string& name, MapEntry& out, std::string* why) const {
+    std::string path;
+    uint64_t size = 0;
+    if (!locate(name, path, size, why)) return false;
     uint64_t hash = 0;
-    if (!net::hash_file(path.string(), hash)) return fail("the map file cannot be read");
+    if (!net::hash_file(path, hash)) {
+        if (why != nullptr) *why = "the map file cannot be read";
+        return false;
+    }
     out.name = name;
-    out.path = path.string();
+    out.path = path;
     out.hash = hash;
     out.size = size;
     return true;

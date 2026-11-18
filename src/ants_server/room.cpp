@@ -120,6 +120,10 @@ private:
 Room::Room(RoomSpec spec, MapEntry map, assets::LevelData level, uint32_t seed, uint32_t now_ms, net::LogBudget* log_budget)
     : spec_(std::move(spec)), map_(std::move(map)), level_(std::move(level)), seed_(seed), created_ms_(now_ms), lobby_(lobby_config(spec_)), log_budget_(log_budget) {
     spec_.players = std::max<uint8_t>(2, std::min<uint8_t>(spec_.players, sim::MAX_PLAYERS));
+    if (spec_.start_hold_ms != 0) {                                  // (the first try to start waits: the pause that a cancelled start also makes)
+        retry_pending_ = true;
+        retry_at_ms_ = now_ms + spec_.start_hold_ms;
+    }
     active_ms_ = now_ms;
     lobby_.set_map(map_.name);
     lobby_.set_fog(spec_.fog);
