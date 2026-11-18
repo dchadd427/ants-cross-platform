@@ -15,11 +15,11 @@
     var MANY = 3000;                // more cells than this to paint again: the whole frame is painted instead
     var SMALL_TILE = 5;             // below this many pixels a tile the canvas is filled pixel by pixel (mapmaker_view.js)
 
-    // env: {doc, win, canvas, minimap (the box), mini (its canvas), miniCap, where (the status line), zoomIn, zoomOut (the buttons), onCursor(cell)}
+    // env: {doc, win, canvas, minimap (the box), mini (its canvas), miniCap, where (the status line), zoomIn, zoomOut (the buttons), gapNote (the line that says what the dashed places are; optional), onCursor(cell)}
     function create(env) {
         var doc = env.doc, win = env.win, canvas = env.canvas, file = null, view = null, cursor = null, hover = null, w = 0, h = 0, dpr = 1, frame = 0;
         var mm = Mini.create(env, redraw), scratch = doc.createElement('canvas'), mini = null, pointers = {}, drag = null, pinch = null;
-        var painter = null, stroke = null, pending = null, line = null, spaceHeld = false, full = null, dirty = [], lastRect = null, sprites = null;       // (sprites: the game's pictures, once loaded: mapmaker_sprites.js)
+        var painter = null, stroke = null, pending = null, line = null, spaceHeld = false, full = null, dirty = [], lastRect = null, sprites = null, gapsShown = false;       // (sprites: the game's pictures, once loaded: mapmaker_sprites.js)
 
         function makeCanvas(cw, ch) { var c = doc.createElement('canvas'); c.width = cw; c.height = ch; return c; }
 
@@ -76,7 +76,10 @@
             if (!file) return;
             var t0 = win.performance ? win.performance.now() : 0, ctx = canvas.getContext('2d'), brush = brushNow(), cell = markedCell(), shape = shapeNow(), rect = View.cursorRect(file, cell, brush || 1, shape), kind = 'full', count = 0;
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-            var list = sameAsFull() && !View.useSprites(view, sprites) ? cellsToPaint(rect) : null;          // (pictures reach beyond their cells: the sprite frame is always a whole one)
+            var gaps = painter && painter.gaps && view.scale >= View.GAPS_FROM ? painter.gaps(View.visible(view, file, w, h)) : null;          // (the places that have no piece in the game: drawn over a whole frame, so a frame that has them, or had them, is a whole one)
+            var list = sameAsFull() && !View.useSprites(view, sprites) && !gaps && !gapsShown ? cellsToPaint(rect) : null;          // (pictures reach beyond their cells: the sprite frame is always a whole one)
+            gapsShown = !!gaps;
+            if (env.gapNote) env.gapNote.hidden = !gaps;
             if (list && list.length <= MANY && (view.scale >= SMALL_TILE || scratch.keptImage)) {
                 var vis = View.visible(view, file, w, h), pixels = view.scale < SMALL_TILE, box = { x0: 1e9, y0: 1e9, x1: -1, y1: -1 }, tab = View.table(file);
                 for (var i = 0; i < list.length; i++) {
@@ -89,7 +92,7 @@
                 if (cell) View.drawCursor(ctx, view, file, w, h, cell, brush || 1, doorNow(), shape);
                 kind = 'cells';
             } else {
-                View.draw(ctx, view, file, w, h, { scratch: scratch, cursor: cell, brush: brush || 1, door: doorNow(), shape: shape, sprites: sprites, dpr: dpr, ghost: ghostNow(cell) });
+                View.draw(ctx, view, file, w, h, { scratch: scratch, cursor: cell, brush: brush || 1, door: doorNow(), shape: shape, sprites: sprites, dpr: dpr, ghost: ghostNow(cell), gaps: gaps });
                 full = { file: file, stamp: View.stamp(file), cx: view.cx, cy: view.cy, scale: view.scale, w: w, h: h, dpr: dpr };
                 count = -1;
             }
@@ -102,7 +105,7 @@
 
         function setFile(next) {
             file = next;
-            cursor = null; hover = null; setStroke(null); pending = null; full = null; dirty = []; lastRect = null;
+            cursor = null; hover = null; setStroke(null); pending = null; full = null; dirty = []; lastRect = null; gapsShown = false;
             if (sprites) sprites.reset();
             measure();
             if (!file) { mm.update(false); mini = null; return; }
