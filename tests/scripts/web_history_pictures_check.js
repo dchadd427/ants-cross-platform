@@ -67,7 +67,48 @@ const attach = (r, tv) => { r.body.appendChild(tv); return tv; };
         same('a list that cannot be had leaves the address of the name', img(a).src, '/maps/previews/Some%20Map.webp');
         const i = img(a);
         i.fire('error');
-        same('a picture that fails leaves the dark square and no image', [a.children.length, a.children[0].tag, a.children[0].className], [1, 'div', 'blank']);
+        same('an address that does not answer is asked in the other ending, once, in the same image (an approved map\'s picture is a PNG)', [a.children.length, img(a) === i, i.src], [1, true, '/maps/previews/Some%20Map.png']);
+        i.fire('error');
+        same('a picture that fails in both endings leaves the dark square and no image', [a.children.length, a.children[0].tag, a.children[0].className], [1, 'div', 'blank']);
+    }
+    {   // an approved map of the players (no library picture, a PNG of the server's own): the name's guess is the library's, the 404 is answered with the other ending, and the list that comes late has the last word
+        const list = { format: 2, maps: [{ file: 'Fight Island.lvl', kind: 'extended', thumb: '/maps/previews/Fight%20Island.png' }, { file: 'Wide Open.lvl', thumb: '/maps/previews/Wide%20Open.png' }] };
+        const r = rig(list);
+        const a = attach(r, r.api.pictureNode('Fight Island.lvl', 'list'));
+        const first = img(a);
+        same('before the list: the library\'s address', first.src, '/maps/previews/Fight%20Island.webp');
+        first.fire('error');
+        same('... a 404 is answered with the PNG, at once, before the list is there', [img(a) === first, first.src], [true, '/maps/previews/Fight%20Island.png']);
+        first.fire('load');
+        await settle();
+        same('the list that comes says the same: the square is a picture of the map, not the dark square', [a.children.length, img(a).tag, img(a).src], [1, 'img', '/maps/previews/Fight%20Island.png']);
+        const b = attach(r, r.api.pictureNode('Wide Open.lvl', 'list'));
+        same('(a map that the page asks for after the list came has the list\'s address at once)', [img(b).src], ['/maps/previews/Wide%20Open.png']);
+    }
+    {   // the list comes BEFORE the 404 of the guess: the square is made again at the list's address, and the old image's late error does nothing to it
+        const r = rig({ format: 2, maps: [{ file: 'Island Three.lvl', thumb: '/maps/previews/Island%20Three.png' }] });
+        const a = attach(r, r.api.pictureNode('Island Three.lvl', 'list'));
+        const old = img(a);
+        same('(the guess is the library\'s)', old.src, '/maps/previews/Island%20Three.webp');
+        await settle();
+        same('the list corrects the address of a picture that has not answered yet', [img(a) !== old, img(a).src], [true, '/maps/previews/Island%20Three.png']);
+        old.fire('error');
+        same('... and the late error of the old image leaves the new one alone', [a.children.length, img(a).tag, img(a).src], [1, 'img', '/maps/previews/Island%20Three.png']);
+    }
+    {   // a test map of the Map Maker (<name> ~test-<8 hex>) is not in the list, and has only the server's PNG: asked at once, with and without the list
+        const r = rig({ format: 2, maps: [{ file: 'POPcOrN.lvl', thumb: '/maps/previews/POPcOrN.webp' }] });
+        const a = attach(r, r.api.pictureNode('Fight Island ~test-0a1b2c3d.lvl', 'list'));
+        same('a test map asks for the PNG at once', img(a).src, '/maps/previews/Fight%20Island%20~test-0a1b2c3d.png');
+        await settle();
+        same('... and the list, which does not hold it, leaves it', [a.children.length, img(a).src], [1, '/maps/previews/Fight%20Island%20~test-0a1b2c3d.png']);
+    }
+    {   // the list cannot be had: the guess and its other ending are all there is
+        const r = rig('fail');
+        const a = attach(r, r.api.pictureNode('Island Two.lvl', 'list'));
+        await settle();
+        const i = img(a);
+        i.fire('error');
+        same('with no list, a 404 of the library\'s address still finds the PNG', [img(a) === i, i.src], [true, '/maps/previews/Island%20Two.png']);
     }
     {
         const r = rig({ format: 1, maps: [] });

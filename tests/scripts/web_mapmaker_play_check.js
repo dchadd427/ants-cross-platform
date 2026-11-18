@@ -361,6 +361,8 @@ function dialogChecks() {
     equal(all(p, '.play-quick button').map((b) => b.textContent + (b.disabled ? ' off' : '')), ['1 bot', '2 bots', '3 bots'], 'three quick buttons, all on for four colors');
     check(all(p, '[role=radiogroup]').length === 4 && all(p, '[role=radiogroup]').every((g) => g.getAttribute('aria-label')), 'each row is a labeled group');
     check(p.doc.activeElement.tagName === 'input' && p.doc.activeElement.checked, 'the focus is on a chosen answer');
+    { const i = rowOf(p, 'Red').querySelectorAll('input').find((x) => x.value === 'm'), row = rowOf(p, 'Red'); i.focus(); i.checked = true; i.fire('change', {});
+      check(rowOf(p, 'Red') === row && i.isConnected && p.doc.activeElement === i && row.querySelectorAll('input').find((x) => x.value === 'm') === i, 'a choice made on a seat leaves the same radio box in the page with the focus'); }
     // You moves
     choose(p, 'Red', 'y');
     equal(checked(p), 'nynn', 'You at Red takes You away from Green (that color is Empty)');

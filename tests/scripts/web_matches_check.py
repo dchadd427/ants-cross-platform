@@ -39,6 +39,7 @@ ID_NODEATHS = "ants-TINY-20261015-070000Z"               # (counted by this vers
 ID_LEFT = "ants-SMALL-20261014-120000Z"
 ID_DOLLAR = "ants-Dollar-20261013-120000Z"
 READY = live.READY
+POND_IMG = "(function () { var c = [].filter.call(document.querySelectorAll('#body .m'), function (x) { return x.querySelector('h3').textContent === 'Pond'; })[0]; return c ? c.querySelector('.tv img') : null; })()"          # (the picture in the card of the map Pond)
 
 
 def seat(n, color, name, bot, **kw):
@@ -235,6 +236,7 @@ class MatchesDoor(live.Door):
         super().__init__()
         self.history = "ok"                              # ok | busy (503) | off (404 as a server with no history answers) | down (500)
         self.deaths = "ok"                               # ok | none (no map of deaths for any map: 404)
+        self.approved_pond = False                       # Pond is a library map (a .webp picture) or an approved one (only a .png: the library's address is a 404)
         self.seat_keys = "both"                          # both (this server) | old (an earlier server: only "colour") | new (only "color"): the keys of each seat
 
     @staticmethod
@@ -265,15 +267,18 @@ class MatchesDoor(live.Door):
     def route(self, h, path):
         query = urllib.parse.urlparse(h.path).query
         if path in ("/matches", "/match"):
-            text = open(os.path.join(live.WEB, path[1:]), encoding="utf-8").read()
+            text = open(os.path.join(live.WEB, path[1:] + ".html"), encoding="utf-8").read()
             for k, v in live.FILLED.items():
                 text = text.replace(k, v)
             return self.send(h, 200, text, "text/html; charset=utf-8")
-        if path == "/maps":
-            return self.js(h, 200, {"format": 1, "maps": [{"file": f, "width": 60, "height": 60, "minutes": 12, "players": 4, "description": "", "plays": 0, "thumb": "/front/preview_%s.png" % f[:-4].lower(), "original": True} for f in MAPS]
-                                    + [{"file": "Pond.lvl", "width": 40, "height": 40, "minutes": 20, "players": 4, "description": "", "plays": 3, "thumb": "/maps/previews/Pond.webp"}]})
-        if path == "/maps/previews/Pond.webp":
+        if path in ("/maps", "/maps/all"):
+            ending = ".png" if self.approved_pond else ".webp"           # (an approved map of the players has the server's own PNG, the library's maps a WebP)
+            return self.js(h, 200, {"format": 2, "maps": [{"file": f, "width": 60, "height": 60, "minutes": 12, "players": 4, "description": "", "plays": 0, "thumb": "/front/preview_%s.png" % f[:-4].lower(), "original": True} for f in MAPS]
+                                    + [{"file": "Pond.lvl", "width": 40, "height": 40, "minutes": 20, "players": 4, "description": "", "plays": 3, "thumb": "/maps/previews/Pond" + ending}]})
+        if path == "/maps/previews/Pond" + (".png" if self.approved_pond else ".webp"):
             return self.send(h, 200, PNG, "image/png")
+        if path.startswith("/maps/previews/"):
+            return self.send(h, 404, "no such picture")
         if path == "/history/deaths":
             name = urllib.parse.parse_qs(query).get("map", [""])[0]
             if self.deaths == "none" or name.lower() != "treasure.lvl":
@@ -353,13 +358,13 @@ def main():
     until = live.until
     cards = "document.querySelectorAll('#body .m').length"
 
-    def hits(prefix):                                    # the requests that the door saw: "/history" is the list (with or without a query), "/history/" the matches, "/maps" the list of maps and no picture of one
+    def hits(prefix):                                    # the requests that the door saw: "/history" is the list (with or without a query), "/history/" the matches, "/maps" the list of maps (GET /maps/all) and no picture of one
         with door.lock:
             seen = list(door.hits)
         if prefix == "/history":
             return [h for h in seen if h == "/history" or h.startswith("/history?")]
         if prefix == "/maps":
-            return [h for h in seen if h == "/maps"]
+            return [h for h in seen if h == "/maps/all"]
         return [h for h in seen if h.startswith(prefix)]
 
     def seen(prefix, n, wait=5.0):                      # the requests of a prefix, once there are n of them (a choice is asked for after a short pause)
@@ -381,7 +386,16 @@ def main():
             first = tab.ev("(function () { var c = document.querySelector('#body .m'); return [c.querySelector('h3').textContent, [].map.call(c.querySelectorAll('.side'), function (s) { return s.textContent; }), c.querySelectorAll('.side.w .won').length, c.querySelector('a.go').getAttribute('href'), c.querySelector('a.go').textContent]; })()")
             check(first[0] == "Treasure" and first[2] == 1 and first[3] == "/match?id=" + ID_PEOPLE and first[4] == "Stats & replay", "the newest card: map, one winner, a link to its match page (%s)" % first)
             check(first[1][0].endswith("Pip (bot, Hard)2,040Won") and first[1][1] == "Bea1,010" and first[1][2] == HOSTILE + " & Rex (bot, Hard)210", "the sides are the rows of the record, with bots as Name (bot, Level): %s" % first[1])
-            check(until(tab, "document.querySelector('#body .m:nth-child(2) .tv img') && document.querySelector('#body .m:nth-child(2) .tv img').getAttribute('src') === '/maps/previews/Pond.webp'") is True and hits("/maps") == ["/maps"], "a map of the players has the picture of the server's list, which is asked for once")
+            check(until(tab, "(function (i) { return !!i && i.getAttribute('src') === '/maps/previews/Pond.webp'; })(%s)" % POND_IMG) is True and hits("/maps") == ["/maps/all"], "a map of the players has the picture of the server's list, which is asked for once")
+            door.approved_pond = True                          # an approved map of the players: a PNG of the server's own, and a 404 at the library's address that the card's first guess is
+            with door.lock:
+                door.hits[:] = []
+            open_page(tab, "/matches")
+            shown = "(function (i) { return !!i && i.complete && i.naturalWidth > 0 && /\\/Pond\\.png$/.test(i.getAttribute('src')); })(%s)" % POND_IMG
+            check(until(tab, shown) is True, "an approved map of the players: its card has the picture (the PNG), not the dark square (%s)" % tab.ev("(function () { var i = %s; return i ? i.parentNode.innerHTML : null; })()" % POND_IMG))
+            pond = hits("/maps/previews/Pond")
+            check(len([h for h in pond if h.endswith(".webp")]) <= 1 and len(pond) <= 3 and hits("/maps") == ["/maps/all"], "... the library's address was asked at most once (a 404, answered with the PNG), no loop, and the list once: %s" % pond)
+            door.approved_pond = False
             labels = tab.ev("[].map.call(document.querySelectorAll('#body .m .side-col .rec'), function (r) { return r.textContent; })")
             check(set(labels) == {"Replay"}, "every match of the first page can be watched: its mark says Replay (%s)" % sorted(set(labels)))
             for keys in ("old", "new"):                       # a page against a server of an earlier release (the older key alone) and one that has dropped it (the new key alone)

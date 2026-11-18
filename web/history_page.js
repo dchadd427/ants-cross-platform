@@ -253,8 +253,9 @@
     }
 
     // ---- the pictures of the maps ----
-    // A square for a map: one of the six has its own picture (front/preview_<word>.png); a map of the players has the picture of the map picker (AntsMapPicker.thumbFor: the server's list GET /maps
-    // when it has come, else the address that the name makes); a picture that is not there leaves the dark square. env = { document, replay (AntsReplay), picker (AntsMapPicker), fetch }.
+    // A square for a map: one of the six has its own picture (front/preview_<word>.png); a map of the players has the picture of the map picker (AntsMapPicker.thumbFor: the server's list GET /maps/all
+    // when it has come, else the address that the name makes; AntsMapPicker.showPicture asks the other ending (.webp, .png) once when an address does not answer); a picture that is not there leaves the dark square.
+    // A square is made again when the list comes and has another address for it. env = { document, replay (AntsReplay), picker (AntsMapPicker), fetch }.
     // `node(map, group)` makes the square, `forget(group)` drops the squares of a group that is built again, `lookMaps()` asks for the list (once) and answers with it (or null), `count()` is for tests.
     function pictures(env) {
         var doc = env.document, R = env.replay, picker = env.picker, fetcher = env.fetch;
@@ -273,8 +274,7 @@
                 img.src = 'front/preview_' + key + '.png';
             } else {
                 img.loading = 'lazy'; img.decoding = 'async';
-                img.addEventListener('error', function () { if (img.parentNode === tv) { tv.textContent = ''; tv.appendChild(el('div', 'blank')); } });
-                img.src = url;
+                picker.showPicture(img, url, function () { if (img.parentNode === tv) { tv.textContent = ''; tv.appendChild(el('div', 'blank')); } });
             }
             tv.appendChild(img);
         }

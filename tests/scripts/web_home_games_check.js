@@ -502,13 +502,31 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     const lost = find(li[1], 'gmap')[0].children[0];
     lost.fire('error');
     li = rowsOf(env);
-    same('a picture that the server does not have (a 404: the image says error) is taken away, and the others stay', li.map(srcOf), [['/maps/previews/POPcOrN.webp'], [], ['front/preview_tiny.png']]);
+    same('a picture that is not at the library\'s address (a 404: the image says error) is asked for in the other ending, once (an approved map\'s picture is a PNG), and the others stay', li.map(srcOf), [['/maps/previews/POPcOrN.webp'], ['/maps/previews/No%20Picture%20Yet.png'], ['front/preview_tiny.png']]);
+    lost.fire('error');
+    li = rowsOf(env);
+    same('... and when that does not come either, it is taken away, and the others stay', li.map(srcOf), [['/maps/previews/POPcOrN.webp'], [], ['front/preview_tiny.png']]);
     check('... the square is still there, hidden from a screen reader, and the row is whole (the name, the seats, Join)', li.every((x) => find(x, 'gmap').length === 1 && find(x, 'gmap')[0].getAttribute('aria-hidden') === 'true') && textOf(first(li[1], 'gname')) === 'Hasnt' && !!joinOf(li[1]) && textOf(first(li[1], 'gcount')) === '1/4');
-    find(li[2], 'gmap')[0].children[0].fire('error');
+    find(li[2], 'gmap')[0].children[0].fire('error');           // (an original has no other ending: gone at once)
+    find(li[0], 'gmap')[0].children[0].fire('error');
     find(li[0], 'gmap')[0].children[0].fire('error');
     check('... an original\'s picture that does not come goes the same way (any picture of the list)', rowsOf(env).every((x) => srcOf(x).length === 0 && find(x, 'gmap').length === 1));
     lost.fire('error');
     check('... and a second word of the same image does no harm (the list is still there)', rowsOf(env).length === 3);
+
+    // a test map of the Map Maker (<name> ~test-<8 hex>) has only the server's PNG, asked at once; an approved map's picture, found in the other ending, is remembered: the list drawn again asks for the ending that came
+    const fight = (extra) => listOf([row('dddddd', 'Tess', { map: 'Fight Island ~test-0a1b2c3d.lvl', people: 1, free: 3, age: 30 }), row('eeeeee', 'Appr', { map: 'Fight Island.lvl', people: 1, free: 3, age: 20 })].concat(extra || []));
+    const by = (name) => rowsOf(env).find((x) => textOf(first(x, 'gname')) === name);
+    site.body = fight();
+    await wait(env, LOOK);
+    same('a test map is asked in the server\'s ending at once, an approved map (not known to be one) in the library\'s', [srcOf(by('Tess')), srcOf(by('Appr'))], [['/maps/previews/Fight%20Island%20~test-0a1b2c3d.png'], ['/maps/previews/Fight%20Island.webp']]);
+    const appr = find(by('Appr'), 'gmap')[0].children[0];
+    appr.fire('error');
+    same('... which, when it is not there, is asked in the other ending, and no more', srcOf(by('Appr')), ['/maps/previews/Fight%20Island.png']);
+    appr.fire('load');
+    site.body = fight([row('ffffff', 'Newc', { map: 'POPcOrN.lvl', people: 1, free: 3, age: 10 })]);
+    await wait(env, LOOK);
+    same('... and a list that is drawn again asks for the ending that came (no second 404 for the same picture)', [srcOf(by('Tess')), srcOf(by('Appr')), srcOf(by('Newc'))], [['/maps/previews/Fight%20Island%20~test-0a1b2c3d.png'], ['/maps/previews/Fight%20Island.png'], ['/maps/previews/POPcOrN.webp']]);
 
     // names that mean something to an address: all of it is escaped, nothing of it can name another place, a name that is not a map's file name makes no row
     const nasty = ['a%2Fb.lvl', 'a%5Cb.lvl', 'a%00b.lvl', '100% #1 & (2)+3;4=5@6[7]{8}^`9,0.lvl', "it's a ~~..lvl", 'a b.LVL', 'x'.repeat(60) + '.lvl', '%41.lvl', 'a..b.lvl', '-.lvl', '~.lvl'];

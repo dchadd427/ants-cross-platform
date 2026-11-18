@@ -80,6 +80,8 @@ class TheCards(unittest.TestCase):
         "one team has the glow of all": ("var c = rgb[team] || FALLBACK[team];", "var c = FALLBACK[team];"),
         "the rulers step by two": ("span <= 34 ? 5", "span <= 34 ? 2"),
         "the original has no picture of its own": ("return 'front/preview_' + key + '.png';", "return '';"),
+        "the picture does not try the other ending": ("if (env.picker && env.picker.showPicture) env.picker.showPicture(img, url, gone);", "if (false) env.picker.showPicture(img, url, gone);"),
+        "a picture that fails stays": ("var img = el('img', 'dm-img'), gone = function () { if (img.parentNode) img.parentNode.removeChild(img); };", "var img = el('img', 'dm-img'), gone = function () {};"),
         # the card
         "a card of a match with no map is a card of nothing": ("if (!model) return compact ? null : quiet(false);", "if (!model) return null;"),
         "the small card of a match with no map is an empty box": ("if (!model) return compact ? null : quiet(false);", "if (!model) return quiet(compact);"),

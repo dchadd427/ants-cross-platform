@@ -201,6 +201,9 @@ public:
     const RestoreReport& restore_report() const noexcept { return report_; }
     /// Records that wait for their replay or are being replayed (their rooms are no rooms yet), and Hellos that wait for such a room
     size_t restoring_count() const noexcept { return restoring_.size(); }
+    /// Whether the match history may count a recording now (the feeder asks at every pass): no room with a person in it runs or loads a match and no record of a restart is being played again. A room of computer players
+    /// alone (the server's own matches) does not hold it.
+    bool history_may_run() const;
     size_t parked_count() const noexcept { return parked_.size(); }
     /// The server is told to stop: every room that keeps a record makes it durable (fsync) and leaves it on disk, the other rooms are closed. Returns the number of records that were kept. Nothing is
     /// deleted: a record is deleted when its room is over, never because the server stops.

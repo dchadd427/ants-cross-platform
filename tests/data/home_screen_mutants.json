@@ -1274,6 +1274,27 @@
    "old": "mineX.setAttribute('aria-label', TEXT.leaveMine); mineX.setAttribute('title', TEXT.leaveMine);",
    "new": "mineX.setAttribute('title', TEXT.leaveMine);",
    "test": "node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
+  },
+  {
+   "id": "room_picture_not_guessed_from_the_name",
+   "file": "web/lobby.html",
+   "old": "side.mapThumb || (side.mapFile && Pk ? Pk.previewPath(side.mapFile) : '')",
+   "new": "side.mapThumb",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "room_picture_other_ending_never_tried",
+   "file": "web/lobby.html",
+   "old": "if (src && Pk) Pk.showPicture(",
+   "new": "if (false) Pk.showPicture(",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "room_picture_broken_image_stays",
+   "file": "web/lobby.html",
+   "old": "img.removeAttribute('src'); img.style.visibility = 'hidden'; });",
+   "new": "img.removeAttribute('src'); });",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
   }
  ]
 }
