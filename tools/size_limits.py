@@ -57,7 +57,7 @@ PICKER_BUDGET, PICKER_GZIP_BUDGET = 17_000, 5_500      # the picture's dropdown
 WAKE_LOCK_BUDGET, WAKE_LOCK_GZIP_BUDGET = 8_100, 2_900   # the screen lock of a match and a replay (web/wake_lock.js)
 TOUCH_KEYS_BUDGET, TOUCH_KEYS_GZIP_BUDGET = 35_700, 11_200   # the hotkey buttons of a touch screen, with the Shift button (web/touch_keys.js and web/touch_keys.css together)
 # the front page (web/home/, web/front/player_name.js)
-HOME_BUDGET, HOME_GZIP_BUDGET = 50_600, 15_000
+HOME_BUDGET, HOME_GZIP_BUDGET = 51_500, 15_300
 GAMES_BUDGET, GAMES_GZIP_BUDGET = 98_000, 28_000
 PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 39_000, 12_300
 VP_BUDGET, VP_GZIP_BUDGET = 4_200, 1_900            # vp.js: the screen numbers of /?vp (loaded for that address only)

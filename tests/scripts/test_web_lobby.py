@@ -10,7 +10,7 @@ and START sends every page to the game page (web/shell.html) in the same tab wit
     (front/lobby_net.js) by tests/scripts/web_lobby_net_check.js and web_lobby_client_check.js;
   - what the PAGE is is read from the file: the markup (the room, the four colors, the invitation, the map and START, How it works, the name card, the footer), the wiring of the script to it (the
     ids, the attributes the cards are made with and the listeners find, which element shows the code and the link), the looks that carry a rule (START, the team buttons: 4.5 : 1 in every state), the room-code and
-    create-block wiring of the links, that START and the old addresses go to this tab, that nothing opens a new tab but the links that leave the game, the Menu link of the game page, one name for the catalog link
+    create-block wiring of the links, that START and the old addresses go to this tab, that nothing opens a new tab but the links that leave the game (and, while the page holds a room, the links to the matches: the maintainer's decision of 2026-11-17), the Menu link of the game page, one name for the catalog link
     on both pages, the Dockerfile that copies the lobby and the game page's second path, the CI's page check, and the documents.
 The routes of nginx are run in tests/scripts/test_nginx_routes.py; the game page's look (the front page's) is read in tests/scripts/test_web_game.py; the whole flow in a real browser is
 tests/scripts/web_home_check.py (opt-in).
@@ -376,6 +376,13 @@ class TheFrontPageMarkup(PageCase):
         self.assertEqual(self.page.count("discord.gg"), 1)
 
     def test_nothing_opens_a_new_tab_but_the_links_that_leave_the_game_and_the_explicit_windows(self):
+        # The markup's own links. THE RULE CHANGED by the maintainer's decision of 2026-11-17: the links to the matches (the masthead's, the footer's, the Menu's) open in a NEW tab while the page holds a room, so that the
+        # room's tab stays connected for as long as a replay is watched. They are plain links in the markup and home.js sets target and rel from the page's state (tests/scripts/web_home_screen_check.js runs the rule: a
+        # new tab with a room, the same tab without one and at START), so this list of what the markup opens in a new tab is the same as before.
+        for ident in ("watch-top", "watch-link"):
+            link = re.search(r'<a [^>]*id="%s"[^>]*>' % ident, self.page).group(0)
+            self.assertIn('href="/matches"', link)
+            self.assertNotIn("target=", link, ident + " is a plain link in the markup: the page decides")
         anchors = re.findall(r"<a [^>]*>", self.page)
         blank = [a for a in anchors if 'target="_blank"' in a]
         hrefs = sorted(set(re.search(r'href="([^"]*)"', a).group(1) for a in blank))

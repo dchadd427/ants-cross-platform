@@ -1,14 +1,16 @@
 // OPT-IN, not part of ./run_tests.sh: the host of a room who goes to another page of the site (the list of matches, a replay) and comes back, in a REAL browser (Chromium through Playwright), against a real
 // native ants_server and a small stand-in for the site that serves the files of web/, leads /ws to the server's WebSocket door and passes the public lists (/lobbies) on. A guest is a second browser of its own.
 // What no fake DOM can show (docs/PLAY_IN_BROWSER.md, "Going away and coming back"):
-//   1. the host leaves the front page for the list of matches (the same tab) and is back within the minute that the room holds a seat: the same seat and the same lead, no strip, nobody joined or left;
+//   0. while the page holds a room, its links to the matches open in a NEW tab (the maintainer's decision of 2026-11-17), and the room's tab stays connected for as long as the replay is watched (66 s of it: the
+//      guest sees the host lead all the time, the room has two people); with no room the same links are plain links of the same tab;
+//   1. the host leaves the front page for the list of matches (the same tab: the browser's own Back, a typed address) and is back within the minute that the room holds a seat: the same seat and the same lead, no strip, nobody joined or left;
 //   2. the host leaves the front page for the list of matches and the person opens the site in a NEW tab within the minute: the new tab takes the same seat back (My room, the lead, no Join in the list for a room
 //      that is the person's own, "Yours"), and the room still has two people, not three;
 //   3. the host is away for more than the minute: the guest leads, and the page that comes back says that the seat ended and names the host, is a guest in that room and has no claim to lead it
-//      (this part takes about 80 seconds: the room's hold is a minute and is not a setting).
+//      (this part and the 66 s of part 0 take about 150 seconds together: the room's hold is a minute and is not a setting).
 //
 //   node tests/scripts/web_host_return_browser.js [--web DIR] [--server PATH] [--quick]     (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox; ANTS_SERVER_BIN or --server names the
-//                                                                                          native ants_server, default build/src/ants_server/ants_server; --quick leaves out part 3)
+//                                                                                          native ants_server, default build/src/ants_server/ants_server; --quick leaves out the parts that wait a minute: the 66 s of part 0, and part 3)
 //
 // Needs `playwright` (npm) and a Chromium that it can start, and a built ants_server; without them it says so and exits 0 (nothing was checked). All names here are the guest names that the pages make for
 // themselves. Exit status: 0 every check passed (or none could be made), 1 a check failed or the page broke.
@@ -146,6 +148,33 @@ async function main() {
     const errors = [];
     const watch = (page) => page.on('pageerror', (e) => errors.push(String(e && e.message || e)));
     try {
+        // ---- 0. the links to the matches open in a new tab while the page holds a room: the room's tab stays where it is ---------------------------------------------------------------------------------------------
+        {
+            const hostCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } }), guestCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+            const plain = await hostCtx.newPage(); watch(plain);
+            await plain.goto(site.url + '/', { waitUntil: 'load' });
+            await plain.waitForSelector('.hbar', { timeout: 8000 });
+            const attrs = (page) => page.evaluate(() => ['watch-top', 'watch-link'].map((id) => { const a = document.getElementById(id); return [a.getAttribute('href'), a.getAttribute('target'), a.getAttribute('rel')]; }));
+            check('0. with no room (a plain visit is Home) the links to the matches are plain links: no target', JSON.stringify(await attrs(plain)) === JSON.stringify([['/matches', null, null], ['/matches', null, null]]), JSON.stringify(await attrs(plain)));
+            await plain.close();
+            const A = await host(hostCtx, site); watch(A.page);
+            const B = await guest(guestCtx, site, A.code); watch(B);
+            const guestBefore = await snap(B);
+            check('0. a page that holds a room: the links to the matches open in a new tab (_blank, noopener noreferrer)', JSON.stringify(await attrs(A.page)) === JSON.stringify([['/matches', '_blank', 'noopener noreferrer'], ['/matches', '_blank', 'noopener noreferrer']]), JSON.stringify(await attrs(A.page)));
+            await A.page.click('.rbar .hmenu');                                              // (the masthead's and the footer's links are not drawn on the Room: the Menu's Matches is the way)
+            const item = A.page.locator('.hmenubox a.mitem', { hasText: 'Matches' });
+            check('0. the Menu\'s Matches item opens in a new tab too', (await item.getAttribute('target')) === '_blank' && (await item.getAttribute('rel')) === 'noopener noreferrer');
+            const [tab] = await Promise.all([hostCtx.waitForEvent('page'), item.click()]);
+            watch(tab);
+            await tab.waitForLoadState('load');
+            check('0. the press opens the list of matches in another tab, and the room\'s tab is still on the front page with its room', new URL(tab.url()).pathname === '/matches' && new URL(A.page.url()).pathname === '/' && (await snap(A.page)).heading === 'Your room');
+            if (!QUICK) {
+                await sleep(66000);                                                           // (longer than the room holds a seat: a tab that had left would have lost the lead by now)
+                const seen = await snap(B), mine = await snap(A.page);
+                check('0. after 66 seconds of a replay the room\'s tab is connected still: the host leads, there is no strip, the guest saw nobody leave, and the room has two people', mine.heading === 'Your room' && mine.banner === '' && mine.slots.some((l) => /you, host$/.test(l)) && JSON.stringify(seen.slots) === JSON.stringify(guestBefore.slots) && seen.banner === '' && (await listed(server)).every((x) => x.code !== A.code || x.people === 2), JSON.stringify([mine, seen]));
+            }
+            await hostCtx.close(); await guestCtx.close();
+        }
         // ---- 1. back within the minute, in the same tab: the same seat and the same lead -------------------------------------------------------------------------------------------------------------------
         {
             const hostCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } }), guestCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
