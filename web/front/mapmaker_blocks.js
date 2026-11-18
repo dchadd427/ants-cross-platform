@@ -399,14 +399,14 @@
 
     // ---- taking things away (the Erase tool); picking things up and moving them is mapmaker_pickup.js ----
 
-    // Where the ants, the plants, the piles and the waypoints of the lists are, by cell (made once for a reading of the lists: an eraser with a big brush asks for many cells)
+    // Where the ants (the indexes of their records), the plants, the piles and the waypoints of the lists are, by cell (made once for a reading of the lists: an eraser with a big brush asks for many cells)
     function indexOf(file, lay) {
         if (lay.index) return lay.index;
         var markers = {}, plants = {}, piles = {}, waypoints = {}, i;
         for (i = 0; i < lay.records.length; i++) {
             var rec = lay.records[i], cell = rec.row * file.columns + rec.column;
             if (rec.row >= file.rows || rec.column >= file.columns) continue;
-            if (teamOfMarker(rec.tile) >= 0) (markers[cell] = markers[cell] || []).push(rec.tile);
+            if (teamOfMarker(rec.tile) >= 0) (markers[cell] = markers[cell] || []).push(i);
             else if (PLANT_NAMES[rec.tile]) (plants[cell] = plants[cell] || []).push(i);
         }
         for (i = 0; i < lay.piles.length; i++) {
@@ -421,16 +421,40 @@
         return lay.index;
     }
 
-    // What stands on the cell `idx` besides an object of layer 2: the start of a team (an ant of it is on the cell: all its ants go together), a plant / dropper and a food pile (the cell is its
-    // anchor, or part of the object that its anchor holds). A change, or null when there is nothing.
+    // The clump of the ant whose record is `first`: that record and the records of the same team that join it through the eight cells round each ant (ants stacked on a cell too), the ant first and the
+    // others in the order they are found. A clump is what a tap of the Ants tool puts; Pick up moves one and the eraser takes one. Records outside the map are no one's neighbors.
+    function clumpOf(file, first) {
+        var lay = layout(file), ix = indexOf(file, lay), team = teamOfMarker(lay.records[first].tile), cols = file.columns, out = [first], taken = {}, seen = {}, q = 0, dr, dc, k;
+        var queue = [lay.records[first].row * cols + lay.records[first].column];
+        if (lay.records[first].row >= file.rows || lay.records[first].column >= cols) return out;
+        taken[first] = true; seen[queue[0]] = true;
+        while (q < queue.length) {
+            var r = (queue[q] / cols) | 0, c = queue[q++] - r * cols;
+            for (dr = -1; dr <= 1; dr++) for (dc = -1; dc <= 1; dc++) {
+                var rr = r + dr, cc = c + dc, cell = rr * cols + cc, list = rr < 0 || cc < 0 || rr >= file.rows || cc >= cols ? null : ix.markers[cell];
+                for (k = 0; list && k < list.length; k++) {
+                    if (taken[list[k]] || teamOfMarker(lay.records[list[k]].tile) !== team) continue;
+                    taken[list[k]] = true; out.push(list[k]);
+                    if (!seen[cell]) { seen[cell] = true; queue.push(cell); }
+                }
+            }
+        }
+        return out;
+    }
+
+    // What stands on the cell `idx` besides an object of layer 2: the ants of a team (an ant of it is on the cell: its clump goes, the team's other clumps stay), a plant / dropper and a food pile (the
+    // cell is its anchor, or part of the object that its anchor holds). A change, or null when there is nothing.
     function eraseAt(file, idx) {
         var lay = layout(file), ix = indexOf(file, lay), change = emptyChange(), i;
         var tiles = lay.ok1 ? ix.markers[idx] : null, plantHits = lay.ok1 ? ix.plants[idx] : null;
         if (tiles || plantHits) {
-            var gone = {}, dropIdx = {};
-            if (tiles) for (i = 0; i < tiles.length; i++) gone[teamOfMarker(tiles[i])] = true;
+            var dropIdx = {}, done = {};
+            for (i = 0; tiles && i < tiles.length; i++) {
+                var tm = teamOfMarker(lay.records[tiles[i]].tile);
+                if (!done[tm]) { done[tm] = true; clumpOf(file, tiles[i]).forEach(function (k) { dropIdx[k] = true; }); }
+            }
             if (plantHits) for (i = 0; i < plantHits.length; i++) dropIdx[plantHits[i]] = true;
-            var kept = lay.records.filter(function (rec, k) { return !gone[teamOfMarker(rec.tile)] && !dropIdx[k]; });
+            var kept = lay.records.filter(function (rec, k) { return !dropIdx[k]; });
             var sp1 = diffSplice(file, lay.b1.rel, lay.b1.length, block1Bytes(kept));
             if (sp1) change.splices.push(sp1);
         }
@@ -600,7 +624,7 @@
         EMPTY2: EMPTY2, MIN_ANTS: MIN_ANTS, MAX_ANTS: MAX_ANTS, MAX_RECORDS: MAX_RECORDS, MIN_STAGES: MIN_STAGES, MAX_STAGES: MAX_STAGES, HILL: HILL, TEAMS: TEAMS, FOOD: FOOD, FOOD_NAMES: FOOD_NAMES, FOOD_ITEMS: FOOD_ITEMS, PLANT_NAMES: PLANT_NAMES,
         team: team, teamOfMarker: teamOfMarker, typeOfMarker: typeOfMarker, markerTile: markerTile, teamOfHill: teamOfHill, clampTo: clampTo, foodItem: foodItem,
         layout: layout, block1Bytes: block1Bytes, block2Bytes: block2Bytes, block4Bytes: block4Bytes, diffSplice: diffSplice,
-        hillCells: hillCells, placeHill: placeHill, startCells: startCells, appendStarts: appendStarts, placeStart: placeStart, eraseStart: eraseStart, placePile: placePile, placePlant: placePlant,
+        hillCells: hillCells, placeHill: placeHill, startCells: startCells, appendStarts: appendStarts, placeStart: placeStart, clumpOf: clumpOf, eraseStart: eraseStart, placePile: placePile, placePlant: placePlant,
         eraseAt: eraseAt, resizeMap: resizeMap, inTheWay: inTheWay, blockedText: blockedText, facts: facts
     };
 });

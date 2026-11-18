@@ -17,7 +17,7 @@
         hills: 'Tap or click to put the hill. The dot is its door. Put it again to move it.',
         ants: 'Tap or click to put a clump of the team\u2019s ants here. Tap again for another clump. Pick up moves one.',
         food: 'Tap or click to put a food pile. Click the food button above to pick from all 32 foods or change bites and points.',
-        erase: 'Tap or click to take something away: an object, a hill, a team\u2019s ants or a pile.',
+        erase: 'Tap or click to take something away: an object, a hill, a clump of ants or a pile.',
         pickup: 'Tap an object, hill, ant, food pile or plant to pick it up, then move, copy or delete it. Drag empty ground to look around.',
         pan: 'Drag to look around. Nothing is changed.'
     };
