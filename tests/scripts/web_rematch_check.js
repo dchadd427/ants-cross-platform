@@ -333,6 +333,25 @@ async function main() {
         p.win.fire('pagehide');
         check('... and the page that goes says nothing more (the seat is the front page\'s)', socket.sent.length === sentBefore && p.w.sockets.length === 1);
     }
+    {   // the way back: the front page that the hand-over opens asks for the seat with the key, and the Welcome of the room is the seat's own key: nothing is "replaced" (the notice that the seat ended while the person was away is
+        // for a key that found no seat), and no room was made
+        const p = page();
+        const c = new N.LobbyClient({ url: 'wss://beta.example/ws', code: 'k7m2xq', name: 'Sam', key: N.bytesOfHex(KEYHEX), WebSocket: p.w.WebSocket, setTimeout: p.w.setTimeout, clearTimeout: p.w.clearTimeout, now: p.w.now });
+        const got = [];
+        c.on('welcome', (e) => got.push(e));
+        c.connect();
+        p.w.last().open();
+        p.w.last().receive(welcome(1, KEY, 0));
+        check('the front page takes the kept seat back with its key: the Welcome is the seat\'s own, not replaced and not created', got.length === 1 && got[0].replaced === false && got[0].created === false && got[0].seat === 1, JSON.stringify(got));
+        const q = page();
+        const d = new N.LobbyClient({ url: 'wss://beta.example/ws', code: 'k7m2xq', name: 'Sam', key: N.bytesOfHex(KEYHEX), WebSocket: q.w.WebSocket, setTimeout: q.w.setTimeout, clearTimeout: q.w.clearTimeout, now: q.w.now });
+        const gone = [];
+        d.on('welcome', (e) => gone.push(e));
+        d.connect();
+        q.w.last().open();
+        q.w.last().receive(welcome(2, seq(0x70), 0));
+        check('... and a seat that was given up meanwhile (the room seats the page as a newcomer under another key) is the case that is replaced', gone.length === 1 && gone[0].replaced === true, JSON.stringify(gone));
+    }
     {   // the game's own Leave Game on the results screen: back to the room, as the strip's button does, while the strip works; else the game goes to the front page as it did
         const p = page();
         check('a game page has the question that the game asks when its results screen\'s Leave Game is pressed', typeof p.win.antsLeaveToRoom === 'function');

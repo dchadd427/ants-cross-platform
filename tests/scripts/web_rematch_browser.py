@@ -50,7 +50,13 @@ CARDS = ("Array.prototype.map.call(document.querySelectorAll('#slots > li'), fun
          ".sort(function (a, b) { return a[0] - b[0]; })")
 PUBLIC = ("(function () { var b = document.querySelectorAll('.vis .vbtn'); return b.length === 2 ? [b[0].getAttribute('aria-pressed'), b[1].getAttribute('aria-pressed')] : null; })()")      # (the leader's Private | Public switch: which one is pressed)
 NOTE = "(function () { var n = document.getElementById('start-note'); return n && !n.hidden ? n.textContent : ''; })()"
+SEAT_ENDED = "ended while you were away"                    # (the front page's notice for a key that found no seat: web/front/lobby_rules.js, banner seatgone)
 BANNER = "(function () { var b = document.getElementById('banner'); return b && !b.hidden ? [document.getElementById('banner-text').textContent, b.className] : null; })()"
+
+
+def seat_ended(tab):
+    banner = tab.ev(BANNER)
+    return bool(banner) and SEAT_ENDED in banner[0]
 
 
 def main():
@@ -146,6 +152,8 @@ def main():
         check(bool(wait_for(lambda: ann.ev("location.pathname + location.search") == "/?room=" + code, 20, 0.25)), "Back to the lobby takes Ann's tab to the room's address")
         check(bool(wait_for(lambda: ann.ev("!!document.getElementById('code') && document.getElementById('code').textContent.replace(' ', '') === %r && !document.getElementById('start').disabled" % code), 30, 0.25)),
               "the front page is in the same room, and Ann may press START")
+        time.sleep(1.0)
+        check(not seat_ended(ann), "the room took Ann's seat back with her key: no \"seat ended\" notice (%s)" % ann.ev(BANNER))
         ann.resize(1280, 1400)                                                    # (picture R2's window)
         bar = wait_for(lambda: ann.ev(BAR), 10, 0.25) or {}
         check(bar.get("lead") == "Back from the match." and bar.get("text", "").startswith("Back from the match. " + ANN + " won with ") and bar.get("text", "").endswith(" Same room, same colors, same map.Stats and replay")
@@ -169,6 +177,8 @@ def main():
             bob.call("Input.dispatchMouseEvent", {"type": kind, "x": LEAVE_GAME[0], "y": LEAVE_GAME[1], "button": "left" if kind != "mouseMoved" else "none", "buttons": 1 if kind == "mousePressed" else 0, "clickCount": 1})
             time.sleep(0.1)
         check(bool(wait_for(lambda: bob.ev("location.pathname + location.search") == "/?room=" + code and bob.ev("document.body.classList.contains('guest')"), 30, 0.25)), "Bob's Leave Game, in the game's picture, takes him to the room, as a player (not to Home)")
+        time.sleep(1.0)
+        check(not seat_ended(bob) and not seat_ended(ann), "Bob's seat was kept for him: no \"seat ended\" notice on either screen (%s, %s)" % (bob.ev(BANNER), ann.ev(BANNER)))
         check(bool(wait_for(lambda: (ann.ev(CARDS) or [[0, ""], [1, ""]])[1][1] == "Back in the room" and ann.ev(NOTE) == "", 10, 0.25)), "Ann's screen: Bob is back in the room, nothing is waited for (%s)" % ann.ev(CARDS))
         check(ann.ev(PUBLIC) == ["false", "true"], "... and it is still public when Bob is back too (%s)" % ann.ev(PUBLIC))
         ann.ev("document.getElementById('start').click(); 1")
