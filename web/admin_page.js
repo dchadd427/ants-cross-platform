@@ -1,8 +1,8 @@
 // The admin page (docs/MAP_SUBMISSIONS.md, "The admin page"), reached only by typing /admin: the bar at the top links out of it and nothing links in. The page asks for no login of its own: the site's web server asks the chat hub
 // (the Discord login) before it passes any /admin/api call on, the game server decides again on every call, and the hub decides again on every call of /hub/admin/api (docs/HUB.md, "The admin page's door"). The page asks who is
 // here (GET /admin/api/me) and shows only what it is told:
-//   * an Admin or an Owner: the title with the person's chip (name, role, Front page, Log out) and four sections: Maps (the maps that players sent), Chat (mute, ban, hide a picture), Log (what moderators, admins and the
-//     map decisions did) and Status (how the site is doing);
+//   * an Admin or an Owner: the title with the person's chip (name, role, Front page, Log out) and five sections: Maps (the maps that players sent), Chat (mute, ban, hide a picture), Bot matches (start matches of
+//     computer players and their schedules: web/admin_bots.js, loaded before this file), Log (what moderators, admins and the map and bot match decisions did) and Status (how the site is doing);
 //   * nobody logged in (401): one card with a link to the Discord login; logged in without the admin role (403 not_allowed): the same card with the person's name, Front page and Log out (a moderator is told where the
 //     moderators' tools are); anything else (a part that is off or not running, no answer): one line. The line says plainly which part is off, with the name of the setting, only when the answer proves that an
 //     admin is looking: the game server's submissions door is off (503 submissions_off), the game server does not accept the pass (403 closed), the chat hub's door is shut (the gate says door_off, and the hub's
@@ -23,6 +23,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
+    var BOTS = typeof AntsAdminBots === 'object' ? AntsAdminBots : null;       // the section "Bot matches" (web/admin_bots.js): without that file the page has four sections
     var TIME_ZONE = 'America/Los_Angeles';                 // the maintainer's times are Pacific time
     var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     var TABS = [['waiting', 'Waiting'], ['approved', 'Approved'], ['declined', 'Declined'], ['taken_down', 'Taken down']];
@@ -140,6 +141,7 @@
         var current = null;                                 // the section that is shown
         var host = null;                                    // where the section is drawn
         var tabsBox = null, select = null, waiting = 0;     // the tabs, the select of a phone, and the number of maps that wait (the badge)
+        var botRunning = 0, botTools = null;                // the number of bot matches that go (the badge of its tab), and the section's code when it has been made
         var cleanup = null;                                 // what a section must undo when another screen takes its place (the key listener of a question)
         var toastTimer = null;
         function tick() { return (env.tick || env.now)(); }                      // a clock that only goes forward, in milliseconds (the page's other clock, now, says the time of day and can be frozen)
@@ -389,9 +391,11 @@
         var SECTIONS = [
             { id: 'maps', title: 'Maps', render: renderMaps },
             { id: 'chat', title: 'Chat', render: renderChat },
+            { id: 'bots', title: 'Bot matches', render: renderBots },
             { id: 'log', title: 'Log', render: renderLog },
             { id: 'status', title: 'Status', render: renderStatus }
         ];
+        if (!BOTS) SECTIONS.splice(2, 1);
 
         function paintTabs() {
             Array.prototype.slice.call(tabsBox.children).forEach(function (b, i) {
@@ -400,10 +404,11 @@
                 b.setAttribute('aria-selected', s === current ? 'true' : 'false');
                 add(b, el('span', null, s.title));
                 if (s.id === 'maps' && waiting > 0) add(b, el('span', 'cnt', String(waiting)));
+                if (s.id === 'bots' && botRunning > 0) add(b, el('span', 'cnt', String(botRunning)));
             });
             Array.prototype.slice.call(select.children).forEach(function (o, i) {
                 var s = SECTIONS[i];
-                o.textContent = s.title + (s.id === 'maps' && waiting > 0 ? ' (' + waiting + ' waiting)' : '');
+                o.textContent = s.title + (s.id === 'maps' && waiting > 0 ? ' (' + waiting + ' waiting)' : s.id === 'bots' && botRunning > 0 ? ' (' + botRunning + ' running)' : '');
                 o.selected = s === current;
             });
             select.value = current.id;
@@ -461,8 +466,21 @@
             add(app, pt, sectionBox(), host);
             current = null;
             waiting = 0;
+            botRunning = 0;
             show(SECTIONS[0]);
+            if (BOTS) tools().count();                       // (the badge of the Bot matches tab: how many go now)
         }
+
+        // ---- the section "Bot matches": web/admin_bots.js, given the helpers of this page ----
+        function tools() {
+            if (!botTools) {
+                botTools = BOTS.make({ doc: doc, env: env, el: el, add: add, button: button, panel: panel, call: call, message: message, typed: typed, when: when, untilWords: untilWords, minutesWords: minutesWords, refused: refused, toast: toast,
+                                       questionBox: questionBox, inertOthers: inertOthers, clearInert: clearInert, tick: tick, ASK_DELAY: ASK_DELAY, UNTRUSTED: UNTRUSTED,
+                                       setCleanup: function (fn) { cleanup = fn; }, setRunning: function (n) { botRunning = n; if (tabsBox && current) paintTabs(); } });
+            }
+            return botTools;
+        }
+        function renderBots(host) { return tools().render(host); }
 
         // ---- the section "Maps" (the maps that players sent) ----
         function renderMaps(host) {
@@ -943,12 +961,19 @@
                 if (!MAP_ACTIONS[r.action]) add(wt, doc.createTextNode(' '), typed('span', null, r.action));
                 return wt;
             }
+            function botText(r, tagged) {                                                                 // (a line about the matches of computer players: the schedule's name or the map is typed text)
+                var wt = add(el('span', 'wt'), tagged ? el('span', 'src bot', 'Bot') : null);
+                add(wt, doc.createTextNode((BOTS && BOTS.logActions[r.action]) || ''), typed('em', null, r.target));
+                if (r.detail) add(wt, doc.createTextNode(' '), typed('span', 'why', r.detail));
+                if (!(BOTS && BOTS.logActions[r.action])) add(wt, doc.createTextNode(' '), typed('span', null, r.action));
+                return wt;
+            }
             function draw() {
-                var chat = st.chat || [], maps = st.maps || [], now = env.now();
+                var chat = st.chat || [], all = st.maps || [], now = env.now(), maps = all.filter(function (r) { return String(r.action).indexOf('bot_') !== 0; }), bots = all.filter(function (r) { return String(r.action).indexOf('bot_') === 0; });
                 tools.textContent = '';
                 var chips = el('span', 'chips');
                 chips.setAttribute('role', 'tablist');
-                [['all', 'All (' + (chat.length + maps.length) + ')'], ['chat', 'Chat actions (' + chat.length + ')'], ['maps', 'Map decisions (' + maps.length + ')']].forEach(function (c) {
+                [['all', 'All (' + (chat.length + maps.length + bots.length) + ')'], ['chat', 'Chat actions (' + chat.length + ')'], ['maps', 'Map decisions (' + maps.length + ')'], ['bots', 'Bot matches (' + bots.length + ')']].forEach(function (c) {
                     var b = el('button', 'chip' + (c[0] === st.mode ? ' on' : ''), c[1]);
                     b.type = 'button';
                     b.setAttribute('role', 'tab');
@@ -957,13 +982,14 @@
                     add(chips, b);
                 });
                 add(tools, chips);
-                lead.textContent = st.mode === 'maps' ? 'What was decided about the maps that players sent.' : st.mode === 'chat' ? 'What moderators and admins did in the chat, the last 30 days.' : 'Chat actions (the last 30 days) and map decisions, newest first.';
+                lead.textContent = st.mode === 'bots' ? 'What was started and stopped, and the schedules that were added, changed or deleted.' : st.mode === 'maps' ? 'What was decided about the maps that players sent.' : st.mode === 'chat' ? 'What moderators and admins did in the chat, the last 30 days.' : 'Chat actions (the last 30 days), map decisions and bot matches, newest first.';
                 body.textContent = '';
                 if (st.chat === null) add(body, message('The chat’s log could not be loaded.'));
                 if (st.maps === null) add(body, message('The map decisions could not be loaded.'));
                 var rows = [];
-                if (st.mode !== 'maps') chat.forEach(function (r) { rows.push({ at: r.at, src: 'chat', who: who(r.actor, r.actor_name), what: chatText(r, st.mode === 'all') }); });
-                if (st.mode !== 'chat') maps.forEach(function (r) { rows.push({ at: r.at, src: 'map', who: who(r.ref, r.who), what: mapText(r, st.mode === 'all') }); });
+                if (st.mode === 'all' || st.mode === 'chat') chat.forEach(function (r) { rows.push({ at: r.at, src: 'chat', who: who(r.actor, r.actor_name), what: chatText(r, st.mode === 'all') }); });
+                if (st.mode === 'all' || st.mode === 'bots') bots.forEach(function (r) { rows.push({ at: r.at, src: 'bot', who: who(r.ref, r.who), what: botText(r, st.mode === 'all') }); });
+                if (st.mode === 'all' || st.mode === 'maps') maps.forEach(function (r) { rows.push({ at: r.at, src: 'map', who: who(r.ref, r.who), what: mapText(r, st.mode === 'all') }); });
                 rows.sort(function (a, b) { return b.at - a.at; });                                        // (newest first; a stable sort keeps the order of the log for one second)
                 var hd = el('div', 'ahd');
                 add(hd, el('span', null, 'When'), el('span', null, 'Who'), el('span', null, 'What'));

@@ -78,6 +78,7 @@ private:
     AdminAudit* audit_;
     std::vector<Started> started_;
     uint64_t next_id_{1};
+    int64_t last_prune_s_{0};                   // the matches that ended are forgotten once a minute (a page that is never asked would leave them for ever)
     std::vector<std::string> notices_;
 };
 

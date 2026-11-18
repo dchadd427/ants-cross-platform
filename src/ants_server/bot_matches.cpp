@@ -372,6 +372,10 @@ HttpResponse BotMatches::schedule_delete(const AdminIdentity& who, int64_t id, i
 // ------------------------------------------------------------------------------------------------ the loop
 
 void BotMatches::update(int64_t now_s, uint32_t now_ms) {
+    if (now_s < last_prune_s_ || now_s - last_prune_s_ >= 60) {
+        last_prune_s_ = now_s;
+        forget_ended(rooms_.bot_matches(now_ms));
+    }
     std::vector<int64_t> due;
     for (const BotSchedule& s : schedules_.list()) {
         if (s.on && s.next_run != 0 && now_s >= s.next_run) due.push_back(s.id);

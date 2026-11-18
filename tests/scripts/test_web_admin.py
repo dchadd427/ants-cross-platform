@@ -2,8 +2,9 @@
 """The admin page, web/admin.html with web/admin_page.js and web/admin.css (run by ./run_tests.sh --fast and by the CI; docs/MAP_SUBMISSIONS.md "The admin page").
 
   - the page's own code is RUN (node, when it is installed) against a fake of the DOM and a fake of the game server, the hub and /busy (tests/scripts/web_admin_check.js): who is let in and what each of them sees
-    (nobody logged in, a player, a moderator, an admin, the owner, a door that is closed or a part that is not running), the chip and its menu, the four sections (Maps, Chat, Log, Status) as tabs and as a select, the
-    Maps lists and their questions, the Chat form and its Ban question and its lists, the Log and its filters, the Status in every state, what each button sends and with which token (the game server's for the maps, the
+    (nobody logged in, a player, a moderator, an admin, the owner, a door that is closed or a part that is not running), the chip and its menu, the five sections (Maps, Chat, Bot matches, Log, Status) as tabs and as a select, the
+    Maps lists and their questions, the Chat form and its Ban question and its lists, the section Bot matches (Start now, Running, Schedules: what each button sends, the questions, every refusal in words, the badge), the Log
+    and its filters, the Status in every state, what each button sends and with which token (the game server's for the maps, the
     hub's for the chat, none for a change that has no token), that a later call that the door refuses swaps the page to the same card, that nothing a person typed becomes markup and that no Discord id is on the page or
     in a call; the check is shown able to fail: broken copies of the script are refused by it;
   - the page has the site's bar and no other link: nothing else of the site links to it, the script has no way to make markup from text (no innerHTML, no document.write, no eval), no address of another site and
@@ -18,6 +19,7 @@ import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SCRIPT = os.path.join(REPO, "web", "admin_page.js")
+BOTS = os.path.join(REPO, "web", "admin_bots.js")
 CHECK_JS = os.path.join(REPO, "tests", "scripts", "web_admin_check.js")
 
 
@@ -26,8 +28,8 @@ def read(*parts):
         return f.read()
 
 
-def run_check(script=SCRIPT):
-    return subprocess.run([shutil.which("node"), CHECK_JS, script], capture_output=True, text=True, timeout=120)
+def run_check(script=SCRIPT, bots=BOTS):
+    return subprocess.run([shutil.which("node"), CHECK_JS, script, bots], capture_output=True, text=True, timeout=120)
 
 
 class ThePagesOwnCode(unittest.TestCase):
@@ -171,7 +173,12 @@ class ThePagesOwnCode(unittest.TestCase):
             'a short code in a list is not marked as typed text': ("function ref(text) { return typed('code', 'refn', text); }", "function ref(text) { return el('code', 'refn', text); }"),
             'a done line is an alert': ('var m = message(null, cls);', "var m = message(null, 'bad');"),
             'the names of the log are not marked': ("if (name) return add(w, typed('span', null, name));", "if (name) return add(w, el('span', null, name));"),
-            'the map name of the log is not marked': ("typed('em', null, r.target)", "el('em', null, r.target)"),
+            'the map name of the log is not marked': ("add(wt, doc.createTextNode(MAP_ACTIONS[r.action] || ''), typed('em', null, r.target));", "add(wt, doc.createTextNode(MAP_ACTIONS[r.action] || ''), el('em', null, r.target));"),
+            'the target of a bot match line of the log is not marked': ("(BOTS && BOTS.logActions[r.action]) || ''), typed('em', null, r.target));", "(BOTS && BOTS.logActions[r.action]) || ''), el('em', null, r.target));"),
+            'the Bot matches filter of the Log is gone': ("['bots', 'Bot matches (' + bots.length + ')']", "['bots', 'Bot matches (0)']"),
+            'the bot lines are counted as map decisions': ("maps = all.filter(function (r) { return String(r.action).indexOf('bot_') !== 0; })", "maps = all.filter(function (r) { return true; })"),
+            'the badge of the Bot matches tab is not drawn': ("if (s.id === 'bots' && botRunning > 0) add(b, el('span', 'cnt', String(botRunning)));", ""),
+            'the number of bot matches that go is not asked when the page opens': ("if (BOTS) tools().count();", ""),
             'the reason of a decline in the log is not marked': ("add(el('span', 'why', 'Reason: '), typed('span', null, r.detail))", "add(el('span', 'why', 'Reason: '), el('span', null, r.detail))"),
             'a time that is not a number stops the list': ("    function when(seconds, nowMs) {\n        if (!isTime(seconds)) return '';", '    function when(seconds, nowMs) {'),
             'the end of a mute that is not a time stops the list': ("    function untilWords(seconds, nowMs) {\n        if (!isTime(seconds)) return '';", '    function untilWords(seconds, nowMs) {'),
@@ -189,6 +196,37 @@ class ThePagesOwnCode(unittest.TestCase):
             'an answer of the hub of another shape is trusted': ('rs[1].json && rs[1].json.health && rs[1].json.store ? rs[1].json : null', 'rs[1].json'),
             "the game server's counts are asked for with the cookie": ("env.fetch('/busy', { credentials: 'omit' })", "env.fetch('/busy', { credentials: 'same-origin' })"),
         }
+        bots_text = read("web", "admin_bots.js")
+        broken_bots = {                                                                          # (the section "Bot matches", the page's second file)
+            "a match's name becomes markup": ("add(name, typed('span', null, m.name), el('span', 'rtag '", "add(name, el('span', null, m.name), el('span', 'rtag '"),
+            "a schedule's name is not marked as typed text": ("add(name, typed('span', null, s.name), el('span', 'tg '", "add(name, el('span', null, s.name), el('span', 'tg '"),
+            "the admin or schedule that started a match is not marked": ("typed('span', null, m.schedule || m.by)", "el('span', null, m.schedule || m.by)"),
+            "the name of a map of a player is not marked as player text": ("if (m.group === 'players') o.setAttribute('data-untrusted', UNTRUSTED);", ""),
+            "Delete asks no question": ("button('Delete', 'bad', function () { askDelete(s); })", "button('Delete', 'bad', function () { call('POST', '/admin/api/bot-schedules/' + s.id + '/delete', {}).then(function () { loadAll(true); }); })"),
+            "Stop all asks no question": ("button('Stop all ' + n, 'bad', function () { askStopAll(); })", "button('Stop all ' + n, 'bad', function () { call('POST', '/admin/api/bot-matches/stop-all', {}).then(function () { loadAll(true); }); })"),
+            "the question can be confirmed at once": ("function () { if (tick() - opened < ASK_DELAY) return; closeAsk(); onGo(); }", "function () { closeAsk(); onGo(); }"),
+            "the limit is nine": ("var CAP = 8;", "var CAP = 9;"),
+            "Start stays on when all eight places are taken": ("off = full || !st.replays;", "off = !st.replays;"),
+            "Start stays on when the server keeps no replays": ("off = full || !st.replays;", "off = full;"),
+            "Watch opens in the page's own tab": ("watch.setAttribute('target', '_blank');", ""),
+            "Watch can be pressed before the live list has the match": ("if (m.live) { watch = el('a', 'btn', 'Watch');", "if (true) { watch = el('a', 'btn', 'Watch');"),
+            "Stop names the match by its map": ("'/admin/api/bot-matches/' + encodeURIComponent(m.id) + '/stop'", "'/admin/api/bot-matches/' + encodeURIComponent(m.name) + '/stop'"),
+            "a split can be chosen with two bots": ("var can = nb >= 3 && v.bots !== 'random';", "var can = true;"),
+            "the hint about ISLANDS in 187 is gone": ("if (mp && mp.file === 'ISLANDS.LVL' && v.rules === '187') {", "if (false) {"),
+            "more than twelve times can be added": ("if (times.length >= 12) {", "if (times.length >= 99) {"),
+            "a time of 25:00 is taken": ("/^([01]?[0-9]|2[0-3]):([0-5][0-9])$/", "/^([0-9]{1,2}):([0-5][0-9])$/"),
+            "minutes are sent as the text that was typed": ("minutes: /^[0-9]{1,4}$/.test(typedMinutes) ? parseInt(typedMinutes, 10) : -1", "minutes: typedMinutes"),
+            "Turn off sends the same state": ("{ on: !s.on }", "{ on: s.on }"),
+            "the default's question says nothing about it": ("(s.default ? ' This is the schedule that the server began with", "(false ? ' This is the schedule that the server began with"),
+            "a server with no routes is not told": ("rs[0].json.error === 'bots_off'", "rs[0].json.error === 'never'"),
+            "the badge is not told how many match go": ("if (r.status === 200 && r.json && r.json.matches) h.setRunning(r.json.matches.length);", ""),
+            "the Running panel does not tell the badge": ("h.setRunning(n);\n            }\n            function stopOne", "}\n            function stopOne"),
+            "a refusal of the number of matches does not say what is free": ("' be over the limit of ' + CAP + '. Start ' + j.free + ' or fewer", "' be over the limit of ' + CAP + '. Start fewer"),
+            "a start that is old (an old token) is not told": ("if (r.status === 403 && e === 'csrf') return", "if (false) return"),
+            "a refused call of a batch is not noticed (a login that ended)": ("if (refused(r)) return;\n                    say('bad', failure(r));", "say('bad', failure(r));"),
+            "the schedule form keeps no name limit": ("nameI.maxLength = 40;", ""),
+            "a schedule that was saved leaves its form open": ("if (r.status === 200) { st.editing = null; return loadAll(true); }", "if (r.status === 200) { return loadAll(true); }"),
+        }
         with tempfile.TemporaryDirectory() as folder:
             for why, (old, new) in broken.items():
                 self.assertEqual(text.count(old), 1, why)
@@ -196,6 +234,12 @@ class ThePagesOwnCode(unittest.TestCase):
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(text.replace(old, new))
                 self.assertNotEqual(run_check(path).returncode, 0, "the check accepted a script where " + why)
+            for why, (old, new) in broken_bots.items():
+                self.assertEqual(bots_text.count(old.replace("\\n", "\n")), 1, why)
+                path = os.path.join(folder, "admin_bots.js")
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(bots_text.replace(old.replace("\\n", "\n"), new.replace("\\n", "\n")))
+                self.assertNotEqual(run_check(SCRIPT, path).returncode, 0, "the check accepted a bots script where " + why)
 
 
 class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
@@ -208,7 +252,7 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
         return out
 
     def test_no_other_file_of_the_site_names_the_address_or_the_file(self):
-        mine = {"admin.html", "admin.css", "admin_page.js"}
+        mine = {"admin.html", "admin.css", "admin_page.js", "admin_bots.js"}
         for path in self.web_files():
             if os.path.basename(path) in mine and os.path.dirname(path) == os.path.join(REPO, "web"):
                 continue
@@ -228,7 +272,7 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
         bar = re.search(r'<header class="sb".*?</header>', page, re.S).group(0)
         self.assertEqual(bar, re.search(r'<header class="sb".*?</header>', read("web", "legal.html"), re.S).group(0))          # (the very markup of the other pages' bar: the build stamps it)
         self.assertEqual(len(re.findall(r"<a\b", page)), len(re.findall(r"<a\b", bar)))                                 # (no link outside the bar)
-        self.assertEqual(re.findall(r'(?:href|src)="([^"]+)"', page.replace(bar, "")), ["/favicon.png?v=f34bea03", "/front/classic.css", "/site_nav.css", "admin.css", "/site_nav.js", "admin_page.js"])
+        self.assertEqual(re.findall(r'(?:href|src)="([^"]+)"', page.replace(bar, "")), ["/favicon.png?v=f34bea03", "/front/classic.css", "/site_nav.css", "admin.css", "/site_nav.js", "admin_bots.js", "admin_page.js"])
         self.assertIn('<meta name="robots" content="noindex, nofollow">', page)
         self.assertNotRegex(page, r"<script>|<style|onclick|onload|javascript:")
         self.assertEqual(len(re.findall(r'<div id="app"></div>', page)), 1)
@@ -249,9 +293,16 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
         for forbidden in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function", "setTimeout('", 'setTimeout("', "localStorage", "sessionStorage", "document.cookie", "location.href"):
             self.assertNotIn(forbidden, script, forbidden)
 
-    def test_the_registry_holds_the_four_sections_and_the_shell_knows_none_by_name(self):
+    def test_the_second_file_has_only_the_addresses_of_its_own_calls_and_makes_no_markup_from_text(self):
+        script = read("web", "admin_bots.js")
+        self.assertEqual(sorted(set(re.findall(r"""['"](/[A-Za-z][^'"\s]*)""", script))), ["/admin/api/bot-matches", "/admin/api/bot-matches/", "/admin/api/bot-matches/stop-all", "/admin/api/bot-options", "/admin/api/bot-schedules", "/admin/api/bot-schedules/", "/delete", "/play?live=", "/stop"])
+        self.assertNotRegex(script, r"https?://")
+        for forbidden in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function", "setTimeout('", 'setTimeout("', "localStorage", "sessionStorage", "document.cookie", "location.href", "fetch("):
+            self.assertNotIn(forbidden, script, forbidden)                          # (it sends and reads through the page's own `call`, which carries the token)
+
+    def test_the_registry_holds_the_five_sections_and_the_shell_knows_none_by_name(self):
         script = read("web", "admin_page.js")
-        for entry in ("{ id: 'maps', title: 'Maps', render: renderMaps }", "{ id: 'chat', title: 'Chat', render: renderChat }", "{ id: 'log', title: 'Log', render: renderLog }", "{ id: 'status', title: 'Status', render: renderStatus }"):
+        for entry in ("{ id: 'maps', title: 'Maps', render: renderMaps }", "{ id: 'chat', title: 'Chat', render: renderChat }", "{ id: 'bots', title: 'Bot matches', render: renderBots }", "{ id: 'log', title: 'Log', render: renderLog }", "{ id: 'status', title: 'Status', render: renderStatus }"):
             self.assertIn(entry, script)
         self.assertIn("section.render(host);", script)                              # (the shell calls the one that is chosen)
         shell = script[script.index("function paintTabs()"):script.index("// ---- the section \"Maps\"")]
