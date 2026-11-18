@@ -229,7 +229,6 @@ WalkResult walk(Session& s, uint32_t ant, bool hump, int reaction_ms, int noise_
     int32_t hy = 0;
     if (!s.screen_of_tile(kGoalB, kLaneRow, hx, hy)) return out;
     const uint64_t tick0 = s.app().sim().current_tick();
-    if (std::getenv("ANTS_LINK_DEBUG")) std::printf("    [walk: goal A at screen (%d,%d), goal B (%d,%d); ant at (%d,%d)]\n", gx, gy, hx, hy, sx, sy);
     std::vector<std::pair<uint64_t, int>> history;                                 // (the confirmed tick, the ant's px) at the end of every frame
     int32_t last_tile = shown->tile_x;
     bool next_is_b = true;
@@ -239,25 +238,15 @@ WalkResult walk(Session& s, uint32_t ant, bool hump, int reaction_ms, int noise_
         if (const sim::AntSnapshot* c = s.confirmed_ant(ant)) history.emplace_back(s.app().sim().current_tick(), c->px);
         const sim::AntSnapshot* seen = s.shown_ant(ant);
         if (seen == nullptr) return;
-        if (!hump && seen->tile_x != last_tile && std::getenv("ANTS_LINK_DEBUG")) {
-            std::printf("      [single: tile (%d,%d) px (%d,%d) at +%u, terrain %d]\n", seen->tile_x, seen->tile_y, seen->px, seen->py, s.now() - start_now, s.app().sim().grid().terrain_class_at(sim::TileCoord{seen->tile_x, seen->tile_y}));
-            last_tile = seen->tile_x;
-        }
         if (!hump) return;
         if (seen->tile_x != last_tile) {                                           // the shown ant has crossed a tile line: the person reacts
             if (seen->tile_x > last_tile && s.now() > start_now + 600) {
-                if (std::getenv("ANTS_LINK_DEBUG")) std::printf("      [crossing to tile %d at %u ms (+%u), click at +%d]\n", seen->tile_x, s.now(), s.now() - start_now, reaction_ms);
                 hand.at(s.now() + static_cast<uint32_t>(std::max(0, reaction_ms + (noise_ms > 0 ? static_cast<int>(s.rng()() % static_cast<uint32_t>(2 * noise_ms + 1)) - noise_ms : 0))), SDL_BUTTON_RIGHT, next_is_b ? hx : gx, next_is_b ? hy : gy);
                 next_is_b = !next_is_b;
             }
             last_tile = seen->tile_x;
         }
     };
-    s.run_ms(1500);
-    if (std::getenv("ANTS_LINK_DEBUG")) {
-        const sim::AntUnit& u = s.app().sim().get_unit(ant);
-        std::printf("    [walk: order %u tile (%d,%d)]\n", static_cast<unsigned>(u.orig_order), u.orig_order_tile.x, u.orig_order_tile.y);
-    }
     const bool done = s.run_until([&]() { return s.app().sim().current_tick() >= tick0 + kWalkTicks + 1; }, 15000);
     s.on_frame_end = nullptr;
     if (!done) {
@@ -350,19 +339,10 @@ struct AttackResult {
 // One attack click: the other person's ant is sent west; when it walks and `phase_ms` after its third tile on the screen, the person right-clicks on it with the attacker selected
 AttackResult attack_click(Session& s, uint32_t attacker, uint32_t enemy, int phase_ms) {
     AttackResult out;
-    const bool dbg = std::getenv("ANTS_LINK_DEBUG") != nullptr;
     if (!s.bring(0, attacker, kAttackerTile, kLaneRow)) {
-        if (dbg) {
-            const sim::AntSnapshot* c = s.confirmed_ant(attacker);
-            const sim::AntSnapshot* v = s.shown_ant(attacker);
-            std::printf("    [attack: the attacker did not get to its place: confirmed (%d,%d) action %d state %d; shown (%d,%d) action %d state %d; order %u]\n", c->tile_x, c->tile_y, c->action,
-                        static_cast<int>(c->state), v->tile_x, v->tile_y, v->action, static_cast<int>(v->state), static_cast<unsigned>(s.app().sim().get_unit(attacker).orig_order));
-        }
         return out;
     }
     if (!s.bring(1, enemy, kEnemyTile, kLaneRow)) {
-        const sim::AntSnapshot* e = s.confirmed_ant(enemy);
-        if (dbg) std::printf("    [attack: the enemy did not get to its place; it is at (%d,%d) action %d]\n", e ? e->tile_x : -1, e ? e->tile_y : -1, e ? e->action : -1);
         return out;
     }
     s.camera_on(15, kLaneRow);
@@ -370,13 +350,11 @@ AttackResult attack_click(Session& s, uint32_t attacker, uint32_t enemy, int pha
     int32_t sy = 0;
     const sim::AntSnapshot* mine = s.shown_ant(attacker);
     if (mine == nullptr || !s.screen_of_world(mine->px, mine->py, sx, sy)) {
-        if (dbg) std::printf("    [attack: the attacker is not on the screen]\n");
         return out;
     }
     s.run_ms(static_cast<uint32_t>(s.rng()() % 50u));
     s.click(SDL_BUTTON_LEFT, sx, sy);
     if (s.app().hud().get_selected_ant_id() != attacker) {
-        if (dbg) std::printf("    [attack: the click at (%d,%d) did not select the attacker]\n", sx, sy);
         return out;
     }
     s.order(1, sim::CommandType::GroupMove, {enemy}, kEnemyGoal, kLaneRow);
@@ -405,7 +383,6 @@ AttackResult attack_click(Session& s, uint32_t attacker, uint32_t enemy, int pha
     const bool clicked = s.run_until([&]() { return done; }, 8000);
     s.on_frame_end = nullptr;
     if (!clicked) {
-        if (dbg) std::printf("    [attack: no click was made (armed %d)]\n", armed ? 1 : 0);
         s.on_frame_start = nullptr;
         return out;
     }
@@ -690,7 +667,6 @@ int main(int argc, char* argv[]) {
                         const int32_t jump = std::max(std::abs(drawn.first - it->second.first), std::abs(drawn.second - it->second.second));
                         if (jump > 20 && jump <= 64) {
                             ++jumps[glide ? 1 : 0];
-                            if (glide && std::getenv("ANTS_LINK_DEBUG")) std::printf("      [jump %d px: ant %u at (%d,%d) engine (%d,%d) glide (%d,%d) tick %llu]\n", jump, a.id, drawn.first, drawn.second, a.px, a.py, gx, gy, static_cast<unsigned long long>(s.app().sim().current_tick()));
                         }               // (an order given to a walking ant snaps it by up to 16 px in the engine itself, as the original's does: more than 20 px in one frame is a hop of the correction; a throw or a teleport is no correction)
                     }
                     last[a.id] = drawn;
@@ -779,7 +755,8 @@ int main(int argc, char* argv[]) {
         for (int n = 0; n < sessions; ++n) {
             std::mt19937 pick(1000u + static_cast<uint32_t>(n));
             Params p;
-            p.map = "SHORT.LVL";
+            const bool long_game = n % 3 == 0 && n % 2 == 1;                                  // (some two-person matches run for four minutes and end with the other person's Quit)
+            p.map = long_game ? "GRASS.LVL" : "SHORT.LVL";
             const uint32_t rtts[6] = {20, 60, 100, 180, 250, 300};
             p.link.rtt_ms = rtts[pick() % 6];
             p.link.jitter_ms = pick() % 4 == 0 ? 0u : 10u + pick() % 50u;
@@ -810,12 +787,13 @@ int main(int argc, char* argv[]) {
             ASSERT_TRUE(s.begin());
             Players players(s);
             players.peer = kind != 1;
-            players.play(50000);
+            players.play(long_game ? 240000 : 50000);
             ASSERT_TRUE(s.app().net()->predicting() || s.app().net()->prediction_cooling_down() == false);
             const net::Prediction::Stats st = s.app().net()->prediction()->stats();
             ASSERT_EQ(st.commands_lost, 0u);
             ASSERT_EQ(st.cooldowns, 0u);
             worst_rebuild_ns = std::max(worst_rebuild_ns, st.rebuild_ns_max);
+            if (long_game) s.quit(1);
             ASSERT_TRUE(s.run_until([&]() { return s.room_finished(); }, 120000));
             s.run_ms(1500);
             ASSERT_EQ(s.app().sim().state_hash().total, s.referee_hash());
