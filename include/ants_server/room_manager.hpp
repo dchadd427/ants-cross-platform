@@ -37,6 +37,7 @@
 #include "ants_net/protocol.hpp"
 #include "ants_net/transport.hpp"
 #include "ants_net/turnlog.hpp"
+#include "ants_server/bot_match_spec.hpp"
 #include "ants_server/history_store.hpp"
 #include "ants_server/map_store.hpp"
 #include "ants_server/restart_record.hpp"
@@ -117,6 +118,18 @@ bool draw_room_code(std::string& code, const RandomBytes& source);
 struct BusyCounts {
     uint32_t matches{0};
     uint32_t players{0};
+};
+
+/// A match of computer players that goes now, as the admin page lists it (RoomManager::bot_matches): nothing of the room that a page could use to join it (the code stays here)
+struct BotMatchInfo {
+    std::string code;                       // the room's code (the manager's own key: never on a page)
+    std::string map;                        // the map's file name
+    uint8_t mode{0};                        // sim::GameMode as a byte
+    std::vector<std::pair<uint8_t, std::string>> seats;   // (seat, "easy" | "medium" | "hard") in the order of the seats
+    std::string sides;                      // "ffa", or the sides by seat: "03-12" (seats 0 and 3 against 1 and 2), "01-2"
+    std::string live_id;                    // the id of the match on the live list when the public list shows it, else "" (it shows after the match has run 30 seconds)
+    uint32_t places{1};                     // what the match takes of kBotPlacesMax
+    RoomState state{RoomState::Waiting};
 };
 
 /// The public list of games shows this many lobbies at the most (RoomManager::lobbies), the best first
@@ -209,15 +222,37 @@ public:
     /// The server is told to stop: every room that keeps a record makes it durable (fsync) and leaves it on disk, the other rooms are closed. Returns the number of records that were kept. Nothing is
     /// deleted: a record is deleted when its room is over, never because the server stops.
     size_t shutdown(uint32_t now_ms);
-    /// The server's own matches of computer players (docs/SERVER.md "Matches of computer players"): every `every_minutes` the manager makes one room whose seats are all bots (RoomSpec::bots_only), on one of
-    /// the original's six maps, with two to four standard bots of the Medium or Hard level on random seats, in the original's game or in 187 (a fair coin for each match), played at the normal speed. The first one begins `first_after_ms` after this call. Nothing is made while
-    /// the server keeps no replays (a match that nobody could watch or look at again), while a match of this kind still runs, or while the manager has no room for another room. `every_minutes` 0 switches it off.
-    /// `seed` 0: the choices come from the system's entropy; else from `seed` (the tests).
-    void enable_bot_matches(uint32_t every_minutes, uint32_t now_ms, uint32_t first_after_ms = 60u * 1000u, uint32_t seed = 0);
-    bool bot_matches_enabled() const noexcept { return bot_every_ms_ != 0; }
-    /// One match of computer players now (what the timer does): the room's code when it was made, else the reason in `why`. `mode`, when given, gets the rules that the match was dealt (sim::GameMode as a byte): each match
-    /// draws them by a fair coin of its own, the original's highest score or 187, with no memory of the matches before it, and then a map of that rules' list (docs/SERVER.md "Matches of computer players")
+    /// The server's own matches of computer players (docs/SERVER_REPLAYS.md "Matches of computer players"). A match is a room whose seats are all bots (RoomSpec::bots_only), played at the normal speed and kept like any other
+    /// match; what starts one, on a schedule or from the admin page, is BotMatches (bot_matches.hpp): the manager only makes the room, within its limits, and lists and stops them. `seed` 0: the draws come from the
+    /// system's entropy (the default); else from `seed` (the tests).
+    void seed_bot_matches(uint32_t seed);
+    /// One match of computer players now, with the choices of `spec`: the room's code when it was made, else the reason in `why` (and in `refusal`, when asked, the kind of reason). Nothing is made while the server keeps
+    /// no replays (a match that nobody could watch or look at again), while kBotMatchesMax matches of this kind are going, while the people's matches use more than their share of the server's places
+    /// (kBotPeopleShareNumerator / kBotPeopleShareDenominator of --demo-rooms), or while the match would take the places of the matches of computer players past kBotPlacesMax. `mode`, when given, gets the rules that the
+    /// match was dealt (sim::GameMode as a byte). A choice that is a draw is drawn in an order that never changes (the map first, then the number of bots, each seat and its level, the seed, the teams, the rules), so
+    /// the first match of a seed with the default choices is the same as it was before there were choices (docs/SERVER_REPLAYS.md "Matches of computer players").
+    bool start_bot_match(uint32_t now_ms, const BotMatchSpec& spec, std::string& code, std::string& why, BotRefusal* refusal = nullptr, uint8_t* mode = nullptr);
+    /// The same with the default choices (a map of the rotation, random rules, two to four bots of the Medium or Hard level, free for all or teams by a draw)
     bool start_bot_match(uint32_t now_ms, std::string& code, std::string& why, uint8_t* mode = nullptr);
+    /// The maps that a match of computer players may be asked to play: the original's six, three maps of the library and every approved map of the players, in that order, each with its size and its places; only
+    /// those that a room can play now (a map that the server lacks or cannot play is not in it)
+    std::vector<BotMapOption> bot_map_options() const;
+    /// How many maps of the rotation's list for those rules a room can play now (docs/SERVER_REPLAYS.md: nine for the original's game and six for 187 when the server has them all)
+    size_t bot_rotation_maps(bool kills_187) const;
+    /// The matches of computer players that go now (a room that waits, loads or runs), the oldest first. `now_ms` only dates the rooms' statuses.
+    std::vector<BotMatchInfo> bot_matches(uint32_t now_ms) const;
+    /// How many matches of computer players go now, and the places that they take together (OnlineLimits::weight of each)
+    size_t bot_match_count() const;
+    uint32_t bot_places() const;
+    /// The places that the matches of people take (public_places) and the places that the server has for them (--demo-rooms: 0 when it has none, and then the matches of people never hold a start back)
+    size_t people_places() const { return public_places(); }
+    size_t place_total() const noexcept { return limits_.demo_rooms; }
+    /// Whether the matches of people use more than their share of the places: a start of computer players waits
+    bool people_busy() const;
+    /// Ends one match of computer players (the room's code), or all of them: the room is closed, and a match that ran 30 seconds is kept as a replay up to where it stopped. False for a code that is no such match; the
+    /// number that were stopped.
+    bool stop_bot_match(const std::string& code, uint32_t now_ms);
+    size_t stop_bot_matches(uint32_t now_ms);
     /// Lines for the server's log about the restart records (a record that was written no more, a room that was restored or not), the replays (files purged, a match that was not kept) and the seats that a room dropped
     /// for a state that differed from the referee's: once each, never a key
     std::vector<std::string> take_notices();
@@ -362,9 +397,10 @@ private:
     uint64_t created_{0};
     uint64_t refused_{0};
     RandomBytes code_source_;                    // (set in the constructor)
-    uint32_t bot_every_ms_{0};                   // the server's own matches of computer players: how often (0: none)
-    uint32_t next_bot_match_ms_{0};
     std::mt19937 bot_rng_;
+    bool bot_rng_seeded_{false};                 // (seeded from the system's entropy at the first match unless seed_bot_matches said otherwise)
+    bool bot_gap_pending_{false};                // the matches of computer players are started kBotStartGapMs apart: until here (a flag and a time, not a time alone: a time that is older than 24.8 days reads as one to come)
+    uint32_t next_bot_start_ms_{0};
     std::vector<std::string> bot_notes_;         // what the timer did, for the log (take_notices)
     std::set<std::string> bot_maps_skipped_;     // the maps of the lists that the last match found that a room cannot play (each is named in the log once, not at every match)
     std::vector<std::string> room_notes_;        // what the rooms said (Room::take_notes), for the log (take_notices)

@@ -347,7 +347,7 @@ class TheFrontPageMarkup(PageCase):
             self.assertIn(needle, nav, needle)
         self.assertIn('id="game-version"', self.page)
         self.assertIn('id="game-build-id"', self.page)
-        self.assertIn('<p class="room-notice" id="room-notice">Online matches are recorded. Recordings are kept for 30 days. Results and names are kept for good and are public.</p>', self.markup)
+        self.assertIn('<p class="room-notice" id="room-notice">Online matches are recorded. Recordings are kept for 90 days. Results and names are kept for good and are public.</p>', self.markup)
         self.found(self.markup, r'<p class="stats" id="stats" hidden><i class="live" id="stats-dot" aria-hidden="true"></i><span id="stats-live"></span><span id="stats-played"></span></p>')
         # the name: asked on a card (a link, a code that was typed, an old address) and changed with the pencil on the player's own color; the field of the card takes the name rules of the game page
         self.assertEqual(len(re.findall(r'<input[^>]*id="name-step-input"', self.markup)), 1)

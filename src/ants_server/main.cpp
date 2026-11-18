@@ -70,9 +70,10 @@
 //                      here (the names that the players typed are in it, with no address or room code). Default: the folder "replays" in --results-dir; without a results folder the server keeps none
 //   --no-replays       keep no replays, whatever --results-dir says
 //   --bot-match-every-min N
-//                      the server plays a match of computer players of its own every N minutes (5 - 1440; 0 = none, the default): two to four standard bots, Medium or Hard, on random seats of one of the original's six
-//                      maps, at the normal speed, so that anybody can watch it live on the site and again afterwards (docs/SERVER.md "Matches of computer players"). Needs the replays (without them nothing is
-//                      played): the first match begins a minute after the start, the next ones N minutes after the one before began, and none while the last is still going.
+//                      makes the first schedule of the server's own matches of computer players (5 - 1440 minutes; 0 = none, the default): one match every N minutes, two to four standard bots on random seats of a map of
+//                      the rotation, at the normal speed, so that anybody can watch it live on the site and again afterwards (docs/SERVER_REPLAYS.md "Matches of computer players"). It only starts the list of schedules: a server
+//                      with a database makes the schedule once (when it has none and has never made it), and from then on the admin page edits the schedules (the option is kept for two releases); a server without one makes it
+//                      at every start. Needs the replays (without them nothing is played): the first match begins a minute after the start.
 //   --db FILE          the database file (SQLite, docs/SERVER.md "The database"). Default: ants.db in --results-dir; without a results folder the server keeps none. A file that cannot be opened (not a database,
 //                      damaged, not writable) or that a newer program made stops the server; the file is never changed or deleted by that
 //   --no-db            keep no database, whatever --results-dir says
@@ -138,6 +139,7 @@
 #include "ants_net/ws.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_server/admin_audit.hpp"
+#include "ants_server/bot_matches.hpp"
 #include "ants_server/private_files.hpp"
 #include "ants_server/control.hpp"
 #include "ants_db/database.hpp"
@@ -741,14 +743,7 @@ int main(int argc, char** argv) {
         } else if (rc.dir.empty()) {
             log("replays are off: no --results-dir or --replays-dir to keep them in");
         }
-        if (o.bot_match_every_min > 0) {
-            if (rooms.replay_store() != nullptr) {
-                rooms.enable_bot_matches(static_cast<uint32_t>(o.bot_match_every_min), now_ms());
-                log("the server plays a match of computer players every " + std::to_string(o.bot_match_every_min) + " minutes, the first one in a minute (--bot-match-every-min)");
-            } else {
-                log("--bot-match-every-min is ignored: the server keeps no replays, and a match that nobody could look at again is not played");
-            }
-        }
+        if (o.bot_match_every_min > 0 && rooms.replay_store() == nullptr) log("--bot-match-every-min is ignored: the server keeps no replays, and a match that nobody could look at again is not played");
     }
     // The match history (history_store.hpp): in the database, unless switched off. It counts the matches that the replay store keeps. Whatever is wrong with it only switches the history off, with a line in the log.
     if (o.no_history) {
@@ -807,6 +802,30 @@ int main(int argc, char** argv) {
             "; " + std::to_string(submissions->approved_maps().size()) + " approved maps in the lobby's list");
         for (const std::string& line : submissions->take_notices()) log(line);
         for (const std::string& line : audit->take_notices()) log(line);
+    }
+    // The matches of computer players that the server plays itself (bot_matches.hpp, docs/SERVER_REPLAYS.md): their schedules are kept in the database, or in memory when the server has none. The first start makes the schedule
+    // that --bot-match-every-min asks for; from then on the admin page edits them. The admin page's calls are handed to BotMatches by the submissions door, behind its pass and token.
+    ants::server::BotScheduleStore bot_store(database.is_open() ? &database : nullptr);
+    std::unique_ptr<ants::server::BotMatches> bot_matches;
+    {
+        std::string why;
+        if (!bot_store.open(static_cast<int64_t>(std::time(nullptr)), why)) {
+            log("matches of computer players are off: " + why);
+        } else {
+            if (o.bot_match_every_min > 0 && rooms.replay_store() != nullptr && bot_store.seed_default(static_cast<int>(o.bot_match_every_min), static_cast<int64_t>(std::time(nullptr)))) {
+                log("the schedule of matches of computer players that --bot-match-every-min asks for was made: one every " + std::to_string(o.bot_match_every_min) + " minutes, the first one in a minute");
+            }
+            bot_matches = std::make_unique<ants::server::BotMatches>(rooms, bot_store, audit.get());
+            if (submit_api) {
+                submit_api->set_bot_routes([&bot_matches](const ants::ctl::HttpRequest& request, const ants::server::AdminIdentity& who, const std::string& tail, const ants::ctl::JsonValue& body, int64_t now_s, uint32_t now) {
+                    return bot_matches->handle(request, who, tail, body, now_s, now);
+                });
+            }
+            for (const ants::server::BotSchedule& s : bot_store.list()) {
+                if (s.on) log("matches of computer players: schedule " + std::to_string(s.id) + " is on, the next run is in " + std::to_string(std::max<int64_t>(0, s.next_run - static_cast<int64_t>(std::time(nullptr)))) + " s");
+            }
+            for (const std::string& line : bot_matches->take_notices()) log(line);
+        }
     }
     // The test maps (test_maps.hpp, docs/MAP_SUBMISSIONS.md "Test maps"): a folder and a list in memory, no database and nothing of the submissions above, so they work on a server whose submissions door is off.
     // What is missing switches the door off with a line in the log; the game goes on.
@@ -890,6 +909,10 @@ int main(int argc, char** argv) {
             }
         }
         rooms.update(now);
+        if (bot_matches && rooms.replay_store() != nullptr) {
+            bot_matches->update(static_cast<int64_t>(std::time(nullptr)), now);              // (the schedules that are due start their matches)
+            for (const std::string& line : bot_matches->take_notices()) log(line);          // (by the schedule's number, never its name)
+        }
         if (http) http->update(now, [&](const ants::ctl::HttpRequest& request) { return ants::server::handle_control(rooms, request, now); });
         if (submit_http && submit_api) {
             submit_http->update(now, [&](const ants::ctl::HttpRequest& request) { return submit_api->handle(request, static_cast<int64_t>(std::time(nullptr)), now); });

@@ -210,7 +210,7 @@ class TheMatchPage(unittest.TestCase):
 
     def test_a_match_that_is_not_there_says_so_and_offers_what_there_is(self):
         for words in ("This match is not in the history.", "A match that has only just ended can take a few minutes to be counted; its replay may already be there.", "Try the replay", "That is not the address of a match.",
-                      "The recording was made by an older version", "Replay removed: recordings are kept for 30 days. The stats below stay."):
+                      "The recording was made by an older version", "Replay removed: recordings are kept for 90 days. The stats below stay."):
             self.assertIn(words, self.page + read("web", "history_page.js"), words)
         self.assertIn("r.data.error === 'no such match'", self.page)                                         # (the server's own words for an id that is not in the history)
         self.assertIn("if (!id) {", self.page)                                                               # (an address that is no id asks for nothing)

@@ -998,7 +998,7 @@
             <div class="name-step-msg" id="name-step-msg" role="alert"></div>
             <div class="name-step-hint" id="name-step-hint">The name the other players see.</div>
             <div class="name-step-hint" id="name-step-login" hidden><a href="/hub/login?next=home">Log in with Discord</a></div>
-            <div class="name-step-hint name-step-notice">Online matches are recorded. Anybody can watch them, live or later. Recordings are kept for 30 days. Results and names are kept for good and are public.</div>
+            <div class="name-step-hint name-step-notice">Online matches are recorded. Anybody can watch them, live or later. Recordings are kept for 90 days. Results and names are kept for good and are public.</div>
             <a class="btn sm name-step-back" id="name-step-back" href="/">&larr; Back to the front page</a>
         </div>
     </div>
@@ -3058,18 +3058,18 @@
                     all();
                 } else if (kind === 'gone') {
                     title = 'That replay is gone';
-                    paragraph(['Matches are kept for 30 days. This one is older than that, or it was taken away.']);
+                    paragraph(['Matches are kept for 90 days. This one is older than that, or it was taken away.']);
                     all();
                 } else if (kind === 'over') {                 // the link of a match that has ended since (the replay is the file that the server kept)
                     title = 'This match is over';
-                    paragraph(['The match you were watching has ended. It is kept in the list for 30 days, and you can watch all of it.']);
+                    paragraph(['The match you were watching has ended. It is kept in the list for 90 days, and you can watch all of it.']);
                     var watch = el('a', 'btn', 'Watch the replay');
                     watch.href = '/play?replay=' + encodeURIComponent(why);
                     buttons.appendChild(watch);
                     all();
                 } else if (kind === 'notlive') {              // the link of a match that is not being played and was not kept (or is not a match)
                     title = 'That match isn’t live';
-                    paragraph(['It has ended without being kept (a match that ran 30 seconds or more is kept for 30 days), or the link is not right. The matches that are being played now are listed on the front page.']);
+                    paragraph(['It has ended without being kept (a match that ran 30 seconds or more is kept for 90 days), or the link is not right. The matches that are being played now are listed on the front page.']);
                     all();
                 } else {
                     title = 'This replay can’t be played here';

@@ -318,6 +318,24 @@ target_include_directories(test_admin_audit PRIVATE
 add_test(NAME test_admin_audit COMMAND test_admin_audit)
 set_tests_properties(test_admin_audit PROPERTIES COST 3)
 
+# The schedules of the server's own matches of computer players (ants_server/pacific_time.hpp, bot_match_spec.hpp, bot_schedules.hpp, db_schema.cpp version 9): the Pacific clock by hand and its two odd days, when a schedule runs next, the words of a
+# batch and a schedule, the rows in the database across a restart, the default made once, the migration from a copy of a version 8 database. No sockets, no rooms
+add_executable(test_bot_schedules
+    test_bot_schedules.cpp
+)
+
+target_link_libraries(test_bot_schedules PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_bot_schedules PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_bot_schedules COMMAND test_bot_schedules)
+set_tests_properties(test_bot_schedules PROPERTIES COST 3)
+
 # The admin page's pass (ants_server/admin_pass.hpp) and the door that checks it (ants_server/submissions_http.hpp): the key, the known answers of docs/HUB.md, every reason a pass is refused, a pass used once, the one answer without a good pass,
 # the token of a change, the retired routes, the decisions signed with the username and the reference. Requests made by hand: no network
 add_executable(test_admin_pass

@@ -12,7 +12,7 @@ The leader of a lobby room ([`NETWORK_PORT.md`](NETWORK_PORT.md#protocol-16-the-
 
 ## The list
 
-`GET /lobbies` of the public door (`--replay-port`; the site's nginx passes it: "Replays" in [`SERVER.md`](SERVER_REPLAYS.md#replays)): read only, no secret, GET only. A query is a 404 (an empty `?` answers as for `/live`); the real listener answers another method with 405 before the handler. It does not need the replay store (a server without replays answers it; one without lobby rooms answers an empty list). The answer is `Cache-Control: no-store` JSON:
+`GET /lobbies` of the public door (`--replay-port`; the site's nginx passes it: "Replays" in [`SERVER_REPLAYS.md`](SERVER_REPLAYS.md#replays)): read only, no secret, GET only. A query is a 404 (an empty `?` answers as for `/live`); the real listener answers another method with 405 before the handler. It does not need the replay store (a server without replays answers it; one without lobby rooms answers an empty list). The answer is `Cache-Control: no-store` JSON:
 
 ```json
 {"format":1,"lobbies":[{"code":"k7m2xq","host":"Ada","map":"TINY.LVL","mode":"highest-score","people":2,"bots":1,"free":1,"size":4,"age":95}],"count":1}

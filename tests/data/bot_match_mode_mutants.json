@@ -1,9 +1,9 @@
 {
- "note": "Mutants of the rules that the server's own match of computer players is dealt (RoomManager::start_bot_match, bot_match_maps and bot_match_map_refusal in src/ants_server/room_manager.cpp, docs/SERVER.md 'Matches of computer players'): the original's game or 187 by a fair coin for each match, with no memory of the last match, the two lists of maps (nine for the original's game, six for 187, never ISLANDS in 187, the players' map in 187 only, the library's three in the original's game only), each map of a list as likely as any other, a map that the server lacks skipped (one line in the log, never a failed match) and the log line that names the rules. For tools/mutate.py (docs/TESTING.md, 'Mutation checks'), each caught by test_server S3.181, S3.184b (the coin, the lists and the log line over 300 matches of one seed) or S3.184f (the maps that the store lacks, the shadowed and taken down players' map, the map over a limit). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_match_mode_mutants.json --keep-going --jobs 1. Every mutant must be caught. Not listed on purpose: the draw's place after the teams (the first match of a seed keeps the seats, levels, seed and teams that it had: S3.183 pins seed 7), the room's own guard of the match's length (a map of more than 20 minutes needs a play of 25), and the rules reaching the room, the engine and the recording of a match of computer players (a 187 room is held by S3.184c and S3.184d, a room made by hand with the mode by S3.185 and S3.188, the new maps' play by S3.184g and HR2.2).",
+ "note": "Mutants of the rules that the server's own match of computer players is dealt (RoomManager::start_bot_match, bot_match_maps and bot_match_map_refusal in src/ants_server/room_manager_bots.cpp, docs/SERVER_REPLAYS.md 'Matches of computer players'): the original's game or 187 by a fair coin for each match, with no memory of the last match, the two lists of maps (nine for the original's game, six for 187, never ISLANDS in 187, the players' map in 187 only, the library's three in the original's game only), each map of a list as likely as any other, a map that the server lacks skipped (one line in the log, never a failed match) and the log line that names the rules. For tools/mutate.py (docs/TESTING.md, 'Mutation checks'), each caught by test_server S3.184b (the coin and the lists over 300 matches of one seed) or S3.184f (the maps that the store lacks, the shadowed and taken down players' map, the map over a limit). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_match_mode_mutants.json --keep-going --jobs 1. Every mutant must be caught. Not listed on purpose: the draw's place after the teams (the first match of a seed keeps the seats, levels, seed and teams that it had: S3.183 pins seed 7), the room's own guard of the match's length (a map of more than 20 minutes needs a play of 25), and the rules reaching the room, the engine and the recording of a match of computer players (a 187 room is held by S3.184c and S3.184d, a room made by hand with the mode by S3.185 and S3.188, the new maps' play by S3.184g and HR2.2).",
  "mutants": [
   {
    "id": "bot_match_mode_always_187",
-   "file": "src/ants_server/room_manager.cpp",
+   "file": "src/ants_server/room_manager_bots.cpp",
    "old": "bot_rng_() % 2 == 0 ? sim::GameMode::HighestScore : sim::GameMode::Kills187);",
    "new": "sim::GameMode::Kills187);",
    "build": "test_server",
@@ -12,7 +12,7 @@
   },
   {
    "id": "bot_match_mode_never_187",
-   "file": "src/ants_server/room_manager.cpp",
+   "file": "src/ants_server/room_manager_bots.cpp",
    "old": "bot_rng_() % 2 == 0 ? sim::GameMode::HighestScore : sim::GameMode::Kills187);",
    "new": "sim::GameMode::HighestScore);",
    "build": "test_server",
@@ -21,7 +21,7 @@
   },
   {
    "id": "bot_match_mode_one_in_four",
-   "file": "src/ants_server/room_manager.cpp",
+   "file": "src/ants_server/room_manager_bots.cpp",
    "old": "bot_rng_() % 2 == 0 ? sim::GameMode::HighestScore : sim::GameMode::Kills187);",
    "new": "bot_rng_() % 4 != 0 ? sim::GameMode::HighestScore : sim::GameMode::Kills187);",
    "build": "test_server",
@@ -30,7 +30,7 @@
   },
   {
    "id": "bot_match_mode_alternates",
-   "file": "src/ants_server/room_manager.cpp",
+   "file": "src/ants_server/room_manager_bots.cpp",
    "old": "bot_rng_() % 2 == 0 ? sim::GameMode::HighestScore : sim::GameMode::Kills187);",
    "new": "created_ % 2 == 0 ? sim::GameMode::HighestScore : sim::GameMode::Kills187);",
    "build": "test_server",
@@ -39,7 +39,7 @@
   },
   {
    "id": "bot_match_lists_187_on_islands",
-   "file": "src/ants_server/room_manager.cpp",
+   "file": "src/ants_server/room_manager_bots.cpp",
    "old": "{\"TREASURE.LVL\", false}, {\"Fight Island.lvl\", true}};",
    "new": "{\"TREASURE.LVL\", false}, {\"ISLANDS.LVL\", false}, {\"Fight Island.lvl\", true}};",
    "build": "test_server",
@@ -48,7 +48,7 @@
   },
   {
    "id": "bot_match_lists_original_game_off_islands",
-   "file": "src/ants_server/room_manager.cpp",
+   "file": "src/ants_server/room_manager_bots.cpp",
    "old": "{\"ISLANDS.LVL\", false}, {\"POPcOrN.lvl\", false}",
    "new": "{\"POPcOrN.lvl\", false}",
    "build": "test_server",
@@ -57,7 +57,7 @@
   },
   {
    "id": "bot_match_lists_players_map_in_original_game",
-   "file": "src/ants_server/room_manager.cpp",
+   "file": "src/ants_server/room_manager_bots.cpp",
    "old": "{\"HELLRAISER.lvl\", false}, {\"Bombz Away.lvl\", false}};",
    "new": "{\"HELLRAISER.lvl\", false}, {\"Bombz Away.lvl\", false}, {\"Fight Island.lvl\", true}};",
    "build": "test_server",
@@ -66,7 +66,7 @@
   },
   {
    "id": "bot_match_lists_library_map_in_187",
-   "file": "src/ants_server/room_manager.cpp",
+   "file": "src/ants_server/room_manager_bots.cpp",
    "old": "{\"TREASURE.LVL\", false}, {\"Fight Island.lvl\", true}};",
    "new": "{\"TREASURE.LVL\", false}, {\"POPcOrN.lvl\", false}, {\"Fight Island.lvl\", true}};",
    "build": "test_server",
@@ -75,7 +75,7 @@
   },
   {
    "id": "bot_match_lists_players_map_missing_from_187",
-   "file": "src/ants_server/room_manager.cpp",
+   "file": "src/ants_server/room_manager_bots.cpp",
    "old": "{\"TREASURE.LVL\", false}, {\"Fight Island.lvl\", true}};",
    "new": "{\"TREASURE.LVL\", false}};",
    "build": "test_server",
@@ -84,7 +84,7 @@
   },
   {
    "id": "bot_match_lists_library_map_missing",
-   "file": "src/ants_server/room_manager.cpp",
+   "file": "src/ants_server/room_manager_bots.cpp",
    "old": "{\"POPcOrN.lvl\", false}, {\"HELLRAISER.lvl\", false}",
    "new": "{\"POPcOrN.lvl\", false}",
    "build": "test_server",
@@ -93,7 +93,7 @@
   },
   {
    "id": "bot_match_map_always_first",
-   "file": "src/ants_server/room_manager.cpp",
+   "file": "src/ants_server/room_manager_bots.cpp",
    "old": "const size_t picked = map_draw % maps.size();",
    "new": "const size_t picked = (map_draw & 0u) % maps.size();",
    "build": "test_server",
@@ -102,7 +102,7 @@
   },
   {
    "id": "bot_match_map_one_list_for_both_rules",
-   "file": "src/ants_server/room_manager.cpp",
+   "file": "src/ants_server/room_manager_bots.cpp",
    "old": "return kills_187 ? k187 : kHighestScore;",
    "new": "return (kills_187 && false) ? k187 : kHighestScore;",
    "build": "test_server",
@@ -111,7 +111,7 @@
   },
   {
    "id": "bot_match_players_map_from_any_folder",
-   "file": "src/ants_server/room_manager.cpp",
+   "file": "src/ants_server/room_manager_bots.cpp",
    "old": "{\"Fight Island.lvl\", true}};\n    return kills_187",
    "new": "{\"Fight Island.lvl\", false}};\n    return kills_187",
    "build": "test_server",
@@ -120,8 +120,8 @@
   },
   {
    "id": "bot_match_missing_map_dealt_anyway",
-   "file": "src/ants_server/room_manager.cpp",
-   "old": "        if (refusal.empty()) {\n            maps.push_back(entry.file);",
+   "file": "src/ants_server/room_manager_bots.cpp",
+   "old": "        if (refusal_text.empty()) {\n            maps.push_back(entry.file);",
    "new": "        if (true) {\n            maps.push_back(entry.file);",
    "build": "test_server",
    "test": "timeout 300 env ANTS_TEST_FILTER=S3.18 ./build/tests/test_server/test_server",
@@ -129,7 +129,7 @@
   },
   {
    "id": "bot_match_skip_line_at_every_match",
-   "file": "src/ants_server/room_manager.cpp",
+   "file": "src/ants_server/room_manager_bots.cpp",
    "old": "} else if (bot_maps_skipped_.insert(entry.file).second) {",
    "new": "} else if (bot_maps_skipped_.insert(entry.file).second || true) {",
    "build": "test_server",
@@ -138,7 +138,7 @@
   },
   {
    "id": "bot_match_skip_never_said",
-   "file": "src/ants_server/room_manager.cpp",
+   "file": "src/ants_server/room_manager_bots.cpp",
    "old": "} else if (bot_maps_skipped_.insert(entry.file).second) {",
    "new": "} else if (bot_maps_skipped_.insert(entry.file).second && false) {",
    "build": "test_server",
@@ -147,7 +147,7 @@
   },
   {
    "id": "bot_match_skip_said_once_for_ever",
-   "file": "src/ants_server/room_manager.cpp",
+   "file": "src/ants_server/room_manager_bots.cpp",
    "old": "            bot_maps_skipped_.erase(entry.file);\n",
    "new": "",
    "build": "test_server",
@@ -156,30 +156,12 @@
   },
   {
    "id": "bot_match_over_limit_map_dealt_anyway",
-   "file": "src/ants_server/room_manager.cpp",
+   "file": "src/ants_server/room_manager_bots.cpp",
    "old": "if (over != Term::None) return std::string(\"it \") + OnlineLimits::info(over).phrase + \" for a room\";",
    "new": "if (over != Term::None && false) return std::string(\"it \") + OnlineLimits::info(over).phrase + \" for a room\";",
    "build": "test_server",
    "test": "timeout 300 env ANTS_TEST_FILTER=S3.18 ./build/tests/test_server/test_server",
    "expect": "S3.184f"
-  },
-  {
-   "id": "bot_match_mode_log_without_rules",
-   "file": "src/ants_server/room_manager.cpp",
-   "old": "\" started (\" + sim::game_mode_name(static_cast<sim::GameMode>(mode)) + \")\");",
-   "new": "\" started\");",
-   "build": "test_server",
-   "test": "timeout 300 env ANTS_TEST_FILTER=S3.18 ./build/tests/test_server/test_server",
-   "expect": "S3.181"
-  },
-  {
-   "id": "bot_match_mode_log_says_original",
-   "file": "src/ants_server/room_manager.cpp",
-   "old": "\" started (\" + sim::game_mode_name(static_cast<sim::GameMode>(mode)) + \")\");",
-   "new": "\" started (\" + sim::game_mode_name(sim::GameMode::HighestScore) + \")\");",
-   "build": "test_server",
-   "test": "timeout 300 env ANTS_TEST_FILTER=S3.18 ./build/tests/test_server/test_server",
-   "expect": "S3.181"
   }
  ]
 }

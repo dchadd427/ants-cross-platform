@@ -1,9 +1,11 @@
-// The tests of the server's own matches of computer players (RoomSpec::bots_only, RoomManager::enable_bot_matches / start_bot_match; docs/SERVER.md "Matches of computer players"): a room whose seats are
-// all bots starts with nobody in it, is not closed for lack of people and is kept like any other match; the specification that cannot be such a room is refused; the timer makes one match at a time, only
+// The tests of the server's own matches of computer players (RoomSpec::bots_only, RoomManager::start_bot_match, the default schedule; docs/SERVER_REPLAYS.md "Matches of computer players"): a room whose seats are
+// all bots starts with nobody in it, is not closed for lack of people and is kept like any other match; the specification that cannot be such a room is refused; the default schedule makes a match every N minutes, only
 // when the server keeps replays, and chooses the same things from the same seed; each match is dealt the original's game or 187 by a coin of its own and then a map of that rules' list (each map of a list as likely
 // as any other; a map that the store lacks is skipped with one line in the log), and a match in 187 plays on every map with every seating of the computer players. Included by test_server_files.cpp, which holds (through server_fixtures.hpp) the harness (TEST_CASE, ASSERT_*, World); test_server.cpp calls run_bot_match_tests().
 #pragma once
 
+#include "ants_server/bot_matches.hpp"
+#include "ants_server/bot_schedules.hpp"
 #include "big_map_fixtures.hpp"
 
 namespace {
@@ -78,7 +80,7 @@ RoomSpec bot_seating_spec(const std::string& code, const char* map, const BotSea
 
 const char* const kBotMatchMaps[] = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "ISLANDS.LVL"};
 
-// The lists that the timer draws from (docs/SERVER.md "Matches of computer players"): the original's game on the six and on three library maps, 187 on five of the six and on a map of the players
+// The lists that the matches of computer players draw from (docs/SERVER_REPLAYS.md "Matches of computer players"): the original's game on the six and on three library maps, 187 on five of the six and on a map of the players
 const char* const kScoreListMaps[] = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "ISLANDS.LVL", "POPcOrN.lvl", "HELLRAISER.lvl", "Bombz Away.lvl"};
 const char* const k187ListMaps[] = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "Fight Island.lvl"};
 
@@ -105,7 +107,7 @@ ApprovedMap made_up_fight_island(const char* tag, uint32_t rows = 150, uint32_t 
 
 // A server that has every map of the two lists: the original's six, the community folder of the repository and the made-up approved map
 struct ListedWorld : World {
-    explicit ListedWorld(const char* tag) : World(ServerLimits(), maps_dir(), bot_match_community()) { mgr.mutable_store().set_approved({made_up_fight_island(tag)}); }
+    explicit ListedWorld(const char* tag, ServerLimits limits = ServerLimits()) : World(limits, maps_dir(), bot_match_community()) { mgr.mutable_store().set_approved({made_up_fight_island(tag)}); }
 };
 
 }  // namespace
@@ -172,19 +174,30 @@ void run_bot_match_tests() {
         ASSERT_TRUE(played.complete && played.turns == f.rep.total_turns && played.hashes_checked >= 5);
     } TEST_END();
 
-    TEST_CASE("S3.181 The Timer Makes A Match Of Two To Four Computer Players After The First Wait And Then Every N Minutes, One At A Time, From Its Seed The Same Match; With No Replays It Makes None And Says Why") {
+    TEST_CASE("S3.181 The Default Schedule Makes A Match Of Two To Four Computer Players After The First Wait And Then Every N Minutes, From Its Seed The Same Match, Many At A Time Up To The Limit; With No Replays It Makes None And Says Why") {
         ReplayClock clock;
         std::string why;
         std::string first;
+        const int64_t wall0 = 1800000000;                                    // (the wall clock of the schedules: seconds since 1970)
         for (int round = 0; round < 2; ++round) {                            // (the same seed twice: the same choices)
             ListedWorld w("botmatch-timer-maps");
             ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-timer", &clock), false, why));
             ASSERT_TRUE(w.mgr.take_notices().size() == 1);                   // (what the store found when it opened)
-            w.mgr.enable_bot_matches(5, w.now, 60u * 1000u, 20261009u);
-            ASSERT_TRUE(w.mgr.bot_matches_enabled());
-            w.run(59000);
+            w.mgr.seed_bot_matches(20261009u);
+            BotScheduleStore schedules(nullptr);
+            BotMatches bots(w.mgr, schedules, nullptr);
+            ASSERT_TRUE(schedules.seed_default(5, wall0));                   // (what --bot-match-every-min 5 makes: one match every five minutes, the first a minute after the start)
+            uint32_t elapsed_ms = 0;
+            const auto run = [&](uint32_t ms) {
+                for (uint32_t t = 0; t < ms; t += 10) {
+                    w.run(10);
+                    elapsed_ms += 10;
+                    bots.update(wall0 + elapsed_ms / 1000, w.now);
+                }
+            };
+            run(59000);
             ASSERT_TRUE(w.mgr.list(w.now).empty());                          // (nothing before the first wait)
-            w.run(2000);
+            run(2000);
             const std::vector<RoomStatus> rooms = w.mgr.list(w.now);
             const RoomStatus* made = only_bot_room(rooms);
             ASSERT_TRUE(made != nullptr);
@@ -196,27 +209,37 @@ void run_bot_match_tests() {
             const std::string choice = bot_match_choice(*made) + " rules " + std::to_string(static_cast<unsigned>(made->mode));      // (the rules are drawn from the seed too)
             if (round == 0) first = choice;
             else ASSERT_EQ(choice, first);
-            const std::vector<std::string> notes = w.mgr.take_notices();
             ASSERT_TRUE(made->mode <= 1);
-            ASSERT_TRUE(notes.size() == 1 && notes[0] == "bot match: room " + made->code + " started (" + sim::game_mode_name(static_cast<sim::GameMode>(made->mode)) + ")");      // (the log says the rules: "187" or "highest-score")
-            w.run(5u * 60u * 1000u);                                         // (the next time comes while the first match runs: nothing is made, the reason is told)
-            ASSERT_TRUE(w.mgr.list(w.now).size() <= 1);
-            const std::vector<std::string> later = w.mgr.take_notices();
-            ASSERT_TRUE(later.size() == 1 && later[0] == "bot match: not started (the last one is still going)");
+            const std::vector<std::string> notes = bots.take_notices();
+            ASSERT_TRUE(notes.size() == 1 && notes[0] == "bot schedule 1: started 1 of 1");                  // (the log names the schedule by its number, never its name)
+            run(5u * 60u * 1000u);                                           // (five minutes later the next time comes while the first match runs: a second one is made, the limit is eight)
+            ASSERT_TRUE(w.mgr.bot_match_count() == 2);
+            const std::vector<std::string> later = bots.take_notices();
+            ASSERT_TRUE(later.size() == 1 && later[0] == "bot schedule 1: started 1 of 1");
         }
         World bare;                                                          // no replays: a match that nobody could watch or look at again is not played
-        bare.mgr.enable_bot_matches(5, bare.now, 1000u, 7u);
-        bare.run(2000);
+        bare.mgr.seed_bot_matches(7u);
+        BotScheduleStore schedules(nullptr);
+        BotMatches bots(bare.mgr, schedules, nullptr);
+        ASSERT_TRUE(schedules.seed_default(5, wall0));
+        bots.update(wall0 + 61, bare.now);
         ASSERT_TRUE(bare.mgr.list(bare.now).empty());
-        const std::vector<std::string> notes = bare.mgr.take_notices();
-        ASSERT_TRUE(notes.size() == 1 && notes[0] == "bot match: not started (the server keeps no replays)");
-        World off;                                                           // 0 minutes: off
+        const std::vector<std::string> notes = bots.take_notices();
+        ASSERT_TRUE(notes.size() == 1 && notes[0] == "bot schedule 1: started 0 of 1 (the server keeps no replays)");
+        World off;                                                           // a schedule that is off starts nothing
         ASSERT_TRUE(off.mgr.enable_replays(replay_config("botmatch-off", &clock), false, why));
         (void)off.mgr.take_notices();
-        off.mgr.enable_bot_matches(0, off.now, 1000u, 7u);
-        ASSERT_FALSE(off.mgr.bot_matches_enabled());
-        off.run(5000);
-        ASSERT_TRUE(off.mgr.list(off.now).empty() && off.mgr.take_notices().empty());
+        off.mgr.seed_bot_matches(7u);
+        BotScheduleStore off_schedules(nullptr);
+        BotMatches off_bots(off.mgr, off_schedules, nullptr);
+        ASSERT_TRUE(off_schedules.seed_default(5, wall0));
+        BotSchedulePatch turn_off;
+        turn_off.has_on = true;
+        turn_off.on = false;
+        BotSchedule changed;
+        ASSERT_TRUE(off_schedules.update(off_schedules.list()[0].id, turn_off, wall0, changed, why));
+        off_bots.update(wall0 + 10 * 3600, off.now);
+        ASSERT_TRUE(off.mgr.list(off.now).empty() && off_bots.take_notices().empty());
     } TEST_END();
 
     TEST_CASE("S3.182 A Match Of Computer Players Alone Is Not A Game That The Site's Statistics Count, Whatever Its Length; The Same Status Without bots_only Is") {
@@ -243,7 +266,9 @@ void run_bot_match_tests() {
         for (uint32_t seed = 1; seed <= 150; ++seed) {
             World w;
             ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-teams", &clock), false, why));
-            w.mgr.enable_bot_matches(5, w.now, 1000u, seed);
+            w.mgr.seed_bot_matches(seed);
+            std::string code, reason;
+            ASSERT_TRUE(w.mgr.start_bot_match(w.now, code, reason));
             w.run(2000);
             const std::vector<RoomStatus> rooms = w.mgr.list(w.now);
             const RoomStatus* made = only_bot_room(rooms);
@@ -323,7 +348,7 @@ void run_bot_match_tests() {
         std::string why;
         ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-coin", &clock), false, why));
         (void)w.mgr.take_notices();
-        w.mgr.enable_bot_matches(0, w.now, 0u, 20261117u);                   // (0 minutes: no timer, only the seed: the matches are the ones that the test asks for)
+        w.mgr.seed_bot_matches(20261117u);                                   // (only the seed: the matches are the ones that the test asks for)
         std::string deals;                                                   // '1' for 187, '0' for the original's game, in the order of the matches
         std::map<std::string, size_t> maps_in_187, maps_in_score;               // (how often each map was dealt in each rules)
         for (int match = 0; match < 300; ++match) {
@@ -500,7 +525,7 @@ void run_bot_match_tests() {
             World w;
             ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-skip-bare", &clock), false, why));
             (void)w.mgr.take_notices();
-            w.mgr.enable_bot_matches(0, w.now, 0u, 20261118u);
+            w.mgr.seed_bot_matches(20261118u);
             std::map<std::string, size_t> maps;
             std::vector<std::string> notes;
             deal(w, 200, maps, notes);
@@ -525,7 +550,7 @@ void run_bot_match_tests() {
             World w(ServerLimits(), maps_dir(), shadow);
             ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-skip-names", &clock), false, why));
             (void)w.mgr.take_notices();
-            w.mgr.enable_bot_matches(0, w.now, 0u, 20261119u);
+            w.mgr.seed_bot_matches(20261119u);
             w.mgr.mutable_store().set_approved({made_up_fight_island("botmatch-skip-names-maps")});
             std::map<std::string, size_t> maps;
             std::vector<std::string> notes;
@@ -540,7 +565,7 @@ void run_bot_match_tests() {
             ListedWorld w("botmatch-skip-down-maps");
             ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-skip-down", &clock), false, why));
             (void)w.mgr.take_notices();
-            w.mgr.enable_bot_matches(0, w.now, 0u, 20261120u);
+            w.mgr.seed_bot_matches(20261120u);
             std::map<std::string, size_t> maps;
             std::vector<std::string> notes;
             deal(w, 100, maps, notes);

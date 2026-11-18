@@ -92,9 +92,9 @@ class TheMarkup(unittest.TestCase):
         # The game page's card says that anybody can watch the recordings, live or later; the front page, as the lobby picture draws it, says what is kept and what is public in two places:
         # in the footer, for a visitor who is not asked for a name, and in the name card (under the hint; only the step of a game on this computer hides it, by script).
         first = "Online matches are recorded."
-        owner = "Recordings are kept for 30 days. Results and names are kept for good and are public."       # (the owner's own sentence: both pages say it as it is; extra words go in a sentence before it)
+        owner = "Recordings are kept for 90 days. Results and names are kept for good and are public."       # (the owner's own sentence: both pages say it as it is; extra words go in a sentence before it)
         game = first + " Anybody can watch them, live or later. " + owner
-        front = first + " Recordings are kept for 30 days. Results and names are kept for good and are public."
+        front = first + " Recordings are kept for 90 days. Results and names are kept for good and are public."
         self.assertEqual(read(LOBBY).count(front), 2)
         self.assertEqual(read(SHELL).count(game), 1)
         self.assertIn('<p class="room-notice" id="room-notice">' + front + "</p>", read(LOBBY))

@@ -25,24 +25,25 @@
 #                                                   below (in your copy of this file).
 #   ANTS_DEMO_MAPS=TINY.LVL,SMALL.LVL,...           the maps a room code may choose (the six maps of the original game by default, which the page offers; comma
 #                                                   separated, blanks around a name are dropped; every one must be in the maps folder, or the server stops at startup)
-#   ANTS_REPLAY_DAYS=30 ANTS_REPLAY_MAX_MB=100      how long the server keeps the recorded matches (1 to 3650 days) and how much room they may take together (1 to 4096 MiB; the oldest go first past it). They are
+#   ANTS_REPLAY_DAYS=90 ANTS_REPLAY_MAX_MB=1024     how long the server keeps the recorded matches (1 to 3650 days) and how much room they may take together (1 to 4096 MiB; the oldest go first past it). They are
 #                                                   in the folder replays of the volume ants-server-results, next to the control secret and the restart records, so the server also stops keeping
 #                                                   matches when the disk has less than 256 MiB free. A match is kept when it ran 30 seconds or more, however it ended, the games of the front page (demo
 #                                                   rooms) included. A value out of range makes the server exit at its start, and with restart: unless-stopped it then restarts again and again
-#                                                   (docs/REPLAYS.md "On the game server")
+#                                                   (docs/SERVER_REPLAYS.md "Replays"). The matches of computer players are kept with the matches of people, in the same store and under the same limits.
 #   ANTS_REPLAY_PORT=4020                           the port, inside the container, where the server answers GET /replays and GET /replays/<file> for the site's nginx: the list and the files of the
 #                                                   recorded matches are PUBLIC here, read only, with no secret. They hold the names that the players typed (plain ASCII, 32 characters at most; a
 #                                                   player with no name shows as a color, a computer player as "Bot (Medium)"), so everybody can read those names; no address, room code or chat is
 #                                                   in them. The port is not published on the host. Leave it at 4020, the one that docker/nginx.conf passes to, or set 0, which switches the public
 #                                                   list off. Any other number leaves the server listening where nginx does not look, and the site answers 404 for both addresses as if the list
 #                                                   were off.
-#   ANTS_BOT_MATCH_EVERY_MIN=60                     minutes between two matches of computer players that the game server plays itself (5 to 1440; 0 plays none): two to four standard bots on a random
-#                                                   map, at the normal speed (6 to 12 minutes), so that the site's list of matches that are being played always has one to watch and the match is kept
-#                                                   as a replay afterwards. A value out of range makes the server exit at its start (see ANTS_REPLAY_DAYS). The first match begins a minute after the
-#                                                   server starts. (docs/SERVER.md "Matches of computer players")
+#   ANTS_BOT_MATCH_EVERY_MIN=60                     makes the first schedule of the matches of computer players that the game server plays itself (5 to 1440 minutes; 0 makes none): two to four standard bots
+#                                                   on a random map, at the normal speed (6 to 12 minutes), so that the site's list of matches that are being played always has one to watch and the match
+#                                                   is kept as a replay afterwards. A value out of range makes the server exit at its start (see ANTS_REPLAY_DAYS). It only STARTS the list of schedules: the
+#                                                   admin page edits them from then on (with the database; a server without one makes the schedule at every start), and the first match begins a minute after
+#                                                   the server starts. Kept for two releases, then removed. (docs/SERVER_REPLAYS.md "Matches of computer players")
 #   ANTS_SUBMIT_PORT=0                              the port, inside the container, of the map submissions' door (docs/MAP_SUBMISSIONS.md): 0 = OFF, the default. Set 4030, the one that docker/nginx.conf
 #                                                   passes /submissions and /admin/api to, to switch it on; it needs the database. Not published on the host. The maps wait in the folder submissions of the volume
-#                                                   ants-server-results, and the database ants.db there grows to schema version 8 (a program of an older version refuses that file: keep a copy of ants.db before the first start)
+#                                                   ants-server-results, and the database ants.db there grows to schema version 9 (a program of an older version refuses that file: keep a copy of ants.db before the first start)
 #   ANTS_TEST_MAP_PORT=4031                         the port, inside the container, of the TEST-MAP door (docs/MAP_SUBMISSIONS.md, "Test maps"): ON by default. The Map Maker's "With other players" sends its draft map
 #                                                   to POST /test-maps, which docker/nginx.conf passes here; it works with the submissions door OFF (it has no database, no accounts and no other route). Leave it at
 #                                                   4031, the one that nginx passes to, or set 0, which switches test rooms off (the site then says so). Not published on the host. The maps live in the folder test-maps of the
@@ -113,11 +114,11 @@ services:
     # ANTS_DEMO_ROOMS is 1 to 255 (see the header). To switch them off, delete the three demo options. A demo room waits ten minutes for its players; its first player can start it earlier with START (two players at least, or one alone with bots).
     # --log-mb 4: one room's turn log (what a returning player is given) is at most 4 MiB (a busy 30-minute match logs 0.65 MB), so that the demo rooms alone cannot use up the 256 MiB that
     # all the logs share (docs/NETWORK_PORT.md). Keep ANTS_DEMO_ROOMS times --log-mb under 256 (tests/scripts/test_default_map.py checks it).
-    # Replays: a match that ran 30 seconds or more is kept for ANTS_REPLAY_DAYS days (default 30), all of them together at most ANTS_REPLAY_MAX_MB MiB (100), in /results/replays; --replay-demo keeps the
+    # Replays: a match that ran 30 seconds or more is kept for ANTS_REPLAY_DAYS days (default 90), all of them together at most ANTS_REPLAY_MAX_MB MiB (1024), in /results/replays; --replay-demo keeps the
     # matches of the demo rooms too (the front page's games). --replay-port opens the PUBLIC, read-only door of the list and the files (GET /replays, GET /replays/<file>; the site's nginx passes both to it
     # over the network below): ON here, with the port that docker/nginx.conf uses; ANTS_REPLAY_PORT=0 switches it off. The program's own default is off.
     # The files and the list hold the names that the players typed (a player with no name shows as a color), so those names are public here; no address, room code or chat is in them.
-    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4", "--bot-match-every-min", "${ANTS_BOT_MATCH_EVERY_MIN:-60}", "--submit-port", "${ANTS_SUBMIT_PORT:-0}", "--test-map-port", "${ANTS_TEST_MAP_PORT:-4031}", "--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-30}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-100}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]
+    command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4", "--bot-match-every-min", "${ANTS_BOT_MATCH_EVERY_MIN:-60}", "--submit-port", "${ANTS_SUBMIT_PORT:-0}", "--test-map-port", "${ANTS_TEST_MAP_PORT:-4031}", "--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-90}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-1024}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
       # the admin page (docs/MAP_SUBMISSIONS.md): the key of the pass that the hub's gate signs; the hub gets the same variable; without a good key every /admin/api path answers 403 closed

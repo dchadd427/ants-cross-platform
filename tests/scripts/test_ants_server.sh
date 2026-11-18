@@ -323,7 +323,7 @@ check "the edges of the restart options start the server: 30 and 1" "$([ "$(exit
 check "... and 3600 and 4096" "$([ "$(exit_of --restart-vote-seconds 3600 --restart-budget-mb 4096 --no-restart-records)" = "142" ]; echo $?)"
 check "--restart-dir makes its folder, for its owner only (mode 700)" "$([ -d "$WORK/rd_a" ] && [ "$(stat -c %a "$WORK/rd_a" 2> /dev/null || stat -f %Lp "$WORK/rd_a")" = "700" ]; echo $?)"
 check "--help names the restart options and their ranges" "$("$SERVER" --help 2>&1 | grep -q -- '--restart-dir DIR | --no-restart-records' && "$SERVER" --help 2>&1 | grep -q -- '--restart-vote-seconds 30-3600' && "$SERVER" --help 2>&1 | grep -q -- '--restart-budget-mb 1-4096'; echo $?)"
-# the replays (docs/SERVER.md "Replays"): the options and their edges
+# the replays (docs/SERVER_REPLAYS.md "Replays"): the options and their edges
 check "--replays-days 0 is refused" "$([ "$(exit_of --replays-days 0)" = "2" ]; echo $?)"
 check "--replays-days above 3650 is refused" "$([ "$(exit_of --replays-days 3651)" = "2" ]; echo $?)"
 check "--replays-days that is no number is refused" "$([ "$(exit_of --replays-days soon)" = "2" ]; echo $?)"
@@ -1756,7 +1756,7 @@ echo "  [restart e2e] SIGTERM $RR_STOPPED_AFTER s to exit with the record kept; 
 echo "  [restore e2e] $RR_CLONES records of a long match were replayed in $RR_RESTORE_S s of the server's launch; meanwhile /busy answered after $RR_BUSY_S s (${RR_BUSY_MATCHES:-?} matches waited) and a new room's player had its Welcome $RR_WELCOME_S s after the launch"
 fi
 
-# ---- part replays: the matches that the server keeps (docs/REPLAYS.md "On the game server", docs/SERVER.md "Replays") ---------------------------------------------
+# ---- part replays: the matches that the server keeps (docs/REPLAYS.md "On the game server", docs/SERVER_REPLAYS.md "Replays") ---------------------------------------------
 # Two real games play a match on a room of the control interface; after 32 seconds of play (640 ticks: the server keeps a match from 600 turns, 30 seconds, however it ended) the owner closes the room. The match is kept
 # as a file in the results folder, and the control interface (with the secret) and the public replay door (without) list it and give it out; the names that the two games typed ("Typed1", "Typed2") are in
 # the list and in the file, the room's code and the address are not; replay_tool plays the downloaded file out to the same hashes and shows the names; the file is still there after a restart of the server; the

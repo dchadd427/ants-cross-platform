@@ -122,6 +122,8 @@ public:
     bool library_has_name(const std::string& key) const;
     /// The approved map that has this file name (exactly), or nullptr. Used to serve its file and picture; a name that is not approved or is taken down is not found.
     const ApprovedMap* approved(const std::string& file_name) const;
+    /// Every approved map of the players that the store holds now (the set that set_approved was given, in its order)
+    const std::vector<ApprovedMap>& approved_maps() const noexcept { return approved_; }
     /// The approved map that `name` names under the lobby's rule (listed_name): the exact file name, else the one that differs in letter case only (a name is unique by its lower-case key, so there is one at most).
     /// What the history reads a recording's map by; the file is the store's own, never a path made from the name.
     const ApprovedMap* approved_any_case(const std::string& name) const;
