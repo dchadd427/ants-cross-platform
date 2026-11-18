@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.17.6 - 2026-11-17 - One admin secret, and a closed admin page says why
+
+**For players:**
+- **For the site's admins:** the admin page needs one secret setting instead of two, and when it is closed it now says which part is off. Players see no change.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.5 page or game still joins. Under the hood: the chat hub, the game server and the web pages are rebuilt.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d148d9ea...711aff60)
+
 ## v0.17.5 - 2026-11-17 - A new look for the match screen, faster match history, 187 computer-player matches
 
 **For players:**
