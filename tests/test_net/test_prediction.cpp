@@ -474,6 +474,11 @@ void run_basic_tests() {
         rig.step();
         ASSERT_EQ(p.display_tick(), held_at + 1);
         ASSERT_EQ(p.display_tick(), rig.confirmed().current_tick() + 5);
+        p.set_expected_delay_ms(200);                                                       // faster by one tick: at once too (a lead that is one tick too long puts an order a tick before the turn that seals it)
+        rig.step();
+        ASSERT_EQ(p.lead_ticks(), 4u);
+        rig.step();
+        ASSERT_EQ(p.display_tick(), rig.confirmed().current_tick() + 4);
         p.set_expected_delay_ms(60000);
         rig.step();
         ASSERT_EQ(p.lead_ticks(), 12u);                                                     // bounded above
