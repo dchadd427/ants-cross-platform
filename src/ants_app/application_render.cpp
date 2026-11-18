@@ -39,6 +39,7 @@ void Application::render_frame() {
         render_catch_up_screen();
     } else {
         sim::SimulationEngine& view = view_sim();            // (the engine that is shown: the predicted one in a match that predicts the player's own orders)
+        feed_view_glide();                                   // (after the engine is asked for: that is where a stale prediction is rebuilt)
         const auto& world = view.get_world_state();
         sync_game_menu_settings();                           // (Ctrl+L flipped the health marks: remembered)
         renderer_->set_health_marks(hud_.ant_health(), hud_.ant_health().when == health::When::Off ? 1.0 : canvas_density().per_css, kPhoneDigits);

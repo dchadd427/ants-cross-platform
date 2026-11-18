@@ -81,7 +81,10 @@ struct Peer {
     net::NetGame net{sim};
     uint32_t now{1000};
 
-    Peer() { net.set_discovery(0); }                                       // (the tests do not announce on the real network)
+    Peer() {                                                               // (the other machine does not predict: a match in which one machine predicts and the other does not stays identical)
+        net.set_discovery(0);                                              // (the tests do not announce on the real network)
+        net.set_prediction_enabled(false);
+    }
     void update() {
         net.update(now);
         for (const auto& ev : net.take_events()) {
@@ -140,16 +143,8 @@ ApplicationConfig host_config() {
     return cfg;
 }
 
-// The prediction is OFF by default (opt-in); the tests that need it ask for it as `--prediction on` does
-ApplicationConfig predicting_config() {
-    ApplicationConfig cfg = host_config();
-    cfg.prediction = true;
-    cfg.prediction_given = true;
-    return cfg;
-}
-
 // The application hosts a room with Bob in it, SMALL.LVL, START: both play, the application is seat 0 and Bob seat 1. Returns when the match screen is up on both.
-bool begin_match(Application& app, Peer& bob, Duo& duo, const ApplicationConfig& config = predicting_config()) {
+bool begin_match(Application& app, Peer& bob, Duo& duo, const ApplicationConfig& config = host_config()) {
     if (!app.init(config) || !app.network_active()) return false;
     if (!bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob")) return false;
     if (!duo.until([&]() { return app.net()->can_start(); }, 8000)) return false;
@@ -498,7 +493,7 @@ int main(int argc, char* argv[]) {
     } TEST_END();
 
 
-    TEST_CASE("PA4 The Switches: Off By Default (Nothing Said, No Key: The Match Shows The Confirmed Engine And Nothing Is Predicted); --prediction on And The Settings' Key `prediction` = on Turn It On, --prediction off (And --no-prediction) Off; The Command Line Wins; Anything Else Is Refused On The Command Line And Ignored In The Settings") {
+    TEST_CASE("PA4 The Switch: A Match Predicts Unless The Command Line Says --prediction off Or --no-prediction (The Last Word Wins, A Value That Is No Switch Is Refused With The Reason); Told Not To, The Match Shows The Confirmed Engine And Nothing Is Predicted") {
         bool on = false;
         ASSERT_TRUE(parse_switch("on", on) && on);
         ASSERT_TRUE(parse_switch("OFF", on) && !on);
@@ -521,58 +516,52 @@ int main(int argc, char* argv[]) {
             return Application::parse_arguments(static_cast<int>(args.size()), st.data());
         };
         ApplicationConfig c = parse({"ants"});
-        ASSERT_TRUE(!c.prediction && !c.prediction_given && c.startup_error.empty());      // off by default (opt-in), the command line said nothing
+        ASSERT_TRUE(c.prediction && c.startup_error.empty());                              // on by default: the command line said nothing
         c = parse({"ants", "--prediction", "off"});
-        ASSERT_TRUE(!c.prediction && c.prediction_given && c.startup_error.empty());
+        ASSERT_TRUE(!c.prediction && c.startup_error.empty());
         c = parse({"ants", "--prediction", "on"});
-        ASSERT_TRUE(c.prediction && c.prediction_given && c.startup_error.empty());
+        ASSERT_TRUE(c.prediction && c.startup_error.empty());
         c = parse({"ants", "--no-prediction"});
-        ASSERT_TRUE(!c.prediction && c.prediction_given && c.startup_error.empty());
+        ASSERT_TRUE(!c.prediction && c.startup_error.empty());
         c = parse({"ants", "--prediction", "maybe"});
         ASSERT_EQ(c.startup_error, std::string("--prediction needs on or off"));           // refused with the reason: the game does not start
-        ASSERT_FALSE(c.prediction_given);
         c = parse({"ants", "--prediction"});
         ASSERT_EQ(c.startup_error, std::string("--prediction needs on or off"));
         c = parse({"ants", "--prediction", "off", "--prediction", "on"});
-        ASSERT_TRUE(c.prediction && c.prediction_given);                                   // the last one wins
+        ASSERT_TRUE(c.prediction);                                                         // the last one wins
         c = parse({"ants", "--prediction", "on", "--no-prediction"});
-        ASSERT_TRUE(!c.prediction && c.prediction_given);
-        // the settings' key: an Application that remembers its options in a file
+        ASSERT_TRUE(!c.prediction);
+        // the application gives its NetGame what the configuration says, and nothing else decides: a key `prediction` in the settings file is not read
         const std::string settings = (std::filesystem::temp_directory_path() / ("ants_prediction_app_settings_" + std::to_string(static_cast<long long>(::getpid())) + ".ini")).string();
-        const auto with_settings = [&](const std::string& line, bool given, bool given_value, bool expect_wanted) {
+        const auto with_settings = [&](const std::string& line, bool predict) {
             {
                 std::ofstream out(settings);
                 out << "Sound Volume=50\n" << line << "\n";
             }
             ApplicationConfig cfg = host_config();
             cfg.settings_path = settings;
-            cfg.prediction_given = given;
-            cfg.prediction = given_value;
+            cfg.prediction = predict;
             Application app;
             if (!app.init(cfg)) return false;
-            return app.prediction_wanted() == expect_wanted && app.net() != nullptr && app.net()->prediction_enabled() == expect_wanted;
+            return app.net() != nullptr && app.net()->prediction_enabled() == predict;
         };
-        ASSERT_TRUE(with_settings("prediction=off", false, false, false));                 // the key says off, the command line says nothing: off
-        ASSERT_TRUE(with_settings("prediction=on", false, false, true));                   // the key turns it on
-        ASSERT_TRUE(with_settings("prediction=off", true, true, true));                    // the command line (on) wins over the key
-        ASSERT_TRUE(with_settings("prediction=on", true, false, false));                   // ... and --prediction off over the key's on
-        ASSERT_TRUE(with_settings("prediction=maybe", false, false, false));               // a value that is no switch is reported and ignored: the default, off
-        ASSERT_TRUE(with_settings("Music Volume=40", false, false, false));                // no key: off (the default)
-        ASSERT_TRUE(with_settings("Music Volume=40", true, true, true));                   // --prediction on and no key: on
+        ASSERT_TRUE(with_settings("Music Volume=40", true));
+        ASSERT_TRUE(with_settings("prediction=off", true));                                // (a key of an earlier version: ignored, the match predicts)
+        ASSERT_TRUE(with_settings("prediction=on", false));                                // ... and does not make a match predict that the command line told not to
         std::error_code removed;
         std::filesystem::remove(settings, removed);
-        // by default: the match shows the confirmed engine, nothing is predicted, an order waits for its turn, and the confirmed engines are the same
+        // told not to: the match shows the confirmed engine, nothing is predicted, an order waits for its turn, and the confirmed engines are the same
         {
-            const ApplicationConfig cfg = host_config();                                   // (nothing said: the product's default)
+            ApplicationConfig cfg = host_config();
+            cfg.prediction = false;
             Application app;
             Peer bob;
             Duo duo{app, bob};
             ASSERT_TRUE(begin_match(app, bob, duo, cfg));
             ASSERT_TRUE(duo.until([&]() { return app.sim().current_tick() > 60; }, 20000));
-            ASSERT_FALSE(app.prediction_wanted());
             ASSERT_FALSE(app.net()->prediction_enabled() || app.net()->predicting());
             ASSERT_TRUE(&app.view_sim() == &app.sim());
-            ASSERT_TRUE(app.net()->prediction() == nullptr);                               // there is no prediction at all, not a suspended one: a default match pays nothing for it
+            ASSERT_TRUE(app.net()->prediction() == nullptr);                               // there is no prediction at all, not a suspended one: a match that is told not to predict pays nothing
             ASSERT_TRUE(app.cue_router().idle());                                          // ... and the cue router has nothing to do
             sim::Command go;
             go.type = sim::CommandType::GroupMove;
@@ -581,6 +570,19 @@ int main(int argc, char* argv[]) {
             go.tile_y = 10;
             go.ants = {ants_of(app.sim(), 0)[0]};
             ASSERT_EQ(app.net()->submit(go).status, sim::CommandResult::Status::Applied);        // (the answer is the guess of predict_order_ack, as before)
+            app.net()->freeze();
+            duo.step(1500);
+            ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+        }
+        // by default: the match predicts (the application's NetGame is asked to, and the screen shows the predicted engine)
+        {
+            Application app;
+            Peer bob;
+            Duo duo{app, bob};
+            ASSERT_TRUE(begin_match(app, bob, duo, host_config()));
+            ASSERT_TRUE(duo.until([&]() { return app.net()->predicting() && app.sim().current_tick() > 60; }, 20000));
+            ASSERT_TRUE(app.net()->prediction_enabled());
+            ASSERT_TRUE(&app.view_sim() == &app.net()->view_engine() && &app.view_sim() != &app.sim());
             app.net()->freeze();
             duo.step(1500);
             ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
@@ -679,9 +681,10 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
     } TEST_END();
 
-    TEST_CASE("PA7 The Cue Router Runs Only While There Is A Prediction Or A Cue That It Played Still Waits For Its Copy: A Default Match Never Runs It (An Own Ant's Cues Are The Confirmed Engine's, As They Were); Switched Off At Run Time While The Predicted Engine's Cue Waits For Its Copy, It Still Drops That Copy (No Second Sound) And Is Idle Again After It") {
-        {                                                                                  // a default match: nothing is routed
-            const ApplicationConfig cfg = host_config();
+    TEST_CASE("PA7 The Cue Router Runs Only While There Is A Prediction Or A Cue That It Played Still Waits For Its Copy: A Match That Is Told Not To Predict Never Runs It (An Own Ant's Cues Are The Confirmed Engine's, As They Were); Switched Off At Run Time While The Predicted Engine's Cue Waits For Its Copy, It Still Drops That Copy (No Second Sound) And Is Idle Again After It") {
+        {                                                                                  // a match that is told not to predict: nothing is routed
+            ApplicationConfig cfg = host_config();
+            cfg.prediction = false;
             Application app;
             Peer bob;
             Duo duo{app, bob};

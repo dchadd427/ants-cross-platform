@@ -31,6 +31,7 @@
 #endif
 
 #include "ants_app/health_changes.hpp"
+#include "ants_app/view_glide.hpp"
 #include "ants_app/health_marks.hpp"
 #include "ants_app/screen_layout.hpp"
 #include "ants_app/view_zoom.hpp"
@@ -572,6 +573,8 @@ public:
     // Software Cursor & Transient Effects
     void spawn_transient_effect(const std::string& anim_name, int32_t px, int32_t py, bool is_screen_space = false);
     void update_transient_effects(float dt);
+    /// The ants that the prediction has moved, drawn gliding to where the engine has them (view_glide.hpp); the application adds the shifts of a rebuild before the frame is drawn
+    ViewGlide& view_glide() noexcept { return view_glide_; }
     /// The game's own pointer at the click point (screen_x, screen_y): the original's sprites, or, when `art` is given (the HUD art that is in use: hud_art.hpp), its cursor of the same name drawn from
     /// the sheet of the output's scale. The art's cursor is used only while it keeps the original's click point, frame times and sprite sizes (hud_art::cursor_fits); otherwise the original's is drawn.
     void render_software_cursor(CursorType type, int32_t screen_x, int32_t screen_y, uint32_t anim_tick = 0, const hud_art::Art* art = nullptr);
@@ -877,6 +880,7 @@ private:
     void draw_health_changes();
     void draw_ant_number(const ants::sim::AntSnapshot& ant, int32_t sprite_x, int32_t sprite_y);
     std::vector<TransientEffect> transient_effects_{};
+    ViewGlide view_glide_;
     uint32_t sub_tick_ms_{0};
 };
 

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <unordered_map>
 #include <utility>
 
 #if defined(_WIN32)
@@ -158,10 +159,17 @@ std::vector<Prediction::PredictedNews> Prediction::take_news() {
     return out;
 }
 
+std::vector<Prediction::Shift> Prediction::take_shifts() {
+    std::vector<Shift> out;
+    out.swap(shifts_);
+    return out;
+}
+
 void Prediction::begin(uint64_t c) {
     running_ = true;
     stale_ = false;
     pending_.clear();
+    shifts_.clear();
     ++stats_.starts;
     lead_ = target_lead_;
     lead_low_ticks_ = 0;
@@ -175,6 +183,7 @@ void Prediction::stop() {
     pending_.clear();
     audio_.clear();
     news_.clear();
+    shifts_.clear();
 }
 
 sim::SimulationEngine& Prediction::engine() {
@@ -260,7 +269,7 @@ void Prediction::rebuild(uint64_t target, bool is_start) {
     const Timer timer(cfg_);
     if (cfg_.work_hook) cfg_.work_hook();
     std::vector<sim::AntSnapshot> before;
-    const bool measure = measure_corrections_ && !is_start && running_;
+    const bool measure = (measure_corrections_ || cfg_.track_shifts) && !is_start && running_;
     if (measure) before = pred_.get_world_state().ants;              // the picture that was on screen
     const uint64_t shown_before = display_;
 
@@ -309,25 +318,41 @@ void Prediction::rebuild(uint64_t target, bool is_start) {
     stale_own_timing_ = false;
 
     if (measure && have_after) {                                     // the same tick before and after: what the player would have seen change
-        ++stats_.corrections;
+        std::unordered_map<uint32_t, const sim::AntSnapshot*> was;
+        was.reserve(before.size());
+        for (const sim::AntSnapshot& b : before) was.emplace(b.id, &b);
         uint32_t moved = 0;
         for (const sim::AntSnapshot& a : after) {
-            for (const sim::AntSnapshot& b : before) {
-                if (b.id != a.id) continue;
-                const uint32_t dx = static_cast<uint32_t>(std::abs(a.px - b.px));
-                const uint32_t dy = static_cast<uint32_t>(std::abs(a.py - b.py));
-                if (dx != 0 || dy != 0) {
-                    ++moved;
-                    stats_.max_move_px = std::max(stats_.max_move_px, std::max(dx, dy));
-                    stats_.move_px_total += std::max(dx, dy);
-                }
-                break;
-            }
+            const auto it = was.find(a.id);
+            if (it == was.end()) continue;
+            const sim::AntSnapshot& b = *it->second;
+            const uint32_t dx = static_cast<uint32_t>(std::abs(a.px - b.px));
+            const uint32_t dy = static_cast<uint32_t>(std::abs(a.py - b.py));
+            if (dx == 0 && dy == 0) continue;
+            ++moved;
+            stats_.max_move_px = std::max(stats_.max_move_px, std::max(dx, dy));
+            stats_.move_px_total += std::max(dx, dy);
+            if (cfg_.track_shifts) add_shift(a.id, b.px - a.px, b.py - a.py);
         }
-        if (moved > 0) ++stats_.corrections_visible;
-        stats_.ants_moved += moved;
+        if (measure_corrections_) {
+            ++stats_.corrections;
+            if (moved > 0) ++stats_.corrections_visible;
+            stats_.ants_moved += moved;
+        }
     }
     note_cost(charged);                                              // (last: over the budget often enough, it starts a cool-down, and nothing here may use the prediction afterwards)
+}
+
+// What a rebuild moved an ant by, added to what an earlier rebuild moved it by that nobody has taken yet
+void Prediction::add_shift(uint32_t ant, int32_t dx, int32_t dy) {
+    for (Shift& s : shifts_) {
+        if (s.ant != ant) continue;
+        s.dx += dx;
+        s.dy += dy;
+        if (s.dx == 0 && s.dy == 0) shifts_.erase(shifts_.begin() + (&s - shifts_.data()));      // (two corrections that cancel: nothing to slide)
+        return;
+    }
+    shifts_.push_back(Shift{ant, dx, dy});
 }
 
 // An own order that no turn has carried for pending_timeout_ticks is lost (the server refused it, a host change dropped it): it must not stay in the picture

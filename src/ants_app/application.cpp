@@ -172,7 +172,6 @@ bool Application::init(const ApplicationConfig& config) {
     config_store_.load();
     choose_aspect();
     choose_zoom();
-    choose_prediction();
     make_rejoin_store();
 
     // 6. Create Desktop Window
@@ -331,6 +330,7 @@ bool Application::init(const ApplicationConfig& config) {
     if (networked) {
         config_.start_in_map_select = true;
         net_ = std::make_unique<net::NetGame>(sim_);
+        if (config_.net_link_maker) net_->set_link_maker_for_test(config_.net_link_maker);
         hook_rejoin_store();
         net_->set_discovery(config_.lan_port);                                          // an open room announces itself to the local network (ants_net/lan.hpp)
         net_->set_game_version(std::string(VERSION_STRING));

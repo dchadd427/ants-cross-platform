@@ -85,6 +85,9 @@ public:
         // Ticks that the display stands beyond the lag. 0: an order is put where the host runs it, so nothing is corrected while the lag holds. 1: the ants react 50 ms sooner, but about one
         // order in six shows a whole-tile hop when its turn corrects it.
         uint32_t lead_bias_ticks{0};
+        // Keep, for every rebuild that changes where an ant stands at the tick that was on the screen, how far it moved (take_shifts): the application draws such an ant gliding from where it
+        // was shown to where the engine has it (ants_app/view_glide.hpp) instead of jumping. Costs the copy of the ants' positions before the rebuild
+        bool track_shifts{false};
     };
 
     /// What the prediction did (for the tests and the measurements; nothing here is state)
@@ -111,6 +114,13 @@ public:
         uint64_t ants_moved{0};                   // ants that stood elsewhere, over all corrections
         uint32_t max_move_px{0};                  // the largest distance that an ant was moved, in pixels (the larger of the two axes)
         uint64_t move_px_total{0};                // the sum of the distances that the moved ants were moved, in pixels (the larger of the two axes of each): over ants_moved, the usual size of a correction
+    };
+
+    /// An ant that a rebuild moved: the picture showed it at the engine's position plus (dx, dy) at the tick that was shown, before the rebuild (pixels)
+    struct Shift {
+        uint32_t ant{0};
+        int32_t dx{0};
+        int32_t dy{0};
     };
 
     /// A cue or a line of news that the predicted engine made at `tick` (the tick that produced it); `generation` counts the rebuilds. `replay` is true for what a rebuild's REPLAY made: a tick
@@ -183,6 +193,8 @@ public:
     /// The cues and news that the predicted ticks made since the last call (each tick that the engine ran, once per run: see PredictedAudio::generation). Nothing is kept while off.
     std::vector<PredictedAudio> take_audio();
     std::vector<PredictedNews> take_news();
+    /// The ants that rebuilds have moved since the last call, one entry for each ant (what several rebuilds moved it is added up); empty unless Config::track_shifts. Nothing is kept while off
+    std::vector<Shift> take_shifts();
 
     /// Which commands are predicted (the kinds that move or stop one's own ants)
     static bool predicts(sim::CommandType type) noexcept;
@@ -216,6 +228,7 @@ private:
     void note_cost(uint64_t ns);
     void start_cooldown(uint64_t tick);
     void drop_lost_orders(uint64_t confirmed_tick);
+    void add_shift(uint32_t ant, int32_t dx, int32_t dy);
     uint64_t confirmed_tick() const noexcept { return confirmed_->current_tick(); }
 
     const sim::SimulationEngine* confirmed_;
@@ -244,6 +257,7 @@ private:
     bool measure_corrections_{false};
     std::vector<PredictedAudio> audio_;
     std::vector<PredictedNews> news_;
+    std::vector<Shift> shifts_;
     Stats stats_;
 };
 

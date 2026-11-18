@@ -249,11 +249,9 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
                 if (i + 1 < argc) ++i;
             } else {
                 ++i;
-                cfg.prediction_given = true;
             }
         } else if (std::strcmp(argv[i], "--no-prediction") == 0) {              // the same as --prediction off
             cfg.prediction = false;
-            cfg.prediction_given = true;
         } else if (std::strcmp(argv[i], "--bot") == 0) {                       // a computer player: --bot SEAT[:SPEC], repeatable (docs/BOTS.md)
             mode_given = true;
             ai::BotSpec spec;

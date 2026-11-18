@@ -650,6 +650,39 @@ void run_correction_tests() {
         ASSERT_OK(verify_min(rig, t + sc.down_delay + 1, 20));                                  // from the frame of the turn's arrival on, every frame is the oracle's
     } TEST_END();
 
+    TEST_CASE("RP3.5 The Ants That A Rebuild Moves Are Told To The Picture With How Far: Only The Ants Of The Other Player's Order (Never The Player's Own, Exact Ones), By A Few Ticks Of Walking At Most, One Entry For Each Ant Whatever The Number Of Rebuilds; Nothing Is Kept Unless The Prediction Is Asked To") {
+        for (const bool track : {true, false}) {
+            Scenario sc;
+            sc.seed = 31;
+            sc.lead_ms = 400;
+            sc.uplink = 6;
+            sc.prediction.track_shifts = track;
+            Rig rig(sc);
+            rig.prediction()->set_measure_corrections(true);
+            rig.run(12);
+            rig.issue(make_command(CommandType::GroupMove, 0, 255, 50, 50, rig.ids.ants[0]));
+            rig.run(6);
+            const uint32_t t = rig.step_no() + 3;
+            rig.schedule(t, make_command(CommandType::GroupMove, 1, 255, 20, 40, rig.ids.ants[1]));
+            rig.schedule(t + 2, make_command(CommandType::GroupMove, 1, 255, 40, 20, rig.ids.ants[1]));        // (a second order for the same ants, two turns later: a second rebuild before anybody asked)
+            rig.run(8);
+            ASSERT_TRUE(rig.prediction()->stats().rebuilds >= 2u);
+            const std::vector<Prediction::Shift> shifts = rig.prediction()->take_shifts();
+            if (!track) {
+                ASSERT_TRUE(shifts.empty());
+                continue;
+            }
+            ASSERT_FALSE(shifts.empty());
+            std::set<uint32_t> seen;
+            for (const Prediction::Shift& s : shifts) {
+                ASSERT_TRUE(seen.insert(s.ant).second);                                              // (one entry for each ant: the two rebuilds are added up)
+                ASSERT_TRUE(std::find(rig.ids.ants[1].begin(), rig.ids.ants[1].end(), s.ant) != rig.ids.ants[1].end());      // (the other player's ants, none of the player's own)
+                ASSERT_TRUE(std::max(std::abs(s.dx), std::abs(s.dy)) > 0 && std::max(std::abs(s.dx), std::abs(s.dy)) <= 128);      // (a tile of walking at most for each of the two rebuilds, in the one direction or the other)
+            }
+            ASSERT_TRUE(rig.prediction()->take_shifts().empty());                                    // (taken once)
+        }
+    } TEST_END();
+
     TEST_CASE("RP3.2 An Order Sealed At Another Tick Than The One Where It Was Applied: Earlier Costs One Rebuild, Later Costs Two (its tick passes without it, then its turn comes) Unless It Lands Where The First Miss Put It; Afterwards The Prediction Is Right") {
         // The lead is 5 ticks, the buffer 1 and the lag 1, so the order is applied 5 ticks ahead of the confirmed engine; an uplink of 3 steps seals it exactly there. A miss (its turn
         // arrives without it) puts it at the display tick of that moment, which is lead - buffer = 4 ticks after the tick that it missed.

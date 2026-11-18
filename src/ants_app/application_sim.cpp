@@ -35,6 +35,16 @@ void Application::note_orders() {
     orders_seen_ = taken;
 }
 
+// The ants that a rebuild of the predicted engine has moved since the last frame are drawn gliding to where the engine has them (view_glide.hpp). Nothing slides while the confirmed engine is shown.
+void Application::feed_view_glide() {
+    net::Prediction* prediction = net_ != nullptr && net_->predicting() ? net_->prediction() : nullptr;
+    if (prediction == nullptr) {
+        renderer_->view_glide().clear();
+        return;
+    }
+    for (const net::Prediction::Shift& shift : prediction->take_shifts()) renderer_->view_glide().add(shift.ant, shift.dx, shift.dy);
+}
+
 sim::SimulationEngine& Application::view_sim() {
     return network_active() ? net_->view_engine() : sim_;       // (the confirmed engine while the prediction is off, and in every game of one machine)
 }

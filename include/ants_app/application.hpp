@@ -90,10 +90,9 @@ struct ApplicationConfig {
     /// line said it (the settings key then does not count).
     float zoom{zoom::kNormal};
     bool zoom_given{false};
-    /// --prediction on | off (--no-prediction is --prediction off; the settings key `prediction` when the command line does not say): whether a match of the network shows the player's own
-    /// orders at once (net::Prediction, docs/NETWORK_PORT.md). OFF by default (opt-in); a game of one machine never predicts. `prediction_given`: the command line said it (the settings key then does not count).
-    bool prediction{false};
-    bool prediction_given{false};
+    /// --prediction on | off (--no-prediction is --prediction off): whether a match of the network shows the player's own orders at once (net::Prediction, docs/NETWORK_PORT.md). On by default;
+    /// a game of one machine never predicts.
+    bool prediction{true};
     /// --hud-art new | classic (the settings key `hud_art` when the command line does not say): the look of the match screen's frame, buttons and panel (hud_art.hpp): the new pictures (the default) or the
     /// original's own. `hud_art_given` is true when the command line said it (the settings key then does not count, and it is not written). `hud_art_dir`: the folder of the new pictures.
     bool hud_art_new{true};
@@ -133,6 +132,7 @@ struct ApplicationConfig {
     NetRole net_role{NetRole::None};
     std::string net_address{"127.0.0.1"};       // Join: the host's address
     uint16_t net_port{4001};                    // the original's port
+    std::function<std::unique_ptr<net::Connection>()> net_link_maker;    // The tests: every link of a game that this application joins (the first one and the way back's) is made by this function (net::NetGame::set_link_maker_for_test); empty: TCP to net_address, as always
     std::string net_url;                        // Join through a WebSocket (--join-url ws://host/path or wss://...): the browser build's only way, and the one a server's proxy offers
     bool net_loopback_only{false};              // Host: accept only this machine (two copies on one computer, tests)
     uint16_t lan_port{net::kLanDiscoveryPort};  // the UDP port on which an open room announces itself to the local network (--lan-port N; 0 = not at all, --no-lan)
@@ -479,8 +479,6 @@ public:
     void set_map_fetcher(std::unique_ptr<MapFetcher> fetcher) { map_fetcher_ = std::move(fetcher); }
     /// What the player feels of an order while the prediction is on, from the frame that took it to the end of the frame that shows it (net::FeltDelayMeter); public for the tests
     const net::FeltDelayMeter& felt_delay() const noexcept { return felt_delay_; }
-    /// Whether the matches of the network that this application makes predict the player's own orders (--prediction, the settings key `prediction`)
-    bool prediction_wanted() const noexcept { return prediction_wanted_; }
     /// The number that the corner's "delay" shows now (nothing: a dash): what the player feels of an order while the prediction is on, the network's delay otherwise
     std::optional<uint32_t> corner_delay_ms() const;
 
@@ -639,7 +637,8 @@ private:
     bool wake_may_step();                                 // the wake-ups drive the match now: hidden page, network, no step running, and the frame loop slower than the turns
     void background_run(double elapsed);                  // the step itself: the network for `elapsed` seconds (at most kMaxWakeSeconds for the clock, see there), no sound
     uint64_t now_counter() const { return clock_ ? clock_() : SDL_GetPerformanceCounter(); }   // the clock of frames and wake-ups (set_clock)
-    void note_orders();                                   // the orders that input gave the predicted engine since the last look begin to be felt (net::FeltDelayMeter)
+    void note_orders();
+    void feed_view_glide();                               // the ants that the prediction's rebuilds have moved slide in the picture (view_glide.hpp)                                   // the orders that input gave the predicted engine since the last look begin to be felt (net::FeltDelayMeter)
     struct OrdersNoted {                                  // (the end of an input handler: whatever it ordered is looked at, by whichever way the handler leaves)
         Application& app;
         ~OrdersNoted() { app.note_orders(); }
@@ -741,7 +740,6 @@ private:
     std::unique_ptr<net::NetGame> net_;
     net::CueRouter cue_router_;                           // which of the two engines each cue is heard from (a match of the network that predicts); reset with every match
     net::FeltDelayMeter felt_delay_;                      // what the player feels of an order while the prediction is on (the corner's "delay"); reset with every match
-    bool prediction_wanted_{false};                       // --prediction, else the settings' key `prediction`, else off: given to every NetGame that this application makes
     uint64_t prediction_cooldowns_reported_{0};           // the cool-downs of this match's prediction that the console has said so of
     uint64_t orders_seen_{0};                             // the orders that the prediction has taken and the felt delay has been told of
     double net_time_ms_{0.0};
@@ -931,7 +929,6 @@ private:
     void apply_window_layout();                           // --grid / --cell, --window-pos, --window-size, the aspect's first size (native builds)
     void choose_aspect();                                 // --aspect, else the settings' key `aspect`, else the config's (the platform's default from parse_arguments: 16:9, on a desktop and in the web build)
     void choose_zoom();                                   // --zoom, else the settings' key `zoom`, else 1: the level that a match starts with when it is offered
-    void choose_prediction();                             // --prediction, else the settings' key `prediction`, else off: whether the matches of the network predict the player's own orders
     void apply_match_zoom();                              // a match starts: the camera takes the remembered level if the kind of match and the map offer it, else 1
     void enforce_zoom_limits();                           // every frame: the camera's zoom inside zoom_limits() and the map's limit (no zoom while the offscreen target cannot be made), one report when that failure begins
     bool zoom_failure_reported_{false};                   // enforce_zoom_limits has said that the target cannot be made (for this failure)
