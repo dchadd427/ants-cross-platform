@@ -30,7 +30,7 @@ void StandardBot::start(const BotContext& context) {
         expedition_.set_params(expedition_params(tactics_.plan));
         ferry_.set_params(ferry_params(tactics_.plan));
         gate_goals_.set_params(gate_goal_params(tactics_.plan));
-        brawl_.set_params(tactics_.plan.brawl);
+        brawl_.set_params(brawl_params(tactics_.plan));
     }
     ledger_.set_rank(kHarvest, kRankHarvest);
     ledger_.set_rank(kFight, kRankFight);

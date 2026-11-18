@@ -286,7 +286,7 @@ void BrawlTask::step(TaskContext& c) {
             const uint64_t decided = job.kind == Kind::Attack && job.target == entry.first ? job.decided : now;
             job = Job{Kind::Attack, entry.first, f->tile, decided, kPending, false};
         }
-        c.orders.attack(ants, f->tile, Priority::Urgent);
+        c.orders.attack(ants, f->tile, Priority::Urgent, params_.follow_up && !joined && idle_member);      // (a pack that struck and is idle again is clicked on again: the controller's follow-up lane)
         fight.ordered = now;
         fight.tile = f->tile;
     }

@@ -50,6 +50,7 @@ int main() {
     run_heal_tests();
     run_gang2_tests();
     run_group_tests();
+    run_hit_tests();
     run_homemines_tests();
     run_ownground_tests();
     run_drops_tests();
