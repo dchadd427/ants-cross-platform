@@ -13,6 +13,8 @@
 //   AI55.8  Medium and Easy play as before: a marked click is an unmarked one where the profile has no lane (the same commands and state hash, the food game and 187); the shipped Hard plays differently with it
 //   AI55.9  a hurt Bomber that an enemy worker keeps striking is answered by the shipped Hard bot, over forty seeds and both styles: the Bomber is ordered at the worker at once, the bot's ants strike the worker
 //           soon and six times by tick 440 and no refusal shuns the worker, and the Bomber lands a blow itself in about a third of the runs (AI34.4 has the Bomber's own blow at the cadence of before)
+//   AI55.12 a hit carrier that the island guard holds is not sent home by the aid
+//   AI55.11 whole matches of four Hard bots on ISLANDS in four seeds in which the faster hitting once let a bridge go under an ant: none does (the walk home and the walk off a bridge, the gate and the aid, the length of the walk)
 //   AI55.10 a refusal that is no clip (an enemy shut in by rocks) still shuns the target for 900 ticks, with both rules on
 #include <algorithm>
 #include <array>
@@ -28,6 +30,7 @@
 #include "b41_helpers.hpp"
 #include "bot_arena_tune.hpp"
 #include "bot_watch_people.hpp"
+#include "island_fixture.hpp"
 
 using namespace ai_test;
 using namespace ants;
@@ -721,5 +724,49 @@ void run_hit_tests() {
         ASSERT_EQ(fight.shunned_count(), 1u);
         ASSERT_TRUE(fight.shunned(enemy, sim.current_tick()));
         ASSERT_EQ(fight.fights(), 0u);
+    } TEST_END();
+
+    TEST_CASE("AI55.11 No Ant Is Lost To A Bridge That Goes While The Hard Bots Hit Faster: Four Hard Bots On ISLANDS (The Arena's Way, All Four Bridge Rules On), The Seeds In Which A Hurt Ant Was Sent Home Over A Bridge Again After It Was Walked Off It (13, 16), A Carrier Was Held At A Bridge That Goes And Was Sent To The Gate Again And Again (30) And An Ant Was Sent Home Over A Bridge That Would Not Last The Walk (58): No Ant Drowns On A Tile That Was A Finished Bridge A Tick Before") {
+        for (const uint32_t seed : {13u, 16u, 30u, 58u}) {
+            island_test::Match m;
+            m.expedition = true;
+            m.ferry = true;
+            m.builders = 0;
+            m.styled = true;
+            m.latency = 3;
+            m.init("ISLANDS", seed, 0x0f, Level::Hard, 0, [](LevelPlan& p) { p.island_flower_link = true; p.island_crew_spare = 2; });
+            ASSERT_TRUE(m.bot(0)->tactics().plan.hit_in_clip && m.bot(0)->tactics().plan.hit_follow_up);       // (the seeds are those of the shipped Hard plan, with its hits)
+            m.run(14400);
+            ASSERT_EQ(m.total_collapsed(), 0);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI55.12 A Hit Carrier That The Island Guard Holds Is Left To The Guard: The Aid Does Not Send It Home (The Click Would Send It Over A Bridge That Goes); The Same Carrier Without The Guard Is Sent Home (AI7.10)") {
+        for (const bool held : {true, false}) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 8);
+            const uint32_t carrier = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{9, 9});
+            sim.get_unit(carrier).pick_up_food(1, 25);
+            const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{9, 11});
+            LevelPlan plan = plan_for(Level::Medium);
+            plan.defenders = 0;
+            IntentRig rig(sim, 0, Level::Medium, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(3);
+            if (held) ASSERT_TRUE(rig.as<StandardBot>().ledger_for_labs().claim(carrier, StandardBot::kIslands));
+            sim.apply_command(command_of(CommandType::GroupAttack, 1, {enemy}, 9, 9));
+            bool hit = false;
+            for (int t = 0; t < 500; ++t) {
+                rig.tick();
+                hit = hit || sim.get_unit(carrier).hp < 10;
+            }
+            ASSERT_TRUE(hit);                                                                          // (it was hit)
+            const StandardBot& bot = rig.as<StandardBot>();
+            if (held) {
+                ASSERT_EQ(bot.aid().sent_home(), 0u);
+                ASSERT_EQ(bot.ledger().owner(carrier), StandardBot::kIslands);                         // (the claim stood the whole time)
+            } else {
+                ASSERT_TRUE(bot.aid().sent_home() >= 1u);
+            }
+        }
     } TEST_END();
 }
