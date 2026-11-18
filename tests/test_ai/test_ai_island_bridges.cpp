@@ -20,6 +20,8 @@ using flower_lab::Lab;
 
 const TileCoord kWestSatellite{12, 23};      // a tile of the satellite west of hill 0
 const TileCoord kWestChannel[2] = {TileCoord{17, 21}, TileCoord{16, 22}};   // the two water tiles between that satellite and the hill's island
+const TileCoord kRing{20, 6};                // a tile of the western half of the ring, near the link
+const TileCoord kWestLinkTile{23, 7};        // the one water tile between the western half of the ring and the top strip
 const TileCoord kNorthSatellite{26, 14};     // a tile of the satellite north of hill 0, beside its food
 const TileCoord kNorthChannel[3] = {TileCoord{23, 16}, TileCoord{24, 17}, TileCoord{25, 18}};   // the three water tiles between it and the hill's island
 
@@ -104,6 +106,7 @@ void run_island_bridges_tests() {
             ASSERT_EQ(standing(lab, kWestChannel, 2) == 2, on);
             ASSERT_EQ(a->hp == 10, on);
             ASSERT_EQ(lab.bot()->flower_link().bridges().homeward(), on ? 1u : 0u);
+            ASSERT_EQ(lab.bot()->ledger().owner(ant), kNoTask);                                 // (the planner keeps the ant from the economy while it walks home, and gives it back when it has healed)
             ASSERT_EQ(lab.bot()->flower_link().bridges().tiles_ordered(BridgeJob::Kind::Return), on ? 2u : 0u);
             if (!on) ASSERT_TRUE(a->tile_x < 16);
         }
@@ -225,17 +228,31 @@ void run_island_bridges_tests() {
         ASSERT_EQ(lab.bot()->flower_link().tiles_ordered(), 0u);
     } TEST_END();
 
-    TEST_CASE("AI54.10 No Bridge Leads Over Another Team's Hill (Seats 0 And 3 In The Roster, `island_bridge_tiles` 5, A Hurt Worker Of Seat 0 On The Food Satellite East Of The Hill Of Seat 3): The Only Way To Its Own Hill Is Over The Island Of The Other Hill, And No Tile Is Dug")
+    TEST_CASE("AI54.10 No Bridge Leads Over Another Team's Hill (Seats 0 And 3 In The Roster, `island_bridge_tiles` 5, A Hurt Worker Of Seat 0 On The Food Satellite East Of The Hill Of Seat 3): The Only Way To Its Own Hill Is Over The Island Of The Other Hill, And No Tile Is Dug; Nor For A Satellite That A Finished Bridge Joins To The Island Of Another Team's Hill (Seats 0 And 2, The Channel Between The Satellite West Of Hill 0 And The Island Of Hill 2 Stands)")
     {
-        Lab lab([](LevelPlan& p) {
-            plans(p, false, true, false, false);
-            p.island_bridge_tiles = 5;                                                           // (two tiles to the island of seat 3's hill and three more to its own: the way round by the ring is eight)
-        }, "ISLANDS", 0x09);
-        swimmers(lab, 3, TileCoord{30, 31});
-        const uint32_t ant = lab.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{49, 24});
-        lab.sim.get_unit(ant).hp = 2;
-        lab.run(2000);
-        ASSERT_EQ(lab.bot()->flower_link().bridges().tiles_ordered(), 0u);
+        {
+            Lab lab([](LevelPlan& p) {
+                plans(p, false, true, false, false);
+                p.island_bridge_tiles = 5;                                                       // (two tiles to the island of seat 3's hill and three more to its own: the way round by the ring is eight)
+            }, "ISLANDS", 0x09);
+            swimmers(lab, 3, TileCoord{30, 31});
+            const uint32_t ant = lab.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{49, 24});
+            lab.sim.get_unit(ant).hp = 2;
+            lab.run(2000);
+            ASSERT_EQ(lab.bot()->flower_link().bridges().tiles_ordered(), 0u);
+        }
+        for (const bool joined : {false, true}) {
+            Lab lab([](LevelPlan& p) { plans(p, false, true, false, false); }, "ISLANDS", 0x05);
+            swimmers(lab, 3, TileCoord{14, 19});
+            const uint32_t ant = lab.sim.spawn_unit(0, sim::AntType::Worker, kWestSatellite);
+            lab.sim.get_unit(ant).hp = 2;
+            lab.run(10);
+            if (joined) {
+                for (const TileCoord t : {TileCoord{15, 28}, TileCoord{16, 29}, TileCoord{17, 30}, TileCoord{18, 31}}) lab.sim.grid_mut().set_bridge_at(t, 4, 0);
+            }
+            lab.run(1500);
+            ASSERT_EQ(lab.bot()->flower_link().bridges().tiles_ordered() == 0u, joined);
+        }
     } TEST_END();
 
     TEST_CASE("AI54.11 A Dig Is Not Left Half Done For A Dearer Link (A Swimmer In The Lake Near The Top Link, A Worker On The East Half Near It; At Tick 40 Four Enemy Workers Stand At The Top Strip): The Two Top Tiles Stand Within 700 Ticks And The Bottom Link Is Not Touched")
@@ -266,6 +283,12 @@ void run_island_bridges_tests() {
             const bool first = lab.bridge_at(TileCoord{21, 11}) && lab.bridge_at(TileCoord{20, 12});
             ASSERT_EQ(first, limit == 5u);
             if (limit == 4u) ASSERT_EQ(lab.bot()->flower_link().bridges().tiles_ordered(), 0u);
+            if (limit == 5u) {                                                                  // (the chain goes on over the channel that stands now: the second channel is dug and the ant is home and whole)
+                lab.run(2500);
+                ASSERT_TRUE(lab.bridge_at(TileCoord{16, 16}) && lab.bridge_at(TileCoord{17, 17}) && lab.bridge_at(TileCoord{18, 18}));
+                ASSERT_TRUE(lab.ant(ant) != nullptr);
+                ASSERT_EQ(lab.ant(ant)->hp, 10);
+            }
         }
     } TEST_END();
 
@@ -283,7 +306,7 @@ void run_island_bridges_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI54.14 A Bridge Job Does Not Wait For Ever For A Tile With An Ant On It (Seat 1 In The Roster, An Enemy Swimmer At Rest On The First Tile Of The Way From The Satellite West Of The Hill, A Hurt Worker There, Three Swimmers): No Tile Is Ordered And Within 600 Ticks No Swimmer Is Held For The Dig")
+    TEST_CASE("AI54.14 A Bridge Job Does Not Wait For Ever For A Tile With An Ant On It, And The Tiles Of A Way Are Dug From The Ant's Side (Seat 1 In The Roster, An Enemy Swimmer At Rest On The First Tile Of The Way From The Satellite West Of The Hill, A Hurt Worker There, Three Swimmers): No Tile Is Ordered And Within 600 Ticks No Swimmer Is Held For The Dig")
     {
         Lab lab([](LevelPlan& p) { plans(p, false, true, false, false); }, "ISLANDS", 0x03);
         swimmers(lab, 3, TileCoord{14, 19});
@@ -293,5 +316,77 @@ void run_island_bridges_tests() {
         lab.run(600);
         ASSERT_EQ(lab.bot()->flower_link().bridges().tiles_ordered(), 0u);
         ASSERT_EQ(lab.bot()->flower_link().digger(), 0u);
+    } TEST_END();
+
+    TEST_CASE("AI54.15 The Tiles To Dig Are In The Price Of A Link (A Worker On The East Half Midway Between The Strips, A Swimmer In The Lake A Tile Nearer To The Top Link): The Bottom Link, One Tile Against Two, Is Dug Though The Swimmer Is Nearer To The Top One")
+    {
+        Lab lab([](LevelPlan& p) { plans(p, true, false, false, false); });
+        lab.sim.spawn_unit(0, sim::AntType::Swimmer, TileCoord{45, 29});
+        lab.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{56, 30});
+        lab.run(400);
+        ASSERT_EQ(any_stage(lab, TileCoord{36, 52}), 1);
+        ASSERT_EQ(any_stage(lab, TileCoord{37, 7}) + any_stage(lab, TileCoord{36, 7}), 0);
+    } TEST_END();
+
+    TEST_CASE("AI54.16 A Swimmer That Is Too Far Is Not Sent For A Bridge For An Ant (A Hurt Worker On The Satellite West Of The Hill): With The Three Swimmers 34 Tiles From The First Tile Nothing Is Dug, With Them 14 Tiles Away The Way Stands")
+    {
+        for (const bool far : {true, false}) {
+            Lab lab([](LevelPlan& p) { plans(p, false, true, false, false); });
+            swimmers(lab, 3, far ? TileCoord{49, 50} : TileCoord{29, 30});
+            const uint32_t ant = lab.sim.spawn_unit(0, sim::AntType::Worker, kWestSatellite);
+            lab.sim.get_unit(ant).hp = 2;
+            lab.run(1500);
+            ASSERT_EQ(standing(lab, kWestChannel, 2) == 2, !far);
+            if (far) ASSERT_EQ(lab.bot()->flower_link().bridges().tiles_ordered(), 0u);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI54.17 An Ant That Stands On A Bridge Of The Planner's That Is About To Fall Is Walked Off It (A Hurt Worker On The Satellite West Of The Hill Gets The Bridge; At Tick 600 A Second Worker Is Put On Its First Tile, The Guard Of The Island Task Is Off): At Tick 4,300, After The Tiles Went, The Worker Is Alive")
+    {
+        Lab lab([](LevelPlan& p) {
+            plans(p, false, true, false, false);
+            p.island_guard = false;
+            p.island_swarm_swimmers = 0;
+        });
+        swimmers(lab, 3, TileCoord{14, 19});
+        const uint32_t hurt = lab.sim.spawn_unit(0, sim::AntType::Worker, kWestSatellite);
+        lab.sim.get_unit(hurt).hp = 2;
+        lab.run(600);
+        ASSERT_EQ(standing(lab, kWestChannel, 2), 2);
+        const uint32_t stands = lab.sim.spawn_unit(0, sim::AntType::Worker, kWestChannel[0]);
+        lab.run(3700);
+        ASSERT_TRUE(lab.ant(stands) != nullptr);
+        ASSERT_EQ(standing(lab, kWestChannel, 2), 0);                                           // (the tiles went at 3,600 ticks after they were finished)
+        ASSERT_TRUE(lab.bot()->flower_link().bridges().evacuated() >= 1u);
+    } TEST_END();
+
+    TEST_CASE("AI54.18 No Ant Is Lost To A Bridge That The Planner Dug (Four Hard Bots On ISLANDS As The Arena Plays Them, Seeds 6 And 12, All Four Rules On): No Ant Drowns On A Tile That Was A Finished Bridge A Tick Before")
+    {
+        for (const uint32_t seed : {6u, 12u}) {
+            island_test::Match m;
+            m.expedition = true;
+            m.ferry = true;
+            m.builders = 0;
+            m.styled = true;
+            m.latency = 3;
+            m.init("ISLANDS", seed, 0x0f, Level::Hard, 0, [](LevelPlan& p) { p.island_flower_link = true; p.island_crew_spare = 2; });
+            m.run(14400);
+            ASSERT_EQ(m.total_collapsed(), 0);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI54.19 The Swarm Lets Go Of An Ant Whose Way To The Strip Is Gone (Two Workers On The West Half Of The Ring, The First Beside The Link, The Second Forty Rows Away; At Tick 300 The Link Tile Falls): The First Is On The Strip, The Second Is Let Go And Stopped On The Ring, So That Only One Ant Is Staged")
+    {
+        Lab lab([](LevelPlan& p) { plans(p, true, false, false, false); });
+        const uint32_t digger = lab.sim.spawn_unit(0, sim::AntType::Swimmer, TileCoord{19, 6});
+        lab.sim.spawn_unit(0, sim::AntType::Worker, kRing);
+        lab.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{2, 40});
+        lab.run(300);
+        ASSERT_TRUE(lab.bridge_at(kWestLinkTile));
+        ASSERT_EQ(lab.bot()->swarm().staged(), 2u);                                             // (both are on their way to the drop tile of the top strip)
+        lab.sim.kill_unit(digger);                                                              // (nobody digs the tile again)
+        lab.sim.grid_mut().collapse_bridge(static_cast<uint32_t>(kWestLinkTile.x), static_cast<uint32_t>(kWestLinkTile.y));
+        lab.run(100);
+        ASSERT_EQ(lab.bot()->swarm().staged(), 1u);
     } TEST_END();
 }

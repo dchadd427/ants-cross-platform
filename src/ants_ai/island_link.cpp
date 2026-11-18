@@ -38,7 +38,6 @@ void FlowerLinkTask::on_command(const sim::Command& command, Bot::Fate fate, uin
 }
 
 void FlowerLinkTask::finish(AntLedger& ledger) {
-    planner_.release_all(ledger);
     digger_ = 0;
     ordered_ = false;
     Task::finish(ledger);
@@ -49,6 +48,7 @@ void FlowerLinkTask::release_digger(TaskContext& c) {
     digger_ = 0;
     digger_link_ = -1;
     digger_kind_ = -1;
+    blocked_since_ = 0;
     ordered_ = false;
     sent_ = kPending;
 }
@@ -147,6 +147,7 @@ void FlowerLinkTask::step(TaskContext& c) {
             digger_ = 0;
             digger_link_ = -1;
             digger_kind_ = -1;
+            blocked_since_ = 0;
             ordered_ = false;
         }
     }
@@ -207,11 +208,12 @@ void FlowerLinkTask::step(TaskContext& c) {
     int64_t want_key = wanted;
     int32_t want_kind = -1;
     const BridgeJob* job = nullptr;
+    const bool jobs_on = tactics_.plan.island_return || tactics_.plan.island_feeder || tactics_.plan.island_power_bridge;
     const std::function<bool(sim::TileCoord)> unusable = [&](sim::TileCoord t) {
         const auto bad = bad_.find(index_of(grid, t));
         return bad != bad_.end() && bad->second > now;
     };
-    if (wanted < 0 && (tactics_.plan.island_return || tactics_.plan.island_feeder || tactics_.plan.island_power_bridge)) {
+    if (wanted < 0 && jobs_on) {
         job = planner_.look(c, tactics_, islands_->info(), swimmers, unusable);
         if (job != nullptr) {
             want_tiles = &job->tiles;
@@ -219,6 +221,7 @@ void FlowerLinkTask::step(TaskContext& c) {
             want_kind = static_cast<int32_t>(job->kind);
         }
     }
+    if (jobs_on || tactics_.plan.island_link_cost) planner_.upkeep(c, islands_->info());                   // (with every switch at 0 the bot is the one before them: it walks nobody off a bridge)
     planner_.walk_home(c);
     if (digger_ != 0 && want_key != digger_link_) {                                                 // nobody waits any more (or another link): the Swimmer goes back to the ferry
         release_digger(c);
@@ -249,6 +252,7 @@ void FlowerLinkTask::step(TaskContext& c) {
     if (digger_ == 0) {
         if (busy) return;
         const AntView* best = nearest_digger(c, target);
+        if (best != nullptr && want_kind >= 0 && best->tile.chebyshev_dist(target) > static_cast<int32_t>(params_.job_max_swim)) return;   // (the swim would cost more than a bridge for an ant is worth)
         if (best == nullptr || !c.ledger.take(best->id, id())) return;
         digger_ = best->id;
         digger_link_ = want_key;

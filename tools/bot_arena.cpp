@@ -745,10 +745,11 @@ struct SwimmerTrace {
         const uint64_t tick = sim.current_tick();
         if (tick % 10 != 0) return;
         const std::vector<sim::TileCell>& cells = sim.grid().cells();
-        if (standing_.size() != cells.size()) standing_.assign(cells.size(), 0);
+        const bool first = standing_.size() != cells.size();                                 // (the bridge pieces that the map file holds are there at the first look: nobody finished them)
+        if (first) standing_.assign(cells.size(), 0);
         for (size_t i = 0; i < cells.size(); ++i) {
             const bool done = cells[i].has_completed_bridge();
-            if (done && standing_[i] == 0 && cells[i].interactive_owner < 4) ++bridged[cells[i].interactive_owner];
+            if (!first && done && standing_[i] == 0 && cells[i].interactive_owner < 4) ++bridged[cells[i].interactive_owner];
             standing_[i] = done ? 1 : 0;
         }
         std::array<uint32_t, 4> n{};

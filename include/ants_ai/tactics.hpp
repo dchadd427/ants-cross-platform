@@ -309,7 +309,7 @@ struct LevelPlan {
     bool island_return{false};           // (Hard) a Swimmer that carries nothing digs a bridge to the hill's island for an own ant that stands hurt and stranded, and the ant walks home to heal (docs/BOTS.md, "Bridges for ants"; `--tune iret=0`: off)
     bool island_feeder{false};           // (Hard) the same for an ant that stands stranded on an island whose food the bridge opens to the economy (`--tune ifeed=0`: off)
     bool island_power_bridge{false};     // (Hard) the same for an ant that stands idle and a wanted power-up that lies on another island a short dig away (`--tune ipower=0`: off)
-    uint8_t island_power_kinds{6};       // ... the kinds that it fetches (a bit for every sim::AntType: Fire and Bomber; a Combat Ant is an ant that does not harvest and the rule cost a map with Combat power-ups on the ring 90 points at minute 6; `--tune ipowerkinds=N`)
+    uint8_t island_power_kinds{6};       // ... the kinds that it fetches (a bit for every sim::AntType: Fire and Bomber; a Combat Ant is an ant that does not harvest and the rule cost a map with Combat power-ups on the ring 70 points at minute 6; `--tune ipowerkinds=N`)
     uint32_t island_bridge_idle{300};    // ... ticks that an own ant stands still, free and away from the hill before a bridge is dug for it (`--tune ibidle=N`)
     uint32_t island_bridge_tiles{3};     // ... the most water tiles that a bridge job digs for one ant, all hops together (`--tune ibtiles=N`)
     uint32_t island_crew_spare{1};       // plain ants beyond the tokens' number that the expedition flies (ExpeditionTask::Params::crew_spare; `--tune icrew=N`)

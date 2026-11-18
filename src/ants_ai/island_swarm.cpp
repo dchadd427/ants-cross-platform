@@ -86,6 +86,15 @@ void SwarmTask::step(TaskContext& c) {
     for (auto it = staged_.begin(); it != staged_.end();) {
         const AntView* a = find_ant(v.mine(), it->first);
         bool keep = a != nullptr && c.ledger.owner(it->first) == id();
+        const bool bridges = plan.island_link_cost || plan.island_return || plan.island_feeder || plan.island_power_bridge;
+        if (keep && bridges && grid.in_bounds(a->tile) && a->tile != it->second.spot) {                       // no walk over the bridges that will last reaches the ant's place any more (docs/BOTS.md, "Bridges for ants"): ...
+            const std::vector<int32_t>& f = field_for(c, it->second.link);
+            if (f.empty() || f[static_cast<size_t>(index_of(grid, a->tile))] < 0) {                         // ... it is let go and stopped (an order that is under way would take it onto a bridge that falls), not sent on
+                c.ledger.release(it->first, id());
+                if (a->takes_orders()) c.orders.stop({a->id}, Priority::Urgent);
+                keep = false;
+            }
+        }
         if (keep && a->type == sim::AntType::Swimmer) {
             ++made_;
             if (first_made_ == 0) first_made_ = now;

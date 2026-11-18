@@ -384,9 +384,16 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "iret") return flag(p.island_return);
     if (key == "ifeed") return flag(p.island_feeder);
     if (key == "ipower") return flag(p.island_power_bridge);
-    if (key == "ipowerkinds") { p.island_power_kinds = static_cast<uint8_t>(v); return true; }
-    if (key == "ibidle") { p.island_bridge_idle = static_cast<uint32_t>(v); return true; }
-    if (key == "ibtiles") { p.island_bridge_tiles = static_cast<uint32_t>(v); return true; }
+    if (key == "ibidle" || key == "ibtiles" || key == "ipowerkinds") {                    // (a count that is negative, or a mask above one byte, is no tuning: it would wrap)
+        if (v < 0 || (key == "ipowerkinds" && v > 255)) {
+            err = "the value of '" + key + "' is out of range";
+            return false;
+        }
+        if (key == "ibidle") p.island_bridge_idle = static_cast<uint32_t>(v);
+        else if (key == "ibtiles") p.island_bridge_tiles = static_cast<uint32_t>(v);
+        else p.island_power_kinds = static_cast<uint8_t>(v);
+        return true;
+    }
     if (key == "imreach") return flag(p.island_mine_reach);
     if (key == "iwb") return flag(p.island_walker_bridge);
     if (key == "icrew") { p.island_crew_spare = static_cast<uint32_t>(v); return true; }

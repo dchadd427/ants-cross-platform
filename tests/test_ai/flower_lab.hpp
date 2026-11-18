@@ -10,6 +10,7 @@
 #include "b41_helpers.hpp"
 #include "island_fixture.hpp"
 #include "ants_ai/standard_bot.hpp"
+#include "ants_sim/game_mode.hpp"
 
 namespace flower_lab {
 
@@ -23,8 +24,12 @@ struct Lab {
     std::unique_ptr<BotController> ctl;
     uint8_t seat_{0};
 
-    explicit Lab(const std::function<void(LevelPlan&)>& tweak, const char* map = "ISLANDS", uint8_t roster = 0x01, uint8_t seat = 0) : seat_(seat) {
+    /// `prepare`: what a test does to the engine before the bot is seated (a pile of its own, a bridge that stands: the analysis of the map takes it in); `mode`: the rules of the match
+    explicit Lab(const std::function<void(LevelPlan&)>& tweak, const char* map = "ISLANDS", uint8_t roster = 0x01, uint8_t seat = 0, const std::function<void(sim::SimulationEngine&)>& prepare = {},
+                 sim::GameMode mode = sim::GameMode::HighestScore) : seat_(seat) {
+        sim.set_game_mode(mode);
         start_match(sim, map, 1, roster);
+        if (prepare) prepare(sim);
         sink = std::make_unique<RecordingSink>(sim, true);
         ctl = std::make_unique<BotController>(sim, 1);
         LevelPlan plan = plan_for(Level::Hard);
