@@ -7,6 +7,7 @@
 //   [scale]     the sheet is the nearest scale at or above the output's, and the renderer takes it
 //   [unusable]  a sheet that cannot be decoded, or that the device cannot make a texture, is said by the renderer and draws nothing (the application then gives the HUD the original's art: test_game_menu.cpp)
 //   [look] [classic] [pieces]   (test_hud_art_look.cpp) the real renderer's frame against the reference pictures, the original's art unchanged, the pieces that change with what happens
+//   [cursors] [cursor-draw] [cursor-classic] [cursor-damaged]   (test_hud_art_cursors.cpp) the new pointers: the original's click points, times and sizes, drawn at 1x, 2x and 3x, the original's when the art does not fit
 // (the setting that chooses between this art and the original's is a row of the settings menu: its cases are in test_game_menu.cpp)
 // Usage: test_hud_art. Exit code 0 when every check passes.
 #include "hud_art_fixtures.hpp"
@@ -294,6 +295,10 @@ void test_frame();
 void test_look(const assets::AssetArchive& arc, const hud_art::Art& art);
 void test_classic(const assets::AssetArchive& arc, const hud_art::Art& art);
 void test_pieces(const assets::AssetArchive& arc, const hud_art::Art& art);
+void test_cursors(const assets::AssetArchive& arc, const hud_art::Art& art);
+void test_cursor_draw(const assets::AssetArchive& arc, const hud_art::Art& art);
+void test_cursor_classic(const assets::AssetArchive& arc, const hud_art::Art& art);
+void test_cursor_damaged(const assets::AssetArchive& arc, const hud_art::Art& art);
 void test_slices();
 void test_scale();
 void test_unusable();
@@ -317,6 +322,10 @@ int main(int argc, char* argv[]) {
     test_look(arc, art);
     test_classic(arc, art);
     test_pieces(arc, art);
+    test_cursors(arc, art);
+    test_cursor_draw(arc, art);
+    test_cursor_classic(arc, art);
+    test_cursor_damaged(arc, art);
     std::printf("\nhud art: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }
