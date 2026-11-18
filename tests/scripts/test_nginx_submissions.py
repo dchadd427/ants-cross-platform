@@ -38,7 +38,7 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"stand-in picture"
 LVL = b"stand-in map file"
 ID = "0123456789abcdef0123456789abcdef"
 HUB_COOKIE = "__Host-ants_hub="
-ADMIN_SESSION, MOD_SESSION, ENDED_SESSION, BROKEN_SESSION, BUSY_SESSION, REDIRECT_SESSION, UNKNOWN_SESSION = ("a" * 32, "b" * 32, "c" * 32, "d" * 32, "e" * 32, "f" * 32, "0" * 32)       # (what the stand-in gate answers for each, below)
+ADMIN_SESSION, MOD_SESSION, ENDED_SESSION, BROKEN_SESSION, BUSY_SESSION, REDIRECT_SESSION, UNKNOWN_SESSION, SHUT_SESSION = ("a" * 32, "b" * 32, "c" * 32, "d" * 32, "e" * 32, "f" * 32, "0" * 32, "1" * 32)       # (what the stand-in gate answers for each, below)
 ADMIN = {"Cookie": HUB_COOKIE + ADMIN_SESSION}                                                  # (the login of an admin: the stand-in gate lets it in with a pass)
 DEVNULL = object()                                                                              # (Rig(own=DEVNULL): the file that the stack files mount when ANTS_TRUSTED_PROXIES_FILE is not set)
 
@@ -97,7 +97,7 @@ class Door(BaseHTTPRequestHandler):
 class Gate(BaseHTTPRequestHandler):
     """A stand-in for the chat hub's gate (GET /hub/admin/gate, docs/HUB.md): what it answers depends on the login cookie that it is shown, and it writes down every request exactly as it came.
     No cookie, or a login that ended: 401. An admin's login: 204 with a pass that tests/scripts/admin_pass.py makes (the game server's checks are not this file's business). A moderator's: 403.
-    The other values are a gate that is in trouble (500, 429, a redirect, 404): nginx must call all of them a door that is off."""
+    The other values are a gate that is in trouble (500, 429, a redirect, 404) and a hub whose door is shut for want of a good key (503, whatever the cookie): nginx must call all of them a door that is off."""
     seen = []                                                                                   # (method, request line, headers as they came, length of the body, request line's version)
     passes = []                                                                                 # (the pass of each 204, in order)
     lock = threading.Lock()
@@ -108,7 +108,7 @@ class Gate(BaseHTTPRequestHandler):
         body = self.rfile.read(length) if length else b""
         cookie = self.headers.get("Cookie", "")
         session = cookie.split(HUB_COOKIE, 1)[1][:32] if HUB_COOKIE in cookie else ""
-        status = {ADMIN_SESSION: 204, MOD_SESSION: 403, BROKEN_SESSION: 500, BUSY_SESSION: 429, REDIRECT_SESSION: 302, UNKNOWN_SESSION: 404}.get(session, 401)
+        status = {ADMIN_SESSION: 204, MOD_SESSION: 403, BROKEN_SESSION: 500, BUSY_SESSION: 429, REDIRECT_SESSION: 302, UNKNOWN_SESSION: 404, SHUT_SESSION: 503}.get(session, 401)
         made = admin_pass.make_pass() if status == 204 else None
         with self.lock:
             self.seen.append((self.command, self.path, list(self.headers.items()), len(body), self.request_version))
@@ -749,7 +749,7 @@ class TheAdminDoor(unittest.TestCase):
             self.assertNotIn("x-ants-admin-pass-extra", [k.lower() for k, v in raw])
         # the visitor's header with a gate that says no: the game server is not called at all
         before = self.door_count()
-        for cookie in (None, MOD_SESSION, ENDED_SESSION, BROKEN_SESSION, BUSY_SESSION, REDIRECT_SESSION, UNKNOWN_SESSION):
+        for cookie in (None, MOD_SESSION, ENDED_SESSION, BROKEN_SESSION, BUSY_SESSION, REDIRECT_SESSION, UNKNOWN_SESSION, SHUT_SESSION):
             headers = dict(letters, **({"Cookie": HUB_COOKIE + cookie} if cookie else {}))
             for method, body in (("GET", None), ("POST", b"{}")):
                 status = rig.ask(method, "/admin/api/maps/x/approve", dict(headers, **{"Content-Type": "application/json"}), body)[0]
@@ -769,7 +769,7 @@ class TheAdminDoor(unittest.TestCase):
     def test_a_gate_that_is_in_trouble_is_a_503_the_admin_page_can_read_and_the_game_server_is_not_called(self):
         rig = self.rig
         before = self.door_count()
-        for cookie in (BROKEN_SESSION, BUSY_SESSION, REDIRECT_SESSION, UNKNOWN_SESSION):                   # (a 500, a 429, a redirect and a 404 of the gate: none of them is a yes or a no)
+        for cookie in (BROKEN_SESSION, BUSY_SESSION, REDIRECT_SESSION, UNKNOWN_SESSION, SHUT_SESSION):      # (a 500, a 429, a redirect and a 404 of the gate, and the 503 of a hub whose door is shut: none of them is a yes or a no, and a shut door is never "not an admin")
             for method, body in (("GET", None), ("POST", b"{}")):
                 self.says(rig.ask(method, "/admin/api/me", {"Cookie": HUB_COOKIE + cookie, "Content-Type": "application/json"}, body), 503, "door_off", "The admin page is not available right now.")
         self.assertEqual(self.door_count(), before)
