@@ -1,7 +1,7 @@
 // Tests of the network handicap of a room's computer players (docs/BOTS.md, "Fairness in detail"; ants_server/bot_lag.hpp): the hold that the people's links give (its rounding, cap, median, hysteresis and
 // dwell), the sink that holds a bot's commands back (order, no loss, the pass-through at a hold of 0, the turn that applied_at names), and whole rooms: a person on a link of 30, 90, 180 and 300 ms
 // round trip gets a bot that waits 1, 2, 4 and 6 ticks; a person on a LAN link, or nobody, a bot that does not; two people give the median; a pause, a slow machine and a person who leaves leave the room
-// right; a second window that takes a seat is read on its own link; and a match with held commands plays out on a fresh engine to the same hashes (the replay case, S3.290, is in replay_tests.hpp, a match of
+// right; a second window that takes a seat is read on its own link; the point of it all, measured (a person's order that answers a tick is never carried after a bot's that answers the same tick); and a match with held commands plays out on a fresh engine to the same hashes (the replay case, S3.290, is in replay_tests.hpp, a match of
 // bots alone holds nothing: S3.180, and a room that a restart of the server brought back holds its bots again: S3.93).
 #include "server_fixtures.hpp"
 
@@ -55,6 +55,112 @@ struct LagRoom {
         ann = &w.connect("Ann", code);
     }
 };
+
+// What the hold is for, measured: a referee's session with a bot's seat (seat 0) and a person (seat 1) over a link of `one_way_ms` each way, the bot's seat wired as Room::start_bots wires it (the hold from
+// the session's readings, the sink's release, then the bot's order). Every 40th tick from tick 200 on, both answer the same tick at once: the bot hands an order to its sink in the referee's hook of that
+// tick, the person hands one to his session in the frame in which his own engine runs it. The turn that carries each is read off the sealed turns. `behind` is the person's turn less the bot's, the
+// least and the most over the events. `held` false: the room's hold stays 0 (the sink of before the hold).
+struct Lead {
+    int least{1000};
+    int most{-1000};
+    int events{0};
+    uint32_t hold{0};
+};
+
+Lead measure_lead(uint32_t one_way_ms, uint32_t first_frame_ms, bool held) {
+    const auto build = [](sim::SimulationEngine& e, uint32_t& ant_of_0, uint32_t& ant_of_1) {
+        e.init_test_world(60, 60, 1, 720000);
+        e.grid_mut().set_anthill(0, sim::TileCoord{4, 4});
+        e.grid_mut().set_anthill(1, sim::TileCoord{50, 50});
+        ant_of_0 = e.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{5, 10});
+        ant_of_1 = e.spawn_unit(1, sim::AntType::Worker, sim::TileCoord{51, 56});
+    };
+    net::LoopbackNetwork network(7);
+    sim::SimulationEngine referee;
+    sim::SimulationEngine machine;
+    uint32_t bot_ant = 0;
+    uint32_t person_ant = 0;
+    build(referee, bot_ant, person_ant);
+    build(machine, bot_ant, person_ant);
+    auto ends = network.connect(net::LoopbackNetwork::Link{one_way_ms, 0});
+    net::HostSession::Config hc;
+    hc.host_player = net::kNoSeat;
+    net::HostSession host(referee, hc);
+    host.add_client(1, ends.first);
+    host.add_bot_seat(0);
+    net::ClientSession::Config cc;
+    cc.player = 1;
+    cc.host = net::kNoSeat;
+    cc.migration = false;
+    net::ClientSession person(machine, cc);
+    person.set_connection(ends.second);
+
+    BotLag lag;
+    LaggedSink::Line line;
+    line.accepts = [&host]() { return host.accepts_bot(0); };
+    line.deliver = [&host](const sim::Command& c) { return host.submit_bot(0, c); };
+    line.turns_sealed = [&host]() -> uint64_t { return host.turns_sealed(); };
+    line.hold_ticks = [&lag]() { return lag.hold_ticks(); };
+    LaggedSink sink(std::move(line));
+
+    const auto answer = [](uint64_t tick, uint32_t ant) {                              // the order that answers `tick`: its tile says which
+        sim::Command c;
+        c.type = sim::CommandType::GroupMove;
+        c.tile_x = static_cast<int16_t>(tick / 40);
+        c.tile_y = 20;
+        c.ants = {ant};
+        return c;
+    };
+    std::map<int, uint32_t> bot_turn;
+    std::map<int, uint32_t> person_turn;
+    host.set_on_seal([&](const net::TurnMsg& t) {
+        for (const sim::Command& c : t.commands) {
+            if (c.type == sim::CommandType::GroupMove) (c.issuer == 0 ? bot_turn : person_turn)[c.tile_x] = t.turn;
+        }
+    });
+    host.runner().set_on_tick([&]() {
+        const uint64_t tick = referee.current_tick();
+        if (held) {
+            uint32_t trip = 0;
+            const bool read = host.turn_trip_ms(1, trip);
+            lag.update(tick, size_t{1}, &trip, read ? size_t{1} : size_t{0});
+        }
+        sink.release();
+        if (tick >= 200 && tick % 40 == 0) sink.submit(answer(tick, bot_ant));
+    });
+    std::vector<sim::Command> clicks;
+    person.runner().set_on_tick([&]() {
+        const uint64_t tick = machine.current_tick();
+        if (tick >= 200 && tick % 40 == 0) clicks.push_back(answer(tick, person_ant));
+    });
+    uint32_t now = 100000;
+    host.start(now);
+    person.start(now);
+    uint32_t next_frame = now + first_frame_ms;
+    uint32_t frames = 0;
+    for (uint32_t elapsed = 0; elapsed < 45000; ++elapsed) {
+        ++now;
+        network.set_time(now);
+        if (now % 2 == 0) host.update(now);                                             // the server's loop
+        if (static_cast<int32_t>(now - next_frame) >= 0) {                              // the person's frames, 60 a second (17, 17 and 16 ms): never in step with the turns
+            person.update(now);
+            for (const sim::Command& c : clicks) person.submit(c);
+            clicks.clear();
+            next_frame += ++frames % 3 == 0 ? 16u : 17u;
+        }
+    }
+    Lead out;
+    out.hold = lag.hold_ticks();
+    for (const auto& entry : bot_turn) {
+        const auto his = person_turn.find(entry.first);
+        if (his == person_turn.end()) continue;
+        const int behind = static_cast<int>(his->second) - static_cast<int>(entry.second);
+        out.least = std::min(out.least, behind);
+        out.most = std::max(out.most, behind);
+        ++out.events;
+    }
+    return out;
+}
 
 }  // namespace
 
@@ -434,5 +540,27 @@ void run_bot_lag_tests() {
         r.w.play_to_the_end("LAG-W");
         ASSERT_TRUE(r.w.status("LAG-W").state == RoomState::Finished);
         ASSERT_FALSE(again.session->desynced());
+    } TEST_END();
+
+    TEST_CASE("S3.292 What The Hold Is For: A Person And A Bot Answer The Same Tick At Once. Without A Hold The Person's Order Is Carried 2, 3 And 6 Turns After The Bot's At 100, 180 And 300 ms Of Round Trip; With It, At 30 To 300 ms, Never After The Bot's And At Most One Turn Before It; Past The Cap (500 ms) The Bot Keeps What Is Beyond 300 ms") {
+        struct Case {
+            uint32_t one_way;
+            int before;                                                                  // the least that the person is behind without a hold, in turns
+        };
+        for (const Case c : {Case{15, 0}, Case{50, 2}, Case{90, 3}, Case{150, 6}}) {
+            for (const uint32_t first_frame : {3u, 9u, 14u}) {                           // (the person's frames fall differently against the turns)
+                const Lead before = measure_lead(c.one_way, first_frame, false);
+                ASSERT_TRUE(before.events >= 15 && before.hold == 0);
+                ASSERT_TRUE(before.least >= c.before && before.most <= c.before + 1);    // the bot's lead: the person's round trip, in whole turns
+                const Lead after = measure_lead(c.one_way, first_frame, true);
+                ASSERT_TRUE(after.events >= 15);
+                ASSERT_TRUE(static_cast<int>(after.hold) >= before.most && static_cast<int>(after.hold) <= before.least + 1);      // the hold covers the lead, and is at most one turn more (180 ms reads at the boundary of 3 and 4 ticks)
+                ASSERT_TRUE(after.most <= 0);                                            // the person's order is never carried after the bot's
+                ASSERT_TRUE(after.least >= -1);                                          // ... and the bot waits at most one turn more than the person is behind
+            }
+        }
+        const Lead far = measure_lead(250, 9, true);                                     // 500 ms of round trip
+        ASSERT_EQ(far.hold, kBotLagMaxTicks);
+        ASSERT_TRUE(far.events >= 15 && far.least == 4 && far.most == 4);                // ten turns behind, six of them made up
     } TEST_END();
 }
