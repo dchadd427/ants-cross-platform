@@ -297,6 +297,13 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "healrecent") { p.heal_recent_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "healwalk") { p.heal_walk_tiles = static_cast<int32_t>(v); return true; }
     if (key == "healcalm") { p.heal_calm_hp = static_cast<uint8_t>(v); return true; }
+    if (key == "hit") {                                                               // the hits without pauses of docs/BOT_FIGHT.md (0: the bot as it was before them; 1: both rules on)
+        if (v == 0) ai::without_hit_cadence(p);
+        else p.hit_in_clip = p.hit_follow_up = true;
+        return true;
+    }
+    if (key == "hitclip") return flag(p.hit_in_clip);
+    if (key == "hitquick") return flag(p.hit_follow_up);
     if (key == "opp") return flag(p.opportunity);
     if (key == "oppreach") { p.opportunity_reach = static_cast<int32_t>(v); return true; }
     if (key == "oppjobs") { p.opportunity_jobs = static_cast<uint32_t>(v); return true; }

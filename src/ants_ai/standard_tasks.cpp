@@ -19,6 +19,7 @@ constexpr int32_t kThiefRadius = 16;          // an enemy Thief this close to th
 constexpr uint64_t kShunTicks = 900;          // an enemy ant that no order reached is left alone this long (45 s)
 constexpr uint64_t kBlowTicks = 6;            // an attack order is one blow: an ant that is idle this long after the order LEFT has done it (or cannot)
 constexpr uint64_t kCantGoWindow = 24;        // an attack that shows "can't go" within this many ticks of leaving was refused by the path finder
+constexpr int32_t kInClipDistance = 2;        // plan.hit_in_clip: an ant at least this many tiles (Chebyshev) from a target that is in its hit clip may be ordered at it (its walk takes 17 ticks or more; the clip is 21 to 26)
 
 }  // namespace
 
@@ -498,7 +499,7 @@ void FightTask::start_offence(TaskContext& c) {
     if (best_assault) ++assaults_started_;
 }
 
-void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::pair<sim::TileCoord, std::vector<uint32_t>>>& attacks) {
+void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<Attack>& attacks) {
     const BotView& v = c.view;
     const uint64_t now = v.tick();
     const LevelPlan& plan = tactics_.plan;
@@ -663,6 +664,13 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
                 d.second.sent = kPending;
                 continue;
             }
+            // (hits without pauses) the ants of one fight come faster and meet: an ant that arrives while the target plays the hit clip of another ant's blow is refused, and so is one whose order in the clip came
+            // a little early. That is no fault of the way to the target: the ant is ordered again when it is free, and the target is not shunned
+            if ((plan.hit_in_clip || plan.hit_follow_up) && (target->hp < d.second.target_hp || target->state == sim::UnitState::Flinch || target->state == sim::UnitState::Knockback)) {
+                d.second.ordered = false;
+                d.second.sent = kPending;
+                continue;
+            }
             shunned_[f.target] = now + kShunTicks;
             ++shunned_count_;
             end = true;
@@ -748,23 +756,28 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
     }
     // the orders: an ant that was never ordered, or is idle again after its blow, gets a new attack order (one order is one blow)
     std::vector<uint32_t> list;
+    std::vector<uint32_t> follow;                                                // the ants that struck and are idle again: their click is a follow-up click (plan.hit_follow_up)
     for (auto& d : f.defenders) {
         const AntView* a = find_ant(v.mine(), d.first);
         if (a == nullptr) continue;
         if ((combat_only && a->type != sim::AntType::Combat) || (opener != 0 && a->id != opener)) continue;
         if (on_fire && a->type != sim::AntType::Fire) continue;                  // (the others wait where they stand until the blow has thrown the target off the wall)
         bool need = false;
+        bool again = false;
         if (!d.second.ordered) need = a->takes_orders();
-        else if (d.second.sent != kPending) need = a->idle() && now >= d.second.sent + kBlowTicks && !v.has_pending_path(d.first);
+        else if (d.second.sent != kPending) need = again = a->idle() && now >= d.second.sent + kBlowTicks && !v.has_pending_path(d.first);
         else need = now > d.second.decided + 200;                                // an order that no fate was ever reported for
-        if (!need || in_hit_clip) continue;                                      // (a target in its hit clip is not ordered at: the order would be refused and the ant would stand in the can't-go clip)
+        // (a target in its hit clip is not ordered at: the order would be refused and the ant would stand in the can't-go clip. With plan.hit_in_clip an ant that stands two tiles or more from it is: its walk to
+        // the target's tile takes longer than the rest of the clip, as a person clicks during the clip)
+        if (!need || (in_hit_clip && !(plan.hit_in_clip && a->tile.chebyshev_dist(target->tile) >= kInClipDistance))) continue;
         d.second.ordered = true;
         d.second.decided = now;
         d.second.sent = kPending;
         d.second.target_hp = target->hp;
-        list.push_back(d.first);
+        (again && plan.hit_follow_up ? follow : list).push_back(d.first);
     }
-    if (!list.empty()) attacks.emplace_back(target->tile, std::move(list));
+    if (!list.empty()) attacks.push_back(Attack{target->tile, std::move(list), false});
+    if (!follow.empty()) attacks.push_back(Attack{target->tile, std::move(follow), true});
 }
 
 void FightTask::step(TaskContext& c) {
@@ -776,7 +789,7 @@ void FightTask::step(TaskContext& c) {
     start_fights(c);
     start_fire_defence(c);
     start_offence(c);
-    std::vector<std::pair<sim::TileCoord, std::vector<uint32_t>>> attacks;
+    std::vector<Attack> attacks;
     for (auto it = fights_.begin(); it != fights_.end();) {
         bool end = false;
         run_fight(c, it->second, end, attacks);
@@ -787,8 +800,8 @@ void FightTask::step(TaskContext& c) {
             ++it;
         }
     }
-    for (auto& a : attacks) {
-        c.orders.attack(a.second, a.first, Priority::Urgent);
+    for (const Attack& a : attacks) {
+        c.orders.attack(a.ants, a.tile, Priority::Urgent, a.follow_up);
         ++attacks_ordered_;
     }
 }

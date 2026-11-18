@@ -271,6 +271,8 @@ LevelPlan plan_for(Level level) noexcept {
             p.reach_fights = true;
             p.idle_hunt = true;
             p.chore_worth = true;
+            p.hit_in_clip = true;                    // the hits without pauses (docs/BOT_FIGHT.md): the next blow is ordered during the target's hit clip, and a follow-up click leaves after 150 ms
+            p.hit_follow_up = true;
             break;
     }
     // The thief batch (docs/BOTS.md, "Thieves: the answer to a raid"): Medium and Hard look at a hole again while a thief walks to it, and do not take a Fire power-up that the ant could not carry home.
@@ -314,6 +316,8 @@ void without_defence_batch(LevelPlan& p) noexcept {
     p.victim_answers = false;
     p.defend_by_strength = false;
 }
+
+void without_hit_cadence(LevelPlan& p) noexcept { p.hit_in_clip = p.hit_follow_up = false; }
 
 void without_heal(LevelPlan& p) noexcept { p.heal = false; }
 

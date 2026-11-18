@@ -27,6 +27,9 @@
 //   issuer          every released command carries the seat of the bot, whatever the bot wrote
 //   anti-thrash     no second order to the same ant within Profile::reissue_cooldown ticks, unless it is Urgent (every order snaps the ant to its tile
 //                   centre and replaces its queued path request)
+//   follow-up lane  the next attack click of an ant that is in a fight (Intent::follow_up, the bot asks for it) leaves Profile::follow_up_reaction ticks after the look (Hard 4, Medium and Easy none: 0) instead of
+//                   the reaction delay, when every ant of it had an attack click released within kFollowUpWindow ticks, and never before an older click that names one of its ants. It costs a token and leaves in the
+//                   priority order like any command: only the delay is the shorter (docs/BOT_FIGHT.md, "Hits without pauses")
 //   timed chains    the clicks of a chain (Orders::chain: one ant, a few clicks, each at a moment counted from the moment the click before is APPLIED) are not released by the clock of the
 //                   decision: the first leaves like any order, every later one at the first tick at which the sink (CommandSink::applied_at) would apply it inside its window, and never
 //                   outside it (a click that would be late is dropped with the rest of the chain: Fate::Expired). They skip the reaction delay, the queue and the cool-down, as the
@@ -146,6 +149,7 @@ private:
         uint64_t last_release{0};                       // the release tick of the seat's latest decision: a later look never leaves before an earlier one
         std::vector<Pending> queue;
         std::map<uint32_t, uint64_t> last_order;        // ant -> tick of the last order released for it
+        std::map<uint32_t, uint64_t> last_attack;       // ant -> tick of the last attack click released for it (the follow-up lane: a fight that is going on)
         std::map<uint32_t, Chain> chains;               // the timed chains that have steps in the queue or are Live (by seat-wide number)
         uint32_t chain_base{0};
         SeatStats stats;
@@ -154,6 +158,8 @@ private:
     Seat* find(uint8_t seat) noexcept;
     const Seat* find(uint8_t seat) const noexcept;
     void decide(const sim::SimulationEngine& sim, Seat& s, uint64_t tick);
+    bool follow_up_lane(const Seat& s, const Intent& in, uint64_t tick) const;
+    uint64_t follow_up_release(const Seat& s, const std::vector<uint32_t>& ants, uint64_t tick) const;
     bool allowed(const sim::SimulationEngine& sim, const Seat& s, const Intent& in) const;
     void refill(Seat& s, uint64_t tick) const;
     void release(const sim::SimulationEngine& sim, Seat& s, uint64_t tick);

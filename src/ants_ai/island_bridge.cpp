@@ -366,6 +366,16 @@ void BridgePlanner::walk_home(TaskContext& c) {
             made = true;
         }
         if (!c.map.reaches_hill(field, a->tile, a->type)) continue;                                // (the way does not stand yet)
+        // a way that stands now is no way home if a tile of a bridge of the planner's goes before the ant has walked it: the ant would be on the bridge when it falls. The tile with the least life left
+        // counts, wherever it is (the planner does not know which tiles the walk takes), and the walk gets the margin of the evacuation's gap
+        const int32_t at = a->tile.y * static_cast<int32_t>(v.grid().width()) + a->tile.x;
+        if (!field.cost.empty() && at >= 0 && static_cast<size_t>(at) < field.cost.size() && field.cost[static_cast<size_t>(at)] >= 0) {
+            int64_t least = std::numeric_limits<int64_t>::max();
+            for (const auto& e : since_) {
+                if (e.second != kFromTheFile) least = std::min<int64_t>(least, static_cast<int64_t>(e.second) + params_.life_ticks - static_cast<int64_t>(now));
+            }
+            if (least != std::numeric_limits<int64_t>::max() && least < static_cast<int64_t>(MapInfo::walking_ticks(field.cost[static_cast<size_t>(at)])) + params_.evacuate_gap) continue;
+        }
         if (h.orders >= params_.home_orders || (h.orders > 0 && (now < h.last + params_.home_gap || !a->idle()))) continue;
         if (!c.ledger.claim(id, owner_)) continue;
         if (h.orders == 0) ++homeward_;
