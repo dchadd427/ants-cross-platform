@@ -1014,7 +1014,7 @@ void run_bot_admin_tests() {
         ASSERT_EQ(d.post("bot-matches/stop-all").status, 200);
         ASSERT_EQ(d.post("bot-matches/stop-all").status, 200);
         size_t stopped = 0;
-        for (const AuditEntry& e : d.log()) stopped += e.action == "bot_stopped_all" ? 1 : 0;
+        for (const AuditEntry& e : d.log()) { if (e.action == "bot_stopped_all") ++stopped; }
         ASSERT_EQ(stopped, size_t{1});                                                                                         // (the second call stopped nothing)
         const std::string body = "{\"name\":\"Evening\",\"on\":true,\"when\":{\"kind\":\"times\",\"times\":[\"18:00\"]},\"what\":" + batch_body(1) + "}";
         const ctl::HttpResponse first = d.post("bot-schedules", body);
@@ -1023,7 +1023,7 @@ void run_bot_admin_tests() {
         ASSERT_EQ(BotDoor::json(first).get("schedule").get("id").as_int_or(-1), BotDoor::json(second).get("schedule").get("id").as_int_or(-2));
         ASSERT_EQ(BotDoor::json(d.get("bot-schedules")).get("schedules").size(), size_t{1});
         size_t added = 0;
-        for (const AuditEntry& e : d.log()) added += e.action == "bot_schedule_added" ? 1 : 0;
+        for (const AuditEntry& e : d.log()) { if (e.action == "bot_schedule_added") ++added; }
         ASSERT_EQ(added, size_t{1});
         const std::string id = std::to_string(BotDoor::json(first).get("schedule").get("id").as_int_or(0));
         const size_t before = d.log().size();
