@@ -80,6 +80,8 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .swatch.gk i { width: 34px; height: 34px; }
 .atlasnote { position: absolute; left: 8px; right: 8px; top: 8px; z-index: 2; padding: 6px 10px; font-size: 13px; line-height: 1.3; color: var(--cream); background: rgba(11, 22, 18, .94); border: 1px solid var(--rule); border-radius: 6px; pointer-events: none; }
 .atlasnote[hidden] { display: none; }
+.gapnote { position: absolute; left: 8px; bottom: 8px; z-index: 2; max-width: calc(100% - 16px); padding: 5px 10px; font-size: 15px; line-height: 1.3; color: var(--cream); background: rgba(8, 16, 13, .92); border: 1.5px solid var(--gold); border-radius: 6px; pointer-events: none; }
+.gapnote[hidden] { display: none; }
 /* the sheet of one kind of ground: every tile it has (the plain tile, then a 3 x 3 compass of the edge and corner pieces toward each other kind) */
 .dlg.ksheetbox { width: min(1020px, 100%); }
 .ksheetbox .lead { font-size: 16px; }
@@ -270,7 +272,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .sh, .crwho { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; } .sn, .crname { font-size: 20px; }
 .sl, .kn, .cnever, .chelp, .crwhole, .crshapes p, .crrange { font-size: 14.5px; color: var(--muted); } .cnever { margin-top: 6px; } .chelp { margin-top: 8px; }
 .dlg.edges { width: min(860px, 100%); } .edpair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 0 0 8px; } .edfig { margin: 0; min-width: 0; } .edfig canvas { display: block; width: 100%; height: auto; max-height: 250px; object-fit: contain; background: #000; border: 2px solid var(--rule); border-radius: 3px; }
-.edfig figcaption { font-size: 15px; margin-top: 4px; } .ednote, .edsample { font-size: 14px; line-height: 1.4; color: var(--muted); margin: 0 0 8px; }
+.edfig figcaption { font-size: 15px; margin-top: 4px; } .edgaps { margin: 2px 0 10px; padding: 10px 12px; border: 1.5px dashed var(--gold); border-radius: 8px; background: rgba(246, 208, 88, .06); } .edgaps[hidden] { display: none; } .edgaps h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--gold); } .edgaps .ednote { margin: 0 0 8px; } .edgaps ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; } .edgaps li { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; justify-content: space-between; font-size: 14px; } .edgaps li > span { flex: 1 1 220px; min-width: 0; } .edgaps li.more { color: var(--muted); } .ednote, .edsample { font-size: 14px; line-height: 1.4; color: var(--muted); margin: 0 0 8px; }
 .kinds.stacked { grid-template-columns: 1fr; gap: 10px; } .kind.off { opacity: .7; cursor: default; } .kind.off input { pointer-events: none; }
 .cname label { display: block; margin: 10px 0 3px; font-size: 14px; color: var(--muted); } .cname input[type=text] { max-width: 340px; min-height: 44px; font-size: 18px; background: #000; }
 .dlg .lead b { font-weight: 400; color: var(--gold); } .cname .note .btn { min-height: 44px; }
@@ -343,7 +345,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
     .scrim { align-items: flex-end; padding: 0; }
     .dlg, .dlg.narrow, .dlg.checks { width: 100%; max-height: 94%; }
     .dlg { border-width: 3px 0 0; border-radius: 12px 12px 0 0; }
-    .edpair { grid-template-columns: 1fr 1fr; gap: 8px; } .edfig figcaption { font-size: 13px; }
+    .edpair { grid-template-columns: 1fr 1fr; gap: 8px; } .edfig figcaption { font-size: 13px; } .gapnote { left: 6px; bottom: 6px; font-size: 13px; }
     .kinds { grid-template-columns: 1fr; gap: 10px; }
     .kind { padding: 12px 12px 12px 48px; }
     .kind .kt { font-size: 19px; } .kind .kl { font-size: 14.5px; } .kind .kx { font-size: 13.5px; } .dlg .lead { font-size: 16px; margin-bottom: 10px; } .note { font-size: 14px; } .live { font-size: 14.5px; }

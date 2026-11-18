@@ -1,6 +1,8 @@
 #include "ants_ai/island_link.hpp"
 
 #include <algorithm>
+#include <functional>
+#include <limits>
 
 #include "ants_sim/movement_tables.hpp"
 
@@ -45,8 +47,52 @@ void FlowerLinkTask::release_digger(TaskContext& c) {
     if (digger_ != 0) c.ledger.release(digger_, id());
     digger_ = 0;
     digger_link_ = -1;
+    digger_kind_ = -1;
+    blocked_since_ = 0;
     ordered_ = false;
     sent_ = kPending;
+}
+
+const AntView* FlowerLinkTask::nearest_digger(TaskContext& c, sim::TileCoord tile) const {
+    const AntView* best = nullptr;
+    int32_t best_dist = 0;
+    for (const AntView& a : c.view.mine()) {
+        if (a.type != sim::AntType::Swimmer || a.holding || a.carried_points > 0 || a.hp < 5 || !a.takes_orders()) continue;
+        const TaskId owner = c.ledger.owner(a.id);
+        if (owner != kNoTask && c.ledger.rank(owner) >= c.ledger.rank(id())) continue;
+        const int32_t d = a.tile.chebyshev_dist(tile);
+        if (best == nullptr || d < best_dist) {
+            best = &a;
+            best_dist = d;
+        }
+    }
+    return best;
+}
+
+// The cost of a link in ticks: the dig (34 ticks for the tile next to the shore, 54 for each next one), the swim of the nearest Swimmer to the first tile still to dig (a Swimmer's step costs 21 where a
+// walker's costs 20 on grass), the walk of the waiting ant to the drop tile of the strip, and the ants of other teams that stand about the drop tile (they take the drop by a few ticks: a strip with a crowd
+// is a gamble). A link with no Swimmer to dig it costs more than any other.
+int64_t FlowerLinkTask::link_cost(TaskContext& c, const Tactics::FlowerLink& link, const AntView& waiting) const {
+    const BotView& v = c.view;
+    const sim::Grid& grid = v.grid();
+    int64_t missing = 0;
+    sim::TileCoord first{-1, -1};
+    for (const sim::TileCoord t : link.tiles) {
+        if (grid.get_cell(t).has_completed_bridge()) continue;
+        if (first.x < 0) first = t;
+        ++missing;
+    }
+    int64_t cost = missing == 0 ? 0 : static_cast<int64_t>(params_.dig_first_ticks) + (missing - 1) * static_cast<int64_t>(params_.dig_next_ticks);
+    if (missing > 0) {
+        const AntView* d = nearest_digger(c, first);
+        cost += d == nullptr ? 100000 : MapInfo::walking_ticks(21 * d->tile.chebyshev_dist(first));
+    }
+    cost += MapInfo::walking_ticks(20 * waiting.tile.chebyshev_dist(link.drop));
+    int64_t crowd = 0;
+    for (const AntView& o : v.others()) {
+        if (o.tile.chebyshev_dist(link.drop) <= static_cast<int32_t>(params_.crowd_radius)) ++crowd;
+    }
+    return cost + std::min<int64_t>(crowd, params_.crowd_cap) * static_cast<int64_t>(params_.crowd_ticks);
 }
 
 // The links, from the analysis of the start: a channel of at most max_tiles between a component that holds a flower (and is no hill's island) and another component that holds none and is no hill's
@@ -100,6 +146,8 @@ void FlowerLinkTask::step(TaskContext& c) {
             if (d != nullptr && c.ledger.owner(digger_) == id()) c.ledger.release(digger_, id());
             digger_ = 0;
             digger_link_ = -1;
+            digger_kind_ = -1;
+            blocked_since_ = 0;
             ordered_ = false;
         }
     }
@@ -130,28 +178,59 @@ void FlowerLinkTask::step(TaskContext& c) {
     for (const AntView& a : v.mine()) swimmers += a.type == sim::AntType::Swimmer ? 1u : 0u;
     const bool lacking = swimmers < tactics_.plan.island_swarm_swimmers;
     int wanted = -1;                                                                                // the link that a free plain ant waits to cross
+    int64_t wanted_cost = 0;
     for (size_t i = 0; i < tactics_.flower_links.size() && lacking; ++i) {
         const Tactics::FlowerLink& l = tactics_.flower_links[i];
         if (life_left(l) >= params_.min_life) continue;
+        const AntView* waiting = nullptr;
         for (const AntView& a : v.mine()) {                                                         // the ant that waits: plain, empty-handed, on the ring half, nobody's but the economy's
             if ((a.type != v.default_ant_type() && a.type != sim::AntType::Fire && a.type != sim::AntType::Bomber) || a.holding || a.carried_points > 0 || a.hp < tactics_.plan.island_swarm_hp || !a.takes_orders()) continue;
             if (c.map.ant_component(c.seat, a.tile) != l.ring) continue;
             const TaskId owner = c.ledger.owner(a.id);
             if (owner != kNoTask && c.ledger.rank(owner) >= c.ledger.rank(id())) continue;
+            if (waiting == nullptr || a.tile.chebyshev_dist(l.drop) < waiting->tile.chebyshev_dist(l.drop)) waiting = &a;
+            if (!tactics_.plan.island_link_cost) break;
+        }
+        if (waiting == nullptr) continue;
+        if (!tactics_.plan.island_link_cost) {                                                      // the first link of the list that has a waiting ant, as it was
             wanted = static_cast<int>(i);
             break;
         }
-        if (wanted >= 0) break;
+        // the cheapest one; a link that its digger is working on stays the one while an ant waits (a dig is not left half done for a dearer link)
+        const int64_t cost = digger_ != 0 && digger_link_ == static_cast<int64_t>(i) ? std::numeric_limits<int64_t>::min() : link_cost(c, l, *waiting);
+        if (wanted < 0 || cost < wanted_cost) {
+            wanted = static_cast<int>(i);
+            wanted_cost = cost;
+        }
     }
-    if (digger_ != 0 && wanted != digger_link_) {                                                   // nobody waits any more (or another link): the Swimmer goes back to the ferry
+    // the bridge for an ant that stands away from the hill: only when no ant waits for a link
+    const std::vector<sim::TileCoord>* want_tiles = wanted >= 0 ? &tactics_.flower_links[static_cast<size_t>(wanted)].tiles : nullptr;
+    int64_t want_key = wanted;
+    int32_t want_kind = -1;
+    const BridgeJob* job = nullptr;
+    const bool jobs_on = tactics_.plan.island_return || tactics_.plan.island_feeder || tactics_.plan.island_power_bridge;
+    const std::function<bool(sim::TileCoord)> unusable = [&](sim::TileCoord t) {
+        const auto bad = bad_.find(index_of(grid, t));
+        return bad != bad_.end() && bad->second > now;
+    };
+    if (wanted < 0 && jobs_on) {
+        job = planner_.look(c, tactics_, islands_->info(), swimmers, unusable);
+        if (job != nullptr) {
+            want_tiles = &job->tiles;
+            want_key = kJobKey + job->key();
+            want_kind = static_cast<int32_t>(job->kind);
+        }
+    }
+    if (jobs_on || tactics_.plan.island_link_cost) planner_.upkeep(c, islands_->info());                   // (with every switch at 0 the bot is the one before them: it walks nobody off a bridge)
+    planner_.walk_home(c);
+    if (digger_ != 0 && want_key != digger_link_) {                                                 // nobody waits any more (or another link): the Swimmer goes back to the ferry
         release_digger(c);
     }
-    if (wanted < 0 || v.ticks_left() < params_.min_ticks_left) return;
-    const Tactics::FlowerLink& link = tactics_.flower_links[static_cast<size_t>(wanted)];
+    if (want_tiles == nullptr || v.ticks_left() < params_.min_ticks_left) return;
     // the next tile to dig
     sim::TileCoord target{-1, -1};
     bool busy = false;                                                                              // a stage of a dig (the neighbour's or ours) is on a tile: wait
-    for (const sim::TileCoord t : link.tiles) {
+    for (const sim::TileCoord t : *want_tiles) {
         if (grid.get_cell(t).has_completed_bridge()) continue;
         if (grid.get_cell(t).has_partial_bridge()) {
             busy = true;
@@ -172,21 +251,12 @@ void FlowerLinkTask::step(TaskContext& c) {
     if (target.x < 0 && !busy) return;                                                              // every tile stands
     if (digger_ == 0) {
         if (busy) return;
-        const AntView* best = nullptr;
-        int32_t best_dist = 0;
-        for (const AntView& a : v.mine()) {
-            if (a.type != sim::AntType::Swimmer || a.holding || a.carried_points > 0 || a.hp < 5 || !a.takes_orders()) continue;
-            const TaskId owner = c.ledger.owner(a.id);
-            if (owner != kNoTask && c.ledger.rank(owner) >= c.ledger.rank(id())) continue;
-            const int32_t d = a.tile.chebyshev_dist(target);
-            if (best == nullptr || d < best_dist) {
-                best = &a;
-                best_dist = d;
-            }
-        }
+        const AntView* best = nearest_digger(c, target);
+        if (best != nullptr && want_kind >= 0 && best->tile.chebyshev_dist(target) > static_cast<int32_t>(params_.job_max_swim)) return;   // (the swim would cost more than a bridge for an ant is worth)
         if (best == nullptr || !c.ledger.take(best->id, id())) return;
         digger_ = best->id;
-        digger_link_ = wanted;
+        digger_link_ = want_key;
+        digger_kind_ = want_kind;
         ordered_ = false;
         sent_ = kPending;
     }
@@ -222,13 +292,24 @@ void FlowerLinkTask::step(TaskContext& c) {
         release_digger(c);
         return;
     }
-    if (ant_on(v, target)) return;                                                                  // no click names a tile with an ant on it
+    if (ant_on(v, target)) {                                                                        // no click names a tile with an ant on it
+        if (digger_kind_ < 0) return;
+        if (blocked_since_ == 0) blocked_since_ = now;
+        if (now >= blocked_since_ + params_.blocked_ticks) {                                        // (a bridge job does not wait for ever: the tile is left alone for a while and the Swimmer goes back to the ferry)
+            bad_[index_of(grid, target)] = now + params_.blacklist_ticks;
+            blocked_since_ = 0;
+            release_digger(c);
+        }
+        return;
+    }
+    blocked_since_ = 0;
     c.orders.special(digger_, target);
     ordered_ = true;
     ordered_tile_ = target;
     decided_ = now;
     sent_ = kPending;
     ++tiles_ordered_;
+    if (digger_kind_ >= 0) planner_.note_ordered(static_cast<BridgeJob::Kind>(digger_kind_));
 }
 
 }  // namespace ants::ai

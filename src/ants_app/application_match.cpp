@@ -24,6 +24,11 @@ extern "C" {
 EM_JS(void, ants_go_to_front_page, (), {
     window.location.assign('/');
 });
+// The match of a lobby room is over and the page holds this player's seat for the rematch (web/front/rematch.js, window.antsLeaveToRoom): it takes the tab back to the room and says so. 0: it does not (no such
+// room, no results strip yet, a seat that is not kept, a storage that refuses), and the game goes to the front page.
+EM_JS(int, ants_leave_to_room, (), {
+    try { return typeof antsLeaveToRoom === "function" && antsLeaveToRoom() === true ? 1 : 0; } catch (e) { return 0; }
+});
 }
 #endif
 
@@ -378,7 +383,9 @@ void Application::quit() {
 #if defined(__EMSCRIPTEN__)
     // The browser leaves a game for the site's front page, where the page's Menu button goes too: a room is left at once (the seat is dropped, not held for a page that is gone). A game in a frame of
     // another page (web/lobby.html) has no menu to go to: it is back at its setup screen (return_to_map_select leaves the room), or the frame loads again.
+    // The results screen of a lobby room's match is the exception: its Leave Game goes back to the room (the seat is kept for the rematch: the page hands it to the front page, as its "Back to the lobby" does).
     if (!ants_page_is_a_frame()) {
+        if (ants_leave_to_room()) return;
         leave_network_match();
         ants_go_to_front_page();
         return;

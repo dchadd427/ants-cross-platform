@@ -133,6 +133,15 @@ function newMapChecks() {
     q('.kind input').fire('change', {}); q('.kind input').checked = true; q('.kind input').fire('change', {});
     equal([q('.kind.on .kt').textContent, q('#size-rows').value], ['Classic map', '100'], 'back to the Classic map: its sizes are as it had them');
     q('.kind input').checked = false; p.host.querySelectorAll('.kind input')[1].checked = true; p.host.querySelectorAll('.kind input')[1].fire('change', {});
+    // typing in the boxes: every key is one `input` event, the dialog shows its line and its note again, and the box stays the same node with the focus and the caret
+    const typed = (id, text) => { q('#' + id).value = ''; return p.doc.typeCheck(() => q('#' + id), text); };
+    equal(typed('size-rows', '120'), '', 'New map, rows: every key stays in the same box with the focus');
+    equal(typed('size-columns', '2000'), '', 'New map, columns (a size that the core refuses, so the note changes with the keys): every key stays in the same box with the focus');
+    equal(p.doc.caretCheck(() => q('#size-rows'), 1, '5'), '', 'New map: a key in the middle of a number keeps the caret after it');
+    equal(p.doc.composeCheck(() => q('#size-rows'), ['1', '12']), '', 'New map: an input method is not cut off');
+    check(q('.note.bad') !== null, 'and the note that the keys made is there');
+    for (const at of [0, 1]) { const r = p.host.querySelectorAll('.kind input'); r[at].focus(); r[at].checked = true; r[at].fire('change', {});
+        check(p.host.querySelectorAll('.kind input')[at] === r[at] && r[at].isConnected && p.doc.activeElement === r[at], 'New map: choosing a kind leaves the same radio box in the page with the focus'); }
     type('size-rows', '300'); type('size-columns', '400');
     check(q('.note') !== null && /Only the new version can open an Extended map\./.test(q('.note').textContent) && !/Classic/.test(q('.note').textContent), 'an Extended map gets the one note, and says nothing about converting back');
     // Enter makes the map, and the map is made by the core's call
@@ -153,6 +162,10 @@ function resizeMapChecks() {
     check(!btn().disabled && btn().textContent === 'Choose part to keep...' && q('.note') !== null, 'shrinking enables the button and offers Choose part to keep...');
     type('resize-rows', '100');
     check(btn().disabled && q('.note.bad') !== null, 'a size beyond Classic limits is refused');
+    const typed = (id, text) => { q('#' + id).value = ''; return p.doc.typeCheck(() => q('#' + id), text); };
+    equal(typed('resize-rows', '120'), '', 'Resize, rows: every key stays in the same box with the focus');
+    equal(typed('resize-columns', '25'), '', 'Resize, columns: every key stays in the same box with the focus');
+    equal(p.doc.caretCheck(() => q('#resize-columns'), 1, '7'), '', 'Resize: a key in the middle of a number keeps the caret after it');
     type('resize-rows', '40'); type('resize-columns', '50');
     check(!btn().disabled && btn().textContent === 'Resize map' && q('.note') === null, 'growing enables Resize map');
     btn().click();
@@ -187,6 +200,12 @@ function openMapChecks() {
     q('.open-q').value = 'brawl'; q('.open-q').fire('input', {});
     equal(all('.open-row').length, 1, 'search filters by description');
     check(/Mosh Pit 2/.test(q('.open-copy-note').textContent), 'updates the selected map and its copy name');
+    // typing in the search box: the list under it is made again with every key, the box is not
+    q('.open-q').value = '';
+    equal(p.doc.typeCheck(() => q('.open-q'), 'mosh'), '', 'Open a map, search: every key stays in the same box with the focus');
+    equal([all('.open-row').length, q('.open-q').value], [1, 'mosh'], 'and the list follows what was typed');
+    equal(p.doc.composeCheck(() => q('.open-q'), ['p', 'pi']), '', 'Open a map: an input method in the search box is not cut off');
+    q('.open-q').value = 'mosh'; q('.open-q').fire('input', {});
     // clicking Use as starting point downloads and opens the map
     q('.dlg-foot').querySelectorAll('button')[1].click();
     equal(chosen, [[12, 'Mosh Pit 2']], 'Use as starting point fetches the map and opens it under its numbered copy name');

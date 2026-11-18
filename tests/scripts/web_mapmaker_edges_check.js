@@ -18,6 +18,13 @@
 //      library makes two facing cells both wear a piece (the game's maps never have them: a dark seam line)
 //   D  the change on real bytes: one step of the history, only the tile words of layer 1 differ (flags, solid bits, layer 2, everything else the same), undo brings back the exact bytes, redo again
 //   E  the dialog on a fake page: the part you see or the whole map, the count, before and after drawn from the same cells, Cancel does nothing, Fix edges makes one change, nothing to fix
+//   F  Auto edges step by step (the real stroke of mapmaker_edit.js): after every move of a stroke each piece has its name in the dictionary (no black cell while the pointer is down), one Undo
+//      gives back the exact bytes and one Redo the same ones, and the cost of a move on a 512 x 512 map
+//      and a stroke without water leaves the very bytes that the way before (names put in at the lift) left, with the same Undo and Redo steps
+//   G  the mud ring beside new water: one cell of mud on the sides of painted water where it meets gravel, dirt or slate (never at a diagonal), the same for any path, a Fill, the edge of the map,
+//      mud and water left alone, erasing the water leaves the ring, one Undo takes the lake and the ring together
+//   H  the places that the game has no piece for (a strip one cell wide with a strip one cell wide beside it): which cells are marked, which are not (a strip that a neighbor can wear, a wide lake,
+//      pairs with no pieces), none on the game's own maps, the places and their badge cell, the box of the dialog (the list, Show), and the look that the canvas draws
 // Exit status 0 when everything passes, 1 otherwise.
 'use strict';
 
@@ -30,7 +37,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const argv = process.argv.slice(2);
 const FRONT = argv.includes('--front') ? path.resolve(argv[argv.indexOf('--front') + 1]) : path.join(ROOT, 'web', 'front');
 const load = (name) => require(path.join(FRONT, name));
-const File = load('mapmaker_file.js'), Tiles = load('mapmaker_tiles.js'), Edit = load('mapmaker_edit.js'), Ground = load('mapmaker_ground.js'), Edges = load('mapmaker_edges.js'), Dialog = load('mapmaker_dialog.js');
+const File = load('mapmaker_file.js'), Tiles = load('mapmaker_tiles.js'), View = load('mapmaker_view.js'), Edit = load('mapmaker_edit.js'), Ground = load('mapmaker_ground.js'), Edges = load('mapmaker_edges.js'), Dialog = load('mapmaker_dialog.js');
 const { makeDocument } = require('./web_mapmaker_fake_dom.js');
 
 let failures = 0, checks = 0;
@@ -140,38 +147,42 @@ function ruleChecks() {
 
 // ---- the lower kind wears where the higher cannot ----
 
-// A made-up map for the real stroke of mapmaker_edit.js: `rows` x `columns` of plain `fill` ground, version 8 (a dictionary of 700 names, '.' all of them: the pieces are not named here)
-function strokeMap(rows, columns, fill) {
-    const names = 700, cells = rows * columns, head = 8 + 2 + 30, out = new Uint8Array(head + 2 + 11 * names + 8 + 12 * cells + 12), view = new DataView(out.buffer);
+// A made-up map for the real stroke of mapmaker_edit.js: `rows` x `columns` of plain `fill` ground, version 8 (a dictionary of 700 names: the five plain tiles are named, the pieces are not)
+function strokeMap(rows, columns, fill, count) {
+    const names = count || 700, cells = rows * columns, head = 8 + 2 + 30, out = new Uint8Array(head + 2 + 11 * names + 8 + 12 * cells + 12), view = new DataView(out.buffer);
     let at = 0;
     const dword = (v) => { view.setUint32(at, v, true); at += 4; }, word = (v) => { view.setUint16(at, v, true); at += 2; };
     dword(8); dword(1); word(10); at += 30; word(names - 1);
-    for (let i = 0; i < names; i++) { out[at] = 0x2E; at += 11; }
+    for (let i = 0; i < names; i++) { out[at] = 0x2E; if (Object.keys(PLAIN).some((k) => PLAIN[k] === i)) { const nm = Ground.name(i); for (let c = 0; c < nm.length; c++) out[at + c] = nm.charCodeAt(c); } at += 11; }
     dword(rows); dword(columns);
     for (let i = 0; i < cells; i++) { word(fill); word(0); word(0xCDCD); }
     for (let i = 0; i < cells; i++) { word(0x7FFE); word(0); word(0); }
     word(0); word(0); word(0); word(0x7FFE); word(0); word(6);
-    return Edit.create(File.parse(out));
+    return Edit.create(File.parse(out), { rebase: (bytes) => File.parse(bytes) });          // (the page's own rebase: a dictionary that gets a name is a new array)
 }
-// one stroke with Auto edges On, as mapmaker_tools.js does it (`applyAuto`: the brush's square and two cells more all round): `path` is the cells that the pointer comes to, the first is where it goes down
-function paintStroke(ed, tile, path, brush) {
+// one stroke with Auto edges On, as mapmaker_tools.js does it (the stroke's tile is named first, each move is MapEdges.strokeStep: the brush's square and the cells round it, and the lift is
+// MapEdges.strokeEnd): `path` is the cells that the pointer comes to, the first is where it goes down; `after` (optional) is called after every move, with the pointer still down
+function paintStroke(ed, tile, path, brush, after) {
+    Edit.ensureTile(ed.file, tile, Ground.name(tile));
     const stroke = ed.begin('ground', tile);
-    const auto = (rect) => {
-        const made = Edges.strokePlan(ed.file, { r0: rect.r0 - 2, r1: rect.r1 + 2, c0: rect.c0 - 2, c1: rect.c1 + 2 }, Ground, tile, stroke.painted, stroke.beforeTile);
-        if (made.count) stroke.change({ names: [], cells: [], solid: [], splices: [], ground: made.cells });
-    };
+    const auto = (rect) => Edges.strokeStep(() => ed.file, rect, Ground, tile, stroke);
     stroke.stamp(path[0][0], path[0][1], brush); auto(Edit.brushRect(ed.file, path[0][0], path[0][1], brush));
+    if (after) after();
     for (let i = 1; i < path.length; i++) {
         const [r0, c0] = path[i - 1], [r1, c1] = path[i];
         stroke.segment(r0, c0, r1, c1, brush);
         const a = Edit.brushRect(ed.file, r0, c0, brush), b = Edit.brushRect(ed.file, r1, c1, brush);
         auto({ r0: Math.min(a.r0, b.r0), r1: Math.max(a.r1, b.r1), c0: Math.min(a.c0, b.c0), c1: Math.max(a.c1, b.c1) });
+        if (after) after();
     }
+    const tidied = Edges.strokeEnd(() => ed.file, Ground, stroke);          // (what the page does when the pointer lifts)
     stroke.end();
+    stroke.tidied = tidied;
+    return stroke;
 }
 // paint the cells of `picture` (rows of letters) that hold `letter`, row by row with a brush of 1 (a run of cells is one stroke)
-function paintLetter(ed, picture, letter) {
-    picture.forEach((row, r) => { for (let c = 0; c < row.length; c++) if (row[c] === letter) { let e = c; while (e + 1 < row.length && row[e + 1] === letter) e++; paintStroke(ed, PLAIN[LETTER[letter]], [[r, c], [r, e]], 1); c = e; } });
+function paintLetter(ed, picture, letter, after) {
+    picture.forEach((row, r) => { for (let c = 0; c < row.length; c++) if (row[c] === letter) { let e = c; while (e + 1 < row.length && row[e + 1] === letter) e++; paintStroke(ed, PLAIN[LETTER[letter]], [[r, c], [r, e]], 1, after); c = e; } });
 }
 function editNames(ed, r0, r1, c0, c1) {
     const out = [];
@@ -228,11 +239,16 @@ function lowerChecks() {
     equal(Edges.plan(f, null, Ground).count, 0, 'and a second Fix edges finds nothing');
 }
 
+// the map that Fix edges makes of the plain ground that a stroke map has (every cell the plain tile of its kind): what Auto edges must leave
+function canonical(ed) {
+    const rows = ed.file.rows, columns = ed.file.columns, plainOf = (r, c) => Ground.kind(Ground.kindOf(ed.file.tile1(r, c))).plain, f = grid(Array.from({ length: rows }, (_, r) => Array.from({ length: columns }, (_, c) => Ground.kind(Ground.kindOf(plainOf(r, c))).letter).join('')));
+    apply(f, Edges.plan(f, null, Ground)); return f;
+}
+// true when the map of a stroke editor is that map, else [row, column, its tile, the tile that Fix edges makes]
+function same(ed) { const f = canonical(ed); for (let r = 0; r < ed.file.rows; r++) for (let c = 0; c < ed.file.columns; c++) if (ed.file.tile1(r, c) !== f.tile1(r, c)) return [r, c, Ground.name(ed.file.tile1(r, c)), Ground.name(f.tile1(r, c))]; return true; }
+
 // Auto edges: painting stroke by stroke leaves the same map in either order, and the same as Fix edges makes of the plain ground
 function strokeChecks() {
-    const canonical = (ed) => { const rows = ed.file.rows, columns = ed.file.columns, plainOf = (r, c) => Ground.kind(Ground.kindOf(ed.file.tile1(r, c))).plain, f = grid(Array.from({ length: rows }, (_, r) => Array.from({ length: columns }, (_, c) => Ground.kind(Ground.kindOf(plainOf(r, c))).letter).join('')));
-        apply(f, Edges.plan(f, null, Ground)); return f; };
-    const same = (ed) => { const f = canonical(ed); for (let r = 0; r < ed.file.rows; r++) for (let c = 0; c < ed.file.columns; c++) if (ed.file.tile1(r, c) !== f.tile1(r, c)) return [r, c, Ground.name(ed.file.tile1(r, c)), Ground.name(f.tile1(r, c))]; return true; };
     const gravel = SCENE.map((row) => row.replace(/[mw]/g, 'g')), rows = SCENE.length, columns = SCENE[0].length;
     [['mud first, then the water', ['m', 'w']], ['water first, then the mud round it', ['w', 'm']]].forEach(([what, order]) => {
         const ed = strokeMap(rows, columns, 485);
@@ -266,6 +282,335 @@ function strokeChecks() {
     const hand = strokeMap(6, 6, 439); hand.file.bytes.set([Ground.FIRST + Ground.NAMES.indexOf('md08a') & 255, Ground.FIRST + Ground.NAMES.indexOf('md08a') >> 8], hand.file.layer1 + 6 * (2 * 6 + 2));
     paintStroke(hand, 476, [[2, 3], [4, 3]], 1);
     equal(hand.file.tile1(2, 2), Ground.FIRST + Ground.NAMES.indexOf('md08a'), 'Auto edges keeps a piece that was put by hand beside the water');
+}
+
+
+// ---- F: the pieces are named as they appear (no black cell while the pointer is down), Undo and Redo, the cost of a move ----
+function nameOf(f, id) { if (id >= f.names) return ''; let s = ''; for (let k = 0; k < 11 && f.bytes[f.dictAt + 2 + 11 * id + k]; k++) s += String.fromCharCode(f.bytes[f.dictAt + 2 + 11 * id + k]); return s; }
+// the cells of layer 1 that hold a ground tile that the dictionary does not name: the page draws a tile by its name, so such a cell is a black square
+function unnamed(f) {
+    const out = [];
+    for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.columns; c++) { const id = f.tile1(r, c); if (id >= Ground.FIRST && id <= Ground.LAST) { const n = nameOf(f, id); if (n === '' || n === '.') out.push(r * f.columns + c); } }
+    return out;
+}
+// random strokes of any kind on a map of `rows` x `columns` of gravel (the same ones for the same generator)
+function randomStrokes(rnd, ed, rows, columns, after) {
+    const pick = (n) => Math.floor(rnd() * n), kinds = [485, 487, 571, 439, 476];
+    for (let s = 1 + pick(6); s > 0; s--) {
+        const path = [[pick(rows), pick(columns)]];
+        for (let i = pick(8); i > 0; i--) path.push([Math.max(0, Math.min(rows - 1, path[path.length - 1][0] + pick(5) - 2)), Math.max(0, Math.min(columns - 1, path[path.length - 1][1] + pick(5) - 2))]);
+        paintStroke(ed, kinds[pick(5)], path, [1, 1, 1, 2, 3][pick(5)], after);
+    }
+}
+
+function stepChecks() {
+    // the maintainer's scene painted stroke by stroke, and random strokes: after EVERY move no cell holds a piece that the dictionary does not name
+    let dark = 0, moves = 0, ed = strokeMap(SCENE.length, SCENE[0].length, 485);
+    const watch = (e) => () => { moves++; dark += unnamed(e.file).length; };
+    ['m', 'w'].forEach((letter) => paintLetter(ed, SCENE, letter, watch(ed)));
+    const rnd = seeded(20261117);
+    for (let k = 0; k < 40; k++) { const rs = 8 + Math.floor(rnd() * 10), cs = 8 + Math.floor(rnd() * 10), m = strokeMap(rs, cs, 485); randomStrokes(rnd, m, rs, cs, watch(m)); }
+    check(moves > 300, 'many moves were watched (' + moves + ')');
+    equal(dark, 0, 'after every move of every stroke each ground tile on the map has its name in the dictionary (no black cell while the pointer is down)');
+    // a lake in gravel, one long stroke: look in the middle of it too
+    ed = strokeMap(12, 20, 485);
+    let mid = null;
+    paintStroke(ed, 476, [[5, 3], [5, 8], [5, 16]], 3, () => { if (mid === null && ed.file.tile1(4, 8) !== 485) mid = unnamed(ed.file).length; });
+    equal(mid, 0, 'in the middle of a long stroke of water the pieces round it are drawn: none is unnamed');
+    // one Undo gives back the exact bytes (the names too), one Redo the same bytes again; many strokes, then all undone one by one
+    for (let k = 0; k < 30; k++) {
+        const rs = 8 + Math.floor(rnd() * 10), cs = 8 + Math.floor(rnd() * 10), m = strokeMap(rs, cs, 485);
+        const states = [digest(m.file.bytes)];
+        for (let s = 1 + Math.floor(rnd() * 4); s > 0; s--) {
+            const before = m.history.size().strokes;
+            Edit.ensureTile(m.file, [485, 487, 571, 439, 476][Math.floor(rnd() * 5)], '');      // (a tile that is named by the stroke itself: nothing to do)
+            const kinds = [485, 487, 571, 439, 476], tile = kinds[Math.floor(rnd() * 5)];
+            Edit.ensureTile(m.file, tile, Ground.name(tile));
+            const was = digest(m.file.bytes);
+            paintStroke(m, tile, [[Math.floor(rnd() * rs), Math.floor(rnd() * cs)], [Math.floor(rnd() * rs), Math.floor(rnd() * cs)]], [1, 3][Math.floor(rnd() * 2)]);
+            if (m.history.size().strokes > before) states.push([was, digest(m.file.bytes)]);
+        }
+        const done = digest(m.file.bytes);
+        let back = true, again = true;
+        for (let i = states.length - 1; i >= 1; i--) { m.undo(); back = back && digest(m.file.bytes) === states[i][0]; }
+        for (let i = 1; i < states.length; i++) { m.redo(); again = again && digest(m.file.bytes) === states[i][1]; }
+        if (!back || !again || digest(m.file.bytes) !== done) { check(false, 'strokes ' + (states.length - 1) + ' on a ' + rs + ' x ' + cs + ' map: undo back ' + back + ', redo again ' + again); break; }
+    }
+    checks++;
+    // a name that is added mid-stroke is part of the stroke: Undo takes it out again (the dictionary of the map before the stroke, byte for byte)
+    ed = strokeMap(10, 10, 485); Edit.ensureTile(ed.file, 487, 'd01a');
+    const d0 = digest(ed.file.bytes);
+    paintStroke(ed, 487, [[4, 4], [4, 6]], 3);
+    check(digest(ed.file.bytes) !== d0 && nameOf(ed.file, Ground.edges('gravel', 'dirt')[1].id) === Ground.name(Ground.edges('gravel', 'dirt')[1].id), 'a stroke names its pieces in the dictionary');
+    ed.undo(); equal(digest(ed.file.bytes), d0, 'one Undo takes the stroke, its pieces and their names out again: the bytes are the ones before');
+}
+
+// The way Auto edges worked before the pieces were named move by move: each move planned the pieces (no names), and the lift named the pieces of the cells that differ from before, in one splice. A
+// stroke of any ground but water must leave the very same bytes now (the file that is saved does not depend on the order in which the names were put in).
+function paintStrokeOld(ed, tile, path, brush) {
+    Edit.ensureTile(ed.file, tile, Ground.name(tile));
+    const stroke = ed.begin('ground', tile);
+    const auto = (rect) => {
+        const made = Edges.strokePlan(ed.file, { r0: rect.r0 - 2, r1: rect.r1 + 2, c0: rect.c0 - 2, c1: rect.c1 + 2 }, Ground, tile, stroke.painted, stroke.beforeTile);
+        if (made.count) stroke.change({ names: [], cells: [], solid: [], splices: [], ground: made.cells });
+    };
+    stroke.stamp(path[0][0], path[0][1], brush); auto(Edit.brushRect(ed.file, path[0][0], path[0][1], brush));
+    for (let i = 1; i < path.length; i++) {
+        const [r0, c0] = path[i - 1], [r1, c1] = path[i];
+        stroke.segment(r0, c0, r1, c1, brush);
+        const a = Edit.brushRect(ed.file, r0, c0, brush), b = Edit.brushRect(ed.file, r1, c1, brush);
+        auto({ r0: Math.min(a.r0, b.r0), r1: Math.max(a.r1, b.r1), c0: Math.min(a.c0, b.c0), c1: Math.max(a.c1, b.c1) });
+    }
+    const b = stroke.box(), f = ed.file, cells = [];
+    for (let r = Math.max(0, b.r0 - 2); r <= Math.min(f.rows - 1, b.r1 + 2); r++) for (let c = Math.max(0, b.c0 - 2); c <= Math.min(f.columns - 1, b.c1 + 2); c++) { const k = r * f.columns + c, now = f.tile1(r, c); if (now !== stroke.beforeTile(k)) cells.push([k, now]); }
+    const sp = cells.length ? Edges.dictionary(f, { cells }, Ground) : null;
+    if (sp) stroke.change({ names: [], cells: [], solid: [], splices: [sp], ground: [] });
+    stroke.end();
+}
+
+function sameBytesChecks() {
+    const rnd = seeded(20261119), pick = (n) => Math.floor(rnd() * n), kinds = [485, 487, 571, 439];
+    let strokes = 0, tidied = 0, differ = 0, first = null, hist = 0;
+    for (let k = 0; k < 160; k++) {
+        const rs = 6 + pick(10), cs = 6 + pick(10), short = k % 2 ? 486 : 0, a = strokeMap(rs, cs, 485, short), b = strokeMap(rs, cs, 485, short);          // (half of the maps have a dictionary that ends at gravel and has to grow)
+        for (let s = 1 + pick(5); s > 0; s--) {
+            const path = [[pick(rs), pick(cs)]];
+            for (let i = pick(8); i > 0; i--) path.push([Math.max(0, Math.min(rs - 1, path[path.length - 1][0] + pick(5) - 2)), Math.max(0, Math.min(cs - 1, path[path.length - 1][1] + pick(5) - 2))]);
+            const tile = kinds[pick(4)], brush = [1, 1, 1, 2, 3, 5][pick(6)], now = paintStroke(a, tile, path, brush);
+            paintStrokeOld(b, tile, path, brush);
+            strokes++; if (now.tidied) tidied++;
+            if (digest(a.file.bytes) !== digest(b.file.bytes)) { differ++; first = first || [rs, cs, tile, brush, JSON.stringify(path)]; }
+        }
+        // the same history: every stroke can be taken back to the bytes that the old way had before it
+        let ok = true;
+        while (a.history.canUndo()) { a.undo(); b.undo(); if (digest(a.file.bytes) !== digest(b.file.bytes)) ok = false; }
+        while (a.history.canRedo()) { a.redo(); b.redo(); if (digest(a.file.bytes) !== digest(b.file.bytes)) ok = false; }
+        if (ok) hist++;
+    }
+    equal([differ, first], [0, null], 'strokes of gravel, dirt, slate and mud with Auto edges leave the same bytes as before the names were put in move by move, in a dictionary of 700 names and in one that grows (' + strokes + ' strokes: the names of the pieces that a later move replaced are taken out again, and the slots made for them)');
+    check(tidied >= 20, 'and the check is not idle: at the lift ' + tidied + ' of the strokes had a name to take out');
+    equal(hist, 160, 'Undo and Redo of those strokes give the same bytes as before the names were put in move by move, step by step');
+}
+
+function stepSpeedChecks() {
+    // a 512 x 512 map, a brush of 9 dragged 115 cells along the middle: each move is the stroke's own step (the ring, the plan and the names); a move that brings a new piece also splices the dictionary
+    const n = 512;
+    [[476, 'water'], [439, 'mud']].forEach(([tile, what]) => {
+        const ed = strokeMap(n, n, 485), mid = n >> 1, times = [];
+        Edit.ensureTile(ed.file, tile, Ground.name(tile));
+        const stroke = ed.begin('ground', tile), auto = (rect) => Edges.strokeStep(() => ed.file, rect, Ground, tile, stroke);
+        stroke.stamp(mid, 4, 9); auto(Edit.brushRect(ed.file, mid, 4, 9));
+        for (let c = 5; c < 120; c++) {
+            const t0 = Clock.now();
+            stroke.segment(mid, c - 1, mid, c, 9);
+            const a = Edit.brushRect(ed.file, mid, c - 1, 9), b = Edit.brushRect(ed.file, mid, c, 9);
+            auto({ r0: Math.min(a.r0, b.r0), r1: Math.max(a.r1, b.r1), c0: Math.min(a.c0, b.c0), c1: Math.max(a.c1, b.c1) });
+            times.push(Clock.now() - t0);
+        }
+        stroke.end();
+        const sorted = times.slice().sort((x, y) => x - y), median = sorted[sorted.length >> 1], worst = sorted[sorted.length - 1];
+        console.log('    a stroke of ' + what + ' on a 512 x 512 map, brush 9: ' + times.length + ' moves, median ' + median.toFixed(2) + ' ms, worst ' + worst.toFixed(2) + ' ms');
+        check(median < 5 && worst < 60, 'a move of a ' + what + ' stroke on a 512 x 512 map costs a few milliseconds at the most (median ' + median.toFixed(2) + ', worst ' + worst.toFixed(2) + ')');
+        equal(unnamed(ed.file).length, 0, 'and the 512 x 512 map has no unnamed piece');
+    });
+}
+
+// ---- G: the mud ring beside new water ----
+// the kinds of a map of a stroke editor, as rows of letters
+function picture(ed) {
+    const f = ed.file, out = [];
+    for (let r = 0; r < f.rows; r++) { let row = ''; for (let c = 0; c < f.columns; c++) row += Ground.kind(Ground.kindOf(f.tile1(r, c))).letter; out.push(row); }
+    return out;
+}
+// a stroke map whose layer 1 is set from rows of letters (plain tiles, no names: the page's own start)
+function drawn(rows) {
+    const ed = strokeMap(rows.length, rows[0].length, 485);
+    rows.forEach((row, r) => row.split('').forEach((ch, c) => { const at = ed.file.layer1 + 6 * (r * ed.file.columns + c), id = PLAIN[LETTER[ch]]; ed.file.bytes[at] = id & 255; ed.file.bytes[at + 1] = id >> 8; }));
+    return ed;
+}
+function ringChecks() {
+    // a lake of water (rows 3 to 5, columns 1 to 7) on each land kind: one cell of mud on its four sides, never at a diagonal, and nothing else changes kind
+    ['g', 'd', 's'].forEach((k) => {
+        const ed = strokeMap(9, 9, PLAIN[LETTER[k]]);
+        paintStroke(ed, 476, [[4, 2], [4, 6]], 3);
+        const want = []; for (let r = 0; r < 9; r++) { let row = ''; for (let c = 0; c < 9; c++) row += (r >= 3 && r <= 5 && c >= 1 && c <= 7) ? 'w' : ((r === 2 || r === 6) && c >= 1 && c <= 7) || ((c === 0 || c === 8) && r >= 3 && r <= 5) ? 'm' : k; want.push(row); }
+        equal(picture(ed), want, 'water on ' + LETTER[k] + ': a ring of one cell of mud on the sides of the lake, the corner cells stay ' + LETTER[k]);
+        equal(same(ed), true, 'water on ' + LETTER[k] + ': the map is the one that Fix edges makes of the plain ground (the pieces round the ring too)');
+        check(doubled(9, 9, (r, c) => ed.file.tile1(r, c)) === 0, 'water on ' + LETTER[k] + ': no boundary has two facing pieces');
+        let touch = 0; for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) if (Ground.kindOf(ed.file.tile1(r, c)) === 'water') for (const [dr, dc] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) { const q = Ground.kindOf(ed.file.tile1(r + dr, c + dc)); if (q === 'gravel' || q === 'dirt' || q === 'slate') touch++; }
+        equal(touch, 0, 'water on ' + LETTER[k] + ': no water cell touches land side by side');
+    });
+    // a lone cell of water: the four sides get the ring, the four diagonals stay land
+    let ed = strokeMap(7, 7, 485); paintStroke(ed, 476, [[3, 3], [3, 3]], 1);
+    equal(picture(ed).slice(2, 5), ['gggmggg', 'ggmwmgg', 'gggmggg'], 'one cell of water: mud on its four sides, land at its diagonals');
+    // the same lake by another path (rows first or columns first, a cell at a time) is the same map; and a lake that is painted as one stroke, in pieces, or by Fill
+    const cells = []; for (let r = 2; r <= 6; r++) for (let c = 3; c <= 8; c++) if (!(r === 2 && c > 6)) cells.push([r, c]);
+    const bySort = (sorter) => { const e = strokeMap(10, 12, 487); cells.slice().sort(sorter).forEach(([r, c]) => paintStroke(e, 476, [[r, c], [r, c]], 1)); return JSON.stringify(Array.from({ length: 120 }, (_, i) => e.file.tile1((i / 12) | 0, i % 12))); };
+    equal(bySort((a, b) => a[0] - b[0] || a[1] - b[1]) === bySort((a, b) => a[1] - b[1] || b[0] - a[0]), true, 'the same lake painted a cell at a time in two orders is the same map');
+    ed = strokeMap(10, 12, 487); paintStroke(ed, 476, [[4, 3], [4, 8]], 5); const one = JSON.stringify(picture(ed));
+    ed = strokeMap(10, 12, 487); paintStroke(ed, 476, [[4, 3], [4, 5]], 5); paintStroke(ed, 476, [[4, 6], [4, 8]], 5);
+    equal(JSON.stringify(picture(ed)), one, 'a lake painted in one stroke or in two is the same map');
+    // Fill: a block of gravel inside a border of dirt turns to water, and the border cells that touch it (not the corners) turn to mud
+    ed = drawn(['dddddd', 'dgggdd', 'dgggdd', 'dgggdd', 'dddddd']);
+    { const stroke = ed.begin('ground', 476); stroke.fill(2, 2); Edges.strokeStep(() => ed.file, stroke.box(), Ground, 476, stroke); stroke.end(); }
+    equal(picture(ed), ['dmmmdd', 'mwwwmd', 'mwwwmd', 'mwwwmd', 'dmmmdd'], 'Fill with water: the ring is put round the filled cells too');
+    equal(same(ed), true, 'and the map is the one that Fix edges makes');
+    // the edge of the map: a lake in the first row and the first column has no ring outside the map, and nothing breaks
+    ed = strokeMap(6, 8, 485); paintStroke(ed, 476, [[0, 0], [0, 4]], 3);
+    equal(picture(ed).slice(0, 3), ['wwwwwwmg', 'wwwwwwmg', 'mmmmmmgg'], 'a lake against the map\'s edge has its ring on the sides that are on the map');
+    equal(same(ed), true, 'and the map is the one that Fix edges makes');
+    // only water has the ring: a stroke of mud, gravel, dirt or slate puts nothing else
+    [439, 485, 487, 571].forEach((tile) => {
+        const e = strokeMap(8, 8, 571); paintStroke(e, tile, [[3, 2], [3, 5]], 3);
+        const n = picture(e).join('').split('').filter((ch) => ch === 'm').length, painted = tile === 439 ? 3 * 6 : 0;
+        equal(n, painted, 'a stroke of ' + Ground.kindOf(tile) + ' on slate puts no ring of mud');
+    });
+    // mud stays as it is, and so does a piece that was put by hand beside the lake
+    ed = drawn(['mmmmmm', 'mgggmm', 'mgggmm', 'mmmmmm']);
+    const hand = Ground.FIRST + Ground.NAMES.indexOf('md08a'); ed.file.bytes[ed.file.layer1 + 6 * 1] = hand & 255; ed.file.bytes[ed.file.layer1 + 6 * 1 + 1] = hand >> 8;
+    paintStroke(ed, 476, [[1, 2], [2, 3]], 1);
+    equal([ed.file.tile1(0, 0), ed.file.tile1(0, 1), ed.file.tile1(3, 5)], [439, hand, 439], 'mud stays mud and a piece placed by hand beside the lake stays');
+    // water painted over its own ring (the ring is an ordinary cell of mud): it turns to water again, and the map is the one that Fix edges makes
+    ed = strokeMap(9, 9, 485); paintStroke(ed, 476, [[4, 2], [4, 5]], 1); paintStroke(ed, 476, [[3, 2], [3, 5]], 1); paintStroke(ed, 476, [[5, 2], [5, 5]], 1);
+    equal(same(ed), true, 'a lake made wider by a second and third stroke keeps the rule');
+    // erasing the water (painting gravel over the lake) leaves the ring: it is mud like any other
+    ed = strokeMap(9, 9, 485); paintStroke(ed, 476, [[4, 2], [4, 6]], 3);
+    const ringBefore = []; for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) if (Ground.kindOf(ed.file.tile1(r, c)) === 'mud') ringBefore.push(r * 9 + c);
+    paintStroke(ed, 485, [[4, 2], [4, 6]], 3);
+    check(ringBefore.length === 20 && ringBefore.every((k) => Ground.kindOf(ed.file.tile1((k / 9) | 0, k % 9)) === 'mud'), 'painting gravel over the lake leaves the ring of mud where it was (' + ringBefore.length + ' cells)');
+    equal(same(ed), true, 'and the map is the one that Fix edges makes');
+    // one Undo takes the lake and its ring, the pieces and their names together; one Redo puts them back
+    ed = strokeMap(9, 9, 487); Edit.ensureTile(ed.file, 476, 'w01a'); const d0 = digest(ed.file.bytes);
+    paintStroke(ed, 476, [[4, 2], [4, 6]], 3);
+    const d1 = digest(ed.file.bytes), steps = ed.history.size().strokes;
+    ed.undo(); equal([steps, digest(ed.file.bytes) === d0, ed.history.canUndo()], [1, true, false], 'water with its ring is one step of the history, and one Undo gives back the exact bytes');
+    ed.redo(); equal(digest(ed.file.bytes), d1, 'and one Redo makes the same lake with the same ring');
+}
+
+// ---- H: the places that the game has no piece for ----
+const LADDER = Array.from({ length: 16 }, (_, r) => { const row = 'm'.repeat(22).split(''); if (r >= 3 && r <= 11) { row[2] = 'w'; row[4] = 'w'; row[8] = 'w'; for (let c = 10; c < 22; c++) row[c] = 'w'; } return row.join(''); });
+function markedCells(g) { const out = []; for (let i = 0; i < g.bits.length; i++) if (g.bits[i]) out.push([g.r0 + ((i / g.columns) | 0), g.c0 + (i % g.columns)]); return out; }
+function gapChecks() {
+    // strip, gap, strip (each one cell wide, the other kind outside): the game has no piece for any cell of the three columns, rows 3 to 11
+    let f = grid(LADDER), g = Edges.gaps(f, Ground, null);
+    const want = []; for (let r = 3; r <= 11; r++) for (let c = 2; c <= 4; c++) want.push([r, c]);
+    equal([markedCells(g), g.count], [want, 27], 'the ladder (water, mud, water, each one cell wide): its three columns are marked and nothing else, a strip beside a wide lake is not');
+    equal(Edges.places(g), [{ r0: 3, r1: 11, c0: 2, c1: 4, row: 3, column: 4 }], 'one place, with the cell for its badge at the right end of its top row');
+    apply(f, Edges.plan(f, null, Ground));
+    equal(markedCells(Edges.gaps(f, Ground, null)), want, 'the same after Fix edges: the rule has no piece for them either (and the places that it can fix are never marked)');
+    // a strip one cell wide that a neighbor can wear, a wide lake, a strip of water in mud, an inlet: all fine
+    [['mmmmm', 'mwwwm', 'mmmmm'], ['mmmmmm', 'mmwmmm', 'mmwmmm', 'mmwmmm', 'mmmmmm'], ['mmmm', 'mwwm', 'mmmm'], ['mmm', 'mwm', 'mmm'], ['gggg', 'gddg', 'gddg', 'gggg']].forEach((rows) => equal(Edges.gaps(grid(rows), Ground, null).count, 0, 'no place: ' + rows.join(' ')));
+    // pairs that have no piece at all (water beside gravel, dirt or slate) say nothing: it is a hard edge for a reason that the box on the map does not mean
+    ['g', 'd', 's'].forEach((k) => equal(Edges.gaps(grid(['wwwww', 'wkwkw'.replace(/k/g, k), 'wwwww']), Ground, null).count, 0, 'water beside ' + LETTER[k] + ' in strips: nothing is marked'));
+    // every pair that has pieces: the ladder is marked (strip, gap, strip: three columns of five rows)
+    [['g', 'd'], ['g', 'm'], ['g', 's'], ['s', 'd'], ['d', 'm'], ['s', 'm'], ['w', 'm']].forEach(([hi, lo]) => {
+        const rows = Array.from({ length: 5 }, () => lo + hi + lo + hi + lo), got = Edges.gaps(grid(rows), Ground, null);
+        equal([markedCells(got).length, Edges.places(got).length], [15, 1], 'the ladder of ' + LETTER[hi] + ' in ' + LETTER[lo] + ': one place of three columns');
+    });
+    // two ladders far apart: two places, in reading order of their top rows
+    const two = Array.from({ length: 20 }, (_, r) => { const row = 'm'.repeat(30).split(''); if (r >= 2 && r <= 6) { row[2] = 'w'; row[4] = 'w'; } if (r >= 10 && r <= 17) { row[20] = 'w'; row[22] = 'w'; } return row.join(''); });
+    equal(Edges.places(Edges.gaps(grid(two), Ground, null)).map((p) => [p.r0, p.r1, p.c0, p.c1, p.row, p.column]), [[2, 6, 2, 4, 2, 4], [10, 17, 20, 22, 10, 22]], 'two ladders are two places');
+    // a part of the map: the same answer for its cells as the whole map, whatever the window (the plan beyond its edge is looked at too)
+    const part = Edges.gaps(f, Ground, { r0: 1, r1: 13, c0: 0, c1: 6 });
+    equal(markedCells(part), want, 'a window that holds the ladder marks the same cells');
+    equal(Edges.gaps(f, Ground, { r0: 0, r1: 15, c0: 11, c1: 21 }).count, 0, 'and a window of the wide lake marks none');
+    equal(markedCells(Edges.gaps(f, Ground, { r0: 5, r1: 6, c0: 3, c1: 3 })), [[5, 3], [6, 3]], 'a window of two cells marks the cells of the ladder that are in it, and no others');
+    // the strips as Auto edges makes them, painted on mud (as in the maintainer's picture): strip, gap, strip are marked; moved apart by one cell (the gap two wide) they are not
+    let ed = strokeMap(14, 12, 439); paintStroke(ed, 476, [[3, 2], [11, 2]], 1); paintStroke(ed, 476, [[3, 4], [11, 4]], 1);
+    equal(markedCells(Edges.gaps(ed.file, Ground, null)), [3, 4, 5, 6, 7, 8, 9, 10, 11].flatMap((r) => [[r, 2], [r, 3], [r, 4]]), 'two strips of water one cell apart (Auto edges): the three columns are marked');
+    paintStroke(ed, 439, [[3, 4], [11, 4]], 1); paintStroke(ed, 476, [[3, 5], [11, 5]], 1);
+    equal(Edges.gaps(ed.file, Ground, null).count, 0, 'and with the gap two wide (the second strip moved over by one cell) none is');
+    // on gravel the ring makes the gap mud: the three columns are marked there too (the cells that cap the ends may be marked as well)
+    ed = strokeMap(14, 12, 485); paintStroke(ed, 476, [[3, 2], [11, 2]], 1); paintStroke(ed, 476, [[3, 4], [11, 4]], 1);
+    const onGravel = markedCells(Edges.gaps(ed.file, Ground, null)).map((x) => x.join(','));
+    check(want.every(([r, c]) => onGravel.indexOf(r + ',' + c) >= 0), 'two strips of water one cell apart on gravel (the ring makes the gap mud): the three columns are marked');
+    // the game's own maps have none; and a map fixed by the rule has the same places as before (the marks are what the rule cannot do)
+    ['GAUNTLET.LVL', 'ISLANDS.LVL', 'MEDIUM.LVL', 'SMALL.LVL', 'TINY.LVL', 'TREASURE.LVL'].forEach((name) => {
+        const m = File.parse(new Uint8Array(fs.readFileSync(path.join(ROOT, 'Original-Ants', 'Maps', name))));
+        equal(m.ok && Edges.gaps(m, Ground, null).count, 0, name + ': the game\'s own map has no place without a piece');
+    });
+    const list = libraryFiles().filter((_, i) => i % 6 === 0);
+    let withPlaces = 0, differ = 0, windowsOff = 0;
+    const rnd = seeded(20261118);
+    list.forEach((file) => {
+        const m = File.parse(new Uint8Array(fs.readFileSync(file)));
+        if (!m.ok) return;
+        const reader = { rows: m.rows, columns: m.columns, tile1: (r, c) => m.tile1(r, c) }, all = Edges.gaps(reader, Ground, null);
+        const cells = []; for (let r = 0; r < m.rows; r++) { const row = []; for (let c = 0; c < m.columns; c++) row.push(m.tile1(r, c)); cells.push(row); }
+        apply({ rows: m.rows, columns: m.columns, cells, tile1: (r, c) => cells[r][c] }, Edges.plan(reader, null, Ground));
+        const fixed = Edges.gaps({ rows: m.rows, columns: m.columns, tile1: (r, c) => (r < 0 || c < 0 || r >= m.rows || c >= m.columns ? 485 : cells[r][c]) }, Ground, null);
+        if (JSON.stringify(Array.from(all.bits)) !== JSON.stringify(Array.from(fixed.bits))) differ++;
+        if (!all.count) return;
+        withPlaces++;
+        for (let w = 0; w < 3; w++) {                                                      // (three windows round marked cells: the same marks as the whole map's inside them)
+            const mk = markedCells(all), at = mk[Math.floor(rnd() * mk.length)], r0 = Math.max(0, at[0] - 12 + Math.floor(rnd() * 8)), c0 = Math.max(0, at[1] - 12 + Math.floor(rnd() * 8));
+            const win = { r0, r1: Math.min(m.rows - 1, r0 + 20), c0, c1: Math.min(m.columns - 1, c0 + 25) }, got = Edges.gaps(reader, Ground, win);
+            for (let r = win.r0; r <= win.r1; r++) for (let c = win.c0; c <= win.c1; c++) if (got.bits[(r - got.r0) * got.columns + (c - got.c0)] !== all.bits[r * all.columns + c]) windowsOff++;
+        }
+    });
+    check(withPlaces >= 10, 'the library has places without a piece (' + withPlaces + ' of ' + list.length + ' maps tried)');
+    equal([differ, windowsOff], [0, 0], 'on the library: the places are the same before and after Fix edges, and a window gives the cells of the whole map');
+}
+
+// the dialog's box with the places: a list and a way to look at each
+function gapDialogChecks() {
+    const shown = [], sprites = { ground(ctx, id, x, y, s) { shown.push([ctx.canvas, id, x, y, s]); return true; } };
+    const where = (p) => { const b = p.host.querySelector('.edgaps'); return { hidden: !b || b.hidden, title: b && b.querySelector('h3').textContent, items: b ? b.querySelectorAll('li').map((li) => li.textContent.replace(/Show$/, '')) : [], shows: b ? b.querySelectorAll('button') : [] }; };
+    let p = page(sprites, null, false, grid(LADDER));
+    Edges.open(p.env);
+    let got = where(p);
+    equal([got.hidden, got.title, got.items, got.shows.length], [false, '1 place has no piece in the game', ['Rows 3 to 11, columns 2 to 4: water, mud, water (each one cell wide)'], 1], 'the box lists the place of the ladder, with where it is and what is across it, and a button to show it');
+    check(p.host.querySelectorAll('p').some((q) => q.textContent === Edges.GAP_NOTE), 'and says why, in the words of the line on the map');
+    // (a text read: the page's line over the map is static markup, so no run can show that it has drifted from the words of the box; it must be the same sentence)
+    check(fs.readFileSync(path.join(ROOT, 'web', 'mapmaker.html'), 'utf8').indexOf('>' + Edges.GAP_NOTE + '<') >= 0, 'the line over the map in web/mapmaker.html is the same sentence');
+    got.shows[0].click();
+    equal([p.dialogs.isOpen(), p.shows], [false, [[7, 3]]], 'Show closes the box and asks the page to bring the middle of the place into view');
+    // the part you can see decides the list: the ladder is in it, or only the wide lake is
+    p = page(sprites, { r0: 0, r1: 15, c0: 12, c1: 21 }, false, grid(LADDER)); Edges.open(p.env);
+    equal(where(p).hidden, true, 'a part that holds only the wide lake has no list');
+    const radios = p.host.querySelectorAll('input'); radios[1].checked = true; radios[1].fire('change', {});
+    equal([where(p).hidden, where(p).items.length], [false, 1], 'the whole map has it');
+    radios[0].checked = true; radios[0].fire('change', {});
+    equal(where(p).hidden, true, 'and the part you see hides it again');
+    p.dialogs.close();
+    // a map that has none shows no box; Fix edges and Cancel still work, and the box changes nothing in the file
+    p = page(sprites, { r0: 1, r1: 3, c0: 0, c1: 5 }); Edges.open(p.env);
+    equal(where(p).hidden, true, 'a map with no such place shows no box');
+    p.dialogs.close();
+    p = page(sprites, null, false, grid(LADDER)); Edges.open(p.env);
+    check(p.host.querySelectorAll('button').filter((b) => b.textContent === 'Fix edges').length === 1, 'the box is beside Fix edges, not instead of it');
+    p.dialogs.close();
+    // eight places: the first six are listed and the rest are counted
+    const rows = Array.from({ length: 12 }, () => 'm'.repeat(40).split('')); for (let k = 0; k < 8; k++) for (let r = 2; r <= 8; r++) { rows[r][k * 5 + 1] = 'w'; rows[r][k * 5 + 3] = 'w'; }
+    p = page(sprites, null, false, grid(rows.map((r) => r.join('')))); Edges.open(p.env);
+    got = where(p);
+    equal([got.title, got.items.length, got.items[6], got.shows.length], ['8 places have no piece in the game', 7, 'And 2 more.', 6], 'eight places: six are listed, "And 2 more." counts the rest');
+    // without a way to show a place (a page that gives none) the list has no buttons
+    p = page(sprites, null, false, grid(LADDER)); delete p.env.show; Edges.open(p.env);
+    equal(where(p).shows.length, 0, 'a page that cannot show a place gets the list without buttons');
+}
+
+// the look: a dashed gold line round each place (none between two cells of it), a badge, nothing when the tiles are tiny, nothing when none is asked for
+function recorder() {
+    const calls = [], ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : (...a) => { calls.push([k, ...a]); }), set: (t, k, v) => { t[k] = v; return true; } });
+    return { ctx, calls, count: (name) => calls.filter((c) => c[0] === name).length };
+}
+function lookChecks() {
+    const f = grid(LADDER), g = Edges.gaps(f, Ground, null), gaps = { g, places: Edges.places(g) };
+    const reader = Object.assign({}, f, { cells: f.rows * f.columns, tile2: () => 0x7FFE, markers: [], food: [] });
+    const scratch = { width: 0, height: 0, getContext: () => ({ createImageData: (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }), putImageData() {} }) };          // (tiles under 5 pixels are drawn as a picture of pixels)
+    const frame = (scale, opts) => { const v = View.create(reader, 22 * scale, 16 * scale); v.scale = scale; v.cx = 11; v.cy = 8; const r = recorder(); View.draw(r.ctx, v, reader, 22 * scale, 16 * scale, Object.assign({ scratch }, opts)); return r; };
+    const plain = frame(20, {}), marked = frame(20, { gaps });
+    equal([plain.count('setLineDash'), plain.count('arc')], [0, 0], 'a frame with no places draws no dashed line and no badge');
+    check(marked.count('setLineDash') === 1 && marked.calls.filter((c) => c[0] === 'setLineDash')[0][1].every((x) => x > 0), 'a frame with places draws a dashed line (the dashes have a length)');
+    equal(frame(20, { gaps: { g, places: [] } }).count('lineTo') - plain.count('lineTo'), 24, 'the line is the outline of the three columns by nine rows: 24 sides of cells, none between two cells of the place');
+    equal(marked.count('arc') - plain.count('arc'), 1, 'and one badge');
+    equal(frame(3, { gaps }).count('setLineDash'), 0, 'tiles of 3 pixels show no places (the line would be a smear)');
+    check(View.GAPS_FROM <= 6 && frame(View.GAPS_FROM, { gaps }).count('setLineDash') === 1, 'tiles of ' + View.GAPS_FROM + ' pixels or more show them');
+    // a place that is off the screen draws nothing
+    const v = View.create(reader, 120, 100); v.scale = 20; v.cx = 18; v.cy = 12; const r = recorder(); View.draw(r.ctx, v, reader, 120, 100, { scratch, gaps });
+    const off = recorder(); View.draw(off.ctx, v, reader, 120, 100, { scratch });
+    equal([r.count('lineTo') - off.count('lineTo'), r.count('arc') - off.count('arc')], [0, 0], 'a place that is not on the screen draws no line and no badge');
 }
 
 // ---- the library ----
@@ -462,7 +807,7 @@ function bytesChecks() {
 }
 
 // ---- the dialog ----
-function page(sprites, visible, big) {
+function page(sprites, visible, big, custom) {
     const doc = makeDocument(), host = doc.createElement('div'), body = doc.createElement('div'), opener = doc.createElement('button');
     [host, body].forEach((n) => doc.body.appendChild(n)); body.appendChild(opener); opener.focus();
     const make = doc.createElement;
@@ -472,10 +817,10 @@ function page(sprites, visible, big) {
         return n;
     };
     let this_style = '';
-    const f = big ? grid(Array.from({ length: 70 }, (_, r) => (r < 35 ? 'g'.repeat(90) : 'm'.repeat(90)))) : grid(['mmmmmm', 'mgggmm', 'mgggmm', 'mgggmm', 'mmmmmm', 'dddddd', 'gggggg']);
-    const applied = [], dialogs = Dialog.create(doc, host, [body]);
-    const env = { doc, dialogs, ground: Ground, file: () => f, visible: () => visible, apply: (ch) => { applied.push(ch); return true; }, sprites: () => sprites };
-    return { doc, host, f, applied, dialogs, env };
+    const f = custom || (big ? grid(Array.from({ length: 70 }, (_, r) => (r < 35 ? 'g'.repeat(90) : 'm'.repeat(90)))) : grid(['mmmmmm', 'mgggmm', 'mgggmm', 'mgggmm', 'mmmmmm', 'dddddd', 'gggggg']));
+    const applied = [], shows = [], dialogs = Dialog.create(doc, host, [body]);
+    const env = { doc, dialogs, ground: Ground, file: () => f, visible: () => visible, apply: (ch) => { applied.push(ch); return true; }, sprites: () => sprites, show: (row, column) => { shows.push([row, column]); } };
+    return { doc, host, f, applied, shows, dialogs, env };
 }
 function dialogChecks() {
     const shown = [], sprites = { ground(ctx, id, x, y, s) { shown.push([ctx.canvas, id, x, y, s]); return true; } };
@@ -498,6 +843,11 @@ function dialogChecks() {
     check(p.host.querySelectorAll('button')[1].disabled === true, 'and Fix edges is off');
     p.host.querySelectorAll('input')[1].checked = true; p.host.querySelectorAll('input')[1].fire('change', {});
     check(p.host.querySelectorAll('button')[1].disabled === false && p.host.querySelectorAll('figcaption')[1].textContent === 'After: 20 cells change', 'the whole map has them, and Fix edges is on again');
+    // a choice made with the keyboard or the pointer redraws the pictures, not the choice: the same box stays in the page with the focus
+    { const r = p.host.querySelectorAll('input'); r[0].focus(); r[0].checked = true; r[0].fire('change', {});
+      check(p.host.querySelectorAll('input')[0] === r[0] && r[0].isConnected && p.doc.activeElement === r[0], 'Fix edges: choosing the part you see leaves the same radio box in the page with the focus');
+      r[1].focus(); r[1].checked = true; r[1].fire('change', {});
+      check(p.host.querySelectorAll('input')[1] === r[1] && r[1].isConnected && p.doc.activeElement === r[1], 'and choosing the whole map too'); }
     p.host.querySelectorAll('button')[0].click();
     check(!p.dialogs.isOpen() && p.applied.length === 0, 'Cancel closes it and changes nothing');
     // Fix edges: one change, the cells of the plan, then it closes
@@ -561,7 +911,14 @@ strokePlanChecks();
 dialogChecks();
 randomChecks();
 strokeChecks();
+stepChecks();
+sameBytesChecks();
+ringChecks();
+gapChecks();
+gapDialogChecks();
+lookChecks();
 speedChecks();
+stepSpeedChecks();
 bytesChecks();
 libraryChecks();
 console.log(failures ? failures + ' of ' + checks + ' checks FAILED' : 'edges check: ' + checks + ' checks passed');

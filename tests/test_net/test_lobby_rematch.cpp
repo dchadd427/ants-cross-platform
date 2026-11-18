@@ -13,13 +13,17 @@ ClientLobby::Config page_with_key(const std::string& name, const SeatKey& key) {
 
 // A lobby room goes as far as its match: Ann's and Bob's pages join (Ann leads), Ann's plan and START, both pages go and their games take their seats over with the keys, the owner starts, the games
 // load and the match begins. The keys of Ann and Bob (zero when a step did not happen: the test looks at the phase).
-std::pair<SeatKey, SeatKey> play_to_begun(Room& room, const PlanMsg& plan) {
+std::pair<SeatKey, SeatKey> play_to_begun(Room& room, const PlanMsg& plan, bool make_public = false) {
     const size_t ann = join_with(room, page_config("Ann"));
     room.run(100);
     const size_t bob = join_with(room, page_config("Bob"));
     room.run(100);
     room.guests[ann].lobby->request_plan(plan);
     room.run(100);
+    if (make_public) {                                     // (Ann, who leads, makes the room public before START)
+        room.guests[ann].lobby->request_visibility(true);
+        room.run(100);
+    }
     room.guests[ann].lobby->request_start();
     room.run(100);
     const SeatKey a = room.guests[ann].lobby->key();
@@ -583,6 +587,66 @@ void run_lobby_rematch_tests() {
         const size_t ann_again = join_with(room, page_with_key("Ann", key_with(1)));
         room.run(300);
         ASSERT_TRUE(room.guests[ann_again].lobby->is_leader() && room.host.is_public() && room.guests[ann_again].lobby->room_is_public());
+    } TEST_END();
+
+    TEST_CASE("N4.49d A Public Room Is Still Public After Its Match (Protocol 22): The Rematch Gives The Place In The Order Of The Leader Who Made The Room Public; The Lobby That Follows Is Public With Nobody Back And When The Persons Of The Match Come Back In Any Order, A Private Room Stays Private, And The Choice Is Gone With The Person Who Made It") {
+        Room match(lobby_room_config(172));                                                             // a public room: its match gives the choice
+        const auto keys = play_to_begun(match, plan_of({K::Open, K::Open, K::Open, K::Open}), true);
+        ASSERT_EQ(match.host.phase(), HostLobby::Phase::Begun);
+        const Rematch r = match.host.rematch();
+        ASSERT_EQ(r.public_by, 1u);
+        Room priv(lobby_room_config(173));                                                              // a private room: nothing to give
+        const auto priv_keys = play_to_begun(priv, plan_of({K::Open, K::Open, K::Open, K::Open}));
+        const Rematch priv_r = priv.host.rematch();
+        ASSERT_EQ(priv_r.public_by, 0u);
+        {   // nobody back: public, and Ann (who made it public) leads it again and it has stayed public: nothing was done to it
+            Room room(lobby_room_config(174), false);
+            room.run(7000);                                                                             // (the clock has run: a listing that was not restarted would show it)
+            ASSERT_TRUE(reopened(room, r));
+            ASSERT_TRUE(room.host.is_public() && room.host.room().is_public() && room.host.leader() == kNoLeader && room.host.listed_age_ms(room.now) == 0u);
+            room.run(300);
+            ASSERT_TRUE(room.host.is_public() && room.host.unlist_count() == 0u);
+            const size_t ann = join_with(room, page_with_key("Ann", keys.first));
+            room.run(300);
+            ASSERT_TRUE(room.guests[ann].lobby->is_leader());
+            ASSERT_TRUE(room.host.is_public());
+            ASSERT_TRUE(room.guests[ann].lobby->room_is_public());
+            const size_t bob = join_with(room, page_with_key("Bob", keys.second));
+            room.run(300);
+            ASSERT_TRUE(room.guests[ann].lobby->is_leader() && room.host.is_public() && room.guests[bob].lobby->room_is_public() && !room.host.any_reserved());
+            ASSERT_TRUE(room.host.unlist_count() == 0u);                                                // (never unlisted by itself: nobody changed it)
+        }
+        {   // Bob is back first and leads while Ann is on the way: the room stays public (Ann chose it); Ann leads again on return
+            Room room(lobby_room_config(175), false);
+            ASSERT_TRUE(reopened(room, r));
+            const size_t bob = join_with(room, page_with_key("Bob", keys.second));
+            room.run(300);
+            ASSERT_TRUE(room.guests[bob].lobby->is_leader() && room.host.is_public() && room.guests[bob].lobby->room_is_public());
+            const size_t ann = join_with(room, page_with_key("Ann", keys.first));
+            room.run(300);
+            ASSERT_TRUE(room.guests[ann].lobby->is_leader() && !room.guests[bob].lobby->is_leader() && room.host.is_public() && room.guests[bob].lobby->room_is_public());
+        }
+        {   // Ann is taken out of the room by Bob (who led meanwhile): the choice goes with her, the room is private and Bob chooses for himself
+            Room room(lobby_room_config(176), false);
+            ASSERT_TRUE(reopened(room, r));
+            const size_t bob = join_with(room, page_with_key("Bob", keys.second));
+            room.run(300);
+            ASSERT_TRUE(room.host.is_public() && room.guests[bob].lobby->is_leader() && room.guests[bob].lobby->request_remove(0));
+            room.run(300);
+            ASSERT_TRUE(!room.host.any_reserved() && !room.host.is_public() && !room.guests[bob].lobby->room_is_public() && room.guests[bob].lobby->is_leader());
+            ASSERT_TRUE(room.host.unlist_count() == 0u);
+        }
+        {   // a room that was private stays private, and one whose leader of the match is not among the persons of the lobby (dropped by the match) is private
+            Room room(lobby_room_config(177), false);
+            ASSERT_TRUE(reopened(room, priv_r));
+            const size_t ann = join_with(room, page_with_key("Ann", priv_keys.first));
+            room.run(300);
+            ASSERT_TRUE(room.guests[ann].lobby->is_leader() && !room.host.is_public());
+            Rematch without_ann = r;                                                                    // Ann (order 1, who made it public) is not in the persons: Bob is
+            without_ann.people.erase(without_ann.people.begin());
+            Room other(lobby_room_config(178), false);
+            ASSERT_TRUE(reopened(other, without_ann) && !other.host.is_public() && !other.host.room().is_public());
+        }
     } TEST_END();
 
     TEST_CASE("N4.48 The Notice Of Who Is Not Back Fits A Line Of Chat (100 Characters) With Whole Names: When The Names Do Not Fit, As Many As Fit And \"And N More\"") {

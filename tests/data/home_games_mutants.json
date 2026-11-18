@@ -2496,8 +2496,15 @@
   {
    "id": "picture_that_does_not_come_stays_broken",
    "file": "web/home/games.js",
-   "old": " img.addEventListener('error', function () { pic.removeChild(img); });",
-   "new": "",
+   "old": "gone = function () { if (img.parentNode === pic) pic.removeChild(img); };",
+   "new": "gone = function () {};",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsDockedInHomesBody"
+  },
+  {
+   "id": "picture_other_ending_never_tried",
+   "file": "web/home/games.js",
+   "old": "if (Picker && Picker.showPicture) Picker.showPicture(img, src, gone);",
+   "new": "if (false) Picker.showPicture(img, src, gone);",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsDockedInHomesBody"
   },
   {
@@ -2517,8 +2524,8 @@
   {
    "id": "picture_lazy_set_after_the_address",
    "file": "web/home/games.js",
-   "old": "img.setAttribute('loading', 'lazy'); img.src = src;",
-   "new": "img.src = src; img.setAttribute('loading', 'lazy');",
+   "old": "img.setAttribute('loading', 'lazy'); img.alt = ''; img.setAttribute('width', '300'); img.setAttribute('height', '300');\n                if (Picker && Picker.showPicture) Picker.showPicture(img, src, gone);      // (an address that does not answer is tried in the other ending once: an approved map's picture is not the library's)\n                else { img.addEventListener('error', gone); img.src = src; }",
+   "new": "img.alt = ''; img.setAttribute('width', '300'); img.setAttribute('height', '300');\n                if (Picker && Picker.showPicture) Picker.showPicture(img, src, gone);      // (an address that does not answer is tried in the other ending once: an approved map's picture is not the library's)\n                else { img.addEventListener('error', gone); img.src = src; } img.setAttribute('loading', 'lazy');",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsDockedInHomesBody"
   },
   {

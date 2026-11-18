@@ -138,7 +138,7 @@
         return out;
     }
     function tickStep(span) { return span <= 14 ? 2 : span <= 34 ? 5 : span <= 84 ? 10 : span <= 220 ? 25 : span <= 600 ? 50 : 250; }
-    // The picture of a map for the card: the original's own, else the picker's (when the page has one); '' for none (the dark ground stays)
+    // The picture of a map for the card: the original's own, else the picker's (when the page has one; the card puts it in with the picker's showPicture); '' for none (the dark ground stays)
     function pictureUrl(map, env) {
         env = env || {};
         var key = env.replay && env.replay.mapKey ? env.replay.mapKey(map) : '';
@@ -216,7 +216,13 @@
                 stage.style.setProperty('--ar', m.w + ' / ' + m.h); stage.setAttribute('tabindex', '0'); stage.setAttribute('role', 'group');
                 stage.setAttribute('aria-label', 'Map of where ants died. ' + count + '. Plus and minus zoom, the arrow keys move.');
                 var url = pictureUrl(map, env);
-                if (url) { var img = el('img', 'dm-img'); img.alt = ''; img.addEventListener('error', function () { if (img.parentNode) img.parentNode.removeChild(img); }); img.src = url; world.appendChild(img); }
+                if (url) {
+                    var img = el('img', 'dm-img'), gone = function () { if (img.parentNode) img.parentNode.removeChild(img); };
+                    img.alt = '';
+                    if (env.picker && env.picker.showPicture) env.picker.showPicture(img, url, gone);      // (an address that does not answer is tried in the other ending once)
+                    else { img.addEventListener('error', gone); img.src = url; }
+                    world.appendChild(img);
+                }
                 var cv = el('canvas'); world.appendChild(cv);
                 var pts = pointsOf(m, sel);
                 if (st.mode === 'heat') {              // the glow is made once for a view of the data (zooming only moves the canvas)

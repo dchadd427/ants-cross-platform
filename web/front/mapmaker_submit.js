@@ -160,24 +160,34 @@
                 var v = values();
                 return nameProblem(v.name) || (chars(v.maker) < 1 ? 'Please type the name that players will see as the maker.' : textProblem(v.maker, 24, 'player name') || makerProblem(v.maker)) || textProblem(v.note, 280, 'note');
             }
+            // The boxes are made once, and typing never takes one out of the page (a box that is taken out loses the focus, and a composition of an input method is cut off with it).
+            // What is shown around them is made again only when what it says has changed, so a button that has the focus keeps it when a late answer comes.
+            function fill(box, says, build) {
+                if (box.says === says) return;
+                box.says = says;
+                box.textContent = '';
+                build();
+            }
             function paint() {
-                var v = values(), nm = nameProblem(v.name), lib = env.store.libraryState();
-                nameBox.textContent = '';
-                if (nm) nameBox.appendChild(note('bad', '!', nm));
-                else if (env.store.inLibrary(v.name)) nameBox.appendChild(note('warn', 'i', 'The name “' + v.name + '” is already in the game’s map list. You can still send it. The owner may change the name or add a number (for example “' + v.name + ' 2”). You will see the final name in My submissions.'));
-                else if (lib === 'ready') nameBox.appendChild(h('div', 'cfree', [h('i', 'dot ok'), 'No map in the list has this name.']));
-                makerBox.textContent = '';
-                if (editing) makerBox.appendChild(h('label', '', ['Player name shown as the maker', makerIn]));
-                else makerBox.appendChild(h('span', '', ['Maker shown to players ', h('b', '', maker), ' ', button('link', 'Change my player name', function () { editing = true; paint(); makerIn.focus(); })]));
-                doorBox.textContent = '';
-                if (door === 'off') doorBox.appendChild(note('warn', 'i', OFF));
-                else if (twin) doorBox.appendChild(note('warn', 'i', ['This very map is already waiting for approval (sent ' + when(twin.sent_at || 0, env.now()) + ' as \u201c' + twin.name + '\u201d). Look at My submissions instead of sending it again. To send a changed map, change it first.', h('div', '', button('btn sm', 'See my submissions', function () { ctl.close(); env.onSee(); }))]));
-                else if (big) doorBox.appendChild(note('bad', '!', 'This map file is too big to send (at most ' + Math.round(CAP[kind] / 1024) + ' KB).'));
+                var v = values(), nm = nameProblem(v.name), lib = env.store.libraryState(), mine = !nm && env.store.inLibrary(v.name), since = twin ? when(twin.sent_at || 0, env.now()) : '';
+                fill(nameBox, nm ? 'bad ' + nm : mine ? 'warn ' + v.name : lib === 'ready' ? 'free' : '', function () {
+                    if (nm) nameBox.appendChild(note('bad', '!', nm));
+                    else if (mine) nameBox.appendChild(note('warn', 'i', 'The name “' + v.name + '” is already in the game’s map list. You can still send it. The owner may change the name or add a number (for example “' + v.name + ' 2”). You will see the final name in My submissions.'));
+                    else if (lib === 'ready') nameBox.appendChild(h('div', 'cfree', [h('i', 'dot ok'), 'No map in the list has this name.']));
+                });
+                fill(makerBox, editing ? 'edit' : 'show ' + maker, function () {
+                    if (editing) makerBox.appendChild(h('label', '', ['Player name shown as the maker', makerIn]));
+                    else makerBox.appendChild(h('span', '', ['Maker shown to players ', h('b', '', maker), ' ', button('link', 'Change my player name', function () { editing = true; paint(); makerIn.focus(); })]));
+                });
+                fill(doorBox, door === 'off' ? 'off' : twin ? 'twin ' + since : big ? 'big' : '', function () {
+                    if (door === 'off') doorBox.appendChild(note('warn', 'i', OFF));
+                    else if (twin) doorBox.appendChild(note('warn', 'i', ['This very map is already waiting for approval (sent ' + since + ' as \u201c' + twin.name + '\u201d). Look at My submissions instead of sending it again. To send a changed map, change it first.', h('div', '', button('btn sm', 'See my submissions', function () { ctl.close(); env.onSee(); }))]));
+                    else if (big) doorBox.appendChild(note('bad', '!', 'This map file is too big to send (at most ' + Math.round(CAP[kind] / 1024) + ' KB).'));
+                });
                 var ready = works && !twin && !big && door !== 'off' && door !== 'checking' && !bad() && !sending;
                 if (ctl) { ctl.setDisabled('send', !ready); ctl.setDisabled('cancel', false); }
-                problems.textContent = '';
                 var line = nm ? '' : bad();
-                if (line) problems.appendChild(h('p', 'cnever', line));
+                fill(problems, line, function () { if (line) problems.appendChild(h('p', 'cnever', line)); });
             }
 
             function verdict() {

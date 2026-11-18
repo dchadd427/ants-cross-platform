@@ -105,8 +105,8 @@
 //                      where the test maps are kept (wiped when the server starts). Default: the folder "test-maps" in --results-dir
 //   --test-map-ignore-client-header
 //                      count an address by the connection's own address instead of the X-Client-Address that the site's nginx sets
-//   The admin page needs one setting in the environment (never on the command line): ANTS_ADMIN_GATE_SECRET (32 to 256 printable characters without a blank: the same value as the chat hub's
-//   ANTS_HUB_ADMIN_GATE_SECRET; it checks the pass that the site's nginx gets from the hub's gate). Without a good one, every /admin/api path answers 403 closed. There are no accounts and no passwords here.
+//   The admin page needs one setting in the environment (never on the command line): ANTS_ADMIN_GATE_SECRET (32 to 256 printable characters without a blank: one setting that the stack hands to the chat hub
+//   as well; it checks the pass that the site's nginx gets from the hub's gate). Without a good one, every /admin/api path answers 403 closed. There are no accounts and no passwords here.
 //   --version, --help
 //
 // SIGTERM and SIGINT stop the server within a moment: the records of the running rooms are made durable (fsync) and left where they are (docker stop: give the container a grace period, the stack

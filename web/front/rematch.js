@@ -185,7 +185,7 @@
             button.type = 'button';
             button.addEventListener('click', back);
             go.appendChild(button);
-            go.appendChild(el(doc, 'div', 'rmt-note', 'The game’s own “Leave Game” still goes to the menu.'));
+            go.appendChild(el(doc, 'div', 'rmt-note', 'The game’s own “Leave Game” brings you back here too.'));
             env.host.appendChild(main);
             env.host.appendChild(go);
             nodes = { text: text, who: who, button: button, go: go };
@@ -268,7 +268,15 @@
             for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) opts[k] = extra[k];
             later(function () { ask(opts, 3); }, ASK_AFTER_MS);
         };
-        // The page goes some other way (the game's Leave Game, a closed tab, a reload): the seat is given up (Leave), so that START does not wait for a person who cannot come back to it (the game let go of
+        // The game's own Leave Game on the results screen (src/ants_app/application_match.cpp, Application::quit) asks the page before it goes to the front page: while the strip's button works, the same hand-over is made
+        // and the tab goes to the room, so that the way back does not depend on the strip being seen (in fullscreen it is out of sight). False (the game goes to the front page, giving the seat up): no strip,
+        // no key, a seat that is not kept any more, or a browser that refuses the storage.
+        win.antsLeaveToRoom = function () {
+            if (!st.shown || !st.over || !st.key || st.removed || st.blocked) return false;
+            back();
+            return !st.blocked;
+        };
+        // The page goes some other way (the game's Leave Game with no strip, a closed tab, a reload, the Home button): the seat is given up (Leave), so that START does not wait for a person who cannot come back to it (the game let go of
         // the key when the match ended, and this page's copy goes with the page). After "Back to the lobby", which hands the seat over, the client has let go already and says nothing.
         if (win.addEventListener) win.addEventListener('pagehide', function () { if (st.client) st.client.leave(); });
         return { state: st, back: back };
@@ -387,7 +395,7 @@
                 if (!isTestFile(file)) return null;
                 var m = known[file], title = (m && m.name) || testTitle(file);
                 var details = m && m.width && m.height ? (m.kind === 'extended' ? 'Extended' : 'Classic') + ' \u00b7 ' + m.width + ' \u00d7 ' + m.height + ' \u00b7 Unlisted test map from Map Maker' : 'Unlisted test map from Map Maker';
-                return { name: title, info: details, thumb: '/maps/previews/' + encodeURIComponent(file.replace(/\.(lvl|LVL)$/, '')) + '.png' };
+                return { name: title, info: details };      // (its picture is the address that AntsMapPicker.previewPath makes of the file name)
             },
             sync: function (model, sendPlan, warmMap) {
                 if (pendingTest && !pendingTest.sent && model && !model.guest && !model.starting && model.mapFile !== pendingTest.file) {

@@ -493,11 +493,17 @@
             parts.pill.textContent = shown ? countText(n) : '';
             parts.games.setAttribute('aria-label', shown ? 'Games, ' + countText(n) + ' open' : 'Games');
         }
-        // One row: the map's picture (an original's, else the library's by file name; one that does not come leaves the square), who hosts, which map, the seats, the bots, and (in the list) Join
+        // One row: the map's picture (an original's, else the one that AntsMapPicker makes of the file name; one that does not come leaves the square), who hosts, which map, the seats, the bots, and (in the list) Join
         function picOf(row) {                              // the square of a row (a room's or a running match's)
             var pic = el('span', 'gmap');
             var src = row.mapKey ? 'front/preview_' + row.mapKey + '.png' : Picker ? Picker.previewPath(row.map) : '';
-            if (src) { var img = el('img'); img.setAttribute('loading', 'lazy'); img.src = src; img.alt = ''; img.setAttribute('width', '300'); img.setAttribute('height', '300'); img.addEventListener('error', function () { pic.removeChild(img); }); pic.appendChild(img); }
+            if (src) {
+                var img = el('img'), gone = function () { if (img.parentNode === pic) pic.removeChild(img); };
+                img.setAttribute('loading', 'lazy'); img.alt = ''; img.setAttribute('width', '300'); img.setAttribute('height', '300');
+                if (Picker && Picker.showPicture) Picker.showPicture(img, src, gone);      // (an address that does not answer is tried in the other ending once: an approved map's picture is not the library's)
+                else { img.addEventListener('error', gone); img.src = src; }
+                pic.appendChild(img);
+            }
             pic.setAttribute('aria-hidden', 'true');
             return pic;
         }

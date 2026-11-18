@@ -1,0 +1,250 @@
+{
+ "note": "The front page that comes back to its room (docs/PLAY_IN_BROWSER.md, 'Going away and coming back'): the Welcome that says 'replaced', the note that a page leaves (front/lobby_net.js seatMemory) and what the page does with them. Run on a copy of the files by test_web_lobby_net.py (TheReturnChecksAreNotVacuous), and by tools/mutate.py.",
+ "mutants": [
+  {
+   "id": "net_replaced_never_said",
+   "file": "web/front/lobby_net.js",
+   "old": "rejoin: m.rejoin, replaced: replaced });",
+   "new": "rejoin: m.rejoin, replaced: false });",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_replaced_for_every_key",
+   "file": "web/front/lobby_net.js",
+   "old": "var replaced = this.keyBytes !== null && hexOf(m.key) !== hexOf(this.keyBytes);",
+   "new": "var replaced = this.keyBytes !== null;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_replaced_for_no_key",
+   "file": "web/front/lobby_net.js",
+   "old": "var replaced = this.keyBytes !== null && hexOf(m.key) !== hexOf(this.keyBytes);",
+   "new": "var replaced = this.keyBytes === null || hexOf(m.key) !== hexOf(this.keyBytes);",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_seat_memory_a_little_long",
+   "file": "web/front/lobby_net.js",
+   "old": "SEAT_MEMORY_MS = 55 * 1000;",
+   "new": "SEAT_MEMORY_MS = 65 * 1000;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_seat_memory_never_old",
+   "file": "web/front/lobby_net.js",
+   "old": "if (nowMs - v.t > SEAT_MEMORY_MS || v.t - nowMs > SEAT_MEMORY_MS) return null;",
+   "new": "if (false) return null;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_seat_memory_from_the_future",
+   "file": "web/front/lobby_net.js",
+   "old": "if (nowMs - v.t > SEAT_MEMORY_MS || v.t - nowMs > SEAT_MEMORY_MS) return null;",
+   "new": "if (nowMs - v.t > SEAT_MEMORY_MS) return null;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_seat_memory_any_server",
+   "file": "web/front/lobby_net.js",
+   "old": "if (v.s !== server || typeof v.c",
+   "new": "if (typeof v.c",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_seat_memory_zero_key_read",
+   "file": "web/front/lobby_net.js",
+   "old": " || /^0+$/.test(v.k)) return null;",
+   "new": ") return null;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_seat_memory_extra_members",
+   "file": "web/front/lobby_net.js",
+   "old": "Object.keys(v).sort().join(',') !== 'c,k,n,o,s,t'",
+   "new": "false",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_seat_memory_zero_key_written",
+   "file": "web/front/lobby_net.js",
+   "old": "if (!validRoomCode(code) || code === '' || !isKey(key) || typeof server",
+   "new": "if (!validRoomCode(code) || code === '' || !key || key.length !== 16 || typeof server",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_seat_memory_no_room_written",
+   "file": "web/front/lobby_net.js",
+   "old": "if (!validRoomCode(code) || code === '' || !isKey(key) || typeof server",
+   "new": "if (!validRoomCode(code) || !isKey(key) || typeof server",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_seat_memory_name_not_cut",
+   "file": "web/front/lobby_net.js",
+   "old": "n: printableOnly(name, MAX_NAME), o: own ? 1 : 0",
+   "new": "n: String(name), o: own ? 1 : 0",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_seat_memory_name_not_checked",
+   "file": "web/front/lobby_net.js",
+   "old": "if (!printable(v.n, MAX_NAME) || (v.o !== 0",
+   "new": "if ((v.o !== 0",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "net_seat_memory_own_any_value",
+   "file": "web/front/lobby_net.js",
+   "old": "(v.o !== 0 && v.o !== 1) || !isWhole(v.t)",
+   "new": "!isWhole(v.t)",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "page_replaced_keeps_the_host_claim",
+   "file": "web/lobby.html",
+   "old": "if (e.replaced) { ownRoom = false; seatLost = true; }",
+   "new": "if (e.replaced) { seatLost = true; }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_replaced_says_nothing",
+   "file": "web/lobby.html",
+   "old": "if (e.replaced) { ownRoom = false; seatLost = true; }",
+   "new": "if (e.replaced) { ownRoom = false; }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_replaced_says_it_after_the_room",
+   "file": "web/lobby.html",
+   "old": "if (seatLost) { seatLost = false; showBanner('seatgone', { host: model.guest ? Rules.hostName(model) : '' }); }",
+   "new": "if (seatLost) { seatLost = false; showBanner('seatgone', { host: Rules.hostName(model) }); }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_replaced_says_it_without_the_host",
+   "file": "web/lobby.html",
+   "old": "showBanner('seatgone', { host: model.guest ? Rules.hostName(model) : '' });",
+   "new": "showBanner('seatgone', { host: '' });",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_gone_room_of_a_key_is_silent",
+   "file": "web/lobby.html",
+   "old": "if (e.created && (!ownRoom || (!wasOnline && lastParams && lastParams.key))) showBanner(",
+   "new": "if (e.created && !ownRoom) showBanner(",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_gone_room_in_a_restart_speaks",
+   "file": "web/lobby.html",
+   "old": "(!wasOnline && lastParams && lastParams.key)",
+   "new": "(lastParams && lastParams.key)",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_memory_is_not_read",
+   "file": "web/lobby.html",
+   "old": "var stored = loadSession() || loadMemory(), test",
+   "new": "var stored = loadSession(), test",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_memory_before_the_session",
+   "file": "web/lobby.html",
+   "old": "var stored = loadSession() || loadMemory(), test",
+   "new": "var stored = loadMemory() || loadSession(), test",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_memory_is_not_dropped_by_the_seat",
+   "file": "web/lobby.html",
+   "old": "if (client) dropMemory(client.code);\n",
+   "new": "",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_memory_of_another_room_dropped",
+   "file": "web/lobby.html",
+   "old": "if (v && v.c === code) window.localStorage.removeItem(Net.SEAT_MEMORY);",
+   "new": "if (v) window.localStorage.removeItem(Net.SEAT_MEMORY);",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_memory_written_on_the_way_to_a_game",
+   "file": "web/lobby.html",
+   "old": "if (!client || handing || !client.key) return;",
+   "new": "if (!client || !client.key) return;",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_memory_not_written_at_pagehide",
+   "file": "web/lobby.html",
+   "old": "window.addEventListener('pagehide', leaveMemory);",
+   "new": "",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_memory_kept_when_the_seat_is_given_up",
+   "file": "web/lobby.html",
+   "old": "if (held) dropMemory(held.code);",
+   "new": "",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_memory_old_note_stays",
+   "file": "web/lobby.html",
+   "old": "if (!v) { try { window.localStorage.removeItem(Net.SEAT_MEMORY); } catch (e) { /* it stays, and is not read */ } return null; }",
+   "new": "if (!v) return null;",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_memory_any_age",
+   "file": "web/lobby.html",
+   "old": "v = Net.seatMemoryRead(text, SERVER, Date.now());",
+   "new": "v = Net.seatMemoryRead(text, SERVER, Date.parse('2026-11-17T00:00:00Z') + 1);",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_memory_for_another_server",
+   "file": "web/lobby.html",
+   "old": "v = Net.seatMemoryRead(text, SERVER, Date.now());",
+   "new": "v = Net.seatMemoryRead(text, (function () { try { return JSON.parse(text).s; } catch (e) { return SERVER; } })(), Date.now());",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_memory_writes_the_key_of_nobody",
+   "file": "web/lobby.html",
+   "old": "var text = Net.seatMemory(SERVER, client.code, client.key, client.name, ownRoom, Date.now());",
+   "new": "var text = Net.seatMemory(SERVER, client.code, Net.bytesOfHex('0102030405060708090a0b0c0d0e0f10'), client.name, ownRoom, Date.now());",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_memory_forgets_who_made_the_room",
+   "file": "web/lobby.html",
+   "old": "client.key, client.name, ownRoom, Date.now());",
+   "new": "client.key, client.name, true, Date.now());",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "rules_seatgone_no_host",
+   "file": "web/front/lobby_rules.js",
+   "old": "(a && a.host ? ' ' + a.host + ' is the host.' : ' You are the host.')",
+   "new": "(a && a.host ? '' : ' You are the host.')",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "rules_seatgone_always_a_host",
+   "file": "web/front/lobby_rules.js",
+   "old": "(a && a.host ? ' ' + a.host + ' is the host.' : ' You are the host.')",
+   "new": "(' ' + (a && a.host || 'Somebody') + ' is the host.')",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_replaced_flag_outlives_its_room",
+   "file": "web/lobby.html",
+   "old": "everOnline = false; seatLost = false;",
+   "new": "everOnline = false;",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  }
+ ]
+}

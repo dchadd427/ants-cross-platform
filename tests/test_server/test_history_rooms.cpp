@@ -217,7 +217,30 @@ int main() {
         } TEST_END();
     }
 
-    TEST_CASE("HR2.1 A match of computer players on an approved map of the players (the maps of the server's own matches in 187 include one) is counted like any other: the history holds a record that names the map, in 187, with the computers alone") {
+    TEST_CASE("HR2.1 The match of a person is counted while the server's own match of computer players runs (nobody waits on that one), within seconds of its recording being kept") {
+        Rooms r;
+        ASSERT_TRUE(r.db_ok && r.open());
+        ASSERT_TRUE(r.mgr.create_room(bots_room("HIS-C", 0), r.now).ok);
+        ASSERT_TRUE(r.until([&] { return r.status("HIS-C").state == RoomState::Running; }, 12000));
+        MatchSpec spec;                                                                               // (a match that two people played, recorded on TINY: it was kept after the room above began)
+        spec.seed = 5;
+        spec.turns = 1000;
+        spec.roster = 0x03;
+        spec.names = {"Ann", "Bob", "", ""};
+        const std::vector<uint8_t> bytes = record_match(spec);
+        ASSERT_TRUE(!bytes.empty());
+        r.clock += 60;
+        const ReplaySave saved = r.mgr.replay_store()->save(bytes);
+        ASSERT_TRUE(saved.kept);
+        ASSERT_EQ(r.mgr.history_store()->count(), size_t{0});
+        ASSERT_TRUE(r.until([&] { return r.mgr.history_store()->count() == 1; }, 5000));
+        ASSERT_TRUE(r.status("HIS-C").state == RoomState::Running);                                  // (the room of computer players is still at it: the count did not wait for it)
+        HistoryRecord rec;
+        ASSERT_TRUE(r.mgr.history_store()->find(stem_of(saved.file), rec));
+        ASSERT_TRUE(!rec.computers_only && rec.seats.size() == 2 && rec.seats[0].name == "Ann");
+    } TEST_END();
+
+    TEST_CASE("HR2.2 A match of computer players on an approved map of the players (the maps of the server's own matches in 187 include one) is counted like any other: the history holds a record that names the map, in 187, with the computers alone") {
         Rooms r;
         ASSERT_TRUE(r.db_ok && r.open());
         const std::string bytes = grown_tiny(150, 150);                      // (a made-up map of the shape of the approved one: TINY grown to 150 x 150, Extended, four hills)

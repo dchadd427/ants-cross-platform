@@ -98,6 +98,56 @@ const RAW = {
     same('an exact name wins over one that differs in case', P.thumbFor('Aa.lvl', P.parseList({ format: 1, maps: [M('aa.lvl', { thumb: '/maps/previews/aa.webp' }), M('Aa.lvl', { thumb: '/maps/previews/Aa.webp' })] })), '/maps/previews/Aa.webp');
 }
 
+// ---- the one way that a map's picture is put in an image: the address from the list or the name, the other ending tried once, a picture that came remembered ---------------------------------------------------
+{
+    // (an image as a browser has it for this: an address, and the words load and error that a page's listeners hear; every address that was set is kept)
+    const image = () => { const l = {}, set = []; return { set, listeners: l, get src() { return set[set.length - 1]; }, set src(v) { set.push(v); }, addEventListener(t, f) { (l[t] = l[t] || []).push(f); }, fire(t) { (l[t] || []).slice().forEach((f) => f()); } }; };
+    const TEST = 'Fight Island ~test-0a1b2c3d.lvl';
+    same('a test map of the Map Maker has only the server\'s PNG, so its name asks for it', [P.previewPath(TEST), P.previewPath('Fight Island ~test-0a1b2c3d'), P.thumbFor(TEST, null), P.thumbFor(TEST, P.parseList({ format: 1, maps: [M('POPcOrN.lvl')] }))],
+        ['/maps/previews/Fight%20Island%20~test-0a1b2c3d.png', '/maps/previews/Fight%20Island%20~test-0a1b2c3d.png', '/maps/previews/Fight%20Island%20~test-0a1b2c3d.png', '/maps/previews/Fight%20Island%20~test-0a1b2c3d.png']);
+    same('... a name that only looks like one (capital hex, too few digits, no space before it) asks for the library\'s', [P.previewPath('Fight Island ~test-0A1B2C3D.lvl'), P.previewPath('Fight Island ~test-0a1b2c3.lvl'), P.previewPath('Fight Island~test-0a1b2c3d.lvl')],
+        ['/maps/previews/Fight%20Island%20~test-0A1B2C3D.webp', '/maps/previews/Fight%20Island%20~test-0a1b2c3.webp', '/maps/previews/Fight%20Island~test-0a1b2c3d.webp']);
+    same('the other ending of a picture of a map (and of nothing else)', [P.otherPicture('/maps/previews/Fight%20Island.png'), P.otherPicture('/maps/previews/Fight%20Island.webp'), P.otherPicture('/front/preview_tiny.png'), P.otherPicture(''), P.otherPicture(null), P.otherPicture('/maps/previews/a b.png'), P.otherPicture('https://evil.example/maps/previews/x.png')],
+        ['/maps/previews/Fight%20Island.webp', '/maps/previews/Fight%20Island.png', '', '', '', '', '']);
+
+    let img = image(), gone = [];
+    P.showPicture(img, '/maps/previews/Shown%20One.webp', (i) => gone.push(i));
+    same('a picture is put in the image at the address given', img.set, ['/maps/previews/Shown%20One.webp']);
+    img.fire('error');
+    same('an address that does not answer is tried in the other ending', [img.set, gone.length], [['/maps/previews/Shown%20One.webp', '/maps/previews/Shown%20One.png'], 0]);
+    img.fire('error');
+    same('... and when that does not answer either, the page is told once (and nothing more is asked for)', [img.set.length, gone.length, gone[0] === img], [2, 1, true]);
+    img = image(); gone = [];
+    P.showPicture(img, '/front/preview_tiny.png', (i) => gone.push(i));
+    img.fire('error');
+    same('a picture that has no other ending (an original\'s own) is gone at once', [img.set, gone.length], [['/front/preview_tiny.png'], 1]);
+    img = image();
+    P.showPicture(img, '/maps/previews/Quiet%20Map.webp');
+    img.fire('error'); img.fire('error');
+    same('no page function: an address that never answers is still asked twice and no more, and nothing breaks', img.set, ['/maps/previews/Quiet%20Map.webp', '/maps/previews/Quiet%20Map.png']);
+    img = image(); gone = [];
+    P.showPicture(img, '/maps/previews/First.webp', (i) => gone.push('a'));
+    img.fire('error');
+    P.showPicture(img, '/maps/previews/Second.webp', (i) => gone.push('b'));
+    img.fire('error'); img.fire('error');
+    same('the same image given another address starts again (one other ending for it, the new page function)', [img.set, gone], [['/maps/previews/First.webp', '/maps/previews/First.png', '/maps/previews/Second.webp', '/maps/previews/Second.png'], ['b']]);
+
+    // a picture that came is remembered for the next time its name is asked for: the ending that answered is asked first (the list that is drawn again makes no second 404); the list's own address still wins
+    same('(before: the library\'s ending)', P.previewPath('Remembered Map.lvl'), '/maps/previews/Remembered%20Map.webp');
+    img = image();
+    P.showPicture(img, P.previewPath('Remembered Map.lvl'));
+    img.fire('error');
+    same('(the other ending is asked, and is not remembered before it has come)', P.previewPath('Remembered Map.lvl'), '/maps/previews/Remembered%20Map.webp');
+    img.fire('load');
+    same('the ending that came is the name\'s address from then on', [P.previewPath('Remembered Map.lvl'), P.previewPath('REMEMBERED MAP'), P.thumbFor('Remembered Map.lvl', null)], ['/maps/previews/Remembered%20Map.png', '/maps/previews/REMEMBERED%20MAP.webp', '/maps/previews/Remembered%20Map.png']);
+    same('... but the server\'s list is what it says', P.thumbFor('Remembered Map.lvl', P.parseList({ format: 1, maps: [M('Remembered Map.lvl')] })), '/maps/previews/Remembered%20Map.webp');
+    img = image();
+    P.showPicture(img, P.previewPath('Remembered Map.lvl'));
+    img.fire('error');
+    img.fire('load');
+    same('a map that the server serves in the library\'s ending again is found there, and remembered', [img.set, P.previewPath('Remembered Map.lvl')], [['/maps/previews/Remembered%20Map.png', '/maps/previews/Remembered%20Map.webp'], '/maps/previews/Remembered%20Map.webp']);
+}
+
 // ---- a small fake of the browser's DOM, enough for the picker ---------------------------------------------------------------------------------------------------------------------------------------
 class Node {
     constructor(doc, tag) { this.doc = doc; this.tagName = tag.toUpperCase(); this.attrs = {}; this.children = []; this.parentNode = null; this.className = ''; this.listeners = {}; this._text = ''; this.hidden = false; this.disabled = false; this.value = ''; this.offsetTop = 0; this.offsetLeft = 0; this.scrollTop = 0; this.isText = false; this.scrolled = 0; }
@@ -105,6 +155,8 @@ class Node {
     set textContent(v) { this.children = []; if (String(v) !== '') { const t = this.doc.createTextNode(String(v)); t.parentNode = this; this.children.push(t); } }
     appendChild(c) { if (c.isFragment) { c.children.slice().forEach((k) => this.appendChild(k)); c.children = []; return c; } c.parentNode = this; this.children.push(c); return c; }
     setAttribute(k, v) { this.attrs[k] = String(v); }
+    get src() { return this.attrs.src; }
+    set src(v) { this.attrs.src = String(v); }      // (the property and the attribute are one, as in a browser)
     getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
     removeAttribute(k) { delete this.attrs[k]; }
     get id() { return this.attrs.id || ''; }

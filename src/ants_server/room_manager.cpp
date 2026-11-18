@@ -589,17 +589,22 @@ void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const
     reject(std::move(connection), good ? net::RejectReason::Full : reason, now_ms);
 }
 
+// A match that a person plays is never slowed down by the counting (a recording takes the one thread for a moment): nothing is counted while a room with a person in it runs or loads a match, or while a record of
+// a restart is being played again. The server's own matches of computer players do not hold it: nobody waits on them, and the match of a person that ended in the meantime is counted at once, not after the
+// computer players' match that has run for ten minutes.
+bool RoomManager::history_may_run() const {
+    if (!restoring_.empty()) return false;
+    for (const auto& kv : rooms_) {
+        const RoomState state = kv.second->state();
+        if ((state == RoomState::Running || state == RoomState::Loading) && !kv.second->bots_only()) return false;       // (a room that loads is about to start: it gets the thread too)
+    }
+    return true;
+}
+
 void RoomManager::update(uint32_t now_ms) {
     if (replays_ != nullptr) replays_->update();                   // (the replays that are too old are deleted once an hour)
     if (history_feeder_ != nullptr) {                              // (one match of the replay store at a time is counted for the history, and only while nobody plays: a recording takes 0.4 - 0.5 s for a match of 10 - 12 minutes, so the gap after it is four times that)
-        history_feeder_->step([this]() {
-            if (!restoring_.empty()) return false;
-            for (const auto& kv : rooms_) {
-                const RoomState state = kv.second->state();
-                if (state == RoomState::Running || state == RoomState::Loading) return false;       // (a room that loads is about to start: it gets the thread too)
-            }
-            return true;
-        }, now_ms);
+        history_feeder_->step([this]() { return history_may_run(); }, now_ms);
     }
     // 0. a record whose delete failed is tried again every 10 s (its room is over: a restart before it is deleted would bring the room back)
     if (restart_ != nullptr) {
@@ -736,7 +741,7 @@ bool RoomManager::enable_history(db::Database& database, std::string& why, Histo
     if (replays_ != nullptr) {
         history_feeder_ = std::make_unique<HistoryFeeder>(*history_, *replays_, store_.directory(), std::function<uint64_t()>(), store_.community_directory());
         history_feeder_->set_approved_map_path([this](const std::string& name) {          // (the matches on an approved map of the players are counted too; one that a room could not play online is not: its recording would hold the one thread for seconds)
-            const ApprovedMap* map = store_.approved(name);
+            const ApprovedMap* map = store_.approved_any_case(name);
             return map != nullptr && OnlineLimits::allows(map->counts()) ? map->path : std::string();
         });
     }

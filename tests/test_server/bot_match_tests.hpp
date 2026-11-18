@@ -457,7 +457,25 @@ void run_bot_match_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.184e A Map Of A List That This Server Cannot Play Is Skipped With One Line In The Log, Never A Failed Match: A Server With Neither The Library Maps Nor The Players' Map, One That Has The Players' Map Under A Name That Is Another File Of The Library, One That Took The Map Down, One Whose Map Is Over A Limit Of A Room, And One With None Of The Maps That Makes No Match And Says Why; The Others Stay As Likely As Before, And A Map That Comes Back Is Played Again") {
+    TEST_CASE("S3.184e The Match History Is Let In While A Room Of Computer Players Alone Runs (Nobody Waits On It), And Not While A Room With A Person In It Loads Or Runs") {
+        World w;
+        ASSERT_TRUE(w.mgr.history_may_run());                                   // (no room)
+        ASSERT_TRUE(w.mgr.create_room(bots_only_spec("BM-GATEB", 2), w.now).ok);
+        ASSERT_TRUE(run_until(w, [&] { return w.status("BM-GATEB").state == RoomState::Running; }, 12000));
+        ASSERT_TRUE(w.mgr.history_may_run());                                   // (the server's own match runs: the history counts a match that a person played)
+        ASSERT_TRUE(w.mgr.create_room(spec_of("BM-GATEP", 2), w.now).ok);
+        Client& gus = w.connect("Gus", "BM-GATEP");
+        Client& hal = w.connect("Hal", "BM-GATEP");
+        gus.next_order_ms = hal.next_order_ms = 0xFFFFFFFFu;
+        const auto person_room_is = [&](RoomState state) { return w.status("BM-GATEP").state == state; };
+        ASSERT_TRUE(run_until(w, [&] { return person_room_is(RoomState::Loading) || person_room_is(RoomState::Running); }, 12000));
+        ASSERT_FALSE(w.mgr.history_may_run());                                  // (a room that loads is about to start: it gets the thread too)
+        ASSERT_TRUE(run_until(w, [&] { return person_room_is(RoomState::Running); }, 12000));
+        ASSERT_FALSE(w.mgr.history_may_run());                                  // (a person's match runs, whatever else runs)
+        ASSERT_TRUE(w.status("BM-GATEB").state == RoomState::Running);
+    } TEST_END();
+
+    TEST_CASE("S3.184f A Map Of A List That This Server Cannot Play Is Skipped With One Line In The Log, Never A Failed Match: A Server With Neither The Library Maps Nor The Players' Map, One That Has The Players' Map Under A Name That Is Another File Of The Library, One That Took The Map Down, One Whose Map Is Over A Limit Of A Room, And One With None Of The Maps That Makes No Match And Says Why; The Others Stay As Likely As Before, And A Map That Comes Back Is Played Again") {
         ReplayClock clock;
         std::string why;
         const auto skip_lines = [](const std::vector<std::string>& notes, const std::string& map) {
@@ -542,7 +560,7 @@ void run_bot_match_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.184f A Match Of Computer Players Starts On Each New Map Of The Lists (POPcOrN, HELLRAISER And Bombz Away In The Original's Game, The Players' Map In 187) With Seatings Of Two, Three And Four Bots In Teams And Free For All, And Plays: The Bots Look At It And The Match Runs For A Minute") {
+    TEST_CASE("S3.184g A Match Of Computer Players Starts On Each New Map Of The Lists (POPcOrN, HELLRAISER And Bombz Away In The Original's Game, The Players' Map In 187) With Seatings Of Two, Three And Four Bots In Teams And Free For All, And Plays: The Bots Look At It And The Match Runs For A Minute") {
         ReplayClock clock;
         const std::vector<BotSeating> seatings = every_bot_seating();
         const size_t chosen[] = {1, 4, 10, 12};                              // two bots on the last seats; three with a pair; four free for all; four across the corners

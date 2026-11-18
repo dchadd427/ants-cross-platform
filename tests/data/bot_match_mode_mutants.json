@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the rules that the server's own match of computer players is dealt (RoomManager::start_bot_match, bot_match_maps and bot_match_map_refusal in src/ants_server/room_manager.cpp, docs/SERVER.md 'Matches of computer players'): the original's game or 187 by a fair coin for each match, with no memory of the last match, the two lists of maps (nine for the original's game, six for 187, never ISLANDS in 187, the players' map in 187 only, the library's three in the original's game only), each map of a list as likely as any other, a map that the server lacks skipped (one line in the log, never a failed match) and the log line that names the rules. For tools/mutate.py (docs/TESTING.md, 'Mutation checks'), each caught by test_server S3.181, S3.184b (the coin, the lists and the log line over 300 matches of one seed) or S3.184e (the maps that the store lacks, the shadowed and taken down players' map, the map over a limit). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_match_mode_mutants.json --keep-going --jobs 1. Every mutant must be caught. Not listed on purpose: the draw's place after the teams (the first match of a seed keeps the seats, levels, seed and teams that it had: S3.183 pins seed 7), the room's own guard of the match's length (a map of more than 20 minutes needs a play of 25), and the rules reaching the room, the engine and the recording of a match of computer players (a 187 room is held by S3.184c and S3.184d, a room made by hand with the mode by S3.185 and S3.188, the new maps' play by S3.184f and HR2.1).",
+ "note": "Mutants of the rules that the server's own match of computer players is dealt (RoomManager::start_bot_match, bot_match_maps and bot_match_map_refusal in src/ants_server/room_manager.cpp, docs/SERVER.md 'Matches of computer players'): the original's game or 187 by a fair coin for each match, with no memory of the last match, the two lists of maps (nine for the original's game, six for 187, never ISLANDS in 187, the players' map in 187 only, the library's three in the original's game only), each map of a list as likely as any other, a map that the server lacks skipped (one line in the log, never a failed match) and the log line that names the rules. For tools/mutate.py (docs/TESTING.md, 'Mutation checks'), each caught by test_server S3.181, S3.184b (the coin, the lists and the log line over 300 matches of one seed) or S3.184f (the maps that the store lacks, the shadowed and taken down players' map, the map over a limit). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_match_mode_mutants.json --keep-going --jobs 1. Every mutant must be caught. Not listed on purpose: the draw's place after the teams (the first match of a seed keeps the seats, levels, seed and teams that it had: S3.183 pins seed 7), the room's own guard of the match's length (a map of more than 20 minutes needs a play of 25), and the rules reaching the room, the engine and the recording of a match of computer players (a 187 room is held by S3.184c and S3.184d, a room made by hand with the mode by S3.185 and S3.188, the new maps' play by S3.184g and HR2.2).",
  "mutants": [
   {
    "id": "bot_match_mode_always_187",
@@ -116,7 +116,7 @@
    "new": "{\"Fight Island.lvl\", false}};\n    return kills_187",
    "build": "test_server",
    "test": "timeout 300 env ANTS_TEST_FILTER=S3.18 ./build/tests/test_server/test_server",
-   "expect": "S3.184e"
+   "expect": "S3.184f"
   },
   {
    "id": "bot_match_missing_map_dealt_anyway",
@@ -125,7 +125,7 @@
    "new": "        if (true) {\n            maps.push_back(entry.file);",
    "build": "test_server",
    "test": "timeout 300 env ANTS_TEST_FILTER=S3.18 ./build/tests/test_server/test_server",
-   "expect": "S3.184e"
+   "expect": "S3.184f"
   },
   {
    "id": "bot_match_skip_line_at_every_match",
@@ -134,7 +134,7 @@
    "new": "} else if (bot_maps_skipped_.insert(entry.file).second || true) {",
    "build": "test_server",
    "test": "timeout 300 env ANTS_TEST_FILTER=S3.18 ./build/tests/test_server/test_server",
-   "expect": "S3.184e"
+   "expect": "S3.184f"
   },
   {
    "id": "bot_match_skip_never_said",
@@ -143,7 +143,7 @@
    "new": "} else if (bot_maps_skipped_.insert(entry.file).second && false) {",
    "build": "test_server",
    "test": "timeout 300 env ANTS_TEST_FILTER=S3.18 ./build/tests/test_server/test_server",
-   "expect": "S3.184e"
+   "expect": "S3.184f"
   },
   {
    "id": "bot_match_skip_said_once_for_ever",
@@ -152,7 +152,7 @@
    "new": "",
    "build": "test_server",
    "test": "timeout 300 env ANTS_TEST_FILTER=S3.18 ./build/tests/test_server/test_server",
-   "expect": "S3.184e"
+   "expect": "S3.184f"
   },
   {
    "id": "bot_match_over_limit_map_dealt_anyway",
@@ -161,7 +161,7 @@
    "new": "if (false) return std::string();",
    "build": "test_server",
    "test": "timeout 300 env ANTS_TEST_FILTER=S3.18 ./build/tests/test_server/test_server",
-   "expect": "S3.184e"
+   "expect": "S3.184f"
   },
   {
    "id": "bot_match_mode_log_without_rules",

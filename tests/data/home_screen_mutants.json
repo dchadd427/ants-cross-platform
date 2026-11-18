@@ -1274,6 +1274,118 @@
    "old": "mineX.setAttribute('aria-label', TEXT.leaveMine); mineX.setAttribute('title', TEXT.leaveMine);",
    "new": "mineX.setAttribute('title', TEXT.leaveMine);",
    "test": "node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
+  },
+  {
+   "id": "room_picture_not_guessed_from_the_name",
+   "file": "web/lobby.html",
+   "old": "side.mapThumb || (side.mapFile && Pk ? Pk.previewPath(side.mapFile) : '')",
+   "new": "side.mapThumb",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "room_picture_other_ending_never_tried",
+   "file": "web/lobby.html",
+   "old": "if (src && Pk) Pk.showPicture(",
+   "new": "if (false) Pk.showPicture(",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "room_picture_broken_image_stays",
+   "file": "web/lobby.html",
+   "old": "img.removeAttribute('src'); img.style.visibility = 'hidden'; });",
+   "new": "img.removeAttribute('src'); });",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "matches_links_never_open_a_new_tab",
+   "file": "web/home/home.js",
+   "old": "[matchesItem, doc.getElementById('watch-top'), doc.getElementById('watch-link')].forEach(function (a) { if (a) newTab(a, room); });",
+   "new": "[matchesItem, doc.getElementById('watch-top'), doc.getElementById('watch-link')].forEach(function (a) { if (a) newTab(a, false); });",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "matches_links_always_open_a_new_tab",
+   "file": "web/home/home.js",
+   "old": "room = !!(page.holds && page.holds());",
+   "new": "room = true;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "matches_links_ignore_the_page_that_holds_a_room",
+   "file": "web/home/home.js",
+   "old": "room = !!(page.holds && page.holds());",
+   "new": "room = !!(page.info && page.info().model);",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "matches_menu_item_is_not_marked",
+   "file": "web/home/home.js",
+   "old": "if (m[1] === '/matches') matchesItem = item;\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "matches_masthead_link_is_not_marked",
+   "file": "web/home/home.js",
+   "old": "[matchesItem, doc.getElementById('watch-top'), doc.getElementById('watch-link')]",
+   "new": "[matchesItem, doc.getElementById('watch-link')]",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "matches_footer_link_is_not_marked",
+   "file": "web/home/home.js",
+   "old": "[matchesItem, doc.getElementById('watch-top'), doc.getElementById('watch-link')]",
+   "new": "[matchesItem, doc.getElementById('watch-top')]",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "matches_links_not_marked_when_the_room_comes_or_goes",
+   "file": "web/home/home.js",
+   "old": "            marks();\n            gamesCall('sync');",
+   "new": "            gamesCall('sync');",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "matches_links_not_marked_when_the_menu_opens",
+   "file": "web/home/home.js",
+   "old": "            menuFor = btn; menuOpen = true;\n            marks();\n",
+   "new": "            menuFor = btn; menuOpen = true;\n",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "matches_links_stay_new_tab_at_start",
+   "file": "web/home/home.js",
+   "old": "inert(held); if (screen === 'home') opening.hidden = false;\n            marks();\n",
+   "new": "inert(held); if (screen === 'home') opening.hidden = false;\n",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "matches_links_all_links_of_the_menu_open_a_new_tab",
+   "file": "web/home/home.js",
+   "old": "if (/^https?:/.test(href)) newTab(a, true);",
+   "new": "newTab(a, true);",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "page_holds_no_room_while_it_waits_for_a_game",
+   "file": "web/lobby.html",
+   "old": "holds: function () { return !!client && !handing; },",
+   "new": "holds: function () { return !!client; },",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "page_holds_a_room_before_it_has_one",
+   "file": "web/lobby.html",
+   "old": "holds: function () { return !!client && !handing; },",
+   "new": "holds: function () { return true; },",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "page_never_holds_a_room",
+   "file": "web/lobby.html",
+   "old": "holds: function () { return !!client && !handing; },",
+   "new": "holds: function () { return false; },",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
   }
  ]
 }

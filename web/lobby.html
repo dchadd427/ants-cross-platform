@@ -165,7 +165,7 @@
     .side { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; }
     .maprow { display: grid; gap: 14px; }
     .tv { margin: 4px auto 6px; width: 300px; max-width: 100%; border: 3px solid var(--edge); background: var(--edge); box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px var(--edge), 4px 6px 0 5px var(--shadow); }
-    .tv img { display: block; width: 100%; height: auto; aspect-ratio: 1; }
+    .tv img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; }
     .mapcard { display: grid; gap: 8px; justify-items: center; min-width: 0; text-align: center; }
     .map-name { font-size: 28px; line-height: 1.1; overflow-wrap: anywhere; } .map-facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; } .map-facts:empty { display: none; }
     .map-facts span { padding: 1px 9px; font-size: 14px; color: var(--cream); background: #0f1820; border: 1px solid #28493e; border-radius: 10px; } .map-facts .tag { color: #1a1405; background: var(--gold); border-color: var(--gold); text-transform: uppercase; letter-spacing: .06em; font-size: 12px; }
@@ -519,6 +519,7 @@
         var client = null;                            // the LobbyClient of this page's seat
         var ownRoom = true;                           // the code was made by this page (a room that is gone is made again without a word)
         var everOnline = false;                       // the client has been welcomed once: a link that drops is "lost" (the color is kept), else the server cannot be reached
+        var seatLost = false;                         // the room took the page as a newcomer, because the seat of its key had ended: the first Room says so (onRoom)
         var offline = 'none';                         // what the colors show instead of a room: false, 'lost', 'none' (no room yet) or 'join' (the name card is open)
         var model = null;                             // Rules.modelOf of the last Room message
         var localSides = [0, 0, 0, 0];                // the leader's own Team switches (the room holds a pair only)
@@ -582,7 +583,34 @@
             if (!client || !client.key) return;
             try { window.sessionStorage.setItem(LOBBY_KEY, JSON.stringify({ c: client.code, k: Net.hexOf(client.key), n: client.name, o: ownRoom ? 1 : 0 })); } catch (e) { /* not kept: a reload makes another room */ }
         }
-        function forgetSession() { try { window.sessionStorage.removeItem(LOBBY_KEY); } catch (e) { /* nothing was kept */ } }
+        function forgetSession() {
+            var held = loadSession();
+            try { window.sessionStorage.removeItem(LOBBY_KEY); } catch (e) { /* nothing was kept */ }
+            if (held) dropMemory(held.code);
+        }
+        // The seat that a page leaves behind when it goes (front/lobby_net.js seatMemory): a link to another page of the site or a closed tab leaves the seat held for a minute at the server, and a page of this browser
+        // that opens within SEAT_MEMORY_MS takes it back with its key, in whatever tab it opens: the same seat, the same lead, and never a second seat for the same person. The page that has its seat again drops the note.
+        function loadMemory() {
+            var text = null, v = null;
+            try { text = window.localStorage.getItem(Net.SEAT_MEMORY); } catch (e) { return null; }
+            if (text === null) return null;
+            v = Net.seatMemoryRead(text, SERVER, Date.now());
+            if (!v) { try { window.localStorage.removeItem(Net.SEAT_MEMORY); } catch (e) { /* it stays, and is not read */ } return null; }
+            return { code: v.code, key: v.key, name: v.name, own: v.own };
+        }
+        function dropMemory(code) {
+            try {
+                var text = window.localStorage.getItem(Net.SEAT_MEMORY), v = text === null ? null : JSON.parse(text);
+                if (v && v.c === code) window.localStorage.removeItem(Net.SEAT_MEMORY);
+            } catch (e) { /* nothing was kept, or a note that is none */ }
+        }
+        function leaveMemory() {           // (pagehide: this page goes; a page that is on its way to a game has given its seat to the game, and one that left has none)
+            if (!client || handing || !client.key) return;
+            try {
+                var text = Net.seatMemory(SERVER, client.code, client.key, client.name, ownRoom, Date.now());
+                if (text) window.localStorage.setItem(Net.SEAT_MEMORY, text);
+            } catch (e) { /* not kept: a page that opens later has no seat to take back */ }
+        }
         function leaveBack() { if (back) { back = null; backBar.hide(); } try { Rematch.forgetBack(window.sessionStorage); } catch (e) { /* nothing was kept */ } }      // (START, another room: the rematch is over)
 
         // ---- the strip at the top ----
@@ -726,8 +754,10 @@
         function paintSide(side) {
             var shownMap = side.mapKey || side.mapFile + '|' + side.mapThumb;
             if ($('preview').getAttribute('data-map') !== shownMap) {
-                var src = side.mapKey ? 'front/preview_' + side.mapKey + '.png' : side.mapThumb;      // (a map of the players: its picture comes with the list; none until then)
-                if (src) $('preview').src = src; else $('preview').removeAttribute('src');
+                var Pk = window.AntsMapPicker;
+                var src = side.mapKey ? 'front/preview_' + side.mapKey + '.png' : side.mapThumb || (side.mapFile && Pk ? Pk.previewPath(side.mapFile) : '');      // (a map of the players: the list's picture when the list has come, else the address that its name makes)
+                if (src && Pk) Pk.showPicture($('preview'), src, function (img) { img.removeAttribute('src'); img.style.visibility = 'hidden'; });      // (an address that does not answer is tried in the other ending once)
+                else if (src) $('preview').src = src; else $('preview').removeAttribute('src');
                 $('preview').style.visibility = src ? '' : 'hidden';
                 $('preview').alt = 'The map: ' + side.mapName;
                 $('preview').setAttribute('data-map', shownMap);
@@ -755,6 +785,7 @@
 
         // ---- what the room says ----
         function onWelcome(e) {
+            var wasOnline = everOnline;
             everOnline = true;
             if (lastParams && lastParams.joinFirst) lastParams.joinFirst = false;      // (the room has taken the page: a room that is lost later is made again, also by Try again)
             if (offline) {
@@ -764,8 +795,10 @@
                 if (wasLost) say('You are back in the room.');
             }
             pendingMode = -1; if (e.created) { newRoom = true; backBar.remade(); }      // (a room that this page made starts with the leader's last game type: onRoom; a pick that no Room has confirmed is dropped with the link)
-            if (e.created && !ownRoom) showBanner('old', { sameMap: false });
+            if (e.created && (!ownRoom || (!wasOnline && lastParams && lastParams.key))) showBanner('old', { sameMap: false });      // (a page that came with a key to a room that had ended says so, whoever made the room)
+            if (e.replaced) { ownRoom = false; seatLost = true; }      // (the key found no seat: this page is a newcomer in a room that went on without it, and it made none; the first Room says who leads)
             saveSession();
+            if (client) dropMemory(client.code);
             render();
         }
         function onRoom(room) {
@@ -775,6 +808,7 @@
                 return;
             }
             model = Rules.modelOf(room);
+            if (seatLost) { seatLost = false; showBanner('seatgone', { host: model.guest ? Rules.hostName(model) : '' }); }
             pendingMode = Rules.pendingAfter(pendingMode, room, model);      // (the leader's pick until a Room confirms it: every plan carries it)
             if (newRoom) { if (room.leader !== room.you) newRoom = false; else if (!room.starting) { var want = Modes.wanted(storage, room.mode); if (want < 0 || client.setPlan(Rules.planWith(room, model, { mode: want }))) { newRoom = false; if (want >= 0) pendingMode = want; } } }
             localSides = Rules.reconcileSides(localSides, model);
@@ -889,7 +923,7 @@
             ownRoom = p.own;
             model = null;
             lastStarting = false;
-            everOnline = false;
+            everOnline = false; seatLost = false;
             localSides = [0, 0, 0, 0];
             picked = -1; removing = -1;
             painted = {};
@@ -1227,6 +1261,7 @@
 
         // ---- the page comes and goes ----
         window.addEventListener('pageshow', function (e) { if (e && e.persisted) window.location.reload(); });       // (Back from the match: the room is the match's now, this page makes another)
+        window.addEventListener('pagehide', leaveMemory);
         document.addEventListener('visibilitychange', function () { if (!document.hidden && client) client.wake(); });
         window.addEventListener('online', function () { if (client) client.wake(); });
         GRID.forEach(function (seat) { var li = el('li'); li.setAttribute('data-i', String(seat)); lis[seat] = li; $('slots').appendChild(li); });
@@ -1246,7 +1281,7 @@
         function runLobby() {
             showRejoin();
             var wantedCode = wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted) ? wanted.toLowerCase() : '';          // (a room code is lower case: a link that came in capitals leads to the same room)
-            var stored = loadSession(), test = backBar.begin(function () { forgetSession(); connect({ code: newCode(), name: myName(), own: true }); });
+            var stored = loadSession() || loadMemory(), test = backBar.begin(function () { forgetSession(); connect({ code: newCode(), name: myName(), own: true }); });
             Home.start(test || wantedCode, stored);          // (the Room opens for a link and a test room; a plain visit is Home, and makes no room: Quick host does)
             if (test) return;
             if (wantedCode && !(stored && stored.code === wantedCode)) {
@@ -1360,7 +1395,7 @@
         // THE TWO SCREENS (web/home/home.js, docs/HOME_SCREEN.md): Home or the Room is a class of <body>; the client, the model and the session storage above are not touched by it
         var Home = window.AntsHome.mount({ doc: document, win: window, host: $('home'), lobby: $('lobby'), page: {
             info: function () { return { client: !!client, model: model, offline: offline }; }, make: function () { connect({ code: newCode(), name: myName(), own: true }); }, how: openHow, stalled: stalled,
-            client: function () { return client; }, join: probe, typed: joinTyped, name: myName, handing: function () { return handing; }, cancel: function () { if (lastProbe && lastProbe !== client) lastProbe.leave(); }, hold: inert,
+            client: function () { return client; }, join: probe, typed: joinTyped, name: myName, handing: function () { return handing; }, cancel: function () { if (lastProbe && lastProbe !== client) lastProbe.leave(); }, hold: inert, holds: function () { return !!client && !handing; },
             leave: function () { if (handing) return; var old = client; client = null; model = null; offline = 'none'; painted = {}; if (old) old.leave(); forgetSession(); leaveBack(); hideBanner(); render(); } } });
 
         // ---- go ----

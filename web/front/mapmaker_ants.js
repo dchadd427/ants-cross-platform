@@ -289,7 +289,7 @@
         }
 
         function render() {
-            var f = file(), keep = doc.activeElement && doc.activeElement.getAttribute ? doc.activeElement.getAttribute('data-k') : null, inside = !!keep && panel.querySelector('[data-k="' + keep + '"]') !== null;
+            var f = file(), at = doc.activeElement, keep = at && at.getAttribute ? at.getAttribute('data-k') : null, mark = keep ? String(at.tagName).toLowerCase() + '[data-k="' + keep + '"]' : '', inside = !!keep && panel.querySelector(mark) !== null;         // (the tag too: the Clump button and the clump's number box are one key)
             panel.textContent = '';
             if (!f) return;
             var mix = mixing(), extra = mix && st.plan && st.plan.ok ? st.plan.cells : null, sum = summary(f, extra), t = env.team(), r;
@@ -388,7 +388,7 @@
             sum.lines.forEach(function (line) { warn.appendChild(el('p', 'am-w ' + line.kind, line.text)); });
             panel.appendChild(warn);
             if (st.note) { var note = el('p', 'am-said', st.note); note.setAttribute('role', 'status'); panel.appendChild(note); }
-            if (inside) { var again = panel.querySelector('[data-k="' + keep + '"]'); if (again && again.focus) again.focus(); }
+            if (inside) { var again = panel.querySelector(mark); if (again && again.focus) again.focus(); }
         }
 
         function clearBox() { st.box = null; st.plan = null; painting = false; st.note = ''; drawOver(); }

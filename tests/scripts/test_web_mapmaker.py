@@ -265,7 +265,7 @@ class TheCodeRuns(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("0 failed", done.stdout)
         for part in ("A the words", "B the change", "C the dialog on a Classic map", "C2 a description of 30 bytes", "C3 the numbers and the ants", "D the dialog on an Extended map", "D2 a text the core refuses",
-                     "E Apply and Cancel", "F text is text"):
+                     "E Apply and Cancel", "F text is text", "G typing in the boxes"):
             self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
 
     def test_the_properties_check_can_fail_on_broken_copies_of_the_scripts(self):
@@ -315,7 +315,7 @@ class TheCodeRuns(unittest.TestCase):
         done = run_check(script=CONVERT_CHECK)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("0 failed", done.stdout)
-        for part in ("A the frame", "B the names", "C the Crop to fit screen", "D Copy this map", "E Start an Extended map, Make a Classic map, the reasons", "F Crop it to fit", "G the rules word of a new Extended map", "H New map and Save as a new map"):
+        for part in ("A the frame", "B the names", "C the Crop to fit screen", "D Copy this map", "E Start an Extended map, Make a Classic map, the reasons", "F Crop it to fit", "G the rules word of a new Extended map", "H New map and Save as a new map", "I typing in the name of a copy"):
             self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
 
     def test_the_convert_check_can_fail_on_broken_copies_of_the_scripts(self):
@@ -580,6 +580,26 @@ class TheCodeRuns(unittest.TestCase):
             "a Resize that gives back the low byte of the word only": ("mapmaker_blocks.js", "removed: file.bytes.slice(14, 16), inserted: new Uint8Array([rules & 255, rules >> 8])", "removed: new Uint8Array([file.bytes[14], 0]), inserted: new Uint8Array([rules & 255, rules >> 8])"),
             "a Resize that writes the word the map has again": ("mapmaker_blocks.js", "if (file.version === 9 && rules !== undefined && rules !== rd(file.bytes, 14)) {", "if (file.version === 9 && rules !== undefined) {"),
             "a change of the properties that is put in while a stroke goes on": ("mapmaker_tools.js", "function act(change) { if (!editor || canvas.isStroking()) return false;", "function act(change) { if (!editor) return false;"),
+            "a frame with places that have no piece that is painted cell by cell": ("mapmaker_canvas.js", "!View.useSprites(view, sprites) && !gaps && !gapsShown ? cellsToPaint(rect) : null;", "!View.useSprites(view, sprites) ? cellsToPaint(rect) : null;"),
+            "a frame after the places went that keeps their lines": ("mapmaker_canvas.js", "!View.useSprites(view, sprites) && !gaps && !gapsShown ? cellsToPaint(rect) : null;", "!View.useSprites(view, sprites) && !gaps ? cellsToPaint(rect) : null;"),
+            "a note about the places that is never hidden": ("mapmaker_canvas.js", "if (env.gapNote) env.gapNote.hidden = !gaps;", "if (env.gapNote) env.gapNote.hidden = false;"),
+            "places asked for at tiles too small to show them": ("mapmaker_canvas.js", "view.scale >= View.GAPS_FROM ? painter.gaps(", "true ? painter.gaps("),
+            "places told to the canvas while a stroke goes on": ("mapmaker_tools.js", "|| current || !vis) return null;", "|| !vis) return null;"),
+            "places told to the canvas for every tool": ("mapmaker_tools.js", "if (!editor || !edges || !ground || state.tool !== 'ground' || current || !vis) return null;", "if (!editor || !edges || !ground || current || !vis) return null;"),
+            "places kept for the map as it was before an undo": ("mapmaker_tools.js", "            rev++;\n            canvas.markDirty(dirty);", "            canvas.markDirty(dirty);"),
+            "places kept for the map as it was before a stroke": ("mapmaker_tools.js", "current = null; rev++;\n                if (n) {", "current = null;\n                if (n) {"),
+            "places kept for a part of the map that is no longer on the screen": ("mapmaker_tools.js", "if (fresh && vis.r0 >= k.r0 && vis.r1 <= k.r1 && vis.c0 >= k.c0 && vis.c1 <= k.c1) return k.answer;", "if (fresh) return k.answer;"),
+            "places that are not told for a big part of the map that has no room for a margin": ("mapmaker_tools.js", "if (area(region) > GAP_MAX) region = { r0: vis.r0, r1: vis.r1, c0: vis.c0, c1: vis.c1 };          // (a big part: no margin)", "void 0;"),
+            "places that are worked out for a part of the map that is too big": ("mapmaker_tools.js", "return area(region) > GAP_MAX ? null : region;", "return region;"),
+            "places kept for a map that was read again": ("mapmaker_tools.js", "fresh = !!k && k.rev === rev && k.file === f;", "fresh = !!k && k.rev === rev;"),
+            "places worked out in the frame that asks for them": ("mapmaker_tools.js", "if (!whenIdle(workOutGaps)) {", "if (true) {"),
+            "places asked for again by every ask until the page is idle": ("mapmaker_tools.js", "if (!gapWaiting) {", "if (true) {"),
+            "places of the map as it was told for the map as it is while the work waits": ("mapmaker_tools.js", "return fresh ? k.answer : null;", "return k ? k.answer : null;"),
+            "places worked out that the canvas is not told of": ("mapmaker_tools.js", "answer: g.count ? { g: g, places: edges.places(g) } : null };\n            canvas.refresh();", "answer: g.count ? { g: g, places: edges.places(g) } : null };"),
+            "places worked out while a stroke goes on": ("mapmaker_tools.js", "|| state.tool !== 'ground' || current) return;", "|| state.tool !== 'ground') return;"),
+            "places given to a timer on a page that has idle time": ("mapmaker_tools.js", "if (w && w.requestIdleCallback) w.requestIdleCallback(run, { timeout: 250 });", "if (false) w.requestIdleCallback(run, { timeout: 250 });"),
+            "a lift that leaves the names of the pieces that the stroke replaced": ("mapmaker_tools.js", "edges.strokeEnd(env.file, ground, current);", "void 0;"),
+            "a stroke that gives no ring to water": ("mapmaker_tools.js", "edges.strokeStep(env.file, rect, ground, state.ground, current)", "edges.strokeStep(env.file, rect, ground, 485, current)"),
         }
         for what, (name, old, new) in mutants.items():
             with self.subTest(what):
@@ -968,7 +988,7 @@ class ThePage(unittest.TestCase):
         done = run_check(script=SUBMIT_CHECK)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn(" 0 failed", done.stdout)
-        for part in ("A the words", "B the sent store", "C the dialog", "D what is sent, and the answers", "F My submissions", "G a send that may have arrived, twins, a 404"):
+        for part in ("A the words", "B the sent store", "C the dialog", "D what is sent, and the answers", "F My submissions", "G a send that may have arrived, twins, a 404", "H typing in the boxes"):
             self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
 
     def test_the_submit_check_can_fail_on_the_broken_copies_of_the_words_the_call_the_dialog_the_list_and_the_tabs(self):
@@ -980,6 +1000,31 @@ class ThePage(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
         with tempfile.TemporaryDirectory() as tmp:
             for name in SCRIPTS + ("mapmaker_submit.js",):
+                shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+            for m in spec["mutants"]:
+                with self.subTest(m["id"]):
+                    name = os.path.basename(m["file"])
+                    text = read(*m["file"].split("/"))
+                    self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in %s exactly once" % (m["id"], name))
+                    script = os.path.join(REPO, m["test"].split(" ", 1)[1])
+                    with open(os.path.join(tmp, name), "w", encoding="utf-8", newline="") as f:
+                        f.write(text.replace(m["old"], m["new"]))
+                    try:
+                        done = run_check(tmp, script)
+                    finally:
+                        shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
+                    self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
+
+    def test_the_checks_can_fail_on_the_broken_copies_of_the_typing_in_the_boxes(self):
+        """tests/data/mapmaker_focus_mutants.json (tools/mutate.py runs it too, with `--keep-going --jobs 1`): a box that a re-render takes out of the page (or moves: a browser counts that as taken out) loses the focus
+        and the composition of an input method with it, a caret that is not put back, a focus that goes to another control: each broken copy must fail the check of its dialog"""
+        with open(os.path.join(REPO, "tests", "data", "mapmaker_focus_mutants.json"), encoding="utf-8") as f:
+            spec = json.load(f)
+        self.assertGreaterEqual(len(spec["mutants"]), 20)
+        ids = [m["id"] for m in spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ALL_SCRIPTS + ("mapmaker_submit.js", "mapmaker_play.js"):
                 shutil.copy(os.path.join(FRONT, name), os.path.join(tmp, name))
             for m in spec["mutants"]:
                 with self.subTest(m["id"]):
