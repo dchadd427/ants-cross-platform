@@ -379,7 +379,7 @@ function caseF() {
         check(st.every((s, i) => i === 0 || s[0] < st[i - 1][0]) && st.slice(0, -1).every((s) => Blocks.FOOD_NAMES[s[1]] !== undefined), n + ' stages: thresholds go down, and every tile has its name');
         check(set.points >= 10 && set.points <= 50 && set.units > 0, n + ' stages: a pile of ' + set.units + ' bites of ' + set.points + ' points');
     }
-    check(Blocks.MIN_STAGES === 2 && Blocks.MAX_STAGES === 6 && Blocks.MIN_ANTS === 1 && Blocks.MAX_ANTS === 64, 'the ranges of the steppers');
+    check(Blocks.MIN_STAGES === 2 && Blocks.MAX_STAGES === 6 && Blocks.MIN_ANTS === 1 && Blocks.MAX_ANTS === 250, 'the ranges of the steppers');
     check(new Set(Palette.GROUND.concat(Palette.OBJECTS, Palette.PLANTS).map((r) => r[2])).size === 36, 'every label is different');
 }
 
@@ -873,42 +873,55 @@ function caseJ() {
         check(lay.ok1 && lay.ok2 && lay.records.length === 5 && lay.piles.length === 1 && lay.piles[0].stages.length === 2, 'the lists of a map are read' + tag);
         const tail = Array.from(f0.bytes.subarray(f0.blocksAt + lay.b2.rel));
         let ch = Blocks.placeStart(f0, 3, 12, 12, 4);
-        check(!ch.error && ch.cells.length === 0 && ch.splices.length === 1, 'ants: a change of block 1 only' + tag);
+        check(!ch.error && ch.cells.length === 0 && ch.splices.length === 2 && ch.splices[0].rel === lay.b1.length && ch.splices[0].inserted.length === 24 && ch.splices[1].rel === 0, 'ants: a change of block 1 only: the four new records at its end, and the count word' + tag);
         ed.act(ch);
         let l2 = Blocks.layout(ed.file);
-        const black = l2.records.filter((r) => r.tile === 152), others = l2.records.filter((r) => r.tile !== 152);
-        check(black.length === 4 && black[0].row === 12 && black[0].column === 12, 'four ants of Black, the first on the cell that was tapped' + tag);
-        check(new Set(black.map((r) => r.row + ',' + r.column)).size === 4 && black.every((r) => Math.abs(r.row - 12) <= 1 && Math.abs(r.column - 12) <= 1), 'all on different cells, next to each other' + tag);
-        equal(black.slice(1).map((r) => [r.row, r.column]), [[11, 12], [12, 11], [12, 13]], 'the nearest cells first, by row and column (the same way every time)' + tag);
-        equal(others.map((r) => [r.tile, r.row, r.column]), [[421, 3, 4], [155, 9, 9], [154, 18, 20]], 'the plant and the other teams\' ants are as they were, in their order' + tag);
-        check(l2.b1.length === 2 + 6 * 7 && Array.from(ed.file.bytes.subarray(ed.file.blocksAt + l2.b2.rel)).join() === tail.join(), 'block 1 has its 7 records and the lists after it are byte for byte as they were' + tag);
+        const black = l2.records.filter((r) => r.tile === 152), clump = l2.records.slice(5);
+        check(black.length === 6 && clump.length === 4 && clump.every((r) => r.tile === 152) && clump[0].row === 12 && clump[0].column === 12, 'four more ants of Black at the end of the list, the first on the cell that was tapped' + tag);
+        check(new Set(clump.map((r) => r.row + ',' + r.column)).size === 4 && clump.every((r) => Math.abs(r.row - 12) <= 1 && Math.abs(r.column - 12) <= 1), 'all on different cells, next to each other' + tag);
+        equal(clump.slice(1).map((r) => [r.row, r.column]), [[11, 12], [12, 11], [12, 13]], 'the nearest cells first, by row and column (the same way every time)' + tag);
+        equal(l2.records.slice(0, 5).map((r) => [r.tile, r.row, r.column]), rec, 'the records that were there (the plant, the ants of Black and of the other teams) are as they were, in their order' + tag);
+        check(l2.b1.length === 2 + 6 * 9 && Array.from(ed.file.bytes.subarray(ed.file.blocksAt + l2.b2.rel)).join() === tail.join(), 'block 1 has its 9 records and the lists after it are byte for byte as they were' + tag);
         const placed = Array.from(ed.file.bytes);
-        // moving: the team's ants go from where they were
+        // put again: a new clump, and nothing is moved
         ed.act(Blocks.placeStart(ed.file, 3, 15, 3, 2));
         l2 = Blocks.layout(ed.file);
-        equal(l2.records.filter((r) => r.tile === 152).map((r) => [r.row, r.column]), [[15, 3], [14, 3]], 'put again: two ants of Black in the new place and no other' + tag);
-        check(l2.records.length === 5, 'and the others are still there: 5 records' + tag);
-        // count is kept inside its range
-        check(Blocks.layout((() => { const x = editorOn(base); x.act(Blocks.placeStart(x.file, 0, 10, 10, 500)); return x.file; })()).records.filter((r) => r.tile === 154).length === 64, 'at most 64 ants for a team, whatever number is asked' + tag);
-        check(Blocks.layout((() => { const x = editorOn(base); x.act(Blocks.placeStart(x.file, 0, 10, 10, 0)); return x.file; })()).records.filter((r) => r.tile === 154).length === 1, 'and at least one (a team that is put has an ant)' + tag);
+        equal(l2.records.slice(5, 9).map((r) => [r.row, r.column]), clump.map((r) => [r.row, r.column]), 'put again: the first clump stays where it is' + tag);
+        equal(l2.records.slice(9).map((r) => [r.row, r.column]), [[15, 3], [14, 3]], 'and two more ants of Black are a second clump in the new place' + tag);
+        check(l2.records.length === 11 && l2.records.filter((r) => r.tile === 152).length === 8, 'the ants of Black are 8 and the others are still there: 11 records' + tag);
+        // put again on the same cell: a third clump round the ants that stand there, on cells that are free
+        ed.act(Blocks.placeStart(ed.file, 3, 12, 12, 4));
+        l2 = Blocks.layout(ed.file);
+        check(l2.records.length === 15 && new Set(l2.records.map((r) => r.row + ',' + r.column)).size === 15, 'a tap on a clump puts the next clump round it: no two ants on one cell' + tag);
+        ed.undo();
+        // the count of a clump is kept inside its range
+        const bigOne = (n) => { const x = editorOn(base); x.act(Blocks.placeStart(x.file, 0, 10, 10, n)); return Blocks.layout(x.file).records.filter((r) => r.tile === 154); };
+        check(bigOne(500).length === 1 + 250 && bigOne(250).length === 1 + 250 && bigOne(249).length === 1 + 249, 'at most 250 ants in a clump, whatever number is asked' + tag);
+        check(bigOne(0).length === 1 + 1 && bigOne(-4).length === 1 + 1 && bigOne('x').length === 1 + 1, 'and at least one (a team that is put has an ant)' + tag);
         // undo and redo
         ed.undo();
-        check(Array.from(ed.file.bytes).join() === placed.join(), 'undo of the move gives the bytes of before, byte for byte' + tag);
+        check(Array.from(ed.file.bytes).join() === placed.join(), 'undo of the second clump gives the bytes of before, byte for byte' + tag);
         ed.undo();
-        check(withoutNames(ed.file) === withoutNames(File.parse(base)), 'and of the first put: the map as it was opened (the name that the dictionary got stays: it is harmless)' + tag);
+        check(withoutNames(ed.file) === withoutNames(File.parse(base)), 'and of the first clump: the map as it was opened (the name that the dictionary got stays: it is harmless)' + tag);
         ed.redo(); ed.redo();
-        check(Blocks.layout(ed.file).records.filter((r) => r.tile === 152).length === 2, 'redo puts them back' + tag);
+        check(Blocks.layout(ed.file).records.filter((r) => r.tile === 152).length === 8, 'redo puts both clumps back' + tag);
         // ants avoid objects, solid ground and the ants of another team
         const crowd = mapWith(version, 12, 12, 486, [[153, 5, 5]], []), c2 = editorOn(crowd);
         put(c2.file, 2, 5, 6, 302, 1, version === 8 ? (5 | (6 << 8)) : 0); put(c2.file, 1, 4, 5, 485, 1, 0xCDCD);
         c2.act(Blocks.placeStart(c2.file, 1, 5, 5, 5));
         const mine = Blocks.layout(c2.file).records.filter((r) => r.tile === 155).map((r) => r.row + ',' + r.column);
         check(mine.length === 5 && mine.indexOf('5,5') < 0 && mine.indexOf('5,6') < 0 && mine.indexOf('4,5') < 0, 'ants are not put on another team\'s ant, on an object or on solid ground: ' + mine.join(' ') + tag);
+        c2.act(Blocks.placeStart(c2.file, 1, 5, 5, 5));
+        const both = Blocks.layout(c2.file).records.filter((r) => r.tile === 155).map((r) => r.row + ',' + r.column);
+        check(both.length === 10 && new Set(both).size === 10 && both.indexOf('5,5') < 0 && both.indexOf('5,6') < 0 && both.indexOf('4,5') < 0, 'nor on an ant of its own team: a second clump of the same team stands on ten different cells' + tag);
         const edge = editorOn(mapWith(version, 3, 3, 486, [], []));
         edge.act(Blocks.placeStart(edge.file, 0, 0, 0, 9));
         check(Blocks.layout(edge.file).records.length === 9, 'a corner of a small map: nine ants on its nine cells' + tag);
-        edge.act(Blocks.placeStart(edge.file, 1, 1, 1, 30));
-        check(Blocks.layout(edge.file).records.filter((r) => r.tile === 155).length === 0 || Blocks.layout(edge.file).records.filter((r) => r.tile === 155).length <= 9, 'a map with fewer cells than ants has fewer ants (' + tag + ')');
+        const nowhere = Blocks.placeStart(edge.file, 1, 1, 1, 30);
+        check(/no cell left/.test(nowhere.error) && Blocks.layout(edge.file).records.length === 9, 'a map with no cell left refuses the clump in words and changes nothing' + tag);
+        const few = editorOn(mapWith(version, 3, 3, 486, [[152, 1, 1]], []));
+        few.act(Blocks.placeStart(few.file, 1, 1, 1, 30));
+        check(Blocks.layout(few.file).records.filter((r) => r.tile === 155).length === 8, 'a map with fewer free cells than ants has as many ants as it has cells' + tag);
         // a dictionary that is too short grows for the start marker, and the lists keep their place (they are counted from the end of layer 2, which does not move)
         let grew = 0;
         const sm = Edit.create(File.parse(mapWith(version, 20, 24, 100, [[421, 3, 4]], [{ row: 5, column: 5, units: 10, points: 30, stages: [[10, 280], [0, 0x7FFE]] }])), { rebase: (b) => { grew++; return File.parse(b); }, erase: Blocks.eraseAt });
@@ -997,7 +1010,10 @@ function caseJ3() {
         const y = editorOn(mapWith(version, 20, 24, 486, [], []));
         let st = y.begin('act');
         st.change(Blocks.placeStart(y.file, 1, 8, 8, 3));
-        check(st.end() === 1 && y.history.size().strokes === 1, 'a change of one splice is one step that reports 1' + tag);
+        check(st.end() === 2 && y.history.size().strokes === 1, 'a clump (its records and the count word) is one step that reports 2' + tag);
+        st = y.begin('act');
+        st.change(Blocks.eraseStart(y.file, 1));
+        check(st.end() === 1 && y.history.size().strokes === 2, 'and a change of one splice is one step that reports 1' + tag);
         st = y.begin('act');
         st.change(Blocks.placeHill(y.file, 1, 10, 10));
         check(st.end() === 16, 'and a hill of 16 cells reports 16' + tag);
@@ -1024,7 +1040,7 @@ function caseJ2() {
     const big = [];
     for (let i = 0; i < 65535; i++) big.push([152, i % 90, (i * 7) % 100]);
     const ed = editorOn(mapWith(8, 100, 100, 486, big, []));
-    ed.act(Blocks.placeStart(ed.file, 3, 50, 50, 8));                       // takes out all 65,535 records of Black: 393 KB of bytes, in one patch
+    ed.act(Blocks.eraseStart(ed.file, 3));                                  // takes out all 65,535 records of Black: 393 KB of bytes, in one patch
     const first = ed.history.size();
     check(first.strokes === 1 && first.records > 20000 && first.records <= Edit.MAX_RECORDS, 'a change that takes 65,535 records out is one step that weighs ' + first.records + ' records');
     for (let n = 0; n < 40; n++) { ed.act(Blocks.placeStart(ed.file, 3, 20 + n, 30, 8)); ed.undo(); ed.redo(); }
@@ -1040,11 +1056,26 @@ function caseJ2() {
     const p = one.begin('erase', null); p.stamp(10, 10, 1); const patch = p.finish();
     check(patch.splices && patch.splices.length === 1 && patch.splices[0].removed.length === 31 && patch.splices[0].inserted.length === 1, 'the patch of a splice holds the bytes it took out and put in, and nothing else of the file (' + patch.splices[0].removed.length + ' and ' + patch.splices[0].inserted.length + ' bytes)');
     p.cancel();
-    // a change that does not move the count of a list is a splice that begins after what stays: the plant that is first, and the count word
+    // a clump is the new records at the end of the list and the count word, and nothing else: a plant that is first stays where it is
     const two = editorOn(mapWith(8, 20, 20, 486, [[421, 1, 1]], []));
     two.act(Blocks.placeStart(two.file, 0, 10, 10, 4));
-    const moved = Blocks.placeStart(two.file, 0, 15, 15, 4);
-    check(moved.splices.length === 1 && moved.splices[0].rel >= 10 && moved.splices[0].removed.length <= 24 && moved.splices[0].inserted.length <= 24, 'moving 4 ants is a splice of the bytes that differ, after the plant and the count (' + moved.splices[0].rel + ', ' + moved.splices[0].removed.length + ' bytes)');
+    const next = Blocks.placeStart(two.file, 0, 15, 15, 4);
+    check(next.splices.length === 2 && next.splices[0].rel === Blocks.layout(two.file).b1.length && next.splices[0].removed.length === 0 && next.splices[0].inserted.length === 24 && next.splices[1].rel === 0 && next.splices[1].removed.length === 2 && next.splices[1].inserted.length === 2, 'a second clump of 4 ants is 24 bytes at the end of the list and the count word (' + next.splices.map((x) => x.rel + ':' + x.removed.length + '>' + x.inserted.length).join(' ') + ')');
+    // a pile put on the last pile keeps the count word, so its splice begins after the piles that stay
+    const piles = [{ row: 5, column: 5, units: 10, points: 30, stages: [[10, 280], [0, 0x7FFE]] }, { row: 9, column: 9, units: 10, points: 30, stages: [[10, 280], [0, 0x7FFE]] }];
+    const pp = editorOn(mapWith(8, 20, 20, 486, [], piles)), lp = Blocks.layout(pp.file), again = Blocks.placePile(pp.file, 9, 9, 3);
+    check(lp.piles.length === 2 && again.splices.length === 1 && again.splices[0].rel >= lp.piles[1].rel, 'a pile put on the last pile is a splice that begins after the piles that stay (' + again.splices.map((x) => x.rel).join() + ' from ' + lp.piles[1].rel + ')');
+    // the list is full: a clump that does not fit is refused whole, with the numbers, and one that fits exactly is put
+    const full = [];
+    for (let i = 0; i < 65535 - 100; i++) full.push([421, i % 90, (i * 7) % 100]);
+    const nearly = editorOn(mapWith(8, 100, 100, 486, full, []));
+    const over = Blocks.placeStart(nearly.file, 0, 50, 50, 101);
+    check(/does not fit/.test(over.error) && /65,535/.test(over.error) && /65435/.test(over.error.replace(/,/g, '')) && Blocks.layout(nearly.file).records.length === 65535 - 100, 'a clump of 101 on a list of 65,435 is refused in words (' + over.error + ')');
+    const exact = Blocks.placeStart(nearly.file, 0, 50, 50, 100);
+    check(!exact.error && !!nearly.act(exact) && Blocks.layout(nearly.file).records.length === 65535, 'and a clump of 100 fits exactly');
+    check(/does not fit/.test(Blocks.placeStart(nearly.file, 0, 50, 50, 1).error), 'a full list takes no more');
+    nearly.undo();
+    check(Blocks.layout(nearly.file).records.length === 65535 - 100, 'one Undo takes the clump of 100 away');
 }
 
 // ---- K: Hills, Ants and Food on a fake page ----
@@ -1093,14 +1124,18 @@ function caseK() {
     check(pt.size() === 1 && pt.tapOnly() && !pt.door(), 'one cell marked');
     p.host.stepMore.click(); p.host.stepMore.click();
     check(p.tools.state().ants === 6 && p.host.stepValue.textContent === '6', 'the stepper makes it more');
-    for (let i = 0; i < 80; i++) p.host.stepMore.click();
-    check(p.tools.state().ants === 64 && p.host.stepMore.disabled && !p.host.stepLess.disabled, 'up to 64, where More is off');
-    for (let i = 0; i < 80; i++) p.host.stepLess.click();
+    for (let i = 0; i < 300; i++) p.host.stepMore.click();
+    check(p.tools.state().ants === 250 && p.host.stepMore.disabled && !p.host.stepLess.disabled, 'up to 250, where More is off');
+    for (let i = 0; i < 300; i++) p.host.stepLess.click();
     check(p.tools.state().ants === 1 && p.host.stepLess.disabled && p.host.tile.querySelector('span').textContent === 'Black · 1 ant', 'down to 1, where Less is off ("1 ant")');
     p.host.stepMore.click(); p.host.stepMore.click();
     check(p.tools.state().ants === 3, 'back to 3');
     pt.begin({ row: 10, column: 10 });
     check(Blocks.layout(p.file()).records.length === 3 && p.host.name.textContent === 'Black: 3 ants' && p.log.rebased >= 1, 'a tap puts 3 ants of Black; the list is longer, and the page read the file again');
+    pt.begin({ row: 16, column: 16 });
+    check(Blocks.layout(p.file()).records.length === 6 && p.host.name.textContent === 'Black: 6 ants', 'a second tap elsewhere puts a second clump: ' + p.host.name.textContent);
+    p.doc.key('z', { ctrlKey: true });
+    check(Blocks.layout(p.file()).records.length === 3 && p.host.name.textContent === 'Black: 3 ants', 'one undo takes the second clump away and leaves the first');
     p.doc.key('z', { ctrlKey: true });
     check(Blocks.layout(p.file()).records.length === 0 && p.host.name.textContent === 'Black: no ants yet', 'undo takes them away');
     p.host.tile.click();
