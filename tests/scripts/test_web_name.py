@@ -92,9 +92,9 @@ class TheMarkup(unittest.TestCase):
         # The game page's card says that anybody can watch the recordings, live or later; the front page, as the lobby picture draws it, says what is kept and what is public in two places:
         # in the footer, for a visitor who is not asked for a name, and in the name card (under the hint; only the step of a game on this computer hides it, by script).
         first = "Online matches are recorded."
-        owner = "Recordings are kept for 30 days. Results and names are kept for good and are public."       # (the owner's own sentence: both pages say it as it is; extra words go in a sentence before it)
+        owner = "Recordings are kept for up to 90 days. Results and names are kept for good and are public."       # (the owner's own sentence: both pages say it as it is; extra words go in a sentence before it)
         game = first + " Anybody can watch them, live or later. " + owner
-        front = first + " Recordings are kept for 30 days. Results and names are kept for good and are public."
+        front = first + " Recordings are kept for up to 90 days. Results and names are kept for good and are public."
         self.assertEqual(read(LOBBY).count(front), 2)
         self.assertEqual(read(SHELL).count(game), 1)
         self.assertIn('<p class="room-notice" id="room-notice">' + front + "</p>", read(LOBBY))
@@ -103,7 +103,7 @@ class TheMarkup(unittest.TestCase):
         self.assertNotIn("Anybody can watch them", read(LOBBY))                                     # (the extra sentence is the game page's only)
         self.assertIn(owner, read(SHELL))
         self.assertIn(owner, read(LOBBY))
-        docs = read(os.path.join(REPO, "docs", "SERVER.md"))                                       # (the one document that quotes them: it also says when the line is true)
+        docs = read(os.path.join(REPO, "docs", "SERVER_REPLAYS.md"))                                       # (the one document that quotes them: it also says when the line is true)
         self.assertIn(front.replace("&rsquo;", "'"), docs)
         self.assertIn(game.replace("&rsquo;", "'"), docs)
 
@@ -115,7 +115,7 @@ class TheDocuments(unittest.TestCase):
         self.assertIn("`ants.guest`", page)                                                  # (the one key of a name that the page keeps)
         self.assertIn("is not used", page)                                                   # (a name that an earlier version remembered, `ants.name`)
         self.assertIn("asks first, every time", page)
-        server = read(os.path.join(REPO, "docs", "SERVER.md"))
+        server = read(os.path.join(REPO, "docs", "SERVER_REPLAYS.md"))
         self.assertIn("A line says what the server does with an online match", server)      # (the notice of the lobby's footer and of both name cards, and the step that has none)
         self.assertIn("not in the step of a game on this computer", server)
         self.assertIn("`who-notice`", server)      # (what an operator who changes the line must leave where it is)

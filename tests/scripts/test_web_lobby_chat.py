@@ -136,7 +136,7 @@ class ThePage(unittest.TestCase):
         css = read(os.path.join(REPO, "web", "home", "home.css"))
         self.assertNotRegex(css, r"\.bar \{ display: (block|flex|grid)")
         self.assertNotIn('id="footer-notice"', self.page)
-        words = "Online matches are recorded. Recordings are kept for 30 days. Results and names are kept for good and are public."
+        words = "Online matches are recorded. Recordings are kept for up to 90 days. Results and names are kept for good and are public."
         notice = '<p class="room-notice" id="room-notice">' + words + "</p>"
         self.assertEqual(self.page.count(notice), 1)
         side = self.page[self.page.index('<aside class="side"'):self.page.index("</aside>")]

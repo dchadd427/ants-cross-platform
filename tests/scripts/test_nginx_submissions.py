@@ -418,7 +418,7 @@ class TheText(unittest.TestCase):
         self.assertIn("4030", RAW)
         self.assertIn("--submit-any-interface", open(os.path.join(REPO, "Dockerfile.server"), encoding="utf-8").read())
         dockerfile = open(os.path.join(REPO, "Dockerfile"), encoding="utf-8").read()
-        for name in ("admin.css", "admin_page.js"):
+        for name in ("admin.css", "admin_bots.js", "admin_page.js"):
             self.assertIn("COPY web/%s /usr/share/nginx/html/%s" % (name, name), dockerfile)
         self.assertIn("COPY --from=builder /src/web/admin.html /usr/share/nginx/html/admin.html", dockerfile)           # (the page with the bar's stamps, as the builder made it)
         self.assertIn("COPY docker/trusted-proxies.conf /etc/nginx/ants-trusted-proxies/proxies.conf", dockerfile)

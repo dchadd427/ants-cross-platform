@@ -2,7 +2,7 @@
 """The pages of the match history in a REAL browser (opt-in; see tests/scripts/test_web_matches.sh and docs/REPLAYS.md "The match pages").
 
 No Docker image, no game server, no game program: the check serves the pages of web/ itself with a FAKE DOOR (GET /history with the server's filters and its refusals, GET /history/<id>, GET /maps,
-GET /live, GET /replays/<file>: the shapes of docs/SERVER.md "Replays" and docs/REPLAYS.md "The match history") and the stand-in for the game of tests/scripts/web_live_check.py, which it reuses. The door
+GET /live, GET /replays/<file>: the shapes of docs/SERVER_REPLAYS.md "Replays" and docs/REPLAYS.md "The match history") and the stand-in for the game of tests/scripts/web_live_check.py, which it reuses. The door
 sends the two cross-origin isolation headers that the site's nginx sends on every page, so the frame of the match page is tried under them. The DevTools protocol is spoken with the client of
 web_hidden_check.py (standard library only); the browser has its own profile and port, and nothing of yours is touched.
 Parts (--only): list (every match, the cards, the filters and the search with their requests and the way back, the pager, the words of a busy server and of no match, a phone), match (the stats of a

@@ -272,6 +272,34 @@ int main() {
         ASSERT_TRUE(rec.map == "Fight Island.lvl" && rec.mode == "187" && rec.computers_only && rec.seats.size() == 3 && rec.turns >= 600);
     } TEST_END();
 
+    TEST_CASE("HR3.1 A server that opens its replay store in the background (the game server does) lists a recording whose head is not read yet as one that can be watched, and a request for it by name reads it: the first minutes after a start do not show the replays of the history as removed") {
+        Rooms r;
+        ASSERT_TRUE(r.db_ok && r.open());
+        ASSERT_TRUE(r.mgr.create_room(bots_room("HIS-A", 0), r.now).ok);
+        ASSERT_TRUE(r.until([&] { return r.status("HIS-A").state != RoomState::Running && r.status("HIS-A").replay_kept; }, 90000));
+        const std::string file = r.status("HIS-A").replay_file;
+        const std::string id = stem_of(file);
+        ASSERT_TRUE(r.until([&] { return r.mgr.history_store()->count() == 1; }, 10000));
+        // the server starts again on the same folder and the same database, with the heads to be read a few at a time
+        ReplayConfig rc;
+        rc.dir = (r.temp.path / "replays").string();
+        rc.game_version = "v0.12.0-test";
+        rc.build_id = "test";
+        rc.clock_s = [&r]() { return r.clock; };
+        rc.min_free_bytes = 0;
+        rc.index_in_background = true;
+        std::string why;
+        ASSERT_TRUE(r.mgr.enable_replays(rc, false, why) && r.mgr.enable_history(r.database, why));
+        ASSERT_TRUE(r.mgr.replay_store()->unindexed() == 1 && r.mgr.replay_store()->readable_count() == 0 && r.mgr.history_store()->count() == 1);
+        ASSERT_EQ(parse_text(r.call("GET", "/history", "rec=watch", true).body).get("count").as_int_or(-1), int64_t{1});          // (the filter by the state of the recording counts it as there, though its head is not read)
+        ASSERT_TRUE(r.mgr.replay_store()->unindexed() == 0 && r.mgr.replay_store()->readable_count() == 1);          // (the file of a match that a page lists is read then: a page is 100 at most)
+        const ctl::JsonValue before = parse_text(r.call("GET", "/history", "", true).body);
+        ASSERT_TRUE(before.get("count").as_int_or(0) == 1 && before.get("history").at(0).get("recording").str() == "watch" && before.get("history").at(0).get("file").str() == file);
+        const ctl::JsonValue item = parse_text(r.call("GET", "/history/" + id, "", true).body);
+        ASSERT_TRUE(item.get("recording").str() == "watch" && item.get("file").str() == file);
+        ASSERT_EQ(r.call("GET", "/replays/" + file, "", true).status, 200);
+    } TEST_END();
+
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";
     return g_test_failures == 0 ? 0 : 1;
 }

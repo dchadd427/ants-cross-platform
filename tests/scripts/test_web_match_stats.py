@@ -143,7 +143,7 @@ class TheDocument(unittest.TestCase):
         text = read("docs", "REPLAYS.md")
         for needle in ("web/match_stats.js", "details", "ants_replay/match_stats", "ants_server/history_details", "Over time", "Activity", "kDetailsMaxBytes", "after_tick"):
             self.assertIn(needle, text, needle)
-        server = read("docs", "SERVER.md")
+        server = read("docs", "SERVER.md") + read("docs", "SERVER_REPLAYS.md")
         for needle in ("details", "backfill", "the stats"):
             self.assertIn(needle, server, needle)
 

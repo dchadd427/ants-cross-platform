@@ -82,6 +82,8 @@ public:
     /// Finds the map file `name`: the name must be a valid map name, the file must be a regular file of 1 .. kMaxMapBytes bytes. False with a reason otherwise.
     /// (the maps folder is asked first, then the community folder)
     bool find(const std::string& name, MapEntry& out, std::string* why = nullptr) const;
+    /// The same without reading the file: which file `name` is (the path) and its size, the checks of find() except the hash. What a caller that keeps its own verdict by path, size and time asks.
+    bool locate(const std::string& name, std::string& path, uint64_t& size, std::string* why = nullptr) const;
 
     /// Lists and hashes every map of both folders (a file that find() would refuse is left out) and reads the community folder's maps.json and previews.json. Returns the number of maps; `notes` gets one line
     /// for each thing that is wrong but not fatal (a bad json file, a map that maps.json describes with another hash). The list: the six originals first, in the order of originals(), then the others by file name.
@@ -123,6 +125,8 @@ public:
     bool library_has_name(const std::string& key) const;
     /// The approved map that has this file name (exactly), or nullptr. Used to serve its file and picture; a name that is not approved or is taken down is not found.
     const ApprovedMap* approved(const std::string& file_name) const;
+    /// Every approved map of the players that the store holds now (the set that set_approved was given, in its order)
+    const std::vector<ApprovedMap>& approved_maps() const noexcept { return approved_; }
     /// The approved map that `name` names under the lobby's rule (listed_name): the exact file name, else the one that differs in letter case only (a name is unique by its lower-case key, so there is one at most).
     /// What the history reads a recording's map by; the file is the store's own, never a path made from the name.
     const ApprovedMap* approved_any_case(const std::string& name) const;

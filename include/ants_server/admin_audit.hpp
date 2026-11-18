@@ -41,8 +41,11 @@ public:
 
     /// One more line. A refused write is not an error of the request that was done (it is told once to the operator's log: take_notices).
     void record(const Actor& by, int64_t now, const char* action, const std::string& target, const std::string& detail);
+    /// Which lines a list is of: all, the decisions on maps (every action that is not a bot's), or the actions on the matches of computer players (the actions whose names start with "bot_"). The filter is in the query, so
+    /// that a busy kind of line never pushes the other kind out of the newest lines that a page asks for.
+    enum class Kind : uint8_t { All, Maps, Bots };
     /// The newest lines first
-    std::vector<AuditEntry> list(size_t limit);
+    std::vector<AuditEntry> list(size_t limit, Kind kind = Kind::All);
     /// Deletes what is old; cheap, call it once an hour
     void maintenance(int64_t now);
     std::vector<std::string> take_notices();

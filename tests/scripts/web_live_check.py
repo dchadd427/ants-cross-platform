@@ -2,7 +2,7 @@
 """Watching a match that is being played, in a REAL browser (opt-in; see tests/scripts/test_web_live.sh and docs/REPLAYS.md "Watching a replay").
 
 No Docker image, no game server, no game program: the check serves the pages of web/ itself, with a FAKE DOOR (GET /live, GET /live/<id>, GET /replays, GET /replays/<file>: the shapes of
-docs/SERVER.md "Replays") and a stand-in for the game (tests/scripts/web_live_stub.js: Module._ants_replay_get / _ants_replay_do as src/ants_app/application.cpp has them). What it shows is the
+docs/SERVER_REPLAYS.md "Replays") and a stand-in for the game (tests/scripts/web_live_stub.js: Module._ants_replay_get / _ants_replay_do as src/ants_app/application.cpp has them). What it shows is the
 page's own part: the glue that fetches the growing file again and again and tells the game, the tag and the notes, the cards. It does not show that the real game follows a file (the
 C++ tests do). The DevTools protocol is spoken with the client of web_hidden_check.py (standard library only); the browser has its own profile and port, and nothing of yours is touched.
 Parts (--only): watch (a match at its present: the tag, Pause and

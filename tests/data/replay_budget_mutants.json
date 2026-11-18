@@ -1,0 +1,131 @@
+{
+ "note": "Mutants of the budget of the matches of computer players in the replay store, the free space of the disk and the background opening of the store (src/ants_server/replay_store.cpp; docs/SERVER_REPLAYS.md, 'Replays'). Run: python3 tools/mutate.py tests/data/replay_budget_mutants.json --keep-going",
+ "mutants": [
+  {
+   "id": "bot_is_any_seat_with_a_bot",
+   "file": "src/ants_server/replay_store.cpp",
+   "old": "if (!ai::is_reserved_bot_name(rep.head.names[seat])) all_bots = false;",
+   "new": "if (false) all_bots = false;",
+   "build": "test_replay_store",
+   "test": "timeout 900 env ANTS_TEST_FILTER=RS12 ./build/tests/test_server/test_replay_store",
+   "expect": "RS12.1"
+  },
+  {
+   "id": "bot_hour_has_no_limit_of_its_own",
+   "file": "src/ants_server/replay_store.cpp",
+   "old": "if (bot && bot_saved_at_.size() >= cfg_.max_bot_saves_per_hour) return refuse(",
+   "new": "if (false && bot_saved_at_.size() >= cfg_.max_bot_saves_per_hour) return refuse(",
+   "build": "test_replay_store",
+   "test": "timeout 900 env ANTS_TEST_FILTER=RS12 ./build/tests/test_server/test_replay_store",
+   "expect": "RS12.2"
+  },
+  {
+   "id": "bot_saves_do_not_count_in_the_hour",
+   "file": "src/ants_server/replay_store.cpp",
+   "old": "    saved_at_.push_back(now);\n    if (bot) bot_saved_at_.push_back(now);",
+   "new": "    if (!bot) saved_at_.push_back(now);\n    if (bot) bot_saved_at_.push_back(now);",
+   "build": "test_replay_store",
+   "test": "timeout 900 env ANTS_TEST_FILTER=RS12 ./build/tests/test_server/test_replay_store",
+   "expect": "RS12.2"
+  },
+  {
+   "id": "bot_saves_left_forgets_the_hour",
+   "file": "src/ants_server/replay_store.cpp",
+   "old": "return std::min(by_bots, by_hour);",
+   "new": "(void)by_hour;\n    return by_bots;",
+   "build": "test_replay_store",
+   "test": "timeout 900 env ANTS_TEST_FILTER=RS12 ./build/tests/test_server/test_replay_store",
+   "expect": "RS12.2"
+  },
+  {
+   "id": "bot_share_is_not_kept",
+   "file": "src/ants_server/replay_store.cpp",
+   "old": "const auto over_bots = [&]() { return bot_total_ + bot_incoming > bot_cap; };",
+   "new": "const auto over_bots = [&]() { return false && bot_total_ + bot_incoming > bot_cap; };",
+   "build": "test_replay_store",
+   "test": "timeout 900 env ANTS_TEST_FILTER=RS12 ./build/tests/test_server/test_replay_store",
+   "expect": "RS12.3"
+  },
+  {
+   "id": "bot_share_is_the_whole_store",
+   "file": "src/ants_server/replay_store.cpp",
+   "old": "uint64_t ReplayStore::bot_cap_bytes() const noexcept { return cfg_.max_bytes / 100 * cfg_.bot_share_percent + cfg_.max_bytes % 100 * cfg_.bot_share_percent / 100; }",
+   "new": "uint64_t ReplayStore::bot_cap_bytes() const noexcept { return cfg_.max_bytes; }",
+   "build": "test_replay_store",
+   "test": "timeout 900 env ANTS_TEST_FILTER=RS12 ./build/tests/test_server/test_replay_store",
+   "expect": "RS12.3"
+  },
+  {
+   "id": "the_files_of_bots_do_not_go_first",
+   "file": "src/ants_server/replay_store.cpp",
+   "old": "if (over_bots() || over_total() || disk_short()) deleted += evict(true,",
+   "new": "if (false) deleted += evict(true,",
+   "build": "test_replay_store",
+   "test": "timeout 900 env ANTS_TEST_FILTER=RS12 ./build/tests/test_server/test_replay_store",
+   "expect": "RS12.4"
+  },
+  {
+   "id": "a_bots_match_deletes_a_persons_file",
+   "file": "src/ants_server/replay_store.cpp",
+   "old": "if (!incoming_bot && (over_total() || disk_short())) deleted += evict(false,",
+   "new": "if ((over_total() || disk_short())) deleted += evict(false,",
+   "build": "test_replay_store",
+   "test": "timeout 900 env ANTS_TEST_FILTER=RS12 ./build/tests/test_server/test_replay_store",
+   "expect": "RS12.4"
+  },
+  {
+   "id": "a_bots_match_is_not_refused_before_it_deletes",
+   "file": "src/ants_server/replay_store.cpp",
+   "old": "if (bot && total_ - bot_total_ + bytes.size() > cfg_.max_bytes) return refuse(",
+   "new": "if (false) return refuse(",
+   "build": "test_replay_store",
+   "test": "timeout 900 env ANTS_TEST_FILTER=RS12 ./build/tests/test_server/test_replay_store",
+   "expect": "RS12.4"
+  },
+  {
+   "id": "a_short_disk_deletes_nothing_for_the_match",
+   "file": "src/ants_server/replay_store.cpp",
+   "old": "const size_t gone = trim(bytes.size(), bot, short_by);",
+   "new": "const size_t gone = 0;",
+   "build": "test_replay_store",
+   "test": "timeout 900 env ANTS_TEST_FILTER=RS12 ./build/tests/test_server/test_replay_store",
+   "expect": "RS12.6"
+  },
+  {
+   "id": "a_short_disk_deletes_in_vain",
+   "file": "src/ants_server/replay_store.cpp",
+   "old": "if (may_go < short_by) {",
+   "new": "if (false) {",
+   "build": "test_replay_store",
+   "test": "timeout 900 env ANTS_TEST_FILTER=RS12 ./build/tests/test_server/test_replay_store",
+   "expect": "RS12.6"
+  },
+  {
+   "id": "the_background_pass_never_runs",
+   "file": "src/ants_server/replay_store.cpp",
+   "old": "    if (unindexed_ > 0) index_step();\n",
+   "new": "",
+   "build": "test_replay_store",
+   "test": "timeout 900 env ANTS_TEST_FILTER=RS12 ./build/tests/test_server/test_replay_store",
+   "expect": "RS12.7"
+  },
+  {
+   "id": "a_file_asked_by_name_is_not_read",
+   "file": "src/ants_server/replay_store.cpp",
+   "old": "if (entry != nullptr && entry->pending) index_entry(*entry);",
+   "new": "",
+   "build": "test_replay_store",
+   "test": "timeout 900 env ANTS_TEST_FILTER=RS12 ./build/tests/test_server/test_replay_store",
+   "expect": "RS12.7"
+  },
+  {
+   "id": "a_file_that_is_not_read_yet_counts_as_removed",
+   "file": "src/ants_server/control_history.cpp",
+   "old": "if (e.readable || e.pending) states[e.file.substr(0, e.file.size() - extension.size())] = e.pending || entry_plays_here(e) ? Recording::Watch : Recording::Old;",
+   "new": "if (e.readable) states[e.file.substr(0, e.file.size() - extension.size())] = entry_plays_here(e) ? Recording::Watch : Recording::Old;",
+   "build": "test_history_rooms",
+   "test": "timeout 900 env ANTS_TEST_FILTER=HR3 ./build/tests/test_server/test_history_rooms",
+   "expect": "HR3.1"
+  }
+ ]
+}
