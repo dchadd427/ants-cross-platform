@@ -1,0 +1,196 @@
+{
+ "note": "Mutants of the cheapest flower link and the bridges for ants that stand away from the hill (include/ants_ai/island_link.hpp, island_bridge.hpp; src/ants_ai/island_link.cpp, island_bridge.cpp; docs/BOTS.md 'Bridges for ants') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_island_bridges_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs all the cases of the batch (AI54).",
+ "defaults": {
+  "build": "test_ai"
+ },
+ "baseline": {
+  "build": "test_ai",
+  "test": "timeout 900 env ANTS_TEST_FILTER='AI54.' ./build/tests/test_ai/test_ai"
+ },
+ "mutants": [
+  {
+   "id": "link_cost_ignored",
+   "file": "src/ants_ai/island_link.cpp",
+   "old": "return cost + std::min<int64_t>(crowd, params_.crowd_cap) * static_cast<int64_t>(params_.crowd_ticks);",
+   "new": "return 0 * (cost + crowd);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.1"
+  },
+  {
+   "id": "link_crowd_ignored",
+   "file": "src/ants_ai/island_link.cpp",
+   "old": "return cost + std::min<int64_t>(crowd, params_.crowd_cap) * static_cast<int64_t>(params_.crowd_ticks);",
+   "new": "return cost + 0 * crowd;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.2"
+  },
+  {
+   "id": "link_dig_not_kept",
+   "file": "src/ants_ai/island_link.cpp",
+   "old": "const int64_t cost = digger_ != 0 && digger_link_ == static_cast<int64_t>(i) ? std::numeric_limits<int64_t>::min() : link_cost(c, l, *waiting);",
+   "new": "const int64_t cost = link_cost(c, l, *waiting);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.11 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.11"
+  },
+  {
+   "id": "link_digger_far",
+   "file": "src/ants_ai/island_link.cpp",
+   "old": "cost += d == nullptr ? 100000 : MapInfo::walking_ticks(21 * d->tile.chebyshev_dist(first));",
+   "new": "cost += d == nullptr ? 100000 : 0;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.13 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.13"
+  },
+  {
+   "id": "return_for_whole_ants",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "if (return_on && a->hp <= params_.return_hp) {",
+   "new": "if (return_on) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.5"
+  },
+  {
+   "id": "feeder_without_food",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "wanted = points >= static_cast<int64_t>(params_.food_min_points);",
+   "new": "wanted = points >= 0;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.5"
+  },
+  {
+   "id": "bridge_over_foreign_hill",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "if (e.a == e.b || foreign_set[static_cast<size_t>(e.a)] || foreign_set[static_cast<size_t>(e.b)]) continue;",
+   "new": "if (e.a == e.b) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.10"
+  },
+  {
+   "id": "bridge_with_few_swimmers",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "if (swimmers < params_.min_swimmers || v.ticks_left() < params_.min_ticks_left) return nullptr;",
+   "new": "if (swimmers + 100u < params_.min_swimmers || v.ticks_left() < params_.min_ticks_left) return nullptr;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.7"
+  },
+  {
+   "id": "bridge_late_in_match",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "if (swimmers < params_.min_swimmers || v.ticks_left() < params_.min_ticks_left) return nullptr;",
+   "new": "if (swimmers < params_.min_swimmers || v.ticks_left() + 100000u < params_.min_ticks_left) return nullptr;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.8"
+  },
+  {
+   "id": "bridge_over_blocked_tile",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "usable = usable && (cell.has_partial_bridge() || (bridge_water(grid, t) && !blocked(t)));",
+   "new": "usable = usable && (true || (bridge_water(grid, t) && !blocked(t)));",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.12 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.12"
+  },
+  {
+   "id": "chain_without_limit",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "if (dist[static_cast<size_t>(to)] > limit) return {};",
+   "new": "if (dist[static_cast<size_t>(to)] > limit + 1000) return {};",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.12 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.12"
+  },
+  {
+   "id": "chain_one_hop_only",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "if (usable && e.missing > 0 && e.missing <= static_cast<int32_t>(plan.island_bridge_tiles)) edges.push_back(e);",
+   "new": "if (usable && e.missing > 0 && e.missing <= static_cast<int32_t>(plan.island_bridge_tiles) && (sets.find(ch->a) == sets.find(hill_comp) || sets.find(ch->b) == sets.find(hill_comp))) edges.push_back(e);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.12 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.12"
+  },
+  {
+   "id": "power_bridge_for_hurt_ant",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "if (power_on && a->type == v.default_ant_type() && a->hp >= 5) {",
+   "new": "if (power_on && a->type == v.default_ant_type()) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.6"
+  },
+  {
+   "id": "no_walk_home",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "        if (!c.ledger.claim(id, owner_)) continue;",
+   "new": "        if (true) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.3"
+  },
+  {
+   "id": "job_waits_for_ever",
+   "file": "src/ants_ai/island_link.cpp",
+   "old": "if (now >= blocked_since_ + params_.blocked_ticks) {",
+   "new": "if (false && now >= blocked_since_ + params_.blocked_ticks) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.14 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.14"
+  },
+  {
+   "id": "power_kinds_ignored",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "if (want == 0 || ((plan.island_power_kinds >> static_cast<unsigned>(kind)) & 1u) == 0) continue;",
+   "new": "if (want == 0 || ((plan.island_power_kinds | 255u) >> static_cast<unsigned>(kind)) == 0u) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.6"
+  },
+  {
+   "id": "evacuation_not_ordered",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "        c.orders.move({a.id}, shore, Priority::Urgent);\n        evacuated_at_[a.id] = now;",
+   "new": "        evacuated_at_[a.id] = now;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.17 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.17"
+  },
+  {
+   "id": "swarm_keeps_shut_way",
+   "file": "src/ants_ai/island_swarm.cpp",
+   "old": "if (f.empty() || f[static_cast<size_t>(index_of(grid, a->tile))] < 0) {",
+   "new": "if (false && (f.empty() || f[static_cast<size_t>(index_of(grid, a->tile))] < 0)) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.18 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.18"
+  },
+  {
+   "id": "healed_ant_kept",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "if (a->hp > params_.return_hp || !hill.present) {",
+   "new": "if (!hill.present) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.3"
+  },
+  {
+   "id": "link_dig_ticks_ignored",
+   "file": "src/ants_ai/island_link.cpp",
+   "old": "int64_t cost = missing == 0 ? 0 : static_cast<int64_t>(params_.dig_first_ticks) + (missing - 1) * static_cast<int64_t>(params_.dig_next_ticks);",
+   "new": "int64_t cost = 0;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.15 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.15"
+  },
+  {
+   "id": "job_far_swimmer",
+   "file": "src/ants_ai/island_link.cpp",
+   "old": "if (best != nullptr && want_kind >= 0 && best->tile.chebyshev_dist(target) > static_cast<int32_t>(params_.job_max_swim)) return;",
+   "new": "if (best != nullptr && want_kind >= 0 && best->tile.chebyshev_dist(target) > 1000) return;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.16 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.16"
+  },
+  {
+   "id": "standing_channel_not_joined",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "if (stands) sets.unite(ch.a, ch.b);",
+   "new": "if (stands) { (void)0; }",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.12 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.12"
+  },
+  {
+   "id": "foreign_per_island_only",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "if (foreign[k]) foreign_set[static_cast<size_t>(sets.find(static_cast<int32_t>(k)))] = true;",
+   "new": "if (foreign[k]) foreign_set[k] = true;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI54.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI54.10"
+  }
+ ]
+}

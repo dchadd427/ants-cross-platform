@@ -161,6 +161,10 @@ LevelPlan plan_for(Level level) noexcept {
             p.island_mine_from = 600;                // the flight starts as soon as the expedition is over (the clock only keeps it from the first minutes)
             p.island_flower_link = true;             // the swarm: a Swimmer digs the tiles from the ring half to the flower strips, the spare ants wait there and take the Swimmers that fall (docs/BOTS.md, "The swarm")
             p.island_swarm_rows = 1300;              // ... and the corner rows that nobody works are taken on foot, from the tick at which the own row is done
+            p.island_link_cost = true;               // ... the link that is dug is the cheapest one, not the first of the list (docs/BOTS.md, "Bridges for ants")
+            p.island_return = true;                  // ... a hurt ant that stands stranded on another island gets a bridge home and heals,
+            p.island_feeder = true;                  // ... one that stands beside food that the hill could not reach gets the bridge that opens it,
+            p.island_power_bridge = true;            // ... and one that stands idle gets the bridge to a power-up that the plan wants
             p.island_crew_spare = 2;                 // the crew that is flown over has two ants more than the row needs: they wait at the strips
             p.island_ferry_per_pile = 3;             // three Swimmers a pile (two lose 24 points a match to three, 40 matches; docs/BOTS.md)
             p.island_ferry = true;
