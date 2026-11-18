@@ -818,7 +818,7 @@ bool RoomManager::start_bot_match(uint32_t now_ms, std::string& code, std::strin
         }
     }
     RoomSpec spec = default_spec();
-    const uint32_t map_draw = bot_rng_();                                  // (the first draw of the match, as the map's always was: what it picks from is known after the coin)
+    const uint32_t map_draw = static_cast<uint32_t>(bot_rng_());                                  // (the first draw of the match, as the map's always was: what it picks from is known after the coin)
     spec.players = static_cast<uint8_t>(2 + bot_rng_() % 3);
     uint32_t need = spec.players;
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {              // (a seat is taken with the chance need / seats left)
