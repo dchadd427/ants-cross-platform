@@ -209,6 +209,7 @@ void HostSession::drop(uint8_t player, bool as_quit) {
     if (player >= sim::MAX_PLAYERS || !clients_[player].present) return;
     end_lag_notice(player);
     attendance_.dropped(player, last_ms_);           // (Dropped is final: the key still tells its owner so)
+    trip_.reset(player);                             // (a seat that goes forgets how far behind its machine was)
     clients_[player].present = false;
     if (clients_[player].conn != nullptr && clients_[player].conn->is_open()) clients_[player].conn->close();
     sequencer_.set_active(player, false);
@@ -224,6 +225,7 @@ void HostSession::lose(uint8_t player) {
     if (!cfg_.hold_seats || !log_.usable() || key_is_zero(keys_[player])) return drop(player);
     end_lag_notice(player);
     if (!attendance_.lost(player, last_ms_)) return drop(player);
+    trip_.reset(player);
     clients_[player].present = false;
     if (clients_[player].conn != nullptr && clients_[player].conn->is_open()) clients_[player].conn->close();
     sequencer_.set_active(player, false);            // its acknowledgements no longer matter, and its commands are refused
@@ -249,6 +251,7 @@ void HostSession::finish_drop(uint8_t seat) {
     if (seat < sim::MAX_PLAYERS && clients_[seat].present) {
         Client& c = clients_[seat];
         end_lag_notice(seat);
+        trip_.reset(seat);
         c.present = false;
         if (c.conn != nullptr && c.conn->is_open()) {
             c.conn->send(encode(RejectMsg{RejectReason::Dropped}));

@@ -10,8 +10,9 @@
 // Pure logic like the other meters of latency.hpp: no clock and no sockets; every call is given the host's millisecond clock (clock.hpp: differences are wrap-safe). Nothing
 // here changes what is sent, what a turn holds or what any machine computes.
 //
-// What a machine's own acknowledgements can change: acknowledging late makes a bigger reading (the room's handicap has a cap), acknowledging a turn before it has run makes a
-// smaller one (which only lowers the handicap for that person), saying nothing leaves the person out of the median. None of it can move the handicap past the cap.
+// What a machine's own acknowledgements can change: acknowledging late makes a bigger reading (the room's handicap has a cap); acknowledging a turn only once the host has run it (a second
+// copy of an early acknowledgement) makes a smaller one, down to about 0, which only lowers the handicap for that person; saying nothing leaves the person out of the median. An acknowledgement
+// that comes before the host has run its turn is no reading. None of it can move the handicap past the cap.
 
 #include <array>
 #include <cstddef>

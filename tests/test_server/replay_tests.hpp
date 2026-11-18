@@ -265,6 +265,9 @@ void run_replay_tests() {
         replay::Outcome played;
         ASSERT_TRUE(plays_out(f.rep, played));                                                           // (no bot, no link, no clock: the recorded turns alone)
         ASSERT_TRUE(played.complete && played.turns == f.rep.total_turns && played.hashes_checked >= 5);
+        size_t from_the_bot = 0;
+        for (const replay::TimedCommand& c : f.rep.commands) from_the_bot += c.command.issuer == 1 ? 1u : 0u;
+        ASSERT_TRUE(from_the_bot > 20 && from_the_bot + 12 >= s.bot_held_commands);                     // (the bot's commands are in the file, the held ones too: none was lost on the way into a turn)
     } TEST_END();
 
     TEST_CASE("S3.162 A Match That Ran Less Than 30 Seconds Is Not Kept Whatever Ended It (Closed, Or Quit So That The Rules End It), And A Room That Never Began Has No Match: The Status Says So, Nothing Is Written; A Match Of Exactly The Length That Counts Is Kept") {

@@ -22,7 +22,8 @@ namespace ants::server {
 inline constexpr uint32_t kBotLagMaxTicks = 6;         // 300 ms: the most that a room holds its bots back, whatever the readings say
 inline constexpr uint32_t kBotLagTickMs = 50;          // a tick and a turn
 inline constexpr uint32_t kBotLagBandMs = 10;          // the reading must pass the boundary between two holds by this much before the hold moves (the number does not flicker)
-inline constexpr uint32_t kBotLagDwellTicks = 20;      // after a change the hold stays at least one second (a timed chain of a bot needs the same hold from its first click to its last)
+inline constexpr uint32_t kBotLagDwellTicks = 20;      // after a change the hold stays at least one second (so it rarely changes in the middle of a timed chain of a bot, which times its clicks by the turn that applied_at names)
+inline constexpr uint32_t kBotLagBlindTicks = 200;     // people are connected and none can be read for this long (10 s): the hold goes to 0
 
 /// The hold, in whole ticks, that a round trip of `ms` stands for: the nearest whole number of ticks (halves up), at most kBotLagMaxTicks
 uint32_t bot_lag_ticks_for(uint32_t ms) noexcept;
@@ -34,8 +35,9 @@ uint32_t bot_lag_median(const uint32_t* ms, size_t n) noexcept;
 class BotLag {
 public:
     /// `humans`: the persons who are connected now; `trips_ms`: the round trip of the turn stream of those among them who have a fresh reading (`n` values). Nobody connected: the hold is 0 at once.
-    /// People connected and no reading among them (a pause, a window that was hidden): the hold stays what it was. Otherwise the hold moves to the median's whole ticks when the median is past the
-    /// boundary by kBotLagBandMs, and no sooner than kBotLagDwellTicks after its last change.
+    /// People connected and no reading among them (a window that was hidden, a machine that says nothing): the hold stays what it was for kBotLagBlindTicks and then goes to 0 (ticks do not run while
+    /// a match is paused, so a pause does not count). Otherwise the hold moves to the median's whole ticks when the median is past the boundary by kBotLagBandMs, and no sooner than
+    /// kBotLagDwellTicks after its last change.
     void update(uint64_t tick, size_t humans, const uint32_t* trips_ms, size_t n) noexcept;
     uint32_t hold_ticks() const noexcept { return hold_; }
 
@@ -43,6 +45,8 @@ private:
     uint32_t hold_{0};
     uint64_t changed_at_{0};
     bool changed_{false};
+    uint64_t blind_since_{0};
+    bool blind_{false};
 };
 
 /// The sink of one bot seat of a room: holds each command back for the room's hold and puts it into the sequencer in the order it came. With a hold of 0 and nothing waiting, a command goes
@@ -58,7 +62,8 @@ public:
     explicit LaggedSink(Line line) : line_(std::move(line)) {}
 
     sim::CommandResult submit(const sim::Command& command) override;
-    /// The turn that a command submitted now will be sealed into: the sequencer's next turn plus the hold, and never before the command that is last in line
+    /// The turn that a command submitted now will be sealed into when the room seals on time: the sequencer's next turn plus the hold, and never before the command that is last in line. A room
+    /// that was late and seals several turns in one pass puts a command in a turn or two later than this; a timed chain whose second click would then miss its window is dropped by the controller
     uint64_t applied_at(uint64_t now) const override;
     /// Called after every tick that the referee has run, before the bot looks: puts every command whose time has come into the sequencer, in order. While the session does not accept a bot's
     /// command (the match waits for a person who is away) the commands wait; the world does not move meanwhile.

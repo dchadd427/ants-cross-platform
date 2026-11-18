@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the network handicap of a room's computer players (docs/BOTS.md, 'The network handicap of a room's bots'): the hold's rounding, cap, median, the band and the dwell that keep it from flickering, nobody connected and nobody readable, the order of the held commands, the pass-through at a hold of 0, the turn that applied_at names, the sink that waits for a match that waits, the host's reading of a person's turns (the readings it needs, how old one may be, the cap of a reading, a turn it has not run, a turn twice), the calls that feed the reading, and the room's use of it, against test_server S3.285 - S3.290 and test_latency N9.40 - N9.44. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_lag_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by the case named in expect. Left out as equivalent: the cap of bot_lag_ticks_for without its early return's twin (std::min alone gives the same number for every reading that does not wrap, which the overflow mutant covers), and the clamp of BotLag::update's median (a median past 600 ms gives the cap with or without it, except at the wrap of the sum, which the huge reading covers).",
+ "note": "Mutants of the network handicap of a room's computer players (docs/BOTS.md, 'The network handicap of a room's bots'): the hold's rounding, cap, median, the band and the dwell that keep it from flickering, nobody connected, nobody readable (kept ten seconds, then 0), the order of the held commands, the pass-through at a hold of 0, the turn that applied_at names, the sink that waits for a match that waits, the host's reading of a person's turns (the readings it needs, how old one may be, the cap of a reading, a turn it has not run, a turn twice), the calls that feed the reading, and the room's use of it, against test_server S3.285 - S3.290 and test_latency N9.40 - N9.44. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_lag_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by the case named in expect. Left out as equivalent: the cap of bot_lag_ticks_for without its early return's twin (std::min alone gives the same number for every reading that does not wrap, which the overflow mutant covers), the seat forgetting its readings when its link goes (TurnTripMeter::reset at loss and drop: the 1.5 s rule clears them at the next reading all the same, but for a seat taken back within 1.5 s), and the check that a seat is present in HostSession::turn_trip_ms (the reset at loss and drop leaves such a seat no reading; the check stays as a second guard).",
  "baseline": [
   {
    "build": "test_server",
@@ -25,7 +25,7 @@
   {
    "id": "ticks_no_overflow_guard",
    "file": "src/ants_server/bot_lag.cpp",
-   "old": "    if (ms >= kBotLagMaxTicks * kBotLagTickMs) return kBotLagMaxTicks;       // (also keeps the sum below from wrapping)\n",
+   "old": "    if (ms >= kBotLagMaxTicks * kBotLagTickMs) return kBotLagMaxTicks;",
    "new": "",
    "expect": "S3.285"
   },
@@ -53,36 +53,57 @@
   {
    "id": "nobody_connected_keeps_the_hold",
    "file": "src/ants_server/bot_lag.cpp",
-   "old": "        hold_ = 0;\n        changed_ = false;\n        return;",
-   "new": "        changed_ = false;\n        return;",
+   "old": "        hold_ = 0;\n        changed_ = false;\n        blind_ = false;",
+   "new": "        changed_ = false;\n        blind_ = false;",
    "expect": "S3.285"
   },
   {
    "id": "nobody_connected_waits_for_the_dwell",
    "file": "src/ants_server/bot_lag.cpp",
-   "old": "        hold_ = 0;\n        changed_ = false;\n        return;",
-   "new": "        if (!changed_ || tick - changed_at_ >= kBotLagDwellTicks) hold_ = 0;\n        return;",
+   "old": "        hold_ = 0;\n        changed_ = false;\n        blind_ = false;",
+   "new": "        if (!changed_ || tick - changed_at_ >= kBotLagDwellTicks) hold_ = 0;\n        changed_ = false;\n        blind_ = false;",
    "expect": "S3.285"
   },
   {
-   "id": "nobody_readable_drops_the_hold",
+   "id": "nobody_readable_drops_the_hold_at_once",
    "file": "src/ants_server/bot_lag.cpp",
-   "old": "if (n == 0) return;                                             // people are here",
-   "new": "if (n == 0) { hold_ = 0; return; }                              // people are here",
+   "old": "if (tick - blind_since_ >= kBotLagBlindTicks) {",
+   "new": "if (true) {",
+   "expect": "S3.285"
+  },
+  {
+   "id": "nobody_readable_keeps_the_hold_for_ever",
+   "file": "src/ants_server/bot_lag.cpp",
+   "old": "if (tick - blind_since_ >= kBotLagBlindTicks) {",
+   "new": "if (false) {",
+   "expect": "S3.285"
+  },
+  {
+   "id": "nobody_readable_for_one_tick_too_long",
+   "file": "src/ants_server/bot_lag.cpp",
+   "old": "if (tick - blind_since_ >= kBotLagBlindTicks) {",
+   "new": "if (tick - blind_since_ > kBotLagBlindTicks) {",
+   "expect": "S3.285"
+  },
+  {
+   "id": "the_silence_is_counted_from_the_first_ever",
+   "file": "src/ants_server/bot_lag.cpp",
+   "old": "    blind_ = false;\n    const uint32_t ms",
+   "new": "    const uint32_t ms",
    "expect": "S3.285"
   },
   {
    "id": "no_band_up",
    "file": "src/ants_server/bot_lag.cpp",
-   "old": "(ms + half - kBotLagBandMs) / kBotLagTickMs);",
-   "new": "(ms + half) / kBotLagTickMs);",
+   "old": "bot_lag_ticks_for(ms > kBotLagBandMs ? ms - kBotLagBandMs : 0)",
+   "new": "bot_lag_ticks_for(ms)",
    "expect": "S3.285"
   },
   {
    "id": "no_band_down",
    "file": "src/ants_server/bot_lag.cpp",
-   "old": "(ms + half + kBotLagBandMs) / kBotLagTickMs);",
-   "new": "(ms + half) / kBotLagTickMs);",
+   "old": "bot_lag_ticks_for(ms + kBotLagBandMs)",
+   "new": "bot_lag_ticks_for(ms)",
    "expect": "S3.285"
   },
   {
@@ -130,8 +151,8 @@
   {
    "id": "refused_command_is_taken",
    "file": "src/ants_server/bot_lag.cpp",
-   "old": "    if (!line_.accepts()) return result;                            // the session refuses it now",
-   "new": "    // the session refuses it now",
+   "old": "    if (!line_.accepts()) return result;",
+   "new": "",
    "expect": "S3.286"
   },
   {
@@ -182,7 +203,7 @@
    "id": "reading_never_goes_stale",
    "file": "src/ants_net/turn_trip.cpp",
    "old": "|| now_ms - seat.last_ms > kStaleMs) return false;",
-   "new": ") return false;",
+   "new": "|| (false && now_ms - seat.last_ms > kStaleMs)) return false;",
    "build": "test_latency",
    "test": "timeout 900 env ANTS_TEST_FILTER='N9.4' ./build/tests/test_net/test_latency",
    "expect": "N9.41"
@@ -199,7 +220,7 @@
   {
    "id": "silent_seat_keeps_its_old_readings",
    "file": "src/ants_net/turn_trip.cpp",
-   "old": "    if (seat.any && now_ms - seat.last_ms > kStaleMs) seat.readings = MedianWindow<kWindow>{};",
+   "old": "if (seat.any && now_ms - seat.last_ms > kStaleMs) seat.readings = MedianWindow<kWindow>{};",
    "new": "",
    "build": "test_latency",
    "test": "timeout 900 env ANTS_TEST_FILTER='N9.4' ./build/tests/test_net/test_latency",
@@ -244,7 +265,7 @@
   {
    "id": "an_acknowledgement_before_the_turn_is_a_reading",
    "file": "src/ants_net/turn_trip.cpp",
-   "old": "    if (trip < 0) return;                                          // (it cannot arrive before the host ran the turn: the clock was set back)\n",
+   "old": "if (trip < 0) return;",
    "new": "",
    "build": "test_latency",
    "test": "timeout 900 env ANTS_TEST_FILTER='N9.4' ./build/tests/test_net/test_latency",
@@ -262,7 +283,7 @@
   {
    "id": "the_session_never_reads_an_acknowledgement",
    "file": "src/ants_net/session.cpp",
-   "old": "            trip_.on_ack(player, m.turn, last_ms_);              // (a reading of the player's link: turn_trip_ms)\n",
+   "old": "trip_.on_ack(player, m.turn, last_ms_);",
    "new": "",
    "build": "test_latency",
    "test": "timeout 900 env ANTS_TEST_FILTER='N9.4' ./build/tests/test_net/test_latency",
@@ -271,17 +292,8 @@
   {
    "id": "the_session_never_notes_its_own_turns",
    "file": "src/ants_net/session.cpp",
-   "old": "        trip_.on_executed(e.turn, last_ms_);                                    // (when this host's own engine ran the turn: the clients' acknowledgements are timed against it)\n",
+   "old": "trip_.on_executed(e.turn, last_ms_);",
    "new": "",
-   "build": "test_latency",
-   "test": "timeout 900 env ANTS_TEST_FILTER='N9.4' ./build/tests/test_net/test_latency",
-   "expect": "N9.42"
-  },
-  {
-   "id": "a_seat_that_is_gone_is_still_read",
-   "file": "include/ants_net/session.hpp",
-   "old": "return player < sim::MAX_PLAYERS && clients_[player].present && trip_.read(player, last_ms_, ms); }",
-   "new": "return player < sim::MAX_PLAYERS && trip_.read(player, last_ms_, ms); }",
    "build": "test_latency",
    "test": "timeout 900 env ANTS_TEST_FILTER='N9.4' ./build/tests/test_net/test_latency",
    "expect": "N9.42"
@@ -307,15 +319,15 @@
   {
    "id": "the_room_never_updates_the_hold",
    "file": "src/ants_server/room.cpp",
-   "old": "        update_bot_lag();                                            // (the hold first",
-   "new": "        // (the hold first",
+   "old": "update_bot_lag();",
+   "new": "",
    "expect": "S3.287"
   },
   {
    "id": "the_room_never_releases_held_commands",
    "file": "src/ants_server/room.cpp",
-   "old": "        for (const std::unique_ptr<LaggedSink>& sink : bot_sinks_) sink->release();\n",
-   "new": "",
+   "old": "sink->release();",
+   "new": "(void)sink;",
    "expect": "S3.287"
   },
   {

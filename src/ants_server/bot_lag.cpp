@@ -24,13 +24,24 @@ void BotLag::update(uint64_t tick, size_t humans, const uint32_t* trips_ms, size
     if (humans == 0) {                                              // nobody to be level with: a bot-only match, a room whose people all left
         hold_ = 0;
         changed_ = false;
+        blind_ = false;
         return;
     }
-    if (n == 0) return;                                             // people are here and none can be read now: what was known stays
+    if (n == 0) {                                                   // people are here and none can be read now: what was known stays, for a while
+        if (!blind_) {
+            blind_ = true;
+            blind_since_ = tick;
+        }
+        if (tick - blind_since_ >= kBotLagBlindTicks) {             // ... and a person who cannot be read for ten seconds is no reading at all: no hold
+            hold_ = 0;
+            changed_ = false;
+        }
+        return;
+    }
+    blind_ = false;
     const uint32_t ms = std::min<uint32_t>(bot_lag_median(trips_ms, n), 2 * kBotLagMaxTicks * kBotLagTickMs);       // (what is past the cap makes no difference, and the sums below cannot wrap)
-    const uint32_t half = kBotLagTickMs / 2;
-    const uint32_t up = std::min<uint32_t>(kBotLagMaxTicks, (ms + half - kBotLagBandMs) / kBotLagTickMs);        // the most the reading holds up to, with the band against the boundary
-    const uint32_t down = std::min<uint32_t>(kBotLagMaxTicks, (ms + half + kBotLagBandMs) / kBotLagTickMs);      // and the least
+    const uint32_t up = bot_lag_ticks_for(ms > kBotLagBandMs ? ms - kBotLagBandMs : 0);        // the most the reading holds up to, with the band against the boundary
+    const uint32_t down = bot_lag_ticks_for(ms + kBotLagBandMs);                               // and the least
     uint32_t next = hold_;
     if (up > hold_) next = up;
     else if (down < hold_) next = down;

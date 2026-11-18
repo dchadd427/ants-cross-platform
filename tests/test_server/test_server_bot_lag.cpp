@@ -114,14 +114,33 @@ void run_bot_lag_tests() {
             feed(lag, 106, 1, {200});
             ASSERT_EQ(lag.hold_ticks(), 4u);
         }
-        {   // people are here and none can be read (a pause, a window that was hidden): what was known stays
+        {   // people are here and none can be read (a window that was hidden, a machine that says nothing): what was known stays for ten seconds, then there is no hold
             BotLag lag;
             feed(lag, 100, 1, {200});
-            for (uint64_t t = 101; t < 400; ++t) feed(lag, t, 2, {});
+            for (uint64_t t = 101; t <= 300; ++t) feed(lag, t, 2, {});                   // (the first tick without a reading is 101: 199 ticks later it is still 4)
             ASSERT_EQ(lag.hold_ticks(), 4u);
+            feed(lag, 301, 2, {});
+            ASSERT_EQ(lag.hold_ticks(), 0u);                                             // 200 ticks: no reading for ten seconds is no reading at all
+            feed(lag, 302, 1, {200});
+            ASSERT_EQ(lag.hold_ticks(), 4u);                                             // (and the way up is free again)
+            BotLag again;                                                                // the ten seconds count from the last time that nobody could be read
+            feed(again, 100, 1, {200});
+            for (uint64_t t = 101; t < 250; ++t) feed(again, t, 1, {});
+            feed(again, 250, 1, {200});                                                  // a reading, 149 ticks into the silence
+            for (uint64_t t = 251; t <= 450; ++t) feed(again, t, 1, {});
+            ASSERT_EQ(again.hold_ticks(), 4u);                                           // 200 ticks of a new silence, counted from 251: its 200th tick is the next one
+            feed(again, 451, 1, {});
+            ASSERT_EQ(again.hold_ticks(), 0u);
             BotLag fresh;
             feed(fresh, 100, 1, {});
             ASSERT_EQ(fresh.hold_ticks(), 0u);                                           // (nothing known yet: no hold)
+        }
+        {   // a reading that is past any clock does not wrap the sums, also when the hold is 6 already
+            BotLag lag;
+            feed(lag, 100, 1, {300});
+            ASSERT_EQ(lag.hold_ticks(), kBotLagMaxTicks);
+            feed(lag, 200, 1, {0xFFFFFFFFu});
+            ASSERT_EQ(lag.hold_ticks(), kBotLagMaxTicks);
         }
         {   // the band against flicker, and the dwell
             BotLag lag;
@@ -186,6 +205,7 @@ void run_bot_lag_tests() {
             sink.submit(numbered(2));
             sink.submit(numbered(3));
             ASSERT_TRUE(f.delivered.empty());
+            ASSERT_EQ(sink.applied_at(0), 13u);                                          // (still behind the first one: the commands after it go with it)
             f.sealed = 13;
             sink.release();
             ASSERT_EQ(f.delivered, (std::vector<int>{1, 2, 3}));
@@ -318,7 +338,35 @@ void run_bot_lag_tests() {
         ASSERT_EQ(s.bot_lag_ticks, 1u);                                                  // Ann alone: 30 ms of round trip
     } TEST_END();
 
-    TEST_CASE("S3.289 A Match That Waits For An Absent Person Holds Nothing (Nobody Is Connected) And Nothing Runs; The Person Comes Back And The Hold Is The Link's Again Within A Few Seconds; A Person Whose Machine Says Nothing For A While Leaves The Hold Where It Was; A Machine That Draws A Frame Every 400 ms Holds Nothing Past The Cap And The Match Keeps Its Pace") {
+    TEST_CASE("S3.288b Teams And More Than One Bot: Every Person Counts Whichever Team They Play On (A Bot Allied To The Near Person Waits For The Far One Too), And Every Bot Of The Room Waits The Same") {
+        {
+            World w;
+            RoomSpec spec = spec_of("LAG-T", 3);
+            spec.bots = {ai::BotSpec{2, "standard", ai::Level::Hard}};
+            spec.teams = sim::StartTeams{true, 0, 2};                                    // Ann (seat 0) and the bot (seat 2) against Bob
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            w.connect("Ann", "LAG-T", 255, net::LoopbackNetwork::Link{15, 0});
+            w.connect("Bob", "LAG-T", 255, net::LoopbackNetwork::Link{120, 0});
+            w.run(kPre + 9000);
+            const RoomStatus s = w.status("LAG-T");
+            ASSERT_TRUE(s.state == RoomState::Running && s.bot_controller && !s.teams.empty() && s.teams != "ffa");
+            ASSERT_EQ(s.bot_lag_ticks, 3u);                                              // the same as the free-for-all room of the same two links
+        }
+        {
+            World w;
+            RoomSpec spec = spec_of("LAG-2B", 3);
+            spec.bots = {ai::BotSpec{1, "standard", ai::Level::Hard}, ai::BotSpec{2, "standard", ai::Level::Hard}};
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            w.connect("Ann", "LAG-2B", 255, net::LoopbackNetwork::Link{55, 0});
+            w.run(kPre + 9000);
+            const RoomStatus s = w.status("LAG-2B");
+            ASSERT_TRUE(s.state == RoomState::Running && s.bots.size() == 2);
+            ASSERT_EQ(s.bot_lag_ticks, 2u);
+            ASSERT_TRUE(s.bot_held_commands > 5 && s.bot_held_longest == 2);              // (the commands of both bots wait)
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.289 A Match That Waits For An Absent Person Holds Nothing (Nobody Is Connected) And Nothing Runs; The Person Comes Back And The Hold Is The Link's Again Within A Few Seconds; A Person Whose Machine Says Nothing For A While Leaves The Hold Where It Was; A Machine That Draws A Frame Every 400 ms Cannot Slow The Match (It Is Read At The Newest Turn Of Each Frame: Its Link Is What Counts)") {
         {   // a pause and a return
             LagRoom r("LAG-P", 45);
             r.w.run(kPre + 8000);
@@ -364,7 +412,6 @@ void run_bot_lag_tests() {
             r.w.run(kPre + 10000);
             const RoomStatus s = r.w.status("LAG-S");
             ASSERT_TRUE(s.state == RoomState::Running);
-            ASSERT_TRUE(s.bot_lag_ticks <= kBotLagMaxTicks);                             // (a machine that runs several turns in a frame is read at the newest of them: its link is what counts, not its frame rate)
             ASSERT_TRUE(s.ticks >= 170);                                                 // 10 s of play at 20 ticks a second: nothing here slows the match
         }
     } TEST_END();
