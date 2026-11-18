@@ -144,10 +144,10 @@ class TheServices(unittest.TestCase):
     def test_the_settings_it_is_given(self):
         for name, text in self.files.items():
             hub = service(text, "ants-hub")
-            self.assertEqual(sorted(re.findall(r"(?m)^      (ANTS_[A-Z_]+):", hub)), ["ANTS_HUB_ADMIN_GATE_SECRET", "ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_CLIENT_ID", "ANTS_HUB_DISCORD_CLIENT_SECRET",
+            self.assertEqual(sorted(re.findall(r"(?m)^      (ANTS_[A-Z_]+):", hub)), ["ANTS_ADMIN_GATE_SECRET", "ANTS_HUB_ADMIN_GATE_SECRET", "ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_CLIENT_ID", "ANTS_HUB_DISCORD_CLIENT_SECRET",
                                                                                      "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_MIN_ACCOUNT_DAYS", "ANTS_HUB_OWNER", "ANTS_HUB_PUBLIC_URL",
                                                                                      "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_ROLE_RECHECK_SECONDS"], name)
-            for secret in ("ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_OWNER", "ANTS_HUB_ADMIN_GATE_SECRET"):
+            for secret in ("ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_OWNER", "ANTS_HUB_ADMIN_GATE_SECRET", "ANTS_ADMIN_GATE_SECRET"):
                 self.assertIn("%s: ${%s:-}\n" % (secret, secret), hub + "\n", name)                  # (the bot's token, the server and the roles: from the stack's environment only, no value in the file)
             self.assertIn("ANTS_HUB_ROLE_RECHECK_SECONDS: ${ANTS_HUB_ROLE_RECHECK_SECONDS:-180}\n", hub + "\n", name)
             self.assertNotIn("ANTS_HUB_MODS", hub, name)
@@ -199,6 +199,22 @@ class TheServices(unittest.TestCase):
             logging = json.loads(done.stdout)["services"]["ants-hub"]["logging"]
             self.assertEqual(logging["driver"], "json-file")
             self.assertEqual(logging["options"], {"max-size": "10m", "max-file": "3"})
+
+    @unittest.skipUnless(shutil.which("docker"), "docker is needed")
+    def test_compose_hands_the_one_admin_key_to_the_hub_and_to_the_game_server(self):
+        """One variable is enough: the stack gives it to both services under the same name; a stack that still sets the hub's old name too keeps both (the hub then reads the shared one first)."""
+        key = "made-up-stack-key-4e7b2a9c1d0f8365-x"
+        for label, extra in (("the one variable", {"ANTS_ADMIN_GATE_SECRET": key}), ("both names", {"ANTS_ADMIN_GATE_SECRET": key, "ANTS_HUB_ADMIN_GATE_SECRET": key})):
+            env = {k: v for k, v in os.environ.items() if not k.startswith("ANTS_")}
+            env.update(extra)
+            done = subprocess.run(["docker", "compose", "-f", STACK, "config", "--format", "json"], capture_output=True, text=True, env=env)
+            if done.returncode != 0:
+                self.skipTest("docker compose is not available: " + done.stderr[:200])
+            services = json.loads(done.stdout)["services"]
+            self.assertEqual(services["ants-hub"]["environment"]["ANTS_ADMIN_GATE_SECRET"], key, label)
+            self.assertEqual(services["ants-server"]["environment"]["ANTS_ADMIN_GATE_SECRET"], key, label)
+            self.assertEqual(services["ants-hub"]["environment"]["ANTS_HUB_ADMIN_GATE_SECRET"], extra.get("ANTS_HUB_ADMIN_GATE_SECRET", ""), label)
+            self.assertNotIn("ANTS_HUB_ADMIN_GATE_SECRET", services["ants-server"]["environment"], label)
 
     @unittest.skipUnless(shutil.which("docker"), "docker is needed")
     def test_compose_renders_the_hub_with_no_published_port(self):
