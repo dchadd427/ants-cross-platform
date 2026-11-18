@@ -122,8 +122,8 @@ Lead measure_lead(uint32_t one_way_ms, uint32_t first_frame_ms, bool held) {
         const uint64_t tick = referee.current_tick();
         if (held) {
             uint32_t trip = 0;
-            const bool read = host.turn_trip_ms(1, trip);
-            lag.update(tick, size_t{1}, &trip, read ? size_t{1} : size_t{0});
+            const bool known = host.turn_trip_ms(1, trip);
+            lag.update(tick, size_t{1}, &trip, known ? size_t{1} : size_t{0});
         }
         sink.release();
         if (tick >= 200 && tick % 40 == 0) sink.submit(answer(tick, bot_ant));
@@ -559,8 +559,8 @@ void run_bot_lag_tests() {
                 ASSERT_TRUE(after.least >= -1);                                          // ... and the bot waits at most one turn more than the person is behind
             }
         }
-        const Lead far = measure_lead(250, 9, true);                                     // 500 ms of round trip
-        ASSERT_EQ(far.hold, kBotLagMaxTicks);
-        ASSERT_TRUE(far.events >= 15 && far.least == 4 && far.most == 4);                // ten turns behind, six of them made up
+        const Lead capped = measure_lead(250, 9, true);                                  // 500 ms of round trip
+        ASSERT_EQ(capped.hold, kBotLagMaxTicks);
+        ASSERT_TRUE(capped.events >= 15 && capped.least == 4 && capped.most == 4);       // ten turns behind, six of them made up
     } TEST_END();
 }
