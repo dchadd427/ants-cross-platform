@@ -122,7 +122,7 @@ void Application::render_frame() {
         hud_.set_sim_query(&view);                           // (the cursor's special-target question is asked of the picture's own engine)
         cur = hud_.evaluate_cursor(mouse_screen_x_, mouse_screen_y_, view.get_world_state(), view.grid(), renderer_->camera());
     }
-    if (!pointer_outside_) renderer_->render_software_cursor(cur, mouse_screen_x_, mouse_screen_y_, static_cast<uint32_t>(sim_.current_tick()));
+    if (!pointer_outside_) renderer_->render_software_cursor(cur, mouse_screen_x_, mouse_screen_y_, static_cast<uint32_t>(sim_.current_tick()), hud_.art());       // (the art's pointers while the HUD art is New and usable)
 
     renderer_->end_frame();
     felt_delay_.on_frame_end(frame_ms());                    // (an order whose effect is in this frame is felt now)

@@ -659,6 +659,54 @@ void test_hud_art() {
             check(app.hud().art() == nullptr && app.menu_settings().hud_art_new, "...the sheet that the window needs cannot be made: the original's art");
         }
     }
+    {   // the pointer follows the art: New draws the art's, Classic and an art that cannot be used the original's; the tip stands on the click point's pixel in all of them
+        struct Pointer {
+            std::vector<uint8_t> mask;        // the pixels round the pointer that change when it moves away
+            int first_x{-1}, first_y{-1};     // the upper left of them
+            int count{0};
+        };
+        const auto pointer = [&](const std::string& dir, bool given, bool new_art) {
+            Pointer out;
+            Application app;
+            if (!start(app, dir, given, new_art, std::string())) return out;
+            const QuietStdout quiet;
+            constexpr int kX = 860, kY = 330, kSide = 48;                              // (over the panel: nothing moves there between two frames)
+            const auto frame = [&](int x, int y) {
+                SDL_MouseMotionEvent m{};
+                m.type = SDL_MOUSEMOTION;
+                m.x = x;
+                m.y = y;
+                app.handle_mouse_motion(m);
+                app.render_frame();
+                std::vector<uint8_t> px(static_cast<size_t>(kSide) * kSide * 4u, 0);
+                const SDL_Rect area = {kX - 8, kY - 8, kSide, kSide};
+                SDL_RenderReadPixels(app.renderer().get_sdl_renderer(), &area, SDL_PIXELFORMAT_RGBA32, px.data(), kSide * 4);
+                return px;
+            };
+            const std::vector<uint8_t> with = frame(kX, kY);
+            const std::vector<uint8_t> away = frame(kX, kY + 120);
+            out.mask.assign(static_cast<size_t>(kSide) * kSide, 0);
+            for (int y = 0; y < kSide; ++y) {
+                for (int x = 0; x < kSide; ++x) {
+                    const size_t i = (static_cast<size_t>(y) * kSide + static_cast<size_t>(x)) * 4;
+                    if (with[i] == away[i] && with[i + 1] == away[i + 1] && with[i + 2] == away[i + 2]) continue;
+                    out.mask[static_cast<size_t>(y) * kSide + static_cast<size_t>(x)] = 1;
+                    if (out.count++ == 0) {
+                        out.first_x = x - 8;
+                        out.first_y = y - 8;
+                    }
+                }
+            }
+            return out;
+        };
+        const Pointer art = pointer(folder, false, true);
+        const Pointer classic = pointer(folder, true, false);
+        const Pointer cut = pointer(art_copy_with_cut_sheets("pointercut", {1, 2, 3}), false, true);
+        check(art.count > 0 && classic.count > 0 && cut.count > 0, "the pointer is drawn over the panel in all three");
+        check(art.mask != classic.mask, "with the new art the pointer is the art's, not the original's");
+        check(cut.mask == classic.mask, "with sheets that cannot be used (the original's art is drawn) the pointer is the original's");
+        check(art.first_x == 0 && art.first_y == 0 && classic.first_x == 0 && classic.first_y == 0, "the tip is on the click point's own pixel in the new art and in the original's");
+    }
     {
         const std::filesystem::path file = std::filesystem::temp_directory_path() / ("ants_hud_art_" + std::to_string(static_cast<long long>(SDL_GetTicks())) + ".ini");
         {

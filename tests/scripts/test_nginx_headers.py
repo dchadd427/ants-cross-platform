@@ -13,6 +13,9 @@ A second nginx has no server behind it, for the answers of the named locations (
   - THE ORIGIN OF A GAME CONNECTION: real handshakes at /ws with no Origin, the site's own (http, https, with a port, the host in capital letters, an address in brackets, a fully qualified name with its final dot) and every kind of other (another site, "null",
     the name with something added before or after it, a path, a user name, a second Origin, another scheme, a capital letter, two dots, a dot next to a port): 101 or 403, and the stand-in is asked only when the answer is 101. The chat hub's door
     still passes the Origin on, for the hub to judge.
+  - WHAT THE PAGE OF ANOTHER SITE MAY READ: a GET of /live, /stats and /history (also with ?limit=) from the Origin https://playants.org is answered with that Origin in Access-Control-Allow-Origin (once) and Vary: Origin, and
+    keeps the headers it had; every other Origin (a look-alike, another scheme, www, a port, capital letters, null) and no Origin get no such header; no other address, no other method and no preflight does (every kind of
+    address of the table is asked as that page asks), and nothing allows credentials or lists methods or headers.
   - WHAT THE GAME SERVER IS GIVEN: the headers of the handshake and the address nginx sees, and nothing else, whatever the visitor sent (cookies, Authorization, forwarding headers, an address header of the
     visitor's own); /busy is given the Host.
   - THE ACCESS LOG: the path that was asked for and no query, no referrer, no cookie, no Authorization header; the image's stock log gets nothing.
@@ -359,6 +362,9 @@ def expected(kind, host=SITE):
 
 HEXID = "a" * 32
 SAME = (("Sec-Fetch-Site", "same-origin"),)
+READER = "https://playants.org"                              # (the one other site whose page reads the numbers of this one with fetch())
+READ_ROUTES = ("/live", "/stats", "/history")                # (the three routes it reads: GET, plain JSON)
+READ_ADDRESSES = READ_ROUTES + ("/history?limit=1", "/history?limit=3")
 # (what it is, method, address, request headers, the status, the kind) for the nginx with a stand-in behind it
 LIVE_ROWS = [
     ("the front page", "GET", "/", (), 200, "lobby"),
@@ -502,6 +508,7 @@ class TheFileRuns(unittest.TestCase):
             cls.live = cls.start("live", cls.stand.server_address[1])
             cls.dead = cls.start("dead", free_port())
             cls.limited = cls.start("limited", cls.stand.server_address[1])                    # (its own allowances: the test that uses up the login's does not spoil the others)
+            cls.reader = cls.start("reader", cls.stand.server_address[1])                      # (and this one, for the routes that another site's page reads: many requests to the same few doors)
         except BaseException:
             cls.tearDownClass()
             raise
@@ -673,6 +680,91 @@ class TheFileRuns(unittest.TestCase):
         again = fetch(self.live.port, "/matches", headers=(("If-None-Match", first.get("etag")),))
         self.assertEqual(again.status, 304)
         self.check("the 304", again, "page")
+
+    # ---- the three routes that the page of another site reads --------------------------------------------------------------------------------------------
+    @staticmethod
+    def allowed_origins(answer):
+        return [v for k, v in answer.headers if k == "access-control-allow-origin"]
+
+    @staticmethod
+    def vary(answer):
+        return [token.strip().lower() for k, v in answer.headers if k == "vary" for token in v.split(",")]
+
+    @staticmethod
+    def other_access_control(answer):
+        return [k for k in answer.names() if k.startswith("access-control-") and k != "access-control-allow-origin"]
+
+    def test_the_page_at_playants_org_may_read_the_three_routes_and_the_answers_keep_every_header_they_had(self):
+        for path in READ_ADDRESSES:
+            answer = fetch(self.reader.port, path, headers=(("Origin", READER),))
+            self.assertEqual(answer.status, 200, path)
+            self.assertEqual(self.allowed_origins(answer), [READER], path)                      # (that origin, written out, once)
+            self.assertIn("origin", self.vary(answer), path)
+            self.assertEqual(self.other_access_control(answer), [], path)                       # (no credentials, no method or header list: a simple GET needs none)
+            self.check(path, answer, "door")                                                    # (and the four headers of every answer of the site, once each)
+            self.assertEqual(answer.body, b'{"stub":true}', path)
+        self.assertEqual(self.allowed_origins(fetch(self.reader.port, "/live", headers=(("origin", READER),))), [READER])      # (a header name has no case)
+
+    def test_any_other_origin_or_none_is_given_nothing_to_read_with_and_the_answer_says_it_depends_on_the_origin(self):
+        others = ["https://playants.org.evil.example", "https://evil.example", "http://playants.org", "https://www.playants.org", "https://beta.playants.org", "https://app.playants.org",
+                  "null", "https://PLAYANTS.ORG", "HTTPS://playants.org", "https://playants.org/", "https://playants.org:443", "https://playants.org:8443", "https://playants.org.",
+                  "https://evilplayants.org", "https://playantsxorg", "https://playants-org", "https://playants.org@evil.example", "https://evil.example#https://playants.org", "playants.org",
+                  "*", "https://playants.org https://evil.example", "https://playants.org, https://evil.example", "https://evil.example, https://playants.org", "//playants.org", ""]
+        for path in READ_ADDRESSES:
+            for origin in others if path in READ_ROUTES else others[:1]:                         # (a list with a query has an allowance of two a second: one request each is enough, the rule is the same)
+                answer = fetch(self.reader.port, path, headers=(("Origin", origin),))
+                self.assertEqual(self.allowed_origins(answer), [], "%s from %r" % (path, origin))
+                self.assertEqual(self.other_access_control(answer), [], "%s from %r" % (path, origin))
+                self.assertIn("origin", self.vary(answer), "%s from %r" % (path, origin))
+            if path in READ_ROUTES:
+                none = fetch(self.reader.port, path)
+                self.assertEqual(self.allowed_origins(none), [], path)
+                self.assertIn("origin", self.vary(none), path)
+
+    def test_the_cache_of_the_numbers_does_not_hand_the_answer_for_one_origin_to_another(self):
+        for path in ("/stats", "/live", "/history"):
+            for origin, want in ((READER, [READER]), (None, []), ("https://evil.example", []), (READER, [READER]), (None, []), (READER, [READER])):
+                answer = fetch(self.reader.port, path, headers=(("Origin", origin),) if origin else ())
+                self.assertEqual(self.allowed_origins(answer), want, "%s from %s" % (path, origin))
+
+    def test_only_a_get_is_given_it_and_a_preflight_is_refused_as_it_was(self):
+        asked = (("Origin", READER), ("Access-Control-Request-Method", "GET"), ("Access-Control-Request-Headers", "content-type"))
+        for path in READ_ROUTES:
+            for method in ("OPTIONS", "POST", "HEAD", "PUT", "DELETE", "PATCH"):
+                answer = fetch(self.reader.port, path, method, asked, body=b"x" if method == "POST" else None)
+                what = "%s %s" % (method, path)
+                self.assertEqual(answer.status, 405, what)
+                self.assertEqual(self.allowed_origins(answer), [], what)
+                self.assertEqual(self.other_access_control(answer), [], what)
+                self.assertIn("origin", self.vary(answer), what)
+                self.assertEqual(answer.get("strict-transport-security"), HSTS, what)           # (the refusal carries the server's headers, as before)
+
+    def test_no_other_address_names_the_page_and_none_ever_allows_credentials(self):
+        def read_route(method, path):
+            return method == "GET" and path.partition("?")[0] in READ_ROUTES
+
+        for rows, front in ((LIVE_ROWS, self.reader), (DEAD_ROWS, self.dead)):
+            for what, method, path, headers, status, kind in rows:
+                sent = tuple(h for h in headers if h[0].lower() != "origin") + (("Origin", READER),)
+                answer = fetch(front.port, path, method, sent, body=b"x" if method == "POST" else b"")
+                got = self.allowed_origins(answer)
+                label = "%s (%s %s)" % (what, method, path)
+                if read_route(method, path):
+                    self.assertIn(got, ([READER],) if front is self.reader else ([], [READER]), label)    # (a game server that is not there: its 404 is the named answer, which has headers of its own)
+                elif kind == "open":
+                    self.assertEqual(got, ["*"], label)                                                  # (the sprites and sounds: open to every site, as they were)
+                else:
+                    self.assertEqual(got, [], label)
+                self.assertEqual(self.other_access_control(answer), [], label)
+        near = [("GET", "/live/"), ("GET", "/history/"), ("GET", "/stats/"), ("GET", "/stats/local"), ("GET", "/live/X-20260101-000000Z"), ("GET", "/history/ants-X-20260101-000000Z"),
+                ("GET", "/history/deaths?map=X"), ("GET", "/livex"), ("GET", "/statsx"), ("GET", "/history2"), ("GET", "/LIVE"), ("GET", "/Stats"), ("GET", "/HISTORY?limit=1"), ("GET", "/live.json"),
+                ("GET", "/stats.html"), ("GET", "/history.html"), ("GET", "/live%2F"), ("GET", "/busy"), ("GET", "/replays"), ("GET", "/lobbies"), ("GET", "/maps"), ("GET", "/maps/all"),
+                ("GET", "/submissions"), ("GET", "/admin/api/me"), ("GET", "/hub/me"), ("GET", "/ws"), ("GET", "/hub/ws"), ("GET", "/play"), ("GET", "/"), ("GET", "/nothing"),
+                ("POST", "/stats/local"), ("POST", "/stats"), ("POST", "/live")]
+        for method, path in near:
+            answer = fetch(self.reader.port, path, method, SAME + (("Origin", READER),), body=b"x" if method == "POST" else b"")
+            self.assertEqual(self.allowed_origins(answer), [], "%s %s" % (method, path))
+            self.assertEqual(self.other_access_control(answer), [], "%s %s" % (method, path))
 
     # ---- the origin of a game connection ---------------------------------------------------------------------------------------------------------------
     def test_the_origin_of_a_game_connection(self):

@@ -9,11 +9,12 @@
 #include <vector>
 
 #include "ants_app/health_marks.hpp"
+#include "ants_app/hud_art.hpp"
 #include "ants_app/renderer.hpp"
 
 namespace ants::app {
 
-void Renderer::render_software_cursor(CursorType type, int32_t screen_x, int32_t screen_y, uint32_t anim_tick) {
+void Renderer::render_software_cursor(CursorType type, int32_t screen_x, int32_t screen_y, uint32_t anim_tick, const hud_art::Art* art) {
     if (!archive_ || !texture_cache_ || !renderer_) return;
     (void)anim_tick;
 
@@ -39,6 +40,7 @@ void Renderer::render_software_cursor(CursorType type, int32_t screen_x, int32_t
     if (anim_id >= archive_->animation_count()) return;
     const auto& anim = archive_->get_animation(anim_id);
     if (anim.subitems.empty()) return;
+    if (art != nullptr && art->loaded() && draw_cursor_art(*art, type, anim, screen_x, screen_y)) return;       // (the HUD art's pointer, while it keeps the original's click point)
 
     size_t sub_idx = 0;
     if (anim.subitems.size() > 1) {
@@ -64,6 +66,38 @@ void Renderer::render_software_cursor(CursorType type, int32_t screen_x, int32_t
 
     const auto& sub = anim.subitems[sub_idx];
     draw_frame_parts(sub, screen_x, screen_y);
+}
+
+// The HUD art's pointer: the art's animation of the original's name, frame by the same clock as the original's. Whether it keeps the original's click point is asked once for each cursor and art (the frames
+// are compared by hud_art::cursor_fits); one that does not is not drawn, and the caller draws the original's.
+bool Renderer::draw_cursor_art(const hud_art::Art& art, CursorType type, const ants::assets::AnimationSequence& original, int32_t screen_x, int32_t screen_y) {
+    if (cursor_art_generation_ != art.generation()) {
+        cursor_art_fit_.fill(-1);
+        cursor_art_generation_ = art.generation();
+    }
+    const size_t index = static_cast<size_t>(type);
+    if (index >= cursor_art_fit_.size()) return false;
+    const hud_art::Animation* replacement = art.find_animation(original.name);
+    if (replacement == nullptr) return false;
+    int8_t& fit = cursor_art_fit_[index];
+    if (fit < 0) {
+        std::vector<hud_art::OriginalCursorFrame> frames;
+        bool one_part = true;
+        for (const auto& sub : original.subitems) {
+            if (sub.frames.size() != 1 || sub.frames[0].sprite_index >= archive_->sprite_count()) {
+                one_part = false;
+                break;
+            }
+            const auto& part = sub.frames[0];
+            const auto& sprite = archive_->get_sprite(part.sprite_index);
+            frames.push_back(hud_art::OriginalCursorFrame{static_cast<int32_t>(sub.val3), part.dx, part.dy, static_cast<int32_t>(sprite.width), static_cast<int32_t>(sprite.height)});
+        }
+        fit = one_part && hud_art::cursor_fits(art, *replacement, frames) ? 1 : 0;
+    }
+    if (fit == 0) return false;
+    const uint32_t now_ms = anim_clock_pin_ms_ >= 0 ? static_cast<uint32_t>(anim_clock_pin_ms_) : SDL_GetTicks();       // (a pinned animation clock is the tests': it holds the art's pointer on one frame)
+    hud_art::draw_all(*this, art, hud_art::cursor_draws(art, *replacement, hud_art::frame_at(*replacement, now_ms), screen_x, screen_y));
+    return true;
 }
 
 // The stored (or mirrored) Table-4 animation of the clip the simulation plays on the ant; null while another system animates it.

@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the HUD art's choice of the sheet by the output's scale, of the nine-slice (a long piece: start, repeated run, end), of the frame's pieces at every shape and of the fall back to the original's art when a sheet cannot be used (src/ants_app/hud_art.cpp, renderer_art.cpp, application_game_menu.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: python3 tools/mutate.py tests/data/hud_art_mutants.json --keep-going --jobs 1; every mutant must be caught by the test and the text named in it.",
+ "note": "Mutants of the HUD art's choice of the sheet by the output's scale, of the nine-slice (a long piece: start, repeated run, end), of the frame's pieces at every shape of the fall back to the original's art when a sheet cannot be used, and of the new cursors (their click points, frame times and sizes, the frame shown, the fall back to the original's cursor) (src/ants_app/hud_art.cpp, renderer_art.cpp, renderer_units.cpp, application_game_menu.cpp, application_render.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: python3 tools/mutate.py tests/data/hud_art_mutants.json --keep-going --jobs 1; every mutant must be caught by the test and the text named in it.",
  "mutants": [
   {
    "id": "scale_one_to_one_is_not_exact",
@@ -171,6 +171,177 @@
    "build": "test_hud_art",
    "test": "./build/tests/test_app/test_hud_art",
    "expect": "preload_art says"
+  },
+  {
+   "id": "cursor_corner_ignores_its_offset_x",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "LayoutRect{x + part.x, y + part.y, s->w, s->h}, LayoutRect{0, 0, s->w, s->h}});\n    }\n    return out;\n}\n\nsize_t frame_at",
+   "new": "LayoutRect{x, y + part.y, s->w, s->h}, LayoutRect{0, 0, s->w, s->h}});\n    }\n    return out;\n}\n\nsize_t frame_at",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[cursor-draw]"
+  },
+  {
+   "id": "cursor_corner_offset_down_is_up",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "LayoutRect{x + part.x, y + part.y, s->w, s->h}, LayoutRect{0, 0, s->w, s->h}});\n    }\n    return out;\n}\n\nsize_t frame_at",
+   "new": "LayoutRect{x + part.x, y - part.y, s->w, s->h}, LayoutRect{0, 0, s->w, s->h}});\n    }\n    return out;\n}\n\nsize_t frame_at",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[cursor-draw]"
+  },
+  {
+   "id": "cursor_frame_ends_a_millisecond_late",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "if (now < duration) return i;",
+   "new": "if (now <= duration) return i;",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[cursors]"
+  },
+  {
+   "id": "cursor_loop_forgets_the_last_frame",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "for (const Frame& f : animation.frames) total += static_cast<uint64_t>(f.ms > 0 ? f.ms : 1);",
+   "new": "for (const Frame& f : animation.frames) total += static_cast<uint64_t>(f.ms > 0 && &f != &animation.frames.back() ? f.ms : 1);",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[cursors]"
+  },
+  {
+   "id": "cursor_reader_does_not_mark_it",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "animations_.push_back(Animation{w[1], w.size() == 3, {}});",
+   "new": "animations_.push_back(Animation{w[1], false, {}});",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[cursors]"
+  },
+  {
+   "id": "cursor_fit_ignores_a_frame_time",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "if (f.ms != original[i].ms || f.parts.size() != 1) return false;",
+   "new": "if (f.parts.size() != 1) return false;",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[cursor-damaged]"
+  },
+  {
+   "id": "cursor_fit_ignores_the_offset_x",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "part.x != original[i].dx || part.y != original[i].dy ||",
+   "new": "part.y != original[i].dy ||",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[cursor-damaged]"
+  },
+  {
+   "id": "cursor_fit_ignores_the_offset_y",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "part.x != original[i].dx || part.y != original[i].dy ||",
+   "new": "part.x != original[i].dx ||",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[cursor-damaged]"
+  },
+  {
+   "id": "cursor_fit_ignores_the_width",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "s->w != original[i].w || s->h != original[i].h)",
+   "new": "s->h != original[i].h)",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[cursor-damaged]"
+  },
+  {
+   "id": "cursor_fit_ignores_the_height",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "s->w != original[i].w || s->h != original[i].h)",
+   "new": "s->w != original[i].w)",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[cursor-damaged]"
+  },
+  {
+   "id": "cursor_fit_ignores_a_missing_frame",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "art_cursor.frames.size() != original.size() ||",
+   "new": "art_cursor.frames.size() < original.size() ||",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[cursor-damaged]"
+  },
+  {
+   "id": "cursor_fit_ignores_the_mark",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "if (!art_cursor.cursor || art_cursor.frames.size()",
+   "new": "if (art_cursor.frames.size()",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[cursor-damaged]"
+  },
+  {
+   "id": "cursor_art_is_never_drawn",
+   "file": "src/ants_app/renderer_units.cpp",
+   "old": "if (art != nullptr && art->loaded() && draw_cursor_art(",
+   "new": "if (false && art != nullptr && art->loaded() && draw_cursor_art(",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[cursor-draw]"
+  },
+  {
+   "id": "cursor_art_is_drawn_without_asking_if_it_fits",
+   "file": "src/ants_app/renderer_units.cpp",
+   "old": "fit = one_part && hud_art::cursor_fits(art, *replacement, frames) ? 1 : 0;",
+   "new": "fit = one_part ? 1 : 0;",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[cursor-damaged]"
+  },
+  {
+   "id": "cursor_art_ignores_the_pinned_clock",
+   "file": "src/ants_app/renderer_units.cpp",
+   "old": "const uint32_t now_ms = anim_clock_pin_ms_ >= 0 ? static_cast<uint32_t>(anim_clock_pin_ms_) : SDL_GetTicks();",
+   "new": "const uint32_t now_ms = SDL_GetTicks();",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[cursor-draw]"
+  },
+  {
+   "id": "cursor_art_stays_on_its_first_frame",
+   "file": "src/ants_app/renderer_units.cpp",
+   "old": "hud_art::frame_at(*replacement, now_ms)",
+   "new": "hud_art::frame_at(*replacement, now_ms) * 0",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[cursor-draw]"
+  },
+  {
+   "id": "cursor_art_is_asked_for_the_wrong_cursor",
+   "file": "src/ants_app/renderer_units.cpp",
+   "old": "const hud_art::Animation* replacement = art.find_animation(original.name);",
+   "new": "const hud_art::Animation* replacement = art.find_animation(\"c_normal\");",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[cursor-damaged]"
+  },
+  {
+   "id": "pointer_art_is_always_given",
+   "file": "src/ants_app/application_render.cpp",
+   "old": "static_cast<uint32_t>(sim_.current_tick()), hud_.art());",
+   "new": "static_cast<uint32_t>(sim_.current_tick()), &hud_art_);",
+   "build": "test_game_menu",
+   "test": "./build/tests/test_app/test_game_menu",
+   "expect": "the pointer is the art's, not the original's"
+  },
+  {
+   "id": "pointer_art_is_never_given",
+   "file": "src/ants_app/application_render.cpp",
+   "old": "static_cast<uint32_t>(sim_.current_tick()), hud_.art());",
+   "new": "static_cast<uint32_t>(sim_.current_tick()), nullptr);",
+   "build": "test_game_menu",
+   "test": "./build/tests/test_app/test_game_menu",
+   "expect": "the pointer is the art's, not the original's"
   }
  ]
 }
