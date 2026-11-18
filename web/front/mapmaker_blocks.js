@@ -13,7 +13,8 @@
     'use strict';
 
     var EMPTY2 = 0x7FFE;            // layer 2: no object in this cell; as a food stage: the pile is gone
-    var MIN_ANTS = 1, MAX_ANTS = 64;                    // the starting ants of a team (the checker wants one; the 540 maps of the library have 1 to 62 for a team)
+    var MIN_ANTS = 1, MAX_ANTS = 250;                   // the ants of one clump (the checker wants one for a team; the 540 maps of the library have 1 to 62 for a team and at most 248 in all; a map may hold many clumps)
+    var MAX_RECORDS = 65535;                            // block 1 holds a word's worth of records, the starting ants and the plants together (docs/MAP_FORMAT.md, "Limits")
     var MIN_STAGES = 2, MAX_STAGES = 6;                 // the stages of a pile (a pile that is eaten must end with the stage that makes it vanish: see FOOD)
     var HILL = 4;                                       // a hill is 4 x 4 cells, its entrance the cell in the second row and column
 
@@ -256,22 +257,17 @@
 
     // ---- starting ants ----
 
-    // The cells where `count` ants stand together round (row, column): the cell itself and then the nearest ones, passing cells that hold an object, solid ground or an ant of another team (when
-    // there are not enough of the good ones, the rest of the cells will do). Fewer than `count` only on a map with fewer cells.
-    function startCells(file, lay, row, column, count, teamIndex) {
-        var taken = {}, i, r, c;
-        for (i = 0; i < lay.records.length; i++) {
-            var rec = lay.records[i];
-            if (teamOfMarker(rec.tile) >= 0 && teamOfMarker(rec.tile) !== teamIndex) taken[rec.row * file.columns + rec.column] = true;
-        }
-        var radius = Math.max(2, Math.ceil(Math.sqrt(count)) + 1), good = [], rest = [];
+    // The cells where `count` ants stand together round (row, column): the cell itself and then the nearest ones, passing cells that hold an object, a hill, a food pile or solid ground (when there are not
+    // enough of the good ones, the rest of the cells will do) and never a cell that has an ant, of any team. Fewer than `count` only on a map with fewer cells.
+    function startCells(file, lay, row, column, count) {
+        var ix = indexOf(file, lay), radius = Math.max(2, Math.ceil(Math.sqrt(count)) + 1), good, rest, r, c;
         for (;;) {
             good = []; rest = [];
             for (r = Math.max(0, row - radius); r <= Math.min(file.rows - 1, row + radius); r++) for (c = Math.max(0, column - radius); c <= Math.min(file.columns - 1, column + radius); c++) {
                 var idx = r * file.columns + c;
-                if (taken[idx]) continue;
+                if (ix.markers[idx]) continue;
                 var item = { r: r, c: c, d: (r - row) * (r - row) + (c - column) * (c - column) };
-                if (Edit.tile(file, 2, idx) === EMPTY2 && (Edit.flags(file, 1, idx) & 1) === 0) good.push(item); else rest.push(item);
+                if (Edit.tile(file, 2, idx) === EMPTY2 && (Edit.flags(file, 1, idx) & 1) === 0 && !ix.piles[idx]) good.push(item); else rest.push(item);
             }
             if (good.length >= count || (radius >= file.rows && radius >= file.columns)) break;
             radius *= 2;
@@ -281,21 +277,28 @@
         return good.concat(rest).slice(0, count);
     }
 
-    // The starting ants of a team put round (row, column): `count` records of the team's start marker, standing together; the team's ants that were there go (only one start for each team).
+    // Records of starting ants (their tiles say the team and the type) put at the end of block 1, as a change: the records, the count word and the dictionary's name of each team's start marker (the change of
+    // a clump, of a mix and of one ant). The records after them are not moved, so the splice is as short as the ants are.
+    function appendStarts(file, lay, records) {
+        var bytes = new Uint8Array(6 * records.length), count = new Uint8Array(2), change = emptyChange(), i;
+        for (i = 0; i < records.length; i++) { wr(bytes, 6 * i, records[i].tile); wr(bytes, 6 * i + 2, records[i].row); wr(bytes, 6 * i + 4, records[i].column); }
+        wr(count, 0, lay.records.length + records.length);
+        change.splices.push({ rel: lay.b1.length, removed: new Uint8Array(0), inserted: bytes }, { rel: 0, removed: file.bytes.slice(file.blocksAt, file.blocksAt + 2), inserted: count });
+        for (i = 0; i < records.length; i++) { var t = TEAMS[teamOfMarker(records[i].tile)]; if (t) addName(change, t.marker, t.markerName); }
+        return change;
+    }
+
+    // A clump of a team's starting ants put round (row, column): `count` more records of the team's start marker, standing together, after the ones that the list has. Nothing the map has is taken away or
+    // moved (put again, and there are two clumps; Pick up moves one, Erase takes a team's ants away). A clump that the list has no room for is refused whole; one that finds fewer free cells than asked for is as big as the room.
     function placeStart(file, teamIndex, row, column, count, antType) {
         var t = TEAMS[teamIndex], lay = layout(file);
         if (!t) return { error: 'There is no such team.' };
         if (!lay.ok1) return { error: 'The list of starting ants in this file cannot be changed here: the file ends in the middle of it.' };
-        var n = clampTo(count, MIN_ANTS, MAX_ANTS), cells = startCells(file, lay, row, column, n, teamIndex), kept = [], insertAt = -1, i;
-        for (i = 0; i < lay.records.length; i++) {
-            if (teamOfMarker(lay.records[i].tile) === teamIndex) { if (insertAt < 0) insertAt = kept.length; } else kept.push(lay.records[i]);
-        }
-        if (insertAt < 0) insertAt = kept.length;
-        var mTile = markerTile(file, teamIndex, antType), fresh = cells.map(function (cell) { return { tile: mTile, row: cell.r, column: cell.c }; });
-        var records = kept.slice(0, insertAt).concat(fresh, kept.slice(insertAt)), change = emptyChange(), splice = diffSplice(file, lay.b1.rel, lay.b1.length, block1Bytes(records));
-        if (splice) change.splices.push(splice);
-        addName(change, t.marker, t.markerName);
-        return change;
+        var n = clampTo(count, MIN_ANTS, MAX_ANTS);
+        if (lay.records.length + n > MAX_RECORDS) return { error: 'A clump of ' + n + ' ants does not fit. The file holds at most 65,535 starting ants and plants together, and it has ' + lay.records.length + '. Put fewer ants, or take some away first.' };
+        var cells = startCells(file, lay, row, column, n), mTile = markerTile(file, teamIndex, antType);
+        if (!cells.length) return { error: 'There is no cell left for an ant on this map.' };
+        return appendStarts(file, lay, cells.map(function (cell) { return { tile: mTile, row: cell.r, column: cell.c }; }));
     }
 
     function eraseStart(file, teamIndex) {
@@ -594,10 +597,10 @@
     }
 
     return {
-        EMPTY2: EMPTY2, MIN_ANTS: MIN_ANTS, MAX_ANTS: MAX_ANTS, MIN_STAGES: MIN_STAGES, MAX_STAGES: MAX_STAGES, HILL: HILL, TEAMS: TEAMS, FOOD: FOOD, FOOD_NAMES: FOOD_NAMES, FOOD_ITEMS: FOOD_ITEMS, PLANT_NAMES: PLANT_NAMES,
+        EMPTY2: EMPTY2, MIN_ANTS: MIN_ANTS, MAX_ANTS: MAX_ANTS, MAX_RECORDS: MAX_RECORDS, MIN_STAGES: MIN_STAGES, MAX_STAGES: MAX_STAGES, HILL: HILL, TEAMS: TEAMS, FOOD: FOOD, FOOD_NAMES: FOOD_NAMES, FOOD_ITEMS: FOOD_ITEMS, PLANT_NAMES: PLANT_NAMES,
         team: team, teamOfMarker: teamOfMarker, typeOfMarker: typeOfMarker, markerTile: markerTile, teamOfHill: teamOfHill, clampTo: clampTo, foodItem: foodItem,
         layout: layout, block1Bytes: block1Bytes, block2Bytes: block2Bytes, block4Bytes: block4Bytes, diffSplice: diffSplice,
-        hillCells: hillCells, placeHill: placeHill, startCells: startCells, placeStart: placeStart, eraseStart: eraseStart, placePile: placePile, placePlant: placePlant,
+        hillCells: hillCells, placeHill: placeHill, startCells: startCells, appendStarts: appendStarts, placeStart: placeStart, eraseStart: eraseStart, placePile: placePile, placePlant: placePlant,
         eraseAt: eraseAt, resizeMap: resizeMap, inTheWay: inTheWay, blockedText: blockedText, facts: facts
     };
 });

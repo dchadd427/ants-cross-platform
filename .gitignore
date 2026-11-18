@@ -44,6 +44,8 @@ cmake-build-*/
 !assets/hud_art/**
 !tests/data/hud_art/
 !tests/data/hud_art/**
+!tools/hud_art/hands/
+!tools/hud_art/hands/**
 
 # Test artifacts and temporary captures
 tests/temp/

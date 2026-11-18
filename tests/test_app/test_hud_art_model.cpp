@@ -106,6 +106,25 @@ void test_manifest() {
     refused(changed("anim one", "frame 100 thing 800 100"), "a frame before any animation");
     refused(changed("anim one", "anim one\nanim one"), "an animation twice");
     refused(changed("anim one", "shade thing"), "a record that is not known");
+    refused(changed("anim one", "anim one pointer"), "an animation marked with a word that is not cursor");
+    refused(changed("anim one", "anim one cursor extra"), "an animation record with a fourth word");
+    {   // a cursor animation: marked, and its parts keep the offsets from the click point (negative numbers are places like any other)
+        std::vector<std::string> lines = small_manifest();
+        for (std::string& l : lines) {
+            if (l == "anim one") l = "anim one cursor";
+            if (l == "frame 100 thing 800 100 card 778 136") l = "frame 100 thing -12 5";
+        }
+        Art art;
+        const hud_art::Animation* one = art.parse(joined(lines)) ? art.find_animation("one") : nullptr;
+        check(one != nullptr && one->cursor && one->frames.size() == 1 && one->frames[0].parts.size() == 1 && one->frames[0].parts[0].x == -12 && one->frames[0].parts[0].y == 5, "an animation marked cursor is read, with a negative offset");
+        if (one != nullptr) {
+            const std::vector<Draw> at = hud_art::cursor_draws(art, *one, 0, 300, 200);
+            check(at.size() == 1 && at[0].dst.x == 288 && at[0].dst.y == 205 && at[0].dst.w == 10 && at[0].dst.h == 10 && at[0].src.w == 10, "its piece is drawn at the click point plus its offset, whatever the sprite's anchor is");
+            check(hud_art::cursor_draws(art, *one, 1, 300, 200).empty(), "a frame that is not there draws nothing");
+        }
+        Art plain;
+        check(plain.parse(joined(small_manifest())) && plain.find_animation("one") != nullptr && !plain.find_animation("one")->cursor, "an animation that is not marked is not a cursor");
+    }
     {
         Art art;
         check(!art.load("/nonexistent/folder") && !art.loaded() && art.what().find("hud_art.txt") != std::string::npos, "a folder without the manifest: refused, and it says which file");
@@ -199,6 +218,7 @@ void test_frame() {
         bool anim_inside = true;
         std::string where;
         for (const hud_art::Animation& a : art.animations()) {
+            if (a.cursor) continue;                                                      // (a cursor's pieces stand at the click point, which can be anywhere: the cursors' own cases are in test_hud_art_cursors.cpp)
             for (size_t f = 0; f < a.frames.size(); ++f) {
                 for (const Draw& d : hud_art::animation_draws(art, a.name, f, layout)) {
                     if (d.dst.x < 0 || d.dst.y < 0 || d.dst.right() > shape.w || d.dst.bottom() > shape.h) {

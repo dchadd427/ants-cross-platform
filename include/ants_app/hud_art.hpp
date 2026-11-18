@@ -11,10 +11,12 @@
 //     sheetsize <w> <h>                                 the 1x sheet's size (the others are that times the scale)
 //     sheet <scale> <png file>
 //     sprite <name> <w> <h> <sheet x> <sheet y> <x> <y> <anchor x> <anchor y> [<axis> <start> <tile from> <tile to> <end>]
-//     anim <name>                                       the original's animation that this set replaces
+//     anim <name> [cursor]                              the original's animation that this set replaces
 //     frame <ms> <sprite> <x> <y> [<sprite> <x> <y> ...]  one frame of it: the original's time, and the pieces that make the frame
 // A sprite's anchor says how its place (x, y) follows a picture of another size: `right` moves x by (width - 960), `bottom` moves y by (height - 540), `left`, `top` keep it, `stretch` (with a
 // slice) makes the piece itself longer: along `axis` the first `start` pixels are kept, the run [tile from, tile to) is repeated (the last copy cut) and the last `end` pixels are kept.
+// An animation marked `cursor` is one of the original's pointers (c_normal, c_attack, CUR_N ...): the place of each of its pieces is where the sprite's upper left corner goes from the click point
+// (the original's own offset for that frame), the anchors do not apply, and the piece has the size of the original's sprite. cursor_fits() says whether a replacement keeps all of that.
 
 #include <array>
 #include <cstddef>
@@ -70,7 +72,17 @@ struct Frame {
 
 struct Animation {
     std::string name;
+    bool cursor{false};         // a pointer: its pieces are placed from the click point (cursor_draws)
     std::vector<Frame> frames;
+};
+
+/// One frame of one of the original's cursors as the archive holds it: its time, the offset of its sprite's upper left corner from the click point and the sprite's size
+struct OriginalCursorFrame {
+    int32_t ms{0};
+    int32_t dx{0};
+    int32_t dy{0};
+    int32_t w{0};
+    int32_t h{0};
 };
 
 /// One copy of a sprite: the rectangle `src` of the sprite (canvas pixels of the sprite itself) fills the rectangle `dst` of the picture
@@ -155,6 +167,17 @@ std::vector<Draw> animation_draws(const Art& art, const std::string& name, size_
 
 /// The same, for an animation that the caller has found already
 std::vector<Draw> frame_part_draws(const Art& art, const Frame& frame, const ScreenLayout& layout);
+
+/// The copies that draw one frame of a cursor animation with the click point at (x, y): the corner of each piece is at the click point plus the piece's own offset
+std::vector<Draw> cursor_draws(const Art& art, const Animation& cursor, size_t frame, int32_t x, int32_t y);
+
+/// Which frame an animation shows `ms` into its loop (the frame times of the manifest, which are the original's): the frames follow one another, each for its time, and the loop starts again. The
+/// original's cursors do the same with their own times, so a replacement that keeps the times is on the same frame at every moment.
+size_t frame_at(const Animation& animation, uint32_t ms) noexcept;
+
+/// True when `art` replaces a cursor without moving its click point: it is marked `cursor`, has the original's number of frames, and in each the original's time and one piece of the original's size at the
+/// original's offset from the click point. A replacement that does not fit is not drawn (the original's cursor is).
+bool cursor_fits(const Art& art, const Animation& art_cursor, const std::vector<OriginalCursorFrame>& original) noexcept;
 
 /// Draws copies through the renderer
 void draw_all(IRenderer& renderer, const Art& art, const std::vector<Draw>& draws);

@@ -110,7 +110,7 @@ def animations():
     return out
 
 def export(scales=(1, 2, 3)):
-    """renders the catalog: ({scale: {sprite name: RGBA picture of size * scale}}, the catalog's rows, the animations)"""
+    """renders the catalog and the cursors: ({scale: {sprite name: RGBA picture of size * scale}}, the catalog's rows, the animations)"""
     cat = catalog()
     # shelf packing on a sheet 1000 wide (the drawing sheet of the browser, not the game's sheet)
     place = []; x = y = rowh = 0
@@ -133,4 +133,8 @@ def export(scales=(1, 2, 3)):
             if name in layers: im.alpha_composite(relief.down(layers[name], k))
             out[k][name] = im
         print('sprites', k, len(cat), flush=True)
-    return out, [e for _, _, e in cat], animations()
+    import cursors
+    pictures, rows, anims = cursors.export(scales)                              # the cursors are in the same sheets (their animations are marked `cursor`: pack.py)
+    for k in scales:
+        out[k].update(pictures[k])
+    return out, [e for _, _, e in cat] + rows, dict(animations(), **anims)

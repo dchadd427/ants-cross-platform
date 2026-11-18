@@ -52,8 +52,9 @@ def skyline(sizes, width):
     return spots, max(seg[1] for seg in sky)
 
 
-def pack(images, rows, anims, out_dir, canvas=(960, 540)):
-    """images: {scale: {name: RGBA picture}}, rows: the catalog's sprite rows, anims: {name: [frame]}; writes the sheets and the manifest into out_dir and returns the sizes of the files"""
+def pack(images, rows, anims, out_dir, canvas=(960, 540), cursor_anims=()):
+    """images: {scale: {name: RGBA picture}}, rows: the catalog's sprite rows, anims: {name: [frame]} (those named in cursor_anims are marked `cursor`: their parts are placed from the click point); writes the sheets and
+    the manifest into out_dir and returns the sizes of the files"""
     scales = sorted(images)
     names = [r['name'] for r in rows]
     # one cell for every different picture
@@ -95,7 +96,7 @@ def pack(images, rows, anims, out_dir, canvas=(960, 540)):
             line += ' %s %d %d %d %d' % (sl['axis'], sl['start'], sl['tile'][0], sl['tile'][1], sl['end'])
         lines.append(line)
     for name, frames in anims.items():
-        lines.append('anim %s' % name)
+        lines.append('anim %s%s' % (name, ' cursor' if name in cursor_anims else ''))
         for f in frames:
             lines.append('frame %d %s' % (f['ms'], ' '.join('%s %d %d' % (p['sprite'], p['x'], p['y']) for p in f['parts'])))
     with open(os.path.join(out_dir, 'hud_art.txt'), 'w', newline='\n') as f:
