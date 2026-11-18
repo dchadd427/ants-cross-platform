@@ -6,10 +6,9 @@
 #include <string>
 #include <utility>
 
-#include "ants_assets/lvl_parser.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_replay/replay.hpp"
-#include "ants_server/map_preview.hpp"
+#include "ants_server/map_pictures.hpp"
 #include "ants_server/site_stats.hpp"
 #include "ants_server/submissions_http.hpp"
 #include "ants_server/whole_file.hpp"
@@ -521,7 +520,8 @@ ctl::HttpResponse handle_public_lobbies(const RoomManager& rooms, const ctl::Htt
 }  // namespace
 
 // The file and the picture of an APPROVED map of the players (the site's nginx asks here only when its own folder of the library's maps has no file of that name): a GET of "/maps/files/<name>.lvl" or
-// "/maps/previews/<name>.png", the name percent-encoded as the lists write it. Only an approved Classic or Extended map is served (a taken-down map and every other name are a 404).
+// "/maps/previews/<name>.png", the name percent-encoded as the lists write it. Only an approved Classic or Extended map is served (a taken-down map and every other name are a 404). The picture is the one that
+// ants_thumb made of the map's file (map_pictures.hpp): a map whose picture is not made yet is a 404, and it is asked for.
 static ctl::HttpResponse approved_map_file(const MapStore& store, const ctl::HttpRequest& request) {
     if (request.method != "GET" || !request.query.empty()) return error_response(404, "not found");
     const bool picture = request.path.compare(0, 15, "/maps/previews/") == 0;
@@ -534,6 +534,16 @@ static ctl::HttpResponse approved_map_file(const MapStore& store, const ctl::Htt
     const ApprovedMap* map = net::valid_map_name(name) ? store.approved(name) : nullptr;
     if (map == nullptr && net::valid_map_name(name)) map = store.test_map(name);
     if (map == nullptr || (map->kind != "classic" && map->kind != "extended") || map->size > MapStore::kMaxMapBytes) return error_response(404, "not found");
+    if (picture) {
+        MapPictures* pictures = store.pictures();
+        std::string png = pictures != nullptr ? pictures->get(map->path) : std::string();
+        if (png.empty()) return error_response(404, "not found");
+        ctl::HttpResponse r;
+        r.status = 200;
+        r.content_type = "image/png";
+        r.body = std::move(png);
+        return r;
+    }
     static_assert(MapStore::kMaxMapBytes <= ctl::HttpServer::kMaxFileResponseBytes, "the door must be able to send the largest map that the store keeps");
     std::string bytes;                                // (one read into a string of the file's size: the byte-by-byte copy of an istreambuf_iterator took 18 ms of the one game thread for a 3 MB map, this about 1.6 ms)
     std::ifstream in(map->path, std::ios::binary | std::ios::ate);
@@ -548,17 +558,9 @@ static ctl::HttpResponse approved_map_file(const MapStore& store, const ctl::Htt
     if (bytes.empty()) return error_response(404, "not found");
     ctl::HttpResponse r;
     r.status = 200;
-    if (!picture) {
-        r.content_type = "application/octet-stream";
-        r.body = std::move(bytes);                  // (an Extended map is up to 4 MiB, more than the door's 1 MiB for everything else: HttpResponse::file)
-        r.file = true;
-        return r;
-    }
-    assets::LevelData level;
-    if (!assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), level, nullptr, assets::LevelLimits::for_play_extended())) return error_response(404, "not found");
-    r.body = render_preview_png(level);
-    if (r.body.empty()) return error_response(404, "not found");
-    r.content_type = "image/png";
+    r.content_type = "application/octet-stream";
+    r.body = std::move(bytes);                      // (an Extended map is up to 4 MiB, more than the door's 1 MiB for everything else: HttpResponse::file)
+    r.file = true;
     return r;
 }
 

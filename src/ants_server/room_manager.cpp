@@ -759,14 +759,52 @@ void RoomManager::enable_bot_matches(uint32_t every_minutes, uint32_t now_ms, ui
     bot_rng_.seed(seed != 0 ? seed : std::random_device{}());
 }
 
-// The match: a map of the original's six that the store has, two to four standard bots on random seats of the four (every set of that many seats as likely as any other), Medium or Hard each, a seed, and
+// The maps of the server's own matches, one list for each rules (docs/SERVER.md "Matches of computer players": the one home of the lists): the match is dealt its rules first, then a map of that rules' list, each map as likely as any
+// other of its list. A map of the players (`approved`) is found in the store of approved maps only, so a server without the submissions door, or one that took the map down, has none; a map that this server cannot play is
+// skipped (one line in the log) and the others are as likely as before. ISLANDS is on the first list alone: its water joins no two hills by a walk and 187 has no Swimmer, so nobody could ever be struck there (docs/BOT_187.md).
+namespace {
+
+struct BotMatchMap {
+    const char* file;
+    bool approved;
+};
+
+const std::vector<BotMatchMap>& bot_match_maps(bool kills_187) {
+    static const std::vector<BotMatchMap> kHighestScore = {{"TINY.LVL", false},   {"SMALL.LVL", false},  {"MEDIUM.LVL", false},   {"GAUNTLET.LVL", false}, {"TREASURE.LVL", false},
+                                                           {"ISLANDS.LVL", false}, {"POPcOrN.lvl", false}, {"HELLRAISER.lvl", false}, {"Bombz Away.lvl", false}};
+    static const std::vector<BotMatchMap> k187 = {{"TINY.LVL", false}, {"SMALL.LVL", false}, {"MEDIUM.LVL", false}, {"GAUNTLET.LVL", false}, {"TREASURE.LVL", false}, {"Fight Island.lvl", true}};
+    return kills_187 ? k187 : kHighestScore;
+}
+
+}  // namespace
+
+// "" when a room can play the map of a list now, else why not (the store does not have it, the approved map is gone or is another file, this engine cannot play it with four seats, a limit of a room: OnlineLimits). `minutes`
+// gets the map's own time limit.
+std::string RoomManager::bot_match_map_refusal(const std::string& file, bool approved, uint32_t& minutes) const {
+    const ApprovedMap* player_map = approved ? store_.approved(file) : nullptr;
+    if (approved && player_map == nullptr) return "it is not an approved map of this server";
+    MapEntry entry;
+    std::string why;
+    if (!store_.find(file, entry, &why)) return why;
+    if (player_map != nullptr && entry.path != player_map->path) return "the file of that name is not the approved map";
+    assets::LevelData level;
+    if (!level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended())) return "this engine cannot play it";
+    const Term over = OnlineLimits::first_over(OnlineLimits::counts_of(level));
+    if (over != Term::None) return std::string("it ") + OnlineLimits::info(over).phrase + " for a room";
+    if (!level.validate(static_cast<uint8_t>(0x0F), assets::LevelLimits::for_play_extended()).playable) return "it has no place for four seats";
+    minutes = level.default_minutes;
+    return std::string();
+}
+
+// The match: the rules first (the original's highest score or the remake's 187, each match by a fair coin of its own), then a map of that rules' list (bot_match_maps) that the store has and a room can play, then two to four
+// standard bots on random seats of the four (every set of that many seats as likely as any other), Medium or Hard each, a seed, and
 // the teams: free for all or any way to make teams of the seats that play (roster_team_choices: with four, the three ways to split them in two, which on a map whose hills sit at the corners of a square are top
 // against bottom, left against right and across the corners (TINY, SMALL, TREASURE and ISLANDS; MEDIUM's hills sit north, east, south and west and GAUNTLET's along a diagonal); with three, any two of them and the third
-// alone; with two, free for all), each choice for the seats that play as likely as any other. The teams are drawn last, so the first match of a seed still chooses the same map, seats, levels and seed as before. The room has no person, plays at the normal speed (the maps' own time limits make it 6 to 12 minutes), and ends by the rules or at its own time limit; the recording keeps it like any other
+// alone; with two, free for all), each choice for the seats that play as likely as any other. The map's draw is the first of the match, as it always was, and its list is known after the coin, so the first match of a seed
+// still chooses the same seats, levels, seed, teams and rules as before, and every match takes the same number of draws. The room has no person, plays at the normal speed (the maps' own time limits
+// make it 6 to 20 minutes or more: its own guard is the longer of 25 minutes and the map's limit and five more), and ends by the rules or at its own time limit; the recording keeps it like any other
 // match (the 30 seconds, the store's limits), and the live list shows it. Rooms of this kind do not pile up: while one runs, the timer makes no other.
-// The rules: the original's highest score or the remake's 187, each match by a fair coin of its own, drawn after the teams, so the first match of a seed has the map, seats, levels, seed and teams that it had without
-// the coin (a 187 match on ISLANDS excepted, below) and each later match of a seed draws from a stream that is one draw further for each match before it. No memory of the last match: two or three of a kind in a row come
-// up as often as chance gives them. A 187 match is never on ISLANDS (nobody can be struck there): its map is drawn again from the other five, one more draw in that case only; the original's game is played on all six.
+// The coin has no memory of the last match: two or three of a kind in a row come up as often as chance gives them.
 bool RoomManager::start_bot_match(uint32_t now_ms, std::string& code, std::string& why, uint8_t* mode) {
     code.clear();
     if (replays_ == nullptr) {
@@ -779,20 +817,8 @@ bool RoomManager::start_bot_match(uint32_t now_ms, std::string& code, std::strin
             return false;
         }
     }
-    static const char* const kMaps[] = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "ISLANDS.LVL"};
-    static const char* const kNoMeetingIn187 = "ISLANDS.LVL";
-    std::vector<std::string> maps;
-    for (const char* name : kMaps) {
-        MapEntry entry;
-        std::string ignored;
-        if (store_.find(name, entry, &ignored)) maps.push_back(name);
-    }
-    if (maps.empty()) {
-        why = "the server has none of the original's maps";
-        return false;
-    }
     RoomSpec spec = default_spec();
-    spec.map = maps[bot_rng_() % maps.size()];
+    const uint32_t map_draw = static_cast<uint32_t>(bot_rng_());                                  // (the first draw of the match, as the map's always was: what it picks from is known after the coin)
     spec.players = static_cast<uint8_t>(2 + bot_rng_() % 3);
     uint32_t need = spec.players;
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {              // (a seat is taken with the chance need / seats left)
@@ -810,19 +836,30 @@ bool RoomManager::start_bot_match(uint32_t now_ms, std::string& code, std::strin
     const std::vector<sim::StartTeams> team_choices = sim::roster_team_choices(roster);
     spec.teams = team_choices[bot_rng_() % team_choices.size()];                // (the room starts with them: Room::update, sim::start_teams_for; the replay's head and the live match carry them)
     spec.mode = static_cast<uint8_t>(bot_rng_() % 2 == 0 ? sim::GameMode::HighestScore : sim::GameMode::Kills187);      // (the coin: the room's mode reaches the lobby, the start data, the engine of the referee and the replay's head)
-    if (spec.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && spec.map == kNoMeetingIn187) {          // (the water of ISLANDS joins no two hills by a walk and 187 has no Swimmer: nobody could ever be struck there, docs/BOT_187.md; so a 187 match is made on another map)
-        std::vector<std::string> meeting;
-        for (const std::string& name : maps) {
-            if (name != kNoMeetingIn187) meeting.push_back(name);
+    std::vector<std::string> maps;                                         // (the maps of the rules' list that a room can play now, in the list's order)
+    std::vector<uint32_t> minutes;
+    for (const BotMatchMap& entry : bot_match_maps(spec.mode == static_cast<uint8_t>(sim::GameMode::Kills187))) {
+        uint32_t limit = 0;
+        const std::string refusal = bot_match_map_refusal(entry.file, entry.approved, limit);
+        if (refusal.empty()) {
+            maps.push_back(entry.file);
+            minutes.push_back(limit);
+            bot_maps_skipped_.erase(entry.file);
+        } else if (bot_maps_skipped_.insert(entry.file).second) {          // (named once, and again if the map comes back and goes: not at every match)
+            bot_notes_.push_back(std::string("bot match: the map ") + entry.file + " is skipped (" + refusal + ")");
         }
-        if (meeting.empty()) spec.mode = static_cast<uint8_t>(sim::GameMode::HighestScore);                 // (a store with that map alone)
-        else spec.map = meeting[bot_rng_() % meeting.size()];
     }
+    if (maps.empty()) {
+        why = "the server has none of the maps of these rules";
+        return false;
+    }
+    const size_t picked = map_draw % maps.size();
+    spec.map = maps[picked];
     spec.bots_only = true;
     spec.early_start = false;
     spec.reconnect = false;                                                // (it holds no seat, so no restart record: a server that stops ends it)
     spec.wait_ms = 30u * 1000u;
-    spec.run_ms = 25u * 60u * 1000u;                                       // (the longest map's limit is 12 minutes: this is only the room's own guard)
+    spec.run_ms = std::max<uint32_t>(25u, minutes[picked] + 5u) * 60u * 1000u;      // (this is only the room's own guard: it must not end a match before the map's own limit, 6 to 20 minutes on the maps of these lists)
     spec.keep_ms = 30u * 1000u;
     const uint8_t made_mode = spec.mode;
     const CreateResult made = create_room(std::move(spec), now_ms);

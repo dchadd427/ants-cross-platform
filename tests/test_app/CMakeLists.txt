@@ -636,11 +636,12 @@ target_link_libraries(test_wide_hud PRIVATE ants_test_paths)
 add_test(NAME test_wide_hud COMMAND test_wide_hud)
 set_tests_properties(test_wide_hud PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
-# The HUD art (hud_art.hpp): the new pictures of the match screen, the png reader, the manifest, the nine-slice, the sheet by scale, and the real renderer's frame against the committed reference pictures
+# The HUD art (hud_art.hpp): the new pictures of the match screen, the png reader, the manifest, the nine-slice, the sheet by scale, the real renderer's frame against the committed reference pictures, and the new cursors
 add_executable(test_hud_art
     test_hud_art.cpp
     test_hud_art_model.cpp
     test_hud_art_look.cpp
+    test_hud_art_cursors.cpp
 )
 
 target_include_directories(test_hud_art PRIVATE
@@ -671,6 +672,47 @@ target_link_libraries(test_hud_art PRIVATE ants_test_paths)
 
 add_test(NAME test_hud_art COMMAND test_hud_art)
 set_tests_properties(test_hud_art PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# The PNG writer of the server's pictures (png_encode.hpp): the deflate stream, the zlib wrapper and the PNG file, read back by the repository's own reader and checked against the formats. No window
+add_executable(test_png_encode
+    test_png_encode.cpp
+)
+
+target_include_directories(test_png_encode PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_png_encode PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_png_encode PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_png_encode PRIVATE ws2_32 winmm)
+    if(DEFINED SDL2_DLL)
+        add_custom_command(TARGET test_png_encode POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SDL2_DLL}" "$<TARGET_FILE_DIR:test_png_encode>"
+        )
+    endif()
+    if(DEFINED SDL2_TTF_DLL)
+        add_custom_command(TARGET test_png_encode POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SDL2_TTF_DLL}" "$<TARGET_FILE_DIR:test_png_encode>"
+        )
+    endif()
+endif()
+
+add_test(NAME test_png_encode COMMAND test_png_encode)
 
 # Wide setup screen (the setup / map selection screen at 960 x 540 with a map preview): the layout against the mock-ups, the seams against the art, the composed screens pixel for pixel,
 # the preview, the screens' state, the pointer through the application, the picture per screen, fingerprints

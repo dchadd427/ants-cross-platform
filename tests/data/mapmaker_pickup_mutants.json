@@ -59,16 +59,16 @@
     },
     {
       "id": "group_four_neighbors",
-      "file": "web/front/mapmaker_pickup.js",
-      "old": "for (dr = -1; dr <= 1; dr++) for (dc = -1; dc <= 1; dc++) {\n                var r = p.r + dr",
-      "new": "for (dr = -1; dr <= 1; dr++) for (dc = -1; dc <= 1; dc++) {\n                if (dr && dc) continue;\n                var r = p.r + dr",
+      "file": "web/front/mapmaker_blocks.js",
+      "old": "var rr = r + dr, cc = c + dc, cell = rr * cols + cc, list = rr < 0 ||",
+      "new": "var rr = r + dr, cc = c + dc, cell = rr * cols + cc, list = (dr && dc) || rr < 0 ||",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {
       "id": "group_any_team",
-      "file": "web/front/mapmaker_pickup.js",
-      "old": "if (taken[list[i]] || Blocks.teamOfMarker(lay.records[list[i]].tile) !== team) continue;",
-      "new": "if (taken[list[i]]) continue;",
+      "file": "web/front/mapmaker_blocks.js",
+      "old": "if (taken[list[k]] || teamOfMarker(lay.records[list[k]].tile) !== team) continue;",
+      "new": "if (taken[list[k]]) continue;",
       "test": "node tests/scripts/web_mapmaker_pickup_check.js --quick"
     },
     {

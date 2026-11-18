@@ -9,6 +9,7 @@
 
 #include "../common/test_assert.hpp"
 #include "ants_server/history_deaths.hpp"
+#include "big_map_fixtures.hpp"
 #include "history_fixtures.hpp"
 
 static int g_test_count = 0;
@@ -237,6 +238,38 @@ int main() {
         HistoryRecord rec;
         ASSERT_TRUE(r.mgr.history_store()->find(stem_of(saved.file), rec));
         ASSERT_TRUE(!rec.computers_only && rec.seats.size() == 2 && rec.seats[0].name == "Ann");
+    } TEST_END();
+
+    TEST_CASE("HR2.2 A match of computer players on an approved map of the players (the maps of the server's own matches in 187 include one) is counted like any other: the history holds a record that names the map, in 187, with the computers alone") {
+        Rooms r;
+        ASSERT_TRUE(r.db_ok && r.open());
+        const std::string bytes = grown_tiny(150, 150);                      // (a made-up map of the shape of the approved one: TINY grown to 150 x 150, Extended, four hills)
+        ASSERT_TRUE(!bytes.empty());
+        const fs::path folder = r.temp.path / "approved";
+        fs::create_directories(folder);
+        ApprovedMap map;
+        map.name = "Fight Island.lvl";
+        map.path = (folder / (map.name + ".bin")).string();
+        { std::ofstream out(map.path, std::ios::binary); out << bytes; }
+        map.size = bytes.size();
+        map.width = 150;
+        map.height = 150;
+        map.minutes = 20;
+        map.players = 4;
+        map.kind = "extended";
+        ASSERT_TRUE(net::hash_file(map.path, map.hash));
+        r.mgr.mutable_store().set_approved({map});
+        RoomSpec spec = bots_room("HIS-P", 1);
+        spec.map = map.name;
+        ASSERT_TRUE(r.mgr.create_room(spec, r.now).ok);
+        ASSERT_TRUE(r.until([&] { return r.status("HIS-P").state == RoomState::Running; }, 12000));
+        ASSERT_TRUE(r.until([&] { return r.status("HIS-P").state != RoomState::Running; }, 60000));
+        const RoomStatus ended = r.status("HIS-P");
+        ASSERT_TRUE(ended.replay_kept && ReplayStore::valid_file_name(ended.replay_file));
+        ASSERT_TRUE(r.until([&] { return r.mgr.history_store()->count() == 1; }, 10000));
+        HistoryRecord rec;
+        ASSERT_TRUE(r.mgr.history_store()->find(stem_of(ended.replay_file), rec));
+        ASSERT_TRUE(rec.map == "Fight Island.lvl" && rec.mode == "187" && rec.computers_only && rec.seats.size() == 3 && rec.turns >= 600);
     } TEST_END();
 
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

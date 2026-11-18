@@ -23,6 +23,21 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.17.9 - 2026-11-18 - New pointers, Map Maker clumps and real map pictures
+
+**For players:**
+- **New pointers with the New HUD art.** Every cursor is redrawn to match the new look, sharp at larger window sizes, and the two places where the frame's pieces met badly are mended. Classic keeps the original's.
+- **Map Maker clumps.** Each tap in Clump puts a new clump of up to 250 ants and leaves the earlier ones where they are. Pick up moves one clump, and Erase takes away only the clump you touch.
+- **Better pictures for players' maps.** Submitted, approved and test maps now get a picture drawn by the game itself, like the library's maps.
+- **More maps in the computer players' own matches.** POPcOrN, HELLRAISER and Bombz Away join Highest score, and Fight Island joins 187.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.8 page or game still joins. Under the hood: the game server and the web pages are rebuilt, and the new front page at playants.org may read the public match numbers.
+
+**Fixes:**
+- On a phone, the Map Maker's map could stay stretched after choosing a tool, so a tap landed on the wrong cell.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/7c0381af...0469f31d)
+
 ## v0.17.8 - 2026-11-17 - Hard computer players keep hitting
 
 **For players:**
@@ -444,30 +459,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/bbf956a1...3b60fa2f)
 
-## v0.12.144 - 2026-10-27 - Big selections: the ants nearest the click are ordered first
+## Older versions (v0.12.144 and before)
 
-**For players:**
-- **A move or an attack on a big selection orders the ants nearest the clicked tile first.** A selection of more than 32 ants goes out as several commands, and until now only the ants inside each command of 32 were ordered nearest first, so ants standing at the cursor could be ordered after ants from far away that had already taken the free tiles around it, and then find none and stop. The whole selection is now sorted by distance to the clicked tile (as the original's group order does) before it is cut, and ants at the same distance keep their selection order.
-- **A click of 32 ants or fewer, a special order (steal, bomb, fire, bridge) and Stop send exactly what they sent before.**
-- **The 1,536 ants per click limit stays, and what it leaves out changes:** a move or an attack beyond it now leaves out the farthest ants from the clicked tile (it was the last selected ones); "Only 1536 ants ordered." says it as before.
-- Still true: an ant that finds no free tile within four tiles of the clicked one stops, as in the original, and 1,500 ants still get their paths one every 50 ms (the original's rule), so the last of a very big crowd starts later.
-
-**Rules / network:** none; the rules and network protocol 21 are unchanged, and a recording made before plays as before (the change is only in the order of the ants the screen puts into its commands).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c119406e...3d620f1c)
-
-## v0.12.143 - 2026-10-27 - Big-map warning moves from 300 to 2,400 starting ants
-
-**For players:**
-- **The big-map warning now starts at 2,400 starting ants, not 300.** The amber "Many ants: may run slowly" chip on a map in the map picker, and the one warning line in the Map Maker's Play this map dialog (both tabs), now show only when a map starts more than 2,400 ants (the start markers of the four colors added up). A map with more than 2,400 ants still warns, and no map is refused for its ants.
-- No map of the library changes: the most that any of the 540 starts is 248, so none was marked before and none is now. Only maps made in the Map Maker (or uploaded) with 301 to 2,400 ants lose the warning.
-- Why: in a real headless Chromium (software rendering, no real GPU) a 2,772-ant map ran with a worst tick of 9 to 11 ms (the budget is 50), and the 6,000-ant map now has a worst tick of 14 to 19 ms after v0.12.141 and v0.12.142.
-- What that did not cover: no phone and no real graphics card, no match between people (lockstep), and not what a match costs the server. The runs were 60 seconds of passive play plus one mass order.
-
-**Rules / network:** none; the rules and network protocol 21 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f011f5c1...3970dcf6)
-
-## Older versions (v0.12.142 and before)
-
-Every release before v0.12.143, and the long notes of v0.12.142 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.145, and the long notes of v0.12.144 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

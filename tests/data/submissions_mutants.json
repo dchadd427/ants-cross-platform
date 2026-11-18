@@ -498,12 +498,6 @@
    "new": "head, &error, HttpServer::kMaxBodyBytes);"
   },
   {
-   "id": "picture_chunk_check_wrong",
-   "file": "src/ants_server/map_preview.cpp",
-   "old": "put32(out, ~crc32_of(reinterpret_cast<const unsigned char*>(body.data()), body.size()));",
-   "new": "put32(out, crc32_of(reinterpret_cast<const unsigned char*>(body.data()), body.size()));"
-  },
-  {
    "id": "cheap_refusals_after_the_window",
    "file": "src/ants_server/submissions.cpp",
    "old": "    std::string real_kind;\n    if (!kind_of_file(in.kind, in.bytes, real_kind, out.fail)) return out;\n    if (in.allow_check && !in.allow_check()) return refuse(503, \"busy\", \"The server is busy checking other maps. Please try again in a minute.\");\n\n    // the check: the real one",

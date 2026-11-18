@@ -503,13 +503,15 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     lost.fire('error');
     li = rowsOf(env);
     same('a picture that is not at the library\'s address (a 404: the image says error) is asked for in the other ending, once (an approved map\'s picture is a PNG), and the others stay', li.map(srcOf), [['/maps/previews/POPcOrN.webp'], ['/maps/previews/No%20Picture%20Yet.png'], ['front/preview_tiny.png']]);
-    lost.fire('error');
+    // (the picker asks a picture of a map of the players again after a pause before it gives it up: the pauses are the page's timers, run by moving its clock)
+    const giveUp = async (image) => { image.fire('error'); for (let i = 0; i < 6; i++) { await wait(env, 21000); image.fire('error'); } };   // (the page's clock: the picker's pauses run as time goes by, each followed by the error of a picture that is still not there)
+    await giveUp(lost);
     li = rowsOf(env);
-    same('... and when that does not come either, it is taken away, and the others stay', li.map(srcOf), [['/maps/previews/POPcOrN.webp'], [], ['front/preview_tiny.png']]);
+    same('... and when that does not come either (after the pauses that the picker waits for the server to draw it), it is taken away, and the others stay', li.map(srcOf), [['/maps/previews/POPcOrN.webp'], [], ['front/preview_tiny.png']]);
     check('... the square is still there, hidden from a screen reader, and the row is whole (the name, the seats, Join)', li.every((x) => find(x, 'gmap').length === 1 && find(x, 'gmap')[0].getAttribute('aria-hidden') === 'true') && textOf(first(li[1], 'gname')) === 'Hasnt' && !!joinOf(li[1]) && textOf(first(li[1], 'gcount')) === '1/4');
     find(li[2], 'gmap')[0].children[0].fire('error');           // (an original has no other ending: gone at once)
     find(li[0], 'gmap')[0].children[0].fire('error');
-    find(li[0], 'gmap')[0].children[0].fire('error');
+    await giveUp(find(li[0], 'gmap')[0].children[0]);
     check('... an original\'s picture that does not come goes the same way (any picture of the list)', rowsOf(env).every((x) => srcOf(x).length === 0 && find(x, 'gmap').length === 1));
     lost.fire('error');
     check('... and a second word of the same image does no harm (the list is still there)', rowsOf(env).length === 3);

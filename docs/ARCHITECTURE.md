@@ -102,8 +102,10 @@ ants-cross-platform/
 │   ├── ants_ctl/                       # JSON library and HTTP server (a bearer secret, or a read-only door)
 │   ├── ants_server/                    # ants_server: the dedicated game server program (main.cpp; the rest is the
 │   │                                   # library ants_server_core)
-│   └── ants_app/                       # The program ants: windowing, input (mouse, keyboard, touch), the map view,
-│                                       # rendering, HUD, audio, the start menu, setup, options and results screens
+│   ├── ants_app/                       # The program ants: windowing, input (mouse, keyboard, touch), the map view,
+│   │                                   # rendering, HUD, audio, the start menu, setup, options and results screens
+│   └── ants_thumb/                     # ants_thumb: draws a map file as the setup screen does, no window, and writes a
+│                                       # PNG (the game server's pictures of the players' maps; native builds only)
 ├── tests/                              # Automated verification test suites
 │   ├── common/                         # Shared test code: where the checkout is (ants_test_paths.hpp), the short pause
 │   │                                   # of the network tests' pump loops (ants_test_pause.hpp) and the pinned
@@ -222,8 +224,8 @@ ants-cross-platform/
 ├── docker-compose.stack.yml            # The web game, the game server and the chat hub together as one stack
 │                                       # (the stack that the host's own update follows)
 ├── Dockerfile                          # Multi-stage Emscripten + Nginx build
-├── Dockerfile.server                   # The dedicated game server alone (no SDL, no sprites or sounds; it carries
-│                                       # the six maps)
+├── Dockerfile.server                   # The dedicated game server (the six maps, and ants_thumb with the game's
+│                                       # archive for the pictures of the players' maps: SDL2's libraries, no window)
 ├── Dockerfile.hub                      # The chat hub alone (Python, standard library only; docs/HUB.md)
 ├── hub/                                # The chat hub's code: WebSocket framing, text rules, limits, SQLite store,
 │                                       # the admin command line (docs/HUB.md)

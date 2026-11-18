@@ -181,6 +181,9 @@ endif()
 option(ANTS_BUILD_APP "Build the game program (needs SDL2)" ON)
 if(ANTS_BUILD_APP)
     add_subdirectory(src/ants_app)
+    if(NOT EMSCRIPTEN)
+        add_subdirectory(src/ants_thumb)  # the picture maker of the game server (a map file as the setup screen draws it, no window): ants_app's renderer on SDL's dummy driver
+    endif()
 endif()
 
 # Where this checkout is, for the tests and tools that read Original-Ants/, tests/data or web/ (tests/common/ants_test_paths.hpp): the folders are written into ONE tiny

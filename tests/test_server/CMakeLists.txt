@@ -301,6 +301,28 @@ target_include_directories(test_test_maps PRIVATE
 add_test(NAME test_test_maps COMMAND test_test_maps)
 set_tests_properties(test_test_maps PROPERTIES COST 8)
 
+# The pictures of the players' maps (ants_server/map_pictures.hpp): the picture maker as a child process (this test program started again as the maker, so that it runs the real start, kill and collect), what
+# the server keeps and refuses, and the real maker, ants_thumb, on real maps (its path is given to the test in ANTS_THUMB; a build without the game program has none and leaves those cases out)
+add_executable(test_map_pictures
+    test_map_pictures.cpp
+)
+
+target_link_libraries(test_map_pictures PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_map_pictures PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_map_pictures COMMAND test_map_pictures)
+set_tests_properties(test_map_pictures PROPERTIES COST 12)
+if(TARGET ants_thumb)
+    add_dependencies(test_map_pictures ants_thumb)
+    set_property(TEST test_map_pictures APPEND PROPERTY ENVIRONMENT "ANTS_THUMB=$<TARGET_FILE:ants_thumb>")
+endif()
+
 # The admin page's log and the step that retired its accounts (ants_server/admin_audit.hpp, db_schema.cpp version 8, private_files.hpp): what a line holds, the caps, the migration of a copy of a version 7 database, the privacy of the database files
 add_executable(test_admin_audit
     test_admin_audit.cpp
