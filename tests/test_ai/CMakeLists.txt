@@ -25,6 +25,7 @@ add_executable(test_ai
     test_ai_island_ferry.cpp
     test_ai_ring_mines.cpp
     test_ai_flower_link.cpp
+    test_ai_island_bridges.cpp
     test_ai_island_small.cpp
     test_ai_token_groups.cpp
     test_ai_power_up_cap.cpp
