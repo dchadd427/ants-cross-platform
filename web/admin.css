@@ -243,3 +243,92 @@ button { font: inherit; color: inherit; }
     .adm .atabs, .adm .panel, .adm .amenu { border: 3px solid CanvasText; }
     .adm .meter i { background: Highlight; }
 }
+
+/* ---- the section "Bot matches" (web/admin_bots.js; docs/MAP_SUBMISSIONS.md "Bot matches on the admin page"): same tokens, panels, chips, rows, meter, question box and message lines as the rest of the page ---- */
+
+/* ---- the layout: two columns on a desktop (Start now on the left, what runs and what is planned on the right), one column under 901 px in the order Start now, Running, Schedules, the note ---- */
+.adm .bgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 22px; align-items: start; }
+.adm .bgrid .cc { min-width: 0; }
+.adm .b-lead { margin: 0 0 14px; font-size: 16px; color: #2a1105; }
+
+/* ---- the choices (Start now and a schedule use the same ones) ---- */
+.adm .f > .flab { display: block; font-size: 15px; color: var(--muted); margin-bottom: 4px; }
+.adm .f > .flab b { font-weight: 500; color: var(--cream); }
+.adm .bchips { display: flex; flex-wrap: wrap; gap: 8px; }
+.adm .bchips .chip { flex: 1 1 auto; justify-content: center; }
+.adm .chip.dis { opacity: .45; cursor: default; }
+.adm .step { display: inline-flex; align-items: center; gap: 10px; }
+.adm .step .btn { min-width: 56px; min-height: 52px; padding: 4px 0; font-size: 26px; }
+.adm .step .stepv { min-width: 64px; padding: 6px 12px; text-align: center; font-size: 26px; line-height: 1.2; color: var(--gold); background: #000; border: 3px solid var(--frame); border-color: var(--frame-bevel); border-radius: 4px; }
+.adm .sel { position: relative; }
+.adm .sel select { min-height: 52px; font-size: 18px; background-image: none; box-shadow: none; }                   /* (the arrow of classic.css is a data: picture, which the page's policy does not allow: it is drawn below, as the page's section select does) */
+.adm .sel::after { content: ""; position: absolute; right: 8px; top: 15px; width: 22px; height: 22px; box-sizing: border-box; background: var(--teal); border: 2px solid var(--edge); border-radius: 2px; pointer-events: none; }
+.adm .sel::before { content: ""; position: absolute; right: 16px; top: 21px; width: 6px; height: 6px; border-right: 2.4px solid var(--cream); border-bottom: 2.4px solid var(--cream); transform: rotate(45deg); z-index: 1; pointer-events: none; }
+.adm .sel select:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.adm .lv { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 0 10px; align-items: center; margin-bottom: 8px; }
+.adm .lv .ln { font-size: 16px; color: var(--cream); }
+.adm .lv .sel select { min-height: 48px; font-size: 17px; }
+.adm .lv .sel::after { top: 13px; }
+.adm .lv .sel::before { top: 19px; }
+.adm .fh.bad { color: var(--bad); }
+.adm .startrow { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+.adm .startrow .btn { min-width: 220px; }
+.adm .tinput { width: 100%; min-height: 52px; font-size: 19px; }
+.adm .tinput.err { border-color: var(--bad); }
+.adm .num { width: 120px; flex: none; }
+
+/* ---- the running matches and the schedules: a row has words on the left and its buttons on the right ---- */
+.adm .bhead { display: flex; align-items: center; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; margin: 2px 0 6px; }
+.adm .bhead .cap { font-size: 17px; }
+.adm .bhead .cap b { font-weight: 500; color: var(--gold); }
+.adm .blist { display: grid; gap: 8px; margin-top: 8px; }
+.adm .brow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; align-items: center; padding: 10px 12px; background: #0d1b16; border: 1px solid var(--rule); border-radius: 6px; }
+.adm .brow.off { background: #0a1411; }
+.adm .brow .bn { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; font-size: 19px; overflow-wrap: anywhere; }
+.adm .brow .bs { margin-top: 3px; font-size: 14.5px; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere; }
+.adm .brow .bs.cream { color: var(--cream); }
+.adm .brow .bb { display: flex; gap: 8px; align-items: center; }
+.adm .brow .bb .btn { padding: 6px 14px; font-size: 16px; }
+.adm .seats { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 4px; font-size: 15px; color: var(--cream); }
+.adm .seats span { white-space: nowrap; }
+.adm .bdot { display: inline-block; width: 12px; height: 12px; margin-right: 6px; vertical-align: -1px; border-radius: 50%; border: 3px solid var(--c, #8a8693); }
+.adm .bdot.c0 { --c: #79bf93; } .adm .bdot.c1 { --c: #d4707f; } .adm .bdot.c2 { --c: #8f8fd6; } .adm .bdot.c3 { --c: #b3afb9; }
+.adm .rtag { display: inline-block; padding: 1px 8px; font-size: 13px; line-height: 1.5; letter-spacing: .03em; border-radius: 3px; white-space: nowrap; border: 1px solid; vertical-align: middle; }
+.adm .rtag.hs { color: var(--mint); background: var(--cls-bg); border-color: var(--cls-edge); }
+.adm .rtag.k187 { color: var(--gold); background: var(--ext-bg); border-color: var(--ext-edge); }
+.adm .rtag.team { color: #cfd8d4; background: #26302d; border-color: #4a5753; }
+.adm .tg.mute { color: #b9c4c0; background: #1b2420; border-color: #46534e; }
+.adm .stopall { margin-top: 12px; display: flex; justify-content: flex-end; }
+.adm .sfoot { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+.adm .sform { margin-top: 10px; }
+.adm .sform .shead { margin: 0 0 12px; font-size: 19px; color: var(--gold); }
+.adm .sform hr { border: 0; border-top: 1px solid var(--rule); margin: 14px 0; }
+.adm .times { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 10px; }
+.adm .tm2 { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 2px 4px 2px 14px; font-size: 17px; color: var(--cream); background: #0d1b16; border: 1px solid var(--rule); border-radius: 6px; font-variant-numeric: tabular-nums; }
+.adm .tm2 button { min-width: 44px; min-height: 44px; font-size: 22px; line-height: 1; color: var(--muted); background: transparent; border: 0; cursor: pointer; }
+.adm .addtime { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.adm .addtime .inw { width: 140px; flex: none; }
+.adm .nowrap { white-space: nowrap; }
+
+/* ---- the Log: a third kind of row ---- */
+.adm .arow2 .src.bot { color: var(--nv-ink); background: var(--nv-bg); border-color: var(--nv-edge); }
+
+@media (min-width: 601px) {
+    .adm .lvbox { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; margin-bottom: 4px; }          /* (a desktop: the bots' levels in two columns) */
+    .adm .lv { grid-template-columns: minmax(0, 1fr); gap: 2px 0; margin-bottom: 0; }
+    .adm .lv .ln { font-size: 14px; color: var(--muted); }
+}
+@media (max-width: 900px) {
+    .adm .bgrid { grid-template-columns: minmax(0, 1fr); }
+    .adm .bgrid .cc { display: contents; }                                /* one column: Start now, Running, Schedules */
+    .adm .b-now { order: 1; } .adm .b-run { order: 2; } .adm .b-sched { order: 3; }
+}
+@media (max-width: 600px) {
+    .adm .brow { grid-template-columns: minmax(0, 1fr); }
+    .adm .brow .bb { }
+    .adm .brow .bb .btn { flex: 1 1 0; min-width: 0; }
+    .adm .startrow .btn { flex: 1 1 100%; }
+    .adm .lv { grid-template-columns: 56px minmax(0, 1fr); }
+    .adm .sfoot .btn { flex: 1 1 0; min-width: 0; }
+    .adm .stopall .btn { width: 100%; }
+}

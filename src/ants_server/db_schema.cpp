@@ -245,6 +245,26 @@ const char* const kAdminPassSql =
     "UPDATE map_submissions SET decided_by = 'earlier admin' WHERE state IN ('approved', 'declined', 'taken_down');"
     "UPDATE review_log SET actor_id = '', actor_name = 'earlier admin';";
 
+// Version 9. bot_schedules: the schedules of the server's own matches of computer players (docs/SERVER_REPLAYS.md "Schedules", ants_server/bot_schedules.hpp), edited on the admin page. One row for each schedule: its name (typed by an admin),
+// whether it is on, whether it is the one that the server made from --bot-match-every-min the first time it had this table (`is_default`: the page tags it), when it runs (`kind` every with `minutes`, or times with `times`, a
+// JSON list of "HH:MM" by the Pacific clock) and what it starts (`what`, a JSON object of bot_match_spec.hpp), the second of its last start and of its next run, and when it was made. The row's id is never used again
+// (AUTOINCREMENT), so a log line or a page that names a schedule that is gone does not name another one. That the default was made once is a row of `meta` ('bot_schedules_seeded'), written with the row, so a schedule that
+// an admin deleted is not made again.
+const char* const kBotSchedulesSql =
+    "CREATE TABLE bot_schedules ("
+    " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    " name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 200),"
+    " enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),"
+    " is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),"
+    " kind TEXT NOT NULL CHECK (kind IN ('every', 'times')),"
+    " minutes INTEGER NOT NULL DEFAULT 60 CHECK (minutes BETWEEN 5 AND 1440),"
+    " times TEXT NOT NULL DEFAULT '[]' CHECK (length(times) <= 400),"
+    " what TEXT NOT NULL CHECK (length(what) <= 1000),"
+    " last_run INTEGER NOT NULL DEFAULT 0,"
+    " next_run INTEGER NOT NULL DEFAULT 0,"
+    " created_at INTEGER NOT NULL"
+    ");";
+
 }  // namespace
 
 const std::vector<db::Migration>& db_migrations() {
@@ -257,6 +277,7 @@ const std::vector<db::Migration>& db_migrations() {
         {6, "admin_accounts", kAccountsSql},
         {7, "history_deaths", kDeathsSql},
         {8, "admin_pass", kAdminPassSql, true},                // (the old password hashes and names are in free pages of the file until it is rewritten)
+        {9, "bot_schedules", kBotSchedulesSql},
     };
     return list;
 }

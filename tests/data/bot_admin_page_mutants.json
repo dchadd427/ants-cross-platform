@@ -1,0 +1,324 @@
+{
+ "note": "Mutants of the page's Bot matches section (web/admin_bots.js and the Log of web/admin_page.js): each breaks a rule of the section (what a button sends, what is asked before something cannot be undone, what is shown as typed text, the limits) and the node check of the page (tests/scripts/web_admin_check.js) must notice. Run: python3 tools/mutate.py tests/data/bot_admin_page_mutants.json --keep-going",
+ "defaults": {
+  "build": [],
+  "test": "node tests/scripts/web_admin_check.js web/admin_page.js web/admin_bots.js"
+ },
+ "mutants": [
+  {
+   "id": "bots_a_match_s_name_becomes_markup",
+   "file": "web/admin_bots.js",
+   "old": "add(name, typed('span', null, m.name), el('span', 'rtag '",
+   "new": "add(name, el('span', null, m.name), el('span', 'rtag '",
+   "why": "a match's name becomes markup"
+  },
+  {
+   "id": "bots_a_schedule_s_name_is_not_marked_as_typed_text",
+   "file": "web/admin_bots.js",
+   "old": "add(name, typed('span', null, s.name), el('span', 'tg '",
+   "new": "add(name, el('span', null, s.name), el('span', 'tg '",
+   "why": "a schedule's name is not marked as typed text"
+  },
+  {
+   "id": "bots_the_admin_or_schedule_that_started_a_match_is_not_marked",
+   "file": "web/admin_bots.js",
+   "old": "typed('span', null, m.schedule || m.by)",
+   "new": "el('span', null, m.schedule || m.by)",
+   "why": "the admin or schedule that started a match is not marked"
+  },
+  {
+   "id": "bots_the_name_of_a_map_of_a_player_is_not_marked_as_player_text",
+   "file": "web/admin_bots.js",
+   "old": "if (m.group === 'players') o.setAttribute('data-untrusted', UNTRUSTED);",
+   "new": "",
+   "why": "the name of a map of a player is not marked as player text"
+  },
+  {
+   "id": "bots_delete_asks_no_question",
+   "file": "web/admin_bots.js",
+   "old": "button('Delete', 'bad', function () { askDelete(s); })",
+   "new": "button('Delete', 'bad', function () { call('POST', '/admin/api/bot-schedules/' + s.id + '/delete', {}).then(function () { loadAll(true); }); })",
+   "why": "Delete asks no question"
+  },
+  {
+   "id": "bots_stop_all_asks_no_question",
+   "file": "web/admin_bots.js",
+   "old": "button('Stop all ' + n, 'bad', function () { askStopAll(); })",
+   "new": "button('Stop all ' + n, 'bad', function () { call('POST', '/admin/api/bot-matches/stop-all', {}).then(function () { loadAll(true); }); })",
+   "why": "Stop all asks no question"
+  },
+  {
+   "id": "bots_the_question_can_be_confirmed_at_once",
+   "file": "web/admin_bots.js",
+   "old": "function () { if (tick() - opened < ASK_DELAY) return; closeAsk(); onGo(); }",
+   "new": "function () { closeAsk(); onGo(); }",
+   "why": "the question can be confirmed at once"
+  },
+  {
+   "id": "bots_the_limit_is_nine",
+   "file": "web/admin_bots.js",
+   "old": "var CAP = 8;",
+   "new": "var CAP = 9;",
+   "why": "the limit is nine"
+  },
+  {
+   "id": "bots_start_stays_on_when_all_eight_places_are_taken",
+   "file": "web/admin_bots.js",
+   "old": "off = full || !st.replays;",
+   "new": "off = !st.replays;",
+   "why": "Start stays on when all eight places are taken"
+  },
+  {
+   "id": "bots_start_stays_on_when_the_server_keeps_no_replays",
+   "file": "web/admin_bots.js",
+   "old": "off = full || !st.replays;",
+   "new": "off = full;",
+   "why": "Start stays on when the server keeps no replays"
+  },
+  {
+   "id": "bots_watch_opens_in_the_page_s_own_tab",
+   "file": "web/admin_bots.js",
+   "old": "watch.setAttribute('target', '_blank');",
+   "new": "",
+   "why": "Watch opens in the page's own tab"
+  },
+  {
+   "id": "bots_watch_can_be_pressed_before_the_live_list_has_the_match",
+   "file": "web/admin_bots.js",
+   "old": "if (m.live) { watch = el('a', 'btn', 'Watch');",
+   "new": "if (true) { watch = el('a', 'btn', 'Watch');",
+   "why": "Watch can be pressed before the live list has the match"
+  },
+  {
+   "id": "bots_stop_names_the_match_by_its_map",
+   "file": "web/admin_bots.js",
+   "old": "'/admin/api/bot-matches/' + encodeURIComponent(m.id) + '/stop'",
+   "new": "'/admin/api/bot-matches/' + encodeURIComponent(m.name) + '/stop'",
+   "why": "Stop names the match by its map"
+  },
+  {
+   "id": "bots_a_split_can_be_chosen_with_two_bots",
+   "file": "web/admin_bots.js",
+   "old": "var can = nb >= 3 && v.bots !== 'random';",
+   "new": "var can = true;",
+   "why": "a split can be chosen with two bots"
+  },
+  {
+   "id": "bots_the_hint_about_islands_in_187_is_gone",
+   "file": "web/admin_bots.js",
+   "old": "if (mp && mp.file === 'ISLANDS.LVL' && v.rules === '187') {",
+   "new": "if (false) {",
+   "why": "the hint about ISLANDS in 187 is gone"
+  },
+  {
+   "id": "bots_more_than_twelve_times_can_be_added",
+   "file": "web/admin_bots.js",
+   "old": "if (times.length >= 12) {",
+   "new": "if (times.length >= 99) {",
+   "why": "more than twelve times can be added"
+  },
+  {
+   "id": "bots_a_time_of_25_00_is_taken",
+   "file": "web/admin_bots.js",
+   "old": "/^([01]?[0-9]|2[0-3]):([0-5][0-9])$/",
+   "new": "/^([0-9]{1,2}):([0-5][0-9])$/",
+   "why": "a time of 25:00 is taken"
+  },
+  {
+   "id": "bots_minutes_are_sent_as_the_text_that_was_typed",
+   "file": "web/admin_bots.js",
+   "old": "minutes: /^[0-9]{1,4}$/.test(typedMinutes) ? parseInt(typedMinutes, 10) : -1",
+   "new": "minutes: typedMinutes",
+   "why": "minutes are sent as the text that was typed"
+  },
+  {
+   "id": "bots_turn_off_sends_the_same_state",
+   "file": "web/admin_bots.js",
+   "old": "{ on: !s.on }",
+   "new": "{ on: s.on }",
+   "why": "Turn off sends the same state"
+  },
+  {
+   "id": "bots_the_default_s_question_says_nothing_about_it",
+   "file": "web/admin_bots.js",
+   "old": "(s.default ? ' This is the schedule that the server began with",
+   "new": "(false ? ' This is the schedule that the server began with",
+   "why": "the default's question says nothing about it"
+  },
+  {
+   "id": "bots_a_server_with_no_routes_is_not_told",
+   "file": "web/admin_bots.js",
+   "old": "rs[0].json.error === 'bots_off'",
+   "new": "rs[0].json.error === 'never'",
+   "why": "a server with no routes is not told"
+  },
+  {
+   "id": "bots_the_badge_is_not_told_how_many_match_go",
+   "file": "web/admin_bots.js",
+   "old": "if (r.status === 200 && r.json && r.json.matches) h.setRunning(r.json.matches.length);",
+   "new": "",
+   "why": "the badge is not told how many match go"
+  },
+  {
+   "id": "bots_the_running_panel_does_not_tell_the_badge",
+   "file": "web/admin_bots.js",
+   "old": "h.setRunning(n);\n            }\n            function stopOne",
+   "new": "}\n            function stopOne",
+   "why": "the Running panel does not tell the badge"
+  },
+  {
+   "id": "bots_a_refusal_of_the_number_of_matches_does_not_say_what_is_free",
+   "file": "web/admin_bots.js",
+   "old": "' be over the limit of ' + CAP + '. Start ' + j.free + ' or fewer",
+   "new": "' be over the limit of ' + CAP + '. Start fewer",
+   "why": "a refusal of the number of matches does not say what is free"
+  },
+  {
+   "id": "bots_a_start_that_is_old_an_old_token_is_not_told",
+   "file": "web/admin_bots.js",
+   "old": "if (r.status === 403 && e === 'csrf') return",
+   "new": "if (false) return",
+   "why": "a start that is old (an old token) is not told"
+  },
+  {
+   "id": "bots_a_refused_call_of_a_batch_is_not_noticed_a_login_that_ended",
+   "file": "web/admin_bots.js",
+   "old": "if (refused(r)) return;\n                    say('bad', failure(r));",
+   "new": "say('bad', failure(r));",
+   "why": "a refused call of a batch is not noticed (a login that ended)"
+  },
+  {
+   "id": "bots_the_schedule_form_keeps_no_name_limit",
+   "file": "web/admin_bots.js",
+   "old": "nameI.maxLength = 40;",
+   "new": "",
+   "why": "the schedule form keeps no name limit"
+  },
+  {
+   "id": "bots_a_schedule_that_was_saved_leaves_its_form_open",
+   "file": "web/admin_bots.js",
+   "old": "if (r.status === 200) { st.editing = null; return loadAll(true); }",
+   "new": "if (r.status === 200) { return loadAll(true); }",
+   "why": "a schedule that was saved leaves its form open"
+  },
+  {
+   "id": "page_the_target_of_a_bot_match_line_of_the_log_is_not_marked",
+   "file": "web/admin_page.js",
+   "old": "(BOTS && BOTS.logActions[r.action]) || ''), typed('em', null, r.target));",
+   "new": "(BOTS && BOTS.logActions[r.action]) || ''), el('em', null, r.target));",
+   "why": "the target of a bot match line of the log is not marked"
+  },
+  {
+   "id": "page_the_bot_matches_filter_of_the_log_is_gone",
+   "file": "web/admin_page.js",
+   "old": "['bots', 'Bot matches (' + bots.length + ')']",
+   "new": "['bots', 'Bot matches (0)']",
+   "why": "the Bot matches filter of the Log is gone"
+  },
+  {
+   "id": "page_the_badge_of_the_bot_matches_tab_is_not_drawn",
+   "file": "web/admin_page.js",
+   "old": "if (s.id === 'bots' && botRunning > 0) add(b, el('span', 'cnt', String(botRunning)));",
+   "new": "",
+   "why": "the badge of the Bot matches tab is not drawn"
+  },
+  {
+   "id": "page_the_number_of_bot_matches_that_go_is_not_asked_when_the_page_opens",
+   "file": "web/admin_page.js",
+   "old": "if (BOTS) tools().count();",
+   "new": "",
+   "why": "the number of bot matches that go is not asked when the page opens"
+  },
+  {
+   "id": "bots_levels_are_not_padded_to_four",
+   "file": "web/admin_bots.js",
+   "old": "for (var i = 0; i < 4; i++) out.push(list && known.indexOf(list[i]) >= 0 ? list[i] : 'rmh');",
+   "new": "for (var i = 0; i < (list ? list.length : 4); i++) out.push(list && known.indexOf(list[i]) >= 0 ? list[i] : 'rmh');",
+   "why": "a schedule saved with two or three bots, edited and raised to four, sends levels that are not there"
+  },
+  {
+   "id": "bots_a_second_click_on_save_sends_another_schedule",
+   "file": "web/admin_bots.js",
+   "old": "st.saving = true;\n                    save.disabled = true;\n",
+   "new": "",
+   "why": "a double click on Save makes two schedules"
+  },
+  {
+   "id": "bots_a_second_click_on_turn_off_sends_again",
+   "file": "web/admin_bots.js",
+   "old": "if (st.switching) return;\n                st.switching = true;",
+   "new": "",
+   "why": "a double click on Turn off sends two calls"
+  },
+  {
+   "id": "bots_stopped_for_busy_is_told_as_places",
+   "file": "web/admin_bots.js",
+   "old": "if (why === 'busy') return",
+   "new": "if (false) return",
+   "why": "a batch that stopped for the people's matches says it was for places"
+  },
+  {
+   "id": "bots_the_budget_refusal_is_not_told",
+   "file": "web/admin_bots.js",
+   "old": "if (r.status === 409 && e === 'budget') return",
+   "new": "if (false) return",
+   "why": "a start that the store has no room for gets the plain line"
+  },
+  {
+   "id": "bots_the_default_question_says_an_hour",
+   "file": "web/admin_bots.js",
+   "old": "(s.default ? ' This is the schedule that the server began with (' + whenWords(s).toLowerCase() + '): until",
+   "new": "(s.default ? ' This is the schedule that the server began with (one match every hour): until",
+   "why": "the question for a default that runs every 90 minutes says an hour"
+  },
+  {
+   "id": "bots_the_switched_off_schedules_are_not_said",
+   "file": "web/admin_bots.js",
+   "old": "if (!st.scheduling) add(schedBox, message(",
+   "new": "if (false) add(schedBox, message(",
+   "why": "a server whose schedules are switched off shows them as if they ran"
+  },
+  {
+   "id": "bots_a_switched_off_server_promises_a_next_start",
+   "file": "web/admin_bots.js",
+   "old": "if (!st.scheduling) return 'Not running",
+   "new": "if (false) return 'Not running",
+   "why": "a row of a switched off server says when it starts next"
+  },
+  {
+   "id": "bots_the_minutes_of_a_map_are_not_shown",
+   "file": "web/admin_bots.js",
+   "old": "mp.name + ' plays ' + (mp.minutes ? 'up to ' + plural(mp.minutes, 'minute', 'minutes') : 'its own time limit') + '.'",
+   "new": "mp.name + ' is a map.'",
+   "why": "a map chosen by name does not say its minutes"
+  },
+  {
+   "id": "bots_a_long_map_is_not_said_to_be_left_out_of_a_random_pick",
+   "file": "web/admin_bots.js",
+   "old": "(mp.random === false ? ' A random pick never takes it",
+   "new": "(false ? ' A random pick never takes it",
+   "why": "the page does not say that a random pick never takes a map over 30 minutes"
+  },
+  {
+   "id": "bots_the_players_maps_for_a_random_pick_are_not_counted",
+   "file": "web/admin_bots.js",
+   "old": "picked = mine.filter(function (m) { return m.random !== false; }).length;",
+   "new": "picked = mine.length;",
+   "why": "the hint counts the long maps among those a random pick may take"
+  },
+  {
+   "id": "page_the_log_asks_for_all_lines_of_the_server_as_maps",
+   "file": "web/admin_page.js",
+   "old": "call('GET', '/admin/api/audit?kind=maps')",
+   "new": "call('GET', '/admin/api/audit')",
+   "why": "the Map decisions filter is filled from all the server's lines, so bot lines crowd it"
+  },
+  {
+   "id": "page_the_log_does_not_ask_for_the_bot_lines",
+   "file": "web/admin_page.js",
+   "old": "call('GET', '/admin/api/audit?kind=bots')",
+   "new": "call('GET', '/admin/api/audit?kind=maps')",
+   "why": "the Bot matches filter shows the map decisions"
+  }
+ ]
+}

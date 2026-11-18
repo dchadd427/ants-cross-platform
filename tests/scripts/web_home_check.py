@@ -197,8 +197,8 @@ LAYOUT_JS = """(function () {
     mapFit: [mapName.scrollWidth, mapName.clientWidth] });
 })()"""
 
-LOBBY_NOTICE = "Online matches are recorded. Recordings are kept for 30 days. Results and names are kept for good and are public."        # (the line under the name field of the front page's name card and in its footer)
-NOTICE_TEXT = "Online matches are recorded. Anybody can watch them, live or later. Recordings are kept for 30 days. Results and names are kept for good and are public."      # (the line under the name field of the game page's name card)
+LOBBY_NOTICE = "Online matches are recorded. Recordings are kept for up to 90 days. Results and names are kept for good and are public."        # (the line under the name field of the front page's name card and in its footer)
+NOTICE_TEXT = "Online matches are recorded. Anybody can watch them, live or later. Recordings are kept for up to 90 days. Results and names are kept for good and are public."      # (the line under the name field of the game page's name card)
 NAME_CARD_JS = """JSON.stringify((function () {
   var card = document.querySelector('.name-step').getBoundingClientRect(), hint = document.getElementById('name-step-hint').getBoundingClientRect(), n = document.getElementById('who-notice'), own = document.getElementById('name-step-own').getBoundingClientRect();
   var r = n.getBoundingClientRect(), s = getComputedStyle(n), h = getComputedStyle(document.getElementById('name-step-hint'));
@@ -748,7 +748,7 @@ def main():
             check(all(hrefs[k][2] == "_blank" for k in ("Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal")) and hrefs["Matches"][2] is None, "the links that leave the front page keep their new tab, the ones to the match pages do not")
             top = json.loads(value("(function () { var b = document.getElementById('watch-top'), m = document.querySelector('header.mast'), r = b && b.getBoundingClientRect(), h = m.getBoundingClientRect(), l = m.querySelector('img').getBoundingClientRect(); return JSON.stringify({text: b && b.textContent.trim(), href: b && b.getAttribute('href'), target: b && b.getAttribute('target'), inHeader: !!b && m.contains(b), right: r && Math.round(h.right - r.right), after: r && r.left > l.right, vis: !!r && r.width > 0 && getComputedStyle(b).visibility === 'visible'}); })()"))
             check(top["text"] == "Matches" and top["href"] == "/matches" and top["target"] is None and top["inHeader"] and top["vis"] and top["after"] and 0 <= top["right"] <= 4, "the header has the one button, Matches, at the right of the row, in this tab (%s)" % top)
-            check(info["notice"] == LOBBY_NOTICE and info["noticeShown"], "the Room says under START that online matches are recorded, the recordings kept for 30 days, the results and names kept for good and public (%r)" % info["notice"])
+            check(info["notice"] == LOBBY_NOTICE and info["noticeShown"], "the Room says under START that online matches are recorded, the recordings kept for up to 90 days, the results and names kept for good and public (%r)" % info["notice"])
             check(not info["footerShown"], "the Room draws no site footer (its markup stays: the Menu reads the numbers and the version from it)")
             stats = json.loads(value("JSON.stringify({hidden: document.getElementById('stats').hidden, text: document.getElementById('stats').textContent.replace(/\\s+/g, ' ').trim()})"))
             check(stats["hidden"] or re.match(r"^\d[\d,]* matches? being played · \d[\d,]* players? online(\d[\d,]* games? played \(\d[\d,]* today\))?$", stats["text"]) is not None,
@@ -1955,7 +1955,7 @@ def main():
                       "... and its way out at %s: a teal \"Back to the front page\" link under the hint, inside the card (%s)" % (label, back))
                 notice = json.loads(value(CARD_NOTICE_JS))
                 check(notice["text"] == NOTICE_TEXT and notice["shown"] and notice["sameType"] and notice["order"] and notice["inside"],
-                      "... and its notice at %s: online matches are recorded, kept for 30 days and public with the players' names, in the hint's own type, between the hint and the way out, inside the card (%s)" % (label, notice))
+                      "... and its notice at %s: online matches are recorded, kept for up to 90 days and public with the players' names, in the hint's own type, between the hint and the way out, inside the card (%s)" % (label, notice))
                 real_click("#name-step-back")
                 time.sleep(1.0)
                 check(tab.ev("location.pathname + location.search") == "/" and tab.ev("!!document.getElementById('slots')"), "... which takes the friend to the front page (the color cards, no room in the address)")

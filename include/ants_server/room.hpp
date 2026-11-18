@@ -138,6 +138,9 @@ struct RoomSpec {
     /// The server's own match of computer players alone (RoomManager::start_bot_match): every seat of the room is a bot (`bots` as many as `players`), no person is needed to start it or to keep it going, and it is
     /// played at the normal speed like any other. Only the server makes such a room (the control interface has no key for it); it holds no seats (`reconnect` false), so no restart record is kept for it.
     bool bots_only{false};
+    /// The room does not try to start its match until this long after it was made (milliseconds; 0: at once): the server's own matches of computer players are made one after another with a gap, so that setting up
+    /// their engines is spread over the passes of the main loop (bot_match_spec.hpp: kBotStartGapMs). Only the server sets it.
+    uint32_t start_hold_ms{0};
     /// Protocol 21: the seconds that the room holds the first turn of its match (the countdown: everybody can chat and go fullscreen) when at least net::kCountdownMinPeople people play; 0 .. net::kMaxCountdownSeconds,
     /// 0 = none (the plain 5 s "Get ready" dialog of protocol 12). A spec built by code says what it wants (0 here); the server's rooms start from RoomManager::default_spec(), which has the server's own setting
     /// (--start-countdown-seconds, default 30; the control key "countdown_seconds"). A room of exactly one person, with or without computer players, holds the first turn min(solo_countdown_s, countdown_s) seconds.
@@ -395,6 +398,8 @@ public:
     uint32_t map_places() const { return OnlineLimits::weight(map_cells(), map_start_ants()); }
     /// Whether the room has this map (file name) as its map or as its plan's map: a test map that a room has is not dropped to make room for another
     bool uses_map(const std::string& file_name) const { return map_.name == file_name || lobby_.map_name() == file_name; }
+    /// The id of the match's recording on the live board ("" while it is not there: before the match begins, after it ends, a match that is not recorded)
+    const std::string& live_id() const noexcept { return live_id_; }
     /// The server's own match of computer players alone (RoomSpec::bots_only)
     bool bots_only() const noexcept { return spec_.bots_only; }
     /// A lobby room (protocol 16) ...

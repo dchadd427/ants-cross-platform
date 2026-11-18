@@ -323,7 +323,7 @@ check "the edges of the restart options start the server: 30 and 1" "$([ "$(exit
 check "... and 3600 and 4096" "$([ "$(exit_of --restart-vote-seconds 3600 --restart-budget-mb 4096 --no-restart-records)" = "142" ]; echo $?)"
 check "--restart-dir makes its folder, for its owner only (mode 700)" "$([ -d "$WORK/rd_a" ] && [ "$(stat -c %a "$WORK/rd_a" 2> /dev/null || stat -f %Lp "$WORK/rd_a")" = "700" ]; echo $?)"
 check "--help names the restart options and their ranges" "$("$SERVER" --help 2>&1 | grep -q -- '--restart-dir DIR | --no-restart-records' && "$SERVER" --help 2>&1 | grep -q -- '--restart-vote-seconds 30-3600' && "$SERVER" --help 2>&1 | grep -q -- '--restart-budget-mb 1-4096'; echo $?)"
-# the replays (docs/SERVER.md "Replays"): the options and their edges
+# the replays (docs/SERVER_REPLAYS.md "Replays"): the options and their edges
 check "--replays-days 0 is refused" "$([ "$(exit_of --replays-days 0)" = "2" ]; echo $?)"
 check "--replays-days above 3650 is refused" "$([ "$(exit_of --replays-days 3651)" = "2" ]; echo $?)"
 check "--replays-days that is no number is refused" "$([ "$(exit_of --replays-days soon)" = "2" ]; echo $?)"
@@ -339,8 +339,10 @@ check "--bot-match-every-min above 1440 is refused" "$([ "$(exit_of --bot-match-
 check "--bot-match-every-min below 0 is refused" "$([ "$(exit_of --bot-match-every-min -1)" = "2" ]; echo $?)"
 check "--bot-match-every-min that is no number is refused" "$([ "$(exit_of --bot-match-every-min hourly)" = "2" ]; echo $?)"
 check "--bot-match-every-min without a value is refused" "$([ "$(exit_of --bot-match-every-min)" = "2" ]; echo $?)"
-check "--bot-match-every-min 0 (none: the default), 5 and 1440 start the server" "$([ "$(exit_of --bot-match-every-min 0)" = "142" ] && [ "$(exit_of --bot-match-every-min 5 --replays-dir "$WORK/rp_a")" = "142" ] && [ "$(exit_of --bot-match-every-min 1440 --replays-dir "$WORK/rp_a")" = "142" ]; echo $?)"
-check "--bot-match-every-min with a replays folder says that the server plays its own matches" "$(log_of --bot-match-every-min 5 --replays-dir "$WORK/rp_a" | grep -q 'plays a match of computer players every 5 minutes'; echo $?)"
+check "--bot-match-every-min 0 (the schedules are off), 5 and 1440 start the server" "$([ "$(exit_of --bot-match-every-min 0)" = "142" ] && [ "$(exit_of --bot-match-every-min 5 --replays-dir "$WORK/rp_a")" = "142" ] && [ "$(exit_of --bot-match-every-min 1440 --replays-dir "$WORK/rp_a")" = "142" ]; echo $?)"
+check "--bot-match-every-min with a replays folder says that it made the schedule of the server's own matches" "$(log_of --bot-match-every-min 5 --replays-dir "$WORK/rp_a" | grep -q 'was made: one every 5 minutes, the first one in a minute'; echo $?)"
+check "--bot-match-every-min 0 is the off switch of the scheduled matches of computer players, and the log says so" "$(log_of --bot-match-every-min 0 --replays-dir "$WORK/rp_a" | grep -q 'scheduled matches of computer players are OFF'; echo $?)"
+check "...left out, the scheduled matches are not switched off (and nothing says that they are)" "$(log_of --replays-dir "$WORK/rp_a" | grep -q 'scheduled matches of computer players are OFF'; echo $(( $? == 0 ? 1 : 0 )))"
 check "--bot-match-every-min without any replays folder is ignored, and the log says why" "$(log_of --bot-match-every-min 5 | grep -q 'bot-match-every-min is ignored'; echo $?)"
 check "--replays-dir with an empty folder name is refused" "$([ "$(exit_of --replays-dir '')" = "2" ]; echo $?)"
 check "--replays-dir together with --no-replays is refused" "$([ "$(exit_of --replays-dir "$WORK/rp_none" --no-replays)" = "2" ]; echo $?)"
@@ -378,14 +380,14 @@ db_start() {      # db_start LOGFILE ARGS...: starts the server in the backgroun
 }
 db_version() { python3 -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); print(c.execute("select max(version) from schema_version").fetchone()[0], c.execute("select count(*) from meta where key = ?", ("created_at",)).fetchone()[0], c.execute("pragma journal_mode").fetchone()[0])' "$1" 2> /dev/null; }
 mkdir -p "$WORK/db_default"
-check "a server with --results-dir starts, logs the database line and stops cleanly on SIGTERM (status 0)" "$([ "$(db_start "$WORK/db_default.log" --results-dir "$WORK/db_default")" = "0" ] && grep -q "database $WORK/db_default/ants.db: schema version 8" "$WORK/db_default.log"; echo $?)"
+check "a server with --results-dir starts, logs the database line and stops cleanly on SIGTERM (status 0)" "$([ "$(db_start "$WORK/db_default.log" --results-dir "$WORK/db_default")" = "0" ] && grep -q "database $WORK/db_default/ants.db: schema version 9" "$WORK/db_default.log"; echo $?)"
 check "... and the database file is in the results folder by default (ants.db)" "$([ -s "$WORK/db_default/ants.db" ]; echo $?)"
 if python3 -c 'import sqlite3' 2> /dev/null; then
-    check "... it is a database at schema version 8 (the match history tables are in it) with the created_at row, in WAL mode, and a clean stop left no -wal file" "$([ "$(db_version "$WORK/db_default/ants.db")" = "8 1 wal" ] && [ ! -s "$WORK/db_default/ants.db-wal" ]; echo $?)"
+    check "... it is a database at schema version 9 (the match history tables are in it) with the created_at row, in WAL mode, and a clean stop left no -wal file" "$([ "$(db_version "$WORK/db_default/ants.db")" = "9 1 wal" ] && [ ! -s "$WORK/db_default/ants.db-wal" ]; echo $?)"
 else
     echo "  SKIP: python3 has no sqlite3 module: the content of the database file was NOT read"
 fi
-check "a second start over the same file finds schema version 8 and keeps its created_at" "$(CREATED="$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select value from meta").fetchone()[0])' "$WORK/db_default/ants.db" 2> /dev/null)"; [ "$(db_start "$WORK/db_again.log" --results-dir "$WORK/db_default")" = "0" ] && grep -q 'schema version 8' "$WORK/db_again.log" && { [ -z "$CREATED" ] || [ "$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select value from meta").fetchone()[0])' "$WORK/db_default/ants.db")" = "$CREATED" ]; }; echo $?)"
+check "a second start over the same file finds schema version 9 and keeps its created_at" "$(CREATED="$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select value from meta").fetchone()[0])' "$WORK/db_default/ants.db" 2> /dev/null)"; [ "$(db_start "$WORK/db_again.log" --results-dir "$WORK/db_default")" = "0" ] && grep -q 'schema version 9' "$WORK/db_again.log" && { [ -z "$CREATED" ] || [ "$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("select value from meta").fetchone()[0])' "$WORK/db_default/ants.db")" = "$CREATED" ]; }; echo $?)"
 check "--db FILE puts the database there (its folder is made) and not in the results folder" "$([ "$(db_start "$WORK/db_named.log" --results-dir "$WORK/db_default2" --db "$WORK/db_dir/sub/named.db")" = "0" ] && [ -s "$WORK/db_dir/sub/named.db" ] && [ ! -e "$WORK/db_default2/ants.db" ]; echo $?)"
 check "--no-db keeps no database file, whatever --results-dir says, and the log says so" "$([ "$(db_start "$WORK/db_off.log" --results-dir "$WORK/db_off" --no-db)" = "0" ] && [ ! -e "$WORK/db_off/ants.db" ] && grep -q 'database is off (--no-db)' "$WORK/db_off.log"; echo $?)"
 check "without --results-dir and --db there is no database, and the log says so" "$([ "$(db_start "$WORK/db_none.log")" = "0" ] && grep -q 'database is off: no --results-dir or --db' "$WORK/db_none.log"; echo $?)"
@@ -1756,7 +1758,7 @@ echo "  [restart e2e] SIGTERM $RR_STOPPED_AFTER s to exit with the record kept; 
 echo "  [restore e2e] $RR_CLONES records of a long match were replayed in $RR_RESTORE_S s of the server's launch; meanwhile /busy answered after $RR_BUSY_S s (${RR_BUSY_MATCHES:-?} matches waited) and a new room's player had its Welcome $RR_WELCOME_S s after the launch"
 fi
 
-# ---- part replays: the matches that the server keeps (docs/REPLAYS.md "On the game server", docs/SERVER.md "Replays") ---------------------------------------------
+# ---- part replays: the matches that the server keeps (docs/REPLAYS.md "On the game server", docs/SERVER_REPLAYS.md "Replays") ---------------------------------------------
 # Two real games play a match on a room of the control interface; after 32 seconds of play (640 ticks: the server keeps a match from 600 turns, 30 seconds, however it ended) the owner closes the room. The match is kept
 # as a file in the results folder, and the control interface (with the secret) and the public replay door (without) list it and give it out; the names that the two games typed ("Typed1", "Typed2") are in
 # the list and in the file, the room's code and the address are not; replay_tool plays the downloaded file out to the same hashes and shows the names; the file is still there after a restart of the server; the

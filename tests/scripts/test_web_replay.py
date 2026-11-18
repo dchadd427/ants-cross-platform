@@ -237,8 +237,8 @@ class TheLiveGlue(unittest.TestCase):
 
     def test_the_words_of_the_notes_and_the_cards_are_the_approved_ones(self):
         for words in ("The live feed stopped. Trying again…", "The match is over. It is now in the list as a replay.", "The match is over.", "This match is over", "Watch the replay",
-                      "The match you were watching has ended. It is kept in the list for 30 days, and you can watch all of it.", "That match isn’t live",
-                      "It has ended without being kept (a match that ran 30 seconds or more is kept for 30 days), or the link is not right. The matches that are being played now are listed on the front page."):
+                      "The match you were watching has ended. It is kept in the list for up to 90 days, and you can watch all of it.", "That match isn’t live",
+                      "It has ended without being kept (a match that ran 30 seconds or more is kept for up to 90 days), or the link is not right. The matches that are being played now are listed on the front page."):
             self.assertIn(words, self.glue, words)
 
     def test_a_match_that_became_a_replay_has_the_address_of_the_replay(self):

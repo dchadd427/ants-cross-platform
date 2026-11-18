@@ -39,6 +39,10 @@ public:
     /// Answers one request. `now_s` is the wall clock (seconds since 1970), `now_ms` a steady millisecond clock.
     ctl::HttpResponse handle(const ctl::HttpRequest& request, int64_t now_s, uint32_t now_ms);
 
+    /// What answers the calls of the admin API whose tail starts with "bot-" (bot_matches.hpp: the section "Bot matches" of the admin page). It is given a call only after the door's own checks (the pass, and for a change the
+    /// token, the same origin and a JSON object), so it has no gate of its own. `body` is the parsed object of a change and the null value for a read; `now_ms` is the steady clock of the main loop.
+    using BotRoutes = std::function<ctl::HttpResponse(const ctl::HttpRequest& request, const AdminIdentity& who, const std::string& tail, const ctl::JsonValue& body, int64_t now_s, uint32_t now_ms)>;
+    void set_bot_routes(BotRoutes routes) { bot_routes_ = std::move(routes); }
     /// Called after the set of approved maps changed (an approval, a take-down, a put-back), so that the lobby's list follows
     void set_on_approved_changed(std::function<void()> fn) { on_approved_changed_ = std::move(fn); }
     /// The limit on the body of a request, asked on its head: 512 KB for a Classic map, 4 MiB for an Extended one, a few KB for anything else (DoorOptions::body_limit)
@@ -57,9 +61,9 @@ public:
 private:
     ctl::HttpResponse submit(const ctl::HttpRequest& request, int64_t now_s, uint32_t now_ms);
     ctl::HttpResponse maker_routes(const ctl::HttpRequest& request, int64_t now_s, uint32_t now_ms);
-    ctl::HttpResponse admin_routes(const ctl::HttpRequest& request, int64_t now_s);
-    ctl::HttpResponse admin_post(const ctl::HttpRequest& request, const AdminIdentity& who, const std::string& tail, int64_t now_s);
-    ctl::HttpResponse audit_list();
+    ctl::HttpResponse admin_routes(const ctl::HttpRequest& request, int64_t now_s, uint32_t now_ms);
+    ctl::HttpResponse admin_post(const ctl::HttpRequest& request, const AdminIdentity& who, const std::string& tail, int64_t now_s, uint32_t now_ms);
+    ctl::HttpResponse audit_list(const ctl::HttpRequest& request);
     bool post_guard(const ctl::HttpRequest& request, const AdminIdentity& who, ctl::JsonValue& body, ctl::HttpResponse& refusal) const;
     bool admitted(const ctl::HttpRequest& request, int64_t now_s, AdminIdentity& who);
     bool address_allowed(const std::string& identity, int64_t now_s);
@@ -69,6 +73,7 @@ private:
     SubmissionApiConfig config_;
     AdminGate gate_;
     std::function<void()> on_approved_changed_;
+    BotRoutes bot_routes_;
     std::map<std::string, std::vector<int64_t>> attempts_;      // address identity -> the seconds of its recent POSTs
     CheckWindow window_;                                        // the checks of real submissions
     std::map<int, int64_t> pass_logged_;                        // PassVerdict -> the second of the last line about it

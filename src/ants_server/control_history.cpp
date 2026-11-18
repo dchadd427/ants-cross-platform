@@ -171,7 +171,7 @@ ctl::HttpResponse history_list_response(const HistoryStore& history, const Repla
             const std::string extension = ReplayStore::kExtension;
             if (replays != nullptr) {
                 for (const ReplayEntry& e : replays->entries()) {
-                    if (e.readable) states[e.file.substr(0, e.file.size() - extension.size())] = entry_plays_here(e) ? Recording::Watch : Recording::Old;
+                    if (e.readable || e.pending) states[e.file.substr(0, e.file.size() - extension.size())] = e.pending || entry_plays_here(e) ? Recording::Watch : Recording::Old;           // (a file whose head is not read yet, in the first minutes after a start: there, and read when somebody asks for it)
                 }
             }
         }
