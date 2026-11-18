@@ -10,7 +10,9 @@ CLIENT_ID = re.compile(r"[0-9]{5,30}\Z")                 # the number of the Dis
 CLIENT_SECRET = re.compile(r"[\x21-\x7e]{8,256}\Z")      # printable characters, no blank
 BOT_TOKEN = re.compile(r"[A-Za-z0-9._-]{30,200}\Z")        # a bot's token is one plain word; one that is not is not Discord's, and is never put in a header
 SNOWFLAKE = re.compile(r"[1-9][0-9]{4,19}\Z")             # the id of a server or of a role
-GATE_SECRET = re.compile(r"[\x21-\x7e]{32,256}\Z")         # the key of the admin page's door (ANTS_HUB_ADMIN_GATE_SECRET): 32 to 256 printable characters, no blank
+GATE_SECRET = re.compile(r"[\x21-\x7e]{32,256}\Z")         # the key of the admin page's door (ANTS_ADMIN_GATE_SECRET): 32 to 256 printable characters, no blank
+GATE_SETTING = "ANTS_ADMIN_GATE_SECRET"                    # the one setting of the key: the game server reads the same name (docs/HUB.md, "The admin page's door")
+GATE_SETTING_OLD = "ANTS_HUB_ADMIN_GATE_SECRET"            # its name before the two services shared one: still read, when the new name is not set, until the release after this one
 GATE_DISTINCT = 8                                        # a key of fewer different characters than this (one repeated character) is not a key
 SAMPLE_GATE_KEY = "canary-gate-key-5d8f0c1e7a9b4263-q"      # the made-up key of the known answer in docs/HUB.md: published, so never a key (the game server refuses it too)
 MIN_RECHECK_SECONDS = 60
@@ -52,7 +54,7 @@ class Config:
 
     @property
     def admin_gate_on(self):
-        """Whether the admin page's door can open: the key is there and of the shape (32 or more printable characters). Otherwise the door answers 403 to everybody."""
+        """Whether the admin page's door can open: the key is there and of the shape (32 or more printable characters). Otherwise the door is shut: the gate answers 503 to everybody."""
         return bool(GATE_SECRET.match(self.admin_gate_secret))
 
     @property
@@ -125,7 +127,7 @@ def load(env):
         raise ConfigError("ANTS_HUB_DISCORD_CLIENT_ID must be the application's number (digits only)")
     if cfg.login_client_secret and not CLIENT_SECRET.match(cfg.login_client_secret):
         raise ConfigError("ANTS_HUB_DISCORD_CLIENT_SECRET must be 8 to 256 printable characters with no blank")
-    gate = env.get("ANTS_HUB_ADMIN_GATE_SECRET", "").strip()
+    gate = env.get(GATE_SETTING, "").strip() or env.get(GATE_SETTING_OLD, "").strip()        # (the shared name wins when it is set, so that one value is the key on both sides)
     cfg.admin_gate_given = bool(gate)
     cfg.admin_gate_sample = gate == SAMPLE_GATE_KEY
     cfg.admin_gate_secret = gate if GATE_SECRET.match(gate) and len(set(gate)) >= GATE_DISTINCT and not cfg.admin_gate_sample else ""        # (a short, malformed or sample key never stops the hub: the door stays shut and the start says so)

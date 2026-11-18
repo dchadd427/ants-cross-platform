@@ -1,14 +1,17 @@
 """The admin page's door (docs/HUB.md, "The admin page's door"): who may use the admin page, decided here and nowhere else, and the hub's side of what the page does.
 
   GET  /hub/admin/gate         asked only by the site's nginx (auth_request) before it passes an /admin/api request on, with the visitor's own headers: 204 and a signed pass in
-                               `X-Ants-Admin-Pass` when the visitor may, 401 when nobody is logged in, 403 when somebody is but may not (or when the door is shut). No body either way, no CORS.
+                               `X-Ants-Admin-Pass` when the visitor may, 401 when nobody is logged in, 403 when somebody is but may not, 503 when the door is shut (no good key: for everybody, nobody
+                               logged in too; nginx turns that into its `door_off` answer, the page says it is not available, and never that the visitor is not an admin). No body, no CORS.
   GET  /hub/admin/api/me, bans, mutes, hidden, modlog, status
   POST /hub/admin/api/ban, unban, mute, unmute, nopic, pic, del      one JSON object, the same rules as the hub's other POSTs and a token (`csrf` of /me)
 
 THE rule (`Door.decide`, used by every one of the above): the visitor's hub login names an account; the account may when it is `ANTS_HUB_OWNER` (no call to Discord) or when its role is
 `admin` on the hub's own freshness rule (hub/roles.py `role_of`: an answer of Discord that is not past its interval and its grace; a role that is not known or not that young is looked up
-once, urgently, and a lookup that does not answer means no). A moderator may not. Unknown, stale, failed: not allowed. The door is shut for everybody when `ANTS_HUB_ADMIN_GATE_SECRET` is
-absent, shorter than 32 characters, not printable or the made-up key of the known answer below (the hub still starts; the start line says so).
+once, urgently, and a lookup that does not answer means no). A moderator may not. Unknown, stale, failed: not allowed. The door is shut for everybody when `ANTS_ADMIN_GATE_SECRET` (the
+one setting of the key; the game server reads the same name; `ANTS_HUB_ADMIN_GATE_SECRET`, its old name here, is read when the new one is not set) is absent, shorter than 32 characters,
+not printable or the made-up key of the known answer below (the hub still starts; the start line says so). A shut door is not a "no": it answers 503 `door_off` on the page's calls
+too, so that nobody is told that they are not an administrator when the page is simply not on.
 
 The keys: the secret is the setting's text with the characters that Python's str.strip() cuts removed from both ends (in practice ASCII space, tab, CR and LF; the secret is printable ASCII), taken as ASCII bytes. The key of the pass is
 the RAW 32-byte digest (not its hex text) of HMAC-SHA-256 with the secret as the KEY and the label `ants-admin-pass-v1` as the MESSAGE; the key of the page's token is the same with the label `ants-admin-csrf-v1`, so the two never share a key. (Known answer: the secret
@@ -16,7 +19,7 @@ the RAW 32-byte digest (not its hex text) of HMAC-SHA-256 with the secret as the
 
 The pass: `v1.<payload>.<mac>`; payload = base64url (no padding) of the JSON `{"exp", "name", "nonce", "ref", "role"}` (exp: seconds since 1970, 60 seconds after it was made; name: the Discord
 username; nonce: 16 hex characters; ref: the account's reference, hub/pseudo.py; role: `admin` or `owner`); mac = hex (64 characters) HMAC-SHA-256, under the raw pass key, of the ASCII text `v1.<payload>`. The game
-server holds the same secret as ANTS_ADMIN_GATE_SECRET and checks the mac, then exp, then role. The token of the page's POSTs is the hex HMAC-SHA-256, under the token's key, of
+server holds the same secret (the same setting, ANTS_ADMIN_GATE_SECRET) and checks the mac, then exp, then role. The token of the page's POSTs is the hex HMAC-SHA-256, under the token's key, of
 `csrf1`, the login's key and the account's reference: it changes with every login and is never in a URL.
 
 An account is addressed by username or reference only (never an id: `admin.resolve(..., ids=False)`), every change is written to the moderators' log with the actor's reference, an action needs the fresh
@@ -295,6 +298,8 @@ class Door:
         if "transfer-encoding" in h or h.get("content-length", "0") != "0":
             return http.response(400)
         verdict, who, role = await self.decide(h)
+        if verdict == "closed":
+            return http.response(503)                                # (no good key: the door is shut, which is not a "no": nginx says door_off and the page says that it is not available)
         if verdict == "login":
             return http.response(401)
         if verdict != "ok":
@@ -321,6 +326,8 @@ class Door:
         if post and h.get("content-type", "").split(";")[0].strip().lower() != "application/json":
             return self.fail(415, "type")
         verdict, who, role = await self.decide(h)
+        if verdict == "closed":
+            return self.fail(503, "door_off")
         if verdict == "login":
             return self.fail(401, "login")
         if verdict != "ok":

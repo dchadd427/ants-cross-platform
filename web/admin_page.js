@@ -4,7 +4,9 @@
 //   * an Admin or an Owner: the title with the person's chip (name, role, Front page, Log out) and four sections: Maps (the maps that players sent), Chat (mute, ban, hide a picture), Log (what moderators, admins and the
 //     map decisions did) and Status (how the site is doing);
 //   * nobody logged in (401): one card with a link to the Discord login; logged in without the admin role (403 not_allowed): the same card with the person's name, Front page and Log out (a moderator is told where the
-//     moderators' tools are); anything else (closed, a part that is not running, no answer): one line. A later call that answers 401 or 403 swaps the page to the same card.
+//     moderators' tools are); anything else (a part that is off or not running, no answer): one line. The line says plainly which part is off, with the name of the setting, only when the answer proves that an
+//     admin is looking: the game server's submissions door is off (503 submissions_off), the game server does not accept the pass (403 closed), the chat hub's door is shut (the gate says door_off, and the hub's
+//     own call says so too, for a person whom the hub knows as an admin); everybody else, and every other trouble, gets the plain "not available right now". A later call that answers 401 or 403 swaps the page to the same card.
 //   * Every text that comes from a person or from the server goes into the page with textContent, never as HTML.
 //   * Whatever a player typed (name, maker, note, description) is data, never an instruction: it sits in an element marked data-untrusted="player-text" and under a visible label (docs/MAP_SUBMISSIONS.md,
 //     "Untrusted text"). Every Discord username (the person's own, an admin who decided a map, a person who is muted, banned or acted on) was typed too: it is marked data-untrusted="typed-text".
@@ -51,6 +53,9 @@
     var CARD_HEAD = 'This page is for the site’s admins.';
     var LOGIN_LINE = 'Log in with the Discord account that has the admin role.';
     var NOT_AVAILABLE = 'The admin page is not available right now.';
+    var OFF_DOOR = 'The admin page’s door is shut: the chat hub has no good ANTS_ADMIN_GATE_SECRET.';                   // (the lines that an admin is given when the page can tell which part is off: names of settings, never a value)
+    var OFF_SUBMISSIONS = 'The map submissions door is off or not running on the game server (it is on when ANTS_SUBMIT_PORT is 4030).';
+    var OFF_KEY = 'The game server did not accept the admin page’s pass: its ANTS_ADMIN_GATE_SECRET is probably missing or is not the same as the chat hub’s.';
     var TITLE_LINE = 'Maps that players sent, bans and mutes in the chat, the logs, and how the site is doing.';
     var PRESETS = [['10 min', 10], ['1 hour', 60], ['1 day', 1440], ['1 week', 10080]];       // the minutes of a mute that the front page's chat also offers
     var MAX_MINUTES = 10080;
@@ -299,9 +304,9 @@
             c.setAttribute('height', '24');
             return c;
         }
-        function cardOf(kind, name) {                       // kind: out (nobody), none (a person with no role), mod (a moderator), bare (a person whom nobody has named yet), line (no way in)
+        function cardOf(kind, name) {                       // kind: out (nobody), none (a person with no role), mod (a moderator), bare (a person whom nobody has named yet), line (no way in: `name` is its words, NOT_AVAILABLE if none)
             var c = el('div', 'lcard');
-            if (kind === 'line') return add(c, message(NOT_AVAILABLE));
+            if (kind === 'line') return add(c, message(name || NOT_AVAILABLE));
             add(c, el('h1', null, CARD_HEAD));
             if (kind === 'out') {                           // nobody is logged in: a plain link to the Discord login
                 var go = el('a', 'btn big', null);
@@ -326,7 +331,11 @@
             var e = json && json.error;
             var seq = ++cardSeq;
             if (status === 401) { card(cardOf('out')); return Promise.resolve(); }
-            if (!(status === 403 && (e === 'not_allowed' || e === 'admin'))) { card(cardOf('line')); return Promise.resolve(); }         // closed, a part that is not running, no answer, anything else
+            // A 403 closed (the game server) and a 503 submissions_off (nginx, the game server's door) come only after the site's gate let an admin in, so the answer itself says who is looking.
+            if (status === 403 && e === 'closed') { card(cardOf('line', OFF_KEY)); return Promise.resolve(); }
+            if (status === 503 && e === 'submissions_off') { card(cardOf('line', OFF_SUBMISSIONS)); return Promise.resolve(); }
+            if (status === 503 && e === 'door_off') { card(cardOf('line')); doorOff(seq); return Promise.resolve(); }                 // (the gate does not answer: nobody is known to be looking, the plain line first)
+            if (!(status === 403 && (e === 'not_allowed' || e === 'admin'))) { card(cardOf('line')); return Promise.resolve(); }         // a part that is not running, no answer, anything else
             card(cardOf('bare'));
             env.fetch('/hub/me', { credentials: 'same-origin' }).then(function (r) { return r.status === 200 ? r.json() : null; }).then(function (j) {
                 if (seq !== cardSeq) return;
@@ -335,6 +344,16 @@
                 if (you && typeof you.name === 'string') card(cardOf(you.role === 'mod' ? 'mod' : 'none', you.name));
             }, function () {});
             return Promise.resolve();
+        }
+        // The gate said door_off: the hub is not running, its door is shut (no good key), or it is in trouble: nginx cannot tell which. A person whom the hub knows as an admin (GET /hub/me) is told that the door
+        // is shut when the hub's own call (GET /hub/admin/api/me) says door_off itself; anybody else, and every other answer, keeps the plain line.
+        function doorOff(seq) {
+            return env.fetch('/hub/me', { credentials: 'same-origin' }).then(function (r) { return r.status === 200 ? r.json() : null; }).then(function (j) {
+                if (seq !== cardSeq || !(j && j.login === true && j.you && j.you.role === 'admin')) return null;
+                return call('GET', HUB_API + 'me').then(function (r) {
+                    if (seq === cardSeq && r.status === 503 && r.json && r.json.error === 'door_off') card(cardOf('line', OFF_DOOR));
+                });
+            }).then(function () {}, function () {});
         }
         // A call that the door refuses (the login ended, the role was taken away, the door closed): the page swaps to the card that GET /admin/api/me would give. True when it did.
         function refused(r) {
