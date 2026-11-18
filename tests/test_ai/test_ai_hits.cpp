@@ -1,9 +1,9 @@
 // The hits without pauses (docs/BOT_FIGHT.md, "Hits without pauses"): the Hard bot orders the next blow while the victim is still in its hit clip (hit_in_clip) and clicks again at once on an ant that has
 // struck (hit_follow_up: the controller's follow-up lane, Profile::follow_up_reaction). Medium and Easy are as they were. Hand-made worlds (b41_helpers.hpp) and the controller with a scripted bot.
 //
-//   AI55.1  the profiles: Hard has the lane (3 ticks), Medium and Easy none; the plans: Hard has both rules, Medium and Easy neither; without_hit_cadence and the keys hit, hitclip and hitquick of
+//   AI55.1  the profiles: Hard has the lane (4 ticks), Medium and Easy none; the plans: Hard has both rules, Medium and Easy neither; without_hit_cadence and the keys hit, hitclip and hitquick of
 //           bot_arena do what they say
-//   AI55.2  the lane in the controller: a marked attack click of an ant that struck leaves 3 ticks after the look, an unmarked one after the reaction delay, a marked one of an ant that never struck
+//   AI55.2  the lane in the controller: a marked attack click of an ant that struck leaves 4 ticks after the look, an unmarked one after the reaction delay, a marked one of an ant that never struck
 //           or of a profile without the lane after the reaction delay, a marked move after the reaction delay; the window (kFollowUpWindow) has its edge
 //   AI55.3  the lane keeps the rules of the door: it costs a token (three clicks at once leave one by one), and it never leaves before an older click that names the same ant
 //   AI55.4  the order during the hit clip: with the rule on, an ant two tiles from a target in its clip is ordered, one that stands next to it is not; with the rule off nobody is; the fight ends sooner
@@ -11,8 +11,9 @@
 //   AI55.6  the same in the 187 brawl: a pack that struck is clicked again with the mark, a pack that was just formed is not
 //   AI55.7  the click after a blow comes sooner, through the controller (the lane) and the engine: the median time from a blow to the next attack click in 187 and in a fight of the food game
 //   AI55.8  Medium and Easy play as before: a marked click is an unmarked one where the profile has no lane (the same commands and state hash, the food game and 187); the shipped Hard plays differently with it
-//   AI55.9  a hurt Bomber that an enemy worker keeps striking is answered by the shipped Hard bot (the workers strike the worker within 200 ticks, six blows by tick 440, and the refusals of ants that meet in
-//           the hit clip of one blow do not shun the worker); AI34.4 has the Bomber's own blow at the cadence of before
+//   AI55.9  a hurt Bomber that an enemy worker keeps striking is answered by the shipped Hard bot, over forty seeds and both styles: the Bomber is ordered at the worker at once, the bot's ants strike the worker
+//           soon and six times by tick 440 and no refusal shuns the worker, and the Bomber lands a blow itself in about a third of the runs (AI34.4 has the Bomber's own blow at the cadence of before)
+//   AI55.10 a refusal that is no clip (an enemy shut in by rocks) still shuns the target for 900 ticks, with both rules on
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -26,6 +27,7 @@
 #include "ants_ai/standard_bot.hpp"
 #include "b41_helpers.hpp"
 #include "bot_arena_tune.hpp"
+#include "bot_watch_people.hpp"
 
 using namespace ai_test;
 using namespace ants;
@@ -145,6 +147,10 @@ public:
     void run(uint64_t n) {
         for (uint64_t i = 0; i < n; ++i) tick();
     }
+    template <class T>
+    T& as() {
+        return static_cast<T&>(*bot_);
+    }
     std::vector<Entry> log;
 
 private:
@@ -203,7 +209,7 @@ Marks marks_of(const std::vector<IntentRig::Entry>& log) {
 
 void run_hit_tests() {
     TEST_CASE("AI55.1 The Profiles And The Plans: Hard Has The Follow-Up Lane (3 Ticks) And Both Rules, Medium And Easy Have Neither; Taking The Rules Out And The Keys Of bot_arena Do What They Say") {
-        ASSERT_EQ(profile_for(Level::Hard).follow_up_reaction, 3u);
+        ASSERT_EQ(profile_for(Level::Hard).follow_up_reaction, 4u);
         ASSERT_EQ(profile_for(Level::Medium).follow_up_reaction, 0u);
         ASSERT_EQ(profile_for(Level::Easy).follow_up_reaction, 0u);
         ASSERT_TRUE(plan_for(Level::Hard).hit_in_clip);
@@ -234,7 +240,7 @@ void run_hit_tests() {
     } TEST_END();
 
     TEST_CASE("AI55.2 The Lane In The Controller: A Marked Attack Click Of An Ant That Struck Leaves 3 Ticks After The Look, An Unmarked One After The Reaction Delay; A Marked One Of An Ant That Never Struck, Of A Profile Without The Lane Or A Marked Move After The Reaction Delay; The Window Has Its Edge") {
-        // (a) one marked click of an ant that struck, and one unmarked: 3 ticks after the look, and the reaction delay (8, plus or minus 25 percent: 6 .. 10)
+        // (a) one marked click of an ant that struck, and one unmarked: 4 ticks after the look, and the reaction delay (8, plus or minus 25 percent: 6 .. 10)
         for (const bool marked : {true, false}) {
             Scene s;
             play_scene(s, Level::Hard, 5, 60, [&](const BotView&, Orders& o, const Scene& now, uint32_t round) {
@@ -243,7 +249,7 @@ void run_hit_tests() {
             ASSERT_TRUE(s.ok);
             ASSERT_EQ(s.log.size(), 2u);
             const uint64_t delay = s.log[1].first - s.looks[6];
-            if (marked) ASSERT_EQ(delay, 3u);
+            if (marked) ASSERT_EQ(delay, 4u);
             else ASSERT_TRUE(delay >= 6u && delay <= 10u);
         }
         // (b) a marked click of an ant that never struck (the first click named the ants 0 .. 9): the reaction delay; the same for a click of one that struck and one that did not (the whole click waits)
@@ -317,7 +323,7 @@ void run_hit_tests() {
                 for (size_t k = 0; k < look_of.size(); ++k) {
                     const uint64_t delay = s.log[k + 1].first - look_of[k];
                     if (look_of[k] <= struck + kFollowUpWindow) {
-                        ASSERT_EQ(delay, 3u);
+                        ASSERT_EQ(delay, 4u);
                         ++inside;
                         on_the_edge += look_of[k] == struck + kFollowUpWindow ? 1u : 0u;
                     } else {
@@ -332,7 +338,7 @@ void run_hit_tests() {
     } TEST_END();
 
     TEST_CASE("AI55.3 The Lane Keeps The Rules Of The Door: A Follow-Up Click Costs A Token (Three At Once Leave One By One), And It Never Leaves Before An Older Click That Names The Same Ant") {
-        // (a) the bucket: ten ordinary clicks empty it; the next look's three marked clicks are due 3 ticks later and wait for their tokens, one every 6 or 7 ticks
+        // (a) the bucket: ten ordinary clicks empty it; the next look's three marked clicks are due 4 ticks later and wait for their tokens, one every 6 or 7 ticks
         {
             sim::SimulationEngine sim;
             build_world(sim, 23);
@@ -359,7 +365,7 @@ void run_hit_tests() {
             ASSERT_EQ(sink.log.size(), 13u);                                                                // (every click left in the end)
             // the three follow-ups are the last three clicks: the refill of the level's rate (3 a second) spaces them, 6 or 7 ticks
             ASSERT_TRUE(sink.log[11].first - sink.log[10].first >= 6u && sink.log[12].first - sink.log[11].first >= 6u);
-            ASSERT_TRUE(sink.log[10].first >= second + 3u);
+            ASSERT_TRUE(sink.log[10].first >= second + 4u);
         }
         // (b) an older click of the ant that is still waiting: the follow-up is not released before it. Over thirty seeds (the jitter differs) the older click is never applied after the follow-up, and in
         // some of them the follow-up was held back for it
@@ -372,7 +378,7 @@ void run_hit_tests() {
                     if (round == 6) o.move({now.mine[0]}, TileCoord{20, 20}, Priority::Urgent);          // (an older click of the ant, still waiting for its time)
                     if (round == 7) {
                         second_look = v.tick();
-                        o.attack({now.mine[0]}, now.enemy, Priority::Urgent, true);                       // (the follow-up, one look later: on its own it would leave 3 ticks after the look)
+                        o.attack({now.mine[0]}, now.enemy, Priority::Urgent, true);                       // (the follow-up, one look later: on its own it would leave 4 ticks after the look)
                     }
                 });
                 ASSERT_TRUE(s.ok && second_look != 0u);
@@ -384,7 +390,7 @@ void run_hit_tests() {
                 }
                 ASSERT_TRUE(attack_at >= 1);
                 ASSERT_TRUE(move_at < 0 || move_at < attack_at);                                           // (the move never comes after the attack that followed it)
-                if (s.log[static_cast<size_t>(attack_at)].first - second_look > 3u) ++held;
+                if (s.log[static_cast<size_t>(attack_at)].first - second_look > 4u) ++held;
             }
             ASSERT_TRUE(held >= 1u);
         }
@@ -550,7 +556,7 @@ void run_hit_tests() {
         const double slow = brawl_wait(false);
         const double fast = brawl_wait(true);
         ASSERT_TRUE(slow > 0.0 && fast > 0.0);
-        ASSERT_TRUE(fast + 2.0 <= slow);                                                              // (the lane: 3 ticks after the look instead of 8, minus the wait for the look)
+        ASSERT_TRUE(fast + 2.0 <= slow);                                                              // (the lane: 4 ticks after the look instead of 8, minus the wait for the look)
         // (b) the food game: three ants against a standing enemy (the struck ant starts the fight)
         const auto fight_wait = [&](bool rules) {
             sim::SimulationEngine sim;
@@ -624,43 +630,96 @@ void run_hit_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI55.9 A Hurt Bomber That An Enemy Worker Strikes Again And Again Is Answered By The Shipped Hard Bot: Within 200 Ticks Of The First Blow On It The Bot's Ants Strike The Worker, And By Tick 440 They Have Struck It At Least Six Times, In Both Styles Of Hard (AI34.4 Has The Bomber's Own Blow, At The Cadence Of Before)") {
+    TEST_CASE("AI55.9 A Hurt Bomber That An Enemy Worker Strikes Again And Again Is Answered By The Shipped Hard Bot, Over Forty Seeds And Both Styles Of Hard: It Is Named In An Attack Click Within 100 Ticks Of The First Blow On It, The Bot's Ants Strike The Worker Within 200 Ticks And Six Times By Tick 440 Without A Shun, And The Bomber Lands A Blow Itself In About A Third Of The Runs (AI34.4 Has It At The Cadence Of Before)") {
         for (const Style style : {Style::Aggressive, Style::Raider}) {
-            sim::SimulationEngine sim;
-            empty_field(sim, 344);
-            add_pile(sim, 30, 12, 40, 25);
-            const uint32_t bomber = sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{16, 10});
-            sim.get_unit(bomber).hp = 6;
-            for (int i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10 + i, 8});
-            const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{21, 10});
-            RecordingSink sink(sim, true);
-            BotController c(sim, 344);
-            std::string why;
-            ASSERT_TRUE(c.add(spec_of(0, Level::Hard), std::make_unique<StandardBot>(Level::Hard, style), sink, why));
-            BlowClock on_bomber;
-            on_bomber.hp = 6;
-            BlowClock on_enemy;
-            for (int t = 0; t < 440; ++t) {
-                sim.tick();
-                sim.clear_news_events();
-                sim.clear_audio_events();
-                c.on_tick(sim);
-                on_bomber.watch(sim, bomber);
-                on_enemy.watch(sim, enemy);
-                if (sim.current_tick() >= 40 && sim.current_tick() % 20 == 0 && alive(sim, enemy)) {            // (it strikes again at the first tick that 20 divides at which it is idle)
-                    const sim::AntSnapshot* e = snapshot_of(sim, enemy);
-                    const sim::AntSnapshot* b = snapshot_of(sim, bomber);
-                    if (e != nullptr && b != nullptr && b->hp > 0 && (e->state == sim::UnitState::Idle || e->state == sim::UnitState::GuardIdle)) {
-                        sim.apply_command(command_of(CommandType::GroupAttack, 1, {enemy}, b->tile_x, b->tile_y));
+            size_t own_blow = 0;
+            size_t named = 0;
+            size_t runs = 0;
+            for (uint32_t seed = 1; seed <= 40; ++seed) {
+                sim::SimulationEngine sim;
+                empty_field(sim, 344);
+                add_pile(sim, 30, 12, 40, 25);
+                const uint32_t bomber = sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{16, 10});
+                sim.get_unit(bomber).hp = 6;
+                for (int i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10 + i, 8});
+                const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{21, 10});
+                RecordingSink sink(sim, true);
+                BotController c(sim, seed);
+                std::string why;
+                ASSERT_TRUE(c.add(spec_of(0, Level::Hard), std::make_unique<StandardBot>(Level::Hard, style), sink, why));
+                watch::PeopleObserver seen;
+                for (int t = 0; t < 440; ++t) {
+                    sim.tick();
+                    sim.clear_news_events();
+                    sim.clear_audio_events();
+                    c.on_tick(sim);
+                    seen.tick(sim);
+                    if (sim.current_tick() >= 40 && sim.current_tick() % 20 == 0 && alive(sim, enemy)) {        // (it strikes again at the first tick that 20 divides at which it is idle)
+                        const sim::AntSnapshot* e = snapshot_of(sim, enemy);
+                        const sim::AntSnapshot* b = snapshot_of(sim, bomber);
+                        if (e != nullptr && b != nullptr && b->hp > 0 && (e->state == sim::UnitState::Idle || e->state == sim::UnitState::GuardIdle)) {
+                            sim.apply_command(command_of(CommandType::GroupAttack, 1, {enemy}, b->tile_x, b->tile_y));
+                        }
                     }
                 }
+                uint64_t first_blow = 0;
+                uint64_t first_answer = 0;
+                size_t answers = 0;
+                bool bomber_struck = false;
+                for (const watch::Blow& b : seen.people().blows()) {
+                    if (first_blow == 0 && b.victim == bomber) first_blow = b.tick;
+                    if (b.victim == enemy && b.striker_seat == 0) {
+                        ++answers;
+                        if (first_answer == 0) first_answer = b.tick;
+                        bomber_struck = bomber_struck || b.striker == bomber;
+                    }
+                }
+                uint64_t first_click = 0;                                                                     // the first attack click that names the Bomber after the first blow on it
+                for (const auto& e : sink.log) {
+                    if (first_blow != 0 && e.first >= first_blow && e.second.type == CommandType::GroupAttack && std::find(e.second.ants.begin(), e.second.ants.end(), bomber) != e.second.ants.end()) {
+                        first_click = e.first;
+                        break;
+                    }
+                }
+                const StandardBot* standard = dynamic_cast<const StandardBot*>(c.bot(0));
+                ASSERT_TRUE(standard != nullptr);
+                ASSERT_TRUE(first_blow != 0u && first_answer != 0u && first_answer <= first_blow + 200);       // (the bot's ants strike the worker soon after the first blow on the Bomber ...)
+                ASSERT_TRUE(answers >= 6u);                                                                   // ... and six times by tick 440
+                ASSERT_EQ(standard->fight().shunned_count(), 0u);                                             // (an ant that arrived in the clip of another's blow was refused: that does not shun the worker)
+                ++runs;
+                own_blow += bomber_struck ? 1u : 0u;
+                named += (first_click != 0u && first_click <= first_blow + 100) ? 1u : 0u;
             }
-            ASSERT_TRUE(!on_bomber.at.empty() && !on_enemy.at.empty());
-            ASSERT_TRUE(on_enemy.at.front() <= on_bomber.at.front() + 200);
-            ASSERT_TRUE(on_enemy.at.size() >= 6u);
-            const StandardBot* standard = dynamic_cast<const StandardBot*>(c.bot(0));
-            ASSERT_TRUE(standard != nullptr);
-            ASSERT_EQ(standard->fight().shunned_count(), 0u);                                                // (an ant that arrived in the clip of another's blow was refused: that does not shun the worker)
+            // the struck Bomber is ordered at the worker at once in the runs in which a fight takes it (in the others, 6 of the 40, another task of the bot holds it: the older cadence has the same 6),
+            // and it lands a blow itself in about a third of the runs (29 of 80; the older cadence 45 of 80: its workers are quicker now and strike the worker more than half as often again, 8.6 times in 440 ticks against 5.5)
+            ASSERT_EQ(runs, 40u);
+            ASSERT_TRUE(named >= 30u);
+            ASSERT_TRUE(own_blow >= 12u);
         }
+    } TEST_END();
+
+    TEST_CASE("AI55.10 A Refusal That Is No Clip Still Shuns The Target: An Enemy Shut In By Rocks Is Left Alone For 900 Ticks After The Attack Shows Can't Go, With Both Rules On, As At Every Level (AI7.8 Has It Without Them)") {
+        sim::SimulationEngine sim;
+        empty_field(sim, 6);
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                if (dx != 0 || dy != 0) sim.set_terrain(30 + dx, 30 + dy, sim::TERRAIN_OBSTACLE);
+            }
+        }
+        const uint32_t victim = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{28, 30});
+        sim.spawn_unit(0, sim::AntType::Worker, TileCoord{26, 28});
+        sim.spawn_unit(0, sim::AntType::Worker, TileCoord{26, 32});
+        const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{30, 30});            // shut in: no path leads to its tile, and it never plays a clip
+        LevelPlan plan = fight_plan(Level::Hard, true, true);
+        plan.reach_guard = false;                                                                      // (the order leaves and the path finder refuses it)
+        IntentRig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+        rig.run(10);
+        sim.get_unit(victim).hp = 9;                                                                   // "hit" (the enemy cannot reach anybody: the test makes the blow)
+        rig.run(300);
+        const FightTask& fight = rig.as<StandardBot>().fight();
+        ASSERT_TRUE(fight.fights_started() >= 1u);
+        ASSERT_EQ(fight.shunned_count(), 1u);
+        ASSERT_TRUE(fight.shunned(enemy, sim.current_tick()));
+        ASSERT_EQ(fight.fights(), 0u);
     } TEST_END();
 }

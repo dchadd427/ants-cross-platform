@@ -72,7 +72,7 @@ struct Profile {
     bool value_aware_piles{true};        // economy (the worker bot, B3): pick food piles by points per trip (Medium, Hard), not the nearest (Easy)
     uint32_t max_ants_per_pile{8};
     uint32_t follow_up_reaction{0};      // the next attack click of an ant that is in a fight (Intent::follow_up) is released this many ticks after the look, not after reaction_delay: a person who has an ant on a
-                                         // victim keeps clicking it, and the reaction time models a surprise, not the next blow of a fight he is in (0: no such lane, the click waits the reaction time like any other; Hard 3)
+                                         // victim keeps clicking it, and the reaction time models a surprise, not the next blow of a fight he is in (0: no such lane, the click waits the reaction time like any other; Hard 4)
 };
 
 Profile profile_for(Level level) noexcept;

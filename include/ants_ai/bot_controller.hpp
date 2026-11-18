@@ -27,7 +27,7 @@
 //   issuer          every released command carries the seat of the bot, whatever the bot wrote
 //   anti-thrash     no second order to the same ant within Profile::reissue_cooldown ticks, unless it is Urgent (every order snaps the ant to its tile
 //                   centre and replaces its queued path request)
-//   follow-up lane  the next attack click of an ant that is in a fight (Intent::follow_up, the bot asks for it) leaves Profile::follow_up_reaction ticks after the look (Hard 3, Medium and Easy none: 0) instead of
+//   follow-up lane  the next attack click of an ant that is in a fight (Intent::follow_up, the bot asks for it) leaves Profile::follow_up_reaction ticks after the look (Hard 4, Medium and Easy none: 0) instead of
 //                   the reaction delay, when every ant of it had an attack click released within kFollowUpWindow ticks, and never before an older click that names one of its ants. It costs a token and leaves in the
 //                   priority order like any command: only the delay is the shorter (docs/BOT_FIGHT.md, "Hits without pauses")
 //   timed chains    the clicks of a chain (Orders::chain: one ant, a few clicks, each at a moment counted from the moment the click before is APPLIED) are not released by the clock of the

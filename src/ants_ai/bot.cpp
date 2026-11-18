@@ -127,7 +127,7 @@ Profile profile_for(Level level) noexcept {
             p.reaction_delay = 8;
             p.rate_milli_cps = 3000;
             p.burst = 10;
-            p.follow_up_reaction = 3;              // 150 ms: the next click of a fight that is going on (the bot's own switch, LevelPlan::hit_follow_up, says whether it asks for it)
+            p.follow_up_reaction = 4;              // 200 ms: the next click of a fight that is going on (the bot's own switch, LevelPlan::hit_follow_up, says whether it asks for it)
             break;
     }
     return p;

@@ -107,10 +107,10 @@
    "expect": "AI55.1"
   },
   {
-   "id": "hard_lane_is_four_ticks",
+   "id": "hard_lane_is_three_ticks",
    "file": "src/ants_ai/bot.cpp",
-   "old": "p.follow_up_reaction = 3;",
-   "new": "p.follow_up_reaction = 4;",
+   "old": "p.follow_up_reaction = 4;",
+   "new": "p.follow_up_reaction = 3;",
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI55.1' ./build/tests/test_ai/test_ai",
    "expect": "AI55.1"
@@ -267,6 +267,15 @@
    "build": "test_ai",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI55.9' ./build/tests/test_ai/test_ai",
    "expect": "AI55.9"
+  },
+  {
+   "id": "refusal_outside_a_clip_is_not_shunned",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "(plan.hit_in_clip || plan.hit_follow_up) && (target->hp < d.second.target_hp || target->state == sim::UnitState::Flinch || target->state == sim::UnitState::Knockback)) {",
+   "new": "(plan.hit_in_clip || plan.hit_follow_up)) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.10' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.10"
   }
  ]
 }
