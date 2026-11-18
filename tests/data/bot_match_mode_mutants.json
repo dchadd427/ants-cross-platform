@@ -157,8 +157,8 @@
   {
    "id": "bot_match_over_limit_map_dealt_anyway",
    "file": "src/ants_server/room_manager_bots.cpp",
-   "old": "if (over != Term::None) return std::string(\"it \") + OnlineLimits::info(over).phrase + \" for a room\";",
-   "new": "if (over != Term::None && false) return std::string(\"it \") + OnlineLimits::info(over).phrase + \" for a room\";",
+   "old": "if (over != Term::None) verdict.refusal = std::string(\"it \") + OnlineLimits::info(over).phrase + \" for a room\";",
+   "new": "if (over != Term::None && false) verdict.refusal = std::string(\"it \") + OnlineLimits::info(over).phrase + \" for a room\";",
    "build": "test_server",
    "test": "timeout 300 env ANTS_TEST_FILTER=S3.18 ./build/tests/test_server/test_server",
    "expect": "S3.184f"
