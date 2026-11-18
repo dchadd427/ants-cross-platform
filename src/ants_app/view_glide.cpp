@@ -50,22 +50,35 @@ bool ViewGlide::offset_of(uint32_t ant, int32_t& dx, int32_t& dy) const {
     return false;
 }
 
-sim::AntSnapshot glided_ant(const ViewGlide& glide, const sim::WorldState& world, uint8_t viewer_team, const sim::AntSnapshot& ant) {
-    int32_t dx = 0;
-    int32_t dy = 0;
-    if (!glide.offset_of(ant.id, dx, dy)) return ant;
+bool glide_offset(const ViewGlide& glide, const sim::WorldState& world, uint8_t viewer_team, const sim::AntSnapshot& ant, int32_t& dx, int32_t& dy) {
+    int32_t whole_x = 0;
+    int32_t whole_y = 0;
+    dx = 0;
+    dy = 0;
+    if (!glide.offset_of(ant.id, whole_x, whole_y)) return false;
     for (int32_t quarters = 4; quarters > 0; --quarters) {               // the whole slide, then three quarters of it, a half, a quarter: the most of it that does not draw the ant on covered ground
         sim::AntSnapshot drawn = ant;
-        drawn.px += dx * quarters / 4;
-        drawn.py += dy * quarters / 4;
+        drawn.px += whole_x * quarters / 4;
+        drawn.py += whole_y * quarters / 4;
         drawn.tile_x = drawn.px / 32;                                    // (the gate of the picture looks at the tile: the one that the ant is drawn on)
         drawn.tile_y = drawn.py / 32;
         if (!health::ant_drawn(world, viewer_team, drawn)) continue;
-        drawn.tile_x = ant.tile_x;                                       // (everything else reads the engine's tile)
-        drawn.tile_y = ant.tile_y;
-        return drawn;
+        dx = drawn.px - ant.px;
+        dy = drawn.py - ant.py;
+        return dx != 0 || dy != 0;
     }
-    return ant;
+    return false;
+}
+
+sim::AntSnapshot glided_ant(const ViewGlide& glide, const sim::WorldState& world, uint8_t viewer_team, const sim::AntSnapshot& ant) {
+    sim::AntSnapshot drawn = ant;                                        // (everything but the place reads the engine's ant: its tile too)
+    int32_t dx = 0;
+    int32_t dy = 0;
+    if (glide_offset(glide, world, viewer_team, ant, dx, dy)) {
+        drawn.px += dx;
+        drawn.py += dy;
+    }
+    return drawn;
 }
 
 }  // namespace ants::app

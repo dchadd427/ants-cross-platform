@@ -441,7 +441,7 @@ void run_basic_tests() {
         ASSERT_TRUE(p.display_tick() > rig.confirmed().current_tick());
     } TEST_END();
 
-    TEST_CASE("RP1.3 The Display Tick Is The Confirmed Tick Plus The Lead, Tick By Tick, And The Lead Follows The Delay: It Rises At Once, Falls Slowly And Is Bounded") {
+    TEST_CASE("RP1.3 The Display Tick Is The Confirmed Tick Plus The Lead, Tick By Tick, And The Lead Follows The Delay: It Falls At Once (The Picture Stands Still Until The Confirmed Engine Has Caught Up), Rises At Once By Two Ticks And More, By One Tick Only After 40 Ticks, And Is Bounded") {
         Scenario sc;
         sc.lead_ms = 150;                                                                   // 3 ticks
         Rig rig(sc);
@@ -452,27 +452,35 @@ void run_basic_tests() {
             rig.step();
             ASSERT_EQ(p.display_tick(), rig.confirmed().current_tick() + p.lead_ticks());
         }
-        p.set_expected_delay_ms(300);                                                       // slower: the lead rises at the next tick
+        p.set_expected_delay_ms(300);                                                       // slower by three ticks: the lead rises at the next tick
         rig.step();
         ASSERT_EQ(p.lead_ticks(), 6u);
         ASSERT_EQ(p.display_tick(), rig.confirmed().current_tick() + 6);
-        p.set_expected_delay_ms(100);                                                       // faster: nothing changes for 40 ticks, then one tick at a time
+        p.set_expected_delay_ms(350);                                                       // slower by one tick: nothing changes for 40 ticks (the lag of an order goes up and down by one with the phase of the host's seals), then it rises
         for (int i = 0; i < 39; ++i) rig.step();
         ASSERT_EQ(p.lead_ticks(), 6u);
+        ASSERT_EQ(p.display_tick(), rig.confirmed().current_tick() + 6);
+        rig.step();
+        ASSERT_EQ(p.lead_ticks(), 7u);
+        ASSERT_EQ(p.display_tick(), rig.confirmed().current_tick() + 7);
         const uint64_t held_at = p.display_tick();
+        p.set_expected_delay_ms(250);                                                       // faster by two ticks: the lead falls at the next tick ...
         rig.step();
         ASSERT_EQ(p.lead_ticks(), 5u);
-        ASSERT_EQ(p.display_tick(), held_at);                                               // (the lead falls by holding the engine for one tick: the confirmed tick moved on, the display tick did not)
+        ASSERT_EQ(p.display_tick(), held_at);                                               // ... by holding the engine: the confirmed tick moves on, the display tick does not, until the lead is the distance again
+        rig.step();
+        ASSERT_EQ(p.display_tick(), held_at);
         ASSERT_EQ(p.display_tick(), rig.confirmed().current_tick() + 5);
         rig.step();
-        ASSERT_EQ(p.display_tick(), rig.confirmed().current_tick() + 5);
         ASSERT_EQ(p.display_tick(), held_at + 1);
+        ASSERT_EQ(p.display_tick(), rig.confirmed().current_tick() + 5);
         p.set_expected_delay_ms(60000);
         rig.step();
         ASSERT_EQ(p.lead_ticks(), 12u);                                                     // bounded above
         p.set_expected_delay_ms(0);
-        for (int i = 0; i < 12 * 40 + 5; ++i) rig.step();
+        rig.step();
         ASSERT_EQ(p.lead_ticks(), 1u);                                                      // and below
+        for (int i = 0; i < 12; ++i) rig.step();
         ASSERT_EQ(p.display_tick(), rig.confirmed().current_tick() + 1);
     } TEST_END();
 
@@ -781,15 +789,15 @@ void run_correction_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("RP3.2 An Order Sealed At Another Tick Than The One Where It Was Applied: Earlier Costs One Rebuild, Later Costs Two (its tick passes without it, then its turn comes) Unless It Lands Where The First Miss Put It; Afterwards The Prediction Is Right") {
-        // The lead is 5 ticks, the buffer 1 and the lag 1, so the order is applied 5 ticks ahead of the confirmed engine; an uplink of 3 steps seals it exactly there. A miss (its turn
-        // arrives without it) puts it at the display tick of that moment, which is lead - buffer = 4 ticks after the tick that it missed.
+    TEST_CASE("RP3.2 An Order Sealed At Another Tick Than The One Where It Was Applied: Earlier Costs One Rebuild; One Tick Later Costs One Too (Its Tick Passes Without It, And The Next Turn, Where It Is Expected Then, Carries It); Later Than That Costs Three (The Next Turn Passes It Too, Then Its Own Comes) Unless It Lands Where The Second Miss Put It; Afterwards The Prediction Is Right") {
+        // The lead is 5 ticks, the buffer 1 and the lag 1, so the order is applied 5 ticks ahead of the confirmed engine; an uplink of 3 steps seals it exactly there. The first miss (its
+        // turn arrives without it) puts it at the next tick; a second miss puts it at the display tick of that moment, which is lead - buffer = 4 ticks after the tick that it missed then.
         struct Case {
             int shift;                       // the tick of the turn minus the tick at which the prediction applied the order
             uint64_t rebuilds;
             uint64_t own_timing;             // ... of which the order's own turn found at another tick than the one it was applied at (the others: a turn that passed it without it)
         };
-        for (const Case c : {Case{-3, 1, 1}, Case{-2, 1, 1}, Case{-1, 1, 1}, Case{0, 0, 0}, Case{1, 2, 1}, Case{2, 2, 1}, Case{3, 2, 1}, Case{4, 1, 0}, Case{5, 3, 1}}) {
+        for (const Case c : {Case{-3, 1, 1}, Case{-2, 1, 1}, Case{-1, 1, 1}, Case{0, 0, 0}, Case{1, 1, 0}, Case{2, 3, 1}, Case{3, 3, 1}, Case{4, 3, 1}, Case{5, 2, 0}}) {
             Scenario sc;
             sc.seed = 40 + static_cast<uint32_t>(c.shift + 5);
             sc.lead_ms = 250;
@@ -1689,7 +1697,7 @@ void run_cue_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("RP8.2 The Lag Is The Median Of The Last Five Orders: One Order That A Stall Held Up Does Not Move The Lead (Its Lag Is Bounded By The Longest Lead), A Lag That Has Changed For Good Does, And The Lead Rises At Once") {
+    TEST_CASE("RP8.2 The Lag Is The Shortest Of The Last Five Orders: One Order That A Stall Held Up Does Not Move The Lead (Its Lag Is Bounded By The Longest Lead), A Lag That Has Grown For Good Does When All Five Say So (At Once, By Its Two Ticks), And One Order With A Shorter Lag Brings It Down At Once") {
         Scenario sc;
         sc.seed = 120;
         sc.buffer_turns = 1;
@@ -1709,14 +1717,16 @@ void run_cue_tests() {
             rig.run(uplink + 25);                                                                // (sealed, back, run)
             return p.learned_lag_ticks();
         };
-        // lags 3 3 3, then a stall (32: held to 12), 3 3, then the link is slower for good: 5 5 5 5
-        const uint32_t uplinks[10] = {1, 1, 1, 30, 1, 1, 3, 3, 3, 3};
-        const uint32_t expected[10] = {3, 3, 3, 3, 3, 3, 3, 5, 5, 5};                              // [3] [3 3] [3 3 3] [3 3 3 12] [.. 3] [3 3 12 3 3] [3 12 3 3 5] [12 3 3 5 5] ...
-        for (int i = 0; i < 10; ++i) {
+        // lags 3 3 3, then a stall (32: held to 12), 3 3, then the link is slower for good: 5 5 5 5 5 5, then one order that is quick again: 3
+        const uint32_t uplinks[13] = {1, 1, 1, 30, 1, 1, 3, 3, 3, 3, 3, 3, 1};
+        const uint32_t expected[13] = {3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 5, 5, 3};                     // [3] [3 3] [3 3 3] [3 3 3 12] [.. 3] [3 3 12 3 3] [3 12 3 3 5] [12 3 3 5 5] [3 3 5 5 5] [3 5 5 5 5] [5 5 5 5 5] [..] [5 5 5 5 3]
+        for (int i = 0; i < 13; ++i) {
             const uint32_t learned = order_with_uplink(uplinks[i]);
             ASSERT_EQ(learned, expected[i]);
             if (i == 3) ASSERT_EQ(p.lead_ticks(), 3u);                                           // the stall did not move the lead
-            if (i == 7) ASSERT_EQ(p.lead_ticks(), 5u);                                           // the change did, at once
+            if (i == 9) ASSERT_EQ(p.lead_ticks(), 3u);                                           // four orders of the slower link: one of the last five was still quick (an order that lands a tick late is the lesser mistake)
+            if (i == 10) ASSERT_EQ(p.lead_ticks(), 5u);                                          // all five: the change moved it, at once
+            if (i == 12) ASSERT_EQ(p.lead_ticks(), 3u);                                          // one quick order: down at once
         }
     } TEST_END();
 
@@ -1741,7 +1751,7 @@ void run_cue_tests() {
         ASSERT_EQ(p.lead_ticks(), 5u);
         rig.run_quiet(61);                                                                       // the lag is older than 60 ticks now
         ASSERT_EQ(p.learned_lag_ticks(), 0u);
-        rig.run_quiet(5 * 40 + 5);                                                               // (the lead falls to the estimate one tick at a time, as it always does)
+        rig.run_quiet(5);                                                                        // (the lead falls to the estimate at once, as it always does)
         ASSERT_EQ(p.lead_ticks(), 2u);
         rig.issue(random_order(rng, rig.ids, 0));
         rig.run(30);
@@ -1749,7 +1759,7 @@ void run_cue_tests() {
         ASSERT_EQ(p.lead_ticks(), 5u);
     } TEST_END();
 
-    TEST_CASE("RP8.5 The Lead's Edges: A Prediction Told Nothing Starts At Two Ticks Of Lag Plus The Bias (Never Outside Its Bounds); Two Orders That Disagree Give The Upper One (A Lead Too Low Is The Worse Mistake); An Order Held Up For Ever Is Counted As The Longest Lead; The Bias On A Long Lag Stops At The Longest Lead") {
+    TEST_CASE("RP8.5 The Lead's Edges: A Prediction Told Nothing Starts At Two Ticks Of Lag Plus The Bias (Never Outside Its Bounds); Two Orders That Disagree Give The Shorter One (A Lead Too Long Is The Worse Mistake: The Order Lands Before The Tick It Was Aimed At); An Order Held Up For Ever Is Counted As The Longest Lead; The Bias On A Long Lag Stops At The Longest Lead") {
         Rig rig(Scenario{});
         Prediction::Config c = Scenario::rig_config();
         {
@@ -1775,7 +1785,7 @@ void run_cue_tests() {
             Prediction fresh(rig.confirmed(), rig.runner(), c);
             ASSERT_EQ(fresh.lead_ticks(), 7u);                                                   // ... and 2 is below the shortest
         }
-        // two orders that disagree (lags 3 and 5): the median of two is the upper one
+        // two orders that disagree (lags 3 and 5): the shorter one
         {
             Scenario sc;
             sc.seed = 125;
@@ -1794,7 +1804,8 @@ void run_cue_tests() {
             two.set_uplink(3);
             two.issue(random_order(rng, two.ids, 0));
             two.run(30);
-            ASSERT_EQ(two.prediction()->learned_lag_ticks(), 5u);
+            ASSERT_EQ(two.prediction()->learned_lag_ticks(), 3u);
+            ASSERT_EQ(two.prediction()->lead_ticks(), 3u);
         }
         // orders that a stall holds up for ever (an uplink of 30 steps) are lags of the longest lead, however long they really took
         {
@@ -1836,7 +1847,7 @@ void run_cue_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("RP8.6 The Product's Defaults Are The Documented Numbers (docs/NETWORK_PORT.md, README): The Lead Learns From The Median Of The Last Five Orders No Older Than 400 Ticks With No Bias (An Order Is Put Where The Host Runs It), Between 1 And 12 Ticks, Falls After 40 Ticks; A Lost Order Is Dropped After 100; The Budget Is 12 ms, Four Strikes In 200 Ticks, A Cool-Down Of 200 Ticks That Doubles Up To 3200") {
+    TEST_CASE("RP8.6 The Product's Defaults Are The Documented Numbers (docs/NETWORK_PORT.md, README): The Lead Learns From The Shortest Lag Of The Last Five Orders No Older Than 400 Ticks With No Bias (An Order Is Put Where The Host Runs It), Between 1 And 12 Ticks, Rises By One Tick After 40 Ticks; A Lost Order Is Dropped After 100; The Budget Is 12 ms, Four Strikes In 200 Ticks, A Cool-Down Of 200 Ticks That Doubles Up To 3200") {
         const Prediction::Config c;
         ASSERT_TRUE(c.learn_lead);
         ASSERT_EQ(c.lag_samples, 5u);
@@ -1844,7 +1855,7 @@ void run_cue_tests() {
         ASSERT_EQ(c.lead_bias_ticks, 0u);                                                        // (a project decision: a local game's feel and no hops; 1 shows an order 50 ms sooner at the price of a tile hop in one order of six)
         ASSERT_EQ(c.min_lead_ticks, 1u);
         ASSERT_EQ(c.max_lead_ticks, 12u);
-        ASSERT_EQ(c.lead_fall_after_ticks, 40u);
+        ASSERT_EQ(c.lead_rise_after_ticks, 40u);
         ASSERT_EQ(c.pending_timeout_ticks, 100u);
         ASSERT_EQ(c.budget_ns, 12ull * 1000ull * 1000ull);
         ASSERT_EQ(c.budget_strikes, 4u);

@@ -55,6 +55,12 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
 
 namespace {
 
+// ANTS_LINK_SEED=n: the printed grids are played with other seeds (the links' jitter, the frames' and the person's phases), to see how much a number depends on them
+uint32_t seed_offset() {
+    const char* v = std::getenv("ANTS_LINK_SEED");
+    return v != nullptr ? static_cast<uint32_t>(std::atoi(v)) * 1000u : 0u;
+}
+
 bool table_wanted() {
     const char* v = std::getenv("ANTS_LINK_TABLE");
     return v != nullptr && v[0] != '\0' && v[0] != '0';
@@ -283,6 +289,7 @@ struct HumpCell {
     double gain{0};
     int good{0};            // humps that gained
     int trials{0};
+    uint64_t sealed[3]{0, 0, 0};   // the person's orders that the host sealed at the tick that the screen applied them at, earlier, later (the prediction's own count; nothing without it)
 };
 
 // A cell of the grid: `trials` single-order walks and as many humping ones in one match of one link
@@ -321,6 +328,12 @@ HumpCell hump_cell(int rtt, int jitter, bool predict, int reaction_ms, int noise
     cell.gain = cell.hump_px - cell.single_px;
     for (int v : humped) cell.good += v > cell.single_px ? 1 : 0;
     cell.trials = static_cast<int>(std::min(single.size(), humped.size()));
+    if (!p.local && s.app().net()->prediction() != nullptr) {
+        const net::Prediction::Stats& st = s.app().net()->prediction()->stats();
+        cell.sealed[0] = st.sealed_exact;
+        cell.sealed[1] = st.sealed_early;
+        cell.sealed[2] = st.sealed_late;
+    }
     return cell;
 }
 
@@ -475,40 +488,63 @@ int main(int argc, char* argv[]) {
         std::printf("\n    one walk of 9 s on grass: %d px\n", w.px);
     } TEST_END();
 
-    TEST_CASE("LK2 Humping On Mud Through The Mouse: A Person Who Clicks The Other Goal A Moment After The Ant Is Seen To Cross A Tile Line Gains As In A Game On His Own Computer, At Every Round Trip, When The Screen Is The Predicted Engine; Without It The Window Of The Re-Order Is Past Before The Order Lands") {
-        const std::vector<int> rtts = table_wanted() ? std::vector<int>{-1, 30, 100, 180, 300} : std::vector<int>{-1, 30, 100, 180, 300};
-        const std::vector<int> reactions = table_wanted() ? std::vector<int>{0, 25, 50, 75, 100, 125, 150, 200} : std::vector<int>{0, 50, 75, 100, 125};
+    TEST_CASE("LK2 Humping On Mud Through The Mouse: With The Screen On The Predicted Engine A Person Who Clicks The Other Goal Up To A Tenth Of A Second After The Ant Is Seen To Cross A Tile Line Gains Ground At Every Round Trip, No More Than In A Game On His Own Computer And No Less Than A Click Two Ticks Later Gains There (The Order Lands At The Tick That Was Aimed At Or The Next, Hardly Ever Before It); Without It The Window Of The Re-Order Is Past Before The Order Lands") {
+        const std::vector<int> rtts{-1, 30, 100, 180, 300};
+        const std::vector<int> local_reactions{0, 25, 50, 75, 100, 125, 150, 175, 200, 250};
+        const std::vector<int> reactions = table_wanted() ? std::vector<int>{0, 25, 50, 75, 100, 125, 150, 200} : std::vector<int>{0, 25, 50, 75, 100, 125};
         const int trials = table_wanted() ? 20 : 8;
         const int jitter = 30;
         const int noise = std::getenv("ANTS_LINK_NOISE") != nullptr ? std::atoi(std::getenv("ANTS_LINK_NOISE")) : 30;        // the person's own timing: each click a little earlier or later, up to this many ms
-        std::vector<double> local;
+        std::vector<double> local;                                                            // the game on this computer, by local_reactions
+        const auto local_at = [&](int reaction) {                                             // (between two of them: a straight line)
+            for (size_t i = 1; i < local_reactions.size(); ++i) {
+                if (reaction > local_reactions[i]) continue;
+                const double f = static_cast<double>(reaction - local_reactions[i - 1]) / static_cast<double>(local_reactions[i] - local_reactions[i - 1]);
+                return local[i - 1] + f * (local[i] - local[i - 1]);
+            }
+            return local.back();
+        };
         double local_best = 0.0;
         for (const int rtt : rtts) {
             for (const bool predict : {false, true}) {
                 if (rtt < 0 && predict) continue;
+                const std::vector<int>& grid = rtt < 0 ? local_reactions : reactions;
                 std::vector<double> gains;
-                for (const int reaction : reactions) {
-                    const HumpCell c = hump_cell(rtt, jitter, predict, reaction, noise, trials, 5u + static_cast<uint32_t>(reaction));
+                uint64_t sealed[3] = {0, 0, 0};
+                for (const int reaction : grid) {
+                    const HumpCell c = hump_cell(rtt, jitter, predict, reaction, noise, trials, 5u + seed_offset() + static_cast<uint32_t>(reaction));
                     ASSERT_TRUE(c.trials > 0);
                     gains.push_back(c.gain);
+                    for (int k = 0; k < 3; ++k) sealed[k] += c.sealed[k];
                 }
                 const double best = *std::max_element(gains.begin(), gains.end());
                 std::printf("    hump  rtt %3d jit %2d prediction %-3s (timing +-%d ms): gain (px over one order in 9 s) by reaction", rtt < 0 ? 0 : rtt, rtt < 0 ? 0 : jitter, predict ? "on" : "off", noise);
-                for (size_t i = 0; i < gains.size(); ++i) std::printf(" %d ms: %+.0f", reactions[i], gains[i]);
-                std::printf("  | best %+.0f\n", best);
+                for (size_t i = 0; i < gains.size(); ++i) std::printf(" %d ms: %+.0f", grid[i], gains[i]);
+                std::printf("  | best %+.0f", best);
+                if (predict) std::printf("  | orders sealed at the tick they were applied at %llu, earlier %llu, later %llu", static_cast<unsigned long long>(sealed[0]), static_cast<unsigned long long>(sealed[1]), static_cast<unsigned long long>(sealed[2]));
+                std::printf("\n");
                 if (rtt < 0) {
                     local = gains;
                     local_best = best;
                     ASSERT_TRUE(local_best > 30.0);                                           // (the reference works: the game on this computer gains on mud, as the original's snap does)
                     continue;
                 }
-                for (size_t i = 0; i < reactions.size(); ++i) {
-                    if (reactions[i] < 75 || reactions[i] > 125) continue;                    // (the middle of the window: 75 to 125 ms after the crossing is seen)
-                    if (predict) ASSERT_TRUE(std::abs(gains[i] - local[i]) <= 12.0);           // with the prediction the gain is the local game's, at every round trip
-                    else if (rtt >= 100) ASSERT_TRUE(gains[i] < 0.0);                          // without it, from 100 ms on, every re-order there loses pixels
+                for (size_t i = 0; i < grid.size(); ++i) {
+                    if (grid[i] > 125) continue;                                              // (the window: up to an eighth of a second after the crossing is seen)
+                    if (predict) {
+                        if (grid[i] <= 100) ASSERT_TRUE(gains[i] > 0.0);                      // with the prediction every re-order of the first tenth of a second gains, at every round trip ...
+                        ASSERT_TRUE(gains[i] <= local_at(grid[i]) + 10.0);                    // ... no more than the same click gains in the local game ...
+                        ASSERT_TRUE(gains[i] >= local_at(grid[i] + 100) - 10.0);              // ... and no less than a click two ticks later gains there (the order lands at the tick that was aimed at or the next, now and then the one after)
+                    } else if (rtt >= 100) {
+                        ASSERT_TRUE(gains[i] < 0.0);                                          // without it, from 100 ms on, every re-order loses pixels
+                    }
                 }
-                if (predict) ASSERT_TRUE(best >= 0.55 * local_best);
-                else if (rtt >= 100) ASSERT_TRUE(best < 0.25 * local_best);
+                if (predict) {
+                    ASSERT_TRUE(best >= 0.55 * local_best);
+                    ASSERT_TRUE(sealed[1] * 10u <= sealed[0] + sealed[1] + sealed[2]);        // (an order is hardly ever sealed before the tick that it was aimed at: under a tenth of them)
+                } else if (rtt >= 100) {
+                    ASSERT_TRUE(best < 0.25 * local_best);
+                }
             }
         }
     } TEST_END();
@@ -518,7 +554,7 @@ int main(int argc, char* argv[]) {
         const int rtts[5] = {2, 30, 100, 180, 300};
         for (int k = 0; k < 5; ++k) {
             for (const bool predict : {false, true}) {
-                const AttackCell c = attack_cell(rtts[k], 30, predict, 16, 7u);
+                const AttackCell c = attack_cell(rtts[k], 30, predict, 16, 7u + seed_offset());
                 print_attack(c);
                 ASSERT_EQ(c.clicks, 16);
                 ASSERT_EQ(c.no_order, 0);
@@ -561,9 +597,13 @@ int main(int argc, char* argv[]) {
                 ASSERT_TRUE(st.commands_predicted > 20);                                  // (the person's clicks that gave an order: a click on an ant or a hill gives none)
                 ASSERT_EQ(st.commands_lost, 0u);                                          // (every order of the person was sealed)
                 ASSERT_TRUE(st.rebuilds > 0);
-                std::printf("\n    prediction on: %llu orders predicted, %llu rebuilds (%llu foreign, %llu own timing), %llu strikes, %llu cool-downs", static_cast<unsigned long long>(st.commands_predicted),
-                            static_cast<unsigned long long>(st.rebuilds), static_cast<unsigned long long>(st.rebuilds_foreign), static_cast<unsigned long long>(st.rebuilds_own_timing),
-                            static_cast<unsigned long long>(st.over_budget), static_cast<unsigned long long>(st.cooldowns));
+                std::printf("\n    prediction on: %llu orders predicted, %llu rebuilds (%llu foreign, %llu own timing), %llu strikes, %llu cool-downs; sealed at the tick they were applied at %llu, earlier %llu, later %llu; the lead changed %llu times",
+                            static_cast<unsigned long long>(st.commands_predicted), static_cast<unsigned long long>(st.rebuilds), static_cast<unsigned long long>(st.rebuilds_foreign), static_cast<unsigned long long>(st.rebuilds_own_timing),
+                            static_cast<unsigned long long>(st.over_budget), static_cast<unsigned long long>(st.cooldowns), static_cast<unsigned long long>(st.sealed_exact), static_cast<unsigned long long>(st.sealed_early),
+                            static_cast<unsigned long long>(st.sealed_late), static_cast<unsigned long long>(st.lead_changes));
+                ASSERT_EQ(st.sealed_exact + st.sealed_early + st.sealed_late, st.commands_predicted);      // (every order came back in a turn)
+                ASSERT_TRUE(st.sealed_early * 5u <= st.commands_predicted);                               // (hardly ever before the tick it was aimed at, even on a link with spikes)
+                ASSERT_TRUE(st.lead_changes * 4u <= st.commands_predicted);                               // (the lead does not go up and down with every order: the picture is not moved a tick back and forth)
             } else {
                 ASSERT_TRUE(s.app().net()->prediction() == nullptr);
             }
@@ -646,6 +686,9 @@ int main(int argc, char* argv[]) {
 
     TEST_CASE("LK7 What The Screen Shows When The Other Person's Orders Arrive: Their Ants Are Put Where The Engine Has Them By A Slide, Not A Jump (At RTT 180 The Frames In Which An Ant Of The Picture Moves By More Than 20 px Are None), And Without The Slide There Are Such Frames") {
         int jumps[2] = {0, 0};
+        int sliding = 0;                                                                     // frames of an ant that is drawn away from where the engine has it ...
+        int sliding_far = 0;                                                                 // ... by 20 px and more
+        int ant_frames = 0;
         for (const bool glide : {false, true}) {
             Params p;
             p.link.rtt_ms = 180;
@@ -664,7 +707,12 @@ int main(int argc, char* argv[]) {
                     int32_t gx = 0;
                     int32_t gy = 0;
                     s.app().renderer().view_glide().offset_of(a.id, gx, gy);
+                    if (glide) ++ant_frames;
                     const std::pair<int32_t, int32_t> drawn{a.px + gx, a.py + gy};
+                    if (glide && (gx != 0 || gy != 0)) {
+                        ++sliding;
+                        if (std::max(std::abs(gx), std::abs(gy)) >= 20) ++sliding_far;      // (the middle of the drawn ant is outside the box of 20 px to each side of where the engine has it: the HUD picks by the drawn place, view_glide.hpp)
+                    }
                     const auto it = last.find(a.id);
                     if (it != last.end() && a.state == sim::UnitState::Walking) {
                         const int32_t jump = std::max(std::abs(drawn.first - it->second.first), std::abs(drawn.second - it->second.second));
@@ -681,7 +729,9 @@ int main(int argc, char* argv[]) {
             ASSERT_TRUE(frames > 1500);
             ASSERT_TRUE(s.app().net()->prediction()->stats().rebuilds_foreign > 10u);       // (the other person's orders were corrected)
         }
-        std::printf("\n    frames in which a walking ant of the picture moved by more than 20 px: %d without the slide, %d with it\n", jumps[0], jumps[1]);
+        std::printf("\n    frames in which a walking ant of the picture moved by more than 20 px: %d without the slide, %d with it; of %d frames of an ant, %d drew it sliding, %d of them 20 px and more from where the engine has it (the pointer picks it where it is drawn)\n",
+                    jumps[0], jumps[1], ant_frames, sliding, sliding_far);
+        ASSERT_TRUE(sliding > 0);
         ASSERT_TRUE(jumps[0] > 3);
         ASSERT_EQ(jumps[1], 0);
     } TEST_END();
@@ -754,6 +804,8 @@ int main(int argc, char* argv[]) {
         if (soak == nullptr || std::atoi(soak) <= 0) return;
         const int sessions = std::atoi(soak);
         uint64_t worst_rebuild_ns = 0;
+        uint64_t soak_sealed[3] = {0, 0, 0};
+        uint64_t soak_lead_changes = 0;
         for (int n = 0; n < sessions; ++n) {
             std::mt19937 engine(1000u + static_cast<uint32_t>(n));
             const auto pick = [&engine](uint32_t below) { return static_cast<uint32_t>(engine() % below); };      // (a number below `below`: the engine's own type is wider than 32 bits on some systems)
@@ -803,10 +855,19 @@ int main(int argc, char* argv[]) {
             ASSERT_FALSE(s.app().net()->desynced());
             std::string why;
             ASSERT_TRUE(recording_plays_to(s, why));
-            std::printf("\n    soak %d: kind %d, rtt %u jit %u spikes %u/%u: %llu orders, %llu rebuilds, longest %.2f ms", n, kind, p.link.rtt_ms, p.link.jitter_ms, p.link.spike_ms, p.link.spike_per_mille,
-                        static_cast<unsigned long long>(st.commands_predicted), static_cast<unsigned long long>(st.rebuilds), static_cast<double>(st.rebuild_ns_max) / 1.0e6);
+            std::printf("\n    soak %d: kind %d, rtt %u jit %u spikes %u/%u: %llu orders (sealed at their tick %llu, earlier %llu, later %llu), the lead changed %llu times, %llu rebuilds, longest %.2f ms", n, kind, p.link.rtt_ms,
+                        p.link.jitter_ms, p.link.spike_ms, p.link.spike_per_mille, static_cast<unsigned long long>(st.commands_predicted), static_cast<unsigned long long>(st.sealed_exact),
+                        static_cast<unsigned long long>(st.sealed_early), static_cast<unsigned long long>(st.sealed_late), static_cast<unsigned long long>(st.lead_changes), static_cast<unsigned long long>(st.rebuilds),
+                        static_cast<double>(st.rebuild_ns_max) / 1.0e6);
+            soak_sealed[0] += st.sealed_exact;
+            soak_sealed[1] += st.sealed_early;
+            soak_sealed[2] += st.sealed_late;
+            soak_lead_changes += st.lead_changes;
         }
-        std::printf("\n    soak: the longest rebuild of all %d sessions %.2f ms\n", sessions, static_cast<double>(worst_rebuild_ns) / 1.0e6);
+        std::printf("\n    soak: the longest rebuild of all %d sessions %.2f ms; orders sealed at the tick they were applied at %llu, earlier %llu, later %llu; the lead changed %llu times\n", sessions,
+                    static_cast<double>(worst_rebuild_ns) / 1.0e6, static_cast<unsigned long long>(soak_sealed[0]), static_cast<unsigned long long>(soak_sealed[1]), static_cast<unsigned long long>(soak_sealed[2]),
+                    static_cast<unsigned long long>(soak_lead_changes));
+        ASSERT_TRUE(soak_sealed[1] * 10u <= soak_sealed[0] + soak_sealed[1] + soak_sealed[2]);            // (over every kind of link: under a tenth of the orders land before the tick that they were aimed at)
     } TEST_END();
 
     std::cout << "\n=======================================================\n"

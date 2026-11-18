@@ -114,8 +114,8 @@
     {
       "id": "glide_drawn_the_wrong_way",
       "file": "src/ants_app/view_glide.cpp",
-      "old": "        drawn.px += dx * quarters / 4;\n        drawn.py += dy * quarters / 4;",
-      "new": "        drawn.px -= dx * quarters / 4;\n        drawn.py -= dy * quarters / 4;",
+      "old": "        drawn.px += whole_x * quarters / 4;\n        drawn.py += whole_y * quarters / 4;",
+      "new": "        drawn.px -= whole_x * quarters / 4;\n        drawn.py -= whole_y * quarters / 4;",
       "build": [
         "test_prediction_app"
       ],
@@ -209,6 +209,105 @@
       ],
       "test": "./build/tests/test_net/test_prediction",
       "expect": "RP2.5"
+    },
+    {
+      "id": "lead_is_the_longest_lag",
+      "file": "src/ants_net/prediction.cpp",
+      "old": "if (c <= lag.second + cfg_.lag_fresh_ticks && (lowest == 0 || lag.first < lowest)) lowest = lag.first;",
+      "new": "if (c <= lag.second + cfg_.lag_fresh_ticks && (lowest == 0 || lag.first > lowest)) lowest = lag.first;",
+      "build": [
+        "test_prediction"
+      ],
+      "test": "./build/tests/test_net/test_prediction",
+      "expect": "RP8.2"
+    },
+    {
+      "id": "lead_is_the_longest_lag_on_a_link",
+      "file": "src/ants_net/prediction.cpp",
+      "old": "if (c <= lag.second + cfg_.lag_fresh_ticks && (lowest == 0 || lag.first < lowest)) lowest = lag.first;",
+      "new": "if (c <= lag.second + cfg_.lag_fresh_ticks && (lowest == 0 || lag.first > lowest)) lowest = lag.first;",
+      "build": [
+        "test_prediction_link"
+      ],
+      "test": "./build/tests/test_app/test_prediction_link",
+      "expect": "LK2"
+    },
+    {
+      "id": "lead_rises_by_one_at_once",
+      "file": "src/ants_net/prediction.cpp",
+      "old": "    if (target_lead_ < lead_ || target_lead_ > lead_ + 1u) {",
+      "new": "    if (target_lead_ != lead_) {",
+      "build": [
+        "test_prediction"
+      ],
+      "test": "./build/tests/test_net/test_prediction",
+      "expect": "RP1.3"
+    },
+    {
+      "id": "lead_falls_slowly",
+      "file": "src/ants_net/prediction.cpp",
+      "old": "    if (target_lead_ < lead_ || target_lead_ > lead_ + 1u) {",
+      "new": "    if (target_lead_ + 1u < lead_ || target_lead_ > lead_ + 1u) {",
+      "build": [
+        "test_prediction"
+      ],
+      "test": "./build/tests/test_net/test_prediction",
+      "expect": "RP"
+    },
+    {
+      "id": "missed_order_not_expected_in_the_next_turn",
+      "file": "src/ants_net/prediction.cpp",
+      "old": "        p.tick = p.misses == 0 ? n + 1u : display_;",
+      "new": "        p.tick = display_;",
+      "build": [
+        "test_prediction"
+      ],
+      "test": "./build/tests/test_net/test_prediction",
+      "expect": "RP3.2"
+    },
+    {
+      "id": "renderer_slides_an_enemy_across_the_fog",
+      "file": "src/ants_app/renderer_units.cpp",
+      "old": "        const ants::sim::AntSnapshot a = glided_ant(view_glide_, world, hud_team_id_, engine_ant);",
+      "new": "        const ants::sim::AntSnapshot a = glided_ant(view_glide_, world, engine_ant.player_id, engine_ant);",
+      "build": [
+        "test_prediction_app"
+      ],
+      "test": "./build/tests/test_app/test_prediction_app",
+      "expect": "PA10"
+    },
+    {
+      "id": "pointer_picks_where_the_engine_has_the_ant",
+      "file": "src/ants_app/application.cpp",
+      "old": "        return renderer_ != nullptr && glide_offset(renderer_->view_glide(), world, team, ant, dx, dy);",
+      "new": "        return false && renderer_ != nullptr && glide_offset(renderer_->view_glide(), world, team, ant, dx, dy);",
+      "build": [
+        "test_prediction_app"
+      ],
+      "test": "./build/tests/test_app/test_prediction_app",
+      "expect": "PA9"
+    },
+    {
+      "id": "hud_pick_ignores_the_slide",
+      "file": "src/ants_app/hud_input.cpp",
+      "old": "                if (draw_offset_) draw_offset_(world, local_player_id_, ant, off_x, off_y);",
+      "new": "                (void)world;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG6"
+    },
+    {
+      "id": "band_ignores_the_slide",
+      "file": "src/ants_app/hud_pointer.cpp",
+      "old": "        if (draw_offset_) draw_offset_(world, local_player_id_, ant, off_x, off_y);",
+      "new": "        (void)off_x;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG6"
     }
   ]
 }

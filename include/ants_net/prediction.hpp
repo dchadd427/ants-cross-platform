@@ -63,7 +63,7 @@ public:
         uint8_t seat{sim::PLAYER_NEUTRAL};        // the player whose orders are predicted
         uint32_t min_lead_ticks{1};               // the display tick is at least this many ticks ahead of the confirmed one
         uint32_t max_lead_ticks{12};              // ... and at most this many (600 ms: a link slower than that is not helped by guessing further)
-        uint32_t lead_fall_after_ticks{40};       // the lead falls by one tick when the delay has asked for less for this long (2 s): it rises at once
+        uint32_t lead_rise_after_ticks{40};       // the lead rises by one tick when the delay has asked for one more for this long (2 s); it falls at once, and rises at once by two and more
         uint32_t pending_timeout_ticks{100};      // an own order that no turn has carried after this many ticks (5 s) is lost
         size_t max_events{4096};                  // the cues and news of the predicted ticks that are kept for the application
         // The budget. The prediction is work that a frame pays for: a rebuild (a copy and a replay of `lead` ticks), or the ticks that it runs for one confirmed tick, that takes more than
@@ -81,8 +81,10 @@ public:
         // what the test says on every platform (tests/test_net/manual_clock.hpp).
         std::function<uint64_t()> wall_clock;
         std::function<uint64_t()> cpu_clock;
-        // The lead is the median lag (the upper one of an even number) of the last `lag_samples` own orders, none older than `lag_fresh_ticks`, plus `lead_bias_ticks`: one stalled order
-        // does not move it. Off: the owner's estimate alone (the tests that hold a wrong lead to account).
+        // The lead is the SHORTEST lag of the last `lag_samples` own orders, none older than `lag_fresh_ticks`, plus `lead_bias_ticks`. The lag of an order varies by a tick with the moment
+        // of the click (the phase of the host's seals) and with the link's jitter; with the shortest one an order is sealed at the tick that the player aimed at or a tick LATER, hardly ever
+        // earlier: an order that lands before its tick meets a state that the screen had already left (an ant that had not crossed its tile line yet, an ant that was still on the tile before).
+        // One stalled order does not move it. Off: the owner's estimate alone (the tests that hold a wrong lead to account).
         bool learn_lead{true};
         uint32_t lag_samples{5};
         uint32_t lag_fresh_ticks{400};                     // 20 s
@@ -105,6 +107,10 @@ public:
         uint64_t turns_checked{0};                // live turns compared with the assumptions
         uint64_t commands_predicted{0};           // own orders applied to the predicted engine
         uint64_t commands_lost{0};                // own orders that no turn ever carried
+        uint64_t sealed_exact{0};                 // own orders that the host sealed at the tick at which the prediction first applied them (what the click was aimed at is what the order met)
+        uint64_t sealed_early{0};                 // ... at an earlier tick
+        uint64_t sealed_late{0};                  // ... at a later one
+        uint64_t lead_changes{0};                 // times the lead changed while the prediction ran (each moves the whole picture by a tick of walking)
         uint64_t starts{0};                       // times the prediction began (the first tick, and after every suspension)
         uint64_t rebuild_ns_total{0};             // time of the rebuilds, and the longest
         uint64_t rebuild_ns_max{0};
@@ -155,11 +161,11 @@ public:
     void set_suspended(bool suspended);
     bool suspended() const noexcept { return suspended_; }
     /// The lag of the player's orders as the owner knows it (the measured delay less the tick that it counts, or an estimate from the round trip and the jitter buffer), in ms: the lead is that
-    /// many ticks, rounded, plus Config::lead_bias_ticks, until the orders themselves have taught it their lag (Config::learn_lead). It rises
-    /// at once and falls slowly (Config::lead_fall_after_ticks), so that the picture does not jump back and forth with the phase of the server's seals.
+    /// many ticks, rounded, plus Config::lead_bias_ticks, until the orders themselves have taught it their lag (Config::learn_lead). It falls
+    /// at once, rises at once by two ticks and more, and by one tick only after Config::lead_rise_after_ticks, so that the picture does not jump back and forth with the phase of the server's seals.
     void set_expected_delay_ms(uint32_t ms);
     uint32_t lead_ticks() const noexcept { return lead_; }
-    /// What the lead has learned from the player's own orders: the median lag of the fresh ones (see Config::learn_lead), 0 when there is none. The lead is this plus the bias, else the estimate
+    /// What the lead has learned from the player's own orders: the shortest lag of the fresh ones (see Config::learn_lead), 0 when there is none. The lead is this plus the bias, else the estimate
     /// plus the bias
     uint32_t learned_lag_ticks() const noexcept;
     /// Compare the picture before and after every rebuild (Stats::corrections...): costs a copy of the ants' positions, off by default
@@ -215,6 +221,8 @@ private:
         sim::Command command;
         uint64_t tick{0};                         // the tick at which the prediction applied it (or will apply it, after a correction)
         uint64_t born{0};                         // the confirmed tick when the player gave it: a lost order is told by the time that has passed since THEN (a correction moves `tick`)
+        uint64_t first_tick{0};                   // the tick at which it was applied when it was given: what the player aimed at (the statistics)
+        uint32_t misses{0};                       // the turns of its tick that arrived without it
     };
 
     void begin(uint64_t confirmed_tick);
@@ -256,7 +264,7 @@ private:
     uint32_t target_lead_{3};
     uint32_t estimate_lag_{2};                    // the owner's estimate of the lag of an order (set_expected_delay_ms), in ticks
     std::deque<std::pair<uint32_t, uint64_t>> lags_;      // (lag in ticks, the confirmed tick at which it was seen) of the last orders that came back in a turn
-    uint32_t lead_low_ticks_{0};
+    uint32_t lead_high_ticks_{0};
     uint32_t generation_{0};
     bool measure_corrections_{false};
     std::vector<PredictedAudio> audio_;

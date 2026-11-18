@@ -308,6 +308,11 @@ public:
     /// The simulation that answers the cursor's special-target question (FUN_01026f91); without it no tile is a special target.
     void set_sim_query(const sim::SimulationEngine* sim) noexcept { sim_query_ = sim; }
     const sim::SimulationEngine* sim_query() const noexcept { return sim_query_; }
+    /// How far from where the engine has it the picture draws an ant (the slide of an ant that the prediction's rebuild moved: view_glide.hpp), in world pixels: the viewer's team, the ant, the
+    /// offset; false when it is drawn where the engine has it. The pointer picks an ant where it is DRAWN (the click, the cursor, the rubber band); an order still names the tile where the
+    /// engine has it. Empty (a game of one machine, the tests of the original's hit boxes): every ant is drawn where the engine has it.
+    using DrawOffset = std::function<bool(const sim::WorldState& world, uint8_t viewer_team, const sim::AntSnapshot& ant, int32_t& dx, int32_t& dy)>;
+    void set_draw_offset(DrawOffset fn) { draw_offset_ = std::move(fn); }
     /// Where the HUD sends the player's commands (group orders, Stop, hatch, alliance offers): a single-player game applies them at once (null =
     /// the engine itself), a network match hands them to the turn manager, which applies them at the agreed turn.
     void set_command_sink(sim::CommandSink* sink) noexcept { command_sink_ = sink; }
@@ -349,7 +354,8 @@ public:
     /// tile are scanned (rows outer, columns inner) and an ant registered on one of them is hit when the click lies in the
     /// half-open rectangle around its sprite position (combat ant [x-32, x+26) x [y-46, y+16), every other type
     /// [x-20, x+20) x [y-32, y+16)); the last hit wins. There is no filter: dying, flying, drowning, scuffling and underground ants
-    /// are hit as well, and fog is only looked at for the tile under the pointer.
+    /// are hit as well, and fog is only looked at for the tile under the pointer. An ant that the picture draws elsewhere (set_draw_offset) is hit where it is drawn: the pointer is
+    /// taken back by the ant's offset, and the scan and the rectangle are the original's from there.
     const sim::AntSnapshot* pick_ant_at(const sim::WorldState& world, int32_t world_x, int32_t world_y) const;
 
 
@@ -550,6 +556,7 @@ private:
     bool chat_scroll_task_{false};             // CHATSCRL is scheduled
     uint32_t chat_scroll_due_ms_{0};
     const sim::SimulationEngine* sim_query_{nullptr};
+    DrawOffset draw_offset_;
     sim::CommandSink* command_sink_{nullptr};
     sim::CommandResult submit_command(sim::SimulationEngine& sim, const sim::Command& command) {
         return command_sink_ != nullptr ? command_sink_->submit(command) : sim.apply_command(command);

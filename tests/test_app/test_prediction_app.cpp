@@ -13,7 +13,9 @@
 #include <SDL.h>
 
 #include "ants_app/application.hpp"
+#include "ants_app/health_changes.hpp"
 #include "ants_app/hud.hpp"
+#include "ants_app/view_glide.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_net/netgame.hpp"
 #include "ants_net/protocol.hpp"
@@ -34,6 +36,7 @@
 #include <iostream>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 #include "../common/test_assert.hpp"
 
@@ -144,10 +147,11 @@ ApplicationConfig host_config() {
 }
 
 // The application hosts a room with Bob in it, SMALL.LVL, START: both play, the application is seat 0 and Bob seat 1. Returns when the match screen is up on both.
-bool begin_match(Application& app, Peer& bob, Duo& duo, const ApplicationConfig& config = host_config()) {
+bool begin_match(Application& app, Peer& bob, Duo& duo, const ApplicationConfig& config = host_config(), bool fog = false) {
     if (!app.init(config) || !app.network_active()) return false;
     if (!bob.net.join("127.0.0.1", app.net()->listen_port(), "Bob")) return false;
     if (!duo.until([&]() { return app.net()->can_start(); }, 8000)) return false;
+    if (fog) app.net()->set_fog(true);
     int32_t small_index = -1;
     for (size_t i = 0; i < app.map_select().get_maps().size(); ++i) {
         if (app.map_select().get_maps()[i].filename == "SMALL.LVL") small_index = static_cast<int32_t>(i);
@@ -174,11 +178,11 @@ const sim::AntSnapshot* ant_in(const sim::SimulationEngine& sim, uint32_t id) {
     return nullptr;
 }
 
-// An open ground tile 10 tiles and more from a team's hill (a goal that the path finder accepts)
-bool far_goal(const sim::SimulationEngine& sim, uint8_t team, int16_t& gx, int16_t& gy) {
+// An open ground tile 10 tiles and more from a team's hill (a goal that the path finder accepts), or `nearest` to `farthest` tiles from it
+bool far_goal(const sim::SimulationEngine& sim, uint8_t team, int16_t& gx, int16_t& gy, int32_t nearest = 10, int32_t farthest = 14) {
     const auto* hill = sim.grid().find_anthill(team);
     if (hill == nullptr) return false;
-    for (int32_t d = 10; d <= 14; ++d) {
+    for (int32_t d = nearest; d <= farthest; ++d) {
         for (int32_t dy = -d; dy <= d; ++dy) {
             for (int32_t dx = -d; dx <= d; ++dx) {
                 if (std::max(std::abs(dx), std::abs(dy)) != d) continue;
@@ -589,7 +593,7 @@ int main(int argc, char* argv[]) {
         }
     } TEST_END();
 
-    TEST_CASE("PA9 The Frame Draws An Ant That A Rebuild Moved Where It Was Shown And Slides It: With A Slide Of 40 px Left Over The Ant Is Not At The Engine's Place Any More, It Is 40 px Further, And When The Slide Is Over The Frame Is The Plain One Again") {
+    TEST_CASE("PA9 The Frame Draws An Ant That A Rebuild Moved Where It Was Shown And Slides It: With A Slide Of 40 px Left Over The Ant Is Not At The Engine's Place Any More, It Is 40 px Further, And When The Slide Is Over The Frame Is The Plain One Again; While It Slides The Pointer Picks It Where It Is Drawn, Not Where The Engine Has It") {
         Application app;
         Peer bob;
         Duo duo{app, bob};
@@ -627,8 +631,161 @@ int main(int argc, char* argv[]) {
         app.render_frame();
         ASSERT_TRUE(canvas_region(app, sx - 12, sy - 12, 24, 24) == before_old);
         ASSERT_TRUE(canvas_region(app, sx + kSlide - 12, sy - 12, 24, 24) == before_new);
+        // The pointer picks the ant where it is DRAWN while it slides: a click on the drawn ant selects it and the cursor over it is the selection cursor; a click where the engine has it, which
+        // the picture shows empty, does not. (The points are ones that no other ant's box holds: the ants stand close together at the hill.)
+        const sim::WorldState world = app.view_sim().get_world_state();
+        const auto in_box = [](const sim::AntSnapshot& a, int32_t x, int32_t y) {
+            const bool combat = a.raw_type == sim::AntType::Combat;
+            return x >= a.px - (combat ? 32 : 20) && x < a.px + (combat ? 26 : 20) && y >= a.py - (combat ? 46 : 32) && y < a.py + 16;
+        };
+        const auto free_of_others = [&](int32_t x, int32_t y) {
+            for (const auto& a : world.ants) {
+                if (a.id != ant && in_box(a, x, y)) return false;
+            }
+            return true;
+        };
+        const auto deselect = [&]() { app.hud().handle_key_down(SDLK_ESCAPE, app.sim(), app.renderer().camera()); };
+        bool tried = false;
+        const std::pair<int32_t, int32_t> slides[] = {{48, 0}, {-48, 0}, {0, 56}, {0, -56}, {48, 56}, {-48, -56}, {48, -56}, {-48, 56}};
+        for (const auto& slide : slides) {
+            const int32_t drawn_x = wx + slide.first;                                       // a point of the ant's box as it is drawn, and one of its box where the engine has it
+            const int32_t drawn_y = wy + slide.second - 8;
+            const int32_t engine_x = wx;
+            const int32_t engine_y = wy - 8;
+            if (!free_of_others(drawn_x, drawn_y) || !free_of_others(engine_x, engine_y)) continue;
+            tried = true;
+            app.renderer().view_glide().clear();
+            app.renderer().view_glide().add(ant, slide.first, slide.second);
+            app.render_frame();
+            deselect();
+            click(app, SDL_BUTTON_LEFT, sx + slide.first, sy + slide.second - 8);
+            ASSERT_EQ(app.hud().get_selected_ant_id(), ant);                                // picked where it is drawn
+            deselect();
+            motion.x = sx + slide.first;
+            motion.y = sy + slide.second - 8;
+            app.handle_mouse_motion(motion);
+            app.render_frame();
+            ASSERT_TRUE(app.hud().current_cursor() == CursorType::Select);
+            click(app, SDL_BUTTON_LEFT, sx, sy - 8);
+            ASSERT_EQ(app.hud().get_selected_ant_id(), 0u);                                 // ... and not where the engine has it: the picture shows nothing there
+            app.renderer().view_glide().clear();                                            // without a slide the same click picks it where the engine has it
+            app.render_frame();
+            click(app, SDL_BUTTON_LEFT, sx, sy - 8);
+            ASSERT_EQ(app.hud().get_selected_ant_id(), ant);
+            deselect();
+            break;
+        }
+        ASSERT_TRUE(tried);
         duo.step(1500);
         ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());                        // (drawing only: the confirmed engines are the same)
+    } TEST_END();
+
+    TEST_CASE("PA10 The Frame Never Draws A Sliding Ant Of Another Team On Ground That The Fog Covers: With Fog Of War An Enemy Ant At The Edge Of The Explored Ground Whose Slide Began Two Tiles Into The Fog Is Drawn With The Part Of The Slide That Stays On Explored Ground (The Same Frame As That Shorter Slide, Nothing Where The Whole Slide Would Put It), And A Slide Over Explored Ground Is Drawn Whole") {
+        Application app;
+        Peer bob;
+        Duo duo{app, bob};
+        ASSERT_TRUE(begin_match(app, bob, duo, host_config(), true));
+        ASSERT_TRUE(duo.until([&]() { return app.net()->predicting() && app.sim().current_tick() > 40; }, 20000));
+        ASSERT_TRUE(app.sim().is_fog_of_war_enabled() && app.view_sim().is_fog_of_war_enabled());
+        const auto drawn_enemy = [&]() -> const sim::AntSnapshot* {                          // an ant of Bob's that the picture draws: it stands on ground that the application's team has explored
+            const sim::WorldState& world = app.view_sim().get_world_state();
+            for (const auto& a : world.ants) {
+                if (a.player_id == 1 && a.hp > 0 && health::ant_drawn(world, 0, a)) return &a;
+            }
+            return nullptr;
+        };
+        ASSERT_TRUE(drawn_enemy() == nullptr);                                              // (the two hills are far apart: Bob's ants stand under the fog)
+        // an own ant walks to Bob's hill; the match is stopped at the frame in which the first of Bob's ants comes out of the fog: that ant stands at the edge of the explored ground
+        const std::vector<uint32_t> mine = ants_of(app.sim(), 0);
+        ASSERT_FALSE(mine.empty());
+        int16_t gx = 0;
+        int16_t gy = 0;
+        ASSERT_TRUE(far_goal(app.sim(), 1, gx, gy, 3, 6));
+        sim::Command go;
+        go.type = sim::CommandType::GroupMove;
+        go.issuer = 0;
+        go.tile_x = gx;
+        go.tile_y = gy;
+        go.ants = {mine[0]};
+        ASSERT_EQ(app.net()->submit(go).status, sim::CommandResult::Status::Applied);
+        ASSERT_TRUE(duo.until([&]() { return drawn_enemy() != nullptr; }, 60000));
+        app.net()->freeze();                                                                // (no tick runs between the frames from here)
+        duo.step(400);
+        ASSERT_TRUE(app.net()->predicting());
+        const sim::AntSnapshot* found = drawn_enemy();
+        ASSERT_TRUE(found != nullptr);
+        const sim::AntSnapshot enemy = *found;
+        const sim::WorldState world = app.view_sim().get_world_state();
+        // a slide of two tiles that began on covered ground, and what the model keeps of it (view_glide.hpp: the largest quarter that stays on explored ground)
+        int32_t fog_dx = 0;
+        int32_t fog_dy = 0;
+        int32_t kept_dx = 0;
+        int32_t kept_dy = 0;
+        bool have = false;
+        const std::pair<int32_t, int32_t> two_tiles[] = {{64, 0}, {-64, 0}, {0, 64}, {0, -64}};
+        for (const auto& d : two_tiles) {
+            const int32_t tx = (enemy.px + d.first) / 32;
+            const int32_t ty = (enemy.py + d.second) / 32;
+            if (tx < 0 || ty < 0 || tx >= static_cast<int32_t>(world.width) || ty >= static_cast<int32_t>(world.height) || world.is_tile_revealed(tx, ty)) continue;
+            ViewGlide model;
+            model.add(enemy.id, d.first, d.second);
+            const sim::AntSnapshot kept = glided_ant(model, world, 0, enemy);
+            fog_dx = d.first;
+            fog_dy = d.second;
+            kept_dx = kept.px - enemy.px;
+            kept_dy = kept.py - enemy.py;
+            have = true;
+            break;
+        }
+        ASSERT_TRUE(have);                                                                  // (the ant stands within two tiles of the fog)
+        ASSERT_TRUE(kept_dx != fog_dx || kept_dy != fog_dy);                                // (the whole slide would draw it on covered ground: the model cuts it)
+        ASSERT_TRUE(place_camera(app, enemy.px, enemy.py, 0, 0));
+        int32_t sx = 0;
+        int32_t sy = 0;
+        ASSERT_TRUE(app.renderer().camera().world_to_screen(enemy.px, enemy.py, sx, sy));
+        const LayoutRect view = app.layout().view();
+        SDL_MouseMotionEvent motion{};
+        motion.type = SDL_MOUSEMOTION;
+        motion.x = view.x + 30;
+        motion.y = view.y + view.h - 30;
+        app.handle_mouse_motion(motion);                                                   // (the pointer far from the ant)
+        // the frame, with a slide of the enemy ant: the ant and two tiles around it on every side
+        const auto frame_with = [&](int32_t dx, int32_t dy) {
+            app.renderer().view_glide().clear();
+            if (dx != 0 || dy != 0) app.renderer().view_glide().add(enemy.id, dx, dy);
+            app.render_frame();
+            return canvas_region(app, sx - 96, sy - 96, 192, 192);
+        };
+        const auto fog_spot = [&]() { return canvas_region(app, sx + fog_dx - 12, sy + fog_dy - 20, 24, 24); };      // (where the whole slide would draw the ant: its body stands above its position)
+        const std::vector<uint8_t> plain = frame_with(0, 0);
+        const std::vector<uint8_t> plain_spot = fog_spot();
+        ASSERT_FALSE(plain.empty() || plain_spot.empty());
+        ASSERT_TRUE(frame_with(0, 0) == plain);                                             // (a frame drawn again is the same frame)
+        const std::vector<uint8_t> slid = frame_with(fog_dx, fog_dy);                       // the slide that began two tiles into the fog ...
+        ASSERT_TRUE(fog_spot() == plain_spot);                                              // ... draws nothing where the fog covers the ground
+        ASSERT_TRUE(slid == frame_with(kept_dx, kept_dy));                                  // ... and is the frame of the part that stays on explored ground (none of it: the plain frame)
+        if (kept_dx == 0 && kept_dy == 0) ASSERT_TRUE(slid == plain);
+        // the same slide of an own ant is drawn whole (the player sees his own ants wherever they are), and so is an enemy's slide over explored ground
+        const sim::AntSnapshot* own = ant_in(app.view_sim(), mine[0]);
+        ASSERT_TRUE(own != nullptr);
+        ViewGlide whole;
+        whole.add(own->id, fog_dx, fog_dy);
+        ASSERT_EQ(glided_ant(whole, world, 0, *own).px, own->px + fog_dx);
+        ASSERT_EQ(glided_ant(whole, world, 0, *own).py, own->py + fog_dy);
+        const int32_t back_tx = (enemy.px - fog_dx / 2) / 32;
+        const int32_t back_ty = (enemy.py - fog_dy / 2) / 32;
+        if (world.is_tile_revealed(back_tx, back_ty)) {                                     // (a tile towards the application's ant: explored)
+            const std::vector<uint8_t> back = frame_with(-fog_dx / 2, -fog_dy / 2);
+            ASSERT_TRUE(back != plain);                                                     // the ant is drawn a tile from where the engine has it
+            ViewGlide over;
+            over.add(enemy.id, -fog_dx / 2, -fog_dy / 2);
+            ASSERT_EQ(glided_ant(over, world, 0, enemy).px, enemy.px - fog_dx / 2);
+            ASSERT_EQ(glided_ant(over, world, 0, enemy).py, enemy.py - fog_dy / 2);
+        }
+        app.renderer().view_glide().clear();
+        duo.step(1500);
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());                        // (drawing only: the confirmed engines are the same)
+        ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
     } TEST_END();
 
     TEST_CASE("PA5 A Hidden Page Shows Nothing: The Prediction Is Suspended While It Is Hidden (The Wake-Ups Step The Match, No Picture Needs The Predicted Engine) And Begins Again, With The Next Tick, When The Page Is Shown") {

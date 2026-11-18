@@ -278,6 +278,9 @@ bool Application::init(const ApplicationConfig& config) {
     hud_.set_on_play_sfx([this](uint32_t sound_id) { play_ui_sound(sound_id); });
     hud_.set_news_note([this](const sim::NewsEvent& event) { return declined_team_up_note(event); });     // (a computer player that declines to team up says why)
 
+    hud_.set_draw_offset([this](const sim::WorldState& world, uint8_t team, const sim::AntSnapshot& ant, int32_t& dx, int32_t& dy) {      // (the pointer picks a sliding ant where the frame draws it: view_glide.hpp)
+        return renderer_ != nullptr && glide_offset(renderer_->view_glide(), world, team, ant, dx, dy);
+    });
     hud_.set_on_spawn_click_marker([this](int32_t wx, int32_t wy) {
         if (renderer_) {
             renderer_->spawn_transient_effect("xmarks", wx, wy);

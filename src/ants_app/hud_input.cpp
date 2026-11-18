@@ -76,19 +76,22 @@ bool HUD::homogeneous_type(const sim::WorldState& world, sim::AntType& type, boo
 // ------------------------------------------------------------------------------------------------
 
 const sim::AntSnapshot* HUD::pick_ant_at(const sim::WorldState& world, int32_t world_x, int32_t world_y) const {
-    const int32_t tx = world_x / 32;
-    const int32_t ty = world_y / 32;
     const sim::AntSnapshot* hit = nullptr;
     for (int32_t dy = -1; dy <= 1; ++dy) {
         for (int32_t dx = -1; dx <= 1; ++dx) {
             for (const auto& ant : world.ants) {
-                if (ant.tile_x != tx + dx || ant.tile_y != ty + dy) continue;     // the occupant registered on the scanned tile
+                int32_t off_x = 0;                                                   // (an ant that slides in the picture is picked where it is drawn: the pointer as that ant's own place sees it)
+                int32_t off_y = 0;
+                if (draw_offset_) draw_offset_(world, local_player_id_, ant, off_x, off_y);
+                const int32_t wx = world_x - off_x;
+                const int32_t wy = world_y - off_y;
+                if (ant.tile_x != wx / 32 + dx || ant.tile_y != wy / 32 + dy) continue;     // the occupant registered on the scanned tile
                 const bool combat = (ant.raw_type == sim::AntType::Combat);          // the ant's own type field (cmp word ptr [ecx + 0x54], 4 at 0x1026a3d), not the getter
                 const int32_t left = ant.px - (combat ? 32 : 20);
                 const int32_t right = ant.px + (combat ? 26 : 20);
                 const int32_t top = ant.py - (combat ? 46 : 32);
                 const int32_t bottom = ant.py + 16;
-                if (world_x >= left && world_x < right && world_y >= top && world_y < bottom) hit = &ant;
+                if (wx >= left && wx < right && wy >= top && wy < bottom) hit = &ant;
             }
         }
     }

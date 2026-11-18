@@ -116,13 +116,11 @@ void Prediction::set_expected_delay_ms(uint32_t ms) {
 
 uint32_t Prediction::learned_lag_ticks() const noexcept {
     const uint64_t c = confirmed_tick();
-    std::vector<uint32_t> fresh;
+    uint32_t lowest = 0;
     for (const auto& lag : lags_) {
-        if (c <= lag.second + cfg_.lag_fresh_ticks) fresh.push_back(lag.first);
+        if (c <= lag.second + cfg_.lag_fresh_ticks && (lowest == 0 || lag.first < lowest)) lowest = lag.first;
     }
-    if (fresh.empty()) return 0;
-    std::sort(fresh.begin(), fresh.end());
-    return fresh[fresh.size() / 2];                                  // (the middle one; the upper of the two in the middle when there is an even number)
+    return lowest;                                                    // (the shortest of them: see Config::learn_lead)
 }
 
 uint32_t Prediction::wanted_lead() const noexcept {
@@ -130,20 +128,22 @@ uint32_t Prediction::wanted_lead() const noexcept {
     return std::clamp<uint32_t>((learned != 0 ? learned : estimate_lag_) + cfg_.lead_bias_ticks, cfg_.min_lead_ticks, cfg_.max_lead_ticks);
 }
 
-// The lead rises at once and falls slowly: a lead that followed the phase of the server's seals (the delay of an order varies by one tick with the moment it was given) would move the whole
-// picture back and forth by a tick
+// The lead falls at once (a lead that is too long is the worse mistake: the order is sealed BEFORE the tick that the player aimed at) and rises at once by two ticks and more (the link has
+// changed); a rise of one tick waits until the delay has asked for it for lead_rise_after_ticks, so that the picture does not move back and forth by a tick with the phase of the host's seals
 void Prediction::update_lead() {
     target_lead_ = wanted_lead();
-    if (target_lead_ > lead_) {
+    if (target_lead_ < lead_ || target_lead_ > lead_ + 1u) {
+        if (target_lead_ != lead_) ++stats_.lead_changes;
         lead_ = target_lead_;
-        lead_low_ticks_ = 0;
-    } else if (target_lead_ < lead_) {
-        if (++lead_low_ticks_ >= cfg_.lead_fall_after_ticks) {
-            --lead_;
-            lead_low_ticks_ = 0;
+        lead_high_ticks_ = 0;
+    } else if (target_lead_ == lead_ + 1u) {
+        if (++lead_high_ticks_ >= cfg_.lead_rise_after_ticks) {
+            ++lead_;
+            ++stats_.lead_changes;
+            lead_high_ticks_ = 0;
         }
     } else {
-        lead_low_ticks_ = 0;
+        lead_high_ticks_ = 0;
     }
 }
 
@@ -172,7 +172,7 @@ void Prediction::begin(uint64_t c) {
     shifts_.clear();
     ++stats_.starts;
     lead_ = target_lead_;
-    lead_low_ticks_ = 0;
+    lead_high_ticks_ = 0;
     rebuild(c + lead_, true);
 }
 
@@ -332,8 +332,10 @@ void Prediction::rebuild(uint64_t target, bool is_start) {
             const uint32_t dy = static_cast<uint32_t>(std::abs(a.py - b.py));
             if (dx == 0 && dy == 0) continue;
             ++moved;
-            stats_.max_move_px = std::max(stats_.max_move_px, std::max(dx, dy));
-            stats_.move_px_total += std::max(dx, dy);
+            if (measure_corrections_) {
+                stats_.max_move_px = std::max(stats_.max_move_px, std::max(dx, dy));
+                stats_.move_px_total += std::max(dx, dy);
+            }
             if (cfg_.track_shifts) add_shift(a.id, b.px - a.px, b.py - a.py);
         }
         if (measure_corrections_) {
@@ -377,7 +379,7 @@ bool Prediction::submit(const sim::Command& command, sim::CommandResult& result)
     if (!running_) return false;
     result = pred_.apply_command(command);
     assumed_.back().push_back(command);
-    pending_.push_back(Pending{command, display_, confirmed_tick()});
+    pending_.push_back(Pending{command, display_, confirmed_tick(), display_});
     ++stats_.commands_predicted;
     return true;
 }
@@ -403,6 +405,7 @@ void Prediction::on_turn(const TurnMsg& turn) {
             while (lags_.size() > cfg_.lag_samples) lags_.pop_front();
         }
         if (pending_[i].tick != n) own_timing = true;                // sealed at another tick than the one at which the prediction applied it
+        ++(n == pending_[i].first_tick ? stats_.sealed_exact : n < pending_[i].first_tick ? stats_.sealed_early : stats_.sealed_late);
         if (i > 0) {                                                 // the orders before it were given earlier and have not been sealed: the host did not take them
             stats_.commands_lost += i;
             wrong = true;
@@ -420,10 +423,13 @@ void Prediction::on_turn(const TurnMsg& turn) {
         stale_foreign_ = stale_foreign_ || (foreign && !own_timing);
         stale_own_timing_ = stale_own_timing_ || own_timing;
     }
-    // The orders that this turn should have carried and did not are sealed later: they stand at the display tick, as if they had just been given (a correction that left them where they were
-    // would be repeated by every turn that comes: one rebuild a turn until they are sealed)
+    // The orders that this turn should have carried and did not are sealed later. The first time that happens to an order it is expected in the NEXT turn (an order is most often one tick
+    // off, by the phase of the host's seals: the lead is the shortest lag of the last orders); an order that the next turn does not carry either stands at the display tick, as if it had
+    // just been given (a correction that left it where it was would be repeated by every turn that comes: one rebuild a turn until it is sealed)
     for (Pending& p : pending_) {
-        if (p.tick <= n) p.tick = display_;
+        if (p.tick > n) continue;
+        p.tick = p.misses == 0 ? n + 1u : display_;                  // (a rebuild puts it no later than the display tick and never behind a turn in hand)
+        ++p.misses;
     }
 }
 

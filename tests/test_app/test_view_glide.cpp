@@ -3,6 +3,9 @@
 // ant which walks and is corrected never moves by more than its walk and the slide's share in a frame.
 #include "ants_app/view_glide.hpp"
 
+#include "ants_app/hud.hpp"
+#include "ants_sim/command.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -15,6 +18,24 @@
 #include "../common/test_assert.hpp"
 
 using ants::app::ViewGlide;
+
+namespace {
+
+// What the HUD sends, recorded and applied (a game of one machine)
+class RecordingSink final : public ants::sim::CommandSink {
+public:
+    explicit RecordingSink(ants::sim::SimulationEngine& sim) : sim_(sim) {}
+    ants::sim::CommandResult submit(const ants::sim::Command& c) override {
+        log.push_back(c);
+        return sim_.apply_command(c);
+    }
+    std::vector<ants::sim::Command> log;
+
+private:
+    ants::sim::SimulationEngine& sim_;
+};
+
+}  // namespace
 
 static int g_test_count = 0;
 static int g_test_failures = 0;
@@ -169,6 +190,77 @@ int main(int argc, char* argv[]) {
         world.fog_of_war_enabled = false;
         ASSERT_EQ(ants::app::glided_ant(far, world, 0, ant).px, ant.px - 64);              // (no fog: nothing is hidden)
         ASSERT_EQ(ants::app::glided_ant(far, world, 0, ant).id, 9u);
+    } TEST_END();
+
+    TEST_CASE("VG6 The Pointer Picks A Sliding Ant Where It Is Drawn: The Cursor Over The Drawn Enemy Ant Is The Attack Cursor And A Click There Orders An Attack On The Tile Where The ENGINE Has It; Where The Engine Has It, And The Picture Shows Nothing, A Click Is A Plain Move; The Rubber Band Takes An Own Ant Where It Is Drawn; Without A Slide Everything Is Where The Engine Has It") {
+        using namespace ants;
+        using namespace ants::app;
+        sim::SimulationEngine sim;
+        sim.init_test_world(60, 60, 1, 600000);
+        HUD hud;
+        hud.init(0);
+        hud.set_sim_query(&sim);
+        ViewportCamera cam;
+        cam.world_x = 400;
+        cam.world_y = 400;
+        RecordingSink sink(sim);
+        hud.set_command_sink(&sink);
+        ViewGlide glide;
+        hud.set_draw_offset([&glide](const sim::WorldState& world, uint8_t team, const sim::AntSnapshot& ant, int32_t& dx, int32_t& dy) { return glide_offset(glide, world, team, ant, dx, dy); });
+        const uint32_t mine = sim.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{18, 18});
+        const uint32_t foe = sim.spawn_unit(1, sim::AntType::Worker, sim::TileCoord{24, 20});
+        sim.tick();
+        const auto snap = [&](uint32_t id) {
+            for (const auto& a : sim.get_world_state().ants) {
+                if (a.id == id) return a;
+            }
+            return sim::AntSnapshot{};
+        };
+        const sim::AntSnapshot enemy = snap(foe);
+        ASSERT_TRUE(enemy.tile_x == 24 && enemy.tile_y == 20);
+        const auto sx = [&](int32_t wx) { return wx - cam.world_x + HUD::PLAYFIELD_X; };
+        const auto sy = [&](int32_t wy) { return wy - cam.world_y + HUD::PLAYFIELD_Y; };
+        const auto cursor = [&](int32_t wx, int32_t wy) { return hud.evaluate_cursor(sx(wx), sy(wy), sim.get_world_state(), sim.grid(), cam); };
+        const auto click = [&](int32_t wx, int32_t wy) {
+            hud.handle_mouse_down(sx(wx), sy(wy), SDL_BUTTON_LEFT, sim, cam, 0);
+            hud.handle_mouse_up(sx(wx), sy(wy), SDL_BUTTON_LEFT, sim, cam, 0);
+        };
+        hud.select_ant(mine);
+        // no slide: the enemy ant is picked where the engine has it
+        ASSERT_TRUE(cursor(enemy.px, enemy.py - 8) == CursorType::Attack);
+        ASSERT_TRUE(cursor(enemy.px + 48, enemy.py - 8) == CursorType::Move);
+        // it slides: the picture has it 48 px to the right of the engine's place (a tile and a half: outside the box of 20 px to each side)
+        glide.add(foe, 48, 0);
+        ASSERT_TRUE(cursor(enemy.px + 48, enemy.py - 8) == CursorType::Attack);              // the cursor over the drawn ant
+        ASSERT_TRUE(cursor(enemy.px, enemy.py - 8) == CursorType::Move);                     // ... and not where the engine has it
+        click(enemy.px + 48, enemy.py - 8);
+        ASSERT_EQ(sink.log.size(), 1u);
+        ASSERT_TRUE(sink.log[0].type == sim::CommandType::GroupAttack);
+        ASSERT_TRUE(sink.log[0].tile_x == 24 && sink.log[0].tile_y == 20);                   // the order names the tile where the engine has the ant, not the tile under the pointer
+        ASSERT_EQ(sim.get_unit(mine).orig_order, sim::AntUnit::kOrderAttack);
+        hud.select_ant(mine);
+        click(enemy.px, enemy.py - 8);                                                       // where the engine has it the picture shows open ground: a plain move
+        ASSERT_EQ(sink.log.size(), 2u);
+        ASSERT_TRUE(sink.log[1].type == sim::CommandType::GroupMove);
+        glide.advance(ViewGlide::kDurationMs / 2);                                           // half of the slide is over: the ant is drawn 24 px from the engine's place
+        ASSERT_TRUE(cursor(enemy.px + 24, enemy.py - 8) == CursorType::Attack);
+        ASSERT_TRUE(cursor(enemy.px + 48, enemy.py - 8) == CursorType::Move);
+        glide.advance(ViewGlide::kDurationMs);                                               // the slide is over
+        ASSERT_TRUE(cursor(enemy.px, enemy.py - 8) == CursorType::Attack);
+        // the rubber band takes an own ant where it is drawn
+        sim.stop_ant(mine);
+        for (int i = 0; i < 40; ++i) sim.tick();
+        const sim::AntSnapshot own = snap(mine);
+        glide.add(mine, 0, 60);
+        hud.clear_selection();
+        hud.select_ants_in_rect(own.px - 10, own.py + 60 - 20, own.px + 10, own.py + 60, sim.get_world_state(), false);        // a band around the drawn ant, below every part of the engine's box
+        ASSERT_TRUE(hud.is_ant_selected(mine));
+        hud.clear_selection();
+        hud.select_ants_in_rect(own.px - 10, own.py - 30, own.px + 10, own.py - 10, sim.get_world_state(), false);            // ... and one around the engine's place, which the picture shows empty
+        ASSERT_FALSE(hud.is_ant_selected(mine));
+        glide.clear();
+        hud.select_ants_in_rect(own.px - 10, own.py - 30, own.px + 10, own.py - 10, sim.get_world_state(), false);
+        ASSERT_TRUE(hud.is_ant_selected(mine));
     } TEST_END();
 
     std::cout << "\n=======================================================\n"
