@@ -23,7 +23,7 @@
 namespace ants::server {
 
 struct SubmissionApiConfig {
-    std::string gate_secret;                 // the key of the admin page's pass (ANTS_ADMIN_GATE_SECRET, the hub's own value): 32 to 256 printable characters. Absent or not of that shape: the admin page is closed (every /admin/api call is 403 closed)
+    std::string gate_secret;                 // the key of the admin page's pass (ANTS_ADMIN_GATE_SECRET, the one setting that the chat hub reads too): 32 to 256 printable characters. Absent or not of that shape: the admin page is closed (every /admin/api call is 403 closed)
     bool trust_client_header{true};          // take the client's address from X-Client-Address (the proxy sets it, and removes one the visitor sent); false: the address of the connection
     size_t attempts_per_hour{20};            // POST /submissions calls for one address and hour, whatever came of them (checking a map costs time)
     size_t checks_per_window{6};             // maps that are checked at the same time window for all addresses together

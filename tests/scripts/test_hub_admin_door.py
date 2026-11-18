@@ -1241,6 +1241,18 @@ class TheOneSecret(unittest.TestCase):
             cfg = self.load(**{self.NEW: bad, self.OLD: SECRET})
             self.assertEqual((cfg.admin_gate_on, cfg.admin_gate_secret), (False, ""), bad)
 
+    def test_a_key_under_the_old_name_is_held_to_the_same_shape_when_the_new_name_is_unset_empty_or_blank(self):
+        """The old name is another place to read the key from, not another rule: a short key, a key with a blank inside, one that is not printable and one of one repeated character leave the door shut."""
+        bad_keys = ("tiny-key", "k" * 40, "a b " * 20, "abcdefghijkl", "abcdefgh abcdefgh abcdefgh abcdefgh", "\x01\x02\x03\x04\x05\x06\x07\x08" * 5)
+        for bad in bad_keys:
+            for new in (None, "", "   "):
+                env = {self.OLD: bad}
+                if new is not None:
+                    env[self.NEW] = new
+                cfg = self.load(**env)
+                self.assertEqual((cfg.admin_gate_on, cfg.admin_gate_secret), (False, ""), (len(bad), new))
+                self.assertTrue(cfg.admin_gate_given, "a key that is there and is no good is said at the start (and one that is not there is said differently)")
+
     def test_the_sample_key_is_refused_under_either_name(self):
         for name in (self.NEW, self.OLD):
             cfg = self.load(**{name: SAMPLE_SECRET})

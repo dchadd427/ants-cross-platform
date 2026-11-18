@@ -703,6 +703,13 @@
    "old": "    gate = env.get(GATE_SETTING, \"\").strip() or env.get(GATE_SETTING_OLD, \"\").strip()",
    "new": "    gate = env.get(GATE_SETTING, \"\").strip() if GATE_SECRET.match(env.get(GATE_SETTING, \"\").strip()) else env.get(GATE_SETTING_OLD, \"\").strip()",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
+  },
+  {
+   "id": "a_key_under_the_old_name_is_not_held_to_the_shape",
+   "file": "hub/config.py",
+   "old": "    cfg.admin_gate_secret = gate if GATE_SECRET.match(gate) and",
+   "new": "    cfg.admin_gate_secret = gate if (not env.get(GATE_SETTING, \"\").strip() or GATE_SECRET.match(gate)) and",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_admin_door"
   }
  ]
 }
