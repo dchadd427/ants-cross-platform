@@ -205,6 +205,8 @@ struct Params {
     uint8_t seats{2};
     std::vector<ai::BotSpec> bots;
     bool use_peer{true};
+    uint8_t peers{1};                 // the other people (bare machines) when use_peer: seats 1 .. peers
+    sim::StartTeams teams;            // the room's teams (set: a pair of seats against the other two)
     bool render{false};               // every frame of the application is drawn too (the ants' glide is fed by the frame that draws)
     bool glide{true};                 // the prediction keeps the ants that its rebuilds move (the application draws them gliding)
     bool local{false};                // a game on this computer (no room, no links, no other person): the reference that the original's feel is measured against
@@ -240,6 +242,7 @@ public:
         spec.players = p_.seats;
         spec.fog = p_.fog;
         spec.bots = p_.bots;
+        spec.teams = p_.teams;
         spec.has_seed = true;
         spec.seed = 4242;
         spec.reconnect = true;
@@ -255,15 +258,20 @@ public:
         if (!app_->init(cfg)) throw std::runtime_error("the application could not start");
         if (!p_.glide) app_->net()->set_prediction_shifts(false);
         if (p_.use_peer) {
-            peer_ = std::make_unique<Peer>(maps_folder().string());
-            peer_->net.set_link_maker_for_test([this]() { return make_link(p_.peer_link); });
             run_ms(300);                                                              // (the application is in the room first: seat 0)
-            if (!peer_->net.join("127.0.0.1", 1, "Bob", 255, "LINK-1")) throw std::runtime_error("the peer cannot join");
+            for (uint8_t i = 0; i < std::max<uint8_t>(1, p_.peers); ++i) {
+                peers_.push_back(std::make_unique<Peer>(maps_folder().string()));
+                Peer& peer = *peers_.back();
+                peer.net.set_link_maker_for_test([this]() { return make_link(p_.peer_link); });
+                if (!peer.net.join("127.0.0.1", 1, "Bob", 255, "LINK-1")) throw std::runtime_error("the peer cannot join");
+                run_ms(300);                                                          // (seats are given in the order of the Hellos)
+            }
         }
     }
 
     Application& app() { return *app_; }
-    Peer& peer() { return *peer_; }
+    Peer& peer(size_t i = 0) { return *peers_.at(i); }
+    size_t peer_count() const noexcept { return peers_.size(); }
     uint32_t now() const noexcept { return now_; }
     server::RoomManager& manager() { return *mgr_; }
     net::LoopbackNetwork& network() { return net_; }
@@ -277,8 +285,8 @@ public:
             net_.set_time(now_);
             if ((now_ & 1u) == 0) mgr_->update(now_);
         }
-        if (peer_ && static_cast<double>(now_) >= peer_next_) {
-            peer_->frame(now_);
+        if (!peers_.empty() && static_cast<double>(now_) >= peer_next_) {
+            for (auto& peer : peers_) peer->frame(now_);
             peer_next_ += 1000.0 / p_.fps;
         }
         if (static_cast<double>(now_) >= app_next_) {
@@ -300,7 +308,9 @@ public:
     bool match_running() {
         if (p_.local) return app_->state() == AppState::Playing && app_->sim().current_tick() >= 40;
         if (app_->state() != AppState::Playing || app_->net() == nullptr || app_->net()->phase() != net::NetGame::Phase::Playing || app_->sim().current_tick() < 40) return false;
-        if (peer_ && (peer_->net.phase() != net::NetGame::Phase::Playing || peer_->ticks < 40)) return false;
+        for (const auto& peer : peers_) {
+            if (peer->net.phase() != net::NetGame::Phase::Playing || peer->ticks < 40) return false;
+        }
         return true;
     }
     bool begin() { return run_until([this]() { return match_running(); }, 40000); }
@@ -362,7 +372,7 @@ public:
         c.ants = ants;
         if (p_.local) app_->sim().apply_command(c);                                // (a game on this computer: the HUD's sink applies at once)
         else if (seat == 0) app_->net()->submit(c);
-        else if (peer_) peer_->net.submit(c);
+        else if (seat <= peers_.size()) peers_[seat - 1u]->net.submit(c);
     }
     // ---- the room ----------------------------------------------------------------------------------------------------------------
     bool room_status(server::RoomStatus& out) const { return mgr_->status("LINK-1", out, now_); }
@@ -384,7 +394,7 @@ public:
         q.type = sim::CommandType::Quit;
         q.issuer = seat;
         if (seat == 0) app_->net()->submit(q);
-        else if (peer_) peer_->net.submit(q);
+        else if (seat <= peers_.size()) peers_[seat - 1u]->net.submit(q);
     }
 
     // An ant stands still on `tile` in the confirmed engine and in the shown one
@@ -434,7 +444,7 @@ private:
     net::Connection* app_wire_{nullptr};
     std::unique_ptr<server::RoomManager> mgr_;
     std::unique_ptr<Application> app_;
-    std::unique_ptr<Peer> peer_;
+    std::vector<std::unique_ptr<Peer>> peers_;
 };
 
 }  // namespace shaped

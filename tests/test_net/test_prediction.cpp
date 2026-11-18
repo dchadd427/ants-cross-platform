@@ -209,6 +209,7 @@ struct View {
     std::vector<Command> applied;
     uint64_t hash{0};
     std::vector<uint8_t> fog;
+    std::vector<uint8_t> confirmed_fog;
 };
 
 class Rig {
@@ -291,7 +292,10 @@ public:
             v.applied = pred_->applied_at_display();
             const bool check_now = derived_every_ != 0 && step_ % derived_every_ == 0;
             v.hash = (sc_.oracle_hashes || check_now) ? e.state_hash().total : 0u;
-            if (sc_.fog) v.fog = e.get_world_state().fog_revealed;
+            if (sc_.fog) {
+                v.fog = e.get_world_state().fog_revealed;
+                v.confirmed_fog = confirmed_.get_world_state().fog_revealed;
+            }
             views.push_back(std::move(v));
             if (check_now) {
                 ++derived_checks;
@@ -328,7 +332,13 @@ public:
             if (v.display >= pre.size()) continue;
             ++checked;
             if (verified != nullptr) *verified = checked;
-            if (sc_.fog && v.fog != pre_fog[v.display]) return "step " + std::to_string(v.step) + ": the predicted engine at tick " + std::to_string(v.display) + " has explored ground that the oracle's has not (or the other way)";
+            if (sc_.fog) {                                                               // the picture's explored ground is the confirmed engine's, which never goes beyond the oracle's at the tick that is shown
+                const std::vector<uint8_t>& truth = pre_fog[v.display];
+                for (size_t i = 0; i < v.fog.size() && i < truth.size(); ++i) {
+                    if (v.fog[i] != 0 && truth[i] == 0) return "step " + std::to_string(v.step) + ": the predicted engine at tick " + std::to_string(v.display) + " has explored ground that the oracle's has not";
+                }
+                if (v.fog != v.confirmed_fog) return "step " + std::to_string(v.step) + ": the predicted engine's explored ground is not the confirmed engine's";
+            }
             if (v.applied.empty()) {
                 if (v.hash != pre[v.display]) return "step " + std::to_string(v.step) + ": the predicted engine at tick " + std::to_string(v.display) + " is not the oracle's";
             } else {
@@ -548,7 +558,7 @@ void run_exactness_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("RP2.5 Fog Of War: The Explored Ground That The Predicted Engine Shows Is The Oracle's At The Same Tick At Every Frame (The Hash Does Not Hold It): With A Buffer Deeper Than The Lead Whatever The Other Seats Order, And With The Right Lead For The Player's Own Orders: The Prediction Reveals Nothing That The Engine Would Not At That Tick, And Hides Nothing") {
+    TEST_CASE("RP2.5 Fog Of War: The Explored Ground That The Predicted Engine Shows Is The Confirmed Engine's At Every Frame And Never More Than The Oracle's At The Tick That Is Shown (The Hash Does Not Hold It), With A Buffer Deeper Than The Lead Whatever The Other Seats Order And With The Right Lead For The Player's Own Orders: The Prediction Explores Nothing That The Engine Would Not At That Tick") {
         for (const bool deep : {true, false}) {
             Scenario sc;
             sc.seed = deep ? 51u : 52u;

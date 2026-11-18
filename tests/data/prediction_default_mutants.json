@@ -176,6 +176,28 @@
       ],
       "test": "./build/tests/test_net/test_prediction",
       "expect": "RP3.5"
+    },
+    {
+      "id": "fog_not_adopted",
+      "file": "src/ants_net/prediction.cpp",
+      "old": "    pred_.tick();\n    pred_.adopt_explored_ground_of(*confirmed_);                      // (the picture explores what the confirmed engine has explored: prediction.hpp, \"Fog of war\")\n",
+      "new": "    pred_.tick();\n",
+      "build": [
+        "test_prediction_link"
+      ],
+      "test": "./build/tests/test_app/test_prediction_link",
+      "expect": "LK8"
+    },
+    {
+      "id": "fog_not_adopted_in_rebuild",
+      "file": "src/ants_net/prediction.cpp",
+      "old": "        pred_.tick();\n        pred_.adopt_explored_ground_of(*confirmed_);\n        capture_events(t, true);",
+      "new": "        pred_.tick();\n        capture_events(t, true);",
+      "build": [
+        "test_prediction"
+      ],
+      "test": "./build/tests/test_net/test_prediction",
+      "expect": "RP2.5"
     }
   ]
 }

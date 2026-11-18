@@ -11,6 +11,7 @@
 #include <SDL.h>
 
 #include "shaped_link_fixtures.hpp"
+#include "ants_app/health_changes.hpp"
 #include "ants_replay/player.hpp"
 #include "ants_replay/replay.hpp"
 #include "../common/test_assert.hpp"
@@ -103,7 +104,6 @@ struct Players {
     uint32_t rounds{0};
     bool person{true};
     bool peer{true};
-    std::vector<std::pair<int32_t, int32_t>> shown_corrections;      // (frame, largest px that an ant of the screen moved between two frames beyond its walk), for the glide checks
 
     explicit Players(Session& session) : s(session) {}
 
@@ -142,11 +142,14 @@ struct Players {
     }
 
     void peer_orders() {
-        const std::vector<uint32_t> theirs = Session::ants_of(s.app().sim(), 1);
-        if (theirs.empty()) return;
-        std::vector<uint32_t> pick;
-        for (size_t i = 0; i < theirs.size() && pick.size() < 3; ++i) pick.push_back(theirs[(i + s.rng()()) % theirs.size()]);
-        s.order(1, sim::CommandType::GroupMove, pick, 2 + static_cast<int32_t>(s.rng()() % 27u), 2 + static_cast<int32_t>(s.rng()() % 27u));
+        for (size_t k = 0; k < s.peer_count(); ++k) {
+            const uint8_t seat = static_cast<uint8_t>(k + 1);
+            const std::vector<uint32_t> theirs = Session::ants_of(s.app().sim(), seat);
+            if (theirs.empty()) continue;
+            std::vector<uint32_t> pick;
+            for (size_t i = 0; i < theirs.size() && pick.size() < 3; ++i) pick.push_back(theirs[(i + s.rng()()) % theirs.size()]);
+            s.order(seat, sim::CommandType::GroupMove, pick, 2 + static_cast<int32_t>(s.rng()() % 27u), 2 + static_cast<int32_t>(s.rng()() % 27u));
+        }
     }
 };
 
@@ -641,13 +644,14 @@ int main(int argc, char* argv[]) {
         players.play(12000);
         ASSERT_TRUE(s.app().net()->predicting());
         const uint64_t starts = s.app().net()->prediction()->stats().starts;
+        ASSERT_TRUE(s.app().net()->prediction()->pending_orders() <= 4u);
         s.cut_app_link();
         ASSERT_TRUE(s.run_until([&]() { return !s.app().net()->predicting(); }, 3000));
         ASSERT_TRUE(&s.app().view_sim() == &s.app().sim());                                  // (the screen shows the confirmed engine while the link is away)
         players.person = false;                                                              // (nobody clicks on a screen that says the link is lost)
         ASSERT_TRUE(s.run_until([&]() { return s.app().net()->phase() == net::NetGame::Phase::Playing && s.app().net()->predicting(); }, 30000));
-        ASSERT_TRUE(s.app().net()->prediction()->stats().starts >= 1u);
-        (void)starts;
+        ASSERT_EQ(s.app().net()->prediction()->stats().starts, starts + 1);                  // (a new beginning from the confirmed engine on the new link, not the old one resumed)
+        ASSERT_EQ(s.app().net()->prediction()->stats().commands_lost, 0u);
         players.person = true;
         players.play(10000);
         ASSERT_TRUE(s.app().net()->predicting());
@@ -680,7 +684,7 @@ int main(int argc, char* argv[]) {
                     s.app().renderer().view_glide().offset_of(a.id, gx, gy);
                     const std::pair<int32_t, int32_t> drawn{a.px + gx, a.py + gy};
                     const auto it = last.find(a.id);
-                    if (it != last.end() && a.state == sim::UnitState::Walking && a.id != 0) {
+                    if (it != last.end() && a.state == sim::UnitState::Walking) {
                         const int32_t jump = std::max(std::abs(drawn.first - it->second.first), std::abs(drawn.second - it->second.second));
                         if (jump > 20 && jump <= 64) {
                             ++jumps[glide ? 1 : 0];
@@ -699,6 +703,127 @@ int main(int argc, char* argv[]) {
         std::printf("\n    frames in which a walking ant of the picture moved by more than 20 px: %d without the slide, %d with it\n", jumps[0], jumps[1]);
         ASSERT_TRUE(jumps[0] > 3);
         ASSERT_EQ(jumps[1], 0);
+    } TEST_END();
+
+    TEST_CASE("LK8 Four People In Teams With Fog Of War (Seats 0 And 1 Against 2 And 3, Round Trips Of 120 And 50 ms): Everything The Picture Of The Application Explores Is Explored By The Confirmed Engine When It Gets To That Tick, The Orders Of Its Ally Are Corrections Like Any Other's, And The Match Ends In The Referee's State With A Recording That Plays To It") {
+        Params p;
+        p.map = "SHORT.LVL";
+        p.link.rtt_ms = 120;
+        p.link.jitter_ms = 30;
+        p.peer_link.rtt_ms = 50;
+        p.peer_link.jitter_ms = 10;
+        p.seats = 4;
+        p.peers = 3;
+        p.fog = true;
+        p.teams = sim::StartTeams{true, 0, 1};
+        p.render = true;
+        p.seed = 61;
+        Session s(p);
+        ASSERT_TRUE(s.begin());
+        std::map<uint64_t, std::vector<uint8_t>> shown;                                      // the ground that the picture had explored at each tick that it showed
+        std::map<uint64_t, std::vector<uint32_t>> shown_enemies;                              // the ants of other teams that the picture drew at each tick that it showed
+        int checked = 0;
+        int explored_by_picture_only = 0;
+        int enemies_drawn_early = 0;
+        s.on_frame_end = [&]() {
+            const sim::SimulationEngine& view = s.app().view_sim();
+            const uint64_t tick = view.current_tick();
+            if (shown.find(tick) == shown.end()) {
+                shown[tick] = view.get_world_state().fog_revealed;
+                std::vector<uint32_t>& ids = shown_enemies[tick];
+                for (const auto& a : view.get_world_state().ants) {
+                    if (a.player_id != 0 && ants::app::health::ant_drawn(view.get_world_state(), 0, a)) ids.push_back(a.id);
+                }
+            }
+            const uint64_t now_tick = s.app().sim().current_tick();
+            const auto it = shown.find(now_tick);                                              // the confirmed engine has got to a tick that the picture showed some frames ago
+            if (it == shown.end()) return;
+            const sim::WorldState& confirmed_world = s.app().sim().get_world_state();
+            const std::vector<uint8_t>& confirmed = confirmed_world.fog_revealed;
+            ++checked;
+            for (size_t i = 0; i < it->second.size() && i < confirmed.size(); ++i) {
+                if (it->second[i] != 0 && confirmed[i] == 0) ++explored_by_picture_only;
+            }
+            for (const uint32_t id : shown_enemies[now_tick]) {                                // an ant of another team that the picture drew: the engine draws it too, at that tick
+                const sim::AntSnapshot* truth = Session::ant_in(s.app().sim(), id);
+                if (truth != nullptr && !ants::app::health::ant_drawn(confirmed_world, 0, *truth)) ++enemies_drawn_early;
+            }
+            shown.erase(shown.begin(), std::next(it));
+            shown_enemies.erase(shown_enemies.begin(), shown_enemies.find(now_tick) == shown_enemies.end() ? shown_enemies.begin() : std::next(shown_enemies.find(now_tick)));
+        };
+        Players players(s);
+        players.play(25000);
+        ASSERT_TRUE(players.rounds > 10);
+        ASSERT_TRUE(checked > 300);
+        std::printf("\n    ground explored by the picture and not by the engine at that tick: %d tiles over %d frames; enemy ants drawn that the engine would not draw: %d\n", explored_by_picture_only, checked, enemies_drawn_early);
+        ASSERT_EQ(enemies_drawn_early, 0);
+        ASSERT_EQ(explored_by_picture_only, 0);                                                // (the picture never explored ground that the engine had not explored when it got to that tick)
+        ASSERT_TRUE(s.app().net()->predicting());
+        ASSERT_EQ(s.app().net()->prediction()->stats().commands_lost, 0u);
+        ASSERT_TRUE(s.run_until([&]() { return s.room_finished(); }, 90000));
+        s.run_ms(1500);
+        ASSERT_EQ(s.app().sim().state_hash().total, s.referee_hash());
+        for (size_t k = 0; k < s.peer_count(); ++k) ASSERT_TRUE(s.app().sim().state_hash() == s.peer(k).sim.state_hash());
+        ASSERT_FALSE(s.app().net()->desynced());
+        std::string why;
+        ASSERT_TRUE(recording_plays_to(s, why));
+    } TEST_END();
+
+    TEST_CASE("LK9 Soak (ANTS_LINK_SOAK=N sessions of a few minutes over links of every kind, with bots, teams and fog where they go together; skipped without it): The Confirmed Match Is The Referee's, The Recording Plays To It, Nothing Is Lost, The Prediction Never Gives Up, And A Rebuild Is Cheap") {
+        const char* soak = std::getenv("ANTS_LINK_SOAK");
+        if (soak == nullptr || std::atoi(soak) <= 0) return;
+        const int sessions = std::atoi(soak);
+        uint64_t worst_rebuild_ns = 0;
+        for (int n = 0; n < sessions; ++n) {
+            std::mt19937 pick(1000u + static_cast<uint32_t>(n));
+            Params p;
+            p.map = "SHORT.LVL";
+            const uint32_t rtts[6] = {20, 60, 100, 180, 250, 300};
+            p.link.rtt_ms = rtts[pick() % 6];
+            p.link.jitter_ms = pick() % 4 == 0 ? 0u : 10u + pick() % 50u;
+            if (pick() % 3 == 0) {
+                p.link.spike_ms = 120 + pick() % 200;
+                p.link.spike_per_mille = 3 + pick() % 12;
+            }
+            p.peer_link.rtt_ms = rtts[pick() % 6];
+            p.peer_link.jitter_ms = pick() % 40;
+            p.seed = 2000u + static_cast<uint32_t>(n);
+            const int kind = n % 3;                                                           // 0: two people; 1: one person and three bots; 2: four people, teams, fog
+            if (kind == 1) {
+                p.seats = 4;
+                p.use_peer = false;
+                for (uint8_t seat = 1; seat < 4; ++seat) {
+                    ai::BotSpec bot;
+                    bot.seat = seat;
+                    bot.level = seat == 1 ? ai::Level::Hard : ai::Level::Medium;
+                    p.bots.push_back(bot);
+                }
+            } else if (kind == 2) {
+                p.seats = 4;
+                p.peers = 3;
+                p.fog = true;
+                p.teams = sim::StartTeams{true, 0, 1};
+            }
+            Session s(p);
+            ASSERT_TRUE(s.begin());
+            Players players(s);
+            players.peer = kind != 1;
+            players.play(50000);
+            ASSERT_TRUE(s.app().net()->predicting() || s.app().net()->prediction_cooling_down() == false);
+            const net::Prediction::Stats st = s.app().net()->prediction()->stats();
+            ASSERT_EQ(st.commands_lost, 0u);
+            ASSERT_EQ(st.cooldowns, 0u);
+            worst_rebuild_ns = std::max(worst_rebuild_ns, st.rebuild_ns_max);
+            ASSERT_TRUE(s.run_until([&]() { return s.room_finished(); }, 120000));
+            s.run_ms(1500);
+            ASSERT_EQ(s.app().sim().state_hash().total, s.referee_hash());
+            ASSERT_FALSE(s.app().net()->desynced());
+            std::string why;
+            ASSERT_TRUE(recording_plays_to(s, why));
+            std::printf("\n    soak %d: kind %d, rtt %u jit %u spikes %u/%u: %llu orders, %llu rebuilds, longest %.2f ms", n, kind, p.link.rtt_ms, p.link.jitter_ms, p.link.spike_ms, p.link.spike_per_mille,
+                        static_cast<unsigned long long>(st.commands_predicted), static_cast<unsigned long long>(st.rebuilds), static_cast<double>(st.rebuild_ns_max) / 1.0e6);
+        }
+        std::printf("\n    soak: the longest rebuild of all %d sessions %.2f ms\n", sessions, static_cast<double>(worst_rebuild_ns) / 1.0e6);
     } TEST_END();
 
     std::cout << "\n=======================================================\n"

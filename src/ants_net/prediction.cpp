@@ -218,6 +218,7 @@ void Prediction::capture_events(uint64_t tick, bool replay) {
 
 void Prediction::advance_one() {
     pred_.tick();
+    pred_.adopt_explored_ground_of(*confirmed_);                      // (the picture explores what the confirmed engine has explored: prediction.hpp, "Fog of war")
     capture_events(display_, false);
     ++display_;
     apply_commands_for(display_);
@@ -293,6 +294,7 @@ void Prediction::rebuild(uint64_t target, bool is_start) {
             have_after = true;
         }
         pred_.tick();
+        pred_.adopt_explored_ground_of(*confirmed_);
         capture_events(t, true);
     }
     apply_commands_for(target);

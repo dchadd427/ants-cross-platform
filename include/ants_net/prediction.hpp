@@ -12,6 +12,10 @@
 //                          + the player's own orders that are not sealed yet, applied at the tick at which the prediction stands
 //                          advanced to the DISPLAY TICK = the confirmed tick + the lead (the delay of one's own orders, in ticks).
 //
+// FOG OF WAR. The explored ground is the player's own picture, and a guess of another player's order (an ally's walk that turns) would explore ground that the real engine never explores: so the
+// predicted engine takes the confirmed engine's explored ground after every tick (SimulationEngine::adopt_explored_ground_of), and the screen, the HUD's picks and the minimap, which ask the shown
+// engine what is explored, never show an ant of another team where the confirmed engine has not explored yet (the veil lifts as the confirmed engine's ants arrive, a few ticks after the shown ones).
+//
 // Other players' commands are not predicted (their ants go on with what the engine knows). Predicted: group moves, group special orders, group attacks and Stop. NOT predicted, because they
 // wait for the confirmation: Hatch (a new ant would need an id that only the confirmed stream gives), the alliance commands, Quit (and Drop, which only the sequencer makes).
 //
