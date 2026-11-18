@@ -1,0 +1,7 @@
+{
+  "note": "The front page chat's lines never overlap: the opt-in real-Chromium check tests/scripts/web_home_chat_lines_browser.py must fail each broken copy. Run by hand (needs a Chromium): python3 tools/mutate.py tests/data/home_chat_lines_mutants.json --keep-going --jobs 1",
+  "mutants": [
+   {"id": "lines_may_shrink", "file": "web/home/chat.css", "old": ".gc-log > * { flex-shrink: 0; }", "new": ".gc-log > * { }", "test": "python3 tests/scripts/web_home_chat_lines_browser.py --strict"},
+   {"id": "button_rule_matches_admin_lines", "file": "web/home/chat.css", "old": ".gc-adminpage { width: 100%; min-height: 46px; margin-top: 8px; }", "new": ".gc-adminpage, .gc-admin { width: 100%; min-height: 46px; margin-top: 8px; }", "test": "python3 tests/scripts/web_home_chat_lines_browser.py --strict"}
+  ]
+}
