@@ -102,7 +102,7 @@ public:
     watch::PeopleObserver seen;
 
     // The world must be built before start(): the controller analyses the map when it is made
-    void start(uint32_t seed, Style style, Level level = Level::Hard) {
+    void start(uint32_t seed, Style style, Level level = Level::Hard, bool hit_cadence = true) {
         sink_ = std::make_unique<RecordingSink>(sim, true);
         controller_ = std::make_unique<BotController>(sim, seed);
         BotSpec spec;
@@ -111,7 +111,10 @@ public:
         spec.level = level;
         spec.style = style;
         std::string why;
-        if (!controller_->add(spec, *sink_, why)) throw std::runtime_error("the bot was not seated: " + why);
+        // `hit_cadence` false: the plan without the hits without pauses (docs/BOT_FIGHT.md), drawn like the registry's bot (the style and the variations of the seat's own generator)
+        const bool seated = hit_cadence ? controller_->add(spec, *sink_, why)
+                                        : controller_->add(spec, std::make_unique<StandardBot>(level, style, [](LevelPlan& p) { without_hit_cadence(p); }), *sink_, why);
+        if (!seated) throw std::runtime_error("the bot was not seated: " + why);
     }
     // One tick: the engine, the bot's looks and the orders that leave, the observer, then the script's orders (they take effect in the next tick)
     void step(const std::function<void(uint64_t)>& script = {}) {
@@ -236,7 +239,8 @@ Verdict scene_lone_ant(Style style, bool combat_from_start) {
 
 // AI34.4: the bot's Bomber (empty, 6 hit points; three workers of the bot stand nearby: the last ants of a bot never fight, so a lone Bomber could not answer) is struck by an enemy worker that strikes again
 // at the first tick that 20 divides at which it is idle (a person orders a moment after the blow, and the engine takes no order for an ant that is engaged or in its hit clip, so a striker that orders on the very
-// tick leaves its victim no free tick at all). The Bomber must strike the worker itself within 200 ticks of the first blow on it
+// tick leaves its victim no free tick at all). The Bomber must strike the worker itself within 200 ticks of the first blow on it. That is a race with an attacker that clicks at once, which the Bomber wins
+// only when the blows of the workers break the worker's rhythm; the Hard bot of the hits without pauses locks the worker in with the workers' blows instead (AI55.9 plays it)
 Verdict scene_hurt_bomber(Style style) {
     Scene s;
     empty_field(s.sim, 344);
@@ -245,7 +249,7 @@ Verdict scene_hurt_bomber(Style style) {
     s.sim.get_unit(bomber).hp = 6;
     for (int i = 0; i < 3; ++i) s.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10 + i, 8});
     const uint32_t enemy = s.sim.spawn_unit(1, sim::AntType::Worker, TileCoord{21, 10});
-    s.start(344, style);
+    s.start(344, style, Level::Hard, false);                                                           // (the cadence of before the hits without pauses: AI55.9 has the shipped plan)
     for (uint64_t t = 0; t < kWarmUp + 400; ++t) {
         s.step([&](uint64_t now) {
             if (now >= kWarmUp && now % 20 == 0) strike_again(s, enemy, bomber);

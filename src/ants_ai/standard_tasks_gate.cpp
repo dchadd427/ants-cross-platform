@@ -1,4 +1,5 @@
 #include "ants_ai/standard_tasks.hpp"
+#include "ants_ai/standard_bot.hpp"
 #include "standard_tasks_shared.hpp"
 
 #include <algorithm>
@@ -232,7 +233,7 @@ void GateTask::step(TaskContext& c) {
                 pending_free_at_ = static_cast<int64_t>(now) + params_.clip_ticks + params_.exit_ticks;
             }
         }
-        if (a.holding && a.state != sim::UnitState::EnteringBase && a.tile != g.entrance && c.ledger.owner(a.id) != kHealTaskId && c.ledger.rank(c.ledger.owner(a.id)) < 6 && (!params_.cantgo_aware || c.map.reaches_hill(now_, a.tile, a.type))) carriers.push_back(&a);          // (a thief with loot banks at the entrance too; an ant that no walk joins to the hill is not ours to place)
+        if (a.holding && a.state != sim::UnitState::EnteringBase && a.tile != g.entrance && c.ledger.owner(a.id) != kHealTaskId && c.ledger.owner(a.id) != StandardBot::kIslands && c.ledger.rank(c.ledger.owner(a.id)) < 6 && (!params_.cantgo_aware || c.map.reaches_hill(now_, a.tile, a.type))) carriers.push_back(&a);          // (a thief with loot banks at the entrance too; an ant that no walk joins to the hill is not ours to place)
     }
     if (!ramp_standing) ramp_since_ = -1;
     else if (ramp_since_ < 0) ramp_since_ = static_cast<int64_t>(now);
@@ -609,6 +610,10 @@ void CarrierAidTask::step(TaskContext& c) {
         const bool carrying = a != nullptr && (a->holding || a->carried_points > 0);
         if (a == nullptr || !carrying || it->second.tries >= 4 || now > it->second.hit + 800 || c.ledger.owner(it->first) == kHealTaskId) {
             it = aid_.erase(it);                                                         // gone, delivered (or dropped its food), helped as often as it makes sense, or held by the healing task (its click is the same)
+            continue;
+        }
+        if (c.ledger.owner(it->first) == StandardBot::kIslands) {                        // held by the island task's guard (a bridge that goes is near): the guard decides whether and when it walks home, a click of ours would send it over the bridge
+            ++it;
             continue;
         }
         // the blow's stun lasts about 12 ticks; an ant that is idle after it has lost its walk

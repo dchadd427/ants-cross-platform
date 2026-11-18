@@ -114,7 +114,12 @@ private:
     void start_fights(TaskContext& context);
     void start_offence(TaskContext& context);
     void start_fire_defence(TaskContext& context);
-    void run_fight(TaskContext& context, Fight& fight, bool& end, std::vector<std::pair<sim::TileCoord, std::vector<uint32_t>>>& attacks);
+    struct Attack {                          // one attack click of a look: the ants, the tile of the target, whether it is a follow-up click (an ant that struck and is idle again)
+        sim::TileCoord tile{};
+        std::vector<uint32_t> ants;
+        bool follow_up{false};
+    };
+    void run_fight(TaskContext& context, Fight& fight, bool& end, std::vector<Attack>& attacks);
     /// (defence.cpp) the ants that join a fight that answers a blow; false: the force is weaker than the enemy's and the fight is called off (plan.defend_by_strength)
     bool take_defenders(TaskContext& context, Fight& fight, const AntView& target, size_t wanted, const Strength& theirs);
 

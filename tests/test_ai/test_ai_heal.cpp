@@ -961,7 +961,7 @@ void run_heal_tests() {
             sim::SimulationEngine sim;
             empty_field(sim, 372);
             sim.set_player_eggs(0, 5);
-            const uint32_t struck = hurt(sim, sim::AntType::Worker, 12, 3, 6);
+            const uint32_t struck = hurt(sim, sim::AntType::Worker, 12, 3, 5);                                 // (5 hit points: the Hard fight of the hits without pauses locks the enemy in within a few blows, so the ant starts nearer the edge to fall below 3; the task holds an ant of 4)
             for (int i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{14 + i, 4});
             const uint32_t enemy = foe(sim, 12, 1);
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(hard_plan()), 4, 4);

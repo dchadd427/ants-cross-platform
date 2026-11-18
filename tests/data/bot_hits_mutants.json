@@ -1,0 +1,308 @@
+{
+ "note": "Mutants of the hits without pauses (docs/BOT_FIGHT.md, 'Hits without pauses'): the controller's follow-up lane (its delay, its window, who may use it, the order of the older click, the start hold), the plan switches and the keys of bot_arena, the order during the target's hit clip (its distance and its switch), the refusals that no longer shun a target, and the marks of FightTask and BrawlTask against test_ai AI55. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_hits_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by the case named in expect. One more mutant is left out as equivalent: the lane's release time without the start hold clamp (a follow-up click needs an attack click that was released already, which was not before the hold, so the clamp can never be the larger number). Another is left out as equivalent in play: BrawlTask's mark without the 'no new ant in the pack' test (the controller's lane refuses a click of an ant that never struck, so a mark on such a click changes nothing but the mark). The last three pin the island interplay (AI55.11, four whole matches on ISLANDS; AI55.12 the aid).",
+ "baseline": [
+  {
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.' ./build/tests/test_ai/test_ai"
+  }
+ ],
+ "mutants": [
+  {
+   "id": "lane_waits_the_reaction_delay",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "uint64_t at = std::max<uint64_t>(tick + s.profile.follow_up_reaction, hold_end_);",
+   "new": "uint64_t at = std::max<uint64_t>(tick + s.profile.reaction_delay, hold_end_);",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.2' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.2"
+  },
+  {
+   "id": "lane_window_is_open_ended",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "if (it == s.last_attack.end() || tick > it->second + kFollowUpWindow) return false;",
+   "new": "if (it == s.last_attack.end() || (tick > it->second + kFollowUpWindow && false)) return false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.2' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.2"
+  },
+  {
+   "id": "lane_window_edge_is_exclusive",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "tick > it->second + kFollowUpWindow) return false;",
+   "new": "tick >= it->second + kFollowUpWindow) return false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.2' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.2"
+  },
+  {
+   "id": "lane_for_an_ant_that_never_struck",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "if (it == s.last_attack.end() || tick > it->second + kFollowUpWindow) return false;",
+   "new": "if (it != s.last_attack.end() && tick > it->second + kFollowUpWindow) return false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.2' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.2"
+  },
+  {
+   "id": "lane_for_a_move",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "in.command.type != sim::CommandType::GroupAttack || in.command.ants.empty()) return false;",
+   "new": "in.command.ants.empty()) return false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.2' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.2"
+  },
+  {
+   "id": "lane_for_a_profile_without_it",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "if (!in.follow_up || s.profile.follow_up_reaction == 0 ||",
+   "new": "if (!in.follow_up ||",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.2' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.2"
+  },
+  {
+   "id": "lane_ignores_the_mark",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "if (!in.follow_up || s.profile.follow_up_reaction == 0 ||",
+   "new": "if (s.profile.follow_up_reaction == 0 ||",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.2' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.2"
+  },
+  {
+   "id": "any_click_counts_as_a_blow",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "if (c.type == sim::CommandType::GroupAttack) {",
+   "new": "if (true) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.2' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.2"
+  },
+  {
+   "id": "window_pruned_too_early",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "if (it->second + kFollowUpWindow < tick) it = s.last_attack.erase(it);",
+   "new": "if (it->second + kFollowUpWindow / 2 < tick) it = s.last_attack.erase(it);",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.2' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.2"
+  },
+  {
+   "id": "lane_may_overtake_an_older_click",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "if (q.release == kNever || q.release <= at) continue;",
+   "new": "continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.3' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.3"
+  },
+  {
+   "id": "medium_has_the_lane",
+   "file": "src/ants_ai/bot.cpp",
+   "old": "p.reaction_delay = 24;",
+   "new": "p.reaction_delay = 24;\n            p.follow_up_reaction = 3;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.1' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.1"
+  },
+  {
+   "id": "hard_lane_is_three_ticks",
+   "file": "src/ants_ai/bot.cpp",
+   "old": "p.follow_up_reaction = 4;",
+   "new": "p.follow_up_reaction = 3;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.1' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.1"
+  },
+  {
+   "id": "attack_drops_the_mark",
+   "file": "src/ants_ai/bot.cpp",
+   "old": "intents_[i].follow_up = follow_up;",
+   "new": "intents_[i].follow_up = follow_up && false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.5' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.5"
+  },
+  {
+   "id": "hard_plan_without_the_clip_rule",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "p.hit_in_clip = true;",
+   "new": "p.hit_in_clip = false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.1' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.1"
+  },
+  {
+   "id": "hard_plan_without_the_follow_up",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "p.hit_follow_up = true;",
+   "new": "p.hit_follow_up = false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.1' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.1"
+  },
+  {
+   "id": "taking_the_rules_out_keeps_the_follow_up",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "p.hit_in_clip = p.hit_follow_up = false; }",
+   "new": "p.hit_in_clip = false; }",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.1' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.1"
+  },
+  {
+   "id": "tune_hit_one_sets_one_rule",
+   "file": "tools/bot_arena_tune.cpp",
+   "old": "else p.hit_in_clip = p.hit_follow_up = true;",
+   "new": "else p.hit_in_clip = true;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.1' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.1"
+  },
+  {
+   "id": "tune_hitclip_sets_the_other_rule",
+   "file": "tools/bot_arena_tune.cpp",
+   "old": "if (key == \"hitclip\") return flag(p.hit_in_clip);",
+   "new": "if (key == \"hitclip\") return flag(p.hit_follow_up);",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.1' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.1"
+  },
+  {
+   "id": "clip_order_never",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "!(plan.hit_in_clip && a->tile.chebyshev_dist(target->tile) >= kInClipDistance)",
+   "new": "!(false && a->tile.chebyshev_dist(target->tile) >= kInClipDistance)",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.4' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.4"
+  },
+  {
+   "id": "clip_order_whatever_the_plan_says",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "!(plan.hit_in_clip && a->tile.chebyshev_dist(target->tile) >= kInClipDistance)",
+   "new": "!(a->tile.chebyshev_dist(target->tile) >= kInClipDistance)",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.4' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.4"
+  },
+  {
+   "id": "clip_order_from_one_tile_too_far",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "constexpr int32_t kInClipDistance = 2;",
+   "new": "constexpr int32_t kInClipDistance = 3;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.4' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.4"
+  },
+  {
+   "id": "clip_order_from_next_to_the_target",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "constexpr int32_t kInClipDistance = 2;",
+   "new": "constexpr int32_t kInClipDistance = 1;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.4' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.4"
+  },
+  {
+   "id": "first_order_is_a_follow_up",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "(again && plan.hit_follow_up ? follow : list).push_back(d.first);",
+   "new": "(plan.hit_follow_up ? follow : list).push_back(d.first);",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.5' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.5"
+  },
+  {
+   "id": "fight_never_marks",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "(again && plan.hit_follow_up ? follow : list).push_back(d.first);",
+   "new": "list.push_back(d.first);",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.5' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.5"
+  },
+  {
+   "id": "fight_marks_without_the_switch",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "(again && plan.hit_follow_up ? follow : list).push_back(d.first);",
+   "new": "(again ? follow : list).push_back(d.first);",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.5' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.5"
+  },
+  {
+   "id": "brawl_never_marks",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "params_.follow_up && !joined && idle_member",
+   "new": "false",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.6' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.6"
+  },
+  {
+   "id": "brawl_marks_without_the_switch",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "params_.follow_up && !joined && idle_member",
+   "new": "!joined && idle_member",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.6' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.6"
+  },
+  {
+   "id": "brawl_parameter_ignores_the_plan",
+   "file": "include/ants_ai/standard_bot.hpp",
+   "old": "p.follow_up = plan.hit_follow_up;",
+   "new": "p.follow_up = false;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.6' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.6"
+  },
+  {
+   "id": "collision_ends_the_fight",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "if ((plan.hit_in_clip || plan.hit_follow_up) && (target->hp < d.second.target_hp",
+   "new": "if (false && (target->hp < d.second.target_hp",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.9' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.9"
+  },
+  {
+   "id": "refusal_outside_a_clip_is_not_shunned",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "(plan.hit_in_clip || plan.hit_follow_up) && (target->hp < d.second.target_hp || target->state == sim::UnitState::Flinch || target->state == sim::UnitState::Knockback)) {",
+   "new": "(plan.hit_in_clip || plan.hit_follow_up)) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.10' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.10"
+  },
+  {
+   "id": "bridge_home_walk_over_tiles_that_will_not_last",
+   "file": "src/ants_ai/island_bridge.cpp",
+   "old": "least < static_cast<int64_t>(MapInfo::walking_ticks(field.cost[static_cast<size_t>(at)])) + params_.evacuate_gap) continue;",
+   "new": "least < 0) continue;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.11' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.11"
+  },
+  {
+   "id": "gate_sends_the_carrier_the_guard_holds",
+   "file": "src/ants_ai/standard_tasks_gate.cpp",
+   "old": "c.ledger.owner(a.id) != StandardBot::kIslands && ",
+   "new": "",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.11' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.11"
+  },
+  {
+   "id": "aid_sends_the_carrier_the_guard_holds",
+   "file": "src/ants_ai/standard_tasks_gate.cpp",
+   "old": "if (c.ledger.owner(it->first) == StandardBot::kIslands) {",
+   "new": "if (false) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI55.12' ./build/tests/test_ai/test_ai",
+   "expect": "AI55.12"
+  }
+ ]
+}

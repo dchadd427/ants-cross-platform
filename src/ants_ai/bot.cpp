@@ -127,6 +127,7 @@ Profile profile_for(Level level) noexcept {
             p.reaction_delay = 8;
             p.rate_milli_cps = 3000;
             p.burst = 10;
+            p.follow_up_reaction = 4;              // 200 ms: the next click of a fight that is going on (the bot's own switch, LevelPlan::hit_follow_up, says whether it asks for it)
             break;
     }
     return p;
@@ -264,7 +265,11 @@ void Orders::alliance(sim::CommandType type, uint8_t other, Priority priority) {
 
 void Orders::move(const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority) { group(sim::CommandType::GroupMove, ants, tile, priority); }
 
-void Orders::attack(const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority) { group(sim::CommandType::GroupAttack, ants, tile, priority); }
+void Orders::attack(const std::vector<uint32_t>& ants, sim::TileCoord tile, Priority priority, bool follow_up) {
+    const size_t before = intents_.size();
+    group(sim::CommandType::GroupAttack, ants, tile, priority);
+    for (size_t i = before; i < intents_.size(); ++i) intents_[i].follow_up = follow_up;
+}
 
 void Orders::pick_up(uint32_t ant, sim::TileCoord tile, Priority priority) {
     group(sim::CommandType::GroupMove, std::vector<uint32_t>{ant}, tile, priority);
