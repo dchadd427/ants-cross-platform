@@ -50,7 +50,7 @@
    "id": "bot_stopped_match_still_counts",
    "file": "src/ants_server/room_manager_bots.cpp",
    "old": "if (kv.second->bots_only() && (state == RoomState::Waiting || state == RoomState::Loading || state == RoomState::Running)) ++n;",
-   "new": "if (kv.second->bots_only()) ++n;",
+   "new": "if (kv.second->bots_only() && (state == RoomState::Waiting || state == RoomState::Loading || state == RoomState::Running || state == RoomState::Failed)) ++n;",
    "build": "test_server",
    "test": "timeout 900 env ANTS_TEST_FILTER=S3.27 ./build/tests/test_server/test_server",
    "expect": "S3.270"
@@ -122,7 +122,7 @@
    "id": "stop_is_not_logged",
    "file": "src/ants_server/bot_matches.cpp",
    "old": "record(who, now_s, \"bot_stopped\", name, std::string());",
-   "new": "(void)name;",
+   "new": "(void)who;\n        (void)name;\n        (void)now_s;",
    "build": "test_server",
    "test": "timeout 900 env ANTS_TEST_FILTER=S3.27 ./build/tests/test_server/test_server",
    "expect": "S3.275"
