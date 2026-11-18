@@ -148,6 +148,62 @@ const RAW = {
     same('a map that the server serves in the library\'s ending again is found there, and remembered', [img.set, P.previewPath('Remembered Map.lvl')], [['/maps/previews/Remembered%20Map.png', '/maps/previews/Remembered%20Map.webp'], '/maps/previews/Remembered%20Map.webp']);
 }
 
+// ---- a test map's picture is drawn by the server after the map came: the address is asked again after a pause (five times) before the square is left plain ------------------------------------------------------
+{
+    const image = () => { const l = {}, set = []; return { set, get src() { return set[set.length - 1]; }, set src(v) { set.push(v); }, addEventListener(t, f) { (l[t] = l[t] || []).push(f); }, fire(t) { (l[t] || []).forEach((f) => f({})); } }; };
+    const realSetTimeout = globalThis.setTimeout;
+    let timers = [];
+    globalThis.setTimeout = (f, ms) => { timers.push({ f, ms }); return timers.length; };
+    try {
+        const TEST = '/maps/previews/Fight%20Island%20~test-0a1b2c3d';
+        let img = image(), gone = 0;
+        P.showPicture(img, TEST + '.png', () => gone++);
+        img.fire('error');
+        same('a test map\'s picture that does not answer is tried in the other ending first, as any picture is', [img.set, timers.length, gone], [[TEST + '.png', TEST + '.webp'], 0, 0]);
+        img.fire('error');
+        same('... then it is asked for again after a pause, and the page is not told yet', [timers.map((t) => t.ms), gone, img.set.length], [[1500], 0, 2]);
+        timers.shift().f();
+        same('the pause over, the address that was asked for first is asked for again (not the other ending: a test map has only the PNG)', img.set, [TEST + '.png', TEST + '.webp', TEST + '.png']);
+        for (let i = 1; i < 5; i++) { img.fire('error'); same('retry ' + i + ' waits longer, up to six seconds', timers.map((t) => t.ms), [[3000], [4500], [6000], [6000]][i - 1]); timers.shift().f(); }
+        same('five more requests for the same address, one request each time', img.set.length, 7);
+        img.fire('error');
+        same('after the fifth pause the page is told once, and nothing more is asked for or waited for', [gone, timers.length, img.set.length], [1, 0, 7]);
+        // the same image given another test map waits for that one from the start
+        gone = 0;
+        P.showPicture(img, '/maps/previews/Next%20One%20~test-00000003.png', () => gone++);
+        img.fire('error'); img.fire('error');
+        same('the image that is given another test map waits for it from the first pause, not from where the last one ended', [timers.map((t) => t.ms), gone], [[1500], 0]);
+
+        // a picture that comes after a pause is shown, and remembered under its own ending
+        img = image(); gone = 0; timers = [];
+        P.showPicture(img, '/maps/previews/Late%20One%20~test-00000001.png', () => gone++);
+        img.fire('error'); img.fire('error');
+        timers.shift().f();
+        img.fire('load');
+        same('a picture that comes at the second asking is remembered: the next time its name is asked for, it is the PNG', [P.previewPath('Late One ~test-00000001.lvl'), gone, timers.length], ['/maps/previews/Late%20One%20~test-00000001.png', 0, 0]);
+
+        // the image that is given another address while it waits is not touched by the old one's pause
+        img = image(); gone = 0; timers = [];
+        P.showPicture(img, '/maps/previews/Wait%20One%20~test-00000002.png', () => gone++);
+        img.fire('error'); img.fire('error');
+        P.showPicture(img, '/maps/previews/Other%20One.webp', () => gone++);
+        timers.shift().f();
+        same('a pause that ends after the image has another address does nothing', [img.set.length, img.set[img.set.length - 1], gone], [3, '/maps/previews/Other%20One.webp', 0]);
+
+        // a picture that is not a test map's is never waited for: one other ending, then the page is told
+        img = image(); gone = 0; timers = [];
+        P.showPicture(img, '/maps/previews/Approved%20Map.png', () => gone++);
+        img.fire('error'); img.fire('error');
+        same('an approved map\'s picture is not asked for again later (the server has drawn it by the time the map is listed)', [gone, timers.length, img.set.length], [1, 0, 2]);
+        img = image(); gone = 0;
+        P.showPicture(img, '/maps/previews/Looks%20Like~test-0a1b2c3d.png', () => gone++);
+        img.fire('error'); img.fire('error');
+        same('a name that only looks like a test map\'s (no space before the tilde) is not waited for', [gone, timers.length], [1, 0]);
+    } finally {
+        globalThis.setTimeout = realSetTimeout;
+    }
+}
+
 // ---- a small fake of the browser's DOM, enough for the picker ---------------------------------------------------------------------------------------------------------------------------------------
 class Node {
     constructor(doc, tag) { this.doc = doc; this.tagName = tag.toUpperCase(); this.attrs = {}; this.children = []; this.parentNode = null; this.className = ''; this.listeners = {}; this._text = ''; this.hidden = false; this.disabled = false; this.value = ''; this.offsetTop = 0; this.offsetLeft = 0; this.scrollTop = 0; this.isText = false; this.scrolled = 0; }

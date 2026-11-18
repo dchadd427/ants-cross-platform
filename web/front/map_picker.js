@@ -74,18 +74,26 @@
     }
     // The ONE way that a map's picture is put in an <img> (a card of the match history, the death map, Open games, the room's picture, the picker): the address is the list's (thumbFor) or the name's guess (previewPath), and an
     // address that does not answer is tried once in the other ending (an approved map's picture is a PNG, the library's a WebP) before gone(img) is called (the page's choice: take the image away, leave a dark square). An image
-    // may be given another address later (the same image); a picture that came is remembered for the next time that its name is asked for. Never more than two requests for an address.
+    // may be given another address later (the same image); a picture that came is remembered for the next time that its name is asked for. A test map's picture is drawn by the server after the map came, behind the ones that wait
+    // (docs/MAP_SUBMISSIONS.md "Pictures"): its address is asked again after a pause, five times, before the square is left plain. Never more than two requests at once for an address.
+    var TEST_PICTURE = /%20~test-[0-9a-f]{8}\.(?:png|webp)$/;
+    var RETRY_MS = [1500, 3000, 4500, 6000, 6000];
     function showPicture(img, url, gone) {
         var s = img._antsPic;
         if (!s) {
-            s = img._antsPic = { url: '', other: '', tried: false, gone: null };
-            img.addEventListener('load', function () { var m = ENDING.exec(s.tried ? s.other : s.url); if (m) noteAnswer(m[1], m[2]); });
+            s = img._antsPic = { url: '', other: '', now: '', tried: false, waits: 0, gone: null };
+            img.addEventListener('load', function () { var m = ENDING.exec(s.now); if (m) noteAnswer(m[1], m[2]); });
             img.addEventListener('error', function () {
-                if (!s.tried && s.other) { s.tried = true; img.src = s.other; return; }
+                if (!s.tried && s.other) { s.tried = true; s.now = s.other; img.src = s.other; return; }
+                if (s.waits < RETRY_MS.length && TEST_PICTURE.test(s.url)) {
+                    var at = s.url, wait = RETRY_MS[s.waits++];
+                    setTimeout(function () { if (img._antsPic === s && s.url === at) { s.now = at; img.src = at; } }, wait);
+                    return;
+                }
                 if (s.gone) s.gone(img);
             });
         }
-        s.url = url; s.other = otherPicture(url); s.tried = false; s.gone = typeof gone === 'function' ? gone : null;
+        s.url = url; s.now = url; s.other = otherPicture(url); s.tried = false; s.waits = 0; s.gone = typeof gone === 'function' ? gone : null;
         img.src = url;
     }
     // The picture of the map that a match record names, from the list that parseList made (null while not known): the list's own entry says what the server serves; a map not in the list has the address its name makes

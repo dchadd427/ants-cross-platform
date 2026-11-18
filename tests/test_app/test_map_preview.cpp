@@ -10,7 +10,9 @@
 //   5. the cache: one render per map (a map shown again is not drawn again; a map that is shown in another box is), the oldest of 24 are dropped;
 //   6. the fallback: a renderer that cannot draw offscreen, or fails, gets the minimap-color picture (exactly render_map_preview_in_box's) and ONE log line; a file that is not a map has no
 //      picture and no render is tried;
-//   7. the six shipped maps' previews pinned by digest with the software renderer (the digests are the same on the real Metal renderer: see the commit message).
+//   7. the six shipped maps' previews pinned by digest with the software renderer (the digests are the same on the real Metal renderer: see the commit message);
+//   8. the thumbnail (include/ants_app/map_thumbnail.hpp, what the server keeps of a player's map): the setup screen's own preview in the 300 x 300 box, centred on the box's floor, the minimap colors
+//      when the renderer cannot draw offscreen, nothing for a level without a grid.
 // Usage: test_map_preview [--print] [--time]   (--print writes the digest table for regeneration, never to silence a failure; --time prints the time per map). Exit code 0 when every check passes.
 #include <SDL.h>
 
@@ -31,6 +33,7 @@
 
 #include "ants_app/map_preview.hpp"
 #include "ants_app/map_select.hpp"
+#include "ants_app/map_thumbnail.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/screen_layout.hpp"
 #include "ants_app/setup_layout.hpp"
@@ -1273,6 +1276,85 @@ void test_shipped(const assets::AssetArchive& arc) {
 
 }  // namespace
 
+// =====================================================================================================================================================
+// 8. The thumbnail
+// =====================================================================================================================================================
+
+/// The pixel (x, y) of a thumbnail as three bytes
+std::array<uint8_t, 3> thumb_pixel(const MapThumbnail& t, int32_t x, int32_t y) {
+    const size_t at = (static_cast<size_t>(y) * static_cast<size_t>(t.width) + static_cast<size_t>(x)) * 3u;
+    return {t.rgb[at], t.rgb[at + 1], t.rgb[at + 2]};
+}
+
+/// Whether the thumbnail shows `p` (an RGBA picture) with its top left corner at (x0, y0) and the floor of the box everywhere else
+bool thumb_is_picture_on_floor(const MapThumbnail& t, const MapPreview& p, int32_t x0, int32_t y0) {
+    if (!t.valid() || !p.valid()) return false;
+    for (int32_t y = 0; y < t.height; ++y) {
+        for (int32_t x = 0; x < t.width; ++x) {
+            const bool inside = x >= x0 && y >= y0 && x < x0 + p.width && y < y0 + p.height;
+            const std::array<uint8_t, 3> want = inside ? std::array<uint8_t, 3>{p.rgba[(static_cast<size_t>(y - y0) * static_cast<size_t>(p.width) + static_cast<size_t>(x - x0)) * 4u],
+                                                                               p.rgba[(static_cast<size_t>(y - y0) * static_cast<size_t>(p.width) + static_cast<size_t>(x - x0)) * 4u + 1],
+                                                                               p.rgba[(static_cast<size_t>(y - y0) * static_cast<size_t>(p.width) + static_cast<size_t>(x - x0)) * 4u + 2]}
+                                                       : std::array<uint8_t, 3>{kMapThumbnailFloor[0], kMapThumbnailFloor[1], kMapThumbnailFloor[2]};
+            if (thumb_pixel(t, x, y) != want) return false;
+        }
+    }
+    return true;
+}
+
+void test_thumbnail(const assets::AssetArchive& arc) {
+    group("thumbnail", "the setup screen's preview in the 300 x 300 box on the box's floor; the minimap colors when the renderer cannot draw; nothing for a level without a grid");
+    check(kMapThumbnailSide == 300 && kMapThumbnailFloor[0] == 7 && kMapThumbnailFloor[1] == 11 && kMapThumbnailFloor[2] == 15, "the box is 300 pixels and its floor is the (7, 11, 15) that the library's pictures have round a map that is not square");
+    RendererRig rig(arc, 960, 540);
+    check(rig.ok, "the renderer is up");
+    if (!rig.ok) return;
+    // a square map: the thumbnail is the preview, pixel for pixel, with no floor to be seen
+    {
+        const assets::LevelData level = load_level("TINY");
+        const MapThumbnail t = make_map_thumbnail(rig.renderer, level, arc.get_palette());
+        const MapPreview p = render_map_preview_world(rig.renderer, level, 300);
+        check(t.valid() && t.engine && t.why.empty() && t.width == 300 && t.height == 300 && p.valid() && p.width == 300 && p.height == 300, "TINY: a valid 300 x 300 thumbnail drawn by the game's renderer");
+        check(thumb_is_picture_on_floor(t, p, 0, 0), "TINY: the thumbnail is the setup screen's preview of the map, pixel for pixel");
+        const MapThumbnail again = make_map_thumbnail(rig.renderer, level, arc.get_palette());
+        check(again.rgb == t.rgb, "TINY: drawn again, the same pixels");
+    }
+    // a map that is wider than tall is centred (SetupLayout::preview_picture: the rounding down), the bands are the floor; a tall one the same
+    {
+        const assets::LevelData wide = crop_level(load_level("GAUNTLET"), 60, 40);
+        const MapThumbnail t = make_map_thumbnail(rig.renderer, wide, arc.get_palette());
+        const MapPreview p = render_map_preview_world(rig.renderer, wide, 300);
+        const LayoutRect where = SetupLayout::of(SetupVariant::Single).preview_picture(p.width, p.height);
+        check(t.valid() && t.engine && p.width == 300 && p.height == 200 && where.x - SetupLayout::of(SetupVariant::Single).preview_area().x == 0 && where.y - SetupLayout::of(SetupVariant::Single).preview_area().y == 50, "60 x 40 cells: 300 x 200 in the middle of the box, 50 rows of floor above and below");
+        check(thumb_is_picture_on_floor(t, p, 0, 50), "60 x 40 cells: the preview at (0, 50), the floor elsewhere");
+        const assets::LevelData tall = crop_level(load_level("GAUNTLET"), 40, 60);
+        const MapThumbnail u = make_map_thumbnail(rig.renderer, tall, arc.get_palette());
+        const MapPreview q = render_map_preview_world(rig.renderer, tall, 300);
+        check(u.valid() && q.width == 200 && q.height == 300 && thumb_is_picture_on_floor(u, q, 50, 0), "40 x 60 cells: 200 x 300 at (50, 0), 50 columns of floor on each side");
+    }
+    // a renderer that cannot draw offscreen: what the setup screen shows then, the minimap colors, in the same place; the reason is kept
+    {
+        Stub none(Stub::World::None);
+        const assets::LevelData level = load_level("TINY");
+        const MapThumbnail t = make_map_thumbnail(none, level, arc.get_palette());
+        const MapPreview old_picture = render_map_preview_in_box(level, arc.get_palette(), 300);
+        check(t.valid() && !t.engine && !t.why.empty() && old_picture.valid() && old_picture.width == 279 && thumb_is_picture_on_floor(t, old_picture, 10, 10), "a renderer that cannot draw offscreen: the minimap-color picture (279 x 279) in the middle, with the reason");
+        Stub fail(Stub::World::Fail);
+        const MapThumbnail f = make_map_thumbnail(fail, level, arc.get_palette());
+        check(f.valid() && !f.engine && f.why == "the stub fails", "a renderer whose render fails: the same, with its reason");
+    }
+    // a level that no team can play still has a picture (the minimap colors, as the screen shows it); a level without a grid has none
+    {
+        assets::LevelData level = load_level("GAUNTLET");
+        for (assets::AnthillSpawn& s : level.anthill_spawns) {
+            if (s.team_id < 4) s.x = static_cast<uint16_t>(level.width() + 5);
+        }
+        const MapThumbnail t = make_map_thumbnail(rig.renderer, level, arc.get_palette());
+        check(t.valid() && !t.engine && t.why.find("no team") != std::string::npos, "a level that no team can play: the minimap colors, and the reason \"" + t.why + "\"");
+        const MapThumbnail empty = make_map_thumbnail(rig.renderer, assets::LevelData{}, arc.get_palette());
+        check(!empty.valid() && empty.width == 0 && empty.height == 0 && empty.rgb.empty(), "a level with no cells: no thumbnail");
+    }
+}
+
 int main(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--print") == 0) g_print = true;
@@ -1291,6 +1373,7 @@ int main(int argc, char* argv[]) {
     test_cache(archive);
     test_fallback(archive);
     test_shipped(archive);
+    test_thumbnail(archive);
     std::printf("\nmap preview: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

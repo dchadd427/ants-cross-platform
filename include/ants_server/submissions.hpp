@@ -106,8 +106,11 @@ public:
     bool put_back(const std::string& id, const std::string& actor_id, const std::string& actor_name, int64_t now, Submission& out, Failure& why);
     /// The next free name for `name` ("Treasure" -> "Treasure 2", or "Treasure 3" when that is taken); false when the name is no map name
     bool next_name(const std::string& name, std::string& out, Failure& why);
-    /// The PNG of a kept map (empty when the file is gone)
+    /// The picture of a kept map: the PNG that ants_thumb made of its file (map_pictures.hpp); empty when it is not made yet (it is asked for) or the file is gone, and without a maker of pictures
     std::string preview_png(const std::string& id);
+    /// The maker of the pictures (not owned; nullptr: none). A map gets its picture asked for when it is sent and when it is approved; want_pictures() asks for those of every kept map that waits or is approved (the start of the server)
+    void set_pictures(MapPictures* pictures) noexcept { pictures_ = pictures; }
+    void want_pictures();
 
     /// The approved maps, for the lobby's list (taken down ones are not in it)
     std::vector<ApprovedMap> approved_maps();
@@ -150,6 +153,7 @@ private:
     std::map<std::string, CachedHash> hash_cache_;        // file path -> its hash (approved_maps)
     bool open_{false};
     bool approved_changed_{true};
+    MapPictures* pictures_{nullptr};
 };
 
 /// The maker's view of a submission, and the admin page's, as JSON (docs/MAP_SUBMISSIONS.md has the members)
