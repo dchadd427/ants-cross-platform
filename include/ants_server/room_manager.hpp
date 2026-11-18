@@ -30,6 +30,7 @@
 #include <map>
 #include <memory>
 #include <random>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -215,7 +216,7 @@ public:
     void enable_bot_matches(uint32_t every_minutes, uint32_t now_ms, uint32_t first_after_ms = 60u * 1000u, uint32_t seed = 0);
     bool bot_matches_enabled() const noexcept { return bot_every_ms_ != 0; }
     /// One match of computer players now (what the timer does): the room's code when it was made, else the reason in `why`. `mode`, when given, gets the rules that the match was dealt (sim::GameMode as a byte): each match
-    /// draws them by a fair coin of its own, the original's highest score or 187, with no memory of the matches before it
+    /// draws them by a fair coin of its own, the original's highest score or 187, with no memory of the matches before it, and then a map of that rules' list (docs/SERVER.md "Matches of computer players")
     bool start_bot_match(uint32_t now_ms, std::string& code, std::string& why, uint8_t* mode = nullptr);
     /// Lines for the server's log about the restart records (a record that was written no more, a room that was restored or not), the replays (files purged, a match that was not kept) and the seats that a room dropped
     /// for a state that differed from the referee's: once each, never a key
@@ -300,6 +301,8 @@ private:
     /// "" when the map of the head is on this server, is the file that the match was played on and can be played by its seats (entry and level are made); else the refusal
     std::string map_refusal(const RestartHead& head, MapEntry& entry, assets::LevelData& level) const;
     void refuse_record(const std::string& path, const RestartHead& head, RestoreItem item, const std::string& refusal, bool has_place, uint32_t now_ms);
+    /// "" when a room can play this map of a list of the server's own matches now (`approved`: it must be one of the approved maps of the players), else why not; `minutes` gets the map's own time limit
+    std::string bot_match_map_refusal(const std::string& file, bool approved, uint32_t& minutes) const;
     void restore_step(uint32_t now_ms);
     size_t next_to_restore() const;
     JobEnd advance(Restoring& job, uint32_t slice_ms, const std::function<uint32_t()>& clock, uint32_t now_ms);
@@ -363,6 +366,7 @@ private:
     uint32_t next_bot_match_ms_{0};
     std::mt19937 bot_rng_;
     std::vector<std::string> bot_notes_;         // what the timer did, for the log (take_notices)
+    std::set<std::string> bot_maps_skipped_;     // the maps of the lists that the last match found that a room cannot play (each is named in the log once, not at every match)
     std::vector<std::string> room_notes_;        // what the rooms said (Room::take_notes), for the log (take_notices)
 };
 

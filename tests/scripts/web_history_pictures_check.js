@@ -68,8 +68,10 @@ const attach = (r, tv) => { r.body.appendChild(tv); return tv; };
         const i = img(a);
         i.fire('error');
         same('an address that does not answer is asked in the other ending, once, in the same image (an approved map\'s picture is a PNG)', [a.children.length, img(a) === i, i.src], [1, true, '/maps/previews/Some%20Map.png']);
-        i.fire('error');
-        same('a picture that fails in both endings leaves the dark square and no image', [a.children.length, a.children[0].tag, a.children[0].className], [1, 'div', 'blank']);
+        // (the picker asks a picture of a map of the players again after a pause before it gives it up: the pauses are kept here and run by hand, each followed by the error of a picture that is still not there)
+        const giveUp = (image) => { const real = globalThis.setTimeout, timers = []; globalThis.setTimeout = (f) => { timers.push(f); return timers.length; }; try { image.fire('error'); const waiting = timers.length; for (let i = 0; i < 6 && timers.length; i++) { timers.shift()(); image.fire('error'); } return waiting; } finally { globalThis.setTimeout = real; } };
+        giveUp(i);
+        same('a picture that fails in both endings (and the pauses that the picker waits for the server to draw it) leaves the dark square and no image', [a.children.length, a.children[0].tag, a.children[0].className], [1, 'div', 'blank']);
     }
     {   // an approved map of the players (no library picture, a PNG of the server's own): the name's guess is the library's, the 404 is answered with the other ending, and the list that comes late has the last word
         const list = { format: 2, maps: [{ file: 'Fight Island.lvl', kind: 'extended', thumb: '/maps/previews/Fight%20Island.png' }, { file: 'Wide Open.lvl', thumb: '/maps/previews/Wide%20Open.png' }] };

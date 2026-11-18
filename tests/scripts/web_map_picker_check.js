@@ -100,6 +100,12 @@ const RAW = {
 
 // ---- the one way that a map's picture is put in an image: the address from the list or the name, the other ending tried once, a picture that came remembered ---------------------------------------------------
 {
+    // (the pauses of the retries are the page's timers: here they are kept and run by hand, `drain` runs them all, each followed by the error that a picture that is still not there gives)
+    const realSetTimeout = globalThis.setTimeout;
+    let timers = [];
+    globalThis.setTimeout = (f, ms) => { timers.push({ f, ms }); return timers.length; };
+    const drain = (img) => { let n = 0; while (timers.length && n++ < 50) { timers.shift().f(); img.fire('error'); } };
+    try {
     // (an image as a browser has it for this: an address, and the words load and error that a page's listeners hear; every address that was set is kept)
     const image = () => { const l = {}, set = []; return { set, listeners: l, get src() { return set[set.length - 1]; }, set src(v) { set.push(v); }, addEventListener(t, f) { (l[t] = l[t] || []).push(f); }, fire(t) { (l[t] || []).slice().forEach((f) => f()); } }; };
     const TEST = 'Fight Island ~test-0a1b2c3d.lvl';
@@ -116,7 +122,9 @@ const RAW = {
     img.fire('error');
     same('an address that does not answer is tried in the other ending', [img.set, gone.length], [['/maps/previews/Shown%20One.webp', '/maps/previews/Shown%20One.png'], 0]);
     img.fire('error');
-    same('... and when that does not answer either, the page is told once (and nothing more is asked for)', [img.set.length, gone.length, gone[0] === img], [2, 1, true]);
+    same('... and when that does not answer either, the page is not told yet: the picture may not be drawn yet, and the PNG address is asked again after a pause', [img.set.length, gone.length, timers.map((t) => t.ms)], [2, 0, [1500]]);
+    drain(img);
+    same('... six pauses later, the page is told once (and nothing more is asked for: the first two requests and one for each pause)', [img.set.length, gone.length, gone[0] === img, timers.length], [8, 1, true, 0]);
     img = image(); gone = [];
     P.showPicture(img, '/front/preview_tiny.png', (i) => gone.push(i));
     img.fire('error');
@@ -124,13 +132,16 @@ const RAW = {
     img = image();
     P.showPicture(img, '/maps/previews/Quiet%20Map.webp');
     img.fire('error'); img.fire('error');
-    same('no page function: an address that never answers is still asked twice and no more, and nothing breaks', img.set, ['/maps/previews/Quiet%20Map.webp', '/maps/previews/Quiet%20Map.png']);
+    same('no page function: an address that never answers is asked in both endings and then waited for, and nothing breaks', img.set, ['/maps/previews/Quiet%20Map.webp', '/maps/previews/Quiet%20Map.png']);
+    drain(img);
+    same('... and when the pauses are over there is no page to tell, and nothing breaks', [img.set.length, timers.length], [8, 0]);
     img = image(); gone = [];
     P.showPicture(img, '/maps/previews/First.webp', (i) => gone.push('a'));
     img.fire('error');
     P.showPicture(img, '/maps/previews/Second.webp', (i) => gone.push('b'));
     img.fire('error'); img.fire('error');
-    same('the same image given another address starts again (one other ending for it, the new page function)', [img.set, gone], [['/maps/previews/First.webp', '/maps/previews/First.png', '/maps/previews/Second.webp', '/maps/previews/Second.png'], ['b']]);
+    drain(img);
+    same('the same image given another address starts again (one other ending for it, the new page function; the first address\'s own pause does not act on it)', [img.set.slice(0, 4), gone], [['/maps/previews/First.webp', '/maps/previews/First.png', '/maps/previews/Second.webp', '/maps/previews/Second.png'], ['b']]);
 
     // a picture that came is remembered for the next time its name is asked for: the ending that answered is asked first (the list that is drawn again makes no second 404); the list's own address still wins
     same('(before: the library\'s ending)', P.previewPath('Remembered Map.lvl'), '/maps/previews/Remembered%20Map.webp');
@@ -146,6 +157,86 @@ const RAW = {
     img.fire('error');
     img.fire('load');
     same('a map that the server serves in the library\'s ending again is found there, and remembered', [img.set, P.previewPath('Remembered Map.lvl')], [['/maps/previews/Remembered%20Map.png', '/maps/previews/Remembered%20Map.webp'], '/maps/previews/Remembered%20Map.webp']);
+    } finally {
+        globalThis.setTimeout = realSetTimeout;
+    }
+}
+
+// ---- a picture of a map of the players may not be drawn yet: the PNG address is asked again after a pause (six times in about 50 seconds) before the square is left plain -----------------------------------------
+{
+    const image = () => { const l = {}, set = []; return { set, get src() { return set[set.length - 1]; }, set src(v) { set.push(v); }, addEventListener(t, f) { (l[t] = l[t] || []).push(f); }, fire(t) { (l[t] || []).forEach((f) => f({})); } }; };
+    const realSetTimeout = globalThis.setTimeout;
+    let timers = [];
+    globalThis.setTimeout = (f, ms) => { timers.push({ f, ms }); return timers.length; };
+    const PAUSES = [1500, 3000, 5000, 8000, 12000, 20000];
+    try {
+        // a test map: the PNG, the other ending once, then the pauses
+        const TEST = '/maps/previews/Fight%20Island%20~test-0a1b2c3d';
+        let img = image(), gone = 0;
+        P.showPicture(img, TEST + '.png', () => gone++);
+        img.fire('error');
+        same('a test map\'s picture that does not answer is tried in the other ending first, as any picture is', [img.set, timers.length, gone], [[TEST + '.png', TEST + '.webp'], 0, 0]);
+        img.fire('error');
+        same('... then it is asked for again after a pause, and the page is not told yet', [timers.map((t) => t.ms), gone, img.set.length], [[1500], 0, 2]);
+        timers.shift().f();
+        same('the pause over, the PNG address is asked for again (not the other ending: that was tried)', img.set, [TEST + '.png', TEST + '.webp', TEST + '.png']);
+        for (let i = 1; i < PAUSES.length; i++) { img.fire('error'); same('pause ' + (i + 1) + ' of ' + PAUSES.length + ' is longer', timers.map((t) => t.ms), [PAUSES[i]]); timers.shift().f(); }
+        same('one request for each pause: two to begin with and six after', img.set.length, 8);
+        img.fire('error');
+        same('after the last pause the page is told once, and nothing more is asked for or waited for', [gone, timers.length, img.set.length], [1, 0, 8]);
+        same('the pauses add up to about 50 seconds', PAUSES.reduce((a, b) => a + b, 0), 49500);
+
+        // the same image given another picture waits for that one from the first pause
+        gone = 0;
+        P.showPicture(img, '/maps/previews/Next%20One%20~test-00000003.png', () => gone++);
+        img.fire('error'); img.fire('error');
+        same('the image that is given another picture waits for it from the first pause, not from where the last one ended', [timers.map((t) => t.ms), gone], [[1500], 0]);
+        timers = [];
+
+        // an approved map of the players: the list gives its PNG; the server draws it after it started (or after a change of the look draws every picture again), so it is waited for as a test map's is
+        img = image(); gone = 0; timers = [];
+        P.showPicture(img, '/maps/previews/Approved%20Map.png', () => gone++);
+        img.fire('error'); img.fire('error');
+        same('an approved map\'s picture that is not drawn yet is waited for too', [gone, timers.map((t) => t.ms)], [0, [1500]]);
+        timers.shift().f(); img.fire('error');
+        timers.shift().f();
+        img.fire('load');
+        same('... and when it comes it is shown (the page is never told) and remembered: the name asks for the PNG from then on', [gone, timers.length, P.previewPath('Approved Map.lvl'), img.set.length], [0, 0, '/maps/previews/Approved%20Map.png', 4]);
+
+        // a name that the list does not know yet is guessed in the library's ending: both endings fail, and the PNG is what is waited for
+        img = image(); gone = 0; timers = [];
+        P.showPicture(img, P.previewPath('Fresh Approved.lvl'), () => gone++);
+        img.fire('error'); img.fire('error');
+        timers.shift().f();
+        same('a guessed address (the library\'s ending) that does not answer: the other ending once, then the PNG is asked for again, never the library\'s ending', [img.set, gone], [['/maps/previews/Fresh%20Approved.webp', '/maps/previews/Fresh%20Approved.png', '/maps/previews/Fresh%20Approved.png'], 0]);
+
+        // a picture that has run out of tries is not waited for again at once: a page that draws its list again does not start the pauses again
+        img = image(); gone = 0; timers = [];
+        P.showPicture(img, '/maps/previews/Gone%20Map.png', () => gone++);
+        img.fire('error'); img.fire('error');
+        for (let i = 0; i < PAUSES.length; i++) { timers.shift().f(); img.fire('error'); }
+        same('(a picture that never comes: the page is told after the pauses)', gone, 1);
+        const again = image(); let goneAgain = 0;
+        P.showPicture(again, '/maps/previews/Gone%20Map.png', () => goneAgain++);
+        again.fire('error'); again.fire('error');
+        same('shown again soon, it is tried in both endings and the page is told at once (no pauses)', [again.set.length, timers.length, goneAgain], [2, 0, 1]);
+
+        // what is not a map of the players is not waited for: an original's own picture is shipped with the page
+        img = image(); gone = 0; timers = [];
+        P.showPicture(img, '/front/preview_tiny.png', () => gone++);
+        img.fire('error');
+        same('an original\'s own picture is not asked for again (the page ships it)', [gone, timers.length, img.set.length], [1, 0, 1]);
+
+        // the image that is given another address while it waits is not touched by the old one's pause
+        img = image(); gone = 0; timers = [];
+        P.showPicture(img, '/maps/previews/Wait%20One%20~test-00000002.png', () => gone++);
+        img.fire('error'); img.fire('error');
+        P.showPicture(img, '/maps/previews/Other%20One.webp', () => gone++);
+        timers.shift().f();
+        same('a pause that ends after the image has another address does nothing', [img.set.length, img.set[img.set.length - 1], gone], [3, '/maps/previews/Other%20One.webp', 0]);
+    } finally {
+        globalThis.setTimeout = realSetTimeout;
+    }
 }
 
 // ---- a small fake of the browser's DOM, enough for the picker ---------------------------------------------------------------------------------------------------------------------------------------

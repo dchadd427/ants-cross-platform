@@ -195,7 +195,7 @@ The abilities, by the type of the single ant (the original's, [`GAME_REVERSE_ENG
 
 ### Pointer & Commands
 
-The cursor mode decides what a click does, exactly as in the original ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 5.44):
+The cursor mode decides what a click does, exactly as in the original ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 5.44; the pointers' pictures follow the [HUD art](VIEW_AND_HUD.md#hud-art) setting, with the same click points):
 
 - Over an ant, the ant is picked with the original's sprite boxes (a 3 x 3 tile scan, the last box wins, no filters).
 - Other players' ants, allies too, give the attack cursor (an ant that stands on a hill tile gives the move cursor instead); food gives the food cursor; your own hill and the fog give the move cursor.

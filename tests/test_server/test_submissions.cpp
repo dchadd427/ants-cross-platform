@@ -14,6 +14,7 @@
 #include "ants_assets/lvl_writer.hpp"
 #include "ants_server/crypto.hpp"
 #include "ants_server/map_names.hpp"
+#include "ants_server/map_pictures.hpp"
 #include "ants_server/submissions.hpp"
 #include "big_map_fixtures.hpp"
 #include "history_fixtures.hpp"
@@ -21,6 +22,7 @@
 static int g_test_count = 0;
 static int g_test_failures = 0;
 static int g_assert_count = 0;
+static std::string g_program;          // this program: a file that can be run, which the picture maker of the cases is pointed at (it is never started here)
 
 inline void run_test_case(const std::string& name, const std::function<void()>& fn) {
     if (const char* filter = std::getenv("ANTS_TEST_FILTER")) {         // (run_tests.sh clears it; a mutation run sets it)
@@ -130,6 +132,21 @@ struct Sub {
         if (!store->open(now, why)) std::cout << "(open failed: " << why << ") ";
     }
 
+    // A picture maker that is on (a program and an archive that exist) and is never run: what the store asks for stays in its queue. Only the store's own asking is looked at here (test_map_pictures.cpp runs the maker).
+    std::unique_ptr<MapPictures> pictures;
+    MapPictures& attach_pictures() {
+        MapPicturesConfig pc;
+        pc.dir = (dir.path / "pictures").string();
+        pc.program = g_program;
+        pc.archive = (dir.path / "archive.chd").string();
+        std::ofstream(pc.archive) << "x";
+        pictures = std::make_unique<MapPictures>(pc);
+        std::string why;
+        pictures->open(why);
+        store->set_pictures(pictures.get());
+        return *pictures;
+    }
+
     SubmitInput input(const std::string& bytes, const std::string& name = "River Run", const std::string& address = "203.0.113.5", const std::string& token = "") {
         SubmitInput in;
         in.kind = "classic";
@@ -168,7 +185,10 @@ struct Sub {
 
 }  // namespace
 
-int main() {
+int main(int argc, char* argv[]) {
+    (void)argc;
+    std::error_code program_error;
+    g_program = fs::absolute(argv[0], program_error).string();
     std::cout << "=======================================================\n MAP SUBMISSIONS: THE STORE\n=======================================================\n";
     if (tiny().empty()) {
         std::cout << "the map TINY.LVL is not there\n";
@@ -224,7 +244,6 @@ int main() {
         std::cout << "(" << ms << " ms) " << std::flush;
         ASSERT_TRUE(o.ok && o.submission.kind == "extended" && o.submission.width == 512 && o.submission.height == 512);
         ASSERT_EQ(o.submission.size, static_cast<int64_t>(big.size()));
-        ASSERT_TRUE(!rig.store->preview_png(o.submission.id).empty());                        // (a picture of the whole map, sampled to 128 pixels)
         const std::string too_many = enlarged_extended(600, 600, assets::LevelLimits::format_ceiling());       // (360,000 cells: more than the place's 262,144)
         ASSERT_TRUE(!too_many.empty() && too_many.size() > SubmissionStore::max_upload_bytes("classic"));
         in.bytes = too_many;
@@ -743,34 +762,61 @@ int main() {
         ASSERT_FALSE(rig.store->take_notices().empty());
     } TEST_END();
 
-    TEST_CASE("SUB6.1 The picture is a real PNG (signature, chunk checks, size) and the owner's picture of a map that is gone is empty") {
+    TEST_CASE("SUB6.1 The picture of a map is the one that the picture maker made of its file: asked for when the map is sent and when it is approved, none until it is made, none of a declined map or of an id that is not one, none without a maker") {
         Sub rig;
-        const SubmitOutcome o = rig.send("Picture Map");
-        const std::string png = rig.store->preview_png(o.submission.id);
-        ASSERT_TRUE(png.size() > 100 && png.compare(0, 8, "\x89PNG\r\n\x1a\n") == 0);
-        ASSERT_TRUE(png.find("IHDR") == 12 && png.find("PLTE") != std::string::npos && png.find("IDAT") != std::string::npos && png.compare(png.size() - 8, 4, "IEND") == 0);
-        ASSERT_EQ(static_cast<unsigned char>(png[19]), 124);                             // 31 cells, enlarged four times: 124 pixels
-        // every chunk's CRC is right (read the chunks back)
-        size_t pos = 8;
-        const auto be32 = [&](size_t at) { return (uint32_t{static_cast<unsigned char>(png[at])} << 24) | (uint32_t{static_cast<unsigned char>(png[at + 1])} << 16) | (uint32_t{static_cast<unsigned char>(png[at + 2])} << 8) | uint32_t{static_cast<unsigned char>(png[at + 3])}; };
-        int chunks = 0;
-        while (pos + 12 <= png.size()) {
-            const uint32_t length = be32(pos);
-            ASSERT_TRUE(pos + 12 + length <= png.size());
-            uint32_t crc = 0xFFFFFFFFu;
-            for (size_t i = pos + 4; i < pos + 8 + length; ++i) {
-                crc ^= static_cast<unsigned char>(png[i]);
-                for (int k = 0; k < 8; ++k) crc = (crc & 1u) ? 0xEDB88320u ^ (crc >> 1) : crc >> 1;
-            }
-            ASSERT_EQ(~crc, be32(pos + 8 + length));
-            pos += 12 + length;
-            ++chunks;
-        }
-        ASSERT_TRUE(chunks == 4 && pos == png.size());
+        const SubmitOutcome without = rig.send("No Maker", "203.0.113.4");
+        ASSERT_TRUE(rig.store->preview_png(without.submission.id).empty());              // (the server has no maker of pictures: the page shows its empty square)
+#if !defined(_WIN32)
+        const SubmitOutcome later = rig.send("Asked At Approval", "203.0.113.5");        // (sent before there was a maker: asked for when it is approved)
+        MapPictures& pictures = rig.attach_pictures();
+        const SubmitOutcome o = rig.send("Picture Map", "203.0.113.6");
+        ASSERT_EQ(pictures.queued(), size_t{1});                                         // (asked for when it was sent: the picture's name is the id of the file)
+        ASSERT_TRUE(rig.store->preview_png(o.submission.id).empty());                    // (not made yet; asked for again, but only once)
+        ASSERT_EQ(pictures.queued(), size_t{1});
+        ASSERT_TRUE(rig.approve(later.submission.id));
+        ASSERT_EQ(pictures.queued(), size_t{2});
+        ASSERT_TRUE(rig.approve(o.submission.id));
+        ASSERT_EQ(pictures.queued(), size_t{2});                                         // (the same name: not asked twice)
+        // the maker made it: a picture of the file's name in the folder is the picture, as it is after a restart
+        const std::string png = std::string("\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR\0\0\0\x0a\0\0\0\x0a\x08\x02\0\0\0", 29) + std::string(4, '\0') + std::string("\0\0\0\0IEND\xAE\x42\x60\x82", 12);
+        { std::ofstream out(fs::path(rig.config.dir).parent_path() / "pictures" / (o.submission.id + ".png"), std::ios::binary); out << png; }
+        std::string why;
+        ASSERT_TRUE(pictures.open(why));
+        ASSERT_EQ(rig.store->preview_png(o.submission.id), png);
         ASSERT_TRUE(rig.store->preview_png(std::string(32, 'f')).empty());
         ASSERT_TRUE(rig.store->preview_png("../../x").empty());
-        fs::remove(fs::path(rig.config.dir) / "files" / (o.submission.id + ".lvl"));
-        ASSERT_TRUE(rig.store->preview_png(o.submission.id).empty());
+        Submission s;
+        Failure failure;
+        const SubmitOutcome other = rig.send("Declined One", "203.0.113.7");
+        { std::ofstream out(fs::path(rig.config.dir).parent_path() / "pictures" / (other.submission.id + ".png"), std::ios::binary); out << png; }
+        ASSERT_TRUE(pictures.open(why) && rig.store->preview_png(other.submission.id) == png);
+        ASSERT_TRUE(rig.store->decline(other.submission.id, "No", "42", "Dave", rig.now, s, failure));
+        ASSERT_TRUE(rig.store->preview_png(other.submission.id).empty());                // (a declined map's file is gone, and its picture is not shown, though it is still in the folder until the hourly sweep)
+#endif
+    } TEST_END();
+
+    TEST_CASE("SUB6.2 At the start the store asks for the pictures of the maps that wait or are approved and have a file, and of no other (a declined or withdrawn one, a taken-down one is still approved's)") {
+#if !defined(_WIN32)
+        Sub rig([](SubmissionConfig& c) { c.per_address_per_day = 100; c.per_day_total = 1000; c.max_waiting = 100; });
+        const SubmitOutcome waiting = rig.send("Still Waiting");
+        const SubmitOutcome approved = rig.send("Approved One");
+        const SubmitOutcome declined = rig.send("Declined Two");
+        const SubmitOutcome taken = rig.send("Taken Down");
+        ASSERT_TRUE(rig.approve(approved.submission.id));
+        ASSERT_TRUE(rig.approve(taken.submission.id));
+        Submission s;
+        Failure why;
+        ASSERT_TRUE(rig.store->decline(declined.submission.id, "No", "42", "Dave", rig.now, s, why));
+        ASSERT_TRUE(rig.store->take_down(taken.submission.id, "42", "Dave", rig.now, s, why));
+        MapPictures& pictures = rig.attach_pictures();
+        ASSERT_EQ(pictures.queued(), size_t{0});
+        rig.store->want_pictures();
+        ASSERT_EQ(pictures.queued(), size_t{2});                                         // (the waiting one and the approved one; the taken-down map is in neither list, the declined one has no file)
+        ASSERT_EQ(pictures.queue_order(), (std::vector<std::string>{approved.submission.id, waiting.submission.id}));          // (the approved map first: it is on the lists that people look at)
+        rig.store->want_pictures();
+        ASSERT_EQ(pictures.queued(), size_t{2});
+        ASSERT_FALSE(pictures.ready((fs::path(rig.config.dir) / "files" / waiting.submission.file).string()));
+#endif
     } TEST_END();
 
     TEST_CASE("SUB7.1 Old things go: the file of a declined map after 30 days (the row stays), the row of a declined or withdrawn one after 90, the counters of old days; what is approved or waiting never goes") {
@@ -843,7 +889,6 @@ int main() {
         ASSERT_TRUE(tight.store->take_down(b.submission.id, "42", "Dave", tight.now, s, why));
         ASSERT_EQ(tight.files().size(), size_t{2});
         ASSERT_TRUE(tight.store->put_back(b.submission.id, "42", "Dave", tight.now, s, why));
-        ASSERT_FALSE(tight.store->preview_png(b.submission.id).empty());
     } TEST_END();
 
     TEST_CASE("SUB4.4 A finding's message is cut short (a map with thousands of hills would name every one): the answer to the sender stays small and the text ends in ...") {

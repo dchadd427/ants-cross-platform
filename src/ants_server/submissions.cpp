@@ -7,14 +7,13 @@
 #include <fstream>
 
 #include "ants_assets/lvl_core.hpp"
-#include "ants_assets/lvl_parser.hpp"
 #include "ants_ctl/http.hpp"
 #include "ants_db/database.hpp"
 #include "ants_net/netgame.hpp"
 #include "ants_server/crypto.hpp"
 #include "ants_server/history_store.hpp"
 #include "ants_server/map_names.hpp"
-#include "ants_server/map_preview.hpp"
+#include "ants_server/map_pictures.hpp"
 #include "ants_server/map_store.hpp"
 #include "ants_server/online_limits.hpp"
 #include "ants_server/secret.hpp"
@@ -371,6 +370,7 @@ SubmitOutcome SubmissionStore::submit(const SubmitInput& in, int64_t now) {
         database_failed(out.fail, "a write");
         return out;
     }
+    if (pictures_ != nullptr) pictures_->want(path_of(config_, s.file));              // (so that the picture is there when the admin looks at the map)
     out.ok = true;
     out.submission = s;
     out.token = token;
@@ -514,6 +514,7 @@ bool SubmissionStore::approve(const std::string& id, const std::string& name, co
         why = make_failure(409, "name_taken", "A map with this name exists already. A name that is taken is never replaced.");     // (the unique index: the name was taken a moment ago)
         return false;
     }
+    if (pictures_ != nullptr) pictures_->want(path_of(config_, out.file));           // (a picture that was made when the map was sent is kept; one that failed then is asked for again)
     audit(now, actor_id, actor_name, "approve", id, renamed ? "renamed" : "same name");
     approved_changed_ = true;
     return fetch_one("id", id, out) || database_failed(why, "a read");
@@ -598,14 +599,20 @@ bool SubmissionStore::next_name(const std::string& name, std::string& out, Failu
 
 std::string SubmissionStore::preview_png(const std::string& id) {
     Submission s;
-    if (!get(id, s) || !s.file_kept) return std::string();
-    std::ifstream in(path_of(config_, s.file), std::ios::binary);
-    if (!in) return std::string();
-    const std::string bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    assets::LevelData level;
-    const assets::LevelLimits limits = s.kind == "extended" ? assets::LevelLimits::for_extended_maps() : assets::LevelLimits::for_new_maps();
-    if (bytes.empty() || !assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), level, nullptr, limits)) return std::string();
-    return render_preview_png(level);
+    if (pictures_ == nullptr || !get(id, s) || !s.file_kept) return std::string();
+    return pictures_->get(path_of(config_, s.file));
+}
+
+void SubmissionStore::want_pictures() {
+    if (pictures_ == nullptr || !open_) return;
+    for (const char* state : {"approved", "waiting"}) {                           // (the approved ones first: they are on the lists that people look at; a waiting map is looked at by the admin only)
+        std::vector<Submission> kept;
+        Failure why;
+        if (!list(state, kept, why)) continue;
+        for (const Submission& s : kept) {
+            if (s.file_kept) pictures_->want(path_of(config_, s.file));
+        }
+    }
 }
 
 std::vector<ApprovedMap> SubmissionStore::approved_maps() {

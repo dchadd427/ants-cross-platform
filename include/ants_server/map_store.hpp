@@ -20,6 +20,7 @@
 namespace ants::server {
 
 struct MapPlays;     // history_store.hpp
+class MapPictures;   // map_pictures.hpp
 
 struct MapEntry {
     std::string name;          // the file name in the folder
@@ -131,7 +132,12 @@ public:
     void set_test_maps(std::vector<ApprovedMap> maps);
     const ApprovedMap* test_map(const std::string& file_name) const;
 
+    /// The maker of the pictures of the approved and test maps (map_pictures.hpp), which the door that serves /maps/previews/ asks; not owned, nullptr: the server makes no pictures
+    void set_pictures(MapPictures* pictures) noexcept { pictures_ = pictures; }
+    MapPictures* pictures() const noexcept { return pictures_; }
+
 private:
+    MapPictures* pictures_{nullptr};
     std::string dir_;
     std::string community_dir_;
     std::vector<MapListing> listing_;

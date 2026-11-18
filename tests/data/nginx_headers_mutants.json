@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the headers, the origin check, the headers passed to the game server, the access log and the compressed files of docker/nginx.conf and the Dockerfile, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/nginx_headers_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_headers.py: each breaks one rule - Strict-Transport-Security on every kind of answer (and only for this host), the four headers of a page and the policy directive by directive (the game page against the others), which address is which kind, the permissions policy (what is switched off and what the game needs), the sockets of the policy, the origin of a game connection (none, the site's own host with or without a port or the final dot of a fully qualified name, anything else refused), what the game server is given, the access log (the path that was asked for, no query, no referrer, cookie or Authorization header), the compressed copies and their step in the Dockerfile, and that every Host name is served.",
+ "note": "Mutants of the headers, the origin check, the one page of another site that may read three routes, the headers passed to the game server, the access log and the compressed files of docker/nginx.conf and the Dockerfile, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/nginx_headers_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_headers.py: each breaks one rule - Strict-Transport-Security on every kind of answer (and only for this host), the four headers of a page and the policy directive by directive (the game page against the others), which address is which kind, the permissions policy (what is switched off and what the game needs), the sockets of the policy, the origin of a game connection (none, the site's own host with or without a port or the final dot of a fully qualified name, anything else refused), what the game server is given, the access log (the path that was asked for, no query, no referrer, cookie or Authorization header), the compressed copies and their step in the Dockerfile, that every Host name is served, and what the front page at https://playants.org may read (that one Origin and no other, a GET of /live, /stats and /history and no other address, no credentials and no preflight answer, Vary: Origin, the headers the three routes already had).",
  "mutants": [
   {
    "id": "hsts_missing_at_the_server",
@@ -1266,6 +1266,111 @@
    "file": "docker/nginx.conf",
    "old": "        proxy_hide_header X-Content-Type-Options;                 # (the server's own nosniff line is the one that this block inherits: not twice)\n    }\n\n    # A browser tells the server that a single-player game began",
    "new": "    }\n\n    # A browser tells the server that a single-player game began",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "site_read_origin_is_a_wildcard",
+   "file": "docker/nginx.conf",
+   "old": "\"~^GET /(?:live|stats|history)\\|https://playants\\.org\\z\" \"https://playants.org\";",
+   "new": "\"~^GET /(?:live|stats|history)\\|https://playants\\.org\\z\" \"*\";",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "site_read_origin_is_given_back_to_any_site",
+   "file": "docker/nginx.conf",
+   "old": "\"~^GET /(?:live|stats|history)\\|https://playants\\.org\\z\" \"https://playants.org\";",
+   "new": "\"~^GET /(?:live|stats|history)\\|https?://[^|]+\\z\" $http_origin;",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "site_read_origin_may_go_on_after_the_name",
+   "file": "docker/nginx.conf",
+   "old": "\"~^GET /(?:live|stats|history)\\|https://playants\\.org\\z\" \"https://playants.org\";",
+   "new": "\"~^GET /(?:live|stats|history)\\|https://playants\\.org\" \"https://playants.org\";",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "site_read_dot_of_the_name_is_any_character",
+   "file": "docker/nginx.conf",
+   "old": "\"~^GET /(?:live|stats|history)\\|https://playants\\.org\\z\" \"https://playants.org\";",
+   "new": "\"~^GET /(?:live|stats|history)\\|https://playants.org\\z\" \"https://playants.org\";",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "site_read_scheme_may_be_http",
+   "file": "docker/nginx.conf",
+   "old": "\"~^GET /(?:live|stats|history)\\|https://playants\\.org\\z\" \"https://playants.org\";",
+   "new": "\"~^GET /(?:live|stats|history)\\|https?://playants\\.org\\z\" \"https://playants.org\";",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "site_read_www_name_too",
+   "file": "docker/nginx.conf",
+   "old": "\"~^GET /(?:live|stats|history)\\|https://playants\\.org\\z\" \"https://playants.org\";",
+   "new": "\"~^GET /(?:live|stats|history)\\|https://(?:www\\.)?playants\\.org\\z\" \"https://playants.org\";",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "site_read_any_method",
+   "file": "docker/nginx.conf",
+   "old": "\"~^GET /(?:live|stats|history)\\|https://playants\\.org\\z\" \"https://playants.org\";",
+   "new": "\"~^[A-Z]+ /(?:live|stats|history)\\|https://playants\\.org\\z\" \"https://playants.org\";",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "site_read_status_door_too",
+   "file": "docker/nginx.conf",
+   "old": "\"~^GET /(?:live|stats|history)\\|https://playants\\.org\\z\" \"https://playants.org\";",
+   "new": "\"~^GET /(?:live|stats|history|busy)\\|https://playants\\.org\\z\" \"https://playants.org\";",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "site_read_every_path_below_too",
+   "file": "docker/nginx.conf",
+   "old": "\"~^GET /(?:live|stats|history)\\|https://playants\\.org\\z\" \"https://playants.org\";",
+   "new": "\"~^GET /(?:live|stats|history)[^|]*\\|https://playants\\.org\\z\" \"https://playants.org\";",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "site_read_header_missing",
+   "file": "docker/nginx.conf",
+   "old": "    add_header Access-Control-Allow-Origin $ants_site_read_origin always;\n",
+   "new": "",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "site_read_vary_missing",
+   "file": "docker/nginx.conf",
+   "old": "    add_header Vary $ants_site_read_vary always;\n",
+   "new": "",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "site_read_vary_not_on_errors",
+   "file": "docker/nginx.conf",
+   "old": "    add_header Vary $ants_site_read_vary always;\n",
+   "new": "    add_header Vary $ants_site_read_vary;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "site_read_credentials_allowed",
+   "file": "docker/nginx.conf",
+   "old": "    add_header Vary $ants_site_read_vary always;\n",
+   "new": "    add_header Vary $ants_site_read_vary always;\n    add_header Access-Control-Allow-Credentials \"true\" always;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "site_read_preflight_methods_listed",
+   "file": "docker/nginx.conf",
+   "old": "    add_header Vary $ants_site_read_vary always;\n",
+   "new": "    add_header Vary $ants_site_read_vary always;\n    add_header Access-Control-Allow-Methods \"GET, OPTIONS\" always;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "site_read_header_in_the_block_of_the_live_list",
+   "file": "docker/nginx.conf",
+   "old": "        limit_req zone=ants_live burst=100 nodelay;\n",
+   "new": "        limit_req zone=ants_live burst=100 nodelay;\n        add_header Access-Control-Allow-Origin $ants_site_read_origin always;\n",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   }
  ]

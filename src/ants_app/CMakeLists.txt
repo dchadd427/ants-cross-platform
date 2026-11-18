@@ -54,6 +54,8 @@ add_library(ants_app STATIC
     hud_pointer.cpp
     minimap_tables.cpp
     map_preview.cpp
+    map_thumbnail.cpp
+    png_encode.cpp
     wide_page.cpp
     setup_layout.cpp
     page_layout.cpp

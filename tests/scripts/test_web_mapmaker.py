@@ -6,6 +6,8 @@
     on a fake page: tests/scripts/web_mapmaker_edit_check.js), and the checks are shown able to fail: broken copies of the scripts are refused by them;
   - the reader's view of all 540 maps of the library is compared with a second reading of the same files here, in Python, with struct (rows, columns and a digest of every tile, and the lists
     of starting ants and food piles after the layers: tests/scripts/web_mapmaker_blocks_check.js, with broken copies that it must refuse);
+  - the game itself on maps with many big clumps (TheGameLoadsTheClumps): the editor's code makes them (tests/scripts/web_mapmaker_ants_check.js --write-maps) and the real map_sweep loads and plays
+    them, when it is built ($BUILD_DIR, `build` by default);
   - the page and the real map core together (tests/scripts/web_mapmaker_core_check.js) when a built module is there ($ANTS_LVL_CORE_DIR, or build_web/lvl_core); without one it says so, and
     the web job of the CI runs it from the image;
   - the properties of the map (tests/scripts/web_mapmaker_props_check.js): the words of the dialog, the change that the history takes, the dialog on a small fake of the DOM with a stand-in for the
@@ -49,6 +51,7 @@ SPRITES_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_sprites_che
 NAMES_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_names_check.js")
 EDGES_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_edges_check.js")
 ANTS_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_ants_check.js")
+SWEEP = os.path.join(REPO, os.environ.get("BUILD_DIR", "build"), "map_sweep")
 PICKUP_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_pickup_check.js")
 LINE_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_line_check.js")
 MINIMAP_CHECK = os.path.join(REPO, "tests", "scripts", "web_mapmaker_minimap_check.js")
@@ -480,15 +483,22 @@ class TheCodeRuns(unittest.TestCase):
             "a hill that is put where half of it is off the map": ("mapmaker_blocks.js", "if (row < 1 || column < 1 || row + 2 >= file.rows", "if (row < 0 || column < 0 || row + 2 >= file.rows"),
             "a hill whose tile the dictionary is not told of": ("mapmaker_blocks.js", "addName(change, t.hill, t.hillName);", "void 0;"),
             "ants that all stand on one cell": ("mapmaker_blocks.js", "return good.concat(rest).slice(0, count);", "return good.concat(rest).slice(0, count).map(function (c) { return good[0] || c; });"),
-            "ants of a team that take the plants and the other teams' ants with them": ("mapmaker_blocks.js", "if (teamOfMarker(lay.records[i].tile) === teamIndex) { if (insertAt < 0)", "if (true) { if (insertAt < 0)"),
-            "a number of ants that is not kept in its range": ("mapmaker_blocks.js", "var n = clampTo(count, MIN_ANTS, MAX_ANTS), cells", "var n = count, cells"),
-            "ants put on objects and on solid ground": ("mapmaker_blocks.js", "if (Edit.tile(file, 2, idx) === EMPTY2 && (Edit.flags(file, 1, idx) & 1) === 0) good.push(item); else rest.push(item);", "good.push(item);"),
-            "ants put on the ants of another team": ("mapmaker_blocks.js", "if (taken[idx]) continue;", "void 0;"),
+            "a clump that is put at the front of the list and moves the plants and the ants that were there": ("mapmaker_blocks.js", "rel: lay.b1.length, removed: new Uint8Array(0)", "rel: 2, removed: new Uint8Array(0)"),
+            "a number of ants that is not kept in its range": ("mapmaker_blocks.js", "var n = clampTo(count, MIN_ANTS, MAX_ANTS);", "var n = count;"),
+            "ants put on objects and on solid ground": ("mapmaker_blocks.js", "if (Edit.tile(file, 2, idx) === EMPTY2 && (Edit.flags(file, 1, idx) & 1) === 0 && !ix.piles[idx]) good.push(item); else rest.push(item);", "good.push(item);"),
+            "ants put on the ants that stand there, of any team": ("mapmaker_blocks.js", "if (ix.markers[idx]) continue;", "void 0;"),
             "a splice that holds more than what changed": ("mapmaker_blocks.js", "while (head < old.length && head < next.length && old[head] === next[head]) head++;", "void 0;"),
             "a pile whose stages are one short": ("mapmaker_blocks.js", "4: { units: 30, points: 25, stages: [[30, 264], [20, 265], [10, 266], [0, EMPTY2]] },", "4: { units: 30, points: 25, stages: [[30, 264], [20, 265], [0, EMPTY2]] },"),
             "a food tile with another name than the game's": ("mapmaker_blocks.js", "280: 'fdfrl1'", "280: 'fdfrl2'"),
             "a pile that is put on a pile and leaves both": ("mapmaker_blocks.js", "if (p.row === row && p.column === column) takePileCells(file, change, p); else list.push", "if (p.row === row && p.column === column) takePileCells(file, change, p); list.push"),
             "a pile taken away that leaves its cell of layer 2": ("mapmaker_blocks.js", "if (tile !== EMPTY2 && stageTiles(pile).indexOf(tile) >= 0) takeObject(file, change, idx);", "void 0;"),
+            "a canvas that is not measured again a frame after a tool's look": ("mapmaker_canvas.js", "if (win.requestAnimationFrame) win.requestAnimationFrame(function () { var q = canvas.getBoundingClientRect(); if (file && (Math.round(q.width) !== w || Math.round(q.height) !== h)) resized(); });", "void 0;"),
+            "an eraser that takes every ant of the team and not the clump": ("mapmaker_blocks.js", "clumpOf(file, tiles[i]).forEach(function (k) { dropIdx[k] = true; });", "lay.records.forEach(function (rec, k) { if (teamOfMarker(rec.tile) === tm) dropIdx[k] = true; });"),
+            "a clump that does not join through a corner": ("mapmaker_blocks.js", "var rr = r + dr, cc = c + dc, cell = rr * cols + cc, list = rr < 0 ||", "var rr = r + dr, cc = c + dc, cell = rr * cols + cc, list = (dr && dc) || rr < 0 ||"),
+            "a clump that takes the ants of another team that touch it": ("mapmaker_blocks.js", "if (taken[list[k]] || teamOfMarker(lay.records[list[k]].tile) !== team) continue;", "if (taken[list[k]]) continue;"),
+            "a clump that stops at the ants next to the first": ("mapmaker_blocks.js", "if (!seen[cell]) { seen[cell] = true; queue.push(cell); }", "if (!seen[cell]) { seen[cell] = true; }"),
+            "a clump that leaves the ants stacked on the cell behind": ("mapmaker_blocks.js", "list = rr < 0 || cc < 0 ||", "list = (!dr && !dc) || rr < 0 || cc < 0 ||"),
+            "a cell with the ants of two teams of which only the first clump goes": ("mapmaker_blocks.js", "if (!done[tm]) { done[tm] = true;", "if (!done[tm] && !i) { done[tm] = true;"),
             "an eraser that does not know a pile by its body": ("mapmaker_blocks.js", "(anchor >= 0 && ix.piles[anchor] || []).forEach(function (k) { hits[k] = true; any = true; });", "void 0;"),
             "a food list with a pile that has no stages that is changed": ("mapmaker_blocks.js", "if (stages === 0 || at + 10 + 4 * stages > b.length) return out;", "if (at + 10 + 4 * stages > b.length) return out;"),
             "an eraser that asks what else goes after it took the object away": ("mapmaker_edit.js", "var more = hooks.erase ? hooks.erase(f, idx) : null, n = tile(f, 2, idx) === EMPTY2 ? 0 : removeObject(idx);", "var n = tile(f, 2, idx) === EMPTY2 ? 0 : removeObject(idx), more = hooks.erase ? hooks.erase(f, idx) : null;"),
@@ -696,7 +706,7 @@ class TheCodeRuns(unittest.TestCase):
             "a list that is written with the wrong count": ("mapmaker_blocks.js", "wr(out, 0, records.length);", "wr(out, 0, records.length + 1);"),
             "a splice that is not the exact piece": ("mapmaker_blocks.js", "return { rel: rel + head, removed: old.slice(head, old.length - tail), inserted: next.slice(head, next.length - tail) };", "return { rel: rel + head, removed: old.slice(head, old.length - tail + 1), inserted: next.slice(head, next.length - tail) };"),
             "a hill put back that is anchored somewhere else": ("mapmaker_blocks.js", "var word = file.version === 8 ? ((row & 255) | ((column & 255) << 8))", "var word = file.version === 8 ? ((column & 255) | ((row & 255) << 8))"),
-            "a team's ants put that touch the pile list": ("mapmaker_blocks.js", "var records = kept.slice(0, insertAt).concat(fresh, kept.slice(insertAt)), change = emptyChange(), splice = diffSplice(file, lay.b1.rel, lay.b1.length, block1Bytes(records));", "var records = kept.slice(0, insertAt).concat(fresh, kept.slice(insertAt)), change = emptyChange(), splice = diffSplice(file, lay.b1.rel, lay.b1.length + 2, block1Bytes(records));"),
+            "a clump's ants put that touch the pile list": ("mapmaker_blocks.js", "{ rel: lay.b1.length, removed: new Uint8Array(0), inserted: bytes }", "{ rel: lay.b1.length + 2, removed: new Uint8Array(0), inserted: bytes }"),
             "an undo that gives back every byte but the lists": ("mapmaker_edit.js", "self.file = hooks.rebase(spliceAt(self.file.bytes, at, out.length, into));", "void 0;"),
         }
         for what, (name, old, new) in mutants.items():
@@ -770,6 +780,31 @@ def built_module():
         if candidate and os.path.isfile(os.path.join(candidate, "lvl_core.js")) and os.path.isfile(os.path.join(candidate, "lvl_core.wasm")):
             return candidate
     return None
+
+
+@unittest.skipUnless(NODE and os.path.isfile(SWEEP), "node or map_sweep is not built (BUILD_DIR): the game was NOT run on maps with many big clumps")
+class TheGameLoadsTheClumps(unittest.TestCase):
+    """docs/MAP_EDITOR.md, "Starting ants": the editor puts a team's ants as many clumps of up to 250, and the game (map_sweep: the real loader and engine, headless) loads such a map, starts every ant of it and plays it,
+    twice from fresh processes with the same hash at the end"""
+
+    def test_a_map_with_twelve_clumps_of_250_loads_starts_and_plays(self):
+        with tempfile.TemporaryDirectory() as work:
+            made = subprocess.run([NODE, ANTS_CHECK, "--write-maps", work], capture_output=True, text=True, timeout=CHECK_LIMIT)
+            self.assertEqual(made.returncode, 0, made.stdout[-2000:] + made.stderr[-2000:])
+            names = sorted(os.listdir(work))
+            self.assertEqual(names, ["ClumpsMedium.LVL", "ClumpsTreasure.LVL"])
+            report = os.path.join(work, "sweep.json")
+            done = subprocess.run([SWEEP, work, "--ticks", "300", "--jobs", "1", "--timeout-seconds", "300", "--out", report], capture_output=True, text=True, timeout=900)
+            self.assertEqual(done.returncode, 0, done.stdout[-3000:] + done.stderr[-2000:])
+            with open(report, encoding="utf-8") as f:
+                sweep = json.load(f)
+            starts = {m["name"]: m["start_markers"] for m in sweep["maps"]}
+            self.assertEqual(sorted(starts), names)
+            self.assertTrue(all(m["loads"] for m in sweep["maps"]))
+            self.assertTrue(all(n >= 750 for n in starts["ClumpsMedium.LVL"]), starts)                  # (the library's own ants and 3 clumps of 250 for every team)
+            self.assertTrue(all(n >= 450 for n in starts["ClumpsTreasure.LVL"]), starts)                # (and 3 clumps of 150)
+            self.assertGreaterEqual(sweep["summary"]["peak_ants"], 3000)                                  # (every one of them was started)
+            self.assertEqual(sweep["summary"]["plays"], 4)
 
 
 @unittest.skipUnless(NODE, "node is not installed")

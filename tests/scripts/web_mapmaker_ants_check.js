@@ -2,14 +2,18 @@
 // The map maker's Ants tool box (web/front/mapmaker_ants.js; docs/MAP_EDITOR.md, "Ants: one at a time, group, mix") held to the library's maps, with the real reader, blocks and history and a small
 // fake of the DOM (no browser, no map core: the real core's verdict is the browser part `ants`):
 //
-//   node tests/scripts/web_mapmaker_ants_check.js [--front DIR]
+//   node tests/scripts/web_mapmaker_ants_check.js [--front DIR] [--write-maps DIR]
 //
 //   A  one ant put and taken away, on real maps: the count, the record, every other byte as it was, Undo and Redo give the same bytes, a refusal says why (solid ground, an object, a hill, a
 //      cell that has an ant) and changes nothing
 //   B  the mix: the same plan every time, exactly `per` ants for each team, no two ants side by side with every other cell, a box that is too small is refused with the numbers, one Undo
-//   C  the group (clump) of before is byte for byte what it was (a pinned digest), and Clear <team> ants is one step
+//   C  the clump: the nearest free cells, appended to the list (a pinned digest and the bytes made by hand), two clumps both stay and never share a cell, up to 250 ants, one Undo for each, and
+//      Pick up moves one clump and leaves the other, and Clear <team> ants is one step
 //   D  the limit of the file (65,535 records) and the warnings (a team with none, too many, packed too tight)
 //   E  the box in the page on a fake DOM: the switch, a tap, Take one away, a mix and its Put button, Clear with its question, one change for each
+//   G  the clump in the page: a tap puts a new clump, a tap on a clump puts the next one round it, the number box up to 250, a refusal says why, one Undo for each clump
+//   H  maps with many big clumps, made with the real editor code (3 clumps of 250 or 150 for every team on two library maps): the file reads again, counts the ants and is as the writer makes it. With --write-maps DIR
+//      the maps are written there too, for the game to load and play (tests/scripts/test_web_mapmaker.py, TheGameLoadsTheClumps)
 // Exit status 0 when everything passes, 1 otherwise.
 'use strict';
 
@@ -22,7 +26,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const argv = process.argv.slice(2);
 const FRONT = argv.includes('--front') ? path.resolve(argv[argv.indexOf('--front') + 1]) : path.join(ROOT, 'web', 'front');
 const load = (name) => require(path.join(FRONT, name));
-const File = load('mapmaker_file.js'), Edit = load('mapmaker_edit.js'), Blocks = load('mapmaker_blocks.js'), Ants = load('mapmaker_ants.js');
+const File = load('mapmaker_file.js'), Edit = load('mapmaker_edit.js'), Blocks = load('mapmaker_blocks.js'), Ants = load('mapmaker_ants.js'), Pick = load('mapmaker_pickup.js');
 
 let failures = 0, checks = 0;
 function check(ok, what) { checks++; if (!ok) { failures++; console.log('    FAILED: ' + what); } }
@@ -125,10 +129,90 @@ for (const rel of MAPS) {
 
 // C
 {
-    const f0 = open('Original-Ants/Maps/TINY.LVL'), ed = editor(f0);
+    // the cells of a clump, made again here: the free cells (the Ants box's own rule) by distance from the tapped cell, then row, then column
+    const nearest = (file, row, column, n) => {
+        const list = [];
+        for (let i = 0; i < file.cells; i++) { const r = Math.floor(i / file.columns), c = i % file.columns; if (!Ants.whyNot(file, i) && Ants.teamAt(file, r, c) < 0) list.push({ r, c, d: (r - row) * (r - row) + (c - column) * (c - column) }); }
+        list.sort((a, b) => a.d - b.d || a.r - b.r || a.c - b.c);
+        return list.slice(0, n).map((x) => [x.r, x.c]);
+    };
+    const cellsOf = (file, from, to) => Blocks.layout(file).records.slice(from, to).map((r) => [r.row, r.column]);
+    const f0 = open('Original-Ants/Maps/TINY.LVL'), ed = editor(f0), lay0 = Blocks.layout(f0), n0 = lay0.records.length, want = nearest(f0, 10, 10, 5);
     const change = Blocks.placeStart(f0, 0, 10, 10, 5);
+    check(!change.error && change.splices.length === 2 && change.cells.length === 0, 'clump: a change of block 1 only (the new records at the end, and the count word)');
     ed.act(change);
-    check(sha(ed.file.bytes) === '939244e62fc816d2d7332cf9ddaf1c9ebe861d32eb598aa11afb2b80bb980f91', 'group: a clump of 5 on TINY is byte for byte what it was (digest ' + sha(ed.file.bytes).slice(0, 12) + ')');
+    const lay1 = Blocks.layout(ed.file);
+    equal(cellsOf(ed.file, n0, n0 + 5), want, 'clump: the five nearest free cells, nearest first');
+    check(lay1.records.length === n0 + 5 && lay1.records.slice(n0).every((r) => r.tile === Blocks.TEAMS[0].marker) && lay1.records.slice(0, n0).every((r, i) => r.tile === lay0.records[i].tile && r.row === lay0.records[i].row && r.column === lay0.records[i].column), 'clump: 5 records of Green after the ones that were there, which are as they were');
+    // the bytes, made by hand: the count word, the old records, the new ones, and everything after
+    const at = f0.blocksAt, hand = new Uint8Array(f0.bytes.length + 30);
+    hand.set(f0.bytes.subarray(0, at), 0);
+    hand.set([(n0 + 5) & 255, (n0 + 5) >> 8], at);
+    hand.set(f0.bytes.subarray(at + 2, at + 2 + 6 * n0), at + 2);
+    want.forEach(([r, c], i) => hand.set([Blocks.TEAMS[0].marker & 255, Blocks.TEAMS[0].marker >> 8, r & 255, r >> 8, c & 255, c >> 8], at + 2 + 6 * n0 + 6 * i));
+    hand.set(f0.bytes.subarray(at + 2 + 6 * n0), at + 2 + 6 * n0 + 30);
+    check(same(ed.file.bytes, hand), 'clump: the file is byte for byte the old one with 5 records and the count word put in');
+    check(sha(ed.file.bytes) === 'eaa6bb74214bb3855e769e7cc78937093c3aa45296bd079f3ca77a74d7d3a332', 'clump: a clump of 5 on TINY is byte for byte what it should be (digest ' + sha(ed.file.bytes).slice(0, 12) + ')');
+    const one = Uint8Array.from(ed.file.bytes);
+    // a second clump of the same team, a third of another: both stay, the first does not move, no two ants share a cell, one Undo for each
+    ed.act(Blocks.placeStart(ed.file, 0, 12, 12, 9));
+    ed.act(Blocks.placeStart(ed.file, 2, 11, 11, 7));
+    const lay2 = Blocks.layout(ed.file), cells = lay2.records.map((r) => r.row + ',' + r.column);
+    check(lay2.records.length === n0 + 21 && ants(ed.file)[0] === ants(f0)[0] + 14 && ants(ed.file)[2] === ants(f0)[2] + 7, 'two clumps of one team stay (5 and 9), and the clump of another team (7): 21 more ants');
+    equal(cellsOf(ed.file, n0, n0 + 5), want, 'the first clump has not moved');
+    check(new Set(cells).size === cells.length, 'no two ants of the map stand on one cell');
+    check(lay2.records.slice(n0 + 5, n0 + 14).every((r) => !Ants.whyNot(f0, r.row * f0.columns + r.column)) && lay2.records.slice(n0 + 14).every((r) => !Ants.whyNot(f0, r.row * f0.columns + r.column)), 'and every one of them stands where an ant can walk');
+    const three = Uint8Array.from(ed.file.bytes);
+    ed.undo(); check(count(ed.file) === n0 + 14, 'one Undo takes the clump of 7 away and no other ant');
+    ed.undo(); check(same(ed.file.bytes, one), 'the next Undo takes the clump of 9 away: the bytes of the first clump, exactly');
+    ed.undo(); check(same(ed.file.bytes, f0.bytes), 'the third gives the map as it was opened, byte for byte');
+    ed.redo(); ed.redo(); ed.redo();
+    check(same(ed.file.bytes, three), 'and three Redos give the same bytes as before');
+    // up to 250 ants, nearest first, in one change
+    for (const rel of MAPS.slice(1)) {
+        const g = open(rel), r = Math.floor(g.rows / 2), c = Math.floor(g.columns / 2), eg = editor(g), g0 = count(g);
+        const big = Blocks.placeStart(g, 1, r, c, 250);
+        check(!big.error && eg.act(big) && count(eg.file) === g0 + 250, rel + ': a clump of 250 is 250 records');
+        equal(cellsOf(eg.file, g0, g0 + 250), nearest(g, r, c, 250), rel + ': the 250 nearest free cells');
+        check(Blocks.placeStart(g, 1, r, c, 251).splices[0].inserted.length === 6 * 250 && Blocks.placeStart(g, 1, r, c, 5000).splices[0].inserted.length === 6 * 250, rel + ': more than 250 is 250');
+        check(Blocks.placeStart(g, 1, r, c, 0).splices[0].inserted.length === 6, rel + ': a clump has at least one ant');
+        eg.undo(); check(same(eg.file.bytes, g.bytes), rel + ': one Undo takes the 250 away, byte for byte');
+        eg.act(Blocks.placeStart(eg.file, 1, r, c, 250)); eg.act(Blocks.placeStart(eg.file, 1, r + 1, c + 1, 250));
+        check(count(eg.file) === g0 + 500 && new Set(Blocks.layout(eg.file).records.slice(g0).map((q) => q.row + ',' + q.column)).size === 500, rel + ': two clumps of 250 on nearly the same cell are 500 ants, none on another\'s cell');
+    }
+    // a clump never starts on a cell that cannot hold an ant: solid ground with nothing on it, a food pile whose cell shows nothing
+    let tried = 0;
+    for (const rel of MAPS) {
+        const g = open(rel);
+        let solid = -1;
+        for (let i = 0; i < g.cells && solid < 0; i++) if ((Edit.flags(g, 1, i) & 1) && Edit.tile(g, 2, i) === Blocks.EMPTY2) solid = i;
+        if (solid < 0) continue;
+        const r = Math.floor(solid / g.columns), c = solid % g.columns, got = Blocks.placeStart(g, 0, r, c, 3).splices[0].inserted;
+        const first = [got[2] + 256 * got[3], got[4] + 256 * got[5]];
+        check(!(first[0] === r && first[1] === c), rel + ': a clump tapped on solid ground does not start on it');
+        tried++;
+    }
+    check(tried > 0, 'the library has solid ground with nothing on it to try');
+    const pile = editor(open('Original-Ants/Maps/TINY.LVL'));
+    pile.act(Blocks.placePile(pile.file, 10, 10, 3));
+    pile.act({ names: [], cells: [[10 * pile.file.columns + 10, Blocks.EMPTY2, 0, 0]], splices: [] });
+    const onPile = Blocks.placeStart(pile.file, 0, 10, 10, 3).splices[0].inserted;
+    check(Ants.whyNot(pile.file, 10 * pile.file.columns + 10) !== '' && !(onPile[2] === 10 && onPile[4] === 10), 'a clump tapped on a food pile (its cell shows nothing) does not start on it');
+    // Pick up moves one clump of a team and leaves the other where it is (an ant and the ants of its team that touch it)
+    {
+        const g = open('Original-Ants/Maps/MEDIUM.LVL'), eg = editor(g), n1 = count(g);
+        eg.act(Blocks.placeStart(eg.file, 1, 10, 10, 30)); eg.act(Blocks.placeStart(eg.file, 1, 45, 45, 40));
+        const fresh = Blocks.layout(eg.file).records.slice(n1), a = fresh[0], b = fresh[30];
+        const ia = Pick.itemsAt(eg.file, a.row, a.column)[0], ib = Pick.itemsAt(eg.file, b.row, b.column)[0];
+        const ga = Pick.antGroup(eg.file, ia), gb = Pick.antGroup(eg.file, ib);
+        check(ga.length === 30 && gb.length === 40 && ga.every((it) => it.i >= n1 && it.i < n1 + 30) && gb.every((it) => it.i >= n1 + 30), 'pick up: an ant of a clump picks up that clump and no other (30 and 40 ants of one team)');
+        const [dr, dc] = [[0, 5], [5, 0], [-5, 0], [0, -5], [2, 3]].find(([r, c]) => Pick.check(eg.file, ga, r, c, 'move', 'group').ok);
+        check(dr !== undefined && !!eg.act(Pick.build(eg.file, ga, dr, dc, 'move')), 'pick up: the first clump can be moved');
+        const after = Blocks.layout(eg.file).records.slice(n1);
+        check(after.length === 70 && after.slice(0, 30).every((r, i) => r.row === fresh[i].row + dr && r.column === fresh[i].column + dc) && after.slice(30).every((r, i) => r.row === fresh[30 + i].row && r.column === fresh[30 + i].column), 'pick up: it moved by ' + dr + ' rows and ' + dc + ' columns, and the second clump did not move');
+        eg.undo(); check(Blocks.layout(eg.file).records.slice(n1).every((r, i) => r.row === fresh[i].row && r.column === fresh[i].column), 'pick up: one Undo puts it back');
+    }
+    // Clear <team> ants
     const ed2 = editor(open('Original-Ants/Maps/TREASURE.LVL')), t = Blocks.teamOfMarker(Blocks.layout(ed2.file).records.find((r) => Blocks.teamOfMarker(r.tile) >= 0).tile);
     const had = ants(ed2.file)[t], total = count(ed2.file);
     check(had > 0 && !!ed2.act(Ants.clearTeam(ed2.file, t)) && ants(ed2.file)[t] === 0 && count(ed2.file) === total - had, 'clear: all ants of one team go, in one step, the others stay');
@@ -145,6 +229,9 @@ for (const rel of MAPS) {
     ed.act(full);
     check(count(ed.file) === 65530, 'limit: a file of 65,530 records');
     const [c1] = free(ed.file, 1, 700);
+    const over5 = Blocks.placeStart(ed.file, 1, c1[0], c1[1], 6);
+    check(over5.error && /does not fit/.test(over5.error) && /65,535/.test(over5.error), 'limit: a clump of 6 on 65,530 records is refused in words (' + over5.error + ')');
+    check(!Blocks.placeStart(ed.file, 1, c1[0], c1[1], 5).error, 'limit: a clump of 5 still fits');
     check(!Ants.putOne(ed.file, 1, c1[0], c1[1]).error, 'limit: one more fits');
     const plan = { ok: true, cells: [0, 1, 2, 3, 4, 5].map((i) => ({ r: i, c: 0, team: 0 })) };
     const err = Ants.putMix(ed.file, plan).error;
@@ -191,7 +278,7 @@ for (const rel of MAPS) {
     });
     part.show(true);
     const btn = (k) => part.panel.querySelector('[data-k="' + k + '"]');
-    check(!part.panel.hidden && part.mine() && part.painter.tapOnly(), 'page: the box shows, One at a time takes the tap and a drag looks around');
+    check(!part.panel.hidden && part.painter.tapOnly(), 'page: the box shows, One at a time takes the tap and a drag looks around');
     check(part.panel.textContent.indexOf('The game picks a random facing at the start of each match; the editor shows an example.') >= 0, 'page: the one line that says the facing is an example (the game picks it at random for every ant at the start of a match)');
     check(btn('t2') && btn('t3') && /Black/.test(part.panel.textContent) && /Same for every team: Combat ants by default, 2 eggs each/.test(part.panel.textContent), 'page: four team buttons with counts, and what is the same for every team');
     const [c] = free(ed.file, 1, ed.file.columns * 5 + 5), n0 = count(ed.file);
@@ -209,7 +296,8 @@ for (const rel of MAPS) {
     check(part.panel.querySelectorAll('.am-team').map((b) => b.getAttribute('data-k')).join(',') === 't3,t2,t0,t1', 'page: the buttons are Black, Blue, Green, Red');
     part.painter.begin({ row: 0, column: 0 });
     btn('group').click(); btn('clump').click();
-    check(!part.mine(), 'page: Clump is the tool\'s own (the box does not take the tap)');
+    check(part.painter.tapOnly(), 'page: Clump takes the tap too, and a drag looks around');
+    check(/A tap puts a new clump\. Pick up moves one\./.test(part.panel.textContent) && !/move it/.test(part.panel.textContent), 'page: the note under the clump\'s number says what a tap does now');
     // typing in the number box of the clump: the keys change nothing on the page, and what the box says is taken when it is left or Enter is pressed, which makes the panel again; the box that the person
     // is in is then the new one, with the focus and the number (the panel puts the focus back on the control that had it)
     const numberBox = (k) => () => part.panel.querySelector('input[data-k="' + k + '"]');
@@ -222,7 +310,7 @@ for (const rel of MAPS) {
     numberBox('clump')().value = '4'; numberBox('clump')().fire('change', {});
     check(clump === 4 && doc.activeElement === numberBox('clump')(), 'page: and again');
     btn('mix').click();
-    check(part.mine() && !part.painter.tapOnly(), 'page: Mix takes the drag');
+    check(!part.painter.tapOnly(), 'page: Mix takes the drag');
     numberBox('per')().value = '';
     equal(doc.typeCheck(numberBox('per'), '40'), '', 'page: the mix\'s number box (ants for each team): every key stays in the same box with the focus');
     numberBox('per')().value = '25'; numberBox('per')().fire('change', {});
@@ -260,11 +348,14 @@ for (const rel of MAPS) {
     const lastTwo = ed9.file.markers.slice(-2);
     check(lastTwo[0].team === 'red' && lastTwo[0].antType === 4 && lastTwo[1].team === 'blue' && lastTwo[1].antType === 1, 'v9: MapFile.parse reads antType on markers');
     check(!!ed9.act(Blocks.placeStart(ed9.file, 1, 10, 10, 3, 5)), 'v9: placeStart clump of 3 Swimmer ants');
-    const redRecs = Blocks.layout(ed9.file).records.filter((r) => Blocks.teamOfMarker(r.tile) === 1);
-    check(redRecs.length === 3 && redRecs.every((r) => Blocks.typeOfMarker(r.tile) === 5), 'v9: clump replaced Red markers with 3 Swimmer ants');
+    const recs2 = Blocks.layout(ed9.file).records, swimmers = recs2.slice(n9 + 2);
+    check(recs2.length === n9 + 5 && Blocks.typeOfMarker(recs2[n9].tile) === 4 && Blocks.typeOfMarker(recs2[n9 + 1].tile) === 1 && swimmers.length === 3 && swimmers.every((r) => Blocks.teamOfMarker(r.tile) === 1 && Blocks.typeOfMarker(r.tile) === 5), 'v9: the clump adds 3 Swimmer ants of Red after the ants that were there');
+    check(Blocks.markerTile(f9, 1, 5) === Blocks.TEAMS[1].marker + 5 * 4096 && Blocks.markerTile(tiny, 1, 5) === Blocks.TEAMS[1].marker, 'v9: only a version 9 file carries the type in the tile');
     check(!!ed9.act(Ants.clearTeam(ed9.file, 1)) && !!ed9.act(Ants.clearTeam(ed9.file, 2)) && ants(ed9.file)[1] === 0, 'v9: clearTeam removes typed markers');
     check(!!ed9.act(Ants.putOne(ed9.file, 1, c1[0], c1[1], 4)) && !!ed9.act(Ants.putOne(ed9.file, 1, c2[0], c2[1], 2)), 'v9: put mixed Red Combat + Fire ants');
-    check(!!ed9.act(Blocks.eraseAt(ed9.file, c1[0] * ed9.file.columns + c1[1])) && ants(ed9.file)[1] === 0, 'v9: eraseAt on one ant removes all starting ants of that team even with mixed types');
+    const [far9] = free(ed9.file, 1, ed9.file.cells - 40);
+    check(!!ed9.act(Ants.putOne(ed9.file, 1, far9[0], far9[1], 3)) && ants(ed9.file)[1] === 3, 'v9: a third Red ant, far from the two');
+    check(!!ed9.act(Blocks.eraseAt(ed9.file, c1[0] * ed9.file.columns + c1[1])) && ants(ed9.file)[1] === 1 && Ants.teamAt(ed9.file, far9[0], far9[1]) === 1, 'v9: eraseAt on one ant takes its clump of two, even with mixed types, and not the Red ant far away');
     let pickedType = 0;
     const part9 = Ants.create({
         doc, win: {}, host: { tools, hint, side }, file: () => ed9.file, act: (c) => { const d = ed9.act(c); part9.refresh(); return !!d; }, say: () => {},
@@ -276,7 +367,101 @@ for (const rel of MAPS) {
     check(btn9('at4') && btn9('at1') && btn9('at5'), 'v9 UI: Ant type buttons rendered on Extended map');
     btn9('at4').click();
     check(pickedType === 4 && part9.state().antType === 4, 'v9 UI: clicking Combat selects antType 4');
+    btn9('group').click(); btn9('clump').click();
+    const before9 = count(ed9.file), [c9] = free(ed9.file, 1, ed9.file.columns * 20 + 20);
+    part9.painter.begin({ row: c9[0], column: c9[1] });
+    check(count(ed9.file) === before9 + 4 && Blocks.layout(ed9.file).records.slice(before9).every((r) => Blocks.teamOfMarker(r.tile) === 0 && Blocks.typeOfMarker(r.tile) === 4), 'v9 UI: a tap in Clump puts 4 Combat ants of the picked team');
     part9.show(false);
+}
+
+// G
+{
+    const doc = makeDocument(), f0 = open('Original-Ants/Maps/TREASURE.LVL'), ed = editor(f0), said = [], dialogs = [];
+    const tools = doc.createElement('div'), side = doc.createElement('div'), hint = doc.createElement('p'), line = doc.createElement('div');
+    line.className = 'checkline'; side.appendChild(line); tools.appendChild(hint); doc.body.appendChild(tools); doc.body.appendChild(side);
+    let team = 1, clump = 6, acts = 0;
+    const part = Ants.create({
+        doc, win: {}, host: { tools, hint, side }, file: () => ed.file, act: (c) => { const d = ed.act(c); if (d) acts++; part.refresh(); return !!d; }, say: (t, m) => said.push(m),
+        dialogs: { open: (spec) => { dialogs.push(spec); } }, team: () => team, setTeam: (t) => { team = t; }, ants: () => clump, setAnts: (n) => { clump = n; }, view: () => null, about: () => ({ ant: 'Combat ants by default', eggs: 2 }), props: () => {}, refresh: () => {}
+    });
+    part.show(true);
+    const btn = (k) => part.panel.querySelector('[data-k="' + k + '"]');
+    btn('group').click(); btn('clump').click();
+    const n0 = count(f0), red0 = ants(f0)[1], start = Uint8Array.from(ed.file.bytes);
+    const at = free(ed.file, 1, ed.file.columns * 10 + 10)[0], far = free(ed.file, 1, ed.file.columns * 40 + 40)[0];
+    check(part.painter.tapOnly() && part.painter.size() === 1, 'clump page: a tap puts, a drag looks around, one cell is marked');
+    check(part.painter.begin({ row: at[0], column: at[1] }) === false && count(ed.file) === n0 + 6 && ants(ed.file)[1] === red0 + 6 && acts === 1, 'clump page: a tap puts a clump of 6 of the picked team, one change');
+    check(/Put 6 Red ants at row \d+, column \d+\. One Undo takes them away\./.test(part.panel.textContent) && btn('t1').textContent.indexOf(String(red0 + 6)) >= 0, 'clump page: the box says what was put, and the team\'s count has grown');
+    const first = Blocks.layout(ed.file).records.slice(n0).map((r) => r.row + ',' + r.column);
+    part.painter.begin({ row: far[0], column: far[1] });
+    check(count(ed.file) === n0 + 12 && acts === 2 && ants(ed.file)[1] === red0 + 12, 'clump page: a tap somewhere else puts a new clump: 12 in all, the first is not moved');
+    equal(Blocks.layout(ed.file).records.slice(n0, n0 + 6).map((r) => r.row + ',' + r.column), first, 'clump page: the cells of the first clump are the same');
+    part.painter.begin({ row: at[0], column: at[1] });
+    const all = Blocks.layout(ed.file).records.map((r) => r.row + ',' + r.column);
+    check(count(ed.file) === n0 + 18 && acts === 3 && new Set(all).size === all.length, 'clump page: a tap on a clump puts the next one round it: 18 in all, none on another\'s cell, nothing taken away');
+    // the number box: up to 250, and no more
+    const box = () => part.panel.querySelector('input[data-k="clump"]');
+    box().value = '250'; box().fire('change', {});
+    check(clump === 250 && box().value === '250' && btn('clump+').disabled && !btn('clump-').disabled, 'clump page: 250 can be typed, and More is off there');
+    box().value = '900'; box().fire('change', {});
+    check(clump === 250 && box().value === '250', 'clump page: a bigger number is 250');
+    btn('clump-').click();
+    check(clump === 249 && !btn('clump+').disabled, 'clump page: Fewer goes to 249');
+    btn('clump+').click();
+    part.painter.begin({ row: Math.floor(ed.file.rows / 2), column: Math.floor(ed.file.columns / 2) });
+    check(count(ed.file) === n0 + 268 && acts === 4 && /Put 250 Red ants/.test(part.panel.textContent), 'clump page: a clump of 250 is one change');
+    // one Undo for each clump, and the bytes of the start come back
+    ed.undo(); check(count(ed.file) === n0 + 18, 'clump page: Undo takes the clump of 250 away and no other ant');
+    ed.undo(); ed.undo(); ed.undo();
+    check(same(ed.file.bytes, start), 'clump page: four Undos for four clumps give the map as it was, byte for byte');
+    // a refusal says why and changes nothing
+    const cut = open('Original-Ants/Maps/TINY.LVL'), edc = editor(cut), lay = Blocks.layout(cut), filler = new Uint8Array(6 * (65530 - lay.records.length));
+    edc.act({ names: [], cells: [], splices: [{ rel: lay.b1.length, removed: new Uint8Array(0), inserted: filler }, { rel: 0, removed: cut.bytes.slice(cut.blocksAt, cut.blocksAt + 2), inserted: new Uint8Array([0xFA, 0xFF]) }] });
+    const partFull = Ants.create({
+        doc, win: {}, host: { tools, hint, side }, file: () => edc.file, act: (c) => !!edc.act(c), say: (t, m) => said.push(m),
+        dialogs: { open: () => {} }, team: () => 0, setTeam: () => {}, ants: () => 6, setAnts: () => {}, view: () => null, about: () => null, props: () => {}, refresh: () => {}
+    });
+    partFull.show(true);
+    partFull.panel.querySelector('[data-k="group"]').click(); partFull.panel.querySelector('[data-k="clump"]').click();
+    const [cf] = free(edc.file, 1, 700), bytesFull = Uint8Array.from(edc.file.bytes), told = said.length;
+    partFull.painter.begin({ row: cf[0], column: cf[1] });
+    check(said.length === told + 1 && /does not fit/.test(said[told]) && same(edc.file.bytes, bytesFull) && !/Put 6/.test(partFull.panel.textContent), 'clump page: a clump that does not fit says why in a message, changes nothing and puts no "Put" note (' + said[told] + ')');
+    part.show(false);
+    // a map that fills up: the last clump is as big as the room, and the box says so
+    const full = editor(open('Original-Ants/Maps/TINY.LVL')), notes = [];
+    const partF = Ants.create({
+        doc, win: {}, host: { tools, hint, side }, file: () => full.file, act: (c) => !!full.act(c), say: (t, m) => said.push(m),
+        dialogs: { open: () => {} }, team: () => 0, setTeam: () => {}, ants: () => 250, setAnts: () => {}, view: () => null, about: () => null, props: () => {}, refresh: () => {}
+    });
+    partF.show(true);
+    partF.panel.querySelector('[data-k="group"]').click(); partF.panel.querySelector('[data-k="clump"]').click();
+    let last = count(full.file);
+    for (let k = 0; k < 6; k++) {
+        partF.painter.begin({ row: 15, column: 15 });
+        const now = count(full.file), text = partF.panel.textContent, m = /Put (\d+) Green ants at row 15, column 15 \(only (\d+) fit\)\./.exec(text);
+        if (m) notes.push([+m[1], +m[2], now - last]);
+        last = now;
+    }
+    check(notes.length >= 1 && notes.every(([said1, only, put]) => said1 === only && only === put && only < 250), 'clump page: when the map fills up the box says how many fit, and that is how many were put (' + JSON.stringify(notes) + ')');
+    check(count(full.file) === full.file.cells, 'clump page: the clumps fill every cell of the map and no more (' + count(full.file) + ' of ' + full.file.cells + ')');
+}
+
+// H
+{
+    const WRITE = argv.includes('--write-maps') ? path.resolve(argv[argv.indexOf('--write-maps') + 1]) : '';
+    for (const [rel, name, size] of [['Original-Ants/Maps/MEDIUM.LVL', 'ClumpsMedium.LVL', 250], ['Original-Ants/Maps/TREASURE.LVL', 'ClumpsTreasure.LVL', 150]]) {      // (TREASURE has room for 2,214 ants)
+        const f0 = open(rel), ed = editor(f0), had = ants(f0).slice(), n0 = count(f0);
+        const spots = [];
+        for (const fr of [0.2, 0.5, 0.8]) for (const fc of [0.2, 0.4, 0.6, 0.8]) spots.push([Math.floor(f0.rows * fr), Math.floor(f0.columns * fc)]);
+        let acts = 0;
+        for (let t = 0; t < 4; t++) for (let k = 0; k < 3; k++) { const at = spots[(t + 4 * k) % spots.length], ch = Blocks.placeStart(ed.file, t, at[0], at[1], size); if (!ch.error && ed.act(ch)) acts++; }
+        check(acts === 12, name + ': twelve clumps of ' + size + ' are twelve changes (' + acts + ')');
+        const after = ants(ed.file), back = File.parse(Uint8Array.from(ed.file.bytes));
+        check(back.ok && count(back) === n0 + 12 * size && [0, 1, 2, 3].every((t) => after[t] === had[t] + 3 * size && ants(back)[t] === after[t]), name + ': the file reads again, with ' + 3 * size + ' more ants for every team');
+        const fresh = Blocks.layout(ed.file).records.slice(n0), cells = fresh.map((r) => r.row + ',' + r.column);
+        check(new Set(cells).size === cells.length && fresh.every((r) => r.row < ed.file.rows && r.column < ed.file.columns && !Ants.whyNot(f0, r.row * f0.columns + r.column)), name + ': every new ant on a cell of its own, inside the map, where an ant can walk');
+        if (WRITE) { fs.mkdirSync(WRITE, { recursive: true }); fs.writeFileSync(path.join(WRITE, name), Buffer.from(ed.file.bytes)); }
+    }
 }
 
 console.log(checks + ' checks, ' + failures + ' failed');

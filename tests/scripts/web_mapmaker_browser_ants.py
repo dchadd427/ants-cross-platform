@@ -142,6 +142,7 @@ def run_ants(page, tab, args, check, env, edges_bytes, edges_js):
     page.ev("document.getElementById('map').focus()")
     page.key("0")
     page.tool("hills")
+    settle(page)                         # (the map has its room when the tool is chosen: a point worked out before that is off, and the first hill is put beside its cell)
     for team, (r, c) in ((0, (10, 10)), (1, (10, 85)), (2, (85, 10)), (3, (85, 85))):
         page.ev("document.querySelector('[data-tile=\"%d\"]').click()" % team)
         tap_cell(page, r, c)
@@ -164,6 +165,7 @@ def run_ants(page, tab, args, check, env, edges_bytes, edges_js):
     tap_cell(page, 2, 2)
     check(wait_for(lambda: len(records(bytes_now(page, edges_bytes))) in (n0 + 1, n0), 3), "a tap on TINY is answered")
     check(wait_for(lambda: page.state()["check"] == "Works in the original game", 10), "the map still works in the original game (%s)" % page.state()["check"])
+    run_clumps(page, tab, args, check, env, edges_bytes, edges_js)
 
 
 def run_ants_phone(page, tab, args, check, env, edges_bytes, edges_js):
@@ -197,3 +199,154 @@ def run_ants_phone(page, tab, args, check, env, edges_bytes, edges_js):
     visible = page.ev("(function () { var b = document.querySelector('.am [data-k=put-mix]'); var r = b.getBoundingClientRect(); return r.top >= 0 && r.bottom <= window.innerHeight && r.height >= 43.5; })()")
     check(visible, "Put is in view on a phone without scrolling, and 44 pixels high")
     page.shot(args.shots, "mapmaker-ants-phone")
+    run_clumps(page, tab, args, check, env, edges_bytes, edges_js, phone=True)
+
+
+def touch_tap(tab, x, y):
+    for kind in ("touchStart", "touchEnd"):
+        tab.call("Input.dispatchTouchEvent", {"type": kind, "touchPoints": [] if kind == "touchEnd" else [{"x": x, "y": y, "id": 1, "radiusX": 8, "radiusY": 8, "force": .5}]})
+        time.sleep(0.06)
+    time.sleep(0.25)
+
+
+def ants_of(page, edges_bytes, tile=154):
+    return [(r, c) for t, r, c in records(bytes_now(page, edges_bytes)) if t == tile]
+
+
+def near(cells, row, column, reach):
+    return bool(cells) and all(abs(r - row) <= reach and abs(c - column) <= reach for r, c in cells)
+
+
+def settle(page):
+    """the map's size and place are the same on two looks 0.3 seconds apart: choosing a tool or pressing a button of the Pick up bar changes the room that the map has, and a point that was worked out before is then off"""
+    last = None
+    for _ in range(40):
+        now = (page.ev("document.getElementById('map').getAttribute('data-scale')"), page.box("#map"))
+        if now == last:
+            return True
+        last = now
+        time.sleep(0.3)
+    return False
+
+
+def point(page, row, column):
+    """where the middle of a cell is on the page NOW: from the view's own middle and size of a tile (Page.cell_point takes the whole map to be in the middle, which a tool's bar under the map makes untrue)"""
+    box = page.box("#map")
+    scale = float(page.ev("document.getElementById('map').getAttribute('data-scale')"))
+    cy, cx = [float(v) for v in page.ev("document.getElementById('map').getAttribute('data-center')").split(",")]
+    return box["x"] + box["w"] / 2 + (column + 0.5 - cx) * scale, box["y"] + box["h"] / 2 + (row + 0.5 - cy) * scale
+
+
+def enter(page):
+    """the Enter key as a keyboard sends it, with its character: the number box takes what is typed in it"""
+    params = {"key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13, "nativeVirtualKeyCode": 13}
+    page.tab.call("Input.dispatchKeyEvent", dict(params, type="keyDown", text="\r"))
+    page.tab.call("Input.dispatchKeyEvent", dict(params, type="keyUp"))
+
+
+def pk_press(page, key):
+    found = page.ev("(function () { var b = document.querySelector('.pk-bar [data-k=\"%s\"]'); if (!b || b.disabled) return false; b.click(); return true; })()" % key)
+    time.sleep(0.3)
+    return found
+
+
+def pk_labels(page):
+    return page.ev("[].filter.call(document.querySelectorAll('.pk-bar .pk-b'), function (b) { return b.getAttribute('data-k') !== 'fold'; }).map(function (b) { return b.textContent; })")
+
+
+def run_clumps(page, tab, args, check, env, edges_bytes, edges_js, phone=False):
+    """the player path of the Clump (docs/MAP_EDITOR.md, "Starting ants"): the Ants tool, Group, Clump; two taps in separate places put two clumps and both stay; 250 ants; Undo takes one clump at a time;
+    Pick up moves one; Erase takes one and Undo gives its bytes back exactly. On a phone the taps are touches and the number is set from a script, as the Mix part does."""
+    global wait_for
+    wait_for = env["wait_for"]
+    make_extended = env["make_extended"]
+    label = "a phone held upright (390 x 844)" if phone else "1280 x 800"
+    print("[web map maker] clumps: two taps, 250 ants, Undo, Pick up, Erase, %s" % label)
+    check(page.open(edges_js) and page.ready(), "the page starts")
+    page.ev(edges_js)
+    if phone:
+        page.press_act("menu")
+        wait_for(lambda: page.ev("!!document.querySelector('.dlg')"))
+        page.ev("[].filter.call(document.querySelectorAll('.dlg button'), function (b) { return b.textContent === 'New'; })[0].click()")
+        wait_for(lambda: page.ev("!!document.querySelector('.kinds')"))
+        page.ev("document.querySelectorAll('.kind input')[1].click()")
+        page.type_into("#size-rows", "60"); page.type_into("#size-columns", "60")
+        page.ev("[].filter.call(document.querySelectorAll('.dlg-foot .btn'), function (b) { return b.textContent === 'Make map'; })[0].click()")
+        check(wait_for(lambda: page.state()["rows"] == "60", 15), "a 60 x 60 Extended map")
+    else:
+        check(make_extended(page, 60, 60), "a 60 x 60 Extended map")
+    tap = (lambda r, c: touch_tap(tab, *point(page, r, c))) if phone else (lambda r, c: page.tab.click(*point(page, r, c)))
+    page.tool("ants")
+    check(wait_for(lambda: page.ev("!!document.querySelector('.am') && !document.querySelector('.am').hidden"), 10), "the Ants box is there")
+    button(page, "group"); button(page, "clump")
+    check(page.ev("document.querySelector('.am input[data-k=clump]').value") == "4", "Group, Clump: 4 ants to begin with")
+    check("A tap puts a new clump. Pick up moves one." in panel_text(page), "the note says that a tap puts a new clump")
+    if phone:
+        small = page.ev("[].filter.call(document.querySelectorAll('.am button, .am input'), function (b) { var r = b.getBoundingClientRect(); return r.width > 0 && (r.height < 43.5 || r.width < 43.5); }).map(function (b) { return b.getAttribute('data-k') || b.className; })")
+        check(not small, "every button and field of the box is at least 44 pixels in Clump too (%s)" % small)
+    page.ev("document.getElementById('map').focus()")
+    page.key("0")
+    # two taps in separate places: two clumps, both stay
+    tap(12, 12)
+    check(wait_counts(page, edges_bytes, {154: 4}), "a tap puts 4 Green ants")
+    check("Put 4 Green ants at row 12, column 12. One Undo takes them away." in panel_text(page), "the box says what the tap put: %s" % panel_text(page)[-110:])
+    tap(45, 45)
+    check(wait_counts(page, edges_bytes, {154: 8}), "a tap in another place puts 4 more: 8 in all")
+    got = ants_of(page, edges_bytes)
+    check(near(got[:4], 12, 12, 2) and near(got[4:], 45, 45, 2), "the first clump stayed round row 12, column 12 and the second is round row 45, column 45: %s" % got)
+    # 250
+    if phone:
+        page.ev("(function () { var n = document.querySelector('.am input[data-k=clump]'); n.value = '900'; n.dispatchEvent(new Event('change')); })()")
+    else:
+        page.type_into(".am input[data-k=clump]", "900")
+        enter(page)
+    check(wait_for(lambda: page.ev("document.querySelector('.am input[data-k=clump]').value") == "250", 5), "900 typed in the number box is 250: %s" % page.ev("document.querySelector('.am input[data-k=clump]').value"))
+    check(page.ev("document.querySelector('.am [data-k=\"clump+\"]').disabled") and not page.ev("document.querySelector('.am [data-k=\"clump-\"]').disabled"), "More is off at 250")
+    page.ev("document.getElementById('map').focus()")
+    page.ev("window.scrollTo(0, 0)")
+    settle(page)
+    tap(30, 14)
+    check(wait_counts(page, edges_bytes, {154: 258}, 12), "a tap puts 250 more: 258 ants")
+    got = ants_of(page, edges_bytes)
+    check(len(set(got)) == 258 and near(got[8:], 30, 14, 12), "the 250 are on cells of their own round row 30, column 14, and the two small clumps are as they were: %s" % got[:8])
+    check("Put 250 Green ants at row 30, column 14. One Undo takes them away." in panel_text(page), "the box says so: %s" % panel_text(page)[-110:])
+    page.shot(args.shots, "mapmaker-clumps-phone" if phone else "mapmaker-clumps-desktop")
+    # Undo takes one clump at a time, Redo puts them back
+    for want in (8, 4, 0):
+        page.ev("document.getElementById('undo-btn').click()")
+        check(wait_counts(page, edges_bytes, {154: want} if want else {}, 8), "Undo: %d ants" % want)
+    for want in (4, 8, 258):
+        page.ev("document.getElementById('redo-btn').click()")
+        check(wait_counts(page, edges_bytes, {154: want}), "Redo: %d ants" % want)
+    # Pick up moves one clump
+    page.tool("pickup")
+    check(wait_for(lambda: page.ev("!!document.querySelector('.pk-bar')"), 10), "Pick up is there")
+    before = ants_of(page, edges_bytes)
+    first = before[0]
+    page.ev("window.scrollTo(0, 0)")
+    settle(page)
+    check(page.ev("(function () { var c = document.getElementById('map'), k = window.devicePixelRatio; return Math.abs(c.width - c.clientWidth * k) <= 1 && Math.abs(c.height - c.clientHeight * k) <= 1; })()"), "the map is drawn in the room it has: no stretched picture after the tool changed (the canvas is %s)" % page.ev("[document.getElementById('map').width, document.getElementById('map').height, document.getElementById('map').clientWidth, document.getElementById('map').clientHeight].join(' ')"))
+    tap(*first)
+    check(wait_for(lambda: "Move its group (4)" in pk_labels(page), 5), "a tap on an ant of the first clump: Move its group (4): %s" % pk_labels(page))
+    pk_press(page, "group")
+    settle(page)
+    tap(first[0] + 6, first[1] + 20)
+    pk_press(page, "done")
+    after = ants_of(page, edges_bytes)
+    check(len(after) == 258 and sorted(after[4:]) == sorted(before[4:]) and near(after[:4], first[0] + 6, first[1] + 20, 2), "the first clump moved 6 rows down and 20 columns right and the other 254 ants did not: %s" % after[:4])
+    # Erase takes one clump and Undo gives the same bytes back
+    page.tool("erase")
+    page.ev("document.getElementById('map').focus()")
+    page.ev("window.scrollTo(0, 0)")
+    settle(page)
+    saved = bytes(bytes_now(page, edges_bytes))
+    second = after[4]
+    tap(*second)
+    check(wait_counts(page, edges_bytes, {154: 254}), "Erase on an ant of the second clump takes its 4 and leaves the other 254")
+    page.ev("document.getElementById('undo-btn').click()")
+    check(wait_for(lambda: bytes(bytes_now(page, edges_bytes)) == saved, 8), "one Undo gives back exactly the bytes of before")
+    tap(30, 14)
+    check(wait_counts(page, edges_bytes, {154: 8}), "Erase on the 250 takes the 250 and leaves the two small clumps")
+    page.ev("document.getElementById('undo-btn').click()")
+    check(wait_for(lambda: bytes(bytes_now(page, edges_bytes)) == saved, 8), "and one Undo gives them back exactly")
+    check(page.ev("document.documentElement.scrollWidth <= window.innerWidth"), "the page does not scroll sideways")

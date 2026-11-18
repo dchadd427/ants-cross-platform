@@ -23,6 +23,8 @@
 
 namespace ants::server {
 
+class MapPictures;       // map_pictures.hpp
+
 struct TestMapConfig {
     std::string dir;                                  // the folder of the test maps (made when the store opens; only files that the store makes are ever deleted from it)
     uint64_t max_held_bytes{64ull << 20};             // all held files together: a full store drops the oldest that may go, else refuses
@@ -82,6 +84,8 @@ public:
     bool take_changed();
     /// The bytes of all held files
     uint64_t held_bytes() const;
+    /// The maker of the pictures (not owned; nullptr: none): a map that is kept gets its picture asked for (map_pictures.hpp)
+    void set_pictures(MapPictures* pictures) noexcept { pictures_ = pictures; }
 
     TestMapStore(const TestMapStore&) = delete;
     TestMapStore& operator=(const TestMapStore&) = delete;
@@ -103,6 +107,7 @@ private:
     bool changed_{false};
     bool upkept_{false};
     uint32_t last_upkeep_ms_{0};
+    MapPictures* pictures_{nullptr};
 };
 
 }  // namespace ants::server

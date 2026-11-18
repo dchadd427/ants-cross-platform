@@ -100,24 +100,10 @@
         return out;
     }
 
-    // The ants of the picked ant's team that touch each other (the eight cells round an ant, a stack of ants on a cell too), as items; the picked one is first
+    // The ants of the picked ant's team that touch each other (the eight cells round an ant, a stack of ants on a cell too), as items; the picked one is first (the clump: mapmaker_blocks.js, clumpOf)
     function antGroup(file, item) {
-        var ix = index(file), lay = ix.lay, team = item.team, seen = {}, out = [item], queue = [item.fp[0]], taken = {}, q = 0, cols = file.columns;
-        taken[item.i] = true; seen[item.fp[0]] = true;
-        while (q < queue.length) {
-            var p = rc(file, queue[q++]), dr, dc;
-            for (dr = -1; dr <= 1; dr++) for (dc = -1; dc <= 1; dc++) {
-                var r = p.r + dr, c = p.c + dc, list, i;
-                if (r < 0 || c < 0 || r >= file.rows || c >= cols) continue;
-                list = ix.ants[r * cols + c] || [];
-                for (i = 0; i < list.length; i++) {
-                    if (taken[list[i]] || Blocks.teamOfMarker(lay.records[list[i]].tile) !== team) continue;
-                    taken[list[i]] = true; out.push(antItem(file, ix, list[i]));
-                    if (!seen[r * cols + c]) { seen[r * cols + c] = true; queue.push(r * cols + c); }
-                }
-            }
-        }
-        return out;
+        var ix = index(file);
+        return Blocks.clumpOf(file, item.i).map(function (i, k) { return k ? antItem(file, ix, i) : item; });
     }
 
     // Everything that is whole inside the box {r0, c0, r1, c1} (cells, both ends in): ants, plants, piles, hills and objects (an object only when every cell of it is inside the box)
