@@ -1,5 +1,6 @@
 # =============================================================================
-# The dedicated game server (ants_server): a headless program, no SDL, no game assets except the six maps.
+# The dedicated game server (ants_server): a headless program. It holds the six maps, and the picture maker ants_thumb with the game's archive (ants.chd), which draws the pictures of the players' maps
+# (docs/MAP_SUBMISSIONS.md, "Pictures"): the game's renderer on SDL's dummy video driver, so the image has SDL2 and SDL2_ttf (the libraries only) and no window system, sound or other game data.
 #   docker build -f Dockerfile.server -t ants-server .
 #   docker run --rm -v ants-results:/results -p 4001:4001 -p 127.0.0.1:4002:4002 -p 127.0.0.1:4010:4010 ants-server
 # The control secret: pass -e ANTS_SERVER_SECRET=<a long random secret>, or leave it out: the server makes one the first time it starts, prints it once in its log
@@ -15,8 +16,9 @@ FROM debian:12-slim AS builder
 
 # ccache makes a compile of unchanged sources a copy of the last result (CMakeLists.txt finds it by itself); its folder is a BuildKit cache mount, kept by the host between builds and never part of
 # the image. The mounts (`RUN --mount=type=cache`) need BuildKit (Docker 23 and later builds with it; docs/BUILD_AND_RUN.md says how to switch it on and what the old builder says).
+# (libsdl2-dev and libsdl2-ttf-dev: ants_thumb links the game's renderer, which needs SDL2 and SDL2_ttf; the server itself needs neither)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends build-essential cmake ccache && \
+    apt-get install -y --no-install-recommends build-essential cmake ccache libsdl2-dev libsdl2-ttf-dev && \
     rm -rf /var/lib/apt/lists/*
 ENV CCACHE_DIR=/root/.ccache CCACHE_MAXSIZE=1G
 
@@ -34,8 +36,8 @@ COPY third_party/ ./third_party/
 RUN echo 999.999.999 > VERSION
 RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-server \
     ccache -z > /dev/null && \
-    cmake -B build -DCMAKE_BUILD_TYPE=Release -DANTS_BUILD_APP=OFF -DBUILD_TESTS=OFF -DANTS_BUILD_TOOLS=OFF && \
-    cmake --build build -j"$(nproc)" --target ants_server && \
+    cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF -DANTS_BUILD_TOOLS=OFF && \
+    cmake --build build -j"$(nproc)" --target ants_server ants_thumb && \
     ccache -s
 
 # The real version (the file VERSION): CMake generates its header again (the grep stops the build if it did not) and the files that include it are compiled again.
@@ -43,7 +45,7 @@ COPY VERSION ./VERSION
 RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-server \
     cmake -B build && \
     grep -q "\"v$(head -n 1 VERSION | tr -d '[:space:]')\"" build/generated/ants_app/version.hpp && \
-    cmake --build build -j"$(nproc)" --target ants_server
+    cmake --build build -j"$(nproc)" --target ants_server ants_thumb
 
 # Which build this is (`ants_server --version` and the first line of the log say it), found AFTER the compile and after the version so that a new commit recompiles one tiny file and links again instead
 # of building the server again. The first of: the build argument ANTS_BUILD_ID (docker build --build-arg ANTS_BUILD_ID=$(git rev-parse --short HEAD) -f Dockerfile.server .; a compose
@@ -56,7 +58,7 @@ COPY docker/resolve_build_id.sh /src/docker/resolve_build_id.sh
 COPY VERSION .git* /src/gitinfo/
 RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitinfo)" && \
     cmake -B build "-DANTS_BUILD_ID=${BUILD_ID}" && \
-    cmake --build build -j"$(nproc)" --target ants_server && \
+    cmake --build build -j"$(nproc)" --target ants_server ants_thumb && \
     SHOWN="$(/src/build/src/ants_server/ants_server --version)" && \
     echo "${SHOWN}" && \
     case "${SHOWN}" in "ants_server v$(head -n 1 /src/gitinfo/VERSION | tr -d '[:space:]') build "*) ;; *) echo "the server does not say the version of the file VERSION" >&2; exit 1 ;; esac
@@ -65,6 +67,11 @@ RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitin
 # The runtime image: the program and nothing else, run by an unprivileged user
 # =============================================================================
 FROM debian:12-slim AS runner
+
+# (libsdl2-2.0-0 and libsdl2-ttf-2.0-0: what ants_thumb needs to run, about 28 MB with the libraries they pull in)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libsdl2-2.0-0 libsdl2-ttf-2.0-0 && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN useradd --system --no-create-home --shell /usr/sbin/nologin ants && \
     mkdir -p /maps /results && chown ants /results
@@ -76,6 +83,9 @@ COPY Original-Ants/Maps/ /maps/
 # volume there that is filled from the image once and then kept, and a volume (or an ANTS_MAPS_DIR) would hide them, or show an old set after an update. (The previews are the site image's: docker/nginx.conf.)
 COPY Community-Maps/*.lvl Community-Maps/*.LVL Community-Maps/maps.json Community-Maps/previews.json /community-maps/
 
+# The picture maker and the archive that it reads (the game's own data, which the repository holds: ants.chd), for the pictures of the players' maps (the server starts the program for each map; the ENTRYPOINT names both)
+COPY Original-Ants/ants.chd /usr/local/share/ants/ants.chd
+COPY --from=builder /src/build/src/ants_thumb/ants_thumb /usr/local/bin/ants_thumb
 COPY --from=builder /src/build/src/ants_server/ants_server /usr/local/bin/ants_server
 
 USER ants
@@ -87,5 +97,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/4001"]
 
 # Every interface inside the container (a published port does not reach the container's loopback address): the published ports decide who can reach it, see the header
-ENTRYPOINT ["/usr/local/bin/ants_server", "--maps", "/maps", "--community-maps", "/community-maps", "--public", "--ws-any-interface", "--ctl-any-interface", "--replay-any-interface", "--submit-any-interface", "--test-map-any-interface", "--results-dir", "/results"]
+ENTRYPOINT ["/usr/local/bin/ants_server", "--maps", "/maps", "--community-maps", "/community-maps", "--public", "--ws-any-interface", "--ctl-any-interface", "--replay-any-interface", "--submit-any-interface", "--test-map-any-interface", "--results-dir", "/results", "--map-picture-program", "/usr/local/bin/ants_thumb", "--map-picture-archive", "/usr/local/share/ants/ants.chd"]
 CMD ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010"]

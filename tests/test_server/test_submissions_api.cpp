@@ -19,6 +19,7 @@
 #include "ants_assets/lvl_writer.hpp"
 #include "ants_server/crypto.hpp"
 #include "ants_server/map_names.hpp"
+#include "ants_server/map_pictures.hpp"
 #include "ants_net/netgame.hpp"
 #include "ants_server/map_store.hpp"
 #include "ants_server/submissions.hpp"
@@ -137,6 +138,21 @@ struct Api {
     }
 
     HttpResponse call(const HttpRequest& r) { return api->handle(r, now, now_ms); }
+
+    // The pictures that the picture maker made (map_pictures.hpp): a folder that holds the picture of each of `ids` (the frame of a PNG; the maker itself is test_map_pictures.cpp) and is not asked to make any
+    std::unique_ptr<MapPictures> pictures;
+    void make_pictures(const std::vector<std::string>& ids) {
+        MapPicturesConfig pc;
+        pc.dir = (dir.path / "pictures").string();
+        fs::create_directories(pc.dir);
+        { std::ofstream(fs::path(pc.dir) / "version") << "1\n"; }
+        const std::string png = std::string("\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR\0\0\0\x0a\0\0\0\x0a\x08\x02\0\0\0", 29) + std::string(4, '\0') + std::string("\0\0\0\0IEND\xAE\x42\x60\x82", 12);
+        for (const std::string& id : ids) std::ofstream(fs::path(pc.dir) / (id + ".png"), std::ios::binary) << png;
+        pictures = std::make_unique<MapPictures>(pc);
+        std::string why;
+        pictures->open(why);
+        store->set_pictures(pictures.get());
+    }
 
     std::string text_of_state(const std::string& id) {
         Submission s;
@@ -378,6 +394,8 @@ int main() {
         ASSERT_EQ(parse_text(t.owner("GET", "/admin/api/next-name", "name=Tiny").body).get("name").str(), std::string("Tiny 2"));
         ASSERT_EQ(t.owner("GET", "/admin/api/next-name", "name=a%2Fb").status, 400);
         ASSERT_EQ(t.owner("GET", "/admin/api/next-name").status, 400);
+        ASSERT_EQ(t.owner("GET", "/admin/api/maps/" + sent[0].submission.id + "/picture").status, 404);          // (no picture is made yet: the page shows its empty square)
+        t.make_pictures({sent[0].submission.id});
         const HttpResponse picture = t.owner("GET", "/admin/api/maps/" + sent[0].submission.id + "/picture");
         ASSERT_TRUE(picture.status == 200 && picture.content_type == "image/png" && picture.body.compare(0, 4, "\x89PNG") == 0);
         ASSERT_EQ(t.owner("GET", "/admin/api/maps/" + std::string(32, 'e') + "/picture").status, 404);

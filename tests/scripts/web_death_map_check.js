@@ -165,8 +165,9 @@ function marks(card) { return svgOf(card).byClass('mkp'); }
     same('with no list yet, an approved map has the library\'s address to begin with', pic && pic.src, '/maps/previews/Fight%20Island.webp');
     pic.fire('error');
     same('... and a 404 is answered with the other ending, in the same image', [stage.byTag('img')[0] === pic, pic.src], [true, '/maps/previews/Fight%20Island.png']);
-    pic.fire('error');
-    same('... and when that does not come either, the picture is taken away and the card stays whole', [stage.byTag('img').length, card.byClass('dm-stage').length], [0, 1]);
+    // (the picker asks a picture of a map of the players again after a pause before it gives it up: the pauses are kept here and run by hand, each followed by the error of a picture that is still not there)
+    const giveUp = (image) => { const real = globalThis.setTimeout, timers = []; globalThis.setTimeout = (f) => { timers.push(f); return timers.length; }; try { image.fire('error'); const waiting = timers.length; for (let i = 0; i < 6 && timers.length; i++) { timers.shift()(); image.fire('error'); } return waiting; } finally { globalThis.setTimeout = real; } };
+    same('... and when that does not come either, it is asked for again after a pause (the server may not have drawn it yet) and, six pauses later, the picture is taken away and the card stays whole', [giveUp(pic), stage.byTag('img').length, card.byClass('dm-stage').length], [1, 0, 1]);
     STAGE = 0;
 }
 {

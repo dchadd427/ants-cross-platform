@@ -10,6 +10,7 @@
 #include "ants_server/crypto.hpp"
 #include "ants_server/history_store.hpp"
 #include "ants_server/map_names.hpp"
+#include "ants_server/map_pictures.hpp"
 #include "ants_server/online_limits.hpp"
 #include "ants_server/secret.hpp"
 
@@ -300,6 +301,7 @@ TestMapOutcome TestMapStore::submit(const TestMapInput& in, int64_t now) {
     }
     kept_.push_back(Kept{m, now, in.address});
     changed_ = true;
+    if (pictures_ != nullptr) pictures_->want(path);                       // (the picture that the room, the lobby's list and the map picker show: made behind the request, never in it)
     out.ok = true;
     out.map = std::move(m);
     out.clean_name = stem;

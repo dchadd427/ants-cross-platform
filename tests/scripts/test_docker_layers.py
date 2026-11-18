@@ -343,7 +343,8 @@ class TheServerImage(unittest.TestCase):
 
     def test_the_runner_stage_is_what_it_was(self):
         self.assertEqual(sorted(w for s in self.runner if s.op == "COPY" for w in s.words[:-1]),
-                         sorted(["Original-Ants/Maps/", "Community-Maps/*.lvl", "Community-Maps/*.LVL", "Community-Maps/maps.json", "Community-Maps/previews.json", "/src/build/src/ants_server/ants_server"]))
+                         sorted(["Original-Ants/Maps/", "Original-Ants/ants.chd", "Community-Maps/*.lvl", "Community-Maps/*.LVL", "Community-Maps/maps.json", "Community-Maps/previews.json", "/src/build/src/ants_thumb/ants_thumb",
+                                 "/src/build/src/ants_server/ants_server"]))
         text = self.docker.text[self.docker.text.index("FROM debian:12-slim AS runner"):]
         self.assertEqual(re.findall(r"(?m)^USER .*$", text), ["USER ants"])
         self.assertEqual(re.findall(r"(?m)^EXPOSE .*$", text), ["EXPOSE 4001 4002 4010 4020"])
