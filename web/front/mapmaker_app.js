@@ -493,7 +493,7 @@
         mine = MapMine.create(mineEnv());
         canvas = MapCanvas.create({
             doc: doc, win: win, canvas: $('map'), minimap: $('minimap'), mini: $('mini'), miniCap: $('mini-cap'), grip: $('mini-grip'), lock: $('mini-lock'), hide: $('mini-hide'), show: $('mini-show'), where: $('where'),
-            zoomIn: doc.querySelector('[data-act="zoom-in"]'), zoomOut: doc.querySelector('[data-act="zoom-out"]'),
+            zoomIn: doc.querySelector('[data-act="zoom-in"]'), zoomOut: doc.querySelector('[data-act="zoom-out"]'), gapNote: $('gap-note'),
             onCursor: function (cell) { $('announce').textContent = cell ? 'Row ' + cell.row + ', column ' + cell.column : ''; }       // (said once for a key or a tap, not for every move of a mouse)
         });
         tools = MapTools.create({
@@ -548,7 +548,8 @@
                 win.MapEdges.open({
                     doc: doc, dialogs: dialogs, ground: win.MapGround, file: function () { return map.file; }, apply: tools.act,
                     visible: function () { var st = canvas.state(); return MapView.visible(st.view, map.file, st.width, st.height); },
-                    sprites: function () { return sprites && sprites.ready() ? sprites : null; }
+                    sprites: function () { return sprites && sprites.ready() ? sprites : null; },
+                    show: function (row, column) { canvas.showCell(row, column); $('map').focus(); }
                 });
             });
         }

@@ -387,6 +387,7 @@
         full: function () { return 'That room is full, so this one is yours now. Send the link on if you like.'; },
         running: function () { return 'The match in that room has already started, so this room is yours instead. Send the link on if you like.'; },
         busy: function () { return 'The server is full right now, so there is no room for you yet. Try again in a minute.'; },
+        seatgone: function (a) { return 'Your seat in this room ended while you were away, so you joined again.' + (a && a.host ? ' ' + a.host + ' is the host.' : ' You are the host.'); },      // (the room kept the seat for a minute; the person came back with its key after that)
         lost: function () { return 'Connection lost. Getting you back in…'; },
         unreachable: function () { return 'Cannot reach the game server. Check your connection; trying again…'; },
         away: function () { return 'This room was opened in another window, so it is closed here.'; },
@@ -405,7 +406,7 @@
     var META = {
         host: { tone: '', btn: 'OK' }, old: { tone: '', btn: 'OK' }, notback: { tone: 'warn', btn: 'OK' }, late: { tone: 'warn', btn: 'OK' }, lateplayer: { tone: 'warn', btn: 'OK' }, noplace: { tone: 'warn', btn: 'OK' },
         startsfailed: { tone: 'warn', btn: 'OK' }, maplost: { tone: 'warn', btn: 'OK' }, mapcolors: { tone: 'warn', btn: 'OK' }, full: { tone: '', btn: 'OK' }, running: { tone: '', btn: 'OK' },
-        removed: { tone: '', btn: 'OK' }, lost: { tone: 'warn', btn: '' }, unreachable: { tone: 'warn', btn: '' }, busy: { tone: 'warn', btn: 'Try again' }, away: { tone: 'warn', btn: 'Use this window' },
+        removed: { tone: '', btn: 'OK' }, seatgone: { tone: 'warn', btn: 'OK' }, lost: { tone: 'warn', btn: '' }, unreachable: { tone: 'warn', btn: '' }, busy: { tone: 'warn', btn: 'Try again' }, away: { tone: 'warn', btn: 'Use this window' },
         version: { tone: 'warn', btn: 'Reload' }, notice: { tone: 'warn', btn: 'OK' }
     };
     // What a banner's button does, in words (the page does it; a test reads the words)

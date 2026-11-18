@@ -59,7 +59,8 @@
 // (8) Public rooms (protocol 22, docs/NETWORK_PORT.md "Protocol 22"). A new lobby room is private. The leader of an open lobby room, while its START does not wait, makes it public or private with VisibilityMsg (within a budget of its
 // own: flood.hpp); the Room message shows it (kRoomPublic) and the server lists the room (is_public(), listed_age_ms()). A room whose people have done nothing with it for Config::public_idle_ms (activity() has not moved: answered pings are no
 // use) becomes private by itself, unlist_count() counts those; a Visibility that says public to a public room is the leader's page looking at it still, and counts as use, so it keeps the room public.
-// A room is public because its leader said so: when another person leads (the leader left or was thrown out), it is private again and the new leader chooses for itself.
+// A room is public because its leader said so: when another person leads (the leader left or was thrown out), it is private again and the new leader chooses for itself. The rematch's lobby keeps the choice: a public
+// room is public again for its leader of the match (Rematch::public_by), who leads again when back; while nobody is back it is not listed (a kept seat is not an open place).
 //
 // Both classes are pure logic over Connection, driven from the main loop like the sessions. The connections stay owned by the caller; when the match
 // begins the host lobby hands them (seat -> connection) to the HostSession.
@@ -95,7 +96,7 @@ inline constexpr uint32_t kLobbyForgiveMs = 60u * 1000u;
 inline constexpr uint32_t kLobbyReserveMs = 3u * 3600u * 1000u;
 
 /// What a lobby room's match was made of (HostLobby::rematch), for the lobby room that the server opens again with the same code when the match is over (HostLobby::reopen): the plan (the map, what each
-/// color is, the teams, the game mode) and every person of the match with the seat, name, key, place in the order of the Welcomes and platform that the room gave them.
+/// color is, the teams, the game mode), whether the room was public and every person of the match with the seat, name, key, place in the order of the Welcomes and platform that the room gave them.
 struct Rematch {
     struct Person {
         uint8_t seat{255};
@@ -109,6 +110,7 @@ struct Rematch {
     uint8_t team_a{kNoTeam};
     uint8_t team_b{kNoTeam};
     uint8_t mode{0};
+    uint32_t public_by{0};              // the place in the order of the leader who made the match's room public (0: it was private): the lobby that follows is public for as long as that person leads
     std::vector<Person> people;
 };
 
@@ -436,6 +438,8 @@ private:
     bool leads() const noexcept { return cfg_.host_seat >= sim::MAX_PLAYERS && cfg_.early_start; }
     /// The leader is the guest with the earliest Welcome among those who are here (recomputed whenever somebody joins or leaves, before the room is broadcast)
     void elect_leader();
+    /// The seat of the guest with this place in the order of the Welcomes (connected, held or kept), 255 when none is in the room (elect_leader: who made the room public)
+    uint8_t seat_of_order(uint32_t order) const noexcept;
     /// Whether move_seat would move a guest now (the rule alone, no guard, no budget): the room is open, both are different seats, `from` holds a guest and `to` is empty or holds a guest
     bool can_move_seat(uint8_t from, uint8_t to) const noexcept;
     /// Whether the leader could take the person of `target` out of the room now (the rule alone, no guard, no budget): the room is open (a START that waits does not forbid it), and the seat holds a person

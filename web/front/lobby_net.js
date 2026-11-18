@@ -293,13 +293,34 @@
         return { name: 'ants.rejoin.' + code + '.' + seat, text: JSON.stringify({ k: hexOf(key), s: server, t: Math.floor(nowMs) }) };
     }
 
+    // ---- the seat that a page leaves behind when it goes ----------------------------------------------------------------------------------------------------------------------------------------------
+    // A page that is left (a link to another page of the site, a closed tab) writes ants.lobbyseat into the browser's local storage: {"s": the server's address, "c": the room, "k": the key (32 hex digits), "n": the
+    // name, "o": 1 when the page made the room, "t": epoch ms}. The server holds the seat for a minute, so a page of this browser that opens within SEAT_MEMORY_MS of it takes the seat back with the key (the same
+    // seat, the same lead); an older note is of no use and is not read. The key is a secret: nothing here logs it, and the note is dropped when the seat is given up or taken back.
+    var SEAT_MEMORY = 'ants.lobbyseat', SEAT_MEMORY_MS = 55 * 1000;
+    function seatMemory(server, code, key, name, own, nowMs) {
+        if (!validRoomCode(code) || code === '' || !isKey(key) || typeof server !== 'string' || !isWhole(nowMs)) return null;
+        return JSON.stringify({ s: server, c: code, k: hexOf(key), n: printableOnly(name, MAX_NAME), o: own ? 1 : 0, t: Math.floor(nowMs) });
+    }
+    // { code, key (16 bytes), name, own } when `text` is a note that this server's page left not more than SEAT_MEMORY_MS ago (a time a little ahead of `nowMs` is a clock that was set back and counts as now), else null
+    function seatMemoryRead(text, server, nowMs) {
+        var v;
+        try { v = JSON.parse(text); } catch (e) { return null; }
+        if (!v || typeof v !== 'object' || Array.isArray(v) || Object.keys(v).sort().join(',') !== 'c,k,n,o,s,t') return null;
+        if (v.s !== server || typeof v.c !== 'string' || v.c === '' || !validRoomCode(v.c) || typeof v.k !== 'string' || !/^[0-9a-f]{32}$/.test(v.k) || /^0+$/.test(v.k)) return null;
+        if (!printable(v.n, MAX_NAME) || (v.o !== 0 && v.o !== 1) || !isWhole(v.t) || !isWhole(nowMs)) return null;
+        if (nowMs - v.t > SEAT_MEMORY_MS || v.t - nowMs > SEAT_MEMORY_MS) return null;
+        return { code: v.c, key: bytesOfHex(v.k), name: v.n, own: v.o === 1 };
+    }
+
     // ---- the client ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     // A page's seat in a lobby room. new LobbyClient({ url, code, map, name, key, join, joinFirst, kind, keyOnly, platform, WebSocket, setTimeout, clearTimeout, now, backoff, connectMs, silenceMs, stableMs, onError }).connect(); then on(event, fn):
     // (join: true sends no lobby block, so that a code with no room is answered NoSuchRoom instead of making one: a code that a person typed. joinFirst: true is that for the first Hello only, a link
     // that was sent: once the room has taken us, a room that is lost (a restart) is made again, as a page that came back does. kind: 'game' and keyOnly: true are the game page's results screen in the rematch
     // (web/front/rematch.js): a game's Hello with the key, and the seat of that key or nothing: a room that is gone is 'refused' (never made again), and a Welcome that is not our key's seat is left at once.)
     //   'status' (status)           idle -> connecting -> online; offline (reconnecting); refused, removed, superseded, closed (final)
-    //   'welcome' ({ seat, created, rejoin })   the room took us (created: our Hello made it); the key is not in it (rejoinEntry() is how a page hands it to the game)
+    //   'welcome' ({ seat, created, rejoin, replaced })   the room took us (created: our Hello made it; replaced: our Hello brought a key and the room seated us as a newcomer, because the seat of that key had ended: this
+    //                               seat is a new one); the key is not in it (rejoinEntry() is how a page hands it to the game)
     //   'room' (room)               every Room message, then the events of diffRooms for it
     //   'joined' | 'left' | 'renamed' | 'moved' | 'swapped' | 'host' | 'plan' | 'starting' | 'games'
     //   'notice' ({ text })         a line that the room itself says (the leader's notices, "<name>'s game did not come in time.")
@@ -481,6 +502,7 @@
                 this.refuse(REJECT.NoSuchRoom);
                 return;
             }
+            var replaced = this.keyBytes !== null && hexOf(m.key) !== hexOf(this.keyBytes);      // (our key found no seat: the room took us as a newcomer)
             this.seat = m.player;
             this.keyBytes = m.key;
             this.created = m.created;
@@ -488,7 +510,7 @@
             this.onlineSince = this.now();
             this.setStatus('online');
             if (this.final()) return;
-            this.emit('welcome', { seat: m.player, created: m.created, rejoin: m.rejoin });
+            this.emit('welcome', { seat: m.player, created: m.created, rejoin: m.rejoin, replaced: replaced });
         } else if (m.type === 'room') {
             var prev = this.room;
             this.room = m;
@@ -640,7 +662,7 @@
         validMapName: validMapName, validRoomCode: validRoomCode, publicRoomCode: publicRoomCode, validPersonName: validPersonName, validTeams: validTeams, validPlatform: validPlatform, validChatLine: validChatLine,
         encodeHello: encodeHello, encodeLeave: encodeLeave, encodePong: encodePong, encodePing: function (nonce, sentMs) { return encodePing(MSG.Ping, nonce, sentMs); },
         encodeSeatMove: encodeSeatMove, encodePlan: encodePlan, encodeName: encodeName, encodeRemove: encodeRemove, encodeVisibility: encodeVisibility, encodeStartRequest: encodeStartRequest, encodeChat: encodeChat,
-        fillOfPlan: fillOfPlan, seatingHash: seatingHash, decode: decode, diffRooms: diffRooms, rejoinEntry: rejoinEntry, LobbyClient: LobbyClient,
+        fillOfPlan: fillOfPlan, seatingHash: seatingHash, decode: decode, diffRooms: diffRooms, rejoinEntry: rejoinEntry, SEAT_MEMORY: SEAT_MEMORY, SEAT_MEMORY_MS: SEAT_MEMORY_MS, seatMemory: seatMemory, seatMemoryRead: seatMemoryRead, LobbyClient: LobbyClient,
         hexOf: hexOf, bytesOfHex: bytesOfHex, zeroKey: zeroKey, isZeroKey: isZeroKey
     };
 });
