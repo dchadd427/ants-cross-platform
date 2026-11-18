@@ -427,6 +427,9 @@ struct LevelPlan {
     bool opportunity_skip_guard{false};  // ... an enemy Combat Ant at rest is struck only by an ant that stands on the tile already: its reflex meets a striker on the way
     bool reach_fights{false};            // a fight is not started at an enemy that no walk of the attacker reaches, and no ant is called to it (an order the engine refuses is no blow)
     bool chore_worth{false};             // a fire wall chore is done only when it is worth it: the ring round an enemy gate only while that team has food to bank (chore_worth.hpp)
+    // the hits without pauses (docs/BOT_FIGHT.md, "Hits without pauses"; built and OFF in a plan made by hand and at Easy and Medium, ON at Hard; `--tune hit=0` is the bot before it; the keys below are one rule each)
+    bool hit_in_clip{false};             // a fight orders the next blow while the target is in its hit clip, from an ant that stands two tiles or more from it (the walk takes longer than the clip: the order is not refused), where it waited for the clip to end
+    bool hit_follow_up{false};           // the next attack click of an ant that struck and is idle again asks for the controller's follow-up lane (Profile::follow_up_reaction ticks, not the reaction delay): FightTask and the 187 brawl
     bool idle_hunt{false};               // with no food that the hill can walk to (nothing to bank, nothing to lose) the last ants do not stay home either: one ant stays (the reserve of a fight is 1, not 2 or 3)
     /// The order of the opening's power-up trips (PowerUpTask): by value, Fire first, the Bomber second, the Thief, the Combat Ant and the Swimmer equal (a style or
     /// the bot's own variations may put the equals in another order)
@@ -472,6 +475,8 @@ void without_thief_batch(LevelPlan& plan) noexcept;
 /// The plan without the defence batch (docs/BOT_PEOPLE.md, "Step 1: everyone hits back"): the fights that answer a blow take the own default type and Combat Ants only, as many as the level's defenders, and
 /// end at the target's hit clip unless a kill is in reach. For `bot_arena --tune defence=0` and the tests whose subject is an older rule.
 void without_defence_batch(LevelPlan& plan) noexcept;
+/// The plan without the hits-without-pauses rules (docs/BOT_FIGHT.md): the blow is ordered when the target's hit clip is over and with the level's reaction time. For `bot_arena --tune hit=0` and the tests whose subject is an older rule.
+void without_hit_cadence(LevelPlan& plan) noexcept;
 /// The plan without the heal batch (docs/BOT_PEOPLE.md, "Step 2: hurt ants heal"): no ant is sent home to heal; the engine's own walk home at 1 hit point is all there is. For `bot_arena --tune heal=0` and the tests whose subject is an older rule.
 void without_heal(LevelPlan& plan) noexcept;
 /// The plan without the group batch (docs/BOT_PEOPLE.md, "Step 3: fight as a group"): the ants that answer a blow come from at most defend_reach tiles (and never from beyond the leash), and the fight is kept up at

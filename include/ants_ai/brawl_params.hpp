@@ -16,6 +16,7 @@ struct BrawlParams {
     int32_t reach_tiles{40};             // enemy ants further than this from an ant are no target of that ant
     uint32_t march_gap_ticks{60};        // an ant that marches is told again no sooner than this
     uint32_t ring_bonus{1000};           // the enemy seat that the ring of the seats names for this seat counts this many points (10 = a tile) nearer; 0: no ring (docs/BOT_187.md, "Who is struck first")
+    bool follow_up{false};               // a pack that struck and is idle again is clicked on again as a follow-up click (Orders::attack: the controller's follow-up lane; LevelPlan::hit_follow_up)
     uint32_t solo_ants{4};               // a side with this many living ants or fewer sends one ant at a victim (per_target 1); 0: always per_target
 };
 

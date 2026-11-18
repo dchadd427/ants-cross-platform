@@ -237,7 +237,8 @@ void BotController::decide(const sim::SimulationEngine& sim, Seat& s, uint64_t t
             ++s.stats.intents;
             continue;
         }
-        if (!release_drawn) {
+        const bool lane = follow_up_lane(s, in, tick);                                      // the click of an ant that is in a fight: its own, shorter delay, and no draw from the seat's generator
+        if (!lane && !release_drawn) {
             // ONE delay for the whole decision: the reaction time, +- jitter_percent, from the seat's own generator. The commands of one look leave in the order they
             // were proposed (a per-command draw could turn "stop, then move" around), and a later look never leaves before an earlier one.
             const uint32_t d = s.profile.reaction_delay;
@@ -247,6 +248,7 @@ void BotController::decide(const sim::SimulationEngine& sim, Seat& s, uint64_t t
             s.last_release = release;
             release_drawn = true;
         }
+        const uint64_t at = lane ? follow_up_release(s, in.command.ants, tick) : release;
         const size_t total = in.command.ants.size();
         const size_t step = sim::has_ant_list(in.command.type) ? cap : std::max<size_t>(total, 1u);
         for (size_t from = 0; from < std::max<size_t>(total, 1u); from += step) {
@@ -257,8 +259,8 @@ void BotController::decide(const sim::SimulationEngine& sim, Seat& s, uint64_t t
                 p.command.ants.assign(in.command.ants.begin() + static_cast<std::ptrdiff_t>(from), in.command.ants.begin() + static_cast<std::ptrdiff_t>(to));
             }
             p.priority = in.priority;
-            p.release = release;
-            p.expires = release + s.profile.intent_ttl;
+            p.release = at;
+            p.expires = at + s.profile.intent_ttl;
             p.seq = s.next_seq++;
             if (chain != 0) {                                                               // the first step of a chain (one ant: allowed() saw to it)
                 p.chain = chain;
@@ -273,6 +275,31 @@ void BotController::decide(const sim::SimulationEngine& sim, Seat& s, uint64_t t
     s.chain_base += orders.chains();
 }
 
+// The follow-up lane: the profile has it, the click is an attack that the bot marked, and every ant of it had an attack click released lately (it is in a fight)
+bool BotController::follow_up_lane(const Seat& s, const Intent& in, uint64_t tick) const {
+    if (!in.follow_up || s.profile.follow_up_reaction == 0 || in.chain != 0 || in.command.type != sim::CommandType::GroupAttack || in.command.ants.empty()) return false;
+    for (const uint32_t id : in.command.ants) {
+        const auto it = s.last_attack.find(id);
+        if (it == s.last_attack.end() || tick > it->second + kFollowUpWindow) return false;
+    }
+    return true;
+}
+
+// follow_up_reaction ticks after the look, not before the start hold, and not before an older click that names one of the ants (the later click of a person wins: it must also leave later)
+uint64_t BotController::follow_up_release(const Seat& s, const std::vector<uint32_t>& ants, uint64_t tick) const {
+    uint64_t at = std::max<uint64_t>(tick + s.profile.follow_up_reaction, hold_end_);
+    for (const Pending& q : s.queue) {
+        if (q.release == kNever || q.release <= at) continue;                                // (a step of a timed chain after the first has no release time)
+        for (const uint32_t id : q.command.ants) {
+            if (std::find(ants.begin(), ants.end(), id) != ants.end()) {
+                at = q.release;
+                break;
+            }
+        }
+    }
+    return at;
+}
+
 // The token bucket: rate_milli_cps thousandths of a command per second = rate / 20 per tick (the remainder is carried, so the rate is exact). It does not fill before the hold's first tick
 // (set_start_hold: the seat holds its one token): with the product's hold of 1 it fills from the first tick of the match.
 void BotController::refill(Seat& s, uint64_t tick) const {
@@ -285,6 +312,10 @@ void BotController::refill(Seat& s, uint64_t tick) const {
 void BotController::release(const sim::SimulationEngine& sim, Seat& s, uint64_t tick) {
     for (auto it = s.last_order.begin(); it != s.last_order.end();) {                 // the cool-down of an ant is over after reissue_cooldown ticks
         if (it->second + s.profile.reissue_cooldown <= tick) it = s.last_order.erase(it);
+        else ++it;
+    }
+    for (auto it = s.last_attack.begin(); it != s.last_attack.end();) {               // an ant is in a fight for kFollowUpWindow ticks after its last attack click
+        if (it->second + kFollowUpWindow < tick) it = s.last_attack.erase(it);
         else ++it;
     }
     if (s.queue.empty()) {
@@ -404,6 +435,9 @@ void BotController::release(const sim::SimulationEngine& sim, Seat& s, uint64_t 
         c.issuer = s.seat;                                                              // whatever the bot wrote: the seat speaks
         s.tokens_milli -= kToken;
         for (const uint32_t id : c.ants) s.last_order[id] = tick;
+        if (c.type == sim::CommandType::GroupAttack) {
+            for (const uint32_t id : c.ants) s.last_attack[id] = tick;
+        }
         break_chains_of(s, c.ants, chain, tick);                                        // (the later click of a person wins: a chain that is under way for the ant is over)
         const uint64_t applies = s.sink->applied_at(tick);
         const sim::CommandResult result = s.sink->submit(c);
