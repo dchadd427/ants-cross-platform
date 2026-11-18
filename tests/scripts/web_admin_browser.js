@@ -9,11 +9,11 @@
 //   5. the names are text: a name that is markup is shown as it is, and no tag of it is in the page;
 //   6. a real double click on the form's Ban of a short phone, where the Ban of the question that it opens comes to stand under the second click, bans nobody (the question ignores a press in its first half second).
 //   --shots DIR takes a picture of every scene (NAME_phone.png, NAME_desktop.png; the phone's is the whole page, the window for the question and the menu; a scene of the section Bot matches is one subject cut out of the page:
-//   a panel, the tabs or the question, a desktop at 1x (a panel is about 600 px wide) and a phone at 2x, so that no picture is wider than 1000 px); --only PREFIX draws the scenes that start with it.
+//   a panel, the tabs or the question, a desktop at 1x (a panel is about 600 px wide; the tabs and the Log are cut from a window of 1000 px) and a phone at 2x, so that no picture is wider than 1000 px); --only PREFIX draws the scenes that start with it.
 //   Made-up names only (basil and tess are admins, sage a moderator, pebble a player, clover.4782 the spammer). ADMIN_SHOT_THUMBS=DIR names a folder with mapthumb_a.png to mapthumb_d.png for the pictures of the
 //   maps (else small drawings are made).
 //
-//   node tests/scripts/web_admin_browser.js [--shots DIR] [--only PREFIX]      (CHROME=/path/to/chromium names a browser, PLAYWRIGHT_MODULE=/path/to/playwright-core a module; as root it runs with --no-sandbox)
+//   node tests/scripts/web_admin_browser.js [--shots DIR] [--only PREFIX] [--bots]      (CHROME=/path/to/chromium names a browser, PLAYWRIGHT_MODULE=/path/to/playwright-core a module; as root it runs with --no-sandbox)
 //
 // Needs `playwright` (npm) and a Chromium that it can start; without them it says so and exits 0 (nothing was checked). Exit status: 0 every check passed (or none could be run), 1 a check failed.
 'use strict';
@@ -32,6 +32,7 @@ const arg = (name) => (process.argv.indexOf(name) !== -1 ? process.argv[process.
 const ROOT = path.resolve(__dirname, '..', '..');
 const SHOTS = arg('--shots') ? path.resolve(arg('--shots')) : null;
 const ONLY = arg('--only') || '';
+const BOTS_ONLY = process.argv.indexOf('--bots') !== -1;       // only the scenes of the section Bot matches (and the checks that follow them)
 const NOW_MS = Date.UTC(2026, 10, 16, 21, 20, 0);            // Mon 16 Nov 2026, 13:20 Pacific
 const at = (iso) => Math.floor(Date.parse(iso) / 1000);
 const SIZES = { phone: { width: 390, height: 844, dsf: 2, mobile: true }, desktop: { width: 1280, height: 800, dsf: 2, mobile: false }, narrow: { width: 320, height: 640, dsf: 1, mobile: true } };
@@ -270,7 +271,7 @@ async function fillStart(pg) {                         // three matches, Fight I
     await pg.selectOption('#now-split', '12-34');
 }
 const BOT_SCENES = [
-    ['0_tabs', { who: 'admin', clip: ['.pt.apt', '.atabs', '.asel'] }, async (pg) => { await pg.waitForSelector('.atab .cnt', { state: 'attached' }); await pg.waitForFunction(() => document.querySelectorAll('.atab .cnt').length === 2); }],
+    ['0_tabs', { who: 'admin', clip: ['.pt.apt', '.atabs', '.asel'], width: 1000 }, async (pg) => { await pg.waitForFunction(() => document.querySelectorAll('.atab .cnt').length === 2); await openBots(pg); }],
     ['1_start_now', { who: 'admin', crop: '.b-now' }, openBots],
     ['1b_start_now_filled_in', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); await fillStart(pg); }],
     ['1c_start_now_done', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); await pg.locator('.b-now .step button').nth(1).click(); await pg.click('.b-now .startrow .btn'); await pg.waitForSelector('.b-now .msg.ok'); await pg.waitForTimeout(300); }],
@@ -303,7 +304,7 @@ const BOT_SCENES = [
     }],
     ['3d_schedule_refused_by_the_form', { who: 'admin', crop: '.b-sched' }, async (pg) => { await openBots(pg); await pg.click('.b-sched .sfoot .btn'); await pg.waitForSelector('.sform'); await pg.fill('#sc-min', '3'); await pg.locator('.sform .sfoot .btn', { hasText: 'Save' }).click(); await pg.waitForSelector('.sform .msg.bad'); }],
     ['3e_schedule_delete_question', { who: 'admin', dialog: true }, async (pg) => { await openBots(pg); await pg.locator('.b-sched .brow .bb button', { hasText: 'Delete' }).first().click(); await pg.waitForSelector('.dlg'); await pg.waitForTimeout(150); }],
-    ['4_log_bot_matches', { who: 'admin', crop: '#secpanel' }, async (pg) => { await openSection(pg, 'log'); await pg.waitForSelector('.alist2 .arow2'); await pg.locator('.lhead .chip', { hasText: 'Bot matches' }).click(); await pg.waitForTimeout(150); }]
+    ['4_log_bot_matches', { who: 'admin', crop: '#secpanel', width: 1000 }, async (pg) => { await openSection(pg, 'log'); await pg.waitForSelector('.alist2 .arow2'); await pg.locator('.lhead .chip', { hasText: 'Bot matches' }).click(); await pg.waitForTimeout(150); }]
 ];
 // one subject cut out of the page: a desktop at 1x and a phone at 2x (never wider than 1000 px); the question is the window of a phone and its own box on a desktop
 async function shoot(pg, spec, file, sizeName) {
@@ -359,10 +360,10 @@ async function checks_of(pg, label, size) {
     if (process.getuid && process.getuid() === 0) launch.args = ['--no-sandbox'];
     let browser;
     try { browser = await playwright.chromium.launch(launch); } catch (e) { console.log('SKIP: no browser could be started (' + String(e.message).split('\n')[0] + '): the admin page was NOT run in a browser'); server.close(); process.exit(0); }
-    for (const [name, spec, steps] of SCENES.concat(BOT_SCENES)) {
+    for (const [name, spec, steps] of BOTS_ONLY ? BOT_SCENES : SCENES.concat(BOT_SCENES)) {
         if (ONLY && name.indexOf(ONLY) !== 0) continue;
         for (const sizeName of SHOTS ? ['phone', 'desktop'] : ['narrow', 'phone', 'desktop']) {
-            const size = spec.crop || spec.clip || spec.dialog ? Object.assign({}, SIZES[sizeName], sizeName === 'desktop' ? { dsf: 1 } : {}) : SIZES[sizeName];       // (a subject cut out of the page: a desktop at 1x)
+            const size = spec.crop || spec.clip || spec.dialog ? Object.assign({}, SIZES[sizeName], sizeName === 'desktop' ? { dsf: 1 } : {}, sizeName === 'desktop' && spec.width ? { width: spec.width } : {}) : SIZES[sizeName];       // (a subject cut out of the page: a desktop at 1x)
             W = world();
             who = WHO[spec.who];
             hubRefuses = false;
