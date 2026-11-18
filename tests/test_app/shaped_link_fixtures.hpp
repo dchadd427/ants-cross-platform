@@ -224,7 +224,8 @@ public:
         cfg.lan_port = 0;
         cfg.aspect = Aspect::Wide16x9;                                              // (the web game's picture: a map view of 762 x 500, 23 tiles across)
         cfg.maps_dir = maps_folder().string();
-        cfg.settings_path = (scratch_root() / ("settings_" + std::to_string(p_.seed) + (p_.local ? "_local" : "") + ".ini")).string();
+        static uint32_t sessions_made = 0;                                               // (every session has a settings file of its own: no key of an earlier session is found by a later one)
+        cfg.settings_path = (scratch_root() / ("settings_" + std::to_string(++sessions_made) + ".ini")).string();
         cfg.prediction = p_.predict;
         if (p_.local) {
             cfg.default_map_path = (maps_folder() / p_.map).string();

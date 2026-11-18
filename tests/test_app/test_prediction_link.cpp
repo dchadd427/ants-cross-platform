@@ -576,6 +576,8 @@ int main(int argc, char* argv[]) {
             if (predict) {
                 ASSERT_TRUE(s.app().net()->prediction() != nullptr);
                 const net::Prediction::Stats& st = s.app().net()->prediction()->stats();
+                std::printf("\n    the person's rounds %u, orders predicted %llu, lost %llu, rebuilds %llu", players.rounds, static_cast<unsigned long long>(st.commands_predicted),
+                            static_cast<unsigned long long>(st.commands_lost), static_cast<unsigned long long>(st.rebuilds));
                 ASSERT_TRUE(st.commands_predicted > 20);                                  // (the person's clicks that gave an order: a click on an ant or a hill gives none)
                 ASSERT_EQ(st.commands_lost, 0u);                                          // (every order of the person was sealed)
                 ASSERT_TRUE(st.rebuilds > 0);
