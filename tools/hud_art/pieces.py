@@ -62,10 +62,19 @@ def topbar(W, uid='tb'):
         b.append(hband(0, y, W, c))
     # chamfer along the view's top edge: the original's ten rows, from x = 17 to the mitre
     ch = [rgb(c) for c in CHAMFER]
-    defs += '<clipPath id="%s_mc"><polygon points="17,12 %d,12 %d,22 17,22"/></clipPath>' % (uid, V + 10, V)
-    g = '<g clip-path="url(#%s_mc)" shape-rendering="crispEdges">' % uid
+    # where the chamfer's rows meet the panel rail's columns at the view's upper right corner: the original ends its dark rows on a steep step (about two rows per column), so the dark corner is
+    # small and the rail's bright column comes up to row 19. EDGE[b] is how far row 21 - b runs past the panel's left edge V (the original's extents)
+    EDGE = [0, 2, 3, 4, 4, 5, 5, 6, 6, 7]
+    g = '<g shape-rendering="crispEdges">'
     for bi in range(10):
-        g += hband(17, 21 - bi, V + 10 - 17, ch[bi])
+        if bi < 2:                                                                  # the two black rows stop at the view's corner; the pixels beyond are the chamfer's dark green
+            g += hband(17, 21 - bi, V + 1 - bi - 17, ch[bi]) + hband(V + 1 - bi, 21 - bi, EDGE[bi] + bi, ch[2])
+        else:
+            g += hband(17, 21 - bi, V + EDGE[bi] + 1 - 17, ch[bi])
+            if bi <= 7: g += hband(V + EDGE[bi], 21 - bi, 1, '#1b4b3f')                 # each dark row ends on one pixel of the original's dark teal (27, 75, 63), as the original's rows do: the step is soft, not a black saw
+    for c in range(2, 8):
+        b0 = next(bi for bi in range(10) if EDGE[bi] >= c)                          # the lowest chamfer row that covers this column; the rail's column stands under it
+        if b0 > 0: g += '<rect x="%d" y="%d" width="1" height="%d" fill="%s"/>' % (V + c, 22 - b0, b0, rgb(RAIL[c]))
     b.append(g + '</g>')
     # the rounded corner at the left: concentric quarter rings about (17, 22), one per band, ending on the left strip's own columns
     defs += ('<linearGradient id="%s_lp" gradientUnits="userSpaceOnUse" x1="17" y1="11" x2="7" y2="22"><stop offset="0" stop-color="%s"/><stop offset="1" stop-color="%s"/></linearGradient>'
@@ -75,9 +84,6 @@ def topbar(W, uid='tb'):
         r = bi + .5
         col = 'url(#%s_lp)' % uid if bi == 9 else ('url(#%s_lp2)' % uid if bi == 8 else ch[bi])
         b.append('<path d="M%s 22 A%s %s 0 0 1 17 %s" fill="none" stroke="%s" stroke-width="1"/>' % (17 - r, r, r, 22 - r, col))
-    # the rail's upper end: its columns appear to the right of the mitre
-    defs += '<clipPath id="%s_rc"><polygon points="%d,12 %d,12 %d,22 %d,22"/></clipPath>' % (uid, V + 10, W, W, V)
-    b.append('<g clip-path="url(#%s_rc)" transform="translate(%d 0)">%s</g>' % (uid, V, rail_cols(12, 10)))
     # windows: the clock (digits 62 .. 131) and the local score (the game's 54 x 14 box at W - 238)
     b.append(window(uid + 'wc', (61, 4, 68, 14), (2, 1, 2, 2)))                      # the clock's field: x 61 .. 128, y 4 .. 17
     b.append(window(uid + 'ws', (W - 238, 4, 54, 14), (2, 1, 1, 2)))                  # the local score's field (the game fills it)
@@ -148,7 +154,7 @@ def minimap_frame(W, uid='mm'):
     g = ''
     for c, col in GROOVE.items():
         if c == 21: continue
-        g += '<rect x="%d" y="0" width="1" height="97" fill="%s"/>' % (c, rgb(col))
+        g += '<rect x="%d" y="0" width="1" height="%d" fill="%s"/>' % (c, (100 - (c - 13)) if c <= 15 else 97, rgb(col))      # the lit lip (columns 13 .. 15) runs on down and turns into the bottom wall
     b.append('<g shape-rendering="crispEdges">%s</g>' % g)
     # top wall: four one-pixel rows from the groove to the right wall, mitred at the right (the corner is rounded by the right wall's own columns)
     defs += '<clipPath id="%s_pk"><path d="M13 0 H143 A3 3 0 0 1 146 3 V98 A3 3 0 0 1 143 101 H13Z"/></clipPath>' % uid
@@ -157,7 +163,7 @@ def minimap_frame(W, uid='mm'):
         d, l = DARK_RAMP[j], LIT_RAMP[j]
         w += poly([(18, j), (146 - j, j), (145 - j, j + 1), (18, j + 1)], d)                              # top ring j (x 794 ..)
         w += poly([(146 - j, j), (146 - j, 101 - j), (145 - j, 100 - j), (145 - j, j + 1)], l)           # right ring j
-        w += poly([(13, 101 - j), (146 - j, 101 - j), (145 - j, 100 - j), (13, 100 - j)], l)             # bottom ring j (x 791 ..)
+        w += poly([(13 + j, 101 - j), (146 - j, 101 - j), (145 - j, 100 - j), (13 + j, 100 - j)], l)     # bottom ring j: starts one pixel further right per ring, a mitre with the lip's columns
     b.append('<g clip-path="url(#%s_pk)">%s</g>' % (uid, w))
     b.append('<rect x="21" y="4" width="121" height="93" fill="#000"/>')
     b.append(LET.label('Map', LETTER, uid + 'm'))
