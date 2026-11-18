@@ -54,15 +54,18 @@ sim::AntSnapshot glided_ant(const ViewGlide& glide, const sim::WorldState& world
     int32_t dx = 0;
     int32_t dy = 0;
     if (!glide.offset_of(ant.id, dx, dy)) return ant;
-    sim::AntSnapshot drawn = ant;
-    drawn.px += dx;
-    drawn.py += dy;
-    drawn.tile_x = drawn.px / 32;                                    // (the gate of the picture looks at the tile: the one that the ant is drawn on)
-    drawn.tile_y = drawn.py / 32;
-    if (!health::ant_drawn(world, viewer_team, drawn)) return ant;
-    drawn.tile_x = ant.tile_x;                                       // (everything else reads the engine's tile)
-    drawn.tile_y = ant.tile_y;
-    return drawn;
+    for (int32_t quarters = 4; quarters > 0; --quarters) {               // the whole slide, then three quarters of it, a half, a quarter: the most of it that does not draw the ant on covered ground
+        sim::AntSnapshot drawn = ant;
+        drawn.px += dx * quarters / 4;
+        drawn.py += dy * quarters / 4;
+        drawn.tile_x = drawn.px / 32;                                    // (the gate of the picture looks at the tile: the one that the ant is drawn on)
+        drawn.tile_y = drawn.py / 32;
+        if (!health::ant_drawn(world, viewer_team, drawn)) continue;
+        drawn.tile_x = ant.tile_x;                                       // (everything else reads the engine's tile)
+        drawn.tile_y = ant.tile_y;
+        return drawn;
+    }
+    return ant;
 }
 
 }  // namespace ants::app

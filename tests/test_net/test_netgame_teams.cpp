@@ -1276,7 +1276,7 @@ void run_prediction_tests() {
         ASSERT_TRUE(open_goal_near_hill(host.sim, 0, gx, gy));
         int accepted = 0;
         int refused = 0;
-        for (int i = 0; i < 1500; ++i) {                                                       // (all in one frame: no turn is sealed between them, and the sequencer takes 1024 and refuses the rest)
+        for (int i = 0; i < 1500; ++i) {                                                       // (all in one frame: no turn is sealed between them, and the sequencer queues 64 for a turn, carries on up to 1024 and refuses the rest)
             const sim::CommandResult r = host.net.submit(order(0, ant, static_cast<int16_t>(gx + (i % 2)), gy));
             if (r.status == sim::CommandResult::Status::Ignored) ++refused;
             else ++accepted;

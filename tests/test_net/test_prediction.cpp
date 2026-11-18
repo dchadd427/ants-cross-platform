@@ -325,7 +325,7 @@ public:
     // turn's own commands were); "" when so, else the first view that is not.
     // The views at ticks that the server has not sealed yet (the prediction stands ahead of the stream by the lead) cannot be checked, and are skipped; `verified`, when given, gets the
     // number of views that were checked.
-    std::string verify_views(uint32_t from_step = 0, size_t* verified = nullptr) const {
+    std::string verify_views(uint32_t from_step = 0, size_t* verified = nullptr, bool compare_state = true) const {
         size_t checked = 0;
         for (const View& v : views) {
             if (v.step < from_step) continue;
@@ -339,6 +339,7 @@ public:
                 }
                 if (v.fog != v.confirmed_fog) return "step " + std::to_string(v.step) + ": the predicted engine's explored ground is not the confirmed engine's";
             }
+            if (!compare_state) continue;                                               // (only the explored ground: a picture that other seats' unknown orders make differ from the oracle's)
             if (v.applied.empty()) {
                 if (v.hash != pre[v.display]) return "step " + std::to_string(v.step) + ": the predicted engine at tick " + std::to_string(v.display) + " is not the oracle's";
             } else {
@@ -559,9 +560,10 @@ void run_exactness_tests() {
     } TEST_END();
 
     TEST_CASE("RP2.5 Fog Of War: The Explored Ground That The Predicted Engine Shows Is The Confirmed Engine's At Every Frame And Never More Than The Oracle's At The Tick That Is Shown (The Hash Does Not Hold It), With A Buffer Deeper Than The Lead Whatever The Other Seats Order And With The Right Lead For The Player's Own Orders: The Prediction Explores Nothing That The Engine Would Not At That Tick") {
-        for (const bool deep : {true, false}) {
+        for (const int kind : {0, 1, 2}) {                                                   // 0: a buffer deeper than the lead; 1: the right lead, own orders; 2: other seats' orders that the prediction does not know, so that it is rebuilt again and again
+            const bool deep = kind == 0;
             Scenario sc;
-            sc.seed = deep ? 51u : 52u;
+            sc.seed = 51u + static_cast<uint32_t>(kind);
             sc.fog = true;
             if (deep) {
                 sc.buffer_turns = 4;
@@ -578,11 +580,19 @@ void run_exactness_tests() {
                 } else if (s % 7 == 0) {
                     rig.issue(random_order(rng, rig.ids, 0));
                 }
+                if (kind == 2 && s % 6 == 3) rig.schedule(rig.step_no() + 2, random_order(rng, rig.ids, static_cast<uint8_t>(1 + rng.below(3))));
                 rig.step();
             }
             rig.run_quiet(30);
             ASSERT_TRUE(rig.prediction()->stats().turns_checked > 200);
-            ASSERT_OK(verify_min(rig, 0, 200));
+            if (kind == 2) {
+                ASSERT_TRUE(rig.prediction()->stats().rebuilds > 20u);
+                size_t views = 0;
+                const std::string why = rig.verify_views(0, &views, false);                      // (the pictures differ from the oracle's here; the explored ground must not)
+                ASSERT_TRUE(why.empty() && views > 150);
+            } else {
+                ASSERT_OK(verify_min(rig, 0, 200));
+            }
             size_t explored = 0;
             for (uint8_t cell : rig.confirmed().get_world_state().fog_revealed) explored += cell != 0 ? 1u : 0u;
             ASSERT_TRUE(explored > 200);                                                      // (the player's ants walked and revealed ground: the comparison is not about an empty map)

@@ -114,8 +114,8 @@
     {
       "id": "glide_drawn_the_wrong_way",
       "file": "src/ants_app/view_glide.cpp",
-      "old": "    drawn.px += dx;\n    drawn.py += dy;",
-      "new": "    drawn.px -= dx;\n    drawn.py -= dy;",
+      "old": "        drawn.px += dx * quarters / 4;\n        drawn.py += dy * quarters / 4;",
+      "new": "        drawn.px -= dx * quarters / 4;\n        drawn.py -= dy * quarters / 4;",
       "build": [
         "test_prediction_app"
       ],
@@ -125,8 +125,8 @@
     {
       "id": "glide_fog_gate_removed",
       "file": "src/ants_app/view_glide.cpp",
-      "old": "    if (!health::ant_drawn(world, viewer_team, drawn)) return ant;",
-      "new": "    if (false && !health::ant_drawn(world, viewer_team, drawn)) return ant;",
+      "old": "        if (!health::ant_drawn(world, viewer_team, drawn)) continue;",
+      "new": "        if (false && !health::ant_drawn(world, viewer_team, drawn)) continue;",
       "build": [
         "test_view_glide"
       ],
@@ -193,6 +193,17 @@
       "file": "src/ants_net/prediction.cpp",
       "old": "        pred_.tick();\n        pred_.adopt_explored_ground_of(*confirmed_);\n        capture_events(t, true);",
       "new": "        pred_.tick();\n        capture_events(t, true);",
+      "build": [
+        "test_prediction"
+      ],
+      "test": "./build/tests/test_net/test_prediction",
+      "expect": "RP2.5"
+    },
+    {
+      "id": "fog_not_adopted_in_the_rig",
+      "file": "src/ants_net/prediction.cpp",
+      "old": "    pred_.tick();\n    pred_.adopt_explored_ground_of(*confirmed_);                      // (the picture explores what the confirmed engine has explored: prediction.hpp, \"Fog of war\")\n",
+      "new": "    pred_.tick();\n",
       "build": [
         "test_prediction"
       ],

@@ -155,8 +155,11 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(ants::app::glided_ant(glide, world, 0, ant).px, ant.px - 30);
         ViewGlide far;
         far.add(9, -64, 0);                                                                // 64 px to the left: tile 3, which the fog covers
-        ASSERT_EQ(ants::app::glided_ant(far, world, 0, ant).px, ant.px);                   // the enemy is drawn where the engine has it
-        ASSERT_EQ(ants::app::glided_ant(far, world, 0, ant).tile_x, 5);
+        ASSERT_EQ(ants::app::glided_ant(far, world, 0, ant).px, ant.px - 48);              // the enemy is drawn with the most of the slide that stays on explored ground (three quarters: tile 4)
+        ASSERT_EQ(ants::app::glided_ant(far, world, 0, ant).tile_x, 5);                    // (everything else reads the engine's tile)
+        world.fog_revealed[static_cast<size_t>(5 * 10 + 4)] = 0;                           // with tile 4 covered too only a quarter of the slide stays on explored ground (tile 5)
+        ASSERT_EQ(ants::app::glided_ant(far, world, 0, ant).px, ant.px - 16);
+        world.fog_revealed[static_cast<size_t>(5 * 10 + 4)] = 1;
         ASSERT_EQ(ants::app::glided_ant(far, world, 1, ant).px, ant.px - 64);              // (its own team sees its own ground)
         world.player_alliances[0] = 1;
         world.player_alliances[1] = 0;
