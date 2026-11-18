@@ -29,6 +29,13 @@ class Canvas:
         fy = np.fft.fftfreq(h)[:, None]; fx = np.fft.rfftfreq(w)[None, :]
         g = np.fft.irfft2(np.fft.rfft2(b) * np.exp(-2 * (np.pi ** 2) * (sg ** 2) * (fx ** 2 + fy ** 2)), s=b.shape)[p:-p, p:-p]
         return ((g > 0.8413) & (mask > 0.5)).astype(float)
+    def smooth(self, mask, sigma):
+        """the shape with its stair steps and square corners rounded: the mask blurred by `sigma` canvas pixels and cut at one half (a straight edge stays where it is, a step becomes a slope, a corner a curve)"""
+        sg = sigma * self.s; p = int(sg * 3) + 2
+        b = np.pad(mask, p, mode='constant'); h, w = b.shape
+        fy = np.fft.fftfreq(h)[:, None]; fx = np.fft.rfftfreq(w)[None, :]
+        g = np.fft.irfft2(np.fft.rfft2(b) * np.exp(-2 * (np.pi ** 2) * (sg ** 2) * (fx ** 2 + fy ** 2)), s=b.shape)[p:-p, p:-p]
+        return (g > 0.5).astype(float)
     def shift(self, m, dx, dy):
         out = np.zeros_like(m); h, w = m.shape; dx, dy = int(round(dx * self.s)), int(round(dy * self.s))
         out[max(dy, 0):h + min(dy, 0), max(dx, 0):w + min(dx, 0)] = m[max(-dy, 0):h + min(-dy, 0), max(-dx, 0):w + min(-dx, 0)]
