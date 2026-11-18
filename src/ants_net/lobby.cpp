@@ -281,8 +281,23 @@ void HostLobby::elect_leader() {
     }
     room_.leader = best;
     // Protocol 22: a room is public because its leader said so. Whoever leads next, because that leader left, was thrown out or came back in another color (the lead goes with the person, so the seat does not
-    // tell), chose nothing and inherits nothing: the room is private again, and every caller shows the Room message.
-    if (public_ && (best == kNoLeader || guests_[best].join_order != public_by_)) public_ = false;
+    // tell), chose nothing and inherits nothing: the room is private again, and every caller shows the Room message. A rematch's lobby keeps seats for the persons of the match, so the choice of the person who made the
+    // room public stands for as long as that person is in the room, back or kept (the room is not listed while a seat is kept, and nobody else leads before the persons of the match): with nobody back, or with another
+    // person of the match leading before the person who chose is back, the room stays what it was. A room whose person who chose is gone is private.
+    if (public_) {
+        const uint8_t chooser = seat_of_order(public_by_);
+        const bool chooser_kept = chooser < sim::MAX_PLAYERS && guests_[chooser].reserved;
+        const bool leads_now = best != kNoLeader && guests_[best].join_order == public_by_;
+        if (!leads_now && !(chooser_kept && (best == kNoLeader || of_match(best)))) public_ = false;
+    }
+}
+
+// The seat of the person with this place in the order of the Welcomes (a connected, held or kept guest), 255 when none is in the room
+uint8_t HostLobby::seat_of_order(uint32_t order) const noexcept {
+    for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+        if (person(s) && guests_[s].join_order == order && order != 0) return s;
+    }
+    return 255;
 }
 
 void HostLobby::remove_guest(uint8_t seat, bool notify_reject, RejectReason reason) {
@@ -913,6 +928,7 @@ Rematch HostLobby::rematch() const {
     r.team_a = room_.team_a;
     r.team_b = room_.team_b;
     r.mode = room_.mode;
+    r.public_by = public_ ? public_by_ : 0u;                                             // (a public room's lobby that follows is public too, for the person who made it so)
     for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {                                     // (the seats as the Start made them: nothing moves in the lobby once its match has begun)
         if (room_.slots[s].state != SlotState::Client || key_is_zero(guests_[s].key)) continue;
         const uint8_t platform = room_.slots[s].platform;                                // (what the game that took the seat over said in its Hello: a page's game says kPlatformBrowser)
@@ -958,6 +974,11 @@ bool HostLobby::reopen(const Rematch& r, uint32_t now_ms) {
         room_.slots[p.seat].platform = valid_platform(p.platform) ? p.platform : kPlatformUnknown;
         joins_ = std::max(joins_, p.order);                                              // (a newcomer comes after every person of the match)
         match_order_ = std::max(match_order_, p.order);
+    }
+    if (r.public_by != 0) {                                                              // (the choice of the match's leader: it stands while nobody is back; elect_leader makes the room private at once
+        public_ = true;                                                                  // when that person is not one of the match's persons here, and later when another person leads first)
+        public_by_ = r.public_by;
+        listed_ms_ = now_ms;
     }
     elect_leader();                                                                      // (nobody leads before somebody is back)
     sync_room_flags();

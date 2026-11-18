@@ -313,7 +313,7 @@ async function main() {
         p.w.last().receive(welcome(1, KEY, 0));
         check('the seat of the key is ours: the strip shows, and the page lays the picture out again', !p.host.hidden && p.win.resized === 1);
         same('the strip\'s words (picture R1)', [byClass(p.host, 'rmt-title').textContent, byClass(p.host, 'rmt-text').textContent, byClass(p.host, 'btn').textContent, byClass(p.host, 'rmt-note').textContent], [
-            'The match is over', 'Everybody can go back to the room together: same host, same colors, same map. Your seat is kept for you.', 'Back to the lobby', 'The game’s own “Leave Game” still goes to the menu.']);
+            'The match is over', 'Everybody can go back to the room together: same host, same colors, same map. Your seat is kept for you.', 'Back to the lobby', 'The game’s own “Leave Game” brings you back here too.']);
         same('the button is a button of the page\'s look', [byClass(p.host, 'btn').tag, byClass(p.host, 'btn').type, byClass(p.host, 'btn').className], ['button', 'button', 'btn big']);
         p.w.last().receive(roomBytes([[C, 'Maple'], [C, 'Sam'], [C, '<b>Juniper</b>'], [E, '']], { you: 1, leader: 0, inGame: 6, platforms: [0x13, 0x13, 0x16, 0] }));
         const chips = all(p.host, (x) => (' ' + x.className + ' ').indexOf(' rmt-chip ') !== -1);
@@ -332,6 +332,64 @@ async function main() {
         check('... where nothing of this page comes back', p.w.sockets.length === 1);
         p.win.fire('pagehide');
         check('... and the page that goes says nothing more (the seat is the front page\'s)', socket.sent.length === sentBefore && p.w.sockets.length === 1);
+    }
+    {   // the way back: the front page that the hand-over opens asks for the seat with the key, and the Welcome of the room is the seat's own key: nothing is "replaced" (the notice that the seat ended while the person was away is
+        // for a key that found no seat), and no room was made
+        const p = page();
+        const c = new N.LobbyClient({ url: 'wss://beta.example/ws', code: 'k7m2xq', name: 'Sam', key: N.bytesOfHex(KEYHEX), WebSocket: p.w.WebSocket, setTimeout: p.w.setTimeout, clearTimeout: p.w.clearTimeout, now: p.w.now });
+        const got = [];
+        c.on('welcome', (e) => got.push(e));
+        c.connect();
+        p.w.last().open();
+        p.w.last().receive(welcome(1, KEY, 0));
+        check('the front page takes the kept seat back with its key: the Welcome is the seat\'s own, not replaced and not created', got.length === 1 && got[0].replaced === false && got[0].created === false && got[0].seat === 1, JSON.stringify(got));
+        const q = page();
+        const d = new N.LobbyClient({ url: 'wss://beta.example/ws', code: 'k7m2xq', name: 'Sam', key: N.bytesOfHex(KEYHEX), WebSocket: q.w.WebSocket, setTimeout: q.w.setTimeout, clearTimeout: q.w.clearTimeout, now: q.w.now });
+        const gone = [];
+        d.on('welcome', (e) => gone.push(e));
+        d.connect();
+        q.w.last().open();
+        q.w.last().receive(welcome(2, seq(0x70), 0));
+        check('... and a seat that was given up meanwhile (the room seats the page as a newcomer under another key) is the case that is replaced', gone.length === 1 && gone[0].replaced === true, JSON.stringify(gone));
+    }
+    {   // the game's own Leave Game on the results screen: back to the room, as the strip's button does, while the strip works; else the game goes to the front page as it did
+        const p = page();
+        check('a game page has the question that the game asks when its results screen\'s Leave Game is pressed', typeof p.win.antsLeaveToRoom === 'function');
+        check('... a page that is no game page has none', page({ search: '' }).win.antsLeaveToRoom === undefined);
+        check('... before the match is over: no, the game goes on its own way', p.win.antsLeaveToRoom() === false && p.loc.assigned.length === 0);
+        p.win.antsMatchOver(golden['two-players']);
+        p.w.advance(R.ASK_AFTER_MS);
+        p.w.last().open();
+        check('... with the seat not yet taken by the room (no strip): no', p.win.antsLeaveToRoom() === false && p.loc.assigned.length === 0 && p.session.items['ants.lobby'] === undefined);
+        p.w.last().receive(welcome(1, KEY, 0));
+        const socket = p.w.last();
+        const sentBefore = socket.sent.length;
+        check('... with the strip shown: yes', p.win.antsLeaveToRoom() === true);
+        check('... the same hand-over as the button: the link goes quietly, the room, the key and the match go to the front page of this tab, and the tab goes to the room',
+            socket.closed && socket.sent.length === sentBefore && p.loc.assigned.length === 1 && p.loc.assigned[0] === '/?room=k7m2xq' && JSON.parse(p.session.items['ants.lobby']).k === KEYHEX
+            && JSON.parse(p.session.items['ants.back']).c === 'k7m2xq');
+        const q = page();
+        q.win.antsMatchOver(golden['two-players']);
+        q.w.advance(R.ASK_AFTER_MS);
+        q.w.last().open();
+        q.w.last().receive(welcome(1, KEY, 0));
+        q.w.last().receive(roomBytes([[C, 'Maple'], [C, 'Sam'], [E, ''], [E, '']], { you: 1, leader: 0, inGame: 2, platforms: [0x13, 0x13, 0, 0] }));
+        q.w.last().receive(reject(N.REJECT.Kicked));
+        check('a seat that the host took away is not kept: no, the game goes to the front page', q.win.antsLeaveToRoom() === false && q.loc.assigned.length === 0);
+        const r = page();
+        r.session.setItem = () => { throw new Error('blocked'); };
+        r.win.antsMatchOver(golden['two-players']);
+        r.w.advance(R.ASK_AFTER_MS);
+        r.w.last().open();
+        r.w.last().receive(welcome(1, KEY, 0));
+        check('a storage that refuses the hand-over: no (the game goes to the front page and gives the seat up), and the tab did not move', r.win.antsLeaveToRoom() === false && r.loc.assigned.length === 0);
+        const t = page();
+        t.win.antsMatchOver(golden['two-players']);
+        t.w.advance(R.ASK_AFTER_MS);
+        t.w.last().open();
+        t.w.last().receive(welcome(1, KEY, 0));
+        t.w.last().receive(reject(N.REJECT.Superseded));
+        check('a seat that another window took (the strip is gone): no', t.win.antsLeaveToRoom() === false && t.loc.assigned.length === 0);
     }
     {
         const p = page();
