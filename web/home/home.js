@@ -158,12 +158,22 @@
         env.lobby.parentNode.insertBefore(rbar, env.lobby);
 
         // ---- the Menu: one box for both bars ----
+        function newTab(a, on) {
+            if (on) { a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer'); } else { a.removeAttribute('target'); a.removeAttribute('rel'); }
+        }
         function link(text, href, cls) {
             var a = el('a', cls, text);
             a.href = href;
-            if (/^https?:/.test(href)) { a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer'); }
+            if (/^https?:/.test(href)) newTab(a, true);
             a.addEventListener('click', closeMenu);
             return a;
+        }
+        // The links to the matches (the Menu's, the masthead's, the footer's) open in a new tab while the page holds a room (docs/PLAY_IN_BROWSER.md, "Going away and coming back")
+        var matchesItem = null;
+        function marks() {
+            var room = false;
+            try { room = !!(page.holds && page.holds()); } catch (e) { room = false; }
+            [matchesItem, doc.getElementById('watch-top'), doc.getElementById('watch-link')].forEach(function (a) { if (a) newTab(a, room); });
         }
         function buildMenu() {
             menuBox = el('nav', 'hmenubox'); menuBox.setAttribute('aria-label', TEXT.menu);
@@ -171,6 +181,7 @@
                 var item;
                 if (m[1]) item = link(m[0], m[1], 'mitem');
                 else { item = el('button', 'mitem', m[0]); item.type = 'button'; item.addEventListener('click', function () { var back = menuFor; closeMenu(); if (back && back.focus) back.focus(); page.how(); }); }      // (the page's list gives the focus back to what had it: the Menu's button)
+                if (m[1] === '/matches') matchesItem = item;
                 if (m[1] === '/') { item.setAttribute('aria-current', 'page'); item.addEventListener('click', function (e) { e.preventDefault(); show('home', 'push'); }); }      // (this page: the Room's Home goes back to the front page's own screen)
                 menuBox.appendChild(item);
             });
@@ -196,6 +207,7 @@
         function openMenu(btn) {
             if (!menuBox) buildMenu();
             menuFor = btn; menuOpen = true;
+            marks();
             var lines = facts();
             factsBox.textContent = lines.join('\n'); factsBox.hidden = !lines.length;
             menuBox.hidden = false;
@@ -280,6 +292,7 @@
             minePill.textContent = n ? n.people + '/' + n.size : '';
             minePill.hidden = !n;
             mine.setAttribute('aria-label', n ? TEXT.mine + ', ' + n.people + ' of ' + n.size : TEXT.mine);
+            marks();
             gamesCall('sync');
         }
         // A part that loads after the first paint (its script and style): once both are there onReady mounts it; a part that does not come leaves its buttons as they are
@@ -323,6 +336,7 @@
         // START reached this page: it is on its way to the game page, so both bars take no press, and Home says so
         function say() {
             going = true; closeMenu(); gamesCall('opening'); inert(held); if (screen === 'home') opening.hidden = false;
+            marks();
             if (goingTimer !== null) clearTimeout(goingTimer);
             if (failTimer !== null) clearTimeout(failTimer);
             failTimer = null;

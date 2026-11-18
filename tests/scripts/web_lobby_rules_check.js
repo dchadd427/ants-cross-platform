@@ -908,6 +908,10 @@ const BANNERS = [
     ['full', {}, 'That room is full, so this one is yours now. Send the link on if you like.', '', 'OK'],
     ['running', {}, 'The match in that room has already started, so this room is yours instead. Send the link on if you like.', '', 'OK'],
     ['removed', {}, 'The host removed you from the room, so this one is yours now. Send the link on if you like.', '', 'OK'],
+    // a person who came back after the room had let its seat go (the host of a room that went on without them, or anybody): not in picture 15, it waits for its own picture
+    ['seatgone', { host: 'Sam' }, 'Your seat in this room ended while you were away, so you joined again. Sam is the host.', 'warn', 'OK'],
+    ['seatgone', { host: '' }, 'Your seat in this room ended while you were away, so you joined again. You are the host.', 'warn', 'OK'],
+    ['seatgone', {}, 'Your seat in this room ended while you were away, so you joined again. You are the host.', 'warn', 'OK'],
     ['lost', {}, 'Connection lost. Getting you back in…', 'warn', ''],
     ['unreachable', {}, 'Cannot reach the game server. Check your connection; trying again…', 'warn', ''],
     ['busy', {}, 'The server is full right now, so there is no room for you yet. Try again in a minute.', 'warn', 'Try again'],
@@ -917,11 +921,12 @@ const BANNERS = [
 ];
 BANNERS.forEach(([kind, args, text, tone, btn]) => same('banner ' + kind + ' ' + JSON.stringify(args).slice(0, 40), R.banner(kind, args), { kind: kind, text: text, tone: tone, btn: btn }));
 // (picture 15's "over", the strip of a match that is over, is the rematch's own strip "Back from the match." now: web/front/rematch.js; the rematch adds "notback", the START that waits for a person of the match)
-same('picture 15 lists seventeen messages: these are their kinds, with the rematch\'s "notback" in the place of "over"', BANNERS.map((b) => b[0]).filter((k, i, a) => a.indexOf(k) === i && k !== 'notice').sort(),
+same('picture 15 lists seventeen messages: these are their kinds, with the rematch\'s "notback" in the place of "over" (and the strip of a seat that ended, which has no picture yet)', BANNERS.map((b) => b[0]).filter((k, i, a) => a.indexOf(k) === i && k !== 'notice' && k !== 'seatgone').sort(),
     ['away', 'busy', 'full', 'host', 'late', 'lateplayer', 'lost', 'mapcolors', 'maplost', 'noplace', 'notback', 'old', 'removed', 'running', 'startsfailed', 'unreachable', 'version']);
 same('green is the page changing something for you (the host, an old room, a full room, a running match, a removal); gold is something that did not work (or waits)', [R.META.host, R.META.old, R.META.full, R.META.running, R.META.removed].map((m) => m.tone).concat([R.META.late, R.META.lost, R.META.busy, R.META.version, R.META.notice, R.META.notback].map((m) => m.tone)), ['', '', '', '', '', 'warn', 'warn', 'warn', 'warn', 'warn', 'warn']);
-same('the kinds that have a strip: the seventeen and the line of the room that has no kind of its own', Object.keys(R.META).sort(),
-    ['away', 'busy', 'full', 'host', 'late', 'lateplayer', 'lost', 'mapcolors', 'maplost', 'noplace', 'notback', 'notice', 'old', 'removed', 'running', 'startsfailed', 'unreachable', 'version']);
+same('the kinds that have a strip: the seventeen, the seat that ended, and the line of the room that has no kind of its own', Object.keys(R.META).sort(),
+    ['away', 'busy', 'full', 'host', 'late', 'lateplayer', 'lost', 'mapcolors', 'maplost', 'noplace', 'notback', 'notice', 'old', 'removed', 'running', 'seatgone', 'startsfailed', 'unreachable', 'version']);
+same('the strip of a seat that ended is gold (something that did not stay as it was) and has an OK, and no button that does anything', [R.META.seatgone.tone, R.META.seatgone.btn, 'seatgone' in R.ACTS], ['warn', 'OK', false]);
 same('no strip says "Welcome back" any more: the front page\'s strip of the rematch says it (picture R2)', [('over' in R.META), ('over' in R.TEXT)], [false, false]);
 same('every strip has its words; the one more is the line under the code field (no room with that code), which is no strip', Object.keys(R.TEXT).sort(), Object.keys(R.META).concat('noroom').sort());
 same('every kind that noticeKind can say has a strip', ['late', 'noplace', 'startsfailed', 'maplost', 'mapcolors', 'notback', 'notice'].map((k) => k in R.META), [true, true, true, true, true, true, true]);
