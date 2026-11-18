@@ -331,7 +331,8 @@ class TheFrontPageMarkup(PageCase):
             self.assertNotIn(gone, self.page, gone)
         self.assertNotIn("ants.name", self.page, "nobody types a name any more: the page keeps none")
         self.assertIn("var ASPECT_KEY = 'ants.aspect.v3';", self.page)
-        self.assertEqual(len(re.findall(r"localStorage\.removeItem|localStorage\.clear|sessionStorage\.clear", self.page)), 0)
+        self.assertEqual(len(re.findall(r"localStorage\.clear|sessionStorage\.clear", self.page)), 0)
+        self.assertEqual(sorted(set(re.findall(r"localStorage\.removeItem\(([^)]*)\)", self.page))), ["Net.SEAT_MEMORY"], "the one note that the page takes away again is the seat that a page left (front/lobby_net.js)")
 
     def test_the_footer_links_the_name_card_and_the_test_room_buttons_are_there(self):
         self.assertEqual(self.page.count("<nav "), 1, "the header is the name, the tagline and the one button of Matches: the other links are in the footer")
