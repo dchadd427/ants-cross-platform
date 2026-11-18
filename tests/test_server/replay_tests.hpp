@@ -1040,6 +1040,7 @@ void run_replay_tests() {
         ASSERT_EQ(id, "TINY-20261008-143209Z");                                                           // (the map and the second the match began in)
         const int64_t listed_turns = e.get("turns").as_int_or(0);
         ASSERT_TRUE(e.get("map").str() == "TINY.LVL" && e.get("started").as_int_or(0) == kReplayT0 && listed_turns >= 600 && e.get("seconds").as_int_or(0) == listed_turns / 20);
+        ASSERT_TRUE(e.get("mode").is_string() && e.get("mode").str() == "highest-score");                 // (the room's game mode, in the words of the list of games and of the history)
         ASSERT_TRUE(e.get("players").size() == 2 && e.get("players").at(0).str() == "Green (Ann)" && e.get("players").at(1).str() == "Red (Bob)");
         for (const char* secret : {"LIVE", "127.0.0.1", "code", "room"}) ASSERT_TRUE(r.body.find(secret) == std::string::npos);
         // the match so far: an incomplete replay with its live chunk, which plays on the real map up to its turns with every hash right
@@ -1228,6 +1229,10 @@ void run_replay_tests() {
         RoomStatus s = w.status("GM-187");
         ASSERT_TRUE(s.state == RoomState::Running && s.turns >= 600 && static_cast<int>(s.mode) == 1);
         ASSERT_EQ(status_to_json(s).get("mode").str(), std::string("187"));
+        {   // the public door of the matches that run says it too (the page marks such a match)
+            const ctl::JsonValue running = replay_json_of(public_call(w.mgr, "GET", "/live"));
+            ASSERT_TRUE(running.get("live").size() == 1 && running.get("live").at(0).get("mode").is_string() && running.get("live").at(0).get("mode").str() == "187");
+        }
         ASSERT_EQ(w.clients.size(), size_t{2});
         for (const auto& c : w.clients) {
             ASSERT_TRUE(c->sim.game_mode() == sim::GameMode::Kills187 && c->lobby->start_info().mode == 1);

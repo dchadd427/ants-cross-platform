@@ -35,6 +35,9 @@ const M = 'TREASURE.LVL';
     const good = Games.liveOf(LIVE('TREASURE-20261109-120000Z', { seconds: 125.9, players: ['Green (Ann)', 'Red (Bot (Medium))', 'Blue', 'Black (<b>x</b>)'] }), RULES0);
     same('a good match: the id, the map (an original by its key), the seconds (whole), the players as a color and a name (the name of a bot as the door writes it)', [good.id, good.map, good.mapKey, good.mapName, good.seconds, good.who],
         ['TREASURE-20261109-120000Z', 'TREASURE.LVL', 'treasure', 'Treasure', 125, [{ seat: 0, name: 'Ann' }, { seat: 1, name: 'Bot (Medium)' }, { seat: 2, name: 'Blue' }, { seat: 3, name: '<b>x</b>' }]]);
+    same('the mode: only the word 187 marks a match of mode 187; highest-score, no word, another word, a number, a list, markup and a word with a blank are a plain match',
+        ['187', 'highest-score', undefined, null, '', ' 187', '187 ', '1870', 187, ['187'], '<b>187</b>', 'Highest-Score', true].map((m) => Games.liveOf(LIVE('A-20261109-120000Z', { mode: m }), RULES0).mode187),
+        [true, false, false, false, false, false, false, false, false, false, false, false, false]);
     same('the seconds come from the turns when they are not there; a number that is not one is 0', [Games.liveOf({ id: 'A-20261109-120000Z', turns: 400 }, RULES0).seconds, Games.liveOf({ id: 'A-20261109-120000Z', seconds: 'x' }, RULES0).seconds, Games.liveOf({ id: 'A-20261109-120000Z', seconds: -4 }, RULES0).seconds, Games.liveOf({ id: 'A-20261109-120000Z', seconds: Infinity }, RULES0).seconds], [20, 0, 0, 0]);
     same('the map is the one in the id when the entry names none; a map of the players has its name and no picture of its own', [Games.liveOf({ id: 'Pop_Corn-20261109-120000Z' }, RULES0).map, Games.liveOf({ id: 'Pop_Corn-20261109-120000Z' }, RULES0).mapKey], ['Pop_Corn.LVL', '']);
     same('at most four players, and one that is no text or has a character that a name has not is dropped', Games.liveOf(LIVE('A-20261109-120000Z', { players: ['Green', 7, 'Red\u202ex', 'Blue', 'Black', 'Green', 'Red'] }), RULES0).who.map((w) => w.name), ['Green', 'Blue', 'Black', 'Green']);
@@ -112,6 +115,26 @@ const M = 'TREASURE.LVL';
     check('nothing open, two in progress: no "No open games right now." card at all, the rows are the first thing under the heading; the head says "0 open, 2 in progress"', first(popOf(only), 'gempty').hidden === true && liveRows(only).length === 2 && headOf(only) === '0 open, 2 in progress', headOf(only));
     const openOnes = await livePage({ lobbies: [row('k7m2xq', 'Pebble')] });
     check('with an open game there is no empty card, the open rows come first and the matches follow in the same list', first(popOf(openOnes), 'gempty').hidden === true && first(popOf(openOnes), 'gpbody').children.indexOf(first(popOf(openOnes), 'glist')) < first(popOf(openOnes), 'gpbody').children.indexOf(boxOf(openOnes)));
+}
+
+{   // the tag of a match of mode 187: after the red Live mark, text only, none for any other mode
+    const KILLS = LIVE('TREASURE-20261109-120000Z', { mode: '187', seconds: 125 }), SCORE = LIVE('ISLANDS-20261109-115900Z', { map: 'ISLANDS.LVL', mode: 'highest-score', seconds: 7 });
+    const OLD = Object.assign(LIVE('MEDIUM-20261109-115800Z', { map: 'MEDIUM.LVL', seconds: 61 }), { mode: undefined }), ODD = LIVE('TINY-20261109-115700Z', { map: 'TINY.LVL', mode: '<b>187</b>', seconds: 62 });
+    const env = await livePage({ rows: [KILLS, SCORE, OLD, ODD] });
+    const rows = liveRows(env);
+    same('four rows in the door\'s order', rows.map((li) => first(li, 'gname').textContent), ['Treasure', 'Islands', 'Medium', 'Tiny']);
+    same('the match of mode 187 has the tag 187; a highest-score match, an answer with no mode and one with a word that is not a mode have none', rows.map((li) => find(li, 'gmode').map((t) => t.textContent)), [['187'], [], [], []]);
+    same('the tag stands in one pair with the Live mark, after it, in the top line of the row; every row has the pair', rows.map((li) => first(li, 'gmarks').children.map((c) => c.className)), [['glive-mark', 'gmode'], ['glive-mark'], ['glive-mark'], ['glive-mark']]);
+    check('the pair is in the top line, after the map\'s name', rows.every((li) => { const top = first(li, 'gtop').children; return top.length === 2 && top[0].className === 'gname' && top[1].className === 'gmarks'; }));
+    same('Watch says the mode for a screen reader: "the 187 match" for a 187 match, "the match" for the others', rows.map((li) => watchOf(li).getAttribute('aria-label')),
+        ['Watch the 187 match on Treasure, Ann, Bot (Medium), 2:05 so far', 'Watch the match on Islands, Ann, Bot (Medium), 0:07 so far', 'Watch the match on Medium, Ann, Bot (Medium), 1:01 so far', 'Watch the match on Tiny, Ann, Bot (Medium), 1:02 so far']);
+    check('the tag is text that the page wrote itself: nothing was written as markup, and the word of the door never reached the row', env.innerHTMLWrites.length === 0 && !rows.some((li) => li.all().some((e) => /<b>/.test(e.textContent || ''))));
+    env.site.live.body = answer([Object.assign({}, KILLS, { seconds: 135 }), SCORE, OLD, ODD]);
+    await wait(env, 12500);
+    check('a look later the clock is written again and the 187 row keeps its tag and its name for a screen reader (the rows stay)', liveRows(env)[0] === rows[0] && find(rows[0], 'gmode').length === 1 && first(rows[0], 'glen').textContent === '2:15 so far' && watchOf(rows[0]).getAttribute('aria-label') === 'Watch the 187 match on Treasure, Ann, Bot (Medium), 2:15 so far');
+    env.site.live.body = answer([Object.assign({}, KILLS, { mode: 'highest-score', seconds: 140 }), SCORE, OLD, ODD]);
+    await wait(env, 12500);
+    check('a match that is given another mode by a later answer (it never is: the id is one match) is drawn again as the answer says', find(liveRows(env)[0], 'gmode').length === 0 && watchOf(liveRows(env)[0]).getAttribute('aria-label') === 'Watch the match on Treasure, Ann, Bot (Medium), 2:20 so far');
 }
 
 // ---- 3. the looks at /live ----

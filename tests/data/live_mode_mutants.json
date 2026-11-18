@@ -1,0 +1,59 @@
+{
+ "note": "Mutants of the game mode in the answer of GET /live (docs/SERVER.md, \"Live matches\") for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the board copies the mode of the replay's head into the match and into the list's entry, and the door writes it in the words of the list of games, against test_live_board (2.19.3, LB1.8) and test_server (S3.176 and S3.185). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/live_mode_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "live_board_does_not_keep_the_mode",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "    match.mode = head.mode;\n",
+   "new": "    match.mode = 0;\n",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.8"
+  },
+  {
+   "id": "live_list_entry_loses_the_mode",
+   "file": "src/ants_server/live_board.cpp",
+   "old": "        m.mode = it->mode;\n",
+   "new": "        m.mode = 0;\n",
+   "build": "test_live_board",
+   "test": "timeout 900 ./build/tests/test_server/test_live_board",
+   "expect": "LB1.8"
+  },
+  {
+   "id": "live_door_says_highest_score_always",
+   "file": "src/ants_server/control.cpp",
+   "old": "sim::game_mode_name(static_cast<sim::GameMode>(m.mode))",
+   "new": "sim::game_mode_name(sim::GameMode::HighestScore)",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.185 ./build/tests/test_server/test_server",
+   "expect": "S3.185"
+  },
+  {
+   "id": "live_door_says_187_always",
+   "file": "src/ants_server/control.cpp",
+   "old": "sim::game_mode_name(static_cast<sim::GameMode>(m.mode))",
+   "new": "sim::game_mode_name(sim::GameMode::Kills187)",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.176 ./build/tests/test_server/test_server",
+   "expect": "S3.176"
+  },
+  {
+   "id": "live_door_writes_the_mode_as_a_number",
+   "file": "src/ants_server/control.cpp",
+   "old": "JsonValue::make_string(sim::game_mode_name(static_cast<sim::GameMode>(m.mode)))",
+   "new": "JsonValue::make_int(m.mode)",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.176 ./build/tests/test_server/test_server",
+   "expect": "S3.176"
+  },
+  {
+   "id": "live_door_leaves_out_the_mode",
+   "file": "src/ants_server/control.cpp",
+   "old": "            e.set(\"mode\", JsonValue::make_string(sim::game_mode_name(static_cast<sim::GameMode>(m.mode))));       // \"highest-score\" or \"187\", as in the list of games\n",
+   "new": "",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.176 ./build/tests/test_server/test_server",
+   "expect": "S3.176"
+  }
+ ]
+}

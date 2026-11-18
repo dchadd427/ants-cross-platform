@@ -44,13 +44,49 @@
         return out;
     }
     var ORIGINALS = /^(?:tiny|small|medium|gauntlet|treasure|islands)\.lvl$/i;       // the six that the front page has its own pictures of (/front/preview_<word>.png)
-    // The picture address of a map of the players from its name alone, as a match record has it ("POPcOrN.lvl", or "POPcOrN"): /maps/previews/<file name without .lvl>.webp, or '' for a name that is not a map's file name (the game's
-    // rule above), one of the six originals, or anything outside the two shapes the page loads
+    // The pictures that came, by the address without its ending: which ending ('.webp' the library's, '.png' the server's own, for an approved or a test map) answered, so that a name that is asked for again goes to it at once
+    var answered = {}, answeredCount = 0;
+    function noteAnswer(stem, ending) {
+        if (answered[stem] === ending) return;
+        if (answeredCount > 2000) { answered = {}; answeredCount = 0; }       // (more maps than the site has: start again, nothing depends on it)
+        if (!answered[stem]) answeredCount++;
+        answered[stem] = ending;
+    }
+    // A test map of the Map Maker (<name> ~test-<8 hex>, docs/MAP_SUBMISSIONS.md "Test maps") has only the server's own picture, a PNG
+    var TEST_BASE = / ~test-[0-9a-f]{8}$/;
+    var ENDING = /^(\/maps\/previews\/.+)(\.webp|\.png)$/;
+    // The same picture in the other ending, '' for any address that is not a map's in /maps/previews/ (an original's own picture has no other)
+    function otherPicture(url) {
+        var m = typeof url === 'string' ? ENDING.exec(url) : null;
+        return m ? ownPath(m[1] + (m[2] === '.webp' ? '.png' : '.webp')) : '';
+    }
+    function guessOf(base) {
+        var stem = '/maps/previews/' + percentEncode(base);
+        return stem + (answered[stem] || (TEST_BASE.test(base) ? '.png' : '.webp'));
+    }
+    // The picture address of a map of the players from its name alone, as a match record has it ("POPcOrN.lvl", or "POPcOrN"): /maps/previews/<file name without .lvl>.webp (the library's) or .png (a test map's, or one that was found to be
+    // there), or '' for a name that is not a map's file name (the game's rule above), one of the six originals, or anything outside the two shapes the page loads. A guess: the list (thumbFor) and showPicture say the rest.
     function previewPath(map) {
         if (typeof map !== 'string') return '';
         var base = map.replace(/\.lvl$/i, ''), file = base + '.lvl';
         if (!validMapFile(file) || ORIGINALS.test(file)) return '';
-        return ownPath('/maps/previews/' + percentEncode(base) + '.webp');
+        return ownPath(guessOf(base));
+    }
+    // The ONE way that a map's picture is put in an <img> (a card of the match history, the death map, Open games, the room's picture, the picker): the address is the list's (thumbFor) or the name's guess (previewPath), and an
+    // address that does not answer is tried once in the other ending (an approved map's picture is a PNG, the library's a WebP) before gone(img) is called (the page's choice: take the image away, leave a dark square). An image
+    // may be given another address later (the same image); a picture that came is remembered for the next time that its name is asked for. Never more than two requests for an address.
+    function showPicture(img, url, gone) {
+        var s = img._antsPic;
+        if (!s) {
+            s = img._antsPic = { url: '', other: '', tried: false, gone: null };
+            img.addEventListener('load', function () { var m = ENDING.exec(s.tried ? s.other : s.url); if (m) noteAnswer(m[1], m[2]); });
+            img.addEventListener('error', function () {
+                if (!s.tried && s.other) { s.tried = true; img.src = s.other; return; }
+                if (s.gone) s.gone(img);
+            });
+        }
+        s.url = url; s.other = otherPicture(url); s.tried = false; s.gone = typeof gone === 'function' ? gone : null;
+        img.src = url;
     }
     // The picture of the map that a match record names, from the list that parseList made (null while not known): the list's own entry says what the server serves; a map not in the list has the address its name makes
     function thumbFor(map, list) {
@@ -284,7 +320,8 @@
             if (m.file === picked) d.className += ' sel';
             var here = opts.room ? canon(opts.room() || '') : '';
             if (m.thumb) {
-                var img = el('img'); img.setAttribute('src', m.thumb); img.setAttribute('alt', ''); img.setAttribute('width', String(px)); img.setAttribute('height', String(px)); img.setAttribute('loading', 'lazy'); img.setAttribute('decoding', 'async');
+                var img = el('img'); img.setAttribute('alt', ''); img.setAttribute('width', String(px)); img.setAttribute('height', String(px)); img.setAttribute('loading', 'lazy'); img.setAttribute('decoding', 'async');
+                showPicture(img, m.thumb);      // (set last: a browser reads the address when it is set)
                 d.appendChild(img);
             } else d.appendChild(el('span', 'pk-nopic'));
             var body = el('div', 'pk-body');
@@ -319,7 +356,7 @@
             var m = pickedIndex() >= 0 ? lookup(picked) : null;
             parts.pane.className = 'pk-pane' + (m ? '' : ' pk-none');
             parts.pname.textContent = m ? m.name : ''; parts.pmeta.textContent = ''; parts.pdesc.textContent = m ? m.description : '';
-            if (m && m.thumb) parts.pimg.setAttribute('src', m.thumb); else parts.pimg.removeAttribute('src');
+            if (m && m.thumb) showPicture(parts.pimg, m.thumb); else parts.pimg.removeAttribute('src');
             if (!m) return;
             if (m.original) parts.pname.appendChild(el('span', 'pk-badge', 'Original')); else if (m.kind === 'extended') parts.pname.appendChild(el('span', 'pk-badge pk-ext', 'Extended'));
             var facts = factsOf(m).slice(1); if (m.original) facts.unshift('Shipped with the game'); if (!m.bare) facts.push(playsText(m.plays) + (m.plays === 1 ? ' play' : ' plays'));
@@ -452,5 +489,5 @@
         };
     }
 
-    return { VIEW_KEY: VIEW_KEY, SORTS: SORTS, validMapFile: validMapFile, previewPath: previewPath, thumbFor: thumbFor, percentEncode: percentEncode, displayName: displayName, parseList: parseList, sortMaps: sortMaps, filterMaps: filterMaps, playsText: playsText, metaText: metaText, infoText: infoText, factsOf: factsOf, HEAVY_TEXT: HEAVY_TEXT, TOO_MANY_TEXT: TOO_MANY_TEXT, create: create };
+    return { VIEW_KEY: VIEW_KEY, SORTS: SORTS, validMapFile: validMapFile, previewPath: previewPath, otherPicture: otherPicture, showPicture: showPicture, thumbFor: thumbFor, percentEncode: percentEncode, displayName: displayName, parseList: parseList, sortMaps: sortMaps, filterMaps: filterMaps, playsText: playsText, metaText: metaText, infoText: infoText, factsOf: factsOf, HEAVY_TEXT: HEAVY_TEXT, TOO_MANY_TEXT: TOO_MANY_TEXT, create: create };
 });

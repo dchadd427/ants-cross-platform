@@ -1,0 +1,176 @@
+{
+ "note": "Mutants of the HUD art's choice of the sheet by the output's scale, of the nine-slice (a long piece: start, repeated run, end), of the frame's pieces at every shape and of the fall back to the original's art when a sheet cannot be used (src/ants_app/hud_art.cpp, renderer_art.cpp, application_game_menu.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout: python3 tools/mutate.py tests/data/hud_art_mutants.json --keep-going --jobs 1; every mutant must be caught by the test and the text named in it.",
+ "mutants": [
+  {
+   "id": "scale_one_to_one_is_not_exact",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "if (!(output_scale > 1.0 + 1e-6)) return 1;",
+   "new": "if (!(output_scale > 1.5)) return 1;",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[scale]"
+  },
+  {
+   "id": "scale_nearest_below_not_above",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "if (!(output_scale > 1.0 + 1e-6)) return 1;",
+   "new": "if (output_scale < 1.5) return 1;",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[scale]"
+  },
+  {
+   "id": "scale_two_ends_too_late",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "if (output_scale <= 2.0 + 1e-6) return 2;",
+   "new": "if (output_scale <= 2.5) return 2;",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[scale]"
+  },
+  {
+   "id": "scale_three_is_never_chosen",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "    if (output_scale <= 2.0 + 1e-6) return 2;\n    return 3;",
+   "new": "    if (output_scale <= 2.0 + 1e-6) return 2;\n    return 2;",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[scale]"
+  },
+  {
+   "id": "scale_renderer_always_takes_the_first_sheet",
+   "file": "src/ants_app/renderer_art.cpp",
+   "old": "return hud_art::Art::scale_for(scale);",
+   "new": "return 1;",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[scale]"
+  },
+  {
+   "id": "slice_run_stops_a_pixel_short",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "tile > 0 && pos < length - sl.end;",
+   "new": "tile > 0 && pos < length - sl.end - 1;",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[slices]"
+  },
+  {
+   "id": "slice_last_copy_not_cut",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "const int32_t n = std::min(tile, length - sl.end - pos);",
+   "new": "const int32_t n = tile;",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[slices]"
+  },
+  {
+   "id": "slice_run_starts_at_the_start",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "piece(sl.tile_from, n, pos);",
+   "new": "piece(0, n, pos);",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[slices]"
+  },
+  {
+   "id": "slice_start_not_cut_for_a_short_piece",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "piece(0, std::min(sl.start, length), 0);",
+   "new": "piece(0, sl.start, 0);",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[slices]"
+  },
+  {
+   "id": "slice_end_is_not_at_the_end",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "piece(full - end, end, length - end);",
+   "new": "piece(full - end, end, length - end - 1);",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[slices]"
+  },
+  {
+   "id": "slice_end_is_the_wrong_part_of_the_piece",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "piece(full - end, end, length - end);",
+   "new": "piece(full - end - 1, end, length - end);",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[slices]"
+  },
+  {
+   "id": "frame_left_strip_grows_with_the_width",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "art.sprites()[static_cast<size_t>(art.left_strip)].y + dh));",
+   "new": "art.sprites()[static_cast<size_t>(art.left_strip)].y + dw));",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[frame]"
+  },
+  {
+   "id": "frame_lower_panel_reaches_the_bottom_strip",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": " - art.sprites()[static_cast<size_t>(art.bottom_strip)].h + dh));",
+   "new": " + dh));",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[frame]"
+  },
+  {
+   "id": "frame_top_bar_does_not_grow",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "art.sprites()[static_cast<size_t>(art.top_bar)].w + dw));",
+   "new": "art.sprites()[static_cast<size_t>(art.top_bar)].w));",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[frame]"
+  },
+  {
+   "id": "frame_right_anchor_follows_the_classic_width",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "(sprite.anchor_x == AnchorX::Right ? layout.width - Art::kReferenceWidth : 0)",
+   "new": "(sprite.anchor_x == AnchorX::Right ? layout.width - Art::kReferenceWidth + 320 : 0)",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[frame]"
+  },
+  {
+   "id": "frame_bottom_anchor_ignores_the_height",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "(sprite.anchor_y == AnchorY::Bottom ? layout.height - Art::kReferenceHeight : 0)",
+   "new": "(sprite.anchor_y == AnchorY::Bottom ? 0 : 0)",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[frame]"
+  },
+  {
+   "id": "unusable_sheet_is_not_given_up",
+   "file": "src/ants_app/application_game_menu.cpp",
+   "old": "if (hud_.art() == nullptr || !renderer_ || renderer_->preload_art(hud_art_)) return;",
+   "new": "if (hud_.art() == nullptr || !renderer_ || (renderer_->preload_art(hud_art_) || true)) return;",
+   "build": "test_game_menu",
+   "test": "./build/tests/test_app/test_game_menu",
+   "expect": "sheets cut after their header"
+  },
+  {
+   "id": "unusable_sheet_is_not_looked_at_every_frame",
+   "file": "src/ants_app/application_render.cpp",
+   "old": "    check_hud_art();                                     // (the sheet of the new HUD art for this output is a texture before anything is drawn with it)\n",
+   "new": "",
+   "build": "test_game_menu",
+   "test": "./build/tests/test_app/test_game_menu",
+   "expect": "gives the original's art at its next frame"
+  },
+  {
+   "id": "preload_says_yes_without_a_texture",
+   "file": "src/ants_app/renderer_art.cpp",
+   "old": "return art_texture(art, art_scale_for_output(nullptr)) != nullptr;",
+   "new": "return art_texture(art, art_scale_for_output(nullptr)) != nullptr || true;",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "preload_art says"
+  }
+ ]
+}

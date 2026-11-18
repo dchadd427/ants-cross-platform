@@ -111,7 +111,7 @@ function page(opts) {
     const library = Object.assign({ tiny: true, treasure: true }, opts.library || {});
     const env = {
         doc, dialogs, sent: sentStore, fetch: opts.noFetch ? null : server.fetch, later: (f, ms) => (ms >= 30000 ? timers.push(f) : setImmediate(f)), Abort: opts.noAbort ? null : FakeAbort, now: () => opts.now || Date.now(),
-        store: { inLibrary: (n) => !!library[Store.key(n)], libraryState: () => opts.libraryState || 'ready', onLibrary: (f) => f() },
+        store: { inLibrary: (n) => !!library[Store.key(n)], libraryState: () => opts.libraryState || 'ready', onLibrary: opts.onLibrary || ((f) => f()) },
         parse: (b) => (b && b[0] === 8 ? { kind: 'classic', rows: 31, columns: 31, rules: 0 } : b && b[0] === 9 ? { kind: 'extended', rows: 300, columns: 400, rules: b[3] === 2 ? 2 : 0 } : null),
         thumb: () => doc.createElement('canvas'), tags: (h, kind, rules) => { h.textContent = (kind === 'extended' ? 'Extended map|New version only' : 'Classic map') + (rules === 2 ? '|Rules 2' : ''); },
         current: () => (opts.currentError ? { error: opts.currentError } : { name: opts.name || 'Sunny Picnic', bytes: cfg.bytes, file, report }),
@@ -559,8 +559,49 @@ async function caseG() {
     check(/&note=a%0A%0Ab$/.test(post(p.server)[0].url), 'three line ends in a row are two: ' + post(p.server)[0].url);
 }
 
+// ---- H: typing in the boxes of the dialog ----
+// The boxes are made once: a key is one `input` event, and the dialog shows again only what it says (problems, the line of the door, the notes under the boxes). A box that is taken out of the page
+// loses the focus, so the next key goes nowhere (the fake DOM does what a browser does: web_mapmaker_fake_dom.js).
+async function caseH() {
+    let p = await opened();
+    const find = (id) => () => p.host.querySelector('#' + id);
+    equal(p.doc.typeCheck(find('sub-name'), ' Two'), '', 'the name of the map: every key stays in the same box with the focus');
+    equal(p.doc.typeCheck(find('sub-note'), 'Two ants\nmeet here'), '', 'the note: every key (and a line break) stays in the same box with the focus');
+    equal(p.doc.typeCheck(find('sub-maker'), 'Mia Pip'), '', 'the player name shown as the maker: every key stays in the same box with the focus');
+    equal(p.doc.caretCheck(find('sub-maker'), 3, 'X'), '', 'a key in the middle of the maker\'s name keeps the caret after it');
+    equal(p.doc.caretCheck(find('sub-name'), 4, 'Z'), '', 'a key in the middle of the name keeps the caret after it');
+    p.doc.typeKey('Backspace'); p.doc.typeKey('Backspace');
+    check(p.doc.activeElement === find('sub-name')() && find('sub-name')().value.length > 3, 'the keys that take letters away keep the focus too');
+    equal(p.doc.composeCheck(find('sub-maker'), ['n', 'ni', 'n\u01d0', '\u4f60']), '', 'an input method: the composition in the maker\'s box is not cut off');
+    equal(p.doc.composeCheck(find('sub-name'), ['a', 'ab']), '', 'and in the name\'s box');
+    check(!p.dialogs.isOpen() || p.host.querySelector('#sub-maker') !== null, 'the dialog is still there');
+    // a name already in the game's list, a name with a problem and a name that is free: the note under the box changes, the box is the same
+    p = await opened({ name: 'Tiny' });
+    equal(p.doc.typeCheck(find('sub-name'), '!!<', 'Tiny!!<'.slice(0, 7)), '', 'a name that the list has and then one that is wrong: the box stays');
+    // a player who has a name already is shown it, and one button changes it
+    const idb = fakeIdb(); idb.m.set('#maker', { id: '#maker', name: 'Mia' });
+    p = await opened({ idb });
+    check(p.host.querySelector('#sub-maker') === null && /Maker shown to players\s*Mia/.test(text(p)), 'a saved name is shown, with no box');
+    equal(p.doc.typeCheck(find('sub-name'), ' 2'), '', 'typing the name of the map with a saved maker: the box stays');
+    button(p, 'Change my player name').click();
+    check(p.host.querySelector('#sub-maker') !== null && p.doc.activeElement === p.host.querySelector('#sub-maker'), 'Change my player name puts the box there with the focus');
+    p.host.querySelector('#sub-maker').value = '';
+    equal(p.doc.typeCheck(find('sub-maker'), 'Pip'), '', 'and the new name is typed with the focus kept');
+    // a late answer of the door or of the list of the game's maps does not take a button away from a person who is on it
+    const waiting = []; let again = [];
+    p = await loadedPage({ onLibrary: (f) => { again.push(f); f(); } });
+    p.sub.open(); await later();
+    type(p, 'sub-maker', 'Mia'); button(p, 'Submit for approval').click(); await later(); p.dialogs.close();
+    p.sub.open(); await later();
+    const see = button(p, 'See my submissions');
+    check(!!see, 'a map that is waiting already shows its button');
+    see.focus(); again.forEach((f) => f()); await later();
+    check(button(p, 'See my submissions') === see && see.isConnected && p.doc.activeElement === see, 'when the list of the game\'s maps comes again, the button that has the focus stays where it is, with the focus');
+    void waiting;
+}
+
 (async () => {
-    const parts = [['A the words', caseA], ['B the sent store', caseB], ['C the dialog', caseC], ['D what is sent, and the answers', caseD], ['F My submissions', caseF], ['G a send that may have arrived, twins, a 404', caseG]];
+    const parts = [['A the words', caseA], ['B the sent store', caseB], ['C the dialog', caseC], ['D what is sent, and the answers', caseD], ['F My submissions', caseF], ['G a send that may have arrived, twins, a 404', caseG], ['H typing in the boxes', caseH]];
     for (const [name, fn] of parts) {
         const was = failures;
         try { await fn(); } catch (e) { failures++; console.log('    ERROR: ' + (e && e.stack || e)); }

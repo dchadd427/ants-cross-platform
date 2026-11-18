@@ -43,10 +43,11 @@ public:
     /// The file of the approved map `name` ("" when there is none), the list read again when it is old, or when it does not know the name and has not been read for a moment
     std::string path_of(const std::string& name, uint32_t now_ms) {
         if (!loaded_ || net::time_reached(now_ms, loaded_ms_ + interval_ms())) load(now_ms);
-        auto it = files_.find(name);
+        const std::string key = server::names::name_key(name);                // (the lobby's rule: the exact name, or the same letters in another case; a name is unique by this key)
+        auto it = files_.find(key);
         if (it == files_.end() && net::time_reached(now_ms, loaded_ms_ + kApprovedMissLookMs)) {
             load(now_ms);
-            it = files_.find(name);
+            it = files_.find(key);
         }
         return it == files_.end() ? std::string() : it->second;
     }
@@ -79,7 +80,7 @@ private:
             const db::Statement::Step step = st.step();
             if (step == db::Statement::Step::Failed) e = st.error();
             if (step != db::Statement::Step::Row) break;
-            found[server::names::file_name_of(st.column_text(0))] = server::submission_file_path(dir_, st.column_text(1));
+            found[server::names::name_key(server::names::file_name_of(st.column_text(0)))] = server::submission_file_path(dir_, st.column_text(1));
         }
         if (!e.ok()) {
             db_.close();                                                     // (opened again at the next look)

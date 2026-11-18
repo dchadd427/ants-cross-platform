@@ -226,6 +226,14 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             } else if (cfg.startup_error.empty()) {
                 cfg.startup_error = "--aspect " + why;
             }
+        } else if (std::strcmp(argv[i], "--hud-art") == 0) {                     // --hud-art new | classic: the look of the match screen's frame (hud_art.hpp)
+            if (i + 1 >= argc || (std::strcmp(argv[i + 1], "new") != 0 && std::strcmp(argv[i + 1], "classic") != 0)) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--hud-art needs new or classic";
+                if (i + 1 < argc) ++i;
+            } else {
+                cfg.hud_art_new = std::strcmp(argv[++i], "new") == 0;
+                cfg.hud_art_given = true;
+            }
         } else if (std::strcmp(argv[i], "--zoom") == 0) {                        // --zoom 0.05 .. 2: the zoom of the map view that a match starts with, the nearest level that its map offers (view_zoom.hpp)
             std::string why;
             if (i + 1 >= argc) {

@@ -556,6 +556,8 @@ struct AppFixture {
         cfg.aspect_given = aspect_given;
         cfg.start_in_map_select = !match;
         cfg.settings_path = settings.string();
+        cfg.hud_art_given = true;                                    // these cases are about the original's frame and the world's drawing: the new HUD art is test_hud_art's
+        cfg.hud_art_new = false;
         if (window_w > 0) {
             cfg.has_window_size = true;
             cfg.window_w = window_w;

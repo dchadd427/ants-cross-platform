@@ -1,6 +1,7 @@
 // The tests of the server's own matches of computer players (RoomSpec::bots_only, RoomManager::enable_bot_matches / start_bot_match; docs/SERVER.md "Matches of computer players"): a room whose seats are
 // all bots starts with nobody in it, is not closed for lack of people and is kept like any other match; the specification that cannot be such a room is refused; the timer makes one match at a time, only
-// when the server keeps replays, and chooses the same things from the same seed. Included by test_server_files.cpp, which holds (through server_fixtures.hpp) the harness (TEST_CASE, ASSERT_*, World); test_server.cpp calls run_bot_match_tests().
+// when the server keeps replays, and chooses the same things from the same seed; each match is dealt the original's game or 187 by a coin of its own, and a match in 187 plays on every map with every seating
+// of the computer players. Included by test_server_files.cpp, which holds (through server_fixtures.hpp) the harness (TEST_CASE, ASSERT_*, World); test_server.cpp calls run_bot_match_tests().
 #pragma once
 
 namespace {
@@ -42,6 +43,38 @@ bool run_until(World& w, Condition cond, uint32_t max_ms) {
 const RoomStatus* only_bot_room(const std::vector<RoomStatus>& rooms) {
     return rooms.size() == 1 ? &rooms[0] : nullptr;
 }
+
+// Every seating that the timer's match can come to: two to four bots on seats (the first ones, and the last ones for two and three), free for all and every way to make teams of them (sim::roster_team_choices)
+struct BotSeating {
+    uint8_t roster;
+    sim::StartTeams teams;
+};
+
+std::vector<BotSeating> every_bot_seating() {
+    std::vector<BotSeating> out;
+    for (const uint8_t roster : {uint8_t{0x03}, uint8_t{0x0C}, uint8_t{0x07}, uint8_t{0x0E}, uint8_t{0x0F}}) {
+        for (const sim::StartTeams& teams : sim::roster_team_choices(roster)) out.push_back({roster, teams});
+    }
+    return out;
+}
+
+// The room of such a seating: bots on the seats of the roster, in `mode`, on `map`, with the teams
+RoomSpec bot_seating_spec(const std::string& code, const char* map, const BotSeating& seating, uint8_t mode) {
+    uint8_t players = 0;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) players = static_cast<uint8_t>(players + ((seating.roster >> seat) & 1u));
+    RoomSpec spec = bots_only_spec(code, players);
+    uint8_t next = 0;
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        if ((seating.roster & (1u << seat)) != 0) spec.bots[next++].seat = seat;
+    }
+    spec.map = map;
+    spec.mode = mode;
+    spec.teams = seating.teams;
+    spec.run_ms = 25u * 60u * 1000u;                                         // (the server's own guard: the longest map's limit is 12 minutes)
+    return spec;
+}
+
+const char* const kBotMatchMaps[] = {"TINY.LVL", "SMALL.LVL", "MEDIUM.LVL", "GAUNTLET.LVL", "TREASURE.LVL", "ISLANDS.LVL"};
 
 }  // namespace
 
@@ -126,11 +159,12 @@ void run_bot_match_tests() {
             ASSERT_TRUE(made->bots.size() >= 2 && made->bots.size() <= 4 && made->joined == made->bots.size() && !made->public_room && !made->lobby && !made->reconnect);
             for (const RoomStatus::Bot& b : made->bots) ASSERT_TRUE(b.seat < 4 && (b.level == "medium" || b.level == "hard") && b.kind == "standard" && !b.fill);
             ASSERT_TRUE(made->map == "TINY.LVL" || made->map == "SMALL.LVL" || made->map == "MEDIUM.LVL" || made->map == "GAUNTLET.LVL" || made->map == "TREASURE.LVL" || made->map == "ISLANDS.LVL");
-            const std::string choice = bot_match_choice(*made);
+            const std::string choice = bot_match_choice(*made) + " rules " + std::to_string(static_cast<unsigned>(made->mode));      // (the rules are drawn from the seed too)
             if (round == 0) first = choice;
             else ASSERT_EQ(choice, first);
             const std::vector<std::string> notes = w.mgr.take_notices();
-            ASSERT_TRUE(notes.size() == 1 && notes[0] == "bot match: room " + made->code + " started");
+            ASSERT_TRUE(made->mode <= 1);
+            ASSERT_TRUE(notes.size() == 1 && notes[0] == "bot match: room " + made->code + " started (" + sim::game_mode_name(static_cast<sim::GameMode>(made->mode)) + ")");      // (the log says the rules: "187" or "highest-score")
             w.run(5u * 60u * 1000u);                                         // (the next time comes while the first match runs: nothing is made, the reason is told)
             ASSERT_TRUE(w.mgr.list(w.now).size() <= 1);
             const std::vector<std::string> later = w.mgr.take_notices();
@@ -247,5 +281,152 @@ void run_bot_match_tests() {
                 if (seat != teams.a && seat != teams.b) ASSERT_EQ(s.allies[seat], uint8_t{4});          // (the seat that is left plays alone)
             }
         }
+    } TEST_END();
+
+    TEST_CASE("S3.184b Each Match Of The Timer Is Dealt The Original's Game Or 187 By A Coin Of Its Own: About Half Are 187, What The Last Match Had Does Not Matter (Runs Of Two And Three Of Each Kind Come Up, It Is No Alternation), The Room Says The Rules It Was Dealt, And A 187 Match Is Never On ISLANDS") {
+        ReplayClock clock;
+        World w;
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-coin", &clock), false, why));
+        (void)w.mgr.take_notices();
+        w.mgr.enable_bot_matches(0, w.now, 0u, 20261117u);                   // (0 minutes: no timer, only the seed: the matches are the ones that the test asks for)
+        std::string deals;                                                   // '1' for 187, '0' for the original's game, in the order of the matches
+        std::set<std::string> maps_in_187, maps_in_score;
+        for (int match = 0; match < 300; ++match) {
+            std::string code, reason;
+            uint8_t mode = 9;
+            ASSERT_TRUE(w.mgr.start_bot_match(w.now, code, reason, &mode));
+            const RoomStatus s = w.status(code);
+            ASSERT_TRUE(mode <= 1 && s.mode == mode && s.bots_only);        // (what the room says is what was dealt)
+            deals += mode == 1 ? '1' : '0';
+            (mode == 1 ? maps_in_187 : maps_in_score).insert(s.map);
+            ASSERT_TRUE(w.mgr.close_room(code, w.now));                      // (the last one is no longer going: the next one may be made)
+            if (match % 100 == 99) w.run(31000);                             // (a closed room is forgotten after its keep time)
+        }
+        const size_t n187 = static_cast<size_t>(std::count(deals.begin(), deals.end(), '1'));
+        ASSERT_MSG(n187 > 120 && n187 < 180, "187 in " + std::to_string(n187) + " of 300");
+        size_t longest[2] = {0, 0};
+        size_t run = 0;
+        size_t after[2] = {0, 0};                                            // the matches that came after one of each kind, and how many of those had the same kind again
+        size_t same_after[2] = {0, 0};
+        for (size_t i = 0; i < deals.size(); ++i) {
+            const size_t kind = deals[i] == '1' ? 1u : 0u;
+            run = i > 0 && deals[i] == deals[i - 1] ? run + 1 : 1;
+            longest[kind] = std::max(longest[kind], run);
+            if (i == 0) continue;
+            const size_t before = deals[i - 1] == '1' ? 1u : 0u;
+            ++after[before];
+            if (deals[i] == deals[i - 1]) ++same_after[before];
+        }
+        // the maps: the original's game on all six, 187 on the five where an ant can strike another (the water of ISLANDS joins no two hills by a walk, and 187 has no Swimmer)
+        ASSERT_EQ(maps_in_score.size(), size_t{6});
+        ASSERT_EQ(maps_in_187.size(), size_t{5});
+        ASSERT_TRUE(maps_in_187.count("ISLANDS.LVL") == 0 && maps_in_score.count("ISLANDS.LVL") == 1);
+        ASSERT_MSG(longest[0] >= 3 && longest[1] >= 3, "the longest runs: " + std::to_string(longest[0]) + " and " + std::to_string(longest[1]));      // (two or three of a kind in a row are expected)
+        for (size_t kind = 0; kind < 2; ++kind) {                            // (after a match of either kind the next one is a coin again: about half the same, never none)
+            ASSERT_MSG(after[kind] > 100 && same_after[kind] * 100 > after[kind] * 35 && same_after[kind] * 100 < after[kind] * 65, "after " + std::to_string(kind) + ": " + std::to_string(same_after[kind]) + " of " + std::to_string(after[kind]));
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.184c A Match Of Computer Players In 187 Starts On Each Of The Six Maps With Every Seating The Timer Can Make (Two To Four Bots On Their Seats, Free For All And Every Way To Make Teams): No Refusal, The Rules And The Teams Stand On The Referee, And The Bots Look At The Match For A Minute") {
+        ReplayClock clock;
+        const std::vector<BotSeating> seatings = every_bot_seating();
+        ASSERT_EQ(seatings.size(), size_t{14});                              // (two bots on two pairs of seats, free for all; three bots on two sets of seats and four bots: free for all and three ways each)
+        for (const char* map : kBotMatchMaps) {
+            World w;
+            std::string why;
+            ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-187-start", &clock), false, why));
+            std::vector<std::string> codes;
+            for (size_t i = 0; i < seatings.size(); ++i) {
+                const std::string code = "B187-" + std::to_string(i);
+                const CreateResult made = w.mgr.create_room(bot_seating_spec(code, map, seatings[i], 1), w.now);
+                ASSERT_MSG(made.ok, std::string(map) + " seating " + std::to_string(i) + ": " + made.error);
+                codes.push_back(code);
+            }
+            ASSERT_TRUE(run_until(w, [&] {
+                for (const std::string& code : codes) {
+                    if (w.status(code).state != RoomState::Running) return false;
+                }
+                return true;
+            }, 15000));
+            w.run(60000);
+            for (size_t i = 0; i < seatings.size(); ++i) {
+                const RoomStatus s = w.status(codes[i]);
+                const sim::StartTeams& teams = seatings[i].teams;
+                ASSERT_MSG(s.state == RoomState::Running && s.turns > 1000 && s.bot_decisions > 0, std::string(map) + " seating " + std::to_string(i) + ": " + s.reason);
+                ASSERT_TRUE(static_cast<int>(s.mode) == 1 && s.bots_only && s.bot_controller);
+                ASSERT_EQ(s.teams, sim::start_teams_text(teams));
+                std::array<uint8_t, sim::MAX_PLAYERS> allies{4, 4, 4, 4};     // (4: none) the pair that was asked for, and with four seats the two that are left are the other team; the third of three plays alone
+                if (teams.set) {
+                    allies[teams.a] = teams.b;
+                    allies[teams.b] = teams.a;
+                    uint8_t others[2];
+                    size_t found = 0;
+                    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+                        if ((seatings[i].roster & (1u << seat)) != 0 && seat != teams.a && seat != teams.b && found < 2) others[found++] = seat;
+                    }
+                    if (found == 2) {
+                        allies[others[0]] = others[1];
+                        allies[others[1]] = others[0];
+                    }
+                }
+                ASSERT_TRUE(s.allies == allies);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.184d A Match Of Computer Players In 187 Is Played To Its End On Each Of The Six Maps (One Seating Each: Four Bots In Each Way To Make Teams And Free For All, Three In Teams, Two): The Brawl Kills (On ISLANDS Nobody Can Be Struck), The Rules End It Before The Room's Own Limit, And The Recording Has The Mode And Plays Out To The Last Hash") {
+        ReplayClock clock;
+        const std::vector<BotSeating> seatings = every_bot_seating();
+        // the seatings of the matches, by index into every_bot_seating(): four bots in each of the three splits (0+1, 0+2, 0+3), three bots with a pair, four bots free for all, three bots on the last seats with a pair
+        const size_t chosen[] = {11, 12, 13, 4, 10, 8};
+        size_t map_index = 0;
+        for (const char* map : kBotMatchMaps) {
+            const BotSeating& seating = seatings[chosen[map_index++]];
+            World w;
+            std::string why;
+            ASSERT_TRUE(w.mgr.enable_replays(replay_config("botmatch-187-play", &clock), false, why));
+            RoomSpec spec = bot_seating_spec("B187-END", map, seating, 1);
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            ASSERT_TRUE(run_until(w, [&] { return w.status("B187-END").state == RoomState::Running; }, 15000));
+            ASSERT_TRUE(run_until(w, [&] { return w.status("B187-END").state != RoomState::Running; }, 24u * 60u * 1000u));
+            const RoomStatus s = w.status("B187-END");
+            ASSERT_MSG(s.state == RoomState::Finished && s.reason != "everybody left", std::string(map) + ": " + s.reason);
+            ASSERT_TRUE(s.ticks > 1200 && s.ticks < 24u * 60u * 20u);        // (the rules ended it: a minute at the least, and well before the room's own limit of 25 minutes)
+            ASSERT_TRUE(s.replay_kept && ReplayStore::valid_file_name(s.replay_file));
+            const StoredReplay f = load_stored(*w.mgr.replay_store(), s.replay_file);
+            ASSERT_TRUE(f.ok && f.rep.complete && f.rep.head.mode == 1 && f.rep.head.sim_rules == replay::sim_rules_for_mode(1) && f.rep.head.roster == seating.roster);
+            ASSERT_TRUE(f.rep.head.teams == seating.teams);
+            replay::Outcome played;
+            ASSERT_TRUE(plays_out(f.rep, played));
+            ASSERT_TRUE(played.complete && played.match_over && played.hashes_checked >= 5);
+            uint32_t killed = 0;
+            uint32_t ants_left = 0;
+            for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+                killed += played.result.stats[seat].enemy_killed;
+                ants_left += played.result.ants_left[seat];                  // (kept in 187 only: the original's game leaves it 0)
+            }
+            ASSERT_MSG(ants_left > 0, std::string(map) + ": ants left " + std::to_string(ants_left));
+            const bool islands = std::string(map) == "ISLANDS.LVL";          // (the water joins no two hills by a walk and 187 has no Swimmer: nobody is struck, the clock ends the match, and that is why the timer makes no 187 match there)
+            ASSERT_MSG(islands ? killed == 0 : killed > 0, std::string(map) + ": killed " + std::to_string(killed));
+        }
+    } TEST_END();
+
+    TEST_CASE("S3.184e The Match History Is Let In While A Room Of Computer Players Alone Runs (Nobody Waits On It), And Not While A Room With A Person In It Loads Or Runs") {
+        World w;
+        ASSERT_TRUE(w.mgr.history_may_run());                                   // (no room)
+        ASSERT_TRUE(w.mgr.create_room(bots_only_spec("BM-GATEB", 2), w.now).ok);
+        ASSERT_TRUE(run_until(w, [&] { return w.status("BM-GATEB").state == RoomState::Running; }, 12000));
+        ASSERT_TRUE(w.mgr.history_may_run());                                   // (the server's own match runs: the history counts a match that a person played)
+        ASSERT_TRUE(w.mgr.create_room(spec_of("BM-GATEP", 2), w.now).ok);
+        Client& gus = w.connect("Gus", "BM-GATEP");
+        Client& hal = w.connect("Hal", "BM-GATEP");
+        gus.next_order_ms = hal.next_order_ms = 0xFFFFFFFFu;
+        const auto person_room_is = [&](RoomState state) { return w.status("BM-GATEP").state == state; };
+        ASSERT_TRUE(run_until(w, [&] { return person_room_is(RoomState::Loading) || person_room_is(RoomState::Running); }, 12000));
+        ASSERT_FALSE(w.mgr.history_may_run());                                  // (a room that loads is about to start: it gets the thread too)
+        ASSERT_TRUE(run_until(w, [&] { return person_room_is(RoomState::Running); }, 12000));
+        ASSERT_FALSE(w.mgr.history_may_run());                                  // (a person's match runs, whatever else runs)
+        ASSERT_TRUE(w.status("BM-GATEB").state == RoomState::Running);
     } TEST_END();
 }

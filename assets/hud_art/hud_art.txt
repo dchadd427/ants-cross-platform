@@ -1,0 +1,523 @@
+ants-hud-art 1
+canvas 960 540
+sheetsize 988 622
+sheet 1 sheet_1x.png
+sheet 2 sheet_2x.png
+sheet 3 sheet_3x.png
+sprite top_bar 960 22 23 537 0 0 stretch top x 140 140 332 320
+sprite left_strip 17 618 2 2 0 22 left stretch y 270 270 398 120
+sprite bottom_strip 943 19 23 563 17 521 stretch bottom x 0 0 192 206
+sprite score_window 57 17 23 586 211 523 left bottom
+sprite lower_panel 182 353 23 2 778 268 right stretch y 92 92 220 104
+sprite panel_top 182 8 84 606 778 22 right top
+sprite minimap_frame 182 106 395 2 778 30 right top
+sprite card 182 116 209 2 778 136 right top
+sprite status_box 182 16 84 586 778 252 right top
+sprite button_help_up 46 23 253 510 796 7 right top
+sprite button_help_hover 46 23 203 510 796 7 right top
+sprite button_help_down 47 23 859 509 796 7 right top
+sprite button_options_up 52 23 315 486 845 7 right top
+sprite button_options_hover 52 23 916 482 845 7 right top
+sprite button_options_down 53 23 859 482 845 7 right top
+sprite button_quit_up 46 23 613 510 899 7 right top
+sprite button_quit_hover 46 23 563 510 899 7 right top
+sprite button_quit_down 47 23 910 509 899 7 right top
+sprite send_all_up 44 24 811 482 852 503 right bottom
+sprite send_all_hover 44 24 763 482 852 503 right bottom
+sprite send_all_down 45 24 714 482 852 503 right bottom
+sprite send_team_up 46 24 664 482 899 503 right bottom
+sprite send_team_hover 46 24 614 482 899 503 right bottom
+sprite send_team_down 47 24 563 482 899 503 right bottom
+sprite stop_up 52 64 259 442 908 172 right top
+sprite stop_down 52 64 203 442 908 172 right top
+sprite label_move 64 16 610 586 794 136 right top
+sprite label_ally 64 16 270 586 794 136 right top
+sprite label_hatch 64 16 542 586 794 136 right top
+sprite label_attack 64 16 338 586 855 136 right top
+sprite label_bomb 64 16 406 586 855 136 right top
+sprite label_fire 64 16 474 586 855 136 right top
+sprite label_thief 64 16 746 586 855 136 right top
+sprite label_swim 64 16 678 586 855 136 right top
+sprite pedestal_rise1 56 76 449 352 796 156 right top
+sprite pedestal_rise2 56 76 509 352 796 156 right top
+sprite pedestal_rise3 56 76 23 359 796 156 right top
+sprite pedestal_rise4 56 76 83 359 796 156 right top
+sprite pedestal_rise5 56 76 143 359 796 156 right top
+sprite pedestal_move_up 56 76 389 352 796 156 right top
+sprite pedestal_move_press1 56 76 629 322 796 156 right top
+sprite pedestal_move_press2 56 76 689 322 796 156 right top
+sprite pedestal_move_latched 56 76 569 322 796 156 right top
+sprite pedestal_move_rise6 56 76 749 322 796 156 right top
+sprite pedestal_move_rise7 56 76 809 322 796 156 right top
+sprite pedestal_move_rise8 56 76 869 322 796 156 right top
+sprite pedestal_move_rise9 56 76 929 322 796 156 right top
+sprite pedestal_ally_up 56 76 641 82 796 156 right top
+sprite pedestal_ally_press1 56 76 641 2 796 156 right top
+sprite pedestal_ally_press2 56 76 701 2 796 156 right top
+sprite pedestal_ally_latched 56 76 581 2 796 156 right top
+sprite pedestal_ally_rise6 56 76 761 2 796 156 right top
+sprite pedestal_ally_rise7 56 76 821 2 796 156 right top
+sprite pedestal_ally_rise8 56 76 881 2 796 156 right top
+sprite pedestal_ally_rise9 56 76 581 82 796 156 right top
+sprite pedestal_hatch_up 56 76 329 282 796 156 right top
+sprite pedestal_hatch_press1 56 76 929 242 796 156 right top
+sprite pedestal_hatch_press2 56 76 389 272 796 156 right top
+sprite pedestal_hatch_latched 56 76 869 242 796 156 right top
+sprite pedestal_hatch_rise6 56 76 449 272 796 156 right top
+sprite pedestal_hatch_rise7 56 76 509 272 796 156 right top
+sprite pedestal_hatch_rise8 56 76 209 282 796 156 right top
+sprite pedestal_hatch_rise9 56 76 269 282 796 156 right top
+sprite pedestal_attack_up 56 76 209 122 857 156 right top
+sprite pedestal_attack_press1 56 76 761 82 857 156 right top
+sprite pedestal_attack_press2 56 76 821 82 857 156 right top
+sprite pedestal_attack_latched 56 76 701 82 857 156 right top
+sprite pedestal_attack_rise6 56 76 881 82 857 156 right top
+sprite pedestal_attack_rise7 56 76 395 112 857 156 right top
+sprite pedestal_attack_rise8 56 76 455 112 857 156 right top
+sprite pedestal_attack_rise9 56 76 515 112 857 156 right top
+sprite pedestal_bomb_up 56 76 875 162 857 156 right top
+sprite pedestal_bomb_press1 56 76 329 122 857 156 right top
+sprite pedestal_bomb_press2 56 76 575 162 857 156 right top
+sprite pedestal_bomb_latched 56 76 269 122 857 156 right top
+sprite pedestal_bomb_rise6 56 76 635 162 857 156 right top
+sprite pedestal_bomb_rise7 56 76 695 162 857 156 right top
+sprite pedestal_bomb_rise8 56 76 755 162 857 156 right top
+sprite pedestal_bomb_rise9 56 76 815 162 857 156 right top
+sprite pedestal_fire_up 56 76 629 242 857 156 right top
+sprite pedestal_fire_press1 56 76 449 192 857 156 right top
+sprite pedestal_fire_press2 56 76 509 192 857 156 right top
+sprite pedestal_fire_latched 56 76 389 192 857 156 right top
+sprite pedestal_fire_rise6 56 76 209 202 857 156 right top
+sprite pedestal_fire_rise7 56 76 269 202 857 156 right top
+sprite pedestal_fire_rise8 56 76 329 202 857 156 right top
+sprite pedestal_fire_rise9 56 76 569 242 857 156 right top
+sprite pedestal_thief_up 56 76 143 439 857 156 right top
+sprite pedestal_thief_press1 56 76 929 402 857 156 right top
+sprite pedestal_thief_press2 56 76 383 432 857 156 right top
+sprite pedestal_thief_latched 56 76 869 402 857 156 right top
+sprite pedestal_thief_rise6 56 76 443 432 857 156 right top
+sprite pedestal_thief_rise7 56 76 503 432 857 156 right top
+sprite pedestal_thief_rise8 56 76 23 439 857 156 right top
+sprite pedestal_thief_rise9 56 76 83 439 857 156 right top
+sprite pedestal_swim_up 56 76 809 402 857 156 right top
+sprite pedestal_swim_press1 56 76 263 362 857 156 right top
+sprite pedestal_swim_press2 56 76 323 362 857 156 right top
+sprite pedestal_swim_latched 56 76 203 362 857 156 right top
+sprite pedestal_swim_rise6 56 76 569 402 857 156 right top
+sprite pedestal_swim_rise7 56 76 629 402 857 156 right top
+sprite pedestal_swim_rise8 56 76 689 402 857 156 right top
+sprite pedestal_swim_rise9 56 76 749 402 857 156 right top
+sprite pedestal_flash1 56 76 689 242 796 156 right top
+sprite pedestal_flash2 56 76 749 242 796 156 right top
+sprite pedestal_flash3 56 76 809 242 796 156 right top
+sprite egg 12 16 970 563 856 158 right top
+sprite egg_hatch1 12 16 970 583 856 158 right top
+sprite egg_hatch2 17 14 814 586 853 159 right top
+sprite egg_hatch3 19 6 835 586 851 167 right top
+sprite lunch_box 34 40 315 442 917 131 right top
+anim buthlpu
+frame 1000 button_help_up 796 7
+anim buthlpr
+frame 1000 button_help_hover 796 7
+anim buthlpd
+frame 1000 button_help_down 796 7
+anim butoptu
+frame 1000 button_options_up 845 7
+anim butoptr
+frame 1000 button_options_hover 845 7
+anim butoptd
+frame 1000 button_options_down 845 7
+anim butqitu
+frame 1000 button_quit_up 899 7
+anim butqitr
+frame 1000 button_quit_hover 899 7
+anim butqitd
+frame 1000 button_quit_down 899 7
+anim butallu
+frame 1000 send_all_up 852 503
+anim butallr
+frame 1000 send_all_hover 852 503
+anim butalld
+frame 1000 send_all_down 852 503
+anim butalsu
+frame 1000 send_team_up 899 503
+anim butalsr
+frame 1000 send_team_hover 899 503
+anim butalsd
+frame 1000 send_team_down 899 503
+anim butcanu
+frame 1000 stop_up 908 172
+anim butcand
+frame 1000 stop_down 908 172
+anim butmovu
+frame 1000 label_move 794 136 pedestal_move_up 796 156
+anim butmovd
+frame 40 label_move 794 136 pedestal_move_latched 796 156
+anim butmov2d
+frame 100 label_move 794 136 pedestal_move_press1 796 156
+frame 100 label_move 794 136 pedestal_move_press2 796 156
+anim trnbmovu
+frame 60 pedestal_rise1 796 156
+frame 60 pedestal_rise2 796 156
+frame 60 pedestal_rise3 796 156
+frame 60 pedestal_rise4 796 156
+frame 60 pedestal_rise5 796 156
+frame 60 pedestal_move_rise6 796 156
+frame 60 pedestal_move_rise7 796 156
+frame 60 pedestal_move_rise8 796 156
+frame 60 pedestal_move_rise9 796 156
+anim trnbmovd
+frame 60 pedestal_move_rise9 796 156
+frame 60 pedestal_move_rise8 796 156
+frame 60 pedestal_move_rise7 796 156
+frame 60 pedestal_move_rise6 796 156
+frame 60 pedestal_rise5 796 156
+frame 60 pedestal_rise4 796 156
+frame 60 pedestal_rise3 796 156
+frame 60 pedestal_rise2 796 156
+frame 60 pedestal_rise1 796 156
+anim trnamovd
+frame 60 pedestal_move_rise9 796 156
+frame 60 pedestal_move_rise8 796 156
+frame 60 pedestal_move_rise7 796 156
+frame 60 pedestal_move_rise6 796 156
+frame 60 pedestal_rise5 796 156
+anim trnamovu
+frame 60 pedestal_move_rise6 796 156
+frame 60 pedestal_move_rise7 796 156
+frame 60 pedestal_move_rise8 796 156
+frame 60 pedestal_move_rise9 796 156
+anim butalyu
+frame 1000 label_ally 794 136 pedestal_ally_up 796 156
+anim butalyd
+frame 40 label_ally 794 136 pedestal_ally_latched 796 156
+anim butaly2d
+frame 100 label_ally 794 136 pedestal_ally_press1 796 156
+frame 100 label_ally 794 136 pedestal_ally_press2 796 156
+anim trnbalyu
+frame 60 pedestal_rise1 796 156
+frame 60 pedestal_rise2 796 156
+frame 60 pedestal_rise3 796 156
+frame 60 pedestal_rise4 796 156
+frame 60 pedestal_rise5 796 156
+frame 60 pedestal_ally_rise6 796 156
+frame 60 pedestal_ally_rise7 796 156
+frame 60 pedestal_ally_rise8 796 156
+frame 60 pedestal_ally_rise9 796 156
+anim trnbalyd
+frame 60 pedestal_ally_rise9 796 156
+frame 60 pedestal_ally_rise8 796 156
+frame 60 pedestal_ally_rise7 796 156
+frame 60 pedestal_ally_rise6 796 156
+frame 60 pedestal_rise5 796 156
+frame 60 pedestal_rise4 796 156
+frame 60 pedestal_rise3 796 156
+frame 60 pedestal_rise2 796 156
+frame 60 pedestal_rise1 796 156
+anim trnaalyd
+frame 60 pedestal_ally_rise9 796 156
+frame 60 pedestal_ally_rise8 796 156
+frame 60 pedestal_ally_rise7 796 156
+frame 60 pedestal_ally_rise6 796 156
+frame 60 pedestal_rise5 796 156
+anim trnaalyu
+frame 60 pedestal_ally_rise6 796 156
+frame 60 pedestal_ally_rise7 796 156
+frame 60 pedestal_ally_rise8 796 156
+frame 60 pedestal_ally_rise9 796 156
+anim buteggu
+frame 1000 label_hatch 794 136 pedestal_hatch_up 796 156
+anim buteggd
+frame 40 label_hatch 794 136 pedestal_hatch_latched 796 156
+anim butegg2d
+frame 100 label_hatch 794 136 pedestal_hatch_press1 796 156
+frame 100 label_hatch 794 136 pedestal_hatch_press2 796 156
+anim trnbeggu
+frame 60 pedestal_rise1 796 156
+frame 60 pedestal_rise2 796 156
+frame 60 pedestal_rise3 796 156
+frame 60 pedestal_rise4 796 156
+frame 60 pedestal_rise5 796 156
+frame 60 pedestal_hatch_rise6 796 156
+frame 60 pedestal_hatch_rise7 796 156
+frame 60 pedestal_hatch_rise8 796 156
+frame 60 pedestal_hatch_rise9 796 156
+anim trnbeggd
+frame 60 pedestal_hatch_rise9 796 156
+frame 60 pedestal_hatch_rise8 796 156
+frame 60 pedestal_hatch_rise7 796 156
+frame 60 pedestal_hatch_rise6 796 156
+frame 60 pedestal_rise5 796 156
+frame 60 pedestal_rise4 796 156
+frame 60 pedestal_rise3 796 156
+frame 60 pedestal_rise2 796 156
+frame 60 pedestal_rise1 796 156
+anim trnaeggd
+frame 60 pedestal_hatch_rise9 796 156
+frame 60 pedestal_hatch_rise8 796 156
+frame 60 pedestal_hatch_rise7 796 156
+frame 60 pedestal_hatch_rise6 796 156
+frame 60 pedestal_rise5 796 156
+anim trnaeggu
+frame 60 pedestal_hatch_rise6 796 156
+frame 60 pedestal_hatch_rise7 796 156
+frame 60 pedestal_hatch_rise8 796 156
+frame 60 pedestal_hatch_rise9 796 156
+anim butattu
+frame 1000 label_attack 855 136 pedestal_attack_up 857 156
+anim butattd
+frame 40 label_attack 855 136 pedestal_attack_latched 857 156
+anim butatt2d
+frame 100 label_attack 855 136 pedestal_attack_press1 857 156
+frame 100 label_attack 855 136 pedestal_attack_press2 857 156
+anim trnbattu
+frame 60 pedestal_rise1 857 156
+frame 60 pedestal_rise2 857 156
+frame 60 pedestal_rise3 857 156
+frame 60 pedestal_rise4 857 156
+frame 60 pedestal_rise5 857 156
+frame 60 pedestal_attack_rise6 857 156
+frame 60 pedestal_attack_rise7 857 156
+frame 60 pedestal_attack_rise8 857 156
+frame 60 pedestal_attack_rise9 857 156
+anim trnbattd
+frame 60 pedestal_attack_rise9 857 156
+frame 60 pedestal_attack_rise8 857 156
+frame 60 pedestal_attack_rise7 857 156
+frame 60 pedestal_attack_rise6 857 156
+frame 60 pedestal_rise5 857 156
+frame 60 pedestal_rise4 857 156
+frame 60 pedestal_rise3 857 156
+frame 60 pedestal_rise2 857 156
+frame 60 pedestal_rise1 857 156
+anim trnaattd
+frame 60 pedestal_attack_rise9 857 156
+frame 60 pedestal_attack_rise8 857 156
+frame 60 pedestal_attack_rise7 857 156
+frame 60 pedestal_attack_rise6 857 156
+frame 60 pedestal_rise5 857 156
+anim trnaattu
+frame 60 pedestal_attack_rise6 857 156
+frame 60 pedestal_attack_rise7 857 156
+frame 60 pedestal_attack_rise8 857 156
+frame 60 pedestal_attack_rise9 857 156
+anim butbomu
+frame 1000 label_bomb 855 136 pedestal_bomb_up 857 156
+anim butbomd
+frame 40 label_bomb 855 136 pedestal_bomb_latched 857 156
+anim butbom2d
+frame 100 label_bomb 855 136 pedestal_bomb_press1 857 156
+frame 100 label_bomb 855 136 pedestal_bomb_press2 857 156
+anim trnbbomu
+frame 60 pedestal_rise1 857 156
+frame 60 pedestal_rise2 857 156
+frame 60 pedestal_rise3 857 156
+frame 60 pedestal_rise4 857 156
+frame 60 pedestal_rise5 857 156
+frame 60 pedestal_bomb_rise6 857 156
+frame 60 pedestal_bomb_rise7 857 156
+frame 60 pedestal_bomb_rise8 857 156
+frame 60 pedestal_bomb_rise9 857 156
+anim trnbbomd
+frame 60 pedestal_bomb_rise9 857 156
+frame 60 pedestal_bomb_rise8 857 156
+frame 60 pedestal_bomb_rise7 857 156
+frame 60 pedestal_bomb_rise6 857 156
+frame 60 pedestal_rise5 857 156
+frame 60 pedestal_rise4 857 156
+frame 60 pedestal_rise3 857 156
+frame 60 pedestal_rise2 857 156
+frame 60 pedestal_rise1 857 156
+anim trnabomd
+frame 60 pedestal_bomb_rise9 857 156
+frame 60 pedestal_bomb_rise8 857 156
+frame 60 pedestal_bomb_rise7 857 156
+frame 60 pedestal_bomb_rise6 857 156
+frame 60 pedestal_rise5 857 156
+anim trnabomu
+frame 60 pedestal_bomb_rise6 857 156
+frame 60 pedestal_bomb_rise7 857 156
+frame 60 pedestal_bomb_rise8 857 156
+frame 60 pedestal_bomb_rise9 857 156
+anim butfiru
+frame 1000 label_fire 855 136 pedestal_fire_up 857 156
+anim butfird
+frame 40 label_fire 855 136 pedestal_fire_latched 857 156
+anim butfir2d
+frame 100 label_fire 855 136 pedestal_fire_press1 857 156
+frame 100 label_fire 855 136 pedestal_fire_press2 857 156
+anim trnbwalu
+frame 60 pedestal_rise1 857 156
+frame 60 pedestal_rise2 857 156
+frame 60 pedestal_rise3 857 156
+frame 60 pedestal_rise4 857 156
+frame 60 pedestal_rise5 857 156
+frame 60 pedestal_fire_rise6 857 156
+frame 60 pedestal_fire_rise7 857 156
+frame 60 pedestal_fire_rise8 857 156
+frame 60 pedestal_fire_rise9 857 156
+anim trnbfird
+frame 60 pedestal_fire_rise9 857 156
+frame 60 pedestal_fire_rise8 857 156
+frame 60 pedestal_fire_rise7 857 156
+frame 60 pedestal_fire_rise6 857 156
+frame 60 pedestal_rise5 857 156
+frame 60 pedestal_rise4 857 156
+frame 60 pedestal_rise3 857 156
+frame 60 pedestal_rise2 857 156
+frame 60 pedestal_rise1 857 156
+anim trnafird
+frame 60 pedestal_fire_rise9 857 156
+frame 60 pedestal_fire_rise8 857 156
+frame 60 pedestal_fire_rise7 857 156
+frame 60 pedestal_fire_rise6 857 156
+frame 60 pedestal_rise5 857 156
+anim trnafiru
+frame 60 pedestal_fire_rise6 857 156
+frame 60 pedestal_fire_rise7 857 156
+frame 60 pedestal_fire_rise8 857 156
+frame 60 pedestal_fire_rise9 857 156
+anim butthfu
+frame 1000 label_thief 855 136 pedestal_thief_up 857 156
+anim butthfd
+frame 40 label_thief 855 136 pedestal_thief_latched 857 156
+anim butthf2d
+frame 100 label_thief 855 136 pedestal_thief_press1 857 156
+frame 100 label_thief 855 136 pedestal_thief_press2 857 156
+anim trnbthfu
+frame 60 pedestal_rise1 857 156
+frame 60 pedestal_rise2 857 156
+frame 60 pedestal_rise3 857 156
+frame 60 pedestal_rise4 857 156
+frame 60 pedestal_rise5 857 156
+frame 60 pedestal_thief_rise6 857 156
+frame 60 pedestal_thief_rise7 857 156
+frame 60 pedestal_thief_rise8 857 156
+frame 60 pedestal_thief_rise9 857 156
+anim trnbthfd
+frame 60 pedestal_thief_rise9 857 156
+frame 60 pedestal_thief_rise8 857 156
+frame 60 pedestal_thief_rise7 857 156
+frame 60 pedestal_thief_rise6 857 156
+frame 60 pedestal_rise5 857 156
+frame 60 pedestal_rise4 857 156
+frame 60 pedestal_rise3 857 156
+frame 60 pedestal_rise2 857 156
+frame 60 pedestal_rise1 857 156
+anim trnathfd
+frame 60 pedestal_thief_rise9 857 156
+frame 60 pedestal_thief_rise8 857 156
+frame 60 pedestal_thief_rise7 857 156
+frame 60 pedestal_thief_rise6 857 156
+frame 60 pedestal_rise5 857 156
+anim trnathfu
+frame 60 pedestal_thief_rise6 857 156
+frame 60 pedestal_thief_rise7 857 156
+frame 60 pedestal_thief_rise8 857 156
+frame 60 pedestal_thief_rise9 857 156
+anim butswmup
+frame 1000 label_swim 855 136 pedestal_swim_up 857 156
+anim butswmd
+frame 40 label_swim 855 136 pedestal_swim_latched 857 156
+anim butswm2d
+frame 100 label_swim 855 136 pedestal_swim_press1 857 156
+frame 100 label_swim 855 136 pedestal_swim_press2 857 156
+anim trnbswmu
+frame 60 pedestal_rise1 857 156
+frame 60 pedestal_rise2 857 156
+frame 60 pedestal_rise3 857 156
+frame 60 pedestal_rise4 857 156
+frame 60 pedestal_rise5 857 156
+frame 60 pedestal_swim_rise6 857 156
+frame 60 pedestal_swim_rise7 857 156
+frame 60 pedestal_swim_rise8 857 156
+frame 60 pedestal_swim_rise9 857 156
+anim trnbswmd
+frame 60 pedestal_swim_rise9 857 156
+frame 60 pedestal_swim_rise8 857 156
+frame 60 pedestal_swim_rise7 857 156
+frame 60 pedestal_swim_rise6 857 156
+frame 60 pedestal_rise5 857 156
+frame 60 pedestal_rise4 857 156
+frame 60 pedestal_rise3 857 156
+frame 60 pedestal_rise2 857 156
+frame 60 pedestal_rise1 857 156
+anim trnaswmd
+frame 60 pedestal_swim_rise9 857 156
+frame 60 pedestal_swim_rise8 857 156
+frame 60 pedestal_swim_rise7 857 156
+frame 60 pedestal_swim_rise6 857 156
+frame 60 pedestal_rise5 857 156
+anim trnaswmu
+frame 60 pedestal_swim_rise6 857 156
+frame 60 pedestal_swim_rise7 857 156
+frame 60 pedestal_swim_rise8 857 156
+frame 60 pedestal_swim_rise9 857 156
+anim butgone
+frame 1000 pedestal_rise1 796 156
+anim butdefl
+frame 150 pedestal_flash3 796 156
+frame 120 pedestal_flash2 796 156
+frame 120 pedestal_flash1 796 156
+frame 120 pedestal_flash2 796 156
+anim butdefr
+frame 150 pedestal_flash3 857 156
+frame 120 pedestal_flash2 857 156
+frame 120 pedestal_flash1 857 156
+frame 120 pedestal_flash2 857 156
+anim egg1
+frame 1000 egg 856 158
+anim egg1h
+frame 200 egg_hatch1 856 158
+frame 100 egg_hatch2 853 159
+frame 100 egg_hatch3 851 167
+anim egg2
+frame 1000 egg 871 158 egg 856 158
+anim egg2h
+frame 200 egg_hatch1 871 158
+frame 100 egg_hatch2 868 159
+frame 100 egg_hatch3 866 167
+anim egg3
+frame 1000 egg 887 158 egg 871 158 egg 856 158
+anim egg3h
+frame 200 egg_hatch1 887 158
+frame 100 egg_hatch2 884 159
+frame 100 egg_hatch3 882 167
+anim egg4
+frame 1000 egg 855 177 egg 887 158 egg 871 158 egg 856 158
+anim egg4h
+frame 200 egg_hatch1 855 177
+frame 100 egg_hatch2 852 178
+frame 100 egg_hatch3 850 186
+anim egg5
+frame 1000 egg 871 177 egg 855 177 egg 887 158 egg 871 158 egg 856 158
+anim egg5h
+frame 200 egg_hatch1 871 177
+frame 100 egg_hatch2 868 178
+frame 100 egg_hatch3 866 186
+anim egg6
+frame 1000 egg 887 177 egg 871 177 egg 855 177 egg 887 158 egg 871 158 egg 856 158
+anim egg6h
+frame 200 egg_hatch1 887 177
+frame 100 egg_hatch2 884 178
+frame 100 egg_hatch3 882 186
+anim egg7
+frame 1000 egg 855 196 egg 887 177 egg 871 177 egg 855 177 egg 887 158 egg 871 158 egg 856 158
+anim egg7h
+frame 200 egg_hatch1 855 196
+frame 100 egg_hatch2 852 197
+frame 100 egg_hatch3 850 205
+anim egg8
+frame 1000 egg 855 196 egg 871 196 egg 887 177 egg 871 177 egg 855 177 egg 887 158 egg 871 158 egg 856 158
+anim egg8h
+frame 200 egg_hatch1 871 196
+frame 100 egg_hatch2 868 197
+frame 100 egg_hatch3 866 205
+anim egg9
+frame 1000 egg 855 196 egg 871 196 egg 887 196 egg 887 177 egg 871 177 egg 855 177 egg 887 158 egg 871 158 egg 856 158
+anim egg9h
+frame 200 egg_hatch1 887 196
+frame 100 egg_hatch2 884 197
+frame 100 egg_hatch3 882 205
+anim UI_LBOX
+frame 1000 lunch_box 917 131

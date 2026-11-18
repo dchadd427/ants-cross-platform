@@ -244,7 +244,7 @@ class Door:
             if self.mode == "down":
                 return self.send(h, 500, "{}", "application/json")
             turns = self.turns()
-            live = [{"id": i, "map": i.split("-")[0] + ".LVL", "started": 1791533464, "turns": turns, "seconds": turns // 20, "players": list(self.names)} for i in self.live]
+            live = [{"id": i, "map": i.split("-")[0] + ".LVL", "mode": "highest-score", "started": 1791533464, "turns": turns, "seconds": turns // 20, "players": list(self.names)} for i in self.live]
             return self.js(h, 200, {"live": live, "count": len(live), "sim_rules": 1})
         m = re.match(r"^/live/([A-Za-z0-9_\-]+)$", path)
         if m:

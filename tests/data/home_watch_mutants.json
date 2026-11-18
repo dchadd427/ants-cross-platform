@@ -336,6 +336,62 @@
    "old": "if (liveShown() && live.length) return",
    "new": "if (liveShown()) return",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_tag_on_every_match",
+   "file": "web/home/games.js",
+   "old": "who: who, mode187: raw.mode === '187' };",
+   "new": "who: who, mode187: true };",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_tag_on_no_match",
+   "file": "web/home/games.js",
+   "old": "who: who, mode187: raw.mode === '187' };",
+   "new": "who: who, mode187: false };",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_tag_on_any_word_that_is_not_highest_score",
+   "file": "web/home/games.js",
+   "old": "mode187: raw.mode === '187' };",
+   "new": "mode187: typeof raw.mode === 'string' && raw.mode !== 'highest-score' };",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_tag_drawn_for_a_plain_match",
+   "file": "web/home/games.js",
+   "old": "if (e.mode187) marks.appendChild(el('span', 'gmode', TEXT.mode187));",
+   "new": "marks.appendChild(el('span', 'gmode', TEXT.mode187));",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_tag_before_the_live_mark",
+   "file": "web/home/games.js",
+   "old": "marks.appendChild(el('span', 'glive-mark', TEXT.liveMark)); if (e.mode187) marks.appendChild(el('span', 'gmode', TEXT.mode187));",
+   "new": "if (e.mode187) marks.appendChild(el('span', 'gmode', TEXT.mode187)); marks.appendChild(el('span', 'glive-mark', TEXT.liveMark));",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_watch_name_leaves_out_the_mode",
+   "file": "web/home/games.js",
+   "old": "kind = e.mode187 ? TEXT.mode187 + ' match' : 'match';",
+   "new": "kind = 'match';",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_redraw_ignores_the_mode",
+   "file": "web/home/games.js",
+   "old": "return [e.id, e.map, e.who, e.mode187]; }));",
+   "new": "return [e.id, e.map, e.who]; }));",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_tag_taller_than_the_live_mark",
+   "file": "web/home/games.css",
+   "old": "line-height: 16px; text-transform: uppercase; white-space: nowrap; color: #d8c9ff;",
+   "new": "line-height: 26px; text-transform: uppercase; white-space: nowrap; color: #d8c9ff;",
+   "test": "node tests/scripts/web_home_watch_browser.js"
   }
  ]
 }

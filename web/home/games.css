@@ -19,7 +19,7 @@
 .gitem { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 12px; }
 .glist .gitem + .gitem { border-top: 1px solid #17382f; }
 .gmap { display: block; width: 56px; height: 56px; flex: none; background: #14201b; border: 2px solid var(--frame); box-shadow: 0 0 0 1px var(--edge); }
-.gmap img { display: block; width: 100%; height: 100%; image-rendering: auto; }
+.gmap img { display: block; width: 100%; height: 100%; object-fit: contain; image-rendering: auto; }
 .gtxt { display: grid; gap: 4px; min-width: 0; }
 .gtop { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; min-width: 0; }
 .gname { font-size: 20px; line-height: 1.2; overflow-wrap: anywhere; }
@@ -59,7 +59,9 @@
 .gphead { flex-wrap: wrap; }
 .glivebox[hidden], .glivelist[hidden] { display: none; }
 .gsub { margin: 16px 0 8px; font-size: 18px; font-weight: 500; line-height: 1.2; color: #a8cfc0; }
-.glive-mark { display: inline-block; align-self: center; padding: 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .06em; line-height: 18px; text-transform: uppercase; color: #fff; background: #c0392b; border-radius: 3px; }
+.gmarks { display: inline-flex; align-self: center; gap: 4px; }
+.gmode { display: inline-block; box-sizing: border-box; padding: 0 6px; font-size: 12px; letter-spacing: .06em; line-height: 16px; text-transform: uppercase; white-space: nowrap; color: #d8c9ff; background: #1c1530; border: 1px solid #4b3a86; border-radius: 3px; }       /* (the look of the history's mode tag, web/matches.css .pill.mode, as tall as the Live mark) */
+.glive-mark { display: inline-block; padding: 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .06em; line-height: 18px; text-transform: uppercase; color: #fff; background: #c0392b; border-radius: 3px; }
 .gwho { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; flex: 1 1 9em; min-width: 0; overflow: hidden; overflow-wrap: anywhere; color: var(--cream); }       /* (three lines of names at the most: the whole list is the button's name and the tip) */
 .glen { color: #a8cfc0; font-variant-numeric: tabular-nums; }
 .gwatch { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 72px; min-height: 44px; text-decoration: none; }

@@ -229,6 +229,7 @@ bool Application::init(const ApplicationConfig& config) {
     hud_.options().load(config_store_);
     hud_.set_config_store(&config_store_);
     load_game_menu_settings();                                        // (Master volume, Mute and the hit point numbers: application_game_menu.cpp)
+    load_hud_art();                                                   // (the new pictures of the HUD, when the setting says so: application_game_menu.cpp)
     local_player_id_ = 0;
 
     scorecard_.set_on_replay([this]() {

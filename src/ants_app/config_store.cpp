@@ -1,6 +1,7 @@
 #include "ants_app/config_store.hpp"
 
 #include <cstdio>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -99,10 +100,16 @@ bool ConfigStore::load() {
     parse(stored != nullptr ? stored : "");
     return true;
 #else
-    std::ifstream in(location_, std::ios::binary);
-    if (!in) return true;                                   // no file yet: nothing is stored
-    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    if (in.bad()) return false;
+    std::string text;
+    try {
+        std::ifstream in(location_, std::ios::binary);
+        if (!in) return true;                               // no file yet: nothing is stored
+        text.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        if (in.bad()) return false;
+    } catch (const std::exception&) {                       // (a folder where the file should be: the standard library of Linux throws when it is read, that of the Mac reads nothing)
+        values_.clear();
+        return false;
+    }
     parse(text);
     return true;
 #endif

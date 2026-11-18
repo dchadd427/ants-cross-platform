@@ -518,7 +518,7 @@ async function main() {
         await flush(); await flush();
         same('POSTs to /test-maps?kind=classic&name=Popcorn%20Remix and calls onReady', [tFetched, readyCalls], [[['/test-maps?kind=classic&name=Popcorn%20Remix', 'POST']], 1]);
         same('info returns the title, details and preview of the unlisted test map', tStrip.info('Popcorn Remix ~test-a1b2c3d4.lvl'), {
-            name: 'Popcorn Remix', info: 'Classic \u00b7 31 \u00d7 31 \u00b7 Unlisted test map from Map Maker', thumb: '/maps/previews/Popcorn%20Remix%20~test-a1b2c3d4.png'
+            name: 'Popcorn Remix', info: 'Classic \u00b7 31 \u00d7 31 \u00b7 Unlisted test map from Map Maker'
         });
         let sentPlans = [], warmed = [];
         tStrip.sync({ guest: false, starting: false, you: 0, mapFile: 'TREASURE.LVL' }, (ch) => { sentPlans.push(ch); return true; }, (f) => warmed.push(f));

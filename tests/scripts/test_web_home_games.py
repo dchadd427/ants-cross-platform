@@ -150,11 +150,14 @@ class TheFolder(unittest.TestCase):
         picker = read("web", "front", "map_picker.js")
         self.assertIn("function previewPath(map) {", picker)
         self.assertIn("previewPath: previewPath", picker)
-        self.assertIn("return ownPath('/maps/previews/' + percentEncode(base) + '.webp');", picker, "what the list's script relies on: one shape, the library's, checked")
+        self.assertIn("return ownPath(guessOf(base));", picker, "what the list's script relies on: one shape (the library's or the server's own ending), checked")
 
     def test_a_picture_that_does_not_come_is_taken_away_and_the_square_stays(self):
-        self.assertEqual(self.js.count("img.addEventListener('error', function () { pic.removeChild(img); });"), 1)
+        self.assertEqual(self.js.count("gone = function () { if (img.parentNode === pic) pic.removeChild(img); };"), 1)
+        self.assertIn("if (Picker && Picker.showPicture) Picker.showPicture(img, src, gone);", self.js, "the picker's one way to show a picture: the other ending is tried once before the picture is taken away")
+        self.assertIn("img.addEventListener('error', gone); img.src = src;", self.js, "a page without the picker: an original's picture, taken away when it does not come")
         self.assertIn("img.setAttribute('loading', 'lazy');", self.js, "a list of 50 rows is not 50 requests at once, and a closed popover asks for none")
+        self.assertLess(self.js.index("img.setAttribute('loading', 'lazy');"), self.js.index("Picker.showPicture(img, src, gone);"), "set before the address, which is when a browser reads it")
         self.assertLess(self.js.index("img.setAttribute('loading', 'lazy');"), self.js.index("img.src = src;"), "set before the address, which is when a browser reads it")
         self.assertIn("pic.setAttribute('aria-hidden', 'true');", self.js)
 

@@ -591,8 +591,11 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
         tap(joinOf(rowsOf(env)[0]));
         const box = dialogOf(env);
         same('the card of "Leave your room?" shows the picture of the map that is joined (' + map + ')', [!!box, box && first(box, 'gmap').children.map((i) => i.src)], [true, [src]]);
-        first(box, 'gmap').children[0].fire('error');
-        same('... a picture that does not come is taken away there too (the square stays)', [first(box, 'gmap').children.length, find(box, 'gmap').length], [0, 1]);
+        const pic = first(box, 'gmap').children[0];
+        pic.fire('error');
+        same('... a picture that does not come is asked in the other ending, once (a map of the players only; an original has none)', [first(box, 'gmap').children.length, pic.src], src.startsWith('front/') ? [0, src] : [1, src.replace(/\.webp$/, '.png')]);
+        pic.fire('error');
+        same('... and when that does not come either it is taken away there too (the square stays)', [first(box, 'gmap').children.length, find(box, 'gmap').length], [0, 1]);
     }
 }
 {   // three or more in the room: no names, the one who has been there longest

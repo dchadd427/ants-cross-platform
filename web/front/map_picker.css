@@ -10,7 +10,7 @@
 .pk-sorts { font-size: 14px; color: var(--muted); } .pk-foot { justify-content: space-between; margin: 10px 0 0; } .pk-count { font-size: 14px; color: var(--muted); }
 .pk-out { flex: 1 1 auto; min-height: 140px; overflow: auto; background: #0a1016; border: 2px solid var(--edge); border-radius: 6px; }
 .pk-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 10px; border-bottom: 1px solid #17382f; cursor: pointer; }
-.pk-row img, .pk-nopic { display: block; width: 64px; height: 64px; background: var(--edge); border: 2px solid var(--edge); } .pk-nopic { border: 2px dashed #28493e; }
+.pk-row img, .pk-nopic { display: block; width: 64px; height: 64px; object-fit: contain; background: var(--edge); border: 2px solid var(--edge); } .pk-nopic { border: 2px dashed #28493e; }
 .pk-nm { font-size: 18px; line-height: 1.25; overflow-wrap: anywhere; } .pk-meta { font-size: 14px; color: var(--muted); }
 .pk-badge { margin-left: 8px; padding: 0 6px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 2px; color: #1a1405; background: var(--gold); border-radius: 3px; } .pk-badge.pk-ext { color: #8fe6c8; background: #17382f; border: 1px solid #3b976f; } .pk-badge.pk-heavy { display: inline-block; max-width: 100%; color: #ffd9a8; background: #3a2512; border: 1px solid #a8682a; text-transform: none; letter-spacing: 0; }
 .pk-pl { text-align: right; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; } .pk-pl b { display: block; font-weight: 500; font-size: 18px; color: var(--cream); }
@@ -19,7 +19,7 @@
 .pk-badge { white-space: nowrap; } .pk-badge.pk-heavy { white-space: normal; }
 .pk-badge.pk-here { color: #05140d; background: #8fe6c8; } .pk-card .pk-badge.pk-here { margin-top: 3px; }
 .pk-pane { display: none; }
-.pk-card { padding: 6px; cursor: pointer; background: #0f1820; border: 2px solid var(--edge); border-radius: 6px; } .pk-card img, .pk-card .pk-nopic { width: 100%; height: auto; aspect-ratio: 1; } .pk-card .pk-nm { margin-top: 6px; font-size: 15px; } .pk-card .pk-badge { display: block; width: max-content; margin: 3px 0 0; }
+.pk-card { padding: 6px; cursor: pointer; background: #0f1820; border: 2px solid var(--edge); border-radius: 6px; } .pk-card img, .pk-card .pk-nopic { width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; } .pk-card .pk-nm { margin-top: 6px; font-size: 15px; } .pk-card .pk-badge { display: block; width: max-content; margin: 3px 0 0; }
 .pk-row.sel, .pk-card.sel { background: #14332b; outline: 3px solid var(--gold); outline-offset: -3px; } .pk-row:focus-visible, .pk-card:focus-visible { outline-offset: -3px; }
 .pk-fine { margin-top: 8px; font-size: 13px; color: var(--muted); } .pk-note { display: grid; gap: 10px; justify-items: center; padding: 28px 14px; text-align: center; color: var(--muted); } .pk-empty b { font-weight: 500; font-size: 20px; color: var(--cream); }
 /* a wide screen, or a phone on its side: the list at the left, the map that is picked at the right with Choose map under it (the footer's own row has its count at the left and the button in the pane's column) */
@@ -29,7 +29,7 @@
     .pickhow .panel > .pk-out { grid-column: 1; grid-row: 4; min-height: 0; } .pickhow .panel > .pk-fine { grid-column: 1; grid-row: 5; } .pk-foot { display: contents; } .pk-count { grid-column: 1; grid-row: 6; margin-top: 10px; }
     .pickhow .panel > .pk-pane { display: block; grid-column: 2; grid-row: 4 / 6; min-height: 0; overflow: auto; } .pk-foot .btn { grid-column: 2; grid-row: 6; margin-top: 10px; align-self: end; }
     .pk-pane.pk-none > * { visibility: hidden; }
-    .pk-pic { display: block; width: 100%; max-width: 340px; height: auto; aspect-ratio: 1; margin: 0 auto 10px; background: var(--edge); border: 3px solid var(--frame); }
+    .pk-pic { display: block; width: 100%; max-width: 340px; height: auto; aspect-ratio: 1; object-fit: contain; margin: 0 auto 10px; background: var(--edge); border: 3px solid var(--frame); }
     .pk-pn { margin: 0 0 4px; font-size: 26px; line-height: 1.15; overflow-wrap: anywhere; } .pk-pn .pk-badge { vertical-align: 4px; } .pk-pane .pk-meta { margin: 0 0 8px; font-size: 15px; } .pk-pd { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
 }
 @media (max-height: 500px) and (min-width: 560px) {      /* a phone on its side: everything above the list is one slim row each, and the picture is small */
