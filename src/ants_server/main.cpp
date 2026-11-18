@@ -108,6 +108,14 @@
 //                      where the test maps are kept (wiped when the server starts). Default: the folder "test-maps" in --results-dir
 //   --test-map-ignore-client-header
 //                      count an address by the connection's own address instead of the X-Client-Address that the site's nginx sets
+//   --map-picture-program PATH
+//                      the picture maker (ants_thumb, built with the game): the program that draws the maps of players as the game's setup screen does, so that a submitted or test map has a picture like the
+//                      library's (docs/MAP_SUBMISSIONS.md, "Pictures"). One process at a time, off the game thread, with a time and a memory limit. Left out: the server makes no pictures and the pictures of
+//                      approved and test maps answer 404
+//   --map-picture-archive FILE
+//                      the game's archive (ants.chd) that the picture maker reads (needed with --map-picture-program)
+//   --map-pictures-dir DIR
+//                      where the pictures are kept (a PNG for each map file; made again when the picture's look changes). Default: the folder "map-pictures" in --results-dir
 //   The admin page needs one setting in the environment (never on the command line): ANTS_ADMIN_GATE_SECRET (32 to 256 printable characters without a blank: one setting that the stack hands to the chat hub
 //   as well; it checks the pass that the site's nginx gets from the hub's gate). Without a good one, every /admin/api path answers 403 closed. There are no accounts and no passwords here.
 //   --version, --help
@@ -147,6 +155,7 @@
 #include "ants_db/database.hpp"
 #include "ants_db/migrations.hpp"
 #include "ants_server/db_schema.hpp"
+#include "ants_server/map_pictures.hpp"
 #include "ants_server/restart_record.hpp"
 #include "ants_server/room_manager.hpp"
 #include "ants_server/secret.hpp"
@@ -215,6 +224,9 @@ struct Options {
     bool test_map_any_interface{false};
     std::string test_maps_dir;                 // --test-maps-dir (empty: the folder "test-maps" in the results folder)
     bool test_map_ignore_client_header{false};
+    std::string picture_program;               // --map-picture-program (empty: no pictures of the players' maps)
+    std::string picture_archive;               // --map-picture-archive
+    std::string pictures_dir;                  // --map-pictures-dir (empty: the folder "map-pictures" in the results folder)
 };
 
 void usage(FILE* to) {
@@ -229,6 +241,7 @@ void usage(FILE* to) {
                  "                    [--replay-port N] [--replay-any-interface] [--bot-match-every-min 0|5-1440] [--db FILE | --no-db] [--no-history]\n"
                  "                    [--submit-port N] [--submit-any-interface] [--submissions-dir DIR] [--submit-max-waiting N] [--submit-per-address N] [--submit-ignore-client-header]\n"
                  "                    [--test-map-port N] [--test-map-any-interface] [--test-maps-dir DIR] [--test-map-ignore-client-header]\n"
+                 "                    [--map-picture-program PATH --map-picture-archive FILE [--map-pictures-dir DIR]]\n"
                  "  the control interface takes its secret from the environment variable ANTS_SERVER_SECRET; without it the server makes one and keeps it\n"
                  "  in --secret-file (default: control-secret in --results-dir)\n");
 }
@@ -308,6 +321,13 @@ int main(int argc, char** argv) {
             o.test_maps_dir = value("--test-maps-dir");
             if (o.test_maps_dir.empty()) {
                 std::fprintf(stderr, "--test-maps-dir takes a folder\n");
+                return 2;
+            }
+        } else if (a == "--map-picture-program" || a == "--map-picture-archive" || a == "--map-pictures-dir") {
+            std::string& target = a == "--map-picture-program" ? o.picture_program : a == "--map-picture-archive" ? o.picture_archive : o.pictures_dir;
+            target = value(a.c_str());
+            if (target.empty()) {
+                std::fprintf(stderr, "%s takes a path\n", a.c_str());
                 return 2;
             }
         } else if (a == "--submit-any-interface") {
@@ -862,6 +882,37 @@ int main(int argc, char** argv) {
                 (o.replay_port != 0 ? std::string() : std::string("; the replay port is off, so a guest cannot download a test map")));
         }
     }
+    // The pictures of the players' maps (map_pictures.hpp, docs/MAP_SUBMISSIONS.md "Pictures"): made by the picture maker program, one process at a time behind the game thread. Without the program the pictures of
+    // approved and test maps answer 404; without a place to keep them they are off, with a line in the log.
+    std::unique_ptr<ants::server::MapPictures> pictures;
+    if (!o.picture_program.empty()) {
+        ants::server::MapPicturesConfig pc;
+        pc.program = o.picture_program;
+        pc.archive = o.picture_archive;
+        pc.dir = !o.pictures_dir.empty() ? o.pictures_dir : o.results_dir.empty() ? std::string() : (std::filesystem::path(o.results_dir) / "map-pictures").string();
+        std::string why;
+        if (o.picture_archive.empty()) {
+            log("map pictures are off: --map-picture-program needs --map-picture-archive");
+        } else if (pc.dir.empty()) {
+            log("map pictures are off: no --results-dir or --map-pictures-dir to keep them in");
+        } else {
+            pictures = std::make_unique<ants::server::MapPictures>(pc);
+            if (!pictures->open(why)) {
+                log("map pictures are off: " + why);
+                pictures.reset();
+            }
+        }
+        if (pictures) {
+            rooms.mutable_store().set_pictures(pictures.get());
+            if (submissions) {
+                submissions->set_pictures(pictures.get());
+                submissions->want_pictures();                       // (the maps that wait or are approved and have no picture yet: the first start after the picture maker came, and a map whose picture failed)
+            }
+            if (test_store) test_store->set_pictures(pictures.get());
+            for (const std::string& line : pictures->take_notices()) log(line);
+            log(std::string("map pictures ") + (pictures->enabled() ? "on" : "kept but not made (the picture maker or the archive cannot be used)") + ": " + std::to_string(pictures->made()) + " in " + pc.dir);
+        }
+    }
     if (o.reconnect) {
         log("rooms hold the seat of a player whose connection is lost (the default; --no-reconnect turns it off): a vote after " + std::to_string(o.hold_vote_s) + " s away, the pauses of a match capped at " + std::to_string(o.max_pause_s) +
             " s, a catch-up of at most " + std::to_string(o.max_catch_up_s) + " s per absence, a resume countdown of " + std::to_string(o.resume_countdown_s) + " s, a turn log of at most " +
@@ -897,6 +948,13 @@ int main(int argc, char** argv) {
         for (const std::string& line : rooms.take_notices()) log(line);
     }
     uint32_t last_submission_upkeep_ms = now_ms();
+    uint32_t last_picture_prune_ms = now_ms();
+    const auto picture_kept = [&](const std::string& stem) {                // (a picture is kept while a map file of that name is: a submission's or a test map's)
+        std::error_code looked;
+        if (submissions && std::filesystem::exists(ants::server::submission_file_path(submissions->config().dir, stem + ".lvl"), looked)) return true;
+        return test_store && std::filesystem::exists(std::filesystem::path(test_store->config().dir) / (stem + ".lvl"), looked);
+    };
+    if (pictures) pictures->prune(picture_kept);
     while (!g_stop) {
         const uint32_t now = now_ms();
         if (tcp) {
@@ -938,6 +996,14 @@ int main(int argc, char** argv) {
         if (test_map_http && test_api) {
             test_map_http->update(now, [&](const ants::ctl::HttpRequest& request) { return test_api->handle(request, static_cast<int64_t>(std::time(nullptr)), now); });
             ants::server::upkeep_test_maps(rooms, *test_store, static_cast<int64_t>(std::time(nullptr)), now);          // (once a minute: the maps that are six hours old)
+        }
+        if (pictures) {
+            pictures->poll();                                                       // (starts the next picture, or collects the one that is made: a waitpid at most)
+            if (static_cast<uint32_t>(now - last_picture_prune_ms) >= 3600u * 1000u) {          // (once an hour: the pictures of maps that are gone)
+                last_picture_prune_ms = now;
+                pictures->prune(picture_kept);
+            }
+            for (const std::string& line : pictures->take_notices()) log(line);
         }
         if (replay_http) replay_http->update(now, [&](const ants::ctl::HttpRequest& request) { return ants::server::handle_public_replays(rooms, request, now); });
         for (const ants::server::RoomStatus& s : rooms.take_ended(now)) {

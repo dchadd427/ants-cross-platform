@@ -28,6 +28,8 @@ REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 BUILD = os.environ.get("BUILD_DIR", "build")
 SERVER = os.path.join(REPO, BUILD, "src", "ants_server", "ants_server")
 LVL_TOOL = os.path.join(REPO, BUILD, "lvl_tool")
+THUMB = os.path.join(REPO, BUILD, "src", "ants_thumb", "ants_thumb")          # (the picture maker: with it the server draws the pictures of the maps; without it they answer 404)
+CHD = os.path.join(REPO, "Original-Ants", "ants.chd")
 SECRET = admin_pass.TEST_SECRET                        # (the key of the pass: a made-up one)
 REF_DAVE = "0123456789abcdef"
 REF_MIA = "fedcba9876543210"
@@ -53,7 +55,7 @@ class Server:
         env["ANTS_ADMIN_GATE_SECRET"] = SECRET
         env.update(env_extra or {})
         self.args = [SERVER, "--maps", os.path.join(REPO, "Original-Ants", "Maps"), "--community-maps", os.path.join(REPO, "Community-Maps"), "--port", "0", "--ws-port", str(self.ws_port), "--replay-port",
-                     str(self.replay_port), "--submit-port", str(self.submit_port), "--results-dir", results] + list(extra_args)
+                     str(self.replay_port), "--submit-port", str(self.submit_port), "--results-dir", results] + (["--map-picture-program", THUMB, "--map-picture-archive", CHD] if os.path.exists(THUMB) else []) + list(extra_args)
         self.proc = subprocess.Popen(self.args, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         for _ in range(300):
             try:
@@ -146,6 +148,24 @@ class TheWholeWay(unittest.TestCase):
     def owner_call(self, method, path, body=None):
         return self.owner.call(method, path, body)
 
+    def picture_of(self, ask):
+        """The answer of ask() for a picture, which the picture maker draws behind the request (docs/MAP_SUBMISSIONS.md "Pictures"): a 404 is asked again for up to 30 seconds when the maker is built; a server that has none answers 404 for good."""
+        until = time.time() + (30 if os.path.exists(THUMB) else 0)
+        while True:
+            answer = ask()
+            if answer[0] != 404 or time.time() >= until:
+                return answer
+            time.sleep(0.2)
+
+    def assert_picture(self, answer):
+        """With the picture maker: a PNG of 300 x 300 pixels, the picture of the setup screen's box; without it: a 404, so that the page keeps its empty square."""
+        if not os.path.exists(THUMB):
+            self.assertEqual(answer[0], 404)
+            return
+        self.assertEqual(answer[0], 200)
+        self.assertEqual(answer[2][:8], b"\x89PNG\r\n\x1a\n")
+        self.assertEqual((int.from_bytes(answer[2][16:20], "big"), int.from_bytes(answer[2][20:24], "big")), (300, 300))
+
     def send(self, data, name, kind="classic", address="203.0.113.5", token=None, maker="Mia"):
         q = urllib.parse.urlencode({"kind": kind, "name": name, "maker": maker, "note": "made by hand"}, quote_via=urllib.parse.quote)
         h = {"Content-Type": "application/octet-stream", "X-Client-Address": address, "Sec-Fetch-Site": "same-origin"}
@@ -215,7 +235,7 @@ class TheWholeWay(unittest.TestCase):
         self.assertEqual([s["id"] for s in json.loads(body)["submissions"]], [sid])
         waiting = j(self.owner_call("GET", "/admin/api/maps?state=waiting"))
         self.assertEqual((len(waiting["maps"]), waiting["maps"][0]["maker"], waiting["maps"][0]["note"], waiting["counts"]["waiting"]), (1, "Mia", "made by hand", 1))
-        self.assertEqual(self.owner_call("GET", "/admin/api/maps/%s/picture" % sid)[2][:4], b"\x89PNG")
+        self.assert_picture(self.picture_of(lambda: self.owner_call("GET", "/admin/api/maps/%s/picture" % sid)))          # (drawn when the map was sent)
         # a map that is the library's name: sent, flagged, not approvable as it is
         status, headers, body = self.send(self.tiny, "Tiny", address="203.0.113.6")
         taken = json.loads(body)
@@ -231,8 +251,10 @@ class TheWholeWay(unittest.TestCase):
         status, headers, file_bytes = self.server.call("GET", "/maps/files/Run%20One.lvl", door="replay")
         self.assertEqual(status, 200)
         self.assertTrue(len(file_bytes) <= len(self.tiny) and b"J" * 100 not in file_bytes)       # (the canonical file, not the upload)
-        status, headers, picture = self.server.call("GET", "/maps/previews/Run%20One.png", door="replay")
-        self.assertTrue(status == 200 and picture[:4] == b"\x89PNG" and headers["content-type"] == "image/png")
+        answer = self.picture_of(lambda: self.server.call("GET", "/maps/previews/Run%20One.png", door="replay"))
+        self.assert_picture(answer)
+        if os.path.exists(THUMB):
+            self.assertEqual(answer[1]["content-type"], "image/png")
         self.assertEqual(self.server.call("GET", "/maps/files/Run%20One.lvl?x=1", door="replay")[0], 404)
         self.assertEqual(self.server.call("GET", "/maps/files/..%2fx.lvl", door="replay")[0], 404)
         mine = j(self.server.call("GET", "/submissions/" + sid, {"Authorization": "Bearer " + token}))["submission"]
@@ -257,7 +279,7 @@ class TheWholeWay(unittest.TestCase):
         both = self.listed("/maps/all", "Run Extended.lvl")
         self.assertTrue(len(both) == 1 and both[0]["kind"] == "extended" and both[0]["thumb"] == "/maps/previews/Run%20Extended.png")
         self.assertEqual(self.server.call("GET", "/maps/files/Run%20Extended.lvl", door="replay")[0], 200)
-        self.assertEqual(self.server.call("GET", "/maps/previews/Run%20Extended.png", door="replay")[0], 200)
+        self.assert_picture(self.picture_of(lambda: self.server.call("GET", "/maps/previews/Run%20Extended.png", door="replay")))
         # what the server refuses
         self.assertEqual(self.send(b"not a map", "Bad One", address="203.0.113.9")[0], 400)
         self.assertEqual(self.send(self.extended, "Lie One", kind="classic", address="203.0.113.9")[0], 400)

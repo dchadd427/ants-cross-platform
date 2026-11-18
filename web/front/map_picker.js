@@ -73,19 +73,32 @@
         return ownPath(guessOf(base));
     }
     // The ONE way that a map's picture is put in an <img> (a card of the match history, the death map, Open games, the room's picture, the picker): the address is the list's (thumbFor) or the name's guess (previewPath), and an
-    // address that does not answer is tried once in the other ending (an approved map's picture is a PNG, the library's a WebP) before gone(img) is called (the page's choice: take the image away, leave a dark square). An image
-    // may be given another address later (the same image); a picture that came is remembered for the next time that its name is asked for. Never more than two requests for an address.
+    // address that does not answer is tried once in the other ending (an approved map's picture is a PNG, the library's a WebP). A picture of a map of the players may not be drawn yet: the server draws it behind the request (a
+    // test map's after the map came, an approved map's after the server started, or after a change of the look, which draws every picture again; docs/MAP_SUBMISSIONS.md "Pictures"), so the PNG address is asked again after a
+    // pause, six times in about 50 seconds, before gone(img) is called (the page's choice: take the image away, leave a dark square). An address that has run out of tries is not waited for again for a minute (a page that draws
+    // its list again does not start the pauses again). An image may be given another address later (the same image); a picture that came is remembered for the next time that its name is asked for.
+    var RETRY_MS = [1500, 3000, 5000, 8000, 12000, 20000];
+    var GAVE_UP_MS = 60000;
+    var gaveUp = {};
+    function retryAddress(url) { var m = ENDING.exec(url); return m ? m[1] + '.png' : ''; }       // (an original's own picture, /front/preview_<word>.png, has none: the page ships it)
     function showPicture(img, url, gone) {
         var s = img._antsPic;
         if (!s) {
-            s = img._antsPic = { url: '', other: '', tried: false, gone: null };
-            img.addEventListener('load', function () { var m = ENDING.exec(s.tried ? s.other : s.url); if (m) noteAnswer(m[1], m[2]); });
+            s = img._antsPic = { url: '', other: '', now: '', retry: '', tried: false, waits: 0, gone: null };
+            img.addEventListener('load', function () { var m = ENDING.exec(s.now); if (m) noteAnswer(m[1], m[2]); });
             img.addEventListener('error', function () {
-                if (!s.tried && s.other) { s.tried = true; img.src = s.other; return; }
+                if (!s.tried && s.other) { s.tried = true; s.now = s.other; img.src = s.other; return; }
+                if (s.retry && s.waits < RETRY_MS.length) {
+                    var at = s.retry, wait = RETRY_MS[s.waits++];
+                    setTimeout(function () { if (img._antsPic === s && s.retry === at) { s.now = at; img.src = at; } }, wait);
+                    return;
+                }
+                if (s.retry) gaveUp[s.retry] = Date.now();
                 if (s.gone) s.gone(img);
             });
         }
-        s.url = url; s.other = otherPicture(url); s.tried = false; s.gone = typeof gone === 'function' ? gone : null;
+        s.url = url; s.now = url; s.other = otherPicture(url); s.retry = retryAddress(url); s.tried = false; s.gone = typeof gone === 'function' ? gone : null;
+        s.waits = s.retry && gaveUp[s.retry] && Date.now() - gaveUp[s.retry] < GAVE_UP_MS ? RETRY_MS.length : 0;
         img.src = url;
     }
     // The picture of the map that a match record names, from the list that parseList made (null while not known): the list's own entry says what the server serves; a map not in the list has the address its name makes

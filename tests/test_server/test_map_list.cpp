@@ -10,6 +10,7 @@
 
 #include "../common/test_assert.hpp"
 #include "ants_net/protocol.hpp"
+#include "ants_server/map_pictures.hpp"
 #include "ants_server/online_limits.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "big_map_fixtures.hpp"
@@ -521,16 +522,16 @@ int main() {
         ASSERT_TRUE(OnlineLimits::weight(1) == 1 && OnlineLimits::weight(10000) == 1 && OnlineLimits::weight(10001) == 2 && OnlineLimits::weight(65536) == 7 && OnlineLimits::weight(262144) == 27);        // the places a match takes
         ASSERT_EQ(OnlineLimits::weight(0), 1u);                                                      // (never less than a place)
         ASSERT_TRUE(OnlineLimits::kMaxCells == 65536u && OnlineLimits::kCellsPerPlace == 10000u && OnlineLimits::allows(online_counts(65536)) && !OnlineLimits::allows(online_counts(65537)));
-        // the public door sends a big map's file whole (HttpResponse::file) and a picture or an error as every other answer
+        // the public door sends a big map's file whole (HttpResponse::file) and an error as every other answer
         {
             ctl::HttpRequest request;
             request.method = "GET";
             request.path = "/maps/files/Wide%20410.lvl";
             ctl::HttpResponse r = handle_public_replays(mgr, request, 0);
             ASSERT_TRUE(r.status == 200 && r.file && r.body.size() == approved[1].size && r.content_type == "application/octet-stream");
-            request.path = "/maps/previews/Wide%20410.png";
+            request.path = "/maps/previews/Wide%20410.png";                                        // (a picture is the picture maker's: this server has none, so it is a 404; ML5.1 has the pictures)
             r = handle_public_replays(mgr, request, 0);
-            ASSERT_TRUE(r.status == 200 && !r.file && r.body.compare(0, 4, "\x89PNG") == 0);
+            ASSERT_TRUE(r.status == 404 && !r.file);
             request.path = "/maps/files/Draft%20Big%20~test-0badf00d.lvl";                          // (a test map's file too: unlisted, not unreachable)
             r = handle_public_replays(mgr, request, 0);
             ASSERT_TRUE(r.status == 200 && r.file && r.body.size() == tests[0].size);
@@ -910,6 +911,83 @@ int main() {
         ASSERT_EQ(ants(), int64_t{-1});
         store.set_approved({same_size});
         ASSERT_EQ(ants(), int64_t{0});
+    } TEST_END();
+
+    TEST_CASE("ML5.1 The public door's pictures (GET /maps/previews/<name>.png): the picture that the maker made of an approved or a test map, a 404 while it is not made (and it is asked for), a 404 for every other name; the map's file is still served whole") {
+        TempDir dir;
+        const std::string tiny_bytes = [] { std::ifstream in(maps_dir() + "/TINY.LVL", std::ios::binary); return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()); }();
+        const auto keep = [&](const std::string& name, const std::string& file, const char* kind) {
+            const fs::path path = dir.path / file;
+            { std::ofstream out(path, std::ios::binary); out << tiny_bytes; }
+            ApprovedMap a;
+            a.name = name;
+            a.path = path.string();
+            a.size = tiny_bytes.size();
+            a.width = 31;
+            a.height = 31;
+            a.minutes = 10;
+            a.players = 4;
+            a.maker = "Mia";
+            a.kind = kind;
+            net::hash_file(a.path, a.hash);
+            return a;
+        };
+        const std::vector<ApprovedMap> approved = {keep("Made Pic.lvl", "0123456789abcdef0123456789abcdef.lvl", "classic"), keep("Late Pic.lvl", "fedcba9876543210fedcba9876543210.lvl", "extended"), keep("Odd Name.lvl", "odd name.lvl", "classic")};
+        const std::vector<ApprovedMap> tests = {keep("Draft ~test-0badf00d.lvl", "test-0badf00d.lvl", "classic")};
+        RoomManager mgr{MapStore(maps_dir(), community_dir())};
+        mgr.mutable_store().scan();
+        mgr.mutable_store().set_approved(approved);
+        mgr.mutable_store().set_test_maps(tests);
+        ctl::HttpRequest request;
+        request.method = "GET";
+        const auto ask = [&](const std::string& path) {
+            request.path = path;
+            return handle_public_replays(mgr, request, 0);
+        };
+        ctl::HttpResponse r = ask("/maps/previews/Made%20Pic.png");
+        ASSERT_TRUE(r.status == 404 && !r.file);                                                       // (no maker of pictures at all)
+        MapPicturesConfig pc;
+        pc.dir = (dir.path / "pictures").string();
+#if !defined(_WIN32)
+        pc.program = "/bin/sh";                                                                        // (a program that can be run, never started here: what the door asks for stays in the queue)
+        pc.archive = (dir.path / "0123456789abcdef0123456789abcdef.lvl").string();
+#endif
+        fs::create_directories(pc.dir);
+        { std::ofstream(fs::path(pc.dir) / "version") << "1\n"; }
+        const std::string png = std::string("\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR\0\0\0\x0a\0\0\0\x0a\x08\x02\0\0\0", 29) + std::string(4, '\0') + std::string("\0\0\0\0IEND\xAE\x42\x60\x82", 12);
+        for (const char* stem : {"0123456789abcdef0123456789abcdef", "test-0badf00d"}) { std::ofstream out(fs::path(pc.dir) / (std::string(stem) + ".png"), std::ios::binary); out << png; }
+        MapPictures pictures(pc);
+        std::string why;
+        ASSERT_TRUE(pictures.open(why));
+        mgr.mutable_store().set_pictures(&pictures);
+        r = ask("/maps/previews/Made%20Pic.png");
+        ASSERT_TRUE(r.status == 200 && !r.file && r.content_type == "image/png" && r.body == png);
+        r = ask("/maps/previews/Draft%20~test-0badf00d.png");
+        ASSERT_TRUE(r.status == 200 && r.content_type == "image/png" && r.body == png);                // (a test map's picture too)
+        r = ask("/maps/files/Made%20Pic.lvl");
+        ASSERT_TRUE(r.status == 200 && r.file && r.body == tiny_bytes);                                // (the file is not the picture)
+#if !defined(_WIN32)
+        ASSERT_TRUE(pictures.enabled());
+        r = ask("/maps/previews/Late%20Pic.png");
+        ASSERT_TRUE(r.status == 404 && !r.file);                                                       // (not made yet: a 404, and it is asked for)
+        ASSERT_EQ(pictures.queued(), size_t{1});
+        r = ask("/maps/previews/Late%20Pic.png");
+        ASSERT_EQ(pictures.queued(), size_t{1});
+        r = ask("/maps/previews/Odd%20Name.png");                                                      // (a file name that no picture can be named for: never queued)
+        ASSERT_TRUE(r.status == 404 && pictures.queued() == 1u);
+#endif
+        for (const char* path : {"/maps/previews/Nobody.png", "/maps/previews/Made%20Pic.webp", "/maps/previews/Made%20Pic", "/maps/previews/Made%20Pic.PNG", "/maps/previews/TINY.png", "/maps/previews/.png"}) {
+            r = ask(path);
+            ASSERT_TRUE(r.status == 404 && !r.file);
+        }
+        request.query = "x=1";
+        ASSERT_EQ(ask("/maps/previews/Made%20Pic.png").status, 404);
+        request.query.clear();
+        request.method = "POST";
+        ASSERT_EQ(ask("/maps/previews/Made%20Pic.png").status, 404);
+        mgr.mutable_store().set_approved({});                                                          // (a map that is taken down: its picture is a 404 too, the file stays on disk)
+        request.method = "GET";
+        ASSERT_EQ(ask("/maps/previews/Made%20Pic.png").status, 404);
     } TEST_END();
 
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

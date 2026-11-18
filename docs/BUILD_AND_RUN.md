@@ -135,7 +135,7 @@ The options of the build (`-D` when CMake configures; CMake does not read them f
 
 | Option | Default | What it does |
 |---|---|---|
-| `-DANTS_BUILD_APP=OFF` | `ON` | leaves out the game and the application's test programs, so the build needs no SDL2 (the server's Docker image does that) |
+| `-DANTS_BUILD_APP=OFF` | `ON` | leaves out the game, `ants_thumb` and the application's test programs, so the build needs no SDL2 (a build of the server alone; the server's Docker image builds `ants_thumb` too and so has SDL2) |
 | `-DBUILD_TESTS=OFF` | `ON` (`OFF` for the web build) | leaves out the test programs |
 | `-DANTS_WERROR=ON` | `OFF` | turns every warning into an error (`-Werror`; `/WX` with MSVC), as CI does |
 | `-DANTS_USE_CCACHE=OFF` | `ON` | switches `ccache` off. With it on, CMake uses `ccache` as the compiler launcher when it finds it (on the `PATH`, or in `~/.local/bin`), so another checkout or a clean build folder compiles from the cache. It is never used with MSVC, with a launcher you set yourself, or for the web build ([`WORKFLOW.md`](WORKFLOW.md#speed-compiler-caches)) |

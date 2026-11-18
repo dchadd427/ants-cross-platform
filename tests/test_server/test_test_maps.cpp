@@ -19,6 +19,7 @@
 #include "ants_assets/lvl_writer.hpp"
 #include "ants_net/netgame.hpp"
 #include "ants_net/protocol.hpp"
+#include "ants_server/map_pictures.hpp"
 #include "ants_server/map_store.hpp"
 #include "ants_server/online_limits.hpp"
 #include "ants_server/submissions.hpp"
@@ -1015,6 +1016,32 @@ int main() {
         upkeep_test_maps(rooms, *u.store, u.now + TestMapStore::kTestMapTtlS, 5000);                  // (six hours on: the upkeep drops it and the rooms follow)
         ASSERT_TRUE(rooms.store().test_map(next) == nullptr);
         ASSERT_EQ(files_in(u.config.dir), size_t{0});
+    } TEST_END();
+
+    TEST_CASE("TM3.2 A map that is kept has its picture asked for (the picture maker is never run here: test_map_pictures.cpp); a refused upload and a map that is not new do not") {
+#if !defined(_WIN32)
+        Door t;
+        MapPicturesConfig pc;
+        pc.dir = (t.dir.path / "pictures").string();
+        pc.program = "/bin/sh";                                                            // (a program that can be run, never started: what is asked for stays in the queue)
+        pc.archive = (fs::path(maps_dir()) / "TINY.LVL").string();
+        MapPictures pictures(pc);
+        std::string why;
+        ASSERT_TRUE(pictures.open(why) && pictures.enabled());
+        t.store->set_pictures(&pictures);
+        ASSERT_EQ(t.upload(std::string("not a map at all"), "Refused", "198.51.100.1").status, 400);
+        ASSERT_EQ(pictures.queued(), size_t{0});
+        const TestMapOutcome kept = t.keep("198.51.100.2");
+        ASSERT_TRUE(kept.ok);
+        ASSERT_EQ(pictures.queued(), size_t{1});                                           // (asked for by the file's name: test-<8 hex>)
+        ASSERT_EQ(MapPictures::stem_of(kept.map.path).compare(0, 5, "test-"), 0);
+        ASSERT_EQ(MapPictures::stem_of(kept.map.path).size(), size_t{13});
+        const TestMapOutcome second = t.keep("198.51.100.3");
+        ASSERT_TRUE(second.ok && second.map.path != kept.map.path);
+        ASSERT_EQ(pictures.queued(), size_t{2});
+        t.store->maintenance(t.now);                                                       // (nothing is old yet: nothing is asked for again)
+        ASSERT_EQ(pictures.queued(), size_t{2});
+#endif
     } TEST_END();
 
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

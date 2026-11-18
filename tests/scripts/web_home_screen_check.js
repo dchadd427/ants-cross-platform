@@ -533,7 +533,9 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
             shown.fire('error');
             same('... a 404 of it is answered with the other ending (an approved map\'s picture is a PNG)', [shown.src, shown.style.visibility], ['/maps/previews/Fight%20Island.png', '']);
             shown.fire('error');
-            same('... and when that does not come either, the picture is hidden (no broken image)', shown.style.visibility, 'hidden');
+            same('... and when that does not come either it is asked for again after a pause (the server may not have drawn it yet), and is not hidden yet', shown.style.visibility, '');
+            for (let i = 0; i < 6; i++) { lib.advance(21000); shown.fire('error'); }
+            same('... and when the pauses are over and it has still not come, the picture is hidden (no broken image)', shown.style.visibility, 'hidden');
             const test = runLobby('', { 'ants.name': 'Maya' }, { picker: true, fetch: offline });
             test.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']], room: { map: 'Fight Island ~test-0a1b2c3d.lvl' } });
             same('a test map of the Map Maker has only the server\'s PNG: asked at once', test.$('preview').src, '/maps/previews/Fight%20Island%20~test-0a1b2c3d.png');

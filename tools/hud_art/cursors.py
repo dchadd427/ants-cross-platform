@@ -219,8 +219,9 @@ def attack(w, h, k):
     return c.out(layers)
 
 
-# The food chunk is a handled lunch box with a bright left face and a light lid, 10 x 12 canvas pixels, as the original's: a stepped, chipped silhouette on whole pixels (so its edges are hard at every
-# scale), a pale highlight along the top, a darker amber edge on its lower right. Rows are (y, from x, to x), half open.
+# The food chunk is a handled lunch box with a bright left face and a light lid, 10 x 12 canvas pixels, as the original's. At 1x it is pixel art on whole pixels, as the original's is: a stepped, chipped
+# silhouette, a pale highlight along the top, a darker amber edge on its lower right. At 2x and 3x it is the same box drawn smooth: a clean outline (CHUNK_OUTLINE) with rounded corners, the same regions with
+# their stairs rounded off, and the shade as a crescent, so that its edges are as smooth as the brackets'. Rows are (y, from x, to x), half open.
 CHUNK = (10, 12)
 CHUNK_SILHOUETTE = [(0, 4, 7), (1, 3, 9), (2, 3, 10), (3, 1, 10), (4, 0, 10), (5, 0, 10), (6, 0, 9), (7, 0, 10), (8, 0, 10), (9, 0, 9), (10, 1, 8), (11, 2, 6)]
 CHUNK_FACE = [(y, 0, 1) for y in range(5, 12)] + [(y, 2, 4) for y in range(6, 12)] + [(1, 3, 4), (2, 3, 4), (3, 3, 4)]       # the bright left face
@@ -229,6 +230,8 @@ CHUNK_LID = [(2, 8, 10), (3, 1, 3), (3, 8, 9), (4, 0, 2), (4, 6, 7), (5, 1, 5)] 
 CHUNK_LIGHT = [(2, 5, 7), (3, 5, 8), (4, 2, 6)]                                                                                # the lid's own highlight
 CHUNK_TOP = [(0, 4, 7), (1, 3, 4)]                                                                                             # the pale edge of the top
 CHUNK_SHADE = [(7, 9, 10), (8, 9, 10), (9, 8, 9), (10, 7, 8), (11, 5, 6)]                                                      # the darker edge of the lower right
+CHUNK_OUTLINE = [(4, 0), (7, 0), (8.2, 1), (9.8, 2.2), (10, 3), (10, 8.4), (9.5, 9.6), (8.3, 10.8), (6.2, 12), (2, 12), (0.8, 11.2), (0, 9.8), (0, 4.5), (1.2, 3.2), (3.2, 3.0), (3.2, 1)]
+CHUNK_ROUND = {'outline': 0.45, 'face': 0.5, 'detail': 0.4}            # how far the corners and steps are rounded, in canvas pixels
 G_RIM = (255, 255, 97)
 G_LIT = (255, 211, 0)
 G_MID = (228, 195, 54)
@@ -245,18 +248,29 @@ def pixel_rows(c, ox, oy, rows):
     return m
 
 
-def chunk(c, ox, oy, rim):
-    """the food chunk with its corner at (ox, oy); `rim`: a color for a one pixel rim round it"""
-    sil = pixel_rows(c, ox, oy, CHUNK_SILHOUETTE)
+def chunk(c, ox, oy, rim, smooth=False):
+    """the food chunk with its corner at (ox, oy); `rim`: a color for a one pixel rim round it; `smooth`: drawn with clean curves (2x and 3x) and not as pixel art (1x)"""
+    if smooth:
+        sil = c.smooth(c.poly([(ox + x, oy + y) for x, y in CHUNK_OUTLINE]), CHUNK_ROUND['outline'])
+    else:
+        sil = pixel_rows(c, ox, oy, CHUNK_SILHOUETTE)
     layers = []
     if rim:
         grown = np.zeros_like(sil)
-        for dx in (-1, 0, 1):
-            for dy in (-1, 0, 1):
-                grown = np.maximum(grown, c.shift(sil, dx, dy))
+        if smooth:
+            for a in range(0, 360, 15):
+                grown = np.maximum(grown, c.shift(sil, math.cos(math.radians(a)), math.sin(math.radians(a))))
+        else:
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    grown = np.maximum(grown, c.shift(sil, dx, dy))
         layers.append((grown, rim))
-    for rows, color in ((CHUNK_SILHOUETTE, G_DK), (CHUNK_FACE, G_LIT), (CHUNK_STRIP, G_MID), (CHUNK_LID, G_MID), (CHUNK_LIGHT, G_HANDLE), (CHUNK_TOP, G_RIM), (CHUNK_SHADE, G_SHADE)):
-        layers.append((pixel_rows(c, ox, oy, rows) * sil, color))
+    layers.append((sil, G_DK))
+    for rows, color, kind in ((CHUNK_FACE, G_LIT, 'face'), (CHUNK_STRIP, G_MID, 'detail'), (CHUNK_LID, G_MID, 'detail'), (CHUNK_LIGHT, G_HANDLE, 'detail'), (CHUNK_TOP, G_RIM, 'detail')):
+        mask = pixel_rows(c, ox, oy, rows)
+        layers.append(((c.smooth(mask, CHUNK_ROUND[kind]) if smooth else mask) * sil, color))
+    shade = sil * (1 - c.shift(sil, -0.9, -0.9)) if smooth else pixel_rows(c, ox, oy, CHUNK_SHADE) * sil      # (a crescent along the lower right edge, or its steps)
+    layers.append((shade, G_SHADE))
     return layers
 
 
@@ -292,15 +306,15 @@ def brackets(c, w, curved):
 
 
 def food(sprite, w, h, k):
-    """the food chunk, and four brackets that close on it (then a ring); then the chunk alone (once with a pale rim, once with a white one), then smaller. No outline"""
+    """the food chunk, and four brackets that close on it (then a ring); then the chunk alone (once with a pale rim, once with a white one), then smaller. No outline. At 1x pixel art, at 2x and 3x smooth"""
     c = Canvas(w, h, k)
     if sprite == 'curfd05':
-        return c.out(chunk(c, 1, 1, G_RIM))
+        return c.out(chunk(c, 1, 1, G_RIM, k >= 2))
     if sprite == 'curfd06':
-        return c.out(chunk(c, 1, 1, WHITE))
+        return c.out(chunk(c, 1, 1, WHITE, k >= 2))
     if sprite == 'curfd08':
-        return c.out(chunk(c, 0, 0, None))
-    return c.out(brackets(c, w, w != 21) + chunk(c, round(w / 2.0 - CHUNK[0] / 2.0), round(h / 2.0 - CHUNK[1] / 2.0), None), snap=k == 1)       # (at 1x the bands are pixel art, as the original's)
+        return c.out(chunk(c, 0, 0, None, k >= 2))
+    return c.out(brackets(c, w, w != 21) + chunk(c, round(w / 2.0 - CHUNK[0] / 2.0), round(h / 2.0 - CHUNK[1] / 2.0), None, k >= 2), snap=k == 1)       # (at 1x the bands are pixel art, as the original's)
 
 
 def no_entry(size, k):

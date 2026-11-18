@@ -24,7 +24,7 @@ add_library(ants_server_core STATIC
     db_schema.cpp
     crypto.cpp
     map_names.cpp
-    map_preview.cpp
+    map_pictures.cpp
     submissions.cpp
     submissions_http.cpp
     test_maps.cpp
