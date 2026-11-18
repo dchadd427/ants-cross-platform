@@ -8,6 +8,7 @@
 // Look only: the same click points, the same clicks.
 #include "hud_art_fixtures.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -145,7 +146,8 @@ std::string art_variant(const std::string& tag, const std::function<std::string(
     fs::remove_all(dir, ignored);
     fs::create_directories(dir, ignored);
     std::ifstream in(art_folder() + "/hud_art.txt", std::ios::binary);
-    const std::string manifest((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    std::string manifest((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    manifest.erase(std::remove(manifest.begin(), manifest.end(), '\r'), manifest.end());       // (a checkout may have made the lines end in CR LF: the edits below look at whole lines)
     std::ofstream out(dir / "hud_art.txt", std::ios::binary | std::ios::trunc);
     out << edit(manifest);
     out.close();
