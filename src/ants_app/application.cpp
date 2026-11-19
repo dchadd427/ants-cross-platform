@@ -617,6 +617,7 @@ void Application::set_page_hidden(bool hidden) {
         hidden_ticks_ = 0;
         return;
     }
+    if (renderer_) renderer_->view_glide().clear();          // (a slide that was left when the page went away is about a picture that nobody saw)
     if (background_driven()) background_step();              // shown again: one last wake-up so that the clocks are up to date, then the frame loop has the match back
     page_hidden_ = false;
     last_frame_time_ = now_counter();                        // the first frame measures from here: the hours that the page was hidden are not a frame

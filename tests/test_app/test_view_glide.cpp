@@ -3,6 +3,7 @@
 // ant which walks and is corrected never moves by more than its walk and the slide's share in a frame.
 #include "ants_app/view_glide.hpp"
 
+#include "ants_app/health_changes.hpp"
 #include "ants_app/hud.hpp"
 #include "ants_sim/command.hpp"
 
@@ -190,6 +191,11 @@ int main(int argc, char* argv[]) {
         world.fog_of_war_enabled = false;
         ASSERT_EQ(ants::app::glided_ant(far, world, 0, ant).px, ant.px - 64);              // (no fog: nothing is hidden)
         ASSERT_EQ(ants::app::glided_ant(far, world, 0, ant).id, 9u);
+        world.fog_of_war_enabled = true;                                                   // the engine's own tile covered (the ant has left into the fog) and the slide's start explored: it is not drawn, and it does not slide
+        world.fog_revealed[static_cast<size_t>(5 * 10 + 5)] = 0;
+        ViewGlide left;
+        left.add(9, -30, 0);
+        ASSERT_EQ(ants::app::glided_ant(left, world, 0, ant).px, ant.px);
     } TEST_END();
 
     TEST_CASE("VG6 The Pointer Picks A Sliding Ant Where It Is Drawn: The Cursor Over The Drawn Enemy Ant Is The Attack Cursor And A Click There Orders An Attack On The Tile Where The ENGINE Has It; Where The Engine Has It, And The Picture Shows Nothing, A Click Is A Plain Move; The Rubber Band Takes An Own Ant Where It Is Drawn; Without A Slide Everything Is Where The Engine Has It") {
@@ -261,6 +267,54 @@ int main(int argc, char* argv[]) {
         glide.clear();
         hud.select_ants_in_rect(own.px - 10, own.py - 30, own.px + 10, own.py - 10, sim.get_world_state(), false);
         ASSERT_TRUE(hud.is_ant_selected(mine));
+    } TEST_END();
+
+    TEST_CASE("VG7 An Ant That The Picture Does Not Draw Is Not There For The Pointer Either: An Enemy Ant Whose Engine Tile The Fog Covers Has No Slide At All, Though Its Slide Began On Explored Ground (It Left Into The Fog): Nothing Is Drawn, The Cursor Over Where The Slide Would Have It Is The Plain Move Cursor, And A Click There Is A Move, Not An Attack On The Covered Tile") {
+        using namespace ants;
+        using namespace ants::app;
+        sim::SimulationEngine sim;
+        sim.set_fog_of_war_enabled(true);
+        sim.init_test_world(60, 60, 1, 600000);
+        HUD hud;
+        hud.init(0);
+        hud.set_sim_query(&sim);
+        ViewportCamera cam;
+        cam.world_x = 400;
+        cam.world_y = 400;
+        RecordingSink sink(sim);
+        hud.set_command_sink(&sink);
+        ViewGlide glide;
+        hud.set_draw_offset([&glide](const sim::WorldState& world, uint8_t team, const sim::AntSnapshot& ant, int32_t& dx, int32_t& dy) { return glide_offset(glide, world, team, ant, dx, dy); });
+        const uint32_t mine = sim.spawn_unit(0, sim::AntType::Worker, sim::TileCoord{18, 18});       // it has explored the 13 x 13 tiles around it: columns 12 to 24
+        const uint32_t foe = sim.spawn_unit(1, sim::AntType::Worker, sim::TileCoord{26, 18});        // two tiles into the fog
+        sim.tick();
+        const sim::WorldState& world = sim.get_world_state();
+        ASSERT_TRUE(world.is_tile_revealed(24, 18) && !world.is_tile_revealed(25, 18) && !world.is_tile_revealed(26, 18));
+        sim::AntSnapshot enemy;
+        for (const auto& a : world.ants) {
+            if (a.id == foe) enemy = a;
+        }
+        ASSERT_TRUE(enemy.id == foe && enemy.tile_x == 26);
+        ASSERT_FALSE(health::ant_drawn(world, 0, enemy));                                    // the picture does not draw it
+        glide.add(foe, -64, 0);                                                              // it was shown two tiles to the left, on explored ground, a moment ago
+        int32_t dx = 7;
+        int32_t dy = 7;
+        ASSERT_FALSE(glide_offset(glide, world, 0, enemy, dx, dy));                          // no slide for the viewer who cannot see it ...
+        ASSERT_TRUE(dx == 0 && dy == 0);
+        ASSERT_EQ(glided_ant(glide, world, 0, enemy).px, enemy.px);
+        ASSERT_TRUE(glide_offset(glide, world, 1, enemy, dx, dy) && dx == -64);              // (... its own team sees it slide)
+        const auto sx = [&](int32_t wx) { return wx - cam.world_x + HUD::PLAYFIELD_X; };
+        const auto sy = [&](int32_t wy) { return wy - cam.world_y + HUD::PLAYFIELD_Y; };
+        hud.select_ant(mine);
+        const int32_t spot_x = enemy.px - 64;                                                // where the slide would have it: an explored tile, and nothing is drawn there
+        const int32_t spot_y = enemy.py - 8;
+        ASSERT_TRUE(hud.evaluate_cursor(sx(spot_x), sy(spot_y), world, sim.grid(), cam) == CursorType::Move);
+        ASSERT_TRUE(hud.pick_ant_at(world, spot_x, spot_y) == nullptr);
+        hud.handle_mouse_down(sx(spot_x), sy(spot_y), SDL_BUTTON_LEFT, sim, cam, 0);
+        hud.handle_mouse_up(sx(spot_x), sy(spot_y), SDL_BUTTON_LEFT, sim, cam, 0);
+        ASSERT_EQ(sink.log.size(), 1u);
+        ASSERT_TRUE(sink.log[0].type == sim::CommandType::GroupMove);                        // a move to the tile under the pointer
+        ASSERT_TRUE(sink.log[0].tile_x == spot_x / 32 && sink.log[0].tile_y == spot_y / 32); // ... which is not the covered tile of the ant
     } TEST_END();
 
     std::cout << "\n=======================================================\n"

@@ -64,7 +64,6 @@ void NetGame::make_prediction() {
     pc.work_hook = prediction_work_hook_;
     pc.wall_clock = prediction_wall_clock_;
     pc.cpu_clock = prediction_cpu_clock_;
-    pc.track_shifts = prediction_track_shifts_;
     prediction_ = std::make_unique<Prediction>(sim_, *r, pc);
 }
 

@@ -638,7 +638,8 @@ private:
     void background_run(double elapsed);                  // the step itself: the network for `elapsed` seconds (at most kMaxWakeSeconds for the clock, see there), no sound
     uint64_t now_counter() const { return clock_ ? clock_() : SDL_GetPerformanceCounter(); }   // the clock of frames and wake-ups (set_clock)
     void note_orders();                                   // the orders that input gave the predicted engine since the last look begin to be felt (net::FeltDelayMeter)
-    void feed_view_glide();                               // the ants that the prediction's rebuilds have moved slide in the picture (view_glide.hpp)
+    void feed_view_glide();                               // the ants that the prediction has moved in the picture slide (view_glide.hpp)
+    sim::SimulationEngine& input_sim();                   // view_sim() for the pointer and the keys: what a rebuild at this very moment moves slides before anything is picked, so that a pick is always by the frame's rule
     struct OrdersNoted {                                  // (the end of an input handler: whatever it ordered is looked at, by whichever way the handler leaves)
         Application& app;
         ~OrdersNoted() { app.note_orders(); }

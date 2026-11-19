@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the prediction's default and of the slide of the ants a rebuild moves, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the product rules that the shaped-link, glide and prediction tests hold: it is on by default and the screen reads it, the player's own orders and attack orders are predicted (and nobody else's, and not a refused one), it is off while the link is away, the corrections slide the right way for a time that reads as walking, never across the fog.",
+  "note": "Mutants of the prediction's default and of the slide of the ants that the prediction moves, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the product rules that the shaped-link, glide and prediction tests hold: it is on by default and the screen reads it, the player's own orders and attack orders are predicted (and nobody else's, and not a refused one), it is off while the link is away, the lead is the shortest lag, falls a tick at a time and forgets at a stop, a missed order is expected in the next turn, the corrections and the changes of the shown engine slide the right way for a time that reads as walking, never across the fog, and the pointer picks what is drawn and nothing else.",
   "mutants": [
     {
       "id": "netgame_default_off",
@@ -103,8 +103,8 @@
     {
       "id": "glide_wrong_way",
       "file": "src/ants_net/prediction.cpp",
-      "old": "if (cfg_.track_shifts) add_shift(a.id, b.px - a.px, b.py - a.py);",
-      "new": "if (cfg_.track_shifts) add_shift(a.id, a.px - b.px, a.py - b.py);",
+      "old": "            add_shift(a.id, b.px - a.px, b.py - a.py);",
+      "new": "            add_shift(a.id, a.px - b.px, a.py - b.py);",
       "build": [
         "test_prediction_link"
       ],
@@ -154,17 +154,6 @@
       ],
       "test": "./build/tests/test_app/test_view_glide",
       "expect": "VG2"
-    },
-    {
-      "id": "shifts_not_asked_for",
-      "file": "src/ants_app/application_menu.cpp",
-      "old": "    net_->set_prediction_shifts(true);",
-      "new": "    net_->set_prediction_shifts(false);",
-      "build": [
-        "test_prediction_link"
-      ],
-      "test": "./build/tests/test_app/test_prediction_link",
-      "expect": "LK7"
     },
     {
       "id": "shifts_added_up_wrong",
@@ -233,28 +222,6 @@
       "expect": "LK2"
     },
     {
-      "id": "lead_rises_by_one_at_once",
-      "file": "src/ants_net/prediction.cpp",
-      "old": "    if (target_lead_ < lead_ || target_lead_ > lead_ + 1u) {",
-      "new": "    if (target_lead_ != lead_) {",
-      "build": [
-        "test_prediction"
-      ],
-      "test": "./build/tests/test_net/test_prediction",
-      "expect": "RP1.3"
-    },
-    {
-      "id": "lead_falls_slowly",
-      "file": "src/ants_net/prediction.cpp",
-      "old": "    if (target_lead_ < lead_ || target_lead_ > lead_ + 1u) {",
-      "new": "    if (target_lead_ + 1u < lead_ || target_lead_ > lead_ + 1u) {",
-      "build": [
-        "test_prediction"
-      ],
-      "test": "./build/tests/test_net/test_prediction",
-      "expect": "RP"
-    },
-    {
       "id": "missed_order_not_expected_in_the_next_turn",
       "file": "src/ants_net/prediction.cpp",
       "old": "        p.tick = p.misses == 0 ? n + 1u : display_;",
@@ -308,6 +275,94 @@
       ],
       "test": "./build/tests/test_app/test_view_glide",
       "expect": "VG6"
+    },
+    {
+      "id": "lead_rises_by_one_at_once",
+      "file": "src/ants_net/prediction.cpp",
+      "old": "    if (target_lead_ > lead_ + 1u) {",
+      "new": "    if (target_lead_ > lead_) {",
+      "build": [
+        "test_prediction"
+      ],
+      "test": "./build/tests/test_net/test_prediction",
+      "expect": "RP1.3"
+    },
+    {
+      "id": "lead_falls_all_at_once",
+      "file": "src/ants_net/prediction.cpp",
+      "old": "            --lead_;\n            ++stats_.lead_changes;\n            lead_fall_wait_ = cfg_.lead_fall_every_ticks;",
+      "new": "            lead_ = target_lead_;\n            ++stats_.lead_changes;\n            lead_fall_wait_ = cfg_.lead_fall_every_ticks;",
+      "build": [
+        "test_prediction"
+      ],
+      "test": "./build/tests/test_net/test_prediction",
+      "expect": "RP1.3"
+    },
+    {
+      "id": "lead_never_falls",
+      "file": "src/ants_net/prediction.cpp",
+      "old": "        if (target_lead_ < lead_ && lead_fall_wait_ == 0) {",
+      "new": "        if (false && target_lead_ < lead_ && lead_fall_wait_ == 0) {",
+      "build": [
+        "test_prediction"
+      ],
+      "test": "./build/tests/test_net/test_prediction",
+      "expect": "RP"
+    },
+    {
+      "id": "lags_kept_over_a_stop",
+      "file": "src/ants_net/prediction.cpp",
+      "old": "    lags_.clear();                                                   // (what the orders taught",
+      "new": "    //lags_.clear();                                                 // (what the orders taught",
+      "build": [
+        "test_prediction"
+      ],
+      "test": "./build/tests/test_net/test_prediction",
+      "expect": "RP8.7"
+    },
+    {
+      "id": "stop_is_a_jump",
+      "file": "src/ants_net/prediction.cpp",
+      "old": "        shift_all(pred_.get_world_state().ants, confirmed_->get_world_state().ants);",
+      "new": "        (void)0;",
+      "build": [
+        "test_prediction"
+      ],
+      "test": "./build/tests/test_net/test_prediction",
+      "expect": "RP3.6"
+    },
+    {
+      "id": "start_is_a_jump",
+      "file": "src/ants_net/prediction.cpp",
+      "old": "    if (running_) shift_all(confirmed_->get_world_state().ants, pred_.get_world_state().ants);",
+      "new": "    if (false) shift_all(confirmed_->get_world_state().ants, pred_.get_world_state().ants);",
+      "build": [
+        "test_prediction"
+      ],
+      "test": "./build/tests/test_net/test_prediction",
+      "expect": "RP3.6"
+    },
+    {
+      "id": "start_and_stop_jump_in_the_frame",
+      "file": "src/ants_app/application_sim.cpp",
+      "old": "void Application::feed_view_glide() {\n    net::Prediction* prediction = net_ != nullptr ? net_->prediction() : nullptr;",
+      "new": "void Application::feed_view_glide() {\n    net::Prediction* prediction = net_ != nullptr && net_->predicting() ? net_->prediction() : nullptr;",
+      "build": [
+        "test_prediction_link"
+      ],
+      "test": "./build/tests/test_app/test_prediction_link",
+      "expect": "LK10"
+    },
+    {
+      "id": "pointer_reaches_an_ant_that_is_not_drawn",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "    if (!health::ant_drawn(world, viewer_team, ant)) return false;",
+      "new": "    if (false && !health::ant_drawn(world, viewer_team, ant)) return false;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG"
     }
   ]
 }

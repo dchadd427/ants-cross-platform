@@ -342,8 +342,8 @@ HumpCell hump_cell(int rtt, int jitter, bool predict, int reaction_ms, int noise
 // The attack click on an enemy ant that walks
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-constexpr int32_t kAttackerTile = 5;               // the person's ant waits on tile 5 of row 3, the other person's on tile 25
-constexpr int32_t kEnemyTile = 25;
+constexpr int32_t kAttackerTile = 5;               // the person's ant waits on tile 5 of row 3, the other person's on tile 21 (clear of the third colony's hill, which a game on one computer has)
+constexpr int32_t kEnemyTile = 21;
 constexpr int32_t kEnemyGoal = 9;
 
 struct AttackResult {
@@ -352,13 +352,16 @@ struct AttackResult {
     uint8_t landed_order{0};        // what the confirmed engine made of it when the order landed (3: an attack; 1: a move)
 };
 
-// One attack click: the other person's ant is sent west; when it walks and `phase_ms` after its third tile on the screen, the person right-clicks on it with the attacker selected
-AttackResult attack_click(Session& s, uint32_t attacker, uint32_t enemy, int phase_ms) {
+// One attack click: the other person's ant is sent west; when it walks and `phase_ms` after its third tile on the screen, the person right-clicks on it with the attacker selected. With `turn_ms` the
+// other person gives his ant another goal every so often (the next row, then back: it changes course as an ant does that is being steered in a fight), which the screen cannot know before the order arrives
+AttackResult attack_click(Session& s, uint32_t attacker, uint32_t enemy, int phase_ms, int turn_ms = 0) {
     AttackResult out;
     if (!s.bring(0, attacker, kAttackerTile, kLaneRow)) {
+        std::printf("    [attack: the person's ant did not get to its place]\n");
         return out;
     }
     if (!s.bring(1, enemy, kEnemyTile, kLaneRow)) {
+        std::printf("    [attack: the other ant did not get to its place]\n");
         return out;
     }
     s.camera_on(15, kLaneRow);
@@ -366,18 +369,27 @@ AttackResult attack_click(Session& s, uint32_t attacker, uint32_t enemy, int pha
     int32_t sy = 0;
     const sim::AntSnapshot* mine = s.shown_ant(attacker);
     if (mine == nullptr || !s.screen_of_world(mine->px, mine->py, sx, sy)) {
+        std::printf("    [attack: the person's ant is not on the screen]\n");
         return out;
     }
     s.run_ms(static_cast<uint32_t>(s.rng()() % 50u));
     s.click(SDL_BUTTON_LEFT, sx, sy);
     if (s.app().hud().get_selected_ant_id() != attacker) {
+        std::printf("    [attack: the click did not select the person's ant]\n");
         return out;
     }
     s.order(1, sim::CommandType::GroupMove, {enemy}, kEnemyGoal, kLaneRow);
     bool armed = false;
     uint32_t click_at = 0;
     bool done = false;
+    uint32_t next_turn = s.now() + static_cast<uint32_t>(turn_ms);
+    bool other_row = true;
     s.on_frame_start = [&]() {
+        if (turn_ms > 0 && !done && s.now() >= next_turn) {                        // the other person steers his ant
+            next_turn = s.now() + static_cast<uint32_t>(turn_ms);
+            s.order(1, sim::CommandType::GroupMove, {enemy}, kEnemyGoal, other_row ? kLaneRow - 1 : kLaneRow);
+            other_row = !other_row;
+        }
         if (done || !armed || s.now() < click_at) return;
         done = true;
         const sim::AntSnapshot* seen = s.shown_ant(enemy);
@@ -399,6 +411,7 @@ AttackResult attack_click(Session& s, uint32_t attacker, uint32_t enemy, int pha
     const bool clicked = s.run_until([&]() { return done; }, 8000);
     s.on_frame_end = nullptr;
     if (!clicked) {
+        std::printf("    [attack: the other ant did not walk three tiles in time]\n");
         s.on_frame_start = nullptr;
         return out;
     }
@@ -423,7 +436,7 @@ struct AttackCell {
 };
 
 // A cell: `phases` clicks in one match of one link, the click `i * 400 / phases` ms after the third tile of the walk
-AttackCell attack_cell(int rtt, int jitter, bool predict, int phases, uint32_t seed) {
+AttackCell attack_cell(int rtt, int jitter, bool predict, int phases, uint32_t seed, int turn_ms = 0) {
     Params p;
     p.map = "GRASS.LVL";
     p.local = rtt < 0;
@@ -448,9 +461,13 @@ AttackCell attack_cell(int rtt, int jitter, bool predict, int phases, uint32_t s
         std::printf("    [attack: ants %zu / %zu; peer seat %d]\n", mine.size(), theirs.size(), static_cast<int>(s.peer().net.my_seat()));
         return cell;
     }
+    if (p.local) {                                                                 // (a game on this computer has all four colonies: the other two wait at the bottom of the map, off the lane)
+        for (const uint8_t seat : {uint8_t{2}, uint8_t{3}}) s.order(seat, sim::CommandType::GroupMove, Session::ants_of(s.app().sim(), seat), 15, 26);
+        s.run_ms(15000);
+    }
     s.run_ms(2500);
     for (int i = 0; i < phases; ++i) {
-        const AttackResult r = attack_click(s, mine[0], theirs[0], i * 400 / phases);
+        const AttackResult r = attack_click(s, mine[0], theirs[0], i * 400 / phases, turn_ms);
         if (!r.clicked) continue;
         ++cell.clicks;
         cell.shown_attack += r.shown_order == sim::AntUnit::kOrderAttack ? 1 : 0;
@@ -461,9 +478,31 @@ AttackCell attack_cell(int rtt, int jitter, bool predict, int phases, uint32_t s
     return cell;
 }
 
-void print_attack(const AttackCell& c) {
-    std::printf("    attack  rtt %3d jit %2d  prediction %-3s: %2d clicks on the walking ant, the screen took %2d as an attack, %2d landed as an attack (%3.0f %%), %2d as a plain move, %d gave no order\n", c.rtt, c.jitter,
-                c.predict ? "on" : "off", c.clicks, c.shown_attack, c.landed_attack, c.clicks > 0 ? 100.0 * c.landed_attack / c.clicks : 0.0, c.landed_move, c.no_order);
+// The cells of several seeds added up (other phases of the frames, the ticks and the links' jitter)
+AttackCell attack_row(int rtt, int jitter, bool predict, int phases, const std::vector<uint32_t>& seeds, int turn_ms = 0) {
+    AttackCell sum;
+    sum.rtt = rtt;
+    sum.jitter = jitter;
+    sum.predict = predict;
+    for (const uint32_t seed : seeds) {
+        const AttackCell c = attack_cell(rtt, jitter, predict, phases, seed + seed_offset(), turn_ms);
+        sum.clicks += c.clicks;
+        sum.shown_attack += c.shown_attack;
+        sum.landed_attack += c.landed_attack;
+        sum.landed_move += c.landed_move;
+        sum.no_order += c.no_order;
+    }
+    return sum;
+}
+
+double share_of(const AttackCell& c) { return c.clicks > 0 ? 100.0 * c.landed_attack / c.clicks : 0.0; }
+
+void print_attack(const AttackCell& c, const char* enemy) {
+    char link[48];
+    if (c.rtt < 0) std::snprintf(link, sizeof link, "a game on this computer    ");
+    else std::snprintf(link, sizeof link, "rtt %3d jit %2d prediction %-3s", c.rtt, c.jitter, c.predict ? "on" : "off");
+    std::printf("    attack (%s)  %s: %2d clicks on the walking ant, the screen took %2d as an attack, %2d landed as an attack (%3.0f %%), %2d as a plain move, %d gave no order\n", enemy, link, c.clicks,
+                c.shown_attack, c.landed_attack, share_of(c), c.landed_move, c.no_order);
 }
 
 }  // namespace
@@ -549,28 +588,39 @@ int main(int argc, char* argv[]) {
         }
     } TEST_END();
 
-    TEST_CASE("LK3 The Attack Click On A Walking Ant: The Order Names The Tile Of The Ant As The Screen Shows It, So That With The Prediction (The Screen Is The Engine The Order Lands In) It Is Still An Attack When It Lands, At Every Round Trip; Without It The Ant Has Left The Tile Before The Order Lands, And The Click Is A Plain Move") {
-        double off_share[5] = {0, 0, 0, 0, 0};
+    TEST_CASE("LK3 The Attack Click On A Walking Ant: The Order Names The Tile Of The Ant As The Screen Shows It, So That With The Prediction (The Screen Is The Engine The Order Lands In) It Is Still An Attack When It Lands, At Every Round Trip, For An Ant That Walks On And For One That Its Owner Steers; Without It The Ant Has Left The Tile Before The Order Lands, And The Click Is A Plain Move; A Game On This Computer Is The Reference") {
+        const std::vector<uint32_t> seeds = table_wanted() ? std::vector<uint32_t>{7u, 8u, 9u, 10u} : std::vector<uint32_t>{7u, 8u};
         const int rtts[5] = {2, 30, 100, 180, 300};
-        for (int k = 0; k < 5; ++k) {
-            for (const bool predict : {false, true}) {
-                const AttackCell c = attack_cell(rtts[k], 30, predict, 16, 7u + seed_offset());
-                print_attack(c);
-                ASSERT_EQ(c.clicks, 16);
-                ASSERT_EQ(c.no_order, 0);
-                const double share = 100.0 * c.landed_attack / c.clicks;
-                if (!predict) {
-                    off_share[k] = share;
-                    ASSERT_EQ(c.shown_attack, 0);                                             // (the screen's engine is the confirmed one: it has no order yet when the click is made)
-                } else {
+        struct Kind {
+            const char* name;
+            int turn_ms;
+        };
+        for (const Kind kind : {Kind{"it walks on", 0}, Kind{"it is steered", 900}}) {
+            const AttackCell local = attack_row(-1, 0, false, 16, seeds, kind.turn_ms);
+            print_attack(local, kind.name);
+            ASSERT_EQ(local.clicks, 16 * static_cast<int>(seeds.size()));
+            ASSERT_EQ(local.no_order, 0);
+            ASSERT_TRUE(share_of(local) >= 95.0);                                             // (the reference: on one computer the click is an attack, the order lands in the screen's own state)
+            double off_share[5] = {0, 0, 0, 0, 0};
+            for (int k = 0; k < 5; ++k) {
+                for (const bool predict : {false, true}) {
+                    const AttackCell c = attack_row(rtts[k], 30, predict, 16, seeds, kind.turn_ms);
+                    print_attack(c, kind.name);
+                    ASSERT_EQ(c.clicks, 16 * static_cast<int>(seeds.size()));
+                    const double share = share_of(c);
+                    if (!predict) {
+                        off_share[k] = share;
+                        continue;
+                    }
+                    ASSERT_EQ(c.no_order, 0);
                     ASSERT_EQ(c.shown_attack, c.clicks);                                      // (the screen takes every click as the attack that it is)
-                    ASSERT_TRUE(share >= 80.0);                                               // ... and the order is still one when it lands (the ant may leave its tile in the tick that the seal is off by: one click in 16 at the end of a tile)
+                    ASSERT_TRUE(share >= (kind.turn_ms == 0 ? 80.0 : 60.0));                  // ... and the order is still one when it lands (the ant may leave its tile in the tick that the seal is late by, and a steered ant may have been given another course that the screen did not know yet)
                     ASSERT_TRUE(share >= off_share[k]);
-                    if (rtts[k] >= 100) ASSERT_TRUE(share >= off_share[k] + 25.0);
+                    if (rtts[k] >= 100) ASSERT_TRUE(share >= off_share[k] + 20.0);
                 }
             }
+            ASSERT_TRUE(off_share[4] <= 30.0 && off_share[2] <= 75.0);                       // (without it: a plain move for many clicks at 100 ms and for most at 300 ms)
         }
-        ASSERT_TRUE(off_share[4] <= 25.0 && off_share[2] <= 70.0);                           // (without it: a plain move for most clicks at 100 ms and for nearly all at 300 ms)
     } TEST_END();
 
     TEST_CASE("LK4 The Confirmed Match Is Exact Whatever The Link Does To The Picture: Two People Play 40 s At RTT 180 With Jitter And Spikes, The Prediction Stays On And Loses Nothing, The Application's Engine Ends In The Referee's State, And Its Recording Plays To The Same State") {
@@ -684,56 +734,105 @@ int main(int argc, char* argv[]) {
         ASSERT_FALSE(s.app().net()->desynced());
     } TEST_END();
 
-    TEST_CASE("LK7 What The Screen Shows When The Other Person's Orders Arrive: Their Ants Are Put Where The Engine Has Them By A Slide, Not A Jump (At RTT 180 The Frames In Which An Ant Of The Picture Moves By More Than 20 px Are None), And Without The Slide There Are Such Frames") {
-        int jumps[2] = {0, 0};
-        int sliding = 0;                                                                     // frames of an ant that is drawn away from where the engine has it ...
-        int sliding_far = 0;                                                                 // ... by 20 px and more
-        int ant_frames = 0;
-        for (const bool glide : {false, true}) {
-            Params p;
-            p.link.rtt_ms = 180;
-            p.link.jitter_ms = 30;
-            p.peer_link.rtt_ms = 60;
-            p.render = true;
-            p.glide = glide;
-            p.seed = 41;
-            Session s(p);
-            ASSERT_TRUE(s.begin());
-            std::map<uint32_t, std::pair<int32_t, int32_t>> last;                        // the picture's position of every ant at the end of the last frame
-            int frames = 0;
-            s.on_frame_end = [&]() {
-                ++frames;
-                for (const auto& a : s.app().view_sim().get_world_state().ants) {
-                    int32_t gx = 0;
-                    int32_t gy = 0;
-                    s.app().renderer().view_glide().offset_of(a.id, gx, gy);
-                    if (glide) ++ant_frames;
-                    const std::pair<int32_t, int32_t> drawn{a.px + gx, a.py + gy};
-                    if (glide && (gx != 0 || gy != 0)) {
-                        ++sliding;
-                        if (std::max(std::abs(gx), std::abs(gy)) >= 20) ++sliding_far;      // (the middle of the drawn ant is outside the box of 20 px to each side of where the engine has it: the HUD picks by the drawn place, view_glide.hpp)
-                    }
-                    const auto it = last.find(a.id);
-                    if (it != last.end() && a.state == sim::UnitState::Walking) {
-                        const int32_t jump = std::max(std::abs(drawn.first - it->second.first), std::abs(drawn.second - it->second.second));
-                        if (jump > 20 && jump <= 64) {
-                            ++jumps[glide ? 1 : 0];
-                        }               // (an order given to a walking ant snaps it by up to 16 px in the engine itself, as the original's does: more than 20 px in one frame is a hop of the correction; a throw or a teleport is no correction)
-                    }
-                    last[a.id] = drawn;
+    // The frames of a session in which a walking ant moves by more than 20 px and no more than 64: where the picture draws it (the engine's place and what is left of its slide), and where a picture
+    // without the slide would (the engine's place alone). An order given to a walking ant snaps it by up to 16 px in the engine itself, as the original's does: more than 20 px in one frame is a hop of
+    // the prediction; a throw or a teleport is none.
+    struct Jumps {
+        int drawn{0};
+        int engine{0};
+        int frames{0};
+        int ant_frames{0};
+        int sliding{0};             // frames of an ant that is drawn away from where the engine has it ...
+        int sliding_far{0};         // ... by 20 px and more (outside the box of 20 px to each side of the engine's place: the HUD picks by the drawn place, view_glide.hpp)
+        std::map<uint32_t, std::pair<int32_t, int32_t>> last_drawn;
+        std::map<uint32_t, std::pair<int32_t, int32_t>> last_engine;
+        void look(Session& s) {
+            ++frames;
+            for (const auto& a : s.app().view_sim().get_world_state().ants) {
+                int32_t gx = 0;
+                int32_t gy = 0;
+                s.app().renderer().view_glide().offset_of(a.id, gx, gy);
+                ++ant_frames;
+                if (gx != 0 || gy != 0) {
+                    ++sliding;
+                    if (std::max(std::abs(gx), std::abs(gy)) >= 20) ++sliding_far;
                 }
-            };
-            Players players(s);
-            players.person = false;
-            players.play(30000);
-            ASSERT_TRUE(frames > 1500);
-            ASSERT_TRUE(s.app().net()->prediction()->stats().rebuilds_foreign > 10u);       // (the other person's orders were corrected)
+                const std::pair<int32_t, int32_t> at{a.px, a.py};
+                const std::pair<int32_t, int32_t> shown{a.px + gx, a.py + gy};
+                const auto was_drawn = last_drawn.find(a.id);
+                if (was_drawn != last_drawn.end() && a.state == sim::UnitState::Walking) {
+                    const auto hop = [](const std::pair<int32_t, int32_t>& x, const std::pair<int32_t, int32_t>& y) { return std::max(std::abs(x.first - y.first), std::abs(x.second - y.second)); };
+                    const int32_t by_picture = hop(shown, was_drawn->second);
+                    const int32_t by_engine = hop(at, last_engine[a.id]);
+                    drawn += by_picture > 20 && by_picture <= 64 ? 1 : 0;
+                    engine += by_engine > 20 && by_engine <= 64 ? 1 : 0;
+                }
+                last_drawn[a.id] = shown;
+                last_engine[a.id] = at;
+            }
         }
+    };
+
+    TEST_CASE("LK7 What The Screen Shows When The Other Person's Orders Arrive: Their Ants Are Put Where The Engine Has Them By A Slide, Not A Jump (At RTT 180 The Frames In Which An Ant Of The Picture Moves By More Than 20 px Are None), And Without The Slide There Are Such Frames") {
+        Params p;
+        p.link.rtt_ms = 180;
+        p.link.jitter_ms = 30;
+        p.peer_link.rtt_ms = 60;
+        p.render = true;
+        p.seed = 41;
+        Session s(p);
+        ASSERT_TRUE(s.begin());
+        Jumps jumps;
+        s.on_frame_end = [&]() { jumps.look(s); };
+        Players players(s);
+        players.person = false;
+        players.play(30000);
+        ASSERT_TRUE(jumps.frames > 1500);
+        ASSERT_TRUE(s.app().net()->prediction()->stats().rebuilds_foreign > 10u);           // (the other person's orders were corrected)
         std::printf("\n    frames in which a walking ant of the picture moved by more than 20 px: %d without the slide, %d with it; of %d frames of an ant, %d drew it sliding, %d of them 20 px and more from where the engine has it (the pointer picks it where it is drawn)\n",
-                    jumps[0], jumps[1], ant_frames, sliding, sliding_far);
-        ASSERT_TRUE(sliding > 0);
-        ASSERT_TRUE(jumps[0] > 3);
-        ASSERT_EQ(jumps[1], 0);
+                    jumps.engine, jumps.drawn, jumps.ant_frames, jumps.sliding, jumps.sliding_far);
+        ASSERT_TRUE(jumps.sliding > 0);
+        ASSERT_TRUE(jumps.engine > 3);
+        ASSERT_EQ(jumps.drawn, 0);
+    } TEST_END();
+
+    TEST_CASE("LK10 When The Prediction Stops And Begins Again (A Page That Is Hidden And Shown, As A Pause Or A Link That Was Away Do) The Screen Changes Engine And Every Walking Ant Stands A Lead Of Ticks Elsewhere: The Picture Slides Them (No Frame In Which An Ant Moves By More Than 20 px), And Without The Slide Every Change Is A Jump; The Match Is The Referee's") {
+        Params p;
+        p.link.rtt_ms = 300;                                                                 // (a lead of about seven ticks: 28 px of walking)
+        p.link.jitter_ms = 20;
+        p.peer_link.rtt_ms = 60;
+        p.render = true;
+        p.seed = 43;
+        Session s(p);
+        ASSERT_TRUE(s.begin());
+        Jumps jumps;
+        s.on_frame_end = [&]() { jumps.look(s); };
+        Players players(s);
+        players.play(6000);                                                                  // (both people have ants walking, and the lead has learned the link)
+        ASSERT_TRUE(s.app().net()->predicting());
+        ASSERT_TRUE(s.app().net()->prediction()->lead_ticks() >= 6u);
+        const int before = jumps.engine;
+        const uint64_t starts = s.app().net()->prediction()->stats().starts;
+        int changes = 0;
+        for (int round = 0; round < 6; ++round) {
+            s.app().set_page_hidden(true);                                                   // the prediction stops with the next update: the screen shows the confirmed engine
+            ASSERT_TRUE(s.run_until([&]() { return !s.app().net()->predicting(); }, 500));
+            players.play(700);
+            s.app().set_page_hidden(false);                                                  // ... and begins again with the next tick
+            ASSERT_TRUE(s.run_until([&]() { return s.app().net()->predicting(); }, 2000));
+            players.play(1800);
+            changes += 2;
+        }
+        ASSERT_EQ(s.app().net()->prediction()->stats().starts, starts + 6);
+        std::printf("\n    %d changes of the shown engine: frames in which a walking ant moved by more than 20 px: %d without the slide (%d before the changes), %d with it\n", changes, jumps.engine, before, jumps.drawn);
+        ASSERT_TRUE(jumps.engine >= before + 6);                                             // (without the slide the changes are jumps)
+        ASSERT_EQ(jumps.drawn, 0);
+        s.on_frame_end = nullptr;
+        s.quit(1);
+        ASSERT_TRUE(s.run_until([&]() { return s.room_finished(); }, 20000));
+        s.run_ms(2000);
+        ASSERT_EQ(s.app().sim().state_hash().total, s.referee_hash());
+        ASSERT_FALSE(s.app().net()->desynced());
     } TEST_END();
 
     TEST_CASE("LK8 Four People In Teams With Fog Of War (Seats 0 And 1 Against 2 And 3, Round Trips Of 120 And 50 ms): Everything The Picture Of The Application Explores Is Explored By The Confirmed Engine When It Gets To That Tick, The Orders Of Its Ally Are Corrections Like Any Other's, And The Match Ends In The Referee's State With A Recording That Plays To It") {

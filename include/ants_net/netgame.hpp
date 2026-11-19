@@ -402,8 +402,6 @@ public:
         prediction_cpu_clock_ = std::move(cpu);
     }
     static uint64_t& default_prediction_budget_ns() noexcept;
-    /// Whether the NEXT prediction keeps the ants that its rebuilds move (Prediction::take_shifts): the application draws them gliding. Off by default (the tests that do not draw)
-    void set_prediction_shifts(bool on) noexcept { prediction_track_shifts_ = on; }
     /// True while the predicted engine is the one that the screen shows: a match is running, the prediction is on and not suspended, and at least one tick has run
     bool predicting() const noexcept { return prediction_ != nullptr && prediction_->active(); }
     /// The engine that the screen shows and that the HUD asks (the cursor, the selection, the panel, the minimap): the predicted engine while predicting(), else the confirmed one that
@@ -582,7 +580,6 @@ private:
     std::unique_ptr<Prediction> prediction_;     // (after the sessions: it holds their runner and goes first; made by refresh_prediction() when it is wanted, never otherwise)
     bool prediction_enabled_{true};
     bool app_suspends_prediction_{false};
-    bool prediction_track_shifts_{false};
     uint64_t prediction_budget_ns_{default_prediction_budget_ns()};
     uint32_t prediction_budget_strikes_{Prediction::Config{}.budget_strikes};
     uint32_t prediction_cooldown_ticks_{Prediction::Config{}.cooldown_ticks};

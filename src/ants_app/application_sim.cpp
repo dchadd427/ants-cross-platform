@@ -35,14 +35,21 @@ void Application::note_orders() {
     orders_seen_ = taken;
 }
 
-// The ants that a rebuild of the predicted engine has moved since the last frame are drawn gliding to where the engine has them (view_glide.hpp). Nothing slides while the confirmed engine is shown.
+// The ants that the prediction has moved in the picture since the last frame are drawn gliding to where the shown engine has them (view_glide.hpp): what a rebuild moved, and every ant when the
+// prediction begins or stops (the screen changes engine: a pause, a hidden page, a link that was away, a cool-down). A game that has no prediction slides nothing.
 void Application::feed_view_glide() {
-    net::Prediction* prediction = net_ != nullptr && net_->predicting() ? net_->prediction() : nullptr;
+    net::Prediction* prediction = net_ != nullptr ? net_->prediction() : nullptr;
     if (prediction == nullptr) {
         renderer_->view_glide().clear();
         return;
     }
     for (const net::Prediction::Shift& shift : prediction->take_shifts()) renderer_->view_glide().add(shift.ant, shift.dx, shift.dy);
+}
+
+sim::SimulationEngine& Application::input_sim() {
+    sim::SimulationEngine& view = view_sim();             // (asking for the engine is where a stale prediction is rebuilt)
+    feed_view_glide();
+    return view;
 }
 
 sim::SimulationEngine& Application::view_sim() {

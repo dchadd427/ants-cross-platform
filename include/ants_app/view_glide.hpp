@@ -46,7 +46,8 @@ private:
 
 /// How far from where the engine has it the picture draws an ant: what is left of its slide. An ant of another team (not the viewer's, not its ally's) is drawn only on ground that Fog of War has
 /// uncovered: when the whole slide would put it on covered ground, it is drawn with the largest quarter of the slide that does not (none: where the engine has it): the slide never shows what the fog
-/// hides. False (and 0, 0) when the ant is drawn where the engine has it. The renderer draws by this and the HUD picks by it (a click on a sliding ant picks that ant).
+/// hides. False (and 0, 0) when the ant is drawn where the engine has it, and for an ant that the picture does not draw at all (its engine tile is covered: it has no place in the picture, whatever
+/// slide it has left). The renderer draws by this and the HUD picks by it (a click on a sliding ant picks that ant, and nothing picks an ant that is not drawn).
 bool glide_offset(const ViewGlide& glide, const sim::WorldState& world, uint8_t viewer_team, const sim::AntSnapshot& ant, int32_t& dx, int32_t& dy);
 /// The ant as the picture draws it: where the engine has it plus glide_offset() (its tile stays the engine's)
 sim::AntSnapshot glided_ant(const ViewGlide& glide, const sim::WorldState& world, uint8_t viewer_team, const sim::AntSnapshot& ant);

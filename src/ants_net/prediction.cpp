@@ -128,13 +128,15 @@ uint32_t Prediction::wanted_lead() const noexcept {
     return std::clamp<uint32_t>((learned != 0 ? learned : estimate_lag_) + cfg_.lead_bias_ticks, cfg_.min_lead_ticks, cfg_.max_lead_ticks);
 }
 
-// The lead falls at once (a lead that is too long is the worse mistake: the order is sealed BEFORE the tick that the player aimed at) and rises at once by two ticks and more (the link has
-// changed); a rise of one tick waits until the delay has asked for it for lead_rise_after_ticks, so that the picture does not move back and forth by a tick with the phase of the host's seals
+// The lead falls one tick at a time, the first tick at once and each further one lead_fall_every_ticks later (a lead that is too long is the worse mistake: the order is sealed BEFORE the tick
+// that the player aimed at; but the picture stands still for every tick that the lead falls by, and it must never stand for more than one). It rises at once by two ticks and more (the link
+// has changed); a rise of one tick waits until the delay has asked for it for lead_rise_after_ticks, so that the picture does not move back and forth by a tick with the phase of the host's seals
 void Prediction::update_lead() {
     target_lead_ = wanted_lead();
-    if (target_lead_ < lead_ || target_lead_ > lead_ + 1u) {
-        if (target_lead_ != lead_) ++stats_.lead_changes;
+    if (lead_fall_wait_ > 0) --lead_fall_wait_;
+    if (target_lead_ > lead_ + 1u) {
         lead_ = target_lead_;
+        ++stats_.lead_changes;
         lead_high_ticks_ = 0;
     } else if (target_lead_ == lead_ + 1u) {
         if (++lead_high_ticks_ >= cfg_.lead_rise_after_ticks) {
@@ -144,6 +146,11 @@ void Prediction::update_lead() {
         }
     } else {
         lead_high_ticks_ = 0;
+        if (target_lead_ < lead_ && lead_fall_wait_ == 0) {
+            --lead_;
+            ++stats_.lead_changes;
+            lead_fall_wait_ = cfg_.lead_fall_every_ticks;
+        }
     }
 }
 
@@ -162,28 +169,48 @@ std::vector<Prediction::PredictedNews> Prediction::take_news() {
 std::vector<Prediction::Shift> Prediction::take_shifts() {
     std::vector<Shift> out;
     out.swap(shifts_);
+    if (!running_ && confirmed_tick() > stopped_at_ + 1u) out.clear();      // (nobody drew a frame when it stopped: the picture of that moment is long gone)
     return out;
 }
 
+void Prediction::shift_all(const std::vector<sim::AntSnapshot>& shown, const std::vector<sim::AntSnapshot>& now) {
+    std::unordered_map<uint32_t, const sim::AntSnapshot*> was;
+    was.reserve(shown.size());
+    for (const sim::AntSnapshot& b : shown) was.emplace(b.id, &b);
+    for (const sim::AntSnapshot& a : now) {
+        const auto it = was.find(a.id);
+        if (it == was.end()) continue;
+        if (it->second->px != a.px || it->second->py != a.py) add_shift(a.id, it->second->px - a.px, it->second->py - a.py);
+    }
+}
+
 void Prediction::begin(uint64_t c) {
+    if (c > stopped_at_ + 1u) shifts_.clear();                       // (what a stop left that nobody took: about a picture that is gone)
     running_ = true;
     stale_ = false;
     pending_.clear();
-    shifts_.clear();
     ++stats_.starts;
+    target_lead_ = wanted_lead();
     lead_ = target_lead_;
     lead_high_ticks_ = 0;
+    lead_fall_wait_ = 0;
     rebuild(c + lead_, true);
+    if (running_) shift_all(confirmed_->get_world_state().ants, pred_.get_world_state().ants);      // the screen showed the confirmed engine: every ant slides to where the predicted one has it, `lead` ticks on
 }
 
 void Prediction::stop() {
+    shifts_.clear();
+    if (running_) {                                                  // the screen showed the predicted engine: every ant slides back to where the confirmed one has it
+        shift_all(pred_.get_world_state().ants, confirmed_->get_world_state().ants);
+        stopped_at_ = confirmed_tick();
+    }
     running_ = false;
     stale_ = false;
     assumed_.clear();
     pending_.clear();
     audio_.clear();
     news_.clear();
-    shifts_.clear();
+    lags_.clear();                                                   // (what the orders taught is about the link and the buffer as they were: a host change, a rejoin or a pause may end with another lag)
 }
 
 sim::SimulationEngine& Prediction::engine() {
@@ -270,7 +297,7 @@ void Prediction::rebuild(uint64_t target, bool is_start) {
     const Timer timer(cfg_);
     if (cfg_.work_hook) cfg_.work_hook();
     std::vector<sim::AntSnapshot> before;
-    const bool measure = (measure_corrections_ || cfg_.track_shifts) && !is_start && running_;
+    const bool measure = !is_start && running_;                      // (the ants that this rebuild moves are told to the picture: take_shifts)
     if (measure) before = pred_.get_world_state().ants;              // the picture that was on screen
     const uint64_t shown_before = display_;
 
@@ -336,7 +363,7 @@ void Prediction::rebuild(uint64_t target, bool is_start) {
                 stats_.max_move_px = std::max(stats_.max_move_px, std::max(dx, dy));
                 stats_.move_px_total += std::max(dx, dy);
             }
-            if (cfg_.track_shifts) add_shift(a.id, b.px - a.px, b.py - a.py);
+            add_shift(a.id, b.px - a.px, b.py - a.py);
         }
         if (measure_corrections_) {
             ++stats_.corrections;

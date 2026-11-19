@@ -448,7 +448,6 @@ void Application::leave_game() {
 // The tick, chat and HUD hooks of a NetGame that the application owns (a room or a match)
 void Application::attach_net() {
     hook_rejoin_store();
-    net_->set_prediction_shifts(true);                                             // (what a rebuild moves is drawn gliding: ants_app/view_glide.hpp)
     net_->set_prediction_enabled(config_.prediction);                              // the prediction of the player's own orders (net::Prediction): on, unless --no-prediction says otherwise
     net_->set_on_prediction_dropped([this]() { hud_.set_sim_query(&sim_); });      // (its engine is gone: the HUD's special-target question goes back to the confirmed one at once)
     net_->set_fill_bots(config_.fill_bots);                                        // the bots that this machine's START seats in the empty seats (protocol 11; the menu's Host panel sets it)

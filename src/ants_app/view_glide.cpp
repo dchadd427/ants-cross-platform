@@ -56,6 +56,7 @@ bool glide_offset(const ViewGlide& glide, const sim::WorldState& world, uint8_t 
     dx = 0;
     dy = 0;
     if (!glide.offset_of(ant.id, whole_x, whole_y)) return false;
+    if (!health::ant_drawn(world, viewer_team, ant)) return false;       // (an ant that the picture does not draw where the engine has it is drawn nowhere, and nothing picks it: its slide may have begun on explored ground)
     for (int32_t quarters = 4; quarters > 0; --quarters) {               // the whole slide, then three quarters of it, a half, a quarter: the most of it that does not draw the ant on covered ground
         sim::AntSnapshot drawn = ant;
         drawn.px += whole_x * quarters / 4;

@@ -208,7 +208,6 @@ struct Params {
     uint8_t peers{1};                 // the other people (bare machines) when use_peer: seats 1 .. peers
     sim::StartTeams teams;            // the room's teams (set: a pair of seats against the other two)
     bool render{false};               // every frame of the application is drawn too (the ants' glide is fed by the frame that draws)
-    bool glide{true};                 // the prediction keeps the ants that its rebuilds move (the application draws them gliding)
     bool local{false};                // a game on this computer (no room, no links, no other person): the reference that the original's feel is measured against
 };
 
@@ -257,7 +256,6 @@ public:
         cfg.net_link_maker = [this]() { return make_link(p_.link); };
         app_ = std::make_unique<Application>();
         if (!app_->init(cfg)) throw std::runtime_error("the application could not start");
-        if (!p_.glide) app_->net()->set_prediction_shifts(false);
         if (p_.use_peer) {
             run_ms(300);                                                              // (the application is in the room first: seat 0)
             for (uint8_t i = 0; i < std::max<uint8_t>(1, p_.peers); ++i) {

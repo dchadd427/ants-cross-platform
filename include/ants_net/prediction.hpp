@@ -63,7 +63,8 @@ public:
         uint8_t seat{sim::PLAYER_NEUTRAL};        // the player whose orders are predicted
         uint32_t min_lead_ticks{1};               // the display tick is at least this many ticks ahead of the confirmed one
         uint32_t max_lead_ticks{12};              // ... and at most this many (600 ms: a link slower than that is not helped by guessing further)
-        uint32_t lead_rise_after_ticks{40};       // the lead rises by one tick when the delay has asked for one more for this long (2 s); it falls at once, and rises at once by two and more
+        uint32_t lead_rise_after_ticks{40};       // the lead rises by one tick when the delay has asked for one more for this long (2 s); it rises at once by two and more
+        uint32_t lead_fall_every_ticks{4};        // the lead falls one tick at a time, the first at once and each further one this many ticks later: the picture stands still for one tick each time, never longer
         uint32_t pending_timeout_ticks{100};      // an own order that no turn has carried after this many ticks (5 s) is lost
         size_t max_events{4096};                  // the cues and news of the predicted ticks that are kept for the application
         // The budget. The prediction is work that a frame pays for: a rebuild (a copy and a replay of `lead` ticks), or the ticks that it runs for one confirmed tick, that takes more than
@@ -91,9 +92,6 @@ public:
         // Ticks that the display stands beyond the lag. 0: an order is put where the host runs it, so nothing is corrected while the lag holds. 1: the ants react 50 ms sooner, but about one
         // order in six shows a whole-tile hop when its turn corrects it.
         uint32_t lead_bias_ticks{0};
-        // Keep, for every rebuild that changes where an ant stands at the tick that was on the screen, how far it moved (take_shifts): the application draws such an ant gliding from where it
-        // was shown to where the engine has it (ants_app/view_glide.hpp) instead of jumping. Costs the copy of the ants' positions before the rebuild
-        bool track_shifts{false};
     };
 
     /// What the prediction did (for the tests and the measurements; nothing here is state)
@@ -162,7 +160,8 @@ public:
     bool suspended() const noexcept { return suspended_; }
     /// The lag of the player's orders as the owner knows it (the measured delay less the tick that it counts, or an estimate from the round trip and the jitter buffer), in ms: the lead is that
     /// many ticks, rounded, plus Config::lead_bias_ticks, until the orders themselves have taught it their lag (Config::learn_lead). It falls
-    /// at once, rises at once by two ticks and more, and by one tick only after Config::lead_rise_after_ticks, so that the picture does not jump back and forth with the phase of the server's seals.
+    /// one tick at a time (the first at once, the next ones Config::lead_fall_every_ticks apart), rises at once by two ticks and more, and by one tick only after Config::lead_rise_after_ticks, so that
+    /// the picture does not jump back and forth with the phase of the server's seals and never stands still for more than a tick.
     void set_expected_delay_ms(uint32_t ms);
     uint32_t lead_ticks() const noexcept { return lead_; }
     /// What the lead has learned from the player's own orders: the shortest lag of the fresh ones (see Config::learn_lead), 0 when there is none. The lead is this plus the bias, else the estimate
@@ -203,7 +202,9 @@ public:
     /// The cues and news that the predicted ticks made since the last call (each tick that the engine ran, once per run: see PredictedAudio::generation). Nothing is kept while off.
     std::vector<PredictedAudio> take_audio();
     std::vector<PredictedNews> take_news();
-    /// The ants that rebuilds have moved since the last call, one entry for each ant (what several rebuilds moved it is added up); empty unless Config::track_shifts. Nothing is kept while off
+    /// The ants that the picture has to move since the last call, each with how far it was shown from where the engine that is shown NOW has it: the ants that a rebuild moved (what several
+    /// rebuilds moved an ant by is added up), and every ant when the prediction begins (the screen goes from the confirmed engine to the predicted one, `lead` ticks ahead) or stops (back to the
+    /// confirmed one). The application draws them sliding (ants_app/view_glide.hpp). What a stop left is forgotten when nobody takes it within a tick
     std::vector<Shift> take_shifts();
 
     /// Which commands are predicted (the kinds that move or stop one's own ants)
@@ -241,6 +242,8 @@ private:
     void start_cooldown(uint64_t tick);
     void drop_lost_orders(uint64_t confirmed_tick);
     void add_shift(uint32_t ant, int32_t dx, int32_t dy);
+    /// Every ant that `shown` has elsewhere than `now`: it slides from there (the screen changes from one engine to the other)
+    void shift_all(const std::vector<sim::AntSnapshot>& shown, const std::vector<sim::AntSnapshot>& now);
     uint64_t confirmed_tick() const noexcept { return confirmed_->current_tick(); }
 
     const sim::SimulationEngine* confirmed_;
@@ -265,6 +268,8 @@ private:
     uint32_t estimate_lag_{2};                    // the owner's estimate of the lag of an order (set_expected_delay_ms), in ticks
     std::deque<std::pair<uint32_t, uint64_t>> lags_;      // (lag in ticks, the confirmed tick at which it was seen) of the last orders that came back in a turn
     uint32_t lead_high_ticks_{0};
+    uint32_t lead_fall_wait_{0};                  // ticks until the lead may fall by another tick
+    uint64_t stopped_at_{0};                      // the confirmed tick at which the prediction stopped: its shifts are about the picture of that moment
     uint32_t generation_{0};
     bool measure_corrections_{false};
     std::vector<PredictedAudio> audio_;
