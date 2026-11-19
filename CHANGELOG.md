@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.17.11 - 2026-11-18 - Your orders act at once online, one window for watching
+
+**For players:**
+- **Your own orders act at once in online matches.** Your ants now answer a click right away on your screen, as in a game on your own computer, whatever your connection. Attack clicks on a moving ant land far more often, and a well-timed re-order on mud works again with a slow connection. The server still decides every result, so nothing changes for the other players.
+- **Watching no longer leaves you with two front pages.** Watch and Matches open in the same tab; while you sit in a room they open a new tab, and Home in that tab closes it and brings you back to your room.
+- **The Games count includes matches in progress.**
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.10 page or game still joins. Under the hood: the game and the web pages are rebuilt. To switch the new behavior off for one game, add `?prediction=off` to the game page's address.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/cb9b01b0...c59ad097)
+
 ## v0.17.10 - 2026-11-18 - Bot matches on the administration page, longer replay storage
 
 **For players:**
