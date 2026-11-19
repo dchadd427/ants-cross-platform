@@ -225,8 +225,6 @@ class TheLiveGlue(unittest.TestCase):
         self.assertIn("Module.FS.writeFile('/replay.antsrep', latest)", self.glue)
         self.assertIn("command(DO.extend, 0)", self.glue)
         self.assertIn("command(DO.liveOver, 0)", self.glue)
-        self.assertIn("FEED_MS = 4000", self.glue)
-        self.assertIn("setTimeout(feed, FEED_MS)", self.glue)
 
     def test_it_asks_the_door_for_the_match_by_an_id_that_passed_the_shape_check_and_keeps_no_cache(self):
         self.assertIn("fetch('/live/' + LIVE_ID, { cache: 'no-store', credentials: 'same-origin' })", self.glue)

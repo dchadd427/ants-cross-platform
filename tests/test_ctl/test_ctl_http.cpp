@@ -1125,6 +1125,49 @@ void run_http_tests() {
         ASSERT_EQ(rig.seen.back().path, "/still-alive");
     } TEST_END();
 
+    TEST_CASE("CTL2.18b HTTP response headers of a handler (HttpResponse::headers): a name of \"X-\", letters, digits and '-' with a value of visible ASCII is sent once, after the server's own; any other name or value is left out and the answer goes on without it; the server's own headers cannot be set or doubled") {
+        Rig rig;
+        ASSERT_TRUE(rig.ok());
+        const auto answer_with = [&](const HttpResponse& resp) {
+            rig.handler = [resp, &rig](const HttpRequest&) {
+                ++rig.calls;
+                return resp;
+            };
+            return rig.exchange(make_request("GET", "/x"));
+        };
+        HttpResponse good;
+        good.body = "ok";
+        good.headers.emplace_back("X-Ants-Live", "now=12; shown=0; delay=600");
+        good.headers.emplace_back("X-Second", "2");
+        Reply r = answer_with(good);
+        ASSERT_TRUE(r.status == 200 && r.body == "ok");
+        ASSERT_TRUE(r.header("x-ants-live") != nullptr && *r.header("x-ants-live") == "now=12; shown=0; delay=600");
+        ASSERT_TRUE(r.header("x-second") != nullptr && *r.header("x-second") == "2");
+        ASSERT_TRUE(r.header("cache-control") != nullptr && *r.header("cache-control") == "no-store" && r.header("x-content-type-options") != nullptr);       // (the server's own are still there, once)
+        ASSERT_EQ(r.responses, 1);
+        // a name or a value that is not safe is left out; the answer is not lost, and nothing starts a header of its own
+        const std::vector<std::pair<std::string, std::string>> bad = {
+            {"X-Ok\r\nX-Evil: 1", "v"}, {"X-Ok\nX-Evil", "v"}, {"X-A b", "v"}, {"X-A:b", "v"}, {"X-", "v"}, {"", "v"}, {"Content-Length", "5"}, {"Cache-Control", "max-age=999"}, {"Connection", "keep-alive"},
+            {"Content-Type", "text/html"}, {"Set-Cookie", "a=b"}, {"x-lower", "v"}, {"X-Content-Type-Options", "sniff"}, {"X-CONTENT-TYPE-OPTIONS", "sniff"}, {"X-" + std::string(40, 'a'), "v"}, {"X-caf\xC3\xA9", "v"},
+            {"X-Value", "a\r\nX-Evil: 1"}, {"X-Value", "a\nb"}, {"X-Value", "tab\there"}, {"X-Value", ""}, {"X-Value", "caf\xC3\xA9"}, {"X-Value", std::string(300, 'v')}};
+        for (const auto& header : bad) {
+            HttpResponse resp;
+            resp.body = "ok";
+            resp.headers.push_back(header);
+            r = answer_with(resp);
+            const std::string why = "header [" + shown(header.first.c_str()) + "]: [" + shown(header.second.c_str()) + "]";
+            ASSERT_MSG(r.status == 200 && r.body == "ok" && r.responses == 1, why);
+            ASSERT_MSG(r.raw.find("X-Evil") == std::string::npos && r.header("x-evil") == nullptr, why);
+            ASSERT_MSG(r.header("cache-control") != nullptr && *r.header("cache-control") == "no-store" && r.header("content-length") != nullptr && *r.header("content-length") == "2", why);
+            ASSERT_MSG(r.header("connection") != nullptr && *r.header("connection") == "close" && r.header("content-type") != nullptr && *r.header("content-type") == "application/json", why);
+            ASSERT_MSG(r.header("set-cookie") == nullptr && r.header("x-value") == nullptr, why);
+            ASSERT_MSG(r.header("x-content-type-options") != nullptr && *r.header("x-content-type-options") == "nosniff", why);
+            size_t own_headers = 0;
+            for (size_t at = r.raw.find("ontent-Type-Options"); at != std::string::npos; at = r.raw.find("ontent-Type-Options", at + 1)) ++own_headers;
+            ASSERT_MSG(own_headers == 1, why);                                                      // (the server's own, once, whatever case the handler spelled it in)
+        }
+    } TEST_END();
+
     TEST_CASE("CTL2.21 HTTP: 100,000 random and mutated request heads parse to a request that is safe to use, or are refused") {
         const std::vector<std::string> seeds = {
             "GET /rooms/ABCD HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer s\r\n\r\n",

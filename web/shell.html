@@ -800,6 +800,7 @@
         .veil { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(5, 10, 8, .55); z-index: 4; }
         .veil .card { display: grid; gap: 10px; justify-items: center; padding: 14px 24px 16px; min-width: min(78%, 330px); font-size: max(12px, 1.8cqw); color: var(--cream); background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
         .veil .progress-bar-container { display: block; width: 100%; height: 16px; margin: 0; }
+        .standby .card { text-align: center; } .standby .card b { font-size: 1.25em; font-weight: 500; } .standby .card span { max-width: 30em; }
 
         /* the replay bar: under the picture, the same width as the picture */
         .rbar { position: relative; width: min(100%, var(--stage-max), calc((100vh - var(--chrome)) * var(--ar-w) / var(--ar-h))); width: min(100%, var(--stage-max), calc((100dvh - var(--chrome)) * var(--ar-w) / var(--ar-h))); min-width: min(100%, 320px); margin: 49px 0 10px; padding: 0 4px; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto auto; grid-template-areas: "play rew tl clock cam speed pic fsx"; gap: 0 18px; align-items: center; color: var(--ink); cursor: default; container: rbar / inline-size; } .rbar:where(:not(.islive)) { gap: 0 8px; }
@@ -969,6 +970,7 @@
 
             <div class="endnote rep-only" id="endnote" hidden>The recording ends here. The match was left or closed before it ended.</div>
             <div class="veil rep-only" id="veil" hidden><div class="card"><span id="veil-t">Jumping&hellip;</span><div class="progress-bar-container"><div class="progress-bar-fill" id="veil-f"></div></div></div></div>
+            <div class="veil rep-only standby" id="standby" role="status" hidden><div class="card"><b id="standby-t">Starting&hellip;</b><span id="standby-s"></span><div class="progress-bar-container"><div class="progress-bar-fill" id="standby-f"></div></div></div></div>
 
             <div id="splash-overlay">
                 <div class="splash-card">
@@ -2938,15 +2940,17 @@
             var DO = { toggle: 0, paused: 1, speed: 2, seek: 3, again: 4, extend: 5, liveOver: 6, camera: 7 };  // ... ReplayControl
             var FAIL = { unreadable: 1, older: 2, newer: 3, nomap: 4, diverged: 5 };                // ... ReplayFailure
             var TPS = 20;                                                                          // turns per second
-            var FEED_MS = 4000;                                                                    // a match that is being played is fetched again this often
             var FILE = ANTS_REPLAY_FILE;     // the replay on show (a live match gets one when it is over and was kept)
             var LIVE_ID = ANTS_LIVE_ID, OWN = ANTS_OWN_MODE ? R.ownPageOf(window, { say: function (text) { say(text); }, infoOf: function (bytes) { return window.AntsMapFiles ? window.AntsMapFiles.infoOfReplay(bytes) : null; } }) : null;      // (a file of your own: web/replay_page.js ownPage)
             var info = null;                 // what the game reported about the file
             var shown = null;                // the card that is up ('' none)
             var liveOn = ANTS_LIVE_MODE && !!LIVE_ID;       // the page follows a match that is being played (the red marks, the notch, "Jump to live"); not for a replay, nor after the match is over
             var atNow = false;               // the playhead is at the present (R.atLive)
-            var waitingNow = false;          // the feed has stopped and the playhead has caught up with what the game holds
+            var waitingNow = false;          // the playhead has caught up with what the game holds and waits: the feed has stopped, or the next part has not come for a while
             var feedFailed = false;          // the last look at the match failed: the note over the picture says so until a look works
+            var liveInfo = null, liveInfoAt = 0;            // what the server said with the last snapshot (R.liveInfoOf: the turns the match had run, the turns shown and the delay) and when the page was told
+            var nextFeedAt = 0, limitSeen = -1, limitMovedAt = 0;      // when the page asks for the match again, the last Limit that the game held, and when it moved: a playhead that waits at the end of what it holds says so
+            var startingNow = false;         // the match has nothing to show yet (it is starting, or its picture has not come to its first turn): the card over the picture says so
             var overNote = '';               // the note over the picture of a match that ended while it was watched: 'kept' (it is now a replay) or 'plain' (it was not kept)
             var overFile = '', overEntry = null;            // the card "This match is over": the kept replay, and what the list says of it (map, length, players)
             var latest = null, applied = null;              // the newest bytes of the match that the page has, and the ones that the game's file holds
@@ -2997,7 +3001,7 @@
                 title.textContent = '';
                 meta.textContent = '';
                 var file = shown === 'over' ? overFile : FILE;
-                if (!file && (!LIVE_ID || shown === 'notlive')) { title.textContent = 'A match to watch'; return; }
+                if (!file && (!LIVE_ID || shown === 'notlive' || shown === 'short')) { title.textContent = 'A match to watch'; return; }
                 var map = shown === 'over' && overEntry && overEntry.map ? overEntry.map : info && info.map ? info.map : file ? (/^ants-([A-Za-z0-9_]+)-/.exec(file) || [])[1] || '' : R.liveMap(LIVE_ID);
                 title.appendChild(document.createTextNode(R.mapTitle(map) || 'A match to watch'));
                 var small = el('small');
@@ -3077,6 +3081,10 @@
                     var watch = el('a', 'btn', 'Watch the replay');
                     watch.href = '/play?replay=' + encodeURIComponent(why);
                     buttons.appendChild(watch);
+                    all();
+                } else if (kind === 'short') {                // the link of a match that ended before 30 seconds of play: it is never kept
+                    title = 'Too short to keep';
+                    paragraph(['It ended within its first 30 seconds, and a match that short is not kept, so there is no replay. The matches that are being played now are listed on the front page.']);
                     all();
                 } else if (kind === 'notlive') {              // the link of a match that is not being played and was not kept (or is not a match)
                     title = 'That match isn’t live';
@@ -3168,22 +3176,37 @@
                 var limit = ready ? limitTurn() / TPS : total;
                 var gap = Math.max(0, limit - seconds);
                 if (liveOn) atNow = R.atLive(atNow, gap, playing && !dragging);
-                waitingNow = liveOn && feedFailed && playing && gap < 0.5;
-                var key = [ready, state, speed, Math.floor(seconds * 4), total, jumping ? get(VALUE.jump) : '', dragging, liveOn, atNow, waitingNow, feedFailed, Math.floor(limit), overNote].join('|');
+                // a live match: nothing to show yet (the game's Limit is still 0: the match is starting, or shown late and not yet at its first turn); or the playhead has stood at the end of what the game holds, with the feed
+                // working, for a while: it waits for the next part (a match that is paused, a slow link); or the feed has stopped. The words say how late the picture is by the server's numbers and the clock.
+                var sinceMs = Date.now() - liveInfoAt, limitNow = ready ? limitTurn() : 0;
+                if (limitNow !== limitSeen) { limitSeen = limitNow; limitMovedAt = Date.now(); }
+                startingNow = liveOn && ready && limitNow <= 0;
+                var stalled = liveOn && !startingNow && playing && !dragging && gap < 0.5 && !feedFailed && Date.now() - limitMovedAt > R.STALL_MS;
+                waitingNow = liveOn && !startingNow && playing && gap < 0.5 && (feedFailed || stalled);
+                var waitS = stalled ? Math.max(0, (nextFeedAt - Date.now()) / 1000) : undefined;
+                var behindS = liveOn ? R.liveBehind(liveInfo, sinceMs, seconds * TPS) : null;
+                var key = [ready, state, speed, Math.floor(seconds * 4), total, jumping ? get(VALUE.jump) : '', dragging, liveOn, atNow, waitingNow, feedFailed, Math.floor(limit), overNote, startingNow, startingNow ? Math.floor(sinceMs / 500) : '', Math.floor(behindS === null ? -1 : behindS), waitS === undefined ? '' : Math.ceil(waitS)].join('|');
                 if (key === lastKey) return;
                 lastKey = key;
                 paint(seconds, total, limit);
-                var running = playing && !waitingNow;
+                var running = playing && !(waitingNow && feedFailed);
                 $('b-play').innerHTML = done ? ICON.again + '<span class="lbl">Watch again</span>' : running ? ICON.pause : ICON.play;
                 $('b-play').setAttribute('aria-label', done ? 'Watch again' : running ? 'Pause' : 'Play');
                 $('rtag').classList.toggle('lv', liveOn);
                 $('rtag-b').textContent = liveOn ? 'LIVE' : 'REPLAY';
-                $('rtag-s').textContent = liveOn ? R.liveTag({ gap: gap, at: atNow, paused: state === STATE.paused, waiting: waitingNow, speed: R.speedText(speed) }) : state === STATE.paused ? 'Paused' : R.speedText(speed);
+                $('rtag-s').textContent = liveOn ? R.liveTag({ gap: gap, at: atNow, paused: state === STATE.paused, waiting: waitingNow, starting: startingNow, wait: waitS, behind: behindS === null ? undefined : behindS, delay: liveInfo ? liveInfo.delay / TPS : 0, speed: R.speedText(speed) }) : state === STATE.paused ? 'Paused' : R.speedText(speed);
                 $('rtag').hidden = !ready || done;
-                var note = state === STATE.cut ? 'The recording ends here. The match was left or closed before it ended.' : liveOn && feedFailed ? 'The live feed stopped. Trying again…'
+                var note = state === STATE.cut ? 'The recording ends here. The match was left or closed before it ended.' : liveOn && feedFailed ? 'The live feed stopped. Trying again…' : liveOn && waitingNow ? 'Waiting for the next part…'
                          : overNote === 'kept' ? 'The match is over. It is now in the list as a replay.' : overNote === 'plain' ? 'The match is over.' : '';
                 $('endnote').hidden = !note;
                 if (note) $('endnote').textContent = note;
+                $('standby').hidden = !startingNow;
+                if (startingNow) {                                // the card over the opening: what the match is waiting for, and how much of the wait is gone
+                    var standby = R.standbyOf(liveInfo, sinceMs);
+                    $('standby-t').textContent = standby.title;
+                    $('standby-s').textContent = standby.line;
+                    $('standby-f').style.width = Math.round(standby.fill * 100) + '%';
+                }
                 $('livenow').hidden = !(liveOn && atNow);
                 $('b-live').hidden = !(liveOn && !atNow); rew.show(!liveOn);
                 [].forEach.call($('speed').querySelectorAll('button'), function (b) { b.setAttribute('aria-checked', String(Math.round(parseFloat(b.dataset.s) * 100) === speed)); });
@@ -3207,7 +3230,7 @@
             function toggle() {
                 var state = get(VALUE.state);
                 if (state === STATE.ended || state === STATE.cut) { overNote = ''; command(DO.again); }
-                else if (waitingNow) return;                                          // (the feed has stopped and the picture has all that there is: nothing to pause)
+                else if (waitingNow && feedFailed) return;                            // (the feed has stopped and the picture has all that there is: nothing to pause)
                 else if (state === STATE.playing || state === STATE.paused) command(DO.toggle);
                 lastKey = '';
                 tick();
@@ -3442,19 +3465,25 @@
                 return fetch('/live/' + LIVE_ID, { cache: 'no-store', credentials: 'same-origin' }).then(function (response) {
                     if (response.status === 200) {
                         if (/^\s*text\/html/i.test(response.headers.get('content-type') || '')) return { kind: 'error' };        // (a page of some other kind, not the match)
-                        return response.arrayBuffer().then(function (buffer) { return buffer.byteLength ? { kind: 'running', bytes: new Uint8Array(buffer) } : { kind: 'error' }; });
+                        var told = R.liveInfoOf(response.headers.get('X-Ants-Live'));              // (null from a server that says nothing, or something that is not what it says: the page then adds the usual lag)
+                        return response.arrayBuffer().then(function (buffer) { return buffer.byteLength ? { kind: 'running', bytes: new Uint8Array(buffer), info: told } : { kind: 'error' }; });
                     }
                     if (response.status === 404) return response.json().then(function (body) { return R.liveVerdict(404, body); }, function () { return R.liveVerdict(404, null); });
                     return R.liveVerdict(response.status, null);
                 }).catch(function () { return { kind: 'error' }; });
+            }
+            function takeInfo(told) { liveInfo = told; liveInfoAt = Date.now(); }
+            function askAgain() {                                                                  // the next look at the match: 2 s after the last answer
+                nextFeedAt = Date.now() + R.FEED_MS;
+                feedTimer = setTimeout(feed, R.FEED_MS);
             }
             // the first look, before the game starts: a failure is tried three times; a match that is over (kept: its card, not kept: "isn't live") or not there is an answer
             function firstSnapshot() {
                 var tries = 0;
                 return (function go() {
                     return snapshot().then(function (got) {
-                        if (got.kind === 'running') return { bytes: got.bytes };
-                        if (got.kind === 'ended') return got.replay ? { error: 'over', replay: got.replay } : { error: 'notlive' };
+                        if (got.kind === 'running') return { bytes: got.bytes, info: got.info };
+                        if (got.kind === 'ended') return got.replay ? { error: 'over', replay: got.replay } : { error: R.tooShort(got) ? 'short' : 'notlive' };
                         if (got.kind === 'notlive') return { error: 'notlive' };
                         if (++tries >= 3) return { error: 'load', text: 'the match could not be loaded: check the connection and try again' };
                         return new Promise(function (resolve) { setTimeout(resolve, 1500); }).then(go);
@@ -3467,14 +3496,14 @@
                 if (!liveOn || shown) return;
                 snapshot().then(function (got) {
                     if (!liveOn || shown) return;
-                    if (got.kind === 'ended') { matchOver(got.replay); return; }
-                    if (got.kind === 'running') { feedFailed = false; notLiveLooks = 0; if (!same(latest, got.bytes)) latest = got.bytes; }
+                    if (got.kind === 'ended') { if (!got.replay && R.tooShort(got)) card('short'); else matchOver(got.replay); return; }
+                    if (got.kind === 'running') { feedFailed = false; notLiveLooks = 0; takeInfo(got.info); if (!same(latest, got.bytes)) latest = got.bytes; }
                     else {
                         feedFailed = true;
                         if (got.kind === 'notlive' && ++notLiveLooks >= 8) { endLive(); return; }          // (the door has no such match for 30 seconds on: it is gone, as a match that was not kept is)
                     }
                     lastKey = '';
-                    feedTimer = setTimeout(feed, FEED_MS);
+                    askAgain();
                 });
             }
             // the game's file system holds the newest file, and the game is told: written when the game is there (the first one is written as it starts), in order
@@ -3568,9 +3597,10 @@
             fetched.then(function (got) {
                 if (got.error === 'gone' || got.error === 'again') card(got.error);
                 else if (got.error === 'notlive') card('notlive');
+                else if (got.error === 'short') card('short');
                 else if (got.error === 'over') card('over', got.replay);
                 else if (got.error) card('cant', got.text);
-                else if (ANTS_LIVE_MODE) { latest = got.bytes; feedTimer = setTimeout(feed, FEED_MS); } else if (OWN) setHeader();      // (the record is read: the header can say the map, the players and the name of the file)
+                else if (ANTS_LIVE_MODE) { latest = got.bytes; takeInfo(got.info); askAgain(); } else if (OWN) setHeader();      // (the record is read: the header can say the map, the players and the name of the file)
             });
             setHeader();
             liveClasses();

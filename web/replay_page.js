@@ -10,7 +10,12 @@
     var MAPS = { TINY: 'Tiny', SMALL: 'Small', MEDIUM: 'Medium', GAUNTLET: 'Gauntlet', TREASURE: 'Treasure', ISLANDS: 'Islands' };     // the original's six, which the pages have a picture of
     // The id of a match that is being played, as the server makes it (<MAP>-<YYYYMMDD>-<HHMMSS>Z[-N]: the map's stem and the UTC time the match began) and as docker/nginx.conf lets it through; nothing else is ever fetched.
     var LIVE_RE = /^[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/;
-    var LIVE_LAG = 10;          // seconds: what the picture of a live match is behind the players at best (the age of the snapshot that the page holds, and the 2 s that the game holds back)
+    var LIVE_LAG = 10;          // seconds: what the picture of a live match is behind the players when the server does not say (no X-Ants-Live header: the age of the snapshot that the page holds, and the 2 s that the game holds back)
+    var TPS = 20;               // turns in a second of the match
+    var HOLD_TURNS = 40;        // the turns that the game keeps back from the end of what it holds while it follows a match (kLiveHoldTurns in include/ants_app/replay_view.hpp)
+    var KEEP_TURNS = 600;       // a match that ran less than this (30 seconds) is never kept as a replay
+    var FEED_MS = 2000;         // the page asks for the match again this often: the game keeps two seconds back from the end of what it holds, so a look every two seconds is what lets the picture play on without a stop
+    var STALL_MS = 3500;        // a playhead that has stood at the end of what it holds this long, with the match not over, is waiting for the next part (the parts come every 2 s, a second of the server's cache and a second of nginx's make it 3: a shorter wait is the usual gap between two parts)
     var AT_LIVE = 1.5;          // a playhead that is less than this many seconds behind the game's Limit is at the present
     var FOLLOW_SLACK = 8;       // ... and one that follows the match stays there while it is less than this behind: the snapshots come in steps (a poll brings up to 7 s of the match at once)
     var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -100,8 +105,45 @@
     function liveVerdict(status, body) {
         if (status === 200) return { kind: 'running', replay: '' };
         if (status !== 404) return { kind: 'error', replay: '' };
-        if (body && typeof body === 'object' && body.ended === true) return { kind: 'ended', replay: typeof body.replay === 'string' && FILE_RE.test(body.replay) ? body.replay : '' };
+        if (body && typeof body === 'object' && body.ended === true) return { kind: 'ended', replay: typeof body.replay === 'string' && FILE_RE.test(body.replay) ? body.replay : '', turns: typeof body.turns === 'number' && isFinite(body.turns) && body.turns >= 0 ? Math.floor(body.turns) : null };
         return { kind: 'notlive', replay: '' };
+    }
+    // A match that is over, was not kept and ran less than 30 seconds (the verdict of liveVerdict): it ended too soon to be kept, and the page says so. One that ran longer, or whose length is not known, is only "not kept".
+    function tooShort(verdict) {
+        return !!verdict && verdict.kind === 'ended' && verdict.replay === '' && typeof verdict.turns === 'number' && verdict.turns < KEEP_TURNS;
+    }
+    // The header X-Ants-Live of a snapshot ("now=<turns the match had run>; shown=<turns the bytes show>; delay=<turns the match is shown late>"): the three numbers, or null when the text is not exactly that
+    function liveInfoOf(text) {
+        var m = /^now=([0-9]{1,9}); shown=([0-9]{1,9}); delay=([0-9]{1,9})$/.exec(typeof text === 'string' ? text : '');
+        if (!m) return null;
+        var now = +m[1], shown = +m[2], delay = +m[3];
+        return shown === Math.max(0, now - delay) ? { now: now, shown: shown, delay: delay } : null;       // (what the server shows is the match as it was `delay` turns ago, no more and no less: a header that says otherwise is not believed)
+    }
+    // The turns the match has run now, by the clock: the turns at the time the page was told (`info.now`) and the time since, at 20 a second. A match that had run no turn when the page was told is in its countdown
+    // (the room holds the first turn for 5 to 30 seconds): the clock does not run for it, and the next answer is what says that it has begun
+    function liveNowTurn(info, sinceMs) {
+        return info && info.now > 0 ? info.now + Math.max(0, sinceMs) / 1000 * TPS : 0;
+    }
+    // How far behind the match the playhead is, in seconds: the match's turns now less the playhead's turn; null when the page has no numbers (the tag then adds the usual lag to the playhead's gap)
+    function liveBehind(info, sinceMs, playTurn) {
+        if (!info || typeof playTurn !== 'number') return null;
+        return Math.max(0, liveNowTurn(info, sinceMs) - playTurn) / TPS;
+    }
+    // "30 seconds", "1 minute", "2 minutes", "90 seconds": the delay in the words of the page
+    function delayText(seconds) {
+        var s = Math.round(seconds);
+        if (s >= 60 && s % 60 === 0) return s === 60 ? '1 minute' : (s / 60) + ' minutes';
+        return s + ' seconds';
+    }
+    // The card over the picture while nothing can be shown yet (the match is starting, or its picture has not come to its first turn): the words, how much of the wait is gone (0 to 1), and null when there is nothing to say.
+    // `info` is what the server said, `sinceMs` the time since. A match shown as it is says that it is about to begin; one that is shown late says so, and when its picture starts (the turns still to run before the
+    // delay is over and the game has its two seconds to play, counted by the clock) once the match has run its first turn.
+    function standbyOf(info, sinceMs) {
+        var late = !!info && info.delay > 0, now = liveNowTurn(info, sinceMs), total = (info ? info.delay : 0) + HOLD_TURNS;
+        if (!late) return { title: 'Starting\u2026', line: 'The match is about to begin.', fill: info && total > 0 ? Math.min(1, now / total) : 0 };
+        var first = 'This match is between people, so it is shown ' + delayText(info.delay / TPS) + ' late. ';
+        if (now < 1) return { title: 'Starting\u2026', line: first + 'The match is about to begin.', fill: 0 };
+        return { title: 'Starting\u2026', line: first + 'The picture starts in ' + lengthText(Math.max(1, Math.ceil((total - now) / TPS))) + '.', fill: Math.min(1, now / total) };
     }
     // Is the playhead of a live match at the present? `gap` is the seconds from the playhead to the game's Limit (the last turn that can be played now), `was` whether it was at the present a moment ago and
     // `playing` whether it plays. The Limit moves in steps (a poll brings up to a few seconds of the match at once), so a playhead that follows it, at 1x or faster, is inside the step most of the time:
@@ -111,14 +153,18 @@
         if (typeof gap !== 'number' || !(gap >= 0)) return false;
         return gap < AT_LIVE || (!!was && !!playing && gap < FOLLOW_SLACK);
     }
-    // The words of the tag over a live picture, after "LIVE": waiting for the match while the feed has stopped and the playhead has caught up; "Paused · 0:59 behind"; "about 10 s behind" at the present;
-    // else the speed and how far behind the players. `gap` is the playhead's seconds behind the game's Limit; the picture is LIVE_LAG seconds behind the players at best, so "behind" is gap + LIVE_LAG.
+    // The words of the tag over a live picture, after "LIVE": starting (nothing to show yet); waiting for the next part, with the seconds until the page asks again (`wait`), or for the match when the feed has stopped;
+    // "Paused · 0:59 behind"; at the present: "shown 30 seconds late" for a match that the server shows late (`delay`, in seconds; with how far behind when the playhead has fallen further behind than that: a stop of the
+    // feed that it waited out), else "about 5 s behind"; else the speed and how far behind the players. `behind` is how far behind the match the playhead is, in seconds, when the page knows (the server's numbers and the
+    // clock); when it does not, the playhead's gap behind the game's Limit and the lag of the picture, LIVE_LAG at best.
     function liveTag(o) {
-        var behind = lengthText(Math.round(Math.max(0, o.gap || 0)) + LIVE_LAG) + ' behind';
-        if (o.waiting) return 'waiting for the match';
-        if (o.paused) return 'Paused \u00b7 ' + behind;
-        if (o.at) return 'about ' + LIVE_LAG + ' s behind';
-        return o.speed + ' \u00b7 ' + behind;
+        var behind = typeof o.behind === 'number' && isFinite(o.behind) ? o.behind : Math.max(0, o.gap || 0) + LIVE_LAG;
+        var text = lengthText(Math.round(behind)) + ' behind';
+        if (o.starting) return 'starting';
+        if (o.waiting) return typeof o.wait !== 'number' ? 'waiting for the match' : o.wait >= 0.5 ? 'waiting for the next part \u00b7 ' + Math.round(o.wait) + ' s' : 'waiting for the next part';       // (the seconds are gone when the page's look is out)
+        if (o.paused) return 'Paused \u00b7 ' + text;
+        if (o.at) return o.delay > 0 ? 'shown ' + delayText(o.delay) + ' late' + (typeof o.behind === 'number' && behind > o.delay + 12 ? ' \u00b7 ' + lengthText(Math.round(behind)) + ' behind' : '') : 'about ' + (typeof o.behind === 'number' ? Math.max(1, Math.round(behind)) : LIVE_LAG) + ' s behind';
+        return o.speed + ' \u00b7 ' + text;
     }
     // A player as the list gives it: "Green (Mika)" is the color word and, after the first " (", what the player typed (or "Bot (Medium)" for a computer player); a bare "Green" typed nothing
     function parsePlayer(text) {
@@ -844,7 +890,7 @@
     }
 
     var api = { barPointer: barPointer, barZone: barZone, ZONE_PX: ZONE_PX, ZONE_GAP: ZONE_GAP, gapOf: gapOf, ZONE_REST_PX: ZONE_REST_PX, ZONE_DWELL_MS: ZONE_DWELL_MS, ZONE_LEAVE_MS: ZONE_LEAVE_MS, REWIND_SECONDS: REWIND_SECONDS, rewindTurn: rewindTurn, rewindControl: rewindControl, CAM_KEY: CAM_KEY, CAM_NOTE_MS: CAM_NOTE_MS, camLoad: camLoad, camSave: camSave, camLabel: camLabel, camTitle: camTitle, camNoteDue: camNoteDue, cameraControl: cameraControl, FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
-                lengthText: lengthText, mapKey: mapKey, mapTitle: mapTitle, speedText: speedText, liveVerdict: liveVerdict, atLive: atLive, liveTag: liveTag, parsePlayer: parsePlayer, playersOf: playersOf, chipsOf: chipsOf,
+                lengthText: lengthText, mapKey: mapKey, mapTitle: mapTitle, speedText: speedText, liveVerdict: liveVerdict, tooShort: tooShort, liveInfoOf: liveInfoOf, liveNowTurn: liveNowTurn, liveBehind: liveBehind, delayText: delayText, FEED_MS: FEED_MS, standbyOf: standbyOf, STALL_MS: STALL_MS, HOLD_TURNS: HOLD_TURNS, atLive: atLive, liveTag: liveTag, parsePlayer: parsePlayer, playersOf: playersOf, chipsOf: chipsOf,
                 LOCAL_MAX_BYTES: LOCAL_MAX_BYTES, HEAD_MAX_BYTES: HEAD_MAX_BYTES, crc32: crc32, localSizeOk: localSizeOk, localCheck: localCheck, ownName: ownName, sizeText: sizeText,
                 OWN_KEEP_MS: OWN_KEEP_MS, ownIdOf: ownIdOf, ownRandomId: ownRandomId, ownStore: ownStore, ownStoreOf: ownStoreOf, ownOpen: ownOpen,
                 refusalWords: refusalWords, opener: opener, ownPage: ownPage, ownPageOf: ownPageOf };
