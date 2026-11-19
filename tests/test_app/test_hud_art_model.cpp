@@ -83,6 +83,17 @@ void test_manifest() {
     refused(changed("sheetsize", "sheetsize 0 300"), "a sheet without a width");
     refused(changed("sheet 3", ""), "no sheet for the scale 3");
     refused(changed("sheet 1", "sheet 4 a.png"), "a sheet of the scale 4");
+    refused(changed("sheetsize", "sheetsize 1000 800\nderive2x 0"), "a derive2x of no rows");
+    refused(changed("sheetsize", "sheetsize 1000 800\nderive2x -4"), "a derive2x of a negative number of rows");
+    refused(changed("sheetsize", "sheetsize 1000 800\nderive2x x"), "a derive2x that is not a number");
+    refused(changed("sheetsize", "sheetsize 1000 800\nderive2x 801"), "a derive2x of more rows than the sheet has");
+    refused(changed("sheetsize", "sheetsize 1000 800\nderive2x 40 40"), "a derive2x with two numbers");
+    {
+        Art art;
+        check(art.parse(changed("sheetsize", "sheetsize 1000 800\nderive2x 800")) && art.derived_rows() == 800, "a derive2x of all the rows of the sheet is read");
+        check(art.parse(changed("sheetsize", "sheetsize 1000 800\nderive2x 40")) && art.derived_rows() == 40, "a derive2x names the rows");
+        check(art.parse(joined(small_manifest())) && art.derived_rows() == 0, "a manifest without one derives nothing");
+    }
     refused(changed("sheet 1", "sheet 1 ../a.png"), "a sheet outside the folder");
     refused(changed("sheet 1", "sheet 1 sub/a.png"), "a sheet in a folder");
     refused(changed("sprite card", "sprite card 182 116 0 240 778 136 right"), "a sprite with too few fields");

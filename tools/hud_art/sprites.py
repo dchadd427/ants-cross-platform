@@ -115,7 +115,7 @@ def animations():
     return out
 
 def export(scales=(1, 2, 3)):
-    """renders the catalog, the cursors and the windows: ({scale: {sprite name: RGBA picture of size * scale}}, the catalog's rows, the animations)"""
+    """renders the catalog, the cursors and the windows: ({scale: {sprite name: RGBA picture of size * scale}}, the catalog's rows, the animations, the names of the sprites whose 2x picture the game makes from the 3x one)"""
     cat = catalog()
     # shelf packing on a sheet 1000 wide (the drawing sheet of the browser, not the game's sheet)
     place = []; x = y = rowh = 0
@@ -143,7 +143,7 @@ def export(scales=(1, 2, 3)):
     for k in scales:
         out[k].update(pictures[k])
     import dialogs
-    dpictures, drows, danims = dialogs.export(scales, out)                         # the windows' art (their animations replace the original's window pictures)
+    dpictures, drows, danims, derived = dialogs.export(scales, out)                         # the windows' art (their animations replace the original's window pictures)
     for k in scales:
         out[k].update(dpictures[k])
-    return out, [e for _, _, e in cat] + rows + drows, dict(animations(), **anims, **danims)
+    return out, [e for _, _, e in cat] + rows + drows, dict(animations(), **anims, **danims), derived

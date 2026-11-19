@@ -100,6 +100,8 @@ bool Art::parse(const std::string& manifest) {
             if (w.size() != 3 || !to_int(w[1], canvas_w) || !to_int(w[2], canvas_h) || canvas_w != kReferenceWidth || canvas_h != kReferenceHeight) return fail(where + "the canvas is not 960 x 540");
         } else if (w[0] == "sheetsize") {
             if (w.size() != 3 || !to_int(w[1], sheet_w_) || !to_int(w[2], sheet_h_) || sheet_w_ <= 0 || sheet_h_ <= 0) return fail(where + "a bad sheet size");
+        } else if (w[0] == "derive2x") {
+            if (w.size() != 2 || !to_int(w[1], derived_rows_) || derived_rows_ <= 0) return fail(where + "a bad derive2x record");
         } else if (w[0] == "sheet") {
             int32_t scale = 0;
             if (w.size() != 3 || !to_int(w[1], scale) || scale < 1 || scale > 3 || w[2].find('/') != std::string::npos || w[2].find('\\') != std::string::npos || w[2].find("..") != std::string::npos) return fail(where + "a bad sheet record");
@@ -155,6 +157,7 @@ bool Art::parse(const std::string& manifest) {
     for (int32_t scale : kScales) {
         if (sheets_[static_cast<size_t>(scale - 1)].empty()) return fail("no sheet for the scale " + std::to_string(scale));
     }
+    if (derived_rows_ > sheet_h_) return fail("derive2x names more rows than the sheet has");
     for (const Sprite& s : sprites_) {
         if (s.sheet_x + s.w > sheet_w_ || s.sheet_y + s.h > sheet_h_) return fail("the sprite " + s.name + " is outside its sheet");
     }
@@ -212,12 +215,63 @@ bool Art::sheet_pixels(int32_t scale, DecodedImage& out) const {
     out = DecodedImage{};
     const std::string& file = sheet_file(scale);
     if (!loaded_ || file.empty()) return false;
+    DecodedImage derived;
+    if (scale == 2 && derived_rows_ > 0) {
+        // the first rows are made from the 3x sheet, of which only those rows are decoded; they are made first, so that the 3x rows are gone again before the 2x sheet is decoded
+        std::string bytes3;
+        DecodedImage three;
+        if (!read_file(folder_ + sheet_file(3), bytes3) || !decode_png_rgba(reinterpret_cast<const uint8_t*>(bytes3.data()), bytes3.size(), three, derived_rows_ * 3) ||
+            three.width != sheet_w_ * 3 || !derive_two_thirds(three, derived) || derived.width != sheet_w_ * 2 || derived.height != derived_rows_ * 2) {
+            return false;
+        }
+    }
     std::string bytes;
     if (!read_file(folder_ + file, bytes)) return false;
     if (!decode_png_rgba(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), out)) return false;
     if (out.width != sheet_w_ * scale || out.height != sheet_h_ * scale) {
         out = DecodedImage{};
         return false;
+    }
+    std::copy(derived.rgba.begin(), derived.rgba.end(), out.rgba.begin());
+    return true;
+}
+
+bool derive_two_thirds(const DecodedImage& three, DecodedImage& two) {
+    two = DecodedImage{};
+    if (three.width <= 0 || three.height <= 0 || three.width % 3 != 0 || three.height % 3 != 0 || three.rgba.size() != static_cast<size_t>(three.width) * static_cast<size_t>(three.height) * 4u) return false;
+    static constexpr int32_t kWeight[2][3] = {{2, 1, 0}, {0, 1, 2}};
+    const int32_t blocks_x = three.width / 3;
+    const int32_t blocks_y = three.height / 3;
+    two.width = blocks_x * 2;
+    two.height = blocks_y * 2;
+    two.rgba.assign(static_cast<size_t>(two.width) * static_cast<size_t>(two.height) * 4u, 0);
+    const size_t stride3 = static_cast<size_t>(three.width) * 4u;
+    const size_t stride2 = static_cast<size_t>(two.width) * 4u;
+    for (int32_t by = 0; by < blocks_y; ++by) {
+        for (int32_t bx = 0; bx < blocks_x; ++bx) {
+            const uint8_t* block = three.rgba.data() + static_cast<size_t>(by) * 3u * stride3 + static_cast<size_t>(bx) * 12u;
+            for (int32_t oy = 0; oy < 2; ++oy) {
+                for (int32_t ox = 0; ox < 2; ++ox) {
+                    uint32_t cover = 0;                 // the sum of weight * alpha (at most 9 * 255)
+                    uint32_t sum[3] = {0, 0, 0};        // the sums of weight * alpha * color
+                    for (int32_t sy = 0; sy < 3; ++sy) {
+                        for (int32_t sx = 0; sx < 3; ++sx) {
+                            const uint32_t weight = static_cast<uint32_t>(kWeight[oy][sy] * kWeight[ox][sx]);
+                            if (weight == 0) continue;
+                            const uint8_t* px = block + static_cast<size_t>(sy) * stride3 + static_cast<size_t>(sx) * 4u;
+                            const uint32_t wa = weight * px[3];
+                            cover += wa;
+                            for (size_t c = 0; c < 3; ++c) sum[c] += wa * px[c];
+                        }
+                    }
+                    uint8_t* dst = two.rgba.data() + (static_cast<size_t>(by) * 2u + static_cast<size_t>(oy)) * stride2 + (static_cast<size_t>(bx) * 2u + static_cast<size_t>(ox)) * 4u;
+                    if (cover > 0) {
+                        for (size_t c = 0; c < 3; ++c) dst[c] = static_cast<uint8_t>((2u * sum[c] + cover) / (2u * cover));
+                    }
+                    dst[3] = static_cast<uint8_t>((2u * cover + 9u) / 18u);
+                }
+            }
+        }
     }
     return true;
 }

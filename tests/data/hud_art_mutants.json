@@ -468,6 +468,78 @@
    "build": "test_hud_art",
    "test": "./build/tests/test_app/test_hud_art",
    "expect": "[windows-draw]"
+  },
+  {
+   "id": "derive_weights_flat",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "static constexpr int32_t kWeight[2][3] = {{2, 1, 0}, {0, 1, 2}};",
+   "new": "static constexpr int32_t kWeight[2][3] = {{1, 1, 1}, {1, 1, 1}};",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[derive]"
+  },
+  {
+   "id": "derive_alpha_not_premultiplied",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "const uint32_t wa = weight * px[3];",
+   "new": "const uint32_t wa = weight * 255u;",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[derive]"
+  },
+  {
+   "id": "derive_rounds_down",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "dst[c] = static_cast<uint8_t>((2u * sum[c] + cover) / (2u * cover));",
+   "new": "dst[c] = static_cast<uint8_t>(sum[c] / cover);",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[derive]"
+  },
+  {
+   "id": "derive_only_applies_to_the_3x_sheet",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "if (scale == 2 && derived_rows_ > 0) {",
+   "new": "if (scale == 3 && derived_rows_ > 0) {",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[png]"
+  },
+  {
+   "id": "derive_reads_too_few_rows_of_the_3x_sheet",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "bytes3.size(), three, derived_rows_ * 3)",
+   "new": "bytes3.size(), three, derived_rows_ * 2)",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[png]"
+  },
+  {
+   "id": "derive_rows_may_pass_the_sheet",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "if (derived_rows_ > sheet_h_) return fail(",
+   "new": "if (derived_rows_ > sheet_h_ * 2) return fail(",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[manifest]"
+  },
+  {
+   "id": "derive_of_no_rows_is_a_record",
+   "file": "src/ants_app/hud_art.cpp",
+   "old": "!to_int(w[1], derived_rows_) || derived_rows_ <= 0)",
+   "new": "!to_int(w[1], derived_rows_) || derived_rows_ < 0)",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[manifest]"
+  },
+  {
+   "id": "png_rows_ignored",
+   "file": "src/ants_app/png_decode.cpp",
+   "old": "const uint32_t take = rows > 0 ? static_cast<uint32_t>(rows) : height;",
+   "new": "const uint32_t take = height;",
+   "build": "test_hud_art",
+   "test": "./build/tests/test_app/test_hud_art",
+   "expect": "[png]"
   }
  ]
 }

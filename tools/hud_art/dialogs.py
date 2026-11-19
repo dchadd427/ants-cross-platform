@@ -16,6 +16,7 @@ import dialog_kit as K
 import dialog_pieces as DP
 import dialog_windows as DW
 import orig_anim as OA
+import shrink as SH
 
 SHEET_W = 700                        # the drawing sheet of the browser (not the game's sheet)
 PEDESTALS = (('qh_pedestal_move', 'pedestal_move_up', (217, 201)), ('qh_pedestal_special', 'pedestal_bomb_up', (474, 404)))
@@ -109,8 +110,9 @@ def _fitted(src, k, w, h):
 
 
 def export(scales, images):
-    """renders the windows' sprites: ({scale: {sprite name: RGBA picture of size * scale}}, the manifest rows, the animations). `images` is what the pack has so far (the pedestals and the cursors that
-    the quick help shows are made from it): it must hold scale 3."""
+    """renders the windows' sprites: ({scale: {sprite name: RGBA picture of size * scale}}, the manifest rows, the animations, the names of the sprites whose 2x picture the game makes from the 3x one: all of them).
+    The pictures are rounded to fewer levels where that cannot be seen (shrink.py). `images` is what the pack has so far (the pedestals and the cursors that the quick help shows are made from it):
+    it must hold scale 3."""
     assert 3 in scales, 'the small pedestals are made from the 3x pictures'
     one, layers = _drawings()
     panel = one.pop('_panel')
@@ -166,7 +168,7 @@ def export(scales, images):
         rows.append(_row(name, PEDESTAL_SIZE[0], PEDESTAL_SIZE[1], x, y))
     for cursor, _ in QH_CURSORS:
         assert cursor in images[scales[0]], 'the quick help shows the HUD sprite %s' % cursor
-    return out, rows, _animations(parts)
+    return out, rows, _animations(parts), SH.shrink(out)
 
 
 def _animations(parts):

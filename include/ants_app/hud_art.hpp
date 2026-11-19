@@ -9,6 +9,7 @@
 //     ants-hud-art 1
 //     canvas 960 540
 //     sheetsize <w> <h>                                 the 1x sheet's size (the others are that times the scale)
+//     derive2x <rows>                                   optional: the first <rows> rows of the 2x sheet are not in its file: sheet_pixels makes them from the same rows of the 3x sheet (derive_two_thirds)
 //     sheet <scale> <png file>
 //     sprite <name> <w> <h> <sheet x> <sheet y> <x> <y> <anchor x> <anchor y> [<axis> <start> <tile from> <tile to> <end>]
 //     anim <name> [cursor]                              the original's animation that this set replaces
@@ -115,8 +116,11 @@ public:
     const Animation* find_animation(const std::string& name) const noexcept;
     const std::string& sheet_file(int32_t scale) const;
 
-    /// The pixels of the sheet of a scale, read and decoded from its file. False (what() says why) when the file is missing or damaged, or is not the size that the manifest's sprites need
+    /// The pixels of the sheet of a scale, read and decoded from its file (the first `derive2x` rows of the 2x sheet: made from the 3x sheet, of which only those rows are decoded). False (what() says why)
+    /// when a file is missing or damaged, or is not the size that the manifest's sprites need
     bool sheet_pixels(int32_t scale, DecodedImage& out) const;
+    /// How many rows (canvas pixels, from the top) of the 2x sheet the game makes from the 3x sheet: the lettering of the windows, whose 2x pictures would only repeat the 3x ones (0: none)
+    int32_t derived_rows() const noexcept { return derived_rows_; }
     /// The size of a sheet in canvas pixels (the manifest's sprites end inside it)
     int32_t sheet_width() const noexcept { return sheet_w_; }
     int32_t sheet_height() const noexcept { return sheet_h_; }
@@ -146,6 +150,7 @@ private:
     uint64_t generation_{0};
     int32_t sheet_w_{0};
     int32_t sheet_h_{0};
+    int32_t derived_rows_{0};
     std::vector<Sprite> sprites_;
     std::vector<Animation> animations_;
     std::unordered_map<std::string, int32_t> sprite_index_;
@@ -189,6 +194,11 @@ std::vector<Draw> animation_draws_at(const Art& art, const std::string& name, si
 /// at or above twice the corner's size. The centre tile (opaque: the clay with its tooth) is repeated over the whole rectangle from its top left, the last copy cut; the frame's pieces lie over
 /// it, as overlays: the edges repeated along their sides, the last copy cut, and the four corners. Empty when the set has no panel (has_panel) or the rectangle is smaller than the two corners.
 std::vector<Draw> panel_draws(const Art& art, const LayoutRect& rect);
+
+/// The 2x picture that a 3x picture gives (`derive2x`): every 3 x 3 pixels give 2 x 2, an output pixel covering 3 / 2 source pixels along each axis (the source pixels are weighted 2, 1, 0 for the first
+/// output pixel of a pair and 0, 1, 2 for the second), averaged over premultiplied color, in whole numbers rounded half up (tools/hud_art/derive.py does the same). The width and height of `three`
+/// must be multiples of 3. False (and `two` empty) when they are not
+bool derive_two_thirds(const DecodedImage& three, DecodedImage& two);
 
 /// True when the manifest has all nine pieces of the panel
 bool has_panel(const Art& art) noexcept;
