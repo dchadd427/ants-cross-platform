@@ -67,8 +67,8 @@
   {
    "id": "watch_answers_a_tab_of_a_match_never_listed",
    "file": "web/home/games.js",
-   "old": "sided.indexOf(d.live) !== -1",
-   "new": "true",
+   "old": "(d.side === 'matches' ? matches : sided.indexOf(d.side) !== -1)",
+   "new": "(d.side === 'matches' ? matches : true)",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
@@ -97,6 +97,27 @@
    "file": "web/home/games.js",
    "old": "talk.postMessage({ t: 'here', token: d.token })",
    "new": "talk.postMessage({ t: 'here', token: 'x' })",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "watch_answers_matches_with_no_room_held",
+   "file": "web/home/games.js",
+   "old": "if (holdsRoom()) matches = true;",
+   "new": "matches = true;",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "watch_never_answers_matches",
+   "file": "web/home/games.js",
+   "old": "(d.side === 'matches' ? matches : sided.indexOf(d.side) !== -1)",
+   "new": "(d.side === 'matches' ? false : sided.indexOf(d.side) !== -1)",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "watch_answers_a_matches_tab_for_a_match_only",
+   "file": "web/home/games.js",
+   "old": "(d.side === 'matches' ? matches : sided.indexOf(d.side) !== -1)",
+   "new": "(sided.indexOf(d.side) !== -1)",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {

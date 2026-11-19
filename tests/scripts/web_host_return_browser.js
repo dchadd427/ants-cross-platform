@@ -5,6 +5,8 @@
 //      guest sees the host lead all the time, the room has two people); with no room the same links are plain links of the same tab;
 //   0b. Watch in the Games list (two matches that the stand-in says run now): with no room it is a link of the same tab; with a room it opens a NEW tab, and Home in that tab closes it again and leaves the room's tab
 //      as it was (not reloaded, still "Your room"); with the room's tab closed first, Home in the watch tab goes on as a link to the front page, which takes the seat back;
+//   0c. Matches (the Menu's link): the same tab with no room; with a room a NEW tab, whose Home closes it (also on the page that the tab's own Menu led to) and leaves the room's tab as it was; a Matches page
+//      that a front page tab with no room of its own went to by a plain link is not such a tab (Home loads the front page there at once);
 //   1. the host leaves the front page for the list of matches (the same tab: the browser's own Back, a typed address) and is back within the minute that the room holds a seat: the same seat and the same lead, no strip, nobody joined or left;
 //   2. the host leaves the front page for the list of matches and the person opens the site in a NEW tab within the minute: the new tab takes the same seat back (My room, the lead, no Join in the list for a room
 //      that is the person's own, "Yours"), and the room still has two people, not three;
@@ -83,7 +85,7 @@ function serve(server) {
         if (door.some((p) => url.pathname === p || url.pathname.indexOf(p + '/') === 0)) return through(req, res, server.ports.door);
         if (url.pathname === '/busy') return through(req, res, server.ports.ws);
         if (url.pathname === '/stats') { res.writeHead(404, { 'Content-Type': 'application/json' }); return res.end('{}'); }
-        const alias = { '/': 'lobby.html', '/matches': 'matches.html', '/match': 'match.html', '/play': 'shell.html' };
+        const alias = { '/': 'lobby.html', '/matches': 'matches.html', '/match': 'match.html', '/play': 'shell.html', '/legal': 'legal.html' };
         const file = alias[url.pathname] || url.pathname.replace(/^\/+/, '');
         const full = path.resolve(WEB, file);
         if (full.indexOf(WEB + path.sep) !== 0 || !fs.existsSync(full) || !fs.statSync(full).isFile()) { res.writeHead(404, { 'Content-Type': 'application/json' }); return res.end('{"error":"not here"}'); }
@@ -221,6 +223,62 @@ async function main() {
             const back = await snap(side2);
             check('0b. with the room\'s tab gone Home goes on as a link in the watch tab, and that front page takes the seat back (My room, "Your room")', ctx.pages().length === 1 && back.mine !== null && back.heading === 'Your room', JSON.stringify(back));
             site.setLive(null);
+            await ctx.close();
+        }
+        // ---- 0c. Matches: the same tab with no room; a new tab with a room, whose Home closes it (also on the page that its Menu led to) -------------------------------------------------------------------------------
+        {
+            const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+            const home = (page) => page.locator('header.sb a[href="/"]:visible').first();
+            const matchesLink = async (page, bar) => { await page.click(bar + ' .hmenu'); await sleep(200); return page.locator('.hmenubox a.mitem[href="/matches"]'); };
+            const plain = await ctx.newPage(); watch(plain);
+            await plain.goto(site.url + '/', { waitUntil: 'load' });
+            await plain.waitForSelector('.hbar', { timeout: 8000 });
+            const link = await matchesLink(plain, '.hbar');
+            check('0c. with no room the Menu\'s Matches is a plain link', (await link.getAttribute('target')) === null);
+            await Promise.all([plain.waitForURL(/\/matches/, { timeout: 8000 }), link.click()]);
+            await plain.waitForSelector('header.sb', { timeout: 8000 });
+            await sleep(500);
+            const began = Date.now();
+            await Promise.all([plain.waitForURL((u) => new URL(u).pathname === '/', { timeout: 5000 }), home(plain).click()]);
+            check('0c. ... a press goes to Matches in this very tab, and Home there loads the front page in it at once (no other tab)', ctx.pages().length === 1 && Date.now() - began < 2000);
+            await plain.close();
+            const A = await host(ctx, site); watch(A.page);
+            await A.page.evaluate(() => { window.__same = 'the room\'s own page'; });
+            await A.page.click('.rbar .rhome');
+            await sleep(400);
+            const inRoom = await matchesLink(A.page, '.hbar');
+            const [tab] = await Promise.all([ctx.waitForEvent('page'), inRoom.click()]);
+            watch(tab);
+            await tab.waitForSelector('header.sb', { timeout: 8000 });
+            await sleep(500);
+            check('0c. with a room the press opens Matches in another tab', new URL(tab.url()).pathname === '/matches' && ctx.pages().length === 2);
+            const gone = new Promise((resolve) => tab.once('close', () => resolve(true)));
+            await home(tab).click().catch(() => {});
+            check('0c. Home on the Matches page closes that tab', (await Promise.race([gone, sleep(3000).then(() => false)])) === true && ctx.pages().length === 1);
+            const kept = await A.page.evaluate(() => ({ same: window.__same, nav: performance.getEntriesByType('navigation').map((n) => n.type).join(), path: location.pathname }));
+            check('0c. ... the room\'s tab was neither reloaded nor navigated, and it is still "Your room"', kept.same === 'the room\'s own page' && kept.nav === 'navigate' && kept.path === '/' && (await snap(A.page)).heading === 'Your room', JSON.stringify(kept));
+            const again = await matchesLink(A.page, '.hbar');
+            const [tab2] = await Promise.all([ctx.waitForEvent('page'), again.click()]);
+            watch(tab2);
+            await tab2.waitForSelector('header.sb', { timeout: 8000 });
+            await sleep(500);
+            await tab2.click('header.sb .sbtn');
+            await Promise.all([tab2.waitForURL(/\/legal/, { timeout: 8000 }), tab2.click('#sbm a[href="/legal"]')]);
+            await tab2.waitForSelector('header.sb', { timeout: 8000 });
+            await sleep(500);
+            const gone2 = new Promise((resolve) => tab2.once('close', () => resolve(true)));
+            await home(tab2).click().catch(() => {});
+            check('0c. a page that the tab\'s Menu led to (Legal) is such a tab too: its Home closes the tab, and the room\'s tab is the same page', (await Promise.race([gone2, sleep(3000).then(() => false)])) === true && ctx.pages().length === 1 && (await A.page.evaluate(() => window.__same)) === 'the room\'s own page');
+            const own = await ctx.newPage(); watch(own);                                     // (the person's own tab: it went to Matches by a plain link of its own, while the room's tab holds a room)
+            await own.goto(site.url + '/', { waitUntil: 'load' });
+            await own.waitForSelector('.hbar', { timeout: 8000 });
+            const plainLink = await matchesLink(own, '.hbar');
+            await Promise.all([own.waitForURL(/\/matches/, { timeout: 8000 }), plainLink.click()]);
+            await own.waitForSelector('header.sb', { timeout: 8000 });
+            await sleep(500);
+            const began2 = Date.now();
+            await Promise.all([own.waitForURL((u) => new URL(u).pathname === '/', { timeout: 5000 }), home(own).click()]);
+            check('0c. a Matches page that a front page tab with no room went to by a plain link is not such a tab: Home loads the front page there at once, and closes nothing', ctx.pages().length === 2 && Date.now() - began2 < 2000);
             await ctx.close();
         }
         // ---- 1. back within the minute, in the same tab: the same seat and the same lead -------------------------------------------------------------------------------------------------------------------

@@ -27,7 +27,7 @@
     var ROWS_MAX = 50;                                   // rows that are shown (the server lists 50 at most: the count says "50+")
     var REFRESH_MS = 600000;                             // a public room that the leader looks at says "public" again every 10 minutes (the server's idle rule is 30)
     var ACTIVE_MS = 1200000;                             // a leader who touched nothing (pointer, key, touch) for this long is not at the Room: the repeat stops
-    var WATCH_CHANNEL = 'ants-watch', WATCH_SEEN = 50;   // the channel on which a watch tab asks for this page (web/game_bar.js); the matches that were listed while the page held a room: this many are remembered
+    var WATCH_CHANNEL = 'ants-watch', WATCH_SEEN = 50;   // the channel on which a tab that this page opened asks for it (web/site_nav.js); the matches that were listed while the page held a room: this many are remembered
     var ASK_MS = 10000;                                  // a Private that was asked for is told from a room that went private by itself for this long
     var TRIES_MAX = 3, TRY_GAP_MS = 300;                 // Quick join tries this many rooms, one after the other, with a wait of 0 to this many ms (random) between two
     var JOINED_MS = 1500;                                // the card "Joined Pebble's room" stands this long, then the Room shows (a press on its button is quicker)
@@ -150,7 +150,7 @@
         var tracked = null, lastRoom = null, lastSent = 0, refreshTimer = null, refreshFor = null, pending = null, pendingTimer = null, askedAt = 0, locked = false, lockTimer = null, hint = '', lastInput = now(), lastLook = 0, floorTimer = null, joinSeq = 0, cancelTimer = null, paintedSig = null;
         var dialog = null, noticeKind = '', quiet = [], finding = false;
         var live = [], liveLoaded = false, liveOff = false, liveFails = 0, liveTimer = null, liveBusy = false, liveRound = 0, lastLive = 0, liveSig = null, liveLens = [];
-        var sided = [], talk = null;                                    // sided: the ids of matches whose Watch the page showed while it held a room; talk: the channel of the watch tabs
+        var sided = [], matches = false, talk = null;                   // sided: the ids of matches whose Watch the page showed while it held a room; matches: it held a room, so its Matches links were new tabs; talk: the channel of those tabs
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -525,8 +525,8 @@
             return li;
         }
         function holdsRoom() { try { return !!(page.holds && page.holds()); } catch (e) { return false; } }
-        // Watch is a plain link of this tab; while the page holds a room it is a new tab (leaving would give the seat up), and that tab is told apart by the match's id: a watch tab asks on the channel (web/game_bar.js)
-        // and this page answers for a match that it listed while it held a room, so the tab's Home closes the tab and never loads a second front page. The press decides again, whatever was drawn.
+        // A link that plays or watches something is a plain link of this tab; while the page holds a room it is a new tab (leaving would give the seat up): Watch here, the Matches links in home.js. Such a tab asks on the channel
+        // (web/site_nav.js) and this page answers for a match that it listed, or for Matches, while it held a room, so the tab's Home closes the tab and never loads a second front page. The press decides again, whatever was drawn.
         function markWatch(link, id) {
             if (!holdsRoom()) { link.removeAttribute('target'); link.removeAttribute('rel'); return; }
             link.setAttribute('target', '_blank'); link.setAttribute('rel', 'noopener');
@@ -536,7 +536,7 @@
             if (talk || typeof win.BroadcastChannel !== 'function') return;
             try {
                 talk = new win.BroadcastChannel(WATCH_CHANNEL);
-                talk.onmessage = function (m) { var d = m && m.data; if (!gone && d && d.t === 'back' && typeof d.token === 'string' && sided.indexOf(d.live) !== -1) { try { talk.postMessage({ t: 'here', token: d.token }); } catch (e) { /* none */ } } };
+                talk.onmessage = function (m) { var d = m && m.data; if (!gone && d && d.t === 'back' && typeof d.token === 'string' && (d.side === 'matches' ? matches : sided.indexOf(d.side) !== -1)) { try { talk.postMessage({ t: 'here', token: d.token }); } catch (e) { /* none */ } } };
             } catch (e) { talk = null; }
         }
         // One match that runs now: the map's square, the map (the room's host is not known: the door carries no room), a red Live mark (and the tag 187 beside it for a match of mode 187), the players (a dot of their color and their names) and how long it has run; Watch opens the
@@ -863,7 +863,7 @@
         if (toastWatch) toastWatch.observe(doc.body, { attributes: true, subtree: true, attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden'] });       // (the list is drawn or covered again: the looks at /live follow; a phone's view, the chat's fold or one of the page's strips changes: the toast is placed again)
         doc.addEventListener('focusin', guard(function (e) { if (e && e.target && !toast.contains(e.target)) lastFocus = e.target; }));       // (where the focus was before it went to the toast)
 
-        function sync() { track(client()); paintVis(); armRefresh(); paintPill(); liveLens.forEach(function (l) { markWatch(l.link, l.id); }); if (isOpen) { paintList(); place(); } }
+        function sync() { track(client()); paintVis(); armRefresh(); paintPill(); if (holdsRoom()) matches = true; liveLens.forEach(function (l) { markWatch(l.link, l.id); }); if (isOpen) { paintList(); place(); } }
         function shown(name) {
             if (name === 'room') { closeAll(); placeVis(); scheduleLive(); } else { poll(); pollLive(); }
             sync();

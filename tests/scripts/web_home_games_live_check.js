@@ -138,7 +138,8 @@ const M = 'TREASURE.LVL';
 }
 
 // ---- 2b. which tab Watch uses, and the watch tab that asks for this page ----
-// The watch tab (web/game_bar.js) asks on the channel "ants-watch" for the page that opened it; this page answers for a match that it listed while it held a room. A fake of the browser's channel: a message goes to every other
+// A tab that this page opened (web/site_nav.js: a live view, or Matches) asks on the channel "ants-watch" for the page that opened it; this page answers for a match that it listed while it held a room, and for Matches
+// once it has held a room. A fake of the browser's channel: a message goes to every other
 // channel of the same name that is open (it is not given to the one that sent it, as in a browser).
 function channels() {
     const open = [];
@@ -149,11 +150,11 @@ function channels() {
     }
     return { Channel, open };
 }
-// a watch tab: asks for the page that opened it (ask returns how many answers came back for that token: an answer goes to every channel, and a tab takes only the one that carries its own token)
-function watchTab(bus, live) {
+// a tab that this page opened: asks for the page that opened it, by a match's id or "matches" (ask returns how many answers came back for that token: an answer goes to every channel, and a tab takes only the one that carries its own token)
+function watchTab(bus, side) {
     const tab = new bus.Channel('ants-watch'), heard = [];
     tab.onmessage = (m) => heard.push(m.data);
-    return { heard, ask: (token) => { tab.postMessage({ t: 'back', live, token }); return heard.filter((m) => m.token === token).length; } };
+    return { heard, ask: (token) => { tab.postMessage({ t: 'back', side, token }); return heard.filter((m) => m.token === token).length; } };
 }
 {
     const ID = 'TREASURE-20261109-120000Z', OTHER = 'ISLANDS-20261109-115900Z';
@@ -178,7 +179,16 @@ function watchTab(bus, live) {
     same('the room is left: Watch is a plain link again at once', outTab(link()), [null, null]);
     same('... and the page still answers for the match that it listed while it held a room (the watch tab that is open goes back to this very tab)', tab.ask('t6'), 1);
     check('none of it reloaded or navigated this page', env.reloads === 0 && env.assigned.length === 0 && env.opened.length === 0);
+    const asked = watchTab(bus, 'matches');
+    same('Matches (the Menu\'s link of home.js: a new tab while a room is held) is answered for once the page has held a room, also after the room was left', asked.ask('m1'), 1);
     check('(a press that comes while the page holds a room decides then: the link is a new tab at the press, whatever was drawn)', (() => { myRoom(env, ['Maya'], R.PRIVATE); link().removeAttribute('target'); link().removeAttribute('rel'); link().click(); return outTab(link()).join() === '_blank,noopener'; })());
+}
+{   // Matches: a page that never held a room answers nobody for it (its Matches links are plain links of the same tab)
+    const bus = channels();
+    const env = await livePage({ options: { win: { BroadcastChannel: bus.Channel } } });
+    same('a page that has held no room answers a Matches tab nobody, and a tab with no key nobody', [watchTab(bus, 'matches').ask('m0'), watchTab(bus, '').ask('m2'), watchTab(bus, undefined).ask('m3')], [0, 0, 0]);
+    myRoom(env, ['Maya'], R.PRIVATE);
+    same('... and answers it once it holds one', watchTab(bus, 'matches').ask('m4'), 1);
 }
 {   // START reaches the page: it leaves, so it answers nobody
     const bus = channels();
@@ -187,8 +197,9 @@ function watchTab(bus, live) {
     env.roomBar('rhome').click();
     await wait(env, 1000);
     const tab = watchTab(bus, 'TREASURE-20261109-120000Z'), before = tab.ask('a');
+    const matches = watchTab(bus, 'matches'), beforeMatches = matches.ask('c');
     sock.receive(roomMessage(seatsOf(['Pebble', 'Maya']), { you: 1, leader: 0, flags: STARTING }));
-    same('a guest holds a room too: a watch tab is answered; once START is on its way the page answers nobody', [before, tab.ask('b')], [1, 0]);
+    same('a guest holds a room too: a watch tab and a Matches tab are answered; once START is on its way the page answers nobody', [before, tab.ask('b'), beforeMatches, matches.ask('d')], [1, 0, 1, 0]);
 }
 {   // a browser with no channel, a channel that refuses: nothing breaks, Watch is the same as ever
     const none = await livePage({ options: { win: { BroadcastChannel: undefined } } });
