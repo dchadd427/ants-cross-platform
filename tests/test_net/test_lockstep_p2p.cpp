@@ -134,6 +134,10 @@ void run_message_tests() {
         for (const CommandType t : {CommandType::Hatch, CommandType::AllianceInvite, CommandType::Quit, CommandType::Drop, CommandType::None}) {      // (only what a prediction can use)
             HintMsg odd = hint;
             odd.command.type = t;
+            odd.command.ants.clear();                                                // (a command of these kinds has no ants: it is a command that decodes, and still no hint)
+            odd.command.tile_x = 0;
+            odd.command.tile_y = 0;
+            odd.command.other_player = 255;
             ASSERT_FALSE(decode(encode(odd), back));
         }
         HintMsg zero = hint;

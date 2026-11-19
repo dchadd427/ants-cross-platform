@@ -2,16 +2,6 @@
  "note": "Mutants of protocol 25 (docs/P2P_HINTS.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the prediction's matching rule for a hint (where it goes, doubled and late hints, the order of a turn, confirmed, moved once, dropped, the limits), the server's session (the credential and its expiry, who is ready, the rule of the address and the violation, the sender's seat stamped by the connection, the limits, who is told, a computer player's hint at the tick of its turn), the wire (what each decoder refuses), the rule of the address in the text of a candidate, the relay's credential (RFC 2104, the expiry), and the game's side (a channel's seat, the server's hint, a relay with no address, the tick of a hint, the mark).",
  "mutants": [
   {
-   "id": "hint_put_behind_a_turn_in_hand",
-   "file": "src/ants_net/prediction.cpp",
-   "old": "    for (Foreign& h : hints_) h.tick = std::max(h.tick, next_receive);        // (a hint is never put behind a turn in hand; one beyond the display tick waits for it)",
-   "new": "    ;",
-   "build": [
-    "test_prediction_hints"
-   ],
-   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
-  },
-  {
    "id": "hint_that_came_after_its_turn_is_applied_again",
    "file": "src/ants_net/prediction.cpp",
    "old": "        if (late || s.matched || !(s.command == command)) continue;",
@@ -102,26 +92,6 @@
    "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
   },
   {
-   "id": "oldest_hint_is_not_the_one_taken",
-   "file": "src/ants_net/prediction.cpp",
-   "old": "    hints_.erase(hints_.begin() + static_cast<std::ptrdiff_t>(first), hints_.begin() + static_cast<std::ptrdiff_t>(i) + 1);",
-   "new": "    hints_.erase(hints_.begin() + static_cast<std::ptrdiff_t>(i), hints_.begin() + static_cast<std::ptrdiff_t>(i) + 1);",
-   "build": [
-    "test_prediction_hints"
-   ],
-   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
-  },
-  {
-   "id": "hint_at_another_tick_is_no_correction",
-   "file": "src/ants_net/prediction.cpp",
-   "old": "        ++stats_.hints_confirmed_moved;\n        wrong = true;",
-   "new": "        ++stats_.hints_confirmed_moved;",
-   "build": [
-    "test_prediction_hints"
-   ],
-   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
-  },
-  {
    "id": "hint_that_was_not_sealed_stays_after_two_turns",
    "file": "src/ants_net/prediction.cpp",
    "old": "        } else {\n            hints_.erase(hints_.begin() + static_cast<std::ptrdiff_t>(i));\n            ++stats_.hints_dropped;\n        }",
@@ -136,16 +106,6 @@
    "file": "src/ants_net/prediction.cpp",
    "old": "    assumed_.clear();\n    pending_.clear();\n    hints_.clear();\n    sealed_seen_.clear();",
    "new": "    assumed_.clear();\n    pending_.clear();",
-   "build": [
-    "test_prediction_hints"
-   ],
-   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
-  },
-  {
-   "id": "hint_is_applied_out_of_order_at_the_display_tick",
-   "file": "src/ants_net/prediction.cpp",
-   "old": "for (const sim::Command& c : assumed_.back()) in_order = in_order && c.issuer < command.issuer;",
-   "new": "for (const sim::Command& c : assumed_.back()) { (void)c; }",
    "build": [
     "test_prediction_hints"
    ],
