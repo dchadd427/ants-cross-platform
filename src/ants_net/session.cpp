@@ -147,10 +147,12 @@ void HostSession::send_turns(Connection* conn, uint32_t from_turn, uint32_t to_t
     }
 }
 
-void HostSession::submit_local(sim::Command command) {
-    if (!started_ || seatless()) return;
+bool HostSession::submit_local(sim::Command command) {
+    if (!started_ || seatless()) return false;
     command.issuer = cfg_.host_player;
-    if (sequencer_.submit(cfg_.host_player, command)) delay_.on_sent(command);     // (a refused command never reaches a turn: nothing to measure)
+    if (!sequencer_.submit(cfg_.host_player, command)) return false;                // (a refused command never reaches a turn: nothing to measure, nothing to predict)
+    delay_.on_sent(command);
+    return true;
 }
 
 void HostSession::chat_local(const std::string& text, bool team) {

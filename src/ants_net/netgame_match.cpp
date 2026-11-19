@@ -90,8 +90,8 @@ void NetGame::drop_prediction() {
     if (on_prediction_dropped_) on_prediction_dropped_();
 }
 
-// Once per update: there is a prediction only where it is wanted (it is made here, when the match plays and the user asked for it, and destroyed when the user switches it off: a default
-// match never has one), and it is on only while the match simply follows the live stream. Every state in which the confirmed engine does not (a pause, a catch-up, a rejoin, a host
+// Once per update: there is a prediction only where it is wanted (it is made here, when the match plays and the game was not told --no-prediction, and destroyed when it is switched off: a match
+// that is told not to predict never has one), and it is on only while the match simply follows the live stream. Every state in which the confirmed engine does not (a pause, a catch-up, a rejoin, a host
 // change, a desync) and the application's switch turn it off; it begins again with the first tick after they are gone.
 // A pause is the runner's `held` (the sessions hold it for as long as the match is paused: a seat that is away, the countdown that follows), and a host change, a rejoin and the like are a
 // client session that is not in its Normal mode: the sessions' own `paused()` and `electing()` say the same thing and are not asked again.
@@ -254,7 +254,7 @@ sim::CommandResult NetGame::submit(const sim::Command& command) {
     sim::Command c = command;
     c.issuer = seat_;
     if (host_session_) {
-        host_session_->submit_local(c);
+        if (!host_session_->submit_local(c)) return sim::CommandResult{};                       // refused at once (the sequencer's flood limits): Ignored, and nothing is predicted
     } else if (!client_session_ || !client_session_->submit(c)) {
         return sim::CommandResult{};                                                            // no host to send it to (a new one is being chosen): Ignored
     }

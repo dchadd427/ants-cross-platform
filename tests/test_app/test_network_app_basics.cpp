@@ -1490,7 +1490,7 @@ void run_guest_tests() {
         ASSERT_TRUE(trio.until([&]() { return app.hud().alliance_dialog() == HUD::AllianceDialog::Waiting; }, 5000));
         ASSERT_EQ(app.hud().alliance_dialog_team(), 1);
         ASSERT_EQ(app.hud().alliance_dialog_text(), "Waiting for Bob (Red) to respond to your offer to team up.");
-        ASSERT_EQ(bob.sim.get_world_state().pending_invite_from[1], 2);                   // Bob's simulation holds the offer as well
+        ASSERT_TRUE(trio.until([&]() { return bob.sim.get_world_state().pending_invite_from[1] == 2; }, 3000));      // Bob's simulation holds the offer as well (the dialog follows the engine that is shown: it can stand ahead of Bob's by the turns in hand)
         // Bob refuses: the waiting dialog closes, the status line says so
         Command deny;
         deny.type = CommandType::AllianceDeny;

@@ -310,18 +310,6 @@ bool parse_switch(const std::string& text, bool& out) {
     return false;
 }
 
-// --prediction, else the settings' key `prediction` ("on" or "off": a key that the owner of the settings file writes, nothing in the game does), else off. A settings file never stops the game: a
-// value that is not a switch is reported and ignored.
-void Application::choose_prediction() {
-    prediction_wanted_ = config_.prediction;
-    if (!config_.prediction_given && config_store_.has("prediction")) {
-        const std::string text = config_store_.get_string("prediction", "", 16);
-        bool from_settings = true;
-        if (parse_switch(text, from_settings)) prediction_wanted_ = from_settings;
-        else std::cerr << "[Application] settings: prediction=" << text << " needs on or off (ignored)" << std::endl;
-    }
-}
-
 // 0x10122d4: the stamp is the C runtime's `_strdate` ("mm/dd/yy") and `_strtime` ("hh:mm:ss") joined by " @ " (the format string "%s @ %s\n\n")
 std::string Application::transcript_stamp(std::time_t time) {
     char date[16] = {0};

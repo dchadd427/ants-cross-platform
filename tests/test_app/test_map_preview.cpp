@@ -307,6 +307,21 @@ void test_filter(const assets::AssetArchive& arc) {
             src.rgba = image.rgba;
             check_against_oracle(src, 300, 300, "the world of GAUNTLET");
             check_against_oracle(src, 248, 248, "the world of GAUNTLET");
+            // The slide of an ant of the live match (the renderer's ViewGlide: an ant that the prediction moved is drawn a little away from its place for a moment) is not this picture's: a
+            // preview made while an ant with the same number slides is the same picture, and the live match's slide is still there afterwards
+            const sim::WorldState with_ants = eng.get_world_state();
+            check(!with_ants.ants.empty(), "the world of GAUNTLET has ants");
+            if (!with_ants.ants.empty()) {
+                WorldImage plain;
+                WorldImage sliding;
+                check(rig.renderer.render_world_image(level, with_ants, eng.grid(), plain, &why) && plain.valid(), "the world image with its ants is made: " + why);
+                rig.renderer.view_glide().add(with_ants.ants.front().id, 40, 0);
+                check(rig.renderer.render_world_image(level, with_ants, eng.grid(), sliding, &why) && sliding.valid(), "... and again while an ant of the live match slides: " + why);
+                check(plain.rgba != image.rgba, "the ants are in the picture");
+                check(sliding.rgba == plain.rgba, "the picture of the map does not draw the live match's slide");
+                check(rig.renderer.view_glide().size() == 1, "the live match's slide is kept");
+                rig.renderer.view_glide().clear();
+            }
         }
     }
     // flat colors stay exactly what they are, every value of every channel, through fractional weights too
