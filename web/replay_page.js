@@ -15,7 +15,7 @@
     var HOLD_TURNS = 40;        // the turns that the game keeps back from the end of what it holds while it follows a match (kLiveHoldTurns in include/ants_app/replay_view.hpp)
     var KEEP_TURNS = 600;       // a match that ran less than this (30 seconds) is never kept as a replay
     var FEED_MS = 2000;         // the page asks for the match again this often: the game keeps two seconds back from the end of what it holds, so a look every two seconds is what lets the picture play on without a stop
-    var STALL_MS = 1500;        // a playhead that has stood at the end of what it holds this long, with the match not over, is waiting for the next part
+    var STALL_MS = 3500;        // a playhead that has stood at the end of what it holds this long, with the match not over, is waiting for the next part (the parts come every 2 s, a second of the server's cache and a second of nginx's make it 3: a shorter wait is the usual gap between two parts)
     var AT_LIVE = 1.5;          // a playhead that is less than this many seconds behind the game's Limit is at the present
     var FOLLOW_SLACK = 8;       // ... and one that follows the match stays there while it is less than this behind: the snapshots come in steps (a poll brings up to 7 s of the match at once)
     var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -154,15 +154,16 @@
         return gap < AT_LIVE || (!!was && !!playing && gap < FOLLOW_SLACK);
     }
     // The words of the tag over a live picture, after "LIVE": starting (nothing to show yet); waiting for the next part, with the seconds until the page asks again (`wait`), or for the match when the feed has stopped;
-    // "Paused · 0:59 behind"; at the present: "shown 30 seconds late" for a match that the server shows late (`delay`, in seconds), else "about 5 s behind"; else the speed and how far behind the players. `behind` is how far
-    // behind the match the playhead is, in seconds, when the page knows (the server's numbers and the clock); when it does not, the playhead's gap behind the game's Limit and the lag of the picture, LIVE_LAG at best.
+    // "Paused · 0:59 behind"; at the present: "shown 30 seconds late" for a match that the server shows late (`delay`, in seconds; with how far behind when the playhead has fallen further behind than that: a stop of the
+    // feed that it waited out), else "about 5 s behind"; else the speed and how far behind the players. `behind` is how far behind the match the playhead is, in seconds, when the page knows (the server's numbers and the
+    // clock); when it does not, the playhead's gap behind the game's Limit and the lag of the picture, LIVE_LAG at best.
     function liveTag(o) {
         var behind = typeof o.behind === 'number' && isFinite(o.behind) ? o.behind : Math.max(0, o.gap || 0) + LIVE_LAG;
         var text = lengthText(Math.round(behind)) + ' behind';
         if (o.starting) return 'starting';
-        if (o.waiting) return typeof o.wait === 'number' ? 'waiting for the next part \u00b7 ' + Math.max(1, Math.round(o.wait)) + ' s' : 'waiting for the match';
+        if (o.waiting) return typeof o.wait !== 'number' ? 'waiting for the match' : o.wait >= 0.5 ? 'waiting for the next part \u00b7 ' + Math.round(o.wait) + ' s' : 'waiting for the next part';       // (the seconds are gone when the page's look is out)
         if (o.paused) return 'Paused \u00b7 ' + text;
-        if (o.at) return o.delay > 0 ? 'shown ' + delayText(o.delay) + ' late' : 'about ' + (typeof o.behind === 'number' ? Math.max(1, Math.round(behind)) : LIVE_LAG) + ' s behind';
+        if (o.at) return o.delay > 0 ? 'shown ' + delayText(o.delay) + ' late' + (typeof o.behind === 'number' && behind > o.delay + 12 ? ' \u00b7 ' + lengthText(Math.round(behind)) + ' behind' : '') : 'about ' + (typeof o.behind === 'number' ? Math.max(1, Math.round(behind)) : LIVE_LAG) + ' s behind';
         return o.speed + ' \u00b7 ' + text;
     }
     // A player as the list gives it: "Green (Mika)" is the color word and, after the first " (", what the player typed (or "Bot (Medium)" for a computer player); a bare "Green" typed nothing

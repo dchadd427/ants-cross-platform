@@ -449,7 +449,7 @@ def main():
             open_page(tab, "/play?live=" + ID)
             until(tab, READY)
             tab.ev(at_the_limit)
-            check(until(tab, "/^waiting for the next part \u00b7 [12] s$/.test(" + TAG + ")", 6) is True, "(c) the tag says that it waits for the next part and in how many seconds (%r)" % tab.ev(TAG))
+            check(until(tab, "/^waiting for the next part( \u00b7 [12] s)?$/.test(" + TAG + ")", 9) is True, "(c) the tag says that it waits for the next part and in how many seconds (%r)" % tab.ev(TAG))
             check(tab.ev(NOTE) == "Waiting for the next part\u2026", "(c) a note over the picture says so (%r)" % tab.ev(NOTE))
             check(tab.ev("(" + SHOWN + ")('b-play')") is True and tab.ev("document.getElementById('b-play').getAttribute('aria-label')") == "Pause", "(c) the match is only waiting: Pause is still there")
             shot(tab, "waiting")
