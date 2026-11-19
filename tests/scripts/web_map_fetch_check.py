@@ -261,7 +261,7 @@ def main():
             # a third browser watches the match live: a recording of a community map
             live_id = wait_for(lambda: next((m["id"] for m in json.load(urllib.request.urlopen("http://127.0.0.1:%d/live" % door_port, timeout=5)).get("live", []) if m.get("map") == MATCH), None), 120, 2.0)
             if not live_id:
-                print("  note: the match has not been on the live board for 120 s (a match is listed after it has run 30 s)")
+                print("  note: the match has not been on the live board for 120 s (a match is listed from its start)")
             check(bool(live_id), "the match is on the server's live board")
             if live_id:
                 w = MapPlayer(chrome, "Watcher", 0, web, args.ready_timeout)

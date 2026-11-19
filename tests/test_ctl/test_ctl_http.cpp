@@ -1148,7 +1148,7 @@ void run_http_tests() {
         // a name or a value that is not safe is left out; the answer is not lost, and nothing starts a header of its own
         const std::vector<std::pair<std::string, std::string>> bad = {
             {"X-Ok\r\nX-Evil: 1", "v"}, {"X-Ok\nX-Evil", "v"}, {"X-A b", "v"}, {"X-A:b", "v"}, {"X-", "v"}, {"", "v"}, {"Content-Length", "5"}, {"Cache-Control", "max-age=999"}, {"Connection", "keep-alive"},
-            {"Content-Type", "text/html"}, {"Set-Cookie", "a=b"}, {"x-lower", "v"}, {"X-" + std::string(40, 'a'), "v"}, {"X-caf\xC3\xA9", "v"},
+            {"Content-Type", "text/html"}, {"Set-Cookie", "a=b"}, {"x-lower", "v"}, {"X-Content-Type-Options", "sniff"}, {"X-CONTENT-TYPE-OPTIONS", "sniff"}, {"X-" + std::string(40, 'a'), "v"}, {"X-caf\xC3\xA9", "v"},
             {"X-Value", "a\r\nX-Evil: 1"}, {"X-Value", "a\nb"}, {"X-Value", "tab\there"}, {"X-Value", ""}, {"X-Value", "caf\xC3\xA9"}, {"X-Value", std::string(300, 'v')}};
         for (const auto& header : bad) {
             HttpResponse resp;
@@ -1161,6 +1161,10 @@ void run_http_tests() {
             ASSERT_MSG(r.header("cache-control") != nullptr && *r.header("cache-control") == "no-store" && r.header("content-length") != nullptr && *r.header("content-length") == "2", why);
             ASSERT_MSG(r.header("connection") != nullptr && *r.header("connection") == "close" && r.header("content-type") != nullptr && *r.header("content-type") == "application/json", why);
             ASSERT_MSG(r.header("set-cookie") == nullptr && r.header("x-value") == nullptr, why);
+            ASSERT_MSG(r.header("x-content-type-options") != nullptr && *r.header("x-content-type-options") == "nosniff", why);
+            size_t own_headers = 0;
+            for (size_t at = r.raw.find("ontent-Type-Options"); at != std::string::npos; at = r.raw.find("ontent-Type-Options", at + 1)) ++own_headers;
+            ASSERT_MSG(own_headers == 1, why);                                                      // (the server's own, once, whatever case the handler spelled it in)
         }
     } TEST_END();
 

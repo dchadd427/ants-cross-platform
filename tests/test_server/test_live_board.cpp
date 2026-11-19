@@ -127,7 +127,7 @@ struct Rec {
             c.issuer = 0;
             c.tile_x = static_cast<int16_t>(rec->turns());
             c.tile_y = 3;
-            c.ants = {1};
+            c.ants.push_back(1);                                                   // (not `= {1}`: GCC 13 at -O3 takes an assignment of a list to an empty vector for a copy into a null pointer, -Werror=nonnull)
             rec->on_command(c);
             rec->on_tick(f.engine);
         }

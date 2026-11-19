@@ -23,7 +23,7 @@
    "id": "delay_never",
    "file": "src/ants_server/live_board.cpp",
    "old": "match.delay_turns = people >= kDelayMinPeople ? delay_s_ * static_cast<uint32_t>(net::kTurnsPerSecond) : 0u;",
-   "new": "match.delay_turns = 0u;",
+   "new": "match.delay_turns = people >= kDelayMinPeople ? 0u : 0u;",
    "build": "test_live_board",
    "test": "timeout 900 ./build/tests/test_server/test_live_board",
    "expect": "LB1.9"
@@ -140,7 +140,7 @@
    "id": "the_list_pushes_old_matches_off",
    "file": "src/ants_server/live_board.cpp",
    "old": "if (!listed(*it) || (it->recorder->turns() >= kReplayMinTurns) != old) continue;",
-   "new": "if (!listed(*it)) continue;",
+   "new": "if (!listed(*it) || !old) continue;",
    "build": "test_live_board",
    "test": "timeout 900 ./build/tests/test_server/test_live_board",
    "expect": "LB1.2b"
@@ -230,7 +230,7 @@
    "id": "the_door_gives_no_header",
    "file": "src/ants_server/control.cpp",
    "old": "        r.headers.emplace_back(\"X-Ants-Live\",",
-   "new": "        (void)(\"X-Ants-Live\",",
+   "new": "        r.headers.emplace_back(\"X-Ants-Other\",",
    "build": "test_server",
    "test": "timeout 1500 env ANTS_TEST_FILTER=S3.176 ./build/tests/test_server/test_server",
    "expect": "S3.176"
@@ -249,6 +249,15 @@
    "file": "src/ants_ctl/http.cpp",
    "old": "if (safe_extra_header_name(header.first) && safe_header_value(header.second)) extra +=",
    "new": "if (safe_extra_header_name(header.first)) extra +=",
+   "build": "test_ctl",
+   "test": "timeout 900 ./build/tests/test_ctl/test_ctl",
+   "expect": "CTL2.18b"
+  },
+  {
+   "id": "a_handler_can_repeat_the_servers_own_x_header",
+   "file": "src/ants_ctl/http.cpp",
+   "old": "if (same) return false;",
+   "new": "if (same) return true;",
    "build": "test_ctl",
    "test": "timeout 900 ./build/tests/test_ctl/test_ctl",
    "expect": "CTL2.18b"

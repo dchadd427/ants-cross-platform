@@ -277,7 +277,7 @@
                     if (st.dead) return;
                     if (r.status === 200) {
                         var j = r.json || {}, n = j.started || 0;
-                        say('ok', [(j.asked && n < j.asked ? 'Started ' + n + ' of ' + plural(j.asked, 'bot match', 'bot matches') + '. ' + stoppedWords(j.stopped_for) + ' ' : 'Started ' + plural(n, 'bot match', 'bot matches') + '. ') + 'They show on the live list in about 30 seconds.']);
+                        say('ok', [(j.asked && n < j.asked ? 'Started ' + n + ' of ' + plural(j.asked, 'bot match', 'bot matches') + '. ' + stoppedWords(j.stopped_for) + ' ' : 'Started ' + plural(n, 'bot match', 'bot matches') + '. ') + 'They show on the live list in a few seconds.']);
                         return loadAll(true);
                     }
                     if (refused(r)) return;
@@ -320,7 +320,7 @@
                         add(l, name, seatsOf(m), bs);
                         var bb = el('div', 'bb'), watch;
                         if (m.live) { watch = el('a', 'btn', 'Watch'); watch.setAttribute('href', '/play?live=' + encodeURIComponent(m.live)); watch.setAttribute('target', '_blank'); watch.setAttribute('rel', 'noopener'); }
-                        else { watch = button('Watch', 'dis', null); watch.disabled = true; watch.setAttribute('title', 'It can be watched when the match has begun, in about 30 seconds.'); }
+                        else { watch = button('Watch', 'dis', null); watch.disabled = true; watch.setAttribute('title', 'It can be watched as soon as the match has begun, in a few seconds.'); }
                         add(bb, watch, button('Stop', 'bad', function () { stopOne(m); }));
                         add(r, l, bb);
                         add(list, r);

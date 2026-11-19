@@ -128,7 +128,7 @@ struct BotMatchInfo {
     uint8_t mode{0};                        // sim::GameMode as a byte
     std::vector<std::pair<uint8_t, std::string>> seats;   // (seat, "easy" | "medium" | "hard") in the order of the seats
     std::string sides;                      // "ffa", or the sides by seat: "03-12" (seats 0 and 3 against 1 and 2), "01-2"
-    std::string live_id;                    // the id of the match on the live list when the public list shows it, else "" (it shows after the match has run 30 seconds)
+    std::string live_id;                    // the id of the match on the live list when the public list shows it, else "" (it shows from the start of the match)
     uint32_t places{1};                     // what the match takes of kBotPlacesMax
     RoomState state{RoomState::Waiting};
 };

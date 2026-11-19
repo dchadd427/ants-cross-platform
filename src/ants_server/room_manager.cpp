@@ -180,7 +180,7 @@ std::unique_ptr<Room> RoomManager::build_room(RoomSpec spec, uint32_t now_ms, Cr
     else if (!wants_replay) room->set_replay_store(nullptr, "the room was made with \"record\": false");
     else if (visitor_made && !replay_demo_) room->set_replay_store(nullptr, "this server does not keep the matches of demo rooms (--replay-demo)");
     else room->set_replay_store(replays_.get());
-    room->set_live_board(&live_board_);                           // (a room that records shows its match here once it has run 30 seconds)
+    room->set_live_board(&live_board_);                           // (a room that records shows its match here from its start)
     if (room->lobby()) room->set_lobby_services(lobby_services());
     return room;
 }

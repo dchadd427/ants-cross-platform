@@ -3,6 +3,7 @@
 #include "ants_ctl/http.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cerrno>
 #include <cstring>
 #include <utility>
@@ -144,10 +145,17 @@ bool safe_header_value(std::string_view s) {
     });
 }
 
-// The name of a header that a handler may add (HttpResponse::headers): "X-" and letters, digits and '-', so it is never one of the server's own and holds no character that ends the line
+// The name of a header that a handler may add (HttpResponse::headers): "X-" and letters, digits and '-' (no character that ends the line), and not the one "X-" header that the server sends itself, in any case
 bool safe_extra_header_name(std::string_view s) {
     if (s.size() < 3 || s.size() > 40 || s[0] != 'X' || s[1] != '-') return false;
-    return std::all_of(s.begin(), s.end(), [](char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-'; });
+    if (!std::all_of(s.begin(), s.end(), [](char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-'; })) return false;
+    constexpr std::string_view own = "x-content-type-options";
+    if (s.size() == own.size()) {
+        bool same = true;
+        for (size_t i = 0; i < s.size() && same; ++i) same = std::tolower(static_cast<unsigned char>(s[i])) == own[i];
+        if (same) return false;
+    }
+    return true;
 }
 
 const char* reason_phrase(int status) {
