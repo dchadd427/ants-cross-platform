@@ -206,7 +206,7 @@ same('... nor one that is not exactly that text', ['', 'now=1; shown=1', 'now=1;
 check('the turns of the match now, by the clock: 20 a second from the turns that the server said', R.liveNowTurn(info(1000, 400, 600), 0) === 1000 && R.liveNowTurn(info(1000, 400, 600), 1000) === 1020 && R.liveNowTurn(info(1000, 400, 600), 2500) === 1050 && R.liveNowTurn(info(1000, 400, 600), -5) === 1000 && R.liveNowTurn(null, 1000) === 0 && R.liveNowTurn(info(0, 0, 600), 25000) === 0);
 check('how far behind: the match now less the playhead, in seconds, never below 0; no numbers, no answer', R.liveBehind(info(1000, 1000, 0), 0, 900) === 5 && R.liveBehind(info(1000, 400, 600), 1000, 400) === 31 && R.liveBehind(info(1000, 1000, 0), 0, 2000) === 0 && R.liveBehind(null, 0, 10) === null && R.liveBehind(info(1, 1, 0), 0, undefined) === null);
 same('the delay in the words of the page', [30, 59, 60, 61, 90, 120, 300, 0].map(R.delayText), ['30 seconds', '59 seconds', '1 minute', '61 seconds', '90 seconds', '2 minutes', '5 minutes', '0 seconds']);
-same('how often the page asks again: 2 s for a match shown as it is and while it has no numbers, 4 s for one shown late', [R.feedEvery(info(10, 10, 0)), R.feedEvery(info(1000, 400, 600)), R.feedEvery(null), R.feedEvery(undefined)], [2000, 4000, 2000, 2000]);
+same('how often the page asks again: every 2 s (the game keeps 2 s back from the end of what it holds: a slower look would stop the picture at every end of a file)', R.FEED_MS, 2000);
 {   // the card over the picture while nothing can be shown yet
     const shownAsIs = R.standbyOf(info(0, 0, 0), 0);
     same('a match shown as it is that has not begun', [shownAsIs.title, shownAsIs.line, shownAsIs.fill], ['Starting\u2026', 'The match is about to begin.', 0]);

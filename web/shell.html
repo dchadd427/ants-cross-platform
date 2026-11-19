@@ -3462,10 +3462,9 @@
                 }).catch(function () { return { kind: 'error' }; });
             }
             function takeInfo(told) { liveInfo = told; liveInfoAt = Date.now(); }
-            function askAgain() {                                                                  // the next look at the match: 2 s after the last answer for a match shown as it is, 4 s for one shown late
-                var ms = R.feedEvery(liveInfo);
-                nextFeedAt = Date.now() + ms;
-                feedTimer = setTimeout(feed, ms);
+            function askAgain() {                                                                  // the next look at the match: 2 s after the last answer
+                nextFeedAt = Date.now() + R.FEED_MS;
+                feedTimer = setTimeout(feed, R.FEED_MS);
             }
             // the first look, before the game starts: a failure is tried three times; a match that is over (kept: its card, not kept: "isn't live") or not there is an answer
             function firstSnapshot() {

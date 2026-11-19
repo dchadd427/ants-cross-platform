@@ -14,8 +14,7 @@
     var TPS = 20;               // turns in a second of the match
     var HOLD_TURNS = 40;        // the turns that the game keeps back from the end of what it holds while it follows a match (kLiveHoldTurns in include/ants_app/replay_view.hpp)
     var KEEP_TURNS = 600;       // a match that ran less than this (30 seconds) is never kept as a replay
-    var FEED_MS = 2000;         // a match that is shown as it is (computer players, or one person) is asked for again this often ...
-    var FEED_LATE_MS = 4000;    // ... one that is shown late (two or more people) this often: its picture is behind by the delay, so a newer one is no use to the viewer sooner
+    var FEED_MS = 2000;         // the page asks for the match again this often: the game keeps two seconds back from the end of what it holds, so a look every two seconds is what lets the picture play on without a stop
     var STALL_MS = 1500;        // a playhead that has stood at the end of what it holds this long, with the match not over, is waiting for the next part
     var AT_LIVE = 1.5;          // a playhead that is less than this many seconds behind the game's Limit is at the present
     var FOLLOW_SLACK = 8;       // ... and one that follows the match stays there while it is less than this behind: the snapshots come in steps (a poll brings up to 7 s of the match at once)
@@ -136,8 +135,6 @@
         if (s >= 60 && s % 60 === 0) return s === 60 ? '1 minute' : (s / 60) + ' minutes';
         return s + ' seconds';
     }
-    // How often the page asks for the match again (milliseconds): 2 s for a match that is shown as it is (and while the page has no numbers), 4 s for one that is shown late
-    function feedEvery(info) { return info && info.delay > 0 ? FEED_LATE_MS : FEED_MS; }
     // The card over the picture while nothing can be shown yet (the match is starting, or its picture has not come to its first turn): the words, how much of the wait is gone (0 to 1), and null when there is nothing to say.
     // `info` is what the server said, `sinceMs` the time since. A match shown as it is says that it is about to begin; one that is shown late says so, and when its picture starts (the turns still to run before the
     // delay is over and the game has its two seconds to play, counted by the clock) once the match has run its first turn.
@@ -892,7 +889,7 @@
     }
 
     var api = { barPointer: barPointer, barZone: barZone, ZONE_PX: ZONE_PX, ZONE_GAP: ZONE_GAP, gapOf: gapOf, ZONE_REST_PX: ZONE_REST_PX, ZONE_DWELL_MS: ZONE_DWELL_MS, ZONE_LEAVE_MS: ZONE_LEAVE_MS, REWIND_SECONDS: REWIND_SECONDS, rewindTurn: rewindTurn, rewindControl: rewindControl, CAM_KEY: CAM_KEY, CAM_NOTE_MS: CAM_NOTE_MS, camLoad: camLoad, camSave: camSave, camLabel: camLabel, camTitle: camTitle, camNoteDue: camNoteDue, cameraControl: cameraControl, FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
-                lengthText: lengthText, mapKey: mapKey, mapTitle: mapTitle, speedText: speedText, liveVerdict: liveVerdict, tooShort: tooShort, liveInfoOf: liveInfoOf, liveNowTurn: liveNowTurn, liveBehind: liveBehind, delayText: delayText, feedEvery: feedEvery, standbyOf: standbyOf, STALL_MS: STALL_MS, HOLD_TURNS: HOLD_TURNS, atLive: atLive, liveTag: liveTag, parsePlayer: parsePlayer, playersOf: playersOf, chipsOf: chipsOf,
+                lengthText: lengthText, mapKey: mapKey, mapTitle: mapTitle, speedText: speedText, liveVerdict: liveVerdict, tooShort: tooShort, liveInfoOf: liveInfoOf, liveNowTurn: liveNowTurn, liveBehind: liveBehind, delayText: delayText, FEED_MS: FEED_MS, standbyOf: standbyOf, STALL_MS: STALL_MS, HOLD_TURNS: HOLD_TURNS, atLive: atLive, liveTag: liveTag, parsePlayer: parsePlayer, playersOf: playersOf, chipsOf: chipsOf,
                 LOCAL_MAX_BYTES: LOCAL_MAX_BYTES, HEAD_MAX_BYTES: HEAD_MAX_BYTES, crc32: crc32, localSizeOk: localSizeOk, localCheck: localCheck, ownName: ownName, sizeText: sizeText,
                 OWN_KEEP_MS: OWN_KEEP_MS, ownIdOf: ownIdOf, ownRandomId: ownRandomId, ownStore: ownStore, ownStoreOf: ownStoreOf, ownOpen: ownOpen,
                 refusalWords: refusalWords, opener: opener, ownPage: ownPage, ownPageOf: ownPageOf };
