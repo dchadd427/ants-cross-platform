@@ -332,10 +332,86 @@ function inRoom(env) {                                                          
     env.win.AntsAlertCore.SOUNDS.join = '';
 }
 
+// ---- 6. the bell ----
+{
+    const env = homePage();
+    const A = env.win.AntsHomeAlerts, core = env.win.AntsAlertCore;
+    const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1';
+    function bellOf(o) {                                                                  // a mount of its own on a bar of its own: o = { permission (none: the browser has no notifications), signedIn, ua, platform, touch, standalone (display-mode), iosStandalone }
+        const calls = { asked: 0, constructed: 0, queries: 0 };
+        const bar = new H.El(env, 'div', ''), menu = new H.El(env, 'button', ''), other = new H.El(env, 'button', ''); menu.className = 'btn hmenu'; other.className = 'btn hlogin'; bar.appendChild(other);
+        const state = { signedIn: o.signedIn !== false, permission: o.permission };
+        const watchers = [];
+        const win = Object.assign({}, env.win, {
+            innerHeight: 800, addEventListener(t, f) { (watchers[t] = watchers[t] || []).push(f); },
+            navigator: { userAgent: o.ua || 'Mozilla/5.0 (X11; Linux x86_64)', platform: o.platform || 'Linux x86_64', maxTouchPoints: o.touch || 0, standalone: o.iosStandalone === true ? true : undefined,
+                permissions: { query() { calls.queries++; return { then(ok) { const st = {}; watchers.status = st; ok(st); } }; } } },
+            matchMedia: (q) => ({ matches: /standalone/.test(q) && o.standalone === true }),
+        });
+        if (o.permission !== undefined) win.Notification = { get permission() { return state.permission; }, requestPermission() { calls.asked++; return { then() {} }; } };
+        else delete win.Notification;
+        const m = A.mount({ doc: env.doc, win, core, ctl: { screen: () => 'home', show() {} }, bar, menuBtn: menu, signedIn: () => state.signedIn });
+        const bell = bar.children[0];
+        return { m, bar, bell, menu, state, calls, watchers, win, marks: () => bell.findAll((e) => /al-mark/.test(e.className)), dot: () => /(^|\s)al-dot(\s|$)/.test(menu.className) };
+    }
+    const named = (b) => ({ state: b.bell.getAttribute('data-state'), label: b.bell.getAttribute('aria-label'), hidden: b.bell.hidden });
+    let b = bellOf({ permission: 'default' });
+    same('logged in, notifications not set up: the bell with a dot, and the dot on the Menu\'s button for a phone with a room', [named(b), b.marks().length, /dot/.test(b.marks()[0] ? b.marks()[0].className : ''), b.dot()], [{ state: 'off', label: 'Alerts: not set up on this device', hidden: false }, 1, true, true]);
+    check('the bell stands in front of the account button', b.bar.children[0] === b.bell && b.bar.children.length === 2 && /hlogin/.test(b.bar.children[1].className));
+    b = bellOf({ permission: 'granted' });
+    same('notifications on: the plain bell, no dot', [named(b), b.marks().length, b.dot()], [{ state: 'on', label: 'Alerts: on for this device', hidden: false }, 0, false]);
+    b = bellOf({ permission: 'denied' });
+    same('the browser blocks them: the struck bell, no dot', [named(b), b.marks().length, b.dot()], [{ state: 'blocked', label: 'Alerts: blocked in this browser', hidden: false }, 0, false]);
+    for (const p of ['default', 'granted', 'denied']) { b = bellOf({ permission: p, signedIn: false }); same('not logged in (' + p + '): the plain bell of the sheet, no dot, whatever the permission says', [named(b), b.marks().length, b.dot()], [{ state: 'guest', label: core.TEXT.sheet, hidden: false }, 0, false]); }
+    b = bellOf({ ua: IPHONE, platform: 'iPhone' });
+    same('an iPhone that has not installed the app (it has no notifications yet): the bell that needs the app, with its arrow', [named(b), b.marks().length], [{ state: 'needs', label: 'Alerts: need the app on the Home Screen', hidden: false }, 1]);
+    b = bellOf({ ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', platform: 'MacIntel', touch: 5 });
+    check('an iPad that says it is a Mac, with a touch screen, is the same', named(b).state === 'needs');
+    b = bellOf({ ua: IPHONE, platform: 'iPhone', permission: 'default', iosStandalone: true });
+    check('the installed app on an iPhone (navigator.standalone) reads the permission like any browser', named(b).state === 'off');
+    b = bellOf({ ua: IPHONE, platform: 'iPhone', permission: 'granted', standalone: true });
+    check('and so does the display mode "standalone"', named(b).state === 'on');
+    b = bellOf({ ua: IPHONE, platform: 'iPhone', iosStandalone: true });
+    check('the installed app of an iOS that has no notifications: no bell', named(b).hidden === true && b.marks().length === 0);
+    for (const signedIn of [true, false]) { b = bellOf({ signedIn }); check('a browser with no notifications at all (' + (signedIn ? 'logged in' : 'not logged in') + '): no bell', named(b).hidden === true && b.marks().length === 0 && !b.dot()); }
+    // the state is read again
+    b = bellOf({ permission: 'default', signedIn: false });
+    b.state.signedIn = true; b.m.refresh();
+    check('the visitor logs in: the state is read again', named(b).state === 'off' && b.dot() && b.marks().length === 1);
+    b.state.permission = 'granted'; b.m.refresh();
+    check('the permission changes: the bell and the dot follow', named(b).state === 'on' && !b.dot() && b.marks().length === 0 && b.bell.getAttribute('title') === b.bell.getAttribute('aria-label'));
+    b.state.permission = 'denied'; (b.watchers.status.onchange)();
+    check('the browser says that the permission changed: the bell follows', named(b).state === 'blocked');
+    b.state.permission = 'default'; (b.watchers.focus || []).forEach((f) => f({}));
+    check('the window gets the focus again: the bell is read again', named(b).state === 'off');
+    // a press opens the sheet, and the browser is never asked
+    b = bellOf({ permission: 'default' });
+    (b.watchers.focus || []).forEach((f) => f({})); (b.win.document || env.doc).listeners.visibilitychange && env.doc.listeners.visibilitychange.forEach((f) => f({}));
+    check('reading the state asks the browser for nothing', b.calls.asked === 0 && b.calls.constructed === 0);
+    b.bell.click();
+    check('a press opens the sheet of the alerts', !!shadeOf(env) && /Alerts/.test(shadeOf(env).textContent));
+    check('and the browser is still not asked', b.calls.asked === 0 && b.win.Notification.permission === 'default');
+    env.doc.listeners.keydown.forEach((f) => f({ key: 'Escape', preventDefault() {} }));
+    check('Escape closes it and the focus is on the bell', !shadeOf(env) && env.doc.activeElement === b.bell);
+    for (const k of ['granted', 'denied']) { b = bellOf({ permission: k }); b.bell.click(); check('a press while ' + k + ' is the same: the sheet, no question', !!shadeOf(env) && b.calls.asked === 0); env.doc.listeners.keydown.forEach((f) => f({ key: 'Escape', preventDefault() {} })); }
+    b = bellOf({ ua: IPHONE, platform: 'iPhone' }); b.bell.click();
+    check('a press on the iPhone bell opens the sheet too (the explanation of the app comes with the install button)', !!shadeOf(env));
+    env.doc.listeners.keydown.forEach((f) => f({ key: 'Escape', preventDefault() {} }));
+}
+{   // the page's own run: Home builds the bell in front of its account button, and the Menu's button gets the dot
+    const asked = [];
+    const env = runLobby('', { 'ants.name': 'Maya' }, { lazy: true, fakeClock: true, stayHome: true, win: { Notification: { permission: 'default', requestPermission() { asked.push(1); } }, navigator: { userAgent: 'Mozilla/5.0 (X11; Linux x86_64)', platform: 'Linux x86_64', maxTouchPoints: 0 } } });
+    env.advance(0);
+    const right = env.home('hright'), first = right.children[0];
+    check('on the page, the bell is in front of the account button and the Menu\'s button, and the visitor is not logged in (the chat dock is not here): the plain bell', /al-bell/.test(first.className) && first.getAttribute('data-state') === 'guest' && right.children.length === 3);
+    first.click();
+    check('its press opens the sheet and asks nothing of the browser', !!shadeOf(env) && asked.length === 0);
+}
+
 // ---- what the scripts never do ----
 {
     const files = ['alert_core.js', path.join('home', 'alerts.js')].map((f) => fs.readFileSync(path.join(web, f), 'utf8').replace(/\/\/.*/g, ''));
-    check('the scripts never ask the browser for anything: no permission, no notification, no worker, no network, no markup', files.every((t) => !/Notification|requestPermission|serviceWorker|pushManager|fetch\(|XMLHttpRequest|WebSocket|sendBeacon|innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b/.test(t)));
+    check('the scripts read the notification permission and never ask for it, and use no worker, no network and no markup', files.every((t) => !/requestPermission|new\s+(window\.)?Notification|showNotification|serviceWorker|pushManager|fetch\(|XMLHttpRequest|WebSocket|sendBeacon|innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b/.test(t)));
 }
 
 console.log(checks + ' checks, ' + failures + ' failed');

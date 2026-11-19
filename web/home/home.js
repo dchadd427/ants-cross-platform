@@ -360,7 +360,7 @@
             if (asked) return;
             asked = true;
             var parts = 2;
-            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); } } catch (e) { dock = null; } }
+            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); hookBell(); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); } } catch (e) { dock = null; } }
             function load() {
                 try {
                     var tail = doc.head || doc.body, css = el('link'), js = el('script');
@@ -378,15 +378,21 @@
             lazy('home/players', function () { if (win.AntsHomePlayers) players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: main, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); meet(); inert(held); var c = players && players.root.querySelector ? players.root.querySelector('.pl-count') : null; if (c) mirror(c, tabBtns.players.pill); });
         }
 
-        var alerts = null, askedAlerts = false;
+        var alerts = null, askedAlerts = false, bellHooked = false;
+        function hookBell() {                               // the bell is read again whenever the dock says who the visitor is (it comes after the first paint, like the alerts part: whichever is second)
+            if (!alerts) return;
+            if (!bellHooked && dock && dock.tap) { bellHooked = true; dock.tap(function (kind) { if (kind === 'live' || kind === 'you' || kind === 'lost') { try { alerts.refresh(); } catch (e) { /* the bell is its own */ } } }); }
+            try { alerts.refresh(); } catch (e) { /* the bell is its own */ }
+        }
         function alertsRow() { return alerts.row(function () { var back = menuFor; closeMenu(); return back; }); }      // (the Menu's row of the alerts sheet, alerts.js: it closes the Menu and the sheet gives the focus back to the Menu's button)
         function wantAlerts() {                             // the alerts sheet and the join alert (alerts.js, alerts.css, with web/alert_core.js): after the first paint
             if (askedAlerts) return;
             askedAlerts = true;
             lazy('home/alerts', function () {
                 if (!win.AntsHomeAlerts) return;
-                alerts = win.AntsHomeAlerts.mount({ doc: doc, win: win, core: win.AntsAlertCore, ctl: { show: show, screen: function () { return screen; } } });
+                alerts = win.AntsHomeAlerts.mount({ doc: doc, win: win, core: win.AntsAlertCore, ctl: { show: show, screen: function () { return screen; } }, bar: right, menuBtn: menuHome, signedIn: function () { return !!(dock && dock.you && dock.you()); } });
                 if (alerts && menuBox) menuBox.insertBefore(alertsRow(), menuBox.querySelector('.msmall'));       // (the Menu was opened before the part came)
+                hookBell();
             });
         }
 

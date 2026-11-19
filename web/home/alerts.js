@@ -5,6 +5,10 @@
 //   * A person (never a computer player: the lobby's `joined` event is for people) joins the room that this page holds: on Home a toast over the page says who and where, with Open (the Room's own toast stays for the Room);
 //     while the page is in the background the tab's title blinks. The switch for it turns both off. The sound, once one is approved, plays with it.
 //   * Everything that is said (names) becomes DOM text with createElement and textContent only, never markup.
+//   * The bell in the top bar (next to the account button) shows where the alerts stand on this device: a dot when notifications are not set up (the browser's permission is still "default"), plain when they are on
+//     ("granted"), struck through when the browser blocks them ("denied"), an arrow on an iPhone that has not installed the app (it has no notifications before that), and plain for a visitor who is not logged in. It
+//     READS the permission (Notification.permission) and never asks for it: no call of requestPermission anywhere, on load or on a press. A press opens the sheet. A browser with no notifications at all has no bell
+//     (the Menu's row stays). On a phone held upright while the page holds a room the bell has no room beside My room: it is not drawn and the Menu's button has the dot.
 // ES5, no module system: a page gets AntsHomeAlerts, node gets module.exports (tests/scripts/web_home_alerts_check.js). It uses the class .gshade of web/home/games.css, and looks out for the .gtoast that the Games list shows.
 (function (root, factory) {
     var api = factory();
@@ -22,11 +26,13 @@
         soundJoin: ['Sound when someone joins my room', 'A person, not a computer player.'], soundStart: ['Sound when my match starts', 'Plays while this page is in the background.']
     };
     var ROWS = [['join', null], ['start', null], ['soundJoin', 'join'], ['soundStart', 'start']];      // [the switch, the sound that the row is for: null for an alert that needs none]
-    var PATHS = { bell: ['M6 17h12l-1.6-2.4V10a4.4 4.4 0 0 0-8.8 0v4.6L6 17z', 'M10 20a2 2 0 0 0 4 0'], user: ['M12 12.2a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2z', 'M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5'], x: ['M6 6l12 12', 'M18 6L6 18'] };
+    var BELL = { off: 'Alerts: not set up on this device', on: 'Alerts: on for this device', blocked: 'Alerts: blocked in this browser', needs: 'Alerts: need the app on the Home Screen' };
+    var PATHS = { bell: ['M6 17h12l-1.6-2.4V10a4.4 4.4 0 0 0-8.8 0v4.6L6 17z', 'M10 20a2 2 0 0 0 4 0'], bellx: ['M6 17h12l-1.6-2.4V10a4.4 4.4 0 0 0-8.8 0v4.6L6 17z', 'M10 20a2 2 0 0 0 4 0', 'M4 4l16 16'], down: ['M12 5v9', 'M8 11l4 4 4-4'], user: ['M12 12.2a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2z', 'M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5'], x: ['M6 6l12 12', 'M18 6L6 18'] };
 
     function shorten(name) { name = String(name); return name.length > NAME_MAX ? name.slice(0, NAME_MAX - 1) + '\u2026' : name; }
 
-    // mount({ doc, win, core (AntsAlertCore), ctl: { screen() -> 'home'|'room', show(name, how) }, table (optional: the sound table) }) -> { row(onPress), open(opener), close(), alert(kind, data), flash }
+    // mount({ doc, win, core (AntsAlertCore), ctl: { screen() -> 'home'|'room', show(name, how) }, bar (the right end of Home's bar: the bell goes in front of its first button), menuBtn (Home's Menu button: it gets the dot),
+    //         signedIn() (whether the visitor is logged in), table (optional: the sound table) }) -> { row(onPress), open(opener), close(), alert(kind, data), refresh(), flash }
     function mount(env) {
         var doc = env.doc, win = env.win, core = env.core, ctl = env.ctl;
         if (!core || !core.settings) return null;
@@ -147,7 +153,56 @@
             return home;
         }
 
-        return { row: row, open: open, close: close, alert: alert, title: title, flash: flash, wired: wired };
+        // ---- the bell ----
+        function iphone() { var nav = win.navigator || {}; return /iPhone|iPad|iPod/.test(String(nav.userAgent || '')) || (nav.platform === 'MacIntel' && nav.maxTouchPoints > 1); }
+        function installed() {
+            var nav = win.navigator || {};
+            if (nav.standalone === true) return true;
+            try { return !!(win.matchMedia && win.matchMedia('(display-mode: standalone)').matches); } catch (e) { return false; }
+        }
+        function permission() { try { return win.Notification && typeof win.Notification.permission === 'string' ? win.Notification.permission : ''; } catch (e) { return ''; } }       // (read, never asked)
+        function stateNow() {                              // 'off', 'on', 'blocked', 'needs', 'guest', or null: no bell
+            var p = permission(), phone = iphone();
+            if (!p && !phone) return null;                 // a browser with no notifications at all
+            if (!(env.signedIn && env.signedIn())) return 'guest';
+            if (phone && !installed()) return 'needs';
+            if (!p) return null;                           // an iPhone app of an iOS that has none
+            return p === 'granted' ? 'on' : p === 'denied' ? 'blocked' : 'off';
+        }
+        var bell = null;
+        function mark(state) {
+            var m = null;
+            if (state === 'off') m = el('span', 'al-mark al-dotmark');
+            else if (state === 'needs') { m = el('span', 'al-mark'); var d = icon('down'); if (d) m.appendChild(d); }
+            return m;
+        }
+        function refresh() {
+            if (!bell) return;
+            var state = stateNow();
+            bell.hidden = !state;
+            if (env.menuBtn) env.menuBtn.className = String(env.menuBtn.className).split(/\s+/).filter(function (c) { return c && c !== 'al-dot'; }).concat(state === 'off' ? ['al-dot'] : []).join(' ');
+            if (!state || state === bell.getAttribute('data-state')) return;
+            var words = state === 'guest' ? title() : BELL[state], ic = icon(state === 'blocked' ? 'bellx' : 'bell'), m = mark(state);
+            while (bell.firstChild) bell.removeChild(bell.firstChild);
+            bell.setAttribute('data-state', state); bell.setAttribute('aria-label', words); bell.setAttribute('title', words);
+            if (ic) bell.appendChild(ic);
+            if (m) bell.appendChild(m);
+        }
+        function makeBell() {
+            if (!env.bar || !env.bar.insertBefore) return;
+            bell = el('button', 'btn al-bell'); bell.type = 'button'; bell.hidden = true;
+            bell.addEventListener('click', function () { open(bell); });         // (a press opens the sheet and nothing else: the browser is never asked)
+            env.bar.insertBefore(bell, env.bar.firstChild);
+            refresh();
+            try { win.addEventListener('focus', refresh); doc.addEventListener('visibilitychange', refresh); } catch (e) { /* the bell is read again when the page asks */ }
+            try {                                          // the browser says when its permission changes (reading it never asks)
+                var q = win.navigator && win.navigator.permissions && win.navigator.permissions.query ? win.navigator.permissions.query({ name: 'notifications' }) : null;
+                if (q && q.then) q.then(function (status) { if (status) status.onchange = refresh; }, function () { /* no such permission here */ });
+            } catch (e) { /* no permission list here */ }
+        }
+        makeBell();
+
+        return { row: row, open: open, close: close, alert: alert, refresh: refresh, title: title, flash: flash, wired: wired };
     }
 
     return { TEXT: TEXT, TOAST_MS: TOAST_MS, mount: mount };

@@ -241,6 +241,83 @@
    "old": "told.textContent = text; ",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_granted_is_not_on",
+   "file": "web/home/alerts.js",
+   "old": "return p === 'granted' ? 'on' : p === 'denied' ? 'blocked' : 'off';",
+   "new": "return p === 'granted' ? 'off' : p === 'denied' ? 'blocked' : 'off';",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_denied_is_not_blocked",
+   "file": "web/home/alerts.js",
+   "old": "p === 'denied' ? 'blocked' : 'off';",
+   "new": "p === 'denied' ? 'off' : 'off';",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_dot_for_a_visitor_who_is_not_logged_in",
+   "file": "web/home/alerts.js",
+   "old": "if (!(env.signedIn && env.signedIn())) return 'guest';",
+   "new": "/* every visitor */",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_where_there_are_no_notifications",
+   "file": "web/home/alerts.js",
+   "old": "if (!p && !phone) return null;",
+   "new": "/* always a bell */",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_iphone_app_still_needs_the_app",
+   "file": "web/home/alerts.js",
+   "old": "if (phone && !installed()) return 'needs';",
+   "new": "if (phone) return 'needs';",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_asks_when_pressed",
+   "file": "web/home/alerts.js",
+   "old": "bell.addEventListener('click', function () { open(bell); });",
+   "new": "bell.addEventListener('click', function () { if (win.Notification && win.Notification.requestPermission) win.Notification.requestPermission(); open(bell); });",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_asks_when_it_is_read",
+   "file": "web/home/alerts.js",
+   "old": "var state = stateNow();\n            bell.hidden = !state;",
+   "new": "var state = stateNow(); if (win.Notification && win.Notification.requestPermission) win.Notification.requestPermission();\n            bell.hidden = !state;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_press_opens_nothing",
+   "file": "web/home/alerts.js",
+   "old": "bell.addEventListener('click', function () { open(bell); });",
+   "new": "bell.addEventListener('click', function () { });",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_dot_on_the_menu_stays",
+   "file": "web/home/alerts.js",
+   "old": "state === 'off' ? ['al-dot'] : []",
+   "new": "['al-dot']",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_does_not_follow_the_browser",
+   "file": "web/home/alerts.js",
+   "old": "if (status) status.onchange = refresh;",
+   "new": "/* none */",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_dot_when_on",
+   "file": "web/home/alerts.js",
+   "old": "if (state === 'off') m = el('span', 'al-mark al-dotmark');",
+   "new": "if (state === 'off' || state === 'on') m = el('span', 'al-mark al-dotmark');",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   }
  ]
 }
