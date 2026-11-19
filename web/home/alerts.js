@@ -36,7 +36,7 @@
     function mount(env) {
         var doc = env.doc, win = env.win, core = env.core, ctl = env.ctl;
         if (!core || !core.settings) return null;
-        var set = core.settings(win), flash = core.flasher({ win: win, doc: doc }), snd = core.sounds({ win: win, settings: set, table: env.table });
+        var set = core.settings(win), seen = core.looked(win), flash = core.flasher({ win: win, doc: doc }), snd = core.sounds({ win: win, settings: set, table: env.table });
         var shade = null, opener = null, toast = null, toastText = null, told = null, toastTimer = null;
 
         function el(tag, cls, text) { var e = doc.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
@@ -83,6 +83,7 @@
             doc.body.appendChild(shade);
             var first = card.querySelector ? card.querySelector('.al-line') : null;
             if (first && first.focus) first.focus(); else if (x.focus) x.focus();
+            seen.mark(); refresh();                        // the sheet has been looked at: the bell's dot goes for good (in step 1 the dot only means "not looked yet"; with push it becomes the permission's state)
         }
         function close() {
             if (!shade) return;
@@ -172,16 +173,18 @@
         var bell = null;
         function mark(state) {
             var m = null;
-            if (state === 'off') m = el('span', 'al-mark al-dotmark');
+            if (state === 'off' && !seen.is()) m = el('span', 'al-mark al-dotmark');
             else if (state === 'needs') { m = el('span', 'al-mark'); var d = icon('down'); if (d) m.appendChild(d); }
             return m;
         }
+        var drawn = '';
         function refresh() {
             if (!bell) return;
-            var state = stateNow();
+            var state = stateNow(), dot = state === 'off' && !seen.is();      // (the dot: not set up, and the sheet not looked at yet)
             bell.hidden = !state;
-            if (env.menuBtn) env.menuBtn.className = String(env.menuBtn.className).split(/\s+/).filter(function (c) { return c && c !== 'al-dot'; }).concat(state === 'off' ? ['al-dot'] : []).join(' ');
-            if (!state || state === bell.getAttribute('data-state')) return;
+            if (env.menuBtn) env.menuBtn.className = String(env.menuBtn.className).split(/\s+/).filter(function (c) { return c && c !== 'al-dot'; }).concat(dot ? ['al-dot'] : []).join(' ');
+            if (!state || state + dot === drawn) return;
+            drawn = state + dot;
             var words = state === 'guest' ? title() : BELL[state], ic = icon(state === 'blocked' ? 'bellx' : 'bell'), m = mark(state);
             while (bell.firstChild) bell.removeChild(bell.firstChild);
             bell.setAttribute('data-state', state); bell.setAttribute('aria-label', words); bell.setAttribute('title', words);

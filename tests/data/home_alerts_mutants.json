@@ -287,8 +287,8 @@
   {
    "id": "bell_asks_when_it_is_read",
    "file": "web/home/alerts.js",
-   "old": "var state = stateNow();\n            bell.hidden = !state;",
-   "new": "var state = stateNow(); if (win.Notification && win.Notification.requestPermission) win.Notification.requestPermission();\n            bell.hidden = !state;",
+   "old": "bell.hidden = !state;",
+   "new": "bell.hidden = !state; if (win.Notification && win.Notification.requestPermission) win.Notification.requestPermission();",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
   {
@@ -301,7 +301,7 @@
   {
    "id": "bell_dot_on_the_menu_stays",
    "file": "web/home/alerts.js",
-   "old": "state === 'off' ? ['al-dot'] : []",
+   "old": "dot ? ['al-dot'] : []",
    "new": "['al-dot']",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
@@ -315,8 +315,8 @@
   {
    "id": "bell_dot_when_on",
    "file": "web/home/alerts.js",
-   "old": "if (state === 'off') m = el('span', 'al-mark al-dotmark');",
-   "new": "if (state === 'off' || state === 'on') m = el('span', 'al-mark al-dotmark');",
+   "old": "if (state === 'off' && !seen.is()) m = el('span', 'al-mark al-dotmark');",
+   "new": "if ((state === 'off' || state === 'on') && !seen.is()) m = el('span', 'al-mark al-dotmark');",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
   {
@@ -331,6 +331,55 @@
    "file": "web/home/alerts.js",
    "old": "if (kind === 'live' || kind === 'you' || kind === 'lost') refresh();",
    "new": "refresh();",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "dot_stays_after_the_sheet_is_opened",
+   "file": "web/home/alerts.js",
+   "old": "seen.mark(); refresh();",
+   "new": "refresh();",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "dot_comes_back_on_the_next_visit",
+   "file": "web/alert_core.js",
+   "old": "try { win.localStorage.setItem(LOOKED_KEY, '1'); }",
+   "new": "try { }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "dot_ignores_that_the_sheet_was_looked_at",
+   "file": "web/home/alerts.js",
+   "old": "dot = state === 'off' && !seen.is();",
+   "new": "dot = state === 'off';",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "dot_on_the_menu_button_stays_after_looking",
+   "file": "web/home/alerts.js",
+   "old": ".concat(dot ? ['al-dot'] : [])",
+   "new": ".concat(state === 'off' ? ['al-dot'] : [])",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "looking_is_forgotten_where_the_browser_refuses_storage",
+   "file": "web/alert_core.js",
+   "old": "mark: function () { visit = true; try",
+   "new": "mark: function () { try",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_has_the_dot_after_the_sheet_was_looked_at",
+   "file": "web/home/alerts.js",
+   "old": "if (state === 'off' && !seen.is()) m = el('span', 'al-mark al-dotmark');",
+   "new": "if (state === 'off') m = el('span', 'al-mark al-dotmark');",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "arrow_of_the_iphone_goes_with_the_dot",
+   "file": "web/home/alerts.js",
+   "old": "else if (state === 'needs') {",
+   "new": "else if (state === 'never') {",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   }
  ]

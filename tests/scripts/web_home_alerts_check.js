@@ -350,6 +350,7 @@ function inRoom(env) {                                                          
         });
         if (o.permission !== undefined) win.Notification = { get permission() { return state.permission; }, requestPermission() { calls.asked++; return { then() {} }; } };
         else delete win.Notification;
+        if (o.noStorage) win.localStorage = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };         // a browser that refuses its storage
         const m = A.mount({ doc: env.doc, win, core, ctl: { screen: () => 'home', show() {} }, bar, menuBtn: menu, signedIn: () => state.signedIn, dock: () => state.dock });
         const bell = bar.children[0];
         return { m, bar, bell, menu, state, calls, watchers, win, marks: () => bell.findAll((e) => /al-mark/.test(e.className)), dot: () => /(^|\s)al-dot(\s|$)/.test(menu.className) };
@@ -406,6 +407,40 @@ function inRoom(env) {                                                          
     b = bellOf({ ua: IPHONE, platform: 'iPhone' }); b.bell.click();
     check('a press on the iPhone bell opens the sheet too (the explanation of the app comes with the install button)', !!shadeOf(env));
     env.doc.listeners.keydown.forEach((f) => f({ key: 'Escape', preventDefault() {} }));
+    // in step 1 the dot means "not looked yet": it goes for good, in this browser, once the Alerts sheet has been opened
+    const escape = () => env.doc.listeners.keydown.forEach((f) => f({ key: 'Escape', preventDefault() {} }));
+    env.storage.removeItem(core.LOOKED_KEY);
+    b = bellOf({ permission: 'default' });
+    check('a browser that has not looked at the alerts: the dot on the bell and on the Menu\'s button', b.marks().length === 1 && b.dot());
+    (b.watchers.focus || []).forEach((f) => f({})); b.m.refresh();
+    check('reading the state again is not looking at the sheet: the dot stays', b.marks().length === 1 && b.dot() && !shadeOf(env));
+    b.bell.click();
+    same('the sheet is opened with the bell: the dot is gone from the bell and from the Menu\'s button, and the bell is there, named as before', [named(b), b.marks().length, b.dot()], [{ state: 'off', label: 'Alerts: not set up on this device', hidden: false }, 0, false]);
+    escape();
+    (b.watchers.focus || []).forEach((f) => f({})); b.m.refresh();
+    check('and it stays gone when the bell is read again', b.marks().length === 0 && !b.dot() && named(b).state === 'off');
+    b = bellOf({ permission: 'default' });
+    check('a later visit of this browser: no dot, on the bell or on the Menu\'s button', b.marks().length === 0 && !b.dot() && named(b).state === 'off' && b.bell.hidden === false);
+    check('what is kept is that the sheet was looked at, and nothing else (no switch is written by it)', env.storage.getItem(core.LOOKED_KEY) === '1' && env.storage.getItem(core.KEY) === null);
+    b.state.permission = 'granted'; b.m.refresh(); b.state.permission = 'default'; b.m.refresh();
+    check('a permission that comes and goes does not bring the dot back', b.marks().length === 0 && !b.dot());
+    env.storage.removeItem(core.LOOKED_KEY);
+    b = bellOf({ permission: 'default' });
+    b.m.row(() => null).click();
+    check('the Menu\'s row opens the sheet, and that is looking at it too: the dot is gone', !!shadeOf(env) && b.marks().length === 0 && !b.dot());
+    escape();
+    env.storage.removeItem(core.LOOKED_KEY);
+    b = bellOf({ permission: 'default' }); b.m.open(null); escape();
+    check('the sheet opened any other way is the same', b.marks().length === 0 && !b.dot());
+    env.storage.removeItem(core.LOOKED_KEY);
+    b = bellOf({ ua: IPHONE, platform: 'iPhone' }); b.bell.click(); escape();
+    check('the arrow of an iPhone that has not installed the app is not that dot: it stays', b.marks().length === 1 && named(b).state === 'needs');
+    env.storage.removeItem(core.LOOKED_KEY);
+    b = bellOf({ permission: 'default', noStorage: true });
+    check('a browser that refuses its storage: the dot at first', b.marks().length === 1 && b.dot());
+    b.bell.click(); escape(); b.m.refresh();
+    check('and it goes for this visit', b.marks().length === 0 && !b.dot());
+    env.storage.removeItem(core.LOOKED_KEY);
 }
 {   // the page's own run: Home builds the bell in front of its account button, and the Menu's button gets the dot
     const asked = [];

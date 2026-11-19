@@ -10,7 +10,7 @@
 //   5. the bell in the top bar (a site with a fake chat hub, so that the visitor is logged in or not): for a logged in visitor the dot (not set up), the plain bell (on), the struck bell (blocked by the browser),
 //      the arrow of an iPhone that has not installed the app, none where the browser has no notifications; the plain bell for a visitor who is not logged in; at 320, 390, 721, 1000 and 1280 px wide, with and without
 //      a room held: the bell and Quick host, Quick join, My room, the account button and the Menu's button lie inside the window and none is over another, every target is 44 px or more, a phone held upright with a
-//      room has the dot on the Menu's button and no bell; a press opens the sheet, and no press and no load asks the browser for anything.
+//      room has the dot on the Menu's button and no bell; a press opens the sheet, the dot goes for good (also after a reload) once the sheet has been opened, and no press and no load asks the browser for anything.
 //   --shots DIR takes the pictures of the build (alerts_*.png).
 //   node tests/scripts/web_home_alerts_browser.js [--web DIR] [--shots DIR]      (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox)
 // Needs `playwright` (npm) and a Chromium that it can start; without them it says so and exits 0 (nothing was checked). Exit status: 0 every check passed (or none could be made), 1 a check failed.
@@ -279,6 +279,18 @@ const over = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b
                 await page.keyboard.press('Escape');
                 check(label('Escape closes it and the focus is on the bell'), await page.evaluate(() => document.activeElement === document.querySelector('.hbar .al-bell')));
             }
+            if (!c.bell) {                                 // a phone upright with a room: no bell, the Menu's row opens the sheet
+                await page.click('.hbar .hmenu'); await sleep(150); await page.click('.hmenubox .al-menu'); await sleep(150);
+                check(label('the Menu\'s row opens the sheet'), !!(await box(page, '.al-card')));
+                await page.keyboard.press('Escape');
+            }
+            st = await bellState(page);
+            check(label('the sheet has been opened: the dot is gone for good, from the bell and from the Menu\'s button'), st.dot === false && (st.after === 'none' || st.after === 'normal') && (st.hidden || st.marks === 0) && (st.hidden || st.state === 'off'), JSON.stringify(st));
+            await page.reload({ waitUntil: 'load' });
+            await until('the dock knows the visitor again', () => page.evaluate(() => { const b = document.querySelector('.hbar .al-bell'); return b && b.getAttribute('data-state') === 'off'; }));
+            await sleep(300);
+            st = await bellState(page);
+            check(label('and after a reload (kept in this browser): no dot on the bell, none on the Menu\'s button'), st.marks === 0 && st.dot === false && (st.after === 'none' || st.after === 'normal'), JSON.stringify(st));
             check(label('the browser was never asked: not on load, not by a press'), await page.evaluate(() => window.__asked === 0));
             await context.close();
         }
