@@ -133,11 +133,6 @@ void run_start_delay_tests() {
 // The prediction of one's own orders (prediction.hpp), in a match of real NetGames
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-// The prediction is OFF by default (opt-in): the tests of it ask for it, as the application does when it is told `--prediction on`
-void enable_prediction(Table& t) {
-    for (auto& m : t.machines) m->net.set_prediction_enabled(true);
-}
-
 // Protocol 13: the bots of each seat's own level, and the teams of the host's START, on a game on the local network
 void run_team_tests() {
     const auto allies_of = [](const sim::SimulationEngine& e) {
@@ -851,16 +846,15 @@ void run_seat_move_tests() {
 }
 
 void run_prediction_tests() {
-    TEST_CASE("N3.25 Prediction: Off By Default In Every Machine Of A Match (Nobody Asked For It), On In The Machines That Were Asked To (Their View Engine Stands Ahead Of The Confirmed One, The Third Machine's Is The Confirmed One); Orders From Everybody, And All Confirmed Engines End Identical") {
+    TEST_CASE("N3.25 Prediction: On By Default In Every Machine Of A Match (Their View Engine Stands Ahead Of The Confirmed One), Off In The Machine That Is Told Not To (Its View Engine Is The Confirmed One); Orders From Everybody, And All Confirmed Engines End Identical") {
         Table t;
         ASSERT_TRUE(make_room(t, 2));
         Machine& host = *t.machines[0];
         Machine& bob = *t.machines[1];
         Machine& carol = *t.machines[2];
         host.net.set_map("SMALL.LVL");
-        ASSERT_FALSE(host.net.prediction_enabled() || bob.net.prediction_enabled() || carol.net.prediction_enabled());      // off by default: opt-in
-        host.net.set_prediction_enabled(true);                                                // the host and Bob are asked to; Carol keeps the default: its screen is its confirmed engine, as it always was
-        bob.net.set_prediction_enabled(true);
+        ASSERT_TRUE(host.net.prediction_enabled() && bob.net.prediction_enabled() && carol.net.prediction_enabled());      // on by default
+        carol.net.set_prediction_enabled(false);                                              // Carol is told not to (--no-prediction): its screen is its confirmed engine, and the match stays identical
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
         ASSERT_TRUE(host.net.start_match(99, hash));
@@ -912,7 +906,6 @@ void run_prediction_tests() {
     TEST_CASE("N3.26 Prediction: An Order Given Through The HUD's Sink Is In The View Engine In The Same Call, Long Before The Confirmed Engine Has It; A Machine That Does Not Predict Waits For The Turn; The Switch Works At Run Time") {
         Table t;
         ASSERT_TRUE(make_room(t, 1));
-        enable_prediction(t);
         Machine& host = *t.machines[0];
         Machine& bob = *t.machines[1];
         host.net.set_map("SMALL.LVL");
@@ -967,7 +960,6 @@ void run_prediction_tests() {
     TEST_CASE("N3.27 Prediction: A Host Change Switches It Off While The Guests Elect (The Confirmed Engine Is Shown), It Begins Again Under The New Host, And Both Machines End Identical") {
         Table t;
         ASSERT_TRUE(make_room(t, 2));
-        enable_prediction(t);
         Machine& host = *t.machines[0];
         Machine& bob = *t.machines[1];
         Machine& carol = *t.machines[2];
@@ -1012,7 +1004,6 @@ void run_prediction_tests() {
     TEST_CASE("N3.28 Prediction: The Application's Switch And A Held Match (A Pause: The Sessions Hold The Runner) Turn It Off At Once, The Confirmed Engine Is Shown Meanwhile, And It Begins Again With The Next Tick After They Are Gone") {
         Table t;
         ASSERT_TRUE(make_room(t, 1));
-        enable_prediction(t);
         Machine& host = *t.machines[0];
         Machine& bob = *t.machines[1];
         host.net.set_map("SMALL.LVL");
@@ -1056,7 +1047,6 @@ void run_prediction_tests() {
     TEST_CASE("N3.29 Prediction: A Machine Whose Match Has Gone Out Of Sync Shows The Confirmed Engine (The Hash Exchange Finds A State That Was Changed Behind The Turns' Back)") {
         Table t;
         ASSERT_TRUE(make_room(t, 1));
-        enable_prediction(t);
         Machine& host = *t.machines[0];
         Machine& bob = *t.machines[1];
         host.net.set_map("SMALL.LVL");
@@ -1084,7 +1074,6 @@ void run_prediction_tests() {
         uint64_t burn = 30 * kMs;                                                                // what every timed block costs
         Table t;
         ASSERT_TRUE(make_room(t, 1));
-        enable_prediction(t);
         Machine& host = *t.machines[0];
         Machine& bob = *t.machines[1];
         host.net.set_map("SMALL.LVL");
@@ -1145,7 +1134,6 @@ void run_prediction_tests() {
     TEST_CASE("N3.31 Prediction: The Lead Begins At The Lag That The Jitter Buffer And The Round Trip Promise (One Tick Less Than The Delay Counts), Then Learns The Lag Of The Orders That Really Came Back: Twelve Orders Of A Guest, The Lead Is The Lag Itself, An Order Is Put Where The Host Runs It (Hardly One Is Corrected), Nothing Is Lost Or Chased, And The Machines End Identical") {
         Table t;
         ASSERT_TRUE(make_room(t, 1));
-        enable_prediction(t);
         t.keep_up = true;                                                                        // (the jitter buffer and the lag below are those of a link with no lateness: a late loopback would grow the buffer)
         Machine& host = *t.machines[0];
         Machine& bob = *t.machines[1];
@@ -1189,7 +1177,7 @@ void run_prediction_tests() {
         ASSERT_FALSE(bob.net.desynced() || host.net.desynced());
     } TEST_END();
 
-    TEST_CASE("N3.32 Prediction: A Match With The Defaults Has No Predicted Engine (Nothing Starts, The View Engine Is The Confirmed One, An Order Is The Old Guess And Waits For Its Turn, The Machines End Identical); Asked For At Run Time It Begins With The Next Tick") {
+    TEST_CASE("N3.32 Prediction: A Match That Is Told Not To Predict Has No Predicted Engine (Nothing Starts, The View Engine Is The Confirmed One, An Order Is The Old Guess And Waits For Its Turn, The Machines End Identical); Switched On At Run Time It Begins With The Next Tick") {
         int told = 0;                                                                          // (declared before the table: the callbacks hold it)
         Table t;
         ASSERT_TRUE(make_room(t, 1));
@@ -1197,16 +1185,18 @@ void run_prediction_tests() {
         Machine& bob = *t.machines[1];
         for (Machine* m : {&host, &bob}) m->net.set_on_prediction_dropped([&told]() { ++told; });
         host.net.set_map("SMALL.LVL");
+        ASSERT_TRUE(host.net.prediction_enabled() && bob.net.prediction_enabled());            // (on by default; these two are told not to)
+        for (Machine* m : {&host, &bob}) m->net.set_prediction_enabled(false);
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
         ASSERT_TRUE(host.net.start_match(32, hash));
         ASSERT_TRUE(t.run_until([&]() { return everybody_running(t); }, kUntilRunning));
         t.run(3000);
         for (Machine* m : {&host, &bob}) {
-            ASSERT_FALSE(m->net.prediction_enabled());                                         // the default
+            ASSERT_FALSE(m->net.prediction_enabled());
             ASSERT_FALSE(m->net.predicting());
             ASSERT_TRUE(&m->net.view_engine() == &m->sim);                                     // the screen reads the confirmed engine
-            ASSERT_TRUE(m->net.prediction() == nullptr);                                        // there is none at all (not a suspended one): a match that does not ask for it pays nothing
+            ASSERT_TRUE(m->net.prediction() == nullptr);                                        // there is none at all (not a suspended one): a match that is told not to predict pays nothing
         }
         ASSERT_EQ(told, 0);                                                                    // (none was ever made, so none was dropped: not one that lived until the next update)
         const uint32_t ant = first_ant(bob, 1);
@@ -1230,14 +1220,14 @@ void run_prediction_tests() {
         ASSERT_FALSE(bob.net.desynced() || host.net.desynced());
     } TEST_END();
 
-    TEST_CASE("N3.33 Prediction: It Is Made Only Where It Is Wanted And Destroyed When It Is Switched Off (A Machine That Was Not Asked Has None; Switched Off At Run Time There Is None Left, Not A Suspended One; Switched On Again A New One Begins), And Whoever Points At Its Engine Is Told At Once Each Time (When It Is Switched Off And When The Machine Leaves The Match)") {
+    TEST_CASE("N3.33 Prediction: It Is Made Only Where It Is Wanted And Destroyed When It Is Switched Off (A Machine That Is Told Not To Has None; Switched Off At Run Time There Is None Left, Not A Suspended One; Switched On Again A New One Begins), And Whoever Points At Its Engine Is Told At Once Each Time (When It Is Switched Off And When The Machine Leaves The Match)") {
         int dropped = 0;                                                                         // (declared before the table: the callback holds it)
         Table t;
         ASSERT_TRUE(make_room(t, 1));
         Machine& host = *t.machines[0];
         Machine& bob = *t.machines[1];
         host.net.set_map("SMALL.LVL");
-        bob.net.set_prediction_enabled(true);                                                    // Bob is asked to, the host is not
+        host.net.set_prediction_enabled(false);                                                  // the host is told not to, Bob keeps the default
         bob.net.set_on_prediction_dropped([&dropped]() { ++dropped; });
         uint64_t hash = 0;
         ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
@@ -1268,5 +1258,37 @@ void run_prediction_tests() {
         bob.net.leave();
         ASSERT_TRUE(bob.net.prediction() == nullptr);
         ASSERT_EQ(dropped, 2);
+    } TEST_END();
+
+    TEST_CASE("N3.34 Prediction: An Order That The Host's Own Sequencer Refuses At Once (More Orders In A Turn Than It Will Carry) Is Not Predicted: The Answer Is Ignored, The Picture Never Shows It, And Nothing Waits For A Turn That Will Not Come") {
+        Table t;
+        ASSERT_TRUE(make_room(t, 1));
+        Machine& host = *t.machines[0];
+        Machine& bob = *t.machines[1];
+        host.net.set_map("SMALL.LVL");
+        uint64_t hash = 0;
+        ASSERT_TRUE(hash_file(maps_dir() + "SMALL.LVL", hash));
+        ASSERT_TRUE(host.net.start_match(34, hash));
+        ASSERT_TRUE(t.run_until([&]() { return everybody_running(t) && host.net.predicting(); }, kUntilRunning));
+        t.run(500);
+        const uint32_t ant = first_ant(host, 0);
+        int16_t gx = 0, gy = 0;
+        ASSERT_TRUE(open_goal_near_hill(host.sim, 0, gx, gy));
+        int accepted = 0;
+        int refused = 0;
+        for (int i = 0; i < 1500; ++i) {                                                       // (all in one frame: no turn is sealed between them, and the sequencer queues 64 for a turn, carries on up to 1024 and refuses the rest)
+            const sim::CommandResult r = host.net.submit(order(0, ant, static_cast<int16_t>(gx + (i % 2)), gy));
+            if (r.status == sim::CommandResult::Status::Ignored) ++refused;
+            else ++accepted;
+        }
+        ASSERT_TRUE(refused > 0 && accepted > 0);
+        ASSERT_EQ(host.net.prediction()->stats().commands_predicted, static_cast<uint64_t>(accepted));       // (what the host refused was never given to the predicted engine)
+        t.run(3000);
+        ASSERT_EQ(host.net.prediction()->stats().commands_lost, 0u);
+        ASSERT_EQ(host.net.prediction()->pending_orders(), 0u);
+        host.net.freeze();
+        t.run(3000);
+        ASSERT_TRUE(all_equal(t));
+        (void)bob;
     } TEST_END();
 }

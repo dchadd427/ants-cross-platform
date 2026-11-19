@@ -128,16 +128,16 @@ How network play works (a room on the local network, a server's room, bots): [`M
 | Option | Argument | Default | Meaning |
 |---|---|---|---|
 | `--audio-focus` | none | off | A window without the input focus is silent and holds its music (for several games on one machine): the piece goes on where it left off when the window has the focus again. Without this option the original's rule applies: leaving the program closes the music, and coming back starts a new random piece ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 5.24). |
-| `--prediction`, `--no-prediction` | `on` or `off` | `off` | Whether a match of the network shows your own orders at once. `--no-prediction` is `--prediction off`. |
+| `--prediction`, `--no-prediction` | `on` or `off` | `on` | Whether a match of the network shows your own orders at once. `--no-prediction` is `--prediction off`. |
 | `--settings` | `FILE` | the per-user application folder | Keep the remembered options in this file: see "Settings" in [`CONTROLS.md`](CONTROLS.md). A headless run keeps its settings in memory only, unless this names a file. |
 
 ### `--prediction` in detail
 
 - `--prediction` takes `on`, `yes`, `true` or `1`, and `off`, `no`, `false` or `0`, in any case. Anything else, or no value, is refused with "--prediction needs on or off".
-- It is off by default. The settings key `prediction` (`on` or `off`) says the same when the command line does not.
+- It is on by default, and nothing but the command line (and the web page's address) says otherwise: the settings file has no key for it.
 - On, an order is also run on a second engine and the screen shows that engine a few ticks ahead of the confirmed match. The confirmed simulation, the network, the hashes and the rules are untouched, and no other machine can tell.
 - A game of one machine never predicts (it has no delay). A hidden web page, a pause, a catch-up, a host change and the "Get ready" dialog switch it off by themselves, and so does a prediction whose work takes too long: it stays off for a while and then begins again.
-- The web page's `?prediction=on` gives the game `--prediction on` (`?prediction=off` says off).
+- The web page's `?prediction=off` gives the game `--no-prediction`.
 - How it works: [`NETWORK_PORT.md`](NETWORK_PORT.md#prediction-of-ones-own-orders-predictionhpp-cue_routerhpp-netgame-applicationview_sim).
 
 ## Testing, headless and screenshots

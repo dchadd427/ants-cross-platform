@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <unordered_map>
 #include <utility>
 
 #if defined(_WIN32)
@@ -115,13 +116,11 @@ void Prediction::set_expected_delay_ms(uint32_t ms) {
 
 uint32_t Prediction::learned_lag_ticks() const noexcept {
     const uint64_t c = confirmed_tick();
-    std::vector<uint32_t> fresh;
+    uint32_t lowest = 0;
     for (const auto& lag : lags_) {
-        if (c <= lag.second + cfg_.lag_fresh_ticks) fresh.push_back(lag.first);
+        if (c <= lag.second + cfg_.lag_fresh_ticks && (lowest == 0 || lag.first < lowest)) lowest = lag.first;
     }
-    if (fresh.empty()) return 0;
-    std::sort(fresh.begin(), fresh.end());
-    return fresh[fresh.size() / 2];                                  // (the middle one; the upper of the two in the middle when there is an even number)
+    return lowest;                                                    // (the shortest of them: see Config::learn_lead)
 }
 
 uint32_t Prediction::wanted_lead() const noexcept {
@@ -129,20 +128,29 @@ uint32_t Prediction::wanted_lead() const noexcept {
     return std::clamp<uint32_t>((learned != 0 ? learned : estimate_lag_) + cfg_.lead_bias_ticks, cfg_.min_lead_ticks, cfg_.max_lead_ticks);
 }
 
-// The lead rises at once and falls slowly: a lead that followed the phase of the server's seals (the delay of an order varies by one tick with the moment it was given) would move the whole
-// picture back and forth by a tick
+// The lead falls one tick at a time, the first tick at once and each further one lead_fall_every_ticks later (a lead that is too long is the worse mistake: the order is sealed BEFORE the tick
+// that the player aimed at; but the picture stands still for every tick that the lead falls by, and it must never stand for more than one). It rises at once by two ticks and more (the link
+// has changed); a rise of one tick waits until the delay has asked for it for lead_rise_after_ticks, so that the picture does not move back and forth by a tick with the phase of the host's seals
 void Prediction::update_lead() {
     target_lead_ = wanted_lead();
-    if (target_lead_ > lead_) {
+    if (lead_fall_wait_ > 0) --lead_fall_wait_;
+    if (target_lead_ > lead_ + 1u) {
         lead_ = target_lead_;
-        lead_low_ticks_ = 0;
-    } else if (target_lead_ < lead_) {
-        if (++lead_low_ticks_ >= cfg_.lead_fall_after_ticks) {
-            --lead_;
-            lead_low_ticks_ = 0;
+        ++stats_.lead_changes;
+        lead_high_ticks_ = 0;
+    } else if (target_lead_ == lead_ + 1u) {
+        if (++lead_high_ticks_ >= cfg_.lead_rise_after_ticks) {
+            ++lead_;
+            ++stats_.lead_changes;
+            lead_high_ticks_ = 0;
         }
     } else {
-        lead_low_ticks_ = 0;
+        lead_high_ticks_ = 0;
+        if (target_lead_ < lead_ && lead_fall_wait_ == 0) {
+            --lead_;
+            ++stats_.lead_changes;
+            lead_fall_wait_ = cfg_.lead_fall_every_ticks;
+        }
     }
 }
 
@@ -158,23 +166,51 @@ std::vector<Prediction::PredictedNews> Prediction::take_news() {
     return out;
 }
 
+std::vector<Prediction::Shift> Prediction::take_shifts() {
+    std::vector<Shift> out;
+    out.swap(shifts_);
+    if (!running_ && confirmed_tick() > stopped_at_ + 1u) out.clear();      // (nobody drew a frame when it stopped: the picture of that moment is long gone)
+    return out;
+}
+
+void Prediction::shift_all(const std::vector<sim::AntSnapshot>& shown, const std::vector<sim::AntSnapshot>& now) {
+    std::unordered_map<uint32_t, const sim::AntSnapshot*> was;
+    was.reserve(shown.size());
+    for (const sim::AntSnapshot& b : shown) was.emplace(b.id, &b);
+    for (const sim::AntSnapshot& a : now) {
+        const auto it = was.find(a.id);
+        if (it == was.end()) continue;
+        if (it->second->px != a.px || it->second->py != a.py) add_shift(a.id, it->second->px - a.px, it->second->py - a.py);
+    }
+}
+
 void Prediction::begin(uint64_t c) {
+    if (c > stopped_at_ + 1u) shifts_.clear();                       // (what a stop left that nobody took: about a picture that is gone)
     running_ = true;
     stale_ = false;
     pending_.clear();
     ++stats_.starts;
+    target_lead_ = wanted_lead();
     lead_ = target_lead_;
-    lead_low_ticks_ = 0;
+    lead_high_ticks_ = 0;
+    lead_fall_wait_ = 0;
     rebuild(c + lead_, true);
+    if (running_) shift_all(confirmed_->get_world_state().ants, pred_.get_world_state().ants);      // the screen showed the confirmed engine: every ant slides to where the predicted one has it, `lead` ticks on
 }
 
 void Prediction::stop() {
+    shifts_.clear();
+    if (running_) {                                                  // the screen showed the predicted engine: every ant slides back to where the confirmed one has it
+        shift_all(pred_.get_world_state().ants, confirmed_->get_world_state().ants);
+        stopped_at_ = confirmed_tick();
+    }
     running_ = false;
     stale_ = false;
     assumed_.clear();
     pending_.clear();
     audio_.clear();
     news_.clear();
+    lags_.clear();                                                   // (what the orders taught is about the link and the buffer as they were: a host change, a rejoin or a pause may end with another lag)
 }
 
 sim::SimulationEngine& Prediction::engine() {
@@ -209,6 +245,7 @@ void Prediction::capture_events(uint64_t tick, bool replay) {
 
 void Prediction::advance_one() {
     pred_.tick();
+    pred_.adopt_explored_ground_of(*confirmed_);                      // (the picture explores what the confirmed engine has explored: prediction.hpp, "Fog of war")
     capture_events(display_, false);
     ++display_;
     apply_commands_for(display_);
@@ -260,7 +297,7 @@ void Prediction::rebuild(uint64_t target, bool is_start) {
     const Timer timer(cfg_);
     if (cfg_.work_hook) cfg_.work_hook();
     std::vector<sim::AntSnapshot> before;
-    const bool measure = measure_corrections_ && !is_start && running_;
+    const bool measure = !is_start && running_;                      // (the ants that this rebuild moves are told to the picture: take_shifts)
     if (measure) before = pred_.get_world_state().ants;              // the picture that was on screen
     const uint64_t shown_before = display_;
 
@@ -284,6 +321,7 @@ void Prediction::rebuild(uint64_t target, bool is_start) {
             have_after = true;
         }
         pred_.tick();
+        pred_.adopt_explored_ground_of(*confirmed_);
         capture_events(t, true);
     }
     apply_commands_for(target);
@@ -309,25 +347,43 @@ void Prediction::rebuild(uint64_t target, bool is_start) {
     stale_own_timing_ = false;
 
     if (measure && have_after) {                                     // the same tick before and after: what the player would have seen change
-        ++stats_.corrections;
+        std::unordered_map<uint32_t, const sim::AntSnapshot*> was;
+        was.reserve(before.size());
+        for (const sim::AntSnapshot& b : before) was.emplace(b.id, &b);
         uint32_t moved = 0;
         for (const sim::AntSnapshot& a : after) {
-            for (const sim::AntSnapshot& b : before) {
-                if (b.id != a.id) continue;
-                const uint32_t dx = static_cast<uint32_t>(std::abs(a.px - b.px));
-                const uint32_t dy = static_cast<uint32_t>(std::abs(a.py - b.py));
-                if (dx != 0 || dy != 0) {
-                    ++moved;
-                    stats_.max_move_px = std::max(stats_.max_move_px, std::max(dx, dy));
-                    stats_.move_px_total += std::max(dx, dy);
-                }
-                break;
+            const auto it = was.find(a.id);
+            if (it == was.end()) continue;
+            const sim::AntSnapshot& b = *it->second;
+            const uint32_t dx = static_cast<uint32_t>(std::abs(a.px - b.px));
+            const uint32_t dy = static_cast<uint32_t>(std::abs(a.py - b.py));
+            if (dx == 0 && dy == 0) continue;
+            ++moved;
+            if (measure_corrections_) {
+                stats_.max_move_px = std::max(stats_.max_move_px, std::max(dx, dy));
+                stats_.move_px_total += std::max(dx, dy);
             }
+            add_shift(a.id, b.px - a.px, b.py - a.py);
         }
-        if (moved > 0) ++stats_.corrections_visible;
-        stats_.ants_moved += moved;
+        if (measure_corrections_) {
+            ++stats_.corrections;
+            if (moved > 0) ++stats_.corrections_visible;
+            stats_.ants_moved += moved;
+        }
     }
     note_cost(charged);                                              // (last: over the budget often enough, it starts a cool-down, and nothing here may use the prediction afterwards)
+}
+
+// What a rebuild moved an ant by, added to what an earlier rebuild moved it by that nobody has taken yet
+void Prediction::add_shift(uint32_t ant, int32_t dx, int32_t dy) {
+    for (Shift& s : shifts_) {
+        if (s.ant != ant) continue;
+        s.dx += dx;
+        s.dy += dy;
+        if (s.dx == 0 && s.dy == 0) shifts_.erase(shifts_.begin() + (&s - shifts_.data()));      // (two corrections that cancel: nothing to slide)
+        return;
+    }
+    shifts_.push_back(Shift{ant, dx, dy});
 }
 
 // An own order that no turn has carried for pending_timeout_ticks is lost (the server refused it, a host change dropped it): it must not stay in the picture
@@ -350,7 +406,7 @@ bool Prediction::submit(const sim::Command& command, sim::CommandResult& result)
     if (!running_) return false;
     result = pred_.apply_command(command);
     assumed_.back().push_back(command);
-    pending_.push_back(Pending{command, display_, confirmed_tick()});
+    pending_.push_back(Pending{command, display_, confirmed_tick(), display_});
     ++stats_.commands_predicted;
     return true;
 }
@@ -376,6 +432,7 @@ void Prediction::on_turn(const TurnMsg& turn) {
             while (lags_.size() > cfg_.lag_samples) lags_.pop_front();
         }
         if (pending_[i].tick != n) own_timing = true;                // sealed at another tick than the one at which the prediction applied it
+        ++(n == pending_[i].first_tick ? stats_.sealed_exact : n < pending_[i].first_tick ? stats_.sealed_early : stats_.sealed_late);
         if (i > 0) {                                                 // the orders before it were given earlier and have not been sealed: the host did not take them
             stats_.commands_lost += i;
             wrong = true;
@@ -393,10 +450,13 @@ void Prediction::on_turn(const TurnMsg& turn) {
         stale_foreign_ = stale_foreign_ || (foreign && !own_timing);
         stale_own_timing_ = stale_own_timing_ || own_timing;
     }
-    // The orders that this turn should have carried and did not are sealed later: they stand at the display tick, as if they had just been given (a correction that left them where they were
-    // would be repeated by every turn that comes: one rebuild a turn until they are sealed)
+    // The orders that this turn should have carried and did not are sealed later. The first time that happens to an order it is expected in the NEXT turn (an order is most often one tick
+    // off, by the phase of the host's seals: the lead is the shortest lag of the last orders); an order that the next turn does not carry either stands at the display tick, as if it had
+    // just been given (a correction that left it where it was would be repeated by every turn that comes: one rebuild a turn until it is sealed)
     for (Pending& p : pending_) {
-        if (p.tick <= n) p.tick = display_;
+        if (p.tick > n) continue;
+        p.tick = p.misses == 0 ? n + 1u : display_;                  // (a rebuild puts it no later than the display tick and never behind a turn in hand)
+        ++p.misses;
     }
 }
 

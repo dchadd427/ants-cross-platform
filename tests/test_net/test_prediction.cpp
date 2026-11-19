@@ -110,8 +110,9 @@ struct Ids {
     std::vector<uint32_t> ants[sim::MAX_PLAYERS];
 };
 
-Ids build_world(sim::SimulationEngine& sim, uint32_t seed, uint32_t match_ms = 720000, uint32_t extra_workers = 0) {
+Ids build_world(sim::SimulationEngine& sim, uint32_t seed, uint32_t match_ms = 720000, uint32_t extra_workers = 0, bool fog = false) {
     Ids ids;
+    if (fog) sim.set_fog_of_war_enabled(true);                                       // (the viewer is seat 0: the player whose orders are predicted)
     sim.init_test_world(60, 60, seed, match_ms);
     const TileCoord hills[sim::MAX_PLAYERS] = {{4, 4}, {50, 4}, {4, 50}, {50, 50}};
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) sim.grid_mut().set_anthill(p, hills[p]);
@@ -187,6 +188,7 @@ struct Scenario {
     bool oracle_hashes{true};      // record the oracle's hash of every tick (the tests that compare with the oracle); off: only the engine runs (the property tests)
     uint32_t match_ms{720000};
     uint32_t extra_workers{0};     // workers added to every player beyond the six ants (the tests of a selection of more than 32 ants)
+    bool fog{false};               // Fog of War: the views are also compared with the oracle's explored ground (it is no part of the state hash)
     Prediction::Config prediction{rig_config()};
     // The rig's prediction has the lead that the scenario names and keeps it (the tests hold a wrong lead to account, and the exact one to exactness): it does not learn its lead and has no bias
     // (the tests of the learning and of the bias switch them on), and no budget (the tests run on busy machines: a stall of the test process is not the prediction's cost; the tests of the
@@ -205,14 +207,16 @@ struct View {
     uint64_t display{0};
     std::vector<Command> applied;
     uint64_t hash{0};
+    std::vector<uint8_t> fog;
+    std::vector<uint8_t> confirmed_fog;
 };
 
 class Rig {
 public:
     explicit Rig(const Scenario& sc)
         : sc_(sc), runner_(confirmed_, runner_config(sc)) {
-        ids = build_world(confirmed_, sc.seed, sc.match_ms, sc.extra_workers);
-        build_world(oracle_, sc.seed, sc.match_ms, sc.extra_workers);
+        ids = build_world(confirmed_, sc.seed, sc.match_ms, sc.extra_workers, sc.fog);
+        build_world(oracle_, sc.seed, sc.match_ms, sc.extra_workers, sc.fog);
         if (sc.predict) {
             Prediction::Config pc = sc.prediction;
             pc.seat = 0;
@@ -263,6 +267,7 @@ public:
         std::stable_sort(t.commands.begin(), t.commands.end(), [](const Command& a, const Command& b) { return a.issuer < b.issuer; });     // (canonical order)
         sealed.push_back(t);
         pre.push_back(sc_.oracle_hashes ? oracle_.state_hash().total : 0u);
+        if (sc_.fog) pre_fog.push_back(oracle_.get_world_state().fog_revealed);
         for (const Command& c : t.commands) oracle_.apply_command(c);
         post.push_back(sc_.oracle_hashes ? oracle_.state_hash().total : 0u);
         oracle_.tick();
@@ -286,6 +291,10 @@ public:
             v.applied = pred_->applied_at_display();
             const bool check_now = derived_every_ != 0 && step_ % derived_every_ == 0;
             v.hash = (sc_.oracle_hashes || check_now) ? e.state_hash().total : 0u;
+            if (sc_.fog) {
+                v.fog = e.get_world_state().fog_revealed;
+                v.confirmed_fog = confirmed_.get_world_state().fog_revealed;
+            }
             views.push_back(std::move(v));
             if (check_now) {
                 ++derived_checks;
@@ -315,13 +324,21 @@ public:
     // turn's own commands were); "" when so, else the first view that is not.
     // The views at ticks that the server has not sealed yet (the prediction stands ahead of the stream by the lead) cannot be checked, and are skipped; `verified`, when given, gets the
     // number of views that were checked.
-    std::string verify_views(uint32_t from_step = 0, size_t* verified = nullptr) const {
+    std::string verify_views(uint32_t from_step = 0, size_t* verified = nullptr, bool compare_state = true) const {
         size_t checked = 0;
         for (const View& v : views) {
             if (v.step < from_step) continue;
             if (v.display >= pre.size()) continue;
             ++checked;
             if (verified != nullptr) *verified = checked;
+            if (sc_.fog) {                                                               // the picture's explored ground is the confirmed engine's, which never goes beyond the oracle's at the tick that is shown
+                const std::vector<uint8_t>& truth = pre_fog[v.display];
+                for (size_t i = 0; i < v.fog.size() && i < truth.size(); ++i) {
+                    if (v.fog[i] != 0 && truth[i] == 0) return "step " + std::to_string(v.step) + ": the predicted engine at tick " + std::to_string(v.display) + " has explored ground that the oracle's has not";
+                }
+                if (v.fog != v.confirmed_fog) return "step " + std::to_string(v.step) + ": the predicted engine's explored ground is not the confirmed engine's";
+            }
+            if (!compare_state) continue;                                               // (only the explored ground: a picture that other seats' unknown orders make differ from the oracle's)
             if (v.applied.empty()) {
                 if (v.hash != pre[v.display]) return "step " + std::to_string(v.step) + ": the predicted engine at tick " + std::to_string(v.display) + " is not the oracle's";
             } else {
@@ -335,6 +352,7 @@ public:
 
     Ids ids;
     std::vector<TurnMsg> sealed;
+    std::vector<std::vector<uint8_t>> pre_fog;      // the oracle's explored ground before each tick (Scenario::fog)
     std::vector<uint64_t> pre;      // the oracle's hash before the commands of each tick
     std::vector<uint64_t> post;     // ... and after them (before the tick runs)
     std::vector<View> views;
@@ -383,6 +401,26 @@ void run_basic_tests() {
         }
     } TEST_END();
 
+    TEST_CASE("RP1.4 Only The Player's Own Orders Are Predicted: A Command Of Another Seat Is Left To The Caller (Nothing Applied, The Answer Untouched), Even Of A Kind That Is Predicted; An Own Order Is Applied To The Predicted Engine And Never To The Confirmed One") {
+        Scenario sc;
+        Rig rig(sc);
+        rig.run(10);
+        Prediction& p = *rig.prediction();
+        ASSERT_TRUE(p.active());
+        const uint32_t ant = rig.ids.ants[1][0];                                            // (seat 1's ant: this player is seat 0)
+        sim::CommandResult r;
+        r.status = sim::CommandResult::Status::RejectedMalformed;
+        ASSERT_FALSE(p.submit(make_command(CommandType::GroupMove, 1, 255, 20, 40, {ant}), r));
+        ASSERT_TRUE(r.status == sim::CommandResult::Status::RejectedMalformed);
+        ASSERT_EQ(p.stats().commands_predicted, 0u);
+        ASSERT_TRUE(p.engine().get_unit(ant).orig_order != sim::AntUnit::kOrderMove);       // (the other seat's ant is not ordered by this player's prediction)
+        const uint32_t own = rig.ids.ants[0][0];
+        ASSERT_TRUE(p.submit(make_command(CommandType::GroupMove, 0, 255, 20, 40, {own}), r));
+        ASSERT_EQ(p.stats().commands_predicted, 1u);
+        ASSERT_EQ(p.engine().get_unit(own).orig_order, sim::AntUnit::kOrderMove);
+        ASSERT_TRUE(rig.confirmed().get_unit(own).orig_order != sim::AntUnit::kOrderMove);   // (the confirmed engine waits for the turn)
+    } TEST_END();
+
     TEST_CASE("RP1.2 Nothing Is Predicted Before The First Tick Has Run (the \"Get ready\" dialog), And Every Order Is Left To The Caller") {
         Scenario sc;
         Rig rig(sc);
@@ -402,7 +440,7 @@ void run_basic_tests() {
         ASSERT_TRUE(p.display_tick() > rig.confirmed().current_tick());
     } TEST_END();
 
-    TEST_CASE("RP1.3 The Display Tick Is The Confirmed Tick Plus The Lead, Tick By Tick, And The Lead Follows The Delay: It Rises At Once, Falls Slowly And Is Bounded") {
+    TEST_CASE("RP1.3 The Display Tick Is The Confirmed Tick Plus The Lead, Tick By Tick, And The Lead Follows The Delay: It Falls One Tick At A Time (The First At Once, The Next Ones Four Ticks Apart: The Picture Stands Still For One Tick Each Time, Never Longer), Rises At Once By Two Ticks And More, By One Tick Only After 40 Ticks, And Is Bounded") {
         Scenario sc;
         sc.lead_ms = 150;                                                                   // 3 ticks
         Rig rig(sc);
@@ -413,26 +451,39 @@ void run_basic_tests() {
             rig.step();
             ASSERT_EQ(p.display_tick(), rig.confirmed().current_tick() + p.lead_ticks());
         }
-        p.set_expected_delay_ms(300);                                                       // slower: the lead rises at the next tick
+        p.set_expected_delay_ms(300);                                                       // slower by three ticks: the lead rises at the next tick
         rig.step();
         ASSERT_EQ(p.lead_ticks(), 6u);
         ASSERT_EQ(p.display_tick(), rig.confirmed().current_tick() + 6);
-        p.set_expected_delay_ms(100);                                                       // faster: nothing changes for 40 ticks, then one tick at a time
+        p.set_expected_delay_ms(350);                                                       // slower by one tick: nothing changes for 40 ticks (the lag of an order goes up and down by one with the phase of the host's seals), then it rises
         for (int i = 0; i < 39; ++i) rig.step();
         ASSERT_EQ(p.lead_ticks(), 6u);
-        const uint64_t held_at = p.display_tick();
+        ASSERT_EQ(p.display_tick(), rig.confirmed().current_tick() + 6);
         rig.step();
-        ASSERT_EQ(p.lead_ticks(), 5u);
-        ASSERT_EQ(p.display_tick(), held_at);                                               // (the lead falls by holding the engine for one tick: the confirmed tick moved on, the display tick did not)
-        ASSERT_EQ(p.display_tick(), rig.confirmed().current_tick() + 5);
-        rig.step();
-        ASSERT_EQ(p.display_tick(), rig.confirmed().current_tick() + 5);
-        ASSERT_EQ(p.display_tick(), held_at + 1);
+        ASSERT_EQ(p.lead_ticks(), 7u);
+        ASSERT_EQ(p.display_tick(), rig.confirmed().current_tick() + 7);
+        // faster by three ticks: the lead falls one tick at the next tick (the engine is held for that tick: the confirmed tick moves on, the display tick does not), and one more every fourth
+        // tick after it; the display tick never stands for two ticks in a row
+        p.set_expected_delay_ms(200);
+        uint64_t shown = p.display_tick();
+        uint32_t held_in_a_row = 0;
+        uint32_t longest_hold = 0;
+        std::vector<uint32_t> leads;
+        for (int i = 0; i < 12; ++i) {
+            rig.step();
+            held_in_a_row = p.display_tick() == shown ? held_in_a_row + 1 : 0;
+            longest_hold = std::max(longest_hold, held_in_a_row);
+            shown = p.display_tick();
+            leads.push_back(p.lead_ticks());
+            ASSERT_EQ(p.display_tick(), rig.confirmed().current_tick() + p.lead_ticks());
+        }
+        ASSERT_TRUE(leads == (std::vector<uint32_t>{6, 6, 6, 6, 5, 5, 5, 5, 4, 4, 4, 4}));
+        ASSERT_EQ(longest_hold, 1u);
         p.set_expected_delay_ms(60000);
         rig.step();
         ASSERT_EQ(p.lead_ticks(), 12u);                                                     // bounded above
         p.set_expected_delay_ms(0);
-        for (int i = 0; i < 12 * 40 + 5; ++i) rig.step();
+        for (int i = 0; i < 11 * 4 + 5; ++i) rig.step();
         ASSERT_EQ(p.lead_ticks(), 1u);                                                      // and below
         ASSERT_EQ(p.display_tick(), rig.confirmed().current_tick() + 1);
     } TEST_END();
@@ -517,6 +568,46 @@ void run_exactness_tests() {
             ASSERT_EQ(rig.prediction()->stats().rebuilds, 0u);
             ASSERT_TRUE(rig.prediction()->stats().turns_checked > 250);
             ASSERT_OK(verify_min(rig, 0, 250));
+        }
+    } TEST_END();
+
+    TEST_CASE("RP2.5 Fog Of War: The Explored Ground That The Predicted Engine Shows Is The Confirmed Engine's At Every Frame And Never More Than The Oracle's At The Tick That Is Shown (The Hash Does Not Hold It), With A Buffer Deeper Than The Lead Whatever The Other Seats Order And With The Right Lead For The Player's Own Orders: The Prediction Explores Nothing That The Engine Would Not At That Tick") {
+        for (const int kind : {0, 1, 2}) {                                                   // 0: a buffer deeper than the lead; 1: the right lead, own orders; 2: other seats' orders that the prediction does not know, so that it is rebuilt again and again
+            const bool deep = kind == 0;
+            Scenario sc;
+            sc.seed = 51u + static_cast<uint32_t>(kind);
+            sc.fog = true;
+            if (deep) {
+                sc.buffer_turns = 4;
+                sc.down_delay = 1;
+                sc.lead_ms = 50;
+            }
+            Rig rig(sc);
+            Lcg rng(sc.seed);
+            rig.run(12);
+            for (uint32_t s = 0; s < 260; ++s) {
+                if (deep) {
+                    if (s % 5 == 0) rig.schedule(rig.step_no() + 2, random_order(rng, rig.ids, static_cast<uint8_t>(1 + rng.below(3))));
+                    if (s % 9 == 0) rig.schedule(rig.step_no() + 2, random_order(rng, rig.ids, 0));
+                } else if (s % 7 == 0) {
+                    rig.issue(random_order(rng, rig.ids, 0));
+                }
+                if (kind == 2 && s % 6 == 3) rig.schedule(rig.step_no() + 2, random_order(rng, rig.ids, static_cast<uint8_t>(1 + rng.below(3))));
+                rig.step();
+            }
+            rig.run_quiet(30);
+            ASSERT_TRUE(rig.prediction()->stats().turns_checked > 200);
+            if (kind == 2) {
+                ASSERT_TRUE(rig.prediction()->stats().rebuilds > 20u);
+                size_t views = 0;
+                const std::string why = rig.verify_views(0, &views, false);                      // (the pictures differ from the oracle's here; the explored ground must not)
+                ASSERT_TRUE(why.empty() && views > 150);
+            } else {
+                ASSERT_OK(verify_min(rig, 0, 200));
+            }
+            size_t explored = 0;
+            for (uint8_t cell : rig.confirmed().get_world_state().fog_revealed) explored += cell != 0 ? 1u : 0u;
+            ASSERT_TRUE(explored > 200);                                                      // (the player's ants walked and revealed ground: the comparison is not about an empty map)
         }
     } TEST_END();
 
@@ -650,15 +741,121 @@ void run_correction_tests() {
         ASSERT_OK(verify_min(rig, t + sc.down_delay + 1, 20));                                  // from the frame of the turn's arrival on, every frame is the oracle's
     } TEST_END();
 
-    TEST_CASE("RP3.2 An Order Sealed At Another Tick Than The One Where It Was Applied: Earlier Costs One Rebuild, Later Costs Two (its tick passes without it, then its turn comes) Unless It Lands Where The First Miss Put It; Afterwards The Prediction Is Right") {
-        // The lead is 5 ticks, the buffer 1 and the lag 1, so the order is applied 5 ticks ahead of the confirmed engine; an uplink of 3 steps seals it exactly there. A miss (its turn
-        // arrives without it) puts it at the display tick of that moment, which is lead - buffer = 4 ticks after the tick that it missed.
+    TEST_CASE("RP3.5 The Ants That A Rebuild Moves Are Told To The Picture With How Far: Only The Ants Of The Other Player's Order (Never The Player's Own, Exact Ones), By A Few Ticks Of Walking At Most, One Entry For Each Ant, What Two Rebuilds Moved It By Added Up (The Same As Taking It After Each)") {
+        // the same match twice: the shifts taken after each of two rebuilds, and taken once after both
+        using Sums = std::map<uint32_t, std::pair<int32_t, int32_t>>;
+        const auto play = [](bool take_between, Sums& sums, size_t& entries) {
+            Scenario sc;
+            sc.seed = 31;
+            sc.lead_ms = 400;
+            sc.uplink = 6;
+            Rig rig(sc);
+            rig.run(12);
+            rig.issue(make_command(CommandType::GroupMove, 0, 255, 50, 50, rig.ids.ants[0]));
+            rig.run(6);
+            const uint32_t t = rig.step_no() + 3;
+            rig.schedule(t, make_command(CommandType::GroupMove, 1, 255, 20, 40, rig.ids.ants[1]));
+            rig.schedule(t + 4, make_command(CommandType::GroupMove, 1, 255, 40, 20, rig.ids.ants[1]));         // (a second order for the same ants, a little later: a second rebuild)
+            const auto add = [&](const std::vector<Prediction::Shift>& list) {
+                entries += list.size();
+                for (const Prediction::Shift& sh : list) {
+                    sums[sh.ant].first += sh.dx;
+                    sums[sh.ant].second += sh.dy;
+                }
+            };
+            while (rig.prediction()->stats().rebuilds < 1u && rig.step_no() < t + 20) rig.step();
+            if (take_between) add(rig.prediction()->take_shifts());
+            rig.run(12);
+            add(rig.prediction()->take_shifts());
+            for (auto it = sums.begin(); it != sums.end();) it = (it->second.first == 0 && it->second.second == 0) ? sums.erase(it) : std::next(it);      // (two that cancel are no entry)
+            return rig.prediction()->stats().rebuilds;
+        };
+        Sums once;
+        Sums twice;
+        size_t once_entries = 0;
+        size_t twice_entries = 0;
+        ASSERT_TRUE(play(false, once, once_entries) >= 2u);
+        ASSERT_TRUE(play(true, twice, twice_entries) >= 2u);
+        ASSERT_FALSE(once.empty());
+        ASSERT_TRUE(once == twice);                                                                  // (what two rebuilds moved an ant by, added up, is what each moved it by)
+        ASSERT_TRUE(once_entries <= twice_entries);                                                  // (one entry for each ant when taken once)
+        sim::SimulationEngine probe;
+        const Ids probe_ids = build_world(probe, 31);
+        const std::vector<uint32_t>& seat1 = probe_ids.ants[1];
+        for (const auto& entry : once) {
+            ASSERT_TRUE(std::find(seat1.begin(), seat1.end(), entry.first) != seat1.end());   // (the other player's ants, none of the player's own)
+            ASSERT_TRUE(std::max(std::abs(entry.second.first), std::abs(entry.second.second)) <= 128);        // (a tile of walking at most for each of the two rebuilds, in the one direction or the other)
+        }
+    } TEST_END();
+
+    TEST_CASE("RP3.6 When The Prediction Begins Or Stops The Screen Changes Engine, And Every Ant That Stands Elsewhere In The Other One Is Told To The Picture With How Far (It Slides, It Does Not Jump): At A Stop From Where The Predicted Engine Had It To Where The Confirmed One Has It, At A Start The Other Way; What A Stop Left Is Forgotten When No Frame Took It") {
+        Scenario sc;
+        sc.seed = 33;
+        sc.lead_ms = 300;                                                                   // six ticks: an ant that walks stands 24 px further in the predicted engine
+        Rig rig(sc);
+        Prediction& p = *rig.prediction();
+        rig.run(12);
+        rig.issue(make_command(CommandType::GroupMove, 0, 255, 30, 30, rig.ids.ants[0]));
+        rig.run(40);
+        p.take_shifts();
+        const auto places = [](const sim::SimulationEngine& e) {
+            std::map<uint32_t, std::pair<int32_t, int32_t>> out;
+            for (const auto& a : e.get_world_state().ants) out[a.id] = {a.px, a.py};
+            return out;
+        };
+        const auto shown = places(p.engine());                                              // what the screen shows: the predicted engine
+        const auto confirmed = places(rig.confirmed());
+        p.set_suspended(true);                                                              // a pause, a hidden page, a link that is away: the screen shows the confirmed engine from here
+        const std::vector<Prediction::Shift> back = p.take_shifts();
+        size_t moved = 0;
+        for (const auto& entry : shown) moved += entry.second != confirmed.at(entry.first) ? 1u : 0u;
+        ASSERT_TRUE(moved >= 3);                                                            // (the player's ants walk: the two engines have them at different places)
+        ASSERT_EQ(back.size(), moved);
+        for (const Prediction::Shift& sh : back) {
+            ASSERT_EQ(sh.dx, shown.at(sh.ant).first - confirmed.at(sh.ant).first);          // drawn where it was shown: the confirmed place plus this
+            ASSERT_EQ(sh.dy, shown.at(sh.ant).second - confirmed.at(sh.ant).second);
+            ASSERT_TRUE(std::max(std::abs(sh.dx), std::abs(sh.dy)) <= 64);
+        }
+        ASSERT_TRUE(p.take_shifts().empty());
+        p.set_suspended(false);
+        const auto before_start = places(rig.confirmed());
+        rig.step();                                                                         // it begins with the next tick
+        ASSERT_TRUE(p.active());
+        const auto after_confirmed = places(rig.confirmed());
+        const auto after_shown = places(p.engine());
+        const std::vector<Prediction::Shift> forth = p.take_shifts();
+        ASSERT_FALSE(forth.empty());
+        for (const Prediction::Shift& sh : forth) {
+            ASSERT_EQ(sh.dx, after_confirmed.at(sh.ant).first - after_shown.at(sh.ant).first);       // from where the confirmed engine has it to where the predicted one does
+            ASSERT_EQ(sh.dy, after_confirmed.at(sh.ant).second - after_shown.at(sh.ant).second);
+        }
+        (void)before_start;
+        // a stop that no frame saw (a hidden page): its shifts are about a picture that is gone
+        rig.run(10);
+        p.take_shifts();
+        p.set_suspended(true);
+        rig.run(3);
+        ASSERT_TRUE(p.take_shifts().empty());
+        p.set_suspended(true);
+        rig.run(3);
+        p.set_suspended(false);
+        rig.step();
+        for (const Prediction::Shift& sh : p.take_shifts()) {                               // (and a start after it tells only the start)
+            const auto now_confirmed = places(rig.confirmed());
+            const auto now_shown = places(p.engine());
+            ASSERT_EQ(sh.dx, now_confirmed.at(sh.ant).first - now_shown.at(sh.ant).first);
+        }
+    } TEST_END();
+
+    TEST_CASE("RP3.2 An Order Sealed At Another Tick Than The One Where It Was Applied: Earlier Costs One Rebuild; One Tick Later Costs One Too (Its Tick Passes Without It, And The Next Turn, Where It Is Expected Then, Carries It); Later Than That Costs Three (The Next Turn Passes It Too, Then Its Own Comes) Unless It Lands Where The Second Miss Put It; Afterwards The Prediction Is Right") {
+        // The lead is 5 ticks, the buffer 1 and the lag 1, so the order is applied 5 ticks ahead of the confirmed engine; an uplink of 3 steps seals it exactly there. The first miss (its
+        // turn arrives without it) puts it at the next tick; a second miss puts it at the display tick of that moment, which is lead - buffer = 4 ticks after the tick that it missed then.
         struct Case {
             int shift;                       // the tick of the turn minus the tick at which the prediction applied the order
             uint64_t rebuilds;
             uint64_t own_timing;             // ... of which the order's own turn found at another tick than the one it was applied at (the others: a turn that passed it without it)
         };
-        for (const Case c : {Case{-3, 1, 1}, Case{-2, 1, 1}, Case{-1, 1, 1}, Case{0, 0, 0}, Case{1, 2, 1}, Case{2, 2, 1}, Case{3, 2, 1}, Case{4, 1, 0}, Case{5, 3, 1}}) {
+        for (const Case c : {Case{-3, 1, 1}, Case{-2, 1, 1}, Case{-1, 1, 1}, Case{0, 0, 0}, Case{1, 1, 0}, Case{2, 3, 1}, Case{3, 3, 1}, Case{4, 3, 1}, Case{5, 2, 0}}) {
             Scenario sc;
             sc.seed = 40 + static_cast<uint32_t>(c.shift + 5);
             sc.lead_ms = 250;
@@ -1558,7 +1755,7 @@ void run_cue_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("RP8.2 The Lag Is The Median Of The Last Five Orders: One Order That A Stall Held Up Does Not Move The Lead (Its Lag Is Bounded By The Longest Lead), A Lag That Has Changed For Good Does, And The Lead Rises At Once") {
+    TEST_CASE("RP8.2 The Lag Is The Shortest Of The Last Five Orders: One Order That A Stall Held Up Does Not Move The Lead (Its Lag Is Bounded By The Longest Lead), A Lag That Has Grown For Good Does When All Five Say So (At Once, By Its Two Ticks), And One Order With A Shorter Lag Brings It Down At Once") {
         Scenario sc;
         sc.seed = 120;
         sc.buffer_turns = 1;
@@ -1578,14 +1775,16 @@ void run_cue_tests() {
             rig.run(uplink + 25);                                                                // (sealed, back, run)
             return p.learned_lag_ticks();
         };
-        // lags 3 3 3, then a stall (32: held to 12), 3 3, then the link is slower for good: 5 5 5 5
-        const uint32_t uplinks[10] = {1, 1, 1, 30, 1, 1, 3, 3, 3, 3};
-        const uint32_t expected[10] = {3, 3, 3, 3, 3, 3, 3, 5, 5, 5};                              // [3] [3 3] [3 3 3] [3 3 3 12] [.. 3] [3 3 12 3 3] [3 12 3 3 5] [12 3 3 5 5] ...
-        for (int i = 0; i < 10; ++i) {
+        // lags 3 3 3, then a stall (32: held to 12), 3 3, then the link is slower for good: 5 5 5 5 5 5, then one order that is quick again: 3
+        const uint32_t uplinks[13] = {1, 1, 1, 30, 1, 1, 3, 3, 3, 3, 3, 3, 1};
+        const uint32_t expected[13] = {3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 5, 5, 3};                     // [3] [3 3] [3 3 3] [3 3 3 12] [.. 3] [3 3 12 3 3] [3 12 3 3 5] [12 3 3 5 5] [3 3 5 5 5] [3 5 5 5 5] [5 5 5 5 5] [..] [5 5 5 5 3]
+        for (int i = 0; i < 13; ++i) {
             const uint32_t learned = order_with_uplink(uplinks[i]);
             ASSERT_EQ(learned, expected[i]);
             if (i == 3) ASSERT_EQ(p.lead_ticks(), 3u);                                           // the stall did not move the lead
-            if (i == 7) ASSERT_EQ(p.lead_ticks(), 5u);                                           // the change did, at once
+            if (i == 9) ASSERT_EQ(p.lead_ticks(), 3u);                                           // four orders of the slower link: one of the last five was still quick (an order that lands a tick late is the lesser mistake)
+            if (i == 10) ASSERT_EQ(p.lead_ticks(), 5u);                                          // all five: the change moved it, at once
+            if (i == 12) ASSERT_EQ(p.lead_ticks(), 3u);                                          // one quick order: down at once
         }
     } TEST_END();
 
@@ -1610,7 +1809,7 @@ void run_cue_tests() {
         ASSERT_EQ(p.lead_ticks(), 5u);
         rig.run_quiet(61);                                                                       // the lag is older than 60 ticks now
         ASSERT_EQ(p.learned_lag_ticks(), 0u);
-        rig.run_quiet(5 * 40 + 5);                                                               // (the lead falls to the estimate one tick at a time, as it always does)
+        rig.run_quiet(12);                                                                       // (the lead falls to the estimate one tick at a time, four ticks apart)
         ASSERT_EQ(p.lead_ticks(), 2u);
         rig.issue(random_order(rng, rig.ids, 0));
         rig.run(30);
@@ -1618,7 +1817,37 @@ void run_cue_tests() {
         ASSERT_EQ(p.lead_ticks(), 5u);
     } TEST_END();
 
-    TEST_CASE("RP8.5 The Lead's Edges: A Prediction Told Nothing Starts At Two Ticks Of Lag Plus The Bias (Never Outside Its Bounds); Two Orders That Disagree Give The Upper One (A Lead Too Low Is The Worse Mistake); An Order Held Up For Ever Is Counted As The Longest Lead; The Bias On A Long Lag Stops At The Longest Lead") {
+    TEST_CASE("RP8.7 What The Orders Taught Is Forgotten When The Prediction Stops (A Pause, A Host Change, A Way Back: The Link And The Buffer May Be Others Afterwards): It Begins Again With The Owner's Estimate, And The Next Orders Teach It Again") {
+        Scenario sc;
+        sc.seed = 123;
+        sc.buffer_turns = 1;
+        sc.down_delay = 1;
+        sc.uplink = 3;                                                                           // the lag is 5
+        sc.lead_ms = 100;                                                                        // the estimate: 2
+        sc.prediction.learn_lead = true;
+        sc.prediction.lead_bias_ticks = 0;
+        Rig rig(sc);
+        Lcg rng(123);
+        Prediction& p = *rig.prediction();
+        rig.run(16);
+        rig.issue(random_order(rng, rig.ids, 0));
+        rig.run(30);
+        ASSERT_EQ(p.learned_lag_ticks(), 5u);
+        ASSERT_EQ(p.lead_ticks(), 5u);
+        p.set_suspended(true);
+        ASSERT_EQ(p.learned_lag_ticks(), 0u);                                                    // forgotten
+        rig.run(5);
+        p.set_suspended(false);
+        rig.run(2);
+        ASSERT_TRUE(p.active());
+        ASSERT_EQ(p.lead_ticks(), 2u);                                                           // the estimate, at once (a new beginning, not a fall)
+        rig.issue(random_order(rng, rig.ids, 0));
+        rig.run(30);
+        ASSERT_EQ(p.learned_lag_ticks(), 5u);                                                    // taught again
+        ASSERT_EQ(p.lead_ticks(), 5u);
+    } TEST_END();
+
+    TEST_CASE("RP8.5 The Lead's Edges: A Prediction Told Nothing Starts At Two Ticks Of Lag Plus The Bias (Never Outside Its Bounds); Two Orders That Disagree Give The Shorter One (A Lead Too Long Is The Worse Mistake: The Order Lands Before The Tick It Was Aimed At); An Order Held Up For Ever Is Counted As The Longest Lead; The Bias On A Long Lag Stops At The Longest Lead") {
         Rig rig(Scenario{});
         Prediction::Config c = Scenario::rig_config();
         {
@@ -1644,7 +1873,7 @@ void run_cue_tests() {
             Prediction fresh(rig.confirmed(), rig.runner(), c);
             ASSERT_EQ(fresh.lead_ticks(), 7u);                                                   // ... and 2 is below the shortest
         }
-        // two orders that disagree (lags 3 and 5): the median of two is the upper one
+        // two orders that disagree (lags 3 and 5): the shorter one
         {
             Scenario sc;
             sc.seed = 125;
@@ -1663,7 +1892,8 @@ void run_cue_tests() {
             two.set_uplink(3);
             two.issue(random_order(rng, two.ids, 0));
             two.run(30);
-            ASSERT_EQ(two.prediction()->learned_lag_ticks(), 5u);
+            ASSERT_EQ(two.prediction()->learned_lag_ticks(), 3u);
+            ASSERT_EQ(two.prediction()->lead_ticks(), 3u);
         }
         // orders that a stall holds up for ever (an uplink of 30 steps) are lags of the longest lead, however long they really took
         {
@@ -1705,7 +1935,7 @@ void run_cue_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("RP8.6 The Product's Defaults Are The Documented Numbers (docs/NETWORK_PORT.md, README): The Lead Learns From The Median Of The Last Five Orders No Older Than 400 Ticks With No Bias (An Order Is Put Where The Host Runs It), Between 1 And 12 Ticks, Falls After 40 Ticks; A Lost Order Is Dropped After 100; The Budget Is 12 ms, Four Strikes In 200 Ticks, A Cool-Down Of 200 Ticks That Doubles Up To 3200") {
+    TEST_CASE("RP8.6 The Product's Defaults Are The Documented Numbers (docs/NETWORK_PORT.md, README): The Lead Learns From The Shortest Lag Of The Last Five Orders No Older Than 400 Ticks With No Bias (An Order Is Put Where The Host Runs It), Between 1 And 12 Ticks, Rises By One Tick After 40 Ticks; A Lost Order Is Dropped After 100; The Budget Is 12 ms, Four Strikes In 200 Ticks, A Cool-Down Of 200 Ticks That Doubles Up To 3200") {
         const Prediction::Config c;
         ASSERT_TRUE(c.learn_lead);
         ASSERT_EQ(c.lag_samples, 5u);
@@ -1713,7 +1943,7 @@ void run_cue_tests() {
         ASSERT_EQ(c.lead_bias_ticks, 0u);                                                        // (a project decision: a local game's feel and no hops; 1 shows an order 50 ms sooner at the price of a tile hop in one order of six)
         ASSERT_EQ(c.min_lead_ticks, 1u);
         ASSERT_EQ(c.max_lead_ticks, 12u);
-        ASSERT_EQ(c.lead_fall_after_ticks, 40u);
+        ASSERT_EQ(c.lead_rise_after_ticks, 40u);
         ASSERT_EQ(c.pending_timeout_ticks, 100u);
         ASSERT_EQ(c.budget_ns, 12ull * 1000ull * 1000ull);
         ASSERT_EQ(c.budget_strikes, 4u);

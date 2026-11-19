@@ -172,7 +172,6 @@ bool Application::init(const ApplicationConfig& config) {
     config_store_.load();
     choose_aspect();
     choose_zoom();
-    choose_prediction();
     make_rejoin_store();
 
     // 6. Create Desktop Window
@@ -279,6 +278,9 @@ bool Application::init(const ApplicationConfig& config) {
     hud_.set_on_play_sfx([this](uint32_t sound_id) { play_ui_sound(sound_id); });
     hud_.set_news_note([this](const sim::NewsEvent& event) { return declined_team_up_note(event); });     // (a computer player that declines to team up says why)
 
+    hud_.set_draw_offset([this](const sim::WorldState& world, uint8_t team, const sim::AntSnapshot& ant, int32_t& dx, int32_t& dy) {      // (the pointer picks a sliding ant where the frame draws it: view_glide.hpp)
+        return renderer_ != nullptr && glide_offset(renderer_->view_glide(), world, team, ant, dx, dy);
+    });
     hud_.set_on_spawn_click_marker([this](int32_t wx, int32_t wy) {
         if (renderer_) {
             renderer_->spawn_transient_effect("xmarks", wx, wy);
@@ -331,6 +333,7 @@ bool Application::init(const ApplicationConfig& config) {
     if (networked) {
         config_.start_in_map_select = true;
         net_ = std::make_unique<net::NetGame>(sim_);
+        if (config_.net_link_maker) net_->set_link_maker_for_test(config_.net_link_maker);
         hook_rejoin_store();
         net_->set_discovery(config_.lan_port);                                          // an open room announces itself to the local network (ants_net/lan.hpp)
         net_->set_game_version(std::string(VERSION_STRING));
@@ -614,6 +617,7 @@ void Application::set_page_hidden(bool hidden) {
         hidden_ticks_ = 0;
         return;
     }
+    if (renderer_) renderer_->view_glide().clear();          // (a slide that was left when the page went away is about a picture that nobody saw)
     if (background_driven()) background_step();              // shown again: one last wake-up so that the clocks are up to date, then the frame loop has the match back
     page_hidden_ = false;
     last_frame_time_ = now_counter();                        // the first frame measures from here: the hours that the page was hidden are not a frame
@@ -822,7 +826,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
             if (game == nullptr) return 0;
             return game->prediction_cooling_down() ? 2 : (game->predicting() ? 1 : 0);
         }
-        case 10: {                                                              // (no game: -1; a game that has no prediction (the default is off: it is never made) predicted nothing: 0)
+        case 10: {                                                              // (no game: -1; a game that has no prediction (told --no-prediction: it is never made) predicted nothing: 0)
             const net::NetGame* game = g_web_app->net();
             if (game == nullptr) return -1;
             return game->prediction() != nullptr ? static_cast<int>(game->prediction()->stats().commands_predicted) : 0;

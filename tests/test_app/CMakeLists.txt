@@ -1065,6 +1065,66 @@ endif()
 add_test(NAME test_rejoin_app COMMAND test_rejoin_app)
 set_tests_properties(test_rejoin_app PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+# The prediction of one's own orders through the real input path over links with a delay and jitter (humping on mud, the attack click on a walking ant, reconciliation): a headless Application in a room
+# of a real RoomManager (ants_server_core) over net::LoopbackNetwork links on a virtual clock, with a bare second machine
+add_executable(test_prediction_link
+    test_prediction_link.cpp
+)
+
+target_include_directories(test_prediction_link PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_prediction_link PRIVATE
+    ants_app
+    ants_server_core
+)
+
+target_link_libraries(test_prediction_link PRIVATE ants_test_paths)
+
+if(APPLE)
+    target_link_libraries(test_prediction_link PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_prediction_link PRIVATE ws2_32 winmm)
+endif()
+
+add_test(NAME test_prediction_link COMMAND test_prediction_link)
+set_tests_properties(test_prediction_link PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# The glide of an ant that the prediction has moved (include/ants_app/view_glide.hpp): the slide's rules and the walk-plus-slide bound on the picture; a model, no SDL, no window
+add_executable(test_view_glide
+    test_view_glide.cpp
+)
+
+target_include_directories(test_view_glide PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_view_glide PRIVATE
+    ants_app
+)
+
+if(APPLE)
+    target_link_libraries(test_view_glide PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_view_glide PRIVATE ws2_32 winmm)
+endif()
+
+add_test(NAME test_view_glide COMMAND test_view_glide)
+set_tests_properties(test_view_glide PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 # Touch model: what one finger or two do on the match screen (tap, drag, hold, the minimap, the pan and the pinch, the second and the third finger, cancels, the clock and the slop's size):
 # finger events in, actions out, with an injected clock (pure: no SDL, no window)
 add_executable(test_touch_model

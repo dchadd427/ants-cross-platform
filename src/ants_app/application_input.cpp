@@ -435,7 +435,7 @@ void Application::handle_key_down(const SDL_KeyboardEvent& key) {
         return;
     }
 
-    hud_.handle_key_down(key.keysym.sym, view_sim(), renderer_->camera(), key.keysym.mod, key.repeat != 0);
+    hud_.handle_key_down(key.keysym.sym, input_sim(), renderer_->camera(), key.keysym.mod, key.repeat != 0);
 }
 
 void Application::handle_mouse_motion(const SDL_MouseMotionEvent& motion) {
@@ -450,7 +450,7 @@ void Application::handle_mouse_motion(const SDL_MouseMotionEvent& motion) {
         return;
     }
 
-    hud_.handle_mouse_motion(motion.x, motion.y, view_sim(), renderer_->camera());
+    hud_.handle_mouse_motion(motion.x, motion.y, input_sim(), renderer_->camera());
 }
 
 void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
@@ -481,9 +481,9 @@ void Application::handle_mouse_button(const SDL_MouseButtonEvent& button) {
 
     uint16_t mod = static_cast<uint16_t>(SDL_GetModState());
     if (button.type == SDL_MOUSEBUTTONDOWN) {
-        hud_.handle_mouse_down(button.x, button.y, button.button, view_sim(), renderer_->camera(), mod);
+        hud_.handle_mouse_down(button.x, button.y, button.button, input_sim(), renderer_->camera(), mod);
     } else if (button.type == SDL_MOUSEBUTTONUP) {
-        hud_.handle_mouse_up(button.x, button.y, button.button, view_sim(), renderer_->camera(), mod);
+        hud_.handle_mouse_up(button.x, button.y, button.button, input_sim(), renderer_->camera(), mod);
     }
 }
 

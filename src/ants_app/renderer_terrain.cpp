@@ -409,6 +409,7 @@ void Renderer::spawn_transient_effect(const std::string& anim_name, int32_t px, 
 }
 
 void Renderer::update_transient_effects(float dt) {
+    view_glide_.advance(static_cast<uint32_t>(std::max(0.0f, dt) * 1000.0f + 0.5f));
     if (transient_effects_.empty() || !archive_) return;
     for (auto it = transient_effects_.begin(); it != transient_effects_.end();) {
         it->elapsed_sec += dt;

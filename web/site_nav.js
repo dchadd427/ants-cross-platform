@@ -72,6 +72,35 @@
         btn.setAttribute('aria-expanded', 'false');
         if (back) btn.focus();
     }
+    // A tab that the front page opened only because its person holds a room (Watch, Matches; docs/SITE_NAV.md): its Home closes the tab and leaves the front page's tab as it was. The page asks on the channel when it
+    // opens (heard) and again at the press of Home; a tab keeps its key in the session storage, so that the pages that its links lead to ask too.
+    var CHANNEL = 'ants-watch', SIDE = 'ants.side', ASK_MS = 300, CLOSE_MS = 400, talk = null, token = '', then = null, heard = false, waiting = false;
+    function kept(set) { try { if (set === undefined) return window.sessionStorage.getItem(SIDE) || ''; if (set) window.sessionStorage.setItem(SIDE, set); else window.sessionStorage.removeItem(SIDE); } catch (e) { /* none */ } return ''; }
+    function sideKey() {
+        var at = window.location || {}, live = /(?:^|[?&])live=([^&#]{1,80})/.exec(at.search || ''), own = at.pathname === '/matches' ? 'matches' : at.pathname === '/play' && live ? live[1] : '';
+        return kept() || (window.history && window.history.length === 1 ? own : '');       // (a page is such a tab by its own address only in a tab that began on it: a page that a tab went on to is told by the key that the tab keeps)
+    }
+    function ask(on) { token = String(Math.random()).slice(2); then = on; try { talk.postMessage({ t: 'back', side: sideKey(), token: token }); return true; } catch (e) { return false; } }
+    if (typeof window.BroadcastChannel === 'function' && sideKey()) {
+        try {
+            talk = new window.BroadcastChannel(CHANNEL);
+            talk.onmessage = function (m) { var x = m && m.data, on = then; if (on && x && x.t === 'here' && x.token === token) { then = null; on(); } };
+            ask(function () { heard = true; kept(sideKey()); });
+        } catch (e) { talk = null; }
+    }
+    function homeBack() {                      // true: the press is taken
+        if (!talk || !heard) return false;
+        if (waiting) return true;
+        var timer, plain = function () { waiting = false; then = null; kept(''); window.location.assign('/'); };
+        waiting = true;
+        if (!ask(function () { clearTimeout(timer); try { window.close(); } catch (e) { /* it goes on as a link */ } setTimeout(plain, CLOSE_MS); })) plain();
+        else timer = setTimeout(plain, ASK_MS);
+        return true;
+    }
+    d.addEventListener('click', function (e) {
+        var a = e.target && e.target.closest ? e.target.closest('a') : null;
+        if (a && a.getAttribute('href') === '/' && (bar.contains(a) || (box && box.contains(a))) && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && !e.button && homeBack()) e.preventDefault();
+    }, true);
     btn.addEventListener('click', function () { if (box && !box.hidden) close(true); else open(); });
     d.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(true); });
     d.addEventListener('click', function (e) { if (box && !box.hidden && !box.contains(e.target) && !btn.contains(e.target)) close(false); });
