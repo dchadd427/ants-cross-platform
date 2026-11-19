@@ -2560,7 +2560,8 @@
             ask: function () { return window.confirm('Leave the game and go back to the menu?'); },
             running: function () { try { return typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (err) { return false; } },
             leave: antsLeaveMatch,
-            focus: function () { canvas.focus(); }
+            focus: function () { canvas.focus(); },
+            side: function () { return ANTS_LIVE_ID || ''; }
         });
 
         // The fullscreen mouse: Locked (the default) or Free, a row of the settings menu (Video; web/game_menu.js calls antsLock). The browser remembers the choice under ANTS_LOCK_KEY (nothing else writes it; only

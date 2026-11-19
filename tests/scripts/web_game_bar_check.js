@@ -3,6 +3,8 @@
 // running or not. What it holds:
 //   links:  with no match every link of the bar and of its Menu acts as on any page; while a match runs Home asks (No stays, Yes lets go of the seat and goes, a click that opens another tab leaves the seat),
 //           the mark of live matches is Home too, every other link opens a new tab and never takes this one, a link that is a new tab anyway is left alone;
+//   watch:  a live view that the front page opened in a new tab (a front page answers on the channel "ants-watch" for the match): its Home and the Menu's Home close the tab and never load a front page; a press that opens another tab, a link that is not Home, a page with no front page that answers (not at all, or not for that match, or not any more), a browser with no channel and a
+//           tab that cannot be closed are plain links of this tab;
 //   keys:   with the focus on the game a key reaches it; with the focus in the bar or the Menu open no key reaches it (down, press, up), a key kept stays kept until its lift (repeats too), a key that was down
 //           before keeps its lift, a bare Shift goes on, Enter presses the focused control, Esc closes the Menu and the game never hears it, a fresh press ends the keeping of the one before;
 //   focus:  a press with the pointer gives the focus back to the game, except on the Menu's button, which has opened the Menu;
@@ -41,20 +43,27 @@ const HTML = '<!doctype html><meta name="viewport" content="width=device-width">
 
 // the stand-in for the game and for the page's call: window.__log is what happened
 const SETUP = () => {
-    window.__log = { keys: [], asks: 0, leaves: 0, opens: [], reloads: 0, focus: 0, clicks: [], answer: true };
+    window.__log = { keys: [], asks: 0, leaves: 0, opens: [], reloads: 0, focus: 0, clicks: [], answer: true, closed: 0, assigned: [] };
     window.__busy = false;
     window.__running = false;
     for (const type of ['keydown', 'keypress', 'keyup']) document.addEventListener(type, (e) => window.__log.keys.push(type + ':' + e.key), false);       // (the game: it listens at the document, in the bubble phase)
     document.addEventListener('click', (e) => { const a = e.target.closest && e.target.closest('a, button'); if (a) { window.__log.clicks.push({ id: a.id || a.textContent.trim(), prevented: e.defaultPrevented }); if (a.tagName === 'A') e.preventDefault(); } }, false);      // (what a click did, and no real navigation)
     AntsGameBar.start({
         doc: document,
-        win: { open: (href, target, features) => { window.__log.opens.push([href, target, features]); return {}; }, location: { reload: () => { window.__log.reloads++; } } },
+        win: { open: (href, target, features) => { window.__log.opens.push([href, target, features]); return {}; }, close: () => { window.__log.closed++; },
+               location: { reload: () => { window.__log.reloads++; }, assign: (url) => { window.__log.assigned.push(url); } }, BroadcastChannel: window.__noChannel ? undefined : window.BroadcastChannel },
         busy: () => window.__busy, running: () => window.__running, ask: () => { window.__log.asks++; return window.__log.answer; }, leave: () => { window.__log.leaves++; },
         focus: () => { window.__log.focus++; document.getElementById('canvas').focus(); },
+        side: () => window.__side || '',
     });
 };
+// the front page that opened a live view, as a stand-in: it answers a watch tab that asks for the match it listed (window.__front.on says whether it is there; asks is what it heard; other: its answer carries another tab's token)
+const FRONT = (live) => {
+    const front = window.__front = { on: true, live, asks: [], channel: new BroadcastChannel('ants-watch') };
+    front.channel.onmessage = (m) => { const x = m.data; front.asks.push(x); if (front.on && x && x.t === 'back' && x.live === front.live) front.channel.postMessage({ t: 'here', token: front.other ? 'of another tab' : x.token }); };
+};
 
-async function open(browser, w, h, body) {
+async function open(browser, w, h, body, watch) {          // watch: { side (the match that the page follows), front (the match that a front page answers for, or none), channel: false (a browser with none) }
     const context = await browser.newContext({ viewport: { width: w, height: h } });
     const p = await context.newPage();
     await p.setContent(HTML.replace('BODY', body || ''));
@@ -63,11 +72,16 @@ async function open(browser, w, h, body) {
     await p.addStyleTag({ content: BASE });
     await p.addScriptTag({ content: fs.readFileSync(navScript, 'utf8') });
     await p.addScriptTag({ content: fs.readFileSync(script, 'utf8') });
+    if (watch) {
+        await p.evaluate((x) => { window.__side = x.side || ''; window.__noChannel = x.channel === false; }, watch);
+        if (watch.front) await p.evaluate(FRONT, watch.front);
+    }
     await p.evaluate(SETUP);
+    await p.waitForTimeout(60);         // (the answer to the question that a live view asks when it opens)
     return { context, p };
 }
 const log = (p) => p.evaluate(() => JSON.parse(JSON.stringify(window.__log)));
-const reset = (p) => p.evaluate(() => { const l = window.__log; l.keys = []; l.asks = 0; l.leaves = 0; l.opens = []; l.reloads = 0; l.focus = 0; l.clicks = []; l.answer = true; });
+const reset = (p) => p.evaluate(() => { const l = window.__log; l.keys = []; l.asks = 0; l.leaves = 0; l.opens = []; l.reloads = 0; l.focus = 0; l.clicks = []; l.answer = true; l.closed = 0; l.assigned = []; });
 const focusGame = (p) => p.evaluate(() => document.getElementById('canvas').focus());
 const menuOpen = (p) => p.evaluate(() => { const b = document.getElementById('sbm'); return !!b && !b.hidden; });
 const menuLines = (p) => p.evaluate(() => [].slice.call(document.querySelectorAll('#sbm > *')).filter((n) => n.offsetParent !== null).map((n) => n.textContent.trim()));
@@ -128,6 +142,85 @@ const active = (p) => p.evaluate(() => { const a = document.activeElement; retur
             l = await log(p);
             expect('a match: the Menu\'s Home asks as well', [l.asks, l.leaves], [1, 1]);
             await context.close();
+        }
+        // ---- the way back of a live view that the front page opened ----
+        {
+            const ID = 'TREASURE-20261109-120000Z';
+            const state = async (p) => { const l = await log(p); return [l.closed, l.assigned, l.clicks.length ? l.clicks[l.clicks.length - 1].prevented : null, l.asks, l.leaves, l.opens.length]; };
+            const heard = (p) => p.evaluate(() => window.__front.asks.length);
+            {
+                const { context, p } = await open(browser, 1280, 800, 'replay live', { side: ID, front: ID });
+                expect('a live view that a front page answers for: it asked once when it opened', await heard(p), 1);
+                await p.click('.sbhome');
+                expect('... Home closes this tab (a press taken: no link is followed, no seat is asked about, nothing is let go of)', await state(p), [1, [], true, 0, 0, 0]);
+                expect('... after asking again, with the match\'s id', await p.evaluate(() => window.__front.asks.map((a) => [a.t, a.live])), [['back', ID], ['back', ID]]);
+                await reset(p);
+                await p.waitForTimeout(600);
+                expect('a tab that cannot be closed (the stand-in\'s close does nothing) goes on as a link of this tab, a moment later', (await log(p)).assigned, ['/']);
+                await reset(p);
+                await p.evaluate(() => { window.__front.asks = []; });
+                await p.click('.sbhome', { modifiers: ['Shift'] });
+                expect('a click that opens another tab is not taken: the link, and the front page is not asked', [await state(p), await heard(p)], [[0, [], false, 0, 0, 0], 0]);
+                await reset(p);
+                await p.click('#all-btn');
+                expect('a link that is not Home is as on any page', [await state(p), await heard(p)], [[0, [], false, 0, 0, 0], 0]);
+                await reset(p);
+                await openMenu(p);
+                await p.click('#sbm a[href="/"]');
+                expect('the Menu\'s Home closes it too', await state(p), [1, [], true, 0, 0, 0]);
+                await context.close();
+            }
+            {
+                const { context, p } = await open(browser, 390, 800, 'replay live', { side: ID, front: ID });
+                await p.click('.sbhome');
+                expect('a phone: the bar\'s Home closes this tab too', await state(p), [1, [], true, 0, 0, 0]);
+                await context.close();
+            }
+            {
+                const { context, p } = await open(browser, 1280, 800, 'replay live', { side: ID, front: ID });
+                await p.evaluate(() => { window.__front.on = false; });
+                await reset(p);
+                await p.click('.sbhome');
+                expect('the front page has gone since: the press is held for a moment, nothing closes', await state(p), [0, [], true, 0, 0, 0]);
+                await p.waitForTimeout(450);
+                expect('... and then Home is followed in this tab', await state(p), [0, ['/'], true, 0, 0, 0]);
+                await context.close();
+            }
+            {
+                const { context, p } = await open(browser, 1280, 800, 'replay live', { side: ID, front: ID });
+                await p.evaluate(() => { window.__front.other = true; });
+                await reset(p);
+                await p.click('.sbhome');
+                await p.waitForTimeout(450);
+                expect('an answer that carries the token of another tab\'s question is not for this tab: nothing closes, and Home is followed after the wait', await state(p), [0, ['/'], true, 0, 0, 0]);
+                await context.close();
+            }
+            {
+                const { context, p } = await open(browser, 1280, 800, 'replay live', { side: ID });
+                await p.click('.sbhome');
+                expect('no front page answered when the page opened (the live view is in the only tab): Home is a plain link at once, with no wait', await state(p), [0, [], false, 0, 0, 0]);
+                await p.waitForTimeout(450);
+                expect('... and nothing is followed by the bar', (await log(p)).assigned, []);
+                await context.close();
+            }
+            {
+                const { context, p } = await open(browser, 1280, 800, 'replay live', { side: ID, front: 'ISLANDS-20261109-115900Z' });
+                await p.click('.sbhome');
+                expect('a front page that answers for another match is not this one\'s: Home is a plain link', await state(p), [0, [], false, 0, 0, 0]);
+                await context.close();
+            }
+            {
+                const { context, p } = await open(browser, 1280, 800, 'replay', { side: '', front: ID });
+                await p.click('.sbhome');
+                expect('a page that follows no live match (a recording, a game) asks nobody and is as any page', [await state(p), await heard(p)], [[0, [], false, 0, 0, 0], 0]);
+                await context.close();
+            }
+            {
+                const { context, p } = await open(browser, 1280, 800, 'replay live', { side: ID, front: ID, channel: false });
+                await p.click('.sbhome');
+                expect('a browser with no channel: Home is a plain link', await state(p), [0, [], false, 0, 0, 0]);
+                await context.close();
+            }
         }
         // ---- the keys ----
         {

@@ -39,15 +39,15 @@
   {
    "id": "links_act_as_usual_during_a_match",
    "file": "web/game_bar.js",
-   "old": "href.charAt(0) === '#' || !busy()) return;",
-   "new": "href.charAt(0) === '#' || true) return;",
+   "old": "if (!busy()) return;",
+   "new": "if (true) return;",
    "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
   },
   {
    "id": "links_ask_with_no_match",
    "file": "web/game_bar.js",
-   "old": "href.charAt(0) === '#' || !busy()) return;",
-   "new": "href.charAt(0) === '#') return;",
+   "old": "if (!busy()) return;",
+   "new": "if (false) return;",
    "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
   },
   {
@@ -329,6 +329,62 @@
    "old": "hit = down && e.target === node; down = false; });",
    "new": "hit = e.target === node; down = false; });",
    "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css web/shell.html web/site_nav.js web/site_nav.css"
+  },
+  {
+   "id": "watch_home_does_not_close_the_tab",
+   "file": "web/game_bar.js",
+   "old": "try { w.close(); } catch (err) { /* it goes on as a link */ }",
+   "new": "",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "watch_home_is_taken_with_no_front_page",
+   "file": "web/game_bar.js",
+   "old": "if (!talk || !heard || !side()) return false;",
+   "new": "if (!talk || !side()) return false;",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "watch_home_closes_without_asking_again",
+   "file": "web/game_bar.js",
+   "old": "if (waiting) return true;\n",
+   "new": "if (waiting) return true;\n            try { w.close(); } catch (err) { /* none */ }\n            return true;\n",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "watch_home_never_goes_on_as_a_link",
+   "file": "web/game_bar.js",
+   "old": "setTimeout(plain, CLOSE_MS);",
+   "new": "",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "watch_home_waits_for_no_answer",
+   "file": "web/game_bar.js",
+   "old": "else timer = setTimeout(plain, ASK_MS);",
+   "new": "else timer = 0;",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "watch_a_modified_press_of_home_is_taken",
+   "file": "web/game_bar.js",
+   "old": "if (href === '/' && !modified && !e.button && homeBack(href))",
+   "new": "if (href === '/' && homeBack(href))",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "watch_a_page_with_no_live_match_asks",
+   "file": "web/game_bar.js",
+   "old": "if (side() && typeof w.BroadcastChannel === 'function') {",
+   "new": "if (typeof w.BroadcastChannel === 'function') {",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
+  },
+  {
+   "id": "watch_any_answer_is_taken",
+   "file": "web/game_bar.js",
+   "old": "x.t === 'here' && x.token === token",
+   "new": "x.t === 'here'",
+   "test": "node tests/scripts/web_game_bar_check.js web/game_bar.js web/game_bar.css"
   }
  ]
 }

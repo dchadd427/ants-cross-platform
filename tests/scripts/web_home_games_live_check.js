@@ -1,6 +1,6 @@
 // Runs the matches IN PROGRESS of the Games list (web/home/games.js, docs/HOME_GAMES.md "The Games list", docs/REPLAYS.md "Live") in the fake browser of tests/scripts/web_page_harness.js, against a fake GET /lobbies and a fake GET /live:
 //   1. the pure parts: a match of the door's answer on a table (the id's shape, the map, the players' words, markup and look-alike characters in a name), the list (50 at the most, an id once, not a list), the waits (10 s at the least);
-//   2. the rows: a red Live mark, the map, who plays, how long it has run, Watch = /play?live=<id> in a NEW tab, the head "N open, M in progress", the Games button that counts the open rooms only, the empty line;
+//   2. the rows: a red Live mark, the map, who plays, how long it has run, Watch = /play?live=<id> (the same tab; a NEW one only while the page holds a room), the head "N open, M in progress", the Games button that counts the open rooms only, the empty line;
 //   3. the looks at /live: never faster than 10 s apart, none while the list is not shown (a closed popover, a hidden tab, the Room, after the hand-off), a server with no live door (404) or a failed look hides the
 //      section with no error and the list goes on;
 //   4. no switch and nothing kept: the rows always show, an old stored word is ignored and left as it was, a blocked storage changes nothing.
@@ -81,7 +81,7 @@ const M = 'TREASURE.LVL';
     same('... who plays and for how long', rows.map((li) => [first(li, 'gwho').textContent, first(li, 'glen').textContent]), [['Ann, Bot (Medium)', '2:05 so far'], ['Cy, Black', '0:07 so far']]);
     same('... a dot of each player\'s color: a person is a filled dot, a computer player (the door writes "Bot (Medium)") a ring, as in the open rooms', rows.map((li) => find(li, 'gdot').map((d) => d.className.replace('gdot ', ''))), [['player c0', 'bot c1'], ['player c2', 'player c3']]);
     const w = watchOf(rows[0]);
-    same('Watch is a link to the player on that match, in a NEW tab (the seat in a room stays), with no opener', [w.tagName, w.getAttribute('href'), w.getAttribute('target'), w.getAttribute('rel')], ['a', '/play?live=TREASURE-20261109-120000Z', '_blank', 'noopener']);
+    same('Watch is a link to the player on that match, in this very tab (the page holds no room: nothing is lost, and Back and Home come back to the one front page)', [w.tagName, w.getAttribute('href'), w.getAttribute('target'), w.getAttribute('rel')], ['a', '/play?live=TREASURE-20261109-120000Z', null, null]);
     check('... and its name for a screen reader says the match', /^Watch the match on Treasure, Ann, Bot \(Medium\), 2:05 so far$/.test(w.getAttribute('aria-label')));
     check('a row in progress has no Join (nobody can take a seat of a running match)', rows.every((li) => !li.findAll((e) => e.tagName === 'button').length && !first(li, 'gjoin')));
     check('the heading of the list says how many are open and how many are in progress', headOf(env) === '1 open, 2 in progress', headOf(env));
@@ -135,6 +135,67 @@ const M = 'TREASURE.LVL';
     env.site.live.body = answer([Object.assign({}, KILLS, { mode: 'highest-score', seconds: 140 }), SCORE, OLD, ODD]);
     await wait(env, 12500);
     check('a match that is given another mode by a later answer (it never is: the id is one match) is drawn again as the answer says', find(liveRows(env)[0], 'gmode').length === 0 && watchOf(liveRows(env)[0]).getAttribute('aria-label') === 'Watch the match on Treasure, Ann, Bot (Medium), 2:20 so far');
+}
+
+// ---- 2b. which tab Watch uses, and the watch tab that asks for this page ----
+// The watch tab (web/game_bar.js) asks on the channel "ants-watch" for the page that opened it; this page answers for a match that it listed while it held a room. A fake of the browser's channel: a message goes to every other
+// channel of the same name that is open (it is not given to the one that sent it, as in a browser).
+function channels() {
+    const open = [];
+    class Channel {
+        constructor(name) { this.name = name; this.closed = false; this.onmessage = null; open.push(this); }
+        postMessage(data) { const copy = JSON.parse(JSON.stringify(data)); for (const c of open) if (c !== this && c.name === this.name && !c.closed && c.onmessage) c.onmessage({ data: copy }); }
+        close() { this.closed = true; }
+    }
+    return { Channel, open };
+}
+// a watch tab: asks for the page that opened it (ask returns how many answers came back for that token: an answer goes to every channel, and a tab takes only the one that carries its own token)
+function watchTab(bus, live) {
+    const tab = new bus.Channel('ants-watch'), heard = [];
+    tab.onmessage = (m) => heard.push(m.data);
+    return { heard, ask: (token) => { tab.postMessage({ t: 'back', live, token }); return heard.filter((m) => m.token === token).length; } };
+}
+{
+    const ID = 'TREASURE-20261109-120000Z', OTHER = 'ISLANDS-20261109-115900Z';
+    const bus = channels();
+    const env = await livePage({ options: { win: { BroadcastChannel: bus.Channel } } });
+    const link = () => watchOf(liveRows(env)[0]);
+    const outTab = (a) => [a.getAttribute('target'), a.getAttribute('rel')];
+    const tab = watchTab(bus, ID);
+    same('with no room Watch is a plain link of the same tab, and a press does not change that', [outTab(link()), (link().click(), outTab(link()))], [[null, null], [null, null]]);
+    same('... and nobody that asks for this page is answered (no seat was given up for a tab to come back to)', tab.ask('t0'), 0);
+    myRoom(env, ['Maya'], R.PRIVATE);
+    env.roomBar('rhome').click();
+    await flush();
+    check('(Home shows, with the room: My room is there)', env.screen() === 'home' && !env.home('mine').hidden);
+    same('while the page holds a room Watch is a new tab with no opener (leaving would give the seat up)', outTab(link()), ['_blank', 'noopener']);
+    same('... the address is the same one', link().getAttribute('href'), '/play?live=' + ID);
+    same('a watch tab that asks for the match listed now is answered, with its own token', [tab.ask('t1'), tab.heard.filter((m) => m.token === 't1')], [1, [{ t: 'here', token: 't1' }]]);
+    same('... so is a match of another id that this page listed; a match that it never listed, and a watch tab with no match, are not', [watchTab(bus, OTHER).ask('t2'), watchTab(bus, 'NEVER-20261109-000000Z').ask('t3'), watchTab(bus, undefined).ask('t4')], [1, 0, 0]);
+    same('... a token that is not text is not answered (nothing is made of it)', watchTab(bus, ID).ask(5), 0);
+    env.roomBar('leave').click();
+    await flush();
+    same('the room is left: Watch is a plain link again at once', outTab(link()), [null, null]);
+    same('... and the page still answers for the match that it listed while it held a room (the watch tab that is open goes back to this very tab)', tab.ask('t6'), 1);
+    check('none of it reloaded or navigated this page', env.reloads === 0 && env.assigned.length === 0 && env.opened.length === 0);
+    check('(a press that comes while the page holds a room decides then: the link is a new tab at the press, whatever was drawn)', (() => { myRoom(env, ['Maya'], R.PRIVATE); link().removeAttribute('target'); link().removeAttribute('rel'); link().click(); return outTab(link()).join() === '_blank,noopener'; })());
+}
+{   // START reaches the page: it leaves, so it answers nobody
+    const bus = channels();
+    const env = await livePage({ search: '?room=k7m2xq', options: { stayHome: false, win: { BroadcastChannel: bus.Channel } } });
+    const sock = R.guestRoom(env, 'Pebble', R.PUBLIC);
+    env.roomBar('rhome').click();
+    await wait(env, 1000);
+    const tab = watchTab(bus, 'TREASURE-20261109-120000Z'), before = tab.ask('a');
+    sock.receive(roomMessage(seatsOf(['Pebble', 'Maya']), { you: 1, leader: 0, flags: STARTING }));
+    same('a guest holds a room too: a watch tab is answered; once START is on its way the page answers nobody', [before, tab.ask('b')], [1, 0]);
+}
+{   // a browser with no channel, a channel that refuses: nothing breaks, Watch is the same as ever
+    const none = await livePage({ options: { win: { BroadcastChannel: undefined } } });
+    myRoom(none, ['Maya'], R.PRIVATE); none.roomBar('rhome').click(); await flush();
+    same('no channel in the browser: the list shows and Watch is a new tab in a room', [watchOf(liveRows(none)[0]).getAttribute('target'), none.screen()], ['_blank', 'home']);
+    const broken = await livePage({ options: { win: { BroadcastChannel: function () { throw new Error('not allowed'); } } } });
+    check('a channel that cannot be made changes nothing: the rows are there', liveRows(broken).length === 2 && watchOf(liveRows(broken)[0]).getAttribute('target') === null);
 }
 
 // ---- 3. the looks at /live ----

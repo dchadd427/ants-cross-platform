@@ -3,7 +3,7 @@
 //   1. a busy list (open rooms and eight matches in progress, with long names, a name that is markup and a map of the players): the page does not scroll sideways, no row is wider than the list, every Watch is at least
 //      44 x 44 px, inside its row and not over the row's own text (nor over the box of the names), and the Games button counts the open rooms only;
 //      (and Watch stands at the row's right edge and four names of 32 characters are cut at three lines inside their box);
-//   2. Watch is a link to /play?live=<id> with target _blank: a press opens a NEW page on that address and the lobby page stays where it was, with its list;
+//   2. Watch is a link to /play?live=<id> of the same tab while the page holds no room (this stand-in has no game server, so it never does): a press opens no new page, the tab goes to that address and Back comes back to the one front page, with its list;
 //   3. a name that is markup is shown as text (no element and no script run: nothing in the page was made from it);
 //   4. there is no switch: the rows always show, and a word that an earlier version kept in this browser ("0") is ignored and left alone, also after a reload;
 //   5. a phone: while its Chat view covers the list nothing looks at /live, and the Games view brings the look back;
@@ -124,7 +124,7 @@ const GEOM = () => {
                 check(name + ': the matches of mode 187 (the 2nd, 5th and 8th) have the tag 187 right after their Live mark, on its line, both 18 px tall and inside the row; the others have none', g.rows.every((r, i) => i % 3 === 1 ? r.tag && r.tag.text === '187' && r.tag.inside && r.tag.after && r.tag.line && Math.abs(r.tag.h - 18) < 0.5 && Math.abs(r.tag.mark - 18) < 0.5 : r.tag === null), JSON.stringify(g.rows.map((r) => r.tag)));
                 check(name + ': the computer players of a server ("Pip (bot, Hard)", "Kit (bot, idle)") and the older "Bot (Hard)" are rings, the 18 people filled dots', info.rings === 3 && info.dots === 18, JSON.stringify([info.rings, info.dots]));
                 check(name + ': a name that is markup ran nothing and made no element', info.hits && info.imgs === 0);
-                check(name + ': every Watch is /play?live=<id> in a new tab with no opener', info.links.length === 8 && info.links.every((l) => /^\/play\?live=[A-Za-z0-9_]+-[0-9]{8}-[0-9]{6}Z$/.test(l[0]) && l[1] === '_blank' && /noopener/.test(l[2])), JSON.stringify(info.links[0]));
+                check(name + ': every Watch is /play?live=<id> and a link of the same tab (the page holds no room)', info.links.length === 8 && info.links.every((l) => /^\/play\?live=[A-Za-z0-9_]+-[0-9]{8}-[0-9]{6}Z$/.test(l[0]) && !l[1] && !l[2]), JSON.stringify(info.links[0]));
                 check(name + ': Watch stands in the last column of its row, at its right edge (its grid area)', g.rows.every((r) => r.flush <= 20), JSON.stringify(g.rows.map((r) => Math.round(r.flush))));
                 check(name + ': four names of 32 characters are cut at three lines and leave nothing outside their box', g.rows.every((r) => !r.leak) && g.rows[6].h <= 200, JSON.stringify(g.rows.map((r) => [r.leak, Math.round(r.h)])));
                 await shot(page, name + '_busy');
@@ -133,12 +133,14 @@ const GEOM = () => {
                 await shot(page, name + '_busy_scrolled');
                 await page.evaluate(() => { document.querySelector('.gdock .gpbody').scrollTop = 0; });
                 if (name === 'desktop') {
-                    const pagePromise = context.waitForEvent('page', { timeout: 5000 });
-                    await page.click('.gdock .glive:nth-of-type(2) .gwatch');
+                    const pagePromise = context.waitForEvent('page', { timeout: 1500 });
+                    await Promise.all([page.waitForURL(/\/play\?live=ISLANDS-/, { timeout: 5000 }).catch(() => null), page.click('.gdock .glive:nth-of-type(2) .gwatch')]);
                     const popup = await pagePromise.catch(() => null);
-                    check('a press on Watch opens a NEW page on that match', !!popup && /\/play\?live=ISLANDS-/.test(popup.url()), popup ? popup.url() : 'no page');
-                    check('... and the lobby page is still on its list with its rows', /\/$/.test(page.url()) && (await page.evaluate(() => document.querySelectorAll('.gdock .glive').length)) === 8);
+                    check('a press on Watch opens no new page: this tab goes to that match', !popup && /\/play\?live=ISLANDS-/.test(page.url()), popup ? 'a new page: ' + popup.url() : page.url());
                     if (popup) await popup.close();
+                    await page.goBack({ waitUntil: 'load' });
+                    await page.waitForSelector('.gdock .glive', { timeout: 15000 });
+                    check('... and Back comes back to the front page, with its list', /\/$/.test(page.url()) && (await page.evaluate(() => document.querySelectorAll('.gdock .glive').length)) === 8);
                     // no switch, and an old stored word is ignored
                     check('there is no switch in the list', (await page.evaluate(() => document.querySelectorAll('.gdock .gfilter, .gdock .gfrow, .gdock input[type=checkbox]').length)) === 0);
                     await page.evaluate(() => localStorage.setItem('ants.home.games.live', '0'));

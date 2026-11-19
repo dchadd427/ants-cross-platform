@@ -1,10 +1,12 @@
-/* The game page's part of the bar at the top (docs/SITE_NAV.md "The game page"; site_nav.js builds the Menu, game_bar.css has the rules). The page calls AntsGameBar.start({ doc, win, busy, running, leave, ask, focus }):
-   busy() is true while a match runs here or a room is joined, running() while a match is played, leave() lets go of the seat, ask() is the question (true: leave), focus() gives the focus to the game.
-   Links: while busy, Home asks first and every other link opens a new tab. Keys: while the Menu or the question is open or the focus is in the bar, no key reaches the game (a held key stays the bar's until its lift);
+/* The game page's part of the bar at the top (docs/SITE_NAV.md "The game page"; site_nav.js builds the Menu, game_bar.css has the rules). The page calls AntsGameBar.start({ doc, win, busy, running, leave, ask, focus, side }):
+   busy() is true while a match runs here or a room is joined, running() while a match is played, leave() lets go of the seat, ask() is the question (true: leave), focus() gives the focus to the game,
+   side() is the id that a live view follows ('' for any other page).
+   Links: while busy, Home asks first and every other link opens a new tab. A live view that the front page opened in a new tab (docs/SITE_NAV.md) has a Home that closes the tab. Keys: while the Menu or the question is open or the focus is in the bar, no key reaches the game (a held key stays the bar's until its lift);
    a closed Menu or question gives the focus back to the game. Menu lines: the note, a recording's tools, "Reload page" (it asks first while a game is played). */
 (function (root) {
     'use strict';
     var MODIFIER = /^(Shift|Control|Alt|AltGraph|Meta|OS|CapsLock|NumLock|ScrollLock|Fn)$/;
+    var CHANNEL = 'ants-watch', ASK_MS = 300, CLOSE_MS = 400;      // the front page has this long to answer a press of Home; a tab that is still here this long after close() goes on as a link
     function start(page) {
         var d = page.doc, w = page.win, bar = d.querySelector('.sb'), btn = bar && bar.querySelector('.sbtn'), kept = {}, dialog = null;
         if (!btn) return null;
@@ -16,6 +18,26 @@
         function playing() { try { return !d.body.classList.contains('replay') && !!page.running && !!page.running(); } catch (err) { return false; } }
         function focusGame() { try { if (page.focus) page.focus(); } catch (err) { /* nothing to focus */ } }
         function make(tag, cls, text) { var n = d.createElement(tag); n.className = cls; n.textContent = text; return n; }
+        // The front page that opened this live view is asked when the page opens (heard) and again at the press of Home, so that a tab that has gone since is not taken for it.
+        function side() { try { return page.side ? String(page.side() || '') : ''; } catch (err) { return ''; } }
+        var talk = null, token = '', then = null, heard = false, waiting = false;
+        function ask(on) { token = String(Math.random()).slice(2); then = on; try { talk.postMessage({ t: 'back', live: side(), token: token }); return true; } catch (err) { return false; } }
+        if (side() && typeof w.BroadcastChannel === 'function') {
+            try {
+                talk = new w.BroadcastChannel(CHANNEL);
+                talk.onmessage = function (m) { var x = m && m.data, on = then; if (on && x && x.t === 'here' && x.token === token) { then = null; on(); } };
+                ask(function () { heard = true; });
+            } catch (err) { talk = null; }
+        }
+        function homeBack(href) {                  // true: the press is taken (a front page is there: this tab closes; none answers: the link is followed)
+            if (!talk || !heard || !side()) return false;
+            if (waiting) return true;
+            var timer, plain = function () { waiting = false; then = null; w.location.assign(href); };
+            waiting = true;
+            if (!ask(function () { clearTimeout(timer); try { w.close(); } catch (err) { /* it goes on as a link */ } setTimeout(plain, CLOSE_MS); })) plain();
+            else timer = setTimeout(plain, ASK_MS);
+            return true;
+        }
         function onBackdrop(node, close) {         // a press that starts and ends on the backdrop itself closes the box as its Cancel does (a drag from inside the box, a text selection or a scroll does not)
             var down = false, hit = false;
             node.addEventListener('pointerdown', function (e) { down = e.target === node; hit = false; });
@@ -49,7 +71,9 @@
 
         d.addEventListener('click', function (e) {                             // the links
             var a = e.target && e.target.closest ? e.target.closest('a') : null, b = box(), href = a && a.getAttribute('href'), modified = e.ctrlKey || e.metaKey || e.shiftKey || e.altKey;
-            if (!a || !(bar.contains(a) || (b && b.contains(a))) || !href || href.charAt(0) === '#' || !busy()) return;
+            if (!a || !(bar.contains(a) || (b && b.contains(a))) || !href || href.charAt(0) === '#') return;
+            if (href === '/' && !modified && !e.button && homeBack(href)) { e.preventDefault(); return; }
+            if (!busy()) return;
             if (href === '/') { if (!page.ask()) e.preventDefault(); else if (!modified) page.leave(); return; }      // (Home, and the mark of live matches: a click for another tab keeps the seat)
             if (a.getAttribute('target') === '_blank' || modified || e.button) return;
             e.preventDefault();
