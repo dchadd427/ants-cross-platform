@@ -264,13 +264,13 @@ void run_way_back_tests() {
 
     TEST_CASE("RJ1.4 A Server That Lost The Last Second Of Its Record Answers The Hello Of A Machine That Is Ahead Of It With BadRequest: The NetGame Starts The Match From Nothing With Its Key (A New Lobby, Start, The Stream), Once; A Second BadRequest Ends It As Any Refusal Does And Nothing Tries Again") {
         {   // the real thing: a server restarted on a record that lacks the last 40 turns, two machines that ran them
+            int a_dropped = 0;                                                           // the prediction of one's own orders is on: the machine's engine is made again, so the prediction that stood
+            int b_dropped = 0;                                                           // on the old session's runner is destroyed (and whoever points at its engine is told); declared before the world: the machines' callbacks hold them to the end
             World w("rejoin-ahead");
             ASSERT_TRUE(w.server.start(w.now));
             ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-4"), w.server_now()).ok);
             Machine& a = w.join("Ann", "RJ-4");
             Machine& b = w.join("Bob", "RJ-4");
-            int a_dropped = 0;                                                           // the prediction of one's own orders is on: the machine's engine is made again, so the prediction that stood
-            int b_dropped = 0;                                                           // on the old session's runner is destroyed (and whoever points at its engine is told)
             a.net.set_prediction_enabled(true);
             b.net.set_prediction_enabled(true);
             a.net.set_on_prediction_dropped([&a_dropped]() { ++a_dropped; });
