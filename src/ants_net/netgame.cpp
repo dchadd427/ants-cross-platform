@@ -219,7 +219,7 @@ bool NetGame::join(const std::string& address, uint16_t port, const std::string&
     // The name is looked up here, once: every link of the way back goes to this address (a lookup at every attempt would hold up the frame, and a name that points elsewhere by then would get the key)
     const std::string numeric = resolver_ ? resolver_(address) : resolve_host(address);
     if (numeric.empty()) return false;
-    auto conn = TcpConnection::connect(numeric, port);
+    auto conn = link_maker_ ? link_maker_() : TcpConnection::connect(numeric, port);       // (the tests make the link themselves: set_link_maker_for_test)
     if (!conn) return false;
     auto peer_listener = TcpListener::listen(0, false);                 // where the other guests reach us during the match (host migration)
     const uint16_t peer_port = peer_listener ? peer_listener->port() : uint16_t{0};

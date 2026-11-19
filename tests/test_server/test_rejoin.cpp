@@ -271,8 +271,6 @@ void run_way_back_tests() {
             ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-4"), w.server_now()).ok);
             Machine& a = w.join("Ann", "RJ-4");
             Machine& b = w.join("Bob", "RJ-4");
-            a.net.set_prediction_enabled(true);
-            b.net.set_prediction_enabled(true);
             a.net.set_on_prediction_dropped([&a_dropped]() { ++a_dropped; });
             b.net.set_on_prediction_dropped([&b_dropped]() { ++b_dropped; });
             ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}) && a.net.predicting() && b.net.predicting(); }, 12000 + kPre));
@@ -744,8 +742,6 @@ void run_way_back_tests() {
         ASSERT_TRUE(w.server.mgr->create_room(spec, w.server_now()).ok);
         Machine& a = w.join("Ann", "RJ-9");
         Machine& b = w.join("Bob", "RJ-9");
-        a.net.set_prediction_enabled(true);
-        b.net.set_prediction_enabled(true);
         ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}) && a.net.predicting() && b.net.predicting(); }, 15000 + kPre));
         w.run(1500);
         ASSERT_TRUE(a.net.predicting() && b.net.predicting() && &a.net.view_engine() != &a.sim && &b.net.view_engine() != &b.sim);

@@ -531,6 +531,9 @@ public:
     void set_fog_of_war_enabled(bool enabled);
     bool is_fog_of_war_enabled() const;
     void set_viewing_player_id(uint8_t player_id);
+    /// Takes the explored ground (the Fog of War mask) of `other`, whatever this engine has explored itself. The mask is the viewer's own picture, no part of the rules or of the state hash: a copy that only
+    /// SHOWS the match ahead of the real one (net::Prediction) uses this so that its picture never explores ground that the real engine has not explored yet (its reveals are guesses of other players' orders).
+    void adopt_explored_ground_of(const SimulationEngine& other);
 
     std::vector<AudioEvent> poll_audio_events();
     std::vector<NewsEvent> poll_news_events();

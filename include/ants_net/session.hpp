@@ -184,8 +184,8 @@ public:
     /// it misses, and the first turn drops the old host and every seat of the roster that did not follow. Instead of start().
     void resume(uint32_t now_ms, uint32_t resume_turn, uint8_t old_host, const std::vector<PeerState>& survivors);
 
-    /// A command of the host's own player (a host without a seat has none: ignored)
-    void submit_local(sim::Command command);
+    /// A command of the host's own player (a host without a seat has none: ignored). False when it was not queued (not started, no seat, or the sequencer refused it)
+    bool submit_local(sim::Command command);
     /// Relays a chat text of the host's own player (a host without a seat has none: ignored). A team line goes to the players that may read it, see "Who hears a team line".
     void chat_local(const std::string& text, bool team);
     /// True when the host plays no seat (a dedicated server): it is the sequencer and the referee only, and it never waits for a player that falls behind
