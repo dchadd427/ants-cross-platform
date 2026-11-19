@@ -249,9 +249,14 @@ void Renderer::draw_anthill_selection_brackets(int32_t cx, int32_t cy, uint32_t 
     SDL_RenderDrawLine(renderer_, x + w - 2, y + h - 2, x + w - 3, y + h - 1);
 }
 
+// An ant as the picture draws it: where the engine has it plus what is left of its slide, and, while it slides, walking the way it moves (view_glide.hpp)
+ants::sim::AntSnapshot Renderer::posed_ant(const ants::sim::WorldState& world, const ants::sim::AntSnapshot& engine) const {
+    return slid_pose(view_glide_, engine, glided_ant(view_glide_, world, hud_team_id_, engine));
+}
+
 void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
     for (const auto& engine_ant : world.ants) {
-        const ants::sim::AntSnapshot a = glided_ant(view_glide_, world, hud_team_id_, engine_ant);      // (drawn where the picture had it a moment ago while a rebuild's correction slides: view_glide.hpp)
+        const ants::sim::AntSnapshot a = posed_ant(world, engine_ant);      // (drawn where the picture had it a moment ago while a rebuild's correction slides, walking the way it moves: view_glide.hpp)
         // The original shows the local player's and the allies' ants always (0x101aa0d); every other ant only on explored ground
         if (!health::ant_drawn(world, hud_team_id_, a)) {              // Concealed enemy ant under fog of war
             if (changes_ != nullptr && changes_->count() > 0) changes_->note_hidden(a.id);       // (and no damage or heal number over it)
@@ -428,8 +433,8 @@ void Renderer::collect_selection_markers(const ants::sim::WorldState& world, int
         if (seq.subitems.empty()) continue;
         OverlayItem item{};
         item.created_ms = st.start_ms;
-        const AntClipPrediction pred = predict_ant_clip(*ant, ant_loco_sequence(*ant));     // the marker follows the sprite, which steps when a frame ends
-        const ants::sim::AntSnapshot slid = glided_ant(view_glide_, world, hud_team_id_, *ant);        // (and the sprite's slide, view_glide.hpp)
+        const ants::sim::AntSnapshot slid = posed_ant(world, *ant);        // (and the sprite's slide and pose, view_glide.hpp)
+        const AntClipPrediction pred = predict_ant_clip(slid, ant_loco_sequence(slid));     // the marker follows the sprite, which steps when a frame ends
         const int32_t px = slid.px + pred.dx, py = slid.py + pred.dy;
         const int64_t start = st.start_ms;
         item.draw = [this, &seq, px, py, start]() {

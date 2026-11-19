@@ -4,6 +4,9 @@
 
 #include "ants_app/application.hpp"
 
+#include <unordered_map>
+#include <vector>
+
 #if defined(__EMSCRIPTEN__)
   #include <emscripten.h>
 
@@ -43,7 +46,16 @@ void Application::feed_view_glide() {
         renderer_->view_glide().clear();
         return;
     }
-    for (const net::Prediction::Shift& shift : prediction->take_shifts()) renderer_->view_glide().add(shift.ant, shift.dx, shift.dy);
+    const std::vector<net::Prediction::Shift> shifts = prediction->take_shifts();
+    if (shifts.empty()) return;
+    // The player's own ants are put right in the quick slide, every other player's ants (the bot's, an opponent's, an ally's) are carried at about the pace of a walk (view_glide.hpp)
+    std::unordered_map<uint32_t, uint8_t> owner;
+    for (const sim::AntSnapshot& ant : view_sim().get_world_state().ants) owner[ant.id] = ant.player_id;       // (the engine that is shown: asked for already, so not rebuilt here)
+    const uint8_t mine = net_->my_seat();
+    for (const net::Prediction::Shift& shift : shifts) {
+        const auto found = owner.find(shift.ant);
+        renderer_->view_glide().add(shift.ant, shift.dx, shift.dy, found != owner.end() && found->second == mine);
+    }
 }
 
 sim::SimulationEngine& Application::input_sim() {

@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the prediction's default and of the slide of the ants that the prediction moves, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the product rules that the shaped-link, glide and prediction tests hold: it is on by default and the screen reads it, the player's own orders and attack orders are predicted (and nobody else's, and not a refused one), it is off while the link is away, the lead is the shortest lag, falls a tick at a time and forgets at a stop, a missed order is expected in the next turn, the corrections and the changes of the shown engine slide the right way for a time that reads as walking, never across the fog, and the pointer picks what is drawn and nothing else.",
+  "note": "Mutants of the prediction's default and of the slide of the ants that the prediction moves, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the product rules that the shaped-link, glide and prediction tests hold: it is on by default and the screen reads it, the player's own orders and attack orders are predicted (and nobody else's, and not a refused one), it is off while the link is away, the lead is the shortest lag, falls a tick at a time and forgets at a stop, a missed order is expected in the next turn, the corrections and the changes of the shown engine slide the right way, another player's ants at the pace of a walk and the player's own quickly, drawn walking the way they move, never across the fog, and the pointer picks what is drawn and nothing else.",
   "mutants": [
     {
       "id": "netgame_default_off",
@@ -92,8 +92,8 @@
     {
       "id": "glide_not_fed",
       "file": "src/ants_app/application_sim.cpp",
-      "old": "    for (const net::Prediction::Shift& shift : prediction->take_shifts()) renderer_->view_glide().add(shift.ant, shift.dx, shift.dy);",
-      "new": "    for (const net::Prediction::Shift& shift : prediction->take_shifts()) (void)shift;",
+      "old": "        renderer_->view_glide().add(shift.ant, shift.dx, shift.dy, found != owner.end() && found->second == mine);",
+      "new": "        (void)found;\n        (void)mine;",
       "build": [
         "test_prediction_link"
       ],
@@ -147,7 +147,7 @@
     {
       "id": "glide_shifts_not_added",
       "file": "src/ants_app/view_glide.cpp",
-      "old": "const int32_t sum_x = scaled(entries_[i].dx, entries_[i].left_ms) + dx;",
+      "old": "const int32_t sum_x = scaled(entries_[i].dx, entries_[i].left_ms, entries_[i].total_ms) + dx;",
       "new": "const int32_t sum_x = dx;",
       "build": [
         "test_view_glide"
@@ -235,8 +235,8 @@
     {
       "id": "renderer_slides_an_enemy_across_the_fog",
       "file": "src/ants_app/renderer_units.cpp",
-      "old": "        const ants::sim::AntSnapshot a = glided_ant(view_glide_, world, hud_team_id_, engine_ant);",
-      "new": "        const ants::sim::AntSnapshot a = glided_ant(view_glide_, world, engine_ant.player_id, engine_ant);",
+      "old": "    return slid_pose(view_glide_, engine, glided_ant(view_glide_, world, hud_team_id_, engine));",
+      "new": "    return slid_pose(view_glide_, engine, glided_ant(view_glide_, world, engine.player_id, engine));",
       "build": [
         "test_prediction_app"
       ],
@@ -363,6 +363,138 @@
       ],
       "test": "./build/tests/test_app/test_view_glide",
       "expect": "VG"
+    },
+    {
+      "id": "slide_ignores_the_distance",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "    const double ms = std::ceil(length * 1000.0 / static_cast<double>(kWalkPxPerSecond));",
+      "new": "    (void)length;\n    const double ms = static_cast<double>(kDurationMs);",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG1"
+    },
+    {
+      "id": "slide_has_no_ceiling",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "static_cast<double>(kDurationMs), static_cast<double>(kMaxDurationMs)));",
+      "new": "static_cast<double>(kDurationMs), 1.0e9));",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG4b"
+    },
+    {
+      "id": "own_ants_slowed",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "    if (own) return kDurationMs;",
+      "new": "    if (false && own) return kDurationMs;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG1"
+    },
+    {
+      "id": "application_slows_own_ants",
+      "file": "src/ants_app/application_sim.cpp",
+      "old": "found != owner.end() && found->second == mine);",
+      "new": "found != owner.end() && found->second == mine && false);",
+      "build": [
+        "test_prediction_link"
+      ],
+      "test": "timeout 900 env ANTS_TEST_FILTER=LK11 ./build/tests/test_app/test_prediction_link",
+      "expect": "LK11"
+    },
+    {
+      "id": "application_quickens_every_ant",
+      "file": "src/ants_app/application_sim.cpp",
+      "old": "found != owner.end() && found->second == mine);",
+      "new": "(found != owner.end() && found->second == mine) || true);",
+      "build": [
+        "test_prediction_link"
+      ],
+      "test": "timeout 900 env ANTS_TEST_FILTER=LK11 ./build/tests/test_app/test_prediction_link",
+      "expect": "LK11"
+    },
+    {
+      "id": "pose_is_the_engines",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "if (!glide.velocity_of(ant.id, svx, svy) || glide.is_own(ant.id)) return drawn;",
+      "new": "if (true) return drawn;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG8"
+    },
+    {
+      "id": "pose_given_to_own_ants",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "|| glide.is_own(ant.id)) return drawn;",
+      "new": ") return drawn;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG8"
+    },
+    {
+      "id": "pose_walks_on_the_spot",
+      "file": "include/ants_app/view_glide.hpp",
+      "old": "inline constexpr int32_t kSlideStandsBelowPxPerSecond = 24;",
+      "new": "inline constexpr int32_t kSlideStandsBelowPxPerSecond = 0;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG8"
+    },
+    {
+      "id": "pose_faces_the_engines_heading",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "    const uint8_t heading = heading_of(vx, vy);",
+      "new": "    const uint8_t heading = static_cast<uint8_t>((ant.facing & 7u) + 0u * heading_of(vx, vy));",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG8"
+    },
+    {
+      "id": "pose_ignores_the_fogs_cut",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "if (drawn.px - engine.px != ox || drawn.py - engine.py != oy) return drawn;",
+      "new": "if (false) return drawn;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG8"
+    },
+    {
+      "id": "pose_forgets_the_crumb",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "    const bool carrying = ant.is_holding;",
+      "new": "    const bool carrying = false;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG8"
+    },
+    {
+      "id": "renderer_draws_the_engines_pose",
+      "file": "src/ants_app/renderer_units.cpp",
+      "old": "    return slid_pose(view_glide_, engine, glided_ant(view_glide_, world, hud_team_id_, engine));",
+      "new": "    return glided_ant(view_glide_, world, hud_team_id_, engine);",
+      "build": [
+        "test_prediction_app"
+      ],
+      "test": "timeout 900 env ANTS_TEST_FILTER=PA11 ./build/tests/test_app/test_prediction_app",
+      "expect": "PA11"
     }
   ]
 }

@@ -680,6 +680,102 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());                        // (drawing only: the confirmed engines are the same)
     } TEST_END();
 
+    TEST_CASE("PA11 The Frame Draws A Sliding Ant Of Another Player Walking The Way It Moves, Not As The Engine Stands It: The Same Slide Of The Same Ant Is Drawn With A Walk Clip When It Is Another Player's And With The Engine's Own Picture When It Is The Player's Own (The Quick Slide), At The Same Place, And When The Slide Is Over It Is The Plain Frame Again; The Pointer Picks It Where It Is Drawn At Every Moment Of The Slow Slide") {
+        Application app;
+        Peer bob;
+        Duo duo{app, bob};
+        ASSERT_TRUE(predicting_match(app, bob, duo));
+        const std::vector<uint32_t> mine = ants_of(app.sim(), 0);
+        ASSERT_FALSE(mine.empty());
+        app.net()->freeze();                                                               // (no tick runs between the frames: they are one frame of one engine)
+        duo.step(400);
+        const uint32_t ant = mine[0];
+        const sim::AntSnapshot* shown = ant_in(app.view_sim(), ant);
+        ASSERT_TRUE(shown != nullptr);
+        ASSERT_TRUE(shown->state == sim::UnitState::Idle || shown->state == sim::UnitState::GuardIdle);       // (the ant stands: the engine's picture is a standing one)
+        const int32_t wx = shown->px;
+        const int32_t wy = shown->py;
+        ASSERT_TRUE(place_camera(app, wx, wy, 110, 90));
+        int32_t sx = 0;
+        int32_t sy = 0;
+        ASSERT_TRUE(app.renderer().camera().world_to_screen(wx, wy, sx, sy));
+        const LayoutRect view = app.layout().view();
+        SDL_MouseMotionEvent motion{};
+        motion.type = SDL_MOUSEMOTION;
+        motion.x = view.x + 30;
+        motion.y = view.y + view.h - 30;
+        app.handle_mouse_motion(motion);                                                   // (the pointer far from the ant)
+        const int32_t kShift = 24;                                                          // drawn 24 px south-east of the engine's place: the slide pulls it north-west at 80 px/s
+        const auto frame = [&](bool own) {
+            app.renderer().view_glide().clear();
+            app.renderer().view_glide().add(ant, kShift, kShift, own);
+            app.render_frame();
+            return canvas_region(app, sx + kShift - 28, sy + kShift - 44, 56, 64);
+        };
+        app.renderer().view_glide().clear();
+        app.render_frame();
+        const std::vector<uint8_t> plain = canvas_region(app, sx + kShift - 28, sy + kShift - 44, 56, 64);          // (the ground where the ant will be drawn, with no ant there)
+        const std::vector<uint8_t> carried = frame(false);
+        const std::vector<uint8_t> quick = frame(true);
+        ASSERT_FALSE(plain.empty() || carried.empty() || quick.empty());
+        ASSERT_TRUE(carried != plain && quick != plain);                                    // (the ant is drawn there both times)
+        ASSERT_TRUE(carried != quick);                                                      // ... walking in the one, standing as the engine has it in the other
+        ASSERT_TRUE(frame(false) == carried);                                               // (a frame drawn again is the same frame)
+        app.renderer().view_glide().clear();
+        app.render_frame();
+        ASSERT_TRUE(canvas_region(app, sx + kShift - 28, sy + kShift - 44, 56, 64) == plain);                       // the slide is over: the plain frame
+        // the pointer picks the ant where it is drawn, at the start and half way through the slow slide (where it is drawn 12 px or more from the engine's place)
+        const sim::WorldState world = app.view_sim().get_world_state();
+        const auto in_box = [](const sim::AntSnapshot& a, int32_t x, int32_t y) {
+            const bool combat = a.raw_type == sim::AntType::Combat;
+            return x >= a.px - (combat ? 32 : 20) && x < a.px + (combat ? 26 : 20) && y >= a.py - (combat ? 46 : 32) && y < a.py + 16;
+        };
+        const auto free_of_others = [&](int32_t x, int32_t y) {
+            for (const auto& a : world.ants) {
+                if (a.id != ant && in_box(a, x, y)) return false;
+            }
+            return true;
+        };
+        ASSERT_TRUE(ViewGlide::duration_ms(kShift, kShift, false) > ViewGlide::kDurationMs);        // (a slow slide: 425 ms)
+        bool tried = false;
+        const std::pair<int32_t, int32_t> slides[] = {{48, 0}, {-48, 0}, {0, 56}, {0, -56}, {48, 56}, {-48, -56}, {48, -56}, {-48, 56}};
+        for (const auto& slide : slides) {
+            const uint32_t total = ViewGlide::duration_ms(slide.first, slide.second, false);
+            ASSERT_TRUE(total >= 500);
+            ViewGlide model;
+            model.add(ant, slide.first, slide.second, false);
+            model.advance(total / 2);
+            int32_t half_x = 0;
+            int32_t half_y = 0;
+            ASSERT_TRUE(model.offset_of(ant, half_x, half_y));
+            if (!free_of_others(wx + slide.first, wy + slide.second - 8) || !free_of_others(wx + half_x, wy + half_y - 8) || !free_of_others(wx, wy - 8)) continue;       // (points that no other ant's box holds)
+            tried = true;
+            for (const uint32_t elapsed : {0u, total / 2}) {
+                int32_t ox = slide.first;
+                int32_t oy = slide.second;
+                if (elapsed != 0) {
+                    ox = half_x;
+                    oy = half_y;
+                }
+                app.renderer().view_glide().clear();
+                app.renderer().view_glide().add(ant, slide.first, slide.second, false);
+                app.renderer().update_transient_effects(static_cast<float>(elapsed) / 1000.0f);
+                app.render_frame();
+                app.hud().handle_key_down(SDLK_ESCAPE, app.sim(), app.renderer().camera());
+                click(app, SDL_BUTTON_LEFT, sx + ox, sy + oy - 8);
+                ASSERT_EQ(app.hud().get_selected_ant_id(), ant);                            // picked where it is drawn: at the start and half way
+                app.hud().handle_key_down(SDLK_ESCAPE, app.sim(), app.renderer().camera());
+                click(app, SDL_BUTTON_LEFT, sx, sy - 8);
+                ASSERT_EQ(app.hud().get_selected_ant_id(), 0u);                             // ... and not where the engine has it: the picture shows nothing there
+            }
+            break;
+        }
+        ASSERT_TRUE(tried);
+        app.renderer().view_glide().clear();
+        duo.step(1500);
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());                        // (drawing only: the confirmed engines are the same)
+    } TEST_END();
+
     TEST_CASE("PA10 The Frame Never Draws A Sliding Ant Of Another Team On Ground That The Fog Covers: With Fog Of War An Enemy Ant At The Edge Of The Explored Ground Whose Slide Began Two Tiles Into The Fog Is Drawn With The Part Of The Slide That Stays On Explored Ground (The Same Frame As That Shorter Slide, Nothing Where The Whole Slide Would Put It), And A Slide Over Explored Ground Is Drawn Whole") {
         Application app;
         Peer bob;

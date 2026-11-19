@@ -881,6 +881,7 @@ private:
     void draw_ant_number(const ants::sim::AntSnapshot& ant, int32_t sprite_x, int32_t sprite_y);
     std::vector<TransientEffect> transient_effects_{};
     ViewGlide view_glide_;
+    ants::sim::AntSnapshot posed_ant(const ants::sim::WorldState& world, const ants::sim::AntSnapshot& engine) const;      // the ant as drawn: slid and posed (view_glide.hpp)
     uint32_t sub_tick_ms_{0};
 };
 

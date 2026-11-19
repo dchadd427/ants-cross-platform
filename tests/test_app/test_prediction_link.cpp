@@ -17,6 +17,7 @@
 #include "../common/test_assert.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -827,6 +828,91 @@ int main(int argc, char* argv[]) {
         std::printf("\n    %d changes of the shown engine: frames in which a walking ant moved by more than 20 px: %d without the slide (%d before the changes), %d with it\n", changes, jumps.engine, before, jumps.drawn);
         ASSERT_TRUE(jumps.engine >= before + 6);                                             // (without the slide the changes are jumps)
         ASSERT_EQ(jumps.drawn, 0);
+        s.on_frame_end = nullptr;
+        s.quit(1);
+        ASSERT_TRUE(s.run_until([&]() { return s.room_finished(); }, 20000));
+        s.run_ms(2000);
+        ASSERT_EQ(s.app().sim().state_hash().total, s.referee_hash());
+        ASSERT_FALSE(s.app().net()->desynced());
+    } TEST_END();
+
+    // How the slides of a match are paced: every slide of an ant is followed from the frame that shows it begin to the frame that shows it over. Another player's ant (the bot's, an opponent's) is
+    // carried at the pace of a walk (80 px/s: a slide of up to 48 px takes at least 12.5 ms a pixel), the player's own ant in the quick slide (view_glide.hpp)
+    struct Paces {
+        struct Last {
+            int32_t x{0};
+            int32_t y{0};
+            double peak{0.0};
+            uint32_t began{0};
+        };
+        std::map<uint32_t, Last> last;
+        int other_slides{0};
+        int other_slow_enough{0};           // another player's slides of 16 px and more that took the time of a walk
+        int other_too_fast{0};              // ... that took less (up to 48 px: a longer one is carried a little faster, and is not asked)
+        int own_slides{0};
+        int own_quick{0};                   // the player's own slides of 16 px and more that took the quick slide
+        uint32_t own_longest{0};
+        void look(Session& s) {
+            const uint32_t now = s.now();
+            for (const auto& a : s.app().view_sim().get_world_state().ants) {
+                int32_t gx = 0;
+                int32_t gy = 0;
+                s.app().renderer().view_glide().offset_of(a.id, gx, gy);
+                Last& l = last[a.id];
+                const bool own = a.player_id == 0;
+                const double mag = std::hypot(static_cast<double>(gx), static_cast<double>(gy));
+                const double was = std::hypot(static_cast<double>(l.x), static_cast<double>(l.y));
+                if (mag > 0.0 && (was == 0.0 || mag > was + 1.5)) {                              // a slide begins (or a new shift begins it again)
+                    l.peak = mag;
+                    l.began = now;
+                    ++(own ? own_slides : other_slides);
+                } else if (mag > 0.0) {
+                    l.peak = std::max(l.peak, mag);
+                } else if (was > 0.0) {                                                           // it is over: the frame that shows it so is at most one frame after its last pixel
+                    const uint32_t took = now - l.began;
+                    if (own) {
+                        own_longest = std::max(own_longest, took);
+                        if (l.peak >= 16.0 && took <= ViewGlide::kDurationMs + 34) ++own_quick;
+                    } else if (l.peak >= 16.0 && l.peak <= 48.0) {
+                        if (static_cast<double>(took) + 34.0 >= 12.5 * l.peak) ++other_slow_enough;
+                        else ++other_too_fast;
+                    }
+                }
+                l.x = gx;
+                l.y = gy;
+            }
+        }
+    };
+
+    TEST_CASE("LK11 No Slide Of Another Player's Ant Is Faster Than A Walk (A Slide Of 16 To 48 px Takes At Least 12.5 ms A Pixel, Whatever Moves It: The Other Person's Orders, The Prediction Stopping And Beginning Again), While The Player's Own Ants Are Put Right In The Quick Slide Of A Sixth Of A Second; The Match Is The Referee's") {
+        Params p;
+        p.link.rtt_ms = 300;                                                                 // (a lead of about seven ticks: 28 px of walking at every stop and start)
+        p.link.jitter_ms = 20;
+        p.peer_link.rtt_ms = 60;
+        p.render = true;
+        p.seed = 43;
+        Session s(p);
+        ASSERT_TRUE(s.begin());
+        Paces paces;
+        s.on_frame_end = [&]() { paces.look(s); };
+        Players players(s);
+        players.play(6000);
+        ASSERT_TRUE(s.app().net()->predicting());
+        for (int round = 0; round < 6; ++round) {
+            s.app().set_page_hidden(true);
+            ASSERT_TRUE(s.run_until([&]() { return !s.app().net()->predicting(); }, 500));
+            players.play(700);
+            s.app().set_page_hidden(false);
+            ASSERT_TRUE(s.run_until([&]() { return s.app().net()->predicting(); }, 2000));
+            players.play(1800);
+        }
+        players.play(8000);
+        std::printf("\n    slides of another player's ants: %d (%d of 16 to 48 px took the time of a walk, %d faster); of the player's own: %d (%d of 16 px and more took the quick slide, the longest %u ms)\n", paces.other_slides,
+                    paces.other_slow_enough, paces.other_too_fast, paces.own_slides, paces.own_quick, paces.own_longest);
+        ASSERT_TRUE(paces.other_slow_enough >= 5);                                           // (the rule was asked)
+        ASSERT_EQ(paces.other_too_fast, 0);
+        ASSERT_TRUE(paces.own_quick >= 3);                                                   // (the own ants' slides were quick ones, not slowed)
+        ASSERT_TRUE(paces.own_longest <= 2 * ViewGlide::kDurationMs + 34);                  // (a second shift that comes while an own ant slides begins the quick slide again: two at most)
         s.on_frame_end = nullptr;
         s.quit(1);
         ASSERT_TRUE(s.run_until([&]() { return s.room_finished(); }, 20000));
