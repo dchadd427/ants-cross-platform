@@ -495,6 +495,28 @@
       ],
       "test": "timeout 900 env ANTS_TEST_FILTER=PA11 ./build/tests/test_app/test_prediction_app",
       "expect": "PA11"
+    },
+    {
+      "id": "pose_assumes_the_pace_of_grass",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "            vx += 1000.0 * static_cast<double>(steps_x) / static_cast<double>(own.total_duration_ms());\n            vy += 1000.0 * static_cast<double>(steps_y) / static_cast<double>(own.total_duration_ms());\n",
+      "new": "            (void)steps_x;\n            (void)steps_y;\n            double ux = 0.0;\n            double uy = 0.0;\n            heading_vector(static_cast<uint8_t>(ant.facing), ux, uy);\n            vx += ux * ViewGlide::kWalkPxPerSecond;\n            vy += uy * ViewGlide::kWalkPxPerSecond;\n",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG8"
+    },
+    {
+      "id": "pose_given_to_swimmers",
+      "file": "src/ants_app/view_glide.cpp",
+      "old": "|| ant.frozen || ant.is_swimming) return drawn;",
+      "new": "|| ant.frozen) return drawn;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG8"
     }
   ]
 }

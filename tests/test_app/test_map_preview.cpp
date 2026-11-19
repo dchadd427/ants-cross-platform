@@ -315,7 +315,7 @@ void test_filter(const assets::AssetArchive& arc) {
                 WorldImage plain;
                 WorldImage sliding;
                 check(rig.renderer.render_world_image(level, with_ants, eng.grid(), plain, &why) && plain.valid(), "the world image with its ants is made: " + why);
-                rig.renderer.view_glide().add(with_ants.ants.front().id, 40, 0);
+                rig.renderer.view_glide().add(with_ants.ants.front().id, 40, 0, false);
                 check(rig.renderer.render_world_image(level, with_ants, eng.grid(), sliding, &why) && sliding.valid(), "... and again while an ant of the live match slides: " + why);
                 check(plain.rgba != image.rgba, "the ants are in the picture");
                 check(sliding.rgba == plain.rgba, "the picture of the map does not draw the live match's slide");

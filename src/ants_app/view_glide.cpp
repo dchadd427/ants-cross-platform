@@ -153,18 +153,39 @@ sim::AntSnapshot slid_pose(const ViewGlide& glide, const sim::AntSnapshot& engin
     glide.offset_of(ant.id, ox, oy);
     if (drawn.px - engine.px != ox || drawn.py - engine.py != oy) return drawn;           // the fog cut the slide: the ant is not carried as the slide says
     if (ant.state != S::Walking && ant.state != S::Idle && ant.state != S::GuardIdle) return drawn;         // a blow, a flinch, a throw, a swim, an action: the engine's picture
-    if (ant.loco_clip == 0x7FFE || ant.frozen) return drawn;                              // another system animates it
+    if (ant.loco_clip == 0x7FFE || ant.frozen || ant.is_swimming) return drawn;           // another system animates it, or it swims (the swim clips are the engine's)
     const uint8_t type = static_cast<uint8_t>(ant.type);
     const bool carrying = ant.is_holding;
     const bool walking = ant.state == S::Walking && ant.action == 1;                        // (action 0 of a walking ant is its three ticks of start-up: it stands)
+    // The engine's walk: the clip it plays now (found by its terrain: grass, sand, mud, dirt) carries the ant by the sum of its steps over its time (80 px/s straight on grass, 33 on mud ...). An ant that
+    // stands is drawn on grass or mud: this model has no grid to ask for the ground it stands on
+    uint8_t terrain = ant.is_on_mud ? sim::movement::kTerrainMud : sim::movement::kTerrainGrass;
     double vx = static_cast<double>(svx);
     double vy = static_cast<double>(svy);
     if (walking) {
-        double ux = 0.0;
-        double uy = 0.0;
-        heading_vector(static_cast<uint8_t>(ant.facing), ux, uy);
-        vx += ux * ViewGlide::kWalkPxPerSecond;
-        vy += uy * ViewGlide::kWalkPxPerSecond;
+        bool known = false;
+        for (const uint8_t t : {sim::movement::kTerrainGrass, sim::movement::kTerrainSand, sim::movement::kTerrainMud, sim::movement::kTerrainDirt}) {
+            const sim::movement::MotionClip own = sim::movement::walk_clip(type, t, static_cast<uint8_t>(ant.facing & 7u), carrying);
+            if (!own.valid() || own.chd_index != ant.loco_clip || own.mirrored != ant.loco_mirrored || own.total_duration_ms() == 0) continue;
+            terrain = t;
+            known = true;
+            int64_t steps_x = 0;
+            int64_t steps_y = 0;
+            for (uint16_t i = 0; i < own.count; ++i) {
+                steps_x += own.dx(i);
+                steps_y += own.dy(i);
+            }
+            vx += 1000.0 * static_cast<double>(steps_x) / static_cast<double>(own.total_duration_ms());
+            vy += 1000.0 * static_cast<double>(steps_y) / static_cast<double>(own.total_duration_ms());
+            break;
+        }
+        if (!known) {                                                                       // (a clip that is none of these: the pace of a walk along its facing)
+            double ux = 0.0;
+            double uy = 0.0;
+            heading_vector(static_cast<uint8_t>(ant.facing), ux, uy);
+            vx += ux * ViewGlide::kWalkPxPerSecond;
+            vy += uy * ViewGlide::kWalkPxPerSecond;
+        }
     }
     sim::AntSnapshot posed = drawn;
     const double speed = std::sqrt(vx * vx + vy * vy);
@@ -177,14 +198,6 @@ sim::AntSnapshot slid_pose(const ViewGlide& glide, const sim::AntSnapshot& engin
         posed.loco_frame = 0;
         posed.loco_left_ms = 0xFFFFu;
         return posed;
-    }
-    // the terrain of the walk clip that the engine plays now (its clips are the ones of that terrain), else grass or mud
-    uint8_t terrain = ant.is_on_mud ? sim::movement::kTerrainMud : sim::movement::kTerrainGrass;
-    if (walking) {
-        for (const uint8_t t : {sim::movement::kTerrainGrass, sim::movement::kTerrainSand, sim::movement::kTerrainMud, sim::movement::kTerrainDirt}) {
-            const sim::movement::MotionClip own = sim::movement::walk_clip(type, t, static_cast<uint8_t>(ant.facing & 7u), carrying);
-            if (own.valid() && own.chd_index == ant.loco_clip && own.mirrored == ant.loco_mirrored) terrain = t;
-        }
     }
     const uint8_t heading = heading_of(vx, vy);
     const sim::movement::MotionClip clip = sim::movement::walk_clip(type, terrain, heading, carrying);

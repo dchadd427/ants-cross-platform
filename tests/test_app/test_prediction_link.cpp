@@ -844,6 +844,7 @@ int main(int argc, char* argv[]) {
             int32_t y{0};
             double peak{0.0};
             uint32_t began{0};
+            uint32_t seen{0};           // the time of the last frame
         };
         std::map<uint32_t, Last> last;
         int other_slides{0};
@@ -862,13 +863,16 @@ int main(int argc, char* argv[]) {
                 const bool own = a.player_id == 0;
                 const double mag = std::hypot(static_cast<double>(gx), static_cast<double>(gy));
                 const double was = std::hypot(static_cast<double>(l.x), static_cast<double>(l.y));
-                if (mag > 0.0 && (was == 0.0 || mag > was + 1.5)) {                              // a slide begins (or a new shift begins it again)
+                const double sheds = ViewGlide::kWalkPxPerSecond * static_cast<double>(now - l.seen) / 1000.0 + 2.0;     // (the most that a slide at the pace of a walk sheds between two frames, and a pixel of rounding on each side)
+                l.seen = now;
+                const bool merged = !own && was > 0.0 && was - mag > sheds;                      // (a second shift came and took off more than the slide does: the sum is a new, shorter slide, or none)
+                if (mag > 0.0 && (was == 0.0 || mag > was + 1.5 || merged)) {                    // a slide begins (or a new shift begins it again)
                     l.peak = mag;
                     l.began = now;
                     ++(own ? own_slides : other_slides);
                 } else if (mag > 0.0) {
                     l.peak = std::max(l.peak, mag);
-                } else if (was > 0.0) {                                                           // it is over: the frame that shows it so is at most one frame after its last pixel
+                } else if (was > 0.0 && !merged) {                                                // it is over: the frame that shows it so is at most one frame after its last pixel (one that was taken off at once is not over: the sum was none, or past two tiles)
                     const uint32_t took = now - l.began;
                     if (own) {
                         own_longest = std::max(own_longest, took);

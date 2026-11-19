@@ -3,7 +3,7 @@
 // The glide of an ant that the prediction has moved (docs/NETWORK_PORT.md, "Prediction of one's own orders"). When a turn of another player arrives, or an order of the player's own is sealed at
 // another tick than the one it was applied at, the predicted engine is rebuilt and an ant that it concerns stands elsewhere than the picture showed it: by what it walked in the ticks that the
 // assumption got wrong, up to two tiles. The picture does not jump: the ant is drawn where it was shown and is carried to where the engine has it. How fast: an ant of ANOTHER player (the bot's, an
-// opponent's, an ally's) is carried at about the pace of a walk, so that no correction moves it faster than it walks (a correction of a quarter tile takes 0.4 s, a tile 0.6 s at most: a longer
+// opponent's, an ally's) is carried at about the pace of a walk, so that no correction moves it faster than it walks (a correction of a tile takes 0.4 s, one of a tile and a half 0.6 s at most: a longer
 // one goes a little faster, never slower than that); the player's OWN ants are never slowed (they are put right in the quick slide: his orders must read at once). Drawing and picking only (a click
 // picks the ant where it is drawn, and its order names the tile where the engine has it): the engine, the turns and the hashes are untouched; a model without SDL, so that the renderer, the HUD
 // and the tests use the same rule.
@@ -30,9 +30,9 @@ public:
     /// The time that a shift of (dx, dy) pixels takes: the quick slide for an own ant, else the distance at the pace of a walk, at least kDurationMs and at most kMaxDurationMs
     static uint32_t duration_ms(int32_t dx, int32_t dy, bool own) noexcept;
 
-    /// The ant was drawn at the engine's position plus (dx, dy) and the engine now has it at its position: it is drawn there and slides back. `own`: the ant is the player's own (the quick slide). A shift
+    /// The ant was drawn at the engine's position plus (dx, dy) and the engine now has it at its position: it is drawn there and slides back. `own`: the ant is the player's own (the quick slide; no default: an ant whose owner is not told would be slowed). A shift
     /// that comes while another is sliding is added to what is left of the first, and the slide starts again (its time is the new sum's)
-    void add(uint32_t ant, int32_t dx, int32_t dy, bool own = false);
+    void add(uint32_t ant, int32_t dx, int32_t dy, bool own);
     /// `ms` of the slide have passed (a frame)
     void advance(uint32_t ms);
     /// What is added to the ant's engine position in the picture now (pixels); false (and 0, 0) when the ant is not sliding
@@ -71,7 +71,7 @@ sim::AntSnapshot glided_ant(const ViewGlide& glide, const sim::WorldState& world
 
 /// How a sliding ant of another player is drawn. The engine's picture of the ant is the engine's own: its walk clip runs and faces the way the ENGINE moves it, while the slide carries the drawn ant
 /// somewhere else (often back along its walk: the corrected engine stands it on the middle of its tile for three ticks), a walk cycle that runs forward on an ant that is carried backward. So such an ant
-/// is drawn as it MOVES: its drawn velocity is the engine's walk (the clip's heading at the pace of a walk, when the ant walks) plus the slide's pull; at kSlideStandsBelowPxPerSecond and more it is
+/// is drawn as it MOVES: its drawn velocity is the engine's walk (the steps of the walk clip it plays over its time: 80 px/s straight on grass, slower on mud, when the ant walks) plus the slide's pull; at kSlideStandsBelowPxPerSecond and more it is
 /// drawn walking in the compass heading of that velocity (the walk clip of its terrain; its walk cycle is the engine's while the engine walks, else it follows what the slide has carried it); below
 /// that it is drawn standing, facing the way the engine has it (an ant that walks on the spot is never drawn so). `drawn` is `engine` as glided_ant() made it. Everything stays the engine's, and the
 /// place stays `drawn`'s (the pointer picks the ant there), for an ant that does not slide, one of the player's own (the quick slide), one that does something else than walk or stand (a blow, a flinch,

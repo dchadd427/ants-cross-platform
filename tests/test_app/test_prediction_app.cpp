@@ -620,7 +620,7 @@ int main(int argc, char* argv[]) {
         const int32_t kSlide = 40;
         const std::vector<uint8_t> before_old = (app.render_frame(), canvas_region(app, sx - 12, sy - 12, 24, 24));
         const std::vector<uint8_t> before_new = canvas_region(app, sx + kSlide - 12, sy - 12, 24, 24);
-        app.renderer().view_glide().add(ant, kSlide, 0);                                    // the ant was shown 40 px to the right of where the engine has it
+        app.renderer().view_glide().add(ant, kSlide, 0, false);                                    // the ant was shown 40 px to the right of where the engine has it
         app.render_frame();
         const std::vector<uint8_t> during_old = canvas_region(app, sx - 12, sy - 12, 24, 24);
         const std::vector<uint8_t> during_new = canvas_region(app, sx + kSlide - 12, sy - 12, 24, 24);
@@ -655,7 +655,7 @@ int main(int argc, char* argv[]) {
             if (!free_of_others(drawn_x, drawn_y) || !free_of_others(engine_x, engine_y)) continue;
             tried = true;
             app.renderer().view_glide().clear();
-            app.renderer().view_glide().add(ant, slide.first, slide.second);
+            app.renderer().view_glide().add(ant, slide.first, slide.second, false);
             app.render_frame();
             deselect();
             click(app, SDL_BUTTON_LEFT, sx + slide.first, sy + slide.second - 8);
@@ -824,7 +824,7 @@ int main(int argc, char* argv[]) {
             const int32_t ty = (enemy.py + d.second) / 32;
             if (tx < 0 || ty < 0 || tx >= static_cast<int32_t>(world.width) || ty >= static_cast<int32_t>(world.height) || world.is_tile_revealed(tx, ty)) continue;
             ViewGlide model;
-            model.add(enemy.id, d.first, d.second);
+            model.add(enemy.id, d.first, d.second, false);
             const sim::AntSnapshot kept = glided_ant(model, world, 0, enemy);
             fog_dx = d.first;
             fog_dy = d.second;
@@ -846,9 +846,9 @@ int main(int argc, char* argv[]) {
         motion.y = view.y + view.h - 30;
         app.handle_mouse_motion(motion);                                                   // (the pointer far from the ant)
         // the frame, with a slide of the enemy ant: the ant and two tiles around it on every side
-        const auto frame_with = [&](int32_t dx, int32_t dy) {
+        const auto frame_with = [&](int32_t dx, int32_t dy, bool quick = false) {          // (`quick`: the slide of an own ant, which is drawn as the engine has the ant: no walk drawn for the slide)
             app.renderer().view_glide().clear();
-            if (dx != 0 || dy != 0) app.renderer().view_glide().add(enemy.id, dx, dy);
+            if (dx != 0 || dy != 0) app.renderer().view_glide().add(enemy.id, dx, dy, quick);
             app.render_frame();
             return canvas_region(app, sx - 96, sy - 96, 192, 192);
         };
@@ -859,13 +859,13 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(frame_with(0, 0) == plain);                                             // (a frame drawn again is the same frame)
         const std::vector<uint8_t> slid = frame_with(fog_dx, fog_dy);                       // the slide that began two tiles into the fog ...
         ASSERT_TRUE(fog_spot() == plain_spot);                                              // ... draws nothing where the fog covers the ground
-        ASSERT_TRUE(slid == frame_with(kept_dx, kept_dy));                                  // ... and is the frame of the part that stays on explored ground (none of it: the plain frame)
+        ASSERT_TRUE(slid == frame_with(kept_dx, kept_dy, true));                            // ... and is the frame of the part that stays on explored ground, as the engine has the ant (none of it: the plain frame)
         if (kept_dx == 0 && kept_dy == 0) ASSERT_TRUE(slid == plain);
         // the same slide of an own ant is drawn whole (the player sees his own ants wherever they are), and so is an enemy's slide over explored ground
         const sim::AntSnapshot* own = ant_in(app.view_sim(), mine[0]);
         ASSERT_TRUE(own != nullptr);
         ViewGlide whole;
-        whole.add(own->id, fog_dx, fog_dy);
+        whole.add(own->id, fog_dx, fog_dy, true);
         ASSERT_EQ(glided_ant(whole, world, 0, *own).px, own->px + fog_dx);
         ASSERT_EQ(glided_ant(whole, world, 0, *own).py, own->py + fog_dy);
         const int32_t back_tx = (enemy.px - fog_dx / 2) / 32;
@@ -874,7 +874,7 @@ int main(int argc, char* argv[]) {
             const std::vector<uint8_t> back = frame_with(-fog_dx / 2, -fog_dy / 2);
             ASSERT_TRUE(back != plain);                                                     // the ant is drawn a tile from where the engine has it
             ViewGlide over;
-            over.add(enemy.id, -fog_dx / 2, -fog_dy / 2);
+            over.add(enemy.id, -fog_dx / 2, -fog_dy / 2, false);
             ASSERT_EQ(glided_ant(over, world, 0, enemy).px, enemy.px - fog_dx / 2);
             ASSERT_EQ(glided_ant(over, world, 0, enemy).py, enemy.py - fog_dy / 2);
         }

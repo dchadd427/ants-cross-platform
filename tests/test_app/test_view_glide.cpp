@@ -105,16 +105,16 @@ int main(int argc, char* argv[]) {
         ViewGlide glide;
         int32_t dx = 0;
         int32_t dy = 0;
-        glide.add(3, 20, 0);                                                                // 250 ms at the pace of a walk
+        glide.add(3, 20, 0, false);                                                                // 250 ms at the pace of a walk
         glide.advance(125);                                                                 // 10 left
-        glide.add(3, 6, 4);
+        glide.add(3, 6, 4, false);
         ASSERT_TRUE(glide.offset_of(3, dx, dy));
         ASSERT_TRUE(dx == 16 && dy == 4);
         const uint32_t again = ViewGlide::duration_ms(16, 4, false);                       // (16.5 px: 207 ms)
         ASSERT_EQ(again, 207u);
         glide.advance(again / 2);
         ASSERT_TRUE(glide.offset_of(3, dx, dy) && std::abs(dx - 8) <= 1 && std::abs(dy - 2) <= 1);      // a whole new slide: half of it is gone after half of the time
-        glide.add(3, -dx, -dy);
+        glide.add(3, -dx, -dy, false);
         ASSERT_FALSE(glide.offset_of(3, dx, dy));
         ASSERT_EQ(glide.size(), 0u);
         ViewGlide mine;                                                                     // an own ant stays in the quick slide however its slide is added to
@@ -131,15 +131,15 @@ int main(int argc, char* argv[]) {
         ViewGlide glide;
         int32_t dx = 0;
         int32_t dy = 0;
-        glide.add(5, ViewGlide::kMaxShiftPx, -ViewGlide::kMaxShiftPx);
+        glide.add(5, ViewGlide::kMaxShiftPx, -ViewGlide::kMaxShiftPx, false);
         ASSERT_TRUE(glide.offset_of(5, dx, dy) && dx == ViewGlide::kMaxShiftPx);             // (exactly two tiles: still a slide)
-        glide.add(5, 1, 0);                                                                  // (what is left plus one pixel is beyond two tiles: the ant jumps)
+        glide.add(5, 1, 0, false);                                                                  // (what is left plus one pixel is beyond two tiles: the ant jumps)
         ASSERT_FALSE(glide.offset_of(5, dx, dy));
-        glide.add(6, ViewGlide::kMaxShiftPx + 1, 0);
+        glide.add(6, ViewGlide::kMaxShiftPx + 1, 0, false);
         ASSERT_FALSE(glide.offset_of(6, dx, dy));
-        glide.add(8, 0, 0);
+        glide.add(8, 0, 0, false);
         ASSERT_EQ(glide.size(), 0u);
-        glide.add(9, 3, 3);
+        glide.add(9, 3, 3, false);
         glide.clear();
         ASSERT_FALSE(glide.offset_of(9, dx, dy));
     } TEST_END();
@@ -189,7 +189,7 @@ int main(int argc, char* argv[]) {
             if (length > 12.0 && length <= 48.0) ASSERT_TRUE(length * 1000.0 / total >= ViewGlide::kWalkPxPerSecond - 1.0);   // (and not slower than a walk either: the ant is carried, it does not drift)
             for (const uint32_t frame_ms : {1u, 7u, 16u, 17u, 33u}) {
                 ViewGlide glide;
-                glide.add(5, s[0], s[1]);
+                glide.add(5, s[0], s[1], false);
                 int32_t px = 0;
                 int32_t py = 0;
                 glide.offset_of(5, px, py);
@@ -219,7 +219,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(vx == 0 && vy == 0);
         ASSERT_EQ(glide.carried_px(1), 0);
         ASSERT_FALSE(glide.is_own(1));
-        glide.add(1, 24, 0);                                                                // 300 ms at 80 px/s
+        glide.add(1, 24, 0, false);                                                                // 300 ms at 80 px/s
         glide.add(2, 0, -16, true);
         ASSERT_TRUE(glide.velocity_of(1, vx, vy));
         ASSERT_TRUE(vx == -80 && vy == 0);
@@ -251,10 +251,10 @@ int main(int argc, char* argv[]) {
         ant.px = 5 * 32 + 16;
         ant.py = 5 * 32 + 16;
         ViewGlide glide;
-        glide.add(9, -30, 0);                                                              // shown 30 px to the left of the engine: on tile 4 (explored)
+        glide.add(9, -30, 0, false);                                                              // shown 30 px to the left of the engine: on tile 4 (explored)
         ASSERT_EQ(ants::app::glided_ant(glide, world, 0, ant).px, ant.px - 30);
         ViewGlide far;
-        far.add(9, -64, 0);                                                                // 64 px to the left: tile 3, which the fog covers
+        far.add(9, -64, 0, false);                                                                // 64 px to the left: tile 3, which the fog covers
         ASSERT_EQ(ants::app::glided_ant(far, world, 0, ant).px, ant.px - 48);              // the enemy is drawn with the most of the slide that stays on explored ground (three quarters: tile 4)
         ASSERT_EQ(ants::app::glided_ant(far, world, 0, ant).tile_x, 5);                    // (everything else reads the engine's tile)
         world.fog_revealed[static_cast<size_t>(5 * 10 + 4)] = 0;                           // with tile 4 covered too only a quarter of the slide stays on explored ground (tile 5)
@@ -272,7 +272,7 @@ int main(int argc, char* argv[]) {
         world.fog_of_war_enabled = true;                                                   // the engine's own tile covered (the ant has left into the fog) and the slide's start explored: it is not drawn, and it does not slide
         world.fog_revealed[static_cast<size_t>(5 * 10 + 5)] = 0;
         ViewGlide left;
-        left.add(9, -30, 0);
+        left.add(9, -30, 0, false);
         ASSERT_EQ(ants::app::glided_ant(left, world, 0, ant).px, ant.px);
     } TEST_END();
 
@@ -314,7 +314,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(cursor(enemy.px, enemy.py - 8) == CursorType::Attack);
         ASSERT_TRUE(cursor(enemy.px + 48, enemy.py - 8) == CursorType::Move);
         // it slides: the picture has it 48 px to the right of the engine's place (a tile and a half: outside the box of 20 px to each side)
-        glide.add(foe, 48, 0);
+        glide.add(foe, 48, 0, false);
         ASSERT_TRUE(cursor(enemy.px + 48, enemy.py - 8) == CursorType::Attack);              // the cursor over the drawn ant
         ASSERT_TRUE(cursor(enemy.px, enemy.py - 8) == CursorType::Move);                     // ... and not where the engine has it
         click(enemy.px + 48, enemy.py - 8);
@@ -335,7 +335,7 @@ int main(int argc, char* argv[]) {
         sim.stop_ant(mine);
         for (int i = 0; i < 40; ++i) sim.tick();
         const sim::AntSnapshot own = snap(mine);
-        glide.add(mine, 0, 60);
+        glide.add(mine, 0, 60, false);
         hud.clear_selection();
         hud.select_ants_in_rect(own.px - 10, own.py + 60 - 20, own.px + 10, own.py + 60, sim.get_world_state(), false);        // a band around the drawn ant, below every part of the engine's box
         ASSERT_TRUE(hud.is_ant_selected(mine));
@@ -374,7 +374,7 @@ int main(int argc, char* argv[]) {
         }
         ASSERT_TRUE(enemy.id == foe && enemy.tile_x == 26);
         ASSERT_FALSE(health::ant_drawn(world, 0, enemy));                                    // the picture does not draw it
-        glide.add(foe, -64, 0);                                                              // it was shown two tiles to the left, on explored ground, a moment ago
+        glide.add(foe, -64, 0, false);                                                              // it was shown two tiles to the left, on explored ground, a moment ago
         int32_t dx = 7;
         int32_t dy = 7;
         ASSERT_FALSE(glide_offset(glide, world, 0, enemy, dx, dy));                          // no slide for the viewer who cannot see it ...
@@ -495,10 +495,38 @@ int main(int argc, char* argv[]) {
             ASSERT_TRUE(drawn.loco_clip == a.loco_clip && drawn.facing == a.facing);
             a.state = sim::UnitState::Flinch;
             ASSERT_TRUE(with_slide(a, 24, 24, false).loco_clip == a.loco_clip);
-            a.state = sim::UnitState::Idle;
-            ASSERT_TRUE(with_slide(a, 24, 24, false).loco_clip == mv::walk_clip(0, mv::kTerrainGrass, 7, false).chd_index);        // (an idle ant is carried: it walks)
+            const mv::MotionClip walk_nw = mv::walk_clip(0, mv::kTerrainGrass, 7, false);
+            for (const sim::UnitState idle : {sim::UnitState::Idle, sim::UnitState::GuardIdle}) {                                   // (an ant that stands is carried: it walks the way the slide carries it)
+                a.state = idle;
+                const sim::AntSnapshot carried = with_slide(a, 24, 24, false);
+                ASSERT_TRUE(carried.loco_clip == walk_nw.chd_index && carried.loco_mirrored == walk_nw.mirrored && carried.facing == 7);
+            }
         }
-        // a carried ant walks with the crumb it carries, and a mud walk keeps its terrain
+        // a swimmer, an ant that another system animates and a frozen one are the engine's picture (the swim clips are its own, not a walk on land)
+        {
+            sim::AntSnapshot a = walking_ant();
+            a.is_swimming = true;
+            ASSERT_TRUE(with_slide(a, 24, 24, false).loco_clip == a.loco_clip);
+            ASSERT_TRUE(with_slide(a, 24, 24, false).facing == a.facing);
+            sim::AntSnapshot f = standing_ant();
+            f.frozen = true;
+            ASSERT_TRUE(with_slide(f, 24, 24, false).loco_clip == f.loco_clip);
+            sim::AntSnapshot x = standing_ant();
+            x.loco_clip = 0x7FFE;
+            ASSERT_TRUE(with_slide(x, 24, 24, false).loco_clip == 0x7FFE);
+        }
+        // the engine walks it west and the slide pulls it east at 80 px/s: it stands, facing west (the mirror of the idle clip east)
+        {
+            sim::AntSnapshot a = walking_ant();
+            const mv::MotionClip walk_w = mv::walk_clip(0, mv::kTerrainGrass, 6, false);
+            const mv::MotionClip idle_w = mv::idle_clip(0, 6, false);
+            a.facing = 6;
+            a.loco_clip = walk_w.chd_index;
+            a.loco_mirrored = walk_w.mirrored;
+            const sim::AntSnapshot drawn = with_slide(a, -24, 0, false);
+            ASSERT_TRUE(drawn.loco_clip == idle_w.chd_index && drawn.loco_mirrored == idle_w.mirrored && drawn.facing == 6 && drawn.loco_frame == 0);
+        }
+        // a carried ant walks with the crumb it carries
         {
             sim::AntSnapshot a = walking_ant();
             a.is_holding = true;
@@ -507,11 +535,18 @@ int main(int argc, char* argv[]) {
             a.loco_mirrored = carry_east.mirrored;
             const sim::AntSnapshot drawn = with_slide(a, 0, -24, false);
             ASSERT_TRUE(drawn.loco_clip == mv::walk_clip(0, mv::kTerrainGrass, 3, true).chd_index);
+        }
+        // on mud the engine walks the ant at a third of the pace on grass: a slide that pulls it back at 80 px/s carries it back (it is not drawn standing as on grass), in the mud walk
+        {
             sim::AntSnapshot m = walking_ant();
             const mv::MotionClip mud_east = mv::walk_clip(0, mv::kTerrainMud, 2, false);
+            const mv::MotionClip mud_west = mv::walk_clip(0, mv::kTerrainMud, 6, false);
+            ASSERT_TRUE(mud_east.valid() && mud_west.valid());
             m.loco_clip = mud_east.chd_index;
             m.loco_mirrored = mud_east.mirrored;
-            ASSERT_TRUE(with_slide(m, 0, -24, false).loco_clip == mv::walk_clip(0, mv::kTerrainMud, 3, false).chd_index);
+            m.is_on_mud = true;
+            const sim::AntSnapshot drawn = with_slide(m, 24, 0, false);
+            ASSERT_TRUE(drawn.loco_clip == mud_west.chd_index && drawn.loco_mirrored == mud_west.mirrored && drawn.facing == 6);
         }
         // the fog cut the slide short (the drawn place is not the whole slide): the ant is drawn as the engine has it
         {
@@ -528,13 +563,13 @@ int main(int argc, char* argv[]) {
             a.px = 5 * 32 + 16;
             a.py = 5 * 32 + 16;
             ViewGlide glide;
-            glide.add(a.id, -64, 0);                                                        // 64 px to the left: tile 3, which the fog covers
+            glide.add(a.id, -64, 0, false);                                                        // 64 px to the left: tile 3, which the fog covers
             const sim::AntSnapshot drawn = glided_ant(glide, world, 0, a);
             ASSERT_EQ(drawn.px, a.px - 48);                                                 // (cut to three quarters)
             const sim::AntSnapshot posed_one = slid_pose(glide, a, drawn);
             ASSERT_TRUE(posed_one.loco_clip == a.loco_clip && posed_one.facing == a.facing);
             ViewGlide inside;
-            inside.add(a.id, -30, 0);                                                       // 30 px: on explored ground, the whole slide is drawn
+            inside.add(a.id, -30, 0, false);                                                       // 30 px: on explored ground, the whole slide is drawn
             ASSERT_TRUE(slid_pose(inside, a, glided_ant(inside, world, 0, a)).loco_clip != a.loco_clip);
         }
     } TEST_END();
