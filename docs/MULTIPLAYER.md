@@ -8,7 +8,7 @@ What the original's network does is recorded in sections 5.46 to 5.48 of [`GAME_
 
 The remake runs **one deterministic simulation on every machine** and sends only the players' intent, a lock-step of commands. The host is the sequencer: it stamps every command with the sender's seat (a peer cannot speak for another player), seals a turn every 50 ms with the commands in canonical order and sends it to everybody. The host is a player's machine (a game on the local network) or a dedicated server (`ants_server`) that plays nobody (a room of the game server). This also makes web play possible.
 
-There is no NAT traversal in the game. Over the internet every player connects out to a dedicated server, so players need no forwarded port, and the browser build can join it. A launcher or lobby can still start the game with `--host` or `--join HOST[:PORT]`; the original's roster options (`-P`, `-G`, `-H`) are not read.
+There is no NAT traversal in the game's own match: over the internet every player connects out to a dedicated server, so players need no forwarded port, and the browser build can join it. (The channels of protocol 25 between browsers carry hints only, never the match: [`P2P_HINTS.md`](P2P_HINTS.md).) A launcher or lobby can still start the game with `--host` or `--join HOST[:PORT]`; the original's roster options (`-P`, `-G`, `-H`) are not read.
 
 ### What you can do
 
@@ -105,6 +105,7 @@ The prediction is **on by default** in every match of the network. `--no-predict
 
 - How the prediction works, what it shows and plays, when it is off and the limit on its work are described in [`NETWORK_PORT.md`](NETWORK_PORT.md#prediction-of-ones-own-orders-predictionhpp-cue_routerhpp-netgame-applicationview_sim).
 - [`NETWORK_PORT.md`](NETWORK_PORT.md) "Prediction of one's own orders" has the design.
+- **Hints (protocol 25).** The other players' orders, and a computer player's, can reach the prediction ahead of their sealed turns, so that their ants are corrected less: the browsers send each other their own orders through the operator's relay (a direct connection only when both players turned it on in the room), and the server sends a computer player's order the moment the bot gives it. The turns, the hashes and the record are not touched. [`P2P_HINTS.md`](P2P_HINTS.md) has the rules.
 
 ## Limits
 

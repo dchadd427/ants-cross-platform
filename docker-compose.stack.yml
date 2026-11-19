@@ -71,6 +71,12 @@
 #   ANTS_HUB_ADMIN_GATE_SECRET=<32+ characters>     the hub's OLD name for ANTS_ADMIN_GATE_SECRET above (the one key; the hub reads this one only when that one is not set; optional; none by default; the release after this one
 #                                                   drops it). Keys come from this stack's environment and never from a file of the repository; with no key the door is shut for everybody
 #
+#   ANTS_TURN_HOST=turn.example.org  ANTS_TURN_SECRET=<openssl rand -hex 32>  ANTS_TURN_EXTERNAL_IP=<the public IPv4 of this machine>  COMPOSE_PROFILES=relay
+#                                                   the relay of the players' channels (docs/SERVER.md "The relay for the players' channels", docs/P2P_HINTS.md; optional, OFF by default): coturn in the
+#                                                   service ants-turn, which starts only with the profile `relay`, plus the same name and secret in the game server's environment. The name must be a DNS
+#                                                   record that points straight at this machine and is NOT proxied (a CDN proxy carries no UDP); the host's firewall must let in UDP and TCP 3478 and UDP
+#                                                   49160-49359. Without the profile, or without the name or the secret, no player opens a channel and every match is what it was. The secret is never printed
+#
 # Only the TCP game port is open to other machines. The WebSocket port (the site's nginx passes /ws to it over the network below) and the control
 # interface (the lobby's backend calls it) are published on the host's loopback address only.
 # The replay port (the site's nginx passes /replays to it over the network below) is not published on the host at all. The services on the network below trust each other, so put only containers you trust on it (the stack's services and the proxy). The chat hub (port 4040, not published) is on it too: the site's nginx passes /hub/ws to it.
@@ -125,6 +131,9 @@ services:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
       # the admin page (docs/MAP_SUBMISSIONS.md): the key of the pass that the hub's gate signs; the hub gets the same variable; without a good key every /admin/api path answers 403 closed
       ANTS_ADMIN_GATE_SECRET: ${ANTS_ADMIN_GATE_SECRET:-}
+      # the relay of the players' channels (docs/P2P_HINTS.md): its DNS name and the secret of its credentials; the server reads them both or neither (without them no player is given a credential)
+      ANTS_TURN_HOST: ${ANTS_TURN_HOST:-}
+      ANTS_TURN_SECRET: ${ANTS_TURN_SECRET:-}
     volumes:
       - ${ANTS_MAPS_DIR:-ants-maps}:/maps:ro
       - ants-server-results:/results
@@ -176,6 +185,42 @@ services:
     tmpfs:
       - /tmp
     # the hub writes a few lines for each connection: the log is kept small (docker's own default keeps all of it)
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # The relay of the players' channels (docs/SERVER.md "The relay for the players' channels"): coturn, in shared-secret mode, for the browsers of the players of a match. Only with the profile `relay`
+  # (COMPOSE_PROFILES=relay) and the three variables of the header: the stack deploys without them. Host networking: one public address, no port publishing (Docker publishes a range of 200 UDP ports one
+  # rule at a time, slowly), and the relay sees the players' real addresses. It is NOT behind the web page's proxy and listens on UDP and TCP 3478 and UDP 49160-49359 of this machine's own address.
+  # The image starts only with the capability to bind its port (the binary carries it); the process still runs as the user nobody. The configuration (docker/turnserver.conf) holds no secret: it comes on the
+  # command line, where `$$` reaches the container as `$` and the image's entry point expands it, so the secret is not written into the command.
+  ants-turn:
+    profiles: ["relay"]
+    build:
+      context: .
+      dockerfile: Dockerfile.turn
+    container_name: ants-turn
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      ANTS_TURN_SECRET: ${ANTS_TURN_SECRET:?set ANTS_TURN_SECRET}
+      ANTS_TURN_EXTERNAL_IP: ${ANTS_TURN_EXTERNAL_IP:?set ANTS_TURN_EXTERNAL_IP}
+      ANTS_TURN_HOST: ${ANTS_TURN_HOST:?set ANTS_TURN_HOST}
+    command: ["-c", "/etc/coturn/turnserver.conf", "--static-auth-secret=$$ANTS_TURN_SECRET", "--external-ip=$$ANTS_TURN_EXTERNAL_IP", "--realm=$$ANTS_TURN_HOST"]
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "turnutils_stunclient", "127.0.0.1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+    # the log holds the players' addresses and the random labels of their credentials: it is kept short
     logging:
       driver: json-file
       options:

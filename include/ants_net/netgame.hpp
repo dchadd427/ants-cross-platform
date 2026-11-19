@@ -382,6 +382,9 @@ public:
         p2p_ = transport;
         p2p_direct_ = direct;
     }
+    /// On by default: a hint from the server (a computer player's order) or from a channel goes to the prediction. Off (--no-p2p, the measurements' "before"): hints are not looked at, and the
+    /// picture waits for the sealed turns as it did before protocol 25.
+    void set_hints_enabled(bool on) noexcept { hints_enabled_ = on; }
     /// How this machine is connected to the player of `seat` (PeerLink::None without a transport or for this player's own seat)
     PeerLink peer_link(uint8_t seat) const;
     /// The hints that the game sent and took (the tests and the readout): `sent` for each order given, `from_server` for a computer player's, `from_peers` for what the channels delivered
@@ -602,6 +605,7 @@ private:
     P2pTransport* p2p_{nullptr};
     bool p2p_direct_{false};
     bool p2p_config_sent_{false};
+    bool hints_enabled_{true};
     uint32_t hint_seq_{0};
     HintCounts hint_counts_;
     std::unique_ptr<Prediction> prediction_;     // (after the sessions: it holds their runner and goes first; made by refresh_prediction() when it is wanted, never otherwise)

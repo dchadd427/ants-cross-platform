@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "ants_net/p2p_transport.hpp"
 #include "ants_net/prediction.hpp"
 #include "ants_net/wire.hpp"
 
@@ -212,6 +213,10 @@ bool signal_allowed(bool from_direct, bool to_direct, std::string_view text) {
     if (from_direct && to_direct) return true;
     return !carries_non_relay_candidate(text);
 }
+
+#ifndef __EMSCRIPTEN__
+std::unique_ptr<P2pTransport> make_browser_channels() { return nullptr; }          // (only a page has channels: wasm_rtc.cpp)
+#endif
 
 std::string turn_username(uint32_t expires, const std::string& label) { return std::to_string(expires) + ":" + label; }
 

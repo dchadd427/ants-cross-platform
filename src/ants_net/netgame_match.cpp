@@ -58,7 +58,7 @@ void NetGame::on_p2p_message(const std::vector<uint8_t>& message) {
     switch (peek_type(message)) {
         case MsgType::Hint: {
             HintMsg h;
-            if (!decode(message, h) || h.command.issuer == seat_) return;
+            if (!hints_enabled_ || !decode(message, h) || h.command.issuer == seat_) return;
             ++hint_counts_.from_server;
             if (prediction_) prediction_->hint(h.command, h.seq, h.tick);
             return;
@@ -99,6 +99,7 @@ void NetGame::pump_p2p() {
             ++hint_counts_.refused;
             continue;
         }
+        if (!hints_enabled_) continue;
         ++hint_counts_.from_peers;
         if (prediction_) prediction_->hint(h.command, h.seq, h.tick);
     }

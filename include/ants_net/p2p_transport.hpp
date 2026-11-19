@@ -5,6 +5,7 @@
 // to whom is kept by the page (it never emits or accepts an address of a player who did not allow direct connections) and again by the server.
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -34,5 +35,8 @@ public:
     /// Closes every channel (the match is over, or the game leaves)
     virtual void close() = 0;
 };
+
+/// The browser build's data channels (wasm_rtc.cpp and web/p2p.js), or null in every other build and in a page that has none
+std::unique_ptr<P2pTransport> make_browser_channels();
 
 }  // namespace ants::net

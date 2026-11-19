@@ -160,6 +160,29 @@ void run_hint_netgame_tests() {
         ASSERT_TRUE(all_equal(m.t));
     } TEST_END();
 
+    TEST_CASE("N25.5 A Game That Is Told Not To Take Hints Ignores Them, From A Channel And From The Server: Nothing Is Counted And The Prediction Is Never Given One") {
+        HintMatch m(true);
+        ASSERT_TRUE(m.ok);
+        m.guest->net.set_hints_enabled(false);
+        m.t.run(1500);
+        uint8_t bot = 255;
+        for (uint8_t seat = 2; seat < sim::MAX_PLAYERS; ++seat) {
+            if ((m.host->net.start_info().roster & (1u << seat)) != 0 && bot == 255) bot = seat;
+        }
+        ASSERT_TRUE(bot != 255);
+        ASSERT_TRUE(m.host->net.submit_bot(bot, order(bot, first_ant(*m.host, bot), 20, 20)));
+        HintMsg h;
+        h.seq = 1;
+        h.tick = static_cast<uint32_t>(m.guest->net.prediction()->display_tick() + 2);
+        h.command = order(0, first_ant(*m.guest, 0), 16, 16);
+        m.channels.to_deliver.push_back({0, encode(h)});
+        m.t.run(500);
+        ASSERT_EQ(m.guest->net.hint_counts().from_server + m.guest->net.hint_counts().from_peers, uint64_t{0});
+        ASSERT_EQ(m.guest->net.prediction()->stats().hints_received, uint64_t{0});
+        m.t.run(2000);
+        ASSERT_TRUE(all_equal(m.t));
+    } TEST_END();
+
     TEST_CASE("N25.4 With A Transport The Game Closes It When It Ends And Reports How It Is Connected To Each Other Player; Without One Every Player Is Not Connected") {
         HintMatch m;
         ASSERT_TRUE(m.ok);

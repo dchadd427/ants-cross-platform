@@ -29,7 +29,7 @@ endif()
 
 # The browser's WebSocket client (the page's own WebSocket through Emscripten's library: -lwebsocket.js)
 if(EMSCRIPTEN)
-    target_sources(ants_net PRIVATE wasm_ws.cpp)
+    target_sources(ants_net PRIVATE wasm_ws.cpp wasm_rtc.cpp)
     target_link_libraries(ants_net PUBLIC websocket.js)
 endif()
 

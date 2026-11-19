@@ -448,6 +448,11 @@ void Application::leave_game() {
 // The tick, chat and HUD hooks of a NetGame that the application owns (a room or a match)
 void Application::attach_net() {
     hook_rejoin_store();
+    net_->set_hints_enabled(config_.p2p);                                          // (--no-p2p: no channel and no hint)
+    if (config_.p2p) {                                                             // the browser's data channels (protocol 25): none in a native build, and none for a game that was told --no-p2p
+        if (!p2p_) p2p_ = net::make_browser_channels();
+        if (p2p_) net_->set_p2p(p2p_.get(), config_.direct);
+    }
     net_->set_prediction_enabled(config_.prediction);                              // the prediction of the player's own orders (net::Prediction): on, unless --no-prediction says otherwise
     net_->set_on_prediction_dropped([this]() { hud_.set_sim_query(&sim_); });      // (its engine is gone: the HUD's special-target question goes back to the confirmed one at once)
     net_->set_fill_bots(config_.fill_bots);                                        // the bots that this machine's START seats in the empty seats (protocol 11; the menu's Host panel sets it)

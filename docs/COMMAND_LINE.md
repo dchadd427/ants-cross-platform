@@ -129,6 +129,8 @@ How network play works (a room on the local network, a server's room, bots): [`M
 |---|---|---|---|
 | `--audio-focus` | none | off | A window without the input focus is silent and holds its music (for several games on one machine): the piece goes on where it left off when the window has the focus again. Without this option the original's rule applies: leaving the program closes the music, and coming back starts a new random piece ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 5.24). |
 | `--prediction`, `--no-prediction` | `on` or `off` | `on` | Whether a match of the network shows your own orders at once. `--no-prediction` is `--prediction off`. |
+| `--direct` | `on` or `off` | `off` | The browser build only ([`P2P_HINTS.md`](P2P_HINTS.md)): whether this player allows a direct connection to the other players who allow it too (they then see each other's IP address). Off: every channel goes through the operator's relay and no player's address reaches another. The page passes `--direct on` when the Room's switch is on. |
+| `--no-p2p` | | | The browser build opens no data channel to the other players of a match, and the game takes no hint from a channel or from the server: the picture waits for the sealed turns, as before protocol 25 (the page's `?p2p=off`). |
 | `--settings` | `FILE` | the per-user application folder | Keep the remembered options in this file: see "Settings" in [`CONTROLS.md`](CONTROLS.md). A headless run keeps its settings in memory only, unless this names a file. |
 
 ### `--prediction` in detail

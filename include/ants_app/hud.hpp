@@ -479,6 +479,10 @@ public:
         match_countdown_left_ms_ = ms_left;
         countdown_seats_ = seats;
     }
+    /// Protocol 25: how this machine is connected to the person of `seat` now (the row's small word, countdown_tag)
+    void set_countdown_link(size_t seat, net::PeerLink link) noexcept {
+        if (seat < countdown_seats_.size()) countdown_seats_[seat].link = link;
+    }
     bool is_match_countdown_active() const noexcept { return show_match_start_modal_ && match_countdown_; }
     void set_match_countdown_left_ms(int64_t ms_left) noexcept { match_countdown_left_ms_ = ms_left; }
     int64_t match_countdown_left_ms() const noexcept { return match_countdown_left_ms_; }

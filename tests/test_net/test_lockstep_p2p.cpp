@@ -420,6 +420,9 @@ void run_bot_hint_tests() {
         ASSERT_TRUE(m.host->submit_bot(2, cmd(CommandType::Hatch, 2)));              // (a kind that is not predicted: no hint)
         m.run(500);
         for (const size_t person : {size_t{0}, size_t{1}}) {
+            size_t on_the_wire = 0;
+            for (const auto& raw : m.got[person]) on_the_wire += peek_type(raw) == MsgType::Hint ? 1u : 0u;
+            ASSERT_EQ(on_the_wire, 3u);                                               // (the Hatch is not sent at all: a message that a decoder would refuse is no hint either)
             const std::vector<HintMsg> hints = m.received<HintMsg>(person, MsgType::Hint);
             ASSERT_EQ(hints.size(), 3u);
             ASSERT_TRUE(hints[0].command == first);

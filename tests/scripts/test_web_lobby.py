@@ -450,7 +450,7 @@ class TheFrontPageMarkup(PageCase):
         for ref in re.findall(r'(?:\sfor|aria-labelledby|aria-describedby)="([^"]+)"', self.markup):
             for target in ref.split():
                 self.assertIn(target, ids, "an id that a label or a description names is not in the page: " + target)
-        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script><script src="front/player_name.js"></script>\n<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script>\n<script src="front/map_picker.js"></script>\n<script src="shapes.js"></script><script src="map_files.js"></script><script src="home/home.js"></script>\n<script>', self.page)         # (the page's own script comes last and reads their globals)
+        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script><script src="front/player_name.js"></script>\n<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script><script src="front/lobby_direct.js"></script>\n<script src="front/map_picker.js"></script>\n<script src="shapes.js"></script><script src="map_files.js"></script><script src="home/home.js"></script>\n<script>', self.page)         # (the page's own script comes last and reads their globals)
         for name in ("lobby_rules.js", "lobby_net.js", "player_name.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js"):
             self.assertTrue(os.path.isfile(os.path.join(REPO, "web", "front", name)), name)
         self.assertIn("root.AntsLobbyRules = api", self.rules)
@@ -534,7 +534,7 @@ class TheGamePage(PageCase):
         join = self.page[self.page.index("function joinArguments(search, secure, host) {"):]
         join = join[:join.index("return out;", join.index("if (join && "))]                                     # (the first "return out;" is the one of an address that cannot be read)
         self.assertEqual(re.findall(r"out\.args\.push\('(--[a-z-]+)'", join),
-                         ["--join-url", "--room", "--room-map", "--room-seats", "--room-teams", "--room-leader-start", "--platform", "--seat", "--fill-bots", "--teams", "--start-when", "--name"])
+                         ["--join-url", "--room", "--room-map", "--room-seats", "--room-teams", "--room-leader-start", "--platform", "--direct", "--seat", "--fill-bots", "--teams", "--start-when", "--name"])
         self.assertIn("var roomTeams = antsTeamsArg(q.get('roomteams'));", join)
         self.assertIn("var platform = antsPlatformArg(q.get('platform'));", join)
         self.assertNotIn("navigator", join)                                                                    # (the page does not look for the platform: it is the address's word or none)
@@ -610,7 +610,7 @@ class TheDocuments(unittest.TestCase):
         rows = [[cell.strip() for cell in line.strip("|").split("|")] for line in table.splitlines()[2:]]
         self.assertEqual([(row[0], row[2]) for row in rows], [("`roommap`", "`--room-map <key>`"), ("`roomseats`", "`--room-seats <n>`"), ("`roomteams`", "`--room-teams <A+B>`"),
                                                               ("`roomleaderstart`", "`--room-leader-start`"), ("`platform`", "`--platform <word>`")])
-        self.assertIn("`--join-url`, `--room`, `--room-map`, `--room-seats`, `--room-teams`, `--room-leader-start`, `--platform`, `--seat`, `--fill-bots`, `--teams`, `--start-when`, `--name`, then the page's own `--aspect`", page)
+        self.assertIn("`--join-url`, `--room`, `--room-map`, `--room-seats`, `--room-teams`, `--room-leader-start`, `--platform`, `--direct`, `--seat`, `--fill-bots`, `--teams`, `--start-when`, `--name`, then the page's own `--aspect`", page)
         for stale in ("`demo-<map>-4p-", "a word of the room's code", "demo-treasure-4p-", "is a word of the code itself", "a word of the code itself"):                 # (the old codes named the map, the seats and the teams)
             self.assertNotIn(stale, page, stale)
 

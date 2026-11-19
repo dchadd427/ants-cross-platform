@@ -1,0 +1,625 @@
+{
+ "note": "Mutants of protocol 25 (docs/P2P_HINTS.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the prediction's matching rule for a hint (where it goes, doubled and late hints, the order of a turn, confirmed, moved once, dropped, the limits), the server's session (the credential and its expiry, who is ready, the rule of the address and the violation, the sender's seat stamped by the connection, the limits, who is told, a computer player's hint at the tick of its turn), the wire (what each decoder refuses), the rule of the address in the text of a candidate, the relay's credential (RFC 2104, the expiry), and the game's side (a channel's seat, the server's hint, a relay with no address, the tick of a hint, the mark).",
+ "mutants": [
+  {
+   "id": "hint_put_behind_a_turn_in_hand",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "Foreign f{command, seq, std::min(std::max(tick, next_receive), horizon), confirmed_tick(), 0};",
+   "new": "Foreign f{command, seq, std::min(tick, horizon), confirmed_tick(), 0};",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "hint_that_came_after_its_turn_is_applied_again",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "        if (late || s.matched || !(s.command == command)) continue;",
+   "new": "        if (true) continue;",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "hint_far_behind_is_not_late",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "bool late = tick + cfg_.hint_max_age_ticks < next_receive;",
+   "new": "bool late = false;",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "copy_of_a_hint_is_applied_again",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "if (!seen_[command.issuer].take(seq)) {",
+   "new": "if (false) {",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "window_of_numbers_is_longer",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "if (d >= 64u || ((bits >> d) & 1u) != 0u) return false;",
+   "new": "if (d >= 65u || ((bits >> d) & 1u) != 0u) return false;",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "hint_of_own_seat_is_taken",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "command.issuer >= sim::MAX_PLAYERS || command.issuer == cfg_.seat || !predicts(command.type)",
+   "new": "command.issuer >= sim::MAX_PLAYERS || !predicts(command.type)",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "hint_of_an_unpredicted_kind_is_taken",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "command.issuer == cfg_.seat || !predicts(command.type) || hints_.size()",
+   "new": "command.issuer == cfg_.seat || hints_.size()",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "hints_are_not_limited",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "|| hints_.size() >= cfg_.max_hints) {",
+   "new": "|| false) {",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "hint_while_off_is_taken",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "if (!running_ || suspended_ || command.issuer >= sim::MAX_PLAYERS",
+   "new": "if (command.issuer >= sim::MAX_PLAYERS",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "hint_far_ahead_is_not_held",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "std::max<uint64_t>(display_, next_receive) + cfg_.max_lead_ticks;",
+   "new": "std::max<uint64_t>(display_, next_receive) + 4000000000ull;",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "oldest_hint_is_not_the_one_taken",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "    hints_.erase(hints_.begin() + static_cast<std::ptrdiff_t>(first), hints_.begin() + static_cast<std::ptrdiff_t>(i) + 1);",
+   "new": "    hints_.erase(hints_.begin() + static_cast<std::ptrdiff_t>(i), hints_.begin() + static_cast<std::ptrdiff_t>(i) + 1);",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "hint_at_another_tick_is_no_correction",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "        ++stats_.hints_confirmed_moved;\n        wrong = true;",
+   "new": "        ++stats_.hints_confirmed_moved;",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "hint_that_was_not_sealed_stays_after_two_turns",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "        } else {\n            hints_.erase(hints_.begin() + static_cast<std::ptrdiff_t>(i));\n            ++stats_.hints_dropped;\n        }",
+   "new": "        } else {\n            ++i;\n        }",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "hint_is_not_moved_to_the_next_tick",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "            hints_[i].tick = n + 1u;",
+   "new": "            hints_[i].tick = n;",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "hint_that_no_turn_carries_stays",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "if (confirmed_tick_now > hints_[i].born + cfg_.pending_timeout_ticks) {",
+   "new": "if (false) {",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "hints_survive_a_stop",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "    assumed_.clear();\n    pending_.clear();\n    hints_.clear();\n    sealed_seen_.clear();",
+   "new": "    assumed_.clear();\n    pending_.clear();",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "hints_at_a_tick_are_not_in_the_order_of_a_turn",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "    for (const Foreign& h : hints_) {\n        if (std::max(h.tick, next_receive) == tick) out.push_back(h.command);\n    }\n    std::stable_sort(out.begin(), out.end(), [](const sim::Command& a, const sim::Command& b) { return a.issuer < b.issuer; });",
+   "new": "    for (const Foreign& h : hints_) {\n        if (std::max(h.tick, next_receive) == tick) out.push_back(h.command);\n    }",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "hint_is_applied_out_of_order_at_the_display_tick",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "for (const sim::Command& c : assumed_.back()) in_order = in_order && c.issuer < command.issuer;",
+   "new": "for (const sim::Command& c : assumed_.back()) in_order = in_order && true;",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "hint_ahead_is_applied_at_once",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "    } else if (at == display_) {",
+   "new": "    } else if (at >= display_) {",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "a_hint_in_a_turn_is_not_taken_out_of_the_list",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "if (!take_hint_for(cmd, n, wrong)) {",
+   "new": "if (!(take_hint_for(cmd, n, wrong) && false)) {",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "credential_never_expires",
+   "file": "src/ants_net/session.cpp",
+   "old": "ice.expires = now + cfg_.turn->ttl_s;",
+   "new": "ice.expires = now + 4000000000u;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "credential_is_not_made_from_the_secret",
+   "file": "src/ants_net/session.cpp",
+   "old": "ice.credential = cfg_.turn->credential(ice.username);",
+   "new": "ice.credential = ice.username;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "every_player_is_ready_without_a_relay",
+   "file": "src/ants_net/session.cpp",
+   "old": "c.p2p_ready = !ice.urls.empty();",
+   "new": "c.p2p_ready = true;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "direct_without_a_relay",
+   "file": "src/ants_net/session.cpp",
+   "old": "c.p2p_direct = c.p2p_ready && m.direct;",
+   "new": "c.p2p_direct = m.direct;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "an_address_is_passed_to_a_player_who_did_not_allow_it",
+   "file": "src/ants_net/session.cpp",
+   "old": "if (!signal_allowed(c.p2p_direct, to.p2p_direct, m.text)) return violation(player);",
+   "new": "if (false) return violation(player);",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "an_address_is_dropped_without_a_violation",
+   "file": "src/ants_net/session.cpp",
+   "old": "if (!signal_allowed(c.p2p_direct, to.p2p_direct, m.text)) return violation(player);",
+   "new": "if (!signal_allowed(c.p2p_direct, to.p2p_direct, m.text)) return;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "the_sender_of_a_signal_is_what_the_page_says",
+   "file": "src/ants_net/session.cpp",
+   "old": "    out.peer = player;\n    out.kind = m.kind;",
+   "new": "    out.peer = m.peer;\n    out.kind = m.kind;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "a_signal_before_p2pconfig_is_taken",
+   "file": "src/ants_net/session.cpp",
+   "old": "if (!c.p2p_ready) return violation(player);",
+   "new": "if (false) return violation(player);",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "a_signal_to_oneself_is_taken",
+   "file": "src/ants_net/session.cpp",
+   "old": "    if (m.peer == player) return violation(player);\n",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "a_signal_to_a_player_who_is_not_ready_is_passed",
+   "file": "src/ants_net/session.cpp",
+   "old": "if (!to.present || !to.p2p_ready || to.conn == nullptr) return;",
+   "new": "if (!to.present || to.conn == nullptr) return;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "signals_are_not_limited",
+   "file": "src/ants_net/session.cpp",
+   "old": "if (++c.p2p_signals > kMaxP2pSignals) return violation(player);",
+   "new": "++c.p2p_signals;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "credentials_are_not_limited",
+   "file": "src/ants_net/session.cpp",
+   "old": "if (++c.p2p_configs > kMaxP2pConfigs) return violation(player);",
+   "new": "++c.p2p_configs;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "peers_name_a_player_who_has_left",
+   "file": "src/ants_net/session.cpp",
+   "old": "if (!clients_[p].present || !clients_[p].p2p_ready) continue;\n        ready",
+   "new": "if (!clients_[p].p2p_ready) continue;\n        ready",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "peers_are_not_told_when_they_change",
+   "file": "src/ants_net/session.cpp",
+   "old": "if (ready == peers_ready_sent_ && direct == peers_direct_sent_) return;",
+   "new": "if (ready == peers_ready_sent_ && direct == peers_direct_sent_ && peers_ready_sent_ != 0) return;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "bot_hint_names_another_tick",
+   "file": "src/ants_net/session.cpp",
+   "old": "hint.tick = sequencer_.next_turn();",
+   "new": "hint.tick = sequencer_.next_turn() + 1;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "bot_hints_of_every_kind",
+   "file": "src/ants_net/session.cpp",
+   "old": "const bool wanted = cfg_.bot_hints && Prediction::predicts(command.type);",
+   "new": "const bool wanted = cfg_.bot_hints;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "bot_hints_cannot_be_switched_off",
+   "file": "src/ants_net/session.cpp",
+   "old": "const bool wanted = cfg_.bot_hints && Prediction::predicts(command.type);",
+   "new": "const bool wanted = Prediction::predicts(command.type);",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "bot_hint_is_sent_for_an_order_that_was_refused",
+   "file": "src/ants_net/session.cpp",
+   "old": "    if (!sequencer_.submit(player, std::move(command))) return false;\n    if (wanted && hint.tick <= kMaxHintTick) broadcast(encode(hint));\n    return true;",
+   "new": "    if (wanted && hint.tick <= kMaxHintTick) broadcast(encode(hint));\n    return sequencer_.submit(player, std::move(command));",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "bot_hint_has_the_wrong_seat",
+   "file": "src/ants_net/session.cpp",
+   "old": "        hint.command.issuer = player;\n    }",
+   "new": "        hint.command.issuer = 0;\n    }",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "relay_is_any_word_that_starts_like_it",
+   "file": "src/ants_net/p2p.cpp",
+   "old": "        if (type != \"relay\") return true;\n        // a relay candidate names",
+   "new": "        if (type.substr(0, 5) != \"relay\") return true;\n        // a relay candidate names",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "a_candidate_with_no_type_is_a_relay_one",
+   "file": "src/ants_net/p2p.cpp",
+   "old": "        if (typ == std::string_view::npos) return true;",
+   "new": "        if (typ == std::string_view::npos) { at += 10; continue; }",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "related_address_of_a_relay_candidate_is_not_looked_at",
+   "file": "src/ants_net/p2p.cpp",
+   "old": "            if (related != \"0.0.0.0\" && related != \"::\") return true;\n        }\n        at += 10;",
+   "new": "        }\n        at += 10;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "a_connection_line_may_show_an_address",
+   "file": "src/ants_net/p2p.cpp",
+   "old": "                if (address != \"0.0.0.0\" && address != \"::\") return true;",
+   "new": "                if (false) return true;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "a_connection_line_that_is_not_understood_is_passed",
+   "file": "src/ants_net/p2p.cpp",
+   "old": "            } else if (connection) {\n                return true;",
+   "new": "            } else if (connection) {\n                (void)0;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "either_player_allowing_direct_is_enough",
+   "file": "src/ants_net/p2p.cpp",
+   "old": "if (from_direct && to_direct) return true;",
+   "new": "if (from_direct || to_direct) return true;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "a_seat_that_allows_direct_need_not_be_ready",
+   "file": "src/ants_net/p2p.cpp",
+   "old": "(direct & ~ready) != 0) return false;",
+   "new": "false) return false;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "a_hint_of_any_kind_decodes",
+   "file": "src/ants_net/p2p.cpp",
+   "old": "if (!Prediction::predicts(m.command.type) || m.command.issuer >= sim::MAX_PLAYERS) return false;",
+   "new": "if (m.command.issuer >= sim::MAX_PLAYERS) return false;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "a_hint_numbered_zero_decodes",
+   "file": "src/ants_net/p2p.cpp",
+   "old": "if (!r.ok() || m.seq == 0 || m.tick > kMaxHintTick) return false;",
+   "new": "if (!r.ok() || m.tick > kMaxHintTick) return false;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "a_credential_for_no_address_decodes",
+   "file": "src/ants_net/p2p.cpp",
+   "old": "    if (n == 0) {                                                                    // no relay: nothing else is told\n        if (m.expires != 0 || !m.username.empty() || !m.credential.empty()) return false;",
+   "new": "    if (n == 0) {\n        (void)0;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "a_signal_for_a_seat_that_is_not_one_decodes",
+   "file": "src/ants_net/p2p.cpp",
+   "old": "m.peer >= sim::MAX_PLAYERS || kind <",
+   "new": "false || kind <",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "a_signal_with_control_characters_decodes",
+   "file": "src/ants_net/p2p.cpp",
+   "old": "    if (!signal_text(m.text)) return false;\n    out = std::move(m);",
+   "new": "    out = std::move(m);",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "credential_signed_with_a_wrong_block_pad",
+   "file": "src/ants_net/turn.cpp",
+   "old": "outer[i] = static_cast<uint8_t>(k[i] ^ 0x5Cu);",
+   "new": "outer[i] = static_cast<uint8_t>(k[i] ^ 0x5Du);",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "credential_valid_at_its_expiry",
+   "file": "src/ants_net/turn.cpp",
+   "old": "if (expires == 0 || expires <= now || secret.empty()) return false;",
+   "new": "if (expires == 0 || expires < now || secret.empty()) return false;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "credential_valid_for_any_secret",
+   "file": "src/ants_net/turn.cpp",
+   "old": "return credential == turn_credential(secret, username);",
+   "new": "return true;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "hint_of_a_channel_that_names_another_seat_is_taken",
+   "file": "src/ants_net/netgame_match.cpp",
+   "old": "if (!decode(raw, h) || peer >= sim::MAX_PLAYERS || h.command.issuer != peer || peer == seat_) {",
+   "new": "if (!decode(raw, h) || peer >= sim::MAX_PLAYERS || peer == seat_) {",
+   "build": [
+    "test_netgame"
+   ],
+   "test": "ANTS_TEST_FILTER=N25 timeout 900 ./build/tests/test_net/test_netgame"
+  },
+  {
+   "id": "hint_of_the_players_own_channel_is_taken",
+   "file": "src/ants_net/netgame_match.cpp",
+   "old": "if (!decode(raw, h) || peer >= sim::MAX_PLAYERS || h.command.issuer != peer || peer == seat_) {",
+   "new": "if (!decode(raw, h) || peer >= sim::MAX_PLAYERS || h.command.issuer != peer) {",
+   "build": [
+    "test_netgame"
+   ],
+   "test": "ANTS_TEST_FILTER=N25 timeout 900 ./build/tests/test_net/test_netgame"
+  },
+  {
+   "id": "servers_hint_does_not_reach_the_prediction",
+   "file": "src/ants_net/netgame_match.cpp",
+   "old": "            ++hint_counts_.from_server;\n            if (prediction_) prediction_->hint(h.command, h.seq, h.tick);",
+   "new": "            ++hint_counts_.from_server;",
+   "build": [
+    "test_netgame"
+   ],
+   "test": "ANTS_TEST_FILTER=N25 timeout 900 ./build/tests/test_net/test_netgame"
+  },
+  {
+   "id": "a_relay_with_no_address_is_opened",
+   "file": "src/ants_net/netgame_match.cpp",
+   "old": "if (p2p_ != nullptr && decode(message, m) && !m.urls.empty()) p2p_->open(seat_, p2p_direct_, m);",
+   "new": "if (p2p_ != nullptr && decode(message, m)) p2p_->open(seat_, p2p_direct_, m);",
+   "build": [
+    "test_netgame"
+   ],
+   "test": "ANTS_TEST_FILTER=N25 timeout 900 ./build/tests/test_net/test_netgame"
+  },
+  {
+   "id": "hint_is_sent_with_the_wrong_tick",
+   "file": "src/ants_net/netgame_match.cpp",
+   "old": "std::min<uint64_t>(prediction_->last_order_tick(), kMaxHintTick)",
+   "new": "std::min<uint64_t>(prediction_->display_tick() + 7, kMaxHintTick)",
+   "build": [
+    "test_netgame"
+   ],
+   "test": "ANTS_TEST_FILTER=N25 timeout 900 ./build/tests/test_net/test_netgame"
+  },
+  {
+   "id": "the_players_own_seat_has_a_mark",
+   "file": "src/ants_net/netgame_match.cpp",
+   "old": "PeerLink NetGame::peer_link(uint8_t seat) const { return p2p_ == nullptr || seat >= sim::MAX_PLAYERS || seat == seat_ ? PeerLink::None : p2p_->link(seat); }",
+   "new": "PeerLink NetGame::peer_link(uint8_t seat) const { return p2p_ == nullptr || seat >= sim::MAX_PLAYERS ? PeerLink::None : p2p_->link(seat); }",
+   "build": [
+    "test_netgame"
+   ],
+   "test": "ANTS_TEST_FILTER=N25 timeout 900 ./build/tests/test_net/test_netgame"
+  },
+  {
+   "id": "hints_are_taken_when_told_not_to",
+   "file": "src/ants_net/netgame_match.cpp",
+   "old": "if (!hints_enabled_ || !decode(message, h) || h.command.issuer == seat_) return;",
+   "new": "if (!decode(message, h) || h.command.issuer == seat_) return;",
+   "build": [
+    "test_netgame"
+   ],
+   "test": "ANTS_TEST_FILTER=N25 timeout 900 ./build/tests/test_net/test_netgame"
+  },
+  {
+   "id": "channel_hints_are_taken_when_told_not_to",
+   "file": "src/ants_net/netgame_match.cpp",
+   "old": "        if (!hints_enabled_) continue;\n        ++hint_counts_.from_peers;",
+   "new": "        ++hint_counts_.from_peers;",
+   "build": [
+    "test_netgame"
+   ],
+   "test": "ANTS_TEST_FILTER=N25 timeout 900 ./build/tests/test_net/test_netgame"
+  }
+ ]
+}

@@ -152,7 +152,17 @@ class TheLegalPage(unittest.TestCase):
 
     def without_the_chat_panel(self):
         start = self.main.index('<section class="panel" id="chat-login">')
-        return plain(self.main[:start] + self.main[self.main.index("</section>", start) + len("</section>"):])
+        text = self.main[:start] + self.main[self.main.index("</section>", start) + len("</section>"):]
+        start = text.index('<section class="panel" id="channels">')              # (the panel of the players' channels, protocol 25, says who can see an address and that the relay's log is short-lived: its own test below)
+        return plain(text[:start] + text[text.index("</section>", start) + len("</section>"):])
+
+    def test_the_panel_of_the_channels_says_who_can_see_an_address_and_that_off_is_the_default(self):
+        start = self.main.index('<section class="panel" id="channels">')
+        panel = plain(self.main[start:self.main.index("</section>", start)])
+        for words in ("relay", "no player's address reaches another player", "Direct connection", "can see your IP address", "turn it off again", "at any time", "short-lived"):
+            self.assertIn(words, panel)
+        for word in ("STUN", "TURN", "WebRTC", "ICE"):
+            self.assertNotIn(word, panel, "the page speaks plainly")
 
     def test_it_is_short_and_says_nothing_of_what_the_site_stores_or_for_how_long_apart_from_the_panel_of_the_chat(self):
         text = self.without_the_chat_panel()
