@@ -252,6 +252,13 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             }
         } else if (std::strcmp(argv[i], "--no-prediction") == 0) {              // the same as --prediction off
             cfg.prediction = false;
+        } else if (std::strcmp(argv[i], "--others") == 0) {                      // --others confirmed | predicted: which engine draws the other players' ants in a match that predicts (others_view.hpp)
+            if (i + 1 >= argc || (std::strcmp(argv[i + 1], "confirmed") != 0 && std::strcmp(argv[i + 1], "predicted") != 0)) {
+                if (cfg.startup_error.empty()) cfg.startup_error = "--others needs confirmed or predicted";
+                if (i + 1 < argc) ++i;
+            } else {
+                cfg.others_confirmed = std::strcmp(argv[++i], "confirmed") == 0;
+            }
         } else if (std::strcmp(argv[i], "--bot") == 0) {                       // a computer player: --bot SEAT[:SPEC], repeatable (docs/BOTS.md)
             mode_given = true;
             ai::BotSpec spec;

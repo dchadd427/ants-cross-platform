@@ -80,7 +80,7 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
     if (show_match_start_modal_) return handle_countdown_key(key, mod, repeat);          // (protocol 21: the countdown card takes the keys of the chat)
 
     const bool ctrl = (mod & KMOD_CTRL) != 0 || (mod & KMOD_GUI) != 0;
-    const auto& world = sim.get_world_state();
+    const auto& world = world_of(sim);
     if (view_only_ && ctrl && (key == 'a' || key == 'A' || key == 'h' || key == 'H' || key == 'n' || key == 'N' || key == 'p' || key == 'P' || key == 's' || key == 'S')) return true;     // (a replay picks nothing)
 
     // The chat edit control is always active while chat is on: it takes 0x20 - 0x7E and Backspace unless Ctrl is held

@@ -1,0 +1,247 @@
+{
+  "note": "Mutants of the picture of others = confirmed (docs/NETWORK_PORT.md, 'Drawing the other players' ants from the confirmed engine'), for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the product rules that the view-glide, prediction-in-the-application and shaped-link tests hold: the other players' ants are the confirmed engine's and the player's own the predicted one's (an ant that only one engine has counts for the engine of its owner), the ground and the effects are the predicted engine's and what is explored the confirmed one's, the world is made again whenever an engine changes, the pointer and the cursor pick from the world that is drawn, an attack on a drawn ant is aimed at the tile of the predicted engine (and never into ground that the fog hides), only the player's own ants slide, and the mode is off by default and without the prediction.",
+  "mutants": [
+    {
+      "id": "others_drawn_from_predicted",
+      "file": "src/ants_app/others_view.cpp",
+      "old": "ants.push_back(mine[s].player_id == own ? mine[s] : theirs[c]);",
+      "new": "ants.push_back(mine[s]);",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG8"
+    },
+    {
+      "id": "own_drawn_from_confirmed",
+      "file": "src/ants_app/others_view.cpp",
+      "old": "ants.push_back(mine[s].player_id == own ? mine[s] : theirs[c]);",
+      "new": "ants.push_back(theirs[c]);",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG8"
+    },
+    {
+      "id": "ground_from_confirmed",
+      "file": "src/ants_app/others_view.cpp",
+      "old": "world_ = shown;",
+      "new": "world_ = confirmed;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG8"
+    },
+    {
+      "id": "fog_from_predicted",
+      "file": "src/ants_app/others_view.cpp",
+      "old": "    world_.fog_revealed = confirmed.fog_revealed;\n",
+      "new": "",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG8"
+    },
+    {
+      "id": "other_ant_only_in_predicted_drawn",
+      "file": "src/ants_app/others_view.cpp",
+      "old": "if (mine[s].player_id == own) ants.push_back(mine[s]);",
+      "new": "ants.push_back(mine[s]);",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG8"
+    },
+    {
+      "id": "other_ant_only_in_confirmed_dropped",
+      "file": "src/ants_app/others_view.cpp",
+      "old": "if (theirs[c].player_id != own) ants.push_back(theirs[c]);",
+      "new": "(void)own;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG8"
+    },
+    {
+      "id": "world_never_made_again",
+      "file": "src/ants_app/others_view.cpp",
+      "old": "if (valid_ && own == own_ && stamp == stamp_) return world_;",
+      "new": "if (valid_) return world_;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG8"
+    },
+    {
+      "id": "stamp_forgets_orders",
+      "file": "include/ants_app/others_view.hpp",
+      "old": "rebuilds == o.rebuilds && starts == o.starts && orders == o.orders;",
+      "new": "rebuilds == o.rebuilds && starts == o.starts;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG8"
+    },
+    {
+      "id": "aim_ignores_fog",
+      "file": "src/ants_app/others_view.cpp",
+      "old": "if (!health::ant_drawn(predicted, viewer, ant)) return false;",
+      "new": "(void)viewer;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG9"
+    },
+    {
+      "id": "click_picks_from_engine",
+      "file": "src/ants_app/hud_input.cpp",
+      "old": "bool shift) {\n    const auto& world = world_of(sim);\n    if (!over_ground(x, y, camera, sim.grid())) return;",
+      "new": "bool shift) {\n    const auto& world = sim.get_world_state();\n    if (!over_ground(x, y, camera, sim.grid())) return;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG10"
+    },
+    {
+      "id": "right_click_picks_from_engine",
+      "file": "src/ants_app/hud_input.cpp",
+      "old": "int32_t x, int32_t y) {\n    const auto& world = world_of(sim);",
+      "new": "int32_t x, int32_t y) {\n    const auto& world = sim.get_world_state();",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG10"
+    },
+    {
+      "id": "attack_not_aimed",
+      "file": "src/ants_app/hud_input.cpp",
+      "old": "    if (aim_tile_) aim_tile_(picked, tile);",
+      "new": "    (void)aim_tile_;",
+      "build": [
+        "test_view_glide"
+      ],
+      "test": "./build/tests/test_app/test_view_glide",
+      "expect": "VG10"
+    },
+    {
+      "id": "frame_draws_predicted_world",
+      "file": "src/ants_app/application_render.cpp",
+      "old": "const auto& world = shown_world();",
+      "new": "const auto& world = view.get_world_state();",
+      "build": [
+        "test_prediction_app"
+      ],
+      "test": "ANTS_TEST_FILTER=PA1 ./build/tests/test_app/test_prediction_app",
+      "expect": "PA12"
+    },
+    {
+      "id": "cursor_reads_predicted_world",
+      "file": "src/ants_app/application_render.cpp",
+      "old": "cur = hud_.evaluate_cursor(mouse_screen_x_, mouse_screen_y_, shown_world(), view.grid(), renderer_->camera());",
+      "new": "cur = hud_.evaluate_cursor(mouse_screen_x_, mouse_screen_y_, view.get_world_state(), view.grid(), renderer_->camera());",
+      "build": [
+        "test_prediction_app"
+      ],
+      "test": "ANTS_TEST_FILTER=PA1 ./build/tests/test_app/test_prediction_app",
+      "expect": "PA12"
+    },
+    {
+      "id": "composed_for_the_other_seat",
+      "file": "src/ants_app/application_sim.cpp",
+      "old": "others_view_.compose(predicted, sim_.get_world_state(), local_player_id_, stamp);",
+      "new": "others_view_.compose(predicted, sim_.get_world_state(), static_cast<uint8_t>(local_player_id_ ^ 1u), stamp);",
+      "build": [
+        "test_prediction_app"
+      ],
+      "test": "ANTS_TEST_FILTER=PA1 ./build/tests/test_app/test_prediction_app",
+      "expect": "PA12"
+    },
+    {
+      "id": "glide_fed_for_other_players",
+      "file": "src/ants_app/application_sim.cpp",
+      "old": "if (owned_in(view_sim().get_world_state()) || owned_in(sim_.get_world_state())) renderer_->view_glide().add(shift.ant, shift.dx, shift.dy);",
+      "new": "renderer_->view_glide().add(shift.ant, shift.dx, shift.dy);",
+      "build": [
+        "test_prediction_app"
+      ],
+      "test": "ANTS_TEST_FILTER=PA1 ./build/tests/test_app/test_prediction_app",
+      "expect": "PA14"
+    },
+    {
+      "id": "glide_not_fed_for_own_ants",
+      "file": "src/ants_app/application_sim.cpp",
+      "old": "if (owned_in(view_sim().get_world_state()) || owned_in(sim_.get_world_state())) renderer_->view_glide().add(shift.ant, shift.dx, shift.dy);",
+      "new": "if (owned_in(view_sim().get_world_state()) || owned_in(sim_.get_world_state())) (void)shift;",
+      "build": [
+        "test_prediction_app"
+      ],
+      "test": "ANTS_TEST_FILTER=PA1 ./build/tests/test_app/test_prediction_app",
+      "expect": "PA14"
+    },
+    {
+      "id": "mode_on_by_default",
+      "file": "include/ants_app/application.hpp",
+      "old": "    bool others_confirmed{false};",
+      "new": "    bool others_confirmed{true};",
+      "build": [
+        "test_prediction_app"
+      ],
+      "test": "ANTS_TEST_FILTER=PA1 ./build/tests/test_app/test_prediction_app",
+      "expect": "PA16"
+    },
+    {
+      "id": "others_option_inverted",
+      "file": "src/ants_app/application_args.cpp",
+      "old": "cfg.others_confirmed = std::strcmp(argv[++i], \"confirmed\") == 0;",
+      "new": "cfg.others_confirmed = std::strcmp(argv[++i], \"confirmed\") != 0;",
+      "build": [
+        "test_prediction_app"
+      ],
+      "test": "ANTS_TEST_FILTER=PA1 ./build/tests/test_app/test_prediction_app",
+      "expect": "PA16"
+    },
+    {
+      "id": "mode_runs_without_prediction",
+      "file": "include/ants_app/application.hpp",
+      "old": "config_.others_confirmed && net_ != nullptr && net_->predicting(); }",
+      "new": "config_.others_confirmed && net_ != nullptr; }",
+      "build": [
+        "test_prediction_app"
+      ],
+      "test": "ANTS_TEST_FILTER=PA1 ./build/tests/test_app/test_prediction_app",
+      "expect": "PA1"
+    },
+    {
+      "id": "click_not_aimed_in_the_application",
+      "file": "src/ants_app/application_sim.cpp",
+      "old": "    if (!others_view_active() || !config_.others_aim) return false;",
+      "new": "    return false;",
+      "build": [
+        "test_prediction_link"
+      ],
+      "test": "ANTS_TEST_FILTER=LK12 ./build/tests/test_app/test_prediction_link",
+      "expect": "LK12"
+    },
+    {
+      "id": "click_aimed_at_the_confirmed_tile",
+      "file": "src/ants_app/application_sim.cpp",
+      "old": "return aim_at_predicted_ant(view_sim().get_world_state(), local_player_id_, picked, tile);",
+      "new": "return aim_at_predicted_ant(sim_.get_world_state(), local_player_id_, picked, tile);",
+      "build": [
+        "test_prediction_link"
+      ],
+      "test": "ANTS_TEST_FILTER=LK12 ./build/tests/test_app/test_prediction_link",
+      "expect": "LK12"
+    }
+  ]
+}

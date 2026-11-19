@@ -43,6 +43,7 @@
 #include "ants_app/latency_corner.hpp"
 #include "ants_app/local_teams.hpp"
 #include "ants_app/midi_player.hpp"
+#include "ants_app/others_view.hpp"
 #include "ants_app/map_fetch.hpp"
 #include "ants_app/map_select.hpp"
 #include "ants_app/net_overlay.hpp"
@@ -93,6 +94,13 @@ struct ApplicationConfig {
     /// --prediction on | off (--no-prediction is --prediction off): whether a match of the network shows the player's own orders at once (net::Prediction, docs/NETWORK_PORT.md). On by default;
     /// a game of one machine never predicts.
     bool prediction{true};
+    /// --others confirmed | predicted (default predicted; `?others=confirmed` on the web page's address): a TEST way to draw a match of the network that predicts. With `confirmed` the ants of every other
+    /// player are drawn from the confirmed engine (a few ticks in the past, never corrected) and the player's own from the predicted one (ants_app/others_view.hpp). Drawing and picking only. Off by
+    /// default; to be retired or removed within two releases of its first (AGENTS.md rule 9).
+    bool others_confirmed{false};
+    /// Only with `others_confirmed`: an attack click on another player's ant names the tile where the predicted engine has that ant (the ant is drawn a few ticks behind it), not the tile where it is
+    /// drawn. On: it is what keeps the click an attack on a walking ant. Off only for the tests that measure what the aim is worth; it has no command line option.
+    bool others_aim{true};
     /// --hud-art new | classic (the settings key `hud_art` when the command line does not say): the look of the match screen's frame, buttons and panel (hud_art.hpp): the new pictures (the default) or the
     /// original's own. `hud_art_given` is true when the command line said it (the settings key then does not count, and it is not written). `hud_art_dir`: the folder of the new pictures.
     bool hud_art_new{true};
@@ -312,6 +320,18 @@ public:
     /// engine: the player's orders show at once and everything else is the confirmed state a few ticks ahead. The cues, the news, the scores, the end of the match and the hashes stay the
     /// confirmed engine's. One call may rebuild a predicted engine that a turn has shown to be wrong, so a frame asks once.
     ants::sim::SimulationEngine& view_sim();
+    /// The world that the match screen draws and the HUD asks (the picture, the minimap, the panel, the selection, the pointer's cursor, what a click picks): `view_sim()`'s world, except with
+    /// `others_confirmed` while the prediction runs, where the ants of every other player are the confirmed engine's (ants_app/others_view.hpp). Orders and everything that is not the picture read the
+    /// engines themselves. Made once for a moment (a frame, the pointer and the keys share it).
+    const ants::sim::WorldState& shown_world();
+    /// Whether the picture is being made of both engines now: `others_confirmed` is asked for and the prediction runs
+    bool others_view_active() const noexcept { return config_.others_confirmed && net_ != nullptr && net_->predicting(); }
+    /// Whether the mode is asked for (the command line, the page's address), whether or not the prediction runs
+    bool others_view_asked() const noexcept { return config_.others_confirmed; }
+    /// The mode at run time (the tests compare the two pictures of the same engines; the command line and the page's address set it for a game)
+    void set_others_confirmed(bool on) { config_.others_confirmed = on; others_view_.forget(); }
+    /// How many worlds of both engines were made (the cost that the tests count)
+    uint64_t others_worlds_made() const noexcept { return others_view_.made(); }
     Renderer& renderer() noexcept { return *renderer_; }
     /// The geometry of the picture that the HUD, the renderer, the edge scroll and the pointer work in (screen_layout.hpp)
     const ScreenLayout& layout() const noexcept { return layout_; }
@@ -643,6 +663,10 @@ private:
     uint64_t now_counter() const { return clock_ ? clock_() : SDL_GetPerformanceCounter(); }   // the clock of frames and wake-ups (set_clock)
     void note_orders();                                   // the orders that input gave the predicted engine since the last look begin to be felt (net::FeltDelayMeter)
     void feed_view_glide();                               // the ants that the prediction has moved in the picture slide (view_glide.hpp)
+    bool feed_own_view_glide();                           // with others_confirmed: only the player's own ants are the predicted engine's, so only they slide (others_view.hpp); false: not that mode
+    bool aimed_tile(const ants::sim::AntSnapshot& picked, ants::sim::TileCoord& tile);       // where an attack order on a picked ant aims (others_view.hpp, aim_at_predicted_ant)
+    OthersView others_view_;                              // the world of both engines (others_confirmed)
+    bool others_view_announced_{false};                   // the console has said once that the picture is made of both engines
     sim::SimulationEngine& input_sim();                   // view_sim() for the pointer and the keys: what a rebuild at this very moment moves slides before anything is picked, so that a pick is always by the frame's rule
     struct OrdersNoted {                                  // (the end of an input handler: whatever it ordered is looked at, by whichever way the handler leaves)
         Application& app;

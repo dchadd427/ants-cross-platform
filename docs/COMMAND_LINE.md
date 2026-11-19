@@ -129,6 +129,7 @@ How network play works (a room on the local network, a server's room, bots): [`M
 |---|---|---|---|
 | `--audio-focus` | none | off | A window without the input focus is silent and holds its music (for several games on one machine): the piece goes on where it left off when the window has the focus again. Without this option the original's rule applies: leaving the program closes the music, and coming back starts a new random piece ([`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 5.24). |
 | `--prediction`, `--no-prediction` | `on` or `off` | `on` | Whether a match of the network shows your own orders at once. `--no-prediction` is `--prediction off`. |
+| `--others` | `confirmed` or `predicted` | `predicted` | A test: with `confirmed` a match that predicts draws the other players' ants from the confirmed engine (a few ticks in the past, never corrected) and your own from the predicted one. Anything else, or no value, is refused with "--others needs confirmed or predicted". The web page's `?others=confirmed` gives the game `--others confirmed`. [`NETWORK_PORT.md`](NETWORK_PORT.md#prediction-of-ones-own-orders-predictionhpp-cue_routerhpp-netgame-applicationview_sim) has what it draws from which engine, the clicks, the fairness and its expiry. |
 | `--settings` | `FILE` | the per-user application folder | Keep the remembered options in this file: see "Settings" in [`CONTROLS.md`](CONTROLS.md). A headless run keeps its settings in memory only, unless this names a file. |
 
 ### `--prediction` in detail

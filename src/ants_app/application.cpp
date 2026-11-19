@@ -281,6 +281,7 @@ bool Application::init(const ApplicationConfig& config) {
     hud_.set_draw_offset([this](const sim::WorldState& world, uint8_t team, const sim::AntSnapshot& ant, int32_t& dx, int32_t& dy) {      // (the pointer picks a sliding ant where the frame draws it: view_glide.hpp)
         return renderer_ != nullptr && glide_offset(renderer_->view_glide(), world, team, ant, dx, dy);
     });
+    hud_.set_aim_tile([this](const sim::AntSnapshot& picked, sim::TileCoord& tile) { return aimed_tile(picked, tile); });       // (an attack on an ant that the picture draws from the confirmed engine: others_view.hpp)
     hud_.set_on_spawn_click_marker([this](int32_t wx, int32_t wy) {
         if (renderer_) {
             renderer_->spawn_transient_effect("xmarks", wx, wy);
@@ -799,6 +800,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_set_page_fullscreen(int on) {
 // orders that it has predicted; 11: the rebuilds that it has made (10 and 11 are 0 when the game has no prediction at all); 12 - 15: the frames' own work since the last reset, in microseconds (12: the mean, 13: the longest, 14: the number of frames;
 // 15: reads 0 and starts again). The lines that the way-back overlay shows (the page cannot read the canvas; tests/scripts/web_rejoin_check.py): 16: how many lines there are now (0: none); 10000 + 1000 * line + index:
 // the code of the character at `index` of that line (net_overlay_probe: 0 past its end, -1 for no such line).
+// The picture of others = confirmed (docs/NETWORK_PORT.md), for the browser measurements: 80: 0 when the mode is not asked for, 1 while the picture is made of both engines, 2 when it is asked for and the
+// prediction is not running (the picture is the confirmed engine's); 81: how many worlds of both engines were made.
 // The seats of the match, for the page's browser check (tests/scripts/web_home_check.py): 20: the roster, bit s set when seat s plays (15: all four colonies, 1: a game for one) (-1 outside a match);
 // 21 - 24: the ants of seat 0 - 3 that are alive now (-1 outside a match).
 // The picture's shape, for the page's browser check (tests/scripts/web_aspect_check.py): 40: the canvas's width, 41: its height (SDL's logical size), 42: the shape (its place in the shape table, ants_set_aspect's number), 43: where the picture on screen starts, x, 44: y, 45: its width, 46: its height (a page in a bigger canvas is centred in it).
@@ -850,6 +853,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
             g_frame_work_max_ms = 0.0;
             g_frame_work_frames = 0;
             return 0;
+        case 80: return g_web_app->others_view_active() ? 1 : (g_web_app->others_view_asked() ? 2 : 0);
+        case 81: return static_cast<int>(g_web_app->others_worlds_made());
         case 20: return g_web_app->match_running() ? static_cast<int>(g_web_app->sim().roster_mask()) : -1;
         case 21: case 22: case 23: case 24: {
             if (!g_web_app->match_running()) return -1;

@@ -352,9 +352,9 @@ struct AttackResult {
     uint8_t landed_order{0};        // what the confirmed engine made of it when the order landed (3: an attack; 1: a move)
 };
 
-// One attack click: the other person's ant is sent west; when it walks and `phase_ms` after its third tile on the screen, the person right-clicks on it with the attacker selected. With `turn_ms` the
+// One attack click: the other person's ant is sent west; when it walks and `phase_ms` (plus up to `spread_ms` more) after its third tile on the screen, the person right-clicks on it with the attacker selected. With `turn_ms` the
 // other person gives his ant another goal every so often (the next row, then back: it changes course as an ant does that is being steered in a fight), which the screen cannot know before the order arrives
-AttackResult attack_click(Session& s, uint32_t attacker, uint32_t enemy, int phase_ms, int turn_ms = 0) {
+AttackResult attack_click(Session& s, uint32_t attacker, uint32_t enemy, int phase_ms, int turn_ms = 0, int spread_ms = 0) {
     AttackResult out;
     if (!s.bring(0, attacker, kAttackerTile, kLaneRow)) {
         std::printf("    [attack: the person's ant did not get to its place]\n");
@@ -405,7 +405,7 @@ AttackResult attack_click(Session& s, uint32_t attacker, uint32_t enemy, int pha
         const sim::AntSnapshot* seen = s.shown_ant(enemy);
         if (seen != nullptr && seen->tile_x <= kEnemyTile - 3) {                  // the enemy ant has walked three tiles on the screen
             armed = true;
-            click_at = s.now() + static_cast<uint32_t>(phase_ms);
+            click_at = s.now() + static_cast<uint32_t>(phase_ms) + (spread_ms > 0 ? static_cast<uint32_t>(s.rng()() % static_cast<uint32_t>(spread_ms)) : 0u);       // (with a spread the click phases do not fall on a grid that the tile's edge can be aligned with)
         }
     };
     const bool clicked = s.run_until([&]() { return done; }, 8000);
@@ -428,6 +428,8 @@ struct AttackCell {
     int rtt{0};
     int jitter{0};
     bool predict{false};
+    bool others{false};             // the other player's ants are drawn from the confirmed engine (the person looks at what the pointer picks: ants_app/others_view.hpp)
+    bool aim{true};                 // ... and the click names the tile where the predicted engine has the ant
     int clicks{0};
     int shown_attack{0};
     int landed_attack{0};
@@ -436,7 +438,7 @@ struct AttackCell {
 };
 
 // A cell: `phases` clicks in one match of one link, the click `i * 400 / phases` ms after the third tile of the walk
-AttackCell attack_cell(int rtt, int jitter, bool predict, int phases, uint32_t seed, int turn_ms = 0) {
+AttackCell attack_cell(int rtt, int jitter, bool predict, int phases, uint32_t seed, int turn_ms = 0, bool others = false, bool aim = true, int spread_ms = 0) {
     Params p;
     p.map = "GRASS.LVL";
     p.local = rtt < 0;
@@ -445,12 +447,16 @@ AttackCell attack_cell(int rtt, int jitter, bool predict, int phases, uint32_t s
     p.link.jitter_ms = static_cast<uint32_t>(jitter);
     p.peer_link.rtt_ms = 30;
     p.predict = predict;
+    p.others_confirmed = others;
+    p.others_aim = aim;
     p.seed = seed;
     Session s(p);
     AttackCell cell;
     cell.rtt = rtt;
     cell.jitter = jitter;
     cell.predict = predict;
+    cell.others = others;
+    cell.aim = aim;
     if (!s.begin()) {
         std::printf("    [attack: the match did not begin]\n");
         return cell;
@@ -467,7 +473,7 @@ AttackCell attack_cell(int rtt, int jitter, bool predict, int phases, uint32_t s
     }
     s.run_ms(2500);
     for (int i = 0; i < phases; ++i) {
-        const AttackResult r = attack_click(s, mine[0], theirs[0], i * 400 / phases, turn_ms);
+        const AttackResult r = attack_click(s, mine[0], theirs[0], i * 400 / phases, turn_ms, spread_ms);
         if (!r.clicked) continue;
         ++cell.clicks;
         cell.shown_attack += r.shown_order == sim::AntUnit::kOrderAttack ? 1 : 0;
@@ -479,13 +485,15 @@ AttackCell attack_cell(int rtt, int jitter, bool predict, int phases, uint32_t s
 }
 
 // The cells of several seeds added up (other phases of the frames, the ticks and the links' jitter)
-AttackCell attack_row(int rtt, int jitter, bool predict, int phases, const std::vector<uint32_t>& seeds, int turn_ms = 0) {
+AttackCell attack_row(int rtt, int jitter, bool predict, int phases, const std::vector<uint32_t>& seeds, int turn_ms = 0, bool others = false, bool aim = true, int spread_ms = 0) {
     AttackCell sum;
     sum.rtt = rtt;
     sum.jitter = jitter;
     sum.predict = predict;
+    sum.others = others;
+    sum.aim = aim;
     for (const uint32_t seed : seeds) {
-        const AttackCell c = attack_cell(rtt, jitter, predict, phases, seed + seed_offset(), turn_ms);
+        const AttackCell c = attack_cell(rtt, jitter, predict, phases, seed + seed_offset(), turn_ms, others, aim, spread_ms);
         sum.clicks += c.clicks;
         sum.shown_attack += c.shown_attack;
         sum.landed_attack += c.landed_attack;
@@ -498,13 +506,172 @@ AttackCell attack_row(int rtt, int jitter, bool predict, int phases, const std::
 double share_of(const AttackCell& c) { return c.clicks > 0 ? 100.0 * c.landed_attack / c.clicks : 0.0; }
 
 void print_attack(const AttackCell& c, const char* enemy) {
-    char link[48];
+    char link[96];
     if (c.rtt < 0) std::snprintf(link, sizeof link, "a game on this computer    ");
-    else std::snprintf(link, sizeof link, "rtt %3d jit %2d prediction %-3s", c.rtt, c.jitter, c.predict ? "on" : "off");
+    else std::snprintf(link, sizeof link, "rtt %3d jit %2d prediction %-3s%s", c.rtt, c.jitter, c.predict ? "on" : "off", !c.others ? "" : c.aim ? " others confirmed, aimed" : " others confirmed, unaimed");
     std::printf("    attack (%s)  %s: %2d clicks on the walking ant, the screen took %2d as an attack, %2d landed as an attack (%3.0f %%), %2d as a plain move, %d gave no order\n", enemy, link, c.clicks,
                 c.shown_attack, c.landed_attack, share_of(c), c.landed_move, c.no_order);
 }
 
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// A blow as the screen draws it: the attacker's swing and the victim's reaction
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+struct BlowResult {
+    bool ok{false};
+    int swing_ms{0};          // the attacker's swing begins on the screen at this time ...
+    int hurt_ms{0};           // ... the victim's hit points fall on the screen at this time, and its flinch begins
+    int flinch_ms{0};
+    uint32_t lead{0};         // the lead of the prediction when the blow was struck, ticks
+};
+
+// Two ants stand next to each other on the lane and one of them is ordered to attack the other, who stands still. The time of the swing and of the reaction is read from the world that the frame draws
+// (Session::shown_ant) every millisecond of the match's clock. `own_strikes`: the application's own ant strikes (else the other person's ant strikes the application's)
+BlowResult blow(Session& s, bool own_strikes) {
+    BlowResult out;
+    const std::vector<uint32_t> mine = Session::ants_of(s.app().sim(), 0);
+    const std::vector<uint32_t> theirs = Session::ants_of(s.app().sim(), 1);
+    if (mine.empty() || theirs.empty()) return out;
+    const uint32_t a = mine[0];
+    const uint32_t b = theirs[0];
+    if (!s.bring(0, a, 15, kLaneRow) || !s.bring(1, b, 16, kLaneRow)) return out;
+    const uint32_t striker = own_strikes ? a : b;
+    const uint32_t victim = own_strikes ? b : a;
+    const sim::AntSnapshot* v0 = s.shown_ant(victim);
+    if (v0 == nullptr) return out;
+    const uint16_t hp0 = v0->hp;
+    s.order(own_strikes ? 0 : 1, sim::CommandType::GroupAttack, {striker}, own_strikes ? 16 : 15, kLaneRow);
+    const uint32_t t0 = s.now();
+    int swing = -1;
+    int hurt = -1;
+    int flinch = -1;
+    s.run_until([&]() {
+        const sim::AntSnapshot* st = s.shown_ant(striker);
+        const sim::AntSnapshot* vi = s.shown_ant(victim);
+        if (st != nullptr && swing < 0 && st->state == sim::UnitState::Attacking) swing = static_cast<int>(s.now() - t0);
+        if (vi != nullptr && hurt < 0 && vi->hp < hp0) hurt = static_cast<int>(s.now() - t0);
+        if (vi != nullptr && flinch < 0 && vi->state == sim::UnitState::Flinch) flinch = static_cast<int>(s.now() - t0);
+        return swing >= 0 && hurt >= 0 && flinch >= 0;
+    }, 6000);
+    if (swing >= 0 && hurt >= 0 && flinch >= 0) {
+        out.ok = true;
+        out.swing_ms = swing;
+        out.hurt_ms = hurt;
+        out.flinch_ms = flinch;
+        out.lead = s.app().net() != nullptr && s.app().net()->prediction() != nullptr ? s.app().net()->prediction()->lead_ticks() : 0u;
+    }
+    s.order(0, sim::CommandType::Stop, {a}, 0, 0);
+    s.order(1, sim::CommandType::Stop, {b}, 0, 0);
+    s.run_ms(1500);
+    return out;
+}
+
+// The same blow in a fresh match: `how` 0 = the plain picture (every ant is the predicted engine's), 1 = others = confirmed, 2 = no prediction (the confirmed engine is the picture)
+BlowResult blow_in(int rtt, int how, bool own_strikes, uint32_t seed) {
+    Params p;
+    p.map = "GRASS.LVL";
+    p.link.rtt_ms = static_cast<uint32_t>(rtt);
+    p.link.jitter_ms = 0;
+    p.peer_link.rtt_ms = 30;
+    p.predict = how != 2;
+    p.others_confirmed = how == 1;
+    p.seed = seed;
+    Session s(p);
+    if (!s.begin()) return BlowResult{};
+    s.run_ms(2500);
+    return blow(s, own_strikes);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// How the other player's ants move on the screen: a computer player's ants over a shaped link, frame by frame
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+struct DrawnMotion {
+    double minutes{0.0};
+    int hops8{0};                   // frames in which an ant of the computer player is drawn 8 px or more from where the last frame drew it
+    int hops16{0};                  // ... 16 px or more
+    int backwards{0};               // ... 8 px or more AGAINST the way it was walking the frame before (a correction that puts it back)
+    int tile_flips{0};              // times that what stands on a tile (food, a power-up, a bomb, a fire wall, a bridge) goes back to what it was a moment before (a second at most): a tile that flickers
+    int frames{0};
+    uint64_t corrections{0};        // ants that the predicted engine's rebuilds moved by 8 px or more (what the plain picture slides; the prediction's own measure)
+    uint64_t correction_px_total{0};
+    uint32_t correction_px_max{0};
+};
+
+// One match of the person (idle) against a Hard computer player, every frame drawn, for `ms` of the match's clock. `how`: 0 the plain picture (the predicted engine, the slide of a correction), 1 others =
+// confirmed, 2 no prediction (the confirmed engine alone: what a game that never predicted draws)
+DrawnMotion drawn_motion(int rtt, int how, uint32_t seed, uint32_t ms) {
+    Params p;
+    p.map = "GRASS.LVL";
+    p.seats = 2;
+    p.use_peer = false;
+    p.render = true;
+    p.link.rtt_ms = static_cast<uint32_t>(rtt);
+    p.link.jitter_ms = 30;
+    p.predict = how != 2;
+    p.others_confirmed = how == 1;
+    ai::BotSpec bot;
+    bot.seat = 1;
+    bot.level = ai::Level::Hard;
+    p.bots.push_back(bot);
+    p.seed = seed;
+    DrawnMotion out;
+    Session s(p);
+    if (!s.begin()) return out;
+    if (s.app().net()->prediction() != nullptr) s.app().net()->prediction()->set_measure_corrections(true);
+    std::map<uint32_t, std::pair<int32_t, int32_t>> last;
+    std::map<uint32_t, std::pair<int32_t, int32_t>> velocity;
+    std::vector<uint16_t> tile_now;
+    std::vector<uint16_t> tile_before;
+    std::vector<int> tile_changed_at;
+    const uint32_t start = s.now();
+    s.on_frame_end = [&]() {
+        const sim::WorldState& world = s.app().shown_world();
+        ++out.frames;
+        if (tile_now.size() != world.cells.size()) {
+            tile_now.assign(world.cells.size(), 0);
+            tile_before.assign(world.cells.size(), 0);
+            tile_changed_at.assign(world.cells.size(), -1000);
+            for (size_t i = 0; i < world.cells.size(); ++i) tile_now[i] = static_cast<uint16_t>(world.cells[i].interactive_id);
+        }
+        for (size_t i = 0; i < world.cells.size(); ++i) {                    // what stands on each tile, frame by frame
+            const uint16_t id = static_cast<uint16_t>(world.cells[i].interactive_id);
+            if (id == tile_now[i]) continue;
+            if (id == tile_before[i] && out.frames - tile_changed_at[i] <= 60) ++out.tile_flips;
+            tile_before[i] = tile_now[i];
+            tile_now[i] = id;
+            tile_changed_at[i] = out.frames;
+        }
+        for (const sim::AntSnapshot& engine_ant : world.ants) {
+            if (engine_ant.player_id != 1 || engine_ant.hp == 0) continue;
+            const sim::AntSnapshot a = glided_ant(s.app().renderer().view_glide(), world, 0, engine_ant);          // (where the frame draws it)
+            const auto it = last.find(a.id);
+            if (it != last.end()) {
+                const int32_t dx = a.px - it->second.first;
+                const int32_t dy = a.py - it->second.second;
+                const int32_t d = std::max(std::abs(dx), std::abs(dy));
+                const auto v = velocity[a.id];
+                if (d >= 8) {
+                    ++out.hops8;
+                    if (std::max(std::abs(v.first), std::abs(v.second)) >= 1 && static_cast<int64_t>(dx) * v.first + static_cast<int64_t>(dy) * v.second < 0) ++out.backwards;
+                }
+                if (d >= 16) ++out.hops16;
+                if (d <= 4) velocity[a.id] = {dx, dy};                      // (the way it was walking: the last small step)
+            }
+            last[a.id] = {a.px, a.py};
+        }
+    };
+    s.run_ms(ms);
+    s.on_frame_end = nullptr;
+    out.minutes = static_cast<double>(s.now() - start) / 60000.0;
+    if (const net::Prediction* prediction = s.app().net()->prediction()) {
+        out.corrections = prediction->stats().ants_moved;
+        out.correction_px_total = prediction->stats().move_px_total;
+        out.correction_px_max = prediction->stats().max_move_px;
+    }
+    return out;
+}
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -621,6 +788,78 @@ int main(int argc, char* argv[]) {
             }
             ASSERT_TRUE(off_share[4] <= 30.0 && off_share[2] <= 75.0);                       // (without it: a plain move for many clicks at 100 ms and for most at 300 ms)
         }
+    } TEST_END();
+
+    TEST_CASE("LK12 The Attack Click On A Walking Ant When The Other Player's Ants Are Drawn From The Confirmed Engine (Others = Confirmed): The Ant Is Drawn A Lead Behind The Engine That The Order Meets, So A Click That Names The Tile Where It Is Drawn Misses It Again; A Click That Names The Tile Where The Predicted Engine Has It Is Still An Attack, At Every Round Trip") {
+        const std::vector<uint32_t> seeds = table_wanted() ? std::vector<uint32_t>{7u, 8u, 9u, 10u} : std::vector<uint32_t>{7u, 8u};
+        const int rtts[4] = {30, 100, 180, 300};
+        struct Kind {
+            const char* name;
+            int turn_ms;
+        };
+        for (const Kind kind : {Kind{"it walks on", 0}, Kind{"it is steered", 900}}) {
+            for (int k = 0; k < 4; ++k) {
+                const AttackCell today = attack_row(rtts[k], 30, true, 32, seeds, kind.turn_ms, false, true, 12);
+                const AttackCell unaimed = attack_row(rtts[k], 30, true, 32, seeds, kind.turn_ms, true, false, 12);
+                const AttackCell aimed = attack_row(rtts[k], 30, true, 32, seeds, kind.turn_ms, true, true, 12);
+                print_attack(today, kind.name);
+                print_attack(unaimed, kind.name);
+                print_attack(aimed, kind.name);
+                for (const AttackCell* c : {&today, &unaimed, &aimed}) {
+                    ASSERT_EQ(c->clicks, 32 * static_cast<int>(seeds.size()));
+                    ASSERT_EQ(c->no_order, 0);
+                }
+                ASSERT_EQ(aimed.shown_attack, aimed.clicks);                              // (the predicted engine takes every aimed click as the attack that it is)
+                ASSERT_TRUE(share_of(today) >= 80.0 && share_of(aimed) >= 80.0);          // today's picture, and this one with the aim: the click is still an attack when the order lands
+                ASSERT_TRUE(share_of(aimed) >= share_of(today) - 8.0);                    // ... as often (the order is the same command at the same moment)
+                if (rtts[k] >= 100) {
+                    ASSERT_TRUE(share_of(unaimed) + 15.0 <= share_of(aimed));             // without the aim the ant has left the tile where it is drawn: the click is a plain move again
+                    ASSERT_TRUE(unaimed.shown_attack < unaimed.clicks);                   // (the predicted engine already says so, right after the click)
+                }
+                const double ceiling[4] = {80.0, 75.0, 45.0, 15.0};                      // what the click was before the prediction existed (69, 56, 38 and 0 %): the drawn ant is as far behind as the screen was
+                ASSERT_TRUE(share_of(unaimed) <= ceiling[k]);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("LK13 What Looks Odd In A Fight When The Other Player's Ants Are Drawn From The Confirmed Engine: A Blow Of The Player's Own Ant Seems To Land LATE (His Swing Is Drawn At Once, The Other Ant's Reaction A Lead Later) And A Blow Of The Other Player's Ant Seems To Land EARLY (His Own Ant Is Hurt, From The Predicted Engine, A Lead Before The Swing Is Drawn): By The Lead, And By Nothing Else; With No Prediction At All Or In The Plain Picture The Swing And The Reaction Are Together As The Engine Has Them") {
+        std::printf("\n    blow (ms from the order to the swing, to the hit points falling, to the flinch; the lead in ticks)");
+        for (const int rtt : {30, 100, 180, 300}) {
+            for (const bool own : {true, false}) {
+                const BlowResult plain = blow_in(rtt, 0, own, 3);
+                const BlowResult others = blow_in(rtt, 1, own, 3);
+                const BlowResult confirmed = blow_in(rtt, 2, own, 3);
+                ASSERT_TRUE(plain.ok && others.ok && confirmed.ok);
+                std::printf("\n    rtt %3d, %-22s plain: swing %4d hurt %4d flinch %4d (reaction %+4d)   others confirmed: swing %4d hurt %4d flinch %4d (reaction %+4d)   no prediction: swing %4d hurt %4d (reaction %+4d)   lead %u",
+                            rtt, own ? "the player's ant strikes" : "the other's ant strikes", plain.swing_ms, plain.hurt_ms, plain.flinch_ms, plain.hurt_ms - plain.swing_ms, others.swing_ms, others.hurt_ms,
+                            others.flinch_ms, others.hurt_ms - others.swing_ms, confirmed.swing_ms, confirmed.hurt_ms, confirmed.hurt_ms - confirmed.swing_ms, others.lead);
+                const int lead_ms = static_cast<int>(others.lead) * 50;
+                const int plain_gap = plain.hurt_ms - plain.swing_ms;
+                const int others_gap = others.hurt_ms - others.swing_ms;
+                ASSERT_TRUE(std::abs(plain_gap - (confirmed.hurt_ms - confirmed.swing_ms)) <= 40);          // (the plain picture and the confirmed engine alone draw the blow in one time: a game on one computer's)
+                ASSERT_TRUE(std::abs(others_gap - plain_gap - (own ? lead_ms : -lead_ms)) <= 60);           // ... this one is off by the lead: later for the player's blow, earlier for the other's (a frame and a tick of slack)
+            }
+        }
+        std::printf("\n");
+    } TEST_END();
+
+    TEST_CASE("LK14 How A Computer Player's Ants Move On The Screen Over A Link Of 150 And 250 ms (Treasure On A Small Map, A Hard Bot, The Person Idle, Every Frame Drawn): With Others = Confirmed They Are Drawn As A Game That Never Predicted Draws Them, Frame By Frame; The Plain Picture Adds The Hops And The Slides Of Its Corrections (Moves Of 8 px And More In A Frame, Some Of Them Against The Way The Ant Was Walking)") {
+        const uint32_t minutes = table_wanted() ? 4u : 2u;
+        for (const int rtt : {150, 250}) {
+            const DrawnMotion plain = drawn_motion(rtt, 0, 5, minutes * 60000u);
+            const DrawnMotion others = drawn_motion(rtt, 1, 5, minutes * 60000u);
+            const DrawnMotion confirmed = drawn_motion(rtt, 2, 5, minutes * 60000u);
+            ASSERT_TRUE(plain.frames > 1000 && others.frames > 1000 && confirmed.frames > 1000);
+            const auto per_minute = [](int n, const DrawnMotion& m) { return n / m.minutes; };
+            std::printf("\n    rtt %3d, frames in which a Hard bot's ant is drawn 8 px or more from where the last frame drew it, a minute of play (16 px or more; against its walk):  plain %.1f (%.1f; %.1f)   others confirmed %.1f (%.1f; %.1f)   no prediction %.1f (%.1f; %.1f)", rtt,
+                        per_minute(plain.hops8, plain), per_minute(plain.hops16, plain), per_minute(plain.backwards, plain), per_minute(others.hops8, others), per_minute(others.hops16, others), per_minute(others.backwards, others),
+                        per_minute(confirmed.hops8, confirmed), per_minute(confirmed.hops16, confirmed), per_minute(confirmed.backwards, confirmed));
+            std::printf("\n    rtt %3d, what the predicted engine's rebuilds moved of the computer player's and the person's ants (the plain picture slides it, this one never draws it for the computer player): %.1f ants a minute, %.1f px on average, %u px at most", rtt,
+                        static_cast<double>(plain.corrections) / plain.minutes, plain.corrections > 0 ? static_cast<double>(plain.correction_px_total) / static_cast<double>(plain.corrections) : 0.0, plain.correction_px_max);
+            std::printf("\n    rtt %3d, tiles that went back to what stood on them a second before: plain %d, others confirmed %d, no prediction %d (in %.0f minutes)", rtt, plain.tile_flips, others.tile_flips, confirmed.tile_flips, plain.minutes);
+            ASSERT_TRUE(others.backwards <= plain.backwards);                                  // (no correction is drawn: the ants are the confirmed engine's, only ever as it walks them)
+        }
+        std::printf("\n");
     } TEST_END();
 
     TEST_CASE("LK4 The Confirmed Match Is Exact Whatever The Link Does To The Picture: Two People Play 40 s At RTT 180 With Jitter And Spikes, The Prediction Stays On And Loses Nothing, The Application's Engine Ends In The Referee's State, And Its Recording Plays To The Same State") {

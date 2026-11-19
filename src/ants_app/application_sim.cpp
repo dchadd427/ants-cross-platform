@@ -39,6 +39,7 @@ void Application::note_orders() {
 // prediction begins or stops (the screen changes engine: a pause, a hidden page, a link that was away, a cool-down). A game that has no prediction slides nothing.
 void Application::feed_view_glide() {
     net::Prediction* prediction = net_ != nullptr ? net_->prediction() : nullptr;
+    if (feed_own_view_glide()) return;                    // (the picture of others = confirmed slides the player's own ants only: others_view.hpp)
     if (prediction == nullptr) {
         renderer_->view_glide().clear();
         return;
@@ -46,10 +47,59 @@ void Application::feed_view_glide() {
     for (const net::Prediction::Shift& shift : prediction->take_shifts()) renderer_->view_glide().add(shift.ant, shift.dx, shift.dy);
 }
 
+// With others_confirmed the ants of every other player are drawn from the confirmed engine, where they always were never corrected: only the player's own ants are the predicted engine's, and only they
+// slide when it moves them (a rebuild, the prediction beginning or stopping). The shifts of the others would put them where the predicted engine has them, which is not where they are drawn.
+// A game that has no prediction slides nothing, as before. False: the mode is not asked for, the ordinary rule feeds the glide.
+bool Application::feed_own_view_glide() {
+    net::Prediction* prediction = net_ != nullptr ? net_->prediction() : nullptr;
+    if (!config_.others_confirmed || prediction == nullptr) return false;           // (a prediction that is cooling down or suspended still has the shifts of its stop to give)
+    const std::vector<net::Prediction::Shift> shifts = prediction->take_shifts();
+    for (const net::Prediction::Shift& shift : shifts) {
+        const auto owned_in = [&shift, me = local_player_id_](const sim::WorldState& world) {
+            for (const sim::AntSnapshot& ant : world.ants) {
+                if (ant.id == shift.ant) return ant.player_id == me;
+            }
+            return false;
+        };
+        if (owned_in(view_sim().get_world_state()) || owned_in(sim_.get_world_state())) renderer_->view_glide().add(shift.ant, shift.dx, shift.dy);
+    }
+    return true;
+}
+
+// Where an attack order on an ant that the picture drew from the confirmed engine aims: the predicted engine's tile for that ant (others_view.hpp, aim_at_predicted_ant)
+bool Application::aimed_tile(const sim::AntSnapshot& picked, sim::TileCoord& tile) {
+    if (!others_view_active() || !config_.others_aim) return false;
+    return aim_at_predicted_ant(view_sim().get_world_state(), local_player_id_, picked, tile);
+}
+
 sim::SimulationEngine& Application::input_sim() {
     sim::SimulationEngine& view = view_sim();             // (asking for the engine is where a stale prediction is rebuilt)
     feed_view_glide();
+    shown_world();                                        // (the HUD looks at the picture's world: made for this moment, or let go of)
     return view;
+}
+
+const sim::WorldState& Application::shown_world() {
+    sim::SimulationEngine& view = view_sim();
+    const sim::WorldState& predicted = view.get_world_state();
+    if (!others_view_active()) {
+        hud_.set_shown_world(nullptr);                    // (the picture is the shown engine's own world: nothing is made, nothing is copied)
+        return predicted;
+    }
+    if (!others_view_announced_) {
+        others_view_announced_ = true;
+        std::cerr << "[Application] Others = confirmed (a test): the other players' ants are drawn from the confirmed engine, a few ticks in the past and never corrected; your own ants are the predicted engine's." << std::endl;
+    }
+    const net::Prediction::Stats& stats = net_->prediction()->stats();
+    OthersView::Stamp stamp;                              // (the engines change by a tick, a rebuild of the predicted one, or an order that it was given)
+    stamp.shown_tick = static_cast<uint64_t>(view.current_tick());
+    stamp.confirmed_tick = static_cast<uint64_t>(sim_.current_tick());
+    stamp.rebuilds = stats.rebuilds;
+    stamp.starts = stats.starts;
+    stamp.orders = stats.commands_predicted;
+    const sim::WorldState& world = others_view_.compose(predicted, sim_.get_world_state(), local_player_id_, stamp);
+    hud_.set_shown_world(&world);
+    return world;
 }
 
 sim::SimulationEngine& Application::view_sim() {
@@ -134,7 +184,7 @@ void Application::post_tick() {
     // is gone. (A local game's dialog ends before its first tick, in update_simulation.)
     if (hud_.is_match_start_modal_active()) hud_.dismiss_match_start_modal();
     const sim::SimulationEngine& shown = view_sim();        // (what the screen shows: with the prediction on, the predicted engine, a tick further for every tick)
-    const auto& world = shown.get_world_state();
+    const auto& world = shown_world();                      // (its world; with others_confirmed the other players' ants are the confirmed engine's)
     hud_.update(world, 1);
     // The first tick after a catch-up: the engine queued the sounds and news of every turn it ran without a picture. They are not played or said now (the news flashes of the chat log stay).
     const bool replayed = catch_up_backlog_;

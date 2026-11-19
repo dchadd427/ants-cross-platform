@@ -256,7 +256,7 @@ void HUD::order_feedback(bool special, bool attack) {
 }
 
 uint32_t HUD::order_selected(sim::SimulationEngine& sim, sim::TileCoord tile, bool special, bool attack) {
-    const auto& world = sim.get_world_state();
+    const auto& world = sim.get_world_state();                      // (the engine that the order meets: never the picture's own world)
     std::vector<uint32_t> raw = selected_ant_ids_;
     if (raw.empty() && selected_ant_id_ != 0) raw.push_back(selected_ant_id_);
     std::vector<uint32_t> targets;
@@ -281,6 +281,10 @@ uint32_t HUD::order_selected(sim::SimulationEngine& sim, sim::TileCoord tile, bo
     if (attack && ally < sim::MAX_PLAYERS) {
         bool at_ally = false;
         for (const auto& a : world.ants) at_ally = at_ally || (a.player_id == ally && a.tile_x == tile.x && a.tile_y == tile.y);
+        const sim::WorldState& drawn = world_of(sim);                                                    // (the ally's ant where the picture draws it, too: the click picked it there)
+        if (&drawn != &world) {
+            for (const auto& a : drawn.ants) at_ally = at_ally || (a.player_id == ally && a.tile_x == tile.x && a.tile_y == tile.y);
+        }
         for (const auto& hill : world.anthills) {
             at_ally = at_ally || (hill.team_id == ally && tile.x >= static_cast<int32_t>(hill.x) && tile.x <= static_cast<int32_t>(hill.x) + 3 &&
                                   tile.y >= static_cast<int32_t>(hill.y) && tile.y <= static_cast<int32_t>(hill.y) + 3);
@@ -364,6 +368,14 @@ uint32_t HUD::issue_group_order(sim::SimulationEngine& sim, sim::TileCoord tile,
     return ack;
 }
 
+// The tile that an attack order on the picked ant names: the one where the ant is (as the picture draws it) unless the aim moves it (set_aim_tile: the confirmed engine's ant is drawn a few ticks behind
+// the engine that the order meets)
+sim::TileCoord HUD::attack_tile(const sim::AntSnapshot& picked) const {
+    sim::TileCoord tile{picked.tile_x, picked.tile_y};
+    if (aim_tile_) aim_tile_(picked, tile);
+    return tile;
+}
+
 void HUD::dispatch_move_order(int32_t target_tile_x, int32_t target_tile_y, sim::SimulationEngine& sim) {
     order_selected(sim, sim::TileCoord{target_tile_x, target_tile_y}, false, false);
 }
@@ -399,7 +411,7 @@ void HUD::stop_selected(sim::SimulationEngine& sim) {
 
 // FUN_010277f4: the click at the release point, by the cursor mode found there
 void HUD::pointer_click(sim::SimulationEngine& sim, ViewportCamera& camera, int32_t x, int32_t y, bool shift) {
-    const auto& world = sim.get_world_state();
+    const auto& world = world_of(sim);
     if (!over_ground(x, y, camera, sim.grid())) return;     // the black around a small map is no ground: a click there does nothing at all (no deselect, no order, no marker)
     sim_query_ = &sim;                                      // (the special-target question is asked of the engine whose world the click picks from: the one the screen shows)
     const CursorType mode = evaluate_cursor(x, y, world, sim.grid(), camera);
@@ -461,7 +473,7 @@ void HUD::pointer_click(sim::SimulationEngine& sim, ViewportCamera& camera, int3
         case CursorType::Attack: {                             // mode 5: the order targets the tile of the ant under the pointer (FUN_01026904)
             spawn_click_marker(world_x, world_y);
             if (const sim::AntSnapshot* ant = pick_ant_at(world, world_x, world_y)) {
-                order_selected(sim, sim::TileCoord{ant->tile_x, ant->tile_y}, false, true);
+                order_selected(sim, attack_tile(*ant), false, true);
             }
             return;
         }
@@ -486,13 +498,13 @@ void HUD::pointer_release(sim::SimulationEngine& sim, ViewportCamera& camera, in
     // the band is in screen pixels; its corners are the world pixels under the centres of its corner pixels, by the rule of a click, at both edges
     const LayoutRect view = layout_.view();
     select_ants_in_rect(camera.world_x_at(rect.left - view.x), camera.world_y_at(rect.top - view.y), camera.world_x_at(rect.right - view.x), camera.world_y_at(rect.bottom - view.y),
-                        sim.get_world_state(), shift);
+                        world_of(sim), shift);
 }
 
 // FUN_01027b51: the right button executes at its release with the tile of the press point
 void HUD::pointer_right_click(sim::SimulationEngine& sim, ViewportCamera& camera, int capture, int32_t press_x, int32_t press_y,
                               int32_t x, int32_t y) {
-    const auto& world = sim.get_world_state();
+    const auto& world = world_of(sim);
     const PanelMode panel = panel_mode(world);
     if (capture == 2) {                                        // pressed on the minimap: own ants only; the press point is a point of the map
         if (panel != PanelMode::OneAnt && panel != PanelMode::Ants) return;
@@ -515,7 +527,7 @@ void HUD::pointer_right_click(sim::SimulationEngine& sim, ViewportCamera& camera
         const LayoutRect view = layout_.view();
         spawn_click_marker(camera.world_x_at(press_x - view.x), camera.world_y_at(press_y - view.y));
         if (const sim::AntSnapshot* ant = pick_ant_at(world, camera.world_x_at(x - view.x), camera.world_y_at(y - view.y))) {
-            order_selected(sim, sim::TileCoord{ant->tile_x, ant->tile_y}, false, true);
+            order_selected(sim, attack_tile(*ant), false, true);
         }
         return;
     }
@@ -538,7 +550,7 @@ void HUD::pointer_right_click(sim::SimulationEngine& sim, ViewportCamera& camera
 
 bool HUD::pedestal_press(sim::SimulationEngine& sim, int32_t x, int32_t y) {
     if (over_map(x, y)) return false;
-    const auto& world = sim.get_world_state();
+    const auto& world = world_of(sim);
     const PanelMode panel = panel_mode(world);
 
     if (panel == PanelMode::Base) {

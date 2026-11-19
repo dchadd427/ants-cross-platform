@@ -41,7 +41,7 @@ void Application::render_frame() {
     } else {
         sim::SimulationEngine& view = view_sim();            // (the engine that is shown: the predicted one in a match that predicts the player's own orders)
         feed_view_glide();                                   // (after the engine is asked for: that is where a stale prediction is rebuilt)
-        const auto& world = view.get_world_state();
+        const auto& world = shown_world();                   // (the shown engine's world; with others_confirmed the other players' ants are the confirmed engine's: others_view.hpp)
         sync_game_menu_settings();                           // (Ctrl+L flipped the health marks: remembered)
         renderer_->set_health_marks(hud_.ant_health(), hud_.ant_health().when == health::When::Off ? 1.0 : canvas_density().per_css, kPhoneDigits);
         renderer_->set_health_changes(menu_settings_.health_changes ? &health_changes_ : nullptr, static_cast<int64_t>(health_clock_ms_));
@@ -122,7 +122,7 @@ void Application::render_frame() {
     if (state_ == AppState::Playing && !scorecard_.is_open() && !catch_up_screen_active()) {         // (the catch-up screen has no map to point at)
         sim::SimulationEngine& view = view_sim();
         hud_.set_sim_query(&view);                           // (the cursor's special-target question is asked of the picture's own engine)
-        cur = hud_.evaluate_cursor(mouse_screen_x_, mouse_screen_y_, view.get_world_state(), view.grid(), renderer_->camera());
+        cur = hud_.evaluate_cursor(mouse_screen_x_, mouse_screen_y_, shown_world(), view.grid(), renderer_->camera());
     }
     if (!pointer_outside_) renderer_->render_software_cursor(cur, mouse_screen_x_, mouse_screen_y_, static_cast<uint32_t>(sim_.current_tick()), hud_.art());       // (the art's pointers while the HUD art is New and usable)
 

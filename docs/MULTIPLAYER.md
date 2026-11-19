@@ -101,7 +101,7 @@ The original has no sequencer: it is a full mesh in which every machine simulate
 
 ### Prediction of your own orders
 
-The prediction is **on by default** in every match of the network. `--no-prediction` (`--prediction off`) and `?prediction=off` on the game page's address switch it off for a game, to find out whether a trouble is the prediction's; nothing else does. There is no protocol change, and no other machine can tell.
+The prediction is **on by default** in every match of the network. `--no-prediction` (`--prediction off`) and `?prediction=off` on the game page's address switch it off for a game, to find out whether a trouble is the prediction's; nothing else does. `--others confirmed` and `?others=confirmed` are a test of another picture (the other players' ants drawn from the confirmed engine) and change nothing else. There is no protocol change, and no other machine can tell.
 
 - How the prediction works, what it shows and plays, when it is off and the limit on its work are described in [`NETWORK_PORT.md`](NETWORK_PORT.md#prediction-of-ones-own-orders-predictionhpp-cue_routerhpp-netgame-applicationview_sim).
 - [`NETWORK_PORT.md`](NETWORK_PORT.md) "Prediction of one's own orders" has the design.
