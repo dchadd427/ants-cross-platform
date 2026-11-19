@@ -1,0 +1,386 @@
+{
+ "note": "Mutants of the alerts that need no permission (web/alert_core.js, web/home/alerts.js and alerts.css, the loader in web/home/home.js, the join hook in web/lobby.html, the countdown block of web/shell.html; docs/HOME_SCREEN.md 'Alerts') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_home_alerts_check.js and the checks of tests/scripts/test_web_home_alerts.py: the switches (on by default, kept), the tab alert (only in the background, once a second, stopped and put back when the page is looked at), the match alert (the card, ready, the switch, 'has started'), no sound assigned and a sound that obeys its switch and the two seconds, the join alert (a switch, Home and not the Room, the page's own toast not twice, the title in the background), the sheet (a row for no sound, a press, Escape, the dimmed page, the focus), the Menu's row, the loaders; every one must be caught (tools/mutate.py tests/data/home_alerts_mutants.json --keep-going --jobs 1).",
+ "baseline": {
+  "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+ },
+ "mutants": [
+  {
+   "id": "default_switch_is_off",
+   "file": "web/alert_core.js",
+   "old": "return typeof v === 'boolean' ? v : true;",
+   "new": "return typeof v === 'boolean' ? v : false;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "switch_not_kept",
+   "file": "web/alert_core.js",
+   "old": "try { win.localStorage.setItem(KEY, JSON.stringify(out)); delete visit[name]; return true; } catch (e) { visit[name] = !!on; return false; }",
+   "new": "try { delete visit[name]; return true; } catch (e) { visit[name] = !!on; return false; }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "memory_beats_the_storage",
+   "file": "web/alert_core.js",
+   "old": "try { win.localStorage.setItem(KEY, JSON.stringify(out)); delete visit[name]; return true; } catch (e) { visit[name] = !!on; return false; }",
+   "new": "visit[name] = !!on; try { win.localStorage.setItem(KEY, JSON.stringify(out)); return true; } catch (e) { return false; }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "blink_every_two_seconds",
+   "file": "web/alert_core.js",
+   "old": "var BLINK_MS = 1000;",
+   "new": "var BLINK_MS = 2000;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "alert_starts_in_front",
+   "file": "web/alert_core.js",
+   "old": "if (!away()) return false;",
+   "new": "/* always */",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "title_not_put_back",
+   "file": "web/alert_core.js",
+   "old": "doc.title = shown ? line : original;",
+   "new": "doc.title = shown ? line : line;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "not_stopped_when_shown",
+   "file": "web/alert_core.js",
+   "old": "function back() { if (doc.hidden) seen = false; if (timer !== null && !away()) stop(); }",
+   "new": "function back() { if (doc.hidden) seen = false; }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "not_stopped_on_pagehide",
+   "file": "web/alert_core.js",
+   "old": "win.addEventListener('pagehide', stop);",
+   "new": "/* none */",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "match_ignores_ready",
+   "file": "web/alert_core.js",
+   "old": "left = env.ready() ? env.ask(60) : -1;",
+   "new": "left = env.ask(60);",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "match_ignores_switch",
+   "file": "web/alert_core.js",
+   "old": "set.on('start') && ",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "match_never_says_started",
+   "file": "web/alert_core.js",
+   "old": "else if (!card && up && flash.active()) flash.relabel(TEXT.started);",
+   "new": "else if (!card && up && flash.active()) { /* nothing */ }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_sound_is_assigned",
+   "file": "web/alert_core.js",
+   "old": "var SOUNDS = { join: '', start: '' };",
+   "new": "var SOUNDS = { join: '/home/alert_join.mp3', start: '' };",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "sound_every_second",
+   "file": "web/alert_core.js",
+   "old": "var SOUND_GAP_MS = 2000;",
+   "new": "var SOUND_GAP_MS = 1000;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "sound_ignores_switch",
+   "file": "web/alert_core.js",
+   "old": "if (!path || !SOUND_SWITCH[name] || !set.on(SOUND_SWITCH[name])) return false;",
+   "new": "if (!path || !SOUND_SWITCH[name]) return false;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "join_alert_ignores_switch",
+   "file": "web/home/alerts.js",
+   "old": "if (set.on('join')) {",
+   "new": "if (true) {",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "home_never_takes_the_toast_over",
+   "file": "web/home/alerts.js",
+   "old": "            return home;",
+   "new": "            return false;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "alert_on_the_room_screen_too",
+   "file": "web/home/alerts.js",
+   "old": "if (home) toastUp(String(data.text || ''));",
+   "new": "toastUp(String(data.text || ''));",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "row_for_every_sound",
+   "file": "web/home/alerts.js",
+   "old": "if (!r[1] || (env.table || core.SOUNDS)[r[1]]) out.push(r[0]);",
+   "new": "out.push(r[0]);",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "press_does_not_turn_the_switch",
+   "file": "web/home/alerts.js",
+   "old": "b.addEventListener('click', function () { set.set(name, !set.on(name)); paint(b, name); });",
+   "new": "b.addEventListener('click', function () { paint(b, name); });",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "escape_does_not_close",
+   "file": "web/home/alerts.js",
+   "old": "if (e.key === 'Escape') { if (e.preventDefault) e.preventDefault(); close(); return; }",
+   "new": "if (e.key === 'Escape') { return; }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "press_that_began_in_the_card_closes",
+   "file": "web/home/alerts.js",
+   "old": "hit = down && e.target === shade;",
+   "new": "hit = e.target === shade;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "no_tab_alert_for_a_join",
+   "file": "web/home/alerts.js",
+   "old": "flash.start('\\u25CF ' + shorten(data.name || '') + TEXT.joined);",
+   "new": "void 0;",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "focus_not_given_back",
+   "file": "web/home/alerts.js",
+   "old": "if (back && back.focus) back.focus();",
+   "new": "/* none */",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "no_row_in_the_menu",
+   "file": "web/home/home.js",
+   "old": "if (alerts) menuBox.appendChild(alertsRow());",
+   "new": "/* none */",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "home_alert_is_dropped",
+   "file": "web/home/home.js",
+   "old": "alert: function (kind, data) { try { return !!alerts && alerts.alert(kind, data); }",
+   "new": "alert: function (kind, data) { try { return false; }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "page_toast_as_well_as_home",
+   "file": "web/lobby.html",
+   "old": "if (!Home.alert('join', { name: e.name, text: text })) say(text);",
+   "new": "Home.alert('join', { name: e.name, text: text }); say(text);",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_recording_is_watched",
+   "file": "web/shell.html",
+   "old": "if (window.AntsAlertCore && !ANTS_REPLAY_MODE) {",
+   "new": "if (window.AntsAlertCore) {",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "tab_trap_misses_a_press_on_the_text",
+   "file": "web/home/alerts.js",
+   "old": "(i === -1 || i === all.length - 1)",
+   "new": "(i === all.length - 1)",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "title_the_page_changed_is_lost",
+   "file": "web/alert_core.js",
+   "old": "function see() { var now = doc.title; if (now !== line) original = now; }",
+   "new": "function see() { }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_press_on_a_shown_page_does_not_stop_it",
+   "file": "web/alert_core.js",
+   "old": "doc.addEventListener('pointerdown', present, true);",
+   "new": "/* none */",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_key_on_a_hidden_page_stops_it",
+   "file": "web/alert_core.js",
+   "old": "function present() { if (doc.hidden) return; seen = true; if (timer !== null) stop(); }",
+   "new": "function present() { seen = true; if (timer !== null) stop(); }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "a_press_is_forgotten_at_once",
+   "file": "web/alert_core.js",
+   "old": "if (!seen) { try { unfocused",
+   "new": "if (true) { try { unfocused",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "second_line_is_lost_in_the_plain_half",
+   "file": "web/alert_core.js",
+   "old": "} else { see(); line = String(text); if (shown) paint(); }",
+   "new": "} else { see(); if (shown) { line = String(text); paint(); } }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "the_status_line_is_missing",
+   "file": "web/home/alerts.js",
+   "old": "told.textContent = text; ",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_granted_is_not_on",
+   "file": "web/home/alerts.js",
+   "old": "return p === 'granted' ? 'on' : p === 'denied' ? 'blocked' : 'off';",
+   "new": "return p === 'granted' ? 'off' : p === 'denied' ? 'blocked' : 'off';",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_denied_is_not_blocked",
+   "file": "web/home/alerts.js",
+   "old": "p === 'denied' ? 'blocked' : 'off';",
+   "new": "p === 'denied' ? 'off' : 'off';",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_dot_for_a_visitor_who_is_not_logged_in",
+   "file": "web/home/alerts.js",
+   "old": "if (!(env.signedIn && env.signedIn())) return 'guest';",
+   "new": "/* every visitor */",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_where_there_are_no_notifications",
+   "file": "web/home/alerts.js",
+   "old": "if (!p && !phone) return null;",
+   "new": "/* always a bell */",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_iphone_app_still_needs_the_app",
+   "file": "web/home/alerts.js",
+   "old": "if (phone && !installed()) return 'needs';",
+   "new": "if (phone) return 'needs';",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_asks_when_pressed",
+   "file": "web/home/alerts.js",
+   "old": "bell.addEventListener('click', function () { open(bell); });",
+   "new": "bell.addEventListener('click', function () { if (win.Notification && win.Notification.requestPermission) win.Notification.requestPermission(); open(bell); });",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_asks_when_it_is_read",
+   "file": "web/home/alerts.js",
+   "old": "bell.hidden = !state;",
+   "new": "bell.hidden = !state; if (win.Notification && win.Notification.requestPermission) win.Notification.requestPermission();",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_press_opens_nothing",
+   "file": "web/home/alerts.js",
+   "old": "bell.addEventListener('click', function () { open(bell); });",
+   "new": "bell.addEventListener('click', function () { });",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_dot_on_the_menu_stays",
+   "file": "web/home/alerts.js",
+   "old": "dot ? ['al-dot'] : []",
+   "new": "['al-dot']",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_does_not_follow_the_browser",
+   "file": "web/home/alerts.js",
+   "old": "if (status) status.onchange = refresh;",
+   "new": "/* none */",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_dot_when_on",
+   "file": "web/home/alerts.js",
+   "old": "if (state === 'off' && !seen.is()) m = el('span', 'al-mark al-dotmark');",
+   "new": "if ((state === 'off' || state === 'on') && !seen.is()) m = el('span', 'al-mark al-dotmark');",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_never_asks_the_dock_again",
+   "file": "web/home/alerts.js",
+   "old": "if (++tries < 40) setTimeout(hook, 500);",
+   "new": "/* once */",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_reads_again_for_a_list_of_players",
+   "file": "web/home/alerts.js",
+   "old": "if (kind === 'live' || kind === 'you' || kind === 'lost') refresh();",
+   "new": "refresh();",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "dot_stays_after_the_sheet_is_opened",
+   "file": "web/home/alerts.js",
+   "old": "seen.mark(); refresh();",
+   "new": "refresh();",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "dot_comes_back_on_the_next_visit",
+   "file": "web/alert_core.js",
+   "old": "try { win.localStorage.setItem(LOOKED_KEY, '1'); }",
+   "new": "try { }",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "dot_ignores_that_the_sheet_was_looked_at",
+   "file": "web/home/alerts.js",
+   "old": "dot = state === 'off' && !seen.is();",
+   "new": "dot = state === 'off';",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "dot_on_the_menu_button_stays_after_looking",
+   "file": "web/home/alerts.js",
+   "old": ".concat(dot ? ['al-dot'] : [])",
+   "new": ".concat(state === 'off' ? ['al-dot'] : [])",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "looking_is_forgotten_where_the_browser_refuses_storage",
+   "file": "web/alert_core.js",
+   "old": "mark: function () { visit = true; try",
+   "new": "mark: function () { try",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_has_the_dot_after_the_sheet_was_looked_at",
+   "file": "web/home/alerts.js",
+   "old": "if (state === 'off' && !seen.is()) m = el('span', 'al-mark al-dotmark');",
+   "new": "if (state === 'off') m = el('span', 'al-mark al-dotmark');",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "arrow_of_the_iphone_goes_with_the_dot",
+   "file": "web/home/alerts.js",
+   "old": "else if (state === 'needs') {",
+   "new": "else if (state === 'never') {",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  }
+ ]
+}
