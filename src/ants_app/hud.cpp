@@ -97,6 +97,7 @@ void HUD::init(uint8_t local_player_id, bool announce) {
     help_button_ = UIButton{};
     options_button_ = UIButton{};
     quit_button_ = UIButton{};
+    fullscreen_button_ = UIButton{};
     move_pedestal_button_ = UIButton{};
     ability_pedestal_button_ = UIButton{};
     stop_button_ = UIButton{};
@@ -146,9 +147,21 @@ void HUD::apply_layout() {
         b.h = h;
     };
     // Top header buttons (x0y0.bmp): the right part of the top bar
-    place(help_button_, lay.right(476), 7, 46, 23);
-    place(options_button_, lay.right(525), 7, 52, 23);
-    place(quit_button_, lay.right(579), 7, 46, 23);
+    // The three of them stand 8 pixels further left where the Fullscreen button is (the new art's pieces are drawn there; the Classic look moves the original's: draw_top_buttons_corner), and every
+    // picture has it but the original's own with the original's art
+    if (top_buttons_moved()) {
+        constexpr int32_t kShift = window_art::ClassicCorner::kShift;
+        place(help_button_, lay.right(476 - kShift), 7, 46, 23);
+        place(options_button_, lay.right(525 - kShift), 7, 52, 23);
+        place(quit_button_, lay.right(579 - kShift), 7, 46, 23);
+        const bool art_button = art_ != nullptr && window_art::has_fullscreen_button(*art_);
+        place(fullscreen_button_, lay.right(window_art::ClassicCorner::kRight), 7, art_button ? 21 : (art_ != nullptr ? 0 : window_art::ClassicCorner::kButtonW), 23);
+    } else {
+        place(help_button_, lay.right(476), 7, 46, 23);
+        place(options_button_, lay.right(525), 7, 52, 23);
+        place(quit_button_, lay.right(579), 7, 46, 23);
+        place(fullscreen_button_, 0, 0, 0, 0);
+    }
 
     // The three pedestal slots of the original (FUN_01028d30, half-open): slot 1 (Move / hatch / ally) (482, 152) - (525, 225),
     // slot 2 (ability) (539, 152) - (582, 225), slot 3 (Stop) (597, 189) - (628, 227); the hatch and ally pedestals are slot 1 as well
@@ -170,7 +183,8 @@ void HUD::apply_layout() {
 
 void HUD::set_art(const hud_art::Art* art) {
     art_ = art != nullptr && art->loaded() ? art : nullptr;
-    refresh_art();
+    pieces_known_ = false;
+    apply_layout();                                      // (the top buttons stand in other places with the art than without; it ends in refresh_art)
 }
 
 void HUD::refresh_art() {
@@ -185,9 +199,12 @@ void HUD::draw_ui(IRenderer& renderer, const assets::AssetArchive& assets, const
 }
 
 void HUD::draw_top_button(IRenderer& renderer, const assets::AssetArchive& assets, const char* up, const char* hover, const char* down, bool is_down, bool is_hovered) {
-    if (is_down) draw_ui(renderer, assets, down, layout_.dx(), 0);
-    else if (is_hovered) draw_ui(renderer, assets, hover, layout_.dx(), 0);
-    else if (art_ != nullptr) draw_ui(renderer, assets, up, layout_.dx(), 0);
+    // The Classic look with its buttons moved (top_buttons_moved) draws the original's pictures 8 pixels left of their own places, the resting one too: the plate holds no picture of it any more
+    const bool moved_classic = art_ == nullptr && top_buttons_moved();
+    const int32_t dx = layout_.dx() - (moved_classic ? window_art::ClassicCorner::kShift : 0);
+    if (is_down) draw_ui(renderer, assets, down, dx, 0);
+    else if (is_hovered) draw_ui(renderer, assets, hover, dx, 0);
+    else if (art_ != nullptr || moved_classic) draw_ui(renderer, assets, up, dx, 0);
 }
 
 bool HUD::in_slot(int slot, int32_t x, int32_t y) const noexcept {
@@ -571,11 +588,13 @@ void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
     if (show_quick_help_ || options_.is_open()) {
         const LayoutPoint window = open_window_offset();
         const bool inset = window != LayoutPoint{};                     // (in the original's own picture the window is where it always was: nothing to cut)
-        if (inset && !show_quick_help_) render_options_dim(renderer);   // (the original's window dims the whole picture around its card: in its own picture the window's pieces do that themselves)
+        const bool new_options = !show_quick_help_ && art_ != nullptr && window_pieces(assets).options;      // (the set has the options window: its veil dims the picture round the card, in any shape)
+        if (new_options) render_veil(renderer);
+        else if (inset && !show_quick_help_) render_options_dim(renderer);   // (the original's window dims the whole picture around its card: in its own picture the window's pieces do that themselves)
         renderer.set_origin(window.x, window.y);
         if (inset) renderer.set_clip_rect(layout_.view().x - window.x, layout_.view().y - window.y, layout_.view().w, layout_.view().h);       // the pieces of a window reach beyond the map view: they stop at it
         if (show_quick_help_) render_quick_help(renderer, assets);
-        else options_.render(renderer, assets, clock_ms());
+        else options_.render(renderer, assets, clock_ms(), new_options ? art_ : nullptr);
         if (inset) renderer.clear_clip_rect();
         renderer.set_origin(0, 0);
     } else if (show_quit_dialog_ || alliance_dialog_ != AllianceDialog::None || show_match_start_modal_) {
@@ -671,9 +690,11 @@ void HUD::render_top_bar(IRenderer& renderer, const assets::AssetArchive& archiv
     // Top-bar buttons (animations buthlp*, butopt*, butqit*; absolute coordinates): the resting art is already part of
     // the top bar image, hovering draws the small "r" label over it and the pressed art replaces it. A button stays down
     // while the screen it opened is showing.
+    draw_top_buttons_corner(renderer, archive);
     draw_top_button(renderer, archive, "buthlpu", "buthlpr", "buthlpd", help_button_.is_pressed || show_quick_help_, help_button_.is_hovered);
     draw_top_button(renderer, archive, "butoptu", "butoptr", "butoptd", options_button_.is_pressed || options_.is_open(), options_button_.is_hovered);
     draw_top_button(renderer, archive, "butqitu", "butqitr", "butqitd", quit_button_.is_pressed || show_quit_dialog_, quit_button_.is_hovered);
+    draw_fullscreen_button(renderer, archive);
 }
 
 void HUD::render_news_banner(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world) {
@@ -747,26 +768,26 @@ void HUD::render_quit_dialog_alone(IRenderer& renderer, const assets::AssetArchi
 }
 
 void HUD::render_quit_dialog(IRenderer& renderer, const assets::AssetArchive& assets) {
-    using assets::ColorRGBA;
-
     // Quit dialog (Ants.exe 0x10142cb): no dim layer, origin (100,100) (OffsetRect(100,100) on the dialog's children)
-    draw_std_dialog(renderer, assets);
+    draw_dialog_frame(renderer, assets);
 
     // Prompt (string 99): a wrapped, centred label of 24 px letters in the rect (130,180) 260x160, color (31,23,51) (FUN_010142cb: label (30,80),
-    // 260x160, height 24, centred, moved by (100,100) with the dialog)
-    draw_label(renderer, "Do you really want to quit?", 130, 180, 260, ColorRGBA{31, 23, 51, 255}, FontSize::Px24, true);
+    // 260x160, height 24, centred, moved by (100,100) with the dialog); in the new look the windows' face in the dialog's inner width
+    draw_dialog_sentence(renderer, assets, "Do you really want to quit?", window_art::kQuestion, 130, 180, 260, FontSize::Px24);
 
     // Yes button at (180, 260)
     // yes1/2/3 and no1/2/3 are placed with SetPos, so their part offsets are relative to the button origin
-    draw_animation_frame0(renderer, assets, yes_button_.is_pressed ? "yes3" : (yes_button_.is_active ? "yes2" : "yes1"),
-                          yes_button_.x, yes_button_.y);
+    draw_dialog_button(renderer, assets, yes_button_.is_pressed ? "yes3" : (yes_button_.is_active ? "yes2" : "yes1"), yes_button_.x, yes_button_.y);
 
     // No button at (292, 260)
-    draw_animation_frame0(renderer, assets, no_button_.is_pressed ? "no3" : (no_button_.is_active ? "no2" : "no1"),
-                          no_button_.x, no_button_.y);
+    draw_dialog_button(renderer, assets, no_button_.is_pressed ? "no3" : (no_button_.is_active ? "no2" : "no1"), no_button_.x, no_button_.y);
 }
 
 void HUD::render_quick_help(IRenderer& renderer, const assets::AssetArchive& assets) {
+    if (art_ != nullptr && window_pieces(assets).quick_help) {            // the new look: the set's panel and pieces, the original's pictures cut out and laid on its wells
+        render_quick_help_new(renderer, assets);
+        return;
+    }
     // In-game quick help (Ants.exe 0x10145d2, qh_screen): a 32-part full-screen composite (frame pieces plus qh2 at
     // (267,10) and qh1 at (10,9)) drawn over the live game, and the Return button qh_return1 at (529,437).
     draw_animation_frame0(renderer, assets, "qh_screen", 0, 0);

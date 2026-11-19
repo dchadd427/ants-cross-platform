@@ -53,6 +53,25 @@ public:
         return out;
     }
     std::vector<Copy> copies;
+
+    /// The pictures with see-through pixels that the HUD lays (the quick help's kept pictures, the Classic corner), and the lines of the windows' face
+    struct Blended {
+        int32_t x{0}, y{0}, w{0}, h{0};
+        std::vector<uint8_t> rgba;
+    };
+    struct Line {
+        std::string text;
+        int32_t x{0}, baseline{0}, em_tenths{0};
+    };
+    void draw_rgba_blended(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) override {
+        blended.push_back(Blended{x, y, w, h, std::vector<uint8_t>(rgba, rgba + static_cast<size_t>(w) * static_cast<size_t>(h) * 4u)});
+    }
+    bool dialog_text_ready() const override { return dialog_face; }
+    int32_t dialog_text_width(const std::string& text, int32_t em_tenths) const override { return static_cast<int32_t>(text.size()) * em_tenths / 20; }      // (a text of n letters: n x em / 2 pixels)
+    void draw_dialog_text(const std::string& text, int32_t x, int32_t baseline, assets::ColorRGBA, int32_t em_tenths) override { lines.push_back(Line{text, x, baseline, em_tenths}); }
+    std::vector<Blended> blended;
+    std::vector<Line> lines;
+    bool dialog_face{false};                       // does this renderer have the windows' face (IRenderer::dialog_text_ready)
 };
 
 /// A decoded picture of 8-bit RGBA read from a file of the repository

@@ -50,6 +50,7 @@ void Application::apply_hud_art() {
 // the original's pieces: the HUD is given the original's art instead, with a word on stderr (the renderer says which sheet). Once a frame (a window that moves to another screen needs another sheet), and when the art is given.
 // The setting is not changed by it; choosing New again tries again.
 void Application::check_hud_art() {
+    if (renderer_ && hud_art_.loaded()) renderer_->set_dialog_font_path(hud_art_.folder() + "LibreBaskerville-Regular.ttf");        // (the face of the new windows' sentences ships with the art; without it they are the original's text)
     if (hud_.art() == nullptr || !renderer_ || renderer_->preload_art(hud_art_)) return;
     std::cerr << "[Application] The HUD art's sheet of this output cannot be used: the original's art is drawn" << std::endl;
     hud_.set_art(nullptr);

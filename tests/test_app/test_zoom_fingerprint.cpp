@@ -10,6 +10,7 @@
 //   * "zoom.ptr.edge.*" and "zoom.ptr.cursor.*": for EVERY pixel of the picture, the step of the edge scroll in screen pixels (nine cameras) and the cursor that HUD::evaluate_cursor chooses
 //     (two selections); "zoom.ptr.click.*": what a click orders (the tile, the marker's world pixel) on a grid of pixels; "zoom.camera.*": the camera's conversions and clamps.
 // The numbers are the same on macOS (clang, SDL 2.32) and on Linux (gcc, SDL 2.26): the pixel hashes never contain TrueType text and the zoom 0.5's smoothing is SDL's 2 x 2 average on both.
+// The wide numbers moved once, deliberately, for the Classic look's Fullscreen button and the three buttons 8 pixels further left (test_view_fingerprint.cpp has the note); the classic 640 x 480 ones did not.
 // Usage: test_zoom_fingerprint [--print | --list | --save DIR | --only PREFIX]; --print regenerates the table (DELIBERATELY, never to silence a failure).
 #include <SDL.h>
 
@@ -617,18 +618,18 @@ const Golden kGoldens[] = {
     {"zoom.app.ants.classic.TINY.z0.5", 0xa7f5e05fd3b30c9d, 307200},
     {"zoom.app.ants.classic.TINY.z1", 0xda19869e407ef4b2, 307200},
     {"zoom.app.ants.classic.TINY.z2", 0xb895fdbbcd0b3b0c, 307200},
-    {"zoom.app.ants.wide.GAUNTLET.z0.5", 0x4933de2eda76a737, 518400},
-    {"zoom.app.ants.wide.GAUNTLET.z1", 0x551955463e0bf2cb, 518400},
-    {"zoom.app.ants.wide.GAUNTLET.z2", 0x3edb97142c4274bb, 518400},
-    {"zoom.app.ants.wide.TINY.z1", 0x98e911fb033e1e86, 518400},
-    {"zoom.app.ants.wide.TINY.z2", 0x953e1d7ddfe2ce25, 518400},
+    {"zoom.app.ants.wide.GAUNTLET.z0.5", 0x68676bf560e39e44, 518400},
+    {"zoom.app.ants.wide.GAUNTLET.z1", 0x968ae0f2aba4be24, 518400},
+    {"zoom.app.ants.wide.GAUNTLET.z2", 0x16ddb7a0b1157608, 518400},
+    {"zoom.app.ants.wide.TINY.z1", 0x615c3aa2a750be21, 518400},
+    {"zoom.app.ants.wide.TINY.z2", 0x7f07a2fc46982176, 518400},
     {"zoom.app.classic.GAUNTLET.z0.5", 0x7e8690547ff47ed5, 307200},
     {"zoom.app.classic.GAUNTLET.z2", 0xa3084691509f93ec, 307200},
     {"zoom.app.classic.TINY.z0.5", 0xcf60e2a41463d11c, 307200},
     {"zoom.app.classic.TINY.z2", 0xa00eaa70cde7127d, 307200},
-    {"zoom.app.wide.GAUNTLET.z0.5", 0xbf4ecb39e449cd87, 518400},
-    {"zoom.app.wide.GAUNTLET.z2", 0x9c140140901816af, 518400},
-    {"zoom.app.wide.TINY.z2", 0xb8badc042443a370, 518400},
+    {"zoom.app.wide.GAUNTLET.z0.5", 0x0011eb94465b5f5c, 518400},
+    {"zoom.app.wide.GAUNTLET.z2", 0x76bf54dc16dd1b90, 518400},
+    {"zoom.app.wide.TINY.z2", 0x9c5bda0f1cfc90c3, 518400},
     {"zoom.camera.classic.z0.5", 0x9f2b4596198e664a, 45},
     {"zoom.camera.classic.z2", 0x3dc85b4971334956, 45},
     {"zoom.camera.wide.z0.5", 0xd5bfb4d2d388771d, 45},

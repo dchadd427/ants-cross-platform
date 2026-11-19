@@ -344,6 +344,7 @@ void Renderer::shutdown() {
         }
     }
     text_cache_.clear();
+    drop_dialog_fonts();
     clear_number_pictures();
     for (auto& font : fonts_) {
         if (font) TTF_CloseFont(font);
@@ -359,6 +360,8 @@ void Renderer::shutdown() {
         SDL_DestroyTexture(rgba_texture_);
         rgba_texture_ = nullptr;
     }
+    for (auto& pair : blend_textures_) SDL_DestroyTexture(pair.second);
+    blend_textures_.clear();
     drop_art_textures();
     for (PassTexture& t : pass_levels_) destroy_texture(t);
     pass_levels_.clear();
@@ -1115,6 +1118,28 @@ void Renderer::draw_rgba_image(int32_t x, int32_t y, int32_t w, int32_t h, const
     SDL_UpdateTexture(rgba_texture_, nullptr, rgba, w * 4);
     const SDL_Rect dst = placed(x, y, w, h);
     SDL_RenderCopy(renderer_, rgba_texture_, nullptr, &dst);
+}
+
+// A picture with see-through pixels (draw_rgba_blended): one small texture for each different picture, made when it is first drawn and found again by what it holds (a texture that several draws of one
+// frame share must not be changed in between: the card draws the commands later), kept until the renderer closes. A window shows about thirty pictures.
+void Renderer::draw_rgba_blended(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) {
+    if (!renderer_ || !rgba || w <= 0 || h <= 0) return;
+    uint64_t key = 1469598103934665603ull ^ (static_cast<uint64_t>(static_cast<uint32_t>(w)) << 32) ^ static_cast<uint32_t>(h);
+    for (size_t i = 0, n = static_cast<size_t>(w) * static_cast<size_t>(h) * 4u; i < n; ++i) key = (key ^ rgba[i]) * 1099511628211ull;
+    auto it = blend_textures_.find(key);
+    if (it == blend_textures_.end()) {
+        if (blend_textures_.size() >= 256) {
+            for (auto& pair : blend_textures_) SDL_DestroyTexture(pair.second);
+            blend_textures_.clear();
+        }
+        SDL_Texture* tex = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, w, h);
+        if (!tex) return;
+        SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+        SDL_UpdateTexture(tex, nullptr, rgba, w * 4);
+        it = blend_textures_.emplace(key, tex).first;
+    }
+    const SDL_Rect dst = placed(x, y, w, h);
+    SDL_RenderCopy(renderer_, it->second, nullptr, &dst);
 }
 
 void Renderer::draw_named_sprite(const std::string& name, int32_t x, int32_t y, bool mirrored) {

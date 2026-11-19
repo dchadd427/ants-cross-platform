@@ -85,6 +85,7 @@ void test_hud_draws_the_frame(const assets::AssetArchive& arc) {
                   at + "with the chat off the three covers are at (478, 421 / 436 / 445) + (dx, dy)");
             rig.hud.options().chat = true;
             // the top bar's buttons: the small label of a hovered button and the art of a pressed one are the animations' parts moved by (dx, 0)
+            const int32_t shift = layout.is_classic() ? 0 : 8;                     // (a wide picture puts the three buttons 8 pixels left of the original's places: the Fullscreen button stands right of Quit)
             const struct { const char* name; int32_t x; const char* hover; const char* pressed; } buttons[] = {{"Help", 476, "buthlpr", "buthlpd"}, {"Options", 525, "butoptr", "butoptd"}, {"Quit", 579, "butqitr", "butqitd"}};
             for (const auto& b : buttons) {
                 for (const bool pressed : {false, true}) {
@@ -95,9 +96,9 @@ void test_hud_draws_the_frame(const assets::AssetArchive& arc) {
                     const auto* anim = arc.find_animation(pressed ? b.pressed : b.hover);
                     bool all = anim != nullptr && !anim->subitems.empty();
                     if (all) {
-                        for (const auto& part : anim->subitems[0].frames) all = all && shot.has_sprite_at(arc.get_sprite(part.sprite_index).name, part.dx + dx, part.dy);
+                        for (const auto& part : anim->subitems[0].frames) all = all && shot.has_sprite_at(arc.get_sprite(part.sprite_index).name, part.dx + dx - shift, part.dy);
                     }
-                    check(all, at + std::string(b.name) + (pressed ? " pressed: the art is at its place + (dx, 0)" : " hovered: the label is at its place + (dx, 0)"));
+                    check(all, at + std::string(b.name) + (pressed ? " pressed: the art is at its place + (dx, 0) less the shift" : " hovered: the label is at its place + (dx, 0) less the shift"));
                 }
             }
         }

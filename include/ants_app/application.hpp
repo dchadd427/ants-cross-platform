@@ -395,6 +395,10 @@ public:
     /// Protocol 21, for the page (ants_probe 60 - 64): the seconds that the countdown has left (-1 when no countdown card is up) and the place of the Fullscreen button on it, in the page's canvas pixels
     int32_t countdown_seconds_left() const noexcept;
     LayoutRect web_countdown_button() const noexcept;
+    int hud_probe(int what) const noexcept;               // ants_probe 70 - 76: the HUD's Fullscreen button for the page (web/hud_fullscreen.js): its x, y, width and height, whether the picture is the one that leaves, whether the pointer is on it, and how often it has acted
+    /// True when the window (or the browser's page, which tells the game: set_page_fullscreen) is full screen now: the HUD's Fullscreen button shows the picture that leaves
+    bool fullscreen_now() const noexcept;
+    void set_page_fullscreen(bool on) noexcept { page_fullscreen_ = on; }
     int countdown_probe(int what) const noexcept;         // ants_probe 60 - 65: the two above, the button's x, y, width and height, and the lines of the chat log (application_net.cpp)
     /// ... and the page edits the HUD's chat line (the game's own line stays the one that is shown and sent): what 0 clear, 1 add the printable ASCII character `value`, 2 Backspace, 3 Enter (a
     /// key press through SDL's queue: the same path as a keyboard's, so [All] / [Team] and the rules of the HUD are the game's). Returns false when the box takes nothing (web_chat_available)
@@ -934,6 +938,7 @@ private:
     void enforce_zoom_limits();                           // every frame: the camera's zoom inside zoom_limits() and the map's limit (no zoom while the offscreen target cannot be made), one report when that failure begins
     bool zoom_failure_reported_{false};                   // enforce_zoom_limits has said that the target cannot be made (for this failure)
     void update_mouse_grab();                             // fullscreen (SDL's or a macOS Space): SDL keeps the pointer in the window while it has the focus (native builds)
+    bool page_fullscreen_{false};                         // the browser build: the page's fullscreen, as the page says it (ants_set_page_fullscreen)
 #if defined(__APPLE__)
     bool presentation_hidden_{false};                     // macOS: the game has made the Dock and the menu bar leave the fullscreen Space that the window is in (update_mouse_grab gives them back)
 #endif
