@@ -52,7 +52,7 @@ class ThePage(unittest.TestCase):
 
     def test_the_image_and_the_web_build_carry_the_script(self):
         self.assertIn("COPY web/hud_fullscreen.js /usr/share/nginx/html/hud_fullscreen.js", read("Dockerfile"))
-        self.assertIn("hub_here.js hud_fullscreen.js death_map.js", read(".github", "workflows", "ci.yml"))
+        self.assertIn("game_bar.js hud_fullscreen.js wake_lock.js", read(".github", "workflows", "ci.yml"))
         self.assertIn('web/hud_fullscreen.js" "${DIST_DIR}/"', read("build_web.sh"))
 
 
