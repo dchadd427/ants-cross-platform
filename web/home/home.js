@@ -185,6 +185,7 @@
                 if (m[1] === '/') { item.setAttribute('aria-current', 'page'); item.addEventListener('click', function (e) { e.preventDefault(); show('home', 'push'); }); }      // (this page: the Room's Home goes back to the front page's own screen)
                 menuBox.appendChild(item);
             });
+            if (alerts) menuBox.appendChild(alertsRow());
             var small = el('p', 'msmall');
             MENU_SMALL.forEach(function (m) { small.appendChild(link(m[0], m[1], 'mlink')); });
             menuBox.appendChild(small);
@@ -325,6 +326,7 @@
         }
         // The page decided what it connects to: link (a link or a test room: the Room), seat (it holds a room of this tab). Called once, before the page connects.
         function start(link, seat) {
+            wantAlerts();
             show(firstScreen(!!link, !!seat, win.location.hash), 'first');
             wantSplit();
             wantGames();
@@ -376,6 +378,18 @@
             lazy('home/players', function () { if (win.AntsHomePlayers) players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: main, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); meet(); inert(held); var c = players && players.root.querySelector ? players.root.querySelector('.pl-count') : null; if (c) mirror(c, tabBtns.players.pill); });
         }
 
+        var alerts = null, askedAlerts = false;
+        function alertsRow() { return alerts.row(function () { var back = menuFor; closeMenu(); return back; }); }      // (the Menu's row of the alerts sheet, alerts.js: it closes the Menu and the sheet gives the focus back to the Menu's button)
+        function wantAlerts() {                             // the alerts sheet and the join alert (alerts.js, alerts.css, with web/alert_core.js): after the first paint
+            if (askedAlerts) return;
+            askedAlerts = true;
+            lazy('home/alerts', function () {
+                if (!win.AntsHomeAlerts) return;
+                alerts = win.AntsHomeAlerts.mount({ doc: doc, win: win, core: win.AntsAlertCore, ctl: { show: show, screen: function () { return screen; } } });
+                if (alerts && menuBox) menuBox.insertBefore(alertsRow(), menuBox.querySelector('.msmall'));       // (the Menu was opened before the part came)
+            });
+        }
+
         function wantSplit() {                              // the two drag handles (split.js, split.css): sizes kept in this browser, put on Home before the lists come
             lazy('home/split', function () { if (win.AntsHomeSplit) split = win.AntsHomeSplit.mount({ doc: doc, win: win, host: host, main: main }); });
         }
@@ -400,7 +414,7 @@
             lazy('home/talk', function () { if (win.AntsHomeTalk) win.AntsHomeTalk.mount({ doc: doc, win: win, dock: dock }); });
         }
 
-        return { start: start, sync: sync, opening: say, show: show, screen: function () { return screen; }, inert: inert, menu: function () { return menuOpen; }, dock: function () { return dock; } };
+        return { start: start, sync: sync, opening: say, alert: function (kind, data) { try { return !!alerts && alerts.alert(kind, data); } catch (e) { return false; } }, show: show, screen: function () { return screen; }, inert: inert, menu: function () { return menuOpen; }, dock: function () { return dock; } };
     }
 
     return { HASH: HASH, TEXT: TEXT, MENU_MAIN: MENU_MAIN, MENU_SMALL: MENU_SMALL, countOf: countOf, fitHeight: fitHeight, heightGuard: heightGuard, readout: readout, screenOf: screenOf, firstScreen: firstScreen, mount: mount };

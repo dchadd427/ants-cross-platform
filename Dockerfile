@@ -234,6 +234,8 @@ COPY web/map_files.js /usr/share/nginx/html/map_files.js
 
 # The countdown's Fullscreen button (docs/MATCH_COUNTDOWN.md): the game page lays it over the card that opens a match of two or more people (countdown_button.js)
 COPY web/countdown_button.js /usr/share/nginx/html/countdown_button.js
+# The alerts that need no permission (docs/HOME_SCREEN.md "Alerts"): the switches, the tab alert and the sound table that the front page and the game page share (alert_core.js; the front page's own part is in web/home/, copied whole below)
+COPY web/alert_core.js /usr/share/nginx/html/alert_core.js
 
 # The screen stays on while a match is played or a recording plays (docs/PLAY_IN_BROWSER.md "The screen stays on"): the game page asks the browser for a Screen Wake Lock (wake_lock.js)
 COPY web/wake_lock.js /usr/share/nginx/html/wake_lock.js

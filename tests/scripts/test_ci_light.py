@@ -54,6 +54,8 @@ NATIVE_READS = {
     "web/front/map_picker.js": "test_ants_server.sh: the page harness (the checks that ask for the picker)",
     "web/home/home.js": "test_ants_server.sh: the page harness",
     "web/home/games.js": "test_ants_server.sh: the page harness (the Games list)",
+    "web/home/alerts.js": "test_ants_server.sh: the page harness (the alerts sheet and the join alert)",
+    "web/alert_core.js": "test_ants_server.sh: the page harness (the switches and the tab alert that the page loads)",
     "tests/scripts/web_fill_check.js": "test_ants_server.sh",
     "tests/scripts/web_lobby_server_check.js": "test_ants_server.sh",
     "tests/scripts/web_lobby_handoff_check.js": "test_ants_server.sh",
