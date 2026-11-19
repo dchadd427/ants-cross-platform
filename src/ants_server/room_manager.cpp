@@ -18,6 +18,7 @@ namespace ants::server {
 
 RoomManager::RoomManager(MapStore store, ServerLimits limits) : store_(std::move(store)), limits_(limits), log_budget_(limits.log_budget_bytes), code_source_(random_bytes) {
     if (!store_.scanned()) store_.scan();           // (the server's main has scanned it and logged the notes; a manager made by hand lists its folders here)
+    live_board_.set_delay_seconds(limits_.live_delay_s);
 }
 
 RoomManager::~RoomManager() = default;

@@ -162,11 +162,14 @@ same('2x 4x 8x', [R.speedText(200), R.speedText(400), R.speedText(800)], ['2\u00
 // ---- what the door answers for a match
 const kept = 'ants-TREASURE-20261009-083210Z.antsrep';
 same('the match runs', R.liveVerdict(200, null).kind, 'running');
-same('over and kept', R.liveVerdict(404, { error: 'no such live match', ended: true, replay: kept }), { kind: 'ended', replay: kept });
-same('over and not kept', R.liveVerdict(404, { error: 'no such live match', ended: true, replay: '' }), { kind: 'ended', replay: '' });
-same('over with a name that is not a file name of the store', R.liveVerdict(404, { ended: true, replay: '../etc/passwd' }), { kind: 'ended', replay: '' });
-same('over with a name that is not text', R.liveVerdict(404, { ended: true, replay: 7 }), { kind: 'ended', replay: '' });
-same('over with no name', R.liveVerdict(404, { ended: true }), { kind: 'ended', replay: '' });
+same('over and kept', R.liveVerdict(404, { error: 'no such live match', ended: true, replay: kept, turns: 7200 }), { kind: 'ended', replay: kept, turns: 7200 });
+same('over and not kept', R.liveVerdict(404, { error: 'no such live match', ended: true, replay: '' }), { kind: 'ended', replay: '', turns: null });
+same('over with a name that is not a file name of the store', R.liveVerdict(404, { ended: true, replay: '../etc/passwd' }), { kind: 'ended', replay: '', turns: null });
+same('over with a name that is not text', R.liveVerdict(404, { ended: true, replay: 7 }), { kind: 'ended', replay: '', turns: null });
+same('over with no name', R.liveVerdict(404, { ended: true }), { kind: 'ended', replay: '', turns: null });
+same('the turns that it ran: a whole number of 0 or more, else none', [0, 12, 12.9, 599, -1, NaN, Infinity, '12', null, undefined, [3]].map((turns) => R.liveVerdict(404, { ended: true, replay: '', turns: turns }).turns), [0, 12, 12, 599, null, null, null, null, null, null, null]);
+same('too short to keep: over, no file, under 600 turns (30 seconds)', [0, 1, 599, 600, 601, 7200, null].map((turns) => R.tooShort({ kind: 'ended', replay: '', turns: turns })), [true, true, true, false, false, false, false]);
+same('... and nothing else is: a file that was kept, a match that runs or is not live, no verdict', [R.tooShort({ kind: 'ended', replay: kept, turns: 3 }), R.tooShort({ kind: 'running', replay: '', turns: 3 }), R.tooShort({ kind: 'notlive', replay: '', turns: 3 }), R.tooShort(null), R.tooShort(undefined), R.tooShort({ kind: 'ended', replay: '' })], [false, false, false, false, false, false]);
 same('never was', R.liveVerdict(404, { error: 'no such live match', ended: false, replay: '' }), { kind: 'notlive', replay: '' });
 same('"ended" that is not true', R.liveVerdict(404, { ended: 'true', replay: kept }), { kind: 'notlive', replay: '' });
 same('a 404 that is not JSON (a server with no door)', R.liveVerdict(404, null), { kind: 'notlive', replay: '' });
@@ -193,6 +196,35 @@ same('half speed, 3.4 s behind', R.liveTag({ gap: 3.4, speed: '\u00bd\u00d7' }),
 same('the feed stopped and the playhead caught up', R.liveTag({ waiting: true, at: true, gap: 0, speed: '1\u00d7' }), 'waiting for the match');
 same('paused at the present', R.liveTag({ paused: true, at: true, gap: 0, speed: '1\u00d7' }), 'Paused \u00b7 0:10 behind');
 same('no gap given', R.liveTag({ speed: '1\u00d7' }), '1\u00d7 \u00b7 0:10 behind');
+
+// ---- the numbers that the server sends with a snapshot, and what the page says from them
+const info = (now, shown, delay) => ({ now, shown, delay });
+same('the header of a match shown as it is', R.liveInfoOf('now=1000; shown=1000; delay=0'), info(1000, 1000, 0));
+same('... of a match shown 30 seconds late (600 turns): what is shown is the match as it was 600 turns ago, never less than 0', [R.liveInfoOf('now=1000; shown=400; delay=600'), R.liveInfoOf('now=300; shown=0; delay=600'), R.liveInfoOf('now=0; shown=0; delay=600')], [info(1000, 400, 600), info(300, 0, 600), info(0, 0, 600)]);
+same('a header that says more shown, or less shown, than the delay allows is not believed', ['now=1000; shown=401; delay=600', 'now=1000; shown=399; delay=600', 'now=1000; shown=1000; delay=600', 'now=300; shown=1; delay=600', 'now=5; shown=6; delay=0', 'now=5; shown=4; delay=0'].map(R.liveInfoOf), [null, null, null, null, null, null]);
+same('... nor one that is not exactly that text', ['', 'now=1; shown=1', 'now=1; shown=1; delay=0 ', ' now=1; shown=1; delay=0', 'NOW=1; shown=1; delay=0', 'now=1;shown=1;delay=0', 'now=-1; shown=-1; delay=0', 'now=1.5; shown=1; delay=0', 'now=1; shown=1; delay=0; x=1', 'now=1234567890; shown=1234567890; delay=0', 'now=1\n; shown=1; delay=0', null, undefined, 7, {}].map(R.liveInfoOf), Array(15).fill(null));
+check('the turns of the match now, by the clock: 20 a second from the turns that the server said', R.liveNowTurn(info(1000, 400, 600), 0) === 1000 && R.liveNowTurn(info(1000, 400, 600), 1000) === 1020 && R.liveNowTurn(info(1000, 400, 600), 2500) === 1050 && R.liveNowTurn(info(1000, 400, 600), -5) === 1000 && R.liveNowTurn(null, 1000) === 0 && R.liveNowTurn(info(0, 0, 600), 25000) === 0);
+check('how far behind: the match now less the playhead, in seconds, never below 0; no numbers, no answer', R.liveBehind(info(1000, 1000, 0), 0, 900) === 5 && R.liveBehind(info(1000, 400, 600), 1000, 400) === 31 && R.liveBehind(info(1000, 1000, 0), 0, 2000) === 0 && R.liveBehind(null, 0, 10) === null && R.liveBehind(info(1, 1, 0), 0, undefined) === null);
+same('the delay in the words of the page', [30, 59, 60, 61, 90, 120, 300, 0].map(R.delayText), ['30 seconds', '59 seconds', '1 minute', '61 seconds', '90 seconds', '2 minutes', '5 minutes', '0 seconds']);
+same('how often the page asks again: 2 s for a match shown as it is and while it has no numbers, 4 s for one shown late', [R.feedEvery(info(10, 10, 0)), R.feedEvery(info(1000, 400, 600)), R.feedEvery(null), R.feedEvery(undefined)], [2000, 4000, 2000, 2000]);
+{   // the card over the picture while nothing can be shown yet
+    const shownAsIs = R.standbyOf(info(0, 0, 0), 0);
+    same('a match shown as it is that has not begun', [shownAsIs.title, shownAsIs.line, shownAsIs.fill], ['Starting\u2026', 'The match is about to begin.', 0]);
+    same('... and a match that had run no turn when the answer came (its countdown) is still about to begin 25 s later: the clock does not run for it', [R.standbyOf(info(0, 0, 600), 25000).line, R.standbyOf(info(0, 0, 0), 25000).fill], ['This match is between people, so it is shown 30 seconds late. The match is about to begin.', 0]);
+    same('... and one that has run 1 s of its 2 s of hold: half of the wait is gone', R.standbyOf(info(20, 20, 0), 0).fill, 0.5);
+    const late0 = R.standbyOf(info(0, 0, 600), 0);
+    same('a match shown late that has run no turn says that it is shown late and is about to begin', [late0.title, late0.line, late0.fill], ['Starting\u2026', 'This match is between people, so it is shown 30 seconds late. The match is about to begin.', 0]);
+    const late = R.standbyOf(info(100, 0, 600), 0);
+    same('... and when it has run turns says when its picture starts (the delay and the 2 s of hold, less what has run: 640 - 100 = 540 turns, 27 s)', [late.line, late.fill], ['This match is between people, so it is shown 30 seconds late. The picture starts in 0:27.', 100 / 640]);
+    same('... the clock runs it on between two answers', R.standbyOf(info(100, 0, 600), 2000).line, 'This match is between people, so it is shown 30 seconds late. The picture starts in 0:25.');
+    same('... and never says less than 1 s while it waits', R.standbyOf(info(639, 0, 600), 0).line, 'This match is between people, so it is shown 30 seconds late. The picture starts in 0:01.');
+    same('a page that has no numbers says the simple thing', [R.standbyOf(null, 5000).line, R.standbyOf(null, 5000).fill], ['The match is about to begin.', 0]);
+}
+same('the tag: starting', R.liveTag({ starting: true, gap: 0, at: true, speed: '1\u00d7', delay: 30, behind: 40 }), 'starting');
+same('... waiting for the next part, with the seconds until the page asks again (at least 1)', [R.liveTag({ waiting: true, wait: 1.4 }), R.liveTag({ waiting: true, wait: 0 }), R.liveTag({ waiting: true, wait: 3.6 })], ['waiting for the next part \u00b7 1 s', 'waiting for the next part \u00b7 1 s', 'waiting for the next part \u00b7 4 s']);
+same('... a match shown as it is, at the present: how far behind, by the numbers (at least 1 s)', [R.liveTag({ at: true, behind: 4.6, delay: 0, speed: '1\u00d7' }), R.liveTag({ at: true, behind: 0.2, speed: '1\u00d7' })], ['about 5 s behind', 'about 1 s behind']);
+same('... a match shown late, at the present: that it is shown late', [R.liveTag({ at: true, behind: 36.2, delay: 30, speed: '1\u00d7' }), R.liveTag({ at: true, behind: 66, delay: 60, speed: '1\u00d7' })], ['shown 30 seconds late', 'shown 1 minute late']);
+same('... away from the present or paused: the speed and how far behind, by the numbers', [R.liveTag({ gap: 20, behind: 56, delay: 30, speed: '2\u00d7' }), R.liveTag({ paused: true, behind: 61, delay: 30, speed: '1\u00d7' })], ['2\u00d7 \u00b7 0:56 behind', 'Paused \u00b7 1:01 behind']);
 
 // ---- the camera button of the game page in replay mode: the choice of the device, the button, the note
 {

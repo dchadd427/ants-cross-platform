@@ -2,10 +2,12 @@
 // through the door is kept and plays out to the same state on a fresh engine, the people's typed names are in it (and a seat that was given none is the color), a bot has its name, no address or
 // room code is, short and unrecorded matches are not kept (and the status says why, a recording that failed in its own words: S3.244, with one line in the log, and by the room's count of ticks to the tick: S3.245),
 // a server that is stopped keeps the match that runs, a room that came back from a restart record does not record, the limits show in the status and the log, and the two doors (the secret's and the
-// public one) answer as they should. The live door (S3.176 - S3.178: GET /live and GET /live/<id> in front of real rooms: a match that runs is listed after 30 seconds, its snapshot grows and plays on the real map,
-// the id says where the file is when the match ends, no room code is anywhere). The store's own rules (names, ages, sizes, a folder with other things in it) are test_replay_store.cpp, the board's (ids, the list,
+// public one) answer as they should. The live door (S3.176 - S3.179: GET /live and GET /live/<id> in front of real rooms: a match is listed from the moment its room starts it, its snapshot grows and plays on the real map,
+// a match with two or more people is shown 30 seconds late and nothing asked for can show more, the id says where the file is when the match ends or that it ended too soon to be kept, no room code is anywhere). The store's own rules (names, ages, sizes, a folder with other things in it) are test_replay_store.cpp, the board's (ids, the list,
 // the cache, the memory of ended matches) test_live_board.cpp. Included by test_server_files.cpp, which holds (through server_fixtures.hpp) the harness (TEST_CASE, ASSERT_*, World, PWorld, Client); test_server.cpp calls run_replay_tests().
 #pragma once
+
+#include "live_fixtures.hpp"
 
 namespace {
 
@@ -998,7 +1000,7 @@ void run_replay_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.176 The Live Door: A Match That Runs Shows In GET /live Once It Has Run 30 Seconds (Id, Map, Start, Turns, Seconds, Players, And No Room Code); GET /live/<id> Gives The Match So Far As An Incomplete File That Plays On The Real Map, The Same Bytes For A Second, A Longer One After; When The Match Ends The Id Answers \"ended\" With The File That The Public List Has, For 15 Minutes; A Room That Does Not Record Is Never Shown") {
+    TEST_CASE("S3.176 The Live Door: A Match Shows In GET /live From The Moment Its Room Starts It (Id, Map, Start, Turns, Seconds, Players, And No Room Code); GET /live/<id> Gives The Match As It Was 30 Seconds Ago When Two People Play It, As An Incomplete File That Plays On The Real Map, The Same Bytes For A Second, A Longer One After; When The Match Ends The Id Answers With The Name Of The Kept File For 15 Minutes") {
         ReplayClock clock;
         World w;
         std::string why;
@@ -1011,22 +1013,39 @@ void run_replay_tests() {
         ASSERT_TRUE(r.status == 200 && r.content_type == "application/json");
         ctl::JsonValue j = replay_json_of(r);
         ASSERT_TRUE(j.get("live").size() == 0 && j.get("live").is_array() && j.get("count").as_int_or(-1) == 0 && j.get("sim_rules").as_int_or(0) == replay::kSimRules);
-        // an id that is not on the board, in every way a request can name it: the page gets the same JSON each time
+        // an id that is not on the board, in every way a request can name it: the page gets the same JSON each time (a match that is over says the turns it ran, and only that one)
         const auto missing = [](const ctl::HttpResponse& x, bool ended = false, const std::string& file = std::string()) {
             if (x.status != 404 || x.content_type != "application/json") return false;
             const ctl::JsonValue v = replay_json_of(x);
+            const bool turns_ok = ended ? v.find("turns") != nullptr && v.get("turns").is_int() : v.find("turns") == nullptr;
             return v.get("error").str() == "no such live match" && v.find("ended") != nullptr && v.get("ended").as_bool_or(!ended) == ended && v.find("replay") != nullptr && v.get("replay").is_string() &&
-                   v.get("replay").str() == file;
+                   v.get("replay").str() == file && turns_ok && x.headers.empty();
         };
         w.connect("Ann", "LIVE-1");
         w.connect("Bob", "LIVE-1");
         w.connect("Cy", "LIVE-QUIET");
         w.connect("Di", "LIVE-QUIET");
-        w.run(1500 + kPre + 12000);
+        // the room starts the match: it is on the list at once, before its first turn has run (the 5 s dialog of the start), as a match that is starting, and Watch has the head to show
+        for (int guard = 0; guard < 400 && replay_json_of(public_call(w.mgr, "GET", "/live")).get("live").size() != 1; ++guard) w.run(10);
+        ASSERT_EQ(replay_json_of(public_call(w.mgr, "GET", "/live")).get("live").size(), size_t{1});
         RoomStatus s = w.status("LIVE-1");
+        ASSERT_TRUE(s.state == RoomState::Running && s.turns == 0);
+        j = replay_json_of(public_call(w.mgr, "GET", "/live"));
+        ASSERT_TRUE(j.get("count").as_int_or(0) == 1 && j.get("live").at(0).get("turns").as_int_or(-1) == 0 && j.get("live").at(0).get("seconds").as_int_or(-1) == 0 && j.get("live").at(0).get("id").str() == "TINY-20261008-143209Z");
+        const std::string id = j.get("live").at(0).get("id").str();
+        r = public_call(w.mgr, "GET", "/live/" + id);
+        uint32_t hn = 99, hs = 99, hd = 99;
+        ASSERT_TRUE(r.status == 200 && live_header(r, hn, hs, hd) && hn == 0 && hs == 0 && hd == 600);       // (two people: 30 s = 600 turns late)
+        DecodedBody zero = decode_body(body_bytes(r));
+        ASSERT_TRUE(zero.ok && !zero.rep.complete && zero.rep.total_turns == 0 && zero.rep.commands.empty() && zero.rep.head.map_name == "TINY.LVL");
+        w.run(kPre + 12000);
+        s = w.status("LIVE-1");
         ASSERT_TRUE(s.state == RoomState::Running && s.turns > 100 && s.turns < 600);
-        ASSERT_EQ(replay_json_of(public_call(w.mgr, "GET", "/live")).get("live").size(), size_t{0});     // (12 seconds: not yet)
-        ASSERT_TRUE(missing(public_call(w.mgr, "GET", "/live/TINY-20261008-143209Z")));                   // (and the id that it will have is not given out before)
+        ASSERT_EQ(replay_json_of(public_call(w.mgr, "GET", "/live")).get("live").size(), size_t{1});
+        clock.now += 1;
+        r = public_call(w.mgr, "GET", "/live/" + id);
+        ASSERT_TRUE(r.status == 200 && live_header(r, hn, hs, hd) && hn > 100 && hn <= s.turns && hs == 0 && hd == 600);
+        ASSERT_TRUE(decode_body(body_bytes(r)).rep.total_turns == 0 && decode_body(body_bytes(r)).rep.commands.empty());           // (12 seconds of play: all of it is inside the delay, nothing of it is shown)
         w.run(26000);
         s = w.status("LIVE-1");
         ASSERT_TRUE(s.state == RoomState::Running && s.turns >= 600);
@@ -1036,19 +1055,22 @@ void run_replay_tests() {
         j = replay_json_of(r);
         ASSERT_TRUE(j.get("count").as_int_or(0) == 1 && j.get("live").size() == 1 && j.get("sim_rules").as_int_or(0) == replay::kSimRules);      // (the room with "record": false is not in it)
         const ctl::JsonValue& e = j.get("live").at(0);
-        const std::string id = e.get("id").str();
-        ASSERT_EQ(id, "TINY-20261008-143209Z");                                                           // (the map and the second the match began in)
+        ASSERT_EQ(e.get("id").str(), id);                                                                 // (the map and the second the match began in)
         const int64_t listed_turns = e.get("turns").as_int_or(0);
         ASSERT_TRUE(e.get("map").str() == "TINY.LVL" && e.get("started").as_int_or(0) == kReplayT0 && listed_turns >= 600 && e.get("seconds").as_int_or(0) == listed_turns / 20);
         ASSERT_TRUE(e.get("mode").is_string() && e.get("mode").str() == "highest-score");                 // (the room's game mode, in the words of the list of games and of the history)
         ASSERT_TRUE(e.get("players").size() == 2 && e.get("players").at(0).str() == "Green (Ann)" && e.get("players").at(1).str() == "Red (Bob)");
+        ASSERT_TRUE(e.find("delay") == nullptr && e.find("people") == nullptr);                           // (the list says nothing of the delay: the snapshot's header does)
         for (const char* secret : {"LIVE", "127.0.0.1", "code", "room"}) ASSERT_TRUE(r.body.find(secret) == std::string::npos);
-        // the match so far: an incomplete replay with its live chunk, which plays on the real map up to its turns with every hash right
+        // the match as it was 30 seconds ago: an incomplete replay with its live chunk, which plays on the real map up to its turns with every hash right, and holds nothing of the last 30 seconds
+        clock.now += 1;
         r = public_call(w.mgr, "GET", "/live/" + id);
         ASSERT_TRUE(r.status == 200 && r.content_type == "application/octet-stream");
+        ASSERT_TRUE(live_header(r, hn, hs, hd) && hd == 600 && hs + 600 == hn && static_cast<int64_t>(hn) >= listed_turns && hn <= s.turns);      // (shown = run - 600, read when the bytes were made)
         const std::vector<uint8_t> first = body_bytes(r);
         const DecodedBody a = decode_body(first);
-        ASSERT_TRUE(a.ok && !a.rep.complete && a.rep.head.map_name == "TINY.LVL" && static_cast<int64_t>(a.rep.total_turns) == listed_turns);
+        ASSERT_TRUE(a.ok && !a.rep.complete && a.rep.head.map_name == "TINY.LVL" && a.rep.total_turns == hs && hs > 0);
+        for (const replay::TimedCommand& tc : a.rep.commands) ASSERT_TRUE(tc.turn < hs);
         ASSERT_FALSE(bytes_contain(first, "LIVE"));
         ASSERT_FALSE(bytes_contain(first, "127.0.0.1"));
         replay::Outcome played;
@@ -1058,9 +1080,12 @@ void run_replay_tests() {
         ASSERT_TRUE(body_bytes(public_call(w.mgr, "GET", "/live/" + id)) == first);
         ASSERT_TRUE(replay_json_of(public_call(w.mgr, "GET", "/live")).get("live").at(0).get("turns").as_int_or(0) >= listed_turns + 40);       // (the list reads the turns when it is asked)
         clock.now += 1;
-        const std::vector<uint8_t> second = body_bytes(public_call(w.mgr, "GET", "/live/" + id));
+        const ctl::HttpResponse again = public_call(w.mgr, "GET", "/live/" + id);
+        const std::vector<uint8_t> second = body_bytes(again);
         const DecodedBody b = decode_body(second);
-        ASSERT_TRUE(second != first && b.ok && !b.rep.complete && b.rep.total_turns >= a.rep.total_turns + 40);
+        uint32_t hn2 = 0, hs2 = 0, hd2 = 0;
+        ASSERT_TRUE(live_header(again, hn2, hs2, hd2) && hd2 == 600 && hs2 + 600 <= hn2 && hn2 >= hn + 40);
+        ASSERT_TRUE(second != first && b.ok && !b.rep.complete && b.rep.total_turns == hs2 && b.rep.total_turns >= a.rep.total_turns + 40);
         ASSERT_TRUE(plays_out(b.rep, played) && played.turns == b.rep.total_turns);
         ASSERT_TRUE(is_start_of(a.rep, b.rep));
         // the ways a request can fail: the id's shape is checked first, then the id; a query, another method, a path below the id and a path of the control interface never get a match
@@ -1092,12 +1117,12 @@ void run_replay_tests() {
         ASSERT_TRUE(s.replay_kept && ReplayStore::valid_file_name(s.replay_file));
         const StoredReplay f = load_stored(*w.mgr.replay_store(), s.replay_file);
         ASSERT_TRUE(f.ok && f.rep.complete);
-        ASSERT_EQ(f.rep.total_turns, last.rep.total_turns);                                               // (nothing ran between the snapshot and the close)
+        ASSERT_TRUE(f.rep.total_turns >= last.rep.total_turns + 600);                                     // (the file that is kept holds the last 30 seconds that the snapshot did not)
         ASSERT_TRUE(is_start_of(last.rep, f.rep));
-        ASSERT_TRUE(last.rep.commands.size() == f.rep.commands.size() && last.rep.hashes == f.rep.hashes);
         ASSERT_EQ(replay_json_of(public_call(w.mgr, "GET", "/live")).get("live").size(), size_t{0});
         r = public_call(w.mgr, "GET", "/live/" + id);
         ASSERT_TRUE(missing(r, true, s.replay_file));
+        ASSERT_EQ(static_cast<uint32_t>(replay_json_of(r).get("turns").as_int_or(0)), f.rep.total_turns);   // (the turns it ran)
         const ctl::JsonValue listed = replay_json_of(public_call(w.mgr, "GET", "/replays"));
         ASSERT_TRUE(listed.get("replays").size() == 1 && listed.get("replays").at(0).get("file").str() == s.replay_file);        // (the name that the id gave is the one that the public list has)
         ASSERT_EQ(public_call(w.mgr, "GET", "/replays/" + s.replay_file).status, 200);
@@ -1158,6 +1183,214 @@ void run_replay_tests() {
         ASSERT_TRUE(w.mgr.replay_store()->remove(ended.get("replay").str()));
         r = public_call(w.mgr, "GET", "/live/" + id);
         ASSERT_TRUE(r.status == 404 && replay_json_of(r).get("ended").as_bool_or(false) && replay_json_of(r).get("replay").str().empty());
+    } TEST_END();
+
+    TEST_CASE("S3.176b A Match With No Person, Or One Person, Is Shown As It Is (The Header Says A Delay Of 0 And The Snapshot Ends At The Turns Run); The People Of A Match Are The Seats That People Hold, Computer Players Are Not Counted (Two People And A Computer Player Is Shown Late)") {
+        ReplayClock clock;
+        ServerLimits limits;
+        limits.live_delay_s = 30;
+        World w(limits);
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("live-people", &clock), false, why));
+        RoomSpec solo = spec_of("SOLO-1", 2);                                                             // (one person and a computer player)
+        solo.bots = {ai::BotSpec{1, "standard", ai::Level::Medium}};
+        ASSERT_TRUE(w.mgr.create_room(solo, w.now).ok);
+        RoomSpec bots = spec_of("BOTS-1", 2);                                                             // (computer players only: the server's own match)
+        bots.bots = {ai::BotSpec{0, "standard", ai::Level::Medium}, ai::BotSpec{1, "standard", ai::Level::Hard}};
+        bots.bots_only = true;
+        bots.early_start = false;
+        bots.reconnect = false;
+        bots.wait_ms = 1000;
+        bots.run_ms = 10u * 60u * 1000u;
+        ASSERT_TRUE(w.mgr.create_room(bots, w.now).ok);
+        RoomSpec mixed = spec_of("MIXED-1", 3);                                                           // (two people and a computer player)
+        mixed.bots = {ai::BotSpec{2, "standard", ai::Level::Medium}};
+        ASSERT_TRUE(w.mgr.create_room(mixed, w.now).ok);
+        w.connect("Ann", "SOLO-1");
+        w.connect("Bea", "MIXED-1");
+        w.connect("Cy", "MIXED-1");
+        w.run(1500 + 5000 + 15000);
+        for (const char* code : {"SOLO-1", "BOTS-1", "MIXED-1"}) ASSERT_MSG(w.status(code).state == RoomState::Running && w.status(code).turns > 100, code);
+        clock.now += 1;
+        const ctl::JsonValue list = replay_json_of(public_call(w.mgr, "GET", "/live"));
+        ASSERT_EQ(list.get("live").size(), size_t{3});
+        std::map<std::string, std::string> id_of;                                                         // (by the players that the list names: the ids are made of the map and the second)
+        for (size_t i = 0; i < list.get("live").size(); ++i) {
+            const ctl::JsonValue& e = list.get("live").at(i);
+            const std::string& first = e.get("players").at(0).str();
+            id_of[first.find("Ann") != std::string::npos ? "SOLO-1" : first.find("Bea") != std::string::npos ? "MIXED-1" : "BOTS-1"] = e.get("id").str();
+        }
+        ASSERT_EQ(id_of.size(), size_t{3});
+        for (const char* code : {"SOLO-1", "BOTS-1"}) {
+            const ctl::HttpResponse r = public_call(w.mgr, "GET", "/live/" + id_of[code]);
+            uint32_t hn = 0, hs = 1, hd = 1;
+            ASSERT_MSG(r.status == 200 && live_header(r, hn, hs, hd) && hd == 0 && hs == hn && hn > 200, code);
+            const DecodedBody d = decode_body(body_bytes(r));
+            ASSERT_MSG(d.ok && d.rep.total_turns == hn, code);                                            // (the match as it is: its last second)
+        }
+        const ctl::HttpResponse m = public_call(w.mgr, "GET", "/live/" + id_of["MIXED-1"]);
+        uint32_t mn = 0, ms = 1, md = 0;
+        ASSERT_TRUE(m.status == 200 && live_header(m, mn, ms, md) && md == 600 && ms == 0 && mn > 200);      // (two people and a computer player: late, and 15 s of play are inside the delay)
+        ASSERT_TRUE(decode_body(body_bytes(m)).rep.total_turns == 0);
+    } TEST_END();
+
+    TEST_CASE("S3.176c The Delay Cannot Be Asked Around: Every Way To Name The Live Routes (A Query Of Any Kind, A Header Of Any Kind, A Method, A Path) Gives A Snapshot That Ends At (Turns Run - Delay) Or Nothing; A Person Who Leaves, Two Who Leave, A Cut Link And A Room That Is Left With One Person Change The Delay Of The Match That Runs Not At All (It Was Counted From The Seats When The Match Began)") {
+        ReplayClock clock;
+        ServerLimits limits;
+        limits.live_delay_s = 10;                                                                         // (200 turns: the same code as 30 s, in less time)
+        World w(limits);
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("live-ask", &clock), false, why));
+        ASSERT_TRUE(w.mgr.create_room(spec_of("ASK-3", 3), w.now).ok);
+        RoomSpec with_bot = spec_of("ASK-B", 3);                                                          // (two people and a computer player)
+        with_bot.bots = {ai::BotSpec{2, "standard", ai::Level::Medium}};
+        ASSERT_TRUE(w.mgr.create_room(with_bot, w.now).ok);
+        w.connect("Ann", "ASK-3");
+        Client& bob = w.connect("Bob", "ASK-3");
+        Client& cat = w.connect("Cat", "ASK-3");
+        w.connect("Dee", "ASK-B");
+        Client& eli = w.connect("Eli", "ASK-B");
+        w.run(1500 + 5000 + 30000);
+        ASSERT_TRUE(w.status("ASK-3").state == RoomState::Running && w.status("ASK-3").turns > 500 && w.status("ASK-B").state == RoomState::Running);
+        const auto id_of = [&](const char* first_player) {
+            const ctl::JsonValue list = replay_json_of(public_call(w.mgr, "GET", "/live"));
+            for (size_t i = 0; i < list.get("live").size(); ++i) {
+                if (list.get("live").at(i).get("players").at(0).str().find(first_player) != std::string::npos) return list.get("live").at(i).get("id").str();
+            }
+            return std::string();
+        };
+        const std::string id3 = id_of("Ann"), idb = id_of("Dee");
+        ASSERT_TRUE(!id3.empty() && !idb.empty() && id3 != idb);
+        uint64_t answers = 0, snapshots = 0;
+        // every request that names the live routes in some way; the answer is the cut snapshot or an answer with no replay in it (the file that is kept does not exist while the match runs)
+        const auto ask_every_way = [&](const std::string& code, const std::string& id) {
+            clock.now += 1;
+            const uint32_t run = w.status(code).turns;
+            const std::vector<std::string> paths = {"/live/" + id, "/live/" + id + "/", "/live/" + id + "/0", "/live/" + id + "/live", "/live", "/replays", "/replays/" + id, "/replays/ants-TINY-20261008-143209Z.antsrep",
+                                                    "/history", "/history/" + id, "/live/" + id + ".antsrep", "/live/..%2F" + id, "/LIVE/" + id};
+            const std::vector<std::string> queries = {"", "x", "from=0", "since=0", "delay=0", "shown=99999", "turns=99999", "t=0", "full=1", "nodelay", "delay=0&full=1", "%64elay=0", "live=1", "limit=1"};
+            const std::vector<std::map<std::string, std::string>> headers = {
+                {}, {{"range", "bytes=0-"}}, {{"range", "bytes=0-1"}}, {{"x-ants-delay", "0"}}, {{"x-ants-live", "now=0; shown=0; delay=0"}}, {{"cache-control", "no-cache"}}, {{"if-none-match", "*"}},
+                {{"authorization", "Bearer x"}}, {{"x-forwarded-for", "127.0.0.1"}}, {{"host", "localhost"}}, {{"x-delay", "0"}, {"x-live-delay", "0"}, {"x-real-ip", "127.0.0.1"}}};
+            for (const char* method : {"GET", "POST", "HEAD", "PUT", "DELETE", ""}) {
+                for (const std::string& path : paths) {
+                    for (const std::string& query : queries) {
+                        for (const auto& h : headers) {
+                            ctl::HttpRequest rq;
+                            rq.method = method;
+                            rq.path = path;
+                            rq.query = query;
+                            rq.headers = std::map<std::string, std::string, std::less<>>(h.begin(), h.end());
+                            const ctl::HttpResponse r = handle_public_replays(w.mgr, rq, 1000);
+                            ++answers;
+                            if (r.status != 200 || r.content_type != "application/octet-stream") continue;
+                            ++snapshots;
+                            uint32_t hn = 0, hs = 0, hd = 0;
+                            ASSERT_MSG(std::string(method) == "GET" && path == "/live/" + id && query.empty() && live_header(r, hn, hs, hd), std::string(method) + " " + path + "?" + query);        // (the one way in)
+                            const DecodedBody d = decode_body(body_bytes(r));
+                            ASSERT_TRUE(d.ok && !d.rep.complete);
+                            ASSERT_EQ(hd, 200u);                                                          // (the match's own delay, whatever was sent)
+                            ASSERT_TRUE(hn <= run);
+                            ASSERT_EQ(hs, hn > hd ? hn - hd : 0u);                                        // (never ahead of the turns run less the delay)
+                            ASSERT_EQ(d.rep.total_turns, hs);
+                            for (const replay::TimedCommand& tc : d.rep.commands) ASSERT_TRUE(tc.turn < hs);
+                            ASSERT_TRUE(d.rep.hashes.size() * 100 <= hs);
+                        }
+                    }
+                }
+            }
+        };
+        ask_every_way("ASK-3", id3);
+        ASSERT_TRUE(snapshots > 0 && answers > 10000);
+        // a person leaves (the link is cut, and a room that holds no seats drops the seat at once): the match goes on with two people; the delay is the one that it began with
+        w.net.cut(cat.server_end);
+        w.run(3000);
+        ASSERT_MSG(w.status("ASK-3").state == RoomState::Running, std::string("state ") + room_state_name(w.status("ASK-3").state));
+        ask_every_way("ASK-3", id3);
+        // the second person leaves (a room of people with nobody to play against ends its match: its id then says so and has nothing to show, which is the end of the delay's business)
+        w.net.cut(bob.server_end);
+        w.run(3000);
+        if (w.status("ASK-3").state == RoomState::Running) {
+            ask_every_way("ASK-3", id3);
+        } else {
+            const ctl::HttpResponse over = public_call(w.mgr, "GET", "/live/" + id3);
+            ASSERT_TRUE(over.status == 404 && replay_json_of(over).get("ended").as_bool_or(false));
+        }
+        // two people and a computer player: one person leaves, one is left with the computer player, and the match is still shown 10 s late, as it began
+        const uint32_t before = w.status("ASK-B").turns;
+        w.net.cut(eli.server_end);
+        w.run(3000);
+        ASSERT_TRUE(w.status("ASK-B").turns > before);
+        ASSERT_MSG(w.status("ASK-B").state == RoomState::Running, std::string("state ") + room_state_name(w.status("ASK-B").state));
+        ask_every_way("ASK-B", idb);
+        clock.now += 1;
+        const ctl::HttpResponse last = public_call(w.mgr, "GET", "/live/" + idb);
+        uint32_t hn = 0, hs = 0, hd = 0;
+        ASSERT_TRUE(last.status == 200 && live_header(last, hn, hs, hd) && hd == 200 && hs + 200 == hn && hs > 200);        // (nothing is counted again)
+    } TEST_END();
+
+    TEST_CASE("S3.176d A Room That Starts And Is Closed Within Seconds Leaves No Dead Watch Link: It Is On The List From Its Start, Gone From It When It Ends, And Its Id Says For Two Minutes That It Ended Before It Could Be Kept (With The Turns It Ran: 0 In Its Countdown, Some After A Few Seconds Or A Quit), Then Is Forgotten; Nothing Is Kept And No File Is Offered") {
+        ReplayClock clock;
+        World w;
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("live-short", &clock), false, why));
+        const auto list_size = [&]() { return replay_json_of(public_call(w.mgr, "GET", "/live")).get("live").size(); };
+        const auto ended_with = [&](const std::string& id, int64_t least, int64_t most) {           // (the turns the recorder ran: the room's own count of sealed turns when it was read, or a turn or two less)
+            const ctl::HttpResponse r = public_call(w.mgr, "GET", "/live/" + id);
+            const ctl::JsonValue v = replay_json_of(r);
+            return r.status == 404 && v.get("ended").as_bool_or(false) && v.get("replay").is_string() && v.get("replay").str().empty() && v.get("turns").as_int_or(-1) >= least && v.get("turns").as_int_or(-1) <= most &&
+                   v.get("turns").as_int_or(-1) < 600;
+        };
+        // (a) closed in the 5 s dialog of the start, before the first turn
+        ASSERT_TRUE(w.mgr.create_room(spec_of("BRIEF-A", 2), w.now).ok);
+        w.connect("Ann", "BRIEF-A");
+        w.connect("Bob", "BRIEF-A");
+        for (int guard = 0; guard < 400 && list_size() != 1; ++guard) w.run(10);
+        ASSERT_EQ(list_size(), size_t{1});
+        const std::string a_id = replay_json_of(public_call(w.mgr, "GET", "/live")).get("live").at(0).get("id").str();
+        ASSERT_EQ(public_call(w.mgr, "GET", "/live/" + a_id).status, 200);
+        w.run(1000);
+        ASSERT_TRUE(w.status("BRIEF-A").turns == 0 && w.mgr.close_room("BRIEF-A", w.now));
+        ASSERT_EQ(list_size(), size_t{0});
+        ASSERT_TRUE(ended_with(a_id, 0, 0));
+        // (b) closed after a few seconds of play
+        clock.now += 5;
+        ASSERT_TRUE(w.mgr.create_room(spec_of("BRIEF-B", 2), w.now).ok);
+        w.connect("Cat", "BRIEF-B");
+        w.connect("Dan", "BRIEF-B");
+        w.run(1500 + kPre + 6000);
+        ASSERT_TRUE(w.status("BRIEF-B").turns > 100 && w.status("BRIEF-B").turns < 600);
+        const std::string b_id = replay_json_of(public_call(w.mgr, "GET", "/live")).get("live").at(0).get("id").str();
+        ASSERT_NE(b_id, a_id);
+        const uint32_t b_turns = w.status("BRIEF-B").turns;
+        ASSERT_TRUE(w.mgr.close_room("BRIEF-B", w.now));
+        ASSERT_EQ(list_size(), size_t{0});
+        ASSERT_TRUE(ended_with(b_id, b_turns - 2, b_turns));
+        ASSERT_TRUE(ended_with(a_id, 0, 0));                                                              // (the earlier one is still remembered)
+        // (c) a Quit ends a match of two at once
+        clock.now += 5;
+        ASSERT_TRUE(w.mgr.create_room(spec_of("BRIEF-C", 2), w.now).ok);
+        Client& leaver = w.connect("Eve", "BRIEF-C");
+        w.connect("Fay", "BRIEF-C");
+        for (int guard = 0; guard < 600 && !(w.status("BRIEF-C").state == RoomState::Running && w.status("BRIEF-C").ticks > 20); ++guard) w.run(100);
+        const std::string c_id = replay_json_of(public_call(w.mgr, "GET", "/live")).get("live").at(0).get("id").str();
+        sim::Command quit;
+        quit.type = sim::CommandType::Quit;
+        quit.issuer = leaver.lobby->my_seat();
+        ASSERT_TRUE(leaver.session->submit(quit));
+        for (int guard = 0; guard < 400 && w.status("BRIEF-C").state != RoomState::Finished; ++guard) w.run(100);
+        ASSERT_TRUE(w.status("BRIEF-C").state == RoomState::Finished && w.status("BRIEF-C").ticks < 600);
+        ASSERT_EQ(list_size(), size_t{0});
+        ASSERT_TRUE(ended_with(c_id, static_cast<int64_t>(w.status("BRIEF-C").ticks) - 2, static_cast<int64_t>(w.status("BRIEF-C").ticks) + 2));
+        ASSERT_EQ(w.mgr.replay_store()->count(), size_t{0});                                              // (none of the three was kept: no file is offered)
+        ASSERT_TRUE(w.mgr.replay_store()->list().empty());
+        // two minutes after their end the first two are forgotten (they ended 10 and 5 seconds before the third), the third a moment after
+        clock.now += static_cast<int64_t>(LiveBoard::kRememberBriefS) - 5;
+        ASSERT_TRUE(ended_with(c_id, static_cast<int64_t>(w.status("BRIEF-C").ticks) - 2, static_cast<int64_t>(w.status("BRIEF-C").ticks) + 2));
+        ASSERT_EQ(public_call(w.mgr, "GET", "/live/" + a_id).status, 404);
+        ASSERT_FALSE(replay_json_of(public_call(w.mgr, "GET", "/live/" + a_id)).get("ended").as_bool_or(true));
+        clock.now += 5;
+        ASSERT_FALSE(replay_json_of(public_call(w.mgr, "GET", "/live/" + c_id)).get("ended").as_bool_or(true));      // (forgotten: the answer of an id that never was)
     } TEST_END();
 
     TEST_CASE("S3.178 A Room That Is Destroyed While Its Match Runs Takes It Off The Live Board (The Board Holds A Pointer To The Room's Recorder): The Room Manager's Destructor Reaches The Board") {

@@ -378,8 +378,9 @@ uint32_t crc32(const uint8_t* data, size_t size, uint32_t crc) noexcept {
 
 namespace {
 
-/// The writer of both kinds of file: `live_turns` null writes a replay as it is (complete or cut), else a snapshot (an incomplete replay and its live chunk)
-std::vector<uint8_t> encode_file(const Replay& r, const uint32_t* live_turns, std::string& error) {
+/// The writer of both kinds of file: `live_turns` null writes a replay as it is (complete or cut), else a snapshot (an incomplete replay and its live chunk). `n_commands` and `n_hashes` are how many of
+/// the replay's commands and hashes are written (the first ones: a snapshot of an earlier moment of the match writes fewer); a file that is written whole passes the sizes.
+std::vector<uint8_t> encode_file(const Replay& r, const uint32_t* live_turns, size_t n_commands, size_t n_hashes, std::string& error) {
     error.clear();
     if (!valid_head(r.head, error)) return {};
     if (r.total_turns > kMaxTurns) {
@@ -387,7 +388,7 @@ std::vector<uint8_t> encode_file(const Replay& r, const uint32_t* live_turns, st
         return {};
     }
     uint32_t last = 0;
-    for (size_t i = 0; i < r.commands.size(); ++i) {
+    for (size_t i = 0; i < n_commands; ++i) {
         const TimedCommand& tc = r.commands[i];
         if (tc.turn < last || tc.turn > kMaxTurns || (r.complete && tc.turn > r.total_turns)) {
             error = "command " + std::to_string(i) + " is out of turn order or after the last turn";
@@ -399,11 +400,11 @@ std::vector<uint8_t> encode_file(const Replay& r, const uint32_t* live_turns, st
         }
         last = tc.turn;
     }
-    if (r.complete && static_cast<uint64_t>(r.hashes.size()) * r.head.hash_period > r.total_turns) {
+    if (r.complete && static_cast<uint64_t>(n_hashes) * r.head.hash_period > r.total_turns) {
         error = "the replay has more hashes than turns";
         return {};
     }
-    if (live_turns != nullptr && (*live_turns > kMaxTurns || *live_turns < last || static_cast<uint64_t>(r.hashes.size()) * r.head.hash_period > *live_turns)) {
+    if (live_turns != nullptr && (*live_turns > kMaxTurns || *live_turns < last || static_cast<uint64_t>(n_hashes) * r.head.hash_period > *live_turns)) {
         error = "the snapshot's turn count is more than a match can have, or less than its last command or its last hash";
         return {};
     }
@@ -442,7 +443,8 @@ std::vector<uint8_t> encode_file(const Replay& r, const uint32_t* live_turns, st
         chunk.clear();
         count = 0;
     };
-    for (const TimedCommand& tc : r.commands) {
+    for (size_t i = 0; i < n_commands; ++i) {
+        const TimedCommand& tc = r.commands[i];
         if (count != 0 && (count >= kMaxChunkCommands || tc.turn - first >= kChunkTurns)) flush();
         if (count == 0) {
             first = tc.turn;
@@ -455,10 +457,10 @@ std::vector<uint8_t> encode_file(const Replay& r, const uint32_t* live_turns, st
     }
     flush();
 
-    if (!r.hashes.empty()) {
+    if (n_hashes != 0) {
         std::vector<uint8_t> payload;
         put_u32(payload, r.head.hash_period);
-        for (const uint32_t h : r.hashes) put_u32(payload, h);
+        for (size_t i = 0; i < n_hashes; ++i) put_u32(payload, r.hashes[i]);
         put_chunk(out, "hash", payload);
     }
     if (live_turns != nullptr) {
@@ -482,14 +484,26 @@ std::vector<uint8_t> encode_file(const Replay& r, const uint32_t* live_turns, st
 
 }  // namespace
 
-std::vector<uint8_t> encode(const Replay& r, std::string& error) { return encode_file(r, nullptr, error); }
+std::vector<uint8_t> encode(const Replay& r, std::string& error) { return encode_file(r, nullptr, r.commands.size(), r.hashes.size(), error); }
 
 std::vector<uint8_t> encode_snapshot(const Replay& r, uint32_t turns, std::string& error) {
     if (r.complete) {
         error = "a snapshot is a replay without its end, and this one has it";
         return {};
     }
-    return encode_file(r, &turns, error);
+    return encode_file(r, &turns, r.commands.size(), r.hashes.size(), error);
+}
+
+std::vector<uint8_t> encode_snapshot_until(const Replay& r, uint32_t turns, std::string& error) {
+    if (r.complete) {
+        error = "a snapshot is a replay without its end, and this one has it";
+        return {};
+    }
+    // the orders that were given before tick `turns` (they are in turn order: encode_file checks it for the ones it writes) and the hashes of the ticks up to it
+    const auto end = std::lower_bound(r.commands.begin(), r.commands.end(), turns, [](const TimedCommand& tc, uint32_t t) { return tc.turn < t; });
+    const size_t n_commands = static_cast<size_t>(end - r.commands.begin());
+    const size_t n_hashes = r.head.hash_period == 0 ? 0 : std::min<size_t>(r.hashes.size(), turns / r.head.hash_period);
+    return encode_file(r, &turns, n_commands, n_hashes, error);
 }
 
 bool decode(const uint8_t* data, size_t size, Replay& out, std::string& error) {

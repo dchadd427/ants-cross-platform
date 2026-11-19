@@ -53,6 +53,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ants::ctl {
@@ -77,6 +78,9 @@ struct HttpResponse {
     std::string content_type{"application/json"};              // visible ASCII only, else replaced by application/json
     std::string body;                                          // at most HttpServer::kMaxResponseBytes (a door's own limit, DoorOptions::max_response_bytes), else 500; a map or replay file (`file`) may be up to kMaxFileResponseBytes
     bool file{false};                                          // a map file (the format allows up to 4 MiB) or a replay file (up to about 2 MiB when it carries its map): its body may be up to HttpServer::kMaxFileResponseBytes, whatever the limit of the door; every other answer keeps the door's
+    /// Headers of the handler's own, sent after the server's: a name that starts with "X-" and is letters, digits and '-' (at most 40), and a value of visible ASCII and spaces (at most 256). One that is not so is left
+    /// out (the answer goes on without it); the server's own headers cannot be set here.
+    std::vector<std::pair<std::string, std::string>> headers;
 };
 
 /// What a door (HttpServer::listen_door) allows beyond the public read-only door. A door has no secret: the handler decides who may do what, so it is only for a program that checks every request itself.

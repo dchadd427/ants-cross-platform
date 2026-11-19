@@ -96,7 +96,7 @@ std::vector<uint8_t> Recorder::finish(const sim::SimulationEngine& engine, std::
     return bytes;
 }
 
-std::vector<uint8_t> Recorder::snapshot(std::string& error) const {
+std::vector<uint8_t> Recorder::snapshot(uint32_t shown_turns, std::string& error) const {
     error.clear();
     if (finished_) {
         error = "the recording is finished already";
@@ -106,11 +106,11 @@ std::vector<uint8_t> Recorder::snapshot(std::string& error) const {
         error = failure_;
         return {};
     }
-    if (turns_ == 0) {
-        error = "no turn ran";
+    if (shown_turns > turns_) {
+        error = "the snapshot would show more turns than the match has run";
         return {};
     }
-    return encode_snapshot(replay_, turns_, error);
+    return encode_snapshot_until(replay_, shown_turns, error);
 }
 
 }  // namespace ants::replay

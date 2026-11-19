@@ -142,7 +142,9 @@ class Door:
 
     def __init__(self):
         self.lock = threading.Lock()
-        self.mode = "ok"                      # ok | down (every answer is a 500) | ended (the match is over and kept) | endednokeep | notlive
+        self.mode = "ok"                      # ok | down (every answer is a 500) | ended (the match is over and kept) | endednokeep | notlive | short (it ended before 30 seconds: never kept)
+        self.info_delay = None                # None: the answer has no X-Ants-Live header (a server that says nothing); else the match's delay in turns (0: shown as it is, 600: shown 30 s late) and the header says it
+        self.short_turns = 240                # the turns that a match that ended too soon ran
         self.base = 13520                     # the turns of the match when the clock below was set
         self.t0 = time.time()
         self.freeze = True                    # a match that does not move (the playhead waits at the Limit)
@@ -192,10 +194,12 @@ class Door:
             return [h for h in self.hits if h.startswith(prefix)]
 
     @staticmethod
-    def send(h, code, body, ctype="text/plain"):
+    def send(h, code, body, ctype="text/plain", headers=None):
         if isinstance(body, str):
             body = body.encode()
         h.send_response(code)
+        for name, value in (headers or {}).items():
+            h.send_header(name, value)
         h.send_header("Content-Type", ctype)
         h.send_header("Content-Length", str(len(body)))
         h.send_header("Cache-Control", "no-store")
@@ -250,10 +254,16 @@ class Door:
         if m:
             if self.mode == "down":
                 return self.send(h, 500, "{}", "application/json")
+            if m.group(1) == ID and self.mode == "short":
+                return self.js(h, 404, {"error": "no such live match", "ended": True, "replay": "", "turns": self.short_turns})
             if m.group(1) != ID or self.mode in ("ended", "endednokeep", "notlive"):
                 over = m.group(1) == ID and self.mode in ("ended", "endednokeep")
                 return self.js(h, 404, {"error": "no such live match", "ended": over, "replay": KEPT if over and self.mode == "ended" else ""})
-            return self.send(h, 200, fake_file(self.turns(), 0), "application/octet-stream")
+            if self.info_delay is None:
+                return self.send(h, 200, fake_file(self.turns(), 0), "application/octet-stream")
+            now = self.turns()                                                  # (what the server does: the file is the match as it was `delay` turns ago, and the header says the three numbers)
+            shown = max(0, now - self.info_delay)
+            return self.send(h, 200, fake_file(shown, 0), "application/octet-stream", {"X-Ants-Live": "now=%d; shown=%d; delay=%d" % (now, shown, self.info_delay)})
         return self.send(h, 404, "not found")
 
 
@@ -281,10 +291,10 @@ SHOWN = "function (id) { var e = document.getElementById(id); return !!e && !e.h
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--browser", default=os.environ.get("CHROME", ""), help="a Chromium-based browser (default: look for one)")
-    ap.add_argument("--only", default="", help="one part: watch, ends, cards, replay, rewind, picture, bar, hide or scrub (default: all)")
+    ap.add_argument("--only", default="", help="one part: watch, late, ends, cards, replay, rewind, picture, bar, hide or scrub (default: all)")
     ap.add_argument("--shots", default="", help="a folder to save screenshots in")
     args = ap.parse_args()
-    parts = ("watch", "ends", "cards", "replay", "rewind", "picture", "bar", "hide", "scrub")
+    parts = ("watch", "late", "ends", "cards", "replay", "rewind", "picture", "bar", "hide", "scrub")
     if args.only and args.only not in parts:
         print("--only is one of: " + ", ".join(parts))
         return 2
@@ -336,7 +346,7 @@ def main():
         return r[0], r[1]
 
     def fresh(**kw):                                                           # (the door as a match at 11:16 that does not move, unless said otherwise)
-        state = dict(mode="ok", freeze=True, live=[ID, OTHER], live_door=True, kept_at=0.0, kept_listed=True, names=PLAYERS, seconds=676)
+        state = dict(mode="ok", freeze=True, live=[ID, OTHER], live_door=True, kept_at=0.0, kept_listed=True, names=PLAYERS, seconds=676, info_delay=None)
         state.update(kw)
         door.set(**state)
         with door.lock:
@@ -372,7 +382,7 @@ def main():
             door.set(freeze=False, seconds=676)
             before = tab.ev("__stub.total")
             seen = []
-            for _ in range(24):                                              # 12 seconds of a match that moves: the file grows by the feed (every 4 s) and the tag stays at 'about 10 s behind'
+            for _ in range(24):                                              # 12 seconds of a match that moves: the file grows by the feed (every 2 s) and the tag stays at 'about 10 s behind' (the door sends no X-Ants-Live: the usual lag is added)
                 time.sleep(0.5)
                 seen.append(tab.ev(TAG))
             check(tab.ev("__stub.total") > before + 100 and tab.ev("__stub.extends") >= 2, "the file grows: the page writes it again and the game is told (Extend): %d -> %d turns, %d Extends" % (before, tab.ev("__stub.total"), tab.ev("__stub.extends")))
@@ -392,6 +402,83 @@ def main():
             check(tab.ev("document.documentElement.scrollWidth <= window.innerWidth") is True, "a phone: no sideways scroll")
             check(tab.ev("(function () { var r = document.getElementById('rbar').getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth; })()") is True, "a phone: the bar is inside the screen")
             shot(tab, "watching-phone")
+            tab.close()
+
+        if args.only in ("", "late"):
+            print("[web live] part late: a match that is starting, one that is shown late, a playhead that waits, a match that ended too soon")
+            READY0 = "!!window.__stub && !document.getElementById('rtag').hidden"                      # (ready, with or without a turn to show)
+            STANDBY = "(function () { var e = document.getElementById('standby'); return e.hidden ? '' : document.getElementById('standby-t').textContent + ' | ' + document.getElementById('standby-s').textContent; })()"
+            FILL = "document.getElementById('standby-f').style.width"
+            at_the_limit = "(function () { __stub.state = 2; __stub.turn = Module._ants_replay_get(8); })()"           # (the playhead has played up to what the game holds: the stand-in's own clock does not run in every browser)
+            # (a) shown as it is, a match that has just begun: nothing to show, and the page says it is starting
+            fresh(seconds=0, info_delay=0)
+            tab = new_tab()
+            open_page(tab, "/play?live=" + ID)
+            check(until(tab, READY0) is True, "(a) the page opens a match that has run no turn")
+            check(until(tab, STANDBY + " === 'Starting\u2026 | The match is about to begin.'") is True, "(a) a card says 'Starting...' and that the match is about to begin (it says %r)" % tab.ev(STANDBY))
+            check(tab.ev(TAG) == "starting" and tab.ev("document.getElementById('rtag-b').textContent") == "LIVE", "(a) the tag says LIVE starting (%r)" % tab.ev(TAG))
+            shot(tab, "starting-bots")
+            door.set(seconds=5)                                                   # (100 turns: 3 s of play are inside what the game may show, the 2 s that it holds back are not)
+            check(until(tab, STANDBY + " === ''", 8) is True, "(a) the first turns come with the next look: the card goes")
+            tab.ev(at_the_limit)
+            check(until(tab, "/^about [1-9] s behind$/.test(" + TAG + ")", 4) is True, "(a) at the present of a match shown as it is the tag says how far behind, by the server's numbers (it says %r)" % tab.ev(TAG))
+            check(tab.ev("__stub.args.slice(-1)") == ["--replay-live"] and tab.ev("__stub.ignored") == 0, "(a) the game follows the file, and takes every file")
+            tab.close()
+            # (b) shown late (two or more people): the card says so and when the picture starts; at the present the tag says that it is shown late
+            fresh(seconds=0, info_delay=600)
+            tab = new_tab()
+            open_page(tab, "/play?live=" + ID)
+            check(until(tab, READY0) is True, "(b) the page opens a match between people that has run no turn")
+            late_line = "This match is between people, so it is shown 30 seconds late. "
+            check(until(tab, STANDBY + " === 'Starting\u2026 | " + late_line + "The match is about to begin.'") is True, "(b) the card says that it is shown 30 seconds late and that it is about to begin (%r)" % tab.ev(STANDBY))
+            door.set(seconds=10)                                                  # (200 turns: the first look of the page that is told it)
+            check(until(tab, "/^Starting\u2026 \\| " + late_line.replace(".", "\\.") + "The picture starts in 0:2[0-2]\\.$/.test(" + STANDBY + ")", 8) is True, "(b) a match that has run 10 s says when its picture starts (%r)" % tab.ev(STANDBY))
+            check(tab.ev(TAG) == "starting" and tab.ev(FILL) in ("29%", "30%", "31%", "32%", "33%", "34%", "35%"), "(b) the bar of the card has filled with it (%r)" % tab.ev(FILL))
+            shot(tab, "starting-people")
+            door.set(seconds=60)                                                  # (1200 turns: 600 shown, the match as it was 30 s ago)
+            check(until(tab, STANDBY + " === ''", 10) is True and tab.ev("__stub.total") == 600, "(b) the delay has gone: the card goes and the game holds what the server shows (600 turns = the match as it was 30 s ago)")
+            tab.ev(at_the_limit)
+            check(until(tab, TAG + " === 'shown 30 seconds late'", 4) is True, "(b) at the present the tag says 'shown 30 seconds late' (it says %r)" % tab.ev(TAG))
+            shot(tab, "live-people")
+            tab.ev("(function () { __stub.state = 3; })()")
+            check(until(tab, "/^Paused \u00b7 0:3\\d behind$/.test(" + TAG + ")", 4) is True, "(b) paused at the present the tag says how far behind: 30 s and the 2 s of the picture (%r)" % tab.ev(TAG))
+            tab.close()
+            # (c) the playhead is at the end of what the game holds and the match does not move: it waits for the next part, and says so, and when the next look is
+            fresh(seconds=60, info_delay=0)
+            tab = new_tab()
+            open_page(tab, "/play?live=" + ID)
+            until(tab, READY)
+            tab.ev(at_the_limit)
+            check(until(tab, "/^waiting for the next part \u00b7 [12] s$/.test(" + TAG + ")", 6) is True, "(c) the tag says that it waits for the next part and in how many seconds (%r)" % tab.ev(TAG))
+            check(tab.ev(NOTE) == "Waiting for the next part\u2026", "(c) a note over the picture says so (%r)" % tab.ev(NOTE))
+            check(tab.ev("(" + SHOWN + ")('b-play')") is True and tab.ev("document.getElementById('b-play').getAttribute('aria-label')") == "Pause", "(c) the match is only waiting: Pause is still there")
+            shot(tab, "waiting")
+            door.set(freeze=False, seconds=60)                                    # (the match goes on: the next look brings turns)
+            tab.ev("(function () { __stub.state = 2; })()")
+            check(until(tab, NOTE + " === ''", 8) is True and tab.ev(TAG) != "waiting for the next part", "(c) the next part comes: the note goes")
+            tab.close()
+            # (d) a link to a match that ended before 30 seconds: its card says so; and a match that is watched when it ends that way
+            fresh(mode="short")
+            for size, tab in (("wide", new_tab()), ("phone", new_tab(390, 844, 2, True))):
+                open_page(tab, "/play?live=" + ID)
+                check(until(tab, "!document.getElementById('rm').hidden") is True, "(d) %s: a card is up" % size)
+                check(tab.ev("document.getElementById('rm-title').textContent") == "Too short to keep", "(d) %s: the card says 'Too short to keep' (%r)" % (size, tab.ev("document.getElementById('rm-title').textContent")))
+                check("30 seconds" in tab.ev("document.getElementById('rm-body').textContent") and tab.ev("document.querySelector('#rm-body a.btn').getAttribute('href')") == "/matches", "(d) %s: it says why and has the way out to the matches" % size)
+                check(tab.ev("document.body.classList.contains('live')") is False and tab.ev("document.getElementById('standby').hidden") is True, "(d) %s: no live marks, no card of a match that starts" % size)
+                shot(tab, "too-short-" + size)
+                tab.close()
+            fresh(info_delay=0)
+            tab = new_tab()
+            open_page(tab, "/play?live=" + ID)
+            until(tab, READY)
+            door.set(mode="short")
+            check(until(tab, "!document.getElementById('rm').hidden && document.getElementById('rm-title').textContent === 'Too short to keep'", 8) is True, "(d) a match that is watched and then ends before 30 seconds: the same card")
+            tab.close()
+            # a match that ended and was not kept after 30 seconds or more, whose length the door says: not 'too short' (the older words)
+            fresh(mode="endednokeep")
+            tab = new_tab()
+            open_page(tab, "/play?live=" + ID)
+            check(until(tab, "!document.getElementById('rm').hidden") is True and tab.ev("document.getElementById('rm-title').textContent") == "That match isn\u2019t live", "(d) a match that ended and was not kept, with no length said, is 'That match isn't live'")
             tab.close()
 
         if args.only in ("", "ends"):
