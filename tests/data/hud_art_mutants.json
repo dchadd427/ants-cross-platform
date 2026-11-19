@@ -373,8 +373,8 @@
   {
    "id": "window_piece_place_is_not_compared",
    "file": "src/ants_app/window_art.cpp",
-   "old": "return theirs.w <= 0 || fits(mine, theirs.moved(what.origin_x, what.origin_y));",
-   "new": "return true;",
+   "old": "fits(mine, theirs.moved(what.origin_x, what.origin_y))",
+   "new": "fits(mine, mine)",
    "build": "test_hud_art",
    "test": "./build/tests/test_app/test_hud_art",
    "expect": "[windows]"
@@ -389,10 +389,10 @@
    "expect": "[window-model]"
   },
   {
-   "id": "kept_picture_of_the_food_loses_its_second_part",
+   "id": "kept_pictures_take_the_ground_for_picture",
    "file": "src/ants_app/window_art.cpp",
-   "old": "(food && sizes[l] > 20)",
-   "new": "(food && sizes[l] > 2000)",
+   "old": "bool solid = !close_to(c, ground, 4);",
+   "new": "bool solid = !close_to(c, ground, 400);",
    "build": "test_hud_art",
    "test": "./build/tests/test_app/test_hud_art",
    "expect": "[window-model]"
@@ -443,10 +443,10 @@
    "expect": "[windows-draw]"
   },
   {
-   "id": "fullscreen_never_shows_the_leave_picture",
+   "id": "fullscreen_shows_the_leave_picture_the_wrong_way_round",
    "file": "src/ants_app/hud_windows.cpp",
    "old": "(fullscreen_on_ ? kLeave : kEnter)[state]",
-   "new": "kEnter[state]",
+   "new": "(!fullscreen_on_ ? kLeave : kEnter)[state]",
    "build": "test_hud_art",
    "test": "./build/tests/test_app/test_hud_art",
    "expect": "[windows-draw]"

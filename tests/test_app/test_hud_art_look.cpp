@@ -403,6 +403,9 @@ void test_windows(const assets::AssetArchive& arc, const Art& art) {
             rig.hud.handle_mouse_motion(fb.x - 30, fb.y + 100, rig.sim, rig.cam);
             rig.hud.handle_mouse_up(fb.x - 30, fb.y + 100, SDL_BUTTON_LEFT, rig.sim, rig.cam);
             check(calls == 1, at + "new art: a press on it and a release away from it acts on nothing");
+            rig.hud.handle_mouse_down(fb.x + 5, fb.y + 5, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+            rig.hud.handle_mouse_up(fb.x - 30, fb.y + 100, SDL_BUTTON_LEFT, rig.sim, rig.cam);          // (a release that comes with no move before it, as a lifted finger does)
+            check(calls == 1 && !rig.hud.fullscreen_button().is_pressed, at + "new art: ...also when the release is the first news of the pointer away from the button");
             rig.hud.handle_mouse_down(fb.x + 5, fb.y + 5, SDL_BUTTON_RIGHT, rig.sim, rig.cam);
             rig.hud.handle_mouse_up(fb.x + 5, fb.y + 5, SDL_BUTTON_RIGHT, rig.sim, rig.cam);
             check(calls == 1, at + "new art: the right button does not act on it");
