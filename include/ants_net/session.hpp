@@ -482,7 +482,7 @@ public:
     static constexpr uint32_t kAskGraceMs = 3000;
 
     void set_on_chat(std::function<void(const ChatMsg&)> fn) { on_chat_ = std::move(fn); }
-    /// Protocol 25: every Hint, IceConfig, P2pPeers and Signal that the host sends while this machine follows the match, whole (the owner decodes it: p2p.hpp). Never called for another message.
+    /// Protocol 25: every Hint, IceConfig, P2pPeers and Signal that the host sends while this machine follows the match, whole (the caller decodes it: p2p.hpp). Never called for another message.
     void set_on_p2p(std::function<void(const std::vector<uint8_t>&)> fn) { on_p2p_ = std::move(fn); }
     /// Sends a P2pConfig or a Signal (an encoded message of p2p.hpp) to the host. False when there is no host to send it to (a new one is being chosen, the machine reconnects or catches up)
     bool send_p2p(const std::vector<uint8_t>& message);

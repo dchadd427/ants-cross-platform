@@ -192,7 +192,7 @@ void ClientSession::poll_host(uint32_t now_ms) {
             case MsgType::Hint:
             case MsgType::IceConfig:
             case MsgType::P2pPeers:
-            case MsgType::Signal:                    // hints and channels (protocol 25): the owner decodes them; they are no part of the match
+            case MsgType::Signal:                    // hints and channels (protocol 25): the caller decodes them; they are no part of the match
                 if (on_p2p_) on_p2p_(msg);
                 break;
             default:
