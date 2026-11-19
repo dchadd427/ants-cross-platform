@@ -234,6 +234,8 @@ COPY web/map_files.js /usr/share/nginx/html/map_files.js
 
 # The countdown's Fullscreen button (docs/MATCH_COUNTDOWN.md): the game page lays it over the card that opens a match of two or more people (countdown_button.js)
 COPY web/countdown_button.js /usr/share/nginx/html/countdown_button.js
+# The HUD's own Fullscreen button (docs/VIEW_AND_HUD.md): the page does the fullscreen when the game says that the click was on it (hud_fullscreen.js)
+COPY web/hud_fullscreen.js /usr/share/nginx/html/hud_fullscreen.js
 
 # The screen stays on while a match is played or a recording plays (docs/PLAY_IN_BROWSER.md "The screen stays on"): the game page asks the browser for a Screen Wake Lock (wake_lock.js)
 COPY web/wake_lock.js /usr/share/nginx/html/wake_lock.js

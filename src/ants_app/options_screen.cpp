@@ -2,6 +2,7 @@
 
 #include "ants_app/text_layout.hpp"
 #include "ants_app/ui_anim.hpp"
+#include "ants_app/window_art.hpp"
 #include "ants_sim/game_strings.hpp"
 
 namespace ants::app {
@@ -107,6 +108,8 @@ void OptionsScreen::open(uint32_t now_ms) {
 // The window's dispatch gives every control the pointer first (the move handlers), then the event, in the order of the list
 void OptionsScreen::on_move(int32_t x, int32_t y) {
     if (!open_) return;
+    pointer_x_ = x;
+    pointer_y_ = y;
     return_.on_move(x, y);
     for (ScreenSlider& s : sliders_) s.on_move(x, y);
     chat_on_.on_move(x, y);
@@ -198,8 +201,44 @@ void OptionsScreen::draw_edit(IRenderer& renderer, const ScreenEdit& edit, uint3
     draw_edit_line(renderer, edit.text(), edit.x(), edit.y(), edit.w(), edit.tail_aligned(), edit.caret_visible(now_ms), kEditColor, kEditFont);
 }
 
-void OptionsScreen::render(IRenderer& renderer, const assets::AssetArchive& assets, uint32_t now_ms) {
+// The window in the new look: the set's panel and lettering where the original's composite is, and the set's pictures for the controls, at the places and with the states of the original's
+// (the original's own pictures are the fallback of the caller: it passes the art only when the set has every piece, window_art::check). The latching pairs show a chosen switch sunk and lit, and
+// one that is only held sunk and plain; the thumb of a slider has a hover picture and a held one; the field with the focus has a thin gold line round its ground.
+void OptionsScreen::render_new(IRenderer& renderer, const hud_art::Art& art, uint32_t now_ms) {
+    const ScreenLayout own = ScreenLayout::classic();                       // (the pieces are in the window's own numbers: no anchor moves them)
+    hud_art::draw_all(renderer, art, hud_art::panel_draws(art, window_art::kOptionsRect));
+    hud_art::draw_animation(renderer, art, "op_window", 0, own);
+    const auto control = [&](const char* name) { hud_art::draw_animation(renderer, art, name, 0, own); };
+    control(return_.pressed() ? "breturn3" : (return_.hovered() ? "breturn2" : "breturn1"));
+    for (size_t i = 0; i < sliders_.size(); ++i) {
+        const ScreenSlider& s = sliders_[i];
+        const bool over = pointer_x_ >= s.thumb_left() && pointer_x_ < s.thumb_left() + ScreenSlider::THUMB_W + 3 && pointer_y_ >= s.thumb_top() && pointer_y_ < s.thumb_top() + 16;
+        const int32_t sprite = art.find_sprite(s.dragging() ? "op_thumb_held" : (over ? "op_thumb_hover" : "op_thumb_up"));
+        if (const hud_art::Sprite* sp = art.sprite_at(sprite)) hud_art::draw_all(renderer, art, {hud_art::Draw{sprite, LayoutRect{s.thumb_left(), s.thumb_top(), sp->w, sp->h}, LayoutRect{0, 0, sp->w, sp->h}}});
+    }
+    struct Switch {
+        const ScreenToggle& toggle;
+        const ToggleArt& names;
+        const char* held;
+    };
+    for (const Switch& sw : {Switch{chat_on_, kChatOnArt, "op_conh"}, Switch{chat_off_, kChatOffArt, "op_coffh"}, Switch{help_on_, kHelpOnArt, "op_honh"}, Switch{help_off_, kHelpOffArt, "op_hoffh"}}) {
+        const ScreenToggle::Art state = sw.toggle.art();
+        const bool held = !sw.toggle.latched() && (state == ScreenToggle::Art::Down || state == ScreenToggle::Art::DownHover);     // pressed, not yet chosen
+        control(held ? sw.held : art_name(sw.names, state));
+    }
+    static constexpr int32_t kGround[4][2] = {{89, 370}, {89, 401}, {298, 370}, {298, 401}};                    // the dark ground of each field (144 x 15), where the original's picture of it stands
+    for (size_t i = 0; i < edits_.size(); ++i) {
+        draw_edit(renderer, edits_[i], now_ms);
+        if (edits_[i].focused()) renderer.draw_rect(kGround[i][0], kGround[i][1], 144, 15, assets::ColorRGBA{243, 219, 55, 255});
+    }
+}
+
+void OptionsScreen::render(IRenderer& renderer, const assets::AssetArchive& assets, uint32_t now_ms, const hud_art::Art* art) {
     if (!open_) return;
+    if (art != nullptr) {
+        render_new(renderer, *art, now_ms);
+        return;
+    }
 
     // The window's picture: the op_screen composite (210 parts; it carries its own dither around the card)
     const auto* anim = assets.find_animation("op_screen");

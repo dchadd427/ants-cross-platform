@@ -5,7 +5,7 @@ usage: make_hud_art.py [--out DIR] [--work DIR] [--chrome PROGRAM]
 
     python3 tools/hud_art/make_hud_art.py                  writes assets/hud_art/sheet_1x.png, sheet_2x.png, sheet_3x.png and hud_art.txt
 
-Needs Python 3 with Pillow and numpy, and Google Chrome or Chromium (headless; it renders the SVG pieces). About half a minute. The scratch files go to --work (default: a folder of the
+Needs Python 3 with Pillow and numpy, and Google Chrome or Chromium (headless; it renders the SVG pieces). About a minute. The scratch files go to --work (default: a folder of the
 system's temporary folder, or ANTS_HUD_ART_WORK); nothing else is written.
 """
 import argparse

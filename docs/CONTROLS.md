@@ -237,7 +237,7 @@ The keyboard is the original's ([Camera & Hotkeys](#camera--hotkeys)), plus the 
 
 - **`F2` / `F3`** vote while another player of a server's room has lost the connection, and **`Esc`** asks the quit question while this machine's own connection is lost (both are in the table below).
 - **`T`** opens the chat line in the waiting room of a network match ([In a network room](#in-a-network-room)).
-- **`Alt+Enter`** (native builds) belongs to the window and not to the game: it switches fullscreen on and off, as `--fullscreen` starts it ([`COMMAND_LINE.md`](COMMAND_LINE.md)). No screen sees that key (`Enter` alone is still START and the chat's send), and a held key toggles once. The web page has its own button.
+- **`Alt+Enter`** (native builds) belongs to the window and not to the game: it switches fullscreen on and off, as `--fullscreen` starts it ([`COMMAND_LINE.md`](COMMAND_LINE.md)). No screen sees that key (`Enter` alone is still START and the chat's send), and a held key toggles once. The web page has its own button. The match screen has one too, a small button right of Quit that does the same ([`VIEW_AND_HUD.md`](VIEW_AND_HUD.md#the-fullscreen-button)).
 
 There is no team switching: you play the team that `--player N` or `-pnum=N` gives you, or your seat in a network match. In a local game the other three colors stand still, unless you seat computer players with `--bot` or in the start menu's Single player rows. There is no tile grid or music mute key and no screenshot key (`--show-grid` and `--screenshot FILE` are command-line options), and no Space, arrow or letter hotkeys.
 

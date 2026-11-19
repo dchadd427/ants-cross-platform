@@ -2,6 +2,7 @@
 #include "ants_app/hud_art.hpp"
 
 #include <algorithm>
+#include <climits>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -295,6 +296,91 @@ std::vector<Draw> animation_draws(const Art& art, const std::string& name, size_
     const Animation* a = art.find_animation(name);
     if (a == nullptr || frame >= a->frames.size()) return {};
     return frame_part_draws(art, a->frames[frame], layout);
+}
+
+std::vector<Draw> animation_draws_at(const Art& art, const std::string& name, size_t frame, int32_t dx, int32_t dy) {
+    std::vector<Draw> out;
+    const Animation* a = art.find_animation(name);
+    if (a == nullptr || frame >= a->frames.size()) return out;
+    for (const Part& part : a->frames[frame].parts) {
+        const Sprite* s = art.sprite_at(part.sprite);
+        if (s == nullptr) continue;
+        out.push_back(Draw{part.sprite, LayoutRect{part.x + dx, part.y + dy, s->w, s->h}, LayoutRect{0, 0, s->w, s->h}});
+    }
+    return out;
+}
+
+LayoutRect animation_bounds(const Art& art, const std::string& name, size_t frame) {
+    const Animation* a = art.find_animation(name);
+    if (a == nullptr || frame >= a->frames.size() || a->frames[frame].parts.empty()) return LayoutRect{};
+    int32_t x0 = INT32_MAX, y0 = INT32_MAX, x1 = INT32_MIN, y1 = INT32_MIN;
+    for (const Part& part : a->frames[frame].parts) {
+        const Sprite* s = art.sprite_at(part.sprite);
+        if (s == nullptr) continue;
+        x0 = std::min(x0, part.x);
+        y0 = std::min(y0, part.y);
+        x1 = std::max(x1, part.x + s->w);
+        y1 = std::max(y1, part.y + s->h);
+    }
+    return x1 > x0 && y1 > y0 ? LayoutRect{x0, y0, x1 - x0, y1 - y0} : LayoutRect{};
+}
+
+namespace {
+constexpr const char* kPanelNames[9] = {"panel_tl", "panel_t", "panel_tr", "panel_l", "panel_c", "panel_r", "panel_bl", "panel_b", "panel_br"};
+}
+
+bool has_panel(const Art& art) noexcept {
+    for (const char* name : kPanelNames) {
+        if (art.find_sprite(name) < 0) return false;
+    }
+    return true;
+}
+
+std::vector<Draw> panel_draws(const Art& art, const LayoutRect& rect) {
+    std::vector<Draw> out;
+    if (!has_panel(art)) return out;
+    int32_t id[9];
+    const Sprite* sp[9];
+    for (size_t i = 0; i < 9; ++i) {
+        id[i] = art.find_sprite(kPanelNames[i]);
+        sp[i] = art.sprite_at(id[i]);
+    }
+    const int32_t cw = sp[0]->w;                 // the corner's size: the frame's overlay pieces all start from it
+    const int32_t ch = sp[0]->h;
+    const Sprite& centre = *sp[4];
+    if (rect.w < 2 * cw || rect.h < 2 * ch || centre.w <= 0 || centre.h <= 0) return out;
+    // the clay: the centre tile over the whole rectangle (the frame lies over its edge), the last copy of each row and column cut
+    for (int32_t y = 0; y < rect.h; y += centre.h) {
+        const int32_t h = std::min(centre.h, rect.h - y);
+        for (int32_t x = 0; x < rect.w; x += centre.w) {
+            const int32_t w = std::min(centre.w, rect.w - x);
+            out.push_back(Draw{id[4], LayoutRect{rect.x + x, rect.y + y, w, h}, LayoutRect{0, 0, w, h}});
+        }
+    }
+    const auto along_x = [&](int32_t piece, int32_t y) {          // an edge piece repeated between the two corners
+        const Sprite& s = *sp[piece];
+        for (int32_t x = cw; x < rect.w - cw; x += s.w) {
+            const int32_t w = std::min(s.w, rect.w - cw - x);
+            out.push_back(Draw{id[piece], LayoutRect{rect.x + x, rect.y + y, w, s.h}, LayoutRect{0, 0, w, s.h}});
+        }
+    };
+    const auto along_y = [&](int32_t piece, int32_t x) {
+        const Sprite& s = *sp[piece];
+        for (int32_t y = ch; y < rect.h - ch; y += s.h) {
+            const int32_t h = std::min(s.h, rect.h - ch - y);
+            out.push_back(Draw{id[piece], LayoutRect{rect.x + x, rect.y + y, s.w, h}, LayoutRect{0, 0, s.w, h}});
+        }
+    };
+    along_x(1, 0);
+    along_x(7, rect.h - sp[7]->h);
+    along_y(3, 0);
+    along_y(5, rect.w - sp[5]->w);
+    const auto corner = [&](int32_t piece, int32_t x, int32_t y) { out.push_back(Draw{id[piece], LayoutRect{rect.x + x, rect.y + y, sp[piece]->w, sp[piece]->h}, LayoutRect{0, 0, sp[piece]->w, sp[piece]->h}}); };
+    corner(0, 0, 0);
+    corner(2, rect.w - sp[2]->w, 0);
+    corner(6, 0, rect.h - sp[6]->h);
+    corner(8, rect.w - sp[8]->w, rect.h - sp[8]->h);
+    return out;
 }
 
 std::vector<Draw> cursor_draws(const Art& art, const Animation& cursor, size_t frame, int32_t x, int32_t y) {

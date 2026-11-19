@@ -302,6 +302,11 @@ void test_cursor_damaged(const assets::AssetArchive& arc, const hud_art::Art& ar
 void test_slices();
 void test_scale();
 void test_unusable();
+void test_panel(const hud_art::Art& art);
+void test_window_pieces(const assets::AssetArchive& arc, const hud_art::Art& art);
+void test_window_model(const assets::AssetArchive& arc);
+void test_windows(const assets::AssetArchive& arc, const hud_art::Art& art);
+void test_windows_more(const assets::AssetArchive& arc, const hud_art::Art& art);
 
 int main(int argc, char* argv[]) {
     (void)argc;
@@ -319,6 +324,9 @@ int main(int argc, char* argv[]) {
         std::fprintf(stderr, "cannot open ants.chd or the HUD art\n");
         return 2;
     }
+    test_panel(art);
+    test_window_pieces(arc, art);
+    test_window_model(arc);
     test_look(arc, art);
     test_classic(arc, art);
     test_pieces(arc, art);
@@ -326,6 +334,8 @@ int main(int argc, char* argv[]) {
     test_cursor_draw(arc, art);
     test_cursor_classic(arc, art);
     test_cursor_damaged(arc, art);
+    test_windows(arc, art);
+    test_windows_more(arc, art);
     std::printf("\nhud art: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

@@ -223,6 +223,11 @@ bool HUD::handle_mouse_down(int32_t x, int32_t y, uint8_t button,
         play_sfx(sim::SoundID::ButtonClick);
         return true;
     }
+    if (fullscreen_button_.contains(x, y)) {                // (the button right of Quit: the same class of button, the same sound)
+        fullscreen_button_.is_pressed = true;
+        play_sfx(sim::SoundID::ButtonClick);
+        return true;
+    }
 
     // The command pedestals fire on the press outside the map rectangle (FUN_010274be)
     if (pedestal_press(sim, x, y)) return true;
@@ -271,11 +276,13 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
     const bool fire_help = left_release && help_button_.is_pressed && help_button_.contains(x, y);
     const bool fire_options = left_release && options_button_.is_pressed && options_button_.contains(x, y);
     const bool fire_quit = left_release && quit_button_.is_pressed && quit_button_.contains(x, y);
+    const bool fire_fullscreen = left_release && fullscreen_button_.is_pressed && fullscreen_button_.contains(x, y);
     const bool fire_all = left_release && options_.state().chat && send_to_button_.is_pressed && send_to_button_.contains(x, y);
     const bool fire_team = left_release && options_.state().chat && is_on_team_ && team_button_.is_pressed && team_button_.contains(x, y);
     help_button_.is_pressed = false;
     options_button_.is_pressed = false;
     quit_button_.is_pressed = false;
+    fullscreen_button_.is_pressed = false;
     move_pedestal_button_.is_pressed = false;
     ability_pedestal_button_.is_pressed = false;
     stop_button_.is_pressed = false;
@@ -347,6 +354,10 @@ bool HUD::handle_mouse_up(int32_t x, int32_t y, uint8_t button,
             if (fire_help) open_quick_help();
             else if (fire_options) open_options();
             else if (fire_quit) open_quit_dialog();
+            else if (fire_fullscreen) {
+                ++fullscreen_clicks_;
+                if (on_fullscreen_) on_fullscreen_();
+            }
             else if (fire_all) send_chat(false);
             else if (fire_team) send_chat(true);
         }
@@ -372,7 +383,7 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
                               [[maybe_unused]] sim::SimulationEngine& sim, [[maybe_unused]] ViewportCamera& camera) {
     mouse_x_ = x;
     mouse_y_ = y;
-    for (UIButton* b : {&help_button_, &options_button_, &quit_button_, &send_to_button_, &team_button_}) {
+    for (UIButton* b : {&help_button_, &options_button_, &quit_button_, &fullscreen_button_, &send_to_button_, &team_button_}) {
         if (b->is_pressed && !b->contains(x, y)) b->is_pressed = false;      // FUN_01011281: leaving cancels the capture for good
     }
     send_to_button_.is_hovered = send_to_button_.contains(x, y);
@@ -380,6 +391,7 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
     help_button_.is_hovered = help_button_.contains(x, y);
     options_button_.is_hovered = options_button_.contains(x, y);
     quit_button_.is_hovered = quit_button_.contains(x, y);
+    fullscreen_button_.is_hovered = fullscreen_button_.contains(x, y);
 
     const LayoutPoint page = open_window_offset();                        // (the windows and the dialogs: see handle_mouse_down)
     const LayoutPoint modal = layout_.modal_offset();
@@ -434,7 +446,7 @@ bool HUD::handle_mouse_motion(int32_t x, int32_t y,
 void HUD::cancel_press() noexcept {
     release_capture();
     options_.cancel_press();                                // (a slider's drag of the options window ends with no act: nothing is written)
-    for (UIButton* b : {&help_button_, &options_button_, &quit_button_, &send_to_button_, &team_button_, &move_pedestal_button_, &ability_pedestal_button_, &stop_button_, &hatch_button_, &team_up_button_}) {
+    for (UIButton* b : {&help_button_, &options_button_, &quit_button_, &fullscreen_button_, &send_to_button_, &team_button_, &move_pedestal_button_, &ability_pedestal_button_, &stop_button_, &hatch_button_, &team_up_button_}) {
         b->is_pressed = false;
     }
 }
@@ -442,7 +454,7 @@ void HUD::cancel_press() noexcept {
 bool HUD::is_input_captured() const noexcept {
     // [5534] != 0: the map, the minimap (left or right button) or a button holds the mouse; the pedestals do not capture
     return is_dragging_ || is_radar_dragging_ || right_capture_ != 0 || help_button_.is_pressed || options_button_.is_pressed ||
-           quit_button_.is_pressed || send_to_button_.is_pressed || team_button_.is_pressed;
+           quit_button_.is_pressed || fullscreen_button_.is_pressed || send_to_button_.is_pressed || team_button_.is_pressed;
 }
 
 // The step of the edge scroll for the camera's zoom (edge_scroll.hpp): the origin and the map in SCREEN pixels at the zoom, the step in screen pixels. At the zoom 1 these are the

@@ -275,6 +275,15 @@ public:
         (void)text; (void)x; (void)y; (void)box_w; (void)ink_h; (void)align; (void)color; (void)outlined;
         return false;
     }
+    /// The face of the new windows' sentences (Libre Baskerville, docs/VIEW_AND_HUD.md "Windows"): true when this renderer has it. Sizes are the letters' em in TENTHS of a canvas pixel (200: 20 px).
+    /// A renderer without the face (the test renderers that only record, a build without the face's file) says false and the window's sentences are drawn the original's way.
+    virtual bool dialog_text_ready() const { return false; }
+    /// The width of a line in canvas pixels (0 when there is no face)
+    virtual int32_t dialog_text_width(const std::string& text, int32_t em_tenths) const { (void)text; (void)em_tenths; return 0; }
+    /// A line of the face with its first letter's left edge at `x` and its baseline at `baseline`, in `color` with a pale edge below and right (pressed into the clay)
+    virtual void draw_dialog_text(const std::string& text, int32_t x, int32_t baseline, ants::assets::ColorRGBA color, int32_t em_tenths) {
+        (void)text; (void)x; (void)baseline; (void)color; (void)em_tenths;
+    }
     /// Restricts everything that is drawn afterwards to a rectangle until clear_clip_rect(): the original draws a label into a surface of the label's own
     /// size, so what sticks out of the box (the half line at the edge of the chat log) is not seen. A renderer without clipping draws it all.
     virtual void set_clip_rect(int32_t x, int32_t y, int32_t w, int32_t h) { (void)x; (void)y; (void)w; (void)h; }
@@ -286,6 +295,16 @@ public:
             for (int32_t i = 0; i < w; ++i) {
                 const uint8_t* px = rgba + (static_cast<size_t>(j) * static_cast<size_t>(w) + static_cast<size_t>(i)) * 4u;
                 fill_rect(x + i, y + j, 1, 1, ants::assets::ColorRGBA{px[0], px[1], px[2], px[3]});
+            }
+        }
+    }
+    /// The same for a picture whose pixels may be see-through (alpha 0 .. 255 laid over what is there): the windows' pictures that the game cuts out of the original's bitmaps and the pieces of the original's
+    /// corner. The default draws a pixel at a time, as draw_rgba_image's does.
+    virtual void draw_rgba_blended(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) {
+        for (int32_t j = 0; j < h; ++j) {
+            for (int32_t i = 0; i < w; ++i) {
+                const uint8_t* px = rgba + (static_cast<size_t>(j) * static_cast<size_t>(w) + static_cast<size_t>(i)) * 4u;
+                if (px[3] != 0) fill_rect(x + i, y + j, 1, 1, ants::assets::ColorRGBA{px[0], px[1], px[2], px[3]});
             }
         }
     }
@@ -479,6 +498,7 @@ public:
     /// The HUD art's sheets are made into textures when a piece is first drawn (the sheet of the output's scale: hud_art.hpp Art::scale_for), and kept until another set is drawn. Linear filter when
     /// the output's scale is not the sheet's (a window of another size), nearest when it is (a copy that is exact). (renderer_art.cpp)
     void draw_art(const hud_art::Art& art, int32_t sprite, int32_t x, int32_t y, int32_t w, int32_t h, int32_t sx, int32_t sy, int32_t sw, int32_t sh) override;
+    void draw_rgba_blended(int32_t x, int32_t y, int32_t w, int32_t h, const uint8_t* rgba) override;
     /// Makes the texture of the sheet that the output needs now, so that the first frame that draws a piece of `art` does not wait for the file's decoding (the window's scale may change later: the
     /// sheet of the new scale is then made when it is first needed). False when the sheet cannot be read or decoded, or the device cannot make it a texture: nothing of the art can be drawn then, and
     /// the application gives the HUD the original's art (Application::check_hud_art). Asked again, it does not read the file again.
@@ -501,6 +521,12 @@ public:
     /// The TrueType point size (at the 2x supersampling of draw_text) whose cell height in the 640 x 480 canvas is `cell_px`, for a font whose
     /// ascent + descent is `cell_ratio` em
     static int32_t ttf_point_size(int32_t cell_px, double cell_ratio) noexcept;
+    bool dialog_text_ready() const override;
+    int32_t dialog_text_width(const std::string& text, int32_t em_tenths) const override;
+    void draw_dialog_text(const std::string& text, int32_t x, int32_t baseline, ants::assets::ColorRGBA color, int32_t em_tenths) override;
+    /// The file of the windows' face (the application gives the one that ships with the HUD art); empty or a file that does not open: no face
+    void set_dialog_font_path(const std::string& path);
+    const std::string& dialog_font_path() const noexcept { return dialog_path_; }
     void set_hud_team(uint8_t team_id) override { hud_team_id_ = team_id; }
     void set_clip_rect(int32_t x, int32_t y, int32_t w, int32_t h) override;
     void clear_clip_rect() override;
@@ -670,6 +696,11 @@ private:
         }
     };
 
+    mutable int8_t dialog_face_ok_{-1};                           // whether that file opens: -1 not asked, 0 no, 1 yes
+    mutable std::unordered_map<int32_t, TTF_Font*> dialog_fonts_;  // by em in tenths of a pixel, opened at twice the size (the 2x supersampling of draw_text)
+    std::unordered_map<std::string, CachedTextEntry> dialog_cache_;
+    TTF_Font* dialog_font(int32_t em_tenths) const;
+    void drop_dialog_fonts();
     static constexpr size_t kFontSizes = 8;          // the enumerators of FontSize
     static size_t font_index(FontSize size) noexcept;
     TTF_Font* font_for(FontSize size) const noexcept { return fonts_[font_index(size)]; }
@@ -679,6 +710,7 @@ private:
     std::unordered_map<TextCacheKey, CachedTextEntry, TextCacheKeyHash> text_cache_;
 #endif
 
+    std::string dialog_path_;                              // the windows' face (set_dialog_font_path)
     SDL_Renderer* renderer_{nullptr};
     SDL_Texture* rgba_texture_{nullptr};   // streaming texture for draw_rgba_image
     uint64_t art_generation_{0};                           // the HUD art that art_textures_ were made from (hud_art::Art::generation; 0: none)
@@ -691,6 +723,7 @@ private:
     SDL_Texture* art_texture(const hud_art::Art& art, int32_t scale);
     int32_t art_scale_for_output(double* output_scale = nullptr) const;
     std::array<SDL_Texture*, 12> fixed_glyphs_{};   // draw_fixed_text: '0' .. '9', '-' and '+', built on first use
+    std::unordered_map<uint64_t, SDL_Texture*> blend_textures_;   // draw_rgba_blended: one for each different picture (by what it holds)
     int32_t rgba_texture_w_{0};
     int32_t rgba_texture_h_{0};
     const ants::assets::AssetArchive* archive_{nullptr};

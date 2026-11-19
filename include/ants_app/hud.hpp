@@ -22,6 +22,7 @@
 #include "ants_app/screen_layout.hpp"
 #include "ants_app/shell_layout.hpp"
 #include "ants_app/status_line.hpp"
+#include "ants_app/window_art.hpp"
 
 namespace ants::app {
 
@@ -127,6 +128,19 @@ public:
     /// original's own art exactly as it always was. Not owned: the art outlives the HUD, or is taken away (null) first. Look only: no rectangle, no hit zone and no timing of the game changes.
     void set_art(const hud_art::Art* art);
     const hud_art::Art* art() const noexcept { return art_; }
+
+    /// The Fullscreen button right of Quit (docs/VIEW_AND_HUD.md, "The Fullscreen button"): a small button in both looks, where the three buttons of the top bar stand 8 pixels further left to make room
+    /// for it. It exists in every picture but the original's own (the classic 640 x 480 picture with the original's art, which stays exactly as it was). `set_fullscreen_state` tells it whether the game is
+    /// full screen now (its picture is then the one that leaves); a click calls the function that set_on_fullscreen gave.
+    const UIButton& fullscreen_button() const noexcept { return fullscreen_button_; }
+    void set_fullscreen_state(bool on) noexcept { fullscreen_on_ = on; }
+    bool fullscreen_state() const noexcept { return fullscreen_on_; }
+    /// True when the three buttons and the Fullscreen button stand in the moved places (every picture but the original's own with the original's art)
+    bool top_buttons_moved() const noexcept { return art_ != nullptr || !layout_.is_classic(); }
+    /// True while a click on the Fullscreen button would act: the button is there and no window or card of the match covers it (the web page asks: ants_probe 75)
+    bool fullscreen_button_active() const noexcept;
+    /// How many times the Fullscreen button has acted (a press and a release on it): the web page, which does the fullscreen itself, counts them (ants_probe 76)
+    uint32_t fullscreen_clicks() const noexcept { return fullscreen_clicks_; }
 
     // Mouse & Keyboard Input Dispatch
     bool handle_mouse_down(int32_t x, int32_t y, uint8_t button,
@@ -266,7 +280,7 @@ public:
     /// May a touch screen's two fingers move and zoom the view now? As view_zoom_allowed, except that the press that the first finger holds on the map view itself (a rubber band, the right
     /// button's press there) is no reason to refuse: the gesture ends it (cancel_press). Any other press (a button, the minimap, the chat log) still is.
     bool view_gesture_allowed() const noexcept {
-        return !is_modal_open() && !chat_dragging_ && !is_radar_dragging_ && right_capture_ != 2 && !help_button_.is_pressed && !options_button_.is_pressed && !quit_button_.is_pressed &&
+        return !is_modal_open() && !chat_dragging_ && !is_radar_dragging_ && right_capture_ != 2 && !help_button_.is_pressed && !options_button_.is_pressed && !quit_button_.is_pressed && !fullscreen_button_.is_pressed &&
                !send_to_button_.is_pressed && !team_button_.is_pressed;
     }
     /// A replay is for looking: the picture is not a place to click. With this on nothing can be picked (no click, no drag box, no corner marks, no Move and Stop buttons, no order markers, no
@@ -497,6 +511,17 @@ private:
     /// clear) and the local team has not dropped out itself
     bool ally_pedestal_possible(const sim::WorldState& world) const;
     void render_quick_help(IRenderer& renderer, const assets::AssetArchive& assets);
+    // The windows in the new look (hud_windows.cpp): each draws the set's pieces when the set has every piece of the window and the original's otherwise
+    const window_art::Pieces& window_pieces(const assets::AssetArchive& assets);
+    void draw_dialog_frame(IRenderer& renderer, const assets::AssetArchive& assets);
+    void draw_dialog_button(IRenderer& renderer, const assets::AssetArchive& assets, const char* name, int32_t x, int32_t y);
+    void draw_dialog_sentence(IRenderer& renderer, const assets::AssetArchive& assets, const std::string& text, const window_art::SentenceStyle& style, int32_t original_x, int32_t original_y,
+                              int32_t original_w, FontSize original_size);
+    void render_quick_help_new(IRenderer& renderer, const assets::AssetArchive& assets);
+    void render_match_countdown_new(IRenderer& renderer, const assets::AssetArchive& assets);
+    void render_veil(IRenderer& renderer);                 // the new look's dim behind the options window (a see-through dark fill over the picture but the card)
+    void draw_top_buttons_corner(IRenderer& renderer, const assets::AssetArchive& assets);
+    void draw_fullscreen_button(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_options_dim(IRenderer& renderer);          // a bigger picture: the checker dither over everything outside the options card, as the original's pieces do in its own picture
     void render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets);
     void render_marquee_box(IRenderer& renderer);
@@ -610,6 +635,17 @@ private:
     PedestalSlot left_pedestal_;
     PedestalSlot right_pedestal_;
     const hud_art::Art* art_{nullptr};            // the HUD art, null: the original's
+    window_art::Pieces pieces_{};                 // which windows that art draws in the new look (window_pieces: found when first asked, after the art or the archive changes)
+    const assets::AssetArchive* pieces_archive_{nullptr};
+    uint64_t pieces_generation_{0};
+    bool pieces_known_{false};
+    window_art::KeptPictures kept_pictures_;      // the pictures of the original's quick help that the new window keeps (cut out when first drawn)
+    bool kept_pictures_built_{false};
+    window_art::ClassicCorner classic_corner_;    // the Classic look's corner with the Fullscreen button (cut from the original's sprites when first drawn)
+    bool classic_corner_built_{false};
+    UIButton fullscreen_button_{};
+    bool fullscreen_on_{false};
+    uint32_t fullscreen_clicks_{0};
     std::vector<hud_art::Draw> art_frame_;        // the pieces of its frame at the layout's shape
     uint32_t (*ticks_fn_)(){nullptr}; // millisecond clock (SDL_GetTicks when null); tests inject a fixed clock
 

@@ -17,6 +17,8 @@
 // slice) makes the piece itself longer: along `axis` the first `start` pixels are kept, the run [tile from, tile to) is repeated (the last copy cut) and the last `end` pixels are kept.
 // An animation marked `cursor` is one of the original's pointers (c_normal, c_attack, CUR_N ...): the place of each of its pieces is where the sprite's upper left corner goes from the click point
 // (the original's own offset for that frame), the anchors do not apply, and the piece has the size of the original's sprite. cursor_fits() says whether a replacement keeps all of that.
+// The windows over the match (docs/VIEW_AND_HUD.md, "Windows") use the same files: the panel is nine sprites (panel_draws), a window's fixed pieces are one animation whose parts stand in the window's own
+// numbers (animation_draws_at moves them to where a window is), and window_art.hpp says which windows a set can draw.
 
 #include <array>
 #include <cstddef>
@@ -178,6 +180,21 @@ size_t frame_at(const Animation& animation, uint32_t ms) noexcept;
 /// True when `art` replaces a cursor without moving its click point: it is marked `cursor`, has the original's number of frames, and in each the original's time and one piece of the original's size at the
 /// original's offset from the click point. A replacement that does not fit is not drawn (the original's cursor is).
 bool cursor_fits(const Art& art, const Animation& art_cursor, const std::vector<OriginalCursorFrame>& original) noexcept;
+
+/// The copies of one frame of an animation with every part moved by (dx, dy), anchors ignored: the pieces of a window that stands where the caller puts it (the countdown card's numbers are
+/// the card's own, and the card is in the middle of the map view)
+std::vector<Draw> animation_draws_at(const Art& art, const std::string& name, size_t frame, int32_t dx, int32_t dy);
+
+/// The pieces of a window's panel (docs/VIEW_AND_HUD.md, "Windows"): the nine sprites panel_tl, panel_t, panel_tr, panel_l, panel_c, panel_r, panel_bl, panel_b and panel_br make a panel of any size
+/// at or above twice the corner's size. The centre tile (opaque: the clay with its tooth) is repeated over the whole rectangle from its top left, the last copy cut; the frame's pieces lie over
+/// it, as overlays: the edges repeated along their sides, the last copy cut, and the four corners. Empty when the set has no panel (has_panel) or the rectangle is smaller than the two corners.
+std::vector<Draw> panel_draws(const Art& art, const LayoutRect& rect);
+
+/// True when the manifest has all nine pieces of the panel
+bool has_panel(const Art& art) noexcept;
+
+/// The rectangle that the parts of one frame of an animation cover together, at the places the manifest gives (anchors ignored); an empty rectangle when the animation or the frame is missing
+LayoutRect animation_bounds(const Art& art, const std::string& name, size_t frame);
 
 /// Draws copies through the renderer
 void draw_all(IRenderer& renderer, const Art& art, const std::vector<Draw>& draws);

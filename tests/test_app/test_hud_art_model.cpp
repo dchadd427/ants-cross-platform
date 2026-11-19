@@ -1,4 +1,5 @@
 // The HUD art, the model's part, continued (see test_hud_art.cpp): the manifest, the frame at every shape, the nine-slice and the choice of the sheet.
+#include <set>
 #include "hud_art_fixtures.hpp"
 
 namespace {
@@ -145,8 +146,10 @@ void test_manifest() {
     assets::AssetArchive arc;
     if (arc.load_chd(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd")) arc_ptr = &arc;
     check(arc_ptr != nullptr, "the original's archive is read");
+    // the set's own animations: the pieces of its windows that the original draws in another way (a switch held down, the window's fixed pieces, the countdown card's); every other is one of the original's
+    const std::set<std::string> own = {"op_conh", "op_coffh", "op_honh", "op_hoffh", "op_window", "qh_window", "cd_card"};
     for (const hud_art::Animation& a : art.animations()) {
-        check(arc_ptr != nullptr && arc.find_animation(a.name) != nullptr, "the art's animation " + a.name + " is one of the original's (a name that the game knows)");
+        check(own.count(a.name) != 0 || (arc_ptr != nullptr && arc.find_animation(a.name) != nullptr), "the art's animation " + a.name + " is one of the original's (a name that the game knows) or one of the windows' own");
         for (const hud_art::Frame& f : a.frames) {
             check(f.ms > 0 && !f.parts.empty(), "a frame of " + a.name + " has a time and a piece");
         }
@@ -234,7 +237,7 @@ void test_frame() {
             const char* animation;
             LayoutRect zone;
         };
-        const Zone zones[] = {{"buthlpu", {layout.right(476), 7, 46, 23}}, {"butoptu", {layout.right(525), 7, 52, 23}}, {"butqitu", {layout.right(579), 7, 46, 23}},
+        const Zone zones[] = {{"buthlpu", {layout.right(476 - 8), 7, 46, 23}}, {"butoptu", {layout.right(525 - 8), 7, 52, 23}}, {"butqitu", {layout.right(579 - 8), 7, 46, 23}},       // (8 pixels left of the original's: room for the Fullscreen button)
                               {"butallu", {layout.right(532), layout.bottom(443), 44, 24}}, {"butalsu", {layout.right(579), layout.bottom(443), 46, 24}}};
         for (const Zone& z : zones) {
             const std::vector<Draw> d = hud_art::animation_draws(art, z.animation, 0, layout);
@@ -451,4 +454,210 @@ void test_unusable() {
     std::error_code ignored;
     for (const std::string& folder : g_cut_folders) std::filesystem::remove_all(folder, ignored);
     g_cut_folders.clear();
+}
+
+// ---- the windows' pieces (docs/VIEW_AND_HUD.md, "Windows") --------------------------------------------------------------------------------------------------------------------
+
+namespace {
+
+std::string shipped_manifest() {
+    std::ifstream f(art_folder() + "/hud_art.txt");
+    return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+}
+
+/// The manifest without the first record whose line starts with `prefix`
+std::string without_record(const std::string& text, const std::string& prefix) {
+    const size_t at = text.find("\n" + prefix);
+    if (at == std::string::npos) return text;
+    const size_t end = text.find('\n', at + 1);
+    return text.substr(0, at) + text.substr(end == std::string::npos ? text.size() : end);
+}
+
+/// The manifest without an animation and its frames
+std::string without_anim(const std::string& text, const std::string& name) {
+    const size_t at = text.find("\nanim " + name + "\n");
+    if (at == std::string::npos) return text;
+    size_t end = at + 1;
+    for (;;) {
+        end = text.find('\n', end);
+        if (end == std::string::npos) return text.substr(0, at);
+        end += 1;
+        if (text.compare(end, 6, "frame ") != 0) break;
+    }
+    return text.substr(0, at) + "\n" + text.substr(end);
+}
+
+std::string replaced(const std::string& text, const std::string& from, const std::string& to) {
+    const size_t at = text.find(from);
+    return at == std::string::npos ? text : text.substr(0, at) + to + text.substr(at + from.size());
+}
+
+window_art::Pieces pieces_of(const std::string& manifest, const assets::AssetArchive& arc) {
+    Art art;
+    if (!art.parse(manifest)) return window_art::Pieces{};
+    return window_art::check(art, arc);
+}
+
+/// How many times every pixel of `rect` is covered by the copies of one sprite (all of them must be one): returns false when a pixel is covered twice or not at all, or a copy leaves the rectangle
+bool covers_once(const std::vector<Draw>& draws, int32_t sprite, const LayoutRect& rect) {
+    std::vector<int> grid(static_cast<size_t>(rect.w) * static_cast<size_t>(rect.h), 0);
+    for (const Draw& d : draws) {
+        if (d.sprite != sprite) continue;
+        if (d.dst.x < rect.x || d.dst.y < rect.y || d.dst.right() > rect.right() || d.dst.bottom() > rect.bottom() || d.dst.w != d.src.w || d.dst.h != d.src.h) return false;
+        for (int32_t y = d.dst.y; y < d.dst.bottom(); ++y) {
+            for (int32_t x = d.dst.x; x < d.dst.right(); ++x) ++grid[static_cast<size_t>(y - rect.y) * static_cast<size_t>(rect.w) + static_cast<size_t>(x - rect.x)];
+        }
+    }
+    return std::all_of(grid.begin(), grid.end(), [](int n) { return n == 1; });
+}
+
+}  // namespace
+
+void test_panel(const Art& art) {
+    group("panel", "the nine pieces make a panel of any size: the clay tile over the whole rectangle once, the frame's pieces along its four sides and in its corners");
+    check(hud_art::has_panel(art), "the shipped art has the nine pieces");
+    const int32_t centre = art.find_sprite("panel_c");
+    const hud_art::Sprite* corner = art.sprite_at(art.find_sprite("panel_tl"));
+    check(corner != nullptr && corner->w == corner->h && corner->w >= 16, "the corner is a square of at least the frame's width");
+    const int32_t c = corner != nullptr ? corner->w : 24;
+    const LayoutRect sizes[] = {{100, 100, 320, 224}, {18, 20, 442, 440}, {0, 0, 640, 480}, {197, 98, 400, 346}, {5, 7, 330, 230}, {0, 0, 2 * c, 2 * c}, {3, 4, 2 * c + 1, 2 * c + 161}};
+    for (const LayoutRect& r : sizes) {
+        const std::string at = std::to_string(r.w) + " x " + std::to_string(r.h) + ": ";
+        const std::vector<Draw> d = hud_art::panel_draws(art, r);
+        check(!d.empty() && covers_once(d, centre, r), at + "the clay tile covers the rectangle exactly once, the last copies cut");
+        // the frame: every piece stays inside the rectangle, the corners stand in the corners, and each edge is covered along its whole side between the corners
+        bool inside = true;
+        for (const Draw& x : d) inside = inside && x.dst.x >= r.x && x.dst.y >= r.y && x.dst.right() <= r.right() && x.dst.bottom() <= r.bottom();
+        check(inside, at + "no piece leaves the rectangle");
+        const auto copies = [&](const char* name) { std::vector<Draw> out; for (const Draw& x : d) if (x.sprite == art.find_sprite(name)) out.push_back(x); return out; };
+        check(copies("panel_tl").size() == 1 && copies("panel_tl")[0].dst.x == r.x && copies("panel_tl")[0].dst.y == r.y, at + "the upper left corner");
+        check(copies("panel_tr").size() == 1 && copies("panel_tr")[0].dst.right() == r.right() && copies("panel_tr")[0].dst.y == r.y, at + "the upper right corner");
+        check(copies("panel_bl").size() == 1 && copies("panel_bl")[0].dst.x == r.x && copies("panel_bl")[0].dst.bottom() == r.bottom(), at + "the lower left corner");
+        check(copies("panel_br").size() == 1 && copies("panel_br")[0].dst.right() == r.right() && copies("panel_br")[0].dst.bottom() == r.bottom(), at + "the lower right corner");
+        int32_t top = 0, bottom = 0, left = 0, right = 0;
+        for (const Draw& x : copies("panel_t")) top += x.dst.w;
+        for (const Draw& x : copies("panel_b")) bottom += x.dst.w;
+        for (const Draw& x : copies("panel_l")) left += x.dst.h;
+        for (const Draw& x : copies("panel_r")) right += x.dst.h;
+        check(top == r.w - 2 * c && bottom == r.w - 2 * c && left == r.h - 2 * c && right == r.h - 2 * c, at + "each edge is drawn along its whole side between the corners, no more");
+    }
+    check(hud_art::panel_draws(art, LayoutRect{0, 0, 2 * c - 1, 2 * c}).empty() && hud_art::panel_draws(art, LayoutRect{0, 0, 2 * c, 2 * c - 1}).empty(), "a rectangle that cannot hold the two corners is no panel");
+    Art bare;
+    check(bare.parse(without_record(shipped_manifest(), "sprite panel_br ")) && !hud_art::has_panel(bare) && hud_art::panel_draws(bare, sizes[0]).empty(), "a set that lacks a piece of the panel draws none");
+}
+
+void test_window_pieces(const assets::AssetArchive& arc, const Art& art) {
+    group("windows", "which windows a set draws: every piece there and each at the original's place, else the window is the original's");
+    const std::string text = shipped_manifest();
+    const window_art::Pieces all = window_art::check(art, arc);
+    check(all.dialogs && all.options && all.quick_help && all.countdown && all.fullscreen, "the shipped art has every window");
+    // a missing animation or sprite takes away its window and no other
+    const struct { const char* what; std::string manifest; bool window_art::Pieces::*gone; } damaged[] = {
+        {"the hover picture of Yes", without_anim(text, "yes2"), &window_art::Pieces::dialogs},
+        {"the Accept button's pressed picture", without_anim(text, "dad_bacc3"), &window_art::Pieces::dialogs},
+        {"the held picture of a switch", without_anim(text, "op_conh"), &window_art::Pieces::options},
+        {"the options window's fixed pieces", without_anim(text, "op_window"), &window_art::Pieces::options},
+        {"the pressed picture of Return to Game (the options window's)", without_anim(text, "breturn3"), &window_art::Pieces::options},
+        {"the quick help's pieces", without_anim(text, "qh_window"), &window_art::Pieces::quick_help},
+        {"the quick help's Return button", without_anim(text, "qh_return2"), &window_art::Pieces::quick_help},
+        {"the countdown card's pieces", without_anim(text, "cd_card"), &window_art::Pieces::countdown},
+        {"the countdown card's seat row", without_record(text, "sprite cd_seat "), &window_art::Pieces::countdown},
+        {"a picture of the Fullscreen button", without_record(text, "sprite button_fullscreen_leave_down "), &window_art::Pieces::fullscreen},
+    };
+    for (const auto& d : damaged) {
+        const window_art::Pieces p = pieces_of(d.manifest, arc);
+        check(!(p.*d.gone), std::string("without ") + d.what + ": that window is the original's");
+        int others = 0;
+        for (const bool b : {p.dialogs, p.options, p.quick_help, p.countdown, p.fullscreen}) others += b ? 1 : 0;
+        check(others == 4, std::string("without ") + d.what + ": the other four windows stay");
+    }
+    check(!pieces_of(without_record(text, "sprite panel_c "), arc).dialogs && !pieces_of(without_record(text, "sprite panel_c "), arc).options, "without the panel no window has the new look");
+    // a piece moved: a pixel is within the original's place, more than that is not
+    const std::string yes = "frame 1000 dlg_btn_yes_up 180 260";
+    check(text.find(yes) != std::string::npos, "(the manifest places the Yes button at the original's place)");
+    check(pieces_of(replaced(text, yes, "frame 1000 dlg_btn_yes_up 181 261"), arc).dialogs, "a dialog button one pixel off the original's place still fits");
+    check(!pieces_of(replaced(text, yes, "frame 1000 dlg_btn_yes_up 183 260"), arc).dialogs, "...three pixels right of it does not: the window is the original's");
+    check(!pieces_of(replaced(text, "frame 1000 dlg_btn_return_up 351 425", "frame 1000 dlg_btn_return_up 351 421"), arc).options, "the options window's Return button four pixels up does not fit");
+    // the rule itself
+    const LayoutRect orig{10, 20, 46, 20};
+    check(window_art::fits(LayoutRect{10, 20, 49, 24}, orig) && window_art::fits(LayoutRect{9, 19, 47, 21}, orig) && window_art::fits(LayoutRect{10, 20, 46, 20}, orig), "fits: the same place, with the cast shadow, or a pixel wider each way");
+    check(!window_art::fits(LayoutRect{12, 20, 44, 20}, orig) && !window_art::fits(LayoutRect{10, 20, 51, 20}, orig) && !window_art::fits(LayoutRect{10, 17, 46, 23}, orig) && !window_art::fits(LayoutRect{10, 20, 46, 30}, orig), "fits: moved, too wide, too high, too tall: no");
+}
+
+void test_window_model(const assets::AssetArchive& arc) {
+    group("window-model", "the veil covers the picture but the card, the pictures cut from the original's quick help, the Classic corner");
+    // the veil and the card cover the picture once
+    const LayoutRect pictures[] = {{0, 0, 640, 480}, {0, 0, 960, 540}, {0, 0, 1200, 540}};
+    for (const LayoutRect& pic : pictures) {
+        const LayoutRect card = window_art::kOptionsRect.moved(pic.w == 640 ? 0 : 160, pic.w == 640 ? 0 : 30);
+        std::vector<int> grid(static_cast<size_t>(pic.w) * static_cast<size_t>(pic.h), 0);
+        for (const LayoutRect& b : window_art::veil_bands(pic, card)) {
+            check(b.w >= 0 && b.h >= 0, "a band has no negative size");
+            for (int32_t y = b.y; y < b.bottom(); ++y) for (int32_t x = b.x; x < b.right(); ++x) ++grid[static_cast<size_t>(y) * static_cast<size_t>(pic.w) + static_cast<size_t>(x)];
+        }
+        bool once = true, card_clear = true;
+        for (int32_t y = 0; y < pic.h; ++y) {
+            for (int32_t x = 0; x < pic.w; ++x) {
+                const int n = grid[static_cast<size_t>(y) * static_cast<size_t>(pic.w) + static_cast<size_t>(x)];
+                if (card.contains(x, y)) card_clear = card_clear && n == 0; else once = once && n == 1;
+            }
+        }
+        check(once && card_clear, std::to_string(pic.w) + " x " + std::to_string(pic.h) + ": the veil covers every pixel outside the card once and none inside it");
+    }
+    check(window_art::kVeil.r == 0 && window_art::kVeil.g == 0 && window_art::kVeil.b == 0 && window_art::kVeil.a > 100 && window_art::kVeil.a < 160, "the veil is an even dark: black at about a half");
+
+    // the pictures of the quick help
+    window_art::KeptPictures kept;
+    check(kept.build(arc) && kept.ready(), "the original's two bitmaps give the quick help's pictures");
+    struct Want { const char* name; int32_t x, y, w, h, opaque; };
+    const Want want[] = {
+        {"ant_win", 154, 52, 23, 42, 556},   {"ant_move", 148, 152, 26, 46, 626},  {"ant_food", 70, 304, 24, 46, 609},   {"pu_swim", 283, 137, 29, 28, 498},   {"pu_bomb", 283, 184, 32, 36, 556},
+        {"pu_thief", 285, 234, 28, 26, 301}, {"pu_fire", 283, 284, 30, 21, 436},   {"pu_comb", 280, 334, 38, 26, 699},   {"ant_swim", 348, 132, 37, 46, 786},   {"ant_bomb", 352, 182, 31, 41, 597},
+        {"ant_thief", 348, 227, 36, 41, 607}, {"ant_fire", 353, 271, 31, 48, 826}, {"ant_comb", 348, 322, 45, 49, 1142}, {"bomb_0", 560, 197, 12, 23, 187},    {"bomb_1", 580, 197, 12, 23, 187},
+        {"bomb_2", 600, 197, 12, 23, 187},   {"fire", 583, 288, 31, 29, 617},      {"ant_steps", 276, 394, 38, 41, 659}, {"hill_0", 74, 409, 43, 43, 1849},     {"hill_1", 121, 409, 43, 43, 1849},
+        {"hill_2", 168, 409, 43, 43, 1849},  {"hill_3", 215, 409, 43, 43, 1849},
+    };
+    check(kept.pictures().size() == sizeof(want) / sizeof(want[0]), "twenty-two pictures: eight ants, five power-ups, the bombs, the fire, the food's ant and the four hills");
+    for (const window_art::KeptPictures::Picture& p : kept.pictures()) {
+        const Want* w = nullptr;
+        for (const Want& c : want) if (std::string(c.name) == p.name) w = &c;
+        check(w != nullptr && p.x == w->x && p.y == w->y && p.w == w->w && p.h == w->h, std::string(p.name) + ": cut out at the place and size that the original's pictures have");
+        int32_t opaque = 0, partly = 0;
+        for (size_t i = 3; i < p.rgba.size(); i += 4) {
+            opaque += p.rgba[i] == 255 ? 1 : 0;
+            partly += p.rgba[i] != 0 && p.rgba[i] != 255 ? 1 : 0;
+        }
+        check(w != nullptr && opaque == w->opaque && partly == 0, std::string(p.name) + ": its own pixels are whole, the ground round it is see-through");
+    }
+
+    // the Classic corner
+    window_art::ClassicCorner corner;
+    check(corner.build(arc) && corner.ready() && corner.plate_w() == 171 && corner.plate().size() == 171u * 24u * 4u, "the corner's plate is 171 x 24");
+    bool mirrored = true, opaque = true;
+    for (int32_t y = 0; y < 24; ++y) {
+        for (int32_t c = 0; c < 13; ++c) {
+            for (int k = 0; k < 4; ++k) mirrored = mirrored && corner.plate()[(static_cast<size_t>(y) * 171 + static_cast<size_t>(c)) * 4 + static_cast<size_t>(k)] == corner.plate()[(static_cast<size_t>(y) * 171 + static_cast<size_t>(25 - c)) * 4 + static_cast<size_t>(k)];
+        }
+        for (int32_t x = 0; x < 171; ++x) opaque = opaque && corner.plate()[(static_cast<size_t>(y) * 171 + static_cast<size_t>(x)) * 4 + 3] == 255;
+    }
+    check(mirrored && opaque, "the plate is the plate's own end columns laid again, every second copy mirrored, no pixel see-through");
+    for (const bool leave : {false, true}) {
+        for (int state = 0; state < 3; ++state) check(corner.button(state, leave).size() == 20u * 23u * 4u, "the Classic button is 20 x 23");
+        check(corner.button(0, leave) != corner.button(1, leave) && corner.button(0, leave) != corner.button(2, leave) && corner.button(1, leave) != corner.button(2, leave), "its three states differ");
+    }
+    check(corner.button(0, false) != corner.button(0, true), "the picture that leaves differs from the one that enters");
+    // the button's left end is the Quit button's own first columns
+    const int32_t quit = arc.find_sprite_id("butquitu.bmp");
+    bool ends = quit >= 0;
+    if (quit >= 0) {
+        const assets::Sprite& s = arc.get_sprite(static_cast<uint32_t>(quit));
+        for (uint32_t y = 0; y < 23; ++y) {
+            for (uint32_t x : {0u, 1u, 2u}) {
+                const assets::ColorRGBA& c = arc.get_palette()[s.get_pixel(x, y)];
+                const uint8_t* got = &corner.button(0, false)[(static_cast<size_t>(y) * 20 + x) * 4];
+                ends = ends && got[0] == c.r && got[1] == c.g && got[2] == c.b;
+            }
+        }
+    }
+    check(ends, "the button's left end is the original Quit button's first columns, pixel for pixel");
 }
