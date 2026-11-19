@@ -340,7 +340,7 @@ function inRoom(env) {                                                          
     function bellOf(o) {                                                                  // a mount of its own on a bar of its own: o = { permission (none: the browser has no notifications), signedIn, ua, platform, touch, standalone (display-mode), iosStandalone }
         const calls = { asked: 0, constructed: 0, queries: 0 };
         const bar = new H.El(env, 'div', ''), menu = new H.El(env, 'button', ''), other = new H.El(env, 'button', ''); menu.className = 'btn hmenu'; other.className = 'btn hlogin'; bar.appendChild(other);
-        const state = { signedIn: o.signedIn !== false, permission: o.permission };
+        const state = { signedIn: o.signedIn !== false, permission: o.permission, dock: null };
         const watchers = [];
         const win = Object.assign({}, env.win, {
             innerHeight: 800, addEventListener(t, f) { (watchers[t] = watchers[t] || []).push(f); },
@@ -350,7 +350,7 @@ function inRoom(env) {                                                          
         });
         if (o.permission !== undefined) win.Notification = { get permission() { return state.permission; }, requestPermission() { calls.asked++; return { then() {} }; } };
         else delete win.Notification;
-        const m = A.mount({ doc: env.doc, win, core, ctl: { screen: () => 'home', show() {} }, bar, menuBtn: menu, signedIn: () => state.signedIn });
+        const m = A.mount({ doc: env.doc, win, core, ctl: { screen: () => 'home', show() {} }, bar, menuBtn: menu, signedIn: () => state.signedIn, dock: () => state.dock });
         const bell = bar.children[0];
         return { m, bar, bell, menu, state, calls, watchers, win, marks: () => bell.findAll((e) => /al-mark/.test(e.className)), dot: () => /(^|\s)al-dot(\s|$)/.test(menu.className) };
     }
@@ -384,6 +384,15 @@ function inRoom(env) {                                                          
     check('the browser says that the permission changed: the bell follows', named(b).state === 'blocked');
     b.state.permission = 'default'; (b.watchers.focus || []).forEach((f) => f({}));
     check('the window gets the focus again: the bell is read again', named(b).state === 'off');
+    // the chat dock comes after the bell: the bell asks it to tell who the visitor is, and reads again when it does
+    b = bellOf({ permission: 'default', signedIn: false });
+    check('the dock is not there yet: the plain bell', named(b).state === 'guest');
+    b.state.signedIn = true; b.state.dock = { tap(fn) { b.state.tapped = fn; } }; env.advance(600);
+    check('the dock comes: the bell asks it to tell, and reads again', typeof b.state.tapped === 'function' && named(b).state === 'off');
+    b.state.signedIn = false; b.state.tapped('who'); check('a list of players is not news of the visitor', named(b).state === 'off');
+    b.state.tapped('lost'); check('the link was lost and the visitor is not known: the plain bell', named(b).state === 'guest');
+    b.state.signedIn = true; b.state.tapped('live'); check('the welcome says who the visitor is: the dot', named(b).state === 'off');
+    b.state.signedIn = false; b.state.tapped('you'); check('the visitor logs out: the plain bell', named(b).state === 'guest');
     // a press opens the sheet, and the browser is never asked
     b = bellOf({ permission: 'default' });
     (b.watchers.focus || []).forEach((f) => f({})); (b.win.document || env.doc).listeners.visibilitychange && env.doc.listeners.visibilitychange.forEach((f) => f({}));

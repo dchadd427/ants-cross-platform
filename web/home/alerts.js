@@ -32,7 +32,7 @@
     function shorten(name) { name = String(name); return name.length > NAME_MAX ? name.slice(0, NAME_MAX - 1) + '\u2026' : name; }
 
     // mount({ doc, win, core (AntsAlertCore), ctl: { screen() -> 'home'|'room', show(name, how) }, bar (the right end of Home's bar: the bell goes in front of its first button), menuBtn (Home's Menu button: it gets the dot),
-    //         signedIn() (whether the visitor is logged in), table (optional: the sound table) }) -> { row(onPress), open(opener), close(), alert(kind, data), refresh(), flash }
+    //         signedIn() (whether the visitor is logged in), dock() (the chat dock, when it is there: its tap(fn) says when the visitor changes), table (optional: the sound table) }) -> { row(onPress), open(opener), close(), alert(kind, data), refresh(), flash }
     function mount(env) {
         var doc = env.doc, win = env.win, core = env.core, ctl = env.ctl;
         if (!core || !core.settings) return null;
@@ -200,7 +200,15 @@
                 if (q && q.then) q.then(function (status) { if (status) status.onchange = refresh; }, function () { /* no such permission here */ });
             } catch (e) { /* no permission list here */ }
         }
+        var hooked = false, tries = 0;
+        function hook() {                                  // the chat dock comes after this part, whichever is first: the bell is read again whenever the dock says who the visitor is
+            var dk = env.dock && env.dock();
+            if (hooked || !bell) return;
+            if (dk && dk.tap) { hooked = true; dk.tap(function (kind) { if (kind === 'live' || kind === 'you' || kind === 'lost') refresh(); }); refresh(); return; }
+            if (++tries < 40) setTimeout(hook, 500);
+        }
         makeBell();
+        hook();
 
         return { row: row, open: open, close: close, alert: alert, refresh: refresh, title: title, flash: flash, wired: wired };
     }

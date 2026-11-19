@@ -318,6 +318,20 @@
    "old": "if (state === 'off') m = el('span', 'al-mark al-dotmark');",
    "new": "if (state === 'off' || state === 'on') m = el('span', 'al-mark al-dotmark');",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_never_asks_the_dock_again",
+   "file": "web/home/alerts.js",
+   "old": "if (++tries < 40) setTimeout(hook, 500);",
+   "new": "/* once */",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
+  },
+  {
+   "id": "bell_reads_again_for_a_list_of_players",
+   "file": "web/home/alerts.js",
+   "old": "if (kind === 'live' || kind === 'you' || kind === 'lost') refresh();",
+   "new": "refresh();",
+   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   }
  ]
 }

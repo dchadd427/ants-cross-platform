@@ -65,7 +65,7 @@ CHAT_BUDGET, CHAT_GZIP_BUDGET = 98_000, 30_000
 TALK_BUDGET, TALK_GZIP_BUDGET = 80_600, 28_900
 MOD_BUDGET, MOD_GZIP_BUDGET = 71_300, 20_800        # mod.js and mod.css: the moderation sheet (loaded for a visitor with a role only)
 SPLIT_BUDGET, SPLIT_GZIP_BUDGET = 16_000, 5_200     # split.js and split.css: the drag handles of Home
-ALERTS_BUDGET, ALERTS_GZIP_BUDGET = 24_000, 8_000   # alerts.js and alerts.css: the alerts sheet, the join alert and the bell of Home
+ALERTS_BUDGET, ALERTS_GZIP_BUDGET = 25_000, 8_300   # alerts.js and alerts.css: the alerts sheet, the join alert and the bell of Home
 ALERT_CORE_BUDGET, ALERT_CORE_GZIP_BUDGET = 12_400, 4_200   # web/alert_core.js: the switches, the tab alert and the sound table that the front page and the game page share
 SCRIPT_BUDGET, SCRIPT_GZIP_BUDGET = 13_000, 4_500       # player_name.js
 # the installable web app (web/app/, web/manifest.webmanifest): the four icons together (measured 4,260 bytes), and the manifest (measured 1,166, revalidated on every visit)
