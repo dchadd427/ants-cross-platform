@@ -249,8 +249,9 @@ const over = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b
             const label = (x) => 'bell ' + name + ': ' + x;
             check(label('a logged in visitor who has not set notifications up: the bell with a dot, named for a reader'), !!c.bell && st.state === 'off' && st.marks === 1 && st.label === 'Alerts: not set up on this device' && c.bell.w >= 44 && c.bell.h >= 44, JSON.stringify(st) + JSON.stringify(c.bell));
             check(label('Quick host, Quick join, the account button, the Menu and the bell are inside the window and none is over another'), c.host && c.join && c.menu && c.chip && [c.host, c.join, c.menu, c.chip, c.bell].every((r) => r.l >= -0.5 && r.r <= w + 0.5 && r.t >= -0.5 && r.b <= h + 0.5) && clash(c).length === 0, clash(c).join() + ' ' + JSON.stringify(c));
-            check(label('the group of the account button and the Menu is at the right edge of the bar'), c.menu.r >= w - 36 && c.menu.r <= w, JSON.stringify(c.menu));
-            check(label('the bell stands next to the account button, in front of it'), c.bell.r <= c.chip.l + 0.5 && Math.abs((c.bell.t + c.bell.b) / 2 - (c.chip.t + c.chip.b) / 2) < 6, JSON.stringify([c.bell, c.chip]));
+            const wide = w >= 721, last = (k) => (wide && k.bell ? k.bell : k.menu);          // a wide window: the bell is the last of the group, after the Menu; a phone: in front of the account button
+            check(label('the group of the account button, the Menu and the bell is at the right edge of the bar'), last(c).r >= w - 36 && last(c).r <= w, JSON.stringify(last(c)));
+            check(label(wide ? 'the bell stands after the Menu, on its line' : 'the bell stands next to the account button, in front of it'), (wide ? c.bell.l >= c.menu.r - 0.5 && c.chip.r <= c.menu.l + 0.5 : c.bell.r <= c.chip.l + 0.5) && Math.abs((c.bell.t + c.bell.b) / 2 - (c.chip.t + c.chip.b) / 2) < 6, JSON.stringify([c.bell, c.chip, c.menu]));
             check(label('the Menu\'s button has no dot while the bell is there'), st.dot === true && (st.after === 'none' || st.after === 'normal'), JSON.stringify(st));
             await shot(page, 'bell_' + name + '_off');
             // a room held: My room joins the row
@@ -263,7 +264,7 @@ const over = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b
             await sleep(300);
             c = await controls(page); st = await bellState(page);
             check(label('with a room held: My room, Quick host, Quick join, the account button and the Menu are inside the window and none is over another (or over the bell)'), !!c.mine && [c.host, c.join, c.menu, c.chip, c.mine].every((r) => r && r.l >= -0.5 && r.r <= w + 0.5 && r.t >= -0.5 && r.b <= h + 0.5) && clash(c).length === 0, clash(c).join() + ' ' + JSON.stringify(c));
-            check(label('with a room held the Menu\'s button is still at the right edge'), c.menu.r >= w - 36 && c.menu.r <= w, JSON.stringify(c.menu));
+            check(label('with a room held the last button of the group is still at the right edge'), last(c).r >= w - 36 && last(c).r <= w, JSON.stringify(last(c)));
             if (upright) {
                 check(label('a phone held upright with a room has no room for the bell: it is not drawn, and the Menu\'s button has the dot'), !c.bell && st.hidden === true && st.dot === true && st.after !== 'none' && st.after !== 'normal', JSON.stringify(st));
                 check(label('the Menu\'s button is still a target of 44 px'), c.menu.w >= 44 && c.menu.h >= 44);
