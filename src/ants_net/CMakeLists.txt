@@ -15,12 +15,13 @@ add_library(ants_net STATIC
     lobby.cpp
     netgame.cpp
     netgame_match.cpp
+    p2p.cpp
 )
 
 # Raw sockets (TCP, the UDP of the LAN discovery, and the WebSocket server for browsers behind a proxy) exist on native platforms only (a browser itself
 # uses WebRTC / WebSocket as a client)
 if(NOT EMSCRIPTEN)
-    target_sources(ants_net PRIVATE tcp.cpp lan.cpp ws.cpp)
+    target_sources(ants_net PRIVATE tcp.cpp lan.cpp ws.cpp turn.cpp)
     if(WIN32)
         target_link_libraries(ants_net PUBLIC ws2_32)
     endif()

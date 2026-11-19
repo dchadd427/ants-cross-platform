@@ -1,6 +1,9 @@
 #include "ants_net/session.hpp"
 
+#include <chrono>
+
 #include "ants_net/clock.hpp"
+#include "ants_net/prediction.hpp"
 
 #include <algorithm>
 
@@ -47,7 +50,19 @@ void HostSession::add_bot_seat(uint8_t player) {
 
 bool HostSession::submit_bot(uint8_t player, sim::Command command) {
     if (!started_ || !is_bot_seat(player) || paused()) return false;         // (a bot waits, like everybody, while a seat is away: its orders would only pile up in the first turn after)
-    return sequencer_.submit(player, std::move(command));
+    // Protocol 25: every player is told the order the moment the bot gives it, ahead of the turn that will carry it (the turn is the next one to be sealed: the order is queued for it). The hint changes
+    // nothing that is sealed or recorded; a player's prediction puts the bot's ants where the turn will, so that the turn corrects them less.
+    HintMsg hint;
+    const bool wanted = cfg_.bot_hints && Prediction::predicts(command.type);
+    if (wanted) {
+        hint.seq = ++hint_seq_[player];
+        hint.tick = sequencer_.next_turn();
+        hint.command = command;
+        hint.command.issuer = player;
+    }
+    if (!sequencer_.submit(player, std::move(command))) return false;
+    if (wanted && hint.tick <= kMaxHintTick) broadcast(encode(hint));
+    return true;
 }
 
 void HostSession::start(uint32_t now_ms) {
@@ -328,6 +343,18 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
             if (++clients_[player].ignored_seat_moves > kIgnoredSeatMovesAllowed) violation(player);       // the same ladder as the StartRequest's: free at first, a violation each beyond it
             return;
         }
+        case MsgType::P2pConfig: {
+            P2pConfigMsg m;
+            if (!decode(msg, m)) return violation(player);
+            handle_p2p_config(player, m);
+            return;
+        }
+        case MsgType::Signal: {
+            SignalMsg m;
+            if (!decode(msg, m)) return violation(player);
+            handle_signal(player, m);
+            return;
+        }
         case MsgType::Chat: {
             ChatMsg m;
             if (!decode(msg, m)) return violation(player);
@@ -343,6 +370,76 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
         }
         default:
             return violation(player);                // hosts do not receive Turn, Desync, Welcome, ...
+    }
+}
+
+// ---- hints and channels (protocol 25, p2p.hpp) -------------------------------------------------------------------------------------------------------
+
+namespace {
+constexpr uint32_t kMaxP2pConfigs = 16;       // a credential is made for each; a match may see a handful of reconnects
+constexpr uint32_t kMaxP2pSignals = 512;      // an offer, an answer and a few relay candidates per pair make a dozen; a page that sends more is not setting up a channel
+}  // namespace
+
+// A player says that it can open channels and whether it allows direct ones. It is given the relay's credential (a user name that holds its expiry and a random label, never a name or an account), when the
+// server has a relay; a server that has none says so with an empty list, and then nobody is ready: no channel is opened and the match is what it was.
+void HostSession::handle_p2p_config(uint8_t player, const P2pConfigMsg& m) {
+    Client& c = clients_[player];
+    if (++c.p2p_configs > kMaxP2pConfigs) return violation(player);
+    IceConfigMsg ice;
+    if (cfg_.turn != nullptr && cfg_.turn->usable() && cfg_.random_bytes) {
+        uint8_t raw[8];
+        if (cfg_.random_bytes(raw, sizeof(raw))) {
+            static const char kHex[] = "0123456789abcdef";
+            std::string label;
+            for (const uint8_t b : raw) {
+                label.push_back(kHex[b >> 4]);
+                label.push_back(kHex[b & 15u]);
+            }
+            const uint32_t now = cfg_.unix_now ? cfg_.unix_now() : static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+            ice.expires = now + cfg_.turn->ttl_s;
+            ice.username = turn_username(ice.expires, label);
+            ice.credential = cfg_.turn->credential(ice.username);
+            ice.urls = cfg_.turn->urls;
+            if (ice.credential.empty()) ice = IceConfigMsg{};
+        }
+    }
+    c.p2p_ready = !ice.urls.empty();
+    c.p2p_direct = c.p2p_ready && m.direct;
+    if (c.conn != nullptr) c.conn->send(encode(ice));
+}
+
+// A player's offer, answer or candidate for another player: passed on with the sender's seat stamped by the connection, when both are here and ready, and never an address that the other player may
+// not see (signal_allowed): a page that sends one is counted as a violation and the message is not passed on.
+void HostSession::handle_signal(uint8_t player, const SignalMsg& m) {
+    Client& c = clients_[player];
+    if (!c.p2p_ready) return violation(player);                      // a Signal before P2pConfig (or with no relay): nothing that an honest page does
+    if (++c.p2p_signals > kMaxP2pSignals) return violation(player);
+    if (m.peer == player) return violation(player);
+    Client& to = clients_[m.peer];
+    if (!to.present || !to.p2p_ready || to.conn == nullptr) return;       // the other player has left, or is not ready yet: nothing to pass on (the page tries again when P2pPeers says it is)
+    if (!signal_allowed(c.p2p_direct, to.p2p_direct, m.text)) return violation(player);
+    SignalMsg out;
+    out.peer = player;
+    out.kind = m.kind;
+    out.text = m.text;
+    to.conn->send(encode(out));
+}
+
+// Who is ready and who allows direct, told to the ready seats whenever it changes (a seat that arrives, leaves or is dropped is a change)
+void HostSession::send_peers_if_changed() {
+    uint8_t ready = 0;
+    uint8_t direct = 0;
+    for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
+        if (!clients_[p].present || !clients_[p].p2p_ready) continue;
+        ready = static_cast<uint8_t>(ready | bit(p));
+        if (clients_[p].p2p_direct) direct = static_cast<uint8_t>(direct | bit(p));
+    }
+    if (ready == peers_ready_sent_ && direct == peers_direct_sent_) return;
+    peers_ready_sent_ = ready;
+    peers_direct_sent_ = direct;
+    const std::vector<uint8_t> msg = encode(P2pPeersMsg{ready, direct});
+    for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
+        if (clients_[p].present && clients_[p].p2p_ready && clients_[p].conn != nullptr) clients_[p].conn->send(msg);
     }
 }
 
@@ -435,6 +532,7 @@ void HostSession::update(uint32_t now_ms) {
     last_ms_ = now_ms;
     delay_.on_frame(now_ms);
     poll_clients();
+    send_peers_if_changed();
     // a peer that says nothing for a minute is gone (its ack and ping stop); in a room that holds seats, for silence_ms: nothing at all for that long is a half-open link (a power cut, a
     // frozen machine), the connection is lost, and the seat is held
     const uint32_t silence = cfg_.hold_seats ? cfg_.silence_ms : cfg_.silence_timeout_ms;

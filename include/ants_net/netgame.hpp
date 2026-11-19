@@ -33,6 +33,7 @@
 
 #include "ants_net/lan.hpp"
 #include "ants_net/lobby.hpp"
+#include "ants_net/p2p_transport.hpp"
 #include "ants_net/prediction.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_net/session.hpp"
@@ -373,6 +374,25 @@ public:
     /// that it handles (group moves, special orders, attacks, Stop) is also applied to the predicted engine at once and the answer is that engine's own verdict.
     sim::CommandResult submit(const sim::Command& command) override;
 
+    // ---- hints and channels (protocol 25, p2p.hpp, docs/P2P_HINTS.md) ----------------------------------------------------------------------------------
+    /// The page's data channels (the browser build; null everywhere else): the game then tells the server that it can open channels (P2pConfig, once the match has begun in a server's room), gives the
+    /// transport the relay's credential and the signalling, sends every order that the prediction applied as a hint to the other players, and gives what their channels deliver to the prediction. `direct`:
+    /// this player allows direct connections. The transport must outlive the game; the game never owns it. Set before the match begins.
+    void set_p2p(P2pTransport* transport, bool direct) noexcept {
+        p2p_ = transport;
+        p2p_direct_ = direct;
+    }
+    /// How this machine is connected to the player of `seat` (PeerLink::None without a transport or for this player's own seat)
+    PeerLink peer_link(uint8_t seat) const;
+    /// The hints that the game sent and took (the tests and the readout): `sent` for each order given, `from_server` for a computer player's, `from_peers` for what the channels delivered
+    struct HintCounts {
+        uint64_t sent{0};
+        uint64_t from_server{0};
+        uint64_t from_peers{0};
+        uint64_t refused{0};      // a hint of a channel whose message did not decode, or said another seat than the channel's
+    };
+    const HintCounts& hint_counts() const noexcept { return hint_counts_; }
+
     // ---- the prediction of one's own orders (prediction.hpp, docs/NETWORK_PORT.md "Prediction of one's own orders") --------------------------------------
     /// On by default: a match that plays makes the prediction (it begins with the next tick); off (--no-prediction, the tests), every order waits for its turn and no second engine is made. A local game has
     /// no delay to hide. Takes effect with the next update; switched off, the prediction is destroyed (not suspended).
@@ -472,6 +492,8 @@ private:
     void begin_match();
     void install_hooks();
     void make_prediction();
+    void on_p2p_message(const std::vector<uint8_t>& message);
+    void pump_p2p();
     void drop_prediction();
     void refresh_prediction();
     /// The lag of the player's orders, as a delay in ms, until the prediction has learned it from the orders: the measured delay of the last orders, else the round trip, half a seal and the
@@ -577,6 +599,11 @@ private:
     std::unique_ptr<ClientLobby> client_lobby_;
     std::unique_ptr<HostSession> host_session_;
     std::unique_ptr<ClientSession> client_session_;
+    P2pTransport* p2p_{nullptr};
+    bool p2p_direct_{false};
+    bool p2p_config_sent_{false};
+    uint32_t hint_seq_{0};
+    HintCounts hint_counts_;
     std::unique_ptr<Prediction> prediction_;     // (after the sessions: it holds their runner and goes first; made by refresh_prediction() when it is wanted, never otherwise)
     bool prediction_enabled_{true};
     bool app_suspends_prediction_{false};

@@ -42,7 +42,66 @@ void NetGame::install_hooks() {
         if (on_chat_) on_chat_(m);
     };
     if (host_session_) host_session_->set_on_chat(chat);
-    if (client_session_) client_session_->set_on_chat(chat);
+    if (client_session_) {
+        client_session_->set_on_chat(chat);
+        client_session_->set_on_p2p([this](const std::vector<uint8_t>& message) { on_p2p_message(message); });
+    }
+}
+
+// ---- hints and channels (protocol 25) -----------------------------------------------------------------------------------------------------------------
+
+PeerLink NetGame::peer_link(uint8_t seat) const { return p2p_ == nullptr || seat >= sim::MAX_PLAYERS || seat == seat_ ? PeerLink::None : p2p_->link(seat); }
+
+// What the server sends that belongs to the channels: a computer player's order ahead of its turn (a hint, straight to the prediction), and the relay's credential, who is ready and the signalling of
+// the other players (to the page's transport, which does not exist in most builds: then they are not even looked at)
+void NetGame::on_p2p_message(const std::vector<uint8_t>& message) {
+    switch (peek_type(message)) {
+        case MsgType::Hint: {
+            HintMsg h;
+            if (!decode(message, h) || h.command.issuer == seat_) return;
+            ++hint_counts_.from_server;
+            if (prediction_) prediction_->hint(h.command, h.seq, h.tick);
+            return;
+        }
+        case MsgType::IceConfig: {
+            IceConfigMsg m;
+            if (p2p_ != nullptr && decode(message, m) && !m.urls.empty()) p2p_->open(seat_, p2p_direct_, m);
+            return;
+        }
+        case MsgType::P2pPeers: {
+            P2pPeersMsg m;
+            if (p2p_ != nullptr && decode(message, m)) p2p_->peers(m.ready, m.direct);
+            return;
+        }
+        case MsgType::Signal: {
+            SignalMsg m;
+            if (p2p_ != nullptr && decode(message, m)) p2p_->signal(m.peer, m.kind, m.text);
+            return;
+        }
+        default:
+            return;
+    }
+}
+
+// Once per update while the match plays: the P2pConfig that tells the server this machine can open channels (until it was taken), the page's signalling to the server, and the hints that the channels
+// delivered, to the prediction. A hint whose message is not a hint, or whose issuer is not the seat of the channel it came on, is refused (the channel says who the sender is, never the payload).
+void NetGame::pump_p2p() {
+    if (p2p_ == nullptr || !client_session_) return;
+    if (!p2p_config_sent_ && client_session_->send_p2p(encode(P2pConfigMsg{p2p_direct_}))) p2p_config_sent_ = true;
+    uint8_t peer = 0;
+    SignalKind kind = SignalKind::Offer;
+    std::string text;
+    for (int budget = 64; budget > 0 && p2p_->poll_signal(peer, kind, text); --budget) client_session_->send_p2p(encode(SignalMsg{peer, kind, text}));
+    std::vector<uint8_t> raw;
+    for (int budget = 128; budget > 0 && p2p_->poll_hint(peer, raw); --budget) {
+        HintMsg h;
+        if (!decode(raw, h) || peer >= sim::MAX_PLAYERS || h.command.issuer != peer || peer == seat_) {
+            ++hint_counts_.refused;
+            continue;
+        }
+        ++hint_counts_.from_peers;
+        if (prediction_) prediction_->hint(h.command, h.seq, h.tick);
+    }
 }
 
 void NetGame::set_on_tick(std::function<void()> fn) { on_tick_ = std::move(fn); }
@@ -260,7 +319,13 @@ sim::CommandResult NetGame::submit(const sim::Command& command) {
     }
     // The order is on its way. With the prediction on, the predicted engine applies it NOW and says what the engine says (the ant that answers, the ants that needed the order); without it,
     // the immediate feedback of the click is predict_order_ack's guess, as it was before the prediction existed.
-    if (prediction_ && prediction_->submit(c, result)) return result;
+    if (prediction_ && prediction_->submit(c, result)) {
+        if (p2p_ != nullptr && p2p_config_sent_) {                                              // the other players learn the order from this machine ahead of its turn (the server's turn is what counts)
+            p2p_->send_hint(encode(HintMsg{++hint_seq_, static_cast<uint32_t>(std::min<uint64_t>(prediction_->last_order_tick(), kMaxHintTick)), c}));
+            ++hint_counts_.sent;
+        }
+        return result;
+    }
     result.ack_ant = sim_.predict_order_ack(c, &result.needing_order);
     result.status = sim::CommandResult::Status::Applied;                                        // optimistic: the turn decides
     return result;

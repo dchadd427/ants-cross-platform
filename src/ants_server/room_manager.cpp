@@ -181,6 +181,7 @@ std::unique_ptr<Room> RoomManager::build_room(RoomSpec spec, uint32_t now_ms, Cr
     else if (visitor_made && !replay_demo_) room->set_replay_store(nullptr, "this server does not keep the matches of demo rooms (--replay-demo)");
     else room->set_replay_store(replays_.get());
     room->set_live_board(&live_board_);                           // (a room that records shows its match here from its start)
+    room->set_turn_settings(limits_.turn);
     if (room->lobby()) room->set_lobby_services(lobby_services());
     return room;
 }

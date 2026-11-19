@@ -10,7 +10,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var PROTOCOL = 24;                                             // kProtocolVersion
+    var PROTOCOL = 25;                                             // kProtocolVersion
     var LAST_GAME_MODE = 1;                                        // sim::kLastGameMode: 0 the original's highest score, 1 "187"; a byte above it is refused, never played as another mode
     var MAX_NAME = 32, MAX_ROOM_CODE = 32, MAX_MAP_NAME = 64, MAX_CHAT = 100;
     var PLAYERS = 4;                                               // sim::MAX_PLAYERS

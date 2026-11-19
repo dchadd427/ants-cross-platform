@@ -19,6 +19,14 @@
 // Other players' commands are not predicted (their ants go on with what the engine knows). Predicted: group moves, group special orders, group attacks and Stop. NOT predicted, because they
 // wait for the confirmation: Hatch (a new ant would need an id that only the confirmed stream gives), the alliance commands, Quit (and Drop, which only the sequencer makes).
 //
+// HINTS (docs/P2P_HINTS.md). Another player's order is learned from its sealed turn, a round trip's worth late. A HINT is the same order sent ahead of its turn, by the other player's machine (a
+// direct channel between the two browsers) or, for a computer player, by the server (the moment the bot decides it): hint() puts it into the predicted engine at the tick it names, so that the ants it
+// concerns are moved by less when the turn arrives. The hint is a guess and the sealed turn is the truth: the confirmed engine, the turns, the hashes and the record never see a hint, and a hint that
+// the sealed turn does not confirm is dropped. The matching rule (the one place it is written): a sealed command of another seat takes the OLDEST hint of that seat that is equal to it; the hints of the
+// same seat before it were not sealed (the server refused them): dropped. A hint is applied at its tick (never behind a turn in hand); when that tick's turn comes without it, it moves ONCE to the next
+// tick (the sealed tick of an order is most often one off, as for one's own orders), and when that turn comes without it either, it is dropped; one that no turn has carried for pending_timeout_ticks is
+// dropped. A hint that comes after its sealed turn (the direct path is slower than the server's) is ignored. Only the kinds that predicts() names are hinted, and only by a seat that is not this one.
+//
 // HOW IT STAYS CORRECT. The predicted engine is derived state: it can always be rebuilt from the confirmed engine, the turns in hand and the orders that are still waiting. It is advanced ONE
 // tick for every tick that the confirmed engine executes, and it is rebuilt (copy + replay) only when something that it ran as an assumption turns out wrong: the prediction keeps, for every tick
 // from the confirmed one to the display tick, the list of commands that it applied there, and every live turn that arrives for a tick it has already started is compared with that list.
@@ -36,6 +44,7 @@
 // The class has no sockets and no SDL, and its only clocks are the thread's CPU time and the wall clock, for the budget: the owner calls on_turn() for every live turn that the runner queues
 // (LockstepRunner::set_on_turn), on_tick() after every tick that the runner executes (set_on_tick), and submit() for the player's commands.
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <deque>
@@ -92,6 +101,10 @@ public:
         // Ticks that the display stands beyond the lag. 0: an order is put where the host runs it, so nothing is corrected while the lag holds. 1: the ants react 50 ms sooner, but about one
         // order in six shows a whole-tile hop when its turn corrects it.
         uint32_t lead_bias_ticks{0};
+        // Hints (see above). A hint whose tick is more than this many ticks behind the next turn that is expected is older than any order that is not sealed yet: it is late. At most `max_hints` wait at a
+        // time (a peer that floods hints cannot make the prediction rebuild without end: the budget and the cool-down count its work too).
+        uint32_t hint_max_age_ticks{12};
+        size_t max_hints{64};
     };
 
     /// What the prediction did (for the tests and the measurements; nothing here is state)
@@ -116,6 +129,16 @@ public:
         uint64_t advance_ns_max{0};
         uint64_t over_budget{0};                  // strikes: rebuilds or runs of predicted ticks that cost more than Config::budget_ns
         uint64_t cooldowns{0};                    // cool-downs started (the strikes reached Config::budget_strikes)
+        // Hints (hint()): what became of the orders that other seats sent ahead of their turns
+        uint64_t hints_received{0};               // every call
+        uint64_t hints_accepted{0};               // put into the predicted engine
+        uint64_t hints_refused{0};                // the prediction was off, an own seat, a kind that is not predicted, or too many waiting
+        uint64_t hints_duplicate{0};              // a copy that was seen already (a channel sends each hint more than once)
+        uint64_t hints_late{0};                   // came after the sealed turn that carries the order
+        uint64_t hints_confirmed{0};              // matched by a sealed command at the tick where the hint stood: nothing to correct
+        uint64_t hints_confirmed_moved{0};        // matched by a sealed command at another tick than the one where the hint stood (one correction)
+        uint64_t hints_dropped{0};                // not confirmed: the turn came without it twice, the server did not seal it before an older one of the seat, or it timed out
+        uint64_t rebuilds_hint{0};                // rebuilds because of a hint (it arrived behind the display tick, or a turn did not confirm it)
         // Corrections (measure_corrections only): what a rebuild changed in the picture, compared at the display tick before and after
         uint64_t corrections{0};                  // rebuilds that were measured
         uint64_t corrections_visible{0};          // ... in which at least one ant stood elsewhere afterwards
@@ -177,6 +200,13 @@ public:
     /// engine said (Applied, the ant that acknowledges, the ants that needed the order): true. False (nothing happened, `result` untouched) when the prediction is off or the command is of a
     /// kind that waits for the confirmation: the caller answers as it did before the prediction existed.
     bool submit(const sim::Command& command, sim::CommandResult& result);
+    /// What became of a hint
+    enum class HintVerdict : uint8_t { Accepted, Refused, Duplicate, Late };
+    /// Another seat's order, ahead of its turn: `command` (its issuer is the sender), the sender's own number for it (`seq`, 1, 2, 3 ... : a copy of a hint that was seen is a Duplicate) and the tick at which the
+    /// sender's own screen applied it (`tick`). Applied to the predicted engine at once when the display tick is not past it, else the engine is rebuilt with it; see HINTS at the top for the matching rule.
+    HintVerdict hint(const sim::Command& command, uint32_t seq, uint64_t tick);
+    /// The hints that no turn has confirmed or dropped yet
+    size_t pending_hints() const noexcept { return hints_.size(); }
     /// A live turn has been queued by the runner. Compared with what the prediction assumed for that tick; the player's own orders in it leave the waiting list.
     void on_turn(const TurnMsg& turn);
     /// The confirmed engine has executed one more tick: the predicted engine runs one more (to the display tick). The first call after the prediction was off begins it.
@@ -198,6 +228,8 @@ public:
     bool stale() const noexcept { return running_ && stale_; }
     /// The own orders that no turn has carried yet
     size_t pending_orders() const noexcept { return pending_.size(); }
+    /// The tick at which the last order that submit() took was applied: what a hint of that order says (0 before there is one)
+    uint64_t last_order_tick() const noexcept { return last_order_tick_; }
     const Stats& stats() const noexcept { return stats_; }
     /// The cues and news that the predicted ticks made since the last call (each tick that the engine ran, once per run: see PredictedAudio::generation). Nothing is kept while off.
     std::vector<PredictedAudio> take_audio();
@@ -226,6 +258,29 @@ private:
         uint32_t misses{0};                       // the turns of its tick that arrived without it
     };
 
+    struct Foreign {
+        sim::Command command;
+        uint32_t seq{0};
+        uint64_t tick{0};                         // where the predicted engine applies it (the hint's own tick, never behind a turn in hand; one tick on after a turn came without it)
+        uint64_t born{0};                         // the confirmed tick when it was accepted (a hint that no turn carries is told by the time since THEN)
+        uint32_t misses{0};
+    };
+    // The numbers of the hints of one seat that were seen (a window of 64: the copies of a hint are the same number)
+    struct SeqWindow {
+        bool any{false};
+        uint32_t highest{0};
+        uint64_t bits{0};
+        bool take(uint32_t seq) noexcept;
+    };
+    // A command of another seat that a live turn carried and no hint had announced: a hint for it that comes later is late
+    struct SealedSeen {
+        sim::Command command;
+        uint64_t turn{0};
+        bool matched{false};
+    };
+    /// The commands that the predicted engine applies at `tick` when no turn is in hand for it: the own orders waiting for it and the hints at it, in the order of a turn (by seat, each seat's in the order sent)
+    std::vector<sim::Command> commands_without_turn(uint64_t tick, uint64_t next_receive, uint64_t target) const;
+    bool take_hint_for(const sim::Command& cmd, uint64_t turn, bool& wrong);
     void begin(uint64_t confirmed_tick);
     void stop();
     /// A copy of the confirmed engine run to `target_display` with the turns in hand and the waiting orders (`is_start`: the prediction begins, nothing is corrected)
@@ -263,6 +318,11 @@ private:
     uint64_t base_tick_{0};                       // the tick that assumed_.front() is about: the confirmed engine's tick
     std::deque<std::vector<sim::Command>> assumed_;      // [tick - base_tick_]: the commands applied at that tick, for every tick from the confirmed one to the display tick
     std::deque<Pending> pending_;
+    std::vector<Foreign> hints_;                   // sorted by (seat, seq)
+    std::vector<SealedSeen> sealed_seen_;
+    std::array<SeqWindow, sim::MAX_PLAYERS> seen_;
+    bool stale_hint_{false};                       // a hint is why it went stale (the statistics)
+    uint64_t last_order_tick_{0};
     uint32_t lead_{3};
     uint32_t target_lead_{3};
     uint32_t estimate_lag_{2};                    // the owner's estimate of the lag of an order (set_expected_delay_ms), in ticks

@@ -151,6 +151,8 @@ NetGame::~NetGame() { shutdown_transport(); }
 
 void NetGame::shutdown_transport() {
     drop_prediction();                                          // (it holds the runner of a session: it goes first)
+    if (p2p_ != nullptr) p2p_->close();                         // (protocol 25: the channels end with the game; a new game says P2pConfig again)
+    p2p_config_sent_ = false;
     host_session_.reset();
     client_session_.reset();
     host_lobby_.reset();
@@ -802,6 +804,7 @@ void NetGame::update_client() {
     if (phase_ == Phase::Loading || phase_ == Phase::Playing) pump_peers();
     if (phase_ == Phase::Playing && client_session_) {
         client_session_->update(now_);
+        pump_p2p();
         if (client_session_->wants_connection(now_)) attach_new_link();       // the way back: the session lost its link and asks for a new one (a failed attempt is told to it too)
         note_session_mode();
         if (!client_session_) return;                            // (the same)

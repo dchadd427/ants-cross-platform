@@ -354,6 +354,8 @@ public:
     void set_live_board(LiveBoard* board) noexcept { live_board_ = board; }
     /// What a lobby room asks of its server (see LobbyServices): set it right after the room is made. A room that is no lobby room never asks.
     void set_lobby_services(LobbyServices services);
+    /// The relay that the players' channels go through (protocol 25): the session of the match hands each player a credential for it. Set it right after the room is made; null: none.
+    void set_turn_settings(std::shared_ptr<const net::TurnSettings> turn) { turn_ = std::move(turn); }
     /// Bringing a match back from a record, first half (RoomManager replays the queue in slices from update(), so that the server serves meanwhile). begin_replay() does everything before the turns: the
     /// bots, the engine, the session with its keys. The room must be fresh (Waiting, made from room_spec_of(record.head)) and `record` must stay alive until replay_step() has said Replayed or Refused.
     /// Refused, with the reason in `why`: the room holds a half-built match and is thrown away. `restart_vote_after_ms`: how long the others wait before they may vote on a seat that has not come back.
@@ -513,6 +515,7 @@ private:
 
     net::HostLobby lobby_;
     LobbyServices services_;                 // protocol 16: what a lobby room asks of its server
+    std::shared_ptr<const net::TurnSettings> turn_;     // protocol 25: the relay (never kept in a record: nothing about it is part of the match)
     bool empty_{false};                      // a lobby room: nobody is in it, since empty_since_ms_
     bool arrived_{false};                    // a lobby room: a connection was given to it since its last pass (its Hello is read in the next one: empty_ is stale until then)
     uint32_t seen_activity_{0};              // a lobby room: HostLobby::activity() at the last pass, and since when it is what it is
