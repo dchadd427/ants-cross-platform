@@ -938,6 +938,51 @@ int main(int argc, char* argv[]) {
         ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
     } TEST_END();
 
+    TEST_CASE("PA17 The Player's Own Ants Are Drawn As They Are Today In Both Pictures, Pixel For Pixel: With An Own Ant Walking (The Two Engines Have It Apart, A Lead Of Walking) The Frame Of Others = Confirmed Has It Where The Predicted Engine Has It, The Plain Frame Is The Same There, And It Is Not Where The Confirmed Engine Has It") {
+        Application app;
+        Peer bob;
+        Duo duo{app, bob};
+        ASSERT_TRUE(predicting_match(app, bob, duo));
+        const uint32_t walker = walk_one_ant_ahead(app, bob, duo, 4);
+        ASSERT_TRUE(walker != 0);
+        app.net()->freeze();                                                               // (no tick between the frames)
+        duo.step(400);
+        ASSERT_TRUE(app.net()->predicting());
+        const sim::AntSnapshot p = *ant_in(app.view_sim(), walker);
+        const sim::AntSnapshot c = *ant_in(app.sim(), walker);
+        ASSERT_TRUE(p.px != c.px || p.py != c.py);
+        ASSERT_TRUE(place_camera(app, p.px, p.py, 110, 90));
+        int32_t psx = 0, psy = 0, csx = 0, csy = 0;
+        ASSERT_TRUE(app.renderer().camera().world_to_screen(p.px, p.py, psx, psy));
+        ASSERT_TRUE(app.renderer().camera().world_to_screen(c.px, c.py, csx, csy));
+        const int32_t rx = std::min(psx, csx) - 30;
+        const int32_t ry = std::min(psy, csy) - 44;
+        const int32_t rw = std::abs(psx - csx) + 60;
+        const int32_t rh = std::abs(psy - csy) + 70;
+        const LayoutRect view = app.layout().view();
+        SDL_MouseMotionEvent motion{};
+        motion.type = SDL_MOUSEMOTION;
+        motion.x = view.x + 30;
+        motion.y = view.y + view.h - 30;
+        app.handle_mouse_motion(motion);
+        app.hud().handle_key_down(SDLK_ESCAPE, app.sim(), app.renderer().camera());        // (nothing selected: the interface is the same in every frame)
+        app.render_frame();
+        const std::vector<uint8_t> plain = canvas_region(app, rx, ry, rw, rh);
+        app.set_others_confirmed(true);
+        app.render_frame();
+        const std::vector<uint8_t> on = canvas_region(app, rx, ry, rw, rh);
+        ASSERT_FALSE(plain.empty());
+        ASSERT_TRUE(on == plain);                                                          // the own ant is drawn where the predicted engine has it, in both
+        const sim::WorldState& world = app.shown_world();
+        ASSERT_TRUE(same_ant(*ant_of_world(world, walker), p) && !same_ant(*ant_of_world(world, walker), c));
+        app.net()->set_prediction_enabled(false);                                          // and without the prediction the same place of the frame shows the ant where the confirmed engine has it
+        app.pump_network(0.0f);
+        app.render_frame();
+        ASSERT_TRUE(canvas_region(app, rx, ry, rw, rh) != plain);
+        duo.step(1500);
+        ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
+    } TEST_END();
+
     TEST_CASE("PA13 Over A Whole Match No Other Player's Ant Is Ever Drawn Ahead Of The Confirmed Engine Or Anywhere It Is Not, Alice's Own Are Always The Predicted Engine's, The World That The Frame And The Pointer Share Is The One That A Fresh Composition Of The Two Engines Would Make At Every Step (Never A Stale One), And The Confirmed Engines End Identical: Two People Order Their Ants About For 40 s, With Fog Of War On And Off") {
         for (const bool fog : {false, true}) {
             Application app;

@@ -170,7 +170,7 @@
       "id": "glide_fed_for_other_players",
       "file": "src/ants_app/application_sim.cpp",
       "old": "if (owned_in(view_sim().get_world_state()) || owned_in(sim_.get_world_state())) renderer_->view_glide().add(shift.ant, shift.dx, shift.dy);",
-      "new": "renderer_->view_glide().add(shift.ant, shift.dx, shift.dy);",
+      "new": "if (owned_in(view_sim().get_world_state()) || owned_in(sim_.get_world_state()) || true) renderer_->view_glide().add(shift.ant, shift.dx, shift.dy);",
       "build": [
         "test_prediction_app"
       ],
