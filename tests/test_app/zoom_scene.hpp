@@ -438,6 +438,10 @@ struct HudRig {
 inline constexpr std::array<float, 3> kZooms = {0.5f, 1.0f, 2.0f};
 
 inline uint32_t g_clock_ms = 100000;
+
+// A match of the network shows the predicted engine (net::Prediction), whose work has a budget of the thread's CPU time: a test process on a busy machine that goes over it loses the prediction for ten
+// seconds, and the screen's engine changes under the test. That is no part of what these tests are about (the budget has tests of its own: test_prediction RP7.x, test_netgame N3.30): no budget here.
+inline const bool g_prediction_has_no_budget_here = (ants::net::NetGame::default_prediction_budget_ns() = UINT64_MAX, true);
 inline SDL_MouseWheelEvent wheel_event(int32_t y, float precise, bool flipped = false, uint32_t advance_ms = 16) {
     g_clock_ms += advance_ms;
     SDL_MouseWheelEvent e{};

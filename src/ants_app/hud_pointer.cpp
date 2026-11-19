@@ -84,10 +84,13 @@ void HUD::select_ants_in_rect(int32_t x1, int32_t y1, int32_t x2, int32_t y2, co
     for (const auto& ant : world.ants) {
         if (ant.player_id != local_player_id_) continue;
         const bool combat = (ant.raw_type == sim::AntType::Combat);       // the own type field, as the hit box reads it (0x1026a3d)
-        const int32_t al = ant.px - (combat ? 32 : 20);
-        const int32_t ar = ant.px + (combat ? 26 : 20);
-        const int32_t at = ant.py - (combat ? 46 : 32);
-        const int32_t ab = ant.py + 16;
+        int32_t off_x = 0;                                                // (an ant that slides in the picture is boxed where it is drawn)
+        int32_t off_y = 0;
+        if (draw_offset_) draw_offset_(world, local_player_id_, ant, off_x, off_y);
+        const int32_t al = ant.px + off_x - (combat ? 32 : 20);
+        const int32_t ar = ant.px + off_x + (combat ? 26 : 20);
+        const int32_t at = ant.py + off_y - (combat ? 46 : 32);
+        const int32_t ab = ant.py + off_y + 16;
         if (std::max(rl, al) < std::min(rr, ar) && std::max(rt, at) < std::min(rb, ab)) picked.push_back(ant.id);
     }
 

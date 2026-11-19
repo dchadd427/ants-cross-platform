@@ -305,8 +305,8 @@
   {
    "id": "off_list_still_counted",
    "file": "web/home/games.js",
-   "old": "var n = listRows().length, shown = loaded && !off;",
-   "new": "var n = listRows().length, shown = loaded;",
+   "old": "var n = listRows().length, m = live.length, shown = loaded && !off;",
+   "new": "var n = listRows().length, m = live.length, shown = loaded;",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {

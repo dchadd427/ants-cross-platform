@@ -162,8 +162,8 @@ class TheFolder(unittest.TestCase):
         self.assertIn("pic.setAttribute('aria-hidden', 'true');", self.js)
 
     def test_nothing_is_kept_in_the_browser_and_the_two_addresses_have_no_query_and_no_cookies(self):
-        for word in ("sessionStorage", "indexedDB", "document.cookie", "XMLHttpRequest", "sendBeacon", "WebSocket", "BroadcastChannel"):
-            self.assertNotIn(word, self.code, word)
+        for word in ("sessionStorage", "indexedDB", "document.cookie", "XMLHttpRequest", "sendBeacon", "WebSocket"):
+            self.assertNotIn(word, self.code, word)       # (the one channel that answers a watch tab is not a keeping: it is run in web_home_games_live_check.js, "which tab Watch uses")
         self.assertNotIn("localStorage", self.code, "nothing is kept in the browser: the matches in progress always show")
         self.assertNotIn("ants.home.games", self.code, "no stored word (an old one from an earlier version is never read)")
         self.assertNotRegex(read("web", "home", "games.css"), r"\.gfilter|\.gfrow", "no switch in the list's head")
