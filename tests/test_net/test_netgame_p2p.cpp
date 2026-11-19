@@ -83,6 +83,7 @@ void run_hint_netgame_tests() {
         ASSERT_TRUE(m.guest->net.predicting());
         const uint32_t ant = m.own_ant();
         ASSERT_EQ(m.guest->net.submit(order(1, ant, 12, 12)).status, sim::CommandResult::Status::Applied);
+        const uint64_t applied_at = m.guest->net.prediction()->last_order_tick();
         m.t.run(300);
         ASSERT_EQ(m.guest->net.submit(order(1, ant, 14, 12)).status, sim::CommandResult::Status::Applied);
         m.t.run(300);
@@ -92,6 +93,7 @@ void run_hint_netgame_tests() {
         ASSERT_TRUE(first.seq == 1 && second.seq == 2);
         ASSERT_TRUE(first.command.issuer == 1 && first.command.type == CommandType::GroupMove && first.command.tile_x == 12 && second.command.tile_x == 14);
         ASSERT_TRUE(first.tick >= 1 && second.tick > first.tick);
+        ASSERT_EQ(uint64_t{first.tick}, applied_at);                                       // (the tick at which this player's own screen applied the order)
         ASSERT_EQ(m.guest->net.hint_counts().sent, uint64_t{2});
         // Hatch is not predicted, so it is not hinted
         sim::Command hatch;

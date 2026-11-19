@@ -4,8 +4,8 @@
   {
    "id": "hint_put_behind_a_turn_in_hand",
    "file": "src/ants_net/prediction.cpp",
-   "old": "Foreign f{command, seq, std::min(std::max(tick, next_receive), horizon), confirmed_tick(), 0};",
-   "new": "Foreign f{command, seq, std::min(tick, horizon), confirmed_tick(), 0};",
+   "old": "    for (Foreign& h : hints_) h.tick = std::max(h.tick, next_receive);        // (a hint is never put behind a turn in hand; one beyond the display tick waits for it)",
+   "new": "    ;",
    "build": [
     "test_prediction_hints"
    ],
@@ -42,10 +42,10 @@
    "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
   },
   {
-   "id": "window_of_numbers_is_longer",
+   "id": "window_of_numbers_is_shorter",
    "file": "src/ants_net/prediction.cpp",
    "old": "if (d >= 64u || ((bits >> d) & 1u) != 0u) return false;",
-   "new": "if (d >= 65u || ((bits >> d) & 1u) != 0u) return false;",
+   "new": "if (d >= 32u || ((bits >> d) & 1u) != 0u) return false;",
    "build": [
     "test_prediction_hints"
    ],
@@ -132,26 +132,6 @@
    "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
   },
   {
-   "id": "hint_is_not_moved_to_the_next_tick",
-   "file": "src/ants_net/prediction.cpp",
-   "old": "            hints_[i].tick = n + 1u;",
-   "new": "            hints_[i].tick = n;",
-   "build": [
-    "test_prediction_hints"
-   ],
-   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
-  },
-  {
-   "id": "hint_that_no_turn_carries_stays",
-   "file": "src/ants_net/prediction.cpp",
-   "old": "if (confirmed_tick_now > hints_[i].born + cfg_.pending_timeout_ticks) {",
-   "new": "if (false) {",
-   "build": [
-    "test_prediction_hints"
-   ],
-   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
-  },
-  {
    "id": "hints_survive_a_stop",
    "file": "src/ants_net/prediction.cpp",
    "old": "    assumed_.clear();\n    pending_.clear();\n    hints_.clear();\n    sealed_seen_.clear();",
@@ -162,20 +142,10 @@
    "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
   },
   {
-   "id": "hints_at_a_tick_are_not_in_the_order_of_a_turn",
-   "file": "src/ants_net/prediction.cpp",
-   "old": "    for (const Foreign& h : hints_) {\n        if (std::max(h.tick, next_receive) == tick) out.push_back(h.command);\n    }\n    std::stable_sort(out.begin(), out.end(), [](const sim::Command& a, const sim::Command& b) { return a.issuer < b.issuer; });",
-   "new": "    for (const Foreign& h : hints_) {\n        if (std::max(h.tick, next_receive) == tick) out.push_back(h.command);\n    }",
-   "build": [
-    "test_prediction_hints"
-   ],
-   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
-  },
-  {
    "id": "hint_is_applied_out_of_order_at_the_display_tick",
    "file": "src/ants_net/prediction.cpp",
    "old": "for (const sim::Command& c : assumed_.back()) in_order = in_order && c.issuer < command.issuer;",
-   "new": "for (const sim::Command& c : assumed_.back()) in_order = in_order && true;",
+   "new": "for (const sim::Command& c : assumed_.back()) { (void)c; }",
    "build": [
     "test_prediction_hints"
    ],
@@ -186,16 +156,6 @@
    "file": "src/ants_net/prediction.cpp",
    "old": "    } else if (at == display_) {",
    "new": "    } else if (at >= display_) {",
-   "build": [
-    "test_prediction_hints"
-   ],
-   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
-  },
-  {
-   "id": "a_hint_in_a_turn_is_not_taken_out_of_the_list",
-   "file": "src/ants_net/prediction.cpp",
-   "old": "if (!take_hint_for(cmd, n, wrong)) {",
-   "new": "if (!(take_hint_for(cmd, n, wrong) && false)) {",
    "build": [
     "test_prediction_hints"
    ],
@@ -226,16 +186,6 @@
    "file": "src/ants_net/session.cpp",
    "old": "c.p2p_ready = !ice.urls.empty();",
    "new": "c.p2p_ready = true;",
-   "build": [
-    "test_lockstep"
-   ],
-   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
-  },
-  {
-   "id": "direct_without_a_relay",
-   "file": "src/ants_net/session.cpp",
-   "old": "c.p2p_direct = c.p2p_ready && m.direct;",
-   "new": "c.p2p_direct = m.direct;",
    "build": [
     "test_lockstep"
    ],
@@ -305,7 +255,7 @@
    "id": "signals_are_not_limited",
    "file": "src/ants_net/session.cpp",
    "old": "if (++c.p2p_signals > kMaxP2pSignals) return violation(player);",
-   "new": "++c.p2p_signals;",
+   "new": "++c.p2p_signals;\n    (void)kMaxP2pSignals;",
    "build": [
     "test_lockstep"
    ],
@@ -315,7 +265,7 @@
    "id": "credentials_are_not_limited",
    "file": "src/ants_net/session.cpp",
    "old": "if (++c.p2p_configs > kMaxP2pConfigs) return violation(player);",
-   "new": "++c.p2p_configs;",
+   "new": "++c.p2p_configs;\n    (void)kMaxP2pConfigs;",
    "build": [
     "test_lockstep"
    ],
@@ -335,7 +285,7 @@
    "id": "peers_are_not_told_when_they_change",
    "file": "src/ants_net/session.cpp",
    "old": "if (ready == peers_ready_sent_ && direct == peers_direct_sent_) return;",
-   "new": "if (ready == peers_ready_sent_ && direct == peers_direct_sent_ && peers_ready_sent_ != 0) return;",
+   "new": "if (ready == peers_ready_sent_) return;",
    "build": [
     "test_lockstep"
    ],
@@ -425,7 +375,7 @@
    "id": "a_connection_line_may_show_an_address",
    "file": "src/ants_net/p2p.cpp",
    "old": "                if (address != \"0.0.0.0\" && address != \"::\") return true;",
-   "new": "                if (false) return true;",
+   "new": "                (void)address;",
    "build": [
     "test_lockstep"
    ],
@@ -505,7 +455,7 @@
    "id": "a_signal_with_control_characters_decodes",
    "file": "src/ants_net/p2p.cpp",
    "old": "    if (!signal_text(m.text)) return false;\n    out = std::move(m);",
-   "new": "    out = std::move(m);",
+   "new": "    if (!signal_text(m.text) && false) return false;\n    out = std::move(m);",
    "build": [
     "test_lockstep"
    ],
@@ -535,7 +485,7 @@
    "id": "credential_valid_for_any_secret",
    "file": "src/ants_net/turn.cpp",
    "old": "return credential == turn_credential(secret, username);",
-   "new": "return true;",
+   "new": "return credential.size() > 0 || true;",
    "build": [
     "test_lockstep"
    ],

@@ -58,9 +58,41 @@ The server relays a `Signal` only between two players who are both ready; a `P2p
 
 `--direct on|off` (default off: this player allows direct connections) and `--no-p2p` (no channel at all), see [`COMMAND_LINE.md`](COMMAND_LINE.md). The page passes `--direct on` when the Room's switch was on (localStorage `ants.direct`) and `--no-p2p` for `?p2p=off`. The server: `--turn-host HOST[:PORT]` (or `ANTS_TURN_HOST`) and `ANTS_TURN_SECRET`, see [`SERVER.md`](SERVER.md). Without both, protocol 25 changes nothing about a match except the computer players' hints.
 
+## Measured effect (a rig on virtual time, not real networks)
+
+What was run: real sealing server session, real client sessions and predictions, links with a latency and a jitter, 240 s of play and three seeds for each line. A "correction" is one ant of ANOTHER seat that a rebuild moved by 8 px or more on a player's screen (a tile is 32 px); the same unit as the study of the bots' rubber banding. The two players of the peers rig give an order to their colony about every 1.3 s each (a busy match), so only the comparison of the columns means something, not the counts.
+
+**Between players** (per minute and per player; round trips in ms: player A to the server / player B to the server / A to B; the relay's path is half the sum of the two players' round trips to it, which sits with the server). Whole-tile hops are corrections of 28 px or more, which the engine makes when an ant that walks is re-ordered a tick away from where the order was meant to land.
+
+| link (A / B / A-B) | no hints: 8 px+ (tile hops) | relay: 8 px+ (tile hops) | direct: 8 px+ (tile hops) |
+|---|---|---|---|
+| 80 / 80 / 15: neighbors far from the server | 109 (0.0) | 97 (12.0) | 36 (12.2) |
+| 120 / 120 / 10: both far, close to each other | 106 (0.9) | 113 (6.5) | 31 (6.5) |
+| 40 / 150 / 110: one overseas | 107 (2.7) | 96 (7.5) | 90 (5.2) |
+| 40 / 40 / 80: server in the middle | 109 (0.0) | 50 (1.0) | 28 (0.3) |
+| 20 / 20 / 40: both near the server | 109 (0.0) | 22 (0.0) | 2 (0.0) |
+| 2 / 2 / 2: lab floor | 109 (0.0) | 22 (0.0) | 22 (0.0) |
+
+Every hint was confirmed by its turn in these runs (no loss, no late hint). Reading: the hints cut the number of corrections a lot when the hint comes well before the turn (pairs near the server, or near each other), and little when the other player is far from you and the server (one overseas). They do not shrink the corrections that remain: the hint carries the sender's display tick, and the turn is sealed on that tick only about half the time (the other orders are sealed a tick later), so a walking ant that is re-ordered near a tile line is put on the wrong side of it by one tick and moved a whole tile when the turn corrects it. That tail (12 a minute in the first two rows) did not exist without hints. What would remove it is the sender knowing the tick that the server will seal an order into from the phase of the server's seals, which the prediction does not follow today.
+
+**A computer player's orders from the server** (a Hard bot on SMALL, one person who does nothing, corrections of the bot's ants per minute, 6 matches of 240 s for each line):
+
+| link (round trip, ms) | without: 8 px+ / 16 px+ / p90 size (px) | with the server's hints: 8 px+ / 16 px+ / p90 size (px) |
+|---|---|---|
+| 2 | 12.3 / 1.4 / 16 | 0.0 / 0.0 / 0 |
+| 30 | 12.3 / 1.4 / 16 | 0.0 / 0.0 / 0 |
+| 80 | 12.4 / 2.6 / 18 | 0.7 / 0.0 / 12 |
+| 150 | 18.0 / 10.5 / 27 | 15.5 / 8.0 / 26 |
+| 250 | 23.9 / 15.3 / 31 | 21.7 / 14.2 / 31 |
+
+Every hint of the server (about 1,090 in six matches, each line) was confirmed on the tick it named. The hint is ahead of its turn by one turn (50 ms: the bot decides right after the server runs a turn, and the order is sealed in the next one), so it removes the corrections where a player's picture is no more than a turn or two behind the server (a round trip up to about 80 ms) and helps little beyond that (9 to 14 % fewer at 150 and 250 ms). Holding the bot's order back so that the hint comes a whole lead ahead is a different thing and was not built: it changes who wins a duel.
+
+**Two real browsers** (headless Chrome, the wasm game, a real `ants_server` and a real coturn in a container): the relay (switch off on both), both on (direct), one on and one off (relay), the relay not there with both off (no channel, the match runs on the server's stream, no host or server-reflexive candidate is ever gathered or sent) and the relay not there with both on (direct). In the relay and direct runs each player gave five orders with the mouse: each was sent as a hint (five sent, fifteen copies received), the prediction took five, and the sealed turns confirmed them; the page was served with the exact content security policy and isolation headers of the site.
+
+
 ## Tests
 
-`test_prediction_hints` (the matching rule and its properties on the prediction's rig), `test_lockstep` P25.x (the wire, the credential against RFC 2202's HMAC vectors, the rule of the address, the server's session, the bot hints, nothing changed in turns or hashes), `test_netgame` N25.x (the game's side with a transport that the test plays), `test_web_p2p` and `test_web_lobby_direct` (the page's channels and the Room's switch, node, with mutants in `tests/data/p2p_mutants.json`, `tests/data/lobby_direct_mutants.json`, and `tests/data/p2p_core_mutants.json` for the C++ rules). The numbers and the two-browser run are in the pull request that made it.
+`test_prediction_hints` (the matching rule and its properties on the prediction's rig), `test_lockstep` P25.x (the wire, the credential against RFC 2202's HMAC vectors, the rule of the address, the server's session, the bot hints, nothing changed in turns or hashes), `test_netgame` N25.x (the game's side with a transport that the test plays), `test_web_p2p` and `test_web_lobby_direct` (the page's channels and the Room's switch, node, with mutants in `tests/data/p2p_mutants.json`, `tests/data/lobby_direct_mutants.json`, and `tests/data/p2p_core_mutants.json` for the C++ rules). The rig that measured the effect and the two-browser run are not part of the repository (they are described above).
 
 ## Limits
 

@@ -63,9 +63,44 @@ void run_benefit_tests() {
         ASSERT_OK(verify_min(rig, t + sc.down_delay + 1, 20));
     } TEST_END();
 
+    TEST_CASE("RH1.4 A Hint Of A Tick That The Jitter Buffer Already Holds Is Put At The First Turn That Is Not Known, Not Behind The Turns In Hand: The Picture Is Right From The Frame Of The Hint On") {
+        Scenario sc = hint_scenario(44);
+        sc.buffer_turns = 3;                                                                // three turns in hand: the hint's tick is one of them, sealed without the order
+        Rig rig(sc);
+        rig.run(14);
+        const uint32_t t = rig.step_no() + 6;
+        const Command order = walk(rig, 1, 20, 40);
+        rig.schedule(t, order);
+        const uint64_t in_hand = rig.runner().next_turn_expected();
+        rig.schedule_hint(t - 3, order, 1, in_hand - 1);                                    // a tick that is behind the turns that this machine holds
+        rig.run(25);
+        rig.run_quiet(30);
+        const Prediction::Stats& st = rig.prediction()->stats();
+        ASSERT_EQ(st.hints_accepted, 1u);
+        ASSERT_EQ(rig.prediction()->pending_hints(), 0u);
+        ASSERT_TRUE(st.hints_confirmed + st.hints_confirmed_moved + st.hints_dropped == 1u);
+        ASSERT_OK(verify_min(rig, t + sc.down_delay + 4, 20));
+        // the first frames after the hint: the order is in the picture (the ants of seat 1 are on their way), where a hint that was dropped on the floor would show them standing
+        Rig control(sc);
+        control.run(14);
+        control.schedule(t, order);
+        control.run(t - 3 - control.step_no() + 1);
+        control.prediction()->engine();
+        const uint32_t ant = control.ids.ants[1][0];
+        Rig with(sc);
+        with.run(14);
+        with.schedule(t, order);
+        with.schedule_hint(t - 3, order, 1, with.runner().next_turn_expected() - 1);
+        with.run(t - 3 - with.step_no() + 1);
+        with.prediction()->engine();
+        ASSERT_TRUE(with.prediction()->engine().get_unit(ant).orig_order == sim::AntUnit::kOrderMove);
+        ASSERT_TRUE(control.prediction()->engine().get_unit(ant).orig_order != sim::AntUnit::kOrderMove);
+    } TEST_END();
+
     TEST_CASE("RH1.3 A Hint That Stands Ahead Of The Display Tick Waits For It And Is Applied Without A Rebuild") {
         Scenario sc = hint_scenario(43);
         Rig rig(sc);
+        rig.check_derived(1);
         rig.run(12);
         Prediction& p = *rig.prediction();
         const uint64_t display = p.display_tick();
@@ -78,6 +113,8 @@ void run_benefit_tests() {
         ASSERT_EQ(p.pending_hints(), 1u);
         rig.run(25);
         rig.run_quiet(20);
+        ASSERT_EQ(rig.derived_mismatches, 0u);                                              // (the engine that waited for the tick is the one that a rebuild makes)
+        ASSERT_TRUE(rig.derived_checks > 20u);
         ASSERT_EQ(p.stats().hints_accepted, 1u);
         ASSERT_EQ(p.pending_hints(), 0u);                                                   // (sealed at t, a different tick from where it stood: it is one correction, and the sealed stream decides)
         ASSERT_TRUE(p.stats().hints_confirmed + p.stats().hints_confirmed_moved + p.stats().hints_dropped == 1u);
@@ -102,6 +139,24 @@ void run_rule_tests() {
         ASSERT_EQ(st.hints_dropped, 0u);
         ASSERT_EQ(rig.prediction()->pending_hints(), 0u);
         ASSERT_OK(verify_min(rig, t + 1 + sc.down_delay + 1, 20));
+    } TEST_END();
+
+    TEST_CASE("RH2.5 A Hint That Stands Ahead Of The Tick That Its Order Is Sealed At Is Confirmed There With One Correction: The Sealed Tick Wins, And The Picture Is The Oracle's From The Turn On") {
+        Scenario sc = hint_scenario(55);
+        Rig rig(sc);
+        rig.run(12);
+        const uint32_t t = rig.step_no() + 4;
+        const Command order = walk(rig, 1, 20, 40);
+        rig.schedule(t, order);
+        rig.schedule_hint(t - 3, order, 1, t + 2);                                          // the sender's screen stood two ticks beyond where the turn put the order
+        rig.run(25);
+        rig.run_quiet(30);
+        const Prediction::Stats& st = rig.prediction()->stats();
+        ASSERT_EQ(st.hints_accepted, 1u);
+        ASSERT_EQ(st.hints_confirmed_moved, 1u);
+        ASSERT_EQ(st.hints_confirmed, 0u);
+        ASSERT_EQ(rig.prediction()->pending_hints(), 0u);
+        ASSERT_OK(verify_min(rig, t + sc.down_delay + 1, 20));
     } TEST_END();
 
     TEST_CASE("RH2.2 A Hint That The Server Never Seals Is Dropped After Two Turns Without It, And The Picture Is The Oracle's Again: The Sealed Stream Wins") {
@@ -146,6 +201,8 @@ void run_rule_tests() {
         rig.schedule(t, second);                                                            // only the second one is sealed (the first was refused by the server's flood limit)
         rig.schedule_hint(t - 3, second, 2, t);                                             // the later order's hint comes first (an unordered channel)
         rig.schedule_hint(t - 2, first, 1, t - 1);
+        rig.run(t + sc.down_delay + 1 - rig.step_no());                                     // up to the frame in which the sealed turn has arrived
+        ASSERT_EQ(rig.prediction()->pending_hints(), 0u);                                   // the hint that the server did not seal went with the one it sealed, at once
         rig.run(25);
         rig.run_quiet(30);
         const Prediction::Stats& st = rig.prediction()->stats();
@@ -173,6 +230,7 @@ void run_rule_tests() {
         const Command other = walk(rig, 2, 12, 12);
         ASSERT_TRUE(p.hint(other, 100, p.display_tick() + 2) == Verdict::Accepted);
         ASSERT_TRUE(p.hint(other, 36, p.display_tick() + 2) == Verdict::Duplicate);         // 64 numbers behind the highest one: out of the window
+        ASSERT_TRUE(p.hint(other, 60, p.display_tick() + 2) == Verdict::Accepted);          // 40 behind: inside it, not seen
         ASSERT_TRUE(p.hint(other, 99, p.display_tick() + 2) == Verdict::Accepted);          // inside the window and not seen: a copy that arrived out of order
         ASSERT_TRUE(p.hint(other, 99, p.display_tick() + 2) == Verdict::Duplicate);
     } TEST_END();
@@ -221,8 +279,7 @@ void run_rule_tests() {
         rig.run(30);
         Prediction& p = *rig.prediction();
         ASSERT_TRUE(p.hint(walk(rig, 1, 20, 40), 1, 4000000000ull) == Verdict::Accepted);
-        rig.run(60);                                                                        // no turn carries it: after the two turns that pass its (clamped) tick it is dropped, or by the timeout
-        rig.run_quiet(120);
+        rig.run(40);                                                                        // no turn carries it: after the two turns that pass its (clamped) tick it is dropped, long before the timeout of 100 ticks
         ASSERT_EQ(p.pending_hints(), 0u);
         ASSERT_EQ(p.stats().hints_dropped, 1u);
     } TEST_END();
@@ -263,6 +320,28 @@ void run_order_tests() {
         ASSERT_TRUE(rig.derived_checks > 20u);
         ASSERT_EQ(rig.prediction()->stats().hints_confirmed, 2u);
         ASSERT_OK(verify_min(rig, t - 2, 25));
+    } TEST_END();
+
+    TEST_CASE("RH4.3 When The Player Is A Higher Seat Than The Hints Are, The Player's Own Order And The Hints Of One Tick Are Applied In The Order Of A Turn (By Seat), As A Rebuild Makes Them") {
+        Scenario sc = hint_scenario(63);
+        sc.seat = 2;
+        Rig rig(sc);
+        rig.check_derived(1);
+        rig.run(12);
+        const uint32_t t = rig.step_no() + 5;
+        const Command a = walk(rig, 0, 20, 40);
+        const Command b = walk(rig, 1, 40, 20);
+        const Command own = walk(rig, 2, 30, 10);
+        rig.schedule(t, a);
+        rig.schedule(t, b);
+        rig.schedule(t, own);
+        rig.schedule_hint(t - 3, a, 1, t);
+        rig.schedule_hint(t - 3, b, 1, t);
+        rig.run(25);
+        rig.run_quiet(30);
+        ASSERT_EQ(rig.derived_mismatches, 0u);
+        ASSERT_TRUE(rig.derived_checks > 20u);
+        ASSERT_EQ(rig.prediction()->stats().hints_confirmed + rig.prediction()->stats().hints_confirmed_moved, 2u);
     } TEST_END();
 
     TEST_CASE("RH4.2 Hints Of The Other Seats Together With The Player's Own Orders, A Lead That Changes And A Jittery Link: The Picture Is Right After Them And Equal To A Rebuild At Every Frame") {

@@ -441,6 +441,16 @@ void run_bot_hint_tests() {
             }
         }
         ASSERT_TRUE(found);
+        // an order that the sequencer refuses (more than a seat may give in one turn) is no hint: only what it took is sent
+        P2pRig flood(2, true, 2);
+        flood.run(300);
+        size_t taken = 0;
+        for (int i = 0; i < 1500; ++i) taken += flood.host->submit_bot(2, bot_walk(flood.ids, 2, static_cast<int16_t>(10 + i % 40), 20)) ? 1u : 0u;
+        flood.run(300);
+        size_t sent = 0;
+        for (const auto& raw : flood.got[0]) sent += peek_type(raw) == MsgType::Hint ? 1u : 0u;
+        ASSERT_TRUE(taken > 64 && taken < 1500);
+        ASSERT_EQ(sent, taken);
         // a server that is told not to sends none; a seat that is paused or a match that has not started has no hints either
         P2pRig quiet(2, true, 2, false);
         quiet.run(300);

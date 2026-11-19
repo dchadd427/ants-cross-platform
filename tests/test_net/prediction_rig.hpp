@@ -180,6 +180,7 @@ struct Scenario {
     uint32_t match_ms{720000};
     uint32_t extra_workers{0};     // workers added to every player beyond the six ants (the tests of a selection of more than 32 ants)
     bool fog{false};               // Fog of War: the views are also compared with the oracle's explored ground (it is no part of the state hash)
+    uint8_t seat{0};               // the player whose orders are predicted (every test but the hints' order of a turn: seat 0)
     Prediction::Config prediction{rig_config()};
     // The rig's prediction has the lead that the scenario names and keeps it (the tests hold a wrong lead to account, and the exact one to exactness): it does not learn its lead and has no bias
     // (the tests of the learning and of the bias switch them on), and no budget (the tests run on busy machines: a stall of the test process is not the prediction's cost; the tests of the
@@ -210,7 +211,7 @@ public:
         build_world(oracle_, sc.seed, sc.match_ms, sc.extra_workers, sc.fog);
         if (sc.predict) {
             Prediction::Config pc = sc.prediction;
-            pc.seat = 0;
+            pc.seat = sc.seat;
             pred_ = std::make_unique<Prediction>(confirmed_, runner_, pc);
             pred_->set_expected_delay_ms(sc.lead_ms != 0 ? sc.lead_ms : (sc.buffer_turns + sc.down_delay + sc.uplink) * sim::TICK_MS);
             runner_.set_on_tick([this]() {
