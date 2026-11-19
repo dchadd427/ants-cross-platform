@@ -940,8 +940,8 @@ private:
     void enforce_zoom_limits();                           // every frame: the camera's zoom inside zoom_limits() and the map's limit (no zoom while the offscreen target cannot be made), one report when that failure begins
     bool zoom_failure_reported_{false};                   // enforce_zoom_limits has said that the target cannot be made (for this failure)
     void update_mouse_grab();                             // fullscreen (SDL's or a macOS Space): SDL keeps the pointer in the window while it has the focus (native builds)
-#if defined(__APPLE__)
     bool page_fullscreen_{false};                         // the browser build: the page's fullscreen, as the page says it (ants_set_page_fullscreen)
+#if defined(__APPLE__)
     bool presentation_hidden_{false};                     // macOS: the game has made the Dock and the menu bar leave the fullscreen Space that the window is in (update_mouse_grab gives them back)
 #endif
     bool button_outside_window(const SDL_MouseButtonEvent& button) const;   // the position SDL delivered (before the clamp) lies outside the window, not merely the picture
