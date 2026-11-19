@@ -175,6 +175,24 @@ LayoutRect Application::web_countdown_button() const noexcept {
     return hud_.countdown_button_rect().moved(picture_.x, picture_.y);
 }
 
+// The HUD's Fullscreen button for the page (ants_probe 70 - 76, web/hud_fullscreen.js): 70 - 73: the place of the button, x, y, width and height in the canvas's pixels (-1 when a click on it would
+// not act: outside a match, with a window or the card up, or in a picture that has no such button), 74: 1 while the game is full screen (the button's picture is the one that leaves), 75: 1 while the pointer
+// is on the button or holds it (the page asks at the click: the pointer lock of a fullscreen page gives the page no coordinates), 76: how many times the button has acted. Anything else: -1.
+int Application::hud_probe(int what) const noexcept {
+    const bool there = match_running() && hud_.fullscreen_button_active();
+    const LayoutRect button = hud_.fullscreen_button().w > 0 ? LayoutRect{hud_.fullscreen_button().x, hud_.fullscreen_button().y, hud_.fullscreen_button().w, hud_.fullscreen_button().h}.moved(picture_.x, picture_.y) : LayoutRect{};
+    switch (what) {
+        case 70: return there ? button.x : -1;
+        case 71: return there ? button.y : -1;
+        case 72: return there ? button.w : -1;
+        case 73: return there ? button.h : -1;
+        case 74: return hud_.fullscreen_state() ? 1 : 0;
+        case 75: return there && (hud_.fullscreen_button().is_hovered || hud_.fullscreen_button().is_pressed) ? 1 : 0;
+        case 76: return static_cast<int>(hud_.fullscreen_clicks() & 0x7fffffffu);
+        default: return -1;
+    }
+}
+
 // The countdown card for the page (ants_probe 60 - 65, web/countdown_button.js): 60: the seconds that the countdown has left, rounded up (-1 when no card is up), 61 - 64: the place of the Fullscreen
 // button on the card, x, y, width and height in the canvas's pixels (the page lays its own button over it), 65: the lines of the match's chat log (-1 outside a match: the browser check reads what the other
 // player said). Anything else: -1.

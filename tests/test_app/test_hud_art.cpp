@@ -288,6 +288,138 @@ void test_png() {
     }
 }
 
+/// A whole file of the repository
+std::vector<uint8_t> file_bytes(const std::string& path) {
+    std::ifstream f(path, std::ios::binary);
+    return std::vector<uint8_t>((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+}
+
+/// One channel of one pixel of the 2x picture that a 3x picture gives, in floating point (the weights of derive_two_thirds, written out): the premultiplied average of the 3 x 3 block over 3 / 2 pixels
+double derived_channel(const DecodedImage& three, int x, int y, int c) {
+    static const int weight[2][3] = {{2, 1, 0}, {0, 1, 2}};
+    double cover = 0, sum = 0;
+    for (int sy = 0; sy < 3; ++sy) {
+        for (int sx = 0; sx < 3; ++sx) {
+            const double wgt = weight[y % 2][sy] * weight[x % 2][sx];
+            const size_t at = (static_cast<size_t>(y / 2 * 3 + sy) * static_cast<size_t>(three.width) + static_cast<size_t>(x / 2 * 3 + sx)) * 4;
+            cover += wgt * three.rgba[at + 3];
+            sum += wgt * three.rgba[at + 3] * (c == 3 ? 255 : three.rgba[at + static_cast<size_t>(c)]);
+        }
+    }
+    if (c == 3) return cover / 9.0;
+    return cover > 0 ? sum / cover : 0.0;
+}
+
+void test_derive() {
+    group("derive", "the first rows of a picture; the 2x rows that the game makes from the 3x sheet (the weights, see-through pixels, the shipped sheets)");
+    {   // the first rows of a PNG: from the start of its data only
+        const int w = 37, h = 200;
+        const std::vector<uint8_t> px = noise_picture(w, h, 4242);
+        const std::vector<uint8_t> bytes = png_of(w, h, filtered(px, w, h, {0, 1, 2, 3, 4}));
+        const size_t row = static_cast<size_t>(w) * 4;
+        DecodedImage part;
+        check(decode_png_rgba(bytes.data(), bytes.size(), part, 31) && part.width == w && part.height == 31 && part.rgba.size() == 31 * row && std::equal(part.rgba.begin(), part.rgba.end(), px.begin()), "the first 31 rows are the first 31 rows of the picture");
+        check(decode_png_rgba(bytes.data(), bytes.size(), part, 1) && part.height == 1 && std::equal(part.rgba.begin(), part.rgba.end(), px.begin()), "one row");
+        check(decode_png_rgba(bytes.data(), bytes.size(), part, h) && same_picture(part, w, h, px), "all the rows, asked for by number");
+        check(decode_png_rgba(bytes.data(), bytes.size(), part, 0) && same_picture(part, w, h, px), "no number is all the rows");
+        check(!decode_png_rgba(bytes.data(), bytes.size(), part, h + 1) && part.rgba.empty(), "more rows than the picture has: refused");
+        check(!decode_png_rgba(bytes.data(), bytes.size(), part, -1), "a negative number of rows: refused");
+        std::vector<uint8_t> out;
+        const uint8_t stored_five[] = {0x01, 0x05, 0x00, 0xfa, 0xff, 1, 2, 3, 4, 5};
+        check(inflate_raw_prefix(stored_five, sizeof(stored_five), out, 3) && out.size() >= 3 && out[0] == 1 && out[2] == 3 && inflate_raw_prefix(stored_five, sizeof(stored_five), out, 5) && !inflate_raw_prefix(stored_five, sizeof(stored_five), out, 6), "the start of a stream: what it holds, and not more than it holds");
+    }
+    {   // the arithmetic: a block of 3 x 3 gives 2 x 2, weights (2, 1, 0) and (0, 1, 2) each way, rounded half up
+        DecodedImage three;
+        three.width = 3;
+        three.height = 3;
+        three.rgba.assign(36, 0);
+        for (int i = 0; i < 9; ++i) {
+            const size_t at = static_cast<size_t>(i) * 4;
+            three.rgba[at] = static_cast<uint8_t>(10 * i);
+            three.rgba[at + 1] = 200;
+            three.rgba[at + 2] = static_cast<uint8_t>(7 * i);
+            three.rgba[at + 3] = 255;
+        }
+        DecodedImage two;
+        check(hud_art::derive_two_thirds(three, two) && two.width == 2 && two.height == 2 && two.rgba.size() == 16, "a block of 3 x 3 gives 2 x 2");
+        const int red[4] = {13, 27, 53, 67};                         // (4 * 0 + 2 * 10 + 2 * 30 + 40) / 9 = 13.3 and so on, worked out by hand
+        const int blue[4] = {9, 19, 37, 47};
+        bool ok = two.rgba.size() == 16;
+        for (size_t i = 0; ok && i < 4; ++i) ok = two.rgba[i * 4] == red[i] && two.rgba[i * 4 + 1] == 200 && two.rgba[i * 4 + 2] == blue[i] && two.rgba[i * 4 + 3] == 255;
+        check(ok, "the four pixels are the weighted averages of the block, to the level (13 27 53 67 in red)");
+        for (int i = 0; i < 9; ++i) three.rgba[static_cast<size_t>(i) * 4 + 3] = 128;      // half see-through everywhere, color 50: the color stays 50, alpha stays 128
+        for (int i = 0; i < 9; ++i) three.rgba[static_cast<size_t>(i) * 4] = 50;
+        check(hud_art::derive_two_thirds(three, two) && two.rgba[0] == 50 && two.rgba[3] == 128 && two.rgba[15] == 128 && two.rgba[12] == 50, "a see-through pixel keeps its alpha and its color");
+        for (int i = 0; i < 9; ++i) {
+            const size_t at = static_cast<size_t>(i) * 4;
+            three.rgba[at] = three.rgba[at + 1] = three.rgba[at + 2] = 100;
+            three.rgba[at + 3] = 255;
+        }
+        three.rgba[0] = 250;                                           // the corner pixel (weight 4 for the first output pixel) is clear: its color counts for nothing
+        three.rgba[3] = 0;
+        check(hud_art::derive_two_thirds(three, two) && two.rgba[0] == 100 && two.rgba[1] == 100 && two.rgba[3] == 142 && two.rgba[4] == 100 && two.rgba[7] == 255 && two.rgba[15] == 255, "a clear pixel adds nothing to the color, and takes its share of the alpha (5 of 9)");
+        DecodedImage six;
+        six.width = 6;
+        six.height = 3;
+        six.rgba.assign(72, 255);
+        for (size_t i = 0; i < 9; ++i) six.rgba[(i / 3 * 6 + i % 3) * 4] = 0;       // the first block red 0, the second 255
+        check(hud_art::derive_two_thirds(six, two) && two.width == 4 && two.height == 2 && two.rgba[0] == 0 && two.rgba[4] == 0 && two.rgba[8] == 255 && two.rgba[12] == 255, "two blocks do not mix");
+        DecodedImage odd;
+        odd.width = 4;
+        odd.height = 3;
+        odd.rgba.assign(48, 0);
+        check(!hud_art::derive_two_thirds(odd, two) && two.rgba.empty(), "a picture that is not a whole number of blocks is refused");
+        check(!hud_art::derive_two_thirds(DecodedImage{}, two), "an empty picture is refused");
+    }
+    hud_art::Art art;
+    if (!load_art(art)) return;
+    const int32_t rows = art.derived_rows();
+    check(rows > 0 && rows < art.sheet_height(), "the shipped manifest derives the first rows of the 2x sheet, and not all of them");
+    const std::vector<uint8_t> bytes3 = file_bytes(art_folder() + "/" + art.sheet_file(3));
+    DecodedImage top3, full3;
+    check(decode_png_rgba(bytes3.data(), bytes3.size(), top3, rows * 3) && decode_png_rgba(bytes3.data(), bytes3.size(), full3) && top3.height == rows * 3 &&
+              std::equal(top3.rgba.begin(), top3.rgba.end(), full3.rgba.begin()), "the first rows of the 3x sheet (a compressed file) are the first rows of the whole sheet");
+    // the 2x file has nothing in those rows: the 2x sheet is smaller by what the 3x sheet already holds
+    DecodedImage file2, sheet2;
+    const std::vector<uint8_t> bytes2 = file_bytes(art_folder() + "/" + art.sheet_file(2));
+    check(decode_png_rgba(bytes2.data(), bytes2.size(), file2) && art.sheet_pixels(2, sheet2) && sheet2.width == file2.width && sheet2.height == file2.height, "the 2x sheet is read, whole");
+    const size_t band = static_cast<size_t>(rows) * 2 * static_cast<size_t>(sheet2.width) * 4;
+    bool empty = file2.rgba.size() >= band;
+    for (size_t i = 0; empty && i < band; ++i) empty = file2.rgba[i] == 0;
+    check(empty, "the file of the 2x sheet holds nothing in the derived rows");
+    check(file2.rgba.size() == sheet2.rgba.size() && std::equal(file2.rgba.begin() + static_cast<std::ptrdiff_t>(band), file2.rgba.end(), sheet2.rgba.begin() + static_cast<std::ptrdiff_t>(band)), "the rows below are the file's own");
+    size_t wrong = 0, seen = 0;
+    for (int y = 0; y < rows * 2; y += 3) {
+        for (int x = 0; x < sheet2.width; x += 2) {
+            for (int c = 0; c < 4; ++c) {
+                const double want = derived_channel(top3, x, y, c);
+                const double got = sheet2.rgba[(static_cast<size_t>(y) * static_cast<size_t>(sheet2.width) + static_cast<size_t>(x)) * 4 + static_cast<size_t>(c)];
+                if (std::fabs(want - got) > 1.0) ++wrong;
+                ++seen;
+            }
+        }
+    }
+    check(seen > 100000 && wrong == 0, "the derived rows are the premultiplied averages of the 3x rows (every 6th row, every 2nd column, to one level)");
+    // where the sprites are: the windows' pictures are in the band, so are the panel's clay and frame pieces; the HUD's own are not
+    for (const char* name : {"panel_c", "panel_tl", "panel_t", "dlg_btn_yes_up", "op_on_up", "op_part_00", "qh_part_02", "cd_title", "dlg_btn_fullscreen_up", "qh_pedestal_move"}) {
+        const hud_art::Sprite* s = art.sprite_at(art.find_sprite(name));
+        bool shows = false;
+        if (s != nullptr && s->sheet_y + s->h <= rows) {
+            for (int32_t y = s->sheet_y * 2; !shows && y < (s->sheet_y + s->h) * 2; ++y) {
+                for (int32_t x = s->sheet_x * 2; !shows && x < (s->sheet_x + s->w) * 2; ++x) shows = sheet2.rgba[(static_cast<size_t>(y) * static_cast<size_t>(sheet2.width) + static_cast<size_t>(x)) * 4 + 3] > 0;
+            }
+        }
+        check(shows, std::string(name) + ": inside the derived rows, and shows something there at 2x");
+    }
+    const hud_art::Sprite* top = art.sprite_at(art.find_sprite("top_bar"));
+    check(top != nullptr && top->sheet_y >= rows, "the HUD's own pieces are below the derived rows (their 2x pictures are drawn, not derived)");
+    // what the web build downloads for the art: the windows' pictures added about 1.4 MB to the 4.65 MB of the HUD's own, and the folder must not grow past what a visitor is asked to wait for
+    std::uintmax_t folder_bytes = 0;
+    std::error_code ignored;
+    for (const auto& entry : std::filesystem::directory_iterator(art_folder(), ignored)) folder_bytes += entry.is_regular_file(ignored) ? entry.file_size(ignored) : 0;
+    check(folder_bytes > 4000000 && folder_bytes <= 6200000, "the art's folder (sheets, manifest, font) is at most 6.2 MB: " + std::to_string(folder_bytes) + " bytes");
+}
+
 }  // namespace
 
 void test_manifest();
@@ -302,12 +434,18 @@ void test_cursor_damaged(const assets::AssetArchive& arc, const hud_art::Art& ar
 void test_slices();
 void test_scale();
 void test_unusable();
+void test_panel(const hud_art::Art& art);
+void test_window_pieces(const assets::AssetArchive& arc, const hud_art::Art& art);
+void test_window_model(const assets::AssetArchive& arc);
+void test_windows(const assets::AssetArchive& arc, const hud_art::Art& art);
+void test_windows_more(const assets::AssetArchive& arc, const hud_art::Art& art);
 
 int main(int argc, char* argv[]) {
     (void)argc;
     (void)argv;                                                  // SDL2main renames main to SDL_main(int, char**) on Windows: the signature must be this one
     ensure_sdl();
     test_png();
+    test_derive();
     test_manifest();
     test_frame();
     test_slices();
@@ -319,6 +457,9 @@ int main(int argc, char* argv[]) {
         std::fprintf(stderr, "cannot open ants.chd or the HUD art\n");
         return 2;
     }
+    test_panel(art);
+    test_window_pieces(arc, art);
+    test_window_model(arc);
     test_look(arc, art);
     test_classic(arc, art);
     test_pieces(arc, art);
@@ -326,6 +467,8 @@ int main(int argc, char* argv[]) {
     test_cursor_draw(arc, art);
     test_cursor_classic(arc, art);
     test_cursor_damaged(arc, art);
+    test_windows(arc, art);
+    test_windows_more(arc, art);
     std::printf("\nhud art: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

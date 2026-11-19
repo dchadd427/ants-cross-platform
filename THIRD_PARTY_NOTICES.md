@@ -44,11 +44,11 @@ artwork, sounds, music and maps are not covered by it: they belong to their copy
 - What: Libre Franklin, Copyright 2020 The Libre Franklin Project Authors, <https://github.com/googlefonts/Libre-Franklin>.
 - Licence: SIL Open Font License, Version 1.1. The full text is in `Original-Ants/LibreFranklin-OFL.txt`; it covers every weight of the family, and it stays together with the fonts.
 
-### Libre Baskerville and Lora (fonts, used to draw the HUD art)
+### Libre Baskerville and Lora (fonts of the HUD art)
 
-- Where: `tools/hud_art/fonts/LibreBaskerville-Regular.ttf` and `tools/hud_art/fonts/Lora-BoldItalic.ttf`, each with its licence text beside it (`LibreBaskerville-OFL.txt`, `Lora-OFL.txt`). They are used by the generator of the HUD art (`tools/hud_art/`) when it draws the labels; the letters are baked into the sprites of `assets/hud_art/`, so the game, the web build and the images ship no font file of them.
+- Where: Libre Baskerville is `assets/hud_art/LibreBaskerville-Regular.ttf`, with its licence text beside it (`assets/hud_art/LibreBaskerville-OFL.txt`). The generator of the HUD art (`tools/hud_art/`) sets the lettering of the pictures in it, and the game draws the sentences of the dialogs in it at run time (the quit and alliance questions, "Get ready to play!", the countdown card's lines); the web build preloads it with the rest of the folder `assets/hud_art`. Lora is `tools/hud_art/fonts/Lora-BoldItalic.ttf` with `Lora-OFL.txt` beside it: only the generator reads it, the letters are baked into the sprites and the game ships no file of Lora.
 - What: Libre Baskerville, Copyright 2012 The Libre Baskerville Project Authors, <https://github.com/impallari/Libre-Baskerville>; Lora, Copyright 2011 The Lora Project Authors, <https://github.com/cyrealtype/Lora-Cyrillic>.
-- Licence: SIL Open Font License, Version 1.1. The full text is in each licence file; it stays together with the fonts.
+- Licence: SIL Open Font License, Version 1.1. The full text is in each licence file; it stays together with the fonts, and the font is shipped unmodified under its own name, with the licence text.
 - The pictures of `assets/hud_art/` are this project's own drawings (MIT, like its code), made by that generator; they are not the original game's artwork.
 
 ## Local files of the original, not part of the repository

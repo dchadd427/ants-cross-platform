@@ -4,7 +4,7 @@ import base64, json, os
 from PIL import Image, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__)) + '/'
-FONTS = {   # key: (file, css family, licence text, name): both are SIL Open Font License 1.1 and are used here at generation time only (fonts/); the lettering is baked into the sprites
+FONTS = {   # key: (file, css family, licence text, name): both are SIL Open Font License 1.1. Libre Baskerville ships with the art (assets/hud_art/: the game draws the windows' sentences in it); Lora is used here at generation time only (fonts/)
     'lb': ('LibreBaskerville-Regular.ttf', 'LB', 'LibreBaskerville-OFL.txt', 'Libre Baskerville Regular'),
     'li': ('Lora-BoldItalic.ttf', 'LBI', 'Lora-OFL.txt', 'Lora Bold Italic'),
 }
@@ -19,9 +19,15 @@ LABELS = {
 EXTRA = {'TeamUp': (797, 143, 47, 8, (778, 136)), 'Hatch': (803, 141, 36, 9, (778, 136)), 'Attack': (862, 142, 40, 8, (778, 136)), 'Bomb': (864, 141, 35, 9, (778, 136)),
          'FireWall': (859, 142, 48, 8, (778, 136)), 'Steal': (866, 142, 33, 8, (778, 136)), 'Bridge': (862, 142, 39, 10, (778, 136)), 'Team': (906, 508, 31, 9, (899, 503))}
 for _n, (_x, _y, _w, _h, _o) in EXTRA.items(): LABELS[_n] = ((0, 0, 0, 0), _o)
+ASSET_FONTS = ('lb',)        # the faces that live in assets/hud_art/ (the game reads them there; the generator reads the same file)
 S0 = 200
 _targets = None
 _metrics = {}
+
+def font_path(key):
+    """the file of a face: assets/hud_art/ for the face that ships with the art, fonts/ for the others"""
+    folder = os.path.join(HERE, '..', '..', 'assets', 'hud_art') if key in ASSET_FONTS else os.path.join(HERE, 'fonts')
+    return os.path.abspath(os.path.join(folder, FONTS[key][0]))
 
 def targets():
     """the ink boxes of the labels (x, y, w, h) in the 960 layout: measured once on the original's own screen and kept in label_boxes.json"""
@@ -36,7 +42,7 @@ def metrics(key, text):
     k = (key, text)
     if k not in _metrics:
         from PIL import ImageDraw
-        f = ImageFont.truetype(HERE + 'fonts/' + FONTS[key][0], S0)
+        f = ImageFont.truetype(font_path(key), S0)
         im = Image.new('L', (2000, 700), 0)
         ImageDraw.Draw(im).text((100, 400), text, font=f, fill=255, anchor='ls')
         x0, y0, x1, y1 = im.point(lambda v: 255 if v > 100 else 0).getbbox()
@@ -48,7 +54,7 @@ def font_css(key):
     out = ''
     for kk in dict.fromkeys((key, CHAT_KEY)):
         fn, fam, _, _ = FONTS[kk]
-        b = base64.b64encode(open(HERE + 'fonts/' + fn, 'rb').read()).decode()
+        b = base64.b64encode(open(font_path(kk), 'rb').read()).decode()
         out += "@font-face{font-family:'%s';src:url(data:font/ttf;base64,%s)}\n" % (fam, b)
     return out
 
