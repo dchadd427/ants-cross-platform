@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 
+#include "ants_net/protocol.hpp"
 #include "ants_replay/player.hpp"
 #include "ants_replay/recorder.hpp"
 #include "ants_server/replay_store.hpp"
@@ -29,6 +30,8 @@ LiveBoard::LiveBoard(std::function<int64_t()> clock_s) : clock_s_(clock_s ? std:
 
 void LiveBoard::set_clock(std::function<int64_t()> clock_s) { clock_s_ = clock_s ? std::move(clock_s) : std::function<int64_t()>(system_seconds); }
 
+void LiveBoard::set_delay_seconds(uint32_t seconds) noexcept { delay_s_ = std::min(seconds, kMaxDelayS); }
+
 bool LiveBoard::valid_id(const std::string& id) {
     // <stem 1 to 24>-<8 digits>-<6 digits>Z[-<1 to 4 digits>]
     size_t at = 0;
@@ -46,11 +49,23 @@ void LiveBoard::forget_old() {
     for (Ended& e : ended_) {
         if (e.ended_s > now) e.ended_s = now;                                // (a clock that was set back must not keep a match for longer than the memory is)
     }
-    ended_.erase(std::remove_if(ended_.begin(), ended_.end(), [now](const Ended& e) { return now - e.ended_s >= kRememberS; }), ended_.end());
-    if (ended_.size() > kMaxRemembered) ended_.erase(ended_.begin(), ended_.begin() + static_cast<std::ptrdiff_t>(ended_.size() - kMaxRemembered));
+    ended_.erase(std::remove_if(ended_.begin(), ended_.end(), [now](const Ended& e) { return now - e.ended_s >= memory_s(e); }), ended_.end());
+    // each kind has its own count, the oldest of it forgotten first: a stream of matches that ended at once forgets none of the matches that were kept
+    for (const bool brief : {false, true}) {
+        const size_t limit = brief ? kMaxRememberedBrief : kMaxRemembered;
+        size_t count = static_cast<size_t>(std::count_if(ended_.begin(), ended_.end(), [brief](const Ended& e) { return e.brief == brief; }));
+        for (auto it = ended_.begin(); it != ended_.end() && count > limit;) {
+            if (it->brief == brief) {
+                it = ended_.erase(it);
+                --count;
+            } else {
+                ++it;
+            }
+        }
+    }
 }
 
-std::string LiveBoard::begin(const replay::Recorder& recorder) {
+std::string LiveBoard::begin(const replay::Recorder& recorder, unsigned people) {
     forget_old();
     const replay::Header& head = recorder.replay().head;
     if (head.fog) return std::string();                          // (Fog of War hides the other sides from a player: a snapshot that anybody can read while the match runs would show them. The match is public when it is over, like any other.)
@@ -70,7 +85,7 @@ std::string LiveBoard::begin(const replay::Recorder& recorder) {
     };
     for (const Running& r : running_) note(r.id);
     for (const Ended& e : ended_) {
-        if (now - e.ended_s < kRememberS) note(e.id);
+        if (now - e.ended_s < memory_s(e)) note(e.id);
     }
     unsigned sequence = 1;
     while (sequence <= kMaxSameSecond && used[sequence]) ++sequence;
@@ -81,6 +96,7 @@ std::string LiveBoard::begin(const replay::Recorder& recorder) {
     match.map = head.map_name;
     match.mode = head.mode;
     match.started = now;
+    match.delay_turns = people >= kDelayMinPeople ? delay_s_ * static_cast<uint32_t>(net::kTurnsPerSecond) : 0u;       // (fixed here, from the seats at the start: nothing that happens in the match changes it)
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if ((head.roster & (1u << seat)) != 0) match.players.push_back(replay::seat_label(head, seat));
     }
@@ -93,25 +109,33 @@ void LiveBoard::end(const std::string& id, const std::string& kept_file) {
     forget_old();
     const auto it = std::find_if(running_.begin(), running_.end(), [&id](const Running& r) { return r.id == id; });
     if (it == running_.end()) return;
-    const bool was_listed = it->recorder != nullptr && it->recorder->turns() >= kReplayMinTurns;
-    running_.erase(it);
-    if (!was_listed) return;
     Ended ended;
     ended.id = id;
     ended.file = kept_file;
     ended.ended_s = now_s();
+    ended.turns = it->recorder != nullptr ? it->recorder->turns() : 0u;
+    ended.brief = ended.turns < kReplayMinTurns;                 // (never kept, whatever became of it: a room that was closed in its countdown, or soon after)
+    running_.erase(it);
     ended_.push_back(std::move(ended));
     forget_old();
 }
 
 bool LiveBoard::listed(const Running& match) const {
-    return match.recorder != nullptr && match.recorder->turns() >= kReplayMinTurns && match.recorder->failure().empty() && !match.recorder->finished();
+    return match.recorder != nullptr && match.recorder->failure().empty() && !match.recorder->finished();
 }
 
 std::vector<LiveMatch> LiveBoard::list() const {
+    // the matches that have run kReplayMinTurns take the places first, newest first; the younger ones fill what is left (a stream of matches that end at once cannot push the others off the list); then all newest first
+    std::vector<const Running*> chosen;
+    for (const bool old : {true, false}) {
+        for (auto it = running_.rbegin(); it != running_.rend() && chosen.size() < kMaxListed; ++it) {        // (newest start first)
+            if (!listed(*it) || (it->recorder->turns() >= kReplayMinTurns) != old) continue;
+            chosen.push_back(&*it);
+        }
+    }
     std::vector<LiveMatch> out;
-    for (auto it = running_.rbegin(); it != running_.rend() && out.size() < kMaxListed; ++it) {        // (newest start first)
-        if (!listed(*it)) continue;
+    for (auto it = running_.rbegin(); it != running_.rend(); ++it) {
+        if (std::find(chosen.begin(), chosen.end(), &*it) == chosen.end()) continue;
         LiveMatch m;
         m.id = it->id;
         m.map = it->map;
@@ -124,22 +148,35 @@ std::vector<LiveMatch> LiveBoard::list() const {
     return out;
 }
 
-const std::vector<uint8_t>* LiveBoard::snapshot(const std::string& id) const {
+LiveSnapshot LiveBoard::snapshot(const std::string& id) const {
+    LiveSnapshot out;
     const auto it = std::find_if(running_.begin(), running_.end(), [&id](const Running& r) { return r.id == id; });
-    if (it == running_.end() || !listed(*it)) return nullptr;
+    if (it == running_.end() || !listed(*it)) return out;
     const int64_t now = now_s();
-    if (!it->cache.empty() && now >= it->cache_s && now - it->cache_s < kSnapshotMaxAgeS) return &it->cache;
-    std::string error;
-    it->cache = it->recorder->snapshot(error);
-    it->cache_s = now;
-    return it->cache.empty() ? nullptr : &it->cache;
+    if (it->cache.empty() || now < it->cache_s || now - it->cache_s >= kSnapshotMaxAgeS) {
+        // what is handed out is the match as it was `delay_turns` ago: the recorder cuts the file there, and the cut is the only thing that decides what can be read (never the page, never a query)
+        const uint32_t run = it->recorder->turns();
+        const uint32_t shown = run > it->delay_turns ? run - it->delay_turns : 0u;
+        std::string error;
+        it->cache = it->recorder->snapshot(shown, error);
+        it->cache_s = now;
+        it->cache_now = run;
+        it->cache_shown = shown;
+    }
+    if (it->cache.empty()) return out;
+    out.bytes = &it->cache;
+    out.now = it->cache_now;
+    out.shown = it->cache_shown;
+    out.delay = it->delay_turns;
+    return out;
 }
 
-bool LiveBoard::outcome(const std::string& id, std::string& kept_file) const {
+bool LiveBoard::outcome(const std::string& id, LiveOutcome& out) const {
     const int64_t now = now_s();
     for (const Ended& e : ended_) {
-        if (e.id == id && now - e.ended_s < kRememberS) {
-            kept_file = e.file;
+        if (e.id == id && now - e.ended_s < memory_s(e)) {
+            out.file = e.file;
+            out.turns = e.turns;
             return true;
         }
     }
@@ -148,7 +185,7 @@ bool LiveBoard::outcome(const std::string& id, std::string& kept_file) const {
 
 size_t LiveBoard::remembered() const {
     const int64_t now = now_s();
-    return static_cast<size_t>(std::count_if(ended_.begin(), ended_.end(), [now](const Ended& e) { return now - e.ended_s < kRememberS; }));
+    return static_cast<size_t>(std::count_if(ended_.begin(), ended_.end(), [now](const Ended& e) { return now - e.ended_s < memory_s(e); }));
 }
 
 }  // namespace ants::server

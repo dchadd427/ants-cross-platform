@@ -192,6 +192,12 @@ std::vector<uint8_t> encode(const Replay& replay, std::string& error);
 /// when that is not so, the replay is complete, or the file would be longer than kMaxFileBytes. `replay.embedded_map` is left out. decode() of it gives complete = false and total_turns = max(last command turn, hashes * period, turns).
 std::vector<uint8_t> encode_snapshot(const Replay& replay, uint32_t turns, std::string& error);
 
+/// The bytes of the match as it was after `turns` ticks, for a viewer who may see no more than that: an incomplete replay (as encode_snapshot) with only the commands that were given before tick `turns`
+/// (turn < `turns`), only the hashes of the ticks up to it (the first turns / period) and the chunk `live` that says `turns`. The replay may hold more (a recording that has run on): nothing after `turns` is
+/// written, so nothing after it can be read. `replay.complete` must be false; empty with `error` set when it is not, `turns` is more than kMaxTurns, or the file would be longer than kMaxFileBytes. decode() of it
+/// gives complete = false and total_turns = turns (or the hashes' ticks, which are never more). The file of a recording that is written whole (`encode`) is not touched by this.
+std::vector<uint8_t> encode_snapshot_until(const Replay& replay, uint32_t turns, std::string& error);
+
 /// Reads a file. True: `out` holds it (check `out.complete`: a file without ENDS is a replay that stops where it was cut). False: it is damaged, foreign, or made by a newer format, and `error`
 /// says what and in which chunk. Nothing of `out` is meaningful then. A file longer than kMaxFileBytesWithMap, a match part (the file without its tmap chunk) longer than kMaxFileBytes, a second tmap chunk, a tmap
 /// chunk that claims more than kMaxEmbeddedMapBytes (refused from its length, before its bytes are looked at), an empty one, or one whose hash is not head.map_hash is refused. A file that was cut inside its tmap chunk is

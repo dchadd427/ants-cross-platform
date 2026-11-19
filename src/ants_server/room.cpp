@@ -829,7 +829,14 @@ void Room::replay_begin(const net::StartMsg& start) {
     session_->runner().set_on_executed([this](const net::TurnMsg& turn) {
         if (recorder_ != nullptr && sim_ != nullptr) recorder_->on_turn(turn, *sim_);
     });
-    if (live_board_ != nullptr) live_id_ = live_board_->begin(*recorder_);       // (from now on a visitor can watch the match once it has run 30 seconds: live_board.hpp)
+    if (live_board_ != nullptr) {
+        unsigned people = 0;                                         // (the seats of the match that people hold, counted once from the room's slots, never from names: the board shows a match of two or more people late)
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+            const net::SlotState state = lobby_.room().slots[seat].state;
+            if ((start.roster & (1u << seat)) != 0 && (state == net::SlotState::Host || state == net::SlotState::Client)) ++people;
+        }
+        live_id_ = live_board_->begin(*recorder_, people);           // (from now on a visitor can watch the match, late when people play it: live_board.hpp)
+    }
 }
 
 void Room::live_end(const std::string& kept_file) {

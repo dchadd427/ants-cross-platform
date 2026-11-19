@@ -51,9 +51,11 @@ public:
     /// the final state hash and whether the rules ended the match. Call it after the last command and the last tick of the match. Whatever the recorder is told afterwards is ignored.
     std::vector<uint8_t> finish(const sim::SimulationEngine& engine, std::string& error);
 
-    /// The match so far as an incomplete file with the chunk `live` (encode_snapshot): what a viewer needs to watch a match that still runs. Empty, with `error`, when the recording failed, is finished, or no turn ran.
-    /// It changes nothing in the recorder (the engine is not read, and the recording goes on). The server makes one at most once a second for a match (ants_server/live_board.hpp).
-    std::vector<uint8_t> snapshot(std::string& error) const;
+    /// The match as it was after `shown_turns` ticks, as an incomplete file with the chunk `live` (encode_snapshot_until): what a viewer needs to watch a match that still runs, and no more than the viewer may see:
+    /// nothing given or run after tick `shown_turns` is in it. `shown_turns` is at most turns(): the whole match so far is `snapshot(turns(), error)`; 0 is the match before its first tick (the head and the chunk
+    /// `live` of 0). Empty, with `error`, when the recording failed, is finished, or `shown_turns` is more than the match has run. It changes nothing in the recorder (the engine is not read, and the recording goes on).
+    /// The server makes one at most once a second for a match (ants_server/live_board.hpp).
+    std::vector<uint8_t> snapshot(uint32_t shown_turns, std::string& error) const;
 
     /// Keeps the bytes of the map file to be written into the file (the tmap chunk, replay.hpp) when the recording is finished; never into a snapshot. True when they are kept: not empty, at most
     /// kMaxEmbeddedMapBytes and the file that the head's map_hash names. False keeps nothing and changes nothing else (the recording goes on without the map; the caller says what that means).

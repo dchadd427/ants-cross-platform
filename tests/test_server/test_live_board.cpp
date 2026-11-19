@@ -1,6 +1,7 @@
-// Tests of the board of the matches that run now (ants_server/live_board.hpp): the id of a match (made of the map and the second it began in, and of nothing else), the list (30 seconds, no failed
-// recording, the newest first, at most 50, the players in the strings of the replay list), the snapshot (the recorder's incomplete file, cached for the clock's second), and the memory of the
-// matches that ended (the file they were kept as, 15 minutes, 256 of them). No network and no room: the matches are recorders that the test feeds with ticks, and the clock is the test's own.
+// Tests of the board of the matches that run now (ants_server/live_board.hpp): the id of a match (made of the map and the second it began in, and of nothing else), the list (a match from its first tick, no failed
+// recording, the newest first, at most 50, the players in the strings of the replay list), the snapshot (the recorder's incomplete file, cut at the delay, cached for the clock's second), the DELAY of a match with two
+// or more people (nothing after it can be read: LB1.9, LB1.10), and the memory of the matches that ended (the file they were kept as, 15 minutes, 256 of them; the ones that were too short to be kept, 2 minutes, 64).
+// No network and no room: the matches are recorders that the test feeds with orders and ticks, and the clock is the test's own.
 // The board in front of real rooms and the public door's answers are in test_server (replay_tests.hpp, S3.176 and on).
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_replay/recorder.hpp"
@@ -118,6 +119,19 @@ struct Rec {
     void run(Fixture& f, uint32_t turns) {
         for (uint32_t i = 0; i < turns; ++i) rec->on_tick(f.engine);
     }
+    // `turns` more turns with one order in each, and the order says its own turn (the tile's x), so that a test can read from a snapshot which turns' orders it holds
+    void run_with_orders(Fixture& f, uint32_t turns) {
+        for (uint32_t i = 0; i < turns; ++i) {
+            sim::Command c;
+            c.type = sim::CommandType::GroupMove;
+            c.issuer = 0;
+            c.tile_x = static_cast<int16_t>(rec->turns());
+            c.tile_y = 3;
+            c.ants.push_back(1);                                                   // (not `= {1}`: GCC 13 at -O3 takes an assignment of a list to an empty vector for a copy into a null pointer, -Werror=nonnull)
+            rec->on_command(c);
+            rec->on_tick(f.engine);
+        }
+    }
 };
 
 struct Decoded {
@@ -156,19 +170,19 @@ int main() {
         Clock clock;
         LiveBoard board([&clock]() { return clock.now; });
         Rec a(f, 0), b(f, 0), c(f, 0);
-        ASSERT_EQ(board.begin(*a.rec), kId0);
-        ASSERT_EQ(board.begin(*b.rec), kId0 + "-2");                               // (a second match of the map in the same second)
-        ASSERT_EQ(board.begin(*c.rec), kId0 + "-3");
+        ASSERT_EQ(board.begin(*a.rec, 0), kId0);
+        ASSERT_EQ(board.begin(*b.rec, 0), kId0 + "-2");                               // (a second match of the map in the same second)
+        ASSERT_EQ(board.begin(*c.rec, 0), kId0 + "-3");
         clock.now += 1;
         Rec d(f, 0);
-        ASSERT_EQ(board.begin(*d.rec), "TINY-20261008-143210Z");
+        ASSERT_EQ(board.begin(*d.rec, 0), "TINY-20261008-143210Z");
         // a map of another name is another id; the characters that a name must not carry are '_' and the stem is cut at 24
         Rec e(f, 0, head_of("DRY LAND.lvl")), g(f, 0, head_of("A-B.LVL")), h(f, 0, head_of("Mäp.LVL")), i(f, 0, head_of("THISMAPHASAVERYLONGNAMEINDEED.LVL")), j(f, 0, head_of("NODOT"));
-        ASSERT_EQ(board.begin(*e.rec), "DRY_LAND-20261008-143210Z");
-        ASSERT_EQ(board.begin(*g.rec), "A_B-20261008-143210Z");
-        ASSERT_EQ(board.begin(*h.rec), "M__p-20261008-143210Z");
-        ASSERT_EQ(board.begin(*i.rec), "THISMAPHASAVERYLONGNAMEI-20261008-143210Z");
-        ASSERT_EQ(board.begin(*j.rec), "NODOT-20261008-143210Z");
+        ASSERT_EQ(board.begin(*e.rec, 0), "DRY_LAND-20261008-143210Z");
+        ASSERT_EQ(board.begin(*g.rec, 0), "A_B-20261008-143210Z");
+        ASSERT_EQ(board.begin(*h.rec, 0), "M__p-20261008-143210Z");
+        ASSERT_EQ(board.begin(*i.rec, 0), "THISMAPHASAVERYLONGNAMEI-20261008-143210Z");
+        ASSERT_EQ(board.begin(*j.rec, 0), "NODOT-20261008-143210Z");
         for (const std::string& id : {kId0, kId0 + "-2", std::string("DRY_LAND-20261008-143210Z"), std::string("M__p-20261008-143210Z"), std::string("THISMAPHASAVERYLONGNAMEI-20261008-143210Z")}) ASSERT_TRUE(LiveBoard::valid_id(id));
         // the id is made of the map and the second and of nothing else: not of the names, the seed, the seats, the map's hash (the board never sees a room's code)
         {
@@ -177,23 +191,23 @@ int main() {
             other_head.seed = 99;
             other_head.map_hash = 5;
             Rec k(f, 0, other_head);
-            ASSERT_EQ(other.begin(*k.rec), "TINY-20261008-143210Z");
+            ASSERT_EQ(other.begin(*k.rec, 0), "TINY-20261008-143210Z");
         }
         // the id of a match that ended lately is not given again (a page that watched the old one would be shown the new one) while the board remembers it
         {
             Clock same;
             LiveBoard memory([&same]() { return same.now; });
             Rec old(f, 700);
-            const std::string first = memory.begin(*old.rec);
+            const std::string first = memory.begin(*old.rec, 0);
             ASSERT_EQ(first, kId0);
             memory.end(first, "");
             ASSERT_EQ(memory.remembered(), size_t{1});
             Rec again(f, 0), third(f, 0);
-            ASSERT_EQ(memory.begin(*again.rec), kId0 + "-2");
-            ASSERT_EQ(memory.begin(*third.rec), kId0 + "-3");
+            ASSERT_EQ(memory.begin(*again.rec, 0), kId0 + "-2");
+            ASSERT_EQ(memory.begin(*third.rec, 0), kId0 + "-3");
             same.now += LiveBoard::kRememberS;                                     // (a new second, a new id)
             Rec later(f, 0);
-            ASSERT_EQ(memory.begin(*later.rec), "TINY-20261008-144709Z");
+            ASSERT_EQ(memory.begin(*later.rec, 0), "TINY-20261008-144709Z");
         }
         // 9999 ids in one second and then none: the match cannot be named and is not on the board
         Clock at_once;
@@ -202,35 +216,36 @@ int main() {
         std::set<std::string> ids;
         for (unsigned n = 0; n < 9999; ++n) {
             recorders.push_back(std::make_unique<replay::Recorder>(head_of()));
-            const std::string id = crowd.begin(*recorders.back());
+            const std::string id = crowd.begin(*recorders.back(), 0);
             ASSERT_TRUE(LiveBoard::valid_id(id));
             ids.insert(id);
         }
         ASSERT_EQ(ids.size(), size_t{9999});
         ASSERT_TRUE(ids.count(kId0) == 1 && ids.count(kId0 + "-9999") == 1);
         recorders.push_back(std::make_unique<replay::Recorder>(head_of()));
-        ASSERT_EQ(crowd.begin(*recorders.back()), std::string());
+        ASSERT_EQ(crowd.begin(*recorders.back(), 0), std::string());
         ASSERT_EQ(crowd.running(), size_t{9999});
     } TEST_END();
 
-    TEST_CASE("LB1.2 The List Holds The Matches That Ran 30 Seconds (600 Turns) And Whose Recording Has Not Failed, The Newest Start First, At Most 50; An Entry Says The Id, The Map, When It Began, The Turns So Far, The Seconds And The Players In The Strings Of The Replay List") {
+    TEST_CASE("LB1.2 The List Holds The Matches Whose Recording Has Not Failed From Their First Tick On (A Match That Has Run No Turn Is On It With 0), The Newest Start First, At Most 50 (When There Are More, The Matches That Ran 30 Seconds Come Before The Younger Ones); An Entry Says The Id, The Map, When It Began, The Turns So Far, The Seconds And The Players In The Strings Of The Replay List") {
         Clock clock;
         LiveBoard board([&clock]() { return clock.now; });
         ASSERT_TRUE(board.list().empty());
-        Rec young(f, 599);
-        const std::string young_id = board.begin(*young.rec);
-        ASSERT_TRUE(board.list().empty());                                         // (599 turns: not yet)
-        young.run(f, 1);
+        Rec young(f, 0);
+        const std::string young_id = board.begin(*young.rec, 0);
         std::vector<LiveMatch> list = board.list();
-        ASSERT_EQ(list.size(), size_t{1});
-        ASSERT_TRUE(list[0].id == young_id && list[0].map == "TINY.LVL" && list[0].started == kT0 && list[0].turns == 600);
+        ASSERT_EQ(list.size(), size_t{1});                                         // (no turn has run: it is on the list at once, as a match that is starting)
+        ASSERT_TRUE(list[0].id == young_id && list[0].map == "TINY.LVL" && list[0].started == kT0 && list[0].turns == 0);
+        young.run(f, 600);
+        list = board.list();
+        ASSERT_TRUE(list.size() == 1 && list[0].turns == 600);
         ASSERT_EQ(list[0].players, (std::vector<std::string>{"Green (Ann)", "Red"}));
         young.run(f, 40);
         ASSERT_EQ(board.list()[0].turns, 640u);                                    // (the turns so far, read when the list is made)
         // a recording that failed is not listed (a turn that was not seen: the recording is lost)
         Rec lost(f, 650, head_of("TREASURE.LVL"));
-        const std::string lost_id = board.begin(*lost.rec);
-        ASSERT_EQ(board.list().size(), size_t{2});
+        const std::string lost_id = board.begin(*lost.rec, 0);
+        ASSERT_EQ(board.list().size(), size_t{2});                                 // (the match of 650 turns and the one of 640)
         net::TurnMsg late;
         late.turn = 9;
         lost.rec->on_turn(late, f.engine);
@@ -242,9 +257,9 @@ int main() {
         // newest start first: by the second the match began in, and on a tie the one that began last
         clock.now += 10;
         Rec second(f, 700, head_of("ISLANDS.LVL", 0x0D, {{"Cat", "", "Bot (Medium)", "Dan"}}));
-        const std::string second_id = board.begin(*second.rec);
+        const std::string second_id = board.begin(*second.rec, 0);
         Rec third(f, 800, head_of("ISLANDS.LVL"));
-        const std::string third_id = board.begin(*third.rec);
+        const std::string third_id = board.begin(*third.rec, 0);
         list = board.list();
         ASSERT_EQ(list.size(), size_t{3});
         ASSERT_TRUE(list[0].id == third_id && list[1].id == second_id && list[2].id == young_id);
@@ -257,7 +272,7 @@ int main() {
         for (unsigned n = 0; n < 60; ++n) {
             clock.now += 1;
             many.push_back(std::make_unique<Rec>(f, 600));
-            board.begin(*many.back()->rec);
+            board.begin(*many.back()->rec, 0);
         }
         list = board.list();
         ASSERT_EQ(list.size(), LiveBoard::kMaxListed);
@@ -266,6 +281,35 @@ int main() {
         ASSERT_EQ(list.front().started, kT0 + 70);
         ASSERT_EQ(list.back().started, kT0 + 21);
         ASSERT_EQ(board.running(), size_t{3 + 60});
+    } TEST_END();
+
+    TEST_CASE("LB1.2b When There Are More Than 50, The Matches That Ran 30 Seconds Take The Places First And The Younger Ones Fill What Is Left (A Stream Of Matches That End At Once Cannot Push The Others Off The List), And The List Is Newest First Whichever Are Chosen") {
+        Clock clock;
+        LiveBoard board([&clock]() { return clock.now; });
+        std::vector<std::unique_ptr<Rec>> keep;
+        std::vector<std::string> old_ids, young_ids;
+        for (unsigned n = 0; n < 20; ++n) {                                        // 20 matches that ran 30 seconds
+            clock.now += 1;
+            keep.push_back(std::make_unique<Rec>(f, 600));
+            old_ids.push_back(board.begin(*keep.back()->rec, 0));
+        }
+        for (unsigned n = 0; n < 60; ++n) {                                        // then a stream of 60 that have just begun
+            clock.now += 1;
+            keep.push_back(std::make_unique<Rec>(f, 3));
+            young_ids.push_back(board.begin(*keep.back()->rec, 0));
+        }
+        std::vector<LiveMatch> list = board.list();
+        ASSERT_EQ(list.size(), LiveBoard::kMaxListed);
+        size_t old_on = 0, young_on = 0;
+        for (const LiveMatch& m : list) {
+            old_on += static_cast<size_t>(std::count(old_ids.begin(), old_ids.end(), m.id));
+            young_on += static_cast<size_t>(std::count(young_ids.begin(), young_ids.end(), m.id));
+        }
+        ASSERT_EQ(old_on, size_t{20});                                             // (none of the old ones was pushed off)
+        ASSERT_EQ(young_on, size_t{30});                                           // (the newest 30 young ones fill the rest)
+        for (size_t i = 1; i < list.size(); ++i) ASSERT_TRUE(list[i - 1].started > list[i].started);        // (newest first, old and young together)
+        ASSERT_EQ(list.front().id, young_ids.back());
+        ASSERT_TRUE(std::count(young_ids.begin(), young_ids.begin() + 30, list.back().id) == 0);         // (the oldest young ones are the ones that are left out)
     } TEST_END();
 
     TEST_CASE("LB1.3 The Players Are Written Exactly As The Replay List Writes Them: The Strings Of A Match That Runs Are The Ones Of Its File Once It Is Kept (A Name, The Color Alone, \"Bot (Medium)\")") {
@@ -282,7 +326,7 @@ int main() {
         std::string why;
         ASSERT_TRUE(store.prepare(why));
         Rec r(f, 650, head_of("TREASURE.LVL", 0x0F, {{"Ann", "", "Bot (Hard)", "O'Neil \"Q\" <b>"}}));
-        board.begin(*r.rec);
+        board.begin(*r.rec, 0);
         const std::vector<LiveMatch> list = board.list();
         ASSERT_EQ(list.size(), size_t{1});
         std::string error;
@@ -298,105 +342,113 @@ int main() {
         ASSERT_EQ(list[0].turns, kept[0].turns);
     } TEST_END();
 
-    TEST_CASE("LB1.4 The Snapshot Is The Recorder's Incomplete File With The Turns Run When It Was Made, Handed Out Again Until The Clock Is In A Later Second, Then Made Again; A Match That Is Not Listed, Failed, Ended Or Unknown Has None; Asking Changes Nothing In The Recording") {
+    TEST_CASE("LB1.4 The Snapshot Is The Recorder's Incomplete File With The Turns Run When It Was Made, Handed Out Again Until The Clock Is In A Later Second, Then Made Again; A Match That Failed, Ended Or Is Unknown Has None (One That Has Run No Turn Has The Head Only); Asking Changes Nothing In The Recording") {
         Clock clock;
         LiveBoard board([&clock]() { return clock.now; });
         Rec a(f, 600, head_of("TREASURE.LVL"));
-        const std::string id = board.begin(*a.rec);
-        const std::vector<uint8_t>* first = board.snapshot(id);
+        const std::string id = board.begin(*a.rec, 0);
+        const std::vector<uint8_t>* first = board.snapshot(id).bytes;
         ASSERT_TRUE(first != nullptr);
         const std::vector<uint8_t> first_bytes = *first;
         Decoded d = decoded(first_bytes);
         ASSERT_TRUE(d.ok && !d.replay.complete && d.replay.total_turns == 600 && d.replay.head.map_name == "TREASURE.LVL" && d.replay.hashes.size() == 6);
         // the match runs on: in the same second the same bytes go to everybody, in the next one a new snapshot
         a.run(f, 50);
-        ASSERT_EQ(*board.snapshot(id), first_bytes);
-        ASSERT_EQ(*board.snapshot(id), first_bytes);
+        ASSERT_EQ(*board.snapshot(id).bytes, first_bytes);
+        ASSERT_EQ(*board.snapshot(id).bytes, first_bytes);
         clock.now += 1;
-        const std::vector<uint8_t>* second = board.snapshot(id);
+        const std::vector<uint8_t>* second = board.snapshot(id).bytes;
         ASSERT_TRUE(second != nullptr && *second != first_bytes);
         d = decoded(*second);
         ASSERT_TRUE(d.ok && d.replay.total_turns == 650);
         const std::vector<uint8_t> second_bytes = *second;
         a.run(f, 50);
         clock.now += 5;
-        ASSERT_EQ(decoded(*board.snapshot(id)).replay.total_turns, 700u);
+        ASSERT_EQ(decoded(*board.snapshot(id).bytes).replay.total_turns, 700u);
         a.run(f, 10);
         clock.now -= 3;                                                            // (a clock that is set back: the snapshot is made again, never held for ever)
-        ASSERT_EQ(decoded(*board.snapshot(id)).replay.total_turns, 710u);
+        ASSERT_EQ(decoded(*board.snapshot(id).bytes).replay.total_turns, 710u);
         ASSERT_EQ(LiveBoard::kSnapshotMaxAgeS, int64_t{1});
         // each match has its own
         Rec b(f, 650);
-        const std::string other = board.begin(*b.rec);
-        ASSERT_EQ(decoded(*board.snapshot(other)).replay.total_turns, 650u);
-        ASSERT_EQ(decoded(*board.snapshot(id)).replay.total_turns, 710u);
+        const std::string other = board.begin(*b.rec, 0);
+        ASSERT_EQ(decoded(*board.snapshot(other).bytes).replay.total_turns, 650u);
+        ASSERT_EQ(decoded(*board.snapshot(id).bytes).replay.total_turns, 710u);
         // asking changed nothing in the recording: it ends in the file that a recorder nobody asked about writes
         Rec plain(f, 710, head_of("TREASURE.LVL"));
         std::string error;
         ASSERT_EQ(a.rec->finish(f.engine, error), plain.rec->finish(f.engine, error));
         // nothing for an id that is unknown, of a match that is not 30 seconds old, whose recording failed, or that ended
-        ASSERT_TRUE(board.snapshot("TINY-20200101-000000Z") == nullptr && board.snapshot("") == nullptr && board.snapshot("../x") == nullptr);
-        Rec young(f, 599);
-        const std::string young_id = board.begin(*young.rec);
-        ASSERT_TRUE(board.snapshot(young_id) == nullptr);
-        young.run(f, 1);
-        ASSERT_TRUE(board.snapshot(young_id) != nullptr);
+        ASSERT_TRUE(board.snapshot("TINY-20200101-000000Z").bytes == nullptr && board.snapshot("").bytes == nullptr && board.snapshot("../x").bytes == nullptr);
+        Rec young(f, 0);
+        const std::string young_id = board.begin(*young.rec, 0);
+        ASSERT_TRUE(board.snapshot(young_id).bytes != nullptr);                    // (a match that has run no turn has one: the head and `live` 0, so that a page can show the opening)
+        d = decoded(*board.snapshot(young_id).bytes);
+        ASSERT_TRUE(d.ok && !d.replay.complete && d.replay.total_turns == 0 && d.replay.commands.empty());
         net::TurnMsg late;
         late.turn = 9;
         young.rec->on_turn(late, f.engine);
-        ASSERT_TRUE(board.snapshot(young_id) == nullptr);
+        ASSERT_TRUE(board.snapshot(young_id).bytes == nullptr);                    // (a recording that failed has none)
         board.end(young_id, "");
-        ASSERT_TRUE(board.snapshot(young_id) == nullptr);
+        ASSERT_TRUE(board.snapshot(young_id).bytes == nullptr);
         board.end(other, "ants-TINY-20261008-143300Z.antsrep");
-        ASSERT_TRUE(board.snapshot(other) == nullptr);
+        ASSERT_TRUE(board.snapshot(other).bytes == nullptr);
     } TEST_END();
 
-    TEST_CASE("LB1.5 A Match That Is Taken Off The Board Disappears From The List And Has No Snapshot; If It Had Run 30 Seconds Its Outcome Is Remembered (The File It Was Kept As, Empty When It Was Not Kept) For 15 Minutes, 256 Matches At Most; A Shorter Match Leaves Nothing, An Unknown Id Is Ignored") {
+    TEST_CASE("LB1.5 A Match That Is Taken Off The Board Disappears From The List And Has No Snapshot; Its Outcome Is Remembered (The File It Was Kept As, Empty When It Was Not Kept, And The Turns It Ran) For 15 Minutes, 256 Matches At Most, Or For 2 Minutes, 64 At Most, When It Ran Under 30 Seconds (It Is Never Kept); An Unknown Id Is Ignored") {
         Clock clock;
         LiveBoard board([&clock]() { return clock.now; });
         Rec kept(f, 700), dropped(f, 700), brief(f, 599);
-        const std::string kept_id = board.begin(*kept.rec);
-        const std::string dropped_id = board.begin(*dropped.rec);
-        const std::string brief_id = board.begin(*brief.rec);
-        ASSERT_EQ(board.list().size(), size_t{2});
-        std::string file = "unchanged";
-        ASSERT_FALSE(board.outcome(kept_id, file));                                // (it runs: it has not ended)
-        ASSERT_EQ(file, "unchanged");
+        const std::string kept_id = board.begin(*kept.rec, 0);
+        const std::string dropped_id = board.begin(*dropped.rec, 0);
+        const std::string brief_id = board.begin(*brief.rec, 0);
+        ASSERT_EQ(board.list().size(), size_t{3});
+        LiveOutcome out;
+        out.file = "unchanged";
+        ASSERT_FALSE(board.outcome(kept_id, out));                                 // (it runs: it has not ended)
+        ASSERT_EQ(out.file, "unchanged");
         board.end(kept_id, "ants-TINY-20261008-143300Z.antsrep");
-        ASSERT_TRUE(board.list().size() == 1 && board.list()[0].id == dropped_id);
-        ASSERT_TRUE(board.snapshot(kept_id) == nullptr);
-        ASSERT_TRUE(board.outcome(kept_id, file));
-        ASSERT_EQ(file, "ants-TINY-20261008-143300Z.antsrep");
+        ASSERT_TRUE(board.list().size() == 2 && board.list()[0].id == brief_id && board.list()[1].id == dropped_id);
+        ASSERT_TRUE(board.snapshot(kept_id).bytes == nullptr);
+        ASSERT_TRUE(board.outcome(kept_id, out));
+        ASSERT_TRUE(out.file == "ants-TINY-20261008-143300Z.antsrep" && out.turns == 700);
         board.end(dropped_id, "");
-        ASSERT_TRUE(board.outcome(dropped_id, file));
-        ASSERT_EQ(file, std::string());
+        ASSERT_TRUE(board.outcome(dropped_id, out));
+        ASSERT_TRUE(out.file.empty() && out.turns == 700);
         board.end(brief_id, "");
-        ASSERT_FALSE(board.outcome(brief_id, file));                               // (it never was in the list: nothing is remembered of it)
+        ASSERT_TRUE(board.outcome(brief_id, out));                                 // (it ran 599 turns: it is remembered too, so that a link to it can say that it ended too soon to be kept)
+        ASSERT_TRUE(out.file.empty() && out.turns == 599);
         ASSERT_EQ(board.running(), size_t{0});
-        ASSERT_EQ(board.remembered(), size_t{2});
+        ASSERT_EQ(board.remembered(), size_t{3});
         board.end("TINY-20200101-000000Z", "x.antsrep");                           // (not on the board: ignored)
         board.end(kept_id, "ants-TINY-20261008-143399Z.antsrep");                  // (ended already: ignored, the first outcome stands)
-        ASSERT_TRUE(board.outcome(kept_id, file) && file == "ants-TINY-20261008-143300Z.antsrep");
-        ASSERT_FALSE(board.outcome("TINY-20200101-000000Z", file));
-        ASSERT_FALSE(board.outcome("", file));
-        // 15 minutes, counted from the end
-        clock.now += LiveBoard::kRememberS - 1;
-        ASSERT_TRUE(board.outcome(kept_id, file) && board.outcome(dropped_id, file));
+        ASSERT_TRUE(board.outcome(kept_id, out) && out.file == "ants-TINY-20261008-143300Z.antsrep");
+        ASSERT_FALSE(board.outcome("TINY-20200101-000000Z", out));
+        ASSERT_FALSE(board.outcome("", out));
+        // 15 minutes, counted from the end (2 minutes for the one that ran under 30 seconds)
+        clock.now += LiveBoard::kRememberBriefS - 1;
+        ASSERT_TRUE(board.outcome(brief_id, out));
+        clock.now += 1;
+        ASSERT_FALSE(board.outcome(brief_id, out));
+        ASSERT_TRUE(board.outcome(kept_id, out) && board.outcome(dropped_id, out));
+        ASSERT_EQ(LiveBoard::kRememberBriefS, int64_t{120});
+        clock.now += LiveBoard::kRememberS - LiveBoard::kRememberBriefS - 1;
+        ASSERT_TRUE(board.outcome(kept_id, out) && board.outcome(dropped_id, out));
         ASSERT_EQ(board.remembered(), size_t{2});
         Rec next(f, 700);
-        const std::string next_id = board.begin(*next.rec);
+        const std::string next_id = board.begin(*next.rec, 0);
         clock.now += 1;                                                            // (900 s after the end)
-        ASSERT_FALSE(board.outcome(kept_id, file));
-        ASSERT_FALSE(board.outcome(dropped_id, file));
+        ASSERT_FALSE(board.outcome(kept_id, out));
+        ASSERT_FALSE(board.outcome(dropped_id, out));
         ASSERT_EQ(board.remembered(), size_t{0});
         ASSERT_EQ(LiveBoard::kRememberS, int64_t{900});
         board.end(next_id, "ants-TINY-20261008-144000Z.antsrep");
-        ASSERT_TRUE(board.outcome(next_id, file) && file == "ants-TINY-20261008-144000Z.antsrep");
+        ASSERT_TRUE(board.outcome(next_id, out) && out.file == "ants-TINY-20261008-144000Z.antsrep");
         // the board forgets without being asked: once the clock has moved on, the old ones are gone from the next change
         clock.now += LiveBoard::kRememberS;
         Rec last(f, 700);
-        board.end(board.begin(*last.rec), "");
-        ASSERT_FALSE(board.outcome(next_id, file));
+        board.end(board.begin(*last.rec, 0), "");
+        ASSERT_FALSE(board.outcome(next_id, out));
         ASSERT_EQ(board.remembered(), size_t{1});
         // at most 256: the oldest are forgotten first
         LiveBoard flood([&clock]() { return clock.now; });
@@ -406,31 +458,62 @@ int main() {
             clock.now += 1;
             recorders.push_back(std::make_unique<replay::Recorder>(head_of()));
             for (uint32_t t = 0; t < 600; ++t) recorders.back()->on_tick(f.engine);
-            ids.push_back(flood.begin(*recorders.back()));
+            ids.push_back(flood.begin(*recorders.back(), 0));
             flood.end(ids.back(), "ants-TINY-" + std::to_string(n) + ".antsrep");
         }
         ASSERT_EQ(LiveBoard::kMaxRemembered, size_t{256});
         ASSERT_EQ(flood.remembered(), size_t{256});
-        ASSERT_FALSE(flood.outcome(ids[0], file));
-        ASSERT_FALSE(flood.outcome(ids[43], file));
-        ASSERT_TRUE(flood.outcome(ids[44], file) && file == "ants-TINY-44.antsrep");
-        ASSERT_TRUE(flood.outcome(ids[299], file) && file == "ants-TINY-299.antsrep");
+        ASSERT_FALSE(flood.outcome(ids[0], out));
+        ASSERT_FALSE(flood.outcome(ids[43], out));
+        ASSERT_TRUE(flood.outcome(ids[44], out) && out.file == "ants-TINY-44.antsrep");
+        ASSERT_TRUE(flood.outcome(ids[299], out) && out.file == "ants-TINY-299.antsrep");
+    } TEST_END();
+
+    TEST_CASE("LB1.5b The Matches That Ended Too Soon To Be Kept Have A Memory Of Their Own (64, 2 Minutes): A Stream Of Them Forgets None Of The Matches That Were Kept, The Oldest Of Them Are Forgotten First, And A Match That Was Closed In Its Countdown (No Turn Run) Is Among Them") {
+        Clock clock;
+        LiveBoard board([&clock]() { return clock.now; });
+        Rec kept(f, 700);
+        const std::string kept_id = board.begin(*kept.rec, 0);
+        board.end(kept_id, "ants-TINY-20261008-143300Z.antsrep");
+        std::vector<std::string> ids;
+        std::vector<std::unique_ptr<replay::Recorder>> recorders;
+        for (unsigned n = 0; n < 100; ++n) {                                       // 100 rooms that were closed at once (some in their countdown, none with a turn run past 30 seconds)
+            recorders.push_back(std::make_unique<replay::Recorder>(head_of()));
+            for (uint32_t t = 0; t < n % 7; ++t) recorders.back()->on_tick(f.engine);
+            clock.now += 1;
+            ids.push_back(board.begin(*recorders.back(), 0));
+            board.end(ids.back(), "");
+        }
+        LiveOutcome out;
+        ASSERT_EQ(LiveBoard::kMaxRememberedBrief, size_t{64});
+        ASSERT_EQ(board.remembered(), size_t{1 + 64});
+        ASSERT_TRUE(board.outcome(kept_id, out) && out.file == "ants-TINY-20261008-143300Z.antsrep");        // (the kept match is still there)
+        ASSERT_FALSE(board.outcome(ids[35], out));
+        ASSERT_TRUE(board.outcome(ids[36], out) && out.file.empty() && out.turns == 36 % 7);
+        ASSERT_TRUE(board.outcome(ids[99], out) && out.turns == 99 % 7);
+        ASSERT_TRUE(board.outcome(ids[98], out) && out.turns == 98 % 7);
+        ASSERT_EQ(board.outcome(ids[0], out), false);
+        // a closed room that never ran a turn says 0
+        Rec none(f, 0);
+        const std::string none_id = board.begin(*none.rec, 0);
+        board.end(none_id, "");
+        ASSERT_TRUE(board.outcome(none_id, out) && out.turns == 0 && out.file.empty());
     } TEST_END();
 
     TEST_CASE("LB1.6 A Clock Set Back Does Not Keep An Ended Match For Longer Than The Memory Is: Its Age Counts From The Earlier Time") {
         Clock clock;
         LiveBoard board([&clock]() { return clock.now; });
         Rec r(f, 700);
-        const std::string id = board.begin(*r.rec);
+        const std::string id = board.begin(*r.rec, 0);
         clock.now += 100000;                                                       // (a clock that is ahead ...)
         board.end(id, "");
         clock.now -= 100000 + 100;                                                 // ... and is set back by more than a day, to before the match ended
         Rec other(f, 700);
-        board.end(board.begin(*other.rec), "");                                    // (the board looks at its memory when it changes)
-        std::string file;
-        ASSERT_TRUE(board.outcome(id, file));
+        board.end(board.begin(*other.rec, 0), "");                                 // (the board looks at its memory when it changes)
+        LiveOutcome out;
+        ASSERT_TRUE(board.outcome(id, out));
         clock.now += LiveBoard::kRememberS;
-        ASSERT_FALSE(board.outcome(id, file));
+        ASSERT_FALSE(board.outcome(id, out));
     } TEST_END();
 
     TEST_CASE("LB1.7 A Match With Fog Of War Is Not On The Board (A Live View Would Show What The Fog Hides From Its Players), And What Becomes Of It Changes Nothing For The Others") {
@@ -439,13 +522,13 @@ int main() {
         replay::Header fogged = head_of("TINY.LVL", 0x03);
         fogged.fog = true;
         Rec hidden(f, 700, fogged), visible(f, 700);
-        ASSERT_EQ(board.begin(*hidden.rec), std::string());                        // (no id: the room keeps none, and end() of "" is a no-op)
+        ASSERT_EQ(board.begin(*hidden.rec, 0), std::string());                        // (no id: the room keeps none, and end() of "" is a no-op)
         ASSERT_EQ(board.running(), size_t{0});
-        const std::string id = board.begin(*visible.rec);
+        const std::string id = board.begin(*visible.rec, 0);
         ASSERT_EQ(id, kId0);                                                       // (the fog match took no id of the second)
         ASSERT_EQ(board.running(), size_t{1});
         ASSERT_EQ(board.list().size(), size_t{1});
-        ASSERT_TRUE(board.snapshot(id) != nullptr);
+        ASSERT_TRUE(board.snapshot(id).bytes != nullptr);
         board.end(std::string(), "ants-TINY-20261008-143209Z.antsrep");
         ASSERT_EQ(board.remembered(), size_t{0});
         ASSERT_EQ(board.running(), size_t{1});
@@ -459,9 +542,9 @@ int main() {
         replay::Header kills = head_of("TREASURE.LVL");
         kills.set_mode(static_cast<uint8_t>(sim::GameMode::Kills187));
         Rec plain(f, 650), fight(f, 650, kills);
-        const std::string plain_id = board.begin(*plain.rec);
+        const std::string plain_id = board.begin(*plain.rec, 0);
         clock.now += 1;
-        const std::string fight_id = board.begin(*fight.rec);
+        const std::string fight_id = board.begin(*fight.rec, 0);
         std::vector<LiveMatch> list = board.list();
         ASSERT_EQ(list.size(), size_t{2});
         ASSERT_TRUE(list[0].id == fight_id && list[0].mode == 1);                  // (newest first: the 187 match)
@@ -470,6 +553,105 @@ int main() {
         fight.run(f, 40);
         list = board.list();
         ASSERT_TRUE(list.size() == 2 && list[0].mode == 1 && list[1].mode == 0 && list[0].turns == 690 && list[1].turns == 690);
+    } TEST_END();
+
+    TEST_CASE("LB1.9 A Match With Two Or More People Is Shown 30 Seconds Late: Its Snapshot Is Byte For Byte The Snapshot Of The Match When It Was 30 Seconds Younger (Nothing After That Is In It), With The Turns It Had Run And The Delay; A Match With No Person Or One Person Is Shown As It Is") {
+        Clock clock;
+        LiveBoard board([&clock]() { return clock.now; });
+        ASSERT_EQ(LiveBoard::kDefaultDelayS, 30u);
+        ASSERT_EQ(LiveBoard::kDelayMinPeople, 2u);
+        ASSERT_EQ(board.delay_seconds(), 30u);
+        for (unsigned people = 0; people <= 4; ++people) {
+            Rec match(f, 0);
+            match.run_with_orders(f, 1000);
+            const std::string id = board.begin(*match.rec, people);
+            const LiveSnapshot s = board.snapshot(id);
+            ASSERT_TRUE(s.bytes != nullptr);
+            ASSERT_EQ(s.now, 1000u);
+            const bool late = people >= 2;
+            ASSERT_EQ(s.delay, late ? 600u : 0u);                                  // (30 s of turns, from the second person on)
+            ASSERT_EQ(s.shown, late ? 400u : 1000u);
+            const Decoded d = decoded(*s.bytes);
+            ASSERT_TRUE(d.ok && !d.replay.complete);
+            ASSERT_EQ(d.replay.total_turns, s.shown);
+            ASSERT_EQ(d.replay.commands.size(), static_cast<size_t>(s.shown));     // (one order in every turn: the ones of the turns before `shown`)
+            ASSERT_EQ(d.replay.hashes.size(), static_cast<size_t>(s.shown / 100));
+            for (const replay::TimedCommand& tc : d.replay.commands) ASSERT_TRUE(tc.turn < s.shown && tc.command.tile_x == static_cast<int16_t>(tc.turn));
+            // the bytes are those of a match that has only run `shown` turns: the same head, the same orders, the same hashes, the same `live`
+            Rec younger(f, 0);
+            younger.run_with_orders(f, s.shown);
+            std::string error;
+            ASSERT_EQ(*s.bytes, younger.rec->snapshot(s.shown, error));
+            board.end(id, "");
+        }
+        // a match that has not run its delay yet shows nothing of its play: the head and `live` 0 (a page can show the opening and say that the picture will start)
+        Rec fresh(f, 0);
+        const std::string fresh_id = board.begin(*fresh.rec, 2);
+        const std::vector<uint32_t> steps = {0, 1, 599, 600, 601, 700};
+        uint32_t run = 0;
+        for (const uint32_t step : steps) {
+            fresh.run_with_orders(f, step - run);
+            run = step;
+            clock.now += 1;
+            const LiveSnapshot s = board.snapshot(fresh_id);
+            ASSERT_TRUE(s.bytes != nullptr);
+            ASSERT_EQ(s.now, step);
+            ASSERT_EQ(s.shown, step > 600 ? step - 600 : 0u);
+            const Decoded d = decoded(*s.bytes);
+            ASSERT_TRUE(d.ok && d.replay.total_turns == s.shown && d.replay.commands.size() == s.shown);
+        }
+        // the delay is the one that the match began with: the setting changes the matches that begin after it, never one that runs; 0 is none; the setting has a top
+        board.set_delay_seconds(0);
+        clock.now += 1;                                                            // (a new second: the snapshot is made again, by the delay that the match began with)
+        ASSERT_TRUE(board.snapshot(fresh_id).delay == 600 && board.snapshot(fresh_id).shown == 100 && board.snapshot(fresh_id).now == 700);
+        Rec free(f, 0);
+        free.run_with_orders(f, 100);
+        const std::string free_id = board.begin(*free.rec, 3);
+        ASSERT_TRUE(board.snapshot(free_id).delay == 0 && board.snapshot(free_id).shown == 100);
+        board.set_delay_seconds(5);
+        Rec brief(f, 0);
+        brief.run_with_orders(f, 300);
+        const std::string brief_id = board.begin(*brief.rec, 2);
+        ASSERT_TRUE(board.snapshot(brief_id).delay == 100 && board.snapshot(brief_id).shown == 200);
+        board.set_delay_seconds(1000000);
+        ASSERT_EQ(board.delay_seconds(), LiveBoard::kMaxDelayS);
+        ASSERT_EQ(LiveBoard::kMaxDelayS, 300u);
+        Rec long_one(f, 0);
+        long_one.run_with_orders(f, 10);
+        ASSERT_EQ(board.snapshot(board.begin(*long_one.rec, 2)).delay, 6000u);
+    } TEST_END();
+
+    TEST_CASE("LB1.10 The Delay Holds At Every Moment Of A Match, For Every Request, Through The Cache And After A Clock That Is Set Back: What The Board Hands Out Never Shows A Turn After (Turns Run - Delay), Nor An Order Or A Hash Of One, And The Header's Numbers Are The Truth") {
+        Clock clock;
+        LiveBoard board([&clock]() { return clock.now; });
+        Rec match(f, 0);
+        const std::string id = board.begin(*match.rec, 2);
+        Rec bots(f, 0);
+        const std::string bots_id = board.begin(*bots.rec, 0);
+        uint32_t asked = 0;
+        for (uint32_t turn = 0; turn < 1800; turn += 29) {
+            match.run_with_orders(f, 29);
+            bots.run_with_orders(f, 29);
+            clock.now += (turn % 3 == 0) ? 1 : 0;                                   // (some requests are in the second of the one before: the cached bytes go out again)
+            if (turn % 1000 == 580) clock.now -= 2;                                 // (a clock that is set back: the snapshot is made again)
+            for (int again = 0; again < 3; ++again) {                               // (asking again, in the same second, changes nothing)
+                const LiveSnapshot s = board.snapshot(id);
+                ASSERT_TRUE(s.bytes != nullptr);
+                ++asked;
+                ASSERT_EQ(s.delay, 600u);
+                ASSERT_TRUE(s.now <= match.rec->turns());                          // (the turns that it says it had run were run)
+                ASSERT_TRUE(s.shown + s.delay <= s.now || s.shown == 0);           // (never ahead of the turns run less the delay)
+                ASSERT_TRUE(s.shown == 0 || s.shown + s.delay <= match.rec->turns());        // (nor of the turns run now: the cache is older than the match, never younger)
+                const Decoded d = decoded(*s.bytes);
+                ASSERT_TRUE(d.ok && d.replay.total_turns == s.shown);
+                for (const replay::TimedCommand& tc : d.replay.commands) ASSERT_TRUE(tc.turn < s.shown);
+                ASSERT_TRUE(d.replay.hashes.size() * 100 <= s.shown);
+                // the match of computer players is not held back by the same code: it shows what the snapshot of its second is
+                const LiveSnapshot b = board.snapshot(bots_id);
+                ASSERT_TRUE(b.bytes != nullptr && b.delay == 0 && b.shown == b.now);
+            }
+        }
+        ASSERT_TRUE(asked > 150);
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures

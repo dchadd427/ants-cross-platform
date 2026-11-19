@@ -440,12 +440,14 @@ ctl::HttpResponse handle_replays(RoomManager& rooms, const ctl::HttpRequest& req
 
 namespace {
 
-// GET /live/<id> that has no match to give: the page reads `ended` and `replay` to tell a match that is over (and, when it was kept, the file to fetch) from one that never was (or is forgotten)
-ctl::HttpResponse live_missing(bool ended, const std::string& replay_file) {
+// GET /live/<id> that has no match to give: the page reads `ended` and `replay` to tell a match that is over (and, when it was kept, the file to fetch) from one that never was (or is forgotten); a match that is over
+// also says the turns it ran (`turns`), so that the page can tell one that ended before it could be kept (under 600 turns) from one that was not kept for another reason
+ctl::HttpResponse live_missing(bool ended, const std::string& replay_file, uint32_t turns = 0) {
     JsonValue o = JsonValue::make_object();
     o.set("error", JsonValue::make_string("no such live match"));
     o.set("ended", JsonValue::make_bool(ended));
     o.set("replay", JsonValue::make_string(replay_file));
+    if (ended) o.set("turns", JsonValue::make_int(turns));
     return json_response(404, o);
 }
 
@@ -479,15 +481,18 @@ ctl::HttpResponse handle_public_live(const RoomManager& rooms, const ctl::HttpRe
     }
     const std::string id = request.path.substr(std::string("/live/").size());
     if (!serving || !LiveBoard::valid_id(id)) return live_missing(false, std::string());
-    if (const std::vector<uint8_t>* snapshot = board.snapshot(id)) {
+    const LiveSnapshot snapshot = board.snapshot(id);
+    if (snapshot.bytes != nullptr) {
         ctl::HttpResponse r;
         r.status = 200;
         r.content_type = "application/octet-stream";
-        r.body.assign(reinterpret_cast<const char*>(snapshot->data()), snapshot->size());
+        r.body.assign(reinterpret_cast<const char*>(snapshot.bytes->data()), snapshot.bytes->size());
+        // what the page needs to say how late the picture is: the turns the match had run, the turns the bytes show and the delay of the match (all in turns; the shown ones are never more than the run ones less the delay)
+        r.headers.emplace_back("X-Ants-Live", "now=" + std::to_string(snapshot.now) + "; shown=" + std::to_string(snapshot.shown) + "; delay=" + std::to_string(snapshot.delay));
         return r;
     }
-    std::string file;
-    if (board.outcome(id, file)) return live_missing(true, store->find(file) != nullptr ? file : std::string());        // (a file that is not in the store any more, the owner deleted it, is not offered)
+    LiveOutcome outcome;
+    if (board.outcome(id, outcome)) return live_missing(true, store->find(outcome.file) != nullptr ? outcome.file : std::string(), outcome.turns);        // (a file that is not in the store any more, the operator deleted it, is not offered)
     return live_missing(false, std::string());
 }
 

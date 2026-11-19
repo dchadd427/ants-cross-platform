@@ -90,6 +90,7 @@ struct ServerLimits {
     uint32_t resume_countdown_ms{net::kResumeCountdownMs};          // the match is held this long after a pause of 3 s or more (--resume-countdown-seconds; 0: none)
     uint32_t countdown_s{0};                                        // protocol 21: the seconds that a room with two or more people holds the first turn (--start-countdown-seconds, 0 - 60; the ants_server default is net::kMatchCountdownSeconds, a Limits made by code has none)
     uint32_t solo_countdown_s{0};                                   // the seconds that a room of exactly one person holds the first turn (--solo-countdown-seconds, 0 - 60; the ants_server default is net::kSoloCountdownSeconds, a Limits made by code has none)
+    uint32_t live_delay_s{LiveBoard::kDefaultDelayS};                // the seconds that the public live door shows a match with two or more people late (--live-delay-seconds, 0 - 300; 0: as it is; live_board.hpp)
     size_t room_log_bytes{net::TurnLog::kDefaultMaxBytes};          // the limit of one room's turn log (16 MiB)
     uint64_t log_budget_bytes{256ull * 1024ull * 1024ull};          // the memory that all the rooms' logs may take together; a log that cannot grow is not kept (its room drops a lost seat at once)
 };
@@ -127,7 +128,7 @@ struct BotMatchInfo {
     uint8_t mode{0};                        // sim::GameMode as a byte
     std::vector<std::pair<uint8_t, std::string>> seats;   // (seat, "easy" | "medium" | "hard") in the order of the seats
     std::string sides;                      // "ffa", or the sides by seat: "03-12" (seats 0 and 3 against 1 and 2), "01-2"
-    std::string live_id;                    // the id of the match on the live list when the public list shows it, else "" (it shows after the match has run 30 seconds)
+    std::string live_id;                    // the id of the match on the live list when the public list shows it, else "" (it shows from the start of the match)
     uint32_t places{1};                     // what the match takes of kBotPlacesMax
     RoomState state{RoomState::Waiting};
 };

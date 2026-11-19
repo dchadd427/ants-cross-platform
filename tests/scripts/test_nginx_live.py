@@ -10,7 +10,7 @@ the two addresses like /replays (tests/scripts/test_nginx_replays.py), as the on
   - nothing of the visitor's request is passed on but Host and Connection, and the connection is not kept;
   - allowances of their own, not shared with the recorded matches': twenty a second for the list,
     thirty for the snapshots (503 beyond);
-  - both are cached for TWO seconds in the cache of /stats (the list in one entry, a snapshot in one entry for each id), only a 200 is kept, an answer is served old only while a new one is being fetched
+  - both are cached for ONE second in the cache of /stats (the list in one entry, a snapshot in one entry for each id), only a 200 is kept, an answer is served old only while a new one is being fetched
     (never because the server does not answer: a snapshot that is repeated for minutes looks like a match that goes on), and a server that has no such door is answered 404 with a JSON body.
 
 The text of the file is checked everywhere. Where docker works the blocks are RUN: the real file in front of a stand-in server (a second nginx that logs what it was sent), so that what reaches the
@@ -147,9 +147,9 @@ class TheAllowancesAndTheCache(unittest.TestCase):
         self.assertNotIn("zone=ants_live ", SNAPSHOT)
         self.assertNotIn("zone=ants_live_files ", LIST)
 
-    def test_both_are_cached_for_two_seconds_in_the_cache_of_the_numbers_and_only_a_200_is_kept(self):
+    def test_both_are_cached_for_one_second_in_the_cache_of_the_numbers_and_only_a_200_is_kept(self):
         for what, block in BOTH:
-            for directive in ("proxy_cache ants_stats_cache;", "proxy_cache_valid 200 2s;", "proxy_ignore_headers Cache-Control;", "proxy_cache_lock on;"):
+            for directive in ("proxy_cache ants_stats_cache;", "proxy_cache_valid 200 1s;", "proxy_ignore_headers Cache-Control;", "proxy_cache_lock on;"):
                 self.assertIn(directive, block, what + directive)
             self.assertEqual(len(re.findall(r"\bproxy_cache_valid\b", block)), 1, what)       # (only a 200: the 404 of a match that is over, or of an id that never was, is asked of the server each time)
             self.assertLess(block.index("limit_req "), block.index("proxy_cache "), what)     # (a request over the limit never reaches the cache)
@@ -206,10 +206,10 @@ class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
     def test_the_documents_name_the_routes_and_the_numbers(self):
         server = read("docs", "SERVER.md")
         replays = read("docs", "REPLAYS.md")
-        for needle in ("GET /live", "GET /live/<id>", "two seconds", "ants_live"):
+        for needle in ("GET /live", "GET /live/<id>", "one second", "ants_live"):
             self.assertIn(needle, server + read("docker", "nginx.conf"), needle)
-        for needle in ("`GET /live`", "`GET /live/<id>`", "snapshot", "no delay"):
-            self.assertIn(needle, replays.replace("**There is no delay, on purpose:**", "no delay"), needle)
+        for needle in ("`GET /live`", "`GET /live/<id>`", "snapshot", "30 seconds late"):
+            self.assertIn(needle, replays, needle)
 
     def test_the_header_of_the_file_names_the_live_zones(self):
         text = read("docker", "nginx.conf")
@@ -321,7 +321,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
                 self.assertEqual(one[field], "-", field)                                      # (and the ones that could matter, by name)
             self.assertEqual((one["host"], one["conn"], one["up"], one["te"], one["cl"]), ("127.0.0.1", "close", "-", "-", "-"))
 
-    def test_the_list_and_each_snapshot_are_cached_for_two_seconds_for_everybody(self):
+    def test_the_list_and_each_snapshot_are_cached_for_one_second_for_everybody(self):
         before = self.stub_lines()
         first = self.ask("GET", "/live")
         self.assertEqual(first[0], 200)
@@ -336,7 +336,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
                 status, _, body = self.ask("GET", "/live/" + match)
                 self.assertEqual((status, body), (200, b"a stand-in snapshot"))
         self.assertEqual(self.stub_lines(before + 3) - before, 3)                             # a snapshot of its own for each match: asked once each (the other three of each came from the cache)
-        time.sleep(3.2)                                                                       # two seconds are over (nginx counts whole seconds: an entry made at the start of a second is good for the whole of the second one, so 2.5 s is not always enough)
+        time.sleep(2.2)                                                                       # one second is over (nginx counts whole seconds: an entry made at the start of a second is good for the whole of that second, so 1.5 s is not always enough)
         self.assertEqual(self.ask("GET", "/live")[0], 200)
         self.assertEqual(self.ask("GET", "/live")[0], 200)
         self.assertEqual(self.ask("GET", "/live/" + SNAPSHOT_ID)[0], 200)
@@ -372,7 +372,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertTrue(set(codes) <= {200, 503}, set(codes))
         self.assertTrue(61 <= allowed <= 61 + int(30 * took) + 1, (allowed, took))            # the first request and the burst of 60, and thirty a second while this goes on
         self.assertEqual(codes[:61], [200] * 61)                                              # (the refusals come after the allowance, none between)
-        self.assertLessEqual(self.stub_lines() - before, 1 + int(took / 2))                   # the cache: the server was asked once (and again every two seconds), not 61 times
+        self.assertLessEqual(self.stub_lines() - before, 2 + int(took))                       # the cache: the server was asked once (and again every second), not 61 times
         self.assertEqual(self.ask("GET", "/live")[0], 200)                                    # the list is another zone: a flood of snapshots does not use its allowance
         self.assertEqual(self.ask("GET", "/replays/ants-TREASURE-20261008-143209Z.antsrep")[0], 404)     # (nor the recorded matches' files'; the stand-in has none: its 404, not nginx's 503)
 
