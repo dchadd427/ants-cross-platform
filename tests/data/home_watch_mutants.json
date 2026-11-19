@@ -121,6 +121,34 @@
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
+   "id": "games_count_ignores_the_matches",
+   "file": "web/home/games.js",
+   "old": "parts.pill.textContent = shown ? countText(n + m) : '';",
+   "new": "parts.pill.textContent = shown ? countText(n) : '';",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "games_count_is_not_said_to_a_screen_reader",
+   "file": "web/home/games.js",
+   "old": " + (m ? ', ' + countText(m) + ' in progress' : '')",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "games_count_waits_for_the_next_look_at_the_list",
+   "file": "web/home/games.js",
+   "old": "            paintLive();\n            paintPill();\n",
+   "new": "            paintLive();\n",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "games_count_adds_a_match_twice",
+   "file": "web/home/games.js",
+   "old": "countText(n + m)",
+   "new": "countText(n + m + m)",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
    "id": "live_looks_while_a_popover_is_closed",
    "file": "web/home/games.js",
    "old": "function liveWanted() { return !gone && visible() && onHome() && isOpen && drawn(); }",
@@ -139,13 +167,6 @@
    "file": "web/home/games.js",
    "old": "who.textContent = names; who.setAttribute('title', names);",
    "new": "who['inner' + 'HTML'] = names; who.setAttribute('title', names);",
-   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
-  },
-  {
-   "id": "the_count_on_the_button_includes_the_matches",
-   "file": "web/home/games.js",
-   "old": "var n = listRows().length, shown = loaded && !off;",
-   "new": "var n = listRows().length + live.length, shown = loaded && !off;",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {

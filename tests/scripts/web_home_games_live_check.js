@@ -85,7 +85,7 @@ const M = 'TREASURE.LVL';
     check('... and its name for a screen reader says the match', /^Watch the match on Treasure, Ann, Bot \(Medium\), 2:05 so far$/.test(w.getAttribute('aria-label')));
     check('a row in progress has no Join (nobody can take a seat of a running match)', rows.every((li) => !li.findAll((e) => e.tagName === 'button').length && !first(li, 'gjoin')));
     check('the heading of the list says how many are open and how many are in progress', headOf(env) === '1 open, 2 in progress', headOf(env));
-    check('the Games button counts the open games only (the number is what can be joined)', R.pillOf(env).textContent === '1' && env.home('games').getAttribute('aria-label') === 'Games, 1 open');
+    check('the count beside Games is the open games and the matches in progress together (1 open and 2 in progress: 3), and says both to a screen reader', R.pillOf(env).textContent === '3' && R.pillOf(env).hidden === false && env.home('games').getAttribute('aria-label') === 'Games, 1 open, 2 in progress');
     check('the open rooms are the rows of the first list and the matches are under it, in a box with its own heading', find(popOf(env), 'gitem').length === 3 && first(boxOf(env), 'gsub').textContent === 'In progress' && boxOf(env).hidden === false);
     check('a row of an open room still has its Join', first(popOf(env), 'gjoin') !== null && first(popOf(env), 'gjoin').textContent === 'Join');
     check('the picture of a match is the map\'s square (an original\'s own)', first(rows[0], 'gmap').findAll((e) => e.tagName === 'img').length === 1 && /preview_treasure\.png$/.test(first(rows[0], 'gmap').findAll((e) => e.tagName === 'img')[0].src));
@@ -96,7 +96,7 @@ const M = 'TREASURE.LVL';
     same('a match that ended is gone from the list and the one that goes on says its new time', liveRows(env).map((li) => [first(li, 'gname').textContent, first(li, 'glen').textContent]), [['Treasure', '2:15 so far']]);
     check('... and the head follows', headOf(env) === '1 open, 1 in progress', headOf(env));
     await wait(env, 31000);
-    check('the Games button still counts the open game only, after the list and the matches have both been looked at again', R.pillOf(env).textContent === '1' && env.home('games').getAttribute('aria-label') === 'Games, 1 open');
+    check('the count follows the matches: one ended, so 1 open and 1 in progress is 2, after the list and the matches have both been looked at again', R.pillOf(env).textContent === '2' && env.home('games').getAttribute('aria-label') === 'Games, 1 open, 1 in progress');
 }
 {   // text only: names with markup, a very long name, a map of the players
     const markup = [LIVE('Pop_Corn-20261109-120000Z', { map: 'Pop Corn.lvl', players: ['Green (<img src=x onerror=alert(1)>)', 'Red (' + 'W'.repeat(60) + ')', 'Blue (a "b" & \'c\' <\/script>)'] })];
@@ -135,6 +135,34 @@ const M = 'TREASURE.LVL';
     env.site.live.body = answer([Object.assign({}, KILLS, { mode: 'highest-score', seconds: 140 }), SCORE, OLD, ODD]);
     await wait(env, 12500);
     check('a match that is given another mode by a later answer (it never is: the id is one match) is drawn again as the answer says', find(liveRows(env)[0], 'gmode').length === 0 && watchOf(liveRows(env)[0]).getAttribute('aria-label') === 'Watch the match on Treasure, Ann, Bot (Medium), 2:20 so far');
+}
+
+// ---- 2a. the count beside Games (and on the phone's tab, which copies it) ----
+{   // matches in progress and no open room: the count is the matches, not 0
+    const env = await livePage({});
+    check('0 open and 2 in progress: the count is 2 (it showed 0 for them), the head says both, and a screen reader hears both', R.pillOf(env).textContent === '2' && R.pillOf(env).hidden === false && headOf(env) === '0 open, 2 in progress' && env.home('games').getAttribute('aria-label') === 'Games, 0 open, 2 in progress', [R.pillOf(env).textContent, headOf(env)].join());
+    env.site.live.body = answer([]);
+    await wait(env, 12500);
+    check('the matches end: the count goes back to the open games, here none', R.pillOf(env).textContent === '0' && env.home('games').getAttribute('aria-label') === 'Games, 0 open');
+    env.site.live.body = answer(SAMPLE);
+    await wait(env, 12500);
+    check('and comes back with the next look at the matches', R.pillOf(env).textContent === '2');
+}
+{   // the door of the matches fails after it has answered: the section goes, and so do the matches from the count
+    const env = await livePage({ lobbies: [row('k7m2xq', 'Pebble')] });
+    check('(1 open and 2 in progress: 3)', R.pillOf(env).textContent === '3');
+    env.site.live.reject = true;
+    await wait(env, 12500);
+    check('a failed look at the matches hides them, and the count is the open games alone again', boxOf(env).hidden === true && R.pillOf(env).textContent === '1' && env.home('games').getAttribute('aria-label') === 'Games, 1 open', R.pillOf(env).textContent);
+}
+{   // the count stops at 50+ as the list does, a page with a room of its own counts it once, and no live door leaves the open games
+    const many = Array.from({ length: 60 }, (_, i) => row('r' + String(i).padStart(5, '0'), 'Host ' + i));
+    const env = await livePage({ lobbies: many });
+    check('60 open rooms and 2 matches: "50+" (the server lists 50 at most, so more may be open)', R.pillOf(env).textContent === '50+' && env.home('games').getAttribute('aria-label') === 'Games, 50+ open, 2 in progress', R.pillOf(env).textContent);
+    const near = await livePage({ lobbies: Array.from({ length: 48 }, (_, i) => row('r' + String(i).padStart(5, '0'), 'Host ' + i)) });
+    check('48 open rooms and 2 matches are "50+": the sum is what is counted', R.pillOf(near).textContent === '50+', R.pillOf(near).textContent);
+    const none = await livePage({ rows: [], lobbies: [row('k7m2xq', 'Pebble')] });
+    check('no match runs: the count is the open games, as it was', R.pillOf(none).textContent === '1' && none.home('games').getAttribute('aria-label') === 'Games, 1 open');
 }
 
 // ---- 2b. which tab Watch uses, and the watch tab that asks for this page ----
@@ -257,7 +285,7 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     const times = site.live.times.slice();
     await wait(env, 100000);
     check('... and the looks go on slowly (doubled after every failure, up to 5 minutes), never faster than 10 s', site.live.times.length <= times.length + 3 && site.live.times.every((x, i) => i === 0 || x - site.live.times[i - 1] >= 10000), JSON.stringify(site.live.times));
-    check('... the Games button still counts the open game', R.pillOf(env).textContent === '1');
+    check('... the count beside Games is the open game alone (no match is shown, so none is counted)', R.pillOf(env).textContent === '1' && env.home('games').getAttribute('aria-label') === 'Games, 1 open');
 }
 {   // a door that answers again after a failure
     const site = R.fakeSite(); site.live.reject = true;

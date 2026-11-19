@@ -489,11 +489,11 @@
 
         function visibleRows() { var own = ownCode(); return bestOrder(rows.filter(function (r) { return r.code !== own; })); }          // the OTHER rooms, best first (Quick join and BEST)
         function listRows() { var own = ownCode(); return rows.filter(function (r) { return r.code === own; }).concat(visibleRows()); }      // the list: the page's own public room first (tagged Yours), then the others
-        function paintPill() {
-            var n = listRows().length, shown = loaded && !off;
+        function paintPill() {                              // the count beside Games (and on the phone's tab, which copies it): the open rooms and the matches in progress together
+            var n = listRows().length, m = live.length, shown = loaded && !off;
             parts.pill.hidden = !shown;
-            parts.pill.textContent = shown ? countText(n) : '';
-            parts.games.setAttribute('aria-label', shown ? 'Games, ' + countText(n) + ' open' : 'Games');
+            parts.pill.textContent = shown ? countText(n + m) : '';
+            parts.games.setAttribute('aria-label', shown ? 'Games, ' + countText(n) + ' open' + (m ? ', ' + countText(m) + ' in progress' : '') : 'Games');
         }
         // One row: the map's picture (an original's, else the one that AntsMapPicker makes of the file name; one that does not come leaves the square), who hosts, which map, the seats, the bots, and (in the list) Join
         function picOf(row) {                              // the square of a row (a room's or a running match's)
@@ -583,6 +583,7 @@
             var shown = listRows(), lead = shown.length - visibleRows().length, active = doc.activeElement, focusCode = active && active.getAttribute ? active.getAttribute('data-code') : null;
             popCount.textContent = countLine(shown.length);
             paintLive();
+            paintPill();
             popLoad.hidden = loaded; popOff.hidden = !(loaded && off); popEmpty.hidden = !(loaded && !off && !shown.length && !(liveShown() && live.length)); popList.hidden = !(loaded && !off && shown.length); popLegend.hidden = popList.hidden;
             popNote.hidden = !popNote.textContent;
             var sig = JSON.stringify(shown.map(function (r) { return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size]; }).concat(lead));       // (the rows are made again only when what they show changed: a press that straddles a repaint is not lost, and a focus stays)
