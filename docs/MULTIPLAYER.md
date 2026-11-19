@@ -19,7 +19,7 @@ There is no NAT traversal in the game. Over the internet every player connects o
 - Team up with another player (three dialogs: the invitation, the waiting dialog and the confirmation before a team is broken). A team line reaches only the sender and its ally.
 - Play on when a player leaves. A game on the local network chooses a new host when the host leaves.
 - Read `ping` and `delay` in the corner of the screen.
-- Show your own orders at once (the prediction, off by default).
+- Show your own orders at once (the prediction, on by default).
 
 ## Ways to play online
 
@@ -101,7 +101,7 @@ The original has no sequencer: it is a full mesh in which every machine simulate
 
 ### Prediction of your own orders
 
-The prediction is **off by default**. Switch it on with `--prediction on`, the settings key `prediction` or `?prediction=on` on the address of a network game (a `?join=...` link; the front page does not pass it on) (`--prediction off` and `--no-prediction` switch it off, and the command line wins). There is no protocol change, and no other machine can tell.
+The prediction is **on by default** in every match of the network. `--no-prediction` (`--prediction off`) and `?prediction=off` on the game page's address switch it off for a game, to find out whether a trouble is the prediction's; nothing else does. There is no protocol change, and no other machine can tell.
 
 - How the prediction works, what it shows and plays, when it is off and the limit on its work are described in [`NETWORK_PORT.md`](NETWORK_PORT.md#prediction-of-ones-own-orders-predictionhpp-cue_routerhpp-netgame-applicationview_sim).
 - [`NETWORK_PORT.md`](NETWORK_PORT.md) "Prediction of one's own orders" has the design.

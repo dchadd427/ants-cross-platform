@@ -89,6 +89,7 @@ add_library(ants_app STATIC
     game_menu.cpp
     application_replay.cpp
     auto_camera.cpp
+    view_glide.cpp
     application_maps.cpp
     map_fetch.cpp
     application_touch.cpp

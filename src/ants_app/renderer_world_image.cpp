@@ -86,6 +86,8 @@ bool Renderer::render_world_image(const ants::assets::LevelData& level, const an
     const LayoutPoint saved_origin = origin_;
     const bool saved_force_target = force_world_target_;                       // (the zoom's state: the camera's zoom is part of saved_camera; the world pass's own state, in_world_target_ and pass_, is idle between frames)
     const uint8_t saved_team = hud_team_id_;
+    ViewGlide saved_glide;                                                      // (the slides of the live match's ants are not this picture's: its ants have the same numbers)
+    std::swap(saved_glide, view_glide_);
     const uint32_t saved_sub_tick = sub_tick_ms_;
     const auto saved_ears = ears_state_;
     const int32_t saved_hill_marker_team = hill_marker_team_;
@@ -108,6 +110,7 @@ bool Renderer::render_world_image(const ants::assets::LevelData& level, const an
         origin_ = saved_origin;
         force_world_target_ = saved_force_target;
         hud_team_id_ = saved_team;
+        std::swap(saved_glide, view_glide_);
         sub_tick_ms_ = saved_sub_tick;
         ears_state_ = saved_ears;
         hill_marker_team_ = saved_hill_marker_team;

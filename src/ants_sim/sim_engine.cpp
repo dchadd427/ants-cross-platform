@@ -944,6 +944,12 @@ bool SimulationEngine::is_fog_of_war_enabled() const {
     return impl_->fog_of_war_enabled_;
 }
 
+void SimulationEngine::adopt_explored_ground_of(const SimulationEngine& other) {
+    if (!impl_->fog_of_war_enabled_ || impl_->fog_revealed_ == other.impl_->fog_revealed_) return;
+    impl_->fog_revealed_ = other.impl_->fog_revealed_;
+    impl_->world_state_dirty_ = true;
+}
+
 void SimulationEngine::set_viewing_player_id(uint8_t player_id) {
     impl_->viewing_player_id_ = player_id;
     for (auto& ant : impl_->ants_) {                       // a new viewer looks at its ants afresh (as a program that starts as that team would)

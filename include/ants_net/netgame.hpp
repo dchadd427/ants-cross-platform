@@ -216,7 +216,7 @@ public:
     /// background step from here (Application::background_pump), which calls update() and take_events() like a frame does. The function may end the session (leave()).
     /// A native build never calls it (its transports are polled by the frame loop).
     void set_on_wake(std::function<void()> fn) { on_wake_ = std::move(fn); }
-    /// The tests: the way back asks this function for every new link instead of connecting to the JoinTarget; null means that no link could be made (the name does not resolve: the network is down)
+    /// The tests: join() and the way back ask this function for every link instead of connecting to the JoinTarget; null means that no link could be made (the name does not resolve: the network is down)
     void set_link_maker_for_test(std::function<std::unique_ptr<Connection>()> fn) { link_maker_ = std::move(fn); }
     /// The tests: join() asks this function for the numeric address of its host (the lookup that it makes once) instead of the system's; "" means that the name does not resolve
     void set_resolver_for_test(std::function<std::string(const std::string&)> fn) { resolver_ = std::move(fn); }
@@ -374,8 +374,8 @@ public:
     sim::CommandResult submit(const sim::Command& command) override;
 
     // ---- the prediction of one's own orders (prediction.hpp, docs/NETWORK_PORT.md "Prediction of one's own orders") --------------------------------------
-    /// Off by default (opt-in: the application turns it on when asked to); off, every order waits for its turn as before. A local game has no delay to hide. Takes effect with the next update:
-    /// a match that is asked for it makes the prediction then (it begins with the next tick), and one that is not asked never makes it; switched off, it is destroyed (not suspended).
+    /// On by default: a match that plays makes the prediction (it begins with the next tick); off (--no-prediction, the tests), every order waits for its turn and no second engine is made. A local game has
+    /// no delay to hide. Takes effect with the next update; switched off, the prediction is destroyed (not suspended).
     void set_prediction_enabled(bool on) noexcept { prediction_enabled_ = on; }
     bool prediction_enabled() const noexcept { return prediction_enabled_; }
     /// Told whenever the predicted engine is destroyed (switched off, the match left, this object destroyed): whoever points at its engine (the HUD's special-target query) points elsewhere
@@ -578,7 +578,7 @@ private:
     std::unique_ptr<HostSession> host_session_;
     std::unique_ptr<ClientSession> client_session_;
     std::unique_ptr<Prediction> prediction_;     // (after the sessions: it holds their runner and goes first; made by refresh_prediction() when it is wanted, never otherwise)
-    bool prediction_enabled_{false};
+    bool prediction_enabled_{true};
     bool app_suspends_prediction_{false};
     uint64_t prediction_budget_ns_{default_prediction_budget_ns()};
     uint32_t prediction_budget_strikes_{Prediction::Config{}.budget_strikes};

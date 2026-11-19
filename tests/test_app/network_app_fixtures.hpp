@@ -58,6 +58,10 @@ inline int g_test_count = 0;
 inline int g_test_failures = 0;
 inline int g_assert_count = 0;
 
+// A match of the network shows the predicted engine (net::Prediction), whose work has a budget of the thread's CPU time: a test process on a busy machine that goes over it loses the prediction for ten
+// seconds, and the screen's engine changes under the test. That is no part of what these tests are about (the budget has tests of its own: test_prediction RP7.x, test_netgame N3.30): no budget here.
+inline const bool g_prediction_has_no_budget_here = (ants::net::NetGame::default_prediction_budget_ns() = UINT64_MAX, true);
+
 inline void run_test_case(const std::string& name, const std::function<void()>& fn) {
     // ANTS_TEST_FILTER=text runs only the cases whose title contains the text (for working on one test and for mutation runs; the suite as run_tests.sh runs it has no filter)
     if (const char* filter = std::getenv("ANTS_TEST_FILTER")) {
