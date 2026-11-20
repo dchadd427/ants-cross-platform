@@ -985,7 +985,7 @@
             if (!client || !client.room) return false; if (change.moveTo >= 0 && client.room.you !== change.moveTo) client.move(client.room.you, change.moveTo, client.guardNow());
             return client.setPlan(Rules.planWith(Rules.withMode(client.room, pendingMode), Rules.modelOf(client.room), change));
         }
-        var directSwitch = window.AntsLobbyDirect ? window.AntsLobbyDirect.create({ doc: document, host: $('direct'), storage: storage, rtc: !!window.RTCPeerConnection }) : null;      // (front/lobby_direct.js: protocol 25's switch, this player's own, off by default)
+        var directSwitch = window.AntsLobbyDirect ? window.AntsLobbyDirect.create({ doc: document, host: $('direct'), storage: storage, rtc: !!window.RTCPeerConnection }) : null;      // (front/lobby_direct.js: protocol 26's switch, this player's own, off by default)
         var gameType = GameType.create({ doc: document, host: $('gtype'), modes: Modes, onChoose: function (id) { Modes.remember(storage, id); if (sendPlan({ mode: id })) pendingMode = id; else render(); } });      // (front/game_type.js)
         // ---- the map card and the map list (front/map_picker.js): the card shows the room's map, and its Change map button (the host's) opens the list: the six originals first, then the players' maps ----
         var picker = null, warmed = {};

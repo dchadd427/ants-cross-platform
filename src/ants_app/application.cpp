@@ -805,7 +805,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_set_page_fullscreen(int on) {
 // The touch model, for the page's browser check (tests/scripts/web_touch_check.py): 30: the taps, 31: the holds, 32: the drags, 33: the two-finger gestures, 34: the fingers that are tracked, 35: what the model
 // is doing (touch_control.hpp Mode: 0 idle, 1 waiting, 2 left button, 3 right button, 4 minimap, 5 two fingers), 36: the slop in picture pixels times 100.
 // The picking, for the page's browser check of a replay (tests/scripts/web_camera_check.py): 50: the ants that are picked, plus 1000 when a base is picked and 100000 when an ant is inspected (0: nothing is picked; -1 outside a match).
-// Hints (protocol 25, docs/P2P_HINTS.md): 80: the hints that this game sent (its own orders, to the other players' channels), 81: the hints that the server sent (a computer player's orders), 82: the hints
+// Hints (protocol 26, docs/P2P_HINTS.md): 80: the hints that this game sent (its own orders, to the other players' channels), 81: the hints that the server sent (a computer player's orders), 82: the hints
 // that the channels delivered, 83: the hints that the prediction took, 84: ... that a sealed turn confirmed, 85: ... that arrived after their turn or were dropped, 86: the rebuilds that a hint caused (-1: no game).
 // The countdown card (protocol 21), for the page's Fullscreen button (web/countdown_button.js): 60 - 65, see Application::countdown_probe (application_net.cpp).
 // The HUD's own Fullscreen button, for the page (web/hud_fullscreen.js): 70 - 76, see Application::hud_probe (application_net.cpp); the page tells the game whether it is fullscreen (ants_set_page_fullscreen).

@@ -197,6 +197,30 @@ void OptionsScreen::on_text(const std::string& text) {
     }
 }
 
+std::optional<size_t> OptionsScreen::focused_edit() const noexcept {
+    if (!open_) return std::nullopt;
+    for (size_t i = 0; i < edits_.size(); ++i) {
+        if (edits_[i].focused()) return i;
+    }
+    return std::nullopt;
+}
+
+void OptionsScreen::focus_edit(size_t index, uint32_t now_ms) {
+    if (!open_ || index >= edits_.size()) return;
+    for (size_t i = 0; i < edits_.size(); ++i) edits_[i].focus(i == index, now_ms);
+}
+
+bool OptionsScreen::set_edit_text(size_t index, const std::string& text) {
+    if (!open_ || index >= edits_.size()) return false;
+    return edits_[index].set_text(text);
+}
+
+void OptionsScreen::commit_edit(size_t index) {
+    if (!open_ || index >= edits_.size() || state_.quick_chat[index] == edits_[index].text()) return;
+    state_.quick_chat[index] = edits_[index].text();                       // (as on_key does: at most 100 characters, written to the profile)
+    notify(static_cast<OptionSetting>(static_cast<size_t>(OptionSetting::QuickChat1) + index));
+}
+
 void OptionsScreen::draw_edit(IRenderer& renderer, const ScreenEdit& edit, uint32_t now_ms) const {
     draw_edit_line(renderer, edit.text(), edit.x(), edit.y(), edit.w(), edit.tail_aligned(), edit.caret_visible(now_ms), kEditColor, kEditFont);
 }

@@ -31,7 +31,7 @@ and broadcasts the results (the game is not lock-step). Its lobby flow, texts an
   Validation (`command_system.cpp`): the issuer is a player; a group order keeps only the issuer's own ants (each once, order kept); the tile is on the map; an answer to an invitation needs that invitation;
   nothing changes once the match is over. Rejections are reported (`CommandResult::Status`), never trusted, never fatal.
 
-* **Topology and NAT traversal** (the WebRTC part of this plan was dropped on 2026-09-30: internet play comes from outside the game, browsers reach a dedicated server over WebSocket; protocol 25 brings WebRTC back for one purpose only, orders sent ahead of their turns, with the server still sealing every turn: [`P2P_HINTS.md`](P2P_HINTS.md)): a star with the room owner as sequencer (with a mesh of links behind it for host migration, below); the plan was one WebRTC data channel per player (ICE with STUN and a TURN relay as the fallback, DTLS-encrypted, reliable ordered
+* **Topology and NAT traversal** (the WebRTC part of this plan was dropped on 2026-09-30: internet play comes from outside the game, browsers reach a dedicated server over WebSocket; protocol 26 brings WebRTC back for one purpose only, orders sent ahead of their turns, with the server still sealing every turn: [`P2P_HINTS.md`](P2P_HINTS.md)): a star with the room owner as sequencer (with a mesh of links behind it for host migration, below); the plan was one WebRTC data channel per player (ICE with STUN and a TURN relay as the fallback, DTLS-encrypted, reliable ordered
   channel for commands and one for keep-alive and hashes) so the same protocol runs natively (libdatachannel) and in the browser (built-in RTCPeerConnection); a small WebSocket signaling service for rooms
   and the SDP / ICE hand-shake. TURN credentials are issued per session (the standard TURN REST scheme); the shared secret, host names and STUN / TURN URLs are configuration, never committed.
 
@@ -921,11 +921,15 @@ No layout changed: a bot is named `Pip (bot, Hard)`; the Room message's planned 
 
 187's hill is closed (rules number 7), the original's game ends at one side left with no food to score (rules number 8), a fire wall of a map file loads as the original loads it (rules numbers 9 and 10), and the end rule of 187 counts the teams that began and not an egg that cannot hatch (rules number 11): [`GAMEPLAY.md`](GAMEPLAY.md#the-last-side-standing), [`map_loader_fidelity.md`](reverse_engineering/map_loader_fidelity.md) section 8; the rules numbers: [`REPLAYS.md`](REPLAYS.md#the-file).
 
-## Protocol 25: [`P2P_HINTS.md`](P2P_HINTS.md)
-
 ## Protocol 24: nothing on the wire
 
 187 puts nothing on the ground (rules number 12): [`GAMEPLAY.md`](GAMEPLAY.md#187-a-game-type-of-the-remake); the rules numbers: [`REPLAYS.md`](REPLAYS.md#the-file).
+
+## Protocol 25: nothing on the wire
+
+A bite takes its unit from the first object of its food tile that still has one, so a lunchbox that falls on the anchor of an emptied pile is eaten once (the original's game, rules number 13): [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) 5.40, "A lunchbox on the anchor of an emptied record"; the rules numbers: [`REPLAYS.md`](REPLAYS.md#the-file).
+
+## Protocol 26: [`P2P_HINTS.md`](P2P_HINTS.md)
 
 ## Reconnect (protocol 10): a player whose connection is lost can come back
 

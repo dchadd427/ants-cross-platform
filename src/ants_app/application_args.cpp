@@ -252,9 +252,9 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             }
         } else if (std::strcmp(argv[i], "--no-prediction") == 0) {              // the same as --prediction off
             cfg.prediction = false;
-        } else if (std::strcmp(argv[i], "--no-p2p") == 0) {                     // the browser build opens no data channels to the other players (protocol 25)
+        } else if (std::strcmp(argv[i], "--no-p2p") == 0) {                     // the browser build opens no data channels to the other players (protocol 26)
             cfg.p2p = false;
-        } else if (std::strcmp(argv[i], "--direct") == 0) {                     // --direct on | off: this player allows direct connections (protocol 25; off by default)
+        } else if (std::strcmp(argv[i], "--direct") == 0) {                     // --direct on | off: this player allows direct connections (protocol 26; off by default)
             if (i + 1 >= argc || !parse_switch(argv[i + 1], cfg.direct)) {
                 if (cfg.startup_error.empty()) cfg.startup_error = "--direct needs on or off";
                 if (i + 1 < argc) ++i;

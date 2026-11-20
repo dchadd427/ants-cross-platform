@@ -374,7 +374,7 @@ public:
     /// that it handles (group moves, special orders, attacks, Stop) is also applied to the predicted engine at once and the answer is that engine's own verdict.
     sim::CommandResult submit(const sim::Command& command) override;
 
-    // ---- hints and channels (protocol 25, p2p.hpp, docs/P2P_HINTS.md) ----------------------------------------------------------------------------------
+    // ---- hints and channels (protocol 26, p2p.hpp, docs/P2P_HINTS.md) ----------------------------------------------------------------------------------
     /// The page's data channels (the browser build; null everywhere else): the game then tells the server that it can open channels (P2pConfig, once the match has begun in a server's room), gives the
     /// transport the relay's credential and the signalling, sends every order that the prediction applied as a hint to the other players, and gives what their channels deliver to the prediction. `direct`:
     /// this player allows direct connections. The transport must outlive the game; the game never owns it. Set before the match begins.
@@ -383,7 +383,7 @@ public:
         p2p_direct_ = direct;
     }
     /// On by default: a hint from the server (a computer player's order) or from a channel goes to the prediction. Off (--no-p2p, the measurements' "before"): hints are not looked at, and the
-    /// picture waits for the sealed turns as it did before protocol 25.
+    /// picture waits for the sealed turns as it did before protocol 26.
     void set_hints_enabled(bool on) noexcept { hints_enabled_ = on; }
     /// How this machine is connected to the player of `seat` (PeerLink::None without a transport or for this player's own seat)
     PeerLink peer_link(uint8_t seat) const;

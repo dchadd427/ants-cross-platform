@@ -1,6 +1,6 @@
 #ifdef __EMSCRIPTEN__
 
-// The browser build's data channels (protocol 25, docs/P2P_HINTS.md): the page's AntsP2p (web/p2p.js) makes the RTCPeerConnections and applies the rule of the address; these calls only hand it the
+// The browser build's data channels (protocol 26, docs/P2P_HINTS.md): the page's AntsP2p (web/p2p.js) makes the RTCPeerConnections and applies the rule of the address; these calls only hand it the
 // relay's credential and the signalling, ask it to send a hint, and take what it has to say. Nothing here can throw into the game: a page that has no p2p.js or a browser without WebRTC gives no
 // channel (link() says none, every poll says nothing).
 #include <emscripten.h>

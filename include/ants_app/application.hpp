@@ -94,7 +94,7 @@ struct ApplicationConfig {
     /// --prediction on | off (--no-prediction is --prediction off): whether a match of the network shows the player's own orders at once (net::Prediction, docs/NETWORK_PORT.md). On by default;
     /// a game of one machine never predicts.
     bool prediction{true};
-    /// --no-p2p (and the page's ?p2p=off): the browser build opens no data channels to the other players of a match and the game takes no hint, from a channel or from the server (protocol 25, docs/P2P_HINTS.md). On by default; only the browser build has channels.
+    /// --no-p2p (and the page's ?p2p=off): the browser build opens no data channels to the other players of a match and the game takes no hint, from a channel or from the server (protocol 26, docs/P2P_HINTS.md). On by default; only the browser build has channels.
     bool p2p{true};
     /// --direct on | off: this player allows direct connections to the other players who allow them too (their address is then visible to each other). Off by default: every channel goes through the
     /// operator's relay and no player's address reaches another. The page passes the choice that the player made in the room (the browser remembers it).
@@ -393,11 +393,18 @@ public:
     const game_menu::MenuSettings& menu_settings() const noexcept { return menu_settings_; }
     const hud_art::Art& hud_art() const noexcept { return hud_art_; }
     const health::ChangeTracker& health_changes() const noexcept { return health_changes_; }      // the live damage and heal numbers (empty while the setting is Off)
-    /// A PHONE'S KEYBOARD for the match's chat box (application_touch.cpp; the page, web/shell.html "ANTS_CHAT", opens the browser's keyboard when a finger taps the box and hands the
-    /// game what is typed, through these and the exports ants_chat_probe / ants_chat_do): the box takes text now (a match is on the screen, no recording, no catch-up screen, chat on, no dialog)
+    /// A PHONE'S KEYBOARD for the match's chat box and the options window's four quick chat fields (application_touch.cpp; the page, web/shell.html "ANTS_CHAT", opens the browser's keyboard when a
+    /// finger taps a box and hands the game what is typed, through these and the exports ants_chat_probe / ants_chat_do): a box takes text now (a match is on the screen, no recording, no
+    /// catch-up screen, and either the options window is open, or chat is on and no dialog is open)
     bool web_chat_available() const noexcept;
-    /// ... the box where a finger taps, in the CANVAS's pixels (the picture sits in the canvas: picture().x / y)
+    /// ... which boxes there are: 0 the chat box, 1 the four fields of the options window (the window is open: it has the screen and the chat box has none)
+    int web_text_mode() const noexcept;
+    /// ... the chat box where a finger taps, in the CANVAS's pixels (the picture sits in the canvas: picture().x / y)
     LayoutRect web_chat_box() const noexcept;
+    /// ... the options window's field `index` (0 - 3: F9 - F12), in the same pixels (an empty rectangle for no such field)
+    LayoutRect web_options_field(size_t index) const noexcept;
+    /// ... the line that the keyboard edits: the HUD's chat line, or the text of the options field with the focus (empty when none has it)
+    std::string web_text_line() const;
     /// Protocol 21, for the page (ants_probe 60 - 64): the seconds that the countdown has left (-1 when no countdown card is up) and the place of the Fullscreen button on it, in the page's canvas pixels
     int32_t countdown_seconds_left() const noexcept;
     LayoutRect web_countdown_button() const noexcept;
@@ -406,8 +413,10 @@ public:
     bool fullscreen_now() const noexcept;
     void set_page_fullscreen(bool on) noexcept { page_fullscreen_ = on; }
     int countdown_probe(int what) const noexcept;         // ants_probe 60 - 65: the two above, the button's x, y, width and height, and the lines of the chat log (application_net.cpp)
-    /// ... and the page edits the HUD's chat line (the game's own line stays the one that is shown and sent): what 0 clear, 1 add the printable ASCII character `value`, 2 Backspace, 3 Enter (a
-    /// key press through SDL's queue: the same path as a keyboard's, so [All] / [Team] and the rules of the HUD are the game's). Returns false when the box takes nothing (web_chat_available)
+    /// ... and the page edits the HUD's chat line, or the options field with the focus (the game's own line stays the one that is shown and sent): what 0 clear, 1 add the printable ASCII character
+    /// `value`, 2 Backspace, 3 Enter (a key press through SDL's queue: the same path as a keyboard's, so [All] / [Team] and the rules of the HUD are the game's; in the options window it closes
+    /// the window), 4 give the options field `value` the focus, 5 write the options field's text to the profile (what 0 - 2 left in it is shown at once and written here). Returns false when no
+    /// box takes anything (web_chat_available), and for 4 and 5 outside the options window
     bool web_chat_do(int what, int value);
     /// Is a touch device's finger one of the model's? Not a platform's own touch made from the mouse, and not a trackpad's (a touch screen counts, and so does a device that SDL does not know: a test's)
     static bool counts_as_finger(SDL_TouchID device, SDL_TouchDeviceType kind) noexcept;
@@ -748,7 +757,7 @@ private:
     std::vector<std::unique_ptr<sim::CommandSink>> bot_sinks_;   // where the bots' commands go (declared before bots_: the controller is destroyed first)
     std::unique_ptr<ai::BotController> bots_;
     std::unique_ptr<RejoinStore> rejoin_store_;           // the keys of the seats (before net_: its callbacks write here, and leave() writes last)
-    std::unique_ptr<net::P2pTransport> p2p_;           // the browser's data channels (protocol 25; none in a native build); declared before net_, which uses it and ends first
+    std::unique_ptr<net::P2pTransport> p2p_;           // the browser's data channels (protocol 26; none in a native build); declared before net_, which uses it and ends first
     std::unique_ptr<net::NetGame> net_;
     net::CueRouter cue_router_;                           // which of the two engines each cue is heard from (a match of the network that predicts); reset with every match
     net::FeltDelayMeter felt_delay_;                      // what the player feels of an order while the prediction is on (the corner's "delay"); reset with every match

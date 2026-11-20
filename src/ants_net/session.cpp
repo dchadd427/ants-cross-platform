@@ -50,7 +50,7 @@ void HostSession::add_bot_seat(uint8_t player) {
 
 bool HostSession::submit_bot(uint8_t player, sim::Command command) {
     if (!started_ || !is_bot_seat(player) || paused()) return false;         // (a bot waits, like everybody, while a seat is away: its orders would only pile up in the first turn after)
-    // Protocol 25: every player is told the order the moment the bot gives it, ahead of the turn that will carry it (the turn is the next one to be sealed: the order is queued for it). The hint changes
+    // Protocol 26: every player is told the order the moment the bot gives it, ahead of the turn that will carry it (the turn is the next one to be sealed: the order is queued for it). The hint changes
     // nothing that is sealed or recorded; a player's prediction puts the bot's ants where the turn will, so that the turn corrects them less.
     HintMsg hint;
     const bool wanted = cfg_.bot_hints && Prediction::predicts(command.type);
@@ -373,7 +373,7 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
     }
 }
 
-// ---- hints and channels (protocol 25, p2p.hpp) -------------------------------------------------------------------------------------------------------
+// ---- hints and channels (protocol 26, p2p.hpp) -------------------------------------------------------------------------------------------------------
 
 namespace {
 constexpr uint32_t kMaxP2pConfigs = 16;       // a credential is made for each; a match may see a handful of reconnects

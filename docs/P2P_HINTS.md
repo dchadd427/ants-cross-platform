@@ -1,4 +1,4 @@
-# Hints and direct channels between players (protocol 25)
+# Hints and direct channels between players (protocol 26)
 
 The server stays what it is: the sealer of the turns, the referee and the recorder of every match. What this page adds is a way for a player's machine to learn another player's order EARLIER than its sealed turn, so that the other player's ants are corrected less on the screen. Two kinds of sender, one kind of message:
 
@@ -21,7 +21,7 @@ The relay's own log holds addresses and the random labels of credentials; it is 
 
 ## The messages
 
-Types 36 to 40 (network protocol 25: a game of protocol 24 cannot play with it, because a server that knows no such message counts it as an offence). Every decoder checks every length, count and range and refuses trailing bytes ([`include/ants_net/p2p.hpp`](../include/ants_net/p2p.hpp)).
+Types 36 to 40 (network protocol 26: a game of protocol 25 cannot play with it, because a server that knows no such message counts it as an offence). Every decoder checks every length, count and range and refuses trailing bytes ([`include/ants_net/p2p.hpp`](../include/ants_net/p2p.hpp)).
 
 | Message | Layout | Direction |
 |---|---|---|
@@ -57,7 +57,7 @@ The server relays a `Signal` only between two players who are both ready; a `P2p
 
 ## Command line and page
 
-`--direct on|off` (default off: this player allows direct connections) and `--no-p2p` (no channel at all), see [`COMMAND_LINE.md`](COMMAND_LINE.md). The page passes `--direct on` when the Room's switch was on (localStorage `ants.direct`) and `--no-p2p` for `?p2p=off`. The server: `--turn-host HOST[:PORT]` (or `ANTS_TURN_HOST`) and `ANTS_TURN_SECRET`, see [`SERVER.md`](SERVER.md). Without both, protocol 25 changes nothing about a match except the computer players' hints.
+`--direct on|off` (default off: this player allows direct connections) and `--no-p2p` (no channel at all), see [`COMMAND_LINE.md`](COMMAND_LINE.md). The page passes `--direct on` when the Room's switch was on (localStorage `ants.direct`) and `--no-p2p` for `?p2p=off`. The server: `--turn-host HOST[:PORT]` (or `ANTS_TURN_HOST`) and `ANTS_TURN_SECRET`, see [`SERVER.md`](SERVER.md). Without both, protocol 26 changes nothing about a match except the computer players' hints.
 
 ## Measured effect (a rig on virtual time, not real networks)
 

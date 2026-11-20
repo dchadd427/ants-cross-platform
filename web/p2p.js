@@ -1,4 +1,4 @@
-/* The game page's data channels (protocol 25, docs/P2P_HINTS.md). They carry one thing: a player's orders to the other players ahead of their sealed turns (hints). The server stays the sealer of the
+/* The game page's data channels (protocol 26, docs/P2P_HINTS.md). They carry one thing: a player's orders to the other players ahead of their sealed turns (hints). The server stays the sealer of the
    turns; a channel that is down, slow or wrong costs nothing.
 
    THE RULE OF THE ADDRESS. Every channel goes through the operator's relay (iceTransportPolicy "relay": only relay candidates are gathered, sent and accepted), so that no player's address reaches

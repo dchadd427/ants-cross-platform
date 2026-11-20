@@ -53,7 +53,7 @@ struct CountdownSeat {
     bool plays{false};                                 // the color is in the match
     bool computer{false};                              // a computer player (its name says so: "Pip (bot, Hard)")
     std::string name;
-    net::PeerLink link{net::PeerLink::None};           // how this machine is connected to that person's page once it is (protocol 25): the mark "relay" or "direct" stands in the row; never a word about an address
+    net::PeerLink link{net::PeerLink::None};           // how this machine is connected to that person's page once it is (protocol 26): the mark "relay" or "direct" stands in the row; never a word about an address
 };
 
 /// The small word at the right end of a color's row: "bot" for a computer player, else "in" (the person has loaded), or, once this machine has a channel to that person, "relay" or "direct"

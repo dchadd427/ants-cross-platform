@@ -57,7 +57,7 @@
 //                      a room of exactly one person, with or without computer players, holds the first turn of its match the shorter of this and --start-countdown-seconds, with the same card (0 - 60, default 10,
 //                      0 = the plain 5 s dialog; the control interface's "solo_countdown_seconds")
 //   --turn-host HOST[:PORT]
-//                      protocol 25 (docs/P2P_HINTS.md): the relay that the players' browsers connect through (a coturn in shared-secret mode; the variable ANTS_TURN_HOST names it when the option is not
+//                      protocol 26 (docs/P2P_HINTS.md): the relay that the players' browsers connect through (a coturn in shared-secret mode; the variable ANTS_TURN_HOST names it when the option is not
 //                      given). Needs the secret in the environment variable ANTS_TURN_SECRET (never on the command line). With both, every player of a match is handed a short-lived credential for it
 //                      and the players open channels that carry their orders to each other ahead of their turns; without either of them, nobody opens a channel and the match is what it always was
 //   --log-mb N         the limit of one room's turn log, which a returning player is given the match from, in MiB (1 - 256, default 16); the logs of all the rooms together may take 256 MiB
@@ -210,7 +210,7 @@ struct Options {
     long solo_countdown_s{static_cast<long>(ants::net::kSoloCountdownSeconds)};       // --solo-countdown-seconds (a room of one person)
     long live_delay_s{static_cast<long>(ants::server::LiveBoard::kDefaultDelayS)};    // --live-delay-seconds (the public live door shows a match of two or more people this late)
     long log_mb{16};
-    std::string turn_host;                     // --turn-host (protocol 25: the relay; empty: the environment variable ANTS_TURN_HOST, else none)
+    std::string turn_host;                     // --turn-host (protocol 26: the relay; empty: the environment variable ANTS_TURN_HOST, else none)
     std::string restart_dir;                   // --restart-dir (empty: the folder "restart" in the results folder, when there is one)
     bool no_restart_records{false};
     long restart_vote_s{90};
@@ -258,7 +258,7 @@ void usage(FILE* to) {
                  "  in --secret-file (default: control-secret in --results-dir); the relay's secret (--turn-host) from ANTS_TURN_SECRET\n");
 }
 
-// The relay of protocol 25 from the option and the environment: its host name (letters, digits, '.', '-', an optional :port) and the secret of its credentials. Null when either is missing or the host is
+// The relay of protocol 26 from the option and the environment: its host name (letters, digits, '.', '-', an optional :port) and the secret of its credentials. Null when either is missing or the host is
 // not a name: no relay, and no player is given a credential.
 std::shared_ptr<const ants::net::TurnSettings> make_turn_settings(const char* host_text, const char* secret_text) {
     const std::string host = host_text != nullptr ? host_text : "";

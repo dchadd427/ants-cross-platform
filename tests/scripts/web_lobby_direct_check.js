@@ -1,4 +1,4 @@
-// Runs the Room's "Direct connection" switch (web/front/lobby_direct.js, protocol 25, docs/P2P_HINTS.md) in node with a small fake DOM and a fake storage, and checks:
+// Runs the Room's "Direct connection" switch (web/front/lobby_direct.js, protocol 26, docs/P2P_HINTS.md) in node with a small fake DOM and a fake storage, and checks:
 //   * off by default: a fresh browser has the switch off and writes nothing; the control says in plain words what it is and what the risk is (the IP address), and uses none of the network's words;
 //   * the first time it is turned on the explanation comes and the switch does NOT change until the answer: Keep it off (or Escape) leaves it off and writes nothing; Turn it on keeps the choice;
 //     once it was explained it is one press each way, and turning it off never asks;

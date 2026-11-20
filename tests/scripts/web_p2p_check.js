@@ -1,4 +1,4 @@
-// Runs the page's data channels (web/p2p.js, protocol 25, docs/P2P_HINTS.md) in node with a fake RTCPeerConnection, and checks the rule of the address and what the channels do:
+// Runs the page's data channels (web/p2p.js, protocol 26, docs/P2P_HINTS.md) in node with a fake RTCPeerConnection, and checks the rule of the address and what the channels do:
 //   * the rule of the address, for every pair of settings (this player allows direct or not, the other allows or not): only when BOTH allow is the connection made with every kind of candidate
 //     (iceTransportPolicy "all", a STUN server); in every other case the policy is "relay", no STUN server is named, a candidate that is not a relay candidate is never sent and never accepted, a relay
 //     candidate's related address is blanked on the way, and an SDP is sent with no candidate and no address in it;

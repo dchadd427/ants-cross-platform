@@ -309,7 +309,7 @@ void Room::build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms
     hc.attendance.resume_countdown_ms = spec_.resume_countdown_ms;
     hc.max_log_bytes = spec_.max_log_bytes;
     hc.log_budget = log_budget_;
-    hc.turn = turn_;                                              // protocol 25: the relay's credential for each player who asks (a room made without one gives none)
+    hc.turn = turn_;                                              // protocol 26: the relay's credential for each player who asks (a room made without one gives none)
     hc.random_bytes = [](uint8_t* out, size_t n) { return random_bytes(out, n); };
     session_ = std::make_unique<net::HostSession>(*sim_, hc);
     session_->set_on_diverged([this](uint32_t turn, uint8_t differ, uint8_t agree) {       // (the line at the end of the room counts the drops; this one says when, and how many agreed)

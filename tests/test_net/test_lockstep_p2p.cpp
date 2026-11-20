@@ -1,4 +1,4 @@
-// Protocol 25 (docs/P2P_HINTS.md): the messages of hints and channels, the relay's credential, the rule for what may be shown to whom, and what a server's session does with them.
+// Protocol 26 (docs/P2P_HINTS.md): the messages of hints and channels, the relay's credential, the rule for what may be shown to whom, and what a server's session does with them.
 //
 // What is checked:
 //   - the messages: every layout round-trips and every decoder refuses what an honest page never sends (a kind that is not predicted, a seat that is not one, trailing bytes, a credential with no address);

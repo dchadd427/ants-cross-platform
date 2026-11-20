@@ -159,7 +159,7 @@ public:
         LogBudget* log_budget{nullptr};                         // the server's memory for the logs of all its rooms (turnlog.hpp), shared: a log that it refuses is not kept
         uint32_t presence_every_ms{kPresenceEveryMs};
         size_t stream_window_bytes{kStreamWindowBytes};
-        // Hints and channels (protocol 25, p2p.hpp). `turn`: the relay's addresses and the maker of its credentials; null, or without addresses: no relay, so no player is given a credential and none opens a channel.
+        // Hints and channels (protocol 26, p2p.hpp). `turn`: the relay's addresses and the maker of its credentials; null, or without addresses: no relay, so no player is given a credential and none opens a channel.
         // `random_bytes` makes the random label of a credential's user name (the operating system's source; without it no credential is made) and `unix_now` is the clock of its expiry (empty: the system clock).
         std::shared_ptr<const TurnSettings> turn;
         std::function<bool(uint8_t*, size_t)> random_bytes;
@@ -325,7 +325,7 @@ private:
         uint32_t next_notice_ms{0};         // when the announcement is repeated
         uint32_t acked_seen{0};             // the ack the last progress check saw, and when it moved (lag_drop_idle_ms)
         uint32_t progress_ms{0};
-        bool p2p_ready{false};              // protocol 25: it sent P2pConfig and the room has a relay: it may exchange Signals
+        bool p2p_ready{false};              // protocol 26: it sent P2pConfig and the room has a relay: it may exchange Signals
         bool p2p_direct{false};             // ... and allows direct channels
         uint32_t p2p_configs{0};            // its P2pConfigs and Signals in this match (a credential is made for each P2pConfig; the numbers are limited)
         uint32_t p2p_signals{0};
@@ -380,7 +380,7 @@ private:
     std::vector<Rejoiner> rejoiners_;
     uint32_t next_presence_ms_{0};
     bool presence_dirty_{false};
-    uint8_t peers_ready_sent_{0};           // the masks of the last P2pPeers (protocol 25); a change is sent to the seats that are ready
+    uint8_t peers_ready_sent_{0};           // the masks of the last P2pPeers (protocol 26); a change is sent to the seats that are ready
     uint8_t peers_direct_sent_{0};
     std::array<uint32_t, sim::MAX_PLAYERS> hint_seq_{};      // the number of the last hint sent for each seat (a computer player's orders)
     bool was_paused_{false};
@@ -482,7 +482,7 @@ public:
     static constexpr uint32_t kAskGraceMs = 3000;
 
     void set_on_chat(std::function<void(const ChatMsg&)> fn) { on_chat_ = std::move(fn); }
-    /// Protocol 25: every Hint, IceConfig, P2pPeers and Signal that the host sends while this machine follows the match, whole (the caller decodes it: p2p.hpp). Never called for another message.
+    /// Protocol 26: every Hint, IceConfig, P2pPeers and Signal that the host sends while this machine follows the match, whole (the caller decodes it: p2p.hpp). Never called for another message.
     void set_on_p2p(std::function<void(const std::vector<uint8_t>&)> fn) { on_p2p_ = std::move(fn); }
     /// Sends a P2pConfig or a Signal (an encoded message of p2p.hpp) to the host. False when there is no host to send it to (a new one is being chosen, the machine reconnects or catches up)
     bool send_p2p(const std::vector<uint8_t>& message);

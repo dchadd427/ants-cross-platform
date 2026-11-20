@@ -1,6 +1,6 @@
 #pragma once
 
-// Hints and the signalling of direct channels (protocol 25, docs/P2P_HINTS.md).
+// Hints and the signalling of direct channels (protocol 26, docs/P2P_HINTS.md).
 //
 // The server stays the sealer of the turns, the referee and the recorder. What these messages add is only a way for a machine to learn another player's order EARLIER than its sealed turn: a HINT is an
 // order sent ahead of its turn, either by the other player's browser over a data channel (the two browsers are connected through WebRTC; this file has the signalling that the server relays) or, for a computer

@@ -1,4 +1,4 @@
-// The "Direct connection" switch of the front page's Room (web/lobby.html; protocol 25, docs/P2P_HINTS.md): one switch, for this player only, off by default, remembered by this browser
+// The "Direct connection" switch of the front page's Room (web/lobby.html; protocol 26, docs/P2P_HINTS.md): one switch, for this player only, off by default, remembered by this browser
 // (localStorage `ants.direct`, which the game page reads when it opens the match: web/p2p.js). Off, every connection to the other players goes through the operator's relay and no player's address
 // reaches another. On, a connection to a player who has turned it on too may be direct, which can lower the delay with players who are near, and those players can see this player's IP address.
 //   * The first time a person turns it on, a short explanation says so in plain words and asks (Turn it on / Keep it off); the switch changes only on the answer. Turning it off again is one press, and

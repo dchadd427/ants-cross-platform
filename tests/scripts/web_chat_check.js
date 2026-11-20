@@ -1,11 +1,14 @@
 // Runs the game page's OWN code for a phone's keyboard (web/shell.html, everything between ANTS_CHAT_BEGIN and ANTS_CHAT_END), without a browser, with fakes for the page and a model of the
-// game's chat box (Module._ants_chat_probe / _ants_chat_do / _ants_probe), and checks:
+// game's chat box and options window (Module._ants_chat_probe / _ants_chat_do / _ants_probe), and checks:
 //   * a TAP on the chat box (a finger that stays within 10 px and is up within 400 ms) focuses the field inside the touchend handler, covers the box with it, and starts it with the game's line;
 //     a drag, a long press, two fingers, a tap beside the box, a tap while the game takes no text, and a page whose game is not ready do nothing;
 //   * what is typed is mirrored into the game's line (clear, then the printable ASCII characters, at most 100), Backspace and a replaced word included; what the game refuses is taken out of
 //     the field; a composition (an IME's) is not rewritten while it is going on;
 //   * Enter (the key, or a line break from the keyboard) sends: the line is mirrored, the game gets Enter, the field is emptied and the keyboard closes; Esc closes it without sending;
 //   * a finger on the game outside the box closes it, a game that stops taking text closes it (the poll), a line that the game changed shows in the field;
+//   * the options window (the game says so: probe 6) has four fields instead of the chat box: a tap on one focuses the field, covers it, starts it with the field's text and gives the game the
+//     focus on it; typing is mirrored into that field only and written to the profile at the end of every edit; Enter (and a line break) closes the keyboard and does NOT send the game an Enter (it
+//     would close the window); a tap on another field moves the keyboard to it, a tap on nothing, the window closing and the chat box coming back close it; the chat box is no box there;
 //   * the field's keys never reach the game's own handler (stopPropagation), and the page adds no touchmove listener, never cancels a touch and listens passively.
 // tests/scripts/test_web_chat.py runs this with node (the quick tier). usage: node web_chat_check.js web/shell.html     (exit 0: every check holds; every failure is printed)
 'use strict';
@@ -63,7 +66,9 @@ function page(opts) {
     opts = opts || {};
     const doc = { activeElement: null };
     const calls = { focus: 0, blur: 0, gameFocus: 0, intervals: [], cleared: 0 };
-    const game = { line: '', takes: true, enters: 0, box: [799, 299, 143, 198], history: [] };
+    const game = { line: '', takes: true, enters: 0, box: [799, 299, 143, 198], history: [], mode: 0, focus: -1, commits: 0,
+                   fields: [[300, 200, 141, 15], [300, 232, 141, 15], [510, 200, 141, 15], [510, 232, 141, 15]], texts: ['Now you are in for it!', 'Let me be!', 'Attack!', 'Do you want to ally?'], saved: [] };
+    const activeLine = () => (game.mode === 1 ? (game.focus >= 0 ? game.texts[game.focus] : '') : game.line);
     const input = target('input');
     input.value = '';
     input.style = {};
@@ -77,13 +82,26 @@ function page(opts) {
         _ants_chat_probe(what) {
             if (what === 0) return game.takes ? 1 : 0;
             if (what >= 1 && what <= 4) return game.box[what - 1];
-            if (what === 5) return game.line.length;
-            if (what >= 100) return what - 100 < game.line.length ? game.line.charCodeAt(what - 100) : -1;
+            if (what === 5) return activeLine().length;
+            if (what === 6) return game.mode;
+            if (what >= 10 && what < 26) return game.mode === 1 ? game.fields[(what - 10) >> 2][(what - 10) & 3] : -1;
+            if (what >= 100) return what - 100 < activeLine().length ? activeLine().charCodeAt(what - 100) : -1;
             return -1;
         },
         _ants_chat_do(what, value) {
             game.history.push([what, value]);
             if (!game.takes) return 0;
+            if (game.mode === 1) {                                           // the options window: the field with the focus
+                if (what === 3) { game.enters++; return 1; }
+                if (what === 4) { game.focus = value; return 1; }
+                if (game.focus < 0) return 0;
+                if (what === 0) game.texts[game.focus] = '';
+                else if (what === 1) { if (game.texts[game.focus].length < 100) game.texts[game.focus] += String.fromCharCode(value); }
+                else if (what === 2) game.texts[game.focus] = game.texts[game.focus].slice(0, -1);
+                else if (what === 5) { game.commits++; game.saved[game.focus] = game.texts[game.focus]; }
+                else return 0;
+                return 1;
+            }
             if (what === 0) game.line = '';
             else if (what === 1) { if (game.line.length < 100) game.line += String.fromCharCode(value); }
             else if (what === 2) game.line = game.line.slice(0, -1);
@@ -117,6 +135,8 @@ function tap(p, x, y, opts) {
 // The chat box is at game pixels (799, 299) .. (942, 497): at 0.5 CSS pixel per game pixel and the canvas at (10, 20) its middle is at client (10 + 870 / 2, 20 + 398 / 2) = (445, 219)
 const INSIDE = [445, 219];
 const BESIDE = [100, 100];
+// The options window's fields are at game pixels (300, 200), (300, 232), (510, 200), (510, 232), each 141 x 15: their middles in client pixels
+const FIELD = [0, 1, 2, 3].map((k) => { const f = [[300, 200], [300, 232], [510, 200], [510, 232]][k]; return [10 + (f[0] + 70.5) / 2, 20 + (f[1] + 7.5) / 2]; });
 
 function typeText(p, text) {
     p.input.value = text;
@@ -281,6 +301,82 @@ try {
         r.game.takes = false;
         r.calls.intervals[0].fn();
         expect('a game that stops taking text (a dialog opens, the match ends) closes the keyboard', [r.doc.activeElement, r.input.value], [null, '']);
+    }
+
+    // ---- the options window: four fields instead of the chat box
+    {
+        const open = () => { const p = page(); p.game.mode = 1; load(text, p); return p; };
+        const p = open();
+        const end = tap(p, ...FIELD[1]);
+        expect('a tap on a field focuses the keyboard\'s field (inside the touchend handler), the touch is not cancelled', [p.calls.focus, p.doc.activeElement === p.input, end.prevented], [1, true, false]);
+        expect('the game is told which field (4, index) before the line is read', [p.game.history[0], p.game.focus], [[4, 1], 1]);
+        expect('the field starts with that field\'s text, and the keyboard\'s key says Done (nothing is sent)', [p.input.value, p.input.enterKeyHint], ['Let me be!', 'done']);
+        expect('it covers the field (CSS px inside the game box: 300 * 0.5, 232 * 0.5, 141 * 0.5, 15 * 0.5)', [p.input.style.left, p.input.style.top, p.input.style.width, p.input.style.height], ['150px', '116px', '70.5px', '7.5px']);
+        typeText(p, 'Hold the line');
+        expect('typing goes into that field only, and the edit is written once at its end (the commit)', [p.game.texts, p.game.commits, p.game.saved[1]], [['Now you are in for it!', 'Hold the line', 'Attack!', 'Do you want to ally?'], 1, 'Hold the line']);
+        expect('the chat line is untouched', p.game.line, '');
+        typeText(p, 'caf\u00e9 ok');
+        expect('what the game does not take is taken out of the field and the text', [p.input.value, p.game.texts[1]], ['caf ok', 'caf ok']);
+        typeText(p, 'x'.repeat(130));
+        expect('at most 100 characters', [p.input.value.length, p.game.texts[1].length], [100, 100]);
+        const enters = p.game.enters;
+        const key = fire(p.input, 'keydown', event('keydown', { key: 'Enter' }));
+        expect('Enter closes the keyboard and does not send the game an Enter (it would close the window)', [key.prevented, p.game.enters - enters, p.doc.activeElement, p.input.value], [true, 0, null, '']);
+        expect('what was typed stays in the field', p.game.texts[1].length, 100);
+        // another field while it is open: the keyboard moves
+        const q = open();
+        tap(q, ...FIELD[0]);
+        const down = touch(7, ...FIELD[3]);
+        fire(q.canvas, 'touchstart', event('touchstart', { changedTouches: [down], touches: [down], timeStamp: 3000 }));
+        expect('a finger on another field keeps the keyboard', q.doc.activeElement, q.input);
+        fire(q.canvas, 'touchend', event('touchend', { changedTouches: [touch(7, ...FIELD[3])], touches: [], timeStamp: 3050 }));
+        expect('and at its end the keyboard is on that field (the game is told, the field is moved and starts with its text)', [q.game.focus, q.input.value, q.input.style.left, q.input.style.top], [3, 'Do you want to ally?', '255px', '116px']);
+        // a finger on nothing, and a line break from the keyboard
+        const r = open();
+        tap(r, ...FIELD[2]);
+        const away = touch(8, ...BESIDE);
+        fire(r.canvas, 'touchstart', event('touchstart', { changedTouches: [away], touches: [away], timeStamp: 4000 }));
+        expect('a finger on the game outside the fields closes the keyboard', r.doc.activeElement, null);
+        const u = open();
+        tap(u, ...FIELD[2]);
+        typeText(u, 'wait');
+        const lb = fire(u.input, 'beforeinput', event('beforeinput', { inputType: 'insertLineBreak' }));
+        expect('a line break from the keyboard only closes it too', [lb.prevented, u.game.enters, u.doc.activeElement, u.game.texts[2]], [true, 0, null, 'wait']);
+        // the chat box is no box while the window is up; the fields are no boxes when it is not
+        const v = open();
+        tap(v, ...INSIDE);
+        expect('a tap where the chat box is does nothing while the options window is up', v.calls.focus, 0);
+        const w = page();
+        load(text, w);
+        tap(w, ...FIELD[1]);
+        expect('a tap where a field would be does nothing when the window is not up', w.calls.focus, 0);
+        // the window closing, or the chat box coming back, under the keyboard
+        const x = open();
+        tap(x, ...FIELD[0]);
+        x.game.takes = false;
+        x.calls.intervals[0].fn();
+        expect('the window closing (the game takes no text) closes the keyboard', [x.doc.activeElement, x.input.value], [null, '']);
+        const y = open();
+        tap(y, ...FIELD[0]);
+        y.game.mode = 0;
+        y.calls.intervals[0].fn();
+        expect('the options window closing with chat open behind it closes the keyboard (the boxes are other ones now)', y.doc.activeElement, null);
+        const z = page();
+        load(text, z);
+        tap(z, ...INSIDE);
+        z.game.mode = 1;
+        z.calls.intervals[0].fn();
+        expect('the options window opening under the chat box\'s keyboard closes it', z.doc.activeElement, null);
+        const t = open();
+        tap(t, ...FIELD[0]);
+        t.game.texts[0] = 'changed by the game';
+        t.calls.intervals[0].fn();
+        expect('a text that the game changed shows in the field', t.input.value, 'changed by the game');
+        // the chat box, once the window is gone, is a chat box again: Enter sends
+        const c = page();
+        load(text, c);
+        tap(c, ...INSIDE);
+        expect('the chat box keyboard says Send', c.input.enterKeyHint, 'send');
     }
 
     // ---- the touch of a finger that went down on the box and was cancelled is no tap

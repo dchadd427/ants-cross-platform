@@ -151,7 +151,7 @@ NetGame::~NetGame() { shutdown_transport(); }
 
 void NetGame::shutdown_transport() {
     drop_prediction();                                          // (it holds the runner of a session: it goes first)
-    if (p2p_ != nullptr) p2p_->close();                         // (protocol 25: the channels end with the game; a new game says P2pConfig again)
+    if (p2p_ != nullptr) p2p_->close();                         // (protocol 26: the channels end with the game; a new game says P2pConfig again)
     p2p_config_sent_ = false;
     host_session_.reset();
     client_session_.reset();

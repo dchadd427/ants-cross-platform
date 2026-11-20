@@ -1,6 +1,6 @@
 #pragma once
 
-// What the game asks of the page's data channels (protocol 25, docs/P2P_HINTS.md). The browser build implements it with RTCPeerConnection (wasm_rtc.cpp and web/p2p.js); every other build has none (the
+// What the game asks of the page's data channels (protocol 26, docs/P2P_HINTS.md). The browser build implements it with RTCPeerConnection (wasm_rtc.cpp and web/p2p.js); every other build has none (the
 // NetGame is given none and plays as it always did), and the tests give it a link of their own. The transport carries bytes and nothing else: the messages are p2p.hpp's, the rule for what may be shown
 // to whom is kept by the page (it never emits or accepts an address of a player who did not allow direct connections) and again by the server.
 

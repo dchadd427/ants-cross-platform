@@ -64,7 +64,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 - [`BOT_GATES.md`](docs/BOT_GATES.md): walled maps: the map's own bombs left to the gate goals, the field breach (food beyond a field of bombs, a fire wall and water: POPcOrN and its family), the measurements, and POPcOrN in a match
 - [`BOT_FIGHT.md`](docs/BOT_FIGHT.md): the Hard computer player's quick kill (an enemy beside water, a bomb or a fire wall, struck from the tile that throws it in), fights that a walk reaches, hunting when there is nothing to bank, and the measuring tool `bot_watch`
 - [`BOT_187.md`](docs/BOT_187.md): the computer players in the game type 187: the brawl (packs on the enemy ants, no ant sent home because the hill is closed, what the engine allows), the measurements, what was tried and left out
-- [`P2P_HINTS.md`](docs/P2P_HINTS.md): hints and direct channels between players (network protocol 25): another player's orders, and a computer player's, reach the prediction ahead of their sealed turns; the relay as the default and the switch for a direct connection
+- [`P2P_HINTS.md`](docs/P2P_HINTS.md): hints and direct channels between players (network protocol 26): another player's orders, and a computer player's, reach the prediction ahead of their sealed turns; the relay as the default and the switch for a direct connection
 - [`MATCH_COUNTDOWN.md`](docs/MATCH_COUNTDOWN.md): the 30 s countdown with the chat open before an online match: the Begin that tells it, the card, the Fullscreen button
 - [`BOT_NAMES.md`](docs/BOT_NAMES.md): the names of the computer players ("Pip (bot, Hard)"): the list, the picker, the label, the names a person may not take, network protocol 20
 

@@ -692,7 +692,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(s.app().net()->predicting());
         const net::Prediction::Stats& st = s.app().net()->prediction()->stats();
         ASSERT_EQ(st.commands_lost, 0u);
-        ASSERT_TRUE(st.rebuilds_foreign + st.rebuilds_hint > 0);                           // (the bots gave orders: each is learned from its hint, protocol 25, or from its turn)
+        ASSERT_TRUE(st.rebuilds_foreign + st.rebuilds_hint > 0);                           // (the bots gave orders: each is learned from its hint, protocol 26, or from its turn)
         ASSERT_TRUE(st.hints_accepted > 10 && st.hints_confirmed > 5);                      // (the server sent every order of a bot ahead of its turn, and the turns confirmed them)
         ASSERT_EQ(st.cooldowns, 0u);
         std::printf("\n    %llu orders, %llu rebuilds (%llu for the bots' orders), %.3f ms the longest\n", static_cast<unsigned long long>(st.commands_predicted), static_cast<unsigned long long>(st.rebuilds),

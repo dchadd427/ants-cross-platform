@@ -6,6 +6,7 @@
 #include <deque>
 #include <array>
 #include <functional>
+#include <optional>
 
 #include "ants_assets/asset_archive.hpp"
 #include "ants_sim/game_strings.hpp"
@@ -408,6 +409,11 @@ public:
     void open_options() { release_capture(); options_.open(clock_ms()); }
     void close_options() noexcept { options_.close(); }
     bool is_options_open() const noexcept { return options_.is_open(); }
+    /// A phone's keyboard for the options window's four quick chat fields (Application::web_chat_do): the field with the focus, a field given the focus, a text left in it and the text written to the profile
+    std::optional<size_t> options_focused_edit() const noexcept { return options_.focused_edit(); }
+    void options_focus_edit(size_t index) { options_.focus_edit(index, clock_ms()); }
+    bool options_set_edit(size_t index, const std::string& text) { return options_.set_edit_text(index, text); }
+    void options_commit_edit(size_t index) { options_.commit_edit(index); }
     const OptionsScreen& options_screen() const noexcept { return options_; }
     OptionsState& options() noexcept { return options_.state(); }
     const OptionsState& options() const noexcept { return options_.state(); }
@@ -479,7 +485,7 @@ public:
         match_countdown_left_ms_ = ms_left;
         countdown_seats_ = seats;
     }
-    /// Protocol 25: how this machine is connected to the person of `seat` now (the row's small word, countdown_tag)
+    /// Protocol 26: how this machine is connected to the person of `seat` now (the row's small word, countdown_tag)
     void set_countdown_link(size_t seat, net::PeerLink link) noexcept {
         if (seat < countdown_seats_.size()) countdown_seats_[seat].link = link;
     }

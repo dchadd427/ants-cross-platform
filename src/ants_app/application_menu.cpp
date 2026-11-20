@@ -449,7 +449,7 @@ void Application::leave_game() {
 void Application::attach_net() {
     hook_rejoin_store();
     net_->set_hints_enabled(config_.p2p);                                          // (--no-p2p: no channel and no hint)
-    if (config_.p2p) {                                                             // the browser's data channels (protocol 25): none in a native build, and none for a game that was told --no-p2p
+    if (config_.p2p) {                                                             // the browser's data channels (protocol 26): none in a native build, and none for a game that was told --no-p2p
         if (!p2p_) p2p_ = net::make_browser_channels();
         if (p2p_) net_->set_p2p(p2p_.get(), config_.direct);
     }

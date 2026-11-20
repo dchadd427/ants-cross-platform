@@ -48,7 +48,7 @@ void NetGame::install_hooks() {
     }
 }
 
-// ---- hints and channels (protocol 25) -----------------------------------------------------------------------------------------------------------------
+// ---- hints and channels (protocol 26) -----------------------------------------------------------------------------------------------------------------
 
 PeerLink NetGame::peer_link(uint8_t seat) const { return p2p_ == nullptr || seat >= sim::MAX_PLAYERS || seat == seat_ ? PeerLink::None : p2p_->link(seat); }
 
