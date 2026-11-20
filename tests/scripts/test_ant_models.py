@@ -111,6 +111,7 @@ class MaterialsContract(unittest.TestCase):
         "eye_iris",
         "eye_limbal",
         "eye_catchlight",
+        "gear_yellow_plastic",
         "gear_steel",
         "gear_brass_trim",
         "bomb_charge",
@@ -186,9 +187,13 @@ class MaterialsContract(unittest.TestCase):
         # Eye catchlight emits linear emissiveFactor and limbal ring is registered.
         glint_gltf = materials.get_material("eye_catchlight").to_gltf_dict()
         self.assertIn("emissiveFactor", glint_gltf)
-        self.assertGreater(glint_gltf["emissiveFactor"][0], 0.20)
+        self.assertGreater(glint_gltf["emissiveFactor"][0], 0.14)
         self.assertLessEqual(glint_gltf["pbrMetallicRoughness"]["roughnessFactor"], 0.06)
         self.assertIn("eye_limbal", materials.MATERIALS)
+        # Molded smooth yellow beach-toy plastic has no woven cloth texture.
+        yp = materials.get_material("gear_yellow_plastic")
+        self.assertIsNone(yp.texture_family)
+        self.assertLessEqual(yp.roughness, 0.40)
 
         # Pure-stdlib GLB validator accepts BLEND glass materials cleanly.
         glass_scene = _make_pure_python_tetra_scene()

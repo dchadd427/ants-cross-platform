@@ -357,11 +357,11 @@ def _build_eyes(
 
     for side, tag, ex, s, b_idx in ((1.0, "left", eye_x_l, s_l, 0), (-1.0, "right", eye_x_r, s_r, 1)):
         yaw = side * eye_ry
-        # Deep sculpted dark orbital socket bezel nesting the eye into the face.
+        # Clean subtle orbital bezel framing bright friendly 1998-style eyes.
         socket_rim = (
-            torus_arc(0.0775 * s, 0.0102 * s, u_segs=26, v_segs=10, plane="xy", name=f"eye_socket_rim_{tag}", material="chitin_dark")
+            torus_arc(0.0775 * s, 0.0072 * s, u_segs=26, v_segs=10, plane="xy", name=f"eye_socket_rim_{tag}", material="chitin_dark")
             .scale(0.97, 1.03, 0.88)
-            .translate(0.0, 0.0, 0.007 * s)
+            .translate(0.0, 0.0, 0.006 * s)
             .rotate_xyz(rx=eye_rx, ry=yaw)
             .translate(ex, eye_y, eye_z)
         )
@@ -370,46 +370,40 @@ def _build_eyes(
             .rotate_xyz(rx=eye_rx, ry=yaw)
             .translate(ex, eye_y, eye_z)
         )
+        # Cute simple 1998 look: big rounded glossy black dot pupil with a velvety near-black
+        # outer feather (eye_iris/eye_limbal) and one small soft specular catchlight dot.
         limbal = (
-            ellipsoid(0.0562 * s, 0.0596 * s, 0.0312 * s, u_segs=24, v_segs=14, name=f"limbal_{tag}", material="eye_limbal")
-            .translate(-side * 0.0022 * s, 0.0014 * s, 0.0414 * s)
+            ellipsoid(0.0450 * s, 0.0480 * s, 0.0305 * s, u_segs=22, v_segs=12, name=f"limbal_{tag}", material="eye_limbal")
+            .translate(-side * 0.0020 * s, 0.0012 * s, 0.0398 * s)
             .rotate_xyz(rx=-look_pitch, ry=look_yaw)
             .rotate_xyz(rx=eye_rx, ry=yaw)
             .translate(ex, eye_y, eye_z)
         )
         iris = (
-            ellipsoid(0.0494 * s, 0.0528 * s, 0.0324 * s, u_segs=22, v_segs=14, name=f"iris_{tag}", material="eye_iris")
-            .translate(-side * 0.0027 * s, 0.0016 * s, 0.0437 * s)
+            ellipsoid(0.0435 * s, 0.0465 * s, 0.0312 * s, u_segs=22, v_segs=12, name=f"iris_{tag}", material="eye_iris")
+            .translate(-side * 0.0022 * s, 0.0014 * s, 0.0405 * s)
             .rotate_xyz(rx=-look_pitch, ry=look_yaw)
             .rotate_xyz(rx=eye_rx, ry=yaw)
             .translate(ex, eye_y, eye_z)
         )
         pupil = (
-            ellipsoid(0.0324 * s, 0.0346 * s, 0.0187 * s, u_segs=18, v_segs=12, name=f"pupil_{tag}", material="eye_pupil")
-            .translate(-side * 0.0032 * s, 0.0017 * s, 0.0592 * s)
+            ellipsoid(0.0410 * s, 0.0440 * s, 0.0275 * s, u_segs=22, v_segs=14, name=f"pupil_{tag}", material="eye_pupil")
+            .translate(-side * 0.0024 * s, 0.0015 * s, 0.0455 * s)
             .rotate_xyz(rx=-look_pitch, ry=look_yaw)
             .rotate_xyz(rx=eye_rx, ry=yaw)
             .translate(ex, eye_y, eye_z)
         )
-        # Dual wet-eye specular catchlight glints (viewer's upper-left = -X, +Y; bounce = +X, -Y)
-        # seated cleanly proud of the iris/pupil while strictly inside r <= 0.0792 * s.
+        # Single small soft upper-left specular catchlight dot (viewer's upper-left = -X, +Y),
+        # nestled cleanly proud of the glossy black pupil and well inside r_lid_inner = 0.0876 * s.
         glint_main = (
-            ellipsoid(0.0100 * s, 0.0116 * s, 0.0030 * s, u_segs=14, v_segs=10, name=f"catchlight_main_{tag}", material="eye_catchlight")
+            ellipsoid(0.0080 * s, 0.0088 * s, 0.0026 * s, u_segs=12, v_segs=10, name=f"catchlight_main_{tag}", material="eye_catchlight")
             .rotate_xyz(rx=-0.24, ry=-0.22)
-            .translate(-0.0165 * s, 0.0176 * s, 0.0724 * s)
+            .translate(-0.0155 * s, 0.0165 * s, 0.0715 * s)
             .rotate_xyz(rx=-0.55 * look_pitch, ry=0.55 * look_yaw)
             .rotate_xyz(rx=eye_rx, ry=yaw)
             .translate(ex, eye_y, eye_z)
         )
-        glint_bounce = (
-            ellipsoid(0.0046 * s, 0.0046 * s, 0.0025 * s, u_segs=10, v_segs=8, name=f"catchlight_bounce_{tag}", material="eye_catchlight")
-            .rotate_xyz(rx=0.22, ry=0.22)
-            .translate(0.0170 * s, -0.0170 * s, 0.0722 * s)
-            .rotate_xyz(rx=-0.55 * look_pitch, ry=0.55 * look_yaw)
-            .rotate_xyz(rx=eye_rx, ry=yaw)
-            .translate(ex, eye_y, eye_z)
-        )
-        scene.add("eyes", [socket_rim, sclera, limbal, iris, pupil, glint_main, glint_bounce])
+        scene.add("eyes", [socket_rim, sclera, limbal, iris, pupil, glint_main])
 
         lid_node = f"eyelid_{tag}"
         scene.add(lid_node, _build_eyelid_shell(f"{lid_node}_shell", yaw_y=yaw, scale=s))
