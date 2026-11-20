@@ -1,0 +1,916 @@
+"""Procedural 3D sculpting primitives, transforms, and scene builder.
+
+Coordinate system (glTF 2.0 right-handed):
+  +Y = up, +Z = front (South / camera 301), +X = ant's left.
+All primitives emit finite float32 positions, unit outward float32 normals,
+and counter-clockwise uint32 triangle indices.
+"""
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass, field
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+
+import numpy as np
+
+try:
+    from .materials import get_material
+except ImportError:
+    from materials import get_material  # type: ignore
+
+Vec3Like = Union[Sequence[float], np.ndarray]
+
+
+def _as_vec3(v: Vec3Like, dy: Optional[float] = None, dz: Optional[float] = None) -> np.ndarray:
+    if dy is not None and dz is not None:
+        return np.array([float(v), float(dy), float(dz)], dtype=np.float64)
+    arr = np.asarray(v, dtype=np.float64).reshape(-1)
+    if arr.size == 1:
+        return np.full(3, float(arr[0]), dtype=np.float64)
+    if arr.size != 3:
+        raise ValueError(f"Expected 3 components, got shape {arr.shape}")
+    return arr
+
+
+def _normalize_rows(vecs: np.ndarray, fallback: Tuple[float, float, float] = (0.0, 1.0, 0.0)) -> np.ndarray:
+    norms = np.linalg.norm(vecs, axis=1, keepdims=True)
+    out = np.empty_like(vecs, dtype=np.float64)
+    good = norms[:, 0] > 1e-10
+    out[good] = vecs[good] / norms[good]
+    if not np.all(good):
+        fb = np.array(fallback, dtype=np.float64)
+        out[~good] = fb / np.linalg.norm(fb)
+    return out
+
+
+def _quad_ring_tris(b0: int, b1: int, n: int) -> List[Tuple[int, int, int]]:
+    tris: List[Tuple[int, int, int]] = []
+    for i in range(n):
+        ni = (i + 1) % n
+        tris.append((b0 + i, b0 + ni, b1 + ni))
+        tris.append((b0 + i, b1 + ni, b1 + i))
+    return tris
+
+
+def recompute_smooth_normals(positions: np.ndarray, indices: np.ndarray) -> np.ndarray:
+    """Compute area-weighted smooth unit vertex normals from triangle indices."""
+    pos = np.asarray(positions, dtype=np.float64)
+    idx = np.asarray(indices, dtype=np.int64).reshape(-1, 3)
+    normals = np.zeros_like(pos, dtype=np.float64)
+    if len(idx) > 0:
+        face_n = np.cross(pos[idx[:, 1]] - pos[idx[:, 0]], pos[idx[:, 2]] - pos[idx[:, 0]])
+        np.add.at(normals, idx[:, 0], face_n)
+        np.add.at(normals, idx[:, 1], face_n)
+        np.add.at(normals, idx[:, 2], face_n)
+    bad = np.linalg.norm(normals, axis=1) <= 1e-10
+    if np.any(bad) and len(pos) > 0:
+        normals[bad] = _normalize_rows(pos[bad] - pos.mean(axis=0))
+    return _normalize_rows(normals).astype(np.float32)
+
+
+def signed_volume(positions: np.ndarray, indices: np.ndarray) -> float:
+    """Return signed volume of a closed triangle mesh (positive = outward CCW)."""
+    pos = np.asarray(positions, dtype=np.float64)
+    idx = np.asarray(indices, dtype=np.int64).reshape(-1, 3)
+    if len(idx) == 0:
+        return 0.0
+    c = pos.mean(axis=0)
+    v0, v1, v2 = pos[idx[:, 0]] - c, pos[idx[:, 1]] - c, pos[idx[:, 2]] - c
+    return float(np.sum(np.einsum("ij,ij->i", v0, np.cross(v1, v2))) / 6.0)
+
+
+def ensure_outward_winding(
+    positions: np.ndarray,
+    indices: np.ndarray,
+    reference_center: Optional[Vec3Like] = None,
+) -> np.ndarray:
+    """Ensure CCW outward triangle winding; flips winding if inverted."""
+    pos = np.asarray(positions, dtype=np.float64)
+    idx = np.asarray(indices, dtype=np.uint32).reshape(-1, 3).copy()
+    if len(idx) == 0:
+        return idx.reshape(-1)
+    if reference_center is None:
+        vol = signed_volume(pos, idx)
+        if abs(vol) > 1e-10:
+            if vol < 0.0:
+                idx = idx[:, [0, 2, 1]]
+            return idx.reshape(-1).astype(np.uint32)
+        ref = 0.5 * (pos.min(axis=0) + pos.max(axis=0))
+    else:
+        ref = _as_vec3(reference_center)
+    v0, v1, v2 = pos[idx[:, 0]], pos[idx[:, 1]], pos[idx[:, 2]]
+    face_n = np.cross(v1 - v0, v2 - v0)
+    face_c = (v0 + v1 + v2) / 3.0 - ref
+    if float(np.sum(np.einsum("ij,ij->i", face_n, face_c))) < 0.0:
+        idx = idx[:, [0, 2, 1]]
+    return idx.reshape(-1).astype(np.uint32)
+
+
+def _rotation_matrix_xyz(rx: float, ry: float, rz: float) -> np.ndarray:
+    cx, sx, cy, sy, cz, sz = math.cos(rx), math.sin(rx), math.cos(ry), math.sin(ry), math.cos(rz), math.sin(rz)
+    mx = np.array([[1.0, 0.0, 0.0], [0.0, cx, -sx], [0.0, sx, cx]], dtype=np.float64)
+    my = np.array([[cy, 0.0, sy], [0.0, 1.0, 0.0], [-sy, 0.0, cy]], dtype=np.float64)
+    mz = np.array([[cz, -sz, 0.0], [sz, cz, 0.0], [0.0, 0.0, 1.0]], dtype=np.float64)
+    return mz @ my @ mx
+
+
+def _rotation_matrix_axis(axis: Vec3Like, angle: float) -> np.ndarray:
+    a = _as_vec3(axis)
+    n = np.linalg.norm(a)
+    if n <= 1e-12:
+        return np.eye(3, dtype=np.float64)
+    x, y, z = a / n
+    c, s, t = math.cos(angle), math.sin(angle), 1.0 - math.cos(angle)
+    return np.array(
+        [
+            [t * x * x + c, t * x * y - s * z, t * x * z + s * y],
+            [t * x * y + s * z, t * y * y + c, t * y * z - s * x],
+            [t * x * z - s * y, t * y * z + s * x, t * z * z + c],
+        ],
+        dtype=np.float64,
+    )
+
+
+@dataclass
+class MeshPart:
+    """Immutable-style triangle mesh chunk with one named PBR material."""
+
+    name: str
+    material: str
+    positions: np.ndarray
+    normals: np.ndarray
+    indices: np.ndarray
+
+    def __post_init__(self) -> None:
+        get_material(self.material)
+        self.positions = np.ascontiguousarray(self.positions, dtype=np.float32).reshape(-1, 3)
+        self.normals = np.ascontiguousarray(self.normals, dtype=np.float32).reshape(-1, 3)
+        self.indices = np.ascontiguousarray(self.indices, dtype=np.uint32).reshape(-1)
+        if self.positions.shape != self.normals.shape:
+            raise ValueError(f"positions {self.positions.shape} != normals {self.normals.shape}")
+        if len(self.indices) % 3 != 0:
+            raise ValueError(f"indices length {len(self.indices)} is not a multiple of 3")
+        if not (np.all(np.isfinite(self.positions)) and np.all(np.isfinite(self.normals))):
+            raise ValueError(f"MeshPart {self.name!r} has non-finite positions or normals")
+
+    def copy(self, name: Optional[str] = None, material: Optional[str] = None) -> "MeshPart":
+        return MeshPart(
+            self.name if name is None else name,
+            self.material if material is None else material,
+            self.positions.copy(),
+            self.normals.copy(),
+            self.indices.copy(),
+        )
+
+    def translate(self, dx: Union[float, Vec3Like], dy: Optional[float] = None, dz: Optional[float] = None) -> "MeshPart":
+        offset = _as_vec3(dx, dy, dz).astype(np.float32)
+        return MeshPart(self.name, self.material, self.positions + offset, self.normals.copy(), self.indices.copy())
+
+    def scale(self, sx: Union[float, Vec3Like], sy: Optional[float] = None, sz: Optional[float] = None) -> "MeshPart":
+        s = _as_vec3(sx, sy, sz)
+        if np.any(np.abs(s) <= 1e-10):
+            raise ValueError(f"Zero scale factor not allowed: {s}")
+        m = np.eye(4, dtype=np.float64)
+        m[0, 0], m[1, 1], m[2, 2] = s[0], s[1], s[2]
+        return self.transform(m)
+
+    def rotate_xyz(self, rx: float = 0.0, ry: float = 0.0, rz: float = 0.0, *, degrees: bool = False) -> "MeshPart":
+        if degrees:
+            rx, ry, rz = math.radians(rx), math.radians(ry), math.radians(rz)
+        m = np.eye(4, dtype=np.float64)
+        m[:3, :3] = _rotation_matrix_xyz(rx, ry, rz)
+        return self.transform(m)
+
+    def rotate_axis(self, axis: Vec3Like, angle: float, *, degrees: bool = False) -> "MeshPart":
+        m = np.eye(4, dtype=np.float64)
+        m[:3, :3] = _rotation_matrix_axis(axis, math.radians(angle) if degrees else angle)
+        return self.transform(m)
+
+    def transform(self, matrix_4x4: np.ndarray) -> "MeshPart":
+        mat = np.asarray(matrix_4x4, dtype=np.float64)
+        if mat.shape != (4, 4):
+            raise ValueError(f"Expected 4x4 transform matrix, got {mat.shape}")
+        lin = mat[:3, :3]
+        pos = self.positions.astype(np.float64) @ lin.T + mat[:3, 3]
+        norms = _normalize_rows(self.normals.astype(np.float64) @ np.linalg.inv(lin))
+        idx = self.indices.copy()
+        if np.linalg.det(lin) < 0.0:
+            idx = idx.reshape(-1, 3)[:, [0, 2, 1]].reshape(-1)
+        return MeshPart(self.name, self.material, pos.astype(np.float32), norms.astype(np.float32), idx)
+
+    def mirror_x(self, name: Optional[str] = None) -> "MeshPart":
+        """Mirror across the YZ plane (X -> -X) while preserving outward winding."""
+        pos = self.positions.copy()
+        norms = self.normals.copy()
+        pos[:, 0] = -pos[:, 0]
+        norms[:, 0] = -norms[:, 0]
+        idx = self.indices.reshape(-1, 3)[:, [0, 2, 1]].reshape(-1).copy()
+        return MeshPart(name if name is not None else f"{self.name}_mirror", self.material, pos, norms, idx)
+
+    def deform(self, fn: Callable[[np.ndarray], np.ndarray], *, recompute_normals: bool = True) -> "MeshPart":
+        """Apply a vertex deformation callback `fn(positions_Nx3) -> new_positions_Nx3`."""
+        new_pos = np.asarray(fn(self.positions.astype(np.float64).copy()), dtype=np.float32).reshape(-1, 3)
+        if new_pos.shape != self.positions.shape:
+            raise ValueError(f"deform changed shape from {self.positions.shape} to {new_pos.shape}")
+        new_norms = recompute_smooth_normals(new_pos, self.indices) if recompute_normals else self.normals.copy()
+        return MeshPart(self.name, self.material, new_pos, new_norms, self.indices.copy())
+
+    def recompute_normals(self) -> "MeshPart":
+        return MeshPart(
+            self.name,
+            self.material,
+            self.positions.copy(),
+            recompute_smooth_normals(self.positions, self.indices),
+            self.indices.copy(),
+        )
+
+    def ensure_outward(self, reference_center: Optional[Vec3Like] = None) -> "MeshPart":
+        idx = ensure_outward_winding(self.positions, self.indices, reference_center=reference_center)
+        return MeshPart(self.name, self.material, self.positions.copy(), recompute_smooth_normals(self.positions, idx), idx)
+
+    def bounds(self) -> Tuple[np.ndarray, np.ndarray]:
+        if len(self.positions) == 0:
+            z = np.zeros(3, dtype=np.float32)
+            return z, z
+        return self.positions.min(axis=0), self.positions.max(axis=0)
+
+    def triangle_count(self) -> int:
+        return int(len(self.indices) // 3)
+
+
+def merge_parts(parts: Sequence[MeshPart], name: str = "merged", material: Optional[str] = None) -> MeshPart:
+    """Merge multiple MeshParts sharing a material into a single MeshPart."""
+    if not parts:
+        raise ValueError("Cannot merge an empty sequence of MeshParts")
+    mat = parts[0].material if material is None else material
+    pos_l, nrm_l, idx_l, offset = [], [], [], 0
+    for part in parts:
+        pos_l.append(part.positions)
+        nrm_l.append(part.normals)
+        idx_l.append(part.indices + np.uint32(offset))
+        offset += len(part.positions)
+    return MeshPart(name, mat, np.concatenate(pos_l), np.concatenate(nrm_l), np.concatenate(idx_l))
+
+
+@dataclass
+class SceneBuilder:
+    """Organizes MeshParts into named logical nodes for glTF export."""
+
+    name: str = "ant"
+    nodes: Dict[str, List[MeshPart]] = field(default_factory=dict)
+
+    def add(self, node_name: str, part: Union[MeshPart, Iterable[MeshPart]]) -> None:
+        bucket = self.nodes.setdefault(node_name, [])
+        if isinstance(part, MeshPart):
+            bucket.append(part)
+        else:
+            for item in part:
+                if not isinstance(item, MeshPart):
+                    raise TypeError(f"Expected MeshPart, got {type(item).__name__}")
+                bucket.append(item)
+
+    def add_mirrored(
+        self, node_name: str, part: MeshPart, *, left_suffix: str = "_left", right_suffix: str = "_right"
+    ) -> Tuple[MeshPart, MeshPart]:
+        """Add `part` (on +X ant-left) and its X-mirrored twin (on -X ant-right)."""
+        left = part.copy(name=f"{part.name}{left_suffix}")
+        right = part.mirror_x(name=f"{part.name}{right_suffix}")
+        self.add(node_name, left)
+        self.add(node_name, right)
+        return left, right
+
+    def get_node(self, node_name: str) -> List[MeshPart]:
+        return list(self.nodes.get(node_name, ()))
+
+    def node_names(self) -> List[str]:
+        return [k for k, v in self.nodes.items() if v]
+
+    def all_parts(self) -> List[MeshPart]:
+        return [p for parts in self.nodes.values() for p in parts]
+
+    def bounds(self) -> Tuple[np.ndarray, np.ndarray]:
+        non_empty = [p.bounds() for p in self.all_parts() if len(p.positions) > 0]
+        if not non_empty:
+            z = np.zeros(3, dtype=np.float32)
+            return z, z
+        return np.min([b[0] for b in non_empty], axis=0), np.max([b[1] for b in non_empty], axis=0)
+
+    def triangle_count(self) -> int:
+        return sum(p.triangle_count() for p in self.all_parts())
+
+    def translate_all(self, dx: Union[float, Vec3Like], dy: Optional[float] = None, dz: Optional[float] = None) -> "SceneBuilder":
+        for k, parts in self.nodes.items():
+            self.nodes[k] = [p.translate(dx, dy, dz) for p in parts]
+        return self
+
+    def scale_all(self, sx: Union[float, Vec3Like], sy: Optional[float] = None, sz: Optional[float] = None) -> "SceneBuilder":
+        for k, parts in self.nodes.items():
+            self.nodes[k] = [p.scale(sx, sy, sz) for p in parts]
+        return self
+
+    def rotate_all_xyz(self, rx: float = 0.0, ry: float = 0.0, rz: float = 0.0, *, degrees: bool = False) -> "SceneBuilder":
+        for k, parts in self.nodes.items():
+            self.nodes[k] = [p.rotate_xyz(rx, ry, rz, degrees=degrees) for p in parts]
+        return self
+
+    def ground_to_y(self, target_y: float = 0.0) -> float:
+        """Shift all geometry vertically so `min_y == target_y`. Returns shift dy."""
+        bmin, _ = self.bounds()
+        dy = float(target_y - bmin[1])
+        if abs(dy) > 1e-7:
+            self.translate_all(0.0, dy, 0.0)
+        return dy
+
+    def merge_from(self, other: "SceneBuilder", prefix: str = "") -> "SceneBuilder":
+        for k, parts in other.nodes.items():
+            target = f"{prefix}{k}" if prefix else k
+            for p in parts:
+                self.add(target, p.copy())
+        return self
+
+
+# ---------------------------------------------------------------------------
+# Spline and frame helpers
+# ---------------------------------------------------------------------------
+
+def _dedupe_points(pts: np.ndarray, extra: Optional[np.ndarray] = None, eps: float = 1e-6):
+    keep = [0]
+    for i in range(1, len(pts)):
+        if np.linalg.norm(pts[i] - pts[keep[-1]]) > eps:
+            keep.append(i)
+    idx = np.array(keep, dtype=np.int64)
+    return pts[idx], (None if extra is None else extra[idx])
+
+
+def catmull_rom_spline(
+    points: Sequence[Vec3Like], samples_per_seg: int = 8, *, closed: bool = False, alpha: float = 0.5
+) -> np.ndarray:
+    """Evaluate a centripetal Catmull-Rom spline through 3D control points."""
+    pts = np.asarray(points, dtype=np.float64).reshape(-1, 3)
+    if len(pts) < 2:
+        raise ValueError("catmull_rom_spline requires at least 2 points")
+    if len(pts) == 2 and not closed:
+        t = np.linspace(0.0, 1.0, max(2, samples_per_seg + 1))[:, None]
+        return (1.0 - t) * pts[0] + t * pts[1]
+    if closed:
+        ctrl, seg_count = np.vstack([pts[-1:], pts, pts[:2]]), len(pts)
+    else:
+        ctrl = np.vstack([(2.0 * pts[0] - pts[1])[None, :], pts, (2.0 * pts[-1] - pts[-2])[None, :]])
+        seg_count = len(pts) - 1
+
+    out: List[np.ndarray] = []
+    for i in range(seg_count):
+        p0, p1, p2, p3 = ctrl[i], ctrl[i + 1], ctrl[i + 2], ctrl[i + 3]
+        t0 = 0.0
+        t1 = t0 + max(1e-6, float(np.linalg.norm(p1 - p0))) ** alpha
+        t2 = t1 + max(1e-6, float(np.linalg.norm(p2 - p1))) ** alpha
+        t3 = t2 + max(1e-6, float(np.linalg.norm(p3 - p2))) ** alpha
+        ts = np.linspace(t1, t2, max(2, samples_per_seg), endpoint=(not closed and i == seg_count - 1))
+        for t in ts:
+            a1 = ((t1 - t) * p0 + (t - t0) * p1) / (t1 - t0)
+            a2 = ((t2 - t) * p1 + (t - t1) * p2) / (t2 - t1)
+            a3 = ((t3 - t) * p2 + (t - t2) * p3) / (t3 - t2)
+            b1 = ((t2 - t) * a1 + (t - t0) * a2) / (t2 - t0)
+            b2 = ((t3 - t) * a2 + (t - t1) * a3) / (t3 - t1)
+            out.append(((t2 - t) * b1 + (t - t1) * b2) / (t2 - t1))
+    return np.asarray(out, dtype=np.float64)
+
+
+def _resample_radii(radii_2d: np.ndarray, seg_count: int, samples_per_seg: int, closed: bool) -> np.ndarray:
+    out: List[np.ndarray] = []
+    n = len(radii_2d)
+    for i in range(seg_count):
+        r1, r2 = radii_2d[i % n], radii_2d[(i + 1) % n]
+        ts = np.linspace(0.0, 1.0, max(2, samples_per_seg), endpoint=(not closed and i == seg_count - 1))
+        for u in ts:
+            s = u * u * (3.0 - 2.0 * u)
+            out.append((1.0 - s) * r1 + s * r2)
+    return np.asarray(out, dtype=np.float64)
+
+
+def _parse_radii(radii: Union[float, Sequence[float], Sequence[Tuple[float, float]]], count: int) -> np.ndarray:
+    if isinstance(radii, (int, float)):
+        return np.full((count, 2), float(radii), dtype=np.float64)
+    arr = np.asarray(radii, dtype=np.float64)
+    if arr.ndim == 1:
+        if len(arr) == 2 and count != 2:
+            return np.tile(arr[None, :], (count, 1))
+        if len(arr) != count:
+            raise ValueError(f"radii length {len(arr)} does not match points length {count}")
+        return np.column_stack([arr, arr])
+    if arr.ndim == 2 and arr.shape == (count, 2):
+        return arr.copy()
+    raise ValueError(f"Invalid radii shape {arr.shape} for {count} points")
+
+
+def _parallel_transport_frames(pts: np.ndarray, closed: bool) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    n = len(pts)
+    tangents = np.zeros((n, 3), dtype=np.float64)
+    for i in range(n):
+        if closed:
+            d = pts[(i + 1) % n] - pts[(i - 1) % n]
+        elif i == 0:
+            d = pts[1] - pts[0]
+        elif i == n - 1:
+            d = pts[-1] - pts[-2]
+        else:
+            d = pts[i + 1] - pts[i - 1]
+        norm = np.linalg.norm(d)
+        tangents[i] = d / norm if norm > 1e-10 else np.array([0.0, 1.0, 0.0])
+
+    normals = np.zeros((n, 3), dtype=np.float64)
+    binormals = np.zeros((n, 3), dtype=np.float64)
+    ref = np.array([0.0, 1.0, 0.0]) if abs(tangents[0, 1]) < 0.9 else np.array([1.0, 0.0, 0.0])
+    n0 = ref - np.dot(ref, tangents[0]) * tangents[0]
+    normals[0] = n0 / np.linalg.norm(n0)
+    binormals[0] = np.cross(tangents[0], normals[0])
+
+    for i in range(1, n):
+        axis = np.cross(tangents[i - 1], tangents[i])
+        s, c = float(np.linalg.norm(axis)), float(np.clip(np.dot(tangents[i - 1], tangents[i]), -1.0, 1.0))
+        ni = (_rotation_matrix_axis(axis / s, math.atan2(s, c)) @ normals[i - 1]) if s > 1e-8 else normals[i - 1].copy()
+        ni = ni - np.dot(ni, tangents[i]) * tangents[i]
+        nlen = np.linalg.norm(ni)
+        normals[i] = ni / nlen if nlen > 1e-10 else normals[i - 1]
+        binormals[i] = np.cross(tangents[i], normals[i])
+
+    if closed and n > 2:
+        axis = np.cross(tangents[-1], tangents[0])
+        s, c = float(np.linalg.norm(axis)), float(np.clip(np.dot(tangents[-1], tangents[0]), -1.0, 1.0))
+        n_end = (_rotation_matrix_axis(axis / s, math.atan2(s, c)) @ normals[-1]) if s > 1e-8 else normals[-1]
+        twist = math.atan2(float(np.dot(n_end, binormals[0])), float(np.dot(n_end, normals[0])))
+        if abs(twist) > 1e-6:
+            for i in range(1, n):
+                ang = -twist * (i / n)
+                ca, sa = math.cos(ang), math.sin(ang)
+                normals[i], binormals[i] = ca * normals[i] + sa * binormals[i], -sa * normals[i] + ca * binormals[i]
+    return tangents, normals, binormals
+
+
+# ---------------------------------------------------------------------------
+# Procedural sculpting primitives
+# ---------------------------------------------------------------------------
+
+def _spow(x: np.ndarray, exp: float) -> np.ndarray:
+    return np.sign(x) * (np.abs(x) ** exp)
+
+
+def superellipsoid(
+    rx: float, ry: float, rz: float, e1: float = 1.0, e2: float = 1.0,
+    u_segs: int = 28, v_segs: int = 20, *, name: str = "superellipsoid", material: str = "chitin_team",
+) -> MeshPart:
+    """Build a smooth closed superellipsoid centered at origin (vinyl rounded cubes/ovals)."""
+    u_segs, v_segs = max(6, int(u_segs)), max(4, int(v_segs))
+    e1, e2 = max(0.08, float(e1)), max(0.08, float(e2))
+    phis = np.linspace(-0.5 * math.pi, 0.5 * math.pi, v_segs + 1)[1:-1]
+    thetas = np.linspace(0.0, 2.0 * math.pi, u_segs, endpoint=False)
+    cos_t, sin_t = _spow(np.cos(thetas), e2), _spow(np.sin(thetas), e2)
+
+    verts: List[np.ndarray] = [np.array([[0.0, -ry, 0.0]], dtype=np.float64)]
+    for phi in phis:
+        cp = float(_spow(np.array(math.cos(phi)), e1))
+        sp = float(_spow(np.array(math.sin(phi)), e1))
+        verts.append(np.column_stack([rx * cp * sin_t, np.full(u_segs, ry * sp), rz * cp * cos_t]))
+    verts.append(np.array([[0.0, +ry, 0.0]], dtype=np.float64))
+
+    positions = np.vstack(verts).astype(np.float32)
+    n_rings, north_idx = len(phis), len(positions) - 1
+    tris: List[Tuple[int, int, int]] = [(0, 1 + (i + 1) % u_segs, 1 + i) for i in range(u_segs)]
+    for r in range(n_rings - 1):
+        tris.extend(_quad_ring_tris(1 + r * u_segs, 1 + (r + 1) * u_segs, u_segs))
+    top_b = 1 + (n_rings - 1) * u_segs
+    tris.extend((north_idx, top_b + i, top_b + (i + 1) % u_segs) for i in range(u_segs))
+
+    indices = np.asarray(tris, dtype=np.uint32).reshape(-1)
+    return MeshPart(name, material, positions, recompute_smooth_normals(positions, indices), indices)
+
+
+def sphere(radius: float, u_segs: int = 28, v_segs: int = 20, *, name: str = "sphere", material: str = "chitin_team") -> MeshPart:
+    return superellipsoid(radius, radius, radius, 1.0, 1.0, u_segs, v_segs, name=name, material=material)
+
+
+def ellipsoid(
+    rx: float, ry: float, rz: float, u_segs: int = 28, v_segs: int = 20, *, name: str = "ellipsoid", material: str = "chitin_team"
+) -> MeshPart:
+    return superellipsoid(rx, ry, rz, 1.0, 1.0, u_segs, v_segs, name=name, material=material)
+
+
+def swept_tube(
+    points: Sequence[Vec3Like],
+    radii: Union[float, Sequence[float], Sequence[Tuple[float, float]]],
+    radial_segs: int = 14,
+    cap_start: bool = True,
+    cap_end: bool = True,
+    closed: bool = False,
+    *,
+    smooth_subdiv: int = 0,
+    cap_rings: int = 4,
+    name: str = "tube",
+    material: str = "chitin_dark",
+) -> MeshPart:
+    """Sweep a smooth circular/elliptical tube along a 3D curve with Bishop frames & round caps."""
+    raw_pts = np.asarray(points, dtype=np.float64).reshape(-1, 3)
+    if len(raw_pts) < 2:
+        raise ValueError("swept_tube requires at least 2 points")
+    raw_rad = _parse_radii(radii, len(raw_pts))
+    raw_pts, raw_rad = _dedupe_points(raw_pts, raw_rad)
+    if closed and len(raw_pts) > 2 and np.linalg.norm(raw_pts[0] - raw_pts[-1]) <= 1e-6:
+        raw_pts, raw_rad = raw_pts[:-1], raw_rad[:-1]
+    if len(raw_pts) < 2:
+        raise ValueError("swept_tube points collapsed to fewer than 2 distinct points")
+
+    if smooth_subdiv > 0:
+        pts = catmull_rom_spline(raw_pts, samples_per_seg=smooth_subdiv, closed=closed)
+        rad = _resample_radii(raw_rad, len(raw_pts) if closed else len(raw_pts) - 1, smooth_subdiv, closed)
+    else:
+        pts, rad = raw_pts, raw_rad
+
+    radial_segs, cap_rings = max(5, int(radial_segs)), max(2, int(cap_rings))
+    tangents, f_n, f_b = _parallel_transport_frames(pts, closed)
+    angles = np.linspace(0.0, 2.0 * math.pi, radial_segs, endpoint=False)
+    ca, sa = np.cos(angles)[:, None], np.sin(angles)[:, None]
+
+    rings: List[np.ndarray] = []
+    start_apex: Optional[np.ndarray] = None
+    end_apex: Optional[np.ndarray] = None
+
+    if not closed and cap_start:
+        r0, r_ax = rad[0], float(0.5 * (rad[0, 0] + rad[0, 1]))
+        start_apex = pts[0] - r_ax * tangents[0]
+        for k in range(cap_rings - 1, 0, -1):
+            phi = (k / cap_rings) * (0.5 * math.pi)
+            c_phi, s_phi = math.cos(phi), math.sin(phi)
+            ctr = pts[0] - (r_ax * s_phi) * tangents[0]
+            rings.append(ctr[None, :] + (r0[0] * c_phi) * ca * f_n[0][None, :] + (r0[1] * c_phi) * sa * f_b[0][None, :])
+
+    for i in range(len(pts)):
+        rings.append(pts[i][None, :] + rad[i, 0] * ca * f_n[i][None, :] + rad[i, 1] * sa * f_b[i][None, :])
+
+    if not closed and cap_end:
+        rn, r_ax = rad[-1], float(0.5 * (rad[-1, 0] + rad[-1, 1]))
+        for k in range(1, cap_rings):
+            phi = (k / cap_rings) * (0.5 * math.pi)
+            c_phi, s_phi = math.cos(phi), math.sin(phi)
+            ctr = pts[-1] + (r_ax * s_phi) * tangents[-1]
+            rings.append(ctr[None, :] + (rn[0] * c_phi) * ca * f_n[-1][None, :] + (rn[1] * c_phi) * sa * f_b[-1][None, :])
+        end_apex = pts[-1] + r_ax * tangents[-1]
+
+    blocks: List[np.ndarray] = ([] if start_apex is None else [start_apex[None, :]]) + rings
+    if end_apex is not None:
+        blocks.append(end_apex[None, :])
+    positions = np.vstack(blocks).astype(np.float32)
+
+    ring_off = 1 if start_apex is not None else 0
+    n_rings = len(rings)
+    tris: List[Tuple[int, int, int]] = []
+    if start_apex is not None:
+        tris.extend((0, ring_off + (i + 1) % radial_segs, ring_off + i) for i in range(radial_segs))
+    for r in range(n_rings if closed else n_rings - 1):
+        tris.extend(_quad_ring_tris(ring_off + r * radial_segs, ring_off + ((r + 1) % n_rings) * radial_segs, radial_segs))
+    if end_apex is not None:
+        end_idx = ring_off + n_rings * radial_segs
+        b_last = ring_off + (n_rings - 1) * radial_segs
+        tris.extend((end_idx, b_last + i, b_last + (i + 1) % radial_segs) for i in range(radial_segs))
+
+    indices = np.asarray(tris, dtype=np.uint32).reshape(-1)
+    return MeshPart(name, material, positions, recompute_smooth_normals(positions, indices), indices)
+
+
+def curved_tube(
+    control_points: Sequence[Vec3Like],
+    radii: Union[float, Sequence[float], Sequence[Tuple[float, float]]],
+    samples_per_seg: int = 6,
+    radial_segs: int = 14,
+    cap_start: bool = True,
+    cap_end: bool = True,
+    closed: bool = False,
+    *,
+    cap_rings: int = 4,
+    name: str = "curved_tube",
+    material: str = "chitin_dark",
+) -> MeshPart:
+    """Convenience wrapper around `swept_tube` with Catmull-Rom smoothing enabled."""
+    return swept_tube(
+        control_points, radii, radial_segs=radial_segs, cap_start=cap_start, cap_end=cap_end,
+        closed=closed, smooth_subdiv=samples_per_seg, cap_rings=cap_rings, name=name, material=material,
+    )
+
+
+def lathe(
+    profile_rz: Sequence[Tuple[float, float]],
+    radial_segs: int = 28,
+    cap_bottom: bool = True,
+    cap_top: bool = True,
+    *,
+    axis: str = "y",
+    name: str = "lathe",
+    material: str = "gear_gold",
+) -> MeshPart:
+    """Build a smooth body of revolution from `(radius, height)` pairs around `axis`."""
+    prof = [(max(0.0, float(r)), float(h)) for r, h in profile_rz]
+    if len(prof) < 2:
+        raise ValueError("lathe requires at least 2 profile points")
+    radial_segs = max(6, int(radial_segs))
+    thetas = np.linspace(0.0, 2.0 * math.pi, radial_segs, endpoint=False)
+    sin_t, cos_t = np.sin(thetas), np.cos(thetas)
+
+    verts: List[np.ndarray] = []
+    ring_meta: List[Tuple[str, int]] = []
+    v_count = 0
+    for r, h in prof:
+        if r <= 1e-6:
+            verts.append(np.array([[0.0, h, 0.0]], dtype=np.float64))
+            ring_meta.append(("pole", v_count))
+            v_count += 1
+        else:
+            verts.append(np.column_stack([r * sin_t, np.full(radial_segs, h), r * cos_t]))
+            ring_meta.append(("ring", v_count))
+            v_count += radial_segs
+
+    tris: List[Tuple[int, int, int]] = []
+    for j in range(len(prof) - 1):
+        (k0, i0), (k1, i1) = ring_meta[j], ring_meta[j + 1]
+        if k0 == "pole" and k1 == "ring":
+            tris.extend((i0, i1 + (i + 1) % radial_segs, i1 + i) for i in range(radial_segs))
+        elif k0 == "ring" and k1 == "pole":
+            tris.extend((i1, i0 + i, i0 + (i + 1) % radial_segs) for i in range(radial_segs))
+        elif k0 == "ring" and k1 == "ring":
+            tris.extend(_quad_ring_tris(i0, i1, radial_segs))
+
+    wall_pos = np.vstack(verts).astype(np.float32)
+    wall_idx = np.asarray(tris, dtype=np.uint32).reshape(-1)
+    parts = [MeshPart(name, material, wall_pos, recompute_smooth_normals(wall_pos, wall_idx), wall_idx)]
+
+    for want_cap, (r, h), ny, rev in (
+        (cap_bottom, prof[0], -1.0, True),
+        (cap_top, prof[-1], +1.0, False),
+    ):
+        if want_cap and r > 1e-6:
+            cp = np.vstack([np.array([[0.0, h, 0.0]]), np.column_stack([r * sin_t, np.full(radial_segs, h), r * cos_t])])
+            cn = np.tile(np.array([[0.0, ny, 0.0]]), (radial_segs + 1, 1))
+            ci = [(0, 1 + (i + 1) % radial_segs, 1 + i) if rev else (0, 1 + i, 1 + (i + 1) % radial_segs) for i in range(radial_segs)]
+            parts.append(MeshPart(f"{name}_cap", material, cp.astype(np.float32), cn.astype(np.float32), np.asarray(ci, dtype=np.uint32).reshape(-1)))
+
+    mesh = merge_parts(parts, name=name, material=material)
+    is_closed = (cap_bottom or prof[0][0] <= 1e-6) and (cap_top or prof[-1][0] <= 1e-6)
+    if is_closed and signed_volume(mesh.positions, mesh.indices) < 0.0:
+        mesh = MeshPart(mesh.name, mesh.material, mesh.positions, -mesh.normals, mesh.indices.reshape(-1, 3)[:, [0, 2, 1]].reshape(-1))
+
+    if axis == "z":
+        return mesh.rotate_xyz(rx=0.5 * math.pi)
+    if axis == "x":
+        return mesh.rotate_xyz(rz=-0.5 * math.pi)
+    if axis != "y":
+        raise ValueError(f"axis must be 'x', 'y', or 'z', got {axis!r}")
+    return mesh
+
+
+def cylinder(
+    radius_bottom: float, radius_top: float, height: float, radial_segs: int = 24, *,
+    cap_bottom: bool = True, cap_top: bool = True, bevel: float = 0.0, axis: str = "y",
+    name: str = "cylinder", material: str = "gear_gold",
+) -> MeshPart:
+    """Build a centered cylinder or frustum with optional end chamfers."""
+    h0, h1 = -0.5 * height, 0.5 * height
+    b = max(0.0, min(float(bevel), 0.35 * height, 0.35 * min(radius_bottom, radius_top)))
+    prof = (
+        [(max(0.0, radius_bottom - b), h0), (radius_bottom, h0 + b), (radius_top, h1 - b), (max(0.0, radius_top - b), h1)]
+        if b > 1e-6
+        else [(radius_bottom, h0), (radius_top, h1)]
+    )
+    return lathe(prof, radial_segs=radial_segs, cap_bottom=cap_bottom, cap_top=cap_top, axis=axis, name=name, material=material)
+
+
+def cone(
+    radius: float, height: float, radial_segs: int = 24, *,
+    cap_bottom: bool = True, axis: str = "y", name: str = "cone", material: str = "gear_gold",
+) -> MeshPart:
+    return lathe([(radius, -0.5 * height), (0.0, 0.5 * height)], radial_segs=radial_segs, cap_bottom=cap_bottom, cap_top=False, axis=axis, name=name, material=material)
+
+
+def capsule(
+    radius: float, length: float, radial_segs: int = 20, cap_rings: int = 6, *,
+    axis: str = "y", name: str = "capsule", material: str = "chitin_dark",
+) -> MeshPart:
+    """Build a smooth rounded capsule centered at origin (cylindrical span = `length`)."""
+    half = 0.5 * max(0.0, float(length))
+    prof = [(radius * math.cos(-0.5 * math.pi + k / cap_rings * 0.5 * math.pi), -half + radius * math.sin(-0.5 * math.pi + k / cap_rings * 0.5 * math.pi)) for k in range(cap_rings + 1)]
+    prof += [(radius * math.cos(k / cap_rings * 0.5 * math.pi), +half + radius * math.sin(k / cap_rings * 0.5 * math.pi)) for k in range(cap_rings + 1)]
+    return lathe(prof, radial_segs=radial_segs, cap_bottom=False, cap_top=False, axis=axis, name=name, material=material)
+
+
+def torus_arc(
+    major_r: float, minor_r: float, start_ang: float = 0.0, end_ang: float = 2.0 * math.pi,
+    u_segs: int = 32, v_segs: int = 14, *, cap_ends: bool = True, plane: str = "xy",
+    name: str = "torus_arc", material: str = "gear_gold",
+) -> MeshPart:
+    """Build a full torus or capped toroidal arc in the XY (default), XZ, or YZ plane."""
+    u_segs, v_segs = max(6, int(u_segs)), max(6, int(v_segs))
+    span = float(end_ang - start_ang)
+    if abs(span) <= 1e-6:
+        raise ValueError("torus_arc requires a non-zero angular span")
+    if span < 0.0:
+        start_ang, end_ang, span = end_ang, start_ang, -span
+
+    if abs(span - 2.0 * math.pi) >= 1e-4:
+        us = np.linspace(start_ang, end_ang, u_segs + 1)
+        pts = np.column_stack([major_r * np.cos(us), major_r * np.sin(us), np.zeros_like(us)])
+        mesh = swept_tube(pts, minor_r, radial_segs=v_segs, cap_start=cap_ends, cap_end=cap_ends, closed=False, name=name, material=material)
+    else:
+        us = np.linspace(0.0, 2.0 * math.pi, u_segs, endpoint=False)
+        vs = np.linspace(0.0, 2.0 * math.pi, v_segs, endpoint=False)
+        rad = major_r + minor_r * np.cos(vs)[None, :]
+        positions = np.column_stack([
+            (rad * np.cos(us)[:, None]).reshape(-1),
+            (rad * np.sin(us)[:, None]).reshape(-1),
+            np.broadcast_to(minor_r * np.sin(vs)[None, :], (u_segs, v_segs)).reshape(-1),
+        ]).astype(np.float32)
+        tris: List[Tuple[int, int, int]] = []
+        for i in range(u_segs):
+            b0, b1 = i * v_segs, ((i + 1) % u_segs) * v_segs
+            for j in range(v_segs):
+                nj = (j + 1) % v_segs
+                tris.append((b0 + j, b1 + j, b1 + nj))
+                tris.append((b0 + j, b1 + nj, b0 + nj))
+        indices = np.asarray(tris, dtype=np.uint32).reshape(-1)
+        mesh = MeshPart(name, material, positions, recompute_smooth_normals(positions, indices), indices)
+
+    if plane == "xz":
+        return mesh.rotate_xyz(rx=0.5 * math.pi)
+    if plane == "yz":
+        return mesh.rotate_xyz(ry=0.5 * math.pi)
+    if plane != "xy":
+        raise ValueError(f"plane must be 'xy', 'xz', or 'yz', got {plane!r}")
+    return mesh
+
+
+def rounded_box(
+    sx: float, sy: float, sz: float, bevel: float = 0.15, segs: int = 3, *,
+    name: str = "rounded_box", material: str = "gear_gold",
+) -> MeshPart:
+    """Build a watertight beveled box centered at origin with exact size (sx, sy, sz)."""
+    hx, hy, hz = 0.5 * float(sx), 0.5 * float(sy), 0.5 * float(sz)
+    b = max(0.0, min(float(bevel), 0.49 * min(sx, sy, sz)))
+    segs = max(1, int(segs))
+
+    if b <= 1e-6:
+        faces = [
+            ((0, 0, 1), [(-hx, -hy, hz), (hx, -hy, hz), (hx, hy, hz), (-hx, hy, hz)]),
+            ((0, 0, -1), [(hx, -hy, -hz), (-hx, -hy, -hz), (-hx, hy, -hz), (hx, hy, -hz)]),
+            ((1, 0, 0), [(hx, -hy, hz), (hx, -hy, -hz), (hx, hy, -hz), (hx, hy, hz)]),
+            ((-1, 0, 0), [(-hx, -hy, -hz), (-hx, -hy, hz), (-hx, hy, hz), (-hx, hy, -hz)]),
+            ((0, 1, 0), [(-hx, hy, hz), (hx, hy, hz), (hx, hy, -hz), (-hx, hy, -hz)]),
+            ((0, -1, 0), [(-hx, -hy, -hz), (hx, -hy, -hz), (hx, -hy, hz), (-hx, -hy, hz)]),
+        ]
+        pos_l, nrm_l, idx_l = [], [], []
+        for fi, (nrm, corners) in enumerate(faces):
+            base = fi * 4
+            pos_l.extend(corners)
+            nrm_l.extend([nrm] * 4)
+            idx_l.extend([base, base + 1, base + 2, base, base + 2, base + 3])
+        return MeshPart(name, material, np.asarray(pos_l, dtype=np.float32), np.asarray(nrm_l, dtype=np.float32), np.asarray(idx_l, dtype=np.uint32))
+
+    # Exact Minkowski sum of inner box (hx-b, hy-b, hz-b) and sphere of radius b.
+    ix, iy, iz = hx - b, hy - b, hz - b
+    n_grid = 2 * segs + 1
+    core_vals = [(-1.0 if k <= segs else 1.0) for k in range(n_grid + 1)]
+    dir_vals = [
+        (-math.tan(((segs - k) / segs) * 0.25 * math.pi) if k <= segs else math.tan(((k - segs - 1) / segs) * 0.25 * math.pi))
+        for k in range(n_grid + 1)
+    ]
+
+    vert_map: Dict[Tuple[int, int, int], int] = {}
+    pos_l, nrm_l = [], []
+
+    def get_vert(gx: int, gy: int, gz: int) -> int:
+        key = (gx, gy, gz)
+        hit = vert_map.get(key)
+        if hit is not None:
+            return hit
+        dx, dy, dz = dir_vals[gx], dir_vals[gy], dir_vals[gz]
+        dlen = math.sqrt(dx * dx + dy * dy + dz * dz)
+        nx, ny, nz = dx / dlen, dy / dlen, dz / dlen
+        idx = len(pos_l)
+        vert_map[key] = idx
+        pos_l.append((core_vals[gx] * ix + b * nx, core_vals[gy] * iy + b * ny, core_vals[gz] * iz + b * nz))
+        nrm_l.append((nx, ny, nz))
+        return idx
+
+    face_maps = (
+        lambda u, v: (u, v, n_grid),
+        lambda u, v: (n_grid - u, v, 0),
+        lambda u, v: (n_grid, v, n_grid - u),
+        lambda u, v: (0, v, u),
+        lambda u, v: (u, n_grid, n_grid - v),
+        lambda u, v: (u, 0, v),
+    )
+    tris: List[Tuple[int, int, int]] = []
+    for fmap in face_maps:
+        for v in range(n_grid):
+            for u in range(n_grid):
+                v00, v10, v11, v01 = get_vert(*fmap(u, v)), get_vert(*fmap(u + 1, v)), get_vert(*fmap(u + 1, v + 1)), get_vert(*fmap(u, v + 1))
+                tris.append((v00, v10, v11))
+                tris.append((v00, v11, v01))
+    return MeshPart(name, material, np.asarray(pos_l, dtype=np.float32), np.asarray(nrm_l, dtype=np.float32), np.asarray(tris, dtype=np.uint32).reshape(-1))
+
+
+def hemisphere_shell(
+    rx: float, ry: float, rz: float, thickness: float = 0.04, start_phi: float = 0.0,
+    u_segs: int = 32, v_segs: int = 14, *, e1: float = 1.0, e2: float = 1.0,
+    deform_fn: Optional[Callable[[np.ndarray], np.ndarray]] = None,
+    name: str = "shell", material: str = "gear_gold",
+) -> MeshPart:
+    """Build a watertight thickened dome/helmet shell with a beveled bottom rim."""
+    u_segs, v_segs = max(8, int(u_segs)), max(4, int(v_segs))
+    thickness, e1, e2 = max(1e-3, float(thickness)), max(0.1, float(e1)), max(0.1, float(e2))
+    phis = np.linspace(float(start_phi), 0.5 * math.pi, v_segs + 1)[:-1]
+    thetas = np.linspace(0.0, 2.0 * math.pi, u_segs, endpoint=False)
+    cos_t, sin_t = _spow(np.cos(thetas), e2), _spow(np.sin(thetas), e2)
+
+    outer_rings = [
+        np.column_stack([rx * float(_spow(np.array(math.cos(phi)), e1)) * sin_t, np.full(u_segs, ry * float(_spow(np.array(math.sin(phi)), e1))), rz * float(_spow(np.array(math.cos(phi)), e1)) * cos_t])
+        for phi in phis
+    ]
+    n_rings = len(outer_rings)
+    p_out = np.vstack(outer_rings + [np.array([[0.0, ry, 0.0]], dtype=np.float64)])
+    if deform_fn is not None:
+        p_out = np.asarray(deform_fn(p_out.copy()), dtype=np.float64).reshape(-1, 3)
+
+    outer_tris: List[Tuple[int, int, int]] = []
+    for r in range(n_rings - 1):
+        outer_tris.extend(_quad_ring_tris(r * u_segs, (r + 1) * u_segs, u_segs))
+    apex_out, top_b = n_rings * u_segs, (n_rings - 1) * u_segs
+    outer_tris.extend((apex_out, top_b + i, top_b + (i + 1) % u_segs) for i in range(u_segs))
+
+    n_out = recompute_smooth_normals(p_out.astype(np.float32), np.asarray(outer_tris, dtype=np.uint32)).astype(np.float64)
+    p_in = p_out - thickness * n_out
+    rim_down = _normalize_rows(p_out[:u_segs] - p_out[u_segs:2 * u_segs], fallback=(0.0, -1.0, 0.0))
+    p_lip = 0.5 * (p_out[:u_segs] + p_in[:u_segs]) + (0.35 * thickness) * rim_down
+
+    in_off, lip_off = len(p_out), 2 * len(p_out)
+    positions = np.vstack([p_out, p_in, p_lip]).astype(np.float32)
+    all_tris = list(outer_tris) + [(in_off + a, in_off + c, in_off + b) for a, b, c in outer_tris]
+    all_tris.extend(_quad_ring_tris(lip_off, 0, u_segs))
+    all_tris.extend(_quad_ring_tris(in_off, lip_off, u_segs))
+
+    indices = ensure_outward_winding(positions, np.asarray(all_tris, dtype=np.uint32).reshape(-1))
+    return MeshPart(name, material, positions, recompute_smooth_normals(positions, indices), indices)
+
+
+def _ear_clip_2d(pts: List[Tuple[float, float]]) -> List[Tuple[int, int, int]]:
+    def cross(o, u, v):
+        return (u[0] - o[0]) * (v[1] - o[1]) - (u[1] - o[1]) * (v[0] - o[0])
+
+    rem, tris, guard = list(range(len(pts))), [], 0
+    while len(rem) > 3 and guard < len(pts) * len(pts) + 10:
+        guard += 1
+        clipped = False
+        m = len(rem)
+        for k in range(m):
+            ia, ib, ic = rem[(k - 1) % m], rem[k], rem[(k + 1) % m]
+            a, b, c = pts[ia], pts[ib], pts[ic]
+            if cross(a, b, c) <= 1e-10:
+                continue
+            if any(cross(a, b, pts[j]) >= -1e-9 and cross(b, c, pts[j]) >= -1e-9 and cross(c, a, pts[j]) >= -1e-9 for j in rem if j not in (ia, ib, ic)):
+                continue
+            tris.append((ia, ib, ic))
+            rem.pop(k)
+            clipped = True
+            break
+        if not clipped:
+            break
+    if len(rem) == 3:
+        tris.append((rem[0], rem[1], rem[2]))
+    return tris
+
+
+def extrude_polygon(
+    points_2d: Sequence[Tuple[float, float]], depth: float, *, name: str = "extrude", material: str = "gear_accent"
+) -> MeshPart:
+    """Extrude a simple 2D polygon along Z in [-depth/2, +depth/2] with crisp normals."""
+    pts = [(float(x), float(y)) for x, y in points_2d]
+    if len(pts) < 3:
+        raise ValueError("extrude_polygon requires at least 3 2D points")
+    area2 = sum(pts[i][0] * pts[(i + 1) % len(pts)][1] - pts[(i + 1) % len(pts)][0] * pts[i][1] for i in range(len(pts)))
+    if area2 < 0.0:
+        pts.reverse()
+    cap_tris = _ear_clip_2d(pts)
+    hz, n = 0.5 * float(depth), len(pts)
+
+    pos_l = [(x, y, +hz) for x, y in pts] + [(x, y, -hz) for x, y in pts]
+    nrm_l = [(0.0, 0.0, 1.0)] * n + [(0.0, 0.0, -1.0)] * n
+    idx_l: List[int] = []
+    for a, b, c in cap_tris:
+        idx_l.extend([a, b, c, n + a, n + c, n + b])
+
+    for i in range(n):
+        (x0, y0), (x1, y1) = pts[i], pts[(i + 1) % n]
+        elen = math.hypot(x1 - x0, y1 - y0)
+        if elen <= 1e-10:
+            continue
+        nx, ny = (y1 - y0) / elen, -(x1 - x0) / elen
+        sb = len(pos_l)
+        pos_l.extend([(x0, y0, -hz), (x1, y1, -hz), (x1, y1, +hz), (x0, y0, +hz)])
+        nrm_l.extend([(nx, ny, 0.0)] * 4)
+        idx_l.extend([sb, sb + 1, sb + 2, sb, sb + 2, sb + 3])
+    return MeshPart(name, material, np.asarray(pos_l, dtype=np.float32), np.asarray(nrm_l, dtype=np.float32), np.asarray(idx_l, dtype=np.uint32))

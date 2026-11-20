@@ -1,0 +1,72 @@
+"""Procedural 3D stylized tabletop/vinyl ant model toolkit."""
+from __future__ import annotations
+
+from .gltf_writer import parse_glb, scene_to_glb_bytes, validate_glb, write_glb
+from .materials import MATERIAL_ORDER, MATERIALS, TEAM_COLORS, MaterialSpec, get_material, material_color
+
+try:
+    import numpy as _np  # noqa: F401
+
+    HAS_NUMPY = True
+except ImportError:
+    HAS_NUMPY = False
+
+if HAS_NUMPY:
+    from .base_ant import build_base_ant
+    from .mesh_core import (
+        MeshPart,
+        SceneBuilder,
+        capsule,
+        catmull_rom_spline,
+        cone,
+        curved_tube,
+        cylinder,
+        ellipsoid,
+        ensure_outward_winding,
+        extrude_polygon,
+        hemisphere_shell,
+        lathe,
+        merge_parts,
+        recompute_smooth_normals,
+        rounded_box,
+        signed_volume,
+        sphere,
+        superellipsoid,
+        swept_tube,
+        torus_arc,
+    )
+
+__all__ = [
+    "HAS_NUMPY",
+    "MATERIALS",
+    "MATERIAL_ORDER",
+    "TEAM_COLORS",
+    "MaterialSpec",
+    "get_material",
+    "material_color",
+    "parse_glb",
+    "scene_to_glb_bytes",
+    "validate_glb",
+    "write_glb",
+    "MeshPart",
+    "SceneBuilder",
+    "build_base_ant",
+    "capsule",
+    "catmull_rom_spline",
+    "cone",
+    "curved_tube",
+    "cylinder",
+    "ellipsoid",
+    "ensure_outward_winding",
+    "extrude_polygon",
+    "hemisphere_shell",
+    "lathe",
+    "merge_parts",
+    "recompute_smooth_normals",
+    "rounded_box",
+    "signed_volume",
+    "sphere",
+    "superellipsoid",
+    "swept_tube",
+    "torus_arc",
+]
