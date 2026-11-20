@@ -363,14 +363,15 @@ def merge_parts(parts: Sequence[MeshPart], name: str = "merged", material: Optio
 
 @dataclass
 class SceneBuilder:
-    """Organizes MeshParts into named logical nodes with optional local TRS pivots and animations."""
+    """Organizes MeshParts into named logical nodes with optional parent hierarchy, TRS pivots, and animations."""
 
     name: str = "ant"
     nodes: Dict[str, List[MeshPart]] = field(default_factory=dict)
     node_transforms: Dict[str, NodeTransform] = field(default_factory=dict)
+    node_parents: Dict[str, str] = field(default_factory=dict)
     animations: List[AnimationClip] = field(default_factory=list)
 
-    def add(self, node_name: str, part: Union[MeshPart, Iterable[MeshPart]]) -> None:
+    def add(self, node_name: str, part: Union[MeshPart, Iterable[MeshPart]], *, parent: Optional[str] = None) -> None:
         bucket = self.nodes.setdefault(node_name, [])
         if isinstance(part, MeshPart):
             bucket.append(part)
@@ -379,21 +380,60 @@ class SceneBuilder:
                 if not isinstance(item, MeshPart):
                     raise TypeError(f"Expected MeshPart, got {type(item).__name__}")
                 bucket.append(item)
+        if parent is not None:
+            self.set_node_parent(node_name, parent)
 
     def add_mirrored(
-        self, node_name: str, part: MeshPart, *, left_suffix: str = "_left", right_suffix: str = "_right"
+        self, node_name: str, part: MeshPart, *, left_suffix: str = "_left", right_suffix: str = "_right",
+        parent: Optional[str] = None,
     ) -> Tuple[MeshPart, MeshPart]:
         """Add `part` (on +X ant-left) and its X-mirrored twin (on -X ant-right)."""
         left = part.copy(name=f"{part.name}{left_suffix}")
         right = part.mirror_x(name=f"{part.name}{right_suffix}")
-        self.add(node_name, left)
+        self.add(node_name, left, parent=parent)
         self.add(node_name, right)
         return left, right
+
+    def set_node_parent(self, child: str, parent: Optional[str]) -> None:
+        """Assign or clear `child`'s parent node (guards against hierarchy cycles)."""
+        if parent is None:
+            self.node_parents.pop(child, None)
+            return
+        cur: Optional[str] = parent
+        while cur is not None:
+            if cur == child:
+                raise ValueError(f"Setting parent {parent!r} for {child!r} would create a cycle")
+            cur = self.node_parents.get(cur)
+        self.nodes.setdefault(parent, [])
+        self.nodes.setdefault(child, [])
+        self.node_parents[child] = parent
+
+    def get_node_parent(self, node_name: str) -> Optional[str]:
+        return self.node_parents.get(node_name)
+
+    def attach_world_node(self, node_name: str, parent: str) -> None:
+        """Reparent a world-authored node under `parent` while keeping its exact rest world pose."""
+        if self.node_parents.get(node_name) == parent:
+            return
+        cur_w = self.get_world_matrix(node_name)
+        cur_t = cur_w[:3, 3] if cur_w is not None else np.zeros(3, dtype=np.float64)
+        cur_xf = self.node_transforms.get(node_name)
+        par_w = self.get_world_matrix(parent)
+        par_inv = np.linalg.inv(par_w) if par_w is not None else np.eye(4, dtype=np.float64)
+        local_t = par_inv[:3, :3] @ cur_t + par_inv[:3, 3]
+        self.set_node_parent(node_name, parent)
+        self.set_node_transform(
+            node_name,
+            translation=(float(local_t[0]), float(local_t[1]), float(local_t[2])),
+            rotation=cur_xf.rotation if cur_xf is not None else (0.0, 0.0, 0.0, 1.0),
+            scale=cur_xf.scale if cur_xf is not None else (1.0, 1.0, 1.0),
+        )
 
     def set_node_transform(
         self, node_name: str, *, translation: Optional[Vec3Like] = None,
         rotation: Optional[Sequence[float]] = None, scale: Optional[Vec3Like] = None,
     ) -> NodeTransform:
+        self.nodes.setdefault(node_name, [])
         cur = self.node_transforms.get(node_name, NodeTransform())
         t = tuple(float(c) for c in _as_vec3(translation)) if translation is not None else cur.translation
         r = tuple(float(c) for c in rotation) if rotation is not None else cur.rotation
@@ -407,7 +447,28 @@ class SceneBuilder:
     def get_node_transform(self, node_name: str) -> Optional[NodeTransform]:
         return self.node_transforms.get(node_name)
 
-    def add_animation(self, name: str, channels: Sequence[AnimationChannel]) -> AnimationClip:
+    def get_world_matrix(self, node_name: str) -> Optional[np.ndarray]:
+        """Return composed parent->child 4x4 world transform matrix, or None if identity."""
+        chain: List[str] = []
+        cur: Optional[str] = node_name
+        seen = set()
+        while cur is not None:
+            if cur in seen:
+                raise ValueError(f"Cycle detected in SceneBuilder node hierarchy at {cur!r}")
+            seen.add(cur)
+            chain.append(cur)
+            cur = self.node_parents.get(cur)
+        mat: Optional[np.ndarray] = None
+        for n in reversed(chain):
+            xf = self.node_transforms.get(n)
+            if xf is not None:
+                lm = xf.to_matrix()
+                mat = lm if mat is None else (mat @ lm)
+        return mat
+
+    def add_animation(self, name: str, channels: Sequence[AnimationChannel], *, replace: bool = False) -> AnimationClip:
+        if replace:
+            self.animations = [c for c in self.animations if c.name != name]
         clip = AnimationClip(name=name, channels=list(channels))
         self.animations.append(clip)
         return clip
@@ -419,7 +480,7 @@ class SceneBuilder:
         times = [0.0, 2.40, 2.48, 2.56, 2.68, 3.00]
         q_open, q_closed = (0.0, 0.0, 0.0, 1.0), quat_from_axis_angle((1.0, 0.0, 0.0), closed_angle)
         vals = [q_open, q_open, q_closed, q_closed, q_open, q_open]
-        return self.add_animation(name, [AnimationChannel(n, "rotation", list(times), list(vals)) for n in eyelid_nodes if self.nodes.get(n)])
+        return self.add_animation(name, [AnimationChannel(n, "rotation", list(times), list(vals)) for n in eyelid_nodes if self.nodes.get(n)], replace=True)
 
     def get_node(self, node_name: str) -> List[MeshPart]:
         return list(self.nodes.get(node_name, ()))
@@ -427,15 +488,31 @@ class SceneBuilder:
     def node_names(self) -> List[str]:
         return [k for k, v in self.nodes.items() if v]
 
+    def hierarchy_node_names(self) -> List[str]:
+        """Return all nodes with meshes, parents, children, transforms, or animation targets."""
+        referenced = set(self.node_parents.values()) | set(self.node_parents.keys())
+        for clip in self.animations:
+            for ch in clip.channels:
+                referenced.add(ch.target_node)
+        seen: List[str] = []
+        for k, parts in self.nodes.items():
+            if parts or k in referenced:
+                seen.append(k)
+        for k in referenced:
+            if k not in self.nodes and k not in seen:
+                seen.append(k)
+        return seen
+
     def all_parts(self) -> List[MeshPart]:
         return [p for parts in self.nodes.values() for p in parts]
 
     def world_parts(self) -> List[MeshPart]:
-        """Return all MeshParts transformed into world space (applying node TRS pivots)."""
+        """Return all MeshParts transformed into world space (composing parent->child TRS pivots)."""
         out: List[MeshPart] = []
         for k, parts in self.nodes.items():
-            xf = self.node_transforms.get(k)
-            mat = xf.to_matrix() if xf is not None else None
+            if not parts:
+                continue
+            mat = self.get_world_matrix(k)
             out.extend(p.transform(mat) if mat is not None else p for p in parts)
         return out
 
@@ -451,39 +528,47 @@ class SceneBuilder:
 
     def translate_all(self, dx: Union[float, Vec3Like], dy: Optional[float] = None, dz: Optional[float] = None) -> "SceneBuilder":
         off = _as_vec3(dx, dy, dz)
-        for k, parts in self.nodes.items():
+        ox, oy, oz = float(off[0]), float(off[1]), float(off[2])
+        for k in list(self.nodes.keys()):
+            if k in self.node_parents:
+                continue
             xf = self.node_transforms.get(k)
             if xf is not None:
-                self.node_transforms[k] = NodeTransform(
-                    (xf.translation[0] + float(off[0]), xf.translation[1] + float(off[1]), xf.translation[2] + float(off[2])),
-                    xf.rotation, xf.scale,
-                )
+                self.node_transforms[k] = NodeTransform((xf.translation[0] + ox, xf.translation[1] + oy, xf.translation[2] + oz), xf.rotation, xf.scale)
             else:
-                self.nodes[k] = [p.translate(off) for p in parts]
+                self.nodes[k] = [p.translate(off) for p in self.nodes[k]]
+        for clip in self.animations:
+            for ch in clip.channels:
+                if ch.path == "translation" and ch.target_node not in self.node_parents:
+                    ch.values = [(v[0] + ox, v[1] + oy, v[2] + oz) for v in ch.values]
         return self
 
     def scale_all(self, sx: Union[float, Vec3Like], sy: Optional[float] = None, sz: Optional[float] = None) -> "SceneBuilder":
         s = _as_vec3(sx, sy, sz)
-        for k, parts in self.nodes.items():
+        fx, fy, fz = float(s[0]), float(s[1]), float(s[2])
+        for k in list(self.nodes.keys()):
             xf = self.node_transforms.get(k)
             if xf is not None:
-                self.node_transforms[k] = NodeTransform(
-                    (xf.translation[0] * float(s[0]), xf.translation[1] * float(s[1]), xf.translation[2] * float(s[2])),
-                    xf.rotation, xf.scale,
-                )
-            self.nodes[k] = [p.scale(s) for p in parts]
+                self.node_transforms[k] = NodeTransform((xf.translation[0] * fx, xf.translation[1] * fy, xf.translation[2] * fz), xf.rotation, xf.scale)
+            self.nodes[k] = [p.scale(s) for p in self.nodes[k]]
+        for clip in self.animations:
+            for ch in clip.channels:
+                if ch.path == "translation":
+                    ch.values = [(v[0] * fx, v[1] * fy, v[2] * fz) for v in ch.values]
         return self
 
     def rotate_all_xyz(self, rx: float = 0.0, ry: float = 0.0, rz: float = 0.0, *, degrees: bool = False) -> "SceneBuilder":
         rot = _rotation_matrix_xyz(math.radians(rx) if degrees else rx, math.radians(ry) if degrees else ry, math.radians(rz) if degrees else rz)
         q_rot = quat_from_euler_xyz(rx, ry, rz, degrees=degrees)
-        for k, parts in self.nodes.items():
+        for k in list(self.nodes.keys()):
+            if k in self.node_parents:
+                continue
             xf = self.node_transforms.get(k)
             if xf is not None:
                 t_new = rot @ np.asarray(xf.translation, dtype=np.float64)
                 self.node_transforms[k] = NodeTransform((float(t_new[0]), float(t_new[1]), float(t_new[2])), quat_mul(q_rot, xf.rotation), xf.scale)
             else:
-                self.nodes[k] = [p.rotate_xyz(rx, ry, rz, degrees=degrees) for p in parts]
+                self.nodes[k] = [p.rotate_xyz(rx, ry, rz, degrees=degrees) for p in self.nodes[k]]
         return self
 
     def ground_to_y(self, target_y: float = 0.0) -> float:
@@ -496,11 +581,14 @@ class SceneBuilder:
     def merge_from(self, other: "SceneBuilder", prefix: str = "") -> "SceneBuilder":
         for k, parts in other.nodes.items():
             target = f"{prefix}{k}" if prefix else k
+            self.nodes.setdefault(target, [])
             for p in parts:
                 self.add(target, p.copy())
             if k in other.node_transforms:
                 xf = other.node_transforms[k]
                 self.node_transforms[target] = NodeTransform(xf.translation, xf.rotation, xf.scale)
+        for child, par in other.node_parents.items():
+            self.set_node_parent(f"{prefix}{child}" if prefix else child, f"{prefix}{par}" if prefix else par)
         for clip in other.animations:
             self.animations.append(AnimationClip(
                 clip.name,
@@ -1151,129 +1239,7 @@ def extrude_polygon(
     return MeshPart(name, material, np.asarray(pos_l, dtype=np.float32), np.asarray(nrm_l, dtype=np.float32), np.asarray(idx_l, dtype=np.uint32), uvs=np.asarray(uv_l, dtype=np.float32))
 
 
-# ---------------------------------------------------------------------------
-# Fast vectorized baked crevice and contact Ambient Occlusion (COLOR_0)
-# ---------------------------------------------------------------------------
-
-def _box_blur_3d(grid: np.ndarray, passes: int) -> np.ndarray:
-    g = grid.astype(np.float32, copy=True)
-    for _ in range(passes):
-        for axis in (0, 1, 2):
-            p = np.pad(g, [(1, 1) if a == axis else (0, 0) for a in range(3)], mode="edge")
-            sl0 = [slice(0, -2) if a == axis else slice(None) for a in range(3)]
-            sl1 = [slice(1, -1) if a == axis else slice(None) for a in range(3)]
-            sl2 = [slice(2, None) if a == axis else slice(None) for a in range(3)]
-            g = (p[tuple(sl0)] + 2.0 * p[tuple(sl1)] + p[tuple(sl2)]) * 0.25
-    return g
-
-
-def _sample_grid_trilinear(grid: np.ndarray, coords: np.ndarray) -> np.ndarray:
-    res = grid.shape[0]
-    c = np.clip(coords, 0.0, float(res - 1.001))
-    i0 = np.floor(c).astype(np.int32)
-    f = (c - i0).astype(np.float32)
-    i1 = np.minimum(i0 + 1, res - 1)
-    x0, y0, z0 = i0[:, 0], i0[:, 1], i0[:, 2]
-    x1, y1, z1 = i1[:, 0], i1[:, 1], i1[:, 2]
-    fx, fy, fz = f[:, 0], f[:, 1], f[:, 2]
-    c00 = grid[x0, y0, z0] * (1.0 - fx) + grid[x1, y0, z0] * fx
-    c10 = grid[x0, y1, z0] * (1.0 - fx) + grid[x1, y1, z0] * fx
-    c01 = grid[x0, y0, z1] * (1.0 - fx) + grid[x1, y0, z1] * fx
-    c11 = grid[x0, y1, z1] * (1.0 - fx) + grid[x1, y1, z1] * fx
-    return (c00 * (1.0 - fy) + c10 * fy) * (1.0 - fz) + (c01 * (1.0 - fy) + c11 * fy) * fz
-
-
-def _local_concavity(positions: np.ndarray, normals: np.ndarray, indices: np.ndarray) -> np.ndarray:
-    """Measure local mesh concavity in [0, 1] for crisp groove/seam shading."""
-    n = len(positions)
-    if n == 0 or len(indices) == 0:
-        return np.zeros(n, dtype=np.float32)
-    pos = positions.astype(np.float64)
-    idx = indices.reshape(-1, 3)
-    acc = np.zeros_like(pos)
-    cnt = np.zeros(n, dtype=np.float64)
-    for a, b in ((0, 1), (1, 2), (2, 0)):
-        ia, ib = idx[:, a], idx[:, b]
-        np.add.at(acc, ia, pos[ib])
-        np.add.at(acc, ib, pos[ia])
-        np.add.at(cnt, ia, 1.0)
-        np.add.at(cnt, ib, 1.0)
-    avg = acc / np.maximum(1.0, cnt[:, None])
-    conc = np.sum((avg - pos) * normals.astype(np.float64), axis=1)
-    return np.clip(conc * 38.0, 0.0, 1.0).astype(np.float32)
-
-
-def bake_scene_ao(scene: SceneBuilder, *, grid_res: int = 56) -> SceneBuilder:
-    """Bake inter-part and crevice Ambient Occlusion into every MeshPart.colors (COLOR_0).
-
-    Excludes translucent BLEND glass materials as occluders so eyes behind scuba
-    masks and goggles stay crisp and bright.
-    """
-    bmin, bmax = scene.bounds()
-    pad = 0.14
-    origin = bmin.astype(np.float64) - pad
-    extent = np.maximum(0.25, (bmax - bmin).astype(np.float64) + 2.0 * pad)
-    step = float(extent.max()) / float(grid_res - 1)
-    inv_step = 1.0 / step
-
-    # Collect opaque world-space sample points (vertices + triangle centroids).
-    occ_pts: List[np.ndarray] = []
-    for k, parts in scene.nodes.items():
-        xf = scene.node_transforms.get(k)
-        mat = xf.to_matrix() if xf is not None else None
-        for p in parts:
-            spec = get_material(p.material)
-            if spec.resolved_alpha_mode() == "BLEND":
-                continue
-            wp = p.transform(mat) if mat is not None else p
-            occ_pts.append(wp.positions.astype(np.float64))
-            idx = wp.indices.reshape(-1, 3)
-            if len(idx) > 0:
-                tri_c = (wp.positions[idx[:, 0]] + wp.positions[idx[:, 1]] + wp.positions[idx[:, 2]]) / 3.0
-                occ_pts.append(tri_c.astype(np.float64))
-
-    if not occ_pts:
-        return scene
-
-    all_occ = np.vstack(occ_pts)
-    grid = np.zeros((grid_res, grid_res, grid_res), dtype=np.float32)
-    vox = np.clip(np.round((all_occ - origin[None, :]) * inv_step).astype(np.int32), 0, grid_res - 1)
-    np.add.at(grid, (vox[:, 0], vox[:, 1], vox[:, 2]), 0.45)
-    grid = np.clip(grid, 0.0, 1.0)
-    occ_fine = _box_blur_3d(grid, 1)
-    occ_broad = _box_blur_3d(grid, 3)
-
-    for k, parts in scene.nodes.items():
-        xf = scene.node_transforms.get(k)
-        mat = xf.to_matrix() if xf is not None else None
-        for p in parts:
-            spec = get_material(p.material)
-            if spec.resolved_alpha_mode() == "BLEND":
-                p.colors = np.ones((len(p.positions), 3), dtype=np.float32)
-                continue
-            wp = p.transform(mat) if mat is not None else p
-            pos = wp.positions.astype(np.float64)
-            nrm = wp.normals.astype(np.float64)
-
-            # Build per-vertex tangent frame for tilted hemisphere probes.
-            ref = np.where(np.abs(nrm[:, 1:2]) < 0.85, np.array([[0.0, 1.0, 0.0]]), np.array([[1.0, 0.0, 0.0]]))
-            t1 = _normalize_rows(np.cross(nrm, ref))
-            t2 = np.cross(nrm, t1)
-
-            occ = np.zeros(len(pos), dtype=np.float32)
-            # Direct outward probes + 4 tilted hemisphere probes catch brims, sockets, seams, joints.
-            for r_off, w, g_src in ((0.032, 0.24, occ_fine), (0.068, 0.24, occ_broad), (0.120, 0.16, occ_broad)):
-                occ += w * _sample_grid_trilinear(g_src, (pos + r_off * nrm - origin[None, :]) * inv_step)
-            for d_vec in (nrm + 0.72 * t1, nrm - 0.72 * t1, nrm + 0.72 * t2, nrm - 0.72 * t2):
-                d_u = _normalize_rows(d_vec)
-                occ += 0.09 * _sample_grid_trilinear(occ_broad, (pos + 0.064 * d_u - origin[None, :]) * inv_step)
-
-            conc = _local_concavity(wp.positions, wp.normals, wp.indices)
-            gnd = np.clip(pos[:, 1] / 0.10, 0.0, 1.0).astype(np.float32)
-            gnd_ao = 0.82 + 0.18 * gnd
-
-            ao = (1.0 - np.clip(occ * 0.72 + conc * 0.24, 0.0, 0.58)) * gnd_ao
-            floor_ao = 0.78 if p.material in ("eye_white", "eye_iris", "eye_pupil") else 0.44
-            ao = np.clip(ao, floor_ao, 1.0).astype(np.float32)
-            p.colors = np.column_stack([ao, ao, ao]).astype(np.float32)
-    return scene
+try:
+    from .textures import bake_scene_ao
+except ImportError:
+    from textures import bake_scene_ao  # type: ignore

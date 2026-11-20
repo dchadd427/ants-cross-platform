@@ -269,6 +269,78 @@ class GltfWriterPureStdlib(unittest.TestCase):
         self.assertGreater(len(doc["meshes"]), 0)
         self.assertGreater(len(bin_data), 0)
 
+    def test_hierarchy_parent_child_and_translation_rotation_animations(self):
+        """Pure-stdlib verification of parent->child glTF node DAG + translation & rotation clips."""
+        base = _make_pure_python_tetra_scene()
+
+        class _StubXf:
+            def __init__(self, translation=(0.0, 0.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0), scale=(1.0, 1.0, 1.0)):
+                self.translation = translation
+                self.rotation = rotation
+                self.scale = scale
+
+        class _StubCh:
+            def __init__(self, target_node, path, times, values):
+                self.target_node = target_node
+                self.path = path
+                self.times = times
+                self.values = values
+                self.interpolation = "LINEAR"
+
+        class _StubClip:
+            def __init__(self, name, channels):
+                self.name = name
+                self.channels = channels
+
+        base._nodes["pivot"] = []
+        base._parents = {"body": "pivot"}
+        base._xfs = {"pivot": _StubXf((0.0, 0.5, 0.0)), "body": _StubXf((0.0, -0.5, 0.0))}
+        base.get_node_parent = lambda n: base._parents.get(n)
+        base.get_node_transform = lambda n: base._xfs.get(n)
+        base.hierarchy_node_names = lambda: ["pivot", "body"]
+        s45 = math.sin(0.25)
+        c45 = math.cos(0.25)
+        base.animations = [
+            _StubClip(
+                "Idle",
+                [
+                    _StubCh("pivot", "translation", [0.0, 0.5, 1.0], [(0.0, 0.5, 0.0), (0.0, 0.6, 0.0), (0.0, 0.5, 0.0)]),
+                    _StubCh("pivot", "rotation", [0.0, 0.5, 1.0], [(0.0, 0.0, 0.0, 1.0), (s45, 0.0, 0.0, c45), (0.0, 0.0, 0.0, 1.0)]),
+                ],
+            )
+        ]
+
+        glb = gltf_writer.scene_to_glb_bytes(base)
+        stats = gltf_writer.validate_glb(glb)
+        self.assertIn("pivot", stats["nodes"])
+        self.assertIn("body", stats["nodes"])
+        self.assertEqual(stats["animations"], ["Idle"])
+        # Composed parent (+0.5) + child (-0.5) preserves exact world bounds [0, 1].
+        self.assertAlmostEqual(stats["bbox_min"][1], 0.0, places=4)
+        self.assertAlmostEqual(stats["bbox_max"][1], 1.0, places=4)
+
+        doc, bin_data = gltf_writer.parse_glb(glb)
+        by_name = {n["name"]: (i, n) for i, n in enumerate(doc["nodes"])}
+        piv_i, piv_node = by_name["pivot"]
+        body_i, _ = by_name["body"]
+        self.assertIn(body_i, piv_node.get("children", []))
+        self.assertNotIn(body_i, doc["nodes"][0].get("children", []))
+
+        # Validator rejects cyclic node.children graphs.
+        doc["nodes"][body_i]["children"] = [piv_i]
+        bad_json = gltf_writer._pad4(json.dumps(doc, separators=(",", ":")).encode("utf-8"), b" ")
+        bad_bin = gltf_writer._pad4(bin_data, b"\x00")
+        total = 12 + 8 + len(bad_json) + 8 + len(bad_bin)
+        bad_glb = (
+            struct.pack("<III", gltf_writer.GLB_MAGIC, gltf_writer.GLB_VERSION, total)
+            + struct.pack("<II", len(bad_json), gltf_writer.CHUNK_JSON)
+            + bad_json
+            + struct.pack("<II", len(bad_bin), gltf_writer.CHUNK_BIN)
+            + bad_bin
+        )
+        with self.assertRaises(ValueError):
+            gltf_writer.validate_glb(bad_glb)
+
     def test_existing_built_glb_files_validate(self):
         models_dir = os.path.join(REPO, "tools", "ant_models", "models")
         if not os.path.isdir(models_dir):
@@ -503,34 +575,59 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
         self.assertGreater(nodes_closed["eyelid_left"]["rotation"][0], 0.45)
         self.assertGreater(nodes_closed["eyelid_right"]["rotation"][0], 0.45)
 
-        # Blink animation targets both eyelids with 6 keyframes.
-        self.assertEqual(len(doc_open["animations"]), 1)
-        blink_anim = doc_open["animations"][0]
-        self.assertEqual(blink_anim["name"], "Blink")
-        self.assertEqual(len(blink_anim["channels"]), 2)
+        # Both Blink (2 eyelid channels) and default Worker Idle (translation+rotation) clips are exported.
+        anims_by_name = {a["name"]: a for a in doc_open["animations"]}
+        self.assertIn("Blink", anims_by_name)
+        self.assertIn("Idle", anims_by_name)
+        self.assertEqual(len(anims_by_name["Blink"]["channels"]), 2)
+        idle_paths = {ch["target"]["path"] for ch in anims_by_name["Idle"]["channels"]}
+        self.assertIn("translation", idle_paths)
+        self.assertIn("rotation", idle_paths)
 
-        # Geometric eyelid radial clearance: inner eyelid strictly clears sclera+iris+pupil across blink=0..1.
-        for b_val in (0.0, 0.25, 0.5, 0.75, 1.0):
-            sc_b, a_b = base_ant.build_base_ant(f"clearance_{b_val}", blink=b_val)
-            w_parts = sc_b.world_parts()
-            for side_sign, eye_key, lid_name in ((1.0, "eye_left", "eyelid_left_shell"), (-1.0, "eye_right", "eyelid_right_shell")):
-                pivot = np.asarray(a_b[eye_key], dtype=np.float64)
-                eye_verts = np.vstack(
-                    [
-                        p.positions.astype(np.float64)
-                        for p in sc_b.get_node("eyes")
-                        if p.material in ("eye_white", "eye_iris", "eye_pupil")
-                        and float(p.positions[:, 0].mean()) * side_sign > 0.0
-                    ]
+        # Verify hierarchical rig parents (legs stay rooted at Y=0; upper_body -> head_group -> head/eyelids).
+        idx_of = {n["name"]: i for i, n in enumerate(doc_open["nodes"])}
+        self.assertIn(idx_of["legs"], doc_open["nodes"][0]["children"])
+        self.assertIn(idx_of["upper_body"], doc_open["nodes"][0]["children"])
+        self.assertIn(idx_of["head_group"], doc_open["nodes"][idx_of["upper_body"]]["children"])
+        self.assertIn(idx_of["gaster_group"], doc_open["nodes"][idx_of["upper_body"]]["children"])
+        self.assertIn(idx_of["eyelid_left"], doc_open["nodes"][idx_of["head_group"]]["children"])
+
+        # Geometric eyelid radial clearance: holds for symmetric (1.0/1.0) AND asymmetric Worker eyes (0.92/1.08).
+        for sl, sr in ((1.0, 1.0), (0.92, 1.08)):
+            for b_val in (0.0, 0.25, 0.5, 0.75, 1.0):
+                sc_b, a_b = base_ant.build_base_ant(
+                    f"clearance_{b_val}", blink=b_val, eye_scale_left=sl, eye_scale_right=sr
                 )
-                r_eye_max = float(np.linalg.norm(eye_verts - pivot[None, :], axis=1).max())
-                lid_verts = np.vstack([p.positions.astype(np.float64) for p in w_parts if p.name == lid_name])
-                r_lid_inner = float(np.linalg.norm(lid_verts - pivot[None, :], axis=1).min())
-                self.assertGreaterEqual(
-                    r_lid_inner - r_eye_max,
-                    0.006,
-                    f"{lid_name} at blink={b_val}: clearance {r_lid_inner - r_eye_max:.5f} < 0.006",
-                )
+                w_parts = sc_b.world_parts()
+                for side_sign, eye_key, lid_name in ((1.0, "eye_left", "eyelid_left_shell"), (-1.0, "eye_right", "eyelid_right_shell")):
+                    pivot = np.asarray(a_b[eye_key], dtype=np.float64)
+                    eye_verts = np.vstack(
+                        [
+                            p.positions.astype(np.float64)
+                            for p in w_parts
+                            if p.material in ("eye_white", "eye_iris", "eye_pupil")
+                            and float(p.positions[:, 0].mean()) * side_sign > 0.0
+                        ]
+                    )
+                    r_eye_max = float(np.linalg.norm(eye_verts - pivot[None, :], axis=1).max())
+                    lid_verts = np.vstack([p.positions.astype(np.float64) for p in w_parts if p.name == lid_name])
+                    r_lid_inner = float(np.linalg.norm(lid_verts - pivot[None, :], axis=1).min())
+                    self.assertGreaterEqual(
+                        r_lid_inner - r_eye_max,
+                        0.006,
+                        f"{lid_name} ({sl}/{sr}) at blink={b_val}: clearance {r_lid_inner - r_eye_max:.5f} < 0.006",
+                    )
+
+        # attach_world_node preserves exact rest world bounds when specialists parent headgear to head_group.
+        sc_hat, a_hat = base_ant.build_base_ant("hat_attach")
+        hat_part = mesh_core.sphere(0.08, name="test_hat", material="gear_gold").translate(0.0, a_hat["head_top"][1] + 0.04, 0.02)
+        sc_hat.add("test_hat_node", hat_part)
+        b_before = sc_hat.bounds()
+        sc_hat.attach_world_node("test_hat_node", "head_group")
+        b_after = sc_hat.bounds()
+        self.assertTrue(np.allclose(b_before[0], b_after[0], atol=1e-5))
+        self.assertTrue(np.allclose(b_before[1], b_after[1], atol=1e-5))
+        gltf_writer.validate_glb(gltf_writer.scene_to_glb_bytes(sc_hat))
 
         # Validator rejects non-unit quaternion in animation track.
         bad_scene, _ = base_ant.build_base_ant("ant_bad_anim")

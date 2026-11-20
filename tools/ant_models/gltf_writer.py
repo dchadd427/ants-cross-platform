@@ -280,16 +280,32 @@ def scene_to_glb_bytes(scene: Any, *, embed_textures: bool = True) -> bytes:
     used_materials_set = set()
     active_nodes: List[Tuple[str, List[Any]]] = []
     any_uvs = False
-    for node_name in scene.node_names():
+    has_triangles = False
+    get_parent = getattr(scene, "get_node_parent", None)
+    hier_fn = getattr(scene, "hierarchy_node_names", None)
+    ordered_names = list(hier_fn()) if callable(hier_fn) else list(scene.node_names())
+    # Ensure any ancestor parent referenced via get_node_parent is included.
+    if callable(get_parent):
+        idx_scan = 0
+        seen_names = set(ordered_names)
+        while idx_scan < len(ordered_names):
+            par = get_parent(ordered_names[idx_scan])
+            if par is not None and par not in seen_names:
+                ordered_names.append(par)
+                seen_names.add(par)
+            idx_scan += 1
+
+    for node_name in ordered_names:
         parts = [p for p in scene.get_node(node_name) if len(p.indices) > 0]
+        active_nodes.append((node_name, parts))
         if parts:
-            active_nodes.append((node_name, parts))
+            has_triangles = True
             for p in parts:
                 used_materials_set.add(p.material)
                 if getattr(p, "uvs", None) is not None:
                     any_uvs = True
 
-    if not active_nodes:
+    if not has_triangles:
         raise ValueError(f"Scene {scene.name!r} contains no triangles to export")
 
     ordered_materials = [m for m in MATERIAL_ORDER if m in used_materials_set]
@@ -466,21 +482,35 @@ def scene_to_glb_bytes(scene: Any, *, embed_textures: bool = True) -> bytes:
                 }
             )
 
+        node_obj: Dict[str, Any] = {"name": node_name}
         if primitives:
             mesh_idx = len(meshes)
             meshes.append({"name": node_name, "primitives": primitives})
-            node_idx = len(nodes)
-            node_obj: Dict[str, Any] = {"name": node_name, "mesh": mesh_idx}
-            xf = get_xf(node_name) if callable(get_xf) else None
-            if xf is not None:
-                if any(abs(c) > 1e-7 for c in xf.translation):
-                    node_obj["translation"] = [round(float(c), 6) for c in xf.translation]
-                node_obj["rotation"] = [round(float(c), 6) for c in xf.rotation]
-                if any(abs(c - 1.0) > 1e-7 for c in xf.scale):
-                    node_obj["scale"] = [round(float(c), 6) for c in xf.scale]
-            nodes.append(node_obj)
-            nodes[0]["children"].append(node_idx)
-            node_name_to_idx[node_name] = node_idx
+            node_obj["mesh"] = mesh_idx
+        xf = get_xf(node_name) if callable(get_xf) else None
+        if xf is not None:
+            if any(abs(c) > 1e-7 for c in xf.translation):
+                node_obj["translation"] = [round(float(c), 6) for c in xf.translation]
+            node_obj["rotation"] = [round(float(c), 6) for c in xf.rotation]
+            if any(abs(c - 1.0) > 1e-7 for c in xf.scale):
+                node_obj["scale"] = [round(float(c), 6) for c in xf.scale]
+        node_idx = len(nodes)
+        nodes.append(node_obj)
+        node_name_to_idx[node_name] = node_idx
+
+    # Wire parent -> child hierarchy (root-level nodes attach under nodes[0]).
+    for node_name, _ in active_nodes:
+        n_idx = node_name_to_idx[node_name]
+        parent_name = get_parent(node_name) if callable(get_parent) else None
+        if parent_name is not None:
+            if parent_name not in node_name_to_idx:
+                raise ValueError(f"Node {node_name!r} references missing parent {parent_name!r}")
+            p_idx = node_name_to_idx[parent_name]
+            if p_idx == n_idx:
+                raise ValueError(f"Node {node_name!r} cannot be its own parent")
+            nodes[p_idx].setdefault("children", []).append(n_idx)
+        else:
+            nodes[0]["children"].append(n_idx)
 
     gltf_animations: List[Dict[str, Any]] = []
     for clip in getattr(scene, "animations", ()) or ():
@@ -900,6 +930,26 @@ def validate_glb(path_or_bytes: Union[str, os.PathLike, bytes, bytearray, memory
                 if not (0 <= ti < len(doc_textures)):
                     raise ValueError(f"Material {m_i} {slot_name}: texture index {ti} out of range")
     node_names = [str(n.get("name", f"node_{i}")) for i, n in enumerate(doc["nodes"])]
+    # Validate node.children DAG (in-range indices, single parent, zero cycles).
+    n_total = len(doc["nodes"])
+    parent_of: Dict[int, int] = {}
+    for n_i, n in enumerate(doc["nodes"]):
+        for child_raw in n.get("children", ()):
+            c_idx = int(child_raw)
+            if not (0 <= c_idx < n_total):
+                raise ValueError(f"Node {n_i}: child index {c_idx} out of range")
+            if c_idx in parent_of:
+                raise ValueError(f"Node {c_idx}: multiple parents ({parent_of[c_idx]} and {n_i})")
+            parent_of[c_idx] = n_i
+    for start in range(n_total):
+        seen_chain = set()
+        cur = start
+        while cur in parent_of:
+            if cur in seen_chain:
+                raise ValueError(f"Cycle detected in glTF node hierarchy at node {cur}")
+            seen_chain.add(cur)
+            cur = parent_of[cur]
+
     world_mats = _compute_world_matrices(doc)
     mesh_nodes: Dict[int, List[int]] = {}
     for n_i, n in enumerate(doc["nodes"]):

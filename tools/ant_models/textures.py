@@ -11,9 +11,14 @@ import math
 import struct
 import zlib
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+
+try:
+    from .materials import get_material
+except ImportError:
+    from materials import get_material  # type: ignore
 
 DEFAULT_TEXTURE_SIZE = 256
 FAMILY_TEXTURE_SIZES: Dict[str, int] = {
@@ -355,3 +360,140 @@ def get_texture_pack(family: str, size: Optional[int] = None) -> TexturePack:
     if family == "rubber":
         return _build_rubber_pack(resolved)
     raise KeyError(f"Unknown texture family {family!r}; expected chitin, cloth, metal, or rubber")
+
+
+# ---------------------------------------------------------------------------
+# Fast vectorized baked crevice and contact Ambient Occlusion (COLOR_0)
+# ---------------------------------------------------------------------------
+
+def _norm_rows(vecs: np.ndarray) -> np.ndarray:
+    norms = np.linalg.norm(vecs, axis=1, keepdims=True)
+    out = np.empty_like(vecs, dtype=np.float64)
+    good = norms[:, 0] > 1e-10
+    out[good] = vecs[good] / norms[good]
+    if not np.all(good):
+        out[~good] = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+    return out
+
+
+def _box_blur_3d(grid: np.ndarray, passes: int) -> np.ndarray:
+    g = grid.astype(np.float32, copy=True)
+    for _ in range(passes):
+        for axis in (0, 1, 2):
+            p = np.pad(g, [(1, 1) if a == axis else (0, 0) for a in range(3)], mode="edge")
+            sl0 = [slice(0, -2) if a == axis else slice(None) for a in range(3)]
+            sl1 = [slice(1, -1) if a == axis else slice(None) for a in range(3)]
+            sl2 = [slice(2, None) if a == axis else slice(None) for a in range(3)]
+            g = (p[tuple(sl0)] + 2.0 * p[tuple(sl1)] + p[tuple(sl2)]) * 0.25
+    return g
+
+
+def _sample_grid_trilinear(grid: np.ndarray, coords: np.ndarray) -> np.ndarray:
+    res = grid.shape[0]
+    c = np.clip(coords, 0.0, float(res - 1.001))
+    i0 = np.floor(c).astype(np.int32)
+    f = (c - i0).astype(np.float32)
+    i1 = np.minimum(i0 + 1, res - 1)
+    x0, y0, z0 = i0[:, 0], i0[:, 1], i0[:, 2]
+    x1, y1, z1 = i1[:, 0], i1[:, 1], i1[:, 2]
+    fx, fy, fz = f[:, 0], f[:, 1], f[:, 2]
+    c00 = grid[x0, y0, z0] * (1.0 - fx) + grid[x1, y0, z0] * fx
+    c10 = grid[x0, y1, z0] * (1.0 - fx) + grid[x1, y1, z0] * fx
+    c01 = grid[x0, y0, z1] * (1.0 - fx) + grid[x1, y0, z1] * fx
+    c11 = grid[x0, y1, z1] * (1.0 - fx) + grid[x1, y1, z1] * fx
+    return (c00 * (1.0 - fy) + c10 * fy) * (1.0 - fz) + (c01 * (1.0 - fy) + c11 * fy) * fz
+
+
+def _local_concavity(positions: np.ndarray, normals: np.ndarray, indices: np.ndarray) -> np.ndarray:
+    """Measure local mesh concavity in [0, 1] for crisp groove/seam shading."""
+    n = len(positions)
+    if n == 0 or len(indices) == 0:
+        return np.zeros(n, dtype=np.float32)
+    pos = positions.astype(np.float64)
+    idx = indices.reshape(-1, 3)
+    acc = np.zeros_like(pos)
+    cnt = np.zeros(n, dtype=np.float64)
+    for a, b in ((0, 1), (1, 2), (2, 0)):
+        ia, ib = idx[:, a], idx[:, b]
+        np.add.at(acc, ia, pos[ib])
+        np.add.at(acc, ib, pos[ia])
+        np.add.at(cnt, ia, 1.0)
+        np.add.at(cnt, ib, 1.0)
+    avg = acc / np.maximum(1.0, cnt[:, None])
+    conc = np.sum((avg - pos) * normals.astype(np.float64), axis=1)
+    return np.clip(conc * 38.0, 0.0, 1.0).astype(np.float32)
+
+
+def bake_scene_ao(scene: Any, *, grid_res: int = 56) -> Any:
+    """Bake inter-part and crevice Ambient Occlusion into every MeshPart.colors (COLOR_0).
+
+    Composes parent->child world transforms and excludes translucent BLEND glass
+    materials as occluders so eyes behind scuba masks and goggles stay crisp and bright.
+    """
+    bmin, bmax = scene.bounds()
+    pad = 0.14
+    origin = bmin.astype(np.float64) - pad
+    extent = np.maximum(0.25, (bmax - bmin).astype(np.float64) + 2.0 * pad)
+    step = float(extent.max()) / float(grid_res - 1)
+    inv_step = 1.0 / step
+
+    occ_pts: List[np.ndarray] = []
+    for k, parts in scene.nodes.items():
+        if not parts:
+            continue
+        mat = scene.get_world_matrix(k)
+        for p in parts:
+            spec = get_material(p.material)
+            if spec.resolved_alpha_mode() == "BLEND":
+                continue
+            wp = p.transform(mat) if mat is not None else p
+            occ_pts.append(wp.positions.astype(np.float64))
+            idx = wp.indices.reshape(-1, 3)
+            if len(idx) > 0:
+                tri_c = (wp.positions[idx[:, 0]] + wp.positions[idx[:, 1]] + wp.positions[idx[:, 2]]) / 3.0
+                occ_pts.append(tri_c.astype(np.float64))
+
+    if not occ_pts:
+        return scene
+
+    all_occ = np.vstack(occ_pts)
+    grid = np.zeros((grid_res, grid_res, grid_res), dtype=np.float32)
+    vox = np.clip(np.round((all_occ - origin[None, :]) * inv_step).astype(np.int32), 0, grid_res - 1)
+    np.add.at(grid, (vox[:, 0], vox[:, 1], vox[:, 2]), 0.45)
+    grid = np.clip(grid, 0.0, 1.0)
+    occ_fine = _box_blur_3d(grid, 1)
+    occ_broad = _box_blur_3d(grid, 3)
+
+    for k, parts in scene.nodes.items():
+        if not parts:
+            continue
+        mat = scene.get_world_matrix(k)
+        for p in parts:
+            spec = get_material(p.material)
+            if spec.resolved_alpha_mode() == "BLEND":
+                p.colors = np.ones((len(p.positions), 3), dtype=np.float32)
+                continue
+            wp = p.transform(mat) if mat is not None else p
+            pos = wp.positions.astype(np.float64)
+            nrm = wp.normals.astype(np.float64)
+
+            ref = np.where(np.abs(nrm[:, 1:2]) < 0.85, np.array([[0.0, 1.0, 0.0]]), np.array([[1.0, 0.0, 0.0]]))
+            t1 = _norm_rows(np.cross(nrm, ref))
+            t2 = np.cross(nrm, t1)
+
+            occ = np.zeros(len(pos), dtype=np.float32)
+            for r_off, w, g_src in ((0.032, 0.24, occ_fine), (0.068, 0.24, occ_broad), (0.120, 0.16, occ_broad)):
+                occ += w * _sample_grid_trilinear(g_src, (pos + r_off * nrm - origin[None, :]) * inv_step)
+            for d_vec in (nrm + 0.72 * t1, nrm - 0.72 * t1, nrm + 0.72 * t2, nrm - 0.72 * t2):
+                d_u = _norm_rows(d_vec)
+                occ += 0.09 * _sample_grid_trilinear(occ_broad, (pos + 0.064 * d_u - origin[None, :]) * inv_step)
+
+            conc = _local_concavity(wp.positions, wp.normals, wp.indices)
+            gnd = np.clip(pos[:, 1] / 0.10, 0.0, 1.0).astype(np.float32)
+            gnd_ao = 0.82 + 0.18 * gnd
+
+            ao = (1.0 - np.clip(occ * 0.72 + conc * 0.24, 0.0, 0.58)) * gnd_ao
+            floor_ao = 0.78 if p.material in ("eye_white", "eye_iris", "eye_pupil") else 0.44
+            ao = np.clip(ao, floor_ao, 1.0).astype(np.float32)
+            p.colors = np.column_stack([ao, ao, ao]).astype(np.float32)
+    return scene

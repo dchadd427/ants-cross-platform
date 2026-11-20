@@ -22,7 +22,7 @@ except ImportError:
     HAS_NUMPY = False
 
 if HAS_NUMPY:
-    from .base_ant import EYELID_CLOSED_ANGLE, build_base_ant
+    from .base_ant import EYELID_CLOSED_ANGLE, add_idle_animation, build_base_ant
     from .mesh_core import (
         AnimationChannel,
         AnimationClip,
@@ -70,6 +70,7 @@ __all__ = [
     "validate_glb",
     "write_glb",
     "EYELID_CLOSED_ANGLE",
+    "add_idle_animation",
     "AnimationChannel",
     "AnimationClip",
     "MeshPart",
