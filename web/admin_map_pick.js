@@ -210,7 +210,7 @@
             function onKey(e) {
                 if (e.key === 'Escape') { close(); return; }
                 if (e.key !== 'Tab') return;
-                var items = dlg.querySelectorAll(FOCUSABLE).filter(function (n) { return !n.disabled && !n.hidden; }), now = doc.activeElement;
+                var items = Array.prototype.slice.call(dlg.querySelectorAll(FOCUSABLE)).filter(function (n) { return !n.disabled && !n.hidden; }), now = doc.activeElement;          // (a NodeList has no filter)
                 if (!items.length) return;
                 var at = items.indexOf(now);
                 if (at < 0 || (e.shiftKey && at === 0) || (!e.shiftKey && at === items.length - 1)) { e.preventDefault(); items[e.shiftKey ? items.length - 1 : 0].focus(); }

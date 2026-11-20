@@ -10,7 +10,10 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var CAP = 8;                                                // the limit of matches at once (the server's kBotMatchesMax says it too, in `cap`)
+    var SCHEDULE_MAX = 8;                                       // the most matches that one run of a schedule starts (a schedule keeps its own limit; the server's kBotScheduleMax says it too)
+    var COUNT_MAX = 10000;                                      // the most matches that one start asks for, and that wait in all (the server says both in `queue_max`)
+    var CAP_FALLBACK = 80, KEEP_PER_HOUR = 30;                  // the number that run at once until the server has said (`cap`), and the replays of bot matches that the store keeps an hour (docs/SERVER_REPLAYS.md)
+    var SHOWN = 5;                                              // the running matches that the list shows before its button "Show all"
     var RULES = [['highest-score', 'Highest score'], ['187', '187'], ['random', 'Random']];
     var COUNTS = [['2', '2'], ['3', '3'], ['4', '4'], ['random', 'Random']];
     var LEVELS = [['rmh', 'Random: Medium/Hard'], ['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard'], ['random', 'Random: any level']];
@@ -28,7 +31,7 @@
     var EVERY_MAX_MIN = 120;                                    // the longest spacing of a batch, in minutes (the server's kBotSpacingMaxS says it too)
     var CATALOG_STALE_MS = 60000;                               // the list of the server's maps is asked again when it is older than this and a box wants it
     var CHECK_AGAIN_MS = 2000;                                  // while the server has not judged every map yet, the page asks again at this interval
-    var RUN_AGAIN_MS = 20000;                                   // while starts wait for their time, the Running list is asked again at this interval
+    var RUN_AGAIN_MS = 20000;                                   // while a queue has starts to come, the Running list is asked again at this interval
     var OFF_LINE = 'Bot matches are not available on this server.';
     var NO_REPLAYS_LINE = 'This server keeps no replays, so it plays no bot matches: a match that nobody could look at again is not played.';
 
@@ -39,19 +42,22 @@
         for (var i = 0; i < 4; i++) out.push(list && known.indexOf(list[i]) >= 0 ? list[i] : 'rmh');
         return out;
     }
-    function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+    function plural(n, one, many) { return thousands(n) + ' ' + (n === 1 ? one : many); }
     function minutesAgo(seconds, nowMs) { return Math.max(0, Math.floor((nowMs / 1000 - seconds) / 60)); }
     // the spacing of a batch in words: "one every 3 minutes", "one every 1.5 minutes", "one every 1 minute"
     function spacingWords(everyS) { var m = Math.floor(everyS / 60), half = everyS % 60 !== 0; return 'one every ' + m + (half ? '.5' : '') + (m === 1 && !half ? ' minute' : ' minutes'); }
     // a time span of whole or half minutes in words: "12 minutes", "1.5 minutes", "30 seconds"
     function inWords(sec) { var m = Math.floor(sec / 60), half = sec % 60 !== 0; return m === 0 ? sec + ' seconds' : m + (half ? '.5' : '') + (m === 1 && !half ? ' minute' : ' minutes'); }
-    // when a start that waits comes, from now (wall-clock seconds of the server): "starts in 6 min", "starts in under a minute", or what holds it back
-    function startsIn(w, nowMs) {
-        var left = w.at - nowMs / 1000;
-        if (w.held) return 'its time has come: it waits for a free place';
-        if (left <= 0) return 'starts now';
-        return left < 60 ? 'starts in under a minute' : 'starts in ' + Math.ceil(left / 60) + ' min';
+    // when the next start of a queue comes, from now (wall-clock seconds of the server): "next start in 6 min", "next start in 4 s", what holds it back, or that it comes as soon as a match ends
+    function nextStart(q, nowMs) {
+        var left = q.at - nowMs / 1000;
+        if (q.held) return 'its time has come: it waits for a free place';
+        if (!(q.at > 0)) return 'the next one starts as soon as one ends';
+        if (left <= 0) return 'next start now';
+        return left < 60 ? 'next start in ' + Math.ceil(left) + ' s' : 'next start in ' + Math.ceil(left / 60) + ' min';
     }
+    // a number in the thousands: "1,000"
+    function thousands(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
     // what the box of the spacing holds, in seconds: whole or half minutes from 0 to 120 (a comma is a point too); -1 for anything else
     function everySeconds(text) {
         var t = String(text).replace(/^\s+|\s+$/g, '').replace(',', '.');
@@ -124,6 +130,35 @@
             add(f, l, row);
             return { box: f, label: l, get: function () { return cur; }, set: function (n) { cur = n; out.textContent = String(cur); } };
         }
+        // a whole number from min to max in a box, with the chips that set it; an entry that is not one is refused in a line under the box, and the choice then has no count (-1: Start is off)
+        function numberBox(labelText, name, min, max, value, onChange) {
+            var f = el('div', 'f'), l = el('label', null, labelText), row = el('div', 'cnt'), inp = el('input', 'tinput'), chips = el('span', 'chips'), bad = el('div', 'fh bad'), cur = value;
+            l.setAttribute('for', name);
+            inp.id = name;
+            inp.type = 'text';
+            inp.setAttribute('inputmode', 'numeric');
+            inp.setAttribute('autocomplete', 'off');
+            inp.value = String(cur);
+            bad.id = name + '-bad';
+            bad.textContent = 'Use a whole number from ' + min + ' to ' + thousands(max) + '.';
+            function paint() { Array.prototype.slice.call(chips.children).forEach(function (c) { c.setAttribute('aria-pressed', String(Number(c.getAttribute('data-n')) === cur)); }); }
+            function line(on) {                                                           // (the refusal is in the page only while it is true)
+                if (on && !bad.parentNode) { add(f, bad); inp.setAttribute('aria-describedby', bad.id); } else if (!on && bad.parentNode) { f.removeChild(bad); inp.removeAttribute('aria-describedby'); }
+            }
+            function take(n) { cur = n; inp.className = 'tinput' + (n < 0 ? ' err' : ''); line(n < 0); paint(); onChange(cur); }
+            inp.addEventListener('input', function () { var t = inp.value.replace(/[ ,]/g, ''), n = /^[0-9]{1,6}$/.test(t) ? parseInt(t, 10) : -1; take(n >= min && n <= max ? n : -1); });
+            [1, 10, 100, 1000].forEach(function (n) {
+                var c = el('button', 'chip', thousands(n));
+                c.type = 'button';
+                c.setAttribute('data-n', String(n));
+                c.addEventListener('click', function () { inp.value = String(n); take(n); });
+                add(chips, c);
+            });
+            add(row, add(el('div', 'inw'), inp), chips);
+            add(f, l, row);
+            paint();
+            return { box: f, label: l, get: function () { return cur; }, set: function (n) { if (n < 0 || n === cur) return; cur = n; inp.value = String(n); inp.className = 'tinput'; line(false); paint(); } };
+        }
         function selectBox(id) {
             var w = el('div', 'sel'), s = el('select');
             s.id = id;
@@ -139,7 +174,8 @@
             if (typeof v.every_s !== 'number') v.every_s = 0;
             var node = el('div'), first = withSpacing === 'run' ? 'when the schedule runs' : 'now';
             function changed() { sync(); listeners.forEach(function (fn) { fn(v); }); }
-            var count = stepper(countLabel, pre + '-count', 1, CAP, v.count, function (n) { v.count = n; changed(); });
+            var countChanged = function (n) { v.count = n; changed(); };
+            var count = withSpacing === 'now' ? numberBox(countLabel, pre + '-count', 1, ctx.queueMax(), v.count, countChanged) : stepper(countLabel, pre + '-count', 1, SCHEDULE_MAX, v.count, countChanged);       // (Start now takes up to 10,000; a schedule keeps its own limit of 8)
             var countHint = el('div', 'fh');
             add(count.box, countHint);
 
@@ -190,7 +226,7 @@
                 ctx.ensure();
                 mapBtn.setAttribute('aria-expanded', 'true');
                 picker.open({
-                    host: ctx.host, title: 'Choose a map', mode: 'choose', current: v.map, cap: CAP, randomMax: ctx.randomMax(), maps: ctx.maps, randoms: randomRows, rotFiles: ctx.rotFiles,
+                    host: ctx.host, title: 'Choose a map', mode: 'choose', current: v.map, cap: ctx.cap(), randomMax: ctx.randomMax(), maps: ctx.maps, randoms: randomRows, rotFiles: ctx.rotFiles,
                     onPick: function (m) { v.map = m.file; picker.close(); changed(); },
                     onClose: function () { mapBtn.setAttribute('aria-expanded', 'false'); mapBtn.focus(); }
                 });
@@ -235,11 +271,11 @@
             function sync() {
                 var nb = nbots(), mp = mapOf(v.map), randomMax = ctx.randomMax();
                 count.set(v.count);
-                countHint.textContent = countWords;
+                countHint.textContent = typeof countWords === 'function' ? countWords() : countWords;
                 everyF.hidden = !(withSpacing && v.count > 1);
                 everyHint.className = 'fh' + (v.every_s < 0 ? ' bad' : '');
                 everyI.className = 'tinput' + (v.every_s < 0 ? ' err' : '');
-                everyHint.textContent = v.every_s < 0 ? 'Whole or half minutes, from 0 to ' + EVERY_MAX_MIN + '.' : v.every_s === 0 ? 'All ' + v.count + ' start at once. Give a time to start the first ' + first + ' and the others one after another.' :
+                everyHint.textContent = v.every_s < 0 ? 'Whole or half minutes, from 0 to ' + EVERY_MAX_MIN + '.' : v.every_s === 0 ? 'All ' + thousands(v.count) + ' start as fast as the server has room. Give a time to start the first ' + first + ' and the others one after another.' :
                     'The first starts ' + first + ', then ' + spacingWords(v.every_s) + ': the last in ' + inWords((v.count - 1) * v.every_s) + '. A start that waits is lost if the server restarts' + (withSpacing === 'run' ? '.' : '; a schedule is kept.');
                 paintMapBtn();
                 mapHint.className = 'fh';
@@ -288,8 +324,8 @@
         }
 
         function render(host) {
-            var st = { matches: [], waiting: [], schedules: null, maps: [], checking: 0, randomMax: 30, catAt: -1, catBusy: null, checkTimer: 0, checkTries: 0, runTimer: 0, rotLists: null, rotDefaults: {}, rotMax: 100, rotFiles: {}, draft: {}, dirty: {}, rotMsg: null, rotBusy: false,
-                scheduling: true, places: null, replays: true, off: false, busy: false, saving: false, keyOff: null, editing: null, loaded: false, dead: false, capShown: false };
+            var st = { matches: [], queues: [], cap: CAP_FALLBACK, queueMax: COUNT_MAX, showAll: false, schedules: null, maps: [], checking: 0, randomMax: 30, catAt: -1, catBusy: null, checkTimer: 0, checkTries: 0, runTimer: 0, rotLists: null, rotDefaults: {}, rotMax: 100, rotFiles: {}, draft: {}, dirty: {}, rotMsg: null, rotBusy: false,
+                scheduling: true, places: null, replays: true, off: false, busy: false, saving: false, keyOff: null, editing: null, loaded: false, dead: false, noReplaysShown: false };
             h.setCleanup(function () {
                 st.dead = true;
                 picker.close();
@@ -299,6 +335,8 @@
             var startMsg = el('div'), runBox = el('div'), schedBox = el('div');
             var ctx = {                                                   // (what the forms and the lists ask the section when they need it)
                 host: host, live: {},
+                cap: function () { return st.cap; },
+                queueMax: function () { return st.queueMax; },
                 maps: function () { return st.maps; },
                 randomMax: function () { return st.randomMax; },
                 rotFiles: function () { return st.rotFiles; },
@@ -307,27 +345,31 @@
             };
 
             // ---- Start now ----
-            var now = panel('Start now', 'Starts bot matches at once or one after another, each in a room of its own on the live list. They play at the normal speed, as long as the map’s own time limit, and are kept as replays.');
+            var now = panel('Start now', 'Starts bot matches at once or one after another, each in a room of its own on the live list. They play at the normal speed, as long as the map’s own time limit. A few of them an hour are kept as replays.');
             now.className += ' b-now';
             var nowForm = el('div'), startBtn = null, picked = null;
             add(now, nowForm);
 
-            function startLabel() { var n = picked ? picked.value().count : 1; return 'Start ' + plural(n, 'bot match', 'bot matches'); }
+            function startLabel() { var n = picked ? picked.value().count : 1; return n < 1 ? 'Start bot matches' : 'Start ' + n + (n === 1 ? ' bot match' : ' bot matches'); }
+            // what Start now explains under the number: how many run at once, that the rest wait, that people come first, and how many are kept as replays
+            function nowCountWords() {
+                return 'Any number up to ' + thousands(st.queueMax) + '. ' + st.cap + ' run at once; the rest wait and start as each one ends, and people’s matches always come first. ' + KEEP_PER_HOUR + ' an hour are kept as replays; the others are played but not kept (watch them live while they run).';
+            }
             function drawNow() {
                 nowForm.textContent = '';
-                picked = choices('now', ctx, defaults(), 'Matches to start', CAP + ' at the most, with the ones that run now.', 'now');
+                picked = choices('now', ctx, defaults(), 'Matches to start', nowCountWords, 'now');
                 startBtn = button(startLabel(), 'big ok', function () { start(); });
-                picked.onChange(function () { startBtn.textContent = startLabel(); });
+                picked.onChange(function () { startBtn.textContent = startLabel(); paintStart(); });
                 add(nowForm, picked.node, startMsg, add(el('div', 'startrow'), startBtn));
                 paintStart();
             }
-            function paintStart() {
-                var full = st.matches.length >= CAP, off = full || !st.replays;
+            function paintStart() {                                                       // Start is never "full": a start that finds the places taken is queued by the server; it is off for a count that is not a number and for a server that keeps no replays
+                var off = picked.value().count < 1 || !st.replays;
                 startBtn.disabled = off;
                 startBtn.className = 'btn big ok' + (off ? ' dis' : '');
-                if (!st.replays) { say('bad', [NO_REPLAYS_LINE]); st.capShown = false; }
-                else if (full && !startMsg.firstChild) { say('bad', ['All ' + CAP + ' places for bot matches are taken. Stop one, or wait until one ends.']); st.capShown = true; }
-                else if (!full && st.capShown) { say('bad', null); st.capShown = false; }
+                picked.refresh();                                                         // (the words under the number name the limit that the server last said)
+                if (!st.replays) { say('bad', [NO_REPLAYS_LINE]); st.noReplaysShown = true; }
+                else if (st.noReplaysShown) { say('bad', null); st.noReplaysShown = false; }
             }
             function say(cls, parts) {
                 startMsg.textContent = '';
@@ -336,24 +378,12 @@
                 parts.forEach(function (n) { add(m, typeof n === 'string' ? doc.createTextNode(n) : n); });
                 add(startMsg, m);
             }
-            // why a batch started fewer matches than it asked for (the server says it in stopped_for)
-            function stoppedWords(why) {
-                if (why === 'places') return 'The rest would take more places than bot matches may have.';
-                if (why === 'busy') return 'People’s matches began to use most of the server’s places, so the rest were not started.';
-                if (why === 'cap') return 'The limit of ' + CAP + ' bot matches at once was reached, so the rest were not started.';
-                if (why === 'budget') return 'The store has no room left this hour for more recordings of bot matches, so the rest were not started.';
-                if (why === 'queue') return 'The server holds only so many starts that wait for their time, so the rest were not started.';
-                return 'The rest could not be started.';
-            }
             function failure(r) {
                 var e = r.json && r.json.error, j = r.json || {};
-                if (r.status === 409 && e === 'cap') return ['Not started: ' + plural(j.running, 'bot match runs', 'bot matches run') + ' and ' + plural(j.asked, 'more would', 'more would') + ' be over the limit of ' + CAP + '. Start ' + j.free + ' or fewer, or stop some first.'];
-                if (r.status === 409 && e === 'queue_full') return ['Not started: ' + plural(j.asked, 'more start', 'more starts') + ' would wait with the ' + j.waiting + ' that wait already, and the server holds ' + j.max + ' at the most. Stop some first, or choose fewer matches.'];
-                if (r.status === 409 && e === 'busy') return ['Not started: people’s matches use ' + j.people + ' of the server’s ' + j.total + ' places. Bot matches wait, so that people are not slowed. Try again in a few minutes.'];
-                if (r.status === 409 && e === 'places') return ['Not started: these matches would take more places than bot matches may have (' + j.used + ' of ' + j.max + ' are taken). Choose a smaller map or fewer matches, or stop some first.'];
+                if (r.status === 409 && e === 'queue_full') return ['Not started: ' + plural(j.asked, 'more start', 'more starts') + ' would wait with the ' + thousands(j.waiting) + ' that wait already, and the server holds ' + thousands(j.max) + ' at the most. Stop the rest of a batch first, or choose fewer matches.'];
                 if (r.status === 409 && e === 'map_187') return ['Not started: ISLANDS is not played in 187 (nobody could be struck there). Choose another map or the rules Highest score.'];
                 if (r.status === 409 && e === 'no_map') return ['Not started: that map cannot be played now. Choose another.'];
-                if (r.status === 409 && e === 'budget') return ['Not started: the store keeps only ' + (j.per_hour || 30) + ' recordings of bot matches an hour, and that many are kept or on their way. A match that would not be kept is not played. Try again later.'];
+                if (r.status === 400 && e === 'bad_count') return ['Not started: use a whole number of matches from 1 to ' + thousands(st.queueMax) + '.'];
                 if (r.status === 400 && e === 'bad_spacing') return ['Not started: start one every 0 to ' + EVERY_MAX_MIN + ' minutes, in whole or half minutes.'];
                 if (r.status === 503 && e === 'no_replays') return ['Not started: the server keeps no replays, and a match that nobody could look at again is not played.'];
                 if (r.status === 503 && e === 'bots_off') return [OFF_LINE];
@@ -361,18 +391,25 @@
                 if (r.status === 429) return ['Too many requests. Wait a few seconds and try again.'];
                 return ['That did not work. Reload the page.'];
             }
-            // what the page says of a batch that was started: the matches that go and, for a spacing, the starts that wait
+            // why the first start of a batch had to wait, in the server's word
+            function heldWords(why) {
+                if (why === 'places') return 'the server has no places left for more bot matches';
+                if (why === 'people') return 'people’s matches are using the server';
+                if (why === 'busy') return 'the server is busy';
+                return 'the limit of ' + st.cap + ' bot matches at once is reached';
+            }
+            // what the page says of a batch that was started: the matches that go now and the starts that wait (a spacing, or a place that must come free)
             function startedWords(j) {
-                var n = j.started || 0, q = j.queued || 0, asked = j.asked || n;
-                if (q) {
-                    return 'Started ' + plural(n, 'bot match', 'bot matches') + ' now. ' + plural(q, 'more waits', 'more wait') + ': ' + spacingWords(j.every_s) + ', the last in ' + inWords(q * j.every_s) + '. ' + (n + q < asked ? stoppedWords(j.stopped_for) + ' ' : '') +
-                        'A start that waits is lost if the server restarts. They show on the live list in a few seconds.';
-                }
-                return (asked && n < asked ? 'Started ' + n + ' of ' + plural(asked, 'bot match', 'bot matches') + '. ' + stoppedWords(j.stopped_for) + ' ' : 'Started ' + plural(n, 'bot match', 'bot matches') + '. ') + 'They show on the live list in a few seconds.';
+                var n = j.started || 0, q = j.queued || 0, asked = j.asked || n + q, tail = ' They show on the live list in a few seconds.';
+                if (!q) return 'Started ' + plural(n, 'bot match', 'bot matches') + '.' + tail;
+                if (!n) return 'Queued ' + plural(asked, 'bot match', 'bot matches') + ': none could start yet, because ' + heldWords(j.held) + '. They start as soon as there is room. A queue is lost if the server restarts.';
+                if (j.every_s) return 'Started ' + plural(n, 'bot match', 'bot matches') + ' now. ' + plural(q, 'more waits', 'more wait') + ': ' + spacingWords(j.every_s) + ', the last in ' + inWords(q * j.every_s) + '. A queue is lost if the server restarts.' + tail;
+                return 'Started ' + plural(n, 'bot match', 'bot matches') + ' now. ' + thousands(q) + ' more wait' + (q === 1 ? 's' : '') + ' and start as each one ends. A queue is lost if the server restarts.' + tail;
             }
             function start() {
                 if (st.busy) return;
                 var body = picked.value();
+                if (body.count < 1) return;
                 st.busy = true;
                 call('POST', '/admin/api/bot-matches', body).then(function (r) {
                     st.busy = false;
@@ -395,33 +432,42 @@
                 m.seats.forEach(function (s) { var sp = el('span'); add(sp, el('i', 'bdot c' + s.seat), doc.createTextNode((SEATS[s.seat] || '') + ' ' + (LEVEL_WORD[s.level] || s.level))); add(box, sp); });
                 return box;
             }
-            // what a start that waits is called: the choice of the map in words, or the map's name
-            function waitingName(w) {
-                var map = w.what && w.what.map;
-                if (map === 'random:rotation') return el('span', null, 'A map of the rotation');
-                if (map === 'random:original') return el('span', null, 'An original map');
-                if (map === 'random:players') return el('span', null, 'A players’ map');
-                return typed('span', null, w.name);
+            function remaining() { return st.queues.reduce(function (a, q) { return a + q.remaining; }, 0); }       // (the starts that wait, in all the queues)
+            // one row for a whole batch: its bar (how many have ended of all), what its numbers are, when the next one starts, and Stop the rest (the starts that wait; what runs goes on)
+            function queueRow(q) {
+                var r = el('div', 'brow bq'), l = el('div'), name = el('div', 'bn'), bar = el('div', 'meter'), fill = el('i'), bs = el('div', 'bs');
+                fill.style.width = (q.total ? Math.min(100, Math.round(q.finished * 100 / q.total)) : 0) + '%';
+                bar.setAttribute('role', 'img');
+                bar.setAttribute('aria-label', thousands(q.finished) + ' of ' + thousands(q.total) + ' done');
+                add(bar, fill);
+                add(name, el('span', null, 'Batch of ' + plural(q.total, 'match', 'matches')), el('span', 'rtag team', thousands(q.remaining) + ' waiting'), q.held ? el('span', 'tg warn', 'Waiting for room') : null);
+                add(bs, doc.createTextNode(thousands(q.finished) + ' done, ' + thousands(q.running) + ' running, ' + thousands(q.kept) + ' kept as replays · ' + nextStart(q, env.now()) + ' · ' + (q.schedule ? 'schedule ' : 'Start now by ')), typed('span', null, q.schedule || q.by), q.name ? doc.createTextNode(' · map ') : null, q.name ? typed('span', null, q.name) : null);
+                add(l, name, bar, bs);
+                var stop = button('Stop the rest', 'bad', function () { stopQueue(q); });
+                stop.setAttribute('aria-label', 'Stop the rest of the batch of ' + plural(q.total, 'match', 'matches'));
+                add(r, l, add(el('div', 'bb'), stop));
+                return r;
             }
             function drawRun() {
                 runBox.textContent = '';
-                var n = st.matches.length, k = st.waiting.length, pct = Math.min(100, Math.round(n * 100 / CAP));
+                var n = st.matches.length, k = remaining(), pct = Math.min(100, Math.round(n * 100 / st.cap));
                 var head = el('div', 'bhead'), cap = el('span', 'cap'), refresh = button('Refresh', 'sm', function () { loadAll(true); });
-                add(cap, el('b', null, String(n)), doc.createTextNode(' of ' + CAP + ' places taken'));
+                add(cap, el('b', null, String(n)), doc.createTextNode(' running, ' + st.cap + ' at once at the most'));
                 add(head, cap, refresh);
-                var meter = el('div', 'meter'), fill = el('i', n >= CAP ? 'b' : n >= 6 ? 'w' : '');
+                var meter = el('div', 'meter'), fill = el('i', n >= st.cap ? 'w' : '');
                 fill.style.width = pct + '%';
                 meter.setAttribute('role', 'img');
-                meter.setAttribute('aria-label', n + ' of ' + CAP);
+                meter.setAttribute('aria-label', n + ' of ' + st.cap);
                 add(meter, fill);
                 add(runBox, head, meter);
                 var title = run.querySelector('h2'), old = title.querySelector('.n');
                 if (old) title.removeChild(old);
                 add(title, el('span', 'n', '(' + n + ')'));
+                st.queues.forEach(function (q) { add(runBox, queueRow(q)); });
                 if (!n) add(runBox, el('p', 'none', 'No bot match is running.'));
                 else {
                     var list = el('div', 'blist');
-                    st.matches.forEach(function (m) {
+                    st.matches.slice(0, st.showAll ? st.matches.length : SHOWN).forEach(function (m) {
                         var r = el('div', 'brow'), l = el('div'), name = el('div', 'bn');
                         add(name, typed('span', null, m.name), el('span', 'rtag ' + (m.rules === '187' ? 'k187' : 'hs'), m.rules === '187' ? '187' : 'Highest score'), m.teams !== 'ffa' ? el('span', 'rtag team', 'Teams') : null, m.live ? null : el('span', 'tg warn', 'Starting'));
                         var bs = el('div', 'bs');
@@ -435,29 +481,28 @@
                         add(list, r);
                     });
                     add(runBox, list);
+                    if (n > SHOWN && !st.showAll) add(runBox, add(el('div', 'stopall'), button('Show all ' + thousands(n) + ' running matches', 'sm', function () { st.showAll = true; drawRun(); })));
                 }
-                if (k) {
-                    var wl = el('div', 'blist bwait');
-                    add(runBox, add(el('div', 'mgh'), el('b', null, 'Waiting for their time'), el('span', null, plural(k, 'start', 'starts'))), wl);
-                    st.waiting.forEach(function (w) {
-                        var r = el('div', 'brow wait'), l = el('div'), name = el('div', 'bn');
-                        add(name, waitingName(w), el('span', 'rtag team', w.n + ' of ' + w.of), w.what && w.what.rules !== 'random' ? el('span', 'rtag ' + (w.what.rules === '187' ? 'k187' : 'hs'), w.what.rules === '187' ? '187' : 'Highest score') : null, w.held ? el('span', 'tg warn', 'Waiting for a place') : null);
-                        var bs = el('div', 'bs');
-                        add(bs, doc.createTextNode(startsIn(w, env.now()) + ' · ' + (w.schedule ? 'schedule ' : 'Start now by ')), typed('span', null, w.schedule || w.by));
-                        add(l, name, bs);
-                        add(r, l, add(el('div', 'bb'), button('Stop', 'bad', function () { stopOne(w); })));
-                        add(wl, r);
-                    });
-                }
-                if (n || k) add(runBox, add(el('div', 'stopall'), button('Stop all ' + (n + k), 'bad', function () { askStopAll(); })));
+                if (n || k) add(runBox, add(el('div', 'stopall'), button('Stop all ' + thousands(n + k), 'bad', function () { askStopAll(); })));
                 var pl = st.places;
-                add(runBox, el('div', 'note', 'The limit is ' + CAP + ' bot matches at once, from the schedules and from Start now together. A start is also refused while people’s matches use most of the server' + (pl ? ': ' + pl.people + ' of its ' + pl.total + ' places now' : '') + '. A big map counts as more places. A start that waits is not kept if the server restarts: a schedule is.'));
+                add(runBox, el('div', 'note', 'Up to ' + st.cap + ' bot matches run at once, from the schedules and Start now together; more wait in a queue of ' + thousands(st.queueMax) + ' at the most. People’s matches come first' + (pl ? ': ' + pl.people + ' of the server’s ' + pl.total + ' places are theirs now' : '') + '. A big map counts as more places. A queue is lost if the server restarts: a schedule is not.'));
                 h.setRunning(n);
             }
             function stopOne(m) {
                 if (st.busy) return;
                 st.busy = true;
                 call('POST', '/admin/api/bot-matches/' + encodeURIComponent(m.id) + '/stop', {}).then(function (r) {
+                    st.busy = false;
+                    if (st.dead) return;
+                    if (r.status === 200 || (r.status === 404 && r.json && r.json.error === 'gone')) return loadAll(true);
+                    if (refused(r)) return;
+                    toast('That did not work. Reload the page.');
+                }, function () { st.busy = false; toast('The server did not answer. Try again.'); });
+            }
+            function stopQueue(q) {                                                       // the starts that wait of one batch are cancelled; the matches that run go on
+                if (st.busy) return;
+                st.busy = true;
+                call('POST', '/admin/api/bot-matches/' + encodeURIComponent(q.id) + '/stop', {}).then(function (r) {
                     st.busy = false;
                     if (st.dead) return;
                     if (r.status === 200 || (r.status === 404 && r.json && r.json.error === 'gone')) return loadAll(true);
@@ -493,7 +538,7 @@
                 shell.focus.focus();
             }
             function askStopAll() {
-                var n = st.matches.length, k = st.waiting.length;
+                var n = st.matches.length, k = remaining();
                 var what = n && k ? plural(n, 'bot match', 'bot matches') + ' and ' + plural(k, 'waiting start', 'waiting starts') : k ? plural(k, 'waiting start', 'waiting starts') : plural(n, 'bot match', 'bot matches');
                 ask('Stop all ' + what + '?', (n ? 'Every bot match on the server ends now, the ones that you started and the ones that a schedule started. A match that has run for 30 seconds is kept as a replay up to where it stopped. ' : '') + (k ? 'Every start that waits for its time is cancelled, so the batch ends. ' : '') + 'The schedules go on.', 'Stop all ' + (n + k), 'bad', function () {
                     call('POST', '/admin/api/bot-matches/stop-all', {}).then(function (r) {
@@ -619,7 +664,7 @@
                 }
                 drawWhen();
                 function sayForm(cls, parts) { msgBox.textContent = ''; if (!parts) return; var m = message(null, cls); parts.forEach(function (n) { add(m, doc.createTextNode(n)); }); add(msgBox, m); }
-                var what = choices('sc', ctx, s.what, 'Matches each time', '1 to ' + CAP + '. When fewer places are free at that time, it starts as many as fit.', 'run');
+                var what = choices('sc', ctx, s.what, 'Matches each time', '1 to ' + SCHEDULE_MAX + ': a schedule keeps its own limit. What does not fit at that time waits in the queue, as any start does.', 'run');
                 var onG = chipGroup('The schedule is', 'sc-on', [['on', 'On'], ['off', 'Off']], on ? 'on' : 'off', function (x) { on = x === 'on'; });
                 var save = button('Save', 'big ok', function () {
                     if (st.saving) return;                                                                     // (a second click while the first is on its way is the same save, not another schedule)
@@ -767,7 +812,7 @@
             function addMap(key) {
                 ctx.ensure();
                 picker.open({
-                    host: host, title: 'Add a map to ' + RULES_NAME[key], mode: 'add', rules: key, cap: CAP, randomMax: st.randomMax, doneLabel: 'Done', maps: ctx.maps, rotFiles: ctx.rotFiles,
+                    host: host, title: 'Add a map to ' + RULES_NAME[key], mode: 'add', rules: key, cap: st.cap, randomMax: st.randomMax, doneLabel: 'Done', maps: ctx.maps, rotFiles: ctx.rotFiles,
                     isIn: function (file) { return st.draft[key].some(function (e) { return e.file === file; }); },
                     onPick: function (m) {
                         st.draft[key].push(rotEntryOf(m));
@@ -798,7 +843,7 @@
                 });
             }
 
-            add(host, el('p', 'b-lead', 'Start bot matches now or by a schedule. They run on the game server like the matches of people, so they have a limit: ' + CAP + ' at once.'));
+            add(host, el('p', 'b-lead', 'Start bot matches now or by a schedule. They run on the game server like the matches of people, so only so many run at once: the rest wait in a queue, and people’s matches come first.'));
             var left = el('div', 'cc'), right = el('div', 'cc');
             add(left, now);
             add(right, run, sched);
@@ -858,7 +903,7 @@
             }
             // while starts wait for their time the Running list is asked again now and then, so that a start that came shows as a match that goes
             function planRun() {
-                if (!st.waiting.length || st.runTimer || st.dead || !env.setTimeout) return;
+                if (!remaining() || st.runTimer || st.dead || !env.setTimeout) return;
                 st.runTimer = env.setTimeout(function () { st.runTimer = 0; if (!st.dead) loadAll(true); }, RUN_AGAIN_MS);
             }
 
@@ -879,7 +924,9 @@
                         return;
                     }
                     st.matches = matches.status === 200 ? matches.json.matches || [] : [];
-                    st.waiting = matches.status === 200 ? matches.json.waiting || [] : [];
+                    st.queues = matches.status === 200 ? matches.json.queues || [] : [];
+                    st.cap = matches.status === 200 && matches.json.cap > 0 ? matches.json.cap : CAP_FALLBACK;
+                    st.queueMax = matches.status === 200 && matches.json.queue_max > 0 ? matches.json.queue_max : COUNT_MAX;
                     st.places = matches.status === 200 ? matches.json.places || null : null;
                     st.replays = matches.status === 200 ? matches.json.replays !== false : true;
                     if (cat) { applyOptions(rs[1]); applyRotation(rs[3]); afterCatalog(); }
@@ -910,5 +957,5 @@
     var LOG_ACTIONS = { bot_started: 'Started bot matches: ', bot_stopped: 'Stopped the bot match on ', bot_waiting_stopped: 'Cancelled a waiting start on ', bot_stopped_all: 'Stopped all bot matches: ', bot_schedule_added: 'Added the schedule ', bot_schedule_changed: 'Changed the schedule ', bot_schedule_on: 'Turned on the schedule ',
         bot_schedule_off: 'Turned off the schedule ', bot_schedule_deleted: 'Deleted the schedule ', bot_rotation_changed: 'Changed the rotation list ', bot_rotation_reset: 'Put the rotation list back to its defaults: ' };
 
-    return { make: make, logActions: LOG_ACTIONS, sidesWords: sidesWords, summary: summary, spacingWords: spacingWords, startsIn: startsIn, everySeconds: everySeconds };
+    return { make: make, logActions: LOG_ACTIONS, sidesWords: sidesWords, summary: summary, spacingWords: spacingWords, nextStart: nextStart, everySeconds: everySeconds };
 });
