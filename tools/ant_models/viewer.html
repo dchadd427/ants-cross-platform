@@ -8,6 +8,7 @@
   <title>Ants 3D Model Viewer</title>
   <link rel="stylesheet" href="viewer.css">
   <script src="viewer.js" defer></script>
+  <script src="viewer_version.js" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -20,6 +21,7 @@
         <span class="badge" id="badge-ant">Worker</span>
         <span class="badge" id="badge-team">Green</span>
         <span class="badge" id="badge-angle">Hero</span>
+        <span class="badge badge-version" id="badge-version" title="Loaded 3D build version" hidden></span>
       </div>
     </header>
 
@@ -163,5 +165,20 @@
       <p role="status" class="status-region" id="status-region">Initializing 3D viewer&hellip;</p>
     </footer>
   </div>
+
+  <dialog
+    id="update-dialog"
+    class="update-dialog"
+    role="alertdialog"
+    aria-labelledby="update-title"
+    aria-describedby="update-body"
+  >
+    <h2 id="update-title">New 3D Models Available</h2>
+    <p id="update-body">A newer build of the 3D ant models is ready.</p>
+    <div class="update-actions">
+      <button type="button" id="btn-refresh-now" class="update-primary">Refresh Now</button>
+      <button type="button" id="btn-refresh-later" class="update-secondary">Later</button>
+    </div>
+  </dialog>
 </body>
 </html>
