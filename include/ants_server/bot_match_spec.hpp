@@ -13,10 +13,13 @@
 
 namespace ants::server {
 
-/// The most matches of computer players that run at once on a server, from the schedules and from the admin page together (they all run on the server's one thread)
-inline constexpr size_t kBotMatchesMax = 8;
-/// The most places that they may take together (OnlineLimits::weight: every shipped map one place, a big map several); a start that would go past it is refused
-inline constexpr uint32_t kBotPlacesMax = 16;
+/// The most matches of computer players that run at once on a server, from the schedules and from the admin page together (they all run on the server's one thread). Measured: a match costs the thread about 2.4 ms for each
+/// second it plays on the maps of the rotation and up to 8 ms on the dearest maps, so 80 take about half a slower host's thread; the busy guard (kBotBusyGate) holds new starts back sooner when the loop is busier than that
+inline constexpr size_t kBotMatchesMax = 80;
+/// The most places that they may take together (OnlineLimits::weight: every shipped map one place, a big map several); a start that would go past it waits
+inline constexpr uint32_t kBotPlacesMax = 160;
+/// A new start waits while the server loop was busy more than this share of the last ten seconds (the loop's own meter, include/ants_server/loop_load.hpp): people's matches, a slow host and heavy maps all slow the queue by themselves
+inline constexpr double kBotBusyGate = 0.40;
 /// A start is refused while the matches of people use more than this part of the server's places (3 of every 4): people come first
 inline constexpr uint32_t kBotPeopleShareNumerator = 3;
 inline constexpr uint32_t kBotPeopleShareDenominator = 4;
@@ -29,8 +32,12 @@ inline constexpr size_t kBotRotationMax = 100;
 /// The spacing of a batch (BotWhat::every_s): whole steps of this many seconds, at most kBotSpacingMaxS (two hours)
 inline constexpr uint32_t kBotSpacingStepS = 30;
 inline constexpr uint32_t kBotSpacingMaxS = 7200;
-/// The starts that wait for their time, from every batch together (BotMatches): a batch that would hold more is refused
-inline constexpr size_t kBotWaitingMax = 32;
+/// The most matches one batch may ask for (BotWhat::count of Start now and of the chat's /bots), and the most starts that wait in all the queues together (BotMatches): a batch that would hold more is refused. A schedule's batch is 1 to kBotScheduleCountMax
+inline constexpr uint32_t kBotCountMax = 10000;
+inline constexpr size_t kBotQueueMax = 10000;
+inline constexpr size_t kBotScheduleCountMax = 8;
+/// The most queues (batches that still have starts to make) at a time
+inline constexpr size_t kBotBatchesMax = 50;
 /// The most map files that one call of the catalog (RoomManager::bot_map_options) loads and judges when their verdicts are not kept yet: the rest are listed as not checked, and the page asks again. The game loop never waits for the whole library
 inline constexpr size_t kBotCatalogLoads = 48;
 inline constexpr size_t kBotLoadAll = static_cast<size_t>(-1);
@@ -71,7 +78,7 @@ enum class BotRefusal : uint8_t {
     Cap,              // kBotMatchesMax matches of computer players go already
     Places,           // the match would take the places of the matches of computer players past kBotPlacesMax
     PeopleBusy,       // the matches of people use more than their share of the server's places
-    Budget,           // the replay store has no room left this hour for the recording of another match of computer players (ReplayStore::bot_saves_left): a match that would not be kept is not played
+    Busy,             // the server loop was busy more than kBotBusyGate of the last ten seconds
     Islands187,       // ISLANDS in 187: its water joins no two hills, so nobody could be struck
     NoMap,            // none of the maps that the choice names can be played now (or the server does not have the map)
     Failed            // a room could not be made
@@ -93,7 +100,7 @@ struct BotMapOption {
 
 /// A batch of matches: what Start now asks for and what a schedule starts each time it runs
 struct BotWhat {
-    uint32_t count{1};                                // 1 - kBotMatchesMax
+    uint32_t count{1};                                // 1 - kBotCountMax (a schedule's: 1 - kBotScheduleCountMax)
     uint32_t every_s{0};                              // the spacing: 0 starts every match at once; else the first starts now and each next one this many seconds after the one before (a multiple of kBotSpacingStepS, at most kBotSpacingMaxS)
     BotMatchSpec spec;
 };
@@ -108,9 +115,9 @@ struct BotSplit {
 const std::vector<BotSplit>& bot_splits(uint8_t bots);
 
 /// Reads a batch from the JSON that the admin page sends (and the database keeps): {"count", "map", "rules", "bots", "levels", "teams", "split", "every_s"} (the last may be left out: 0). False, with the error code that the page is told (`bad_count`, `bad_map`,
-/// `bad_rules`, `bad_bots`, `bad_levels`, `bad_teams`, `bad_split`, `bad_spacing`), for anything that is not one of the words. A map that is a file name is only checked for its shape here (a schedule may name a map that is gone; what a
+/// `bad_rules`, `bad_bots`, `bad_levels`, `bad_teams`, `bad_split`, `bad_spacing`); a count over `max_count` is `bad_count`, for anything that is not one of the words. A map that is a file name is only checked for its shape here (a schedule may name a map that is gone; what a
 /// room can play is decided when the match is made).
-bool parse_bot_what(const ctl::JsonValue& json, BotWhat& out, std::string& error);
+bool parse_bot_what(const ctl::JsonValue& json, BotWhat& out, std::string& error, uint32_t max_count = kBotCountMax);
 /// The same, as the page and the database have it
 ctl::JsonValue bot_what_json(const BotWhat& what);
 /// A short line for the admin log: "3 matches, rotation map, rules 187, 4 bots, one every 3 minutes"

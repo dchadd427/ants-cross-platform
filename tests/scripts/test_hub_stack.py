@@ -145,7 +145,7 @@ class TheServices(unittest.TestCase):
         for name, text in self.files.items():
             hub = service(text, "ants-hub")
             self.assertEqual(sorted(re.findall(r"(?m)^      (ANTS_[A-Z_]+):", hub)), ["ANTS_ADMIN_GATE_SECRET", "ANTS_HUB_ADMIN_GATE_SECRET", "ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_CLIENT_ID", "ANTS_HUB_DISCORD_CLIENT_SECRET",
-                                                                                     "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_MIN_ACCOUNT_DAYS", "ANTS_HUB_OWNER", "ANTS_HUB_PUBLIC_URL",
+                                                                                     "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_GAME_ADMIN_URL", "ANTS_HUB_MIN_ACCOUNT_DAYS", "ANTS_HUB_OWNER", "ANTS_HUB_PUBLIC_URL",
                                                                                      "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_ROLE_RECHECK_SECONDS"], name)
             for secret in ("ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_OWNER", "ANTS_HUB_ADMIN_GATE_SECRET", "ANTS_ADMIN_GATE_SECRET"):
                 self.assertIn("%s: ${%s:-}\n" % (secret, secret), hub + "\n", name)                  # (the bot's token, the server and the roles: from the stack's environment only, no value in the file)
@@ -258,7 +258,7 @@ class TheCode(unittest.TestCase):
 
     def test_the_sources_hold_no_invisible_or_look_alike_character(self):
         # a bidirectional control or a zero-width character in a source file could make the code read differently from what it does; the tricks are written as escapes (\\u202e) and the files are ASCII
-        names = ["Dockerfile.hub", os.path.join("docs", "HUB.md"), os.path.join("docs", "HUB_PICTURES.md")] + [os.path.join("hub", n) for n in os.listdir(os.path.join(REPO, "hub")) if n.endswith(".py")]
+        names = ["Dockerfile.hub", os.path.join("docs", "HUB.md"), os.path.join("docs", "HUB_COMMANDS.md"), os.path.join("docs", "HUB_PICTURES.md")] + [os.path.join("hub", n) for n in os.listdir(os.path.join(REPO, "hub")) if n.endswith(".py")]
         names += [os.path.join("tests", "scripts", n) for n in os.listdir(os.path.join(REPO, "tests", "scripts")) if n.startswith(("test_hub_", "hub_")) or n == "test_nginx_hub.py"]
         for name in names:
             with open(os.path.join(REPO, name), "rb") as f:

@@ -40,6 +40,7 @@
 #include "ants_net/turnlog.hpp"
 #include "ants_server/bot_match_spec.hpp"
 #include "ants_server/history_store.hpp"
+#include "ants_server/loop_load.hpp"
 #include "ants_server/map_store.hpp"
 #include "ants_server/restart_record.hpp"
 #include "ants_server/room.hpp"
@@ -231,10 +232,17 @@ public:
     void seed_bot_matches(uint32_t seed);
     /// One match of computer players now, with the choices of `spec`: the room's code when it was made, else the reason in `why` (and in `refusal`, when asked, the kind of reason). Nothing is made while the server keeps
     /// no replays (a match that nobody could watch or look at again), while kBotMatchesMax matches of this kind are going, while the people's matches use more than their share of the server's places
-    /// (kBotPeopleShareNumerator / kBotPeopleShareDenominator of --demo-rooms), while the match would take the places of the matches of computer players past kBotPlacesMax, or while the replay store has no room left this hour for the recording of another one (ReplayStore::bot_saves_left: a match that would not be kept is not played). A random choice of the map never takes a map of more than kBotRandomMaxMinutes. `mode`, when given, gets the rules that the
+    /// (kBotPeopleShareNumerator / kBotPeopleShareDenominator of --demo-rooms), while the match would take the places of the matches of computer players past kBotPlacesMax, or while the loop is busier than kBotBusyGate
+    /// (set_loop_load). The hour's budget of recordings of computer players no longer refuses a match: the match is played, and it is KEPT only while a slot of the budget is reserved for it (RoomSpec::keep_replay; a person's
+    /// recording is never pushed out). A random choice of the map never takes a map of more than kBotRandomMaxMinutes. `mode`, when given, gets the rules that the
     /// match was dealt (sim::GameMode as a byte). A choice that is a draw is drawn in an order that never changes (the map first, then the number of bots, each seat and its level, the seed, the teams, the rules), so
     /// the first match of a seed with the default choices is the same as it was before there were choices (docs/SERVER_REPLAYS.md "Matches of computer players").
-    bool start_bot_match(uint32_t now_ms, const BotMatchSpec& spec, std::string& code, std::string& why, BotRefusal* refusal = nullptr, uint8_t* mode = nullptr);
+    /// `keep`, when given, says whether the match will be kept as a replay when it ends (a slot of the hour's budget was reserved for it)
+    bool start_bot_match(uint32_t now_ms, const BotMatchSpec& spec, std::string& code, std::string& why, BotRefusal* refusal = nullptr, uint8_t* mode = nullptr, bool* keep = nullptr);
+    /// Whether the match with this room code is still a match of computer players that waits, loads or runs
+    bool bot_match_going(const std::string& code) const;
+    /// How busy the loop was in the last ten seconds, 0 to 100 (0 when no meter was given)
+    int loop_busy_percent(uint32_t now_ms);
     /// How many map files were loaded and judged for the lists of the matches of computer players since the server started (a verdict that is kept is not loaded again)
     size_t bot_map_loads() const noexcept { return bot_map_loads_; }
     /// The catalog: every map that the server has, for a match of computer players to name (the original's six, then the library, then every approved map of the players: a map of the test store never), each with its size,
@@ -261,6 +269,10 @@ public:
     size_t place_total() const noexcept { return limits_.demo_rooms; }
     /// Whether the matches of people use more than their share of the places: a start of computer players waits
     bool people_busy() const;
+    /// The loop's meter, which the main loop feeds (loop_load.hpp); null: no guard (the tests that do not give one). A start of a match of computer players waits while its share is over kBotBusyGate
+    void set_loop_load(LoopLoad* load) noexcept { loop_load_ = load; }
+    /// How many of the matches of computer players that go will be kept as replays (the slots that they hold of this hour's budget)
+    size_t bot_kept_count() const;
     /// Ends one match of computer players (the room's code), or all of them: the room is closed, and a match that ran 30 seconds is kept as a replay up to where it stopped. False for a code that is no such match; the
     /// number that were stopped.
     bool stop_bot_match(const std::string& code, uint32_t now_ms);
@@ -431,6 +443,7 @@ private:
     bool bot_gap_pending_{false};                // the matches of computer players are started kBotStartGapMs apart: until here (a flag and a time, not a time alone: a time that is older than 24.8 days reads as one to come)
     uint32_t next_bot_start_ms_{0};
     std::vector<std::string> bot_notes_;         // what the timer did, for the log (take_notices)
+    LoopLoad* loop_load_{nullptr};
     std::set<std::string> bot_maps_skipped_;     // the maps of the lists that the last match found that a room cannot play (each is named in the log once, not at every match)
     std::vector<BotRotationEntry> bot_rotation_[2]{bot_rotation_defaults(false), bot_rotation_defaults(true)};      // the two lists of the rotation: the original's game, 187
     size_t bot_warm_at_{0};                      // where warm_bot_maps goes on in the catalog

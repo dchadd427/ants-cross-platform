@@ -50,6 +50,8 @@ OWNER = "1900000000000001"
 ROLES = ("none", "mod", "admin")
 COMMANDS = ("mute", "unmute", "del", "kick", "ban", "unban", "bans", "mutes")
 NO_TARGET = ("bans", "mutes")
+UNKNOWN = {"t": "reply", "c": "unknown", "r": "unknown"}               # the one answer to a word that is no command of the sender's own (hub/commands.py)
+MAY = {"none": [], "mod": ["mute", "unmute", "del", "kick", "mutes"], "admin": ["mute", "unmute", "del", "kick", "ban", "unban", "bans", "mutes"]}      # the commands that each role has
 
 MODERATOR = session.Identity("9001", "moddy", False)
 MODERATOR2 = session.Identity("9002", "other.mod", False)
@@ -65,8 +67,7 @@ def assert_no_id(test, text, where):
 
 def allowed_by_the_rules(command, actor, target, same):
     """The table of the powers as the owner stated it, written the other way round from hub/chat.py: a list of what each role may do, and nothing else."""
-    may = {"none": [], "mod": ["mute", "unmute", "del", "kick", "mutes"], "admin": ["mute", "unmute", "del", "kick", "ban", "unban", "bans", "mutes"]}
-    if command not in may[actor]:
+    if command not in MAY[actor]:
         return False
     if target is None:
         return True
@@ -98,8 +99,9 @@ class ThePowerTable(unittest.TestCase):
         self.assertFalse(a("ban", "admin", "admin", False))                                                                       # (admin against admin: refused)
         self.assertFalse(a("kick", "admin", "none", True) or a("ban", "admin", "admin", True))                                    # (nobody acts on themselves)
         self.assertTrue(a("del", "mod", "mod", True) and a("del", "admin", "admin", True))                                        # (but a line of one's own may go)
-        self.assertEqual(sorted(chatmod.NEEDS), sorted(COMMANDS))
-        self.assertEqual(chatmod.COMMANDS, frozenset("/" + c for c in COMMANDS))
+        self.assertEqual({c: chatmod.NEEDS[c] for c in COMMANDS}, {"mute": 1, "unmute": 1, "del": 1, "kick": 1, "ban": 2, "unban": 2, "bans": 2, "mutes": 1})      # (the one table of ranks, which hub/commands.py makes from its own)
+        self.assertEqual({c: chatmod.NEEDS[c] for c in ("help", "ignore", "unignore", "nopic", "pic", "bots")}, {"help": 0, "ignore": 0, "unignore": 0, "nopic": 2, "pic": 2, "bots": 2})
+        self.assertTrue(a("nopic", "admin", "none", False) and a("pic", "admin", "mod", False) and not a("nopic", "mod", "none", False) and not a("pic", "admin", "admin", False))
 
 
 class Powers(unittest.TestCase):
@@ -161,8 +163,8 @@ class ThePowersOfEveryRole(Powers):
                 before = len(w.store.actions())
                 w.say(actor, text)
                 codes, kinds = actor.codes(), [m["t"] for m in actor.sent if m["t"] in ("ok", "bans", "mutes")]
-                if actor_role == "none":
-                    self.assertEqual(codes, ["bad"])                                              # (a command from an account with no role is refused and never posted)
+                if command not in MAY[actor_role]:
+                    self.assertEqual((codes, kinds, actor.kinds("reply")), ([], [], [UNKNOWN]))   # (a command that the role does not have, an account with no role most of all: the answer for a word that is no command, and never posted)
                     self.assertEqual(bystander.kinds("line"), [])
                     self.assertEqual(len(w.store.actions()), before)
                     continue
@@ -199,7 +201,7 @@ class TheCommands(Powers):
         self.assertEqual([m["c"] for m in self.mod.kinds("ok")], ["mute", "unmute", "del"])
         for command in ("/ban bob", "/unban bob", "/bans"):
             self.say(self.mod, command)
-        self.assertEqual(self.mod.codes(), ["power"] * 3)
+        self.assertEqual((self.mod.codes(), self.mod.kinds("reply")), ([], [UNKNOWN] * 3))              # (commands that a moderator does not have: the answer for a word that is no command)
         self.assertFalse(self.w.store.is_banned("1002"))
         self.say(self.mod, "/kick bob")
         self.assertEqual(self.bob.closed, (1000, "kicked"))
@@ -243,16 +245,20 @@ class TheCommands(Powers):
         self.say(self.admin, "/KICK alice")
         self.assertEqual(self.admin.codes(), [])
         self.assertEqual([m["c"] for m in self.admin.kinds("ok")], ["ban", "unban", "mute", "unmute", "kick"])
-        for text in ("/kick", "/kick a b", "/ban", "/bans x", "/unban", "/unmute", "/unmute a b", "/mute bob", "/del", "/del 1 2", "/", "/frobnicate bob"):
+        for text in ("/kick", "/kick a b", "/ban", "/bans x", "/unban", "/unmute", "/unmute a b", "/mute bob", "/del", "/del 1 2"):
             before = len(self.admin.codes())
             self.say(self.admin, text)
             self.assertEqual(self.admin.codes()[before:], ["bad"], text)
+        for text in ("/", "/frobnicate bob"):                                                          # (no command of theirs: the other answer)
+            before = (len(self.admin.codes()), len(self.admin.kinds("reply")))
+            self.say(self.admin, text)
+            self.assertEqual((len(self.admin.codes()), self.admin.kinds("reply")[before[1]:]), (before[0], [UNKNOWN]), text)
 
-    def test_an_account_with_no_role_gets_bad_for_every_command_word_in_any_case_and_nothing_is_posted(self):
-        for word in ("/kick", "/KICK", "/Ban", "/unban", "/bans", "/Unmute", "/mute", "/del", "/Del"):
+    def test_an_account_with_no_role_gets_the_unknown_answer_for_every_command_word_in_any_case_and_nothing_is_posted(self):
+        for word in ("/kick", "/KICK", "/Ban", "/unban", "/bans", "/Unmute", "/mute", "/del", "/Del", "/nopic", "/PIC"):
             self.w.clock.now += 3
             self.say(self.alice, word + " bob")
-        self.assertEqual(self.alice.codes(), ["bad"] * 9)
+        self.assertEqual((self.alice.codes(), self.alice.kinds("reply")), ([], [UNKNOWN] * 11))
         self.assertEqual(self.reader.kinds("line"), [])
         self.assertEqual(self.w.store.recent_lines(10), [])
 
@@ -385,18 +391,17 @@ class TheCommands(Powers):
         self.assertEqual(self.mod2.codes(), ["banned"])
         self.assertIsNone(self.bob.closed)
 
-    def test_a_refused_command_counts_as_a_mistake_of_the_socket(self):
+    def test_a_refused_command_counts_as_a_mistake_of_the_socket_and_a_word_that_is_not_theirs_costs_a_frame(self):
         self.say(self.mod, "/ban bob")
         self.say(self.mod, "/kick nobody")
-        self.assertEqual((self.mod.strikes, self.mod.charges), (2, 0))
+        self.assertEqual((self.mod.strikes, self.mod.charges), (1, 1))
 
     def test_a_demoted_account_whose_cached_role_ran_out_is_told_role_and_nothing_is_done(self):
-        original = self.w.chat.is_mod
-        self.w.chat.is_mod = lambda account: True                                               # (the cached role said mod when the command came in: the answer that is fresh says none)
-        self.w.roles.roles["9001"] = "none"
+        said = iter(["mod"])                                                                    # (the cached role said mod when the command came in: the answer that is fresh says none)
+        original = self.w.roles.role_of
+        self.w.roles.role_of = lambda account: next(said, "none") if account == "9001" else original(account)
         self.say(self.mod, "/mute bob 5")
         self.assertEqual((self.mod.codes(), self.w.store.mutes()), (["role"], []))
-        self.w.chat.is_mod = original
 
     def test_no_command_is_a_line_of_chat_and_a_good_one_answers_ok_to_the_sender_only(self):
         self.say(self.admin, "/mute bob 5")
@@ -542,6 +547,9 @@ class TheLineAndRowTargets(Powers):
                 if allowed_by_the_rules(command, actor_role, target_role, False):
                     self.assertEqual((actor.codes(), [m["c"] for m in actor.kinds("ok")]), ([], [command]), text)
                     self.assertEqual(len(self.rows()), before + 1)
+                elif command not in MAY[actor_role]:
+                    self.assertEqual((actor.codes(), actor.kinds("reply")), ([], [UNKNOWN]), text)              # (a command above the rank)
+                    self.assertEqual(len(self.rows()), before)
                 else:
                     self.assertEqual(actor.codes(), ["power"], text)
                     self.assertEqual(len(self.rows()), before)
@@ -551,7 +559,7 @@ class TheLineAndRowTargets(Powers):
         line = self.speak(self.bob)
         for text in ("/mute #%d 5" % line, "/kick row:%d" % self.row(self.bob), "/ban #%d purge" % line, "/mutes"):
             self.say(self.alice, text)
-        self.assertEqual(self.alice.codes(), ["bad"] * 4)
+        self.assertEqual((self.alice.codes(), self.alice.kinds("reply")), ([], [UNKNOWN] * 4))
         self.assertEqual((self.w.store.mutes(), self.w.store.bans()), ([], []))
         self.assertEqual(self.reader.kinds("line")[-1]["text"], "a line")           # (and none of it became a line of chat)
         self.assertEqual(len(self.reader.kinds("line")), 1)
@@ -642,7 +650,7 @@ class TheMutesList(Powers):
         for peer in (self.alice, self.reader):
             self.say(peer, "/mutes")
         self.assertEqual((self.alice.kinds("mutes"), self.reader.kinds("mutes")), ([], []))
-        self.assertEqual(self.alice.codes(), ["bad"])
+        self.assertEqual((self.alice.codes(), self.alice.kinds("reply")), ([], [UNKNOWN]))
         self.say(self.mod, "/mute bob 5")
         self.say(self.admin, "/mute alice 7")
         row = self.w.chat.welcome(self.bob)["me"]
@@ -736,7 +744,7 @@ class TheBanAndPurge(Powers):
         self.say(self.admin, "/ban bob")
         self.assertEqual((self.reader.kinds("del"), self.alive() >= set(self.mine)), ([], True))
         self.say(self.mod, "/ban alice purge")
-        self.assertEqual(self.mod.codes(), ["power"])
+        self.assertEqual((self.mod.codes(), self.mod.kinds("reply")), ([], [UNKNOWN]))                    # (a moderator has no /ban at all)
         self.assertFalse(self.w.store.is_banned("1001"))
         self.assertEqual(self.reader.kinds("del"), [])
         self.say(self.admin, "/ban boss.two purge")
@@ -923,9 +931,9 @@ class TheFreshCheck(FreshBase):
         await self.settle()
         self.assertEqual((self.admin.codes(), self.w.store.is_banned("1002"), [m["c"] for m in self.admin.kinds("ok")]), ([], True, ["ban"]))
         self.age()
-        self.w.say(self.mod, "/ban alice")
+        self.w.say(self.mod, "/kick boss.one")
         await self.settle()
-        self.assertEqual((self.mod.codes(), self.w.store.is_banned("1001")), (["power"], False))           # (a moderator may not ban: the lookups were made first, and the answer is power)
+        self.assertEqual((self.mod.codes(), self.admin.closed), (["power"], None))                         # (a moderator may not act on an administrator: the lookups were made first, and the answer is power)
 
     async def test_a_discord_that_is_too_slow_refuses_the_action_with_role_and_the_chat_goes_on(self):
         self.age()
@@ -1139,8 +1147,8 @@ class TheFreshCheck(FreshBase):
         self.w.say(owner, "/mute bob 5")
         self.assertEqual(owner.codes(), [])
         self.assertGreater(self.w.store.muted_until("1002"), 0)
-        self.w.say(self.mod, "/mute alice 5")                                                      # (the moderator's role is not asked of anybody: none)
-        self.assertEqual(self.mod.codes(), ["bad"])
+        self.w.say(self.mod, "/mute alice 5")                                                      # (the moderator's role is not asked of anybody: none, and /mute is no command of theirs)
+        self.assertEqual((self.mod.codes(), self.mod.kinds("reply")), ([], [UNKNOWN]))
 
     async def test_a_bug_in_a_waiting_command_is_reported_by_its_class_and_never_prints_a_text(self):
         asyncio.get_running_loop().slow_callback_duration = 3600.0                                 # (this loop is in debug mode, which logs "Executing <Task> took N seconds" for a callback over a tenth of a second: the speed of the machine, not a report of the bug)
@@ -1702,9 +1710,9 @@ class TheLiveHub(LiveTest):
         mod = self.moderator()
         victim, _ = self.connect("1003:victim")
         mod.say("/ban victim")
-        self.assertEqual(self.drain_until(mod, "err")[0]["code"], "power")
+        self.assertEqual(self.drain_until(mod, "reply")[0], UNKNOWN)                                # (a moderator has no /ban and no /bans: the answer for a word that is no command)
         mod.say("/bans")
-        self.assertEqual(self.drain_until(mod, "err")[0]["code"], "power")
+        self.assertEqual(self.drain_until(mod, "reply")[0], UNKNOWN)
         boss, _ = self.connect("1002:boss")
         self.wait_role(boss, "admin")
         other_boss, _ = self.connect("1002:boss")
@@ -1887,8 +1895,10 @@ class TheRealProcess(unittest.TestCase):
 
 class TheDocumentsSayWhatTheCodeDoes(unittest.TestCase):
     def setUp(self):
-        with open(os.path.join(REPO, "docs", "HUB.md"), encoding="utf-8") as f:
-            self.doc = f.read()
+        self.doc = ""
+        for name in ("HUB.md", "HUB_COMMANDS.md"):                                                  # (the moderation section is in the second: a pure move of the first)
+            with open(os.path.join(REPO, "docs", name), encoding="utf-8") as f:
+                self.doc += f.read()
 
     def test_the_protocol_table_and_the_codes_list_what_the_chat_sends(self):
         for needle in ("`{\"t\":\"ok\",\"c\":c}`", "`{\"t\":\"bye\",\"why\":\"kicked\"\\|\"banned\"}`", "`{\"t\":\"bans\",\"rows\":[{\"u\",\"at\"},...]}`", "`power`", "`role`", "`who`",

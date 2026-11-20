@@ -13,16 +13,16 @@
   },
   {
    "id": "a_moderator_may_ban",
-   "file": "hub/chat.py",
-   "old": "\"ban\": 2, \"unban\": 2, \"bans\": 2, \"mutes\": 1}",
-   "new": "\"ban\": 1, \"unban\": 2, \"bans\": 2, \"mutes\": 1}",
+   "file": "hub/commands.py",
+   "old": "Command(\"ban\", 2,",
+   "new": "Command(\"ban\", 1,",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
   },
   {
    "id": "a_moderator_may_list_the_bans",
-   "file": "hub/chat.py",
-   "old": "\"ban\": 2, \"unban\": 2, \"bans\": 2, \"mutes\": 1}",
-   "new": "\"ban\": 2, \"unban\": 2, \"bans\": 1, \"mutes\": 1}",
+   "file": "hub/commands.py",
+   "old": "Command(\"bans\", 2,",
+   "new": "Command(\"bans\", 1,",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
   },
   {
@@ -98,8 +98,8 @@
   {
    "id": "a_command_from_an_account_with_no_role_is_a_line",
    "file": "hub/chat.py",
-   "old": "COMMANDS = frozenset((\"/mute\", \"/unmute\", \"/del\", \"/kick\", \"/ban\", \"/unban\", \"/bans\", \"/mutes\"))",
-   "new": "COMMANDS = frozenset((\"/mute\", \"/unmute\", \"/del\", \"/kick\", \"/ban\", \"/unban\", \"/mutes\"))",
+   "old": "        elif line.startswith(\"/\"):",
+   "new": "        elif line.startswith(\"/\") and not line.lower().startswith(\"/bans\"):",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
   },
   {
@@ -832,9 +832,9 @@
   },
   {
    "id": "a_moderator_may_not_list_the_mutes",
-   "file": "hub/chat.py",
-   "old": "\"mutes\": 1}",
-   "new": "\"mutes\": 2}",
+   "file": "hub/commands.py",
+   "old": "Command(\"mutes\", 1,",
+   "new": "Command(\"mutes\", 2,",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLineAndRowTargets tests.scripts.test_hub_powers.TheMutesList tests.scripts.test_hub_powers.TheBanAndPurge tests.scripts.test_hub_powers.TheNewCommandsKeepTheIdOut tests.scripts.test_hub_store_contract"
   },
   {

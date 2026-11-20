@@ -216,11 +216,18 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
                 continue
             if path == os.path.join(REPO, "web", "home", "chat.js"):
                 continue                                                                          # (the account menu's one line, below)
+            if path in (os.path.join(REPO, "web", "home", "cmds.js"), os.path.join(REPO, "web", "home", "cmds.css")):
+                continue                                                                          # (the /bots builder of the chat borrows the admin page's list of maps and reads two of its calls: below)
             with open(path, encoding="utf-8", errors="replace") as f:
                 text = f.read()
             self.assertNotRegex(text, r"/admin\b|admin\.html|admin_page|admin\.css|maps-review", os.path.relpath(path, REPO))
         for name in ("sitemap.xml", "robots.txt"):
             self.assertFalse(os.path.exists(os.path.join(REPO, "web", name)), name + " would list it")
+
+    def test_the_chats_bots_builder_borrows_only_the_list_of_maps_and_reads_two_calls(self):
+        js = re.sub(r"(?m)^\s*//.*|\s//.*", "", read("web", "home", "cmds.js"))                      # (a comment may name them; the code may name only these)
+        self.assertEqual(sorted(set(re.findall(r"['\"](/admin[^'\"\s]*)", js))), ["/admin.css", "/admin/api/bot-matches/summary", "/admin/api/bot-options", "/admin_map_pick.js"], "the admin page's list of maps and its style, and two GETs of its API: what runs at once and the maps (tests/scripts/test_web_home_cmds.py)")
+        self.assertNotRegex(js, r"admin_page|admin_bots|admin\.html|maps-review")
 
     def test_the_front_pages_account_menu_names_the_address_once_and_its_behavior_is_run_in_node(self):
         self.assertEqual(read("web", "home", "chat.js").count("/admin"), 1)                       # (the one line for an administrator: what it shows and to whom is RUN by tests/scripts/web_home_chat_check.js)

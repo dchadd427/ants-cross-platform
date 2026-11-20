@@ -41,39 +41,11 @@
    "why": "Delete asks no question"
   },
   {
-   "id": "bots_stop_all_asks_no_question",
-   "file": "web/admin_bots.js",
-   "old": "button('Stop all ' + (n + k), 'bad', function () { askStopAll(); })",
-   "new": "button('Stop all ' + (n + k), 'bad', function () { call('POST', '/admin/api/bot-matches/stop-all', {}).then(function () { loadAll(true); }); })",
-   "why": "Stop all asks no question"
-  },
-  {
    "id": "bots_the_question_can_be_confirmed_at_once",
    "file": "web/admin_bots.js",
    "old": "function () { if (tick() - opened < ASK_DELAY) return; closeAsk(); onGo(); }",
    "new": "function () { closeAsk(); onGo(); }",
    "why": "the question can be confirmed at once"
-  },
-  {
-   "id": "bots_the_limit_is_nine",
-   "file": "web/admin_bots.js",
-   "old": "var CAP = 8;",
-   "new": "var CAP = 9;",
-   "why": "the limit is nine"
-  },
-  {
-   "id": "bots_start_stays_on_when_all_eight_places_are_taken",
-   "file": "web/admin_bots.js",
-   "old": "off = full || !st.replays;",
-   "new": "off = !st.replays;",
-   "why": "Start stays on when all eight places are taken"
-  },
-  {
-   "id": "bots_start_stays_on_when_the_server_keeps_no_replays",
-   "file": "web/admin_bots.js",
-   "old": "off = full || !st.replays;",
-   "new": "off = full;",
-   "why": "Start stays on when the server keeps no replays"
   },
   {
    "id": "bots_watch_opens_in_the_page_s_own_tab",
@@ -167,13 +139,6 @@
    "why": "the Running panel does not tell the badge"
   },
   {
-   "id": "bots_a_refusal_of_the_number_of_matches_does_not_say_what_is_free",
-   "file": "web/admin_bots.js",
-   "old": "' be over the limit of ' + CAP + '. Start ' + j.free + ' or fewer",
-   "new": "' be over the limit of ' + CAP + '. Start fewer",
-   "why": "a refusal of the number of matches does not say what is free"
-  },
-  {
    "id": "bots_a_start_that_is_old_an_old_token_is_not_told",
    "file": "web/admin_bots.js",
    "old": "if (r.status === 403 && e === 'csrf') return [",
@@ -256,13 +221,6 @@
    "old": "if (why === 'busy') return",
    "new": "if (false) return",
    "why": "a batch that stopped for the people's matches says it was for places"
-  },
-  {
-   "id": "bots_the_budget_refusal_is_not_told",
-   "file": "web/admin_bots.js",
-   "old": "if (r.status === 409 && e === 'budget') return",
-   "new": "if (false) return",
-   "why": "a start that the store has no room for gets the plain line"
   },
   {
    "id": "bots_the_default_question_says_an_hour",
@@ -496,39 +454,11 @@
    "why": "one match is sent with a spacing"
   },
   {
-   "id": "bots_a_waiting_start_cannot_be_stopped",
-   "file": "web/admin_bots.js",
-   "old": "add(r, l, add(el('div', 'bb'), button('Stop', 'bad', function () { stopOne(w); })));",
-   "new": "add(r, l);",
-   "why": "a start that waits has no Stop"
-  },
-  {
    "id": "bots_stop_all_does_not_name_the_waiting_starts",
    "file": "web/admin_bots.js",
    "old": "var what = n && k ?",
    "new": "var what = false ?",
    "why": "the question of Stop all does not name the waiting starts"
-  },
-  {
-   "id": "bots_a_waiting_start_does_not_say_when_it_starts",
-   "file": "web/admin_bots.js",
-   "old": "add(bs, doc.createTextNode(startsIn(w, env.now()) + ' · '",
-   "new": "add(bs, doc.createTextNode(' · '",
-   "why": "a start that waits does not say when it starts"
-  },
-  {
-   "id": "bots_the_page_does_not_say_that_a_wait_is_lost_on_a_restart",
-   "file": "web/admin_bots.js",
-   "old": "'A start that waits is lost if the server restarts. They show on the live list in a few seconds.';",
-   "new": "'They show on the live list in a few seconds.';",
-   "why": "the page does not say that a waiting start is lost if the server restarts"
-  },
-  {
-   "id": "bots_a_waiting_start_that_is_held_is_not_said",
-   "file": "web/admin_bots.js",
-   "old": "if (w.held) return 'its time has come: it waits for a free place';",
-   "new": "",
-   "why": "a start that waits for a place does not say so"
   },
   {
    "id": "bots_a_schedule_whose_map_is_gone_is_not_said",
@@ -559,13 +489,6 @@
    "why": "the log does not word a cancelled waiting start"
   },
   {
-   "id": "bots_a_schedule_form_has_no_spacing_field",
-   "file": "web/admin_bots.js",
-   "old": "it starts as many as fit.', 'run');",
-   "new": "it starts as many as fit.', false);",
-   "why": "the form of a schedule has no field for the spacing"
-  },
-  {
    "id": "bots_the_hint_of_a_schedule_says_now",
    "file": "web/admin_bots.js",
    "old": "first = withSpacing === 'run' ? 'when the schedule runs' : 'now'",
@@ -592,6 +515,174 @@
    "old": "(w.count > 1 && w.every_s ? ', ' + spacingWords(w.every_s) : '')",
    "new": "''",
    "why": "a schedule row does not say its spacing"
+  },
+  {
+   "id": "bots_stop_all_asks_no_question",
+   "file": "web/admin_bots.js",
+   "old": "button('Stop all ' + thousands(n + k), 'bad', function () { askStopAll(); })",
+   "new": "button('Stop all ' + thousands(n + k), 'bad', function () { call('POST', '/admin/api/bot-matches/stop-all', {}).then(function () { loadAll(true); }); })",
+   "why": "Stop all asks no question"
+  },
+  {
+   "id": "bots_stop_all_counts_only_the_matches",
+   "file": "web/admin_bots.js",
+   "old": "button('Stop all ' + thousands(n + k), 'bad',",
+   "new": "button('Stop all ' + thousands(n), 'bad',",
+   "why": "Stop all does not count the starts that wait"
+  },
+  {
+   "id": "bots_a_schedule_may_start_more_than_eight",
+   "file": "web/admin_bots.js",
+   "old": "var SCHEDULE_MAX = 8;",
+   "new": "var SCHEDULE_MAX = 9;",
+   "why": "a schedule keeps its limit of eight: one more is nine"
+  },
+  {
+   "id": "bots_start_now_keeps_the_stepper_of_eight",
+   "file": "web/admin_bots.js",
+   "old": "withSpacing === 'now' ? numberBox(",
+   "new": "false ? numberBox(",
+   "why": "Start now is a stepper of 1 to 8 again, not a number box"
+  },
+  {
+   "id": "bots_the_count_may_pass_the_servers_queue",
+   "file": "web/admin_bots.js",
+   "old": "take(n >= min && n <= max ? n : -1);",
+   "new": "take(n >= min && n <= max * 2 ? n : -1);",
+   "why": "a count over the server's queue is taken"
+  },
+  {
+   "id": "bots_the_count_takes_a_fraction",
+   "file": "web/admin_bots.js",
+   "old": "/^[0-9]{1,6}$/.test(t) ? parseInt(t, 10) : -1",
+   "new": "/^[0-9.]{1,6}$/.test(t) ? parseInt(t, 10) : -1",
+   "why": "a count that is 1.5 is taken as one"
+  },
+  {
+   "id": "bots_the_count_takes_a_zero",
+   "file": "web/admin_bots.js",
+   "old": "take(n >= min && n <= max ? n : -1);",
+   "new": "take(n >= 0 && n <= max ? n : -1);",
+   "why": "a count of 0 is taken"
+  },
+  {
+   "id": "bots_start_is_on_for_a_count_that_is_not_one",
+   "file": "web/admin_bots.js",
+   "old": "var off = picked.value().count < 1 || !st.replays;",
+   "new": "var off = !st.replays;",
+   "why": "Start is on when the number box holds no number"
+  },
+  {
+   "id": "bots_start_is_off_when_the_places_are_taken",
+   "file": "web/admin_bots.js",
+   "old": "var off = picked.value().count < 1 || !st.replays;",
+   "new": "var off = picked.value().count < 1 || !st.replays || st.matches.length >= st.cap;",
+   "why": "Start is off when every place is taken (a start is queued by the server instead)"
+  },
+  {
+   "id": "bots_start_is_on_when_the_server_keeps_no_replays",
+   "file": "web/admin_bots.js",
+   "old": "var off = picked.value().count < 1 || !st.replays;",
+   "new": "var off = picked.value().count < 1;",
+   "why": "Start stays on when the server keeps no replays"
+  },
+  {
+   "id": "bots_the_cap_is_a_number_of_the_page",
+   "file": "web/admin_bots.js",
+   "old": "st.cap = matches.status === 200 && matches.json.cap > 0 ? matches.json.cap : CAP_FALLBACK;",
+   "new": "st.cap = CAP_FALLBACK;",
+   "why": "the number that run at once is a constant of the page, not the server's"
+  },
+  {
+   "id": "bots_a_batch_has_no_row",
+   "file": "web/admin_bots.js",
+   "old": "st.queues.forEach(function (q) { add(runBox, queueRow(q)); });",
+   "new": "",
+   "why": "a batch with starts to come has no row in Running"
+  },
+  {
+   "id": "bots_a_batch_cannot_be_stopped",
+   "file": "web/admin_bots.js",
+   "old": "add(r, l, add(el('div', 'bb'), stop));",
+   "new": "add(r, l);",
+   "why": "a batch has no Stop the rest"
+  },
+  {
+   "id": "bots_stop_the_rest_stops_everything",
+   "file": "web/admin_bots.js",
+   "old": "call('POST', '/admin/api/bot-matches/' + encodeURIComponent(q.id) + '/stop', {})",
+   "new": "call('POST', '/admin/api/bot-matches/stop-all', {})",
+   "why": "Stop the rest of a batch stops every match and every batch"
+  },
+  {
+   "id": "bots_a_batch_does_not_say_when_the_next_start_comes",
+   "file": "web/admin_bots.js",
+   "old": "nextStart(q, env.now()) + ' · '",
+   "new": "' · '",
+   "why": "a batch does not say when its next start comes"
+  },
+  {
+   "id": "bots_a_batch_that_waits_for_room_is_not_said",
+   "file": "web/admin_bots.js",
+   "old": "if (q.held) return 'its time has come: it waits for a free place';",
+   "new": "",
+   "why": "a batch that waits for a free place does not say so"
+  },
+  {
+   "id": "bots_the_page_does_not_say_that_a_spaced_queue_is_lost_on_a_restart",
+   "file": "web/admin_bots.js",
+   "old": "'. A queue is lost if the server restarts.' + tail;\n                return 'Started '",
+   "new": "'.' + tail;\n                return 'Started '",
+   "why": "the page does not say that the starts that wait are lost if the server restarts (a spacing)"
+  },
+  {
+   "id": "bots_the_page_does_not_say_that_a_big_queue_is_lost_on_a_restart",
+   "file": "web/admin_bots.js",
+   "old": "and start as each one ends. A queue is lost if the server restarts.' + tail;",
+   "new": "and start as each one ends.' + tail;",
+   "why": "the page does not say that the starts that wait are lost if the server restarts (a big batch)"
+  },
+  {
+   "id": "bots_the_note_does_not_say_that_a_queue_is_lost_on_a_restart",
+   "file": "web/admin_bots.js",
+   "old": "A queue is lost if the server restarts: a schedule is not.'",
+   "new": "'",
+   "why": "the note under Running does not say that a queue is lost if the server restarts"
+  },
+  {
+   "id": "bots_only_five_matches_are_shown_after_show_all",
+   "file": "web/admin_bots.js",
+   "old": "st.matches.slice(0, st.showAll ? st.matches.length : SHOWN)",
+   "new": "st.matches.slice(0, SHOWN)",
+   "why": "Show all shows only five"
+  },
+  {
+   "id": "bots_ten_matches_are_shown_before_the_button",
+   "file": "web/admin_bots.js",
+   "old": "var SHOWN = 5;",
+   "new": "var SHOWN = 10;",
+   "why": "the first ten matches are shown, not five"
+  },
+  {
+   "id": "bots_the_queue_is_full_is_not_told",
+   "file": "web/admin_bots.js",
+   "old": "if (r.status === 409 && e === 'queue_full') return",
+   "new": "if (false) return",
+   "why": "a start that would pass the queue gets the plain line"
+  },
+  {
+   "id": "bots_a_batch_that_could_not_start_is_told_as_started",
+   "file": "web/admin_bots.js",
+   "old": "if (!n) return 'Queued '",
+   "new": "if (false) return 'Queued '",
+   "why": "a batch whose first start waits is told as started"
+  },
+  {
+   "id": "bots_a_schedule_form_has_no_spacing_field",
+   "file": "web/admin_bots.js",
+   "old": "as any start does.', 'run');",
+   "new": "as any start does.', false);",
+   "why": "the form of a schedule has no field for the spacing"
   }
  ]
 }

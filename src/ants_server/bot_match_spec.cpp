@@ -55,14 +55,14 @@ bool bot_map_name_shape_ok(const std::string& name) {
     return (tail[0] == '.') && (tail[1] == 'l' || tail[1] == 'L') && (tail[2] == 'v' || tail[2] == 'V') && (tail[3] == 'l' || tail[3] == 'L');
 }
 
-bool parse_bot_what(const ctl::JsonValue& json, BotWhat& out, std::string& error) {
+bool parse_bot_what(const ctl::JsonValue& json, BotWhat& out, std::string& error, uint32_t max_count) {
     BotWhat what;
     if (!json.is_object()) {
         error = "bad_count";
         return false;
     }
     const ctl::JsonValue& count = json.get("count");
-    if (!count.is_int() || count.as_int_or(0) < 1 || count.as_int_or(0) > static_cast<int64_t>(kBotMatchesMax)) {
+    if (!count.is_int() || count.as_int_or(0) < 1 || count.as_int_or(0) > static_cast<int64_t>(max_count)) {
         error = "bad_count";
         return false;
     }

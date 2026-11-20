@@ -761,6 +761,17 @@ class Contract(unittest.TestCase):
         self.assertLessEqual(len(self.store.actions()), 20)
         self.assertEqual(self.store.actions()[0].detail, "59")
 
+    def test_a_row_for_an_action_that_changes_no_data_is_written_by_itself_and_an_id_cannot_get_in(self):
+        A = self.REF_A
+        self.store.log_action((A, "bots_start", "", "1000 every 120s"))
+        self.store.log_action((A, "bots_stop", "", "stopped 3 dropped 940"))
+        self.assertEqual([(r.actor, r.action, r.target, r.detail) for r in self.store.actions()], [(A, "bots_stop", "", "stopped 3 dropped 940"), (A, "bots_start", "", "1000 every 120s")])
+        for bad in ((A, "bots_start", "", "1000 every 120s map tiny"), (A, "bots_start", "", "7311000099990001 every 0s"), ("73110000999900012", "bots_stop", "", "stopped 1 dropped 1"), (A, "bots_stop", "", ""),
+                    (A, "mute", "", "1 every 2s"), (A, "frobnicate", "", "1")):
+            with self.assertRaises(ValueError, msg=bad):
+                self.store.log_action(bad)
+        self.assertEqual(len(self.store.actions()), 2)                                          # (a refused note leaves nothing)
+
     def test_forget_and_a_purge_of_profiles_do_not_take_the_log_away(self):
         A, B = self.REF_A, self.REF_B
         self.store.set_profile("1002", "bob", "", 100)

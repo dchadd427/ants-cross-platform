@@ -1493,6 +1493,20 @@ class TheForget(LoginTest):
         self.assertIsNone(self.socket(w).welcome["you"])
         self.assertEqual(v.call("POST", "/hub/forget").status, 401)              # (nobody left to forget)
 
+    def test_it_drops_the_list_of_the_people_that_the_account_ignores_and_its_place_on_the_lists_of_the_others(self):
+        v = self.member()
+        self.fake.user = ("444444444444444444", "sam.the.other")
+        s = self.visitor()
+        s.login()
+        mine, theirs = self.socket(v), self.socket(s)
+        mine.say("/ignore sam.the.other")
+        self.assertEqual(mine.recv_reply(), {"t": "reply", "c": "ignore", "r": "ok", "n": 1})
+        theirs.say("/ignore maple.leaf")
+        self.assertEqual(theirs.recv_reply(), {"t": "reply", "c": "ignore", "r": "ok", "n": 1})
+        self.assertEqual(len(self.rig.call(lambda: dict(self.rig.hub.chat.commands.ignores))), 2)
+        self.assertEqual(v.call("POST", "/hub/forget").status, 200)
+        self.assertEqual(self.rig.call(lambda: dict(self.rig.hub.chat.commands.ignores)), {})        # (its own list is gone, and so is its place on sam's)
+
     def test_a_reader_cannot_forget_anybody(self):
         v = self.member()
         r = self.visitor().call("POST", "/hub/forget")

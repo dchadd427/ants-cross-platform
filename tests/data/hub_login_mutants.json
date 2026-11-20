@@ -1098,9 +1098,9 @@
   },
   {
    "id": "command_error_cuts_the_socket",
-   "file": "hub/chat.py",
-   "old": "            try:\n                return self.command(peer, line)\n            except StoreError as e:",
-   "new": "            try:\n                return self.command(peer, line)\n            except ZeroDivisionError as e:",
+   "file": "hub/commands.py",
+   "old": "        return commands.chat.command(peer, job)\n    except StoreError as e:",
+   "new": "        return commands.chat.command(peer, job)\n    except ZeroDivisionError as e:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
   },
   {
@@ -1133,9 +1133,9 @@
   },
   {
    "id": "failed_command_is_said_rate",
-   "file": "hub/chat.py",
-   "old": "return self.trouble(peer, e, \"bad\")                # (a moderator is told that the command did not happen, and may type it again)",
-   "new": "return self.trouble(peer, e, \"rate\")",
+   "file": "hub/commands.py",
+   "old": "return commands.chat.trouble(peer, e, \"bad\")",
+   "new": "return commands.chat.trouble(peer, e, \"rate\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
   },
   {
