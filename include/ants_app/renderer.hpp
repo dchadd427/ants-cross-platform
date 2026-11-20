@@ -540,10 +540,11 @@ public:
     /// paused). They keep one size on every canvas and stand centred on the ant's body.
     void set_health_changes(health::ChangeTracker* tracker, int64_t now_ms);
     /// The numbers' font, the original's fixed system font (the 8 x 15 raster "Fixedsys"): a cell is `kFixedCellW` x `kFixedCellH` pixels; only digits and '-' have glyphs (nothing else is drawn)
-    /// `scale` makes every font pixel `scale` x `scale` (the cell grows right and down from (x, y)); `outline` first draws the glyph in black one scaled pixel round (the phone look, health_marks.hpp: digit_scale)
-    void draw_fixed_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, int32_t scale = 1, bool outline = false);
-    /// The numbers (hit points, damage and heal, score) in the game's TrueType font, white with a one pixel outline, rasterised at the real output resolution (renderer_numbers.cpp). `classic` true (the default for now)
-    /// keeps the old drawing (the 8 x 15 raster digits and the archive's digit sprites); it is also what is drawn when no font was found. A prototype switch.
+    /// `scale` makes every font pixel `scale` x `scale` (the cell grows right and down from (x, y); the phone look, health_marks.hpp: digit_scale). Plain: nothing is drawn round a glyph
+    void draw_fixed_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, int32_t scale = 1);
+    /// The numbers (hit points, damage and heal, score) in the game's TrueType font, rasterised at the real output resolution (renderer_numbers.cpp): the hit points and the damage and heal numbers are plain glyphs,
+    /// the score numbers that rise from a hill and the results page's have the outline. `classic` true (the default for now) keeps the old drawing (the 8 x 15 raster digits and the archive's digit sprites); it is also
+    /// what is drawn when no font was found. A prototype switch.
     void set_classic_numbers(bool classic) noexcept { classic_numbers_ = classic; }
     bool classic_numbers() const noexcept { return classic_numbers_; }
     /// (a test hook) the face's file that the numbers use: empty is no face (the classic numbers are drawn); a file that does not open draws no number
@@ -771,8 +772,7 @@ private:
     uint8_t hud_team_id_{0};
     health::Setting health_{health::When::Off, health::Style::Bar};
     bool health_thick_{false};
-    int32_t digit_scale_{1};          // the number's size and look on a canvas shown small (health::digit_scale / digit_outlined)
-    bool digit_outline_{false};
+    int32_t digit_scale_{1};          // the number's size on a canvas shown small (health::digit_scale)
     ScreenLayout layout_{ScreenLayout::classic()};
     int32_t canvas_w_{CANVAS_WIDTH};
     int32_t canvas_h_{CANVAS_HEIGHT};
@@ -838,7 +838,7 @@ private:
     };
     std::vector<DeferredDigits> deferred_digits_;
     void draw_deferred_digits();
-    /// The damage and heal numbers: the tracker (null = Off), its clock and the size they are drawn at. The pictures of "-12" and "+7" are made once (outlined, white, 7 x 10 pixel glyphs) and tinted
+    /// The damage and heal numbers: the tracker (null = Off), its clock and the size they are drawn at. The pictures of "-12" and "+7" are made once (plain white 7 x 10 pixel glyphs) and tinted
     health::ChangeTracker* changes_{nullptr};
     int64_t changes_now_ms_{0};
     struct ChangePicture {
@@ -855,11 +855,11 @@ private:
     std::string number_path_;                      // the face of the numbers: the bundled Libre Franklin Black, else ttf_path_ (empty: none was found, the classic numbers are drawn)
     struct NumberPicture {
         std::string text;
-        int32_t height_px{0};                      // the wanted height of what shows (a digit and its outline) in output pixels
+        int32_t height_px{0};                      // the wanted height of what shows in output pixels (a plain picture: the digit; an outlined one: the digit and its old one pixel outline)
         int32_t outline_px{0};
         SDL_Texture* texture{nullptr};
         int32_t w{0}, h{0};                        // the texture
-        int32_t box_x{0}, box_y{0}, box_w{0}, box_h{0};   // the box of what shows (glyphs and outline) in the texture: the digits' height, the text's width
+        int32_t box_x{0}, box_y{0}, box_w{0}, box_h{0};   // the box of what shows (glyphs, and the outline if there is one) in the texture: the digits' height, the text's width
         uint64_t used{0};                          // when it was made or last asked for (number_tick_): the oldest go first
     };
     std::vector<NumberPicture> number_pictures_;
@@ -879,8 +879,9 @@ private:
     void drop_number_fonts();
     uint64_t number_tick_{0};                      // a counter of the cache's uses (the age of a picture or a face)
     size_t number_font_opens_{0};                  // how many times a face was opened for a size (two a size: the fill and the outline)
-    /// `x`, `y` are the canvas position of the box of what shows (its left and top edge; a centred one passes the middle); `width_px` > 0 stretches the box to that many output pixels
-    void draw_number_box(const NativeFrame& f, const NumberPicture& pic, double x, double y, bool centre_x, bool centre_y, health::Color color, int32_t alpha, int32_t width_px = 0);
+    /// `x`, `y` are the canvas position of the box of what shows (its left and top edge; a centred one passes the middle); `width_px` > 0 stretches the box to that many output pixels; `shift_px` moves it that many
+    /// output pixels right and down
+    void draw_number_box(const NativeFrame& f, const NumberPicture& pic, double x, double y, bool centre_x, bool centre_y, health::Color color, int32_t alpha, double width_px = 0.0, int32_t shift_px = 0);
     /// The part of an animation's sprites that shows (the pixels that are not the color key), in the animation's own coordinates: the digit sprites' ink, not their cell
     AnimBounds anim_ink(int32_t anim_id);
     std::unordered_map<int32_t, AnimBounds> anim_ink_;
