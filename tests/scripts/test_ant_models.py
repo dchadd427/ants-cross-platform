@@ -810,13 +810,65 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
             self.assertNotEqual(m2["models_hash"], m1["models_hash"])
             self.assertEqual(m2["version"], "v-" + m2["build_hash"][:8])
 
-            # Dynamic viewer file discovery hashes all viewer*.html/.css/.js files present.
+            # Dynamic viewer file discovery hashes all viewer*/compare* .html/.css/.js files present.
             viewer_files = build_all._discover_viewer_files()
             for fname in viewer_files:
-                self.assertTrue(fname.startswith("viewer"))
+                self.assertTrue(fname.startswith(("viewer", "compare")))
                 self.assertTrue(fname.endswith((".html", ".css", ".js")))
             if os.path.isfile(os.path.join(build_all.THIS_DIR, "viewer.html")):
                 self.assertIn("viewer.html", viewer_files)
+
+
+@unittest.skipUnless(HAS_PIL, "Pillow is needed")
+class OrigSpritesBundleTests(unittest.TestCase):
+    def test_orig_sprites_bundle_covers_all_classes_angles_and_teams(self):
+        import base64
+        import io
+        from tools.ant_models import orig_sprites
+
+        if not orig_sprites.can_generate_orig_sprites():
+            self.skipTest("Original-Ants/ants.chd or chd_table4_animations.json not present")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            p1 = os.path.join(tmp, "orig_sprites_1.json")
+            p2 = os.path.join(tmp, "orig_sprites_2.json")
+            bundle = orig_sprites.write_orig_sprites(p1)
+            orig_sprites.write_orig_sprites(p2)
+            with open(p1, "rb") as f1, open(p2, "rb") as f2:
+                self.assertEqual(f1.read(), f2.read(), "orig_sprites.json must be byte-deterministic")
+
+        self.assertEqual(bundle["schema_version"], 1)
+        self.assertEqual(tuple(bundle["classes"]), orig_sprites.ANT_CLASSES)
+        self.assertEqual(tuple(bundle["angles"]), orig_sprites.CANONICAL_ANGLES)
+        self.assertEqual(tuple(bundle["teams"]), orig_sprites.ORIGINAL_TEAMS)
+
+        sheet_count = 0
+        for cls in orig_sprites.ANT_CLASSES:
+            self.assertIn(cls, bundle["sprites"])
+            for angle in orig_sprites.CANONICAL_ANGLES:
+                spec = bundle["sprites"][cls][angle]
+                self.assertGreater(spec["fw"], 0)
+                self.assertGreater(spec["fh"], 0)
+                self.assertTrue(0 < spec["foot_y"] <= spec["fh"])
+                self.assertTrue(0 < spec["vis_h"] <= spec["fh"])
+                self.assertGreater(spec["total_ms"], 0)
+                self.assertGreaterEqual(spec["frame_count"], 1)
+                self.assertGreaterEqual(len(spec["steps"]), 1)
+                for step in spec["steps"]:
+                    self.assertTrue(0 <= step["f"] < spec["frame_count"])
+                    self.assertGreater(step["ms"], 0)
+                for team in orig_sprites.ORIGINAL_TEAMS:
+                    uri = spec["sheets"][team]
+                    self.assertTrue(uri.startswith("data:image/png;base64,"))
+                    sheet_count += 1
+        self.assertEqual(sheet_count, 6 * 5 * 4)
+
+        # Spot-check PNG decode dimensions on worker 301 green & combat 301 red.
+        for cls, ang, team in (("worker", "301", "green"), ("combat", "301", "red"), ("fire", "901", "blue")):
+            spec = bundle["sprites"][cls][ang]
+            raw = base64.b64decode(spec["sheets"][team].split(",", 1)[1])
+            im = Image.open(io.BytesIO(raw)).convert("RGBA")
+            self.assertEqual(im.size, (spec["fw"] * spec["frame_count"], spec["fh"]))
 
 
 @unittest.skipUnless(HAS_NUMPY and HAS_PIL, "numpy and Pillow are needed")

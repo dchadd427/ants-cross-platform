@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from .gltf_writer import parse_glb, scene_to_glb_bytes, validate_glb, write_glb
+from .orig_sprites import build_orig_sprites_bundle, can_generate_orig_sprites, write_orig_sprites
 from .materials import (
     MATERIAL_ORDER,
     MATERIALS,
@@ -69,6 +70,9 @@ __all__ = [
     "scene_to_glb_bytes",
     "validate_glb",
     "write_glb",
+    "build_orig_sprites_bundle",
+    "can_generate_orig_sprites",
+    "write_orig_sprites",
     "BROW_STYLES",
     "EYELID_CLOSED_ANGLE",
     "add_idle_animation",
