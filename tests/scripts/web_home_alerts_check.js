@@ -339,7 +339,7 @@ function inRoom(env) {                                                          
     const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1';
     function bellOf(o) {                                                                  // a mount of its own on a bar of its own: o = { permission (none: the browser has no notifications), signedIn, ua, platform, touch, standalone (display-mode), iosStandalone }
         const calls = { asked: 0, constructed: 0, queries: 0 };
-        const bar = new H.El(env, 'div', ''), menu = new H.El(env, 'button', ''), other = new H.El(env, 'button', ''); menu.className = 'btn hmenu'; other.className = 'btn hlogin'; bar.appendChild(other);
+        const bar = new H.El(env, 'div', ''), menu = new H.El(env, 'button', ''), other = new H.El(env, 'button', ''); menu.className = 'btn hmenu'; other.className = 'btn hlogin'; bar.appendChild(other); bar.appendChild(menu);          // (the bar of Home's right end: the account button, then the Menu's button)
         const state = { signedIn: o.signedIn !== false, permission: o.permission, dock: null };
         const watchers = [];
         const win = Object.assign({}, env.win, {
@@ -352,18 +352,20 @@ function inRoom(env) {                                                          
         else delete win.Notification;
         if (o.noStorage) win.localStorage = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };         // a browser that refuses its storage
         const m = A.mount({ doc: env.doc, win, core, ctl: { screen: () => 'home', show() {} }, bar, menuBtn: menu, signedIn: () => state.signedIn, dock: () => state.dock });
-        const bell = bar.children[0];
-        return { m, bar, bell, menu, state, calls, watchers, win, marks: () => bell.findAll((e) => /al-mark/.test(e.className)), dot: () => /(^|\s)al-dot(\s|$)/.test(menu.className) };
+        const bell = bar.children.filter((e) => /(^|\s)al-bell(\s|$)/.test(e.className))[0];
+        return { m, bar, bell, menu, chip: other, state, calls, watchers, win, marks: () => bell.findAll((e) => /al-mark/.test(e.className)) };
     }
     const named = (b) => ({ state: b.bell.getAttribute('data-state'), label: b.bell.getAttribute('aria-label'), hidden: b.bell.hidden });
     let b = bellOf({ permission: 'default' });
-    same('logged in, notifications not set up: the bell with a dot, and the dot on the Menu\'s button for a phone with a room', [named(b), b.marks().length, /dot/.test(b.marks()[0] ? b.marks()[0].className : ''), b.dot()], [{ state: 'off', label: 'Alerts: not set up on this device', hidden: false }, 1, true, true]);
-    check('the bell stands in front of the account button', b.bar.children[0] === b.bell && b.bar.children.length === 2 && /hlogin/.test(b.bar.children[1].className));
+    same('logged in, notifications not set up: the bell with a dot', [named(b), b.marks().length, /dot/.test(b.marks()[0] ? b.marks()[0].className : '')], [{ state: 'off', label: 'Alerts: not set up on this device', hidden: false }, 1, true]);
+    const at = (x) => b.bar.children.indexOf(x);
+    check('the bell is the Menu\'s button\'s neighbor on its left, behind the account button, whoever is in the bar, and the Menu\'s button is left as it was (no dot of its own)', at(b.bell) === at(b.menu) - 1 && at(b.chip) < at(b.bell) && b.menu.className === 'btn hmenu');
+    check('the bar holds the account button, the bell and the Menu\'s button, in that order, and nothing else', b.bar.children.length === 3 && b.bar.children[0] === b.chip && b.bar.children[1] === b.bell && b.bar.children[2] === b.menu);
     b = bellOf({ permission: 'granted' });
-    same('notifications on: the plain bell, no dot', [named(b), b.marks().length, b.dot()], [{ state: 'on', label: 'Alerts: on for this device', hidden: false }, 0, false]);
+    same('notifications on: the plain bell, no dot', [named(b), b.marks().length], [{ state: 'on', label: 'Alerts: on for this device', hidden: false }, 0]);
     b = bellOf({ permission: 'denied' });
-    same('the browser blocks them: the struck bell, no dot', [named(b), b.marks().length, b.dot()], [{ state: 'blocked', label: 'Alerts: blocked in this browser', hidden: false }, 0, false]);
-    for (const p of ['default', 'granted', 'denied']) { b = bellOf({ permission: p, signedIn: false }); same('not logged in (' + p + '): the plain bell of the sheet, no dot, whatever the permission says', [named(b), b.marks().length, b.dot()], [{ state: 'guest', label: core.TEXT.sheet, hidden: false }, 0, false]); }
+    same('the browser blocks them: the struck bell, no dot', [named(b), b.marks().length], [{ state: 'blocked', label: 'Alerts: blocked in this browser', hidden: false }, 0]);
+    for (const p of ['default', 'granted', 'denied']) { b = bellOf({ permission: p, signedIn: false }); same('not logged in (' + p + '): the plain bell of the sheet, no dot, whatever the permission says', [named(b), b.marks().length], [{ state: 'guest', label: core.TEXT.sheet, hidden: false }, 0]); }
     b = bellOf({ ua: IPHONE, platform: 'iPhone' });
     same('an iPhone that has not installed the app (it has no notifications yet): the bell that needs the app, with its arrow', [named(b), b.marks().length], [{ state: 'needs', label: 'Alerts: need the app on the Home Screen', hidden: false }, 1]);
     b = bellOf({ ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', platform: 'MacIntel', touch: 5 });
@@ -374,13 +376,13 @@ function inRoom(env) {                                                          
     check('and so does the display mode "standalone"', named(b).state === 'on');
     b = bellOf({ ua: IPHONE, platform: 'iPhone', iosStandalone: true });
     check('the installed app of an iOS that has no notifications: no bell', named(b).hidden === true && b.marks().length === 0);
-    for (const signedIn of [true, false]) { b = bellOf({ signedIn }); check('a browser with no notifications at all (' + (signedIn ? 'logged in' : 'not logged in') + '): no bell', named(b).hidden === true && b.marks().length === 0 && !b.dot()); }
+    for (const signedIn of [true, false]) { b = bellOf({ signedIn }); check('a browser with no notifications at all (' + (signedIn ? 'logged in' : 'not logged in') + '): no bell', named(b).hidden === true && b.marks().length === 0); }
     // the state is read again
     b = bellOf({ permission: 'default', signedIn: false });
     b.state.signedIn = true; b.m.refresh();
-    check('the visitor logs in: the state is read again', named(b).state === 'off' && b.dot() && b.marks().length === 1);
+    check('the visitor logs in: the state is read again', named(b).state === 'off' && b.marks().length === 1);
     b.state.permission = 'granted'; b.m.refresh();
-    check('the permission changes: the bell and the dot follow', named(b).state === 'on' && !b.dot() && b.marks().length === 0 && b.bell.getAttribute('title') === b.bell.getAttribute('aria-label'));
+    check('the permission changes: the bell and the dot follow', named(b).state === 'on' && b.marks().length === 0 && b.bell.getAttribute('title') === b.bell.getAttribute('aria-label'));
     b.state.permission = 'denied'; (b.watchers.status.onchange)();
     check('the browser says that the permission changed: the bell follows', named(b).state === 'blocked');
     b.state.permission = 'default'; (b.watchers.focus || []).forEach((f) => f({}));
@@ -411,43 +413,43 @@ function inRoom(env) {                                                          
     const escape = () => env.doc.listeners.keydown.forEach((f) => f({ key: 'Escape', preventDefault() {} }));
     env.storage.removeItem(core.LOOKED_KEY);
     b = bellOf({ permission: 'default' });
-    check('a browser that has not looked at the alerts: the dot on the bell and on the Menu\'s button', b.marks().length === 1 && b.dot());
+    check('a browser that has not looked at the alerts: the dot on the bell', b.marks().length === 1);
     (b.watchers.focus || []).forEach((f) => f({})); b.m.refresh();
-    check('reading the state again is not looking at the sheet: the dot stays', b.marks().length === 1 && b.dot() && !shadeOf(env));
+    check('reading the state again is not looking at the sheet: the dot stays', b.marks().length === 1 && !shadeOf(env));
     b.bell.click();
-    same('the sheet is opened with the bell: the dot is gone from the bell and from the Menu\'s button, and the bell is there, named as before', [named(b), b.marks().length, b.dot()], [{ state: 'off', label: 'Alerts: not set up on this device', hidden: false }, 0, false]);
+    same('the sheet is opened with the bell: the dot is gone from the bell, and the bell is there, named as before', [named(b), b.marks().length], [{ state: 'off', label: 'Alerts: not set up on this device', hidden: false }, 0]);
     escape();
     (b.watchers.focus || []).forEach((f) => f({})); b.m.refresh();
-    check('and it stays gone when the bell is read again', b.marks().length === 0 && !b.dot() && named(b).state === 'off');
+    check('and it stays gone when the bell is read again', b.marks().length === 0 && named(b).state === 'off');
     b = bellOf({ permission: 'default' });
-    check('a later visit of this browser: no dot, on the bell or on the Menu\'s button', b.marks().length === 0 && !b.dot() && named(b).state === 'off' && b.bell.hidden === false);
+    check('a later visit of this browser: no dot on the bell', b.marks().length === 0 && named(b).state === 'off' && b.bell.hidden === false);
     check('what is kept is that the sheet was looked at, and nothing else (no switch is written by it)', env.storage.getItem(core.LOOKED_KEY) === '1' && env.storage.getItem(core.KEY) === null);
     b.state.permission = 'granted'; b.m.refresh(); b.state.permission = 'default'; b.m.refresh();
-    check('a permission that comes and goes does not bring the dot back', b.marks().length === 0 && !b.dot());
+    check('a permission that comes and goes does not bring the dot back', b.marks().length === 0);
     env.storage.removeItem(core.LOOKED_KEY);
     b = bellOf({ permission: 'default' });
     b.m.row(() => null).click();
-    check('the Menu\'s row opens the sheet, and that is looking at it too: the dot is gone', !!shadeOf(env) && b.marks().length === 0 && !b.dot());
+    check('the Menu\'s row opens the sheet, and that is looking at it too: the dot is gone', !!shadeOf(env) && b.marks().length === 0);
     escape();
     env.storage.removeItem(core.LOOKED_KEY);
     b = bellOf({ permission: 'default' }); b.m.open(null); escape();
-    check('the sheet opened any other way is the same', b.marks().length === 0 && !b.dot());
+    check('the sheet opened any other way is the same', b.marks().length === 0);
     env.storage.removeItem(core.LOOKED_KEY);
     b = bellOf({ ua: IPHONE, platform: 'iPhone' }); b.bell.click(); escape();
     check('the arrow of an iPhone that has not installed the app is not that dot: it stays', b.marks().length === 1 && named(b).state === 'needs');
     env.storage.removeItem(core.LOOKED_KEY);
     b = bellOf({ permission: 'default', noStorage: true });
-    check('a browser that refuses its storage: the dot at first', b.marks().length === 1 && b.dot());
+    check('a browser that refuses its storage: the dot at first', b.marks().length === 1);
     b.bell.click(); escape(); b.m.refresh();
-    check('and it goes for this visit', b.marks().length === 0 && !b.dot());
+    check('and it goes for this visit', b.marks().length === 0);
     env.storage.removeItem(core.LOOKED_KEY);
 }
 {   // the page's own run: Home builds the bell in front of its account button, and the Menu's button gets the dot
     const asked = [];
     const env = runLobby('', { 'ants.name': 'Maya' }, { lazy: true, fakeClock: true, stayHome: true, win: { Notification: { permission: 'default', requestPermission() { asked.push(1); } }, navigator: { userAgent: 'Mozilla/5.0 (X11; Linux x86_64)', platform: 'Linux x86_64', maxTouchPoints: 0 } } });
     env.advance(0);
-    const right = env.home('hright'), first = right.children[0];
-    check('on the page, the bell is in front of the account button and the Menu\'s button, and the visitor is not logged in (the chat dock is not here): the plain bell', /al-bell/.test(first.className) && first.getAttribute('data-state') === 'guest' && right.children.length === 3);
+    const right = env.home('hright'), first = right.children[1];
+    check('on the page, the bell is between the account button and the Menu\'s button, and the visitor is not logged in (the chat dock is not here): the plain bell', right.children.length === 3 && /hlogin/.test(right.children[0].className) && /al-bell/.test(first.className) && /hmenu/.test(right.children[2].className) && first.getAttribute('data-state') === 'guest');
     first.click();
     check('its press opens the sheet and asks nothing of the browser', !!shadeOf(env) && asked.length === 0);
 }
