@@ -51,12 +51,12 @@ except ImportError:
         torus_arc,
     )
 
-# Confident natural ready-carry right-arm pose holding the classic shovel mid-shaft beside right side.
+# Confident natural ready-carry right-arm pose starting at compact-head shoulder (-0.106, 0.478, 0.016).
 _SWIMMER_RIGHT_ARM: List[Tuple[float, float, float]] = [
-    (-0.092, 0.476, 0.014),
-    (-0.198, 0.422, 0.044),
-    (-0.242, 0.418, 0.130),
-    (-0.252, 0.428, 0.170),
+    (-0.106, 0.478, 0.016),
+    (-0.208, 0.426, 0.048),
+    (-0.250, 0.422, 0.134),
+    (-0.260, 0.432, 0.174),
 ]
 
 
@@ -158,15 +158,15 @@ def _build_scuba_mask(
     oval_exp = 0.74
     curve_depth = 0.052
 
-    # Wide crystal-clear open oval window framed cleanly around the trimmed rich-iris eyes & eyelids.
-    rx_in = max(hrx * 0.80, (eye_max_x - hx) + 0.015)
-    ry_in = max(0.102, eye_max_dy + 0.015)
-    wall_t = 0.042  # Chunky, bold yellow molded scuba bezel thickness
+    # Wide crystal-clear open oval window framed cleanly around the compact non-alien rich-iris eyes.
+    rx_in = max(hrx * 0.80, (eye_max_x - hx) + 0.014)
+    ry_in = max(0.094, eye_max_dy + 0.014)
+    wall_t = 0.038  # Bold chunky yellow molded scuba bezel sized harmoniously to the compact head
     rx_out = rx_in + wall_t
 
     # Seat the translucent visor safely ahead of eyelid sweep even at the curved outer corner of the eye.
     eye_nx = (eye_max_x - hx) / max(1e-6, rx_out)
-    visor_z_center = max(eye_left[2] + 0.104, eye_max_z + 0.012 + curve_depth * (eye_nx * eye_nx))
+    visor_z_center = max(eye_left[2] + 0.094, eye_max_z + 0.012 + curve_depth * (eye_nx * eye_nx))
 
     # 1. Bold, chunky deep-rimmed molded yellow-gold oval scuba housing (beveled front + deep side wall).
     frame_prof = [
@@ -251,19 +251,19 @@ def _build_scuba_mask(
     )
     scene.add("scuba_mask", visor)
 
-    # 4. Wide snug dark rubber rear head strap hugging the exact heart-shield cranium contour (e2=0.80).
-    rx_strap = hrx + 0.011
-    rz_strap = hrz + 0.011
+    # 4. Wide snug dark rubber rear head strap hugging the exact soft-cube cranium contour (e2=0.76).
+    rx_strap = hrx + 0.010
+    rz_strap = hrz + 0.010
     strap_pts: List[Tuple[float, float, float]] = []
     n_arc = 28
     start_ang = math.radians(52.0)
     end_ang = math.radians(308.0)
     for i in range(n_arc + 1):
         ang = start_ang + (end_ang - start_ang) * (i / n_arc)
-        sx = hx + rx_strap * _spow(math.sin(ang), 0.80)
-        sz = hz + rz_strap * _spow(math.cos(ang), 0.80)
-        rear_lift = 0.016 * (0.5 * (1.0 - math.cos(ang)))
-        strap_pts.append((sx, mask_y + 0.006 + rear_lift, sz))
+        sx = hx + rx_strap * _spow(math.sin(ang), 0.76)
+        sz = hz + rz_strap * _spow(math.cos(ang), 0.76)
+        rear_lift = 0.014 * (0.5 * (1.0 - math.cos(ang)))
+        strap_pts.append((sx, mask_y + 0.005 + rear_lift, sz))
 
     strap = swept_tube(
         strap_pts,
@@ -315,20 +315,20 @@ def _build_snorkel(
     tube_x = cx + 0.028
     tube_z = cz + 0.008
 
-    # Dark rubber mouthpiece seated near the lower-left mandible/cheek.
+    # Dark rubber mouthpiece seated near the lower-left mandible/cheek of the compact head.
     mouthpiece = (
-        rounded_box(0.078, 0.042, 0.046, bevel=0.013, segs=3, name="snorkel_mouthpiece", material="gear_dark")
+        rounded_box(0.070, 0.038, 0.042, bevel=0.012, segs=3, name="snorkel_mouthpiece", material="gear_dark")
         .rotate_xyz(ry=-0.35)
-        .translate(hx + 0.074, hy - 0.172, hz + 0.178)
+        .translate(hx + 0.066, hy - 0.142, hz + 0.158)
     )
     scene.add("snorkel", mouthpiece)
 
     # Lower dark curved flex-hose sweeping from mouthpiece around left cheek into vertical tactical shaft.
     flex_pts = [
-        (hx + 0.096, hy - 0.172, hz + 0.184),
-        (hx + 0.184, hy - 0.168, hz + 0.176),
-        (tube_x - 0.006, hy - 0.128, tube_z + 0.014),
-        (tube_x, hy - 0.056, tube_z + 0.006),
+        (hx + 0.086, hy - 0.142, hz + 0.164),
+        (hx + 0.160, hy - 0.138, hz + 0.158),
+        (tube_x - 0.006, hy - 0.104, tube_z + 0.012),
+        (tube_x, hy - 0.044, tube_z + 0.006),
     ]
     flex_hose = curved_tube(
         flex_pts,
@@ -503,10 +503,10 @@ def _build_scuba_tank(
 
     for side_sign, tag in ((+1.0, "left"), (-1.0, "right")):
         h_pts = [
-            (bx - 0.072 + side_sign * 0.048, by + 0.145, bz - 0.010),
-            (side_sign * 0.080, ty + 0.128, tz - 0.032),
-            (side_sign * 0.078, ty + 0.110, tz + 0.060),
-            (side_sign * 0.066, ty + 0.018, tz + 0.106),
+            (bx - 0.072 + side_sign * 0.050, by + 0.145, bz - 0.010),
+            (side_sign * 0.088, ty + 0.128, tz - 0.032),
+            (side_sign * 0.086, ty + 0.112, tz + 0.064),
+            (side_sign * 0.076, ty + 0.020, tz + 0.120),
         ]
         h_strap = curved_tube(
             h_pts,
@@ -659,9 +659,9 @@ def _build_shovel(
         )
         parts.append(rivet)
 
-    # 4. Classic broad scooped yellow spade blade (stepped top foot-treads + broad cheeks + rounded spade nose).
-    blade_w = 0.184
-    blade_l = 0.208
+    # 4. Classic broad scooped yellow spade blade (~28% wider with crisp stepped foot-treads + rounded nose).
+    blade_w = 0.236
+    blade_l = 0.220
     blade_top_y = ferrule_bot_y + 0.008
     blade_cy = blade_top_y - 0.5 * blade_l
 
@@ -679,10 +679,10 @@ def _build_shovel(
 
         nx = p[:, 0] / max(1e-6, 0.5 * blade_w)
         # Smooth concave scoop dish curving forward (+Z) along side walls and nose.
-        cup_z = 0.027 * (nx * nx) + 0.020 * (u ** 1.7)
+        cup_z = 0.031 * (nx * nx) + 0.021 * (u ** 1.7)
         # Crisp turned-forward top foot-tread shoulders flanking the socket.
-        shoulder_mask = np.clip((np.abs(nx) - 0.20) / 0.16, 0.0, 1.0)
-        tread_step = 0.022 * (np.clip((0.12 - u) / 0.12, 0.0, 1.0) ** 1.5) * shoulder_mask
+        shoulder_mask = np.clip((np.abs(nx) - 0.18) / 0.16, 0.0, 1.0)
+        tread_step = 0.023 * (np.clip((0.12 - u) / 0.12, 0.0, 1.0) ** 1.5) * shoulder_mask
         thick_scale = 1.0 - 0.40 * (u ** 1.25)
         p[:, 2] = p[:, 2] * thick_scale + cup_z + tread_step
         return p
@@ -719,8 +719,8 @@ def _build_shovel(
 
 
 def _add_swimmer_idle(scene: SceneBuilder) -> AnimationClip:
-    """Attach Swimmer's original 1998 900 ms smooth aquatic sway + shovel rock Idle clip (`asst301`)."""
-    dur = 0.90
+    """Attach Swimmer's calm, relaxed 1.80s aquatic breathing sway + gentle shovel rock Idle clip."""
+    dur = 1.80
     n_steps = 16
     times = [round(dur * k / n_steps, 5) for k in range(n_steps + 1)]
 
@@ -740,7 +740,7 @@ def _add_swimmer_idle(scene: SceneBuilder) -> AnimationClip:
         ph = 2.0 * math.pi * (k / n_steps)
         dip = 0.5 * (1.0 - math.cos(ph))
         sway = math.sin(ph)
-        body_t.append((bx + 0.015 * sway, by - 0.022 * dip, bz + 0.004 * dip))
+        body_t.append((bx + 0.008 * sway, by - 0.011 * dip, bz + 0.002 * dip))
     body_t[-1] = body_t[0]
     channels.append(AnimationChannel("upper_body", "translation", list(times), body_t))
 
@@ -749,8 +749,8 @@ def _add_swimmer_idle(scene: SceneBuilder) -> AnimationClip:
         quat_mul(
             r0_b,
             quat_from_euler_xyz(
-                rx=0.026 * math.sin(2.0 * math.pi * (k / n_steps)),
-                rz=0.072 * math.sin(2.0 * math.pi * (k / n_steps)),
+                rx=0.014 * math.sin(2.0 * math.pi * (k / n_steps)),
+                rz=0.036 * math.sin(2.0 * math.pi * (k / n_steps)),
             ),
         )
         for k in range(n_steps + 1)
@@ -763,9 +763,9 @@ def _add_swimmer_idle(scene: SceneBuilder) -> AnimationClip:
         quat_mul(
             r0_h,
             quat_from_euler_xyz(
-                rx=0.032 * math.sin(2.0 * math.pi * (k / n_steps) - 0.25),
-                ry=0.062 * math.sin(2.0 * math.pi * (k / n_steps)),
-                rz=0.120 * math.sin(2.0 * math.pi * (k / n_steps) - 0.20),
+                rx=0.016 * math.sin(2.0 * math.pi * (k / n_steps) - 0.25),
+                ry=0.032 * math.sin(2.0 * math.pi * (k / n_steps)),
+                rz=0.058 * math.sin(2.0 * math.pi * (k / n_steps) - 0.20),
             ),
         )
         for k in range(n_steps + 1)
@@ -779,8 +779,8 @@ def _add_swimmer_idle(scene: SceneBuilder) -> AnimationClip:
             quat_mul(
                 r0_sh,
                 quat_from_euler_xyz(
-                    rx=0.072 * math.sin(2.0 * math.pi * (k / n_steps) - 0.35),
-                    rz=0.045 * math.sin(2.0 * math.pi * (k / n_steps) - 0.20),
+                    rx=0.035 * math.sin(2.0 * math.pi * (k / n_steps) - 0.35),
+                    rz=0.022 * math.sin(2.0 * math.pi * (k / n_steps) - 0.20),
                 ),
             )
             for k in range(n_steps + 1)
@@ -791,7 +791,7 @@ def _add_swimmer_idle(scene: SceneBuilder) -> AnimationClip:
     if "gaster_group" in scene.nodes:
         r0_g = _rest_r("gaster_group")
         g_r = [
-            quat_mul(r0_g, quat_from_euler_xyz(rx=-0.045 * math.sin(2.0 * math.pi * (k / n_steps))))
+            quat_mul(r0_g, quat_from_euler_xyz(rx=-0.024 * math.sin(2.0 * math.pi * (k / n_steps))))
             for k in range(n_steps + 1)
         ]
         g_r[-1] = g_r[0]
@@ -804,8 +804,8 @@ def _add_swimmer_idle(scene: SceneBuilder) -> AnimationClip:
                 quat_mul(
                     r0_a,
                     quat_from_euler_xyz(
-                        rx=0.085 * math.sin(2.0 * math.pi * (k / n_steps) + poff),
-                        rz=side * 0.060 * math.sin(2.0 * math.pi * (k / n_steps) - 0.3),
+                        rx=0.044 * math.sin(2.0 * math.pi * (k / n_steps) + poff),
+                        rz=side * 0.030 * math.sin(2.0 * math.pi * (k / n_steps) - 0.3),
                     ),
                 )
                 for k in range(n_steps + 1)
@@ -816,7 +816,7 @@ def _add_swimmer_idle(scene: SceneBuilder) -> AnimationClip:
     if "mandibles" in scene.nodes and scene.get_node("mandibles"):
         r0_m = _rest_r("mandibles")
         m_r = [
-            quat_mul(r0_m, quat_from_euler_xyz(rx=0.028 * 0.5 * (1.0 - math.cos(2.0 * math.pi * (k / n_steps)))))
+            quat_mul(r0_m, quat_from_euler_xyz(rx=0.018 * 0.5 * (1.0 - math.cos(2.0 * math.pi * (k / n_steps)))))
             for k in range(n_steps + 1)
         ]
         m_r[-1] = m_r[0]

@@ -53,28 +53,28 @@ except ImportError:
         torus_arc,
     )
 
-# Natural flowing bent-elbow right-arm hold starting at Pass 4 shoulder (-0.092, 0.476, 0.014).
+# Natural flowing bent-elbow right-arm hold starting at compact-head shoulder (-0.106, 0.478, 0.016).
 _FIRE_RIGHT_ARM: List[Tuple[float, float, float]] = [
-    (-0.092, 0.476, 0.014),
-    (-0.194, 0.434, 0.072),
-    (-0.204, 0.468, 0.174),
-    (-0.194, 0.494, 0.228),
+    (-0.106, 0.478, 0.016),
+    (-0.206, 0.436, 0.072),
+    (-0.214, 0.468, 0.174),
+    (-0.204, 0.494, 0.228),
 ]
 
 
 def _brim_radial_and_y(theta: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Compute sleek fitted American firefighter helmet brim + bold downward-sweeping rear ducktail."""
+    """Compute sleek fitted American firefighter helmet brim + steeper downward-sweeping rear neck guard."""
     cos_t = np.cos(theta)
     sin_t = np.sin(theta)
     front_w = np.clip(cos_t, 0.0, 1.0) ** 1.4
     side_w = sin_t * sin_t
     rear_w = (0.5 * (1.0 - cos_t)) ** 1.25
 
-    # Tight fitted side brim (never wide like a sun-hat) + crisp front bill + bold sweeping
-    # downward-sloped rear ducktail neck guard extending generously behind the skull & neck.
-    x_flare = 0.16 * front_w + 0.15 * side_w + 0.28 * rear_w
-    z_flare = 0.28 * front_w + 0.18 * side_w + 1.05 * rear_w
-    y_shift = 0.016 * front_w - 0.014 * side_w - 0.155 * rear_w
+    # Tight fitted side brim (zero sun-hat flare) + crisp front bill + proud steeper downward-back
+    # rear neck-guard tail hugging smoothly behind the skull & neck.
+    x_flare = 0.15 * front_w + 0.13 * side_w + 0.22 * rear_w
+    z_flare = 0.26 * front_w + 0.16 * side_w + 0.90 * rear_w
+    y_shift = 0.015 * front_w - 0.016 * side_w - 0.195 * rear_w
     return x_flare, z_flare, y_shift
 
 
@@ -178,13 +178,13 @@ def _build_fire_helmet(
     hrx, _, hrz = head_radii
     eyelid_top_y = _measure_eyelid_max_y(scene, eye_left, closed_angle)
 
-    # Seat helmet brim snugly down right onto the top brow above the eyes (hiding excess forehead)
-    # while leaving crisp clearance above full blink=0..1 eyelids and hugging the crown tightly.
-    shell_y = max(eyelid_top_y + 0.008, head_top[1] - 0.112)
-    shell_z = hz - 0.008
-    dome_rx = hrx + 0.012
-    dome_ry = max(0.194, (head_top[1] - shell_y) + 0.092)
-    dome_rz = hrz + 0.020
+    # Seat helmet brim snugly down right onto the top brow above the compact eyes (hiding forehead),
+    # with a ~28% taller proud classic 8-ribbed bell dome rising gracefully above the brim.
+    shell_y = max(eyelid_top_y + 0.008, head_top[1] - 0.100)
+    shell_z = hz - 0.006
+    dome_rx = hrx + 0.013
+    dome_ry = max(0.244, (head_top[1] - shell_y) + 0.154)
+    dome_rz = hrz + 0.018
 
     # 1. Smooth rounded bell dome + wide horizontal-sweeping rear ducktail brim.
     dome = (
@@ -287,27 +287,27 @@ def _build_fire_helmet(
     )
     scene.add("fire_helmet", crown_hub)
 
-    # 3. Classic scalloped firefighter front shield badge holding the bold 3D crimson 'A'.
+    # 3. Tall classic scalloped firefighter front shield badge holding the bold 3D crimson 'A'.
     shield_poly = [
-        (0.000, +0.120),
-        (+0.032, +0.098),
-        (+0.072, +0.088),
-        (+0.090, +0.070),
-        (+0.080, +0.020),
-        (+0.090, -0.022),
-        (+0.086, -0.074),
-        (+0.050, -0.092),
-        (0.000, -0.098),
-        (-0.050, -0.092),
-        (-0.086, -0.074),
-        (-0.090, -0.022),
-        (-0.080, +0.020),
-        (-0.090, +0.070),
-        (-0.072, +0.088),
-        (-0.032, +0.098),
+        (0.000, +0.136),
+        (+0.032, +0.110),
+        (+0.072, +0.099),
+        (+0.089, +0.078),
+        (+0.080, +0.022),
+        (+0.089, -0.024),
+        (+0.085, -0.082),
+        (+0.050, -0.102),
+        (0.000, -0.108),
+        (-0.050, -0.102),
+        (-0.085, -0.082),
+        (-0.089, -0.024),
+        (-0.080, +0.022),
+        (-0.089, +0.078),
+        (-0.072, +0.099),
+        (-0.032, +0.110),
     ]
-    shield_tilt_x = -20.0
-    shield_pos = (hx, shell_y + 0.096, shell_z + dome_rz + 0.003)
+    shield_tilt_x = -16.0
+    shield_pos = (hx, shell_y + 0.120, shell_z + dome_rz + 0.002)
 
     shield_plate = (
         extrude_polygon(shield_poly, depth=0.018, name="helmet_shield_plate", material="gear_gold_metal")
@@ -332,7 +332,7 @@ def _build_fire_helmet(
     )
     scene.add("fire_helmet", shield_border)
 
-    for rv_idx, (rvx, rvy) in enumerate(((0.0, 0.092), (-0.068, -0.064), (+0.068, -0.064))):
+    for rv_idx, (rvx, rvy) in enumerate(((0.0, 0.104), (-0.068, -0.072), (+0.068, -0.072))):
         rivet = (
             sphere(0.008, u_segs=10, v_segs=8, name=f"helmet_shield_rivet_{rv_idx}", material="gear_steel")
             .translate(rvx, rvy, 0.014)
@@ -343,7 +343,8 @@ def _build_fire_helmet(
 
     for part in _build_letter_a():
         placed = (
-            part.translate(0.0, -0.005, 0.015)
+            part.scale(1.0, 1.12, 1.0)
+            .translate(0.0, -0.005, 0.015)
             .rotate_xyz(rx=shield_tilt_x, degrees=True)
             .translate(*shield_pos)
         )
@@ -442,8 +443,8 @@ def _build_magnifying_glass(
 
 
 def _add_fire_idle(scene: SceneBuilder) -> AnimationClip:
-    """Attach Fire's original 1998 600 ms brisk eager bounce + chin-up helmet nod Idle clip (`afst301`)."""
-    dur = 0.60
+    """Attach Fire's calm, composed 1.50s breathing bounce + gentle chin-up helmet nod Idle clip."""
+    dur = 1.50
     n_steps = 16
     times = [round(dur * k / n_steps, 5) for k in range(n_steps + 1)]
 
@@ -456,16 +457,16 @@ def _add_fire_idle(scene: SceneBuilder) -> AnimationClip:
         return xf.rotation if xf is not None else (0.0, 0.0, 0.0, 1.0)
 
     channels: List[AnimationChannel] = []
-    pumps = [(0.5 * (1.0 - math.cos(2.0 * math.pi * (k / n_steps)))) ** 0.85 for k in range(n_steps + 1)]
+    pumps = [0.5 * (1.0 - math.cos(2.0 * math.pi * (k / n_steps))) for k in range(n_steps + 1)]
     pumps[-1] = pumps[0]
 
     bx, by, bz = _rest_t("upper_body")
-    body_t = [(bx, by + 0.052 * p, bz - 0.006 * p) for p in pumps]
+    body_t = [(bx, by + 0.023 * p, bz - 0.003 * p) for p in pumps]
     body_t[-1] = body_t[0]
     channels.append(AnimationChannel("upper_body", "translation", list(times), body_t))
 
     r0_b = _rest_r("upper_body")
-    body_r = [quat_mul(r0_b, quat_from_euler_xyz(rx=-0.055 * p)) for p in pumps]
+    body_r = [quat_mul(r0_b, quat_from_euler_xyz(rx=-0.024 * p)) for p in pumps]
     body_r[-1] = body_r[0]
     channels.append(AnimationChannel("upper_body", "rotation", list(times), body_r))
 
@@ -474,8 +475,8 @@ def _add_fire_idle(scene: SceneBuilder) -> AnimationClip:
         quat_mul(
             r0_h,
             quat_from_euler_xyz(
-                rx=-0.145 * pumps[k],
-                rz=0.022 * math.sin(2.0 * math.pi * (k / n_steps)),
+                rx=-0.064 * pumps[k],
+                rz=0.012 * math.sin(2.0 * math.pi * (k / n_steps)),
             ),
         )
         for k in range(n_steps + 1)
@@ -485,19 +486,19 @@ def _add_fire_idle(scene: SceneBuilder) -> AnimationClip:
 
     if "magnifying_glass" in scene.nodes and scene.get_node("magnifying_glass"):
         r0_m = _rest_r("magnifying_glass")
-        mag_r = [quat_mul(r0_m, quat_from_euler_xyz(rx=-0.065 * p, rz=-0.032 * p)) for p in pumps]
+        mag_r = [quat_mul(r0_m, quat_from_euler_xyz(rx=-0.028 * p, rz=-0.015 * p)) for p in pumps]
         mag_r[-1] = mag_r[0]
         channels.append(AnimationChannel("magnifying_glass", "rotation", list(times), mag_r))
 
     if "gaster_group" in scene.nodes:
         r0_g = _rest_r("gaster_group")
-        g_r = [quat_mul(r0_g, quat_from_euler_xyz(rx=0.075 * p)) for p in pumps]
+        g_r = [quat_mul(r0_g, quat_from_euler_xyz(rx=0.034 * p)) for p in pumps]
         g_r[-1] = g_r[0]
         channels.append(AnimationChannel("gaster_group", "rotation", list(times), g_r))
 
     if "mandibles" in scene.nodes and scene.get_node("mandibles"):
         r0_j = _rest_r("mandibles")
-        j_r = [quat_mul(r0_j, quat_from_euler_xyz(rx=0.036 * p)) for p in pumps]
+        j_r = [quat_mul(r0_j, quat_from_euler_xyz(rx=0.018 * p)) for p in pumps]
         j_r[-1] = j_r[0]
         channels.append(AnimationChannel("mandibles", "rotation", list(times), j_r))
 
