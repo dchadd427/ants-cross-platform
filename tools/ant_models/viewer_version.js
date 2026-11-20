@@ -31,7 +31,7 @@
   function saveReloadState(updatedVersion) {
     try {
       const snap = typeof window.__antViewerGetState === "function" ? window.__antViewerGetState() : {};
-      const payload = { ...snap, updatedVersion: updatedVersion || "" };
+      const payload = { ...snap, page: window.location.pathname, updatedVersion: updatedVersion || "" };
       window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch (_) {
       // Ignore storage errors in restricted browsing modes

@@ -8,6 +8,7 @@
   <title>Ants 3D Model Viewer</title>
   <link rel="stylesheet" href="viewer.css">
   <script src="viewer_gltf.js" defer></script>
+  <script src="viewer_render.js" defer></script>
   <script src="viewer.js" defer></script>
   <script src="viewer_version.js" defer></script>
 </head>
@@ -18,6 +19,10 @@
         <h1>Ants 3D Model Viewer</h1>
         <p class="subtitle">Stylized 3D Studio &middot; glTF 2.0</p>
       </div>
+      <nav class="view-tabs" aria-label="Viewer mode">
+        <a class="view-tab" id="tab-studio" href="viewer.html" aria-current="page">3D Studio</a>
+        <a class="view-tab" id="tab-compare" href="compare.html">Compare 1998</a>
+      </nav>
       <div class="active-summary" id="active-summary" aria-label="Active selection summary">
         <span class="badge" id="badge-ant">All 6 Lineup</span>
         <span class="badge" id="badge-team">Green</span>

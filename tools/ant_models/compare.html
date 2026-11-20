@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23183825'/%3E%3Ccircle cx='16' cy='12' r='5' fill='%23e0b029'/%3E%3Ccircle cx='16' cy='21' r='6' fill='%23297040'/%3E%3C/svg%3E">
+  <title>Ants 3D Model Viewer &middot; Compare 1998</title>
+  <link rel="stylesheet" href="viewer.css">
+  <script src="viewer_gltf.js" defer></script>
+  <script src="viewer_render.js" defer></script>
+  <script src="compare.js" defer></script>
+  <script src="viewer_version.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="title-block">
+        <h1>Ants 3D Model Viewer</h1>
+        <p class="subtitle">1998 Sprites vs. Live 3D</p>
+      </div>
+      <nav class="view-tabs" aria-label="Viewer mode">
+        <a class="view-tab" id="tab-studio" href="viewer.html">3D Studio</a>
+        <a class="view-tab" id="tab-compare" href="compare.html" aria-current="page">Compare 1998</a>
+      </nav>
+      <div class="active-summary" id="active-summary" aria-label="Active comparison summary">
+        <span class="badge" id="badge-ant">All 6</span>
+        <span class="badge" id="badge-team">Green</span>
+        <span class="badge" id="badge-angle">301 S</span>
+        <span class="badge badge-version" id="badge-version" title="Loaded 3D build version" hidden></span>
+      </div>
+    </header>
+
+    <div
+      class="toolbar"
+      id="compare-toolbar"
+      role="toolbar"
+      aria-label="1998 sprite comparison controls"
+      focusgroup="toolbar wrap"
+      aria-controls="compare-stage"
+    >
+      <div class="toolbar-group" role="group" aria-label="Ant class">
+        <span class="group-label" aria-hidden="true">Class</span>
+        <button type="button" data-ant="all" aria-pressed="true">All 6</button>
+        <button type="button" data-ant="worker" aria-pressed="false">Worker</button>
+        <button type="button" data-ant="combat" aria-pressed="false">Combat</button>
+        <button type="button" data-ant="thief" aria-pressed="false">Thief</button>
+        <button type="button" data-ant="bomber" aria-pressed="false">Bomber</button>
+        <button type="button" data-ant="swimmer" aria-pressed="false">Swimmer</button>
+        <button type="button" data-ant="fire" aria-pressed="false">Fire</button>
+      </div>
+
+      <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
+
+      <div class="toolbar-group" role="group" aria-label="Team color">
+        <span class="group-label" aria-hidden="true">Team</span>
+        <button type="button" data-team="green" aria-pressed="true">
+          <span class="swatch swatch-green" aria-hidden="true"></span>Green
+        </button>
+        <button type="button" data-team="red" aria-pressed="false">
+          <span class="swatch swatch-red" aria-hidden="true"></span>Red
+        </button>
+        <button type="button" data-team="blue" aria-pressed="false">
+          <span class="swatch swatch-blue" aria-hidden="true"></span>Blue
+        </button>
+        <button type="button" data-team="black" aria-pressed="false">
+          <span class="swatch swatch-black" aria-hidden="true"></span>Black
+        </button>
+      </div>
+
+      <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
+
+      <div class="toolbar-group" role="group" aria-label="Canonical angle">
+        <span class="group-label" aria-hidden="true">Angle</span>
+        <button type="button" data-angle="301" aria-pressed="true" title="301 South Front (yaw 0, pitch 33)">301 S</button>
+        <button type="button" data-angle="201" aria-pressed="false" title="201 South-East 3/4 (yaw -45, pitch 33)">201 SE</button>
+        <button type="button" data-angle="901" aria-pressed="false" title="901 East Side (yaw -90, pitch 33)">901 E</button>
+        <button type="button" data-angle="801" aria-pressed="false" title="801 North-East Back 3/4 (yaw -135, pitch 33)">801 NE</button>
+        <button type="button" data-angle="701" aria-pressed="false" title="701 North Back (yaw 180, pitch 33)">701 N</button>
+      </div>
+
+      <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
+
+      <div class="toolbar-group" role="group" aria-label="Playback and timing controls">
+        <span class="group-label" aria-hidden="true">Play</span>
+        <button type="button" id="btn-idle" aria-pressed="true" title="Play or pause synchronized idle animation (I)">Idle</button>
+        <button type="button" data-speed="0.5" aria-pressed="false" title="Half playback speed">0.5&times;</button>
+        <button type="button" data-speed="1" aria-pressed="true" title="Normal playback speed">1&times;</button>
+        <button type="button" data-speed="1.5" aria-pressed="false" title="1.5x playback speed">1.5&times;</button>
+        <button type="button" id="btn-sync-reset" class="action-btn" title="Restart 1998 and 3D idle clocks together (R)">Sync Reset</button>
+      </div>
+    </div>
+
+    <main class="compare-main" id="compare-stage">
+      <section class="compare-grid" id="compare-grid" aria-label="All 6 ant classes 1998 sprite versus 3D comparison">
+        <article class="compare-card" data-card-ant="worker">
+          <header class="compare-card-head">
+            <h2 class="compare-card-title">Worker</h2>
+            <span class="compare-cycle" data-cycle-for="worker">Orig &mdash; &middot; 3D &mdash;</span>
+            <button type="button" class="card-focus-btn" data-focus-ant="worker" aria-label="Focus Worker side-by-side comparison">Focus</button>
+          </header>
+          <div class="compare-card-stage" data-stage-ant="worker">
+            <canvas class="compare-card-canvas" data-canvas-ant="worker" aria-label="Worker 1998 original sprite beside live 3D model"></canvas>
+            <span class="compare-pill compare-pill-left" aria-hidden="true">1998 Original</span>
+            <span class="compare-pill compare-pill-right" aria-hidden="true">Live 3D</span>
+          </div>
+        </article>
+
+        <article class="compare-card" data-card-ant="combat">
+          <header class="compare-card-head">
+            <h2 class="compare-card-title">Combat</h2>
+            <span class="compare-cycle" data-cycle-for="combat">Orig &mdash; &middot; 3D &mdash;</span>
+            <button type="button" class="card-focus-btn" data-focus-ant="combat" aria-label="Focus Combat side-by-side comparison">Focus</button>
+          </header>
+          <div class="compare-card-stage" data-stage-ant="combat">
+            <canvas class="compare-card-canvas" data-canvas-ant="combat" aria-label="Combat 1998 original sprite beside live 3D model"></canvas>
+            <span class="compare-pill compare-pill-left" aria-hidden="true">1998 Original</span>
+            <span class="compare-pill compare-pill-right" aria-hidden="true">Live 3D</span>
+          </div>
+        </article>
+
+        <article class="compare-card" data-card-ant="thief">
+          <header class="compare-card-head">
+            <h2 class="compare-card-title">Thief</h2>
+            <span class="compare-cycle" data-cycle-for="thief">Orig &mdash; &middot; 3D &mdash;</span>
+            <button type="button" class="card-focus-btn" data-focus-ant="thief" aria-label="Focus Thief side-by-side comparison">Focus</button>
+          </header>
+          <div class="compare-card-stage" data-stage-ant="thief">
+            <canvas class="compare-card-canvas" data-canvas-ant="thief" aria-label="Thief 1998 original sprite beside live 3D model"></canvas>
+            <span class="compare-pill compare-pill-left" aria-hidden="true">1998 Original</span>
+            <span class="compare-pill compare-pill-right" aria-hidden="true">Live 3D</span>
+          </div>
+        </article>
+
+        <article class="compare-card" data-card-ant="bomber">
+          <header class="compare-card-head">
+            <h2 class="compare-card-title">Bomber</h2>
+            <span class="compare-cycle" data-cycle-for="bomber">Orig &mdash; &middot; 3D &mdash;</span>
+            <button type="button" class="card-focus-btn" data-focus-ant="bomber" aria-label="Focus Bomber side-by-side comparison">Focus</button>
+          </header>
+          <div class="compare-card-stage" data-stage-ant="bomber">
+            <canvas class="compare-card-canvas" data-canvas-ant="bomber" aria-label="Bomber 1998 original sprite beside live 3D model"></canvas>
+            <span class="compare-pill compare-pill-left" aria-hidden="true">1998 Original</span>
+            <span class="compare-pill compare-pill-right" aria-hidden="true">Live 3D</span>
+          </div>
+        </article>
+
+        <article class="compare-card" data-card-ant="swimmer">
+          <header class="compare-card-head">
+            <h2 class="compare-card-title">Swimmer</h2>
+            <span class="compare-cycle" data-cycle-for="swimmer">Orig &mdash; &middot; 3D &mdash;</span>
+            <button type="button" class="card-focus-btn" data-focus-ant="swimmer" aria-label="Focus Swimmer side-by-side comparison">Focus</button>
+          </header>
+          <div class="compare-card-stage" data-stage-ant="swimmer">
+            <canvas class="compare-card-canvas" data-canvas-ant="swimmer" aria-label="Swimmer 1998 original sprite beside live 3D model"></canvas>
+            <span class="compare-pill compare-pill-left" aria-hidden="true">1998 Original</span>
+            <span class="compare-pill compare-pill-right" aria-hidden="true">Live 3D</span>
+          </div>
+        </article>
+
+        <article class="compare-card" data-card-ant="fire">
+          <header class="compare-card-head">
+            <h2 class="compare-card-title">Fire</h2>
+            <span class="compare-cycle" data-cycle-for="fire">Orig &mdash; &middot; 3D &mdash;</span>
+            <button type="button" class="card-focus-btn" data-focus-ant="fire" aria-label="Focus Fire side-by-side comparison">Focus</button>
+          </header>
+          <div class="compare-card-stage" data-stage-ant="fire">
+            <canvas class="compare-card-canvas" data-canvas-ant="fire" aria-label="Fire 1998 original sprite beside live 3D model"></canvas>
+            <span class="compare-pill compare-pill-left" aria-hidden="true">1998 Original</span>
+            <span class="compare-pill compare-pill-right" aria-hidden="true">Live 3D</span>
+          </div>
+        </article>
+      </section>
+
+      <section class="compare-solo" id="compare-solo" aria-label="Solo ant side-by-side focus" hidden>
+        <div class="solo-header">
+          <div class="solo-header-left">
+            <button type="button" id="btn-back-all" class="solo-btn">&larr; All 6</button>
+            <h2 id="solo-title">Worker</h2>
+            <span class="compare-cycle" id="solo-cycle">Orig &mdash; &middot; 3D &mdash;</span>
+            <span class="solo-anim-tag" id="solo-anim">&mdash;</span>
+          </div>
+          <div class="solo-header-right">
+            <button type="button" id="btn-solo-reset-angle" class="solo-btn" disabled>Reset 3D Angle</button>
+          </div>
+        </div>
+
+        <div class="solo-split">
+          <div class="solo-panel">
+            <canvas id="solo-orig-canvas" aria-label="1998 original animated ant sprite at crisp pixel scale"></canvas>
+            <span class="compare-pill compare-pill-left" id="solo-orig-pill" aria-hidden="true">1998 Original</span>
+          </div>
+          <div class="solo-panel">
+            <canvas
+              id="solo-3d-canvas"
+              tabindex="0"
+              aria-label="Live 3D ant model viewport aligned with 1998 sprite. Drag to orbit, scroll or pinch to zoom. Press arrow keys to orbit, plus or minus to zoom, R to reset to canonical angle, I to toggle idle animation, 1 through 5 for canonical angles, or Escape to return to All 6."
+            ></canvas>
+            <span class="compare-pill compare-pill-right" id="solo-3d-pill" aria-hidden="true">Live 3D &middot; 301 S</span>
+            <div class="solo-hint" aria-hidden="true">Drag: Orbit &middot; Scroll/Pinch: Zoom &middot; Arrows: Orbit &middot; R: Reset Angle &middot; Esc: All 6</div>
+          </div>
+        </div>
+      </section>
+
+      <div class="empty-overlay" id="compare-empty" hidden>
+        <div class="empty-card">
+          <h2 id="compare-empty-title">Comparison assets unavailable</h2>
+          <p id="compare-empty-message">
+            Serve this folder over HTTP after building 3D models and 1998 sprite sheets.
+          </p>
+        </div>
+      </div>
+    </main>
+
+    <footer class="app-footer">
+      <dl class="meta-grid" aria-label="Comparison metadata">
+        <div class="meta-item">
+          <dt>Scale</dt>
+          <dd id="meta-scale">Worker-locked uniform</dd>
+        </div>
+        <div class="meta-item">
+          <dt>Projection</dt>
+          <dd id="meta-proj">Ortho 33&deg; &middot; Shared Ground</dd>
+        </div>
+        <div class="meta-item">
+          <dt>Playback</dt>
+          <dd id="meta-play">Playing &middot; 1&times;</dd>
+        </div>
+      </dl>
+      <p role="status" class="status-region" id="status-region">Loading 1998 sprites and 3D models&hellip;</p>
+    </footer>
+  </div>
+
+  <div id="update-toast" class="update-toast" aria-hidden="true" hidden></div>
+</body>
+</html>
