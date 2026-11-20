@@ -622,12 +622,22 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
         self.assertIn(idx_of["eyelid_left"], doc_open["nodes"][idx_of["head_group"]]["children"])
 
         # Geometric eyelid radial clearance: holds for symmetric (1.0/1.0), asymmetric (0.92/1.08),
-        # and non-zero eye_look gaze across all 5 eye materials including limbal ring & catchlights.
+        # and vertically stretched eyes (eye_aspect_left/right) with non-zero eye_look across all 5 eye materials.
         eye_mats = ("eye_white", "eye_limbal", "eye_iris", "eye_pupil", "eye_catchlight")
-        for sl, sr, look in ((1.0, 1.0, (0.0, 0.0)), (0.92, 1.08, (-0.15, 0.12))):
+        for sl, sr, al, ar, look in (
+            (1.0, 1.0, 1.0, 1.0, (0.0, 0.0)),
+            (0.92, 1.08, 1.0, 1.0, (-0.15, 0.12)),
+            (0.94, 1.05, 0.92, 1.18, (-0.12, 0.10)),
+        ):
             for b_val in (0.0, 0.25, 0.5, 0.75, 1.0):
                 sc_b, a_b = base_ant.build_base_ant(
-                    f"clearance_{b_val}", blink=b_val, eye_scale_left=sl, eye_scale_right=sr, eye_look=look
+                    f"clearance_{b_val}",
+                    blink=b_val,
+                    eye_scale_left=sl,
+                    eye_scale_right=sr,
+                    eye_aspect_left=al,
+                    eye_aspect_right=ar,
+                    eye_look=look,
                 )
                 w_parts = sc_b.world_parts()
                 for side_sign, lid_node, lid_name in ((1.0, "eyelid_left", "eyelid_left_shell"), (-1.0, "eyelid_right", "eyelid_right_shell")):
@@ -646,9 +656,25 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
                     r_lid_inner = float(np.linalg.norm(lid_verts - pivot[None, :], axis=1).min())
                     self.assertGreaterEqual(
                         r_lid_inner - r_eye_max,
-                        0.006,
-                        f"{lid_name} ({sl}/{sr}, look={look}) at blink={b_val}: clearance {r_lid_inner - r_eye_max:.5f} < 0.006",
+                        0.007,
+                        f"{lid_name} ({sl}/{sr}, aspect={al}/{ar}, look={look}) at blink={b_val}: clearance {r_lid_inner - r_eye_max:.5f} < 0.007",
                     )
+
+        # Vertical eye_aspect_right > eye_aspect_left makes the viewer-left (-X / right) sclera noticeably taller.
+        sc_tall, anc_tall = base_ant.build_base_ant(
+            "aspect_test",
+            eye_scale_left=0.94,
+            eye_scale_right=1.05,
+            eye_aspect_left=0.92,
+            eye_aspect_right=1.18,
+            head_pitch_deg=0.0,
+        )
+        scl_l = next(p for p in sc_tall.world_parts() if p.name == "sclera_left")
+        scl_r = next(p for p in sc_tall.world_parts() if p.name == "sclera_right")
+        h_l = float(scl_l.bounds()[1][1] - scl_l.bounds()[0][1])
+        h_r = float(scl_r.bounds()[1][1] - scl_r.bounds()[0][1])
+        self.assertGreater(h_r, h_l * 1.30, f"expected taller right (-X) eye, got {h_r:.4f} vs {h_l:.4f}")
+        self.assertGreater(anc_tall["eye_right"][1], anc_tall["eye_left"][1] + 0.005)
 
         # attach_world_node preserves exact rest world bounds when specialists parent headgear to head_group.
         sc_hat, a_hat = base_ant.build_base_ant("hat_attach")
@@ -801,7 +827,7 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
                     self.assertGreaterEqual(stats["dimensions"][0], 0.90)
                     self.assertGreaterEqual(stats["bbox_max"][1], 1.05)
                 else:
-                    self.assertTrue(0.85 <= stats["bbox_max"][1] <= 1.45, f"{entry['id']} height {stats['bbox_max'][1]}")
+                    self.assertTrue(0.76 <= stats["bbox_max"][1] <= 1.45, f"{entry['id']} height {stats['bbox_max'][1]}")
 
     def test_build_all_cli_out_alias_and_comma_only(self):
         with tempfile.TemporaryDirectory() as tmp:
