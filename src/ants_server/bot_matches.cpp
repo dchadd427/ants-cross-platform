@@ -509,8 +509,8 @@ HttpResponse BotMatches::rotation_save(const AdminIdentity& who, const JsonValue
     if (!rotation_.set(kills_187, next, now_s, error)) return failure(503, "db", "The database did not take the list.");
     rooms_.set_bot_rotation(kills_187, next);
     size_t added = 0, removed = 0;
-    for (const BotRotationEntry& e : next) added += std::none_of(current.begin(), current.end(), [&](const BotRotationEntry& c) { return c.file == e.file; }) ? 1 : 0;
-    for (const BotRotationEntry& c : current) removed += std::none_of(next.begin(), next.end(), [&](const BotRotationEntry& e) { return c.file == e.file; }) ? 1 : 0;
+    for (const BotRotationEntry& e : next) added += std::none_of(current.begin(), current.end(), [&](const BotRotationEntry& c) { return c.file == e.file; }) ? size_t{1} : size_t{0};
+    for (const BotRotationEntry& c : current) removed += std::none_of(next.begin(), next.end(), [&](const BotRotationEntry& e) { return c.file == e.file; }) ? size_t{1} : size_t{0};
     record(who, now_s, "bot_rotation_changed", rules_name(kills_187), "+" + std::to_string(added) + " -" + std::to_string(removed) + ", " + std::to_string(next.size()) + (next.size() == 1 ? " map" : " maps"));
     o.set("changed", JsonValue::make_bool(true));
     return json_reply(200, o);

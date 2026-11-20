@@ -430,7 +430,7 @@ void run_bot_admin_tests() {
             size_t library = 0;
             for (const BotMapOption& o : options) {
                 by_file[o.file] = o;
-                library += o.group == "library" ? 1 : 0;
+                library += o.group == "library" ? size_t{1} : size_t{0};
                 ASSERT_TRUE(o.checked && o.playable && o.reason.empty() && o.width > 0 && o.height > 0 && o.players > 0 && o.minutes > 0);
             }
             ASSERT_EQ(library, size_t{534});

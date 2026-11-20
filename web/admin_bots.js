@@ -24,7 +24,7 @@
     var RANDOM_MAPS = [['random:rotation', 'Random from the rotation'], ['random:original', 'Random from the original maps'], ['random:players', 'Random from the players’ maps']];
     var RULES_NAME = { 'highest-score': 'Highest score', '187': '187' };
     var ROT_KEYS = ['highest-score', '187'];
-    var EVERY_PRESETS = [[0, 'All at once'], [1, '1 min'], [2, '2 min'], [3, '3 min'], [5, '5 min'], [10, '10 min'], [30, '30 min']];
+    var EVERY_PRESETS = [[0, 'All at once'], [1, '1 min'], [2, '2 min'], [3, '3 min'], [5, '5 min'], [10, '10 min']];
     var EVERY_MAX_MIN = 120;                                    // the longest spacing of a batch, in minutes (the server's kBotSpacingMaxS says it too)
     var CATALOG_STALE_MS = 60000;                               // the list of the server's maps is asked again when it is older than this and a box wants it
     var CHECK_AGAIN_MS = 2000;                                  // while the server has not judged every map yet, the page asks again at this interval
@@ -655,7 +655,7 @@
             function anyDirty() { return ROT_KEYS.some(listDirty); }
             function namesOf(list) { return list.map(function (e) { return e.name; }).join(', '); }
             function skipWords(e) {
-                if (e.reason === 'taken down') return 'Taken down, so it is skipped. Put it back, or remove it here.';
+                if (e.reason === 'taken down') return 'Taken down, so it is skipped. Put it back on the Maps page, or remove it here.';
                 if (e.reason === 'not on this server') return 'It is not on this server now, so it is skipped. Remove it here.';
                 return 'Skipped: ' + e.reason + '.';
             }
@@ -671,7 +671,7 @@
                 else if (e.state === 'checking') add(nm, el('span', 'tg mute', 'Checking'));
                 else if (e.random === false) add(nm, el('span', 'tg warn', 'Over ' + st.randomMax + ' min'));
                 if (e.places > 1) add(nm, el('span', 'rtag team', e.places + ' places'));
-                add(left, nm, el('div', 'bs', PICK.mapMeta(e)));
+                add(left, nm, e.width ? el('div', 'bs', PICK.mapMeta(e)) : null);          // (a map that the server has lost has no size to tell)
                 if (e.state === 'skipped') add(left, el('div', 'mr', skipWords(e)));
                 var rm = button('Remove', '', function () { removeFrom(key, e); });
                 rm.setAttribute('aria-label', 'Remove ' + e.name + ' from ' + RULES_NAME[key]);
@@ -826,7 +826,7 @@
             function afterCatalog() {
                 st.catAt = env.now();
                 if (st.checking <= 0) st.checkTries = 0;
-                else if (!st.checkTimer && !st.dead && env.setTimeout && st.checkTries < 90) {
+                else if (!st.checkTimer && !st.dead && env.setTimeout && st.checkTries < 30) {
                     st.checkTries++;
                     st.checkTimer = env.setTimeout(function () { st.checkTimer = 0; if (!st.dead) loadCatalog(); }, CHECK_AGAIN_MS);
                 }

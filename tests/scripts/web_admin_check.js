@@ -57,8 +57,9 @@ function catalogRow(file, group, width, height, players, minutes, places, extra)
 }
 const ROTATION_DEFAULTS = { 'highest-score': ['TINY.LVL', 'SMALL.LVL', 'MEDIUM.LVL', 'GAUNTLET.LVL', 'TREASURE.LVL', 'ISLANDS.LVL', 'POPcOrN.lvl', 'HELLRAISER.lvl', 'Bombz Away.lvl'], '187': ['TINY.LVL', 'SMALL.LVL', 'MEDIUM.LVL', 'GAUNTLET.LVL', 'TREASURE.LVL', 'Fight Island.lvl'] };
 // the entry of a list of the rotation (GET bot-rotation): the map's row, and whether the list can draw it
-function rotationEntry(maps, file) {
+function rotationEntry(maps, file, takenDown) {
     const m = maps.filter((x) => x.file === file)[0];
+    if (!m && takenDown && takenDown.indexOf(file) >= 0) return { file, name: file.replace(/\.lvl$/i, ''), group: 'players', state: 'skipped', reason: 'taken down' };          // (a map of a player that was taken down: the server no longer knows its size)
     if (!m) return { file, name: file.replace(/\.lvl$/i, ''), group: 'library', state: 'skipped', reason: 'not on this server' };
     return Object.assign({}, m, m.playable === false ? { state: 'skipped', reason: m.reason } : { state: 'ok' });
 }
@@ -146,7 +147,7 @@ function world(overrides) {
         if (method === 'GET' && url === '/admin/api/bot-rotation') {
             const lists = {}, defaults = {};
             for (const k of Object.keys(ROTATION_DEFAULTS)) {
-                lists[k] = (w.bots.rotation_lists ? w.bots.rotation_lists[k] : ROTATION_DEFAULTS[k]).map((f) => rotationEntry(w.bots.maps, f));
+                lists[k] = (w.bots.rotation_lists ? w.bots.rotation_lists[k] : ROTATION_DEFAULTS[k]).map((f) => rotationEntry(w.bots.maps, f, w.bots.takenDown));
                 defaults[k] = ROTATION_DEFAULTS[k].map((f) => ({ file: f, name: f.replace(/\.lvl$/i, '') }));
             }
             return reply(200, { lists, defaults, max: 100, checking: w.bots.checking, untrusted: true, untrusted_fields: ['name'] });
@@ -1846,7 +1847,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             for (let i = 0; i < 4; i++) plus.click();
             await settle();
             same('with five matches the field is shown: "Start one every", at 0 minutes (all at once), with the presets and a hint', [everyField(app).hidden, texts(app, '.b-now label').filter((t) => /^Start one every/.test(t)), everyBox(app).value, texts(app, '.b-now .minrow .chip'), texts(app, '.b-now .minrow .unit'), texts(app, '.b-now .fh').filter((t) => /start at once/.test(t))],
-                [false, ['Start one every'], '0', ['All at once', '1 min', '2 min', '3 min', '5 min', '10 min', '30 min'], ['minutes'], ['All 5 start at once. Give a time to start the first now and the others one after another.']]);
+                [false, ['Start one every'], '0', ['All at once', '1 min', '2 min', '3 min', '5 min', '10 min'], ['minutes'], ['All 5 start at once. Give a time to start the first now and the others one after another.']]);
             await press(app, '3 min');
             same('a preset puts its minutes in the box, and the hint says how it goes: the first now, then one every 3 minutes, the last in 12', [everyBox(app).value, texts(app, '.b-now .fh').filter((t) => /^The first starts now/.test(t))], ['3', ['The first starts now, then one every 3 minutes: the last in 12 minutes. A start that waits is lost if the server restarts; a schedule is kept.']]);
             everyBox(app).value = '1,5'; everyBox(app).fire('input', {});
@@ -2074,7 +2075,10 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             td.rotation_lists = { 'highest-score': ROTATION_DEFAULTS['highest-score'], '187': ROTATION_DEFAULTS['187'] };
             td.maps = td.maps.filter((m) => m.file !== 'Fight Island.lvl');
             const t2 = await opened({ bots: td });
-            same('a map that is not on the server shows its name and the words for a map that is gone', [texts(t2.app, '.b-rot .rrow.skip .rnm'), texts(t2.app, '.b-rot .rrow.skip .mr')], [['Fight IslandSkipped now'], ['It is not on this server now, so it is skipped. Remove it here.']]);
+            same('a map that is not on the server shows its name and the words for a map that is gone, and no size line (the server does not know it any more)', [texts(t2.app, '.b-rot .rrow.skip .rnm'), texts(t2.app, '.b-rot .rrow.skip .mr'), texts(t2.app, '.b-rot .rrow.skip .bs')], [['Fight IslandSkipped now'], ['It is not on this server now, so it is skipped. Remove it here.'], []]);
+            td.takenDown = ['Fight Island.lvl'];
+            const t3 = await opened({ bots: td });
+            same('a map of a player that was taken down says so, and where to put it back', texts(t3.app, '.b-rot .rrow.skip .mr'), ['Taken down, so it is skipped. Put it back on the Maps page, or remove it here.']);
             // a Rotation that cannot be had
             const none = await opened({ replies: { 'GET /admin/api/bot-rotation': { status: 500, json: {} } } });
             same('a rotation that cannot be had is said, and Start now and the maps are there', [texts(none.app, '.b-rot .msg'), all(none.app, '.b-now').length, mapWords(none.app, 'now')], [['The rotation could not be loaded.'], 1, 'Random from the rotation0 maps for Highest score, 0 for 187']);

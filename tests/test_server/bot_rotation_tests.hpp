@@ -132,7 +132,7 @@ void run_bot_rotation_tests() {
                 ASSERT_LE(d.w.mgr.bot_map_loads() - before, kBotCatalogLoads);                                                                    // (the bound: never the whole library in one call of the loop)
                 const size_t unchecked = static_cast<size_t>(o.get("checking").as_int_or(-1));
                 size_t flagged = 0;
-                for (size_t i = 0; i < o.get("maps").size(); ++i) flagged += o.get("maps").at(i).has("checked") && !o.get("maps").at(i).get("checked").as_bool_or(true) ? 1 : 0;
+                for (size_t i = 0; i < o.get("maps").size(); ++i) flagged += o.get("maps").at(i).has("checked") && !o.get("maps").at(i).get("checked").as_bool_or(true) ? size_t{1} : size_t{0};
                 ASSERT_EQ(flagged, unchecked);
                 if (calls == 0) ASSERT_EQ(unchecked, size_t{541} - kBotCatalogLoads);
                 else ASSERT_LT(unchecked, last_unchecked);                                                                                        // (each call judges others)
@@ -332,7 +332,7 @@ void run_bot_rotation_tests() {
         d.w.mgr.take_notices();
         ASSERT_TRUE(rotation_draws(d, BotRules::HighestScore, 12) == std::set<std::string>{"TINY.LVL"});                                           // (never drawn: the others are as likely as before)
         size_t named = 0;
-        for (const std::string& line : d.w.mgr.take_notices()) named += line.find("the map Mossy Ridge.lvl is skipped") != std::string::npos ? 1 : 0;
+        for (const std::string& line : d.w.mgr.take_notices()) named += line.find("the map Mossy Ridge.lvl is skipped") != std::string::npos ? size_t{1} : size_t{0};
         ASSERT_EQ(named, size_t{1});                                                                                                              // (named once, not at every match)
         // a save that leaves the lost map where it is goes through; the map is the admin's to remove
         ASSERT_EQ(d.post("bot-rotation", rotation_body("highest-score", {"TINY.LVL", "Mossy Ridge.lvl", "SMALL.LVL"})).status, 200);

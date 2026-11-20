@@ -88,17 +88,16 @@ function world() {
 // every map of the made-up server: the original's six (their sizes and minutes from docs/GAMEPLAY.md), the library of the repository (Community-Maps/maps.json: name, size, seats and minutes as they are) and a few approved maps of
 // the players (made up, apart from the name of Fight Island); a row has what a room can do with the map (`playable`, and a plain `reason` when not), as GET bot-options gives it
 const nameOf = (file) => file.replace(/\.lvl$/i, '');
-function mapRow(file, group, width, height, players, minutes, places, extra) { return Object.assign({ file, name: nameOf(file), group, width, height, players, minutes, places: places || 1, random: minutes <= 30, playable: true }, extra || {}); }
+function catalogRow(file, group, width, height, players, minutes, places, extra) { return Object.assign({ file, name: nameOf(file), group, width, height, players, minutes, places: places || 1, random: minutes <= 30, playable: true }, extra || {}); }
 const LIBRARY = JSON.parse(fs.readFileSync(path.join(ROOT, 'Community-Maps', 'maps.json'), 'utf8')).maps;
-const BOT_MAPS = [['TINY.LVL', 31, 6], ['SMALL.LVL', 40, 8], ['MEDIUM.LVL', 60, 10], ['GAUNTLET.LVL', 60, 10], ['TREASURE.LVL', 60, 12], ['ISLANDS.LVL', 60, 12]].map((o) => mapRow(o[0], 'original', o[1], o[1], 4, o[2]))
-    .concat(LIBRARY.map((m) => mapRow(m.file, 'library', m.width, m.height, m.players, m.minutes)))
-    .concat([mapRow('Cave Crossing.lvl', 'players', 31, 31, 4, 12), mapRow('Fight Island.lvl', 'players', 150, 150, 4, 20, 3), mapRow('Mossy Ridge.lvl', 'players', 31, 31, 4, 10), mapRow('Old Bridge.lvl', 'players', 128, 128, 4, 14, 2),
-        mapRow('Big Meadow.lvl', 'players', 200, 160, 4, 15, 1, { playable: false, reason: 'it starts too many ants for a room' }), mapRow('Two Hills.lvl', 'players', 31, 31, 2, 10, 1, { playable: false, reason: 'it has no place for four seats' }),
-        mapRow('Ultimate Chess.lvl', 'players', 120, 120, 4, 60, 2)]);
+const BOT_MAPS = [['TINY.LVL', 31, 6], ['SMALL.LVL', 40, 8], ['MEDIUM.LVL', 60, 10], ['GAUNTLET.LVL', 60, 10], ['TREASURE.LVL', 60, 12], ['ISLANDS.LVL', 60, 12]].map((o) => catalogRow(o[0], 'original', o[1], o[1], 4, o[2]))
+    .concat(LIBRARY.map((m) => catalogRow(m.file, 'library', m.width, m.height, m.players, m.minutes)))
+    .concat([catalogRow('Cave Crossing.lvl', 'players', 31, 31, 4, 12), catalogRow('Fight Island.lvl', 'players', 150, 150, 4, 20, 3), catalogRow('Mossy Ridge.lvl', 'players', 31, 31, 4, 10), catalogRow('Old Bridge.lvl', 'players', 128, 128, 4, 14, 2),
+        catalogRow('Big Meadow.lvl', 'players', 200, 160, 4, 15, 1, { playable: false, reason: 'it starts too many ants for a room' }), catalogRow('Two Hills.lvl', 'players', 31, 31, 2, 10, 1, { playable: false, reason: 'it has no place for four seats' })]);
 const ROTATION_DEFAULTS = { 'highest-score': ['TINY.LVL', 'SMALL.LVL', 'MEDIUM.LVL', 'GAUNTLET.LVL', 'TREASURE.LVL', 'ISLANDS.LVL', 'POPcOrN.lvl', 'HELLRAISER.lvl', 'Bombz Away.lvl'], '187': ['TINY.LVL', 'SMALL.LVL', 'MEDIUM.LVL', 'GAUNTLET.LVL', 'TREASURE.LVL', 'Fight Island.lvl'] };
 function rotationEntry(file) {                                       // an entry of a list of the rotation: the map's row, and whether the list can draw it now
     const m = W.bots.maps.filter((x) => x.file === file)[0];
-    if (!m) return { file, name: nameOf(file), group: 'library', width: 0, height: 0, players: 0, minutes: 0, places: 1, random: true, playable: false, state: 'skipped', reason: 'taken down' };
+    if (!m) return { file, name: nameOf(file), group: 'players', state: 'skipped', reason: 'taken down' };          // (a map that the server has lost: it knows no size any more)
     return Object.assign({}, m, m.playable === false ? { state: 'skipped', reason: m.reason } : { state: 'ok' });
 }
 const BOT_ROTATION = { count: 1, every_s: 0, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' };

@@ -52,7 +52,7 @@
             close();
             var q = '', chip = 'all', openLetter = '', warnFile = null, note = '', alive = true;
             var maps = function () { return o.maps(); };
-            var dlg = el('div', 'dlg mp'), head = el('div', 'mp-hd'), title = el('h2', null, o.title), wrap = el('div', 'mp-wrap'), top = el('div', 'mp-top'), list = el('div', 'mp-list fix');
+            var dlg = el('div', 'dlg mp'), head = el('div', 'mp-hd'), title = el('h2', null, o.title), wrap = el('div', 'mp-wrap'), top = el('div', 'mp-top'), list = el('div', 'mp-list');
             var inw = el('div', 'inw'), inp = el('input', 'tinput mp-q'), chips = el('div', 'chips mp-chips'), count = el('div', 'mp-count'), added = el('div', 'mp-added');
             title.id = 'mp-title';
             title.tabIndex = -1;
