@@ -255,10 +255,10 @@ def _build_torso(scene: SceneBuilder) -> np.ndarray:
     neck_ring = torus_arc(0.140, 0.013, u_segs=20, v_segs=8, plane="xz", name="neck_band", material="chitin_dark").scale(1.02, 1.0, 0.94).rotate_xyz(rx=0.40).translate(0.0, 0.816, 0.122)
     scene.add("body", [pelvis, neck, neck_ring])
 
-    # Smooth curved scale-plated armored pauldrons seated cleanly on the outer shoulders outside the bandolier straps.
+    # Smooth curved scale-plated armored pauldrons seated cleanly on the outer shoulders outside the yellow collar.
     pauldron_specs = (
-        ((0.336, 0.748, -0.022), (0.154, 0.066, 0.156), -0.48),
-        ((0.408, 0.654, -0.004), (0.146, 0.068, 0.148), -0.82),
+        ((0.362, 0.724, -0.022), (0.130, 0.056, 0.144), -0.58),
+        ((0.412, 0.664, -0.004), (0.134, 0.056, 0.138), -0.86),
     )
     plate_parts: List[MeshPart] = []
 
@@ -291,7 +291,7 @@ def _build_torso(scene: SceneBuilder) -> np.ndarray:
 
     # Row of 3 smooth overlapping curved armor scales riding organically on the outer deltoid arms.
     for s_idx, (z_off, yaw_z) in enumerate(((-0.072, -0.28), (0.0, 0.0), (0.072, 0.28))):
-        sc_ctr = np.array([0.442, 0.622, 0.005 + z_off])
+        sc_ctr = np.array([0.440, 0.636, 0.005 + z_off])
         scale_plate = (
             superellipsoid(0.056, 0.042, 0.054, e1=0.72, e2=0.78, u_segs=14, v_segs=10, name=f"pauldron_scale_{s_idx}", material="chitin_team")
             .rotate_xyz(ry=yaw_z, rz=-1.04)
@@ -623,10 +623,10 @@ def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray
     thumb = [fi + np.array(c) for c in ((-0.048, 0.040, 0.026), (-0.074, 0.026, 0.074), (-0.046, -0.004, 0.104))]
     _add_arm_pair(curved_tube(thumb, [0.026, 0.022, 0.010], samples_per_seg=3, radial_segs=10, cap_rings=2, name="fist_thumb", material="chitin_dark"), right_node="right_forearm")
 
-    # Sample exact right (-X) lower-bicep center & vertices so hot-magenta cloth wraps cleanly
-    # just below the bulging bicep mountain peak (letting the big bicep pop proudly above it!).
+    # Sample exact right (-X) high upper bicep center & vertices so hot-magenta cloth wraps cleanly
+    # high on the meaty upper bicep right below the deltoid scales (matching `acst301`/`acst901`).
     sampled = catmull_rom_spline(ARM_PTS_LEFT, samples_per_seg=10)
-    idx = 16
+    idx = 8
     p_l = sampled[idx]
     t_l = _normalize(sampled[idx + 1] - sampled[idx - 1])
     right_arm_verts = np.vstack([p.positions for p in scene.get_node("right_upper_arm") + scene.get_node("right_forearm")]).astype(np.float64)
@@ -729,82 +729,82 @@ def _conform_belt_to_torso(
 
 
 def _make_tactical_pouch(center: np.ndarray, width_dir: np.ndarray, out_n: np.ndarray, tangent: np.ndarray, label: str) -> List[MeshPart]:
-    """One chunky quilted bright-yellow tactical utility pouch with overlapping flap (`acst301`)."""
+    """One chunky rectangular quilted bright-yellow tactical utility pouch (`acst301`/`acst901`)."""
     mat = _frame(center, width_dir, out_n, tangent)
-    body = rounded_box(0.116, 0.044, 0.056, bevel=0.011, segs=1, name=f"tactical_pouch_{label}", material="gear_yellow_plastic").transform(mat)
-    flap = rounded_box(0.120, 0.016, 0.042, bevel=0.005, segs=1, name=f"pouch_flap_{label}", material="gear_yellow_plastic").translate(0.0, 0.018, -0.005).transform(mat)
-    crease = rounded_box(0.114, 0.009, 0.009, bevel=0.002, segs=1, name=f"pouch_seam_{label}", material="gear_dark").translate(0.0, 0.014, 0.016).transform(mat)
+    body = rounded_box(0.132, 0.048, 0.062, bevel=0.011, segs=1, name=f"tactical_pouch_{label}", material="gear_yellow_plastic").transform(mat)
+    flap = rounded_box(0.136, 0.017, 0.046, bevel=0.005, segs=1, name=f"pouch_flap_{label}", material="gear_yellow_plastic").translate(0.0, 0.020, -0.005).transform(mat)
+    crease = rounded_box(0.128, 0.008, 0.009, bevel=0.002, segs=1, name=f"pouch_seam_{label}", material="gear_gold").translate(0.0, 0.015, 0.018).transform(mat)
     return [body, flap, crease]
 
 
 def _build_bandoliers(scene: SceneBuilder, torso_verts: np.ndarray) -> None:
-    """Crossed ribbed woven-gold bullet bandoliers draped taut & flush over chest, collarbone, & back."""
-    belt_ctrl = [
-        (0.172, 0.806, -0.042),   # snugly over inner trapezius right beside the dark muscular neck
-        (0.176, 0.706, 0.146),    # straight, taut drape down inner collarbone & upper pec
-        (0.106, 0.576, 0.228),    # smooth diagonal across left pectoral
-        (0.000, 0.474, 0.254),    # front chest X crossing
-        (-0.142, 0.390, 0.214),   # lower-right abdomen
-        (-0.242, 0.348, 0.094),   # right front hip
-        (-0.260, 0.354, -0.082),  # right side hip
-        (-0.192, 0.438, -0.264),  # lower-right back
-        (0.000, 0.562, -0.326),   # back X crossing across big dorsal carapace
-        (0.166, 0.716, -0.278),   # upper-left back
-        (0.178, 0.788, -0.166),   # smooth rear inner-shoulder slope
+    """Wide U-shaped / horseshoe all-yellow tactical pouch collar sweeping wide over BOTH shoulders,
+    curving cleanly beneath the chin across the chest (`acst301`), and meeting in a bold V on the back (`acst701`).
+    """
+    # Single continuous closed 3D horseshoe/V tactical harness loop matching `acst301`/`901`/`701`:
+    # wide over outer trapezius/shoulders -> U-collar across upper-mid chest -> V-meet across mid-back!
+    harness_ctrl = [
+        (0.000, 0.458, +0.268),   # bottom center of bold front U-collar below chin
+        (+0.155, 0.516, +0.236),  # wide front-left chest curve
+        (+0.258, 0.656, +0.136),  # sweeping wide up front-left shoulder
+        (+0.274, 0.816, -0.032),  # wide & clean over top of left shoulder/trapezius
+        (+0.232, 0.728, -0.226),  # sweeping down upper-left back
+        (+0.132, 0.580, -0.304),  # angling inward into rear V
+        (0.000, 0.486, -0.324),   # crisp rear back V-junction above gaster (`acst701`)
+        (-0.132, 0.580, -0.304),  # angling up-outward on right back
+        (-0.232, 0.728, -0.226),  # sweeping up upper-right back
+        (-0.274, 0.816, -0.032),  # wide & clean over top of right shoulder/trapezius
+        (-0.258, 0.656, +0.136),  # sweeping wide down front-right shoulder
+        (-0.155, 0.516, +0.236),  # wide front-right chest curve
     ]
-    pivot = np.array([0.0, 0.535, -0.032])
-    crossings = {"front": np.array([0.0, 0.474, 0.282]), "back": np.array([0.0, 0.562, -0.354])}
+    pivot = np.array([0.0, 0.545, -0.028])
+    pts = catmull_rom_spline(np.asarray(harness_ctrl, dtype=np.float64), samples_per_seg=6, closed=True)
+    # Smooth continuous upward normal ramp over the wide shoulders so pouches sit cleanly flat on the collar!
+    out_n = np.array([
+        _normalize(p - pivot + np.array([0.0, 0.34 * max(0.0, min(1.0, (p[1] - 0.60) / 0.22)), 0.0]))
+        for p in pts
+    ])
+    pts = _conform_belt_to_torso(pts, out_n, torso_verts, pivot, clearance=0.012)
 
-    for belt_idx, sign in enumerate((1.0, -1.0)):
-        raw = np.array([(sign * x, y, z) for x, y, z in belt_ctrl], dtype=np.float64)
-        pts = catmull_rom_spline(raw, samples_per_seg=6, closed=True)
-        # Smooth continuous upward normal ramp across collarbone (eliminates any front shoulder hook!).
-        out_n = np.array([
-            _normalize(p - pivot + np.array([0.0, 0.26 * max(0.0, min(1.0, (p[1] - 0.62) / 0.20)), 0.0]))
-            for p in pts
-        ])
-        pts = _conform_belt_to_torso(pts, out_n, torso_verts, pivot, clearance=0.011)
-        if belt_idx == 1:
-            pts = pts + (0.030 * np.exp(-((pts[:, 0] / 0.11) ** 2)))[:, None] * out_n
-            for tag, mask in (("front", pts[:, 2] > 0.15), ("back", pts[:, 2] < -0.15)):
-                sub = pts[mask]
-                hit = sub[int(np.argmin(np.abs(sub[:, 0])))]
-                crossings[tag] = hit + np.array([0.0, 0.0, 0.020 if tag == "front" else -0.020])
+    n_pts = len(pts)
+    scene.add(
+        "gear_bandolier",
+        _sculpted_ribbon_mesh(pts, out_n, np.full(n_pts, 0.084), np.full(n_pts, 0.014), closed=True, profile_segs=8, name="bandolier_strap_0", material="gear_gold"),
+    )
 
-        n_pts = len(pts)
-        scene.add("gear_bandolier", _sculpted_ribbon_mesh(pts, out_n, np.full(n_pts, 0.072), np.full(n_pts, 0.012), closed=True, profile_segs=8, name=f"bandolier_strap_{belt_idx}", material="gear_gold"))
+    tangents = np.array([_normalize(pts[(i + 1) % n_pts] - pts[(i - 1) % n_pts]) for i in range(n_pts)])
+    surf_n = np.array([_normalize(o - np.dot(o, t) * t) for o, t in zip(out_n, tangents)])
 
-        tangents = np.array([_normalize(pts[(i + 1) % n_pts] - pts[(i - 1) % n_pts]) for i in range(n_pts)])
-        surf_n = np.array([_normalize(o - np.dot(o, t) * t) for o, t in zip(out_n, tangents)])
+    seg_lens = np.linalg.norm(np.roll(pts, -1, axis=0) - pts, axis=1)
+    cum = np.concatenate([[0.0], np.cumsum(seg_lens)])
+    total = float(cum[-1])
+    count = int(total / 0.082)
+    for k in range(count):
+        s = (k + 0.5) * total / count
+        i = int(np.searchsorted(cum, s, side="right") - 1) % n_pts
+        j = (i + 1) % n_pts
+        f = (s - cum[i]) / max(1e-8, float(seg_lens[i]))
+        p = (1.0 - f) * pts[i] + f * pts[j]
+        # Leave clean space for the rear V-junction clasp only (front U stays a continuous row of yellow pouches!)
+        if abs(p[0]) < 0.070 and p[2] < -0.22:
+            continue
+        t = _normalize((1.0 - f) * tangents[i] + f * tangents[j])
+        o = _normalize((1.0 - f) * surf_n[i] + f * surf_n[j])
+        w = _normalize(np.cross(o, t))
+        o = np.cross(t, w)
+        if np.dot(w, np.array([1.0 if p[0] >= 0.0 else -1.0, 0.20, 0.0])) < 0.0:
+            w = -w
+            t = -t
+        scene.add("gear_bandolier", _make_tactical_pouch(p + 0.024 * o, w, o, t, f"u_{k}"))
 
-        seg_lens = np.linalg.norm(np.roll(pts, -1, axis=0) - pts, axis=1)
-        cum = np.concatenate([[0.0], np.cumsum(seg_lens)])
-        total = float(cum[-1])
-        count = int(total / 0.080)
-        for k in range(count):
-            s = (k + 0.5) * total / count
-            i = int(np.searchsorted(cum, s, side="right") - 1) % n_pts
-            j = (i + 1) % n_pts
-            f = (s - cum[i]) / max(1e-8, float(seg_lens[i]))
-            p = (1.0 - f) * pts[i] + f * pts[j]
-            if abs(p[0]) < 0.088 and abs(p[2]) > 0.14:
-                continue
-            t = _normalize((1.0 - f) * tangents[i] + f * tangents[j])
-            o = _normalize((1.0 - f) * surf_n[i] + f * surf_n[j])
-            w = _normalize(np.cross(o, t))
-            o = np.cross(t, w)
-            if np.dot(w, np.array([sign, 0.25, 0.0])) < 0.0:
-                w = -w
-                t = -t
-            scene.add("gear_bandolier", _make_tactical_pouch(p + 0.022 * o, w, o, t, f"{belt_idx}_{k}"))
-
-    for tag, pos in crossings.items():
-        tilt = 14.0 if tag == "front" else -16.0
-        face = 1.0 if tag == "front" else -1.0
-        frame = rounded_box(0.150, 0.150, 0.036, bevel=0.012, segs=2, name=f"buckle_frame_{tag}", material="gear_yellow_plastic").rotate_xyz(rx=tilt, rz=45.0, degrees=True).translate(*pos)
-        recess = rounded_box(0.094, 0.094, 0.042, bevel=0.008, segs=1, name=f"buckle_recess_{tag}", material="gear_dark").rotate_xyz(rx=tilt, rz=45.0, degrees=True).translate(*pos)
-        boss = superellipsoid(0.039, 0.039, 0.022, e1=0.74, e2=0.74, u_segs=14, v_segs=8, name=f"buckle_boss_{tag}", material="gear_gold").rotate_xyz(rx=tilt, degrees=True).translate(pos[0], pos[1], pos[2] + 0.018 * face)
-        scene.add("gear_bandolier", [frame, recess, boss])
+    # Clean yellow rear V-junction tactical clasp anchoring the harness smoothly across the back (`acst701`).
+    back_mask = pts[:, 2] < -0.20
+    back_sub = pts[back_mask]
+    back_pos = back_sub[int(np.argmin(np.abs(back_sub[:, 0])))] + np.array([0.0, 0.0, -0.022])
+    frame = rounded_box(0.144, 0.144, 0.036, bevel=0.012, segs=2, name="buckle_frame_back", material="gear_yellow_plastic").rotate_xyz(rx=-16.0, rz=45.0, degrees=True).translate(*back_pos)
+    recess = rounded_box(0.088, 0.088, 0.040, bevel=0.008, segs=1, name="buckle_recess_back", material="gear_gold").rotate_xyz(rx=-16.0, rz=45.0, degrees=True).translate(*back_pos)
+    boss = superellipsoid(0.036, 0.036, 0.022, e1=0.74, e2=0.74, u_segs=14, v_segs=8, name="buckle_boss_back", material="gear_yellow_plastic").rotate_xyz(rx=-16.0, degrees=True).translate(back_pos[0], back_pos[1], back_pos[2] - 0.018)
+    scene.add("gear_bandolier", [frame, recess, boss])
 
 
 # ---------------------------------------------------------------------------
