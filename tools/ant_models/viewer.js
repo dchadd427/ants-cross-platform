@@ -9,10 +9,10 @@
   const srgbToLinear = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
   const rgbLinear = (rgb) => rgb.map(srgbToLinear);
   const TEAMS = {
-    green: { label: "Green", team: rgbLinear([0.24, 0.43, 0.27]), dark: rgbLinear([0.09, 0.08, 0.07]) },
-    red: { label: "Red", team: rgbLinear([0.50, 0.16, 0.17]), dark: rgbLinear([0.12, 0.06, 0.06]) },
-    blue: { label: "Blue", team: rgbLinear([0.20, 0.31, 0.52]), dark: rgbLinear([0.07, 0.08, 0.13]) },
-    black: { label: "Black", team: rgbLinear([0.34, 0.36, 0.40]), dark: rgbLinear([0.08, 0.08, 0.09]) },
+    green: { label: "Green", team: rgbLinear([0.24, 0.44, 0.27]), dark: rgbLinear([0.16, 0.31, 0.19]) },
+    red: { label: "Red", team: rgbLinear([0.52, 0.16, 0.18]), dark: rgbLinear([0.36, 0.10, 0.12]) },
+    blue: { label: "Blue", team: rgbLinear([0.20, 0.32, 0.54]), dark: rgbLinear([0.13, 0.22, 0.39]) },
+    black: { label: "Black", team: rgbLinear([0.35, 0.37, 0.42]), dark: rgbLinear([0.23, 0.25, 0.29]) },
   };
   const ANGLES = {
     "301": { label: "301 S", full: "301 S (Front)", yaw: 0, pitch: 50 },
@@ -228,15 +228,21 @@
     const buffers = (gltf.buffers || []).map((b, i) => (!b.uri && i === 0 && binSlice ? binSlice : (b.uri && b.uri.startsWith("data:") ? decodeDataUri(b.uri) : binSlice || new ArrayBuffer(0))));
     if (!buffers.length && binSlice) buffers.push(binSlice);
 
-    const defaultMat = { name: "default", baseColor: [0.75, 0.78, 0.82, 1], metallic: 0.05, roughness: 0.4, emissive: [0, 0, 0], alphaMode: "OPAQUE", doubleSided: false };
+    const defaultMat = { name: "default", baseColor: [0.75, 0.78, 0.82, 1], metallic: 0.05, roughness: 0.4, emissive: [0, 0, 0], alphaMode: "OPAQUE", doubleSided: false, isTranslucent: false };
     const materials = (gltf.materials || []).map((m, i) => {
       const pbr = m.pbrMetallicRoughness || {}, bc = Array.isArray(pbr.baseColorFactor) ? pbr.baseColorFactor : [1, 1, 1, 1];
+      const name = m.name || ("material_" + i);
+      let alpha = bc.length > 3 ? bc[3] : 1, alphaMode = m.alphaMode || "OPAQUE", doubleSided = Boolean(m.doubleSided);
+      if (alphaMode === "OPAQUE" && alpha >= 0.99) {
+        if (name === "glass_tinted") { alpha = 0.30; alphaMode = "BLEND"; doubleSided = true; }
+        else if (name === "glass_clear") { alpha = 0.22; alphaMode = "BLEND"; doubleSided = true; }
+      }
       return {
-        name: m.name || ("material_" + i), baseColor: [bc[0], bc[1], bc[2], bc.length > 3 ? bc[3] : 1],
+        name, baseColor: [bc[0], bc[1], bc[2], alpha],
         metallic: typeof pbr.metallicFactor === "number" ? pbr.metallicFactor : 0.05,
         roughness: typeof pbr.roughnessFactor === "number" ? pbr.roughnessFactor : 0.45,
         emissive: Array.isArray(m.emissiveFactor) ? m.emissiveFactor : [0, 0, 0],
-        alphaMode: m.alphaMode || "OPAQUE", doubleSided: Boolean(m.doubleSided),
+        alphaMode, doubleSided, isTranslucent: alphaMode === "BLEND" || alpha < 0.99,
       };
     });
 
@@ -405,7 +411,7 @@
     return env + vec3(1.0, 0.97, 0.92) * smoothstep(0.68, 0.97, dot(R, u_keyDir)) * 1.25 * sharp
                + vec3(0.82, 0.90, 1.0) * smoothstep(0.76, 0.98, dot(R, u_rimDir)) * 0.52 * sharp;
   }
-  vec3 evalLight(vec3 L, vec3 lCol, vec3 N, vec3 V, vec3 albedo, float met, float rough, vec3 F0, float coatW) {
+  vec3 evalLight(vec3 L, vec3 lCol, vec3 N, vec3 V, vec3 albedo, float met, float rough, vec3 F0, float coatW, inout vec3 specAcc) {
     float NoL = max(dot(N, L), 0.0);
     if (NoL <= 0.0) return vec3(0.0);
     vec3 H = normalize(V + L);
@@ -414,7 +420,9 @@
     vec3 spec = (D_GGX(NoH, max(rough * rough, 0.045)) * G_Smith(NoV, NoL, rough) * F) / (4.0 * NoV * NoL + 1e-4);
     vec3 diff = (vec3(1.0) - F) * (1.0 - met) * albedo / PI;
     float coat = coatW * (D_GGX(NoH, 0.0484) * G_Smith(NoV, NoL, 0.22) * (0.04 + 0.96 * pow(1.0 - HoV, 5.0))) / (4.0 * NoV * NoL + 1e-4);
-    return (diff + spec + vec3(coat)) * lCol * NoL;
+    vec3 specTerm = (spec + vec3(coat)) * lCol * NoL;
+    specAcc += specTerm;
+    return diff * lCol * NoL + specTerm;
   }
   vec3 acesFilm(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
   vec3 linearToSrgb(vec3 c) { return mix(c * 12.92, 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c)); }
@@ -448,17 +456,23 @@
       albedo *= mix(0.86, 1.08, brush);
       rough = clamp(rough + (brush - 0.5) * 0.14, 0.14, 0.78);
     }
-    vec3 F0 = mix(vec3(0.04), albedo, met);
-    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.97, 0.92) * 3.45, N, V, albedo, met, rough, F0, coatW)
-            + evalLight(u_fillDir, vec3(0.70, 0.82, 0.98) * 0.54, N, V, albedo, met, rough, F0, coatW)
-            + evalLight(u_rimDir, vec3(0.88, 0.94, 1.0) * 1.22, N, V, albedo, met, rough, F0, coatW);
+    vec3 F0 = mix(vec3(0.04), albedo, met), specAcc = vec3(0.0);
+    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.97, 0.92) * 3.45, N, V, albedo, met, rough, F0, coatW, specAcc)
+            + evalLight(u_fillDir, vec3(0.70, 0.82, 0.98) * 0.54, N, V, albedo, met, rough, F0, coatW, specAcc)
+            + evalLight(u_rimDir, vec3(0.88, 0.94, 1.0) * 1.22, N, V, albedo, met, rough, F0, coatW, specAcc);
     float ao = mix(0.64, 1.0, smoothstep(0.0, 0.32, v_worldPos.y)) * mix(0.56, 1.0, smoothstep(-0.35, 0.55, N.y));
     vec3 ambDiff = mix(u_groundColor, u_skyColor, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.30;
     vec3 R = reflect(-V, N); float NoV = max(dot(N, V), 0.0);
     vec3 F_env = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - NoV, 5.0);
     vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.88, 0.14, rough);
     vec3 envCoat = studioEnv(R, 0.22) * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * 0.26;
-    fragColor = vec4(linearToSrgb(acesFilm((Lo + (ambDiff + envSpec + envCoat) * ao + u_emissive) * 1.03)), u_alpha);
+    vec3 outCol = linearToSrgb(acesFilm((Lo + (ambDiff + envSpec + envCoat) * ao + u_emissive) * 1.03));
+    float outAlpha = u_alpha;
+    if (u_alpha < 0.99) {
+      float specLuma = dot(acesFilm((specAcc + (envSpec + envCoat) * ao) * 1.03), vec3(0.2126, 0.7152, 0.0722));
+      outAlpha = clamp(u_alpha + pow(1.0 - NoV, 3.0) * 0.42 + specLuma * 0.55, 0.0, 0.90);
+    }
+    fragColor = vec4(outCol, outAlpha);
   }`;
 
   const PLINTH_VS = `#version 300 es
@@ -690,30 +704,36 @@
       gl.uniform3fv(this.uPbr.u_keyDir, keyDir); gl.uniform3fv(this.uPbr.u_fillDir, fillDir); gl.uniform3fv(this.uPbr.u_rimDir, rimDir);
       gl.uniform3fv(this.uPbr.u_skyColor, pal.sky); gl.uniform3fv(this.uPbr.u_groundColor, pal.ground);
 
-      scene.instances.forEach((inst, instIdx) => {
-        const worldMats = evaluateWorldMats(inst, opts.blinkMode);
-        gl.uniform3f(this.uPbr.u_instOffset, inst.offsetMat ? inst.offsetMat[12] : 0, inst.offsetMat ? inst.offsetMat[13] : 0, inst.offsetMat ? inst.offsetMat[14] : 0);
-        gl.uniform1f(this.uPbr.u_noiseSeed, instIdx * 17.3);
-        for (const item of inst.model.drawCalls) {
-          const prim = item.prim, mat = prim.material;
-          let bc = mat.baseColor;
-          if (mat.name === "chitin_team") bc = [team.team[0], team.team[1], team.team[2], bc[3]];
-          else if (mat.name === "chitin_dark") bc = [team.dark[0], team.dark[1], team.dark[2], bc[3]];
-          if (mat.alphaMode === "BLEND" || bc[3] < 0.99) {
-            gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
-          } else { gl.disable(gl.BLEND); gl.depthMask(true); }
-          if (mat.doubleSided) gl.disable(gl.CULL_FACE); else { gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); }
-          const nodeMat = worldMats[item.nodeIndex] || item.worldMat;
-          const modelMat = inst.offsetMat ? mat4Multiply(inst.offsetMat, nodeMat) : nodeMat;
-          gl.frontFace(mat3DetFromMat4(modelMat) < 0 ? gl.CW : gl.CCW);
-          gl.uniformMatrix4fv(this.uPbr.u_model, false, modelMat); gl.uniformMatrix3fv(this.uPbr.u_normalMat, false, mat3NormalFromMat4(modelMat));
-          gl.uniform3f(this.uPbr.u_baseColor, bc[0], bc[1], bc[2]); gl.uniform1f(this.uPbr.u_alpha, bc[3]);
-          gl.uniform1f(this.uPbr.u_metallic, mat.metallic); gl.uniform1f(this.uPbr.u_roughness, mat.roughness);
-          gl.uniform1i(this.uPbr.u_surfaceKind, surfaceKindFor(mat)); gl.uniform3fv(this.uPbr.u_emissive, mat.emissive);
-          gl.bindVertexArray(prim.vao);
-          if (prim.indexed) gl.drawElements(prim.mode, prim.drawCount, prim.indexType, 0); else gl.drawArrays(prim.mode, 0, prim.drawCount);
-        }
-      });
+      // 2-pass rendering across all instances: Pass 0 opaque, Pass 1 translucent glass lenses
+      const instMats = scene.instances.map((inst) => evaluateWorldMats(inst, opts.blinkMode));
+      for (let pass = 0; pass < 2; pass++) {
+        const wantBlend = pass === 1;
+        if (wantBlend) {
+          gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+        } else { gl.disable(gl.BLEND); gl.depthMask(true); }
+        scene.instances.forEach((inst, instIdx) => {
+          const worldMats = instMats[instIdx];
+          gl.uniform3f(this.uPbr.u_instOffset, inst.offsetMat ? inst.offsetMat[12] : 0, inst.offsetMat ? inst.offsetMat[13] : 0, inst.offsetMat ? inst.offsetMat[14] : 0);
+          gl.uniform1f(this.uPbr.u_noiseSeed, instIdx * 17.3);
+          for (const item of inst.model.drawCalls) {
+            const prim = item.prim, mat = prim.material;
+            if (Boolean(mat.isTranslucent) !== wantBlend) continue;
+            let bc = mat.baseColor;
+            if (mat.name === "chitin_team") bc = [team.team[0], team.team[1], team.team[2], bc[3]];
+            else if (mat.name === "chitin_dark") bc = [team.dark[0], team.dark[1], team.dark[2], bc[3]];
+            if (mat.doubleSided) gl.disable(gl.CULL_FACE); else { gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); }
+            const nodeMat = worldMats[item.nodeIndex] || item.worldMat;
+            const modelMat = inst.offsetMat ? mat4Multiply(inst.offsetMat, nodeMat) : nodeMat;
+            gl.frontFace(mat3DetFromMat4(modelMat) < 0 ? gl.CW : gl.CCW);
+            gl.uniformMatrix4fv(this.uPbr.u_model, false, modelMat); gl.uniformMatrix3fv(this.uPbr.u_normalMat, false, mat3NormalFromMat4(modelMat));
+            gl.uniform3f(this.uPbr.u_baseColor, bc[0], bc[1], bc[2]); gl.uniform1f(this.uPbr.u_alpha, bc[3]);
+            gl.uniform1f(this.uPbr.u_metallic, mat.metallic); gl.uniform1f(this.uPbr.u_roughness, mat.roughness);
+            gl.uniform1i(this.uPbr.u_surfaceKind, surfaceKindFor(mat)); gl.uniform3fv(this.uPbr.u_emissive, mat.emissive);
+            gl.bindVertexArray(prim.vao);
+            if (prim.indexed) gl.drawElements(prim.mode, prim.drawCount, prim.indexType, 0); else gl.drawArrays(prim.mode, 0, prim.drawCount);
+          }
+        });
+      }
       gl.bindVertexArray(null); gl.frontFace(gl.CCW); gl.depthMask(true); gl.disable(gl.BLEND);
     }
 
