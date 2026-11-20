@@ -726,8 +726,20 @@ void run_rematch_tests() {
             ctl::JsonValue j;
             ctl::parse_json(handle_public_replays(w.mgr, rq, w.now).body, j, nullptr);
             std::string out;
-            for (size_t i = 0; i < j.get("lobbies").size(); ++i) out += (out.empty() ? "" : ",") + j.get("lobbies").at(i).get("code").str();
+            for (size_t i = 0; i < j.get("lobbies").size(); ++i) {
+                if (j.get("lobbies").at(i).has("code")) out += (out.empty() ? "" : ",") + j.get("lobbies").at(i).get("code").str();       // (the rows of private rooms have no code)
+            }
             return out;
+        };
+        const auto locked = [](World& w) {                                                          // the rows of private rooms
+            ctl::HttpRequest rq;
+            rq.method = "GET";
+            rq.path = "/lobbies";
+            ctl::JsonValue j;
+            ctl::parse_json(handle_public_replays(w.mgr, rq, w.now).body, j, nullptr);
+            size_t n = 0;
+            for (size_t i = 0; i < j.get("lobbies").size(); ++i) n += j.get("lobbies").at(i).get("private").as_bool_or(false) ? 1u : 0u;
+            return n;
         };
         for (const bool removes : {false, true}) {
             World w(rematch_limits());
@@ -778,6 +790,14 @@ void run_rematch_tests() {
             w.run(300);
             ASSERT_TRUE(pia_back.lobby->is_leader() && !pia_back.lobby->room_is_public() && !lobby_of(w, code)->lobby_public);
             ASSERT_EQ(listed(w), "");
+            ASSERT_EQ(locked(w), size_t{0});                                                       // (Bob's seat is kept for him: a private room is no more a locked card than a public one is a row)
+            w.next_key = p.bob;
+            Client& bob_back = w.connect_page("Bob", code, lobby_block_of());
+            w.next_key = net::SeatKey{};
+            w.run(300);
+            ASSERT_TRUE(bob_back.lobby->phase() == net::ClientLobby::Phase::InRoom && lobby_of(w, code)->reserved == 0);
+            ASSERT_EQ(listed(w), "");
+            ASSERT_EQ(locked(w), size_t{1});                                                       // (everybody is back: the room is a locked card, and still no public row)
         }
     } TEST_END();
 }
