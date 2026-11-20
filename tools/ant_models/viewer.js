@@ -88,18 +88,27 @@
   uniform sampler2D u_baseTex, u_normalTex, u_mrTex;
   out vec4 fragColor;
 
-  vec3 applyNormalMap(vec3 N, vec3 pos, vec2 uv) {
-    vec3 mapN = texture(u_normalTex, uv).xyz * 2.0 - 1.0;
-    mapN = normalize(vec3(mapN.xy * u_normalScale, max(mapN.z, 1e-4)));
+  vec3 applyNormalMap(vec3 N, vec3 pos, vec2 uv, out float slope) {
+    vec3 mapN = texture(u_normalTex, uv, -0.35).xyz * 2.0 - 1.0;
+    vec2 scaledXY = mapN.xy * u_normalScale;
+    slope = length(scaledXY);
+    mapN = normalize(vec3(scaledXY, max(mapN.z, 1e-4)));
     vec3 dp1 = dFdx(pos), dp2 = dFdy(pos);
     vec2 duv1 = dFdx(uv), duv2 = dFdy(uv);
+    float dpMax2 = max(dot(dp1, dp1), dot(dp2, dp2));
+    float uvMax2 = max(dot(duv1, duv1), dot(duv2, duv2));
+    if (dpMax2 < 1e-30 || uvMax2 < 1e-30) return N;
+    float dpScale = inversesqrt(dpMax2), uvScale = inversesqrt(uvMax2);
+    dp1 *= dpScale; dp2 *= dpScale;
+    duv1 *= uvScale; duv2 *= uvScale;
     vec3 dp2perp = cross(dp2, N), dp1perp = cross(N, dp1);
     vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
     vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
-    float maxLen2 = max(dot(T, T), dot(B, B));
-    if (maxLen2 < 1e-10) return N;
-    float invmax = inversesqrt(maxLen2);
-    return normalize(mat3(T * invmax, -B * invmax, N) * mapN);
+    float tLen2 = dot(T, T), bLen2 = dot(B, B);
+    if (tLen2 < 1e-12 && bLen2 < 1e-12) return N;
+    vec3 Tn = tLen2 >= 1e-12 ? T * inversesqrt(tLen2) : normalize(cross(N, B));
+    vec3 Bn = bLen2 >= 1e-12 ? B * inversesqrt(bLen2) : normalize(cross(T, N));
+    return normalize(mat3(Tn, Bn, N) * mapN);
   }
   float D_GGX(float NoH, float a) { float a2 = a * a, d = (NoH * NoH) * (a2 - 1.0) + 1.0; return a2 / (PI * d * d + 1e-6); }
   float G_Smith(float NoV, float NoL, float r) {
@@ -132,24 +141,31 @@
   void main() {
     vec3 N = normalize(v_worldNormal);
     if (!gl_FrontFacing) N = -N;
-    if (u_hasNormalTex == 1 && u_normalScale > 0.0) N = applyNormalMap(N, v_worldPos, v_uv);
+    float normSlope = 0.0;
+    if (u_hasNormalTex == 1 && u_normalScale > 0.0) N = applyNormalMap(N, v_worldPos, v_uv, normSlope);
     vec3 V = u_isOrtho == 1 ? normalize(u_viewDir) : normalize(u_cameraPos - v_worldPos);
 
-    vec4 baseSample = texture(u_baseTex, v_uv);
-    vec3 albedo = max(u_baseColor * baseSample.rgb, 0.0);
-    vec4 mrSample = texture(u_mrTex, v_uv);
+    vec4 baseSample = texture(u_baseTex, v_uv, -0.35);
+    vec4 mrSample = texture(u_mrTex, v_uv, -0.35);
     float rough = clamp(u_roughness * mrSample.g, 0.05, 0.98);
     float met = clamp(u_metallic * mrSample.b, 0.0, 1.0);
+    vec3 texCol = u_hasNormalTex == 1 ? clamp(mix(vec3(0.84), baseSample.rgb, 1.22), 0.45, 1.12) : baseSample.rgb;
+    float microCav = 1.0;
+    if (u_hasNormalTex == 1) {
+      float pitDepth = smoothstep(0.62, 0.98, mrSample.g);
+      microCav = clamp(1.0 - (pitDepth * 0.60 + clamp(normSlope, 0.0, 1.0) * 0.45) * mix(0.15, 0.08, met), 0.82, 1.0);
+    }
+    vec3 albedo = max(u_baseColor * texCol * microCav, 0.0);
 
     // Optical catchlights strictly on eyes & glass; satin chitin/cloth/metal use normal + MR maps
     float coatW = u_isOptical == 1 ? 0.26 * (1.0 - smoothstep(0.18, 0.44, rough)) : 0.0;
     vec3 F0 = mix(vec3(0.045), albedo, met), specAcc = vec3(0.0);
-    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.96, 0.90) * 3.35, N, V, albedo, met, rough, F0, coatW, specAcc)
-            + evalLight(u_fillDir, vec3(0.68, 0.80, 0.98) * 0.62, N, V, albedo, met, rough, F0, coatW, specAcc)
+    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.96, 0.90) * 3.25, N, V, albedo, met, rough, F0, coatW, specAcc)
+            + evalLight(u_fillDir, vec3(0.76, 0.86, 1.0) * 0.92, N, V, albedo, met, rough, F0, coatW, specAcc)
             + evalLight(u_rimDir, vec3(0.86, 0.94, 1.0) * 1.65, N, V, albedo, met, rough, F0, coatW, specAcc);
 
     vec3 bakedAo = clamp(v_color, 0.0, 1.0);
-    float aoScalar = dot(bakedAo, vec3(0.2126, 0.7152, 0.0722));
+    float aoScalar = dot(bakedAo, vec3(0.2126, 0.7152, 0.0722)) * microCav;
     float geoAo = mix(0.76, 1.0, smoothstep(0.0, 0.26, v_worldPos.y)) * mix(0.74, 1.0, smoothstep(-0.38, 0.52, N.y));
     vec3 directAo = mix(vec3(1.0), bakedAo, u_alpha < 0.99 ? 0.20 : 0.52);
 
@@ -161,11 +177,11 @@
     vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.16, 0.95, envAtten) * mix(envAtten, 1.0, met) * specOccl * geoAo;
     vec3 envCoat = studioEnv(R, 0.19) * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * 0.32 * specOccl;
 
-    vec3 outCol = linearToSrgb(acesFilm((Lo * directAo + ambDiff + envSpec + envCoat + u_emissive) * 1.02));
+    vec3 outCol = linearToSrgb(acesFilm((Lo * directAo + ambDiff + envSpec + envCoat + u_emissive) * 1.04));
     float outAlpha = 1.0;
     if (u_alpha < 0.99) {
       float baseA = clamp(u_alpha * baseSample.a, 0.0, 1.0);
-      float specLuma = dot(acesFilm((specAcc * directAo + envSpec + envCoat) * 1.02), vec3(0.2126, 0.7152, 0.0722));
+      float specLuma = dot(acesFilm((specAcc * directAo + envSpec + envCoat) * 1.04), vec3(0.2126, 0.7152, 0.0722));
       outAlpha = clamp(baseA + pow(1.0 - NoV, 3.0) * 0.42 + specLuma * 0.55, 0.0, 0.90);
     }
     fragColor = vec4(outCol, outAlpha);
@@ -391,9 +407,9 @@
       }
       gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
       const camera = this.computeCamera(scene, cam, opts.width, opts.height, opts.overrideProj);
-      const keyDir = this.rotateLight(-0.56, 0.84, 0.58, camera.yaw);
-      const fillDir = this.rotateLight(0.76, 0.42, 0.34, camera.yaw);
-      const rimDir = this.rotateLight(0.36, 0.52, -0.84, camera.yaw);
+      const keyDir = this.rotateLight(-0.78, 0.58, 0.24, camera.yaw);
+      const fillDir = this.rotateLight(0.84, 0.26, 0.22, camera.yaw);
+      const rimDir = this.rotateLight(0.32, 0.50, -0.84, camera.yaw);
 
       if (opts.showPlinth !== false && !opts.transparent) {
         const plinth = this.ensurePlinth(scene.plinthSpanX, scene.plinthRadius);
