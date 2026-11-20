@@ -98,15 +98,16 @@ def discover_available_classes(include_base: bool = False) -> List[str]:
     return found
 
 
+VIEWER_PREFIXES: Tuple[str, ...] = ("viewer", "compare")
 VIEWER_EXTS: Tuple[str, ...] = (".html", ".css", ".js")
 
 
 def _discover_viewer_files() -> List[str]:
-    """Return sorted viewer*.html / viewer*.css / viewer*.js filenames in tools/ant_models/."""
+    """Return sorted viewer* / compare* (.html/.css/.js) filenames in tools/ant_models/."""
     found: List[str] = []
     if os.path.isdir(THIS_DIR):
         for fname in sorted(os.listdir(THIS_DIR)):
-            if fname.startswith("viewer") and fname.endswith(VIEWER_EXTS):
+            if fname.startswith(VIEWER_PREFIXES) and fname.endswith(VIEWER_EXTS):
                 if os.path.isfile(os.path.join(THIS_DIR, fname)):
                     found.append(fname)
     return found
@@ -120,8 +121,12 @@ def _file_sha256_hex(path: str, length: int = 12) -> str:
     return h.hexdigest()[:length]
 
 
-def _compute_manifest_hashes(entries: Sequence[Dict[str, Any]]) -> Tuple[str, str, str]:
-    """Return deterministic (version, build_hash, models_hash) across models + all viewer files."""
+def _compute_manifest_hashes(
+    entries: Sequence[Dict[str, Any]],
+    *,
+    orig_sprites_sha: str = "",
+) -> Tuple[str, str, str]:
+    """Return deterministic (version, build_hash, models_hash) across models, orig_sprites, and viewer/compare files."""
     sorted_models = sorted(entries, key=lambda e: str(e.get("id", "")))
     m_hasher = hashlib.sha256()
     for e in sorted_models:
@@ -130,6 +135,8 @@ def _compute_manifest_hashes(entries: Sequence[Dict[str, Any]]) -> Tuple[str, st
 
     b_hasher = hashlib.sha256()
     b_hasher.update(f"models:{models_hash}\n".encode("utf-8"))
+    if orig_sprites_sha:
+        b_hasher.update(f"orig_sprites.json:{orig_sprites_sha}\n".encode("utf-8"))
     for fname in _discover_viewer_files():
         fpath = os.path.join(THIS_DIR, fname)
         b_hasher.update(f"{fname}:{_file_sha256_hex(fpath, length=64)}\n".encode("utf-8"))
@@ -214,9 +221,29 @@ def build_all(
                 f"size {dims[0]:.2f}x{dims[1]:.2f}x{dims[2]:.2f}, min_y={stats['bbox_min'][1]:.4f})"
             )
 
+    orig_sprites_info: Optional[Dict[str, Any]] = None
+    orig_sprites_path = os.path.join(out_dir, "orig_sprites.json")
+    try:
+        from . import orig_sprites as _orig_sprites
+    except ImportError:
+        import orig_sprites as _orig_sprites  # type: ignore
+    if _orig_sprites.can_generate_orig_sprites() and (not only or not os.path.isfile(orig_sprites_path)):
+        _orig_sprites.write_orig_sprites(orig_sprites_path)
+        if not quiet:
+            print(f"  [ok]   orig_sprites -> orig_sprites.json ({os.path.getsize(orig_sprites_path):,} B)")
+    if os.path.isfile(orig_sprites_path):
+        orig_sprites_info = {
+            "file": "orig_sprites.json",
+            "sha256": _file_sha256_hex(orig_sprites_path, 12),
+            "byte_length": os.path.getsize(orig_sprites_path),
+        }
+
     manifest_models = sorted(built_entries.values(), key=_model_sort_key)
-    version, build_hash, models_hash = _compute_manifest_hashes(manifest_models)
-    manifest = {
+    version, build_hash, models_hash = _compute_manifest_hashes(
+        manifest_models,
+        orig_sprites_sha=orig_sprites_info["sha256"] if orig_sprites_info else "",
+    )
+    manifest: Dict[str, Any] = {
         "schema_version": 1,
         "version": version,
         "build_hash": build_hash,
@@ -224,6 +251,8 @@ def build_all(
         "coordinate_system": "glTF 2.0 right-handed (+Y up, +Z front, +X ant-left, feet at Y=0)",
         "models": manifest_models,
     }
+    if orig_sprites_info is not None:
+        manifest["orig_sprites"] = orig_sprites_info
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
         f.write("\n")
