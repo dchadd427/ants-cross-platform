@@ -524,6 +524,12 @@ public:
     /// The same for both game modes (the loader knows no mode). It is chosen after set_game_mode (which sets it back to the rule of a match played now) and before init(), which keeps it. The state hash carries the overlay.
     void set_fire_wall_as_original(bool on);
     bool fire_wall_as_original() const noexcept;
+    /// The rules number of the recording that is being played (replay::kSimRulesBeforeEmptyRecord, kSimRulesMode187BeforeNoDrops and the numbers before them): with `on` (the default, the rules of a match played now) the bite
+    /// of an ant that starts to harvest an anchor takes its unit from the first object of that anchor that still has one (Grid::food_object_first_with_units_at), so a lunchbox that falls on the anchor of an emptied pile is
+    /// eaten once; with `on` unset it takes it from the first object of the anchor whatever it holds, as the original does (FUN_01008c63), and that lunchbox is eaten again and again. The same for both game modes (187 now has no
+    /// lunchbox). It is chosen after set_game_mode (which sets it back to the rule of a match played now) and before init(), which keeps it. The state hash does not carry it (the object that the ant bites does).
+    void set_bite_skips_empty_record(bool on);
+    bool bite_skips_empty_record() const noexcept;
     /// Whether an ant of this match can enter its own hill: always in the original's game, in 187 only while the rule of the old recordings is set (set_hill_open_187)
     bool own_hill_enterable() const noexcept;
 
