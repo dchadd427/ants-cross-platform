@@ -203,6 +203,7 @@ public:
     /// The ants that are on their way and what for
     std::vector<std::pair<uint32_t, sim::AntType>> on_their_way() const;
     /// The watcher (Hard): the ant that stands beside the drop tile of the own flower and waits for a landing of a kind that the plan lacks (0: none), and how many were sent
+    uint32_t swaps_started() const noexcept { return swaps_; }       // trips of idle typed ants (the idle swap and the Thief of the food-gone batch)
     uint32_t watcher() const noexcept { return watch_.ant; }
     uint32_t watchers_sent() const noexcept { return watched_; }
     const Params& params() const noexcept { return params_; }
@@ -225,6 +226,7 @@ private:
     static int64_t key_of(sim::TileCoord t) noexcept { return static_cast<int64_t>(t.y) * 4096 + t.x; }
     const std::vector<int32_t>& field_for(TaskContext& context, sim::TileCoord tile);
     bool try_start(TaskContext& context, sim::AntType kind);
+    bool swappable(const AntView& ant, sim::AntType kind, uint64_t now) const;
     void watch(TaskContext& context);
     sim::TileCoord free_spot(TaskContext& context, sim::TileCoord drop, const std::vector<int32_t>& field, sim::TileCoord from, uint32_t self) const;
     bool is_link_flower(sim::TileCoord drop) const noexcept;
@@ -246,6 +248,7 @@ private:
     Tactics& tactics_;
     Params params_;
     std::map<uint32_t, Take> takes_;                                 // ant -> its trip
+    std::map<uint32_t, uint64_t> idle_since_;                        // ant -> the tick at which it began to stand idle with empty hands (the idle swap)
     Watch watch_;                                                    // the watcher
     std::vector<StepOff> step_off_;                                  // typed ants that took a drop from the watcher's place and are still on the drop tile (a standing ant locks the flower)
     uint32_t watched_{0};
@@ -260,6 +263,7 @@ private:
     uint32_t failed_{0};
     uint32_t contested_{0};
     uint32_t stranded_skips_{0};
+    uint32_t swaps_{0};
     uint32_t called_back_{0};
     uint64_t searches_{0};
 };

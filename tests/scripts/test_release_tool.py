@@ -113,6 +113,28 @@ class Release(Scratch):
         self.assertIn('"## Next"', result.stderr)
         self.assertEqual(self.snapshot(), before)
 
+    def test_a_line_for_players_that_names_the_operators_side_is_refused_and_one_for_operators_is_not(self):
+        for line in ("**The admin page has a tab.** It lists the bots.", "**A setting.** Set `ANTS_SOME_SETTING=0` to switch it off.", "The database moves to schema 9.", "**For the site's admins:** the administration page says why it is closed."):
+            self.make(CHANGELOG % {"draft": "## Next\n\n**For players:**\n- fine\n- %s\n\n" % line})
+            before = self.snapshot()
+            result = self.release("1.3.0", "x")
+            self.assertEqual(result.returncode, 2, line)
+            self.assertIn("For operators", result.stderr, line)
+            self.assertEqual(self.snapshot(), before, line)
+        self.make(CHANGELOG % {"draft": "## Next\n\n**Fixes:**\n- a fix for the database\n\n"})
+        self.assertEqual(self.release("1.3.0", "x").returncode, 2)                      # (the same two labels: Fixes is shown too)
+        self.make(CHANGELOG % {"draft": "## Next\n\n**For players:**\n- fine\n\n**Rules / network:** none. The database moves to schema 9.\n\n**For operators:**\n- The administration page has a tab; set `ANTS_SOME_SETTING=0`.\n\n"})
+        result = self.release("1.3.0", "x")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_a_release_with_only_operator_lines_is_a_release_and_has_no_warning(self):
+        self.make(CHANGELOG % {"draft": "## Next\n\n**For operators:**\n- The administration page has a tab.\n\n"})
+        result = self.release("1.3.0", "Only for operators")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("warning", result.stderr)
+        self.make(CHANGELOG % {"draft": "## Next\n\n**Details:** nothing else\n\n"})
+        self.assertIn("warning", self.release("1.3.0", "x").stderr)                      # (neither label for players nor one for operators: the old warning)
+
     def test_an_empty_draft_is_refused(self):
         self.make(CHANGELOG % {"draft": "## Next\n\n"})
         before = self.snapshot()

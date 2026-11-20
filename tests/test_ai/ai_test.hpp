@@ -240,6 +240,7 @@ void run_defence_tests();
 void run_heal_tests();
 void run_drops_tests();
 void run_thief_tests();
+void run_gone_tests();
 void run_gang2_tests();
 void run_group_tests();
 void run_hit_tests();

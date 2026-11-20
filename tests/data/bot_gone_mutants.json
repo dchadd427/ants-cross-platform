@@ -1,0 +1,220 @@
+{
+  "note": "Mutants of the food-gone batch of the computer players (docs/BOT_GONE.md, include/ants_ai/tactics.hpp LevelPlan::gone, src/ants_ai/standard_bot.cpp, standard_tasks.cpp, standard_tasks_raid.cpp, heal_task.cpp) and of the idle tally and the teams of the arena (src/ants_ai/arena.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): when the batch begins, the smaller loot of a raid, the last ant that fights only a team that has more to lose, the idle ant that heals, the idle swap of a Bomber or Swimmer for a Fire power-up, the Thief that an idle typed ant becomes, the game type 187 that has no batch, the odds that a fight with the food gone asks for, the teams of the arena and the idle tally. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_gone_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs all the cases of the batch (AI56).",
+  "defaults": {
+    "build": "test_ai"
+  },
+  "baseline": {
+    "build": "test_ai",
+    "test": "timeout 900 env ANTS_TEST_FILTER='AI56.' ./build/tests/test_ai/test_ai"
+  },
+  "mutants": [
+    {
+      "id": "begins_without_the_wait",
+      "file": "src/ants_ai/standard_bot.cpp",
+      "old": "now >= no_work_since_ + plan.gone_wait && view.ticks_left() > 300;",
+      "new": "now >= no_work_since_ && view.ticks_left() > 300;",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.1 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.1"
+    },
+    {
+      "id": "begins_with_food_to_walk_to",
+      "file": "src/ants_ai/standard_bot.cpp",
+      "old": "const bool nothing_to_do = !walkable_food && (",
+      "new": "const bool nothing_to_do = (",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.1 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.1"
+    },
+    {
+      "id": "begins_with_the_batch_off",
+      "file": "src/ants_ai/standard_bot.cpp",
+      "old": "tactics_.gone = plan.gone && view.game_mode()",
+      "new": "tactics_.gone = view.game_mode()",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.1 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.1"
+    },
+    {
+      "id": "usual_loot_in_the_endgame",
+      "file": "src/ants_ai/standard_tasks_raid.cpp",
+      "old": "return tactics_.gone && plan.gone ? std::min(loot, plan.gone_raid_min) : loot;",
+      "new": "return loot;",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.2 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.2"
+    },
+    {
+      "id": "loot_of_nothing",
+      "file": "src/ants_ai/standard_tasks_raid.cpp",
+      "old": "return tactics_.gone && plan.gone ? std::min(loot, plan.gone_raid_min) : loot;",
+      "new": "return tactics_.gone && plan.gone ? 0u : loot;",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.2 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.2"
+    },
+    {
+      "id": "no_raids_when_the_plan_has_none",
+      "file": "src/ants_ai/standard_bot.cpp",
+      "old": "(plan.catchup && st.tier >= plan.catchup_lift_tier) || tactics_.gone;",
+      "new": "(plan.catchup && st.tier >= plan.catchup_lift_tier);",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.2 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.2"
+    },
+    {
+      "id": "last_ant_fights_the_smaller_team",
+      "file": "src/ants_ai/standard_tasks.cpp",
+      "old": "return std::min<int32_t>(200, std::max<int32_t>(0, theirs)) >= my_loss + margin || theirs >= v.score() + 2 * margin;",
+      "new": "return std::min<int32_t>(200, std::max<int32_t>(0, theirs)) >= margin + 0 * my_loss || theirs >= v.score() + 2 * margin;",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.3 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.3"
+    },
+    {
+      "id": "last_ant_fights_an_equal_team",
+      "file": "src/ants_ai/standard_tasks.cpp",
+      "old": "return std::min<int32_t>(200, std::max<int32_t>(0, theirs)) >= my_loss + margin || theirs >= v.score() + 2 * margin;",
+      "new": "return std::min<int32_t>(200, std::max<int32_t>(0, theirs)) >= my_loss + margin || theirs >= v.score();",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.3 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.3"
+    },
+    {
+      "id": "easy_risks_its_last_ant",
+      "file": "src/ants_ai/tactics.cpp",
+      "old": "            p.gone_margin = 10000;",
+      "new": "            p.gone_margin = 0;",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.3 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.3"
+    },
+    {
+      "id": "healthy_ants_go_home",
+      "file": "src/ants_ai/heal_task.cpp",
+      "old": "a.hp <= plan.gone_heal_hp && a.idle()",
+      "new": "a.hp <= sim::AntUnit::MAX_HP && a.idle()",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.5 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.5"
+    },
+    {
+      "id": "heal_with_the_batch_off",
+      "file": "src/ants_ai/heal_task.cpp",
+      "old": "const bool gone_heal = tactics_.gone && plan.gone && plan.gone_heal;",
+      "new": "const bool gone_heal = plan.gone_heal;",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.5 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.5"
+    },
+    {
+      "id": "teams_not_made",
+      "file": "src/ants_ai/arena.cpp",
+      "old": "    sim::apply_start_teams(sim, spec.teams);              // (free for all makes nothing)",
+      "new": "",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.6 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.6"
+    },
+    {
+      "id": "teams_of_a_seat_that_does_not_play",
+      "file": "src/ants_ai/arena.cpp",
+      "old": "        if (!plan.why.empty()) return \"teams \" + sim::start_teams_text(spec.teams) + \": \" + plan.why;",
+      "new": "",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.6 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.6"
+    },
+    {
+      "id": "idle_from_the_first_tick",
+      "file": "src/ants_ai/arena.cpp",
+      "old": "        if (tick - idle_since_[a.id] >= kIdleTicks) {",
+      "new": "        if (tick - idle_since_[a.id] >= 0) {",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.7 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.7"
+    },
+    {
+      "id": "after_the_food_never_restarts",
+      "file": "src/ants_ai/arena.cpp",
+      "old": "        for (Seat& s : seats_) {\n            s.after_ant_ticks = 0;\n            s.after_idle_ticks = 0;\n        }",
+      "new": "",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.7 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.7"
+    },
+    {
+      "id": "raids_not_counted",
+      "file": "src/ants_ai/arena.cpp",
+      "old": "            ++seat.raids;",
+      "new": "",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.7 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.7"
+    },
+    {
+      "id": "begins_in_187",
+      "file": "src/ants_ai/standard_bot.cpp",
+      "old": "view.game_mode() == sim::GameMode::HighestScore && no_work_since_ != 0",
+      "new": "no_work_since_ != 0",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.10 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.10"
+    },
+    {
+      "id": "idle_swap_at_once",
+      "file": "src/ants_ai/standard_tasks_powerup.cpp",
+      "old": "now >= since->second + plan.idle_swap_ticks;",
+      "new": "now >= since->second;",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.8 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.8"
+    },
+    {
+      "id": "idle_swap_takes_the_fighter",
+      "file": "src/ants_ai/standard_tasks_powerup.cpp",
+      "old": "(a.type != sim::AntType::Bomber && a.type != sim::AntType::Swimmer)) return false;",
+      "new": "false) return false;",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.8 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.8"
+    },
+    {
+      "id": "idle_swap_with_a_fire_ant",
+      "file": "src/ants_ai/standard_tasks_powerup.cpp",
+      "old": "for (const AntView& a : v.mine()) have += a.type == kind ? 1u : 0u;",
+      "new": "for (const AntView& a : v.mine()) have += (a.type == kind && kind != sim::AntType::Fire) ? 1u : 0u;",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.8 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.8"
+    },
+    {
+      "id": "thief_swap_with_the_batch_off",
+      "file": "src/ants_ai/standard_tasks_powerup.cpp",
+      "old": "return tactics_.gone && tactics_.gone_thief && plan.gone && plan.gone_swap && a.type",
+      "new": "return plan.gone_swap && a.type",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.9 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.9"
+    },
+    {
+      "id": "thief_wanted_behind_a_wall",
+      "file": "src/ants_ai/standard_bot.cpp",
+      "old": "map->hill_component(seat_) >= 0 && map->ant_component(seat_, map->hill(t).raid) == map->hill_component(seat_)) {",
+      "new": "true) {",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.9 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.9"
+    },
+    {
+      "id": "fights_not_won",
+      "file": "src/ants_ai/standard_tasks.cpp",
+      "old": "const uint32_t odds = !eg ? assault_odds : wipe ? plan.gone_wipe_odds_percent : plan.gone_odds_percent;",
+      "new": "const uint32_t odds = assault_odds;",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.11 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.11"
+    },
+    {
+      "id": "wipe_uses_the_ordinary_odds",
+      "file": "src/ants_ai/standard_tasks.cpp",
+      "old": "wipe ? plan.gone_wipe_odds_percent : plan.gone_odds_percent;",
+      "new": "plan.gone_odds_percent;",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.11 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.11"
+    },
+    {
+      "id": "every_team_is_a_wipe_out",
+      "file": "src/ants_ai/standard_tasks.cpp",
+      "old": "wipe = shown <= plan.gone_wipe_ants;",
+      "new": "wipe = shown <= 1000u;",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.11 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.11"
+    },
+    {
+      "id": "thief_swap_for_any_want",
+      "file": "src/ants_ai/standard_tasks_powerup.cpp",
+      "old": "return tactics_.gone && tactics_.gone_thief && plan.gone",
+      "new": "return tactics_.gone && plan.gone",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.9 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.9"
+    }
+  ]
+}

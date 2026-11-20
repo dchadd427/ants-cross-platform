@@ -32,6 +32,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .screen.ed { height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; }
 .screen::after { z-index: 5; }
 .screen.ed > .sb { padding: 12px 24px 0; margin: 0; }                /* the site bar (web/site_nav.css) above the editor's own row */
+.screen.ed > .upd-strip { margin: 8px 24px 4px; }                      /* the update notice's strip (web/update_notice.js) under the bar, as wide as the bar's buttons */
 .edtop { display: flex; align-items: center; gap: 14px; padding: 6px 24px 8px; }
 .edname { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; }
 .edname .nm { width: auto; flex: 0 1 300px; min-width: 120px; min-height: 44px; font-size: 18px; }
@@ -312,6 +313,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
     .screen.ed { height: auto; min-height: 100vh; min-height: 100dvh; overflow: visible; } .edbody { flex: 1 0 auto; min-height: auto; }
     .scrim { position: fixed; }
     .screen.ed > .sb { padding: 10px 14px 0; }
+    .screen.ed > .upd-strip { margin: 6px 14px 6px; }
     .edtop { padding: 4px 14px 6px; gap: 8px 10px; flex-wrap: wrap; align-items: center; } .edtop .edmenu { order: 2; margin-left: auto; } .edtop .edname { order: 1; flex: 1 1 0; flex-wrap: nowrap; }
     .edname { gap: 6px; }
     .edname .nm { min-width: 0; flex: 1 1 110px; font-size: 16px; padding: 4px 10px; min-height: 44px; }

@@ -916,7 +916,7 @@ const BANNERS = [
     ['unreachable', {}, 'Cannot reach the game server. Check your connection; trying again…', 'warn', ''],
     ['busy', {}, 'The server is full right now, so there is no room for you yet. Try again in a minute.', 'warn', 'Try again'],
     ['away', {}, 'This room was opened in another window, so it is closed here.', 'warn', 'Use this window'],
-    ['version', {}, 'A newer version of Ants is out. Reload the page to update.', 'warn', 'Reload'],
+    ['version', {}, 'A new version of Ants is out. Reload the page to update.', 'warn', 'Reload'],
     ['notice', { server: 'Some other line of the room.' }, 'Some other line of the room.', 'warn', 'OK']
 ];
 BANNERS.forEach(([kind, args, text, tone, btn]) => same('banner ' + kind + ' ' + JSON.stringify(args).slice(0, 40), R.banner(kind, args), { kind: kind, text: text, tone: tone, btn: btn }));

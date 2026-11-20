@@ -1,0 +1,75 @@
+/* The update notice: the strip at the top of every page and the "What's new" window (web/update_notice.js, docs/SITE_NAV.md "The update notice"). The look of the site: black inset boxes with the green frame, a gold line for
+   a notice, teal bevelled buttons with the red shadow. Every color is the page's own token with the same value as a fallback, so one file serves every page (the pages that have no token are the admin page and the changelog:
+   the first allows no inline style, so nothing here is set from script). */
+.upd, .upd * { box-sizing: border-box; }
+.upd { --u-inset: var(--inset, #070b0f); --u-frame: var(--frame, #2b6b4f); --u-hi: var(--frame-hi, #3b976f); --u-lo: var(--frame-lo, #13634b); --u-gold: var(--gold, #f6d058); --u-cream: var(--cream, #f4ece2);
+    --u-edge: var(--edge, #050a08); --u-shadow: var(--shadow, #9d0d17); --u-muted: var(--muted, #8fb3a6); --u-teal: var(--teal, #2b6357);
+    font-family: "Libre Franklin", "Franklin Gothic Medium", "Liberation Sans", Arial, sans-serif; font-weight: 500; font-size: 16px; line-height: 1.35; color: var(--u-cream); text-align: left; }
+.upd p { margin: 0; }
+.upd :focus-visible { outline: 3px solid var(--u-gold); outline-offset: 3px; }
+
+/* the buttons: the teal bevel of the game */
+.upd .u-b { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 6px 18px; font: inherit; font-size: 16px; line-height: 1.1; white-space: nowrap; cursor: pointer; color: var(--u-cream);
+    background: linear-gradient(180deg, rgba(255, 255, 255, .12) 0, rgba(255, 255, 255, 0) 18%, rgba(0, 0, 0, .28) 100%) var(--u-teal); border: 2px solid var(--u-edge); border-radius: 8px;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .38), inset 0 0 0 3px rgba(0, 0, 0, .38), inset 0 -3px 0 3px rgba(0, 0, 0, .14), 2px 3px 0 var(--u-shadow); text-shadow: 0 1px 0 rgba(0, 0, 0, .6); }
+.upd .u-b:hover { background-color: #2f6f5a; }
+.upd .u-b:active { transform: translate(2px, 3px); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .5), inset 0 5px 8px 1px rgba(0, 0, 0, .65), 0 0 0 var(--u-shadow); }
+.upd .u-b.u-go { background-color: #2d7a5a; }
+.upd .u-nn { color: var(--u-muted); font-size: 15px; line-height: 1.35; }
+
+/* the strip: in the strips that the front page keeps at its top (the room's other messages are there), under the bar of every other page */
+.upd-strip { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0 0 14px; padding: 10px 14px; background: var(--u-inset); border: 3px solid var(--u-gold); border-radius: 4px;
+    box-shadow: 0 0 0 2px var(--u-edge), 3px 4px 0 2px var(--u-shadow); }
+.upd-strip .u-tx { flex: 1 1 260px; min-width: 0; display: grid; gap: 1px; }
+.upd-strip .u-tt { color: var(--u-cream); font-size: 16px; line-height: 1.25; }
+.upd-strip .u-room { display: none; }
+body[data-screen="room"] .upd-strip .u-room { display: block; }
+.upd-strip .u-ac { display: flex; flex-wrap: wrap; gap: 10px; flex: 0 0 auto; margin-left: auto; }
+.upd-strip .u-b { min-height: 40px; padding: 4px 16px; }
+body > .upd-strip { width: 100%; max-width: 1280px; margin-bottom: 16px; }            /* (the game page: the strip is as wide as its bar) */
+@media (max-width: 719px) { .upd-strip { padding: 10px 12px; } }
+@media (max-width: 359px) { .upd .u-b { padding: 6px 14px; } .upd-strip .u-tx { flex-basis: 100%; } .upd-strip .u-ac { margin-left: 0; width: 100%; } .upd-strip .u-ac .u-b { flex: 1 1 0; } }
+
+/* the window: What's new */
+.upd-win { position: fixed; inset: 0; z-index: 95; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(2, 6, 5, .66); }
+.upd-win .upd-box { width: 580px; max-width: 100%; max-height: min(86vh, 760px); display: flex; flex-direction: column; overflow: hidden; background: var(--u-inset); border: 3px solid var(--u-hi);
+    border-color: var(--u-hi) var(--u-lo) var(--u-lo) var(--u-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--u-edge), 3px 4px 0 2px var(--u-shadow); }
+.upd-win .u-wh { padding: 16px 22px 12px; border-bottom: 1px solid #1d3a31; }
+.upd-win .u-wh h2 { margin: 0; font-size: 24px; font-weight: 500; line-height: 1.2; color: var(--u-cream); }
+.upd-win .u-wh .u-nn { margin-top: 2px; }
+.upd-win .u-wb { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 6px 22px 8px; }
+.upd-win .u-wf { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 22px 16px; border-top: 1px solid #1d3a31; background: #050b0e; }
+.upd-win .u-wf a { color: #8fe0c0; font-size: 16px; text-underline-offset: 3px; padding: 10px 0; }
+.upd-win .u-wf a:hover { color: #fff; }
+.upd-win .u-wf .u-b { margin-left: auto; min-width: 96px; }
+.upd-win .u-rel { padding: 14px 0 6px; border-top: 1px solid #12282a; }
+.upd-win .u-rel:first-child { border-top: 0; }
+.upd-win .u-rh { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 8px; }
+.upd-win .u-rv { display: inline-block; padding: 0 12px; font-size: 17px; line-height: 1.5; color: var(--u-cream); background: linear-gradient(180deg, rgba(255, 255, 255, .12) 0, rgba(255, 255, 255, 0) 18%, rgba(0, 0, 0, .28) 100%) var(--u-teal);
+    border: 2px solid var(--u-edge); border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .3), 2px 2px 0 var(--u-shadow); text-shadow: 0 1px 0 rgba(0, 0, 0, .6); }
+.upd-win .u-rt { flex: 1 1 200px; min-width: 0; font-size: 17px; line-height: 1.3; color: var(--u-gold); }
+.upd-win .u-rd { font-size: 14px; color: var(--u-muted); white-space: nowrap; }
+.upd-win ul { margin: 0 0 6px; padding: 0 0 0 20px; }
+.upd-win li { margin: 0 0 8px; font-size: 15px; line-height: 1.5; color: #e9e2d8; overflow-wrap: anywhere; }
+.upd-win li::marker { color: var(--u-gold); }
+.upd-win li b { font-weight: 500; color: #fff; -webkit-text-stroke: .5px currentColor; }
+.upd-win .u-fx { margin: 4px 0; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--u-muted); }
+
+/* the older releases are folded to one line each (their first line and how many more); a press opens one */
+.upd-win .u-fold > summary { list-style: none; cursor: pointer; min-height: 44px; margin: 0; padding: 4px 0; }
+.upd-win .u-fold > summary::-webkit-details-marker { display: none; }
+.upd-win .u-fold > summary::before { content: "\25B8"; flex: none; width: 14px; font-size: 16px; color: var(--u-gold); }
+.upd-win .u-fold[open] > summary::before { content: "\25BE"; }
+.upd-win .u-fold[open] > summary { margin-bottom: 4px; }
+.upd-win .u-fold:not([open]) { padding-bottom: 0; }
+@media (max-width: 719px) {
+    .upd-win { padding: 10px; }
+    .upd-win .upd-box { max-height: calc(100vh - 28px); }
+    .upd-win .u-wh { padding: 14px 16px 10px; }
+    .upd-win .u-wh h2 { font-size: 22px; }
+    .upd-win .u-wb { padding: 4px 16px 6px; }
+    .upd-win .u-wf { padding: 10px 16px 12px; }
+    .upd-win .u-rt { font-size: 16px; }
+}
+@media (forced-colors: active) { .upd-strip, .upd-win .upd-box { border: 2px solid CanvasText; box-shadow: none; } .upd .u-b { border: 2px solid ButtonText; } }
+@media (prefers-reduced-motion: no-preference) { .upd-win .upd-box { animation: upd-in .18s ease-out; } @keyframes upd-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } } }

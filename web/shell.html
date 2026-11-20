@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="Ants!">
     <link rel="shortcut icon" href="/favicon.ico?v=e2d196f0">
     <link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
-    <link rel="stylesheet" href="site_nav.css"><link rel="stylesheet" href="game_bar.css"><link rel="stylesheet" href="replay_stats.css"><link rel="stylesheet" href="death_map.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="touch_keys.css">
+    <link rel="stylesheet" href="site_nav.css"><link rel="stylesheet" href="game_bar.css"><link rel="stylesheet" href="replay_stats.css"><link rel="stylesheet" href="death_map.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="touch_keys.css"><link rel="stylesheet" href="update_notice.css">
     <style>
         /* The look of the front page (web/lobby.html), which is the look of the 1998 game's own menus: the orange clay, the thin green frame, teal bevelled buttons with a red shadow, black
            inset boxes, the game's own font (Libre Franklin, SIL OFL) and the "ants!" logo, all from web/front/. The colors are the front page's, token for token (tests/scripts/test_web_game.py
@@ -1129,7 +1129,7 @@
 
     <div class="toast" id="toast" role="status" hidden></div>
 
-    <script src="site_nav.js"></script><script src="game_bar.js"></script><script src="rejoin_key.js"></script><script src="hub_here.js"></script><script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="alert_core.js"></script><script src="hud_fullscreen.js"></script><script src="wake_lock.js"></script><script src="p2p.js"></script><script src="touch_keys.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
+    <script src="site_nav.js"></script><script src="game_bar.js"></script><script src="update_notice.js" data-window="no"></script><script src="rejoin_key.js"></script><script src="hub_here.js"></script><script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="alert_core.js"></script><script src="hud_fullscreen.js"></script><script src="wake_lock.js"></script><script src="p2p.js"></script><script src="touch_keys.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -2566,6 +2566,26 @@
             leave: antsLeaveMatch,
             focus: function () { canvas.focus(); }
         });
+
+        // The update notice (web/update_notice.js, docs/SITE_NAV.md "The update notice"): NOTHING while the game loads, a match is joined or played, or a live match is watched; its strip comes once the results are up (or at a game's menu,
+        // or a recording), and goes when the next match starts. window.antsMatchOver (the rematch strip and the hub's tab already wrap it) says that the match of a room is over.
+        // ANTS_UPDATE_BEGIN (tests/scripts/web_update_notice_check.js runs this block on a page of fakes)
+        (function () {
+            var over = false, previous = window.antsMatchOver;
+            window.antsMatchOver = function () {
+                try { if (typeof previous === 'function') return previous.apply(this, arguments); } finally { over = true; }
+                return undefined;
+            };
+            if (window.AntsUpdate) window.AntsUpdate.page({
+                quiet: function () {
+                    var playing = false;
+                    try { playing = typeof Module !== 'undefined' && !!Module._ants_match_running && Module._ants_match_running() === 1; } catch (err) { /* the game does not answer: no match */ }
+                    return !isReadyToPlay || ANTS_LIVE_MODE || playing || (ANTS_ARGS.indexOf('--join-url') !== -1 && !over);
+                },
+                moved: function () { relayout(false); }      // (the strip changes the room that the picture has: measureChrome counts it)
+            });
+        })();
+        // ANTS_UPDATE_END
 
         // The fullscreen mouse: Locked (the default) or Free, a row of the settings menu (Video; web/game_menu.js calls antsLock). The browser remembers the choice under ANTS_LOCK_KEY (nothing else writes it; only
         // "off" turns the lock off, see ANTS_PAGE.lockSetting); the pointer lock above reads ANTS_POINTER_LOCK. A browser without a pointer lock (an iPhone) has no such row.

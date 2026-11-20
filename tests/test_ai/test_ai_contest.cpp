@@ -899,7 +899,7 @@ void run_contest_tests() {
         {   // (a) the Fire Ant stands 7 tiles from the gate: the fighters go after it (a hunt of its own kind), the walls are not put out meanwhile
             sim::SimulationEngine sim;
             const World w = build(sim, TileCoord{14, 6});
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_without_gone(Level::Hard)), 4, 4);
             rig.run(60);
             ASSERT_EQ(rig.as<StandardBot>().fight().fire_hunts(), 1u);
             ASSERT_TRUE(rig.as<StandardBot>().fight().hunting(w.fire_ant));
@@ -920,7 +920,7 @@ void run_contest_tests() {
         {   // (b) the Fire Ant is dead: the keeper puts the walls out (and the fighters are free again)
             sim::SimulationEngine sim;
             const World w = build(sim, TileCoord{14, 6});
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_without_gone(Level::Hard)), 4, 4);
             rig.run(60);
             ASSERT_EQ(extinguish_orders(rig), 0u);
             sim.kill_unit(w.fire_ant);
@@ -943,7 +943,7 @@ void run_contest_tests() {
             for (int i = 0; i < 3; ++i) sim.grid_mut().place_firewall(static_cast<uint32_t>(ring[static_cast<size_t>(i)].x), static_cast<uint32_t>(ring[static_cast<size_t>(i)].y), 1);
             std::vector<uint32_t> force;
             for (int i = 0; i < 3; ++i) force.push_back(sim.spawn_unit(1, sim::AntType::Combat, TileCoord{ring[0].x + 5, ring[0].y + 1 + i}));
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_without_gone(Level::Hard)), 4, 4);
             rig.run(200);
             ASSERT_EQ(extinguish_orders(rig), 0u);
             for (const uint32_t id : force) sim.kill_unit(id);

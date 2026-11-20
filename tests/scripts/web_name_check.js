@@ -448,7 +448,7 @@ const path = require('path');
 const H = require('./web_page_harness.js')(lobbyPath);
 const { lobbyDir, lobbyMarkup, lobbyScripts, lobbyScript, RULES0, NET0, CHAT0, GUEST, hex, E, C, str8, KEY, welcome, reject, roomMessage, helloBytes, helloName, helloRoom, CODE, grouped, BLOCK_PARAMS, blockText, noBlockOf, THROWS, runLobby } = H;
 {
-    same('the page loads its scripts (the alerts, the seat-key reader, the rules, the network client, the chat box, the rematch\'s strip, the map list, the shapes, the file fetcher, the Home screen) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['alert_core.js', 'rejoin_key.js', 'front/lobby_direct.js', 'front/map_maker_link.js', 'front/lobby_rules.js', 'front/lobby_net.js', 'front/player_name.js', 'front/lobby_chat.js', 'front/rematch.js', 'front/game_modes.js', 'front/game_type.js', 'front/map_picker.js', 'shapes.js', 'map_files.js', 'home/home.js', 'inline']);
+    same('the page loads its scripts (the alerts, the seat-key reader, the update notice, the direct-connection switch, the rules, the network client, the chat box, the rematch\'s strip, the map list, the shapes, the file fetcher, the Home screen) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['alert_core.js', 'rejoin_key.js', 'update_notice.js', 'front/lobby_direct.js', 'front/map_maker_link.js', 'front/lobby_rules.js', 'front/lobby_net.js', 'front/player_name.js', 'front/lobby_chat.js', 'front/rematch.js', 'front/game_modes.js', 'front/game_type.js', 'front/map_picker.js', 'shapes.js', 'map_files.js', 'home/home.js', 'inline']);
     const markupIds = [...lobbyMarkup.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
     check('no id is used twice in the markup', new Set(markupIds).size === markupIds.length, markupIds.filter((id, i) => markupIds.indexOf(id) !== i).join(','));
     const asked = new Set([...lobbyScript.matchAll(/\$\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/freshNode\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/getElementById\('([\w-]+)'\)/g)].map((m) => m[1]));
@@ -1158,7 +1158,7 @@ async function codeBox(env) {
     check('a room whose match has started: "The match in that room has already started."', running.box.hint.textContent === 'The match in that room has already started.');
     const old = await typedJoin('k7m2xq');
     old.last().open().receive(reject(2));
-    check('a server that speaks another version: the strip asks for a reload', !old.$('banner').hidden && /A newer version of Ants is out/.test(old.$('banner-text').textContent) && old.$('banner-x').textContent === 'Reload');
+    check('a server that speaks another version: the strip asks for a reload', !old.$('banner').hidden && /A new version of Ants is out/.test(old.$('banner-text').textContent) && old.$('banner-x').textContent === 'Reload');
     // the probe is welcomed: the page leaves its own room and shows that one
     const ok = await typedJoin('k7m2xq');
     const ownSocket = ok.sockets[0];
