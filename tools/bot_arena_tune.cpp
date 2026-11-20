@@ -313,6 +313,25 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "oppharv") { p.opportunity_harvest_d = static_cast<int32_t>(v); return true; }
     if (key == "reach") return flag(p.reach_fights);
     if (key == "idlehunt") return flag(p.idle_hunt);
+    if (key == "gone") {                                                                // the food-gone batch of docs/BOTS.md, "When the food is gone" (0: the bot as it was before it; 1: the plan that ships)
+        if (v == 0) ai::without_gone_batch(p);
+        else p.gone = true;
+        return true;
+    }
+    if (key == "gonestall") { p.gone_stall = static_cast<uint32_t>(v); return true; }
+    if (key == "gonewait") { p.gone_wait = static_cast<uint32_t>(v); return true; }
+    if (key == "goneraid") { p.gone_raid_min = static_cast<uint32_t>(v); return true; }
+    if (key == "gonethief") return flag(p.gone_thief);
+    if (key == "gonetrip") { p.gone_trip_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "gonemin") { p.gone_assault_min = static_cast<uint32_t>(v); return true; }
+    if (key == "gonemargin") { p.gone_margin = static_cast<uint32_t>(v); return true; }
+    if (key == "gonewipe") { p.gone_wipe_ants = static_cast<uint32_t>(v); return true; }
+    if (key == "goneodds") { p.gone_odds_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "gonewipeodds") { p.gone_wipe_odds_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "goneswap") return flag(p.gone_swap);
+    if (key == "goneheal") return flag(p.gone_heal);
+    if (key == "iswap") return flag(p.idle_swap);                                      // the idle swap of docs/BOT_GONE.md (0: an idle typed ant stays as it was)
+    if (key == "iswapticks") { p.idle_swap_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "worth") return flag(p.chore_worth);
     if (key == "stand") {                                                             // the stand batch of docs/BOTS.md, "The stand batch" (0: the bot as it was before it; 1: the plan that ships)
         if (v == 0) ai::without_stand_batch(p);

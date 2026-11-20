@@ -695,7 +695,7 @@ void run_b41_style_tests() {
                 std::vector<uint32_t> mine;
                 for (int i = 0; i < 6; ++i) mine.push_back(sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10 + i % 3, 9 + i / 3}));
                 const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{30, 36});
-                LevelPlan plan = plan_for(Level::Hard);
+                LevelPlan plan = plan_without_gone(Level::Hard);
                 plan.combat_extra = extra;
                 plan.steals = true;
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);

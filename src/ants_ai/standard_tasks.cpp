@@ -318,12 +318,22 @@ void FightTask::start_offence(TaskContext& c) {
     const uint8_t war = plan.behind_war ? st.war : 0;
     const bool pull = war >= 1 && war >= plan.behind_free_tier;                                      // (from the war tier plan.behind_free_tier on the Combat Ants are taken off the piles for the assault, and the surplus of free ants is no longer asked for)
     const uint64_t assault_from = war >= 1 ? std::min<uint64_t>(plan.assault_after, plan.behind_assault_after) : plan.assault_after;
-    const bool assault_on = plan.assault && now >= assault_from && (tactics_.surplus >= plan.assault_min || pull) && v.ticks_left() > 200;
+    const bool eg = tactics_.gone && plan.gone;                                                // (the food-gone batch: no food to walk to, so no wait and no surplus)
+    const bool last_ants = v.mine().size() <= tactics_.reserve_of(v);                           // the last ants stay out of every fight (idle_hunt: but with nothing to bank and nothing to lose only the last one) ...
+    const size_t assault_min = eg ? plan.gone_assault_min : plan.assault_min;
+    const bool assault_on = plan.assault && (eg || now >= assault_from) && (eg || tactics_.surplus >= plan.assault_min || pull) && v.ticks_left() > 200;
     const uint32_t assault_odds = plan.assault_odds_percent * (100u - std::min<uint32_t>(80u, plan.behind_odds_ease * war)) / 100u;
     const size_t assault_force = plan.assault_force + (war >= 2 ? 1u : 0u);
     if (!(plan.skirmish || plan.hunt || pressure_fights || assault_on) || !v.has_grid() || now < offence_pause_until_ || tactics_.guard_stance) return;     // (the leader of the last minute guards: no offence)
     const uint32_t odds_scale = plan.catchup && st.tier >= 3 ? 50u : pressure_fights ? 70u : 100u;
-    if (v.mine().size() <= tactics_.reserve_of(v)) return;      // the last ants stay out of every fight (idle_hunt: but with nothing to bank and nothing to lose only the last one)
+    if (last_ants && !(eg && plan.assault)) return;                                                  // ... except, with the food gone, an assault on a team that has more to lose than the bot (wipe_pays)
+    const int32_t my_loss = std::min<int32_t>(200, std::max<int32_t>(0, v.score()));                // a wipe-out forces a hatch of min(score, 200) points: what the bot loses if its last ants die
+    const auto wipe_pays = [&](const AntView& e) {                                                    // a gamble with the last ants is taken against a team that has more to lose than the bot, or that is well ahead of it (a team that is behind loses no place by losing a fight)
+        if (e.team >= sim::MAX_PLAYERS) return false;
+        const int32_t theirs = v.rows()[e.team].score;
+        const int32_t margin = static_cast<int32_t>(plan.gone_margin);
+        return std::min<int32_t>(200, std::max<int32_t>(0, theirs)) >= my_loss + margin || theirs >= v.score() + 2 * margin;
+    };
     std::set<uint32_t> busy;                                                                         // the ants of the fights that run
     for (const auto& f : fights_) {
         for (const auto& d : f.second.defenders) busy.insert(d.first);
@@ -380,6 +390,7 @@ void FightTask::start_offence(TaskContext& c) {
     bool best_hunt = false;
     bool best_vicinity = false;
     bool best_assault = false;
+    uint32_t best_odds = assault_odds;                                                               // (the odds that the chosen assault asked for)
     for (const AntView& e : v.others()) {
         if (fights_.count(e.id) != 0 || !attackable(v, e) || shunned(e.id, now)) continue;
         // a kill that is available: of a WOUNDED ant (or a non-Swimmer near unbridged water), by the plan of the real blows (kill_plan or water_push_blows); a survivor with one
@@ -390,7 +401,7 @@ void FightTask::start_offence(TaskContext& c) {
             ? (e.state != sim::UnitState::Walking || e.hp < sim::AntUnit::MAX_HP || (!near_hunt.empty() && near_hunt.front()->idle() && near_hunt.front()->tile.chebyshev_dist(e.tile) <= 2))
             : (raw_w_blows > 1 && e.hp < sim::AntUnit::MAX_HP);
         const uint32_t w_blows = water_ready ? raw_w_blows : 0u;
-        if (plan.hunt && e.hp >= 1 && (e.hp < sim::AntUnit::MAX_HP || w_blows > 0) && !(e.hp == 1 && e.state == sim::UnitState::Walking && w_blows == 0) && in_scope(e, w_blows)) {
+        if (plan.hunt && !last_ants && e.hp >= 1 && (e.hp < sim::AntUnit::MAX_HP || w_blows > 0) && !(e.hp == 1 && e.state == sim::UnitState::Walking && w_blows == 0) && in_scope(e, w_blows)) {
             Strength own;
             size_t combats = 0;
             for (const AntView* a : near_hunt) {
@@ -428,29 +439,38 @@ void FightTask::start_offence(TaskContext& c) {
             }
         }
         // the assault: the nearest enemy ant that the force of free ants outweighs (a raider, a wounded ant and a carrier first)
-        if (assault_on && !running) {
+        if (assault_on && !running && (!last_ants || wipe_pays(e))) {
             const std::vector<const AntView*> near = form(e, plan.assault_reach, assault_force, true);
-            if (!near.empty() && near.size() >= plan.assault_min) {
+            if (!near.empty() && near.size() >= assault_min) {
                 Strength own;
                 for (const AntView* a : near) own.add(a->hp, blow_damage(a->type));
                 const Strength theirs = enemy_strength(v, e.tile, plan.skirmish_near, e.id, plan.skirmish_enemy_cap);
-                if (own.value() * 100u >= theirs.value() * assault_odds) {
+                bool wipe = false;                                                                         // (the food-gone batch) a team that shows few ants: killing them all forces a hatch (min(score, 200) off the box)
+                if (eg && plan.gone_wipe_ants > 0 && e.team < sim::MAX_PLAYERS && v.rows()[e.team].score >= plan.gone_wipe_box) {
+                    uint32_t shown = 0;
+                    for (const AntView& o : v.others()) shown += o.team == e.team ? 1u : 0u;
+                    wipe = shown <= plan.gone_wipe_ants;
+                }
+                const uint32_t odds = !eg ? assault_odds : wipe ? plan.gone_wipe_odds_percent : plan.gone_odds_percent;      // (with the food gone a fight pays only when it is won: the odds are asked for, a wipe-out is worth less of them)
+                if (own.value() * 100u >= theirs.value() * odds) {
                     int32_t score = 100 - 3 * near.front()->tile.chebyshev_dist(e.tile) + (10 - static_cast<int32_t>(std::min<uint32_t>(e.hp, 10u))) * 8;
                     if (e.type == sim::AntType::Fire || e.type == sim::AntType::Bomber) score += 60;
                     if (e.holding) score += 40;
                     if (war >= 1 && leader >= 0 && e.team == leader) score += 50;                     // the leader's ants: what he has not banked yet is what the bot can still take from him
+                    if (wipe) score += 80;
                     if (best == nullptr || (!best_hunt && score > best_score)) {
                         best = &e;
                         best_score = score;
                         best_hunt = false;
                         best_vicinity = false;
                         best_assault = true;
+                        best_odds = odds;
                     }
                 }
             }
         }
         // pressure: a carrier on its way, a worker at a pile
-        if (!(plan.skirmish || pressure_fights) || running || e.type == sim::AntType::Thief) continue;
+        if (!(plan.skirmish || pressure_fights) || running || last_ants || e.type == sim::AntType::Thief) continue;
         int32_t value = 0;
         if (e.holding) {
             value = 100;                                                                             // a carrier: a blow costs its owner the walk and the time to send it on
@@ -491,7 +511,7 @@ void FightTask::start_offence(TaskContext& c) {
     f.assault = best_assault;
     f.force = static_cast<uint32_t>(assault_force);
     f.pull = pull;
-    f.abort_percent = std::min<uint32_t>(plan.skirmish_abort_percent, assault_odds * 8u / 10u);
+    f.abort_percent = std::min<uint32_t>(plan.skirmish_abort_percent, (best_assault ? best_odds : assault_odds) * 8u / 10u);
     fights_.emplace(best->id, std::move(f));
     ++fights_started_;
     ++offence_started_;
@@ -505,7 +525,7 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<Attac
     const LevelPlan& plan = tactics_.plan;
     const uint32_t duel_spare = duel_spare_of(tactics_);
     const AntView* target = find_ant(v.others(), f.target);
-    if (v.mine().size() <= tactics_.reserve_of(v)) {
+    if (v.mine().size() <= tactics_.reserve_of(v) && !(f.assault && tactics_.gone && plan.gone)) {
         end = true;                                                              // down to the last ants: they leave the fight
         return;
     }

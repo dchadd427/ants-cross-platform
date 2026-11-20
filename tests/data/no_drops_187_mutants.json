@@ -184,8 +184,8 @@
   {
    "id": "played_text_lacks_12",
    "file": "src/ants_replay/replay.cpp",
-   "old": "+ \" and \" + std::to_string(kSimRulesMode187);",
-   "new": ";",
+   "old": "+ \", \" + std::to_string(kSimRulesMode187) + \" and \"",
+   "new": "+ \" and \"",
    "build": "test_rules_no_drops",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_no_drops",
    "expect": "RP16.1"

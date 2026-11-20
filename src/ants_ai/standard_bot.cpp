@@ -12,6 +12,7 @@ constexpr uint8_t kRankPowerUps = 3;
 constexpr uint8_t kRankWalls = 4;
 constexpr uint8_t kRankFight = 5;
 constexpr uint8_t kRankGates = 6;                 // (a gate goal exists only while the food is walled off for the seat; a Sealed vault (HELLRAISER) is raided again and again, so the goal repeats while the vault has food: the Fire ant or Bomber is worth more to the bot than to the mines, the walls or a fight)
+constexpr uint64_t kGoneMinTick = 3600;           // (the food-gone batch: work that banks nothing is only called lost after the first 3 minutes, which an expedition over water or a breach of a wall needs for its first food)
 constexpr uint64_t kBreachTicks = 2400;           // (the opening of a gate map: the fire walls against a thief and the trips to the power-ups of the own side wait this long at most, 2 minutes)
 }  // namespace
 
@@ -113,6 +114,20 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     }
     tactics_.far_work = (plan.islands && island_.active()) || tactics_.gate_map || tactics_.field_map;                            // (food beyond water, a gate or a field is work for the Swimmers and the goals: the ants do not go hunting, and the last ants do not go for a kill)
     tactics_.no_work = !any_reachable_pile && !tactics_.far_work;
+    // The food-gone batch (LevelPlan::gone, docs/BOTS.md "When the food is gone"): no food to walk to, no island, gate or field work for the ants, for plan.gone_wait ticks and with time left on the clock
+    {
+        // nothing to do: every pile is eaten, or what is left is out of the hill's reach (a lunchbox that no walk joins to the hill is no pile) and the island, gate or field work has banked nothing for plan.gone_stall ticks
+        bool walkable_food = false;
+        for (const PileView& p : view.piles()) {
+            const PileInfo* info = map->pile(p.index);
+            const bool walks = info != nullptr ? info->approach[seat_].reachable() : (map->ant_component(seat_, p.anchor) >= 0 && map->ant_component(seat_, p.anchor) == map->hill_component(seat_));
+            walkable_food = walkable_food || walks;
+        }
+        const bool nothing_to_do = !walkable_food && (view.piles().empty() || !tactics_.far_work || (now >= progress_tick_ + plan.gone_stall && now >= kGoneMinTick));
+        if (!nothing_to_do) no_work_since_ = 0;
+        else if (no_work_since_ == 0) no_work_since_ = std::max<uint64_t>(now, 1u);
+    }
+    tactics_.gone = plan.gone && view.game_mode() == sim::GameMode::HighestScore && no_work_since_ != 0 && !fallback && now >= no_work_since_ + plan.gone_wait && view.ticks_left() > 300;       // (the game type 187 has no food by its rules: its brawl is its own)
     const bool gate_breaching = tactics_.gate_map && !tactics_.gate_beside && !fallback && !gate_goals_.exhausted() && !any_reachable_pile && now < kBreachTicks && (view.score() == 0 || gate_goals_.phase() != GateGoalTask::Phase::Idle);
     tactics_.wall_demand = !gate_breaching && wall_demand(tactics_, view, *map);
     if (tactics_.wall_demand) tactics_.wants[static_cast<size_t>(sim::AntType::Fire)] = 1;
@@ -145,6 +160,17 @@ void StandardBot::think(const BotView& view, Orders& orders) {
             const bool lost = plan.drop_retake && ((plan.drop_retake_kinds >> static_cast<unsigned>(p.kind)) & 1u) != 0 && k < kind_seen_.size() && kind_seen_[k] != 0 && now <= kind_seen_[k] + plan.drop_memory_ticks && kind_seen_[k] != now;
             const bool secured = plan.drop_contest && ((plan.secure_kinds >> static_cast<unsigned>(p.kind)) & 1u) != 0;
             if (lost || secured) tactics_.wants[k] = std::max<uint8_t>(tactics_.wants[k], 1);
+        }
+    }
+    tactics_.gone_thief = false;
+    if (tactics_.gone && plan.gone_thief && view.ticks_left() > 1200) {              // a Thief for the steals: while an enemy box shows enough to take, the team wants one (the trip is the ordinary one, longer)
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+            const TeamRow& row = view.rows()[t];
+            if (t != seat_ && row.present && !row.dropped && !(view.ally() < sim::MAX_PLAYERS && t == view.ally()) && row.score >= static_cast<int32_t>(plan.gone_raid_min) && map->hill(t).present &&
+                map->hill_component(seat_) >= 0 && map->ant_component(seat_, map->hill(t).raid) == map->hill_component(seat_)) {       // (a hill that the own hill's ants walk to: a Thief that no walk leads to a hill is no use)
+                tactics_.wants[static_cast<size_t>(sim::AntType::Thief)] = std::max<uint8_t>(tactics_.wants[static_cast<size_t>(sim::AntType::Thief)], 1);
+                tactics_.gone_thief = true;
+            }
         }
     }
     bool enemy_plays = false;
@@ -197,7 +223,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     powerups_.step(context);
     bombs_.step(context);
     if (plan.mine_per_pile > 0 || plan.mine_gate > 0 || plan.mine_home > 0 || mines_.jobs() != 0) mines_.step(context);       // (when the plan has no mines the task only gives back what it held)
-    const bool raiding = plan.raids || (plan.catchup && st.tier >= plan.catchup_lift_tier);
+    const bool raiding = plan.raids || (plan.catchup && st.tier >= plan.catchup_lift_tier) || tactics_.gone;
     raids_.set_launching(raiding);
     if ((raiding || ledger_.count(kRaids) != 0) && !fallback) raids_.step(context);         // (when the pressure falls the raid under way is seen out: the thief is not kept for ever)
     if (plan.guards) guard_.step(context);

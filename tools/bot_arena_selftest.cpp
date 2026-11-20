@@ -553,6 +553,24 @@ void selftest_wiring(SelfTest& t, const LoadedMap& tiny) {
             t.check(report_json(m, maps, one187).find("\"game_mode\": \"187\"") != std::string::npos && report_json(o, maps, one_original).find("game_mode") == std::string::npos,
                     "the report names the mode when it is 187 and says nothing of it for the original's game");
         }
+        {   // --teams reaches the match: the pair and the other two are allies from the first tick, the report names the teams (only a match with teams does); four seats play, as a pair of two seats would be the whole match
+            Options m = o;
+            m.seats = {spec_for(0, "worker", ai::Level::Hard), spec_for(1, "worker", ai::Level::Hard), spec_for(2, "worker", ai::Level::Hard), spec_for(3, "worker", ai::Level::Hard)};
+            Options f = m;
+            m.teams = sim::StartTeams{true, 0, 1};
+            m.ticks = 20;
+            f.ticks = 20;
+            Job four;
+            four.seed = job.seed;
+            four.bots = m.seats;
+            const MatchReport teamed = run_job(m, maps, four, selftest_factory);
+            const MatchReport single = run_job(f, maps, four, selftest_factory);
+            const std::vector<MatchReport> one_teamed = {teamed};
+            const std::vector<MatchReport> one_free = {single};
+            t.check(spec_of(m, tiny, four, false).teams.set && !spec_of(f, tiny, four, false).teams.set && teamed.ok() && report_json(m, maps, one_teamed).find("\"teams\": \"0+1\"") != std::string::npos &&
+                        report_json(f, maps, one_free).find("\"teams\"") == std::string::npos,
+                    "spec_of carries --teams and the report names the teams only when there are some");
+        }
         // a replay that fails is reported as such, with its first bad tick
         std::vector<MatchReport> broken = {checked};
         broken[0].replay.ok = false;
@@ -703,7 +721,7 @@ void selftest_tool(SelfTest& t) {
     t.check(!text.empty() && JsonChecker(text).valid() && JsonReader(text).parse(tree), "the report file is there, valid JSON, and reads back");
     const JsonValue* matches = tree.get("matches");
     const JsonValue* summary = tree.get("summary");
-    t.check(tree.get("tool") != nullptr && tree.get("tool")->text == "bot_arena" && tree.get("format") != nullptr && tree.get("format")->u64() == 6 && matches != nullptr && matches->items.size() == 1 &&
+    t.check(tree.get("tool") != nullptr && tree.get("tool")->text == "bot_arena" && tree.get("format") != nullptr && tree.get("format")->u64() == 7 && matches != nullptr && matches->items.size() == 1 &&
                 summary != nullptr && summary->get("matches") != nullptr && summary->get("matches")->u64() == 1 && summary->get("failures") != nullptr && summary->get("failures")->u64() == 0,
             "the tool, the format and the summary");
     // the numbers of the report are the numbers of the match: play the same match in-process and compare every field
@@ -979,6 +997,10 @@ int selftest() {
         t.check(d.game_mode == sim::GameMode::HighestScore && parse_args({"--game-mode", "187"}, gm, err) && gm.game_mode == sim::GameMode::Kills187 &&
                     parse_args({"--game-mode", "highest-score"}, gm, err) && gm.game_mode == sim::GameMode::HighestScore,
                 "--game-mode: the original's game by default, 187 and highest-score by their words");
+        Options tm;
+        t.check(!d.teams.set && parse_args({"--teams", "0+2"}, tm, err) && tm.teams.set && tm.teams.a == 0 && tm.teams.b == 2 && parse_args({"--teams", "ffa"}, tm, err) && !tm.teams.set,
+                "--teams: free for all by default, a pair of seats as digits, ffa to say so");
+        t.check(!parse_args({"--teams", "1+1"}, bad, err) && !parse_args({"--teams", "0+7"}, bad, err) && !parse_args({"--teams"}, bad, err), "--teams: two different seats of 0 to 3, a value is needed");
         t.check(!parse_args({"--game-mode", "188"}, bad, err) && !parse_args({"--game-mode", "1"}, bad, err) && !parse_args({"--game-mode"}, bad, err), "--game-mode: no number, no other word, a value is needed");
         t.check(!parse_args({"--seat", "0=idle", "--seat", "0=hard"}, bad, err) && !parse_args({"--ticks", "0"}, bad, err) && !parse_args({"--wat"}, bad, err) &&
                     !parse_args({"--threads", "0"}, bad, err) && !parse_args({"--map"}, bad, err),

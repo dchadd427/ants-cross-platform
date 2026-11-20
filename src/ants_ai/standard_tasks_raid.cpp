@@ -55,7 +55,8 @@ uint32_t RaidTask::min_loot_now() const noexcept {
     const LevelPlan& plan = tactics_.plan;
     // behind the leader a smaller loot is worth the trip (tier 1: two thirds, tier 2: a third, tier 3: 10 points) and a hill with an enemy Combat Ant near it is raided (tier 2 and up)
     const uint8_t tier = plan.catchup ? tactics_.standing.tier : 0;
-    return tier >= 3 ? std::min<uint32_t>(plan.raid_min_loot, 10u) : tier == 2 ? plan.raid_min_loot / 3u : tier == 1 ? plan.raid_min_loot * 2u / 3u : plan.raid_min_loot;
+    const uint32_t loot = tier >= 3 ? std::min<uint32_t>(plan.raid_min_loot, 10u) : tier == 2 ? plan.raid_min_loot / 3u : tier == 1 ? plan.raid_min_loot * 2u / 3u : plan.raid_min_loot;
+    return tactics_.gone && plan.gone ? std::min(loot, plan.gone_raid_min) : loot;                // (the food-gone batch: with no food to bank a steal is the only points there are)
 }
 
 RaidTask::Hole RaidTask::hole_state(TaskContext& c, uint8_t t, uint32_t thief_id) const {

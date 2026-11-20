@@ -4,7 +4,7 @@
 // changes nothing: a match under watch has the same state hash as the same match in bot_arena. Every seat also gets its "people" numbers (docs/BOT_PEOPLE.md; --no-people leaves them out).
 //
 // Usage:
-//   bot_watch [--map NAMES] [--maps-dir DIR] [--seeds A..B] --seat N=SPEC ... [--rotate] [--threads N] [--ticks full|N] [--latency-ticks N] [--out FILE] [--quiet] [--no-people]
+//   bot_watch [--map NAMES] [--maps-dir DIR] [--seeds A..B] --seat N=SPEC ... [--teams A+B] [--rotate] [--threads N] [--ticks full|N] [--latency-ticks N] [--out FILE] [--quiet] [--no-people]
 //   bot_watch --mapinfo NAMES [--maps-dir DIR]     (and --ascii NAMES: the map as letters)
 //   bot_watch --replay FILE... [--maps-dir DIR] [--out FILE]     the same counters over recordings (a person's game against bots too: the bots' ants have no task names there)
 // SPEC is as in bot_arena (KIND:LEVEL[:STYLE]; the bench bots too: gang, aggressor, ...); KIND may be standard+K=V,K=V (the keys of apply_tune, tools/bot_arena_tune.cpp), `styled=1` draws the style like the registry's bot.
@@ -821,6 +821,7 @@ struct Options {
     bool people{true};
     bool mapinfo{false};
     bool ascii{false};
+    sim::StartTeams teams{};
     std::vector<std::string> replays;
     bool help{false};
 };
@@ -929,6 +930,10 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
             const std::string* v = value();
             if (v == nullptr) { err = "--out needs a file"; return false; }
             o.out = *v;
+        } else if (k == "--teams") {
+            const std::string* v = value();
+            std::string why;
+            if (v == nullptr || !sim::parse_start_teams(*v, o.teams, why)) { err = "--teams A+B: " + why; return false; }
         } else if (k == "--rotate") o.rotate = true;
         else if (k == "--quiet") o.quiet = true;
         else if (k == "--no-people") o.people = false;
@@ -1112,6 +1117,7 @@ MatchOut play_one(const Options& o, const LoadedMap& m, uint32_t seed, const std
     spec.bots = arrangement;
     spec.max_ticks = o.ticks;
     spec.latency_ticks = o.latency;
+    spec.teams = o.teams;
     for (const ai::BotSpec& b : arrangement) {
         if (b.kind.rfind("standard+", 0) == 0 || !ai::bench::bench_kind_of(b.kind).empty()) spec.extra_kinds.push_back(b.kind);
     }

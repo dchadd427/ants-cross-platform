@@ -1002,7 +1002,9 @@ int main() {
         entry.sim_rules = replay::kSimRules;
         ASSERT_FALSE(entry_plays_here(entry));                                                              // (the original's number with the mode of 187)
         entry.mode = 0;
-        ASSERT_TRUE(entry_plays_here(entry));                                                               // (the original's game now, rules 9)
+        ASSERT_TRUE(entry_plays_here(entry));                                                               // (the original's game now, rules 13)
+        entry.sim_rules = replay::kSimRulesBeforeEmptyRecord;
+        ASSERT_TRUE(entry_plays_here(entry));                                                               // (and as it was before the empty record, rules 9)
         entry.sim_rules = replay::kSimRulesBeforeFireWall;
         ASSERT_TRUE(entry_plays_here(entry));                                                               // (and as it was before the loader's fire wall, rules 8)
         entry.sim_rules = replay::kSimRulesBeforeLastSide;
