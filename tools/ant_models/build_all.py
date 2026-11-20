@@ -72,15 +72,20 @@ def _load_ant_builder(ant_id: str):
     raise AttributeError(f"Module {mod_name}.py defines none of build_ant(), build_{ant_id}(), or build()")
 
 
-def build_scene_for(ant_id: str):
-    """Build and return SceneBuilder for `ant_id`, or None if module is not present."""
+def build_scene_for(ant_id: str, *, bake_ao: bool = True):
+    """Build and return SceneBuilder for `ant_id` (with baked crevice AO), or None if absent."""
     builder = _load_ant_builder(ant_id)
     if builder is None:
         return None
     result = builder()
-    if isinstance(result, tuple):
-        return result[0]
-    return result
+    scene = result[0] if isinstance(result, tuple) else result
+    if bake_ao and scene is not None:
+        try:
+            from .mesh_core import bake_scene_ao
+        except ImportError:
+            from mesh_core import bake_scene_ao  # type: ignore
+        bake_scene_ao(scene)
+    return scene
 
 
 def discover_available_classes(include_base: bool = False) -> List[str]:
@@ -93,7 +98,18 @@ def discover_available_classes(include_base: bool = False) -> List[str]:
     return found
 
 
-VIEWER_FILES: Tuple[str, ...] = ("viewer.html", "viewer.css", "viewer.js", "viewer_version.js")
+VIEWER_EXTS: Tuple[str, ...] = (".html", ".css", ".js")
+
+
+def _discover_viewer_files() -> List[str]:
+    """Return sorted viewer*.html / viewer*.css / viewer*.js filenames in tools/ant_models/."""
+    found: List[str] = []
+    if os.path.isdir(THIS_DIR):
+        for fname in sorted(os.listdir(THIS_DIR)):
+            if fname.startswith("viewer") and fname.endswith(VIEWER_EXTS):
+                if os.path.isfile(os.path.join(THIS_DIR, fname)):
+                    found.append(fname)
+    return found
 
 
 def _file_sha256_hex(path: str, length: int = 12) -> str:
@@ -105,7 +121,7 @@ def _file_sha256_hex(path: str, length: int = 12) -> str:
 
 
 def _compute_manifest_hashes(entries: Sequence[Dict[str, Any]]) -> Tuple[str, str, str]:
-    """Return deterministic (version, build_hash, models_hash) across models + viewer files."""
+    """Return deterministic (version, build_hash, models_hash) across models + all viewer files."""
     sorted_models = sorted(entries, key=lambda e: str(e.get("id", "")))
     m_hasher = hashlib.sha256()
     for e in sorted_models:
@@ -114,10 +130,9 @@ def _compute_manifest_hashes(entries: Sequence[Dict[str, Any]]) -> Tuple[str, st
 
     b_hasher = hashlib.sha256()
     b_hasher.update(f"models:{models_hash}\n".encode("utf-8"))
-    for fname in sorted(VIEWER_FILES):
+    for fname in _discover_viewer_files():
         fpath = os.path.join(THIS_DIR, fname)
-        if os.path.isfile(fpath):
-            b_hasher.update(f"{fname}:{_file_sha256_hex(fpath, length=64)}\n".encode("utf-8"))
+        b_hasher.update(f"{fname}:{_file_sha256_hex(fpath, length=64)}\n".encode("utf-8"))
     build_hash = b_hasher.hexdigest()[:16]
     version = f"v-{build_hash[:8]}"
     return version, build_hash, models_hash
@@ -183,6 +198,8 @@ def build_all(
             "nodes": stats["nodes"],
             "materials": stats["materials"],
             "animations": stats.get("animations", []),
+            "textures": stats.get("textures", 0),
+            "images": stats.get("images", 0),
             "bbox_min": stats["bbox_min"],
             "bbox_max": stats["bbox_max"],
             "dimensions": stats["dimensions"],
@@ -227,29 +244,20 @@ def _aces_srgb(rgb):
     return np.clip(srgb * 255.0 + 0.5, 0.0, 255.0).astype(np.uint8)
 
 
-def _shade_vinyl(normals, view_dir, base_rgb, metallic: float, roughness: float, world_pts=None, mottle: float = 0.0):
-    """Organic satin-chitin PBR studio approximation with moody contrast and subtle mottling."""
+def _shade_vinyl(normals, view_dir, base_rgb, metallic: float, roughness: float, ao=None):
+    """Satin organic exoskeleton PBR studio approximation with baked crevice AO."""
     import numpy as np
 
     n = normals / np.maximum(1e-8, np.linalg.norm(normals, axis=-1, keepdims=True))
     v = view_dir / max(1e-8, float(np.linalg.norm(view_dir)))
-
-    # `base_rgb` is already IEC-linear RGB (matching glTF 2.0 baseColorFactor).
     albedo = np.clip(base_rgb, 0.0, 1.0)
-    if mottle > 0.0 and world_pts is not None:
-        # Subtle deterministic 3D organic chitin patina/mottling in linear space.
-        p = world_pts
-        grain = (
-            0.55 * np.sin(p[:, 0] * 19.0 + np.cos(p[:, 1] * 23.0 + p[:, 2] * 17.0))
-            + 0.45 * np.cos(p[:, 1] * 31.0 - p[:, 2] * 27.0 + np.sin(p[:, 0] * 29.0))
-        )
-        albedo = np.clip(albedo[None, :] * (1.0 + mottle * grain[:, None]), 0.0, 1.0)
+    ao_val = np.clip(ao, 0.35, 1.0) if ao is not None else 1.0
 
-    # 3-point moody studio lights: crisp top-left key, subdued cool fill, edge rim backlight.
+    # 3-point studio lights: crisp warm key, cool fill, crisp studio rim backlight.
     lights = (
-        (np.array([-0.46, 0.74, 0.49]), np.array([1.72, 1.64, 1.52])),
-        (np.array([0.72, 0.30, 0.42]), np.array([0.28, 0.34, 0.44])),
-        (np.array([0.24, 0.56, -0.79]), np.array([0.62, 0.68, 0.78])),
+        (np.array([-0.46, 0.74, 0.49]), np.array([1.70, 1.63, 1.52])),
+        (np.array([0.72, 0.32, 0.44]), np.array([0.34, 0.40, 0.52])),
+        (np.array([0.24, 0.56, -0.79]), np.array([0.72, 0.80, 0.92])),
     )
 
     f0 = (1.0 - metallic) * 0.04 + metallic * albedo
@@ -258,13 +266,14 @@ def _shade_vinyl(normals, view_dir, base_rgb, metallic: float, roughness: float,
     spec_exp = max(8.0, (2.0 / (alpha * alpha)) - 2.0)
     spec_norm = (spec_exp + 2.0) / 14.0
 
-    # Low ambient bounce so eye sockets, brow furrow, and undersides drop into deep shadows.
+    # Hemisphere ambient bounce scaled by baked crevice AO for crisp socket & seam depth.
     hemi = 0.5 * (n[..., 1:2] + 1.0)
-    ambient = (0.04 * (1.0 - hemi) * np.array([0.26, 0.24, 0.22]) + 0.14 * hemi * np.array([0.74, 0.80, 0.90]))
-    color = diffuse_albedo * ambient
+    ambient = (0.06 * (1.0 - hemi) * np.array([0.26, 0.25, 0.24]) + 0.19 * hemi * np.array([0.76, 0.83, 0.94]))
+    color = diffuse_albedo * ambient * ao_val
 
     ndv = np.clip(np.sum(n * v, axis=-1, keepdims=True), 0.0, 1.0)
-    fresnel_rim = (1.0 - ndv) ** 4.0
+    fresnel_rim = (1.0 - ndv) ** 3.6
+    spec_ao = 0.55 + 0.45 * ao_val
 
     for l_vec, l_col in lights:
         l_dir = l_vec / float(np.linalg.norm(l_vec))
@@ -273,14 +282,12 @@ def _shade_vinyl(normals, view_dir, base_rgb, metallic: float, roughness: float,
         h /= max(1e-8, float(np.linalg.norm(h)))
         ndh = np.clip(np.sum(n * h, axis=-1, keepdims=True), 0.0, 1.0)
 
-        # Primary PBR specular; reserve glossy clearcoat highlight strictly for smooth eyes/glass (roughness < 0.25).
-        spec = spec_norm * (ndh ** min(spec_exp, 140.0)) * f0 * ((1.0 - roughness) ** 1.4)
-        coat = 0.08 * (ndh ** 64.0) if roughness < 0.25 else 0.0
-        color = color + (diffuse_albedo * ndl + (spec + coat) * (ndl > 0.0)) * l_col
+        spec = spec_norm * (ndh ** min(spec_exp, 140.0)) * f0 * ((1.0 - 0.55 * roughness) ** 1.2)
+        coat = 0.09 * (ndh ** 68.0) if roughness < 0.25 else 0.0
+        color = color + (diffuse_albedo * ndl * (0.45 + 0.55 * ao_val) + (spec + coat) * spec_ao * (ndl > 0.0)) * l_col
 
-    # Restrained Fresnel rim attenuated strongly on matte materials so chitin reads velvety, not plastic.
-    matte_atten = (1.0 - roughness) ** 2.0
-    color = color + fresnel_rim * (0.015 + 0.09 * matte_atten) * np.array([0.62, 0.70, 0.82])
+    rim_strength = 0.03 + 0.11 * ((1.0 - roughness) ** 1.6)
+    color = color + fresnel_rim * rim_strength * spec_ao * np.array([0.68, 0.78, 0.92])
     return color
 
 
@@ -361,7 +368,7 @@ def render_scene_orthographic(
             rgba = material_linear_color(part.material, team=team)
             base_rgb = np.array(rgba[:3], dtype=np.float64)
             base_alpha = float(rgba[3])
-            mottle = 0.14 if (not is_blend and part.material in ("chitin_team", "chitin_dark", "gear_gold", "prop_brown")) else 0.0
+            v_cols = part.colors.astype(np.float64) if getattr(part, "colors", None) is not None else None
 
             world_pos = part.positions.astype(np.float64)
             pos = world_pos - center[None, :]
@@ -421,12 +428,12 @@ def render_scene_orthographic(
                     + w1[hit, None] * nrm[i1]
                     + w2[hit, None] * nrm[i2]
                 )
-                w_pix = (
-                    w0[hit, None] * world_pos[i0]
-                    + w1[hit, None] * world_pos[i1]
-                    + w2[hit, None] * world_pos[i2]
-                ) if mottle > 0.0 else None
-                shaded = _shade_vinyl(n_pix, cam_dir, base_rgb, spec.metallic, spec.roughness, world_pts=w_pix, mottle=mottle)
+                ao_pix = (
+                    w0[hit, None] * v_cols[i0]
+                    + w1[hit, None] * v_cols[i1]
+                    + w2[hit, None] * v_cols[i2]
+                ) if v_cols is not None else None
+                shaded = _shade_vinyl(n_pix, cam_dir, base_rgb, spec.metallic, spec.roughness, ao=ao_pix)
                 sub_col = color_buf[min_y : max_y + 1, min_x : max_x + 1]
                 if not is_blend:
                     sub_z[hit] = z_interp[hit]

@@ -202,27 +202,66 @@ class AnimationClip:
     channels: List[AnimationChannel] = field(default_factory=list)
 
 
+DEFAULT_UV_SCALE = 2.6
+
+
+def _mirrored_theta_u(thetas: np.ndarray, circum: float, uv_scale: float = DEFAULT_UV_SCALE) -> np.ndarray:
+    """Seam-free periodic mirrored U in [0, repeats] with zero wrap-back jump at theta=0/2pi."""
+    repeats = max(1, int(round(max(0.05, float(circum)) * uv_scale * 0.5)))
+    return (repeats * (1.0 - np.abs(thetas / math.pi - 1.0))).astype(np.float32)
+
+
+def _default_continuous_uvs(positions: np.ndarray, uv_scale: float = DEFAULT_UV_SCALE) -> np.ndarray:
+    """Fallback seam-free cylindrical UVs for hand-built meshes without explicit UVs."""
+    pos = np.asarray(positions, dtype=np.float64)
+    if len(pos) == 0:
+        return np.zeros((0, 2), dtype=np.float32)
+    ctr = 0.5 * (pos.min(axis=0) + pos.max(axis=0))
+    span = pos.max(axis=0) - pos.min(axis=0)
+    dx, dz = pos[:, 0] - ctr[0], pos[:, 2] - ctr[2]
+    ang = np.mod(np.arctan2(dx, dz), 2.0 * math.pi)
+    circum = math.pi * max(0.08, float(0.5 * (span[0] + span[2])))
+    u = _mirrored_theta_u(ang, circum, uv_scale=uv_scale)
+    v = ((pos[:, 1] - pos[:, 1].min()) * uv_scale).astype(np.float32)
+    return np.column_stack([u, v]).astype(np.float32)
+
+
 @dataclass
 class MeshPart:
-    """Immutable-style triangle mesh chunk with one named PBR material."""
+    """Immutable-style triangle mesh chunk with one named PBR material, UVs, and vertex AO."""
 
     name: str
     material: str
     positions: np.ndarray
     normals: np.ndarray
     indices: np.ndarray
+    uvs: Optional[np.ndarray] = None
+    colors: Optional[np.ndarray] = None
 
     def __post_init__(self) -> None:
         get_material(self.material)
         self.positions = np.ascontiguousarray(self.positions, dtype=np.float32).reshape(-1, 3)
         self.normals = np.ascontiguousarray(self.normals, dtype=np.float32).reshape(-1, 3)
         self.indices = np.ascontiguousarray(self.indices, dtype=np.uint32).reshape(-1)
+        n = len(self.positions)
+        if self.uvs is None:
+            self.uvs = _default_continuous_uvs(self.positions)
+        else:
+            self.uvs = np.ascontiguousarray(self.uvs, dtype=np.float32).reshape(-1, 2)
+        if self.colors is None:
+            self.colors = np.ones((n, 3), dtype=np.float32)
+        else:
+            self.colors = np.ascontiguousarray(self.colors, dtype=np.float32).reshape(-1, 3)
         if self.positions.shape != self.normals.shape:
             raise ValueError(f"positions {self.positions.shape} != normals {self.normals.shape}")
+        if self.uvs.shape != (n, 2):
+            raise ValueError(f"uvs {self.uvs.shape} != ({n}, 2)")
+        if self.colors.shape != (n, 3):
+            raise ValueError(f"colors {self.colors.shape} != ({n}, 3)")
         if len(self.indices) % 3 != 0:
             raise ValueError(f"indices length {len(self.indices)} is not a multiple of 3")
-        if not (np.all(np.isfinite(self.positions)) and np.all(np.isfinite(self.normals))):
-            raise ValueError(f"MeshPart {self.name!r} has non-finite positions or normals")
+        if not (np.all(np.isfinite(self.positions)) and np.all(np.isfinite(self.normals)) and np.all(np.isfinite(self.uvs)) and np.all(np.isfinite(self.colors))):
+            raise ValueError(f"MeshPart {self.name!r} has non-finite vertex attributes")
 
     def copy(self, name: Optional[str] = None, material: Optional[str] = None) -> "MeshPart":
         return MeshPart(
@@ -231,11 +270,13 @@ class MeshPart:
             self.positions.copy(),
             self.normals.copy(),
             self.indices.copy(),
+            self.uvs.copy(),
+            self.colors.copy(),
         )
 
     def translate(self, dx: Union[float, Vec3Like], dy: Optional[float] = None, dz: Optional[float] = None) -> "MeshPart":
         offset = _as_vec3(dx, dy, dz).astype(np.float32)
-        return MeshPart(self.name, self.material, self.positions + offset, self.normals.copy(), self.indices.copy())
+        return MeshPart(self.name, self.material, self.positions + offset, self.normals.copy(), self.indices.copy(), self.uvs.copy(), self.colors.copy())
 
     def scale(self, sx: Union[float, Vec3Like], sy: Optional[float] = None, sz: Optional[float] = None) -> "MeshPart":
         s = _as_vec3(sx, sy, sz)
@@ -267,16 +308,14 @@ class MeshPart:
         idx = self.indices.copy()
         if np.linalg.det(lin) < 0.0:
             idx = idx.reshape(-1, 3)[:, [0, 2, 1]].reshape(-1)
-        return MeshPart(self.name, self.material, pos.astype(np.float32), norms.astype(np.float32), idx)
+        return MeshPart(self.name, self.material, pos.astype(np.float32), norms.astype(np.float32), idx, self.uvs.copy(), self.colors.copy())
 
     def mirror_x(self, name: Optional[str] = None) -> "MeshPart":
         """Mirror across the YZ plane (X -> -X) while preserving outward winding."""
-        pos = self.positions.copy()
-        norms = self.normals.copy()
-        pos[:, 0] = -pos[:, 0]
-        norms[:, 0] = -norms[:, 0]
+        pos, norms = self.positions.copy(), self.normals.copy()
+        pos[:, 0], norms[:, 0] = -pos[:, 0], -norms[:, 0]
         idx = self.indices.reshape(-1, 3)[:, [0, 2, 1]].reshape(-1).copy()
-        return MeshPart(name if name is not None else f"{self.name}_mirror", self.material, pos, norms, idx)
+        return MeshPart(name if name is not None else f"{self.name}_mirror", self.material, pos, norms, idx, self.uvs.copy(), self.colors.copy())
 
     def deform(self, fn: Callable[[np.ndarray], np.ndarray], *, recompute_normals: bool = True) -> "MeshPart":
         """Apply a vertex deformation callback `fn(positions_Nx3) -> new_positions_Nx3`."""
@@ -284,20 +323,17 @@ class MeshPart:
         if new_pos.shape != self.positions.shape:
             raise ValueError(f"deform changed shape from {self.positions.shape} to {new_pos.shape}")
         new_norms = recompute_smooth_normals(new_pos, self.indices) if recompute_normals else self.normals.copy()
-        return MeshPart(self.name, self.material, new_pos, new_norms, self.indices.copy())
+        return MeshPart(self.name, self.material, new_pos, new_norms, self.indices.copy(), self.uvs.copy(), self.colors.copy())
 
     def recompute_normals(self) -> "MeshPart":
         return MeshPart(
-            self.name,
-            self.material,
-            self.positions.copy(),
-            recompute_smooth_normals(self.positions, self.indices),
-            self.indices.copy(),
+            self.name, self.material, self.positions.copy(),
+            recompute_smooth_normals(self.positions, self.indices), self.indices.copy(), self.uvs.copy(), self.colors.copy(),
         )
 
     def ensure_outward(self, reference_center: Optional[Vec3Like] = None) -> "MeshPart":
         idx = ensure_outward_winding(self.positions, self.indices, reference_center=reference_center)
-        return MeshPart(self.name, self.material, self.positions.copy(), recompute_smooth_normals(self.positions, idx), idx)
+        return MeshPart(self.name, self.material, self.positions.copy(), recompute_smooth_normals(self.positions, idx), idx, self.uvs.copy(), self.colors.copy())
 
     def bounds(self) -> Tuple[np.ndarray, np.ndarray]:
         if len(self.positions) == 0:
@@ -314,13 +350,15 @@ def merge_parts(parts: Sequence[MeshPart], name: str = "merged", material: Optio
     if not parts:
         raise ValueError("Cannot merge an empty sequence of MeshParts")
     mat = parts[0].material if material is None else material
-    pos_l, nrm_l, idx_l, offset = [], [], [], 0
+    pos_l, nrm_l, idx_l, uv_l, col_l, offset = [], [], [], [], [], 0
     for part in parts:
         pos_l.append(part.positions)
         nrm_l.append(part.normals)
         idx_l.append(part.indices + np.uint32(offset))
+        uv_l.append(part.uvs)
+        col_l.append(part.colors)
         offset += len(part.positions)
-    return MeshPart(name, mat, np.concatenate(pos_l), np.concatenate(nrm_l), np.concatenate(idx_l))
+    return MeshPart(name, mat, np.concatenate(pos_l), np.concatenate(nrm_l), np.concatenate(idx_l), np.concatenate(uv_l), np.concatenate(col_l))
 
 
 @dataclass
@@ -601,21 +639,28 @@ def superellipsoid(
     rx: float, ry: float, rz: float, e1: float = 1.0, e2: float = 1.0,
     u_segs: int = 28, v_segs: int = 20, *, name: str = "superellipsoid", material: str = "chitin_team",
 ) -> MeshPart:
-    """Build a smooth closed superellipsoid centered at origin (vinyl rounded cubes/ovals)."""
+    """Build a smooth closed superellipsoid centered at origin with seam-free UVs."""
     u_segs, v_segs = max(6, int(u_segs)), max(4, int(v_segs))
     e1, e2 = max(0.08, float(e1)), max(0.08, float(e2))
     phis = np.linspace(-0.5 * math.pi, 0.5 * math.pi, v_segs + 1)[1:-1]
     thetas = np.linspace(0.0, 2.0 * math.pi, u_segs, endpoint=False)
     cos_t, sin_t = _spow(np.cos(thetas), e2), _spow(np.sin(thetas), e2)
 
+    u_ring = _mirrored_theta_u(thetas, math.pi * (rx + rz))
+    v_scale = math.pi * 0.5 * (ry + 0.5 * (rx + rz)) * DEFAULT_UV_SCALE
     verts: List[np.ndarray] = [np.array([[0.0, -ry, 0.0]], dtype=np.float64)]
+    uvs_l: List[np.ndarray] = [np.array([[float(u_ring.mean()), 0.0]], dtype=np.float32)]
     for phi in phis:
         cp = float(_spow(np.array(math.cos(phi)), e1))
         sp = float(_spow(np.array(math.sin(phi)), e1))
         verts.append(np.column_stack([rx * cp * sin_t, np.full(u_segs, ry * sp), rz * cp * cos_t]))
+        v_val = float((phi + 0.5 * math.pi) / math.pi * v_scale)
+        uvs_l.append(np.column_stack([u_ring, np.full(u_segs, v_val, dtype=np.float32)]))
     verts.append(np.array([[0.0, +ry, 0.0]], dtype=np.float64))
+    uvs_l.append(np.array([[float(u_ring.mean()), float(v_scale)]], dtype=np.float32))
 
     positions = np.vstack(verts).astype(np.float32)
+    uvs = np.vstack(uvs_l).astype(np.float32)
     n_rings, north_idx = len(phis), len(positions) - 1
     tris: List[Tuple[int, int, int]] = [(0, 1 + (i + 1) % u_segs, 1 + i) for i in range(u_segs)]
     for r in range(n_rings - 1):
@@ -624,7 +669,7 @@ def superellipsoid(
     tris.extend((north_idx, top_b + i, top_b + (i + 1) % u_segs) for i in range(u_segs))
 
     indices = np.asarray(tris, dtype=np.uint32).reshape(-1)
-    return MeshPart(name, material, positions, recompute_smooth_normals(positions, indices), indices)
+    return MeshPart(name, material, positions, recompute_smooth_normals(positions, indices), indices, uvs=uvs)
 
 
 def sphere(radius: float, u_segs: int = 28, v_segs: int = 20, *, name: str = "sphere", material: str = "chitin_team") -> MeshPart:
@@ -671,23 +716,33 @@ def swept_tube(
     tangents, f_n, f_b = _parallel_transport_frames(pts, closed)
     angles = np.linspace(0.0, 2.0 * math.pi, radial_segs, endpoint=False)
     ca, sa = np.cos(angles)[:, None], np.sin(angles)[:, None]
+    u_ring = _mirrored_theta_u(angles, 2.0 * math.pi * float(rad.mean()))
+
+    seg_lens = np.linalg.norm(np.diff(pts, axis=0), axis=1)
+    arc_s = np.concatenate([[0.0], np.cumsum(seg_lens)])
 
     rings: List[np.ndarray] = []
+    ring_vs: List[float] = []
     start_apex: Optional[np.ndarray] = None
     end_apex: Optional[np.ndarray] = None
+    start_v = 0.0
 
     if not closed and cap_start:
         r0, r_ax = rad[0], float(0.5 * (rad[0, 0] + rad[0, 1]))
         start_apex = pts[0] - r_ax * tangents[0]
+        start_v = -0.5 * math.pi * r_ax * DEFAULT_UV_SCALE
         for k in range(cap_rings - 1, 0, -1):
             phi = (k / cap_rings) * (0.5 * math.pi)
             c_phi, s_phi = math.cos(phi), math.sin(phi)
             ctr = pts[0] - (r_ax * s_phi) * tangents[0]
             rings.append(ctr[None, :] + (r0[0] * c_phi) * ca * f_n[0][None, :] + (r0[1] * c_phi) * sa * f_b[0][None, :])
+            ring_vs.append(-phi * r_ax * DEFAULT_UV_SCALE)
 
     for i in range(len(pts)):
         rings.append(pts[i][None, :] + rad[i, 0] * ca * f_n[i][None, :] + rad[i, 1] * sa * f_b[i][None, :])
+        ring_vs.append(float(arc_s[i] * DEFAULT_UV_SCALE))
 
+    end_v = float(arc_s[-1] * DEFAULT_UV_SCALE)
     if not closed and cap_end:
         rn, r_ax = rad[-1], float(0.5 * (rad[-1, 0] + rad[-1, 1]))
         for k in range(1, cap_rings):
@@ -695,12 +750,20 @@ def swept_tube(
             c_phi, s_phi = math.cos(phi), math.sin(phi)
             ctr = pts[-1] + (r_ax * s_phi) * tangents[-1]
             rings.append(ctr[None, :] + (rn[0] * c_phi) * ca * f_n[-1][None, :] + (rn[1] * c_phi) * sa * f_b[-1][None, :])
+            ring_vs.append(float((arc_s[-1] + phi * r_ax) * DEFAULT_UV_SCALE))
         end_apex = pts[-1] + r_ax * tangents[-1]
+        end_v = float((arc_s[-1] + 0.5 * math.pi * r_ax) * DEFAULT_UV_SCALE)
 
+    u_mid = float(u_ring.mean())
     blocks: List[np.ndarray] = ([] if start_apex is None else [start_apex[None, :]]) + rings
+    uv_blocks: List[np.ndarray] = ([] if start_apex is None else [np.array([[u_mid, start_v]], dtype=np.float32)]) + [
+        np.column_stack([u_ring, np.full(radial_segs, v_val, dtype=np.float32)]) for v_val in ring_vs
+    ]
     if end_apex is not None:
         blocks.append(end_apex[None, :])
+        uv_blocks.append(np.array([[u_mid, end_v]], dtype=np.float32))
     positions = np.vstack(blocks).astype(np.float32)
+    uvs = np.vstack(uv_blocks).astype(np.float32)
 
     ring_off = 1 if start_apex is not None else 0
     n_rings = len(rings)
@@ -715,7 +778,7 @@ def swept_tube(
         tris.extend((end_idx, b_last + i, b_last + (i + 1) % radial_segs) for i in range(radial_segs))
 
     indices = np.asarray(tris, dtype=np.uint32).reshape(-1)
-    return MeshPart(name, material, positions, recompute_smooth_normals(positions, indices), indices)
+    return MeshPart(name, material, positions, recompute_smooth_normals(positions, indices), indices, uvs=uvs)
 
 
 def curved_tube(
@@ -755,17 +818,24 @@ def lathe(
     radial_segs = max(6, int(radial_segs))
     thetas = np.linspace(0.0, 2.0 * math.pi, radial_segs, endpoint=False)
     sin_t, cos_t = np.sin(thetas), np.cos(thetas)
+    u_ring = _mirrored_theta_u(thetas, 2.0 * math.pi * max([r for r, _ in prof] or [0.05]))
+    u_mid = float(u_ring.mean())
 
     verts: List[np.ndarray] = []
+    uvs_l: List[np.ndarray] = []
     ring_meta: List[Tuple[str, int]] = []
-    v_count = 0
-    for r, h in prof:
+    v_count, arc_v = 0, 0.0
+    for j, (r, h) in enumerate(prof):
+        if j > 0:
+            arc_v += math.hypot(r - prof[j - 1][0], h - prof[j - 1][1]) * DEFAULT_UV_SCALE
         if r <= 1e-6:
             verts.append(np.array([[0.0, h, 0.0]], dtype=np.float64))
+            uvs_l.append(np.array([[u_mid, arc_v]], dtype=np.float32))
             ring_meta.append(("pole", v_count))
             v_count += 1
         else:
             verts.append(np.column_stack([r * sin_t, np.full(radial_segs, h), r * cos_t]))
+            uvs_l.append(np.column_stack([u_ring, np.full(radial_segs, arc_v, dtype=np.float32)]))
             ring_meta.append(("ring", v_count))
             v_count += radial_segs
 
@@ -780,8 +850,9 @@ def lathe(
             tris.extend(_quad_ring_tris(i0, i1, radial_segs))
 
     wall_pos = np.vstack(verts).astype(np.float32)
+    wall_uv = np.vstack(uvs_l).astype(np.float32)
     wall_idx = np.asarray(tris, dtype=np.uint32).reshape(-1)
-    parts = [MeshPart(name, material, wall_pos, recompute_smooth_normals(wall_pos, wall_idx), wall_idx)]
+    parts = [MeshPart(name, material, wall_pos, recompute_smooth_normals(wall_pos, wall_idx), wall_idx, uvs=wall_uv)]
 
     for want_cap, (r, h), ny, rev in (
         (cap_bottom, prof[0], -1.0, True),
@@ -790,13 +861,14 @@ def lathe(
         if want_cap and r > 1e-6:
             cp = np.vstack([np.array([[0.0, h, 0.0]]), np.column_stack([r * sin_t, np.full(radial_segs, h), r * cos_t])])
             cn = np.tile(np.array([[0.0, ny, 0.0]]), (radial_segs + 1, 1))
+            cuv = np.column_stack([cp[:, 0] * DEFAULT_UV_SCALE, cp[:, 2] * DEFAULT_UV_SCALE]).astype(np.float32)
             ci = [(0, 1 + (i + 1) % radial_segs, 1 + i) if rev else (0, 1 + i, 1 + (i + 1) % radial_segs) for i in range(radial_segs)]
-            parts.append(MeshPart(f"{name}_cap", material, cp.astype(np.float32), cn.astype(np.float32), np.asarray(ci, dtype=np.uint32).reshape(-1)))
+            parts.append(MeshPart(f"{name}_cap", material, cp.astype(np.float32), cn.astype(np.float32), np.asarray(ci, dtype=np.uint32).reshape(-1), uvs=cuv))
 
     mesh = merge_parts(parts, name=name, material=material)
     is_closed = (cap_bottom or prof[0][0] <= 1e-6) and (cap_top or prof[-1][0] <= 1e-6)
     if is_closed and signed_volume(mesh.positions, mesh.indices) < 0.0:
-        mesh = MeshPart(mesh.name, mesh.material, mesh.positions, -mesh.normals, mesh.indices.reshape(-1, 3)[:, [0, 2, 1]].reshape(-1))
+        mesh = MeshPart(mesh.name, mesh.material, mesh.positions, -mesh.normals, mesh.indices.reshape(-1, 3)[:, [0, 2, 1]].reshape(-1), uvs=mesh.uvs, colors=mesh.colors)
 
     if axis == "z":
         return mesh.rotate_xyz(rx=0.5 * math.pi)
@@ -867,6 +939,12 @@ def torus_arc(
             (rad * np.sin(us)[:, None]).reshape(-1),
             np.broadcast_to(minor_r * np.sin(vs)[None, :], (u_segs, v_segs)).reshape(-1),
         ]).astype(np.float32)
+        uu = _mirrored_theta_u(us, 2.0 * math.pi * major_r)[:, None]
+        vv = _mirrored_theta_u(vs, 2.0 * math.pi * minor_r)[None, :]
+        uvs = np.column_stack([
+            np.broadcast_to(uu, (u_segs, v_segs)).reshape(-1),
+            np.broadcast_to(vv, (u_segs, v_segs)).reshape(-1),
+        ]).astype(np.float32)
         tris: List[Tuple[int, int, int]] = []
         for i in range(u_segs):
             b0, b1 = i * v_segs, ((i + 1) % u_segs) * v_segs
@@ -875,7 +953,7 @@ def torus_arc(
                 tris.append((b0 + j, b1 + j, b1 + nj))
                 tris.append((b0 + j, b1 + nj, b0 + nj))
         indices = np.asarray(tris, dtype=np.uint32).reshape(-1)
-        mesh = MeshPart(name, material, positions, recompute_smooth_normals(positions, indices), indices)
+        mesh = MeshPart(name, material, positions, recompute_smooth_normals(positions, indices), indices, uvs=uvs)
 
     if plane == "xz":
         return mesh.rotate_xyz(rx=0.5 * math.pi)
@@ -904,13 +982,16 @@ def rounded_box(
             ((0, 1, 0), [(-hx, hy, hz), (hx, hy, hz), (hx, hy, -hz), (-hx, hy, -hz)]),
             ((0, -1, 0), [(-hx, -hy, -hz), (hx, -hy, -hz), (hx, -hy, hz), (-hx, -hy, hz)]),
         ]
-        pos_l, nrm_l, idx_l = [], [], []
+        pos_l, nrm_l, uv_l, idx_l = [], [], [], []
+        face_dims = ((sx, sy), (sx, sy), (sz, sy), (sz, sy), (sx, sz), (sx, sz))
         for fi, (nrm, corners) in enumerate(faces):
             base = fi * 4
+            fu, fv = face_dims[fi][0] * DEFAULT_UV_SCALE, face_dims[fi][1] * DEFAULT_UV_SCALE
             pos_l.extend(corners)
             nrm_l.extend([nrm] * 4)
+            uv_l.extend([(0.0, 0.0), (fu, 0.0), (fu, fv), (0.0, fv)])
             idx_l.extend([base, base + 1, base + 2, base, base + 2, base + 3])
-        return MeshPart(name, material, np.asarray(pos_l, dtype=np.float32), np.asarray(nrm_l, dtype=np.float32), np.asarray(idx_l, dtype=np.uint32))
+        return MeshPart(name, material, np.asarray(pos_l, dtype=np.float32), np.asarray(nrm_l, dtype=np.float32), np.asarray(idx_l, dtype=np.uint32), uvs=np.asarray(uv_l, dtype=np.float32))
 
     # Exact Minkowski sum of inner box (hx-b, hy-b, hz-b) and sphere of radius b.
     ix, iy, iz = hx - b, hy - b, hz - b
@@ -921,39 +1002,37 @@ def rounded_box(
         for k in range(n_grid + 1)
     ]
 
-    vert_map: Dict[Tuple[int, int, int], int] = {}
-    pos_l, nrm_l = [], []
-
-    def get_vert(gx: int, gy: int, gz: int) -> int:
-        key = (gx, gy, gz)
-        hit = vert_map.get(key)
-        if hit is not None:
-            return hit
-        dx, dy, dz = dir_vals[gx], dir_vals[gy], dir_vals[gz]
-        dlen = math.sqrt(dx * dx + dy * dy + dz * dz)
-        nx, ny, nz = dx / dlen, dy / dlen, dz / dlen
-        idx = len(pos_l)
-        vert_map[key] = idx
-        pos_l.append((core_vals[gx] * ix + b * nx, core_vals[gy] * iy + b * ny, core_vals[gz] * iz + b * nz))
-        nrm_l.append((nx, ny, nz))
-        return idx
-
+    # Per-face vertex table keeps analytic smooth corner normals while giving distortion-free planar UVs.
     face_maps = (
-        lambda u, v: (u, v, n_grid),
-        lambda u, v: (n_grid - u, v, 0),
-        lambda u, v: (n_grid, v, n_grid - u),
-        lambda u, v: (0, v, u),
-        lambda u, v: (u, n_grid, n_grid - v),
-        lambda u, v: (u, 0, v),
+        (lambda u, v: (u, v, n_grid), lambda x, y, z: (x, y)),
+        (lambda u, v: (n_grid - u, v, 0), lambda x, y, z: (-x, y)),
+        (lambda u, v: (n_grid, v, n_grid - u), lambda x, y, z: (-z, y)),
+        (lambda u, v: (0, v, u), lambda x, y, z: (z, y)),
+        (lambda u, v: (u, n_grid, n_grid - v), lambda x, y, z: (x, -z)),
+        (lambda u, v: (u, 0, v), lambda x, y, z: (x, z)),
     )
-    tris: List[Tuple[int, int, int]] = []
-    for fmap in face_maps:
+    pos_l, nrm_l, uv_l, tris = [], [], [], []
+    for fi, (fmap, uv_proj) in enumerate(face_maps):
+        f_base = len(pos_l)
+        for v in range(n_grid + 1):
+            for u in range(n_grid + 1):
+                gx, gy, gz = fmap(u, v)
+                dx, dy, dz = dir_vals[gx], dir_vals[gy], dir_vals[gz]
+                dlen = math.sqrt(dx * dx + dy * dy + dz * dz)
+                nx, ny, nz = dx / dlen, dy / dlen, dz / dlen
+                px, py, pz = core_vals[gx] * ix + b * nx, core_vals[gy] * iy + b * ny, core_vals[gz] * iz + b * nz
+                pos_l.append((px, py, pz))
+                nrm_l.append((nx, ny, nz))
+                pu, pv = uv_proj(px, py, pz)
+                uv_l.append((pu * DEFAULT_UV_SCALE, pv * DEFAULT_UV_SCALE))
+        stride = n_grid + 1
         for v in range(n_grid):
             for u in range(n_grid):
-                v00, v10, v11, v01 = get_vert(*fmap(u, v)), get_vert(*fmap(u + 1, v)), get_vert(*fmap(u + 1, v + 1)), get_vert(*fmap(u, v + 1))
+                v00 = f_base + v * stride + u
+                v10, v11, v01 = v00 + 1, v00 + stride + 1, v00 + stride
                 tris.append((v00, v10, v11))
                 tris.append((v00, v11, v01))
-    return MeshPart(name, material, np.asarray(pos_l, dtype=np.float32), np.asarray(nrm_l, dtype=np.float32), np.asarray(tris, dtype=np.uint32).reshape(-1))
+    return MeshPart(name, material, np.asarray(pos_l, dtype=np.float32), np.asarray(nrm_l, dtype=np.float32), np.asarray(tris, dtype=np.uint32).reshape(-1), uvs=np.asarray(uv_l, dtype=np.float32))
 
 
 def hemisphere_shell(
@@ -995,8 +1074,17 @@ def hemisphere_shell(
     all_tris.extend(_quad_ring_tris(lip_off, 0, u_segs))
     all_tris.extend(_quad_ring_tris(in_off, lip_off, u_segs))
 
+    u_ring = _mirrored_theta_u(thetas, math.pi * (rx + rz))
+    v_scale = math.pi * 0.5 * (ry + 0.5 * (rx + rz)) * DEFAULT_UV_SCALE
+    uv_out = np.vstack([
+        np.column_stack([u_ring, np.full(u_segs, float((phi - start_phi) / max(0.2, 0.5 * math.pi - start_phi) * v_scale * 0.5), dtype=np.float32)])
+        for phi in phis
+    ] + [np.array([[float(u_ring.mean()), float(v_scale * 0.5)]], dtype=np.float32)])
+    uv_lip = np.column_stack([u_ring, np.full(u_segs, -0.04, dtype=np.float32)])
+    uvs = np.vstack([uv_out, uv_out, uv_lip]).astype(np.float32)
+
     indices = ensure_outward_winding(positions, np.asarray(all_tris, dtype=np.uint32).reshape(-1))
-    return MeshPart(name, material, positions, recompute_smooth_normals(positions, indices), indices)
+    return MeshPart(name, material, positions, recompute_smooth_normals(positions, indices), indices, uvs=uvs)
 
 
 def _ear_clip_2d(pts: List[Tuple[float, float]]) -> List[Tuple[int, int, int]]:
@@ -1041,10 +1129,12 @@ def extrude_polygon(
 
     pos_l = [(x, y, +hz) for x, y in pts] + [(x, y, -hz) for x, y in pts]
     nrm_l = [(0.0, 0.0, 1.0)] * n + [(0.0, 0.0, -1.0)] * n
+    uv_l = [(x * DEFAULT_UV_SCALE, y * DEFAULT_UV_SCALE) for x, y in pts] * 2
     idx_l: List[int] = []
     for a, b, c in cap_tris:
         idx_l.extend([a, b, c, n + a, n + c, n + b])
 
+    perim = 0.0
     for i in range(n):
         (x0, y0), (x1, y1) = pts[i], pts[(i + 1) % n]
         elen = math.hypot(x1 - x0, y1 - y0)
@@ -1054,5 +1144,136 @@ def extrude_polygon(
         sb = len(pos_l)
         pos_l.extend([(x0, y0, -hz), (x1, y1, -hz), (x1, y1, +hz), (x0, y0, +hz)])
         nrm_l.extend([(nx, ny, 0.0)] * 4)
+        u0, u1 = perim * DEFAULT_UV_SCALE, (perim + elen) * DEFAULT_UV_SCALE
+        uv_l.extend([(u0, 0.0), (u1, 0.0), (u1, depth * DEFAULT_UV_SCALE), (u0, depth * DEFAULT_UV_SCALE)])
+        perim += elen
         idx_l.extend([sb, sb + 1, sb + 2, sb, sb + 2, sb + 3])
-    return MeshPart(name, material, np.asarray(pos_l, dtype=np.float32), np.asarray(nrm_l, dtype=np.float32), np.asarray(idx_l, dtype=np.uint32))
+    return MeshPart(name, material, np.asarray(pos_l, dtype=np.float32), np.asarray(nrm_l, dtype=np.float32), np.asarray(idx_l, dtype=np.uint32), uvs=np.asarray(uv_l, dtype=np.float32))
+
+
+# ---------------------------------------------------------------------------
+# Fast vectorized baked crevice and contact Ambient Occlusion (COLOR_0)
+# ---------------------------------------------------------------------------
+
+def _box_blur_3d(grid: np.ndarray, passes: int) -> np.ndarray:
+    g = grid.astype(np.float32, copy=True)
+    for _ in range(passes):
+        for axis in (0, 1, 2):
+            p = np.pad(g, [(1, 1) if a == axis else (0, 0) for a in range(3)], mode="edge")
+            sl0 = [slice(0, -2) if a == axis else slice(None) for a in range(3)]
+            sl1 = [slice(1, -1) if a == axis else slice(None) for a in range(3)]
+            sl2 = [slice(2, None) if a == axis else slice(None) for a in range(3)]
+            g = (p[tuple(sl0)] + 2.0 * p[tuple(sl1)] + p[tuple(sl2)]) * 0.25
+    return g
+
+
+def _sample_grid_trilinear(grid: np.ndarray, coords: np.ndarray) -> np.ndarray:
+    res = grid.shape[0]
+    c = np.clip(coords, 0.0, float(res - 1.001))
+    i0 = np.floor(c).astype(np.int32)
+    f = (c - i0).astype(np.float32)
+    i1 = np.minimum(i0 + 1, res - 1)
+    x0, y0, z0 = i0[:, 0], i0[:, 1], i0[:, 2]
+    x1, y1, z1 = i1[:, 0], i1[:, 1], i1[:, 2]
+    fx, fy, fz = f[:, 0], f[:, 1], f[:, 2]
+    c00 = grid[x0, y0, z0] * (1.0 - fx) + grid[x1, y0, z0] * fx
+    c10 = grid[x0, y1, z0] * (1.0 - fx) + grid[x1, y1, z0] * fx
+    c01 = grid[x0, y0, z1] * (1.0 - fx) + grid[x1, y0, z1] * fx
+    c11 = grid[x0, y1, z1] * (1.0 - fx) + grid[x1, y1, z1] * fx
+    return (c00 * (1.0 - fy) + c10 * fy) * (1.0 - fz) + (c01 * (1.0 - fy) + c11 * fy) * fz
+
+
+def _local_concavity(positions: np.ndarray, normals: np.ndarray, indices: np.ndarray) -> np.ndarray:
+    """Measure local mesh concavity in [0, 1] for crisp groove/seam shading."""
+    n = len(positions)
+    if n == 0 or len(indices) == 0:
+        return np.zeros(n, dtype=np.float32)
+    pos = positions.astype(np.float64)
+    idx = indices.reshape(-1, 3)
+    acc = np.zeros_like(pos)
+    cnt = np.zeros(n, dtype=np.float64)
+    for a, b in ((0, 1), (1, 2), (2, 0)):
+        ia, ib = idx[:, a], idx[:, b]
+        np.add.at(acc, ia, pos[ib])
+        np.add.at(acc, ib, pos[ia])
+        np.add.at(cnt, ia, 1.0)
+        np.add.at(cnt, ib, 1.0)
+    avg = acc / np.maximum(1.0, cnt[:, None])
+    conc = np.sum((avg - pos) * normals.astype(np.float64), axis=1)
+    return np.clip(conc * 38.0, 0.0, 1.0).astype(np.float32)
+
+
+def bake_scene_ao(scene: SceneBuilder, *, grid_res: int = 56) -> SceneBuilder:
+    """Bake inter-part and crevice Ambient Occlusion into every MeshPart.colors (COLOR_0).
+
+    Excludes translucent BLEND glass materials as occluders so eyes behind scuba
+    masks and goggles stay crisp and bright.
+    """
+    bmin, bmax = scene.bounds()
+    pad = 0.14
+    origin = bmin.astype(np.float64) - pad
+    extent = np.maximum(0.25, (bmax - bmin).astype(np.float64) + 2.0 * pad)
+    step = float(extent.max()) / float(grid_res - 1)
+    inv_step = 1.0 / step
+
+    # Collect opaque world-space sample points (vertices + triangle centroids).
+    occ_pts: List[np.ndarray] = []
+    for k, parts in scene.nodes.items():
+        xf = scene.node_transforms.get(k)
+        mat = xf.to_matrix() if xf is not None else None
+        for p in parts:
+            spec = get_material(p.material)
+            if spec.resolved_alpha_mode() == "BLEND":
+                continue
+            wp = p.transform(mat) if mat is not None else p
+            occ_pts.append(wp.positions.astype(np.float64))
+            idx = wp.indices.reshape(-1, 3)
+            if len(idx) > 0:
+                tri_c = (wp.positions[idx[:, 0]] + wp.positions[idx[:, 1]] + wp.positions[idx[:, 2]]) / 3.0
+                occ_pts.append(tri_c.astype(np.float64))
+
+    if not occ_pts:
+        return scene
+
+    all_occ = np.vstack(occ_pts)
+    grid = np.zeros((grid_res, grid_res, grid_res), dtype=np.float32)
+    vox = np.clip(np.round((all_occ - origin[None, :]) * inv_step).astype(np.int32), 0, grid_res - 1)
+    np.add.at(grid, (vox[:, 0], vox[:, 1], vox[:, 2]), 0.45)
+    grid = np.clip(grid, 0.0, 1.0)
+    occ_fine = _box_blur_3d(grid, 1)
+    occ_broad = _box_blur_3d(grid, 3)
+
+    for k, parts in scene.nodes.items():
+        xf = scene.node_transforms.get(k)
+        mat = xf.to_matrix() if xf is not None else None
+        for p in parts:
+            spec = get_material(p.material)
+            if spec.resolved_alpha_mode() == "BLEND":
+                p.colors = np.ones((len(p.positions), 3), dtype=np.float32)
+                continue
+            wp = p.transform(mat) if mat is not None else p
+            pos = wp.positions.astype(np.float64)
+            nrm = wp.normals.astype(np.float64)
+
+            # Build per-vertex tangent frame for tilted hemisphere probes.
+            ref = np.where(np.abs(nrm[:, 1:2]) < 0.85, np.array([[0.0, 1.0, 0.0]]), np.array([[1.0, 0.0, 0.0]]))
+            t1 = _normalize_rows(np.cross(nrm, ref))
+            t2 = np.cross(nrm, t1)
+
+            occ = np.zeros(len(pos), dtype=np.float32)
+            # Direct outward probes + 4 tilted hemisphere probes catch brims, sockets, seams, joints.
+            for r_off, w, g_src in ((0.032, 0.24, occ_fine), (0.068, 0.24, occ_broad), (0.120, 0.16, occ_broad)):
+                occ += w * _sample_grid_trilinear(g_src, (pos + r_off * nrm - origin[None, :]) * inv_step)
+            for d_vec in (nrm + 0.72 * t1, nrm - 0.72 * t1, nrm + 0.72 * t2, nrm - 0.72 * t2):
+                d_u = _normalize_rows(d_vec)
+                occ += 0.09 * _sample_grid_trilinear(occ_broad, (pos + 0.064 * d_u - origin[None, :]) * inv_step)
+
+            conc = _local_concavity(wp.positions, wp.normals, wp.indices)
+            gnd = np.clip(pos[:, 1] / 0.10, 0.0, 1.0).astype(np.float32)
+            gnd_ao = 0.82 + 0.18 * gnd
+
+            ao = (1.0 - np.clip(occ * 0.72 + conc * 0.24, 0.0, 0.58)) * gnd_ao
+            floor_ao = 0.78 if p.material in ("eye_white", "eye_iris", "eye_pupil") else 0.44
+            ao = np.clip(ao, floor_ao, 1.0).astype(np.float32)
+            p.colors = np.column_stack([ao, ao, ao]).astype(np.float32)
+    return scene

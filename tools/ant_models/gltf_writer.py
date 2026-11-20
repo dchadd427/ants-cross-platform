@@ -24,6 +24,7 @@ CHUNK_BIN = 0x004E4942  # b"BIN\0"
 ARRAY_BUFFER = 34962
 ELEMENT_ARRAY_BUFFER = 34963
 
+COMPONENT_UNSIGNED_BYTE = 5121
 COMPONENT_UNSIGNED_SHORT = 5123
 COMPONENT_UNSIGNED_INT = 5125
 COMPONENT_FLOAT = 5126
@@ -76,28 +77,93 @@ def _pack_vec3_f32(arr: Any) -> Tuple[bytes, int, List[float], List[float]]:
     return bytes(buf), count, vmin, vmax
 
 
-def _pack_u32(arr: Any, offset: int = 0) -> Tuple[bytes, int, int, int]:
-    """Serialize uint32 indices with optional vertex index offset."""
+def _pack_indices(arr: Any, offset: int = 0, use_u16: bool = False) -> Tuple[bytes, int, int, int]:
+    """Serialize uint16 or uint32 indices with optional vertex index offset."""
+    dtype = "<u2" if use_u16 else "<u4"
+    fmt_char = "H" if use_u16 else "I"
     if hasattr(arr, "astype") and hasattr(arr, "tobytes"):
         a = arr.astype("<u4", copy=False).reshape(-1)
         if offset:
-            a = (a + offset).astype("<u4", copy=False)
+            a = a + offset
         count = int(a.size)
         if count == 0:
             return b"", 0, 0, 0
-        return a.tobytes(), count, int(a.min()), int(a.max())
+        lo, hi = int(a.min()), int(a.max())
+        return a.astype(dtype, copy=False).tobytes(), count, lo, hi
 
     vals = [int(v) + offset for v in arr]
     if not vals:
         return b"", 0, 0, 0
-    raw = struct.pack(f"<{len(vals)}I", *vals)
+    raw = struct.pack(f"<{len(vals)}{fmt_char}", *vals)
     return raw, len(vals), min(vals), max(vals)
 
 
-def _merge_primitive_streams(parts: Sequence[Any]) -> Tuple[bytes, bytes, bytes, int, int, List[float], List[float], int, int]:
-    """Concatenate positions, normals, and offset indices for same-material parts."""
+def _pack_vec4_u8_norm(arr: Any) -> Tuple[bytes, int]:
+    """Serialize (N, 3|4) float linear colors in [0, 1] to compact 4-byte RGBA UNSIGNED_BYTE."""
+    if hasattr(arr, "astype") and hasattr(arr, "tobytes"):
+        a = arr.astype("<f4", copy=False)
+        if a.ndim != 2 or a.shape[1] not in (3, 4):
+            raise ValueError(f"Expected (N, 3|4) color array, got shape {a.shape}")
+        count = int(a.shape[0])
+        if count == 0:
+            return b"", 0
+        if not (math.isfinite(float(a.min())) and math.isfinite(float(a.max()))):
+            raise ValueError("Non-finite vertex color encountered during GLB export")
+        scaled = (a.clip(0.0, 1.0) * 255.0 + 0.5).astype("u1")
+        if a.shape[1] == 4:
+            return scaled.tobytes(), count
+        # Pad alpha = 255 for 4-byte aligned VEC4 UNSIGNED_BYTE normalized accessor.
+        buf = bytearray(count * 4)
+        flat = scaled.tobytes()
+        buf[0::4] = flat[0::3]
+        buf[1::4] = flat[1::3]
+        buf[2::4] = flat[2::3]
+        buf[3::4] = bytes((255,)) * count
+        return bytes(buf), count
+
+    rows = list(arr)
+    buf = bytearray()
+    for row in rows:
+        if len(row) not in (3, 4):
+            raise ValueError(f"Expected 3- or 4-tuple color, got {len(row)}")
+        vals = [float(c) for c in row]
+        if not all(math.isfinite(c) for c in vals):
+            raise ValueError("Non-finite vertex color encountered during GLB export")
+        r = max(0, min(255, int(vals[0] * 255.0 + 0.5)))
+        g = max(0, min(255, int(vals[1] * 255.0 + 0.5)))
+        b = max(0, min(255, int(vals[2] * 255.0 + 0.5)))
+        a_u8 = 255 if len(vals) == 3 else max(0, min(255, int(vals[3] * 255.0 + 0.5)))
+        buf.extend((r, g, b, a_u8))
+    return bytes(buf), len(rows)
+
+
+def _pack_vec2_f32(arr: Any) -> Tuple[bytes, int]:
+    """Serialize (N, 2) float32 array/sequence to little-endian bytes."""
+    if hasattr(arr, "astype") and hasattr(arr, "tobytes"):
+        a = arr.astype("<f4", copy=False).reshape(-1, 2)
+        count = int(a.shape[0])
+        if count == 0:
+            return b"", 0
+        if not (math.isfinite(float(a.min())) and math.isfinite(float(a.max()))):
+            raise ValueError("Non-finite UV coordinate encountered during GLB export")
+        return a.tobytes(), count
+
+    rows = list(arr)
+    buf = bytearray()
+    for u, v in rows:
+        fu, fv = float(u), float(v)
+        if not (math.isfinite(fu) and math.isfinite(fv)):
+            raise ValueError("Non-finite UV coordinate encountered during GLB export")
+        buf.extend(struct.pack("<2f", fu, fv))
+    return bytes(buf), len(rows)
+
+
+def _merge_primitive_streams(parts: Sequence[Any]):
+    """Concatenate positions, normals, optional UVs/colors, and compact offset indices."""
     pos_buf = bytearray()
     nrm_buf = bytearray()
+    uv_buf = bytearray()
+    col_buf = bytearray()
     idx_buf = bytearray()
     v_total = 0
     i_total = 0
@@ -106,6 +172,12 @@ def _merge_primitive_streams(parts: Sequence[Any]) -> Tuple[bytes, bytes, bytes,
     imin = math.inf
     imax = -math.inf
 
+    has_uvs = any(getattr(p, "uvs", None) is not None for p in parts)
+    has_colors = any(getattr(p, "colors", None) is not None for p in parts)
+    est_verts = sum(len(p.positions) for p in parts)
+    # Keep index < 65535 (avoids WebGL primitive restart 0xFFFF) for compact 2-byte indices.
+    use_u16 = est_verts < 65535
+
     for part in parts:
         p_raw, v_cnt, mn, mx = _pack_vec3_f32(part.positions)
         n_raw, n_cnt, _, _ = _pack_vec3_f32(part.normals)
@@ -113,9 +185,27 @@ def _merge_primitive_streams(parts: Sequence[Any]) -> Tuple[bytes, bytes, bytes,
             raise ValueError(f"Part {part.name!r}: position count {v_cnt} != normal count {n_cnt}")
         if v_cnt == 0:
             continue
-        i_raw, i_cnt, lo, hi = _pack_u32(part.indices, offset=v_total)
+        i_raw, i_cnt, lo, hi = _pack_indices(part.indices, offset=v_total, use_u16=use_u16)
         if i_cnt == 0:
             continue
+        if has_uvs:
+            p_uvs = getattr(part, "uvs", None)
+            if p_uvs is None:
+                uv_buf.extend(struct.pack("<2f", 0.0, 0.0) * v_cnt)
+            else:
+                u_raw, u_cnt = _pack_vec2_f32(p_uvs)
+                if u_cnt != v_cnt:
+                    raise ValueError(f"Part {part.name!r}: UV count {u_cnt} != vertex count {v_cnt}")
+                uv_buf.extend(u_raw)
+        if has_colors:
+            p_cols = getattr(part, "colors", None)
+            if p_cols is None:
+                col_buf.extend(b"\xff\xff\xff\xff" * v_cnt)
+            else:
+                c_raw, c_cnt = _pack_vec4_u8_norm(p_cols)
+                if c_cnt != v_cnt:
+                    raise ValueError(f"Part {part.name!r}: color count {c_cnt} != vertex count {v_cnt}")
+                col_buf.extend(c_raw)
         pos_buf.extend(p_raw)
         nrm_buf.extend(n_raw)
         idx_buf.extend(i_raw)
@@ -131,9 +221,23 @@ def _merge_primitive_streams(parts: Sequence[Any]) -> Tuple[bytes, bytes, bytes,
         v_total += v_cnt
         i_total += i_cnt
 
+    idx_ctype = COMPONENT_UNSIGNED_SHORT if use_u16 else COMPONENT_UNSIGNED_INT
     if v_total == 0 or i_total == 0:
-        return b"", b"", b"", 0, 0, [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], 0, 0
-    return bytes(pos_buf), bytes(nrm_buf), bytes(idx_buf), v_total, i_total, pmin, pmax, int(imin), int(imax)
+        return b"", b"", b"", b"", b"", 0, 0, [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], 0, 0, idx_ctype
+    return (
+        bytes(pos_buf),
+        bytes(nrm_buf),
+        bytes(uv_buf) if has_uvs else b"",
+        bytes(col_buf) if has_colors else b"",
+        bytes(idx_buf),
+        v_total,
+        i_total,
+        pmin,
+        pmax,
+        int(imin),
+        int(imax),
+        idx_ctype,
+    )
 
 
 def _pack_f32_scalars(vals: Sequence[float]) -> Tuple[bytes, int, float, float]:
@@ -158,16 +262,32 @@ def _pack_f32_tuples(vals: Sequence[Sequence[float]], width: int) -> Tuple[bytes
     return bytes(buf), len(vals)
 
 
-def scene_to_glb_bytes(scene: Any) -> bytes:
+def _load_texture_pack_fn():
+    """Return textures.get_texture_pack when numpy is available, else None."""
+    try:
+        from .textures import get_texture_pack
+        return get_texture_pack
+    except ImportError:
+        try:
+            from textures import get_texture_pack  # type: ignore
+            return get_texture_pack
+        except ImportError:
+            return None
+
+
+def scene_to_glb_bytes(scene: Any, *, embed_textures: bool = True) -> bytes:
     """Serialize a SceneBuilder into strictly valid glTF 2.0 binary (.glb) bytes."""
     used_materials_set = set()
     active_nodes: List[Tuple[str, List[Any]]] = []
+    any_uvs = False
     for node_name in scene.node_names():
         parts = [p for p in scene.get_node(node_name) if len(p.indices) > 0]
         if parts:
             active_nodes.append((node_name, parts))
             for p in parts:
                 used_materials_set.add(p.material)
+                if getattr(p, "uvs", None) is not None:
+                    any_uvs = True
 
     if not active_nodes:
         raise ValueError(f"Scene {scene.name!r} contains no triangles to export")
@@ -177,7 +297,6 @@ def scene_to_glb_bytes(scene: Any) -> bytes:
         if m not in ordered_materials:
             ordered_materials.append(m)
     mat_index = {name: i for i, name in enumerate(ordered_materials)}
-    gltf_materials = [get_material(name).to_gltf_dict() for name in ordered_materials]
 
     bin_blob = bytearray()
     buffer_views: List[Dict[str, Any]] = []
@@ -185,6 +304,9 @@ def scene_to_glb_bytes(scene: Any) -> bytes:
     meshes: List[Dict[str, Any]] = []
     nodes: List[Dict[str, Any]] = [{"name": scene.name, "children": []}]
     node_name_to_idx: Dict[str, int] = {}
+    images: List[Dict[str, Any]] = []
+    textures: List[Dict[str, Any]] = []
+    samplers: List[Dict[str, Any]] = []
 
     def append_view(raw: bytes, target: int = 0, byte_stride: int = 0) -> int:
         while len(bin_blob) % 4 != 0:
@@ -204,6 +326,52 @@ def scene_to_glb_bytes(scene: Any) -> bytes:
         buffer_views.append(view)
         return idx
 
+    # Embed shared seamless PNG PBR textures once per referenced material family (when UVs & numpy exist).
+    tex_fn = _load_texture_pack_fn() if (embed_textures and any_uvs) else None
+    family_tex_ids: Dict[str, Tuple[Optional[int], int, int]] = {}
+    if tex_fn is not None:
+        needed_families: List[str] = []
+        for mat_name in ordered_materials:
+            fam = get_material(mat_name).texture_family
+            if fam and fam not in needed_families:
+                needed_families.append(fam)
+        if needed_families:
+            samplers.append({"magFilter": 9729, "minFilter": 9987, "wrapS": 10497, "wrapT": 10497})
+            for fam in needed_families:
+                pack = tex_fn(fam)
+                base_tid: Optional[int] = None
+                if pack.base_color_png:
+                    bv = append_view(pack.base_color_png)
+                    img_i = len(images)
+                    images.append({"bufferView": bv, "mimeType": "image/png", "name": f"{fam}_baseColor"})
+                    base_tid = len(textures)
+                    textures.append({"sampler": 0, "source": img_i, "name": f"{fam}_baseColor"})
+
+                n_bv = append_view(pack.normal_png)
+                n_img = len(images)
+                images.append({"bufferView": n_bv, "mimeType": "image/png", "name": f"{fam}_normal"})
+                n_tid = len(textures)
+                textures.append({"sampler": 0, "source": n_img, "name": f"{fam}_normal"})
+
+                mr_bv = append_view(pack.metallic_roughness_png)
+                mr_img = len(images)
+                images.append({"bufferView": mr_bv, "mimeType": "image/png", "name": f"{fam}_metallicRoughness"})
+                mr_tid = len(textures)
+                textures.append({"sampler": 0, "source": mr_img, "name": f"{fam}_metallicRoughness"})
+
+                family_tex_ids[fam] = (base_tid, n_tid, mr_tid)
+
+    gltf_materials: List[Dict[str, Any]] = []
+    for name in ordered_materials:
+        spec = get_material(name)
+        if spec.texture_family and spec.texture_family in family_tex_ids:
+            b_tid, n_tid, mr_tid = family_tex_ids[spec.texture_family]
+            gltf_materials.append(
+                spec.to_gltf_dict(base_tex_index=b_tid, normal_tex_index=n_tid, mr_tex_index=mr_tid)
+            )
+        else:
+            gltf_materials.append(spec.to_gltf_dict())
+
     get_xf = getattr(scene, "get_node_transform", None)
 
     for node_name, parts in active_nodes:
@@ -214,7 +382,9 @@ def scene_to_glb_bytes(scene: Any) -> bytes:
 
         primitives: List[Dict[str, Any]] = []
         for mat_name, mat_parts in grouped.items():
-            p_raw, n_raw, i_raw, v_cnt, i_cnt, pmin, pmax, imin, imax = _merge_primitive_streams(mat_parts)
+            p_raw, n_raw, uv_raw, col_raw, i_raw, v_cnt, i_cnt, pmin, pmax, imin, imax, idx_ctype = (
+                _merge_primitive_streams(mat_parts)
+            )
             if v_cnt == 0 or i_cnt == 0:
                 continue
 
@@ -244,13 +414,42 @@ def scene_to_glb_bytes(scene: Any) -> bytes:
                 }
             )
 
+            attrs: Dict[str, int] = {"POSITION": pos_acc, "NORMAL": nrm_acc}
+            if uv_raw:
+                uv_bv = append_view(uv_raw, ARRAY_BUFFER, byte_stride=8)
+                uv_acc = len(accessors)
+                accessors.append(
+                    {
+                        "bufferView": uv_bv,
+                        "byteOffset": 0,
+                        "componentType": COMPONENT_FLOAT,
+                        "count": v_cnt,
+                        "type": "VEC2",
+                    }
+                )
+                attrs["TEXCOORD_0"] = uv_acc
+            if col_raw:
+                col_bv = append_view(col_raw, ARRAY_BUFFER, byte_stride=4)
+                col_acc = len(accessors)
+                accessors.append(
+                    {
+                        "bufferView": col_bv,
+                        "byteOffset": 0,
+                        "componentType": COMPONENT_UNSIGNED_BYTE,
+                        "normalized": True,
+                        "count": v_cnt,
+                        "type": "VEC4",
+                    }
+                )
+                attrs["COLOR_0"] = col_acc
+
             idx_bv = append_view(i_raw, ELEMENT_ARRAY_BUFFER)
             idx_acc = len(accessors)
             accessors.append(
                 {
                     "bufferView": idx_bv,
                     "byteOffset": 0,
-                    "componentType": COMPONENT_UNSIGNED_INT,
+                    "componentType": idx_ctype,
                     "count": i_cnt,
                     "type": "SCALAR",
                     "min": [imin],
@@ -260,7 +459,7 @@ def scene_to_glb_bytes(scene: Any) -> bytes:
 
             primitives.append(
                 {
-                    "attributes": {"POSITION": pos_acc, "NORMAL": nrm_acc},
+                    "attributes": attrs,
                     "indices": idx_acc,
                     "material": mat_index[mat_name],
                     "mode": 4,
@@ -276,7 +475,6 @@ def scene_to_glb_bytes(scene: Any) -> bytes:
             if xf is not None:
                 if any(abs(c) > 1e-7 for c in xf.translation):
                     node_obj["translation"] = [round(float(c), 6) for c in xf.translation]
-                # Emit explicit rotation on pivoted nodes (including identity so animated tracks have an explicit baseline).
                 node_obj["rotation"] = [round(float(c), 6) for c in xf.rotation]
                 if any(abs(c - 1.0) > 1e-7 for c in xf.scale):
                     node_obj["scale"] = [round(float(c), 6) for c in xf.scale]
@@ -286,7 +484,7 @@ def scene_to_glb_bytes(scene: Any) -> bytes:
 
     gltf_animations: List[Dict[str, Any]] = []
     for clip in getattr(scene, "animations", ()) or ():
-        samplers: List[Dict[str, Any]] = []
+        samplers_a: List[Dict[str, Any]] = []
         channels: List[Dict[str, Any]] = []
         for ch in clip.channels:
             if ch.target_node not in node_name_to_idx:
@@ -299,7 +497,6 @@ def scene_to_glb_bytes(scene: Any) -> bytes:
             if t_cnt == 0 or t_cnt != v_cnt:
                 raise ValueError(f"Animation channel {ch.target_node}.{ch.path}: time count {t_cnt} != value count {v_cnt}")
 
-            # glTF 2.0 spec: animation bufferViews omit `target`.
             t_bv = append_view(t_raw)
             t_acc = len(accessors)
             accessors.append(
@@ -324,8 +521,8 @@ def scene_to_glb_bytes(scene: Any) -> bytes:
                     "type": "VEC4" if width == 4 else "VEC3",
                 }
             )
-            s_idx = len(samplers)
-            samplers.append({"input": t_acc, "interpolation": ch.interpolation, "output": v_acc})
+            s_idx = len(samplers_a)
+            samplers_a.append({"input": t_acc, "interpolation": ch.interpolation, "output": v_acc})
             channels.append(
                 {
                     "sampler": s_idx,
@@ -333,7 +530,7 @@ def scene_to_glb_bytes(scene: Any) -> bytes:
                 }
             )
         if channels:
-            gltf_animations.append({"name": clip.name, "samplers": samplers, "channels": channels})
+            gltf_animations.append({"name": clip.name, "samplers": samplers_a, "channels": channels})
 
     bin_bytes = _pad4(bytes(bin_blob), b"\x00")
     gltf_doc: Dict[str, Any] = {
@@ -350,6 +547,12 @@ def scene_to_glb_bytes(scene: Any) -> bytes:
         "bufferViews": buffer_views,
         "buffers": [{"byteLength": len(bin_bytes)}],
     }
+    if images:
+        gltf_doc["images"] = images
+    if textures:
+        gltf_doc["textures"] = textures
+    if samplers:
+        gltf_doc["samplers"] = samplers
     if gltf_animations:
         gltf_doc["animations"] = gltf_animations
 
@@ -502,6 +705,50 @@ def _read_accessor_floats(doc: Dict[str, Any], bin_data: bytes, acc_idx: int, ex
     return [struct.unpack_from(fmt, bin_data, base + i * stride) for i in range(count)]
 
 
+def _read_accessor_colors(doc: Dict[str, Any], bin_data: bytes, acc_idx: int) -> List[Tuple[float, ...]]:
+    """Read glTF COLOR_0 accessor (VEC3 or VEC4; FLOAT, normalized UBYTE, or normalized USHORT)."""
+    accessors = doc["accessors"]
+    views = doc["bufferViews"]
+    if not (0 <= acc_idx < len(accessors)):
+        raise ValueError(f"COLOR_0 accessor {acc_idx} out of range")
+    acc = accessors[acc_idx]
+    atype = acc.get("type")
+    if atype not in ("VEC3", "VEC4"):
+        raise ValueError(f"COLOR_0 accessor {acc_idx}: expected VEC3 or VEC4, got {atype!r}")
+    width = 3 if atype == "VEC3" else 4
+    ctype = acc.get("componentType")
+    if ctype == COMPONENT_FLOAT:
+        elem_size, fmt_char, scale = 4, "f", 1.0
+    elif ctype == COMPONENT_UNSIGNED_BYTE:
+        if not acc.get("normalized", False):
+            raise ValueError(f"COLOR_0 accessor {acc_idx}: UNSIGNED_BYTE must be normalized")
+        elem_size, fmt_char, scale = 1, "B", 1.0 / 255.0
+    elif ctype == COMPONENT_UNSIGNED_SHORT:
+        if not acc.get("normalized", False):
+            raise ValueError(f"COLOR_0 accessor {acc_idx}: UNSIGNED_SHORT must be normalized")
+        elem_size, fmt_char, scale = 2, "H", 1.0 / 65535.0
+    else:
+        raise ValueError(f"COLOR_0 accessor {acc_idx}: unsupported componentType {ctype}")
+
+    bv_idx = acc["bufferView"]
+    if not (0 <= bv_idx < len(views)):
+        raise ValueError(f"COLOR_0 accessor {acc_idx}: bufferView {bv_idx} out of range")
+    bv = views[bv_idx]
+    count = int(acc["count"])
+    packed_size = width * elem_size
+    stride = int(bv.get("byteStride", packed_size))
+    if stride < packed_size:
+        raise ValueError(f"COLOR_0 accessor {acc_idx}: invalid byteStride {stride}")
+    base = int(bv.get("byteOffset", 0)) + int(acc.get("byteOffset", 0))
+    end = base + (count - 1) * stride + packed_size if count > 0 else base
+    if base < 0 or end > len(bin_data):
+        raise ValueError(f"COLOR_0 accessor {acc_idx}: range [{base}, {end}) exceeds BIN buffer {len(bin_data)}")
+    fmt = f"<{width}{fmt_char}"
+    if scale == 1.0:
+        return [struct.unpack_from(fmt, bin_data, base + i * stride) for i in range(count)]
+    return [tuple(v * scale for v in struct.unpack_from(fmt, bin_data, base + i * stride)) for i in range(count)]
+
+
 def _mat4_mul(a: List[float], b: List[float]) -> List[float]:
     # Column-major 4x4 matrices (glTF convention): out[col*4 + row] = sum_k a[k*4 + row] * b[col*4 + k]
     out = [0.0] * 16
@@ -599,6 +846,33 @@ def validate_glb(path_or_bytes: Union[str, os.PathLike, bytes, bytearray, memory
         if bo < 0 or bo + bl > declared_bin:
             raise ValueError(f"bufferView {bv_i}: [{bo}, {bo + bl}) exceeds buffer length {declared_bin}")
 
+    doc_images = doc.get("images", [])
+    doc_samplers = doc.get("samplers", [])
+    doc_textures = doc.get("textures", [])
+    for img_i, img in enumerate(doc_images):
+        bv_idx = int(img.get("bufferView", -1))
+        if not (0 <= bv_idx < len(doc["bufferViews"])):
+            raise ValueError(f"Image {img_i}: bufferView {bv_idx} out of range")
+        bv = doc["bufferViews"][bv_idx]
+        bo = int(bv.get("byteOffset", 0))
+        bl = int(bv["byteLength"])
+        raw_img = bin_data[bo : bo + bl]
+        if img.get("mimeType") == "image/png":
+            if len(raw_img) < 24 or raw_img[:8] != b"\x89PNG\r\n\x1a\n" or raw_img[12:16] != b"IHDR":
+                raise ValueError(f"Image {img_i}: invalid PNG header")
+            iw, ih = struct.unpack_from(">II", raw_img, 16)
+            if iw == 0 or ih == 0:
+                raise ValueError(f"Image {img_i}: zero PNG dimensions")
+
+    for t_i, tex in enumerate(doc_textures):
+        src = int(tex.get("source", -1))
+        if not (0 <= src < len(doc_images)):
+            raise ValueError(f"Texture {t_i}: source image {src} out of range")
+        if "sampler" in tex:
+            smp = int(tex["sampler"])
+            if not (0 <= smp < len(doc_samplers)):
+                raise ValueError(f"Texture {t_i}: sampler {smp} out of range")
+
     mat_names: List[str] = []
     for m_i, mat in enumerate(doc["materials"]):
         mat_names.append(str(mat.get("name", f"material_{m_i}")))
@@ -616,6 +890,15 @@ def validate_glb(path_or_bytes: Union[str, os.PathLike, bytes, bytearray, memory
                     raise ValueError(f"Material {m_i}: baseColorFactor[{k}]={fc} out of [0, 1]")
             if alpha_mode == "BLEND" and float(bcf[3]) <= 0.0:
                 raise ValueError(f"Material {m_i}: BLEND material must have alpha in (0, 1]")
+        for slot_name, slot in (
+            ("baseColorTexture", pbr.get("baseColorTexture")),
+            ("metallicRoughnessTexture", pbr.get("metallicRoughnessTexture")),
+            ("normalTexture", mat.get("normalTexture")),
+        ):
+            if slot is not None:
+                ti = int(slot.get("index", -1))
+                if not (0 <= ti < len(doc_textures)):
+                    raise ValueError(f"Material {m_i} {slot_name}: texture index {ti} out of range")
     node_names = [str(n.get("name", f"node_{i}")) for i, n in enumerate(doc["nodes"])]
     world_mats = _compute_world_matrices(doc)
     mesh_nodes: Dict[int, List[int]] = {}
@@ -626,6 +909,8 @@ def validate_glb(path_or_bytes: Union[str, os.PathLike, bytes, bytearray, memory
     total_vertices = 0
     total_triangles = 0
     primitive_count = 0
+    has_uvs = False
+    has_ao = False
     gmin = [math.inf, math.inf, math.inf]
     gmax = [-math.inf, -math.inf, -math.inf]
 
@@ -707,6 +992,24 @@ def validate_glb(path_or_bytes: Union[str, os.PathLike, bytes, bytearray, memory
                 if abs(nlen - 1.0) > 1e-3:
                     raise ValueError(f"Mesh {m_i} prim {p_i} normal {n_i}: non-unit length {nlen:.6f}")
 
+            if "TEXCOORD_0" in attrs:
+                has_uvs = True
+                uvs = _read_accessor_floats(doc, bin_data, int(attrs["TEXCOORD_0"]), "VEC2")
+                if len(uvs) != len(positions):
+                    raise ValueError(f"Mesh {m_i} prim {p_i}: TEXCOORD_0 count mismatch")
+                for u_i, (u, v) in enumerate(uvs):
+                    if not (math.isfinite(u) and math.isfinite(v)):
+                        raise ValueError(f"Mesh {m_i} prim {p_i} uv {u_i}: non-finite TEXCOORD_0")
+
+            if "COLOR_0" in attrs:
+                has_ao = True
+                cols = _read_accessor_colors(doc, bin_data, int(attrs["COLOR_0"]))
+                if len(cols) != len(positions):
+                    raise ValueError(f"Mesh {m_i} prim {p_i}: COLOR_0 count mismatch")
+                for c_i, vec in enumerate(cols):
+                    if any(not math.isfinite(ch) or ch < 0.0 or ch > 1.001 for ch in vec):
+                        raise ValueError(f"Mesh {m_i} prim {p_i} color {c_i}: out-of-range COLOR_0")
+
             v_count = len(positions)
             for t in range(0, len(indices), 3):
                 a, b, c = indices[t], indices[t + 1], indices[t + 2]
@@ -776,6 +1079,10 @@ def validate_glb(path_or_bytes: Union[str, os.PathLike, bytes, bytearray, memory
         "triangles": total_triangles,
         "materials": mat_names,
         "animations": anim_names,
+        "textures": len(doc_textures),
+        "images": len(doc_images),
+        "has_uvs": has_uvs,
+        "has_ao": has_ao,
         "bbox_min": [round(v, 5) for v in gmin],
         "bbox_max": [round(v, 5) for v in gmax],
         "dimensions": dims,
