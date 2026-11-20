@@ -2,7 +2,17 @@
 from __future__ import annotations
 
 from .gltf_writer import parse_glb, scene_to_glb_bytes, validate_glb, write_glb
-from .materials import MATERIAL_ORDER, MATERIALS, TEAM_COLORS, MaterialSpec, get_material, material_color
+from .materials import (
+    MATERIAL_ORDER,
+    MATERIALS,
+    TEAM_COLORS,
+    MaterialSpec,
+    get_material,
+    material_color,
+    material_linear_color,
+    srgb_rgba_to_linear,
+    srgb_to_linear,
+)
 
 try:
     import numpy as _np  # noqa: F401
@@ -44,6 +54,9 @@ __all__ = [
     "MaterialSpec",
     "get_material",
     "material_color",
+    "material_linear_color",
+    "srgb_rgba_to_linear",
+    "srgb_to_linear",
     "parse_glb",
     "scene_to_glb_bytes",
     "validate_glb",

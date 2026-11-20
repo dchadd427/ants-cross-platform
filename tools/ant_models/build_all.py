@@ -22,10 +22,10 @@ if THIS_DIR not in sys.path:
 
 try:
     from .gltf_writer import write_glb
-    from .materials import get_material, material_color
+    from .materials import get_material, material_linear_color
 except ImportError:
     from gltf_writer import write_glb  # type: ignore
-    from materials import get_material, material_color  # type: ignore
+    from materials import get_material, material_linear_color  # type: ignore
 
 ANT_CLASSES: Tuple[str, ...] = ("worker", "combat", "thief", "bomber", "swimmer", "fire")
 DEFAULT_OUT_DIR = os.path.join(THIS_DIR, "models")
@@ -170,8 +170,8 @@ def _shade_vinyl(normals, view_dir, base_rgb, metallic: float, roughness: float)
     n = normals / np.maximum(1e-8, np.linalg.norm(normals, axis=-1, keepdims=True))
     v = view_dir / max(1e-8, float(np.linalg.norm(view_dir)))
 
-    # Convert sRGB-authored material factors to linear space for physically consistent contrast.
-    albedo = np.power(np.clip(base_rgb, 0.0, 1.0), 2.2)
+    # `base_rgb` is already IEC-linear RGB (matching glTF 2.0 baseColorFactor).
+    albedo = np.clip(base_rgb, 0.0, 1.0)
 
     # 3-point studio lights: warm key, cool fill, crisp rim backlight.
     lights = (
@@ -274,7 +274,7 @@ def render_scene_orthographic(
         if len(part.indices) == 0:
             continue
         spec = get_material(part.material)
-        rgba = material_color(part.material, team=team)
+        rgba = material_linear_color(part.material, team=team)
         base_rgb = np.array(rgba[:3], dtype=np.float64)
 
         pos = part.positions.astype(np.float64) - center[None, :]
@@ -388,8 +388,8 @@ def render_preview_sheet(
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Build Ants stylized 3D .glb models and manifest.")
-    parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR, help="Output directory for .glb and manifest.json")
-    parser.add_argument("--only", nargs="+", help="Build only specific model ids (e.g. worker fire base)")
+    parser.add_argument("--out-dir", "--out", dest="out_dir", default=DEFAULT_OUT_DIR, help="Output directory for .glb and manifest.json")
+    parser.add_argument("--only", nargs="+", help="Build only specific model ids (space- or comma-separated, e.g. worker,fire)")
     parser.add_argument("--include-base", action="store_true", help="Also build base_ant as base.glb")
     parser.add_argument("--render-preview", default="", help="Optional path to save a headless PNG contact sheet")
     parser.add_argument("--team", default="green", choices=("green", "red", "blue", "black"), help="Preview team color")
@@ -397,9 +397,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--quiet", action="store_true", help="Suppress per-model log lines")
     args = parser.parse_args(argv)
 
+    only_ids: Optional[List[str]] = None
+    if args.only:
+        only_ids = [item.strip() for token in args.only for item in token.split(",") if item.strip()]
+
     manifest, built = build_all(
         out_dir=args.out_dir,
-        only=args.only,
+        only=only_ids,
         include_base=args.include_base,
         quiet=args.quiet,
     )

@@ -9,9 +9,25 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
 
+def srgb_to_linear(c: float) -> float:
+    """Convert a single sRGB channel in [0, 1] to linear light via IEC 61966-2-1 EOTF."""
+    v = max(0.0, min(1.0, float(c)))
+    return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+
+
+def srgb_rgba_to_linear(rgba: Tuple[float, float, float, float]) -> Tuple[float, float, float, float]:
+    """Convert sRGB RGB channels to glTF 2.0 linear RGB while keeping alpha linear."""
+    r, g, b, a = rgba
+    return (srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b), max(0.0, min(1.0, float(a))))
+
+
 @dataclass(frozen=True)
 class MaterialSpec:
-    """Metallic-roughness PBR material matching glTF 2.0 pbrMetallicRoughness."""
+    """Metallic-roughness PBR material matching glTF 2.0 pbrMetallicRoughness.
+
+    `base_color` stores sRGB-authored RGBA factors; `to_gltf_dict()` converts
+    RGB channels to linear space per glTF 2.0 section 5.22.1 (alpha stays linear).
+    """
 
     name: str
     base_color: Tuple[float, float, float, float]
@@ -19,12 +35,16 @@ class MaterialSpec:
     roughness: float
     double_sided: bool = False
 
+    def linear_base_color(self) -> Tuple[float, float, float, float]:
+        """Return linear-space RGBA baseColorFactor per glTF 2.0 spec."""
+        return srgb_rgba_to_linear(self.base_color)
+
     def to_gltf_dict(self) -> Dict[str, object]:
-        """Serialize to a glTF 2.0 material object."""
+        """Serialize to a glTF 2.0 material object with IEC-linear baseColorFactor."""
         return {
             "name": self.name,
             "pbrMetallicRoughness": {
-                "baseColorFactor": [round(float(c), 6) for c in self.base_color],
+                "baseColorFactor": [round(float(c), 6) for c in self.linear_base_color()],
                 "metallicFactor": round(float(self.metallic), 6),
                 "roughnessFactor": round(float(self.roughness), 6),
             },
@@ -139,10 +159,15 @@ def get_material(name: str) -> MaterialSpec:
 
 
 def material_color(name: str, team: str = "green") -> Tuple[float, float, float, float]:
-    """Return the RGBA linear base color for `name` under `team`."""
+    """Return the sRGB-authored RGBA color for `name` under `team`."""
     spec = get_material(name)
     palette = TEAM_COLORS.get(team)
     if palette and name in palette:
         c = palette[name]
         return (float(c[0]), float(c[1]), float(c[2]), float(c[3]))
     return spec.base_color
+
+
+def material_linear_color(name: str, team: str = "green") -> Tuple[float, float, float, float]:
+    """Return the glTF 2.0 linear-RGB + linear-alpha color for `name` under `team`."""
+    return srgb_rgba_to_linear(material_color(name, team=team))

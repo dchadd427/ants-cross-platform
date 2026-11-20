@@ -125,6 +125,39 @@ class MaterialsContract(unittest.TestCase):
             pbr = gltf["pbrMetallicRoughness"]
             self.assertEqual(len(pbr["baseColorFactor"]), 4)
 
+    def test_to_gltf_dict_emits_iec_linear_base_color(self):
+        # Verify IEC 61966-2-1 sRGB EOTF on toe, gamma curve, and endpoints.
+        self.assertEqual(materials.srgb_to_linear(0.0), 0.0)
+        self.assertEqual(materials.srgb_to_linear(1.0), 1.0)
+        self.assertAlmostEqual(materials.srgb_to_linear(0.04045), 0.04045 / 12.92, places=7)
+        self.assertAlmostEqual(materials.srgb_to_linear(0.5), ((0.5 + 0.055) / 1.055) ** 2.4, places=7)
+
+        # Verify every canonical material converts RGB to linear and keeps alpha linear.
+        for name in self.EXPECTED_NAMES:
+            spec = materials.get_material(name)
+            bcf = spec.to_gltf_dict()["pbrMetallicRoughness"]["baseColorFactor"]
+            for k in range(3):
+                expected = materials.srgb_to_linear(spec.base_color[k])
+                self.assertAlmostEqual(bcf[k], expected, places=5, msg=f"{name}[{k}]")
+                if 0.0 < spec.base_color[k] < 1.0:
+                    self.assertLess(bcf[k], spec.base_color[k], f"{name}[{k}] should be linear (< sRGB)")
+            self.assertAlmostEqual(bcf[3], spec.base_color[3], places=6)
+
+        # Verify custom alpha stays linear (unconverted by EOTF).
+        translucent = materials.MaterialSpec("test_alpha", (0.5, 0.5, 0.5, 0.5), 0.0, 0.5)
+        bcf = translucent.to_gltf_dict()["pbrMetallicRoughness"]["baseColorFactor"]
+        self.assertAlmostEqual(bcf[0], ((0.5 + 0.055) / 1.055) ** 2.4, places=5)
+        self.assertAlmostEqual(bcf[3], 0.5, places=6)
+
+        # Verify serialized GLB carries IEC-linear baseColorFactor in its JSON chunk.
+        glb = gltf_writer.scene_to_glb_bytes(_make_pure_python_tetra_scene())
+        doc, _ = gltf_writer.parse_glb(glb)
+        chitin = materials.get_material("chitin_team")
+        glb_bcf = doc["materials"][0]["pbrMetallicRoughness"]["baseColorFactor"]
+        for k in range(3):
+            self.assertAlmostEqual(glb_bcf[k], materials.srgb_to_linear(chitin.base_color[k]), places=5)
+        self.assertAlmostEqual(glb_bcf[3], 1.0, places=6)
+
     def test_unknown_material_raises(self):
         with self.assertRaises(KeyError):
             materials.get_material("does_not_exist")
@@ -396,6 +429,13 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
                     self.assertGreaterEqual(stats["bbox_max"][1], 1.05)
                 else:
                     self.assertTrue(0.85 <= stats["bbox_max"][1] <= 1.45, f"{entry['id']} height {stats['bbox_max'][1]}")
+
+    def test_build_all_cli_out_alias_and_comma_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rc = build_all.main(["--only", "base,worker", "--out", tmp, "--quiet"])
+            self.assertEqual(rc, 0)
+            self.assertTrue(os.path.isfile(os.path.join(tmp, "base.glb")))
+            self.assertTrue(os.path.isfile(os.path.join(tmp, "manifest.json")))
 
 
 @unittest.skipUnless(HAS_NUMPY and HAS_PIL, "numpy and Pillow are needed")
