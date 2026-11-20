@@ -16,10 +16,10 @@
   const rgbLinear = (rgb) => rgb.map(srgbToLinear);
   const DEFAULT_CUSTOM_HEX = "#7c3aed";
   const TEAMS = {
-    green: { label: "Green", team: rgbLinear([0.24, 0.45, 0.27]), dark: rgbLinear([0.10, 0.22, 0.13]) },
-    red: { label: "Red", team: rgbLinear([0.54, 0.16, 0.18]), dark: rgbLinear([0.24, 0.06, 0.07]) },
-    blue: { label: "Blue", team: rgbLinear([0.20, 0.33, 0.56]), dark: rgbLinear([0.08, 0.14, 0.28]) },
-    black: { label: "Black", team: rgbLinear([0.36, 0.38, 0.43]), dark: rgbLinear([0.14, 0.15, 0.18]) },
+    green: { label: "Green", team: rgbLinear([0.34, 0.59, 0.43]), dark: rgbLinear([0.17, 0.34, 0.28]) },
+    red: { label: "Red", team: rgbLinear([0.56, 0.18, 0.22]), dark: rgbLinear([0.27, 0.08, 0.11]) },
+    blue: { label: "Blue", team: rgbLinear([0.34, 0.42, 0.66]), dark: rgbLinear([0.15, 0.20, 0.38]) },
+    black: { label: "Black", team: rgbLinear([0.45, 0.46, 0.51]), dark: rgbLinear([0.22, 0.23, 0.27]) },
   };
   const ANGLES = {
     "301": { label: "301 S", full: "301 S (Front)", yaw: 0, pitch: 45 },
@@ -71,12 +71,12 @@
     light: {
       bgTop: [0.855, 0.880, 0.918], bgMid: [0.958, 0.966, 0.978], bgBot: [0.780, 0.816, 0.862],
       plinthTop: [0.68, 0.71, 0.76], plinthSide: [0.42, 0.46, 0.52], plinthRing: [0.45, 0.49, 0.56],
-      sky: [0.56, 0.70, 0.82], ground: [0.18, 0.17, 0.18], rimBoost: 0.62,
+      sky: [0.72, 0.80, 0.90], ground: [0.44, 0.46, 0.50], rimBoost: 0.58,
     },
     dark: {
       bgTop: [0.072, 0.092, 0.130], bgMid: [0.136, 0.168, 0.220], bgBot: [0.052, 0.068, 0.098],
       plinthTop: [0.095, 0.114, 0.148], plinthSide: [0.048, 0.060, 0.082], plinthRing: [0.19, 0.25, 0.32],
-      sky: [0.38, 0.56, 0.68], ground: [0.08, 0.08, 0.09], rimBoost: 1.0,
+      sky: [0.56, 0.68, 0.82], ground: [0.32, 0.36, 0.44], rimBoost: 0.86,
     },
   };
 
@@ -118,9 +118,9 @@
   const float PI = 3.14159265359;
   in vec3 v_worldPos, v_worldNormal, v_color;
   in vec2 v_uv;
-  uniform vec3 u_cameraPos, u_viewDir, u_baseColor, u_emissive, u_keyDir, u_fillDir, u_rimDir, u_skyColor, u_groundColor;
+  uniform vec3 u_cameraPos, u_viewDir, u_baseColor, u_emissive, u_keyDir, u_fillDir, u_rimDir, u_skyColor, u_groundColor, u_silhouetteColor;
   uniform float u_alpha, u_metallic, u_roughness, u_normalScale, u_rimBoost;
-  uniform int u_isOrtho, u_matKind, u_hasNormalTex;
+  uniform int u_isOrtho, u_matKind, u_hasNormalTex, u_silhouette;
   uniform sampler2D u_baseTex, u_normalTex, u_mrTex;
   out vec4 fragColor;
 
@@ -178,6 +178,10 @@
   vec3 linearToSrgb(vec3 c) { return mix(c * 12.92, 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c)); }
 
   void main() {
+    if (u_silhouette != 0) {
+      fragColor = vec4(u_silhouetteColor, 1.0);
+      return;
+    }
     vec3 N = normalize(v_worldNormal);
     if (!gl_FrontFacing) N = -N;
     float normSlope = 0.0;
@@ -197,34 +201,34 @@
 
     float coatW = u_matKind == 1 ? 0.34 * (1.0 - smoothstep(0.18, 0.42, rough)) : 0.0;
     vec3 F0 = mix(vec3(0.045), albedo, met), specAcc = vec3(0.0);
-    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.94, 0.85) * 3.30, N, V, albedo, met, rough, F0, coatW, specAcc)
-            + evalLight(u_fillDir, vec3(0.58, 0.84, 0.96) * 0.94, N, V, albedo, met, rough, F0, coatW, specAcc)
-            + evalLight(u_rimDir, vec3(0.84, 0.96, 1.0) * 1.90, N, V, albedo, met, rough, F0, coatW, specAcc);
+    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.98, 0.94) * 2.55, N, V, albedo, met, rough, F0, coatW, specAcc)
+            + evalLight(u_fillDir, vec3(0.84, 0.92, 1.0) * 1.12, N, V, albedo, met, rough, F0, coatW, specAcc)
+            + evalLight(u_rimDir, vec3(0.88, 0.96, 1.0) * 1.40, N, V, albedo, met, rough, F0, coatW, specAcc);
 
     vec3 bakedAo = clamp(v_color, 0.0, 1.0);
-    vec3 aoRich = pow(bakedAo, vec3(1.28));
-    float aoScalar = dot(aoRich, vec3(0.2126, 0.7152, 0.0722)) * microCav;
-    float geoAo = mix(0.75, 1.0, smoothstep(0.0, 0.26, v_worldPos.y)) * mix(0.72, 1.0, smoothstep(-0.38, 0.52, N.y));
-    vec3 directAo = mix(vec3(1.0), aoRich, u_alpha < 0.99 ? 0.18 : 0.62);
+    vec3 aoSoft = mix(vec3(1.0), bakedAo, 0.55);
+    float aoScalar = dot(aoSoft, vec3(0.2126, 0.7152, 0.0722)) * microCav;
+    float geoAo = mix(0.88, 1.0, smoothstep(0.0, 0.24, v_worldPos.y)) * mix(0.86, 1.0, smoothstep(-0.42, 0.48, N.y));
+    vec3 directAo = mix(vec3(1.0), aoSoft, u_alpha < 0.99 ? 0.14 : 0.42);
 
     vec3 R = reflect(-V, N); float NoV = max(dot(N, V), 0.0);
     float specOccl = clamp(pow(NoV + aoScalar, exp2(-16.0 * rough - 1.0)) - 1.0 + aoScalar, 0.0, 1.0);
-    vec3 ambDiff = mix(u_groundColor, u_skyColor, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.35 * aoRich * geoAo;
+    vec3 ambDiff = mix(u_groundColor * 1.22, u_skyColor * 1.12, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.56 * aoSoft * geoAo;
     float envAtten = (1.0 - rough) * (1.0 - rough);
     vec3 F_env = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - NoV, 5.0);
-    vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.18, 1.05, envAtten) * mix(envAtten, 1.0, met) * specOccl * geoAo;
-    vec3 envCoat = studioEnv(R, 0.14) * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * 0.42 * specOccl;
+    vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.18, 1.02, envAtten) * mix(envAtten, 1.0, met) * specOccl * geoAo;
+    vec3 envCoat = studioEnv(R, 0.14) * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * 0.40 * specOccl;
 
     vec3 sssBounce = vec3(0.0);
     if (u_matKind == 2) {
-      float wrapKey = clamp((dot(N, u_keyDir) + 0.28) / 1.28, 0.0, 1.0);
+      float wrapKey = clamp((dot(N, u_keyDir) + 0.34) / 1.34, 0.0, 1.0);
       float termBand = wrapKey * (1.0 - max(dot(N, u_keyDir), 0.0));
-      sssBounce = (albedo * vec3(1.18, 1.08, 0.88) + vec3(0.012, 0.010, 0.005)) * termBand * 0.44 * aoRich * geoAo;
+      sssBounce = (albedo * vec3(1.16, 1.10, 0.96) + vec3(0.014, 0.014, 0.010)) * termBand * 0.46 * aoSoft * geoAo;
     }
     float fresnelRim = pow(1.0 - NoV, 3.2) * smoothstep(-0.25, 0.72, N.y);
     float rimMask = mix(0.45, 1.0, clamp(dot(N, u_rimDir) * 0.55 + 0.55, 0.0, 1.0));
     vec3 rimTint = mix(vec3(0.76, 0.92, 1.0), albedo * 1.45 + vec3(0.28, 0.36, 0.42), u_matKind == 2 ? 0.42 : 0.18);
-    vec3 rimGlow = rimTint * fresnelRim * rimMask * (u_matKind == 1 ? 0.40 : (u_matKind == 2 ? 0.34 : 0.24)) * u_rimBoost * aoRich * geoAo;
+    vec3 rimGlow = rimTint * fresnelRim * rimMask * (u_matKind == 1 ? 0.36 : (u_matKind == 2 ? 0.32 : 0.22)) * u_rimBoost * aoSoft * geoAo;
 
     vec3 outCol = linearToSrgb(acesFilm((Lo * directAo + ambDiff + envSpec + envCoat + sssBounce + rimGlow + u_emissive) * 1.03));
     float outAlpha = 1.0;
@@ -405,6 +409,7 @@
         "u_baseColor", "u_alpha", "u_metallic", "u_roughness", "u_emissive", "u_normalScale",
         "u_matKind", "u_hasNormalTex", "u_baseTex", "u_normalTex", "u_mrTex",
         "u_keyDir", "u_fillDir", "u_rimDir", "u_skyColor", "u_groundColor", "u_rimBoost",
+        "u_silhouette", "u_silhouetteColor",
       ]);
       this.uPlinth = getUniforms(gl, this.plinthProg, [
         "u_viewProj", "u_topBase", "u_sideBase", "u_ringColor", "u_keyDir",
@@ -451,9 +456,27 @@
       return { eye, viewProj: mat4Multiply(proj, mat4LookAt(eye, t, [0, 1, 0])), viewDir: [dx / l, dy / l, dz / l], isOrtho, yaw };
     }
 
-    rotateLight(lx, ly, lz, yaw) {
-      const c = Math.cos(yaw), s = Math.sin(yaw), rx = lx * c + lz * s, rz = -lx * s + lz * c, l = Math.hypot(rx, ly, rz) || 1;
-      return [rx / l, ly / l, rz / l];
+    cameraLights(camera) {
+      const vd = camera.viewDir;
+      const rLen = Math.hypot(vd[2], -vd[0]) || 1;
+      const cr = [vd[2] / rLen, 0, -vd[0] / rLen];
+      const cu = [
+        vd[1] * cr[2] - vd[2] * cr[1],
+        vd[2] * cr[0] - vd[0] * cr[2],
+        vd[0] * cr[1] - vd[1] * cr[0],
+      ];
+      const basis = (fv, uv, rv) => {
+        const x = vd[0] * fv + cu[0] * uv + cr[0] * rv;
+        const y = vd[1] * fv + cu[1] * uv + cr[1] * rv;
+        const z = vd[2] * fv + cu[2] * uv + cr[2] * rv;
+        const l = Math.hypot(x, y, z) || 1;
+        return [x / l, y / l, z / l];
+      };
+      return {
+        keyDir: basis(0.88, 0.42, -0.18),
+        fillDir: basis(0.68, -0.16, 0.72),
+        rimDir: basis(-0.55, 0.72, 0.42),
+      };
     }
 
     drawScene(scene, cam, opts) {
@@ -467,9 +490,7 @@
       }
       gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
       const camera = this.computeCamera(scene, cam, opts.width, opts.height, opts.overrideProj, opts);
-      const keyDir = this.rotateLight(-0.74, 0.62, 0.30, camera.yaw);
-      const fillDir = this.rotateLight(0.84, 0.28, 0.22, camera.yaw);
-      const rimDir = this.rotateLight(0.38, 0.54, -0.82, camera.yaw);
+      const { keyDir, fillDir, rimDir } = this.cameraLights(camera);
 
       if (opts.showPlinth !== false && !opts.transparent) {
         const plinth = this.ensurePlinth(scene.plinthSpanX, scene.plinthRadius);
@@ -495,6 +516,9 @@
       gl.uniform3fv(this.uPbr.u_keyDir, keyDir); gl.uniform3fv(this.uPbr.u_fillDir, fillDir); gl.uniform3fv(this.uPbr.u_rimDir, rimDir);
       gl.uniform3fv(this.uPbr.u_skyColor, pal.sky); gl.uniform3fv(this.uPbr.u_groundColor, pal.ground);
       gl.uniform1f(this.uPbr.u_rimBoost, opts.transparent ? (opts.dark ? 0.95 : 0.65) : pal.rimBoost);
+      const isSil = Boolean(opts.silhouette);
+      gl.uniform1i(this.uPbr.u_silhouette, isSil ? 1 : 0);
+      gl.uniform3fv(this.uPbr.u_silhouetteColor, opts.dark ? [0.910, 0.933, 0.973] : [0.067, 0.086, 0.122]);
 
       const instMats = scene.instances.map((inst) => evaluateWorldMats(inst, opts));
       for (let pass = 0; pass < 2; pass++) {
