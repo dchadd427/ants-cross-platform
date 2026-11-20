@@ -107,15 +107,17 @@ Box delta(const Picture& a, const Picture& b) {
 constexpr hc::Setting kOff{hc::When::Off, hc::Style::Bar};
 constexpr hc::Setting kNumbers{hc::When::All, hc::Style::Number};
 
-/// How many pixels of `box` differ from the frame without the number (`none`) and are darker, in some channel, than both the ground's value and the number's own color (r, g, b): a number drawn plainly
-/// (digits white or green, edge pixels white blended with what is behind them) has none, a border has them all round the digits
+/// How many pixels of `box` are darker, in some channel, than both the ground's value (the frame without the number, `none`) and the number's own color (r, g, b), by more than `kBlendSlack` levels: a number
+/// drawn plainly (digits white or green, edge pixels that color blended with what is behind them) has none, a border has them all round the digits (it darkens the ground by tens of levels).
+/// The slack is SDL's: its software renderer on x86 (2.30 of Linux) rounds the blend of an almost transparent texel down by up to 2 levels of the ground, for any texture.
+constexpr int kBlendSlack = 4;
 int unbordered(const Picture& none, const Picture& with, const Box& box, int r, int g, int b) {
     const int color[3] = {r, g, b};
     int n = 0;
     for (int y = box.y0; y <= box.y1; ++y) {
         for (int x = box.x0; x <= box.x1; ++x) {
             bool darker = false;
-            for (int c = 0; c < 3; ++c) darker = darker || with.at(x, y)[c] + 1 < std::min<int>(none.at(x, y)[c], color[c]);
+            for (int c = 0; c < 3; ++c) darker = darker || with.at(x, y)[c] + kBlendSlack < std::min<int>(none.at(x, y)[c], color[c]);
             n += darker ? 1 : 0;
         }
     }
