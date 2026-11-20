@@ -264,7 +264,7 @@ def _build_torso(scene: SceneBuilder) -> np.ndarray:
 
     def _add_shoulder_pair(part: MeshPart, on_arm: bool) -> None:
         if on_arm:
-            scene.add("arm_left", part)
+            scene.add("left_upper_arm", part)
             scene.add("right_upper_arm", part.mirror_x(f"{part.name}_right"))
         else:
             scene.add_mirrored("body", part)
@@ -556,9 +556,13 @@ def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray
     pts_r = [np.array([-p[0], p[1], p[2]], dtype=np.float64) for p in pts]
     sh_r, mid_r, el_r, wr_r, fi_r = pts_r
 
-    # Left (+X) continuous flowing muscular arm; right (-X) split seamlessly at elbow for bicep flex!
+    # Both arms split seamlessly at elbows so right (-X) flexes bicep while left (+X) plants on hip!
     # Athletic, defined upper arms (0.114) tapering to sleeker forearms (0.086) (~14% trimmer, zero ballooning).
-    scene.add("arm_left", curved_tube(pts, [0.094, 0.114, 0.090, 0.086, 0.070], samples_per_seg=5, radial_segs=16, cap_rings=3, name="gorilla_arm_left", material="chitin_team"))
+    scene.add("left_upper_arm", [
+        curved_tube([sh, mid, el], [0.094, 0.114, 0.090], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_upper_left", material="chitin_team"),
+        sphere(0.088, u_segs=14, v_segs=10, name="elbow_joint_left", material="chitin_team").translate(el),
+    ])
+    scene.add("left_forearm", curved_tube([el, wr, fi], [0.090, 0.086, 0.070], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_forearm_left", material="chitin_team"))
     scene.add("right_upper_arm", [
         curved_tube([sh_r, mid_r, el_r], [0.094, 0.114, 0.090], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_upper_right", material="chitin_team"),
         sphere(0.088, u_segs=14, v_segs=10, name="elbow_joint_right", material="chitin_team").translate(el_r),
@@ -566,7 +570,7 @@ def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray
     scene.add("right_forearm", curved_tube([el_r, wr_r, fi_r], [0.090, 0.086, 0.070], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_forearm_right", material="chitin_team"))
 
     def _add_arm_pair(part: MeshPart, *, right_node: str) -> None:
-        scene.add("arm_left", part)
+        scene.add(right_node.replace("right_", "left_"), part)
         scene.add(right_node, part.mirror_x(f"{part.name}_right"))
 
     # Crisp sculpted athletic bicep peak (front-inner -> pops UP during flex) & defined tricep belly.
@@ -918,36 +922,77 @@ def _quat_rot_mat(q: Tuple[float, float, float, float]) -> np.ndarray:
 
 
 def _add_combat_idle_animation(scene: SceneBuilder) -> None:
-    """Authentic `acst301` 7.82s heavy muscular heave + 900ms bodybuilder right-arm bicep flex!"""
+    """Authentic `acst301` 7.82s energetic arm-bounce forward heave + right-arm flex with left hand on hip!"""
     q_id = (0.0, 0.0, 0.0, 1.0)
+    sh_l = np.array(ARM_PTS_LEFT[0], dtype=np.float64)
+    el_l = np.array(ARM_PTS_LEFT[2], dtype=np.float64)
+    fi_l = np.array(ARM_PTS_LEFT[4], dtype=np.float64)
     sh_r = np.array([-ARM_PTS_LEFT[0][0], ARM_PTS_LEFT[0][1], ARM_PTS_LEFT[0][2]])
     el_r = np.array([-ARM_PTS_LEFT[2][0], ARM_PTS_LEFT[2][1], ARM_PTS_LEFT[2][2]])
     fi_r = np.array([-ARM_PTS_LEFT[4][0], ARM_PTS_LEFT[4][1], ARM_PTS_LEFT[4][2]])
-    q_sh_ext = _quat_shortest_arc(el_r - sh_r, np.array([-1.0, 0.06, 0.10]))
+    # Bold high-and-out right-arm-up victory flex (`+0.34 Y` shoulder lift!) + tight double-pump curl.
+    q_sh_ext = _quat_shortest_arc(el_r - sh_r, np.array([-0.92, 0.34, 0.16]))
     r_sh = _quat_rot_mat(q_sh_ext)
-    q_el_ext = _quat_shortest_arc(fi_r - el_r, r_sh.T @ np.array([-1.0, 0.02, 0.10]))
+    q_el_ext = _quat_shortest_arc(fi_r - el_r, r_sh.T @ np.array([-0.94, 0.24, 0.14]))
     z_loc = tuple(r_sh.T @ np.array([0.0, 0.0, 1.0]))
-    q_el_mid = quat_mul(quat_from_axis_angle(z_loc, -0.92), q_el_ext)
-    q_el_flex = quat_mul(quat_from_axis_angle(z_loc, -1.85), q_el_ext)
-    q_el_hi = quat_mul(quat_from_axis_angle(z_loc, -1.96), q_el_ext)
+    q_el_mid = quat_mul(quat_from_axis_angle(z_loc, -1.04), q_el_ext)
+    q_el_flex = quat_mul(quat_from_axis_angle(z_loc, -1.98), q_el_ext)
+    q_el_hi = quat_mul(quat_from_axis_angle(z_loc, -2.18), q_el_ext)
+
+    # Cocky left hand-on-hip bodybuilder pose (`#306`): elbow flares out akimbo, fist plants on left hip!
+    q_lsh_hip = _quat_shortest_arc(el_l - sh_l, np.array([0.64, -0.76, -0.08]))
+    r_lsh = _quat_rot_mat(q_lsh_hip)
+    el_l_hip = sh_l + r_lsh @ (el_l - sh_l)
+    q_lel_hip = _quat_shortest_arc(fi_l - el_l, r_lsh.T @ (np.array([0.285, 0.365, 0.035]) - el_l_hip))
+    q_lsh_mid = _quat_shortest_arc(el_l - sh_l, np.array([0.58, -0.80, 0.10]))
+    r_lmid = _quat_rot_mat(q_lsh_mid)
+    q_lel_mid = _quat_shortest_arc(fi_l - el_l, r_lmid.T @ (np.array([0.34, 0.28, 0.15]) - (sh_l + r_lmid @ (el_l - sh_l))))
 
     rows = []
-    # 5 calm, weighty muscular breathing heaves across [0.00, 5.90] (1.18s each)
+    # 5 energetic rhythmic boxer arm-bounce & forward-leaning chest heaves across [0.00, 5.90] (1.18s each)
     for b in range(5):
         t0 = b * 1.18
-        rows.append((t0, 0.000, 0.00, q_id, q_id, q_id, q_id, 0.00))
-        rows.append((t0 + 0.56, 0.048, -0.036, quat_from_euler_xyz(rx=0.045), quat_from_euler_xyz(rx=-0.03, rz=0.11), quat_from_euler_xyz(rx=-0.03, rz=-0.11), quat_from_euler_xyz(rz=0.06), -0.06))
-    # Emote: extend right (-X) arm sideways -> curl up -> hold 900ms bicep flex -> lower smoothly
+        rows.append((t0, 0.000, 0.000, q_id, q_id, q_id, q_id, q_id, 0.00))
+        rows.append((
+            t0 + 0.26, -0.020, +0.072,
+            quat_from_euler_xyz(rx=-0.055),
+            quat_from_euler_xyz(rx=-0.10, rz=0.14),
+            quat_from_euler_xyz(rz=-0.12),
+            quat_from_euler_xyz(rx=-0.10, rz=-0.14),
+            quat_from_euler_xyz(rz=+0.12),
+            +0.05,
+        ))
+        rows.append((
+            t0 + 0.60, +0.056, +0.032,
+            quat_from_euler_xyz(rx=-0.025),
+            quat_from_euler_xyz(rx=-0.16, rz=0.23),
+            quat_from_euler_xyz(rz=+0.10),
+            quat_from_euler_xyz(rx=-0.16, rz=-0.23),
+            quat_from_euler_xyz(rz=-0.10),
+            -0.08,
+        ))
+        rows.append((
+            t0 + 0.92, -0.010, +0.048,
+            quat_from_euler_xyz(rx=-0.035),
+            quat_from_euler_xyz(rx=-0.06, rz=0.08),
+            quat_from_euler_xyz(rz=-0.06),
+            quat_from_euler_xyz(rx=-0.06, rz=-0.08),
+            quat_from_euler_xyz(rz=+0.06),
+            +0.03,
+        ))
+    # Emote: plant left hand cockily on hip, whip right arm high up in double-pump flex, turn head to admire bicep!
     rows.extend([
-        (5.90, 0.000, 0.000, q_id, q_id, q_id, q_id, 0.00),
-        (6.08, 0.034, -0.030, quat_from_euler_xyz(rx=-0.02, ry=-0.14), quat_from_euler_xyz(rz=0.09), q_sh_ext, q_el_ext, -0.04),
-        (6.17, 0.048, -0.042, quat_from_euler_xyz(rx=-0.04, ry=-0.20), quat_from_euler_xyz(rz=0.11), q_sh_ext, q_el_mid, -0.06),
-        (6.26, 0.058, -0.052, quat_from_euler_xyz(rx=-0.05, ry=-0.24, rz=0.04), quat_from_euler_xyz(rz=0.14), q_sh_ext, q_el_flex, -0.08),
-        (6.71, 0.064, -0.058, quat_from_euler_xyz(rx=-0.06, ry=-0.26, rz=0.05), quat_from_euler_xyz(rz=0.15), q_sh_ext, q_el_hi, -0.09),
-        (7.16, 0.056, -0.050, quat_from_euler_xyz(rx=-0.05, ry=-0.22, rz=0.04), quat_from_euler_xyz(rz=0.13), q_sh_ext, q_el_flex, -0.07),
-        (7.32, 0.030, -0.024, quat_from_euler_xyz(rx=-0.02, ry=-0.10), quat_from_euler_xyz(rz=0.07), q_sh_ext, q_el_mid, -0.04),
-        (7.50, 0.010, -0.008, q_id, q_id, quat_from_euler_xyz(rz=-0.20), q_id, -0.02),
-        (7.82, 0.000, 0.000, q_id, q_id, q_id, q_id, 0.00),
+        (5.90, 0.000, 0.000, q_id, q_id, q_id, q_id, q_id, 0.00),
+        (6.06, +0.038, +0.056, quat_from_euler_xyz(rx=-0.04, ry=-0.26, rz=0.04), q_lsh_mid, q_lel_mid, q_sh_ext, q_el_ext, -0.05),
+        (6.16, +0.054, +0.064, quat_from_euler_xyz(rx=-0.05, ry=-0.42, rz=0.08), q_lsh_hip, q_lel_hip, q_sh_ext, q_el_mid, -0.07),
+        (6.28, +0.066, +0.070, quat_from_euler_xyz(rx=-0.06, ry=-0.52, rz=0.10), q_lsh_hip, q_lel_hip, q_sh_ext, q_el_flex, -0.09),
+        (6.48, +0.074, +0.082, quat_from_euler_xyz(rx=-0.07, ry=-0.56, rz=0.11), q_lsh_hip, q_lel_hip, q_sh_ext, q_el_hi, -0.11),
+        (6.70, +0.060, +0.064, quat_from_euler_xyz(rx=-0.05, ry=-0.50, rz=0.09), q_lsh_hip, q_lel_hip, q_sh_ext, q_el_flex, -0.08),
+        (6.92, +0.074, +0.082, quat_from_euler_xyz(rx=-0.07, ry=-0.56, rz=0.11), q_lsh_hip, q_lel_hip, q_sh_ext, q_el_hi, -0.11),
+        (7.16, +0.058, +0.058, quat_from_euler_xyz(rx=-0.05, ry=-0.46, rz=0.08), q_lsh_hip, q_lel_hip, q_sh_ext, q_el_flex, -0.07),
+        (7.34, +0.028, +0.032, quat_from_euler_xyz(rx=-0.02, ry=-0.20, rz=0.03), q_lsh_mid, q_lel_mid, q_sh_ext, q_el_mid, -0.04),
+        (7.54, +0.008, +0.012, q_id, q_id, q_id, quat_from_euler_xyz(rz=-0.22), q_id, -0.02),
+        (7.82, 0.000, 0.000, q_id, q_id, q_id, q_id, q_id, 0.00),
     ])
     times = [round(r[0], 4) for r in rows]
     bx, by, bz = scene.get_node_transform("upper_body").translation
@@ -958,9 +1003,10 @@ def _add_combat_idle_animation(scene: SceneBuilder) -> None:
         AnimationChannel("upper_body", "rotation", list(times), [quat_mul(ub_r0, quat_from_euler_xyz(rx=r[2])) for r in rows]),
         AnimationChannel("head_group", "rotation", list(times), [quat_mul(hd_r0, r[3]) for r in rows]),
         AnimationChannel("left_arm_group", "rotation", list(times), [r[4] for r in rows]),
-        AnimationChannel("right_arm_group", "rotation", list(times), [r[5] for r in rows]),
-        AnimationChannel("right_forearm_group", "rotation", list(times), [r[6] for r in rows]),
-        AnimationChannel("gaster_group", "rotation", list(times), [quat_from_euler_xyz(rx=r[7]) for r in rows]),
+        AnimationChannel("left_forearm_group", "rotation", list(times), [r[5] for r in rows]),
+        AnimationChannel("right_arm_group", "rotation", list(times), [r[6] for r in rows]),
+        AnimationChannel("right_forearm_group", "rotation", list(times), [r[7] for r in rows]),
+        AnimationChannel("gaster_group", "rotation", list(times), [quat_from_euler_xyz(rx=r[8]) for r in rows]),
     ], replace=True)
 
 
@@ -976,6 +1022,7 @@ def build_combat(blink: float = 0.0) -> SceneBuilder:
 
     # Assemble clean hierarchical rig keeping `legs` rooted solidly on Y = 0.0!
     sh_l = ARM_PTS_LEFT[0]
+    el_l = ARM_PTS_LEFT[2]
     sh_r = (-ARM_PTS_LEFT[0][0], ARM_PTS_LEFT[0][1], ARM_PTS_LEFT[0][2])
     el_r = (-ARM_PTS_LEFT[2][0], ARM_PTS_LEFT[2][1], ARM_PTS_LEFT[2][2])
 
@@ -994,7 +1041,11 @@ def build_combat(blink: float = 0.0) -> SceneBuilder:
 
     scene.set_node_transform("left_arm_group", translation=sh_l)
     scene.attach_world_node("left_arm_group", "upper_body")
-    scene.attach_world_node("arm_left", "left_arm_group")
+    scene.attach_world_node("left_upper_arm", "left_arm_group")
+
+    scene.set_node_transform("left_forearm_group", translation=el_l)
+    scene.attach_world_node("left_forearm_group", "left_arm_group")
+    scene.attach_world_node("left_forearm", "left_forearm_group")
 
     scene.set_node_transform("right_arm_group", translation=sh_r)
     scene.attach_world_node("right_arm_group", "upper_body")
