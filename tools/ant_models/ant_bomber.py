@@ -519,11 +519,11 @@ def _build_dynamite_pack(
     scene.add("dynamite_pack", chest_belt)
 
     rack_pts = [
-        (-0.158, pack_y + 0.054, pack_z - 0.012),
-        (-0.088, pack_y + 0.098, pack_z - 0.058),
-        (0.000, pack_y + 0.114, pack_z - 0.072),
-        (0.088, pack_y + 0.098, pack_z - 0.058),
-        (0.158, pack_y + 0.054, pack_z - 0.012),
+        (-0.158, pack_y + 0.054, pack_z - 0.042),
+        (-0.088, pack_y + 0.098, pack_z - 0.086),
+        (0.000, pack_y + 0.114, pack_z - 0.100),
+        (0.088, pack_y + 0.098, pack_z - 0.086),
+        (0.158, pack_y + 0.054, pack_z - 0.042),
     ]
     rack_strap = curved_tube(
         rack_pts,
@@ -539,15 +539,16 @@ def _build_dynamite_pack(
     rack_buckle = (
         rounded_box(0.048, 0.042, 0.022, bevel=0.007, segs=3, name="bomb_rack_buckle", material="gear_gold_metal")
         .rotate_xyz(rx=-0.26)
-        .translate(0.0, pack_y + 0.114, pack_z - 0.080)
+        .translate(0.0, pack_y + 0.114, pack_z - 0.108)
     )
     scene.add("dynamite_pack", rack_buckle)
 
+    # Set back cleanly behind the -13 deg chin-up pitched cranium & rear goggle strap/buckle.
     pack_specs = (
-        (+18.0, -14.0, -0.112, 0.062, -0.018, 0.080, -0.026),
-        (+6.0, -18.0, -0.046, 0.140, -0.052, 0.084, -0.022),
-        (-6.0, -18.0, +0.046, 0.140, -0.052, 0.084, +0.022),
-        (-18.0, -14.0, +0.112, 0.062, -0.018, 0.080, +0.026),
+        (+18.0, -18.0, -0.112, 0.062, -0.050, 0.080, -0.026),
+        (+6.0, -23.0, -0.046, 0.140, -0.082, 0.084, -0.022),
+        (-6.0, -23.0, +0.046, 0.140, -0.082, 0.084, +0.022),
+        (-18.0, -18.0, +0.112, 0.062, -0.050, 0.080, +0.026),
     )
     for idx, (rz_deg, rx_deg, ox, oy, oz, cup_h, fuse_dx) in enumerate(pack_specs):
         holster = (
@@ -665,6 +666,7 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
         brow_style="eager",
         head_tilt_deg=-5.5,
         head_yaw_deg=3.5,
+        head_pitch_deg=-13.0,
         eye_look=(-0.06, 0.04),
         antenna_asymmetry=0.45,
         stance_asymmetry=0.40,
