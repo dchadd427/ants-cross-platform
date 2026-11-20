@@ -257,9 +257,9 @@ def _build_goggles(
         goggle_yaw=yaw_mag,
         mount_offset=(mount_dx, 0.0, mount_dz),
     )
-    # Narrow radial fit around compact eyes + ~1.45x deeper forward binocular barrel projection.
-    bore_r = max(0.0835, max_lid_r + 0.0038)
-    lens_z = max(0.116, max_lid_z + 0.036)
+    # Narrow radial fit around Bomber's compact head + bold projecting binocular barrel length.
+    bore_r = max(0.0785, max_lid_r + 0.0036)
+    lens_z = max(0.114, max_lid_z + 0.038)
 
     for side_sign, eye_pos in ((+1.0, eye_left), (-1.0, eye_right)):
         mount = (eye_pos[0] + side_sign * mount_dx, eye_pos[1], eye_pos[2] + mount_dz)
@@ -269,9 +269,9 @@ def _build_goggles(
                 def _clamp_nose_midline(pos: np.ndarray, s: float = side_sign) -> np.ndarray:
                     p = pos.copy()
                     if s > 0.0:
-                        p[:, 0] = np.maximum(p[:, 0], -0.0012)
+                        p[:, 0] = np.maximum(p[:, 0], 0.0)
                     else:
-                        p[:, 0] = np.minimum(p[:, 0], +0.0012)
+                        p[:, 0] = np.minimum(p[:, 0], 0.0)
                     return p
                 placed = placed.deform(_clamp_nose_midline)
             scene.add("goggles", placed)
@@ -475,17 +475,18 @@ def _build_dynamite_pack(
     )
     scene.add("dynamite_pack", backplate)
 
+    # Snug shoulder straps & chest belt conformed tightly to core's slim petite thorax (`max r=0.082`).
     for side_sign, tag in ((+1.0, "left"), (-1.0, "right")):
         s_pts = [
-            (side_sign * 0.072, pack_y + 0.024, pack_z + 0.034),
-            (side_sign * 0.088, ty + 0.128, tz - 0.034),
-            (side_sign * 0.086, ty + 0.114, tz + 0.064),
-            (side_sign * 0.078, ty + 0.032, tz + 0.122),
-            (side_sign * 0.072, ty - 0.032, tz + 0.112),
+            (side_sign * 0.056, pack_y + 0.022, pack_z + 0.030),
+            (side_sign * 0.066, ty + 0.106, tz - 0.026),
+            (side_sign * 0.064, ty + 0.094, tz + 0.048),
+            (side_sign * 0.058, ty + 0.026, tz + 0.094),
+            (side_sign * 0.054, ty - 0.026, tz + 0.086),
         ]
         s_strap = curved_tube(
             s_pts,
-            (0.011, 0.017),
+            (0.0095, 0.0145),
             samples_per_seg=4,
             radial_segs=10,
             cap_rings=2,
@@ -495,21 +496,21 @@ def _build_dynamite_pack(
         scene.add("dynamite_pack", s_strap)
 
         chest_buckle = (
-            rounded_box(0.028, 0.034, 0.018, bevel=0.005, segs=2, name=f"harness_buckle_{tag}", material="gear_brass_trim")
+            rounded_box(0.024, 0.028, 0.016, bevel=0.0045, segs=2, name=f"harness_buckle_{tag}", material="gear_brass_trim")
             .rotate_xyz(rx=-0.16, ry=side_sign * 0.28)
-            .translate(side_sign * 0.078, ty + 0.036, tz + 0.126)
+            .translate(side_sign * 0.058, ty + 0.030, tz + 0.098)
         )
         scene.add("dynamite_pack", chest_buckle)
 
     chest_belt = curved_tube(
         [
-            (-0.094, ty - 0.022, tz + 0.068),
-            (-0.058, ty - 0.022, tz + 0.124),
-            (0.000, ty - 0.022, tz + 0.136),
-            (0.058, ty - 0.022, tz + 0.124),
-            (0.094, ty - 0.022, tz + 0.068),
+            (-0.072, ty - 0.020, tz + 0.052),
+            (-0.046, ty - 0.020, tz + 0.096),
+            (0.000, ty - 0.020, tz + 0.104),
+            (0.046, ty - 0.020, tz + 0.096),
+            (0.072, ty - 0.020, tz + 0.052),
         ],
-        (0.014, 0.0095),
+        (0.012, 0.0085),
         samples_per_seg=4,
         radial_segs=8,
         cap_rings=2,
@@ -519,11 +520,11 @@ def _build_dynamite_pack(
     scene.add("dynamite_pack", chest_belt)
 
     rack_pts = [
-        (-0.158, pack_y + 0.054, pack_z - 0.042),
-        (-0.088, pack_y + 0.098, pack_z - 0.086),
-        (0.000, pack_y + 0.114, pack_z - 0.100),
-        (0.088, pack_y + 0.098, pack_z - 0.086),
-        (0.158, pack_y + 0.054, pack_z - 0.042),
+        (-0.158, pack_y + 0.054, pack_z - 0.068),
+        (-0.088, pack_y + 0.098, pack_z - 0.110),
+        (0.000, pack_y + 0.114, pack_z - 0.124),
+        (0.088, pack_y + 0.098, pack_z - 0.110),
+        (0.158, pack_y + 0.054, pack_z - 0.068),
     ]
     rack_strap = curved_tube(
         rack_pts,
@@ -539,16 +540,16 @@ def _build_dynamite_pack(
     rack_buckle = (
         rounded_box(0.048, 0.042, 0.022, bevel=0.007, segs=3, name="bomb_rack_buckle", material="gear_gold_metal")
         .rotate_xyz(rx=-0.26)
-        .translate(0.0, pack_y + 0.114, pack_z - 0.108)
+        .translate(0.0, pack_y + 0.114, pack_z - 0.132)
     )
     scene.add("dynamite_pack", rack_buckle)
 
-    # Set back cleanly behind the -13 deg chin-up pitched cranium & rear goggle strap/buckle.
+    # Set back cleanly behind the -16 deg chin-up pitched cranium & rear goggle strap/buckle.
     pack_specs = (
-        (+18.0, -18.0, -0.112, 0.062, -0.050, 0.080, -0.026),
-        (+6.0, -23.0, -0.046, 0.140, -0.082, 0.084, -0.022),
-        (-6.0, -23.0, +0.046, 0.140, -0.082, 0.084, +0.022),
-        (-18.0, -18.0, +0.112, 0.062, -0.050, 0.080, +0.026),
+        (+18.0, -18.0, -0.112, 0.062, -0.076, 0.080, -0.026),
+        (+6.0, -23.0, -0.046, 0.140, -0.106, 0.084, -0.022),
+        (-6.0, -23.0, +0.046, 0.140, -0.106, 0.084, +0.022),
+        (-18.0, -18.0, +0.112, 0.062, -0.076, 0.080, +0.026),
     )
     for idx, (rz_deg, rx_deg, ox, oy, oz, cup_h, fuse_dx) in enumerate(pack_specs):
         holster = (
@@ -656,8 +657,125 @@ def _add_bomber_idle(scene: SceneBuilder) -> AnimationClip:
     return scene.add_animation("Idle", channels, replace=True)
 
 
+def _scale_bomber_head_and_tall_antennae(
+    scene: SceneBuilder,
+    anchors: dict,
+    *,
+    head_scale: float = 0.90,
+) -> Tuple[
+    Tuple[float, float, float],
+    Tuple[float, float, float],
+    Tuple[float, float, float],
+    Tuple[float, float, float],
+    float,
+]:
+    """Scale Bomber's head/eyes/eyelids/mandibles ~10% slimmer and sculpt tall, bold upright antennae.
+
+    Matches `abst301` compact slim head silhouette (`~21px` wide) topped by tall bold dark antennae
+    towering prominently above the goggles and pink back-pack bombs.
+    """
+    hc = anchors["head_center"]
+    hrx, hry, hrz = anchors["head_radii"]
+    head_xf = scene.get_node_transform("head")
+    neck_pivot = (
+        (-head_xf.translation[0], -head_xf.translation[1], -head_xf.translation[2])
+        if head_xf is not None
+        else anchors["neck_center"]
+    )
+    # Anchor scaling slightly below head center so the slimmer skull stays seated flush on neck_joint.
+    piv = (hc[0], hc[1] - 0.052, hc[2])
+    p_hg = (piv[0] - neck_pivot[0], piv[1] - neck_pivot[1], piv[2] - neck_pivot[2])
+    s = float(head_scale)
+
+    # 1. Uniformly scale `head` & `eyes` parts around `piv` in neutral world space (t stays -neck_pivot).
+    for node_name in ("head", "eyes"):
+        if node_name in scene.nodes:
+            scene.nodes[node_name] = [
+                part.translate(-piv[0], -piv[1], -piv[2]).scale(s, s, s).translate(*piv)
+                for part in scene.nodes[node_name]
+            ]
+
+    # 2. Scale locally-pivoted `mandibles`, `eyelid_left`, `eyelid_right` around their own (0,0,0) hinges
+    # and shift their `head_group`-local pivot positions toward `p_hg` so blink & jaw pivots stay exact.
+    for node_name in ("mandibles", "eyelid_left", "eyelid_right"):
+        if node_name in scene.nodes:
+            scene.nodes[node_name] = [part.scale(s, s, s) for part in scene.nodes[node_name]]
+            xf = scene.get_node_transform(node_name)
+            if xf is not None:
+                tx, ty, tz = xf.translation
+                scene.set_node_transform(
+                    node_name,
+                    translation=(
+                        p_hg[0] + s * (tx - p_hg[0]),
+                        p_hg[1] + s * (ty - p_hg[1]),
+                        p_hg[2] + s * (tz - p_hg[2]),
+                    ),
+                )
+
+    def _scale_pt(pt: Tuple[float, float, float]) -> Tuple[float, float, float]:
+        return (piv[0] + s * (pt[0] - piv[0]), piv[1] + s * (pt[1] - piv[1]), piv[2] + s * (pt[2] - piv[2]))
+
+    new_hc = _scale_pt(hc)
+    new_hr = (hrx * s, hry * s, hrz * s)
+    new_eye_l = _scale_pt(anchors["eye_left"])
+    new_eye_r = _scale_pt(anchors["eye_right"])
+    new_head_back_z = new_hc[2] - new_hr[2]
+
+    # 3. Replace antennae with tall, thick, bold upright Bomber antennae (~1.52x taller, ~1.38x thicker)
+    # anchored onto the scaled skull crown so they tower cleanly above goggles & bombs like `abst301`.
+    ant_rads = [
+        (0.024, 0.024),
+        (0.020, 0.021),
+        (0.017, 0.018),
+        (0.019, 0.020),
+        (0.024, 0.026),
+        (0.028, 0.030),
+        (0.015, 0.017),
+    ]
+    for side, tag, orig_key in ((+1.0, "left", "antenna_base_left"), (-1.0, "right", "antenna_base_right")):
+        node_name = f"antenna_{tag}"
+        base_p = _scale_pt(anchors[orig_key])
+        # Subtle playful jaunty asymmetry while keeping BOTH antennae boldly tall & upright.
+        h_boost = 0.022 if side > 0 else -0.014
+        z_lean = 0.016 if side > 0 else -0.014
+        bx, by, bz = base_p
+        pts = [
+            (bx - side * 0.006, by - 0.018, bz - 0.004),
+            base_p,
+            (bx + side * 0.018, by + 0.115 + 0.4 * h_boost, bz + 0.008 + 0.3 * z_lean),
+            (bx + side * 0.034, by + 0.215 + 0.8 * h_boost, bz + 0.024 + 0.6 * z_lean),
+            (bx + side * 0.044, by + 0.258 + h_boost, bz + 0.068 + 0.9 * z_lean),
+            (bx + side * 0.048, by + 0.244 + h_boost, bz + 0.104 + z_lean),
+            (bx + side * 0.050, by + 0.212 + 0.9 * h_boost, bz + 0.122 + 1.1 * z_lean),
+        ]
+        stalk = swept_tube(
+            pts,
+            ant_rads,
+            radial_segs=12,
+            smooth_subdiv=3,
+            cap_rings=3,
+            name=f"antenna_stalk_{tag}",
+            material="chitin_dark",
+        )
+        sock = (
+            ellipsoid(0.026, 0.013, 0.026, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark")
+            .rotate_xyz(rx=0.18, rz=-side * 0.24)
+            .translate(*base_p)
+        )
+        scene.nodes[node_name] = [
+            stalk.translate(-bx, -by, -bz),
+            sock.translate(-bx, -by, -bz),
+        ]
+        scene.set_node_transform(
+            node_name,
+            translation=(bx - neck_pivot[0], by - neck_pivot[1], bz - neck_pivot[2]),
+        )
+
+    return new_hc, new_hr, new_eye_l, new_eye_r, new_head_back_z
+
+
 def build_bomber(blink: float = 0.0) -> SceneBuilder:
-    """Build the sculpted 3D Bomber Ant SceneBuilder with feisty expression, Blink, and 1.70s Idle."""
+    """Build the sculpted 3D Bomber Ant SceneBuilder with slim head, tall antennae, Blink, and 1.70s Idle."""
     scene, anchors = build_base_ant(
         scene_name="ant_bomber",
         include_antennae=True,
@@ -666,7 +784,7 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
         brow_style="eager",
         head_tilt_deg=-5.5,
         head_yaw_deg=3.5,
-        head_pitch_deg=-13.0,
+        head_pitch_deg=-16.0,
         eye_look=(-0.06, 0.04),
         antenna_asymmetry=0.45,
         stance_asymmetry=0.40,
@@ -676,16 +794,16 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
         right_arm_pose="idle",
         blink=blink,
     )
+    head_c, head_r, eye_l, eye_r, head_back_z = _scale_bomber_head_and_tall_antennae(scene, anchors, head_scale=0.90)
     _build_goggles(
         scene,
-        anchors["head_center"],
-        anchors["head_radii"],
-        anchors["eye_left"],
-        anchors["eye_right"],
+        head_c,
+        head_r,
+        eye_l,
+        eye_r,
         float(anchors.get("eyelid_closed_angle", 1.80)),
     )
-    head_back = anchors.get("head_back", (0.0, anchors["head_center"][1], anchors["head_center"][2] - anchors["head_radii"][2]))
-    _build_dynamite_pack(scene, anchors["back_anchor"], anchors["thorax_center"], float(head_back[2]))
+    _build_dynamite_pack(scene, anchors["back_anchor"], anchors["thorax_center"], head_back_z)
 
     scene.attach_world_node("goggles", "head_group", preserve_world_pose=False)
     head_xf = scene.get_node_transform("head")

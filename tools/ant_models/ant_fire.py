@@ -1,4 +1,4 @@
-"""Sculpted 3D Fire Ant (snug 8-rib American firefighter helmet, 'A' shield, magnifier, 0.60s Idle).
+"""Sculpted 3D Fire Ant (Option A: 1998 Wide Billboard yellow plastic helmet + empty idle hands).
 
 Coordinate system (glTF 2.0 right-handed):
   +Y = up (feet grounded solidly at Y = 0.0)
@@ -22,7 +22,6 @@ try:
         curved_tube,
         cylinder,
         ellipsoid,
-        extrude_polygon,
         hemisphere_shell,
         lathe,
         quat_from_euler_xyz,
@@ -42,7 +41,6 @@ except ImportError:
         curved_tube,
         cylinder,
         ellipsoid,
-        extrude_polygon,
         hemisphere_shell,
         lathe,
         quat_from_euler_xyz,
@@ -53,33 +51,35 @@ except ImportError:
         torus_arc,
     )
 
-# Inquisitive bent-elbow right-arm hold lifting the magnifying glass as if inspecting for sparks.
+_HAT_MAT = "gear_yellow_plastic"
+
+# Optional right-arm pose when `hold_magnifying_glass=True` (kept for Fire's fire-starting animation).
 _FIRE_RIGHT_ARM: List[Tuple[float, float, float]] = [
-    (-0.106, 0.478, 0.016),
-    (-0.206, 0.440, 0.072),
-    (-0.212, 0.482, 0.178),
-    (-0.198, 0.512, 0.234),
+    (-0.078, 0.456, 0.014),
+    (-0.184, 0.422, 0.068),
+    (-0.194, 0.464, 0.168),
+    (-0.182, 0.494, 0.222),
 ]
 
 
 def _brim_radial_and_y(theta: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Compute crisp flat horizontal American firefighter helmet brim + gently sloped rear ducktail."""
+    """Compute Option A wide flat horizontal front/side brim + sweeping downward rear ducktail neck guard."""
     cos_t = np.cos(theta)
     sin_t = np.sin(theta)
-    front_w = np.clip(cos_t, 0.0, 1.0) ** 1.4
+    front_w = np.clip(cos_t, 0.0, 1.0) ** 1.35
     side_w = sin_t * sin_t
-    rear_w = (0.5 * (1.0 - cos_t)) ** 1.30
+    rear_w = (0.5 * (1.0 - cos_t)) ** 1.45
 
-    # Crisp flat horizontal flare around front & sides (zero bucket-hat droop), flowing smoothly
-    # into the longer classic rear firefighter ducktail with only a gentle downward slope.
-    x_flare = 0.24 * front_w + 0.24 * side_w + 0.34 * rear_w
-    z_flare = 0.34 * front_w + 0.22 * side_w + 1.02 * rear_w
-    y_shift = 0.010 * front_w + 0.004 * side_w - 0.044 * rear_w
+    # Crisp wide flat horizontal brim around front & sides, transitioning smoothly into a generous
+    # downward-sweeping rear ducktail neck guard matching Option A's 3/4 and side profile.
+    x_flare = 0.26 * front_w + 0.24 * side_w + 0.30 * rear_w
+    z_flare = 0.36 * front_w + 0.22 * side_w + 0.94 * rear_w
+    y_shift = 0.008 * front_w + 0.002 * side_w - 0.132 * rear_w
     return x_flare, z_flare, y_shift
 
 
 def _helmet_shell_deform(pos: np.ndarray) -> np.ndarray:
-    """Sculpt classic American traditional firefighter helmet: tall bell dome + flat horizontal brim."""
+    """Sculpt Option A rounded yellow plastic dome + flat horizontal front/side brim + rear ducktail."""
     p = pos.copy()
     x, y, z = p[:, 0], p[:, 1], p[:, 2]
 
@@ -96,53 +96,87 @@ def _helmet_shell_deform(pos: np.ndarray) -> np.ndarray:
     p[:, 0] = x * (1.0 + brim * x_flare)
     p[:, 2] = z * (1.0 + brim * z_flare)
 
-    # Lift the brim base upward into a crisp flat horizontal shelf (eliminating bucket/bell droop).
-    flatten_lift = 0.044 * (brim_t ** 1.35)
+    # Lift the front/side brim shelf horizontally flat while letting the rear ducktail sweep down smoothly.
+    rear_w = (0.5 * (1.0 - np.cos(theta))) ** 1.45
+    flatten_lift = 0.044 * (1.0 - 0.30 * rear_w) * (brim_t ** 1.35)
     edge_mask = np.clip(1.0 - h / 0.06, 0.0, 1.0) ** 2
-    lip_curl = (0.008 * (0.5 + 0.5 * np.cos(theta)) + 0.009 * ((0.5 * (1.0 - np.cos(theta))) ** 1.3)) * edge_mask
+    lip_curl = 0.007 * (0.5 + 0.5 * np.cos(theta)) * edge_mask
     p[:, 1] = y + flatten_lift + brim * y_shift + lip_curl
     return p
 
 
-def _build_letter_a() -> List[MeshPart]:
-    """Build a bold, sharp 3D embossed dark-crimson capital 'A' centered cleanly on the front shield."""
+def _build_option_a_billboard(
+    billboard_w: float,
+    billboard_h: float,
+    curve_depth: float,
+) -> MeshPart:
+    """Build Option A's wide, gently-curved vertical yellow plastic front billboard crown face."""
+    def _sculpt_billboard(pos: np.ndarray) -> np.ndarray:
+        p = pos.copy()
+        # u_y: 0.0 at brim base -> 1.0 at gently arched wide top crest.
+        u_y = np.clip((p[:, 1] + 0.5 * billboard_h) / max(1e-6, billboard_h), 0.0, 1.0)
+        # Gentle trapezoidal taper toward top so the wide billboard blends cleanly into the crown dome.
+        taper = 1.0 - 0.18 * (u_y ** 1.35)
+        p[:, 0] *= taper
+        nx = p[:, 0] / max(1e-6, 0.5 * billboard_w)
+        # Broad gentle arch across the top edge (not pointed, not square).
+        top_mask = np.clip((u_y - 0.50) / 0.50, 0.0, 1.0)
+        p[:, 1] -= 0.022 * (nx * nx) * top_mask
+        # Smooth horizontal wrap AND gentle upper crown sweep back so top/sides melt seamlessly into the dome.
+        p[:, 2] -= curve_depth * (nx * nx) + 0.024 * (u_y ** 1.75)
+        return p
+
+    return rounded_box(
+        billboard_w,
+        billboard_h,
+        0.116,
+        bevel=0.020,
+        segs=5,
+        name="helmet_front_billboard",
+        material=_HAT_MAT,
+    ).deform(_sculpt_billboard)
+
+
+def _build_giant_letter_a(billboard_w: float, billboard_h: float, curve_depth: float) -> List[MeshPart]:
+    """Build a giant, bold, clean sans-serif crimson 'A' curving smoothly onto the yellow billboard.
+
+    Sits directly on the bright yellow billboard face with ZERO dark backing plaque or shield.
+    """
     parts: List[MeshPart] = []
-    thickness = 0.020
-    stroke_w = 0.026
-    leg_len = 0.124
-    tilt_deg = 21.5
+    thickness = 0.024
+    stroke_w = 0.036
+    leg_len = 0.168
+    tilt_deg = 20.5
 
     left_leg = (
-        rounded_box(stroke_w, leg_len, thickness, bevel=0.0045, segs=3, name="letter_a_left", material="gear_accent")
+        rounded_box(stroke_w, leg_len, thickness, bevel=0.0055, segs=3, name="letter_a_left", material="gear_accent")
         .rotate_xyz(rz=-tilt_deg, degrees=True)
-        .translate(-0.024, 0.0, 0.0)
+        .translate(-0.032, 0.0, 0.0)
     )
     right_leg = (
-        rounded_box(stroke_w, leg_len, thickness, bevel=0.0045, segs=3, name="letter_a_right", material="gear_accent")
+        rounded_box(stroke_w, leg_len, thickness, bevel=0.0055, segs=3, name="letter_a_right", material="gear_accent")
         .rotate_xyz(rz=+tilt_deg, degrees=True)
-        .translate(+0.024, 0.0, 0.0)
+        .translate(+0.032, 0.0, 0.0)
     )
-    parts.extend([left_leg, right_leg])
-
     apex = (
-        rounded_box(0.028, 0.020, thickness, bevel=0.0045, segs=2, name="letter_a_apex", material="gear_accent")
-        .translate(0.0, 0.052, 0.0)
+        rounded_box(0.044, 0.028, thickness, bevel=0.0055, segs=2, name="letter_a_apex", material="gear_accent")
+        .translate(0.0, 0.066, 0.0)
     )
-    parts.append(apex)
-
     crossbar = (
-        rounded_box(0.074, 0.021, thickness, bevel=0.004, segs=2, name="letter_a_bar", material="gear_accent")
-        .translate(0.0, -0.020, 0.0)
+        rounded_box(0.096, 0.029, thickness, bevel=0.005, segs=2, name="letter_a_bar", material="gear_accent")
+        .translate(0.0, -0.022, 0.0)
     )
-    parts.append(crossbar)
+    raw_parts = [left_leg, right_leg, apex, crossbar]
 
-    for side_sign, tag in ((-1.0, "left"), (+1.0, "right")):
-        serif = (
-            rounded_box(0.042, 0.015, thickness, bevel=0.0035, segs=2, name=f"letter_a_serif_{tag}", material="gear_accent")
-            .translate(side_sign * 0.047, -0.056, 0.0)
-        )
-        parts.append(serif)
+    def _curve_onto_billboard(pos: np.ndarray) -> np.ndarray:
+        p = pos.copy()
+        u_y = np.clip((p[:, 1] - 0.004 + 0.5 * billboard_h) / max(1e-6, billboard_h), 0.0, 1.0)
+        nx = p[:, 0] / max(1e-6, 0.5 * billboard_w)
+        p[:, 2] -= curve_depth * (nx * nx) + 0.024 * (u_y ** 1.75)
+        return p
 
+    for part in raw_parts:
+        parts.append(part.deform(_curve_onto_billboard))
     return parts
 
 
@@ -154,7 +188,7 @@ def _measure_eyelid_max_y(
     """Measure the highest world Y reached by eyelid_left across full blink=0..1."""
     parts = scene.nodes.get("eyelid_left", [])
     if not parts:
-        return eye_left[1] + 0.082
+        return eye_left[1] + 0.092
     verts = np.vstack([p.positions.astype(np.float64) for p in parts])
     ey = float(eye_left[1])
     max_y = ey
@@ -175,20 +209,19 @@ def _build_fire_helmet(
     eye_left: Tuple[float, float, float],
     closed_angle: float,
 ) -> None:
-    """Build classic yellow 8-rib American firefighter helmet with bold rear ducktail brim."""
+    """Build Option A: 1998 Wide Billboard smooth yellow plastic firefighter helmet."""
     hx, _, hz = head_center
     hrx, _, hrz = head_radii
     eyelid_top_y = _measure_eyelid_max_y(scene, eye_left, closed_angle)
 
-    # Seat the crisp flat horizontal brim snugly right on the top brow above the compact eyes
-    # (`shell_y + y_base + 0.044` ~= eyelid_top_y + 0.012) while keeping the proud tall 8-ribbed dome.
+    # Seat crisp flat front/side brim snugly right on the brow above the cute eyes.
     shell_y = max(eyelid_top_y - 0.022, head_top[1] - 0.132)
-    shell_z = hz - 0.006
-    dome_rx = hrx + 0.012
-    dome_ry = max(0.278, (head_top[1] - shell_y) + 0.160)
+    shell_z = hz - 0.008
+    dome_rx = hrx + 0.016
+    dome_ry = max(0.268, (head_top[1] - shell_y) + 0.148)
     dome_rz = hrz + 0.018
 
-    # 1. Tall rounded bell dome + crisp flat horizontal outward-flaring firefighter brim.
+    # 1. Smooth sunny-yellow plastic dome + crisp flat front/side brim + sweeping downward rear ducktail.
     dome = (
         hemisphere_shell(
             dome_rx,
@@ -198,17 +231,17 @@ def _build_fire_helmet(
             start_phi=-0.04,
             u_segs=56,
             v_segs=26,
-            e1=0.94,
-            e2=0.94,
+            e1=0.92,
+            e2=0.92,
             deform_fn=_helmet_shell_deform,
             name="helmet_dome",
-            material="gear_gold",
+            material=_HAT_MAT,
         )
         .translate(hx, shell_y, shell_z)
     )
     scene.add("fire_helmet", dome)
 
-    # Clean rolled outer edge beading loop wrapping smoothly around the flat oval & ducktail brim.
+    # Smooth rolled yellow plastic outer brim edge bead hugging the exact perimeter.
     n_lip = 64
     lip_pts: List[Tuple[float, float, float]] = []
     start_phi = -0.04
@@ -221,23 +254,25 @@ def _build_fire_helmet(
         bz = dome_rz * c_phi * math.cos(ang)
         xf, zf, ys = _brim_radial_and_y(np.array([ang]))
         cos_a = math.cos(ang)
-        curl = 0.008 * (0.5 + 0.5 * cos_a) + 0.009 * ((0.5 * (1.0 - cos_a)) ** 1.3)
+        rw = (0.5 * (1.0 - cos_a)) ** 1.45
+        lift = 0.044 * (1.0 - 0.30 * rw)
+        curl = 0.007 * (0.5 + 0.5 * cos_a)
         lx = hx + bx * (1.0 + float(xf[0]))
-        ly = shell_y + y_base + 0.044 + float(ys[0]) + curl - 0.003
+        ly = shell_y + y_base + lift + float(ys[0]) + curl - 0.003
         lz = shell_z + bz * (1.0 + float(zf[0]))
         lip_pts.append((lx, ly, lz))
 
     brim_lip = swept_tube(
         lip_pts,
-        0.0135,
+        0.013,
         radial_segs=10,
         closed=True,
         name="helmet_brim_lip",
-        material="gear_gold",
+        material=_HAT_MAT,
     )
     scene.add("fire_helmet", brim_lip)
 
-    # Dark inner head-liner band seated cleanly inside the dome above the flat horizontal brim.
+    # Dark inner head-liner band tucked cleanly inside the yellow plastic shell.
     liner = (
         cylinder(hrx * 0.94, hrx * 0.97, 0.036, radial_segs=26, bevel=0.006, axis="y", name="helmet_liner", material="gear_dark")
         .scale(1.0, 1.0, hrz / max(1e-6, hrx))
@@ -245,16 +280,13 @@ def _build_fire_helmet(
     )
     scene.add("fire_helmet", liner)
 
-    # 2. Classic 8 radiating molded firefighter crown ribs ending cleanly at the flat brim crease.
+    # 2. Clean subtle molded ribs along the side & back dome behind the wide front billboard.
     rib_specs = (
-        (0.0, 0.52, 0.020, "front"),
-        (180.0, 0.24, 0.022, "back"),
-        (90.0, 0.25, 0.018, "left"),
-        (-90.0, 0.25, 0.018, "right"),
-        (46.0, 0.26, 0.017, "fl"),
-        (-46.0, 0.26, 0.017, "fr"),
-        (134.0, 0.24, 0.017, "bl"),
-        (-134.0, 0.24, 0.017, "br"),
+        (180.0, 0.22, 0.019, "back"),
+        (86.0, 0.24, 0.016, "left"),
+        (-86.0, 0.24, 0.016, "right"),
+        (132.0, 0.22, 0.016, "bl"),
+        (-132.0, 0.22, 0.016, "br"),
     )
     for az_deg, phi_end, peak_rad, tag in rib_specs:
         az = math.radians(az_deg)
@@ -263,10 +295,10 @@ def _build_fire_helmet(
         r_pts: List[Tuple[float, float, float]] = []
         r_rads: List[float] = []
         for k, phi in enumerate(phis):
-            cp = float(abs(math.cos(phi)) ** 0.94)
-            sp = float(abs(math.sin(phi)) ** 0.94)
+            cp = float(abs(math.cos(phi)) ** 0.92)
+            sp = float(abs(math.sin(phi)) ** 0.92)
             t_arc = k / (len(phis) - 1)
-            lift = 0.011 * (1.0 - 0.55 * (t_arc * t_arc))
+            lift = 0.010 * (1.0 - 0.55 * (t_arc * t_arc))
             px = hx + (dome_rx + lift) * cp * sa
             py = shell_y + (dome_ry + lift) * sp
             pz = shell_z + (dome_rz + lift) * cp * ca
@@ -279,81 +311,53 @@ def _build_fire_helmet(
             radial_segs=10,
             cap_rings=2,
             name=f"helmet_rib_{tag}",
-            material="gear_gold",
+            material=_HAT_MAT,
         )
         scene.add("fire_helmet", rib)
 
-    crown_hub = (
-        ellipsoid(0.042, 0.024, 0.048, u_segs=16, v_segs=10, name="helmet_crown_hub", material="gear_gold")
-        .translate(hx, shell_y + dome_ry + 0.009, shell_z)
-    )
-    scene.add("fire_helmet", crown_hub)
-
-    # 3. Tall classic scalloped firefighter front shield badge holding the bold 3D crimson 'A'.
-    shield_poly = [
-        (0.000, +0.136),
-        (+0.032, +0.110),
-        (+0.072, +0.099),
-        (+0.089, +0.078),
-        (+0.080, +0.022),
-        (+0.089, -0.024),
-        (+0.085, -0.082),
-        (+0.050, -0.102),
-        (0.000, -0.108),
-        (-0.050, -0.102),
-        (-0.085, -0.082),
-        (-0.089, -0.024),
-        (-0.080, +0.022),
-        (-0.089, +0.078),
-        (-0.072, +0.099),
-        (-0.032, +0.110),
+    # Subtle top crown spine ridge running smoothly from the billboard top back into the rear dome.
+    crest_pts = [
+        (hx, shell_y + dome_ry + 0.002, shell_z + dome_rz * 0.45),
+        (hx, shell_y + dome_ry + 0.011, shell_z + 0.010),
+        (hx, shell_y + dome_ry - 0.004, shell_z - dome_rz * 0.42),
     ]
-    shield_tilt_x = -15.0
-    shield_pos = (hx, shell_y + 0.156, shell_z + dome_rz + 0.001)
-
-    shield_plate = (
-        extrude_polygon(shield_poly, depth=0.018, name="helmet_shield_plate", material="gear_gold_metal")
-        .rotate_xyz(rx=shield_tilt_x, degrees=True)
-        .translate(*shield_pos)
+    crest = curved_tube(
+        crest_pts,
+        [0.018, 0.022, 0.018],
+        samples_per_seg=4,
+        radial_segs=10,
+        cap_rings=2,
+        name="helmet_crown_crest",
+        material=_HAT_MAT,
     )
-    scene.add("fire_helmet", shield_plate)
+    scene.add("fire_helmet", crest)
 
-    border_pts = [(px, py, 0.007) for px, py in shield_poly]
-    shield_border = (
-        curved_tube(
-            border_pts,
-            0.0085,
-            samples_per_seg=3,
-            radial_segs=10,
-            closed=True,
-            name="helmet_shield_border",
-            material="gear_dark",
-        )
-        .rotate_xyz(rx=shield_tilt_x, degrees=True)
-        .translate(*shield_pos)
+    # 3. Option A's wide, gently-curved vertical yellow front billboard face + giant red 'A' directly on it.
+    billboard_w = dome_rx * 1.38  # Wide iconic 1998 front billboard (~0.298 wide)
+    billboard_h = dome_ry * 0.84  # Tall proud vertical front panel (~0.226 tall)
+    curve_depth = 0.064
+    billboard_tilt_x = -11.5
+    # Seat billboard deep into front dome so rear & top edges merge seamlessly with zero step in 201/901.
+    billboard_pos = (hx, shell_y + 0.150, shell_z + dome_rz - 0.036)
+
+    billboard = (
+        _build_option_a_billboard(billboard_w, billboard_h, curve_depth)
+        .rotate_xyz(rx=billboard_tilt_x, degrees=True)
+        .translate(*billboard_pos)
     )
-    scene.add("fire_helmet", shield_border)
+    scene.add("fire_helmet", billboard)
 
-    for rv_idx, (rvx, rvy) in enumerate(((0.0, 0.104), (-0.068, -0.072), (+0.068, -0.072))):
-        rivet = (
-            sphere(0.008, u_segs=10, v_segs=8, name=f"helmet_shield_rivet_{rv_idx}", material="gear_steel")
-            .translate(rvx, rvy, 0.014)
-            .rotate_xyz(rx=shield_tilt_x, degrees=True)
-            .translate(*shield_pos)
-        )
-        scene.add("fire_helmet", rivet)
-
-    for part in _build_letter_a():
+    # Giant bold crimson 'A' sitting cleanly and directly on the wide yellow front billboard (zero plaque!).
+    for part in _build_giant_letter_a(billboard_w, billboard_h, curve_depth):
         placed = (
-            part.scale(1.0, 1.12, 1.0)
-            .translate(0.0, -0.005, 0.015)
-            .rotate_xyz(rx=shield_tilt_x, degrees=True)
-            .translate(*shield_pos)
+            part.translate(0.0, -0.004, 0.054)
+            .rotate_xyz(rx=billboard_tilt_x, degrees=True)
+            .translate(*billboard_pos)
         )
         scene.add("fire_helmet", placed)
 
 
-def _build_magnifying_glass(
+def build_magnifying_glass(
     scene: SceneBuilder,
     right_hand: Tuple[float, float, float],
     right_hand_dir: Tuple[float, float, float],
@@ -436,12 +440,13 @@ def _build_magnifying_glass(
     )
     parts.append(lens)
 
-    # Keep magnifying glass in grip-local coordinates with node pivot at the right pincer pocket,
-    # angled slightly inquisitively forward as if inspecting for sparks during the calm 1.50s Idle.
     for part in parts:
         placed = part.rotate_xyz(rx=18.0, ry=-12.0, rz=10.0, degrees=True)
         scene.add("magnifying_glass", placed)
     scene.set_node_transform("magnifying_glass", translation=(grip_x, grip_y, grip_z))
+
+
+_build_magnifying_glass = build_magnifying_glass
 
 
 def _add_fire_idle(scene: SceneBuilder) -> AnimationClip:
@@ -507,8 +512,8 @@ def _add_fire_idle(scene: SceneBuilder) -> AnimationClip:
     return scene.add_animation("Idle", channels, replace=True)
 
 
-def build_fire(blink: float = 0.0) -> SceneBuilder:
-    """Build the sculpted 3D Fire Ant SceneBuilder with plucky hero expression, Blink, and 1.50s Idle."""
+def build_fire(blink: float = 0.0, *, hold_magnifying_glass: bool = False) -> SceneBuilder:
+    """Build the sculpted 3D Fire Ant SceneBuilder (Option A Wide Billboard hat, empty idle hands)."""
     scene, anchors = build_base_ant(
         scene_name="ant_fire",
         include_antennae=False,
@@ -517,12 +522,12 @@ def build_fire(blink: float = 0.0) -> SceneBuilder:
         brow_style="plucky",
         head_tilt_deg=3.5,
         head_yaw_deg=-3.0,
-        head_pitch_deg=-11.0,
+        head_pitch_deg=-15.5,
         eye_look=(0.05, 0.04),
         stance_asymmetry=0.35,
         include_idle=False,
         left_arm_pose="idle",
-        right_arm_pose=_FIRE_RIGHT_ARM,
+        right_arm_pose=_FIRE_RIGHT_ARM if hold_magnifying_glass else "idle",
         blink=blink,
     )
     _build_fire_helmet(
@@ -533,17 +538,19 @@ def build_fire(blink: float = 0.0) -> SceneBuilder:
         anchors["eye_left"],
         float(anchors.get("eyelid_closed_angle", 1.80)),
     )
-    _build_magnifying_glass(scene, anchors["right_hand"], anchors["right_hand_dir"])
-
     scene.attach_world_node("fire_helmet", "head_group", preserve_world_pose=False)
     head_xf = scene.get_node_transform("head")
     if head_xf is not None:
         scene.set_node_transform("fire_helmet", translation=head_xf.translation)
-    scene.attach_world_node("magnifying_glass", "upper_body", preserve_world_pose=False)
+
+    if hold_magnifying_glass:
+        build_magnifying_glass(scene, anchors["right_hand"], anchors["right_hand_dir"])
+        scene.attach_world_node("magnifying_glass", "upper_body", preserve_world_pose=False)
+
     _add_fire_idle(scene)
     return scene
 
 
-def build_ant(blink: float = 0.0) -> SceneBuilder:
+def build_ant(blink: float = 0.0, *, hold_magnifying_glass: bool = False) -> SceneBuilder:
     """Canonical entry point discovered by build_all.py."""
-    return build_fire(blink=blink)
+    return build_fire(blink=blink, hold_magnifying_glass=hold_magnifying_glass)
