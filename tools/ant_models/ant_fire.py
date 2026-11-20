@@ -1,4 +1,4 @@
-"""Sculpted 3D Fire Ant (classic 8-rib American firefighter helmet with 'A' shield + see-through magnifier).
+"""Sculpted 3D Fire Ant (snug 8-rib American firefighter helmet, 'A' shield, magnifier, 0.60s Idle).
 
 Coordinate system (glTF 2.0 right-handed):
   +Y = up (feet grounded solidly at Y = 0.0)
@@ -15,6 +15,8 @@ import numpy as np
 try:
     from .base_ant import build_base_ant
     from .mesh_core import (
+        AnimationChannel,
+        AnimationClip,
         MeshPart,
         SceneBuilder,
         curved_tube,
@@ -23,6 +25,8 @@ try:
         extrude_polygon,
         hemisphere_shell,
         lathe,
+        quat_from_euler_xyz,
+        quat_mul,
         rounded_box,
         sphere,
         swept_tube,
@@ -31,6 +35,8 @@ try:
 except ImportError:
     from base_ant import build_base_ant  # type: ignore
     from mesh_core import (  # type: ignore
+        AnimationChannel,
+        AnimationClip,
         MeshPart,
         SceneBuilder,
         curved_tube,
@@ -39,6 +45,8 @@ except ImportError:
         extrude_polygon,
         hemisphere_shell,
         lathe,
+        quat_from_euler_xyz,
+        quat_mul,
         rounded_box,
         sphere,
         swept_tube,
@@ -55,18 +63,18 @@ _FIRE_RIGHT_ARM: List[Tuple[float, float, float]] = [
 
 
 def _brim_radial_and_y(theta: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Compute horizontal-sweeping traditional firefighter helmet brim flare & height vs azimuth."""
+    """Compute sleek fitted American firefighter helmet brim + bold downward-sweeping rear ducktail."""
     cos_t = np.cos(theta)
     sin_t = np.sin(theta)
     front_w = np.clip(cos_t, 0.0, 1.0) ** 1.4
     side_w = sin_t * sin_t
     rear_w = (0.5 * (1.0 - cos_t)) ** 1.25
 
-    # Classic traditional firefighter oval brim: crisp front bill, sleek flared sides, and a bold
-    # wide horizontal-sloped rear ducktail extending generously behind the neck/shoulders.
-    x_flare = 0.24 * front_w + 0.28 * side_w + 0.46 * rear_w
-    z_flare = 0.34 * front_w + 0.28 * side_w + 1.15 * rear_w
-    y_shift = 0.018 * front_w - 0.010 * side_w - 0.092 * rear_w
+    # Tight fitted side brim (never wide like a sun-hat) + crisp front bill + bold sweeping
+    # downward-sloped rear ducktail neck guard extending generously behind the skull & neck.
+    x_flare = 0.16 * front_w + 0.15 * side_w + 0.28 * rear_w
+    z_flare = 0.28 * front_w + 0.18 * side_w + 1.05 * rear_w
+    y_shift = 0.016 * front_w - 0.014 * side_w - 0.155 * rear_w
     return x_flare, z_flare, y_shift
 
 
@@ -170,12 +178,13 @@ def _build_fire_helmet(
     hrx, _, hrz = head_radii
     eyelid_top_y = _measure_eyelid_max_y(scene, eye_left, closed_angle)
 
-    # Seat helmet brim cleanly above the big eyes & blinking eyelids while hugging the crown tightly.
-    shell_y = max(eyelid_top_y + 0.022, head_top[1] - 0.148)
+    # Seat helmet brim snugly down right onto the top brow above the eyes (hiding excess forehead)
+    # while leaving crisp clearance above full blink=0..1 eyelids and hugging the crown tightly.
+    shell_y = max(eyelid_top_y + 0.008, head_top[1] - 0.112)
     shell_z = hz - 0.008
-    dome_rx = hrx + 0.018
-    dome_ry = max(0.212, (head_top[1] - shell_y) + 0.088)
-    dome_rz = hrz + 0.028
+    dome_rx = hrx + 0.012
+    dome_ry = max(0.194, (head_top[1] - shell_y) + 0.092)
+    dome_rz = hrz + 0.020
 
     # 1. Smooth rounded bell dome + wide horizontal-sweeping rear ducktail brim.
     dome = (
@@ -298,7 +307,7 @@ def _build_fire_helmet(
         (-0.032, +0.098),
     ]
     shield_tilt_x = -20.0
-    shield_pos = (hx, shell_y + 0.106, shell_z + dome_rz + 0.004)
+    shield_pos = (hx, shell_y + 0.096, shell_z + dome_rz + 0.003)
 
     shield_plate = (
         extrude_polygon(shield_poly, depth=0.018, name="helmet_shield_plate", material="gear_gold_metal")
@@ -424,23 +433,85 @@ def _build_magnifying_glass(
     )
     parts.append(lens)
 
-    # Handle seated cleanly directly inside the right pincer-grip pocket at chest height, angled
-    # upright-forward so the hollow see-through lens clears the helmet brim, arm, and ground.
+    # Keep magnifying glass in grip-local coordinates with node pivot at the right pincer pocket so
+    # it follows `upper_body` and adds a subtle eager wrist tilt during the 0.60s firefighter bounce.
     for part in parts:
-        placed = (
-            part.rotate_xyz(rx=24.0, ry=-22.0, rz=14.0, degrees=True)
-            .translate(grip_x, grip_y, grip_z)
-        )
+        placed = part.rotate_xyz(rx=24.0, ry=-22.0, rz=14.0, degrees=True)
         scene.add("magnifying_glass", placed)
+    scene.set_node_transform("magnifying_glass", translation=(grip_x, grip_y, grip_z))
+
+
+def _add_fire_idle(scene: SceneBuilder) -> AnimationClip:
+    """Attach Fire's original 1998 600 ms brisk eager bounce + chin-up helmet nod Idle clip (`afst301`)."""
+    dur = 0.60
+    n_steps = 16
+    times = [round(dur * k / n_steps, 5) for k in range(n_steps + 1)]
+
+    def _rest_t(node: str) -> Tuple[float, float, float]:
+        xf = scene.get_node_transform(node)
+        return xf.translation if xf is not None else (0.0, 0.0, 0.0)
+
+    def _rest_r(node: str) -> Tuple[float, float, float, float]:
+        xf = scene.get_node_transform(node)
+        return xf.rotation if xf is not None else (0.0, 0.0, 0.0, 1.0)
+
+    channels: List[AnimationChannel] = []
+    pumps = [(0.5 * (1.0 - math.cos(2.0 * math.pi * (k / n_steps)))) ** 0.85 for k in range(n_steps + 1)]
+    pumps[-1] = pumps[0]
+
+    bx, by, bz = _rest_t("upper_body")
+    body_t = [(bx, by + 0.052 * p, bz - 0.006 * p) for p in pumps]
+    body_t[-1] = body_t[0]
+    channels.append(AnimationChannel("upper_body", "translation", list(times), body_t))
+
+    r0_b = _rest_r("upper_body")
+    body_r = [quat_mul(r0_b, quat_from_euler_xyz(rx=-0.055 * p)) for p in pumps]
+    body_r[-1] = body_r[0]
+    channels.append(AnimationChannel("upper_body", "rotation", list(times), body_r))
+
+    r0_h = _rest_r("head_group")
+    head_r = [
+        quat_mul(
+            r0_h,
+            quat_from_euler_xyz(
+                rx=-0.145 * pumps[k],
+                rz=0.022 * math.sin(2.0 * math.pi * (k / n_steps)),
+            ),
+        )
+        for k in range(n_steps + 1)
+    ]
+    head_r[-1] = head_r[0]
+    channels.append(AnimationChannel("head_group", "rotation", list(times), head_r))
+
+    if "magnifying_glass" in scene.nodes and scene.get_node("magnifying_glass"):
+        r0_m = _rest_r("magnifying_glass")
+        mag_r = [quat_mul(r0_m, quat_from_euler_xyz(rx=-0.065 * p, rz=-0.032 * p)) for p in pumps]
+        mag_r[-1] = mag_r[0]
+        channels.append(AnimationChannel("magnifying_glass", "rotation", list(times), mag_r))
+
+    if "gaster_group" in scene.nodes:
+        r0_g = _rest_r("gaster_group")
+        g_r = [quat_mul(r0_g, quat_from_euler_xyz(rx=0.075 * p)) for p in pumps]
+        g_r[-1] = g_r[0]
+        channels.append(AnimationChannel("gaster_group", "rotation", list(times), g_r))
+
+    if "mandibles" in scene.nodes and scene.get_node("mandibles"):
+        r0_j = _rest_r("mandibles")
+        j_r = [quat_mul(r0_j, quat_from_euler_xyz(rx=0.036 * p)) for p in pumps]
+        j_r[-1] = j_r[0]
+        channels.append(AnimationChannel("mandibles", "rotation", list(times), j_r))
+
+    return scene.add_animation("Idle", channels, replace=True)
 
 
 def build_fire(blink: float = 0.0) -> SceneBuilder:
-    """Build the sculpted 3D Fire Ant SceneBuilder with intact Blink animation."""
+    """Build the sculpted 3D Fire Ant SceneBuilder with Blink + 0.60s brisk bounce Idle clips."""
     scene, anchors = build_base_ant(
         scene_name="ant_fire",
         include_antennae=False,
         include_eyes=True,
         include_brows=False,
+        include_idle=False,
         left_arm_pose="idle",
         right_arm_pose=_FIRE_RIGHT_ARM,
         blink=blink,
@@ -451,9 +522,13 @@ def build_fire(blink: float = 0.0) -> SceneBuilder:
         anchors["head_radii"],
         anchors["head_top"],
         anchors["eye_left"],
-        float(anchors.get("eyelid_closed_angle", 1.66)),
+        float(anchors.get("eyelid_closed_angle", 1.80)),
     )
     _build_magnifying_glass(scene, anchors["right_hand"], anchors["right_hand_dir"])
+
+    scene.attach_world_node("fire_helmet", "head_group")
+    scene.attach_world_node("magnifying_glass", "upper_body")
+    _add_fire_idle(scene)
     return scene
 
 

@@ -1,4 +1,4 @@
-"""Sculpted 3D Swimmer Ant (bold chunky scuba mask, banded snorkel, brushed-steel tank, flippers, classic shovel).
+"""Sculpted 3D Swimmer Ant (bold chunky scuba mask, snorkel, steel tank, flippers, shovel, 0.90s Idle).
 
 Coordinate system (glTF 2.0 right-handed):
   +Y = up (feet and diving flippers grounded solidly at Y = 0.0)
@@ -15,12 +15,16 @@ import numpy as np
 try:
     from .base_ant import build_base_ant
     from .mesh_core import (
+        AnimationChannel,
+        AnimationClip,
         MeshPart,
         SceneBuilder,
         capsule,
         curved_tube,
         cylinder,
         lathe,
+        quat_from_euler_xyz,
+        quat_mul,
         rounded_box,
         sphere,
         superellipsoid,
@@ -30,12 +34,16 @@ try:
 except ImportError:
     from base_ant import build_base_ant  # type: ignore
     from mesh_core import (  # type: ignore
+        AnimationChannel,
+        AnimationClip,
         MeshPart,
         SceneBuilder,
         capsule,
         curved_tube,
         cylinder,
         lathe,
+        quat_from_euler_xyz,
+        quat_mul,
         rounded_box,
         sphere,
         superellipsoid,
@@ -150,9 +158,9 @@ def _build_scuba_mask(
     oval_exp = 0.74
     curve_depth = 0.052
 
-    # Wide crystal-clear open oval window guaranteed to frame both big eyes & eyelids cleanly.
-    rx_in = max(hrx * 0.84, (eye_max_x - hx) + 0.015)
-    ry_in = max(0.106, eye_max_dy + 0.016)
+    # Wide crystal-clear open oval window framed cleanly around the trimmed rich-iris eyes & eyelids.
+    rx_in = max(hrx * 0.80, (eye_max_x - hx) + 0.015)
+    ry_in = max(0.102, eye_max_dy + 0.015)
     wall_t = 0.042  # Chunky, bold yellow molded scuba bezel thickness
     rx_out = rx_in + wall_t
 
@@ -702,33 +710,145 @@ def _build_shovel(
     )
     parts.append(blade_rib)
 
-    # Natural confident ready-carry beside right side: closed yellow D-handle stays clearly visible below
-    # the yellow scuba mask, while the broad scooped yellow spade rides forward-downward cleanly off ground.
+    # Keep shovel parts in hand-grip-local coordinates with node transform at the right fist pivot so
+    # the shovel rides with `upper_body` AND rocks gently around his grip during the 0.90s Idle sway.
     for part in parts:
-        placed = (
-            part.rotate_xyz(rx=-29.0, ry=-24.0, rz=12.0, degrees=True)
-            .translate(grip_x, grip_y, grip_z)
-        )
+        placed = part.rotate_xyz(rx=-29.0, ry=-24.0, rz=12.0, degrees=True)
         scene.add("shovel", placed)
+    scene.set_node_transform("shovel", translation=(grip_x, grip_y, grip_z))
+
+
+def _add_swimmer_idle(scene: SceneBuilder) -> AnimationClip:
+    """Attach Swimmer's original 1998 900 ms smooth aquatic sway + shovel rock Idle clip (`asst301`)."""
+    dur = 0.90
+    n_steps = 16
+    times = [round(dur * k / n_steps, 5) for k in range(n_steps + 1)]
+
+    def _rest_t(node: str) -> Tuple[float, float, float]:
+        xf = scene.get_node_transform(node)
+        return xf.translation if xf is not None else (0.0, 0.0, 0.0)
+
+    def _rest_r(node: str) -> Tuple[float, float, float, float]:
+        xf = scene.get_node_transform(node)
+        return xf.rotation if xf is not None else (0.0, 0.0, 0.0, 1.0)
+
+    channels: List[AnimationChannel] = []
+
+    bx, by, bz = _rest_t("upper_body")
+    body_t = []
+    for k in range(n_steps + 1):
+        ph = 2.0 * math.pi * (k / n_steps)
+        dip = 0.5 * (1.0 - math.cos(ph))
+        sway = math.sin(ph)
+        body_t.append((bx + 0.015 * sway, by - 0.022 * dip, bz + 0.004 * dip))
+    body_t[-1] = body_t[0]
+    channels.append(AnimationChannel("upper_body", "translation", list(times), body_t))
+
+    r0_b = _rest_r("upper_body")
+    body_r = [
+        quat_mul(
+            r0_b,
+            quat_from_euler_xyz(
+                rx=0.026 * math.sin(2.0 * math.pi * (k / n_steps)),
+                rz=0.072 * math.sin(2.0 * math.pi * (k / n_steps)),
+            ),
+        )
+        for k in range(n_steps + 1)
+    ]
+    body_r[-1] = body_r[0]
+    channels.append(AnimationChannel("upper_body", "rotation", list(times), body_r))
+
+    r0_h = _rest_r("head_group")
+    head_r = [
+        quat_mul(
+            r0_h,
+            quat_from_euler_xyz(
+                rx=0.032 * math.sin(2.0 * math.pi * (k / n_steps) - 0.25),
+                ry=0.062 * math.sin(2.0 * math.pi * (k / n_steps)),
+                rz=0.120 * math.sin(2.0 * math.pi * (k / n_steps) - 0.20),
+            ),
+        )
+        for k in range(n_steps + 1)
+    ]
+    head_r[-1] = head_r[0]
+    channels.append(AnimationChannel("head_group", "rotation", list(times), head_r))
+
+    if "shovel" in scene.nodes and scene.get_node("shovel"):
+        r0_sh = _rest_r("shovel")
+        sh_r = [
+            quat_mul(
+                r0_sh,
+                quat_from_euler_xyz(
+                    rx=0.072 * math.sin(2.0 * math.pi * (k / n_steps) - 0.35),
+                    rz=0.045 * math.sin(2.0 * math.pi * (k / n_steps) - 0.20),
+                ),
+            )
+            for k in range(n_steps + 1)
+        ]
+        sh_r[-1] = sh_r[0]
+        channels.append(AnimationChannel("shovel", "rotation", list(times), sh_r))
+
+    if "gaster_group" in scene.nodes:
+        r0_g = _rest_r("gaster_group")
+        g_r = [
+            quat_mul(r0_g, quat_from_euler_xyz(rx=-0.045 * math.sin(2.0 * math.pi * (k / n_steps))))
+            for k in range(n_steps + 1)
+        ]
+        g_r[-1] = g_r[0]
+        channels.append(AnimationChannel("gaster_group", "rotation", list(times), g_r))
+
+    for node_name, side, poff in (("antenna_left", 1.0, 0.0), ("antenna_right", -1.0, 0.7)):
+        if node_name in scene.nodes and scene.get_node(node_name):
+            r0_a = _rest_r(node_name)
+            a_r = [
+                quat_mul(
+                    r0_a,
+                    quat_from_euler_xyz(
+                        rx=0.085 * math.sin(2.0 * math.pi * (k / n_steps) + poff),
+                        rz=side * 0.060 * math.sin(2.0 * math.pi * (k / n_steps) - 0.3),
+                    ),
+                )
+                for k in range(n_steps + 1)
+            ]
+            a_r[-1] = a_r[0]
+            channels.append(AnimationChannel(node_name, "rotation", list(times), a_r))
+
+    if "mandibles" in scene.nodes and scene.get_node("mandibles"):
+        r0_m = _rest_r("mandibles")
+        m_r = [
+            quat_mul(r0_m, quat_from_euler_xyz(rx=0.028 * 0.5 * (1.0 - math.cos(2.0 * math.pi * (k / n_steps)))))
+            for k in range(n_steps + 1)
+        ]
+        m_r[-1] = m_r[0]
+        channels.append(AnimationChannel("mandibles", "rotation", list(times), m_r))
+
+    return scene.add_animation("Idle", channels, replace=True)
 
 
 def build_swimmer(blink: float = 0.0) -> SceneBuilder:
-    """Build the sculpted 3D Swimmer Ant SceneBuilder with intact Blink animation."""
+    """Build the sculpted 3D Swimmer Ant SceneBuilder with Blink + 0.90s aquatic sway Idle clips."""
     scene, anchors = build_base_ant(
         scene_name="ant_swimmer",
         include_antennae=True,
         include_eyes=True,
         include_brows=False,
+        include_idle=False,
         left_arm_pose="idle",
         right_arm_pose=_SWIMMER_RIGHT_ARM,
         blink=blink,
     )
-    closed_angle = float(anchors.get("eyelid_closed_angle", 1.66))
+    closed_angle = float(anchors.get("eyelid_closed_angle", 1.80))
     clip_anchor = _build_scuba_mask(scene, anchors["head_center"], anchors["head_radii"], anchors["eye_left"], closed_angle)
     _build_snorkel(scene, anchors["head_center"], anchors["head_top"], clip_anchor)
     _build_scuba_tank(scene, anchors["back_anchor"], anchors["thorax_center"])
     _build_flippers(scene, anchors)
     _build_shovel(scene, anchors["right_hand"], anchors["right_hand_dir"])
+
+    scene.attach_world_node("scuba_mask", "head_group")
+    scene.attach_world_node("snorkel", "head_group")
+    scene.attach_world_node("scuba_tank", "upper_body")
+    scene.attach_world_node("shovel", "upper_body")
+    _add_swimmer_idle(scene)
     return scene
 
 
