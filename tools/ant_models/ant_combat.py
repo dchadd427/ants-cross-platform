@@ -81,8 +81,8 @@ except ImportError:
 
 Vec3 = Tuple[float, float, float]
 
-# Forward-leaning prowling commando head perched cleanly on a proud dark muscular neck (`acst901`).
-HEAD_CENTER: Vec3 = (0.0, 1.008, 0.144)
+# Lower, forward-leaning linebacker commando head tucked prowling ahead of massive shoulders (`acst301`/`901`).
+HEAD_CENTER: Vec3 = (0.0, 0.958, 0.176)
 HEAD_SCALE = 1.00
 EYE_OFFSET: Vec3 = (0.098, -0.002, 0.128)  # left eye relative to head center
 
@@ -250,9 +250,9 @@ def _build_torso(scene: SceneBuilder) -> np.ndarray:
     scene.add("body", abs_parts)
 
     pelvis = superellipsoid(0.165, 0.096, 0.142, e1=0.86, e2=0.88, u_segs=18, v_segs=12, name="pelvis_core", material="chitin_dark").translate(0.0, 0.300, -0.055)
-    # Sturdy muscular dark neck leaning boldly forward (`+Z`) out of the armored collar (`acst901`).
-    neck = superellipsoid(0.144, 0.118, 0.152, e1=0.70, e2=0.82, u_segs=18, v_segs=12, name="neck_collar", material="chitin_dark").rotate_xyz(rx=0.28).translate(0.0, 0.824, 0.072)
-    neck_ring = torus_arc(0.142, 0.013, u_segs=20, v_segs=8, plane="xz", name="neck_band", material="chitin_dark").scale(1.02, 1.0, 0.94).rotate_xyz(rx=0.28).translate(0.0, 0.844, 0.088)
+    # Thick muscular dark neck angling forward out of the broad armored shoulders (linebacker stance).
+    neck = superellipsoid(0.142, 0.118, 0.156, e1=0.70, e2=0.82, u_segs=18, v_segs=12, name="neck_collar", material="chitin_dark").rotate_xyz(rx=0.40).translate(0.0, 0.794, 0.104)
+    neck_ring = torus_arc(0.140, 0.013, u_segs=20, v_segs=8, plane="xz", name="neck_band", material="chitin_dark").scale(1.02, 1.0, 0.94).rotate_xyz(rx=0.40).translate(0.0, 0.816, 0.122)
     scene.add("body", [pelvis, neck, neck_ring])
 
     # Smooth curved scale-plated armored pauldrons seated cleanly on the outer shoulders outside the bandolier straps.
@@ -724,14 +724,13 @@ def _conform_belt_to_torso(
     return pts + shifts[:, None] * out_normals
 
 
-def _make_brass_bullet_pad(center: np.ndarray, width_dir: np.ndarray, out_n: np.ndarray, tangent: np.ndarray, label: str) -> List[MeshPart]:
-    """One bright sunny-yellow ribbed ammo loop housing a crisp yellow cartridge (`acst301`)."""
+def _make_tactical_pouch(center: np.ndarray, width_dir: np.ndarray, out_n: np.ndarray, tangent: np.ndarray, label: str) -> List[MeshPart]:
+    """One chunky quilted bright-yellow tactical utility pouch with overlapping flap (`acst301`)."""
     mat = _frame(center, width_dir, out_n, tangent)
-    loop_pad = rounded_box(0.084, 0.032, 0.042, bevel=0.010, segs=1, name=f"bandolier_pad_{label}", material="gear_yellow_plastic").transform(mat)
-    casing = cylinder(0.016, 0.016, 0.114, radial_segs=8, bevel=0.0, axis="x", name=f"bullet_case_{label}", material="gear_yellow_plastic").translate(-0.006, 0.006, 0.0).transform(mat)
-    tip_prof = [(0.000, 0.048), (0.0155, 0.048), (0.000, 0.076)]
-    tip = lathe(tip_prof, radial_segs=8, cap_bottom=False, cap_top=False, axis="x", name=f"bullet_tip_{label}", material="gear_gold").translate(0.0, 0.006, 0.0).transform(mat)
-    return [loop_pad, casing, tip]
+    body = rounded_box(0.116, 0.044, 0.056, bevel=0.011, segs=1, name=f"tactical_pouch_{label}", material="gear_yellow_plastic").transform(mat)
+    flap = rounded_box(0.120, 0.016, 0.042, bevel=0.005, segs=1, name=f"pouch_flap_{label}", material="gear_yellow_plastic").translate(0.0, 0.018, -0.005).transform(mat)
+    crease = rounded_box(0.114, 0.009, 0.009, bevel=0.002, segs=1, name=f"pouch_seam_{label}", material="gear_dark").translate(0.0, 0.014, 0.016).transform(mat)
+    return [body, flap, crease]
 
 
 def _build_bandoliers(scene: SceneBuilder, torso_verts: np.ndarray) -> None:
@@ -769,7 +768,7 @@ def _build_bandoliers(scene: SceneBuilder, torso_verts: np.ndarray) -> None:
                 crossings[tag] = hit + np.array([0.0, 0.0, 0.020 if tag == "front" else -0.020])
 
         n_pts = len(pts)
-        scene.add("gear_bandolier", _sculpted_ribbon_mesh(pts, out_n, np.full(n_pts, 0.072), np.full(n_pts, 0.012), closed=True, profile_segs=8, name=f"bandolier_strap_{belt_idx}", material="gear_dark"))
+        scene.add("gear_bandolier", _sculpted_ribbon_mesh(pts, out_n, np.full(n_pts, 0.072), np.full(n_pts, 0.012), closed=True, profile_segs=8, name=f"bandolier_strap_{belt_idx}", material="gear_gold"))
 
         tangents = np.array([_normalize(pts[(i + 1) % n_pts] - pts[(i - 1) % n_pts]) for i in range(n_pts)])
         surf_n = np.array([_normalize(o - np.dot(o, t) * t) for o, t in zip(out_n, tangents)])
@@ -777,14 +776,14 @@ def _build_bandoliers(scene: SceneBuilder, torso_verts: np.ndarray) -> None:
         seg_lens = np.linalg.norm(np.roll(pts, -1, axis=0) - pts, axis=1)
         cum = np.concatenate([[0.0], np.cumsum(seg_lens)])
         total = float(cum[-1])
-        count = int(total / 0.064)
+        count = int(total / 0.080)
         for k in range(count):
             s = (k + 0.5) * total / count
             i = int(np.searchsorted(cum, s, side="right") - 1) % n_pts
             j = (i + 1) % n_pts
             f = (s - cum[i]) / max(1e-8, float(seg_lens[i]))
             p = (1.0 - f) * pts[i] + f * pts[j]
-            if abs(p[0]) < 0.085 and abs(p[2]) > 0.14:
+            if abs(p[0]) < 0.088 and abs(p[2]) > 0.14:
                 continue
             t = _normalize((1.0 - f) * tangents[i] + f * tangents[j])
             o = _normalize((1.0 - f) * surf_n[i] + f * surf_n[j])
@@ -793,7 +792,7 @@ def _build_bandoliers(scene: SceneBuilder, torso_verts: np.ndarray) -> None:
             if np.dot(w, np.array([sign, 0.25, 0.0])) < 0.0:
                 w = -w
                 t = -t
-            scene.add("gear_bandolier", _make_brass_bullet_pad(p + 0.021 * o, w, o, t, f"{belt_idx}_{k}"))
+            scene.add("gear_bandolier", _make_tactical_pouch(p + 0.022 * o, w, o, t, f"{belt_idx}_{k}"))
 
     for tag, pos in crossings.items():
         tilt = 14.0 if tag == "front" else -16.0
@@ -988,7 +987,7 @@ def build_combat(blink: float = 0.0) -> SceneBuilder:
     scene.attach_world_node("gaster_group", "upper_body")
     scene.attach_world_node("gaster", "gaster_group")
 
-    scene.set_node_transform("head_group", translation=(0.0, 0.842, 0.084))
+    scene.set_node_transform("head_group", translation=(0.0, 0.812, 0.116))
     scene.attach_world_node("head_group", "upper_body")
     for hc_name in ("head", "eyes", "eyelid_left", "eyelid_right", "antennae"):
         scene.attach_world_node(hc_name, "head_group")
@@ -1006,11 +1005,11 @@ def build_combat(blink: float = 0.0) -> SceneBuilder:
     scene.attach_world_node("right_forearm_group", "right_arm_group")
     scene.attach_world_node("right_forearm", "right_forearm_group")
 
-    # Subtle tough-guy Rambo swagger attitude + 15 deg chin-up pitch toward the 45 deg game camera!
+    # Subtle tough-guy Rambo swagger attitude + 16 deg chin-up glare from lowered linebacker stance!
     ub_xf = scene.get_node_transform("upper_body")
     scene.set_node_transform("upper_body", translation=ub_xf.translation, rotation=quat_from_euler_xyz(ry=0.042, rz=-0.024))
     hd_xf = scene.get_node_transform("head_group")
-    scene.set_node_transform("head_group", translation=hd_xf.translation, rotation=quat_from_euler_xyz(rx=-math.radians(15.0), ry=-0.058, rz=0.054))
+    scene.set_node_transform("head_group", translation=hd_xf.translation, rotation=quat_from_euler_xyz(rx=-math.radians(16.0), ry=-0.058, rz=0.054))
 
     scene.ground_to_y(0.0)
     _add_combat_idle_animation(scene)
