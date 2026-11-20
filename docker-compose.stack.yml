@@ -192,7 +192,7 @@ services:
         max-file: "3"
 
   # The relay of the players' channels (docs/SERVER.md "The relay for the players' channels"): coturn, in shared-secret mode, for the browsers of the players of a match. Only with the profile `relay`
-  # (COMPOSE_PROFILES=relay) and the three variables of the header: the stack deploys without them. Host networking: one public address, no port publishing (Docker publishes a range of 200 UDP ports one
+  # (COMPOSE_PROFILES=relay) and the three variables of the header (it exits at once without them): the stack deploys without them. Host networking: one public address, no port publishing (Docker publishes a range of 200 UDP ports one
   # rule at a time, slowly), and the relay sees the players' real addresses. It is NOT behind the web page's proxy and listens on UDP and TCP 3478 and UDP 49160-49359 of this machine's own address.
   # The image starts only with the capability to bind its port (the binary carries it); the process still runs as the user nobody. The configuration (docker/turnserver.conf) holds no secret: it comes on the
   # command line, where `$$` reaches the container as `$` and the image's entry point expands it, so the secret is not written into the command.
@@ -205,9 +205,11 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
-      ANTS_TURN_SECRET: ${ANTS_TURN_SECRET:?set ANTS_TURN_SECRET}
-      ANTS_TURN_EXTERNAL_IP: ${ANTS_TURN_EXTERNAL_IP:?set ANTS_TURN_EXTERNAL_IP}
-      ANTS_TURN_HOST: ${ANTS_TURN_HOST:?set ANTS_TURN_HOST}
+      ANTS_TURN_SECRET: ${ANTS_TURN_SECRET:-}
+      ANTS_TURN_EXTERNAL_IP: ${ANTS_TURN_EXTERNAL_IP:-}
+      ANTS_TURN_HOST: ${ANTS_TURN_HOST:-}
+    # The relay refuses to start unless all three are set (an empty secret would be a key that everybody knows): the check runs before the image's own entry point, which then expands `$` in the command.
+    entrypoint: ["/bin/sh", "-c", 'if [ -z "$$ANTS_TURN_SECRET" ] || [ -z "$$ANTS_TURN_EXTERNAL_IP" ] || [ -z "$$ANTS_TURN_HOST" ]; then echo "ants-turn: set ANTS_TURN_SECRET, ANTS_TURN_EXTERNAL_IP and ANTS_TURN_HOST" >&2; exit 1; fi; exec /usr/local/bin/docker-entrypoint.sh "$$@"', "sh"]
     command: ["-c", "/etc/coturn/turnserver.conf", "--static-auth-secret=$$ANTS_TURN_SECRET", "--external-ip=$$ANTS_TURN_EXTERNAL_IP", "--realm=$$ANTS_TURN_HOST"]
     read_only: true
     cap_drop: [ALL]
