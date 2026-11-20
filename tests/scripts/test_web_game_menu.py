@@ -154,23 +154,149 @@ class TheScript(unittest.TestCase):
         self.assertIn("behind[j].removeAttribute('inert');", self.script)
 
 
-class TheStyle(unittest.TestCase):
-    """Nothing is laid over the game's picture in fullscreen, on any device (docs/GAME_MENU.md, "The Settings button"): the button that was there is gone, its style and its script too"""
+# The style, read as a browser reads it for one element: which of its rules declare `position` and match the element (a class, `:not(.class)`, a space between two of them, a comma), under a window of a given width
+# (`@media (max-width: N)` and `(min-width: N)`), the one of the highest specificity that comes last winning, `static` when none. Nothing else of CSS is read: a rule that declares `position` in a form that this
+# does not read fails the check and says so, so that the reader is made larger and a rule is never skipped.
+def css_blocks(text):
+    """(prelude, body) of every block at the top level of `text`, the bodies with their own blocks inside"""
+    out, depth, start, prelude = [], 0, 0, ""
+    for i, c in enumerate(text):
+        if c == "{":
+            if depth == 0:
+                prelude, start = text[prelude_start(text, i):i].strip(), i + 1
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                out.append((prelude, text[start:i]))
+    return out
 
-    def test_nothing_of_the_menu_lies_over_the_picture_in_fullscreen(self):
-        css, script = read(STYLE), read(SCRIPT)
-        for name in ("gm-fs", "settings-btn-fs"):
-            self.assertNotIn(name, css, "the style of the button over the picture is gone")
-            self.assertNotIn(name, script, "the script makes no button over the picture")
-        self.assertNotIn("stage.appendChild(", re.sub(r"stage\.appendChild\(scrim\);", "", script), "only the panel's dimmed screen goes into the stage")
-        # No button of the menu is placed over the picture. The one rule before the panel's that positions anything is the gear of a recording's or a live match's bar, which the bar's grid has no cell for:
-        # it is placed by the page's own bar (under the picture: `.rbar:not(.over)`), never by the bar that lies over the picture in fullscreen (`.rbar.over`) or by a button of the header
-        buttons = re.sub(r"/\*.*?\*/", "", css.split("/* the dimmed screen and the panel */")[0], flags=re.S)
-        placed = [(selector.strip(), body) for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", buttons) if re.search(r"position:\s*(absolute|fixed)", body)]
-        self.assertEqual(len(placed), 1, "one button of the menu is placed, the gear of the page's bar")
-        for selector, _ in placed:
-            for one in selector.split(","):
-                self.assertRegex(one.strip(), r"^\.rbar:not\(\.over\) \.gm-bar$", "only the gear on the page's own bar (not the one over the picture) is placed")
+
+def prelude_start(text, brace):
+    """where the text before the `{` at `brace` begins: after the last `}` or `;` before it"""
+    return max(text.rfind("}", 0, brace), text.rfind(";", 0, brace)) + 1
+
+
+def media_holds(prelude, width):
+    """does `@media` + this prelude hold for a window `width` px wide: True or False; None when a condition is of a kind that this reader does not read (a height, a hover)"""
+    verdict = False
+    for query in prelude[len("@media"):].split(","):
+        holds = True
+        for condition in re.findall(r"\(([^()]*)\)", query):
+            m = re.fullmatch(r"\s*(min|max)-width:\s*(\d+)px\s*", condition)
+            if not m:
+                return None
+            holds = holds and (width >= int(m.group(2)) if m.group(1) == "min" else width <= int(m.group(2)))
+        verdict = verdict or holds
+    return verdict
+
+
+def selector_matches(selector, element):
+    """`element` is (the classes of the element, the classes of each of its ancestors, the nearest first); a selector is read as compounds of `.class` and `:not(.class)` with spaces between them; a selector for a
+    pseudo-element (`::before`) is not for the element itself"""
+    if "::" in selector:
+        return False
+    compounds = selector.split()
+    classes, ancestors = element
+    if not compounds:
+        return False
+
+    def compound_fits(compound, have):
+        rest = re.sub(r":not\(\.[\w-]+\)", "", compound)
+        if not re.fullmatch(r"(\.[\w-]+)*", rest):
+            raise ValueError("a selector that this reader does not read: " + selector)
+        if any(name in have for name in re.findall(r":not\(\.([\w-]+)\)", compound)):
+            return False
+        return all(name in have for name in re.findall(r"\.([\w-]+)", rest))
+
+    if not compound_fits(compounds[-1], classes):
+        return False
+    at = 0
+    for compound in reversed(compounds[:-1]):             # (each earlier compound is some ancestor, the nearer ones first)
+        while at < len(ancestors) and not compound_fits(compound, ancestors[at]):
+            at += 1
+        if at == len(ancestors):
+            return False
+        at += 1
+    return True
+
+
+def specificity(selector):
+    return len(re.findall(r"\.[\w-]+", selector)) + len(re.findall(r"\[[^\]]*\]|:[a-z-]+(?!\()", re.sub(r":not\(", "", selector)))
+
+
+def declares_position(body):
+    return re.search(r"(?:^|[;{\s])position:", body) is not None
+
+
+def computed_position(css_text, element, width):
+    """the `position` of `element` under a window `width` px wide, by the cascade of `css_text`"""
+    text = re.sub(r"/\*.*?\*/", "", css_text, flags=re.S)
+    rules = []
+    for prelude, body in css_blocks(text):
+        if prelude.startswith("@media"):
+            holds = media_holds(prelude, width)
+            if holds is None and declares_position(body):
+                raise ValueError("a condition that this reader does not read holds a rule of `position`: " + prelude)
+            if holds:
+                rules += css_blocks(body)
+        elif not prelude.startswith("@"):
+            rules.append((prelude, body))
+    best, order = ("static", (-1, -1)), 0
+    for selector_list, body in rules:
+        order += 1
+        if not declares_position(body):
+            continue
+        declared = re.findall(r"(?:^|[;{\s])position:\s*([a-z-]+)", body)
+        for selector in (s.strip() for s in selector_list.split(",")):
+            if selector_matches(selector, element) and (specificity(selector), order) > best[1]:
+                best = (declared[-1], (specificity(selector), order))
+    return best[0]
+
+
+# The places where the page's script puts a button of the menu (tests/scripts/web_game_menu_check.js runs the script on a fake page and holds it to them): the header, before Fullscreen, and the bar of a recording or of
+# a live match, before its Picture button. The bar is the page's own, under the picture (`rbar`), or the one that lies over the picture in fullscreen (`rbar over`: `barZone` in web/replay_page.js, docs/REPLAYS.md).
+BUTTON_PLACES = {
+    "the header's button": ({"btn", "sm", "gm-btn", "gm-top"}, [{"header"}]),
+    "the gear of the page's own bar": ({"btn", "sm", "gm-btn", "gm-bar"}, [{"rbar"}]),
+    "the gear of the bar over the picture": ({"btn", "sm", "gm-btn", "gm-bar"}, [{"rbar", "over"}]),
+}
+WIDTHS = (320, 360, 390, 700, 701, 1139, 1140, 1280)
+
+
+def placed_buttons(css_text):
+    """{(place, width): position} for every button of the menu that the style takes out of the flow of the page (absolute or fixed), at every window width"""
+    placed = {}
+    for place, element in BUTTON_PLACES.items():
+        for width in WIDTHS:
+            position = computed_position(css_text, element, width)
+            if position in ("absolute", "fixed"):
+                placed[(place, width)] = position
+    return placed
+
+
+class TheStyle(unittest.TestCase):
+    """Nothing is laid over the game's picture in fullscreen, on any device (docs/GAME_MENU.md, "The Settings button"): of the buttons that the script puts in the page, the style takes only one out of the flow, the gear of
+    the page's own bar on a narrow window, and none that the bar over the picture holds (the script's own part is run by ThePagesOwnCode: no button in the stage)"""
+
+    def test_no_button_of_the_menu_lies_over_the_picture_and_only_the_gear_of_the_pages_own_bar_is_placed(self):
+        placed = placed_buttons(read(STYLE))
+        self.assertEqual(sorted(placed), [("the gear of the page's own bar", w) for w in WIDTHS if w <= 700], "a button that is placed lies over what is under it: only the page's own bar, a narrow one, places its gear")
+        self.assertEqual(set(placed.values()), {"absolute"})
+
+    def test_the_style_is_read_as_a_browser_reads_it(self):
+        sheet = """.a { position: relative; } .b .a { position: absolute; } @media (max-width: 10px) { .c { position: fixed; } } @media (min-width: 5px) and (max-width: 20px) { .a:not(.n) { position: sticky; } }
+                   .b .a:not(.n) { position: absolute; } .a.n { color: red; }"""
+        self.assertEqual([computed_position(sheet, ({"a"}, []), w) for w in (3, 7, 30)], ["relative", "sticky", "relative"])
+        self.assertEqual(computed_position(sheet, ({"a"}, [{"b"}]), 30), "absolute", "a space is some ancestor, and the more specific rule wins")
+        self.assertEqual(computed_position(sheet, ({"a", "n"}, [{"b"}]), 30), "absolute", ":not() is not met and the rule with a space is")
+        self.assertEqual(computed_position(sheet, ({"a", "n"}, []), 7), "relative", "a rule that :not() excludes does not apply")
+        self.assertEqual((computed_position(sheet, ({"c"}, []), 7), computed_position(sheet, ({"c"}, []), 11), computed_position(sheet, ({"z"}, []), 7)), ("fixed", "static", "static"))
+        with self.assertRaises(ValueError):
+            computed_position(".a > .b { position: fixed; }", ({"b"}, [{"a"}]), 7)
+        with self.assertRaises(ValueError):
+            computed_position("@media (max-height: 9px) { .a { position: fixed; } }", ({"a"}, []), 7)
+        self.assertEqual(computed_position("@media (hover: none), (max-width: 9px) { .a { color: red; } } .a::before { position: fixed; }", ({"a"}, []), 7), "static", "no position is declared for the element itself")
 
 
 # The stage's wheel listener (web/shell.html, "THE BARS"): in fullscreen it cancels the wheel over a bar so that nothing else happens there. The settings panel is a child of the stage, so its wheel was cancelled too
@@ -245,12 +371,17 @@ class TheScrolling(unittest.TestCase):
         self.assertEqual(pane_failures(read(STYLE)), [])
 
 
+def mutants_of(spec, test_class, files):
+    """the mutants of tests/data/game_menu_mutants.json that are in `files` and are held to `test_class` (the command of a mutant names it)"""
+    return [m for m in spec["mutants"] if m["file"] in files and m["test"].endswith(" " + test_class)]
+
+
 class TheScrollingMutants(unittest.TestCase):
     @unittest.skipUnless(shutil.which("node"), "node is not installed: the mutants of the scrolling were NOT run")
     def test_the_checks_fail_on_every_broken_copy(self):
         """the mutants of tests/data/game_menu_mutants.json that break the scrolling (tools/mutate.py runs the same ones against `TheScrolling`)"""
         spec = json.loads(read(os.path.join(DATA, "game_menu_mutants.json")))
-        mine = [m for m in spec["mutants"] if m["file"] in ("web/shell.html", "web/game_menu.css")]
+        mine = mutants_of(spec, "TheScrolling", ("web/shell.html", "web/game_menu.css"))
         self.assertGreaterEqual(len(mine), 6)
         for m in mine:
             with self.subTest(m["id"]):
@@ -260,6 +391,20 @@ class TheScrollingMutants(unittest.TestCase):
                 broken = text.replace(m["old"], m["new"])
                 found = wheel_failures(broken) if m["file"] == "web/shell.html" else pane_failures(broken)
                 self.assertTrue(found, "the check did not notice: " + m["id"])
+
+
+class TheStyleMutants(unittest.TestCase):
+    def test_the_check_fails_on_every_broken_copy_of_the_style(self):
+        """the mutants that put a button of the menu over the picture (tools/mutate.py runs the same ones against `TheStyle`)"""
+        spec = json.loads(read(os.path.join(DATA, "game_menu_mutants.json")))
+        mine = mutants_of(spec, "TheStyle", ("web/game_menu.css",))
+        self.assertGreaterEqual(len(mine), 4)
+        text = read(STYLE)
+        wanted = {("the gear of the page's own bar", w) for w in WIDTHS if w <= 700}
+        for m in mine:
+            with self.subTest(m["id"]):
+                self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in the file exactly once" % m["id"])
+                self.assertNotEqual(set(placed_buttons(text.replace(m["old"], m["new"]))), wanted, "the check did not notice: " + m["id"])
 
 
 class TheTable(unittest.TestCase):
