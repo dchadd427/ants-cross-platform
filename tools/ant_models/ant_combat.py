@@ -478,8 +478,8 @@ def _sculpt_head(scene: SceneBuilder, blink: float) -> None:
         eye_pts = np.vstack([p.positions for p in (sclera, limbal, iris, pupil, glint_main, glint_bounce)]).astype(np.float64)
         r_eye_max = max(r_eye_max, float(np.max(np.linalg.norm(eye_pts - eye[None, :], axis=1))))
 
-    # Spherical eyelids strictly outside max eye+catchlight radius + 0.0075; Blink closes remaining angle!
-    lid_outer_r = r_eye_max + 0.0075 + lid_thick
+    # Spherical eyelids strictly outside max eye+catchlight radius + 0.0082 (stays >= 6.5 mm after 0.80x scale)!
+    lid_outer_r = r_eye_max + 0.0082 + lid_thick
     rem = EYELID_CLOSED_ANGLE - COMBAT_LID_DROOP
     rest = quat_from_axis_angle((1.0, 0.0, 0.0), max(0.0, min(1.0, float(blink))) * rem)
     for node, sign in (("eyelid_left", 1.0), ("eyelid_right", -1.0)):
@@ -1007,6 +1007,10 @@ def build_combat(blink: float = 0.0) -> SceneBuilder:
 
     scene.ground_to_y(0.0)
     _add_combat_idle_animation(scene)
+    # Uniformly scale Combat Ant down to 0.80x (geometry, node pivots, and Idle heave translations)
+    # for authentic proportions alongside Worker while preserving every sculpt detail and animation.
+    scene.scale_all(0.80)
+    scene.ground_to_y(0.0)
     return scene
 
 
