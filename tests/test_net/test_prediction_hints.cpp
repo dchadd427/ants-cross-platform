@@ -9,7 +9,10 @@
 //     the sealed stream wins; a hint that comes after its turn, a copy of a hint, a refused kind and a flood are ignored;
 //   - the property that makes it safe: the predicted engine that was advanced tick by tick equals the engine that a rebuild would make now, under random orders, hints that are lost, doubled, late, at wrong
 //     ticks and out of order, and when the hints have settled the picture is the oracle's;
-//   - what a hint can never do: change the confirmed engine, a turn or a hash, and show an ant where the confirmed engine has not explored (Fog of War).
+//   - what a hint can never do: change the confirmed engine, a turn or a hash, and show an ant where the confirmed engine has not explored (Fog of War);
+//   - the tick that a sender's hint names (RH6): the turn that the server will seal the order in, from the phase of its seals (SealPhase): on a model of the link in milliseconds (exact and jittery
+//     links, a link that changes, late and scattered orders, no rhythm), and on the rig (it differs from the screen's tick when the lead is not the lag, and falls back to it where the phase is not known or is not
+//     believed).
 #include "prediction_rig.hpp"
 
 namespace {
@@ -560,7 +563,6 @@ std::vector<Answer> run_seal_model(const SealModel& m, const std::vector<uint32_
             ++next_order;
         }
     }
-    if (std::getenv("DBGM")) for (size_t i = 0; i < out.size(); ++i) std::cout << "DBG " << i << " at " << out[i].at << " pred " << (out[i].predicted ? static_cast<long long>(*out[i].predicted) : -1) << " truth " << out[i].truth << (out[i].disturbed ? " late" : "") << "\n";
     return out;
 }
 
