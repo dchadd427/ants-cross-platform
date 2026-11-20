@@ -41,6 +41,7 @@ class MaterialSpec:
     alpha_mode: str = "OPAQUE"
     texture_family: Optional[str] = None
     normal_scale: float = 0.50
+    emissive: Tuple[float, float, float] = (0.0, 0.0, 0.0)
 
     def resolved_alpha_mode(self) -> str:
         """Return effective glTF 2.0 alphaMode ('BLEND' when alpha < 1.0)."""
@@ -51,6 +52,11 @@ class MaterialSpec:
     def linear_base_color(self) -> Tuple[float, float, float, float]:
         """Return linear-space RGBA baseColorFactor per glTF 2.0 spec."""
         return srgb_rgba_to_linear(self.base_color)
+
+    def linear_emissive(self) -> Tuple[float, float, float]:
+        """Return linear-space RGB emissiveFactor per glTF 2.0 spec."""
+        r, g, b = self.emissive
+        return (srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b))
 
     def to_gltf_dict(
         self,
@@ -77,6 +83,8 @@ class MaterialSpec:
             "alphaMode": mode,
             "doubleSided": bool(self.double_sided or mode == "BLEND"),
         }
+        if any(c > 1e-6 for c in self.emissive):
+            out["emissiveFactor"] = [round(float(c), 6) for c in self.linear_emissive()]
         if normal_tex_index is not None:
             out["normalTexture"] = {
                 "index": int(normal_tex_index),
@@ -90,23 +98,23 @@ _SPECS: Tuple[MaterialSpec, ...] = (
         name="chitin_team",
         base_color=(0.24, 0.45, 0.27, 1.0),
         metallic=0.06,
-        roughness=0.52,
+        roughness=0.50,
         texture_family="chitin",
-        normal_scale=0.22,
+        normal_scale=0.30,
     ),
     MaterialSpec(
         name="chitin_dark",
         base_color=(0.10, 0.22, 0.13, 1.0),
         metallic=0.06,
-        roughness=0.56,
+        roughness=0.54,
         texture_family="chitin",
-        normal_scale=0.24,
+        normal_scale=0.30,
     ),
     MaterialSpec(
         name="eye_white",
-        base_color=(0.94, 0.94, 0.89, 1.0),
+        base_color=(0.95, 0.94, 0.87, 1.0),
         metallic=0.0,
-        roughness=0.14,
+        roughness=0.12,
     ),
     MaterialSpec(
         name="eye_pupil",
@@ -120,15 +128,15 @@ _SPECS: Tuple[MaterialSpec, ...] = (
         metallic=0.04,
         roughness=0.64,
         texture_family="cloth",
-        normal_scale=0.36,
+        normal_scale=0.40,
     ),
     MaterialSpec(
         name="gear_gold_metal",
         base_color=(0.88, 0.68, 0.18, 1.0),
         metallic=0.82,
-        roughness=0.32,
+        roughness=0.28,
         texture_family="metal",
-        normal_scale=0.30,
+        normal_scale=0.34,
     ),
     MaterialSpec(
         name="gear_accent",
@@ -136,7 +144,7 @@ _SPECS: Tuple[MaterialSpec, ...] = (
         metallic=0.04,
         roughness=0.60,
         texture_family="cloth",
-        normal_scale=0.35,
+        normal_scale=0.38,
     ),
     MaterialSpec(
         name="gear_dark",
@@ -180,25 +188,38 @@ _SPECS: Tuple[MaterialSpec, ...] = (
     ),
     MaterialSpec(
         name="eye_iris",
-        base_color=(0.60, 0.58, 0.23, 1.0),
-        metallic=0.05,
-        roughness=0.16,
+        base_color=(0.64, 0.62, 0.24, 1.0),
+        metallic=0.06,
+        roughness=0.14,
+    ),
+    MaterialSpec(
+        name="eye_limbal",
+        base_color=(0.14, 0.16, 0.09, 1.0),
+        metallic=0.04,
+        roughness=0.10,
+    ),
+    MaterialSpec(
+        name="eye_catchlight",
+        base_color=(1.0, 1.0, 1.0, 1.0),
+        metallic=0.0,
+        roughness=0.04,
+        emissive=(0.68, 0.68, 0.65),
     ),
     MaterialSpec(
         name="gear_steel",
         base_color=(0.64, 0.66, 0.69, 1.0),
-        metallic=0.76,
-        roughness=0.38,
+        metallic=0.78,
+        roughness=0.34,
         texture_family="metal",
-        normal_scale=0.32,
+        normal_scale=0.34,
     ),
     MaterialSpec(
         name="gear_brass_trim",
         base_color=(0.74, 0.38, 0.19, 1.0),
-        metallic=0.52,
-        roughness=0.36,
+        metallic=0.56,
+        roughness=0.32,
         texture_family="metal",
-        normal_scale=0.30,
+        normal_scale=0.34,
     ),
     MaterialSpec(
         name="bomb_charge",

@@ -368,6 +368,7 @@ def render_scene_orthographic(
             rgba = material_linear_color(part.material, team=team)
             base_rgb = np.array(rgba[:3], dtype=np.float64)
             base_alpha = float(rgba[3])
+            emissive_rgb = np.array(spec.linear_emissive(), dtype=np.float64)
             v_cols = part.colors.astype(np.float64) if getattr(part, "colors", None) is not None else None
 
             world_pos = part.positions.astype(np.float64)
@@ -433,7 +434,7 @@ def render_scene_orthographic(
                     + w1[hit, None] * v_cols[i1]
                     + w2[hit, None] * v_cols[i2]
                 ) if v_cols is not None else None
-                shaded = _shade_vinyl(n_pix, cam_dir, base_rgb, spec.metallic, spec.roughness, ao=ao_pix)
+                shaded = _shade_vinyl(n_pix, cam_dir, base_rgb, spec.metallic, spec.roughness, ao=ao_pix) + emissive_rgb
                 sub_col = color_buf[min_y : max_y + 1, min_x : max_x + 1]
                 if not is_blend:
                     sub_z[hit] = z_interp[hit]

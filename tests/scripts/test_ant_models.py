@@ -109,6 +109,8 @@ class MaterialsContract(unittest.TestCase):
         "fuse_white",
         "prop_brown",
         "eye_iris",
+        "eye_limbal",
+        "eye_catchlight",
         "gear_steel",
         "gear_brass_trim",
         "bomb_charge",
@@ -179,6 +181,14 @@ class MaterialsContract(unittest.TestCase):
         chitin_gltf = materials.get_material("chitin_team").to_gltf_dict()
         self.assertEqual(chitin_gltf["alphaMode"], "OPAQUE")
         self.assertAlmostEqual(chitin_gltf["pbrMetallicRoughness"]["baseColorFactor"][3], 1.0, places=6)
+        self.assertNotIn("emissiveFactor", chitin_gltf)
+
+        # Eye catchlight emits linear emissiveFactor and limbal ring is registered.
+        glint_gltf = materials.get_material("eye_catchlight").to_gltf_dict()
+        self.assertIn("emissiveFactor", glint_gltf)
+        self.assertGreater(glint_gltf["emissiveFactor"][0], 0.20)
+        self.assertLessEqual(glint_gltf["pbrMetallicRoughness"]["roughnessFactor"], 0.06)
+        self.assertIn("eye_limbal", materials.MATERIALS)
 
         # Pure-stdlib GLB validator accepts BLEND glass materials cleanly.
         glass_scene = _make_pure_python_tetra_scene()
@@ -513,6 +523,8 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
             self.assertIn(expected_node, stats["nodes"])
         self.assertIn("Blink", stats["animations"])
         self.assertIn("eye_iris", stats["materials"])
+        self.assertIn("eye_limbal", stats["materials"])
+        self.assertIn("eye_catchlight", stats["materials"])
         self.assertTrue(stats["has_uvs"])
         self.assertTrue(stats["has_ao"])
         self.assertGreaterEqual(stats["textures"], 3)
@@ -532,15 +544,21 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
                 iw, ih = struct.unpack_from(">II", png, 16)
                 self.assertEqual((iw, ih), (exp_size, exp_size))
 
-        # Verify baked crevice AO creates real depth variation while respecting floors.
+        # Verify baked crevice AO creates real depth variation, stays idempotent, and respects floors.
         scene, _ = base_ant.build_base_ant("ao_test")
         mesh_core.bake_scene_ao(scene)
         chitin_ao = np.concatenate([p.colors[:, 0] for p in scene.all_parts() if p.material == "chitin_team"])
         eye_ao = np.concatenate([p.colors[:, 0] for p in scene.all_parts() if p.material == "eye_white"])
+        glint_ao = np.concatenate([p.colors[:, 0] for p in scene.all_parts() if p.material == "eye_catchlight"])
         self.assertGreaterEqual(float(chitin_ao.min()), 0.43)
         self.assertLessEqual(float(chitin_ao.max()), 1.001)
         self.assertGreater(float(chitin_ao.max() - chitin_ao.min()), 0.12, "expected real crevice AO contrast")
         self.assertGreaterEqual(float(eye_ao.min()), 0.77, "eyes must stay bright inside sockets")
+        self.assertAlmostEqual(float(glint_ao.min()), 1.0, places=5, msg="catchlights must stay pure bright")
+        # Calling bake_scene_ao a second time must be idempotent (never double-darkens vertex shading).
+        mesh_core.bake_scene_ao(scene)
+        chitin_ao_2 = np.concatenate([p.colors[:, 0] for p in scene.all_parts() if p.material == "chitin_team"])
+        self.assertTrue(np.allclose(chitin_ao, chitin_ao_2, atol=1e-5))
 
         # Verify embedded textures, compact U16 indices, and normalized U8 VEC4 COLOR_0 in GLB JSON.
         glb = gltf_writer.scene_to_glb_bytes(scene)
@@ -550,7 +568,7 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
         self.assertIn("metallicRoughnessTexture", mats["chitin_team"]["pbrMetallicRoughness"])
         self.assertIn("normalTexture", mats["chitin_team"])
         chitin_ns = float(mats["chitin_team"]["normalTexture"]["scale"])
-        self.assertTrue(0.18 <= chitin_ns <= 0.30, f"expected subtle chitin normal scale, got {chitin_ns}")
+        self.assertTrue(0.22 <= chitin_ns <= 0.34, f"expected tasteful chitin normal scale, got {chitin_ns}")
         # Optical eyes remain pure untextured gloss.
         self.assertNotIn("normalTexture", mats["eye_white"])
         self.assertNotIn("baseColorTexture", mats["eye_white"]["pbrMetallicRoughness"])
@@ -595,11 +613,13 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
         self.assertIn(idx_of["gaster_group"], doc_open["nodes"][idx_of["upper_body"]]["children"])
         self.assertIn(idx_of["eyelid_left"], doc_open["nodes"][idx_of["head_group"]]["children"])
 
-        # Geometric eyelid radial clearance: holds for symmetric (1.0/1.0) AND asymmetric Worker eyes (0.92/1.08).
-        for sl, sr in ((1.0, 1.0), (0.92, 1.08)):
+        # Geometric eyelid radial clearance: holds for symmetric (1.0/1.0), asymmetric (0.92/1.08),
+        # and non-zero eye_look gaze across all 5 eye materials including limbal ring & catchlights.
+        eye_mats = ("eye_white", "eye_limbal", "eye_iris", "eye_pupil", "eye_catchlight")
+        for sl, sr, look in ((1.0, 1.0, (0.0, 0.0)), (0.92, 1.08, (-0.15, 0.12))):
             for b_val in (0.0, 0.25, 0.5, 0.75, 1.0):
                 sc_b, a_b = base_ant.build_base_ant(
-                    f"clearance_{b_val}", blink=b_val, eye_scale_left=sl, eye_scale_right=sr
+                    f"clearance_{b_val}", blink=b_val, eye_scale_left=sl, eye_scale_right=sr, eye_look=look
                 )
                 w_parts = sc_b.world_parts()
                 for side_sign, eye_key, lid_name in ((1.0, "eye_left", "eyelid_left_shell"), (-1.0, "eye_right", "eyelid_right_shell")):
@@ -608,7 +628,7 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
                         [
                             p.positions.astype(np.float64)
                             for p in w_parts
-                            if p.material in ("eye_white", "eye_iris", "eye_pupil")
+                            if p.material in eye_mats
                             and float(p.positions[:, 0].mean()) * side_sign > 0.0
                         ]
                     )
@@ -618,7 +638,7 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
                     self.assertGreaterEqual(
                         r_lid_inner - r_eye_max,
                         0.006,
-                        f"{lid_name} ({sl}/{sr}) at blink={b_val}: clearance {r_lid_inner - r_eye_max:.5f} < 0.006",
+                        f"{lid_name} ({sl}/{sr}, look={look}) at blink={b_val}: clearance {r_lid_inner - r_eye_max:.5f} < 0.006",
                     )
 
         # attach_world_node preserves exact rest world bounds when specialists parent headgear to head_group.
@@ -660,6 +680,64 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
             self.assertAlmostEqual(stats["bbox_min"][1], 0.0, delta=1e-3)
             self.assertIn("Idle", stats["animations"])
             self.assertIn("Blink", stats["animations"])
+
+    def test_base_ant_character_expression_api(self):
+        # All brow styles build cleanly; "none" omits brow caps and invalid styles raise ValueError.
+        for style in base_ant.BROW_STYLES:
+            sc, _ = base_ant.build_base_ant(f"brow_{style}", brow_style=style)
+            has_brow = any(p.name.startswith("brow_cap_") for p in sc.get_node("eyes"))
+            self.assertEqual(has_brow, style != "none", style)
+            gltf_writer.validate_glb(gltf_writer.scene_to_glb_bytes(sc))
+        with self.assertRaises(ValueError):
+            base_ant.build_base_ant("bad_brow", brow_style="grumpy_invalid")
+
+        # head_tilt_deg, head_yaw_deg, eye_look, antenna_asymmetry, and stance_asymmetry compose cleanly.
+        sc_expr, anc_expr = base_ant.build_base_ant(
+            "ant_expressive",
+            brow_style="eager",
+            head_tilt_deg=5.0,
+            head_yaw_deg=-4.5,
+            eye_look=(-0.12, 0.09),
+            antenna_asymmetry=0.35,
+            stance_asymmetry=0.45,
+        )
+        self.assertGreater(anc_expr["left_hand"][1], anc_expr["right_hand"][1] + 0.01)
+        head_xf = sc_expr.get_node_transform("head_group")
+        body_xf = sc_expr.get_node_transform("upper_body")
+        self.assertIsNotNone(head_xf)
+        self.assertIsNotNone(body_xf)
+        self.assertGreater(abs(head_xf.rotation[1]) + abs(head_xf.rotation[2]), 0.04)
+        self.assertGreater(abs(body_xf.rotation[1]) + abs(body_xf.rotation[2]), 0.01)
+
+        # Asymmetric antennae differ in peak height; antenna_asymmetry=0.0 mirrors symmetrically.
+        ant_l_y = max(float(p.bounds()[1][1]) for p in sc_expr.world_parts() if p.name == "antenna_stalk_left")
+        ant_r_y = max(float(p.bounds()[1][1]) for p in sc_expr.world_parts() if p.name == "antenna_stalk_right")
+        self.assertGreater(abs(ant_l_y - ant_r_y), 0.01)
+
+        sc_sym, _ = base_ant.build_base_ant("ant_sym_ant", antenna_asymmetry=0.0)
+        sym_l_y = max(float(p.bounds()[1][1]) for p in sc_sym.world_parts() if p.name == "antenna_stalk_left")
+        sym_r_y = max(float(p.bounds()[1][1]) for p in sc_sym.world_parts() if p.name == "antenna_stalk_right")
+        self.assertAlmostEqual(sym_l_y, sym_r_y, places=4)
+
+        # attach_world_node preserves exact world bounds on rotated head_group (preserve_world_pose=True)
+        # and tilts canonical gear in lockstep when preserve_world_pose=False.
+        hat = mesh_core.sphere(0.06, name="expr_hat", material="gear_gold").translate(0.0, anc_expr["head_top"][1] + 0.04, 0.02)
+        sc_expr.add("hat_world", hat.copy("hat_world"))
+        b_before = sc_expr.bounds()
+        sc_expr.attach_world_node("hat_world", "head_group", preserve_world_pose=True)
+        b_after = sc_expr.bounds()
+        self.assertTrue(np.allclose(b_before[0], b_after[0], atol=1e-4))
+        self.assertTrue(np.allclose(b_before[1], b_after[1], atol=1e-4))
+
+        sc_expr.add("hat_canon", hat.copy("hat_canon"))
+        sc_expr.attach_world_node("hat_canon", "head_group", preserve_world_pose=False)
+        hat_canon_world = next(p for p in sc_expr.world_parts() if p.name == "hat_canon")
+        self.assertGreater(abs(float(hat_canon_world.positions[:, 0].mean())), 0.015)
+
+        st_expr = gltf_writer.validate_glb(gltf_writer.scene_to_glb_bytes(sc_expr))
+        self.assertAlmostEqual(st_expr["bbox_min"][1], 0.0, delta=1e-3)
+        self.assertIn("Idle", st_expr["animations"])
+        self.assertIn("Blink", st_expr["animations"])
 
     def test_base_ant_variants_and_arm_pose_overrides(self):
         _, a_idle = base_ant.build_base_ant("idle")

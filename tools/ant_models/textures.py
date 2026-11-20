@@ -232,99 +232,111 @@ def _build_chitin_pack(size: int) -> TexturePack:
     scuff_b = _smoothstep(0.87, 0.98, _sample_periodic_bilinear(streak_src_b, diag_v, gx))
     scratches = np.clip(scuff_a * 0.75 + scuff_b * 0.55, 0.0, 1.0)
 
-    # Organic mottled chitin patina + fine dusty/earthy micro-speckle.
-    patina_broad = _tile_noise(size, 8, 8, seed=107)
+    # Multi-scale domain-warped organic mottled hide variation (weathered Pixar insect skin,
+    # never flat plastic and never harsh static) + faint dusty micro-speckle.
+    mottle_warp_x = (_tile_noise(size, 5, 5, seed=110) - 0.5) * (size * 0.065)
+    mottle_warp_y = (_tile_noise(size, 5, 5, seed=111) - 0.5) * (size * 0.065)
+    patina_macro = _sample_periodic_bilinear(
+        _tile_noise(size, 4, 4, seed=112), gx + mottle_warp_x, gy + mottle_warp_y
+    )
+    patina_broad = _sample_periodic_bilinear(
+        _tile_noise(size, 9, 9, seed=107), gx + 0.6 * mottle_warp_x, gy + 0.6 * mottle_warp_y
+    )
     patina_med = _tile_noise(size, 18, 18, seed=108)
-    speckle = _tile_noise(size, 64, 64, seed=109)
-    dust_speck = _smoothstep(0.72, 0.94, speckle)
+    speckle = _tile_noise(size, 56, 56, seed=109)
+    dust_speck = _smoothstep(0.68, 0.92, speckle)
 
     height = (
-        0.40 * pit_a
-        + 0.22 * pit_b
+        0.38 * pit_a
+        + 0.20 * pit_b
         + 0.08 * cell_ridge
-        + 0.18 * curved_stria
-        + 0.12 * speckle
-        - 0.14 * scratches
+        + 0.16 * curved_stria
+        + 0.10 * patina_broad
+        + 0.10 * speckle
+        - 0.12 * scratches
     )
     height = np.clip(height, 0.0, 1.0)
 
-    # Silky, tasteful neutral patina (~0.92..1.00, mean ~0.968) with gentle micro-grain.
+    # Tactile organic mottled hide (~0.83..1.00, mean ~0.935) with gentle crevice pore darkening.
     albedo = (
-        0.932
-        + 0.024 * pit_a
-        + 0.012 * pit_b
-        + 0.018 * patina_broad
-        + 0.012 * patina_med
-        + 0.008 * curved_stria
-        - 0.012 * dust_speck
-        + 0.010 * scratches
+        0.842
+        + 0.052 * patina_macro
+        + 0.036 * patina_broad
+        + 0.022 * patina_med
+        + 0.030 * pit_a
+        + 0.014 * pit_b
+        + 0.010 * curved_stria
+        - 0.020 * dust_speck
+        + 0.014 * scratches
     )
 
-    # Smooth satin micro-roughness breakup: sleek carapace (~0.70 * 0.52 = 0.36)
-    # vs softly matte pores and faint scuffs (~1.00 * 0.52 = 0.52).
+    # Organic satin-to-matte roughness breakup (~0.60..1.00): smooth carapace crowns catch
+    # rim highlights while mottled hide patches, micro-pores, and scuffs stay softly matte.
     rough_mult = (
-        0.70
-        + 0.15 * (1.0 - pit_a)
+        0.60
+        + 0.16 * (1.0 - pit_a)
         + 0.08 * (1.0 - pit_b)
-        + 0.05 * dust_speck
+        + 0.08 * (1.0 - patina_macro)
+        + 0.06 * (1.0 - patina_broad)
+        + 0.06 * dust_speck
         + 0.08 * scratches
-        + 0.04 * (1.0 - patina_med)
     )
     return TexturePack(
         family="chitin",
         size=size,
-        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.92, 1.0)),
-        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=2.8)),
-        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.68, 1.0)),
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.82, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=3.1)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.58, 1.0)),
     )
 
 
 def _build_cloth_pack(size: int) -> TexturePack:
-    """Crisp cross-hatch woven textile warp/weft canvas with tactile fiber detail."""
+    """Crisp cross-hatch woven canvas warp/weft with organic yarn slub and tactile fiber grain."""
     t = np.linspace(0.0, 2.0 * math.pi, size, endpoint=False, dtype=np.float32)
     u, v = np.meshgrid(t, t)
-    threads = 20.0 if size <= 128 else 28.0
+    threads = 24.0 if size <= 128 else 32.0
     warp_phase = np.sin(u * threads)
     weft_phase = np.sin(v * threads)
     checker = np.sign(np.sin(u * threads * 0.5) * np.sin(v * threads * 0.5))
     warp = 0.5 + 0.5 * np.cos(u * threads)
     weft = 0.5 + 0.5 * np.cos(v * threads)
-    weave = np.where(checker >= 0.0, 0.68 * warp + 0.32 * (1.0 - weft), 0.68 * weft + 0.32 * (1.0 - warp))
+    weave = np.where(checker >= 0.0, 0.70 * warp + 0.30 * (1.0 - weft), 0.70 * weft + 0.30 * (1.0 - warp))
     cross_ridge = 0.5 + 0.25 * (warp_phase * weft_phase)
-    fiber = _tile_noise(size, 40, 40, seed=201)
-    slub = _tile_noise(size, 12, 12, seed=202)
+    fiber = _tile_noise(size, 44, 44, seed=201)
+    slub = _tile_noise(size, 10, 10, seed=202)
+    yarn_var = _tile_noise(size, 5, 5, seed=203)
 
     height = 0.64 * weave + 0.16 * cross_ridge + 0.14 * fiber + 0.06 * slub
-    albedo = 0.80 + 0.15 * weave + 0.05 * slub
-    rough_mult = 0.76 + 0.24 * (1.0 - weave)
+    albedo = 0.77 + 0.16 * weave + 0.04 * slub + 0.03 * yarn_var
+    rough_mult = 0.74 + 0.26 * (1.0 - weave)
     return TexturePack(
         family="cloth",
         size=size,
-        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.75, 1.0)),
-        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=4.6)),
-        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.76, 1.0)),
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.74, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=5.0)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.74, 1.0)),
     )
 
 
 def _build_metal_pack(size: int) -> TexturePack:
-    """Crisp directional brushed weathered metal scratches and subtle micro-patina."""
-    brush_a = _tile_noise(size, 4, 52, seed=301)
-    brush_b = _tile_noise(size, 8, 64, seed=302)
-    cross_scratch = _tile_noise(size, 36, 6, seed=303)
-    patina = _tile_noise(size, 14, 14, seed=304)
-    pitting = _tile_pores(size, 20, seed=305)
+    """Crisp directional brushed metallic sheen with fine anisotropic grain and edge patina."""
+    brush_a = _tile_noise(size, 3, 60, seed=301)
+    brush_b = _tile_noise(size, 6, 72, seed=302)
+    cross_scratch = _tile_noise(size, 40, 5, seed=303)
+    patina = _tile_noise(size, 10, 10, seed=304)
+    pitting = _tile_pores(size, 22, seed=305)
     pit_mask = _smoothstep(0.12, 0.32, pitting)
 
-    height = 0.46 * brush_a + 0.28 * brush_b + 0.14 * cross_scratch + 0.12 * pit_mask
-    albedo = 0.80 + 0.12 * brush_a + 0.04 * brush_b + 0.04 * patina
-    rough_mult = 0.58 + 0.24 * (1.0 - brush_a) + 0.14 * (1.0 - patina) + 0.08 * (1.0 - pit_mask)
+    height = 0.48 * brush_a + 0.28 * brush_b + 0.13 * cross_scratch + 0.11 * pit_mask
+    albedo = 0.78 + 0.13 * brush_a + 0.04 * brush_b + 0.05 * patina
+    rough_mult = 0.50 + 0.26 * (1.0 - brush_a) + 0.16 * (1.0 - patina) + 0.10 * (1.0 - pit_mask)
     metal_mult = 0.88 + 0.12 * pit_mask
     return TexturePack(
         family="metal",
         size=size,
-        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.76, 1.0)),
-        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=3.6)),
-        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.58, 1.0), np.clip(metal_mult, 0.85, 1.0)),
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.75, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=3.9)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.50, 1.0), np.clip(metal_mult, 0.86, 1.0)),
     )
 
 
@@ -444,7 +456,7 @@ def bake_scene_ao(scene: Any, *, grid_res: int = 56) -> Any:
         mat = scene.get_world_matrix(k)
         for p in parts:
             spec = get_material(p.material)
-            if spec.resolved_alpha_mode() == "BLEND":
+            if spec.resolved_alpha_mode() == "BLEND" or p.material == "eye_catchlight":
                 continue
             wp = p.transform(mat) if mat is not None else p
             occ_pts.append(wp.positions.astype(np.float64))
@@ -470,9 +482,18 @@ def bake_scene_ao(scene: Any, *, grid_res: int = 56) -> Any:
         mat = scene.get_world_matrix(k)
         for p in parts:
             spec = get_material(p.material)
-            if spec.resolved_alpha_mode() == "BLEND":
+            if spec.resolved_alpha_mode() == "BLEND" or p.material == "eye_catchlight":
                 p.colors = np.ones((len(p.positions), 3), dtype=np.float32)
                 continue
+            # Idempotently preserve any sculptor-authored vertex color shading/highlights.
+            base_tint = getattr(p, "_base_tint", None)
+            if base_tint is None or len(base_tint) != len(p.positions):
+                base_tint = (
+                    p.colors.astype(np.float32, copy=True)
+                    if p.colors is not None and len(p.colors) == len(p.positions)
+                    else np.ones((len(p.positions), 3), dtype=np.float32)
+                )
+                p._base_tint = base_tint
             wp = p.transform(mat) if mat is not None else p
             pos = wp.positions.astype(np.float64)
             nrm = wp.normals.astype(np.float64)
@@ -492,8 +513,8 @@ def bake_scene_ao(scene: Any, *, grid_res: int = 56) -> Any:
             gnd = np.clip(pos[:, 1] / 0.10, 0.0, 1.0).astype(np.float32)
             gnd_ao = 0.82 + 0.18 * gnd
 
-            ao = (1.0 - np.clip(occ * 0.72 + conc * 0.24, 0.0, 0.58)) * gnd_ao
-            floor_ao = 0.78 if p.material in ("eye_white", "eye_iris", "eye_pupil") else 0.44
+            ao = (1.0 - np.clip(occ * 0.74 + conc * 0.26, 0.0, 0.58)) * gnd_ao
+            floor_ao = 0.78 if p.material in ("eye_white", "eye_iris", "eye_pupil", "eye_limbal") else 0.44
             ao = np.clip(ao, floor_ao, 1.0).astype(np.float32)
-            p.colors = np.column_stack([ao, ao, ao]).astype(np.float32)
+            p.colors = np.clip(base_tint * ao[:, None], floor_ao, 1.0).astype(np.float32)
     return scene
