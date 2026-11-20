@@ -81,8 +81,8 @@ except ImportError:
 
 Vec3 = Tuple[float, float, float]
 
-# Proud upright boxy-rounded commando head perched clearly ABOVE shoulders on a real dark neck.
-HEAD_CENTER: Vec3 = (0.0, 0.968, 0.072)
+# Proud upright boxy-rounded commando head perched high ABOVE the bigger muscular back on a real neck.
+HEAD_CENTER: Vec3 = (0.0, 1.024, 0.068)
 HEAD_SCALE = 1.00
 EYE_OFFSET: Vec3 = (0.098, -0.002, 0.128)  # left eye relative to head center
 
@@ -210,50 +210,39 @@ def _sculpted_ribbon_mesh(
 # ---------------------------------------------------------------------------
 
 def _upright_torso_deform(pos: np.ndarray) -> np.ndarray:
-    """Sculpt broad upright muscular commando shoulders tapering to hips (ZERO hunchback hump!)."""
+    """Sculpt a big, powerful armored commando upper back & lats tapering to hips (with room for proud neck)."""
     p = pos.copy()
     x, y, z = p[:, 0], p[:, 1], p[:, 2]
     upper = np.clip((y + 0.04) / 0.24, 0.0, 1.0)
     lower = np.clip(-y / 0.24, 0.0, 1.0)
-    p[:, 0] = x * (1.0 + 0.09 * upper - 0.24 * (lower ** 1.45))
+    p[:, 0] = x * (1.0 + 0.11 * upper - 0.24 * (lower ** 1.45))
     p[:, 2] = z * (1.0 - 0.14 * (lower ** 1.35))
-    # Gently slope rear upper back downward behind the neck (eliminating any hunchback dome!).
-    rear_slope = np.clip((-z) / 0.22, 0.0, 1.0) * upper
-    p[:, 1] = y - 0.022 * rear_slope
+    # Fuller, deeper muscular upper back & lats curving smoothly down behind the elevated neck.
+    back_swell = np.clip((-z) / 0.22, 0.0, 1.0) * np.exp(-((y - 0.04) / 0.18) ** 2)
+    p[:, 2] -= 0.030 * back_swell
     spine = np.exp(-(x / 0.024) ** 2) * np.clip((-z) / 0.18, 0.0, 1.0)
-    p[:, 2] += 0.008 * spine
+    p[:, 2] += 0.009 * spine
     return p
 
 
 def _build_torso(scene: SceneBuilder) -> np.ndarray:
-    """Build upright broad muscular commando torso, visible dark neck, pauldrons, and compact gaster."""
-    core = (
-        superellipsoid(0.242, 0.205, 0.190, e1=0.84, e2=0.88, u_segs=22, v_segs=14, name="thorax_core", material="chitin_dark")
-        .translate(0.0, 0.495, -0.015)
-    )
-    # Broad upright armored upper torso peaking cleanly at shoulder height (~0.77, no hunchback!).
+    """Build powerful broad commando torso with big upper back, elevated dark neck, pauldrons, and gaster."""
+    core = superellipsoid(0.248, 0.214, 0.206, e1=0.84, e2=0.88, u_segs=20, v_segs=14, name="thorax_core", material="chitin_dark").translate(0.0, 0.505, -0.026)
+    # Massive, powerful armored upper back & lats (~0.835 shoulder crown, sitting cleanly below elevated neck!).
     dorsal = (
-        superellipsoid(0.312, 0.202, 0.202, e1=0.82, e2=0.86, u_segs=26, v_segs=18, name="dorsal_carapace", material="chitin_team")
+        superellipsoid(0.336, 0.232, 0.248, e1=0.82, e2=0.86, u_segs=26, v_segs=18, name="dorsal_carapace", material="chitin_team")
         .deform(_upright_torso_deform)
-        .rotate_xyz(rx=0.06)
-        .translate(0.0, 0.568, -0.025)
-    )
-    chest = (
-        superellipsoid(0.264, 0.192, 0.158, e1=0.82, e2=0.86, u_segs=22, v_segs=16, name="barrel_chest", material="chitin_team")
         .rotate_xyz(rx=0.08)
-        .translate(0.0, 0.530, 0.072)
+        .translate(0.0, 0.608, -0.056)
     )
-    pec_l = (
-        superellipsoid(0.130, 0.102, 0.068, e1=0.82, e2=0.84, u_segs=16, v_segs=12, name="pectoral_plate", material="chitin_team")
-        .rotate_xyz(rx=0.14, ry=0.28, rz=-0.06)
-        .translate(0.118, 0.565, 0.148)
-    )
+    chest = superellipsoid(0.266, 0.196, 0.160, e1=0.82, e2=0.86, u_segs=20, v_segs=14, name="barrel_chest", material="chitin_team").rotate_xyz(rx=0.08).translate(0.0, 0.540, 0.072)
+    pec_l = superellipsoid(0.132, 0.104, 0.068, e1=0.82, e2=0.84, u_segs=16, v_segs=12, name="pectoral_plate", material="chitin_team").rotate_xyz(rx=0.14, ry=0.28, rz=-0.06).translate(0.118, 0.576, 0.148)
     left_pec, right_pec = scene.add_mirrored("body", pec_l)
     scene.add("body", [core, dorsal, chest])
 
     # Rounded segmented lower abdominal plates tapering neatly into the crouched pelvis.
     abs_parts: List[MeshPart] = []
-    for i, (y, rx, rz, z) in enumerate(((0.392, 0.172, 0.112, 0.068), (0.334, 0.140, 0.094, 0.046))):
+    for i, (y, rx, rz, z) in enumerate(((0.394, 0.172, 0.112, 0.068), (0.336, 0.140, 0.094, 0.046))):
         plate = superellipsoid(rx, 0.038, rz, e1=0.76, e2=0.82, u_segs=18, v_segs=10, name=f"ab_plate_{i}", material="chitin_team").rotate_xyz(rx=0.14).translate(0.0, y, z)
         seam = torus_arc(rx * 0.94, 0.0065, u_segs=18, v_segs=6, plane="xz", name=f"ab_seam_{i}", material="chitin_dark").scale(1.0, 1.0, rz / rx).rotate_xyz(rx=0.14).translate(0.0, y - 0.020, z)
         abs_parts.append(plate)
@@ -261,24 +250,15 @@ def _build_torso(scene: SceneBuilder) -> np.ndarray:
     scene.add("body", abs_parts)
 
     pelvis = superellipsoid(0.165, 0.096, 0.142, e1=0.86, e2=0.88, u_segs=18, v_segs=12, name="pelvis_core", material="chitin_dark").translate(0.0, 0.300, -0.055)
-    # Visible sturdy muscular dark neck rising cleanly ABOVE the shoulders & crossed bandoliers!
-    neck = (
-        superellipsoid(0.144, 0.104, 0.134, e1=0.70, e2=0.82, u_segs=18, v_segs=12, name="neck_collar", material="chitin_dark")
-        .rotate_xyz(rx=0.10)
-        .translate(0.0, 0.780, 0.032)
-    )
-    neck_ring = (
-        torus_arc(0.142, 0.013, u_segs=20, v_segs=8, plane="xz", name="neck_band", material="chitin_dark")
-        .scale(1.02, 1.0, 0.92)
-        .rotate_xyz(rx=0.10)
-        .translate(0.0, 0.790, 0.034)
-    )
+    # Elevated sturdy muscular dark neck rising clearly & proudly ABOVE the bigger back and bandoliers!
+    neck = superellipsoid(0.146, 0.112, 0.136, e1=0.70, e2=0.82, u_segs=18, v_segs=12, name="neck_collar", material="chitin_dark").rotate_xyz(rx=0.08).translate(0.0, 0.838, 0.026)
+    neck_ring = torus_arc(0.144, 0.013, u_segs=20, v_segs=8, plane="xz", name="neck_band", material="chitin_dark").scale(1.02, 1.0, 0.92).rotate_xyz(rx=0.08).translate(0.0, 0.850, 0.028)
     scene.add("body", [pelvis, neck, neck_ring])
 
     # Smooth curved scale-plated armored pauldrons: upper cap on torso, outer deltoid cap on arm roots!
     pauldron_specs = (
-        ((0.302, 0.728, -0.010), (0.172, 0.068, 0.158), -0.44),
-        ((0.398, 0.658, -0.004), (0.136, 0.060, 0.140), -0.82),
+        ((0.308, 0.768, -0.022), (0.178, 0.072, 0.168), -0.44),
+        ((0.402, 0.656, -0.004), (0.146, 0.068, 0.148), -0.82),
     )
     plate_parts: List[MeshPart] = []
 
@@ -554,34 +534,33 @@ def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray
     sh_r, mid_r, el_r, wr_r, fi_r = pts_r
 
     # Left (+X) continuous flowing ape arm; right (-X) split seamlessly at elbow for bicep flex!
-    scene.add("arm_left", curved_tube(pts, [0.094, 0.104, 0.098, 0.108, 0.082], samples_per_seg=5, radial_segs=16, cap_rings=3, name="gorilla_arm_left", material="chitin_team"))
-    scene.add(
-        "right_upper_arm",
-        [
-            curved_tube([sh_r, mid_r, el_r], [0.094, 0.104, 0.098], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_upper_right", material="chitin_team"),
-            sphere(0.096, u_segs=14, v_segs=10, name="elbow_joint_right", material="chitin_team").translate(el_r),
-        ],
-    )
-    scene.add(
-        "right_forearm",
-        curved_tube([el_r, wr_r, fi_r], [0.098, 0.108, 0.082], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_forearm_right", material="chitin_team"),
-    )
+    # Thick, meaty bodybuilder upper arms (0.130) clearly dominating the sleeker forearms (0.100).
+    scene.add("arm_left", curved_tube(pts, [0.108, 0.132, 0.104, 0.100, 0.080], samples_per_seg=5, radial_segs=16, cap_rings=3, name="gorilla_arm_left", material="chitin_team"))
+    scene.add("right_upper_arm", [
+        curved_tube([sh_r, mid_r, el_r], [0.108, 0.132, 0.104], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_upper_right", material="chitin_team"),
+        sphere(0.102, u_segs=14, v_segs=10, name="elbow_joint_right", material="chitin_team").translate(el_r),
+    ])
+    scene.add("right_forearm", curved_tube([el_r, wr_r, fi_r], [0.104, 0.100, 0.080], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_forearm_right", material="chitin_team"))
 
     def _add_arm_pair(part: MeshPart, *, right_node: str) -> None:
         scene.add("arm_left", part)
         scene.add(right_node, part.mirror_x(f"{part.name}_right"))
 
+    # Sculpted bulging Rambo bicep peak (front-inner -> pops UP during flex) & horseshoe tricep belly.
+    _add_arm_pair(superellipsoid(0.088, 0.124, 0.094, e1=0.78, e2=0.82, u_segs=14, v_segs=10, name="bicep_peak", material="chitin_team").rotate_xyz(rx=0.40, ry=-0.16, rz=0.38).translate(0.456, 0.514, 0.090), right_node="right_upper_arm")
+    _add_arm_pair(superellipsoid(0.084, 0.116, 0.088, e1=0.80, e2=0.84, u_segs=12, v_segs=8, name="tricep_belly", material="chitin_team").rotate_xyz(rx=0.34, rz=0.40).translate(0.506, 0.520, -0.020), right_node="right_upper_arm")
+
     # Sculpted outer forearm gauntlet shell + recessed dark armor seam cuffs & elbow cop.
     gauntlet = (
-        superellipsoid(0.110, 0.104, 0.124, e1=0.76, e2=0.80, u_segs=18, v_segs=12, name="forearm_gauntlet", material="chitin_team")
+        superellipsoid(0.102, 0.098, 0.118, e1=0.76, e2=0.80, u_segs=16, v_segs=12, name="forearm_gauntlet", material="chitin_team")
         .rotate_xyz(rx=0.58, ry=-0.38, rz=0.18)
         .translate(0.478, 0.304, 0.162)
     )
     _add_arm_pair(gauntlet, right_node="right_forearm")
-    _add_arm_pair(_ring_on_segment(mid, el, 0.36, 0.102, 0.008, name="bracer_seam_0", material="chitin_dark"), right_node="right_upper_arm")
-    _add_arm_pair(_ring_on_segment(el, wr, 0.36, 0.112, 0.0085, name="gauntlet_seam_0", material="chitin_dark"), right_node="right_forearm")
-    _add_arm_pair(_ring_on_segment(el, wr, 0.72, 0.106, 0.0085, name="gauntlet_seam_1", material="chitin_dark"), right_node="right_forearm")
-    _add_arm_pair(_ring_on_segment(el, wr, 0.96, 0.094, 0.014, name="gauntlet_cuff", material="chitin_dark"), right_node="right_forearm")
+    _add_arm_pair(_ring_on_segment(mid, el, 0.64, 0.116, 0.008, name="bracer_seam_0", material="chitin_dark"), right_node="right_upper_arm")
+    _add_arm_pair(_ring_on_segment(el, wr, 0.36, 0.106, 0.0085, name="gauntlet_seam_0", material="chitin_dark"), right_node="right_forearm")
+    _add_arm_pair(_ring_on_segment(el, wr, 0.72, 0.102, 0.0085, name="gauntlet_seam_1", material="chitin_dark"), right_node="right_forearm")
+    _add_arm_pair(_ring_on_segment(el, wr, 0.96, 0.092, 0.014, name="gauntlet_cuff", material="chitin_dark"), right_node="right_forearm")
 
     elbow_cop = (
         superellipsoid(0.064, 0.058, 0.036, e1=0.76, e2=0.82, u_segs=14, v_segs=10, name="elbow_cop", material="chitin_team")
@@ -617,9 +596,10 @@ def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray
     thumb = [fi + np.array(c) for c in ((-0.048, 0.040, 0.026), (-0.074, 0.026, 0.074), (-0.046, -0.004, 0.104))]
     _add_arm_pair(curved_tube(thumb, [0.026, 0.022, 0.010], samples_per_seg=3, radial_segs=10, cap_rings=2, name="fist_thumb", material="chitin_dark"), right_node="right_forearm")
 
-    # Sample exact right (-X) bicep center, tangent, and arm vertices so the hot-magenta cloth hugs flush.
+    # Sample exact right (-X) lower-bicep center & vertices so hot-magenta cloth wraps cleanly
+    # just below the bulging bicep mountain peak (letting the big bicep pop proudly above it!).
     sampled = catmull_rom_spline(ARM_PTS_LEFT, samples_per_seg=10)
-    idx = 14
+    idx = 16
     p_l = sampled[idx]
     t_l = _normalize(sampled[idx + 1] - sampled[idx - 1])
     right_arm_verts = np.vstack([p.positions for p in scene.get_node("right_upper_arm") + scene.get_node("right_forearm")]).astype(np.float64)
@@ -718,25 +698,25 @@ def _make_brass_bullet_pad(center: np.ndarray, width_dir: np.ndarray, out_n: np.
 def _build_bandoliers(scene: SceneBuilder, torso_verts: np.ndarray) -> None:
     """Crossed ribbed woven-gold bullet bandoliers over BOTH chest and back with brass X-buckles."""
     belt_ctrl = [
-        (0.214, 0.785, -0.025),   # over upright left shoulder beside the dark muscular neck
-        (0.224, 0.695, 0.155),    # upper-left chest
-        (0.122, 0.568, 0.245),    # left pectoral
-        (0.000, 0.468, 0.266),    # front chest X crossing
-        (-0.142, 0.388, 0.222),   # lower-right abdomen
-        (-0.240, 0.344, 0.098),   # right front hip
-        (-0.256, 0.348, -0.072),  # right side hip
-        (-0.186, 0.428, -0.238),  # lower-right back
-        (0.000, 0.540, -0.286),   # back X crossing
-        (0.168, 0.678, -0.242),   # upper-left back
-        (0.214, 0.758, -0.135),   # rear left shoulder slope
+        (0.218, 0.835, -0.042),   # over fuller left shoulder beside the elevated dark muscular neck
+        (0.228, 0.722, 0.155),    # upper-left chest
+        (0.122, 0.578, 0.248),    # left pectoral
+        (0.000, 0.474, 0.268),    # front chest X crossing
+        (-0.144, 0.390, 0.224),   # lower-right abdomen
+        (-0.244, 0.346, 0.100),   # right front hip
+        (-0.262, 0.352, -0.080),  # right side hip
+        (-0.194, 0.436, -0.268),  # lower-right back
+        (0.000, 0.562, -0.332),   # back X crossing across bigger dorsal carapace
+        (0.176, 0.726, -0.292),   # upper-left back
+        (0.218, 0.808, -0.175),   # rear left shoulder slope
     ]
-    pivot = np.array([0.0, 0.515, -0.015])
-    crossings = {"front": np.array([0.0, 0.468, 0.292]), "back": np.array([0.0, 0.540, -0.314])}
+    pivot = np.array([0.0, 0.535, -0.032])
+    crossings = {"front": np.array([0.0, 0.474, 0.294]), "back": np.array([0.0, 0.562, -0.360])}
 
     for belt_idx, sign in enumerate((1.0, -1.0)):
         raw = np.array([(sign * x, y, z) for x, y, z in belt_ctrl], dtype=np.float64)
         pts = catmull_rom_spline(raw, samples_per_seg=6, closed=True)
-        out_n = np.array([_normalize(p - pivot + (np.array([0.0, 0.28, 0.0]) if p[1] > 0.70 else 0.0)) for p in pts])
+        out_n = np.array([_normalize(p - pivot + (np.array([0.0, 0.28, 0.0]) if p[1] > 0.74 else 0.0)) for p in pts])
         pts = _conform_belt_to_torso(pts, out_n, torso_verts, pivot, clearance=0.014)
         if belt_idx == 1:
             pts = pts + (0.030 * np.exp(-((pts[:, 0] / 0.11) ** 2)))[:, None] * out_n
@@ -808,18 +788,18 @@ def _build_right_bicep_cloth(
     band_out = np.array([math.cos(a) * out_x + math.sin(a) * fwd for a in angs])
     rel = right_arm_verts - center[None, :]
     axial = rel @ t
-    near_band = np.abs(axial) < 0.044
+    near_band = np.abs(axial) < 0.056
     sub = rel[near_band] if np.any(near_band) else rel
-    radii = np.full(n_ring, 0.100, dtype=np.float64)
+    radii = np.full(n_ring, 0.114, dtype=np.float64)
     for i, d in enumerate(band_out):
         proj = sub @ d
         perp = sub - proj[:, None] * d[None, :] - (sub @ t)[:, None] * t[None, :]
-        in_wedge = (proj > 0.02) & (np.abs(perp @ np.cross(t, d)) < 0.032)
+        in_wedge = (proj > 0.02) & (np.abs(perp @ np.cross(t, d)) < 0.038)
         if np.any(in_wedge):
-            radii[i] = max(0.098, float(np.max(proj[in_wedge])))
+            radii[i] = max(0.112, float(np.max(proj[in_wedge])))
     for _ in range(3):
         radii = 0.25 * np.roll(radii, 1) + 0.50 * radii + 0.25 * np.roll(radii, -1)
-    band_r = radii + 0.005  # snug proud wrap hugging the bicep cleanly with zero gap
+    band_r = radii + 0.006  # snug proud wrap hugging the beefier bicep cleanly with zero clipping
 
     # Main snug flat cloth wrap + subtle taut overlapping wrap-lap cinching cleanly into the knot.
     band_pts = center[None, :] + band_r[:, None] * band_out
@@ -963,7 +943,7 @@ def build_combat(blink: float = 0.0) -> SceneBuilder:
     scene.attach_world_node("gaster_group", "upper_body")
     scene.attach_world_node("gaster", "gaster_group")
 
-    scene.set_node_transform("head_group", translation=(0.0, 0.790, 0.036))
+    scene.set_node_transform("head_group", translation=(0.0, 0.848, 0.030))
     scene.attach_world_node("head_group", "upper_body")
     for hc_name in ("head", "eyes", "eyelid_left", "eyelid_right", "antennae"):
         scene.attach_world_node(hc_name, "head_group")
