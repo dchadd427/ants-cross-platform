@@ -2,9 +2,8 @@
 
 Built directly on `base_ant` so it keeps the iconic unadorned slim upright
 Worker silhouette (no headwear or tools), with a few subtle sculpted chitin
-finishing touches fitted to the base anatomy: a beveled thoracic collar, a
-chest carapace crest, a dorsal pronotum ridge, shoulder caps, wrist cuffs, and
-a petiole waist ring. The base supplies the 3-part eyes, toothed mandibles,
+finishing touches fitted to the base anatomy: a faceted chest carapace crest, a
+dorsal pronotum ridge, shoulder caps, and wrist cuffs. The base supplies the 3-part eyes, toothed mandibles,
 clubbed antennae, and the pivoted `eyelid_left` / `eyelid_right` nodes with the
 glTF 2.0 "Blink" clip.
 
@@ -28,8 +27,8 @@ except ImportError:
 
 # Slightly poised idle arms (shoulder, elbow, wrist, hand) that keep the chest crest clear.
 _WORKER_ARM_LEFT = [
-    (0.114, 0.438, 0.022),
-    (0.222, 0.398, 0.080),
+    (0.106, 0.440, 0.020),
+    (0.218, 0.400, 0.078),
     (0.196, 0.354, 0.184),
     (0.164, 0.348, 0.222),
 ]
@@ -51,16 +50,13 @@ def _ring_across(center: Sequence[float], axis: Sequence[float], major_r: float,
 
 def _add_carapace_details(scene: SceneBuilder) -> None:
     """Subtle sculpted chitin plates fitted flush onto the base thorax and limbs."""
-    # Beveled collar hugging the neck where it meets the thorax.
-    collar = torus_arc(0.078, 0.014, u_segs=24, v_segs=10, plane="xz", name="thorax_collar", material="chitin_team").scale(1.08, 0.85, 1.0).rotate_xyz(rx=0.14).translate(0.0, 0.468, 0.016)
     # Faceted breastplate crest over the chest plate, and a dorsal pronotum ridge on the back.
-    crest = superellipsoid(0.066, 0.070, 0.028, e1=0.55, e2=0.65, u_segs=16, v_segs=12, name="chest_crest", material="chitin_team").rotate_xyz(rx=0.16).translate(0.0, 0.352, 0.112)
-    ridge = superellipsoid(0.054, 0.032, 0.062, e1=0.55, e2=0.65, u_segs=16, v_segs=10, name="dorsal_ridge", material="chitin_team").rotate_xyz(rx=-0.22).translate(0.0, 0.444, -0.078)
-    waist = torus_arc(0.050, 0.0065, u_segs=18, v_segs=8, plane="xy", name="waist_ring", material="chitin_dark").rotate_xyz(rx=-0.10).translate(0.0, 0.248, -0.130)
-    scene.add("body", [collar, crest, ridge, waist])
+    crest = superellipsoid(0.056, 0.058, 0.022, e1=0.40, e2=0.46, u_segs=14, v_segs=10, name="chest_crest", material="chitin_team").rotate_xyz(rx=0.18).translate(0.0, 0.380, 0.104)
+    ridge = superellipsoid(0.050, 0.028, 0.056, e1=0.40, e2=0.46, u_segs=14, v_segs=10, name="dorsal_ridge", material="chitin_team").rotate_xyz(rx=-0.22).translate(0.0, 0.452, -0.074)
+    scene.add("body", [crest, ridge])
 
     # Team-colored shoulder caps over each arm socket.
-    cap = superellipsoid(0.036, 0.028, 0.034, e1=0.60, e2=0.70, u_segs=14, v_segs=10, name="shoulder_cap", material="chitin_team").rotate_xyz(rz=-0.32).translate(0.112, 0.456, 0.022)
+    cap = superellipsoid(0.036, 0.028, 0.034, e1=0.60, e2=0.70, u_segs=14, v_segs=10, name="shoulder_cap", material="chitin_team").rotate_xyz(rz=-0.32).translate(0.106, 0.458, 0.020)
     scene.add_mirrored("body", cap)
 
     # Slim wrist cuffs across each forearm just behind the claw hand.
