@@ -2,6 +2,8 @@
 // leaves out and never says, and the idle rule that makes an unused public room private
 #include "server_fixtures.hpp"
 
+#include <cctype>
+
 namespace {
 
 // The options of a server that offers the front page's lobbies, with a pool large enough for a list of more than 50
