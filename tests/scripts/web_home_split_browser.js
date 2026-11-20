@@ -21,6 +21,7 @@ if (python.status !== 0) { console.log('SKIP: python3 cannot import the hub: the
 const ROOT = path.resolve(__dirname, '..', '..');
 const arg = (name) => { const i = process.argv.indexOf(name); return i === -1 ? null : process.argv[i + 1]; };
 const WEB = path.resolve(arg('--web') || path.join(ROOT, 'web'));
+const GT = require(path.join(WEB, 'home', 'games.js')).TEXT;          // (the page's own words: a check names the button that the page has for a situation, and does not spell it)
 const SHOTS = arg('--shots') ? path.resolve(arg('--shots')) : null;
 const ONLY = arg('--only') ? arg('--only').split(',') : null;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.ttf': 'font/ttf', '.ico': 'image/x-icon', '.json': 'application/json', '.svg': 'image/svg+xml' };
@@ -296,7 +297,7 @@ async function main() {
         await page.evaluate(() => document.querySelector('.hmain') && 0);
         await page.click('.quick.host, .hbar .quick').catch(() => {});
         await sleep(600);
-        await page.getByRole('button', { name: 'Private room' }).click().catch(() => {});
+        await page.locator('.gconfirm button', { hasText: GT.hostPrivate }).click().catch(() => {});
         await page.waitForFunction(() => document.body.getAttribute('data-screen') === 'room', null, { timeout: 8000 }).catch(() => {});
         await sleep(800);
         await shot(page, 'split_room_probe');
