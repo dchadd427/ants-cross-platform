@@ -358,6 +358,24 @@ target_include_directories(test_bot_schedules PRIVATE
 add_test(NAME test_bot_schedules COMMAND test_bot_schedules)
 set_tests_properties(test_bot_schedules PROPERTIES COST 3)
 
+# The lists of the rotation of the server's own matches of computer players (ants_server/bot_match_spec.hpp bot_rotation_defaults, bot_rotation.hpp, db_schema.cpp version 10): the lists that a server starts with, a saved list in the database and
+# in memory, back to the defaults as no row, the shape of a list read back, the migration from a copy of a version 9 database. No sockets, no rooms
+add_executable(test_bot_rotation
+    test_bot_rotation.cpp
+)
+
+target_link_libraries(test_bot_rotation PRIVATE
+    ants_server_core
+    ants_test_paths
+)
+
+target_include_directories(test_bot_rotation PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_bot_rotation COMMAND test_bot_rotation)
+set_tests_properties(test_bot_rotation PROPERTIES COST 3)
+
 # The admin page's pass (ants_server/admin_pass.hpp) and the door that checks it (ants_server/submissions_http.hpp): the key, the known answers of docs/HUB.md, every reason a pass is refused, a pass used once, the one answer without a good pass,
 # the token of a change, the retired routes, the decisions signed with the username and the reference. Requests made by hand: no network
 add_executable(test_admin_pass

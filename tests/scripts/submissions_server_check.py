@@ -288,7 +288,7 @@ class TheWholeWay(unittest.TestCase):
         out, err = self.server.stop()
         type(self).logs += err
         self.assertEqual(self.server.proc.returncode, 0)                                           # (a stop by SIGTERM is a clean exit)
-        self.assertIn("schema version 9", err)
+        self.assertIn("schema version 10", err)
         type(self).server = Server(self.results)
         self.owner.server = self.operator.server = self.server
         self.assertEqual(self.owner.call("GET", "/admin/api/me")[0], 200)
