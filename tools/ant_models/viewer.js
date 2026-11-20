@@ -1,6 +1,12 @@
 "use strict";
 
 (() => {
+  const {
+    clamp, mat4Translate, mat4Multiply, mat4FromTRS, mat4LookAt, mat4Perspective, mat4Ortho,
+    mat3DetFromMat4, mat3NormalFromMat4, quatMul, sampleChannel,
+    uploadBuffer, createFallbackTextures, parseGlb,
+  } = window.__antGltf;
+
   const ANT_CLASSES = ["worker", "combat", "thief", "bomber", "swimmer", "fire"];
   const ANT_LABELS = {
     worker: "Worker", combat: "Combat", thief: "Thief",
@@ -9,10 +15,10 @@
   const srgbToLinear = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
   const rgbLinear = (rgb) => rgb.map(srgbToLinear);
   const TEAMS = {
-    green: { label: "Green", team: rgbLinear([0.24, 0.44, 0.27]), dark: rgbLinear([0.16, 0.31, 0.19]) },
-    red: { label: "Red", team: rgbLinear([0.52, 0.16, 0.18]), dark: rgbLinear([0.36, 0.10, 0.12]) },
-    blue: { label: "Blue", team: rgbLinear([0.20, 0.32, 0.54]), dark: rgbLinear([0.13, 0.22, 0.39]) },
-    black: { label: "Black", team: rgbLinear([0.35, 0.37, 0.42]), dark: rgbLinear([0.23, 0.25, 0.29]) },
+    green: { label: "Green", team: rgbLinear([0.24, 0.45, 0.27]), dark: rgbLinear([0.10, 0.22, 0.13]) },
+    red: { label: "Red", team: rgbLinear([0.54, 0.16, 0.18]), dark: rgbLinear([0.24, 0.06, 0.07]) },
+    blue: { label: "Blue", team: rgbLinear([0.20, 0.33, 0.56]), dark: rgbLinear([0.08, 0.14, 0.28]) },
+    black: { label: "Black", team: rgbLinear([0.36, 0.38, 0.43]), dark: rgbLinear([0.14, 0.15, 0.18]) },
   };
   const ANGLES = {
     "301": { label: "301 S", full: "301 S (Front)", yaw: 0, pitch: 50 },
@@ -24,328 +30,21 @@
   };
   const SHEET_ANGLES = ["301", "201", "901", "801", "701"];
   const DEG = Math.PI / 180;
+  const wrapAngleDeg = (deg) => { const a = ((deg + 180) % 360 + 360) % 360 - 180; return a === -180 ? 180 : a; };
   const STUDIO_PALETTE = {
     light: {
       bgTop: [0.855, 0.880, 0.918], bgMid: [0.958, 0.966, 0.978], bgBot: [0.780, 0.816, 0.862],
       plinthTop: [0.68, 0.71, 0.76], plinthSide: [0.42, 0.46, 0.52], plinthRing: [0.45, 0.49, 0.56],
-      sky: [0.60, 0.67, 0.78], ground: [0.16, 0.17, 0.20],
+      sky: [0.62, 0.69, 0.80], ground: [0.16, 0.17, 0.20],
     },
     dark: {
       bgTop: [0.075, 0.092, 0.128], bgMid: [0.138, 0.165, 0.215], bgBot: [0.055, 0.068, 0.095],
       plinthTop: [0.095, 0.112, 0.145], plinthSide: [0.048, 0.060, 0.082], plinthRing: [0.19, 0.24, 0.31],
-      sky: [0.42, 0.50, 0.64], ground: [0.07, 0.08, 0.10],
+      sky: [0.44, 0.52, 0.66], ground: [0.07, 0.08, 0.10],
     },
   };
 
-  // --- Column-Major 3D Math & Quaternion Helpers ---
-  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-  const wrapAngleDeg = (deg) => { const a = ((deg + 180) % 360 + 360) % 360 - 180; return a === -180 ? 180 : a; };
-  const mat4Identity = () => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
-  const mat4Translate = (x, y, z) => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1]);
-
-  function mat4Multiply(a, b) {
-    const out = new Float32Array(16);
-    for (let c = 0; c < 4; c++) {
-      const o = c * 4, b0 = b[o], b1 = b[o + 1], b2 = b[o + 2], b3 = b[o + 3];
-      out[o] = a[0] * b0 + a[4] * b1 + a[8] * b2 + a[12] * b3;
-      out[o + 1] = a[1] * b0 + a[5] * b1 + a[9] * b2 + a[13] * b3;
-      out[o + 2] = a[2] * b0 + a[6] * b1 + a[10] * b2 + a[14] * b3;
-      out[o + 3] = a[3] * b0 + a[7] * b1 + a[11] * b2 + a[15] * b3;
-    }
-    return out;
-  }
-
-  function mat4FromTRS(t, q, s) {
-    const [x, y, z, w] = q, [sx, sy, sz] = s;
-    const xx = x * x, yy = y * y, zz = z * z, xy = x * y, xz = x * z, yz = y * z, wx = w * x, wy = w * y, wz = w * z;
-    return new Float32Array([
-      (1 - 2 * (yy + zz)) * sx, 2 * (xy + wz) * sx, 2 * (xz - wy) * sx, 0,
-      2 * (xy - wz) * sy, (1 - 2 * (xx + zz)) * sy, 2 * (yz + wx) * sy, 0,
-      2 * (xz + wy) * sz, 2 * (yz - wx) * sz, (1 - 2 * (xx + yy)) * sz, 0,
-      t[0], t[1], t[2], 1,
-    ]);
-  }
-
-  function mat4LookAt(eye, target, up) {
-    let zx = eye[0] - target[0], zy = eye[1] - target[1], zz = eye[2] - target[2], l = Math.hypot(zx, zy, zz) || 1;
-    zx /= l; zy /= l; zz /= l;
-    let xx = up[1] * zz - up[2] * zy, xy = up[2] * zx - up[0] * zz, xz = up[0] * zy - up[1] * zx;
-    l = Math.hypot(xx, xy, xz) || 1; xx /= l; xy /= l; xz /= l;
-    const yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx;
-    return new Float32Array([
-      xx, yx, zx, 0, xy, yy, zy, 0, xz, yz, zz, 0,
-      -(xx * eye[0] + xy * eye[1] + xz * eye[2]), -(yx * eye[0] + yy * eye[1] + yz * eye[2]), -(zx * eye[0] + zy * eye[1] + zz * eye[2]), 1,
-    ]);
-  }
-
-  function mat4Perspective(fovy, aspect, near, far) {
-    const f = 1 / Math.tan(fovy * 0.5), nf = 1 / (near - far);
-    return new Float32Array([f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0]);
-  }
-
-  function mat4Ortho(l, r, b, t, n, f) {
-    const rl = 1 / (r - l), tb = 1 / (t - b), fn = 1 / (f - n);
-    return new Float32Array([2 * rl, 0, 0, 0, 0, 2 * tb, 0, 0, 0, 0, -2 * fn, 0, -(r + l) * rl, -(t + b) * tb, -(f + n) * fn, 1]);
-  }
-
-  const mat3DetFromMat4 = (m) => m[0] * (m[5] * m[10] - m[6] * m[9]) - m[4] * (m[1] * m[10] - m[2] * m[9]) + m[8] * (m[1] * m[6] - m[2] * m[5]);
-  const transformPoint = (m, x, y, z) => [m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13], m[2] * x + m[6] * y + m[10] * z + m[14]];
-
-  function mat3NormalFromMat4(m) {
-    const a00 = m[0], a01 = m[1], a02 = m[2], a10 = m[4], a11 = m[5], a12 = m[6], a20 = m[8], a21 = m[9], a22 = m[10];
-    const b01 = a22 * a11 - a12 * a21, b11 = -a22 * a10 + a12 * a20, b21 = a21 * a10 - a11 * a20;
-    const det = a00 * b01 + a01 * b11 + a02 * b21;
-    if (Math.abs(det) < 1e-8) return new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
-    const inv = 1 / det;
-    return new Float32Array([
-      b01 * inv, (-a22 * a01 + a02 * a21) * inv, (a12 * a01 - a02 * a11) * inv,
-      b11 * inv, (a22 * a00 - a02 * a20) * inv, (-a12 * a00 + a02 * a10) * inv,
-      b21 * inv, (-a21 * a00 + a01 * a20) * inv, (a11 * a00 - a01 * a10) * inv,
-    ]);
-  }
-
-  function quatSlerp(a, b, t) {
-    let [ax, ay, az, aw] = a, [bx, by, bz, bw] = b;
-    let dot = ax * bx + ay * by + az * bz + aw * bw;
-    if (dot < 0) { dot = -dot; bx = -bx; by = -by; bz = -bz; bw = -bw; }
-    let s0 = 1 - t, s1 = t;
-    if (1 - dot > 1e-4) {
-      const om = Math.acos(clamp(dot, -1, 1)), inv = 1 / Math.sin(om);
-      s0 = Math.sin((1 - t) * om) * inv; s1 = Math.sin(t * om) * inv;
-    }
-    const rx = s0 * ax + s1 * bx, ry = s0 * ay + s1 * by, rz = s0 * az + s1 * bz, rw = s0 * aw + s1 * bw, l = Math.hypot(rx, ry, rz, rw) || 1;
-    return [rx / l, ry / l, rz / l, rw / l];
-  }
-
-  const quatMul = (a, b) => [
-    a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1], a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
-    a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3], a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
-  ];
-  const quatAngle = (a, b) => 2 * Math.acos(clamp(Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]), 0, 1));
-
-  function sampleChannel(ch, t) {
-    const times = ch.times, vals = ch.values, n = times.length;
-    if (!n) return null;
-    const dim = ch.path === "rotation" ? 4 : 3, cubic = ch.interpolation === "CUBICSPLINE";
-    const at = (i) => {
-      const off = (cubic ? i * 3 + 1 : i) * dim;
-      return dim === 4 ? [vals[off], vals[off + 1], vals[off + 2], vals[off + 3]] : [vals[off], vals[off + 1], vals[off + 2]];
-    };
-    if (n === 1 || t <= times[0]) return at(0);
-    if (t >= times[n - 1]) return at(n - 1);
-    let idx = 0;
-    while (idx + 1 < n - 1 && times[idx + 1] <= t) idx++;
-    if (ch.interpolation === "STEP") return at(idx);
-    const span = times[idx + 1] - times[idx], u = span > 1e-6 ? clamp((t - times[idx]) / span, 0, 1) : 0;
-    const v0 = at(idx), v1 = at(idx + 1);
-    return dim === 4 ? quatSlerp(v0, v1, u) : [v0[0] + (v1[0] - v0[0]) * u, v0[1] + (v1[1] - v0[1]) * u, v0[2] + (v1[2] - v0[2]) * u];
-  }
-
-  // --- glTF 2.0 Binary (.glb) Parser ---
-  const TYPE_COMPS = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
-  const COMP_SIZES = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 };
-  const COMP_READERS = {
-    5126: (dv, o) => dv.getFloat32(o, true),
-    5125: (dv, o) => dv.getUint32(o, true),
-    5123: (dv, o, n) => dv.getUint16(o, true) / (n ? 65535 : 1),
-    5122: (dv, o, n) => (n ? Math.max(dv.getInt16(o, true) / 32767, -1) : dv.getInt16(o, true)),
-    5121: (dv, o, n) => dv.getUint8(o) / (n ? 255 : 1),
-    5120: (dv, o, n) => (n ? Math.max(dv.getInt8(o) / 127, -1) : dv.getInt8(o)),
-  };
-
-  function decodeDataUri(uri) {
-    const idx = uri.indexOf("base64,");
-    if (idx < 0) return null;
-    const raw = atob(uri.slice(idx + 7)), bytes = new Uint8Array(raw.length);
-    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-    return bytes.buffer;
-  }
-
-  function readAccessor(gltf, buffers, accIdx) {
-    const acc = gltf.accessors[accIdx], numComp = TYPE_COMPS[acc.type], compSize = COMP_SIZES[acc.componentType], count = acc.count;
-    if (acc.bufferView === undefined) return new Float32Array(count * numComp);
-    const bv = gltf.bufferViews[acc.bufferView], dv = new DataView(buffers[bv.buffer || 0]);
-    const baseOff = (bv.byteOffset || 0) + (acc.byteOffset || 0), stride = bv.byteStride || numComp * compSize, norm = Boolean(acc.normalized);
-    const out = !norm && acc.componentType === 5125 ? new Uint32Array(count * numComp)
-      : (!norm && (acc.componentType === 5123 || acc.componentType === 5121) ? new Uint16Array(count * numComp) : new Float32Array(count * numComp));
-    const read = COMP_READERS[acc.componentType];
-    for (let i = 0; i < count; i++) {
-      const row = baseOff + i * stride;
-      for (let c = 0; c < numComp; c++) out[i * numComp + c] = read ? read(dv, row + c * compSize, norm) : 0;
-    }
-    return out;
-  }
-
-  function expandBounds(min, max, x, y, z) {
-    if (x < min[0]) min[0] = x; if (x > max[0]) max[0] = x;
-    if (y < min[1]) min[1] = y; if (y > max[1]) max[1] = y;
-    if (z < min[2]) min[2] = z; if (z > max[2]) max[2] = z;
-  }
-
-  function computeFallbackNormals(pos, indices) {
-    const norm = new Float32Array(pos.length), count = indices ? indices.length : pos.length / 3;
-    for (let i = 0; i + 2 < count; i += 3) {
-      const i0 = (indices ? indices[i] : i) * 3, i1 = (indices ? indices[i + 1] : i + 1) * 3, i2 = (indices ? indices[i + 2] : i + 2) * 3;
-      const ax = pos[i1] - pos[i0], ay = pos[i1 + 1] - pos[i0 + 1], az = pos[i1 + 2] - pos[i0 + 2];
-      const bx = pos[i2] - pos[i0], by = pos[i2 + 1] - pos[i0 + 1], bz = pos[i2 + 2] - pos[i0 + 2];
-      const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
-      norm[i0] += nx; norm[i0 + 1] += ny; norm[i0 + 2] += nz;
-      norm[i1] += nx; norm[i1 + 1] += ny; norm[i1 + 2] += nz;
-      norm[i2] += nx; norm[i2 + 1] += ny; norm[i2 + 2] += nz;
-    }
-    for (let i = 0; i < norm.length; i += 3) {
-      const l = Math.hypot(norm[i], norm[i + 1], norm[i + 2]) || 1;
-      norm[i] /= l; norm[i + 1] /= l; norm[i + 2] /= l;
-    }
-    return norm;
-  }
-
-  function uploadBuffer(gl, target, data, attrLoc) {
-    const buf = gl.createBuffer();
-    gl.bindBuffer(target, buf); gl.bufferData(target, data, gl.STATIC_DRAW);
-    if (attrLoc !== undefined) { gl.enableVertexAttribArray(attrLoc); gl.vertexAttribPointer(attrLoc, 3, gl.FLOAT, false, 0, 0); }
-    return buf;
-  }
-
-  function parseGlb(arrayBuffer, gl) {
-    if (arrayBuffer.byteLength < 20) throw new Error("File is too small to be a valid .glb");
-    const dv = new DataView(arrayBuffer);
-    const magic = dv.getUint32(0, true), version = dv.getUint32(4, true), totalLen = dv.getUint32(8, true);
-    if (magic !== 0x46546c67) throw new Error("Invalid .glb header magic");
-    if (version !== 2) throw new Error("Unsupported glTF version " + version);
-    if (totalLen > arrayBuffer.byteLength) throw new Error("Truncated .glb buffer");
-
-    let gltf = null, binSlice = null;
-    for (let offset = 12; offset + 8 <= totalLen;) {
-      const chunkLen = dv.getUint32(offset, true), chunkType = dv.getUint32(offset + 4, true), start = offset + 8;
-      if (start + chunkLen > totalLen) throw new Error("Truncated .glb chunk");
-      if (chunkType === 0x4e4f534a) gltf = JSON.parse(new TextDecoder("utf-8").decode(new Uint8Array(arrayBuffer, start, chunkLen)));
-      else if (chunkType === 0x004e4942) binSlice = arrayBuffer.slice(start, start + chunkLen);
-      offset = start + chunkLen;
-    }
-    if (!gltf) throw new Error("Missing JSON chunk in .glb");
-
-    const buffers = (gltf.buffers || []).map((b, i) => (!b.uri && i === 0 && binSlice ? binSlice : (b.uri && b.uri.startsWith("data:") ? decodeDataUri(b.uri) : binSlice || new ArrayBuffer(0))));
-    if (!buffers.length && binSlice) buffers.push(binSlice);
-
-    const defaultMat = { name: "default", baseColor: [0.75, 0.78, 0.82, 1], metallic: 0.05, roughness: 0.4, emissive: [0, 0, 0], alphaMode: "OPAQUE", doubleSided: false, isTranslucent: false };
-    const materials = (gltf.materials || []).map((m, i) => {
-      const pbr = m.pbrMetallicRoughness || {}, bc = Array.isArray(pbr.baseColorFactor) ? pbr.baseColorFactor : [1, 1, 1, 1];
-      const name = m.name || ("material_" + i);
-      let alpha = bc.length > 3 ? bc[3] : 1, alphaMode = m.alphaMode || "OPAQUE", doubleSided = Boolean(m.doubleSided);
-      if (alphaMode === "OPAQUE" && alpha >= 0.99) {
-        if (name === "glass_tinted") { alpha = 0.30; alphaMode = "BLEND"; doubleSided = true; }
-        else if (name === "glass_clear") { alpha = 0.22; alphaMode = "BLEND"; doubleSided = true; }
-      }
-      return {
-        name, baseColor: [bc[0], bc[1], bc[2], alpha],
-        metallic: typeof pbr.metallicFactor === "number" ? pbr.metallicFactor : 0.05,
-        roughness: typeof pbr.roughnessFactor === "number" ? pbr.roughnessFactor : 0.45,
-        emissive: Array.isArray(m.emissiveFactor) ? m.emissiveFactor : [0, 0, 0],
-        alphaMode, doubleSided, isTranslucent: alphaMode === "BLEND" || alpha < 0.99,
-      };
-    });
-
-    const uploadedMeshes = (gltf.meshes || []).map((mesh) => (mesh.primitives || []).map((prim) => {
-      if (prim.attributes.POSITION === undefined) return null;
-      const pos = readAccessor(gltf, buffers, prim.attributes.POSITION);
-      const indices = prim.indices !== undefined ? readAccessor(gltf, buffers, prim.indices) : null;
-      const norm = prim.attributes.NORMAL !== undefined ? readAccessor(gltf, buffers, prim.attributes.NORMAL) : computeFallbackNormals(pos, indices);
-      const vao = gl.createVertexArray();
-      gl.bindVertexArray(vao);
-      const glBufs = [uploadBuffer(gl, gl.ARRAY_BUFFER, pos, 0), uploadBuffer(gl, gl.ARRAY_BUFFER, norm, 1)];
-      let indexType = 0, drawCount = pos.length / 3;
-      if (indices) {
-        glBufs.push(uploadBuffer(gl, gl.ELEMENT_ARRAY_BUFFER, indices));
-        indexType = indices instanceof Uint32Array ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT; drawCount = indices.length;
-      }
-      gl.bindVertexArray(null);
-      const lmin = [Infinity, Infinity, Infinity], lmax = [-Infinity, -Infinity, -Infinity];
-      for (let i = 0; i < pos.length; i += 3) expandBounds(lmin, lmax, pos[i], pos[i + 1], pos[i + 2]);
-      const mode = prim.mode !== undefined ? prim.mode : gl.TRIANGLES;
-      return {
-        vao, buffers: glBufs, indexed: Boolean(indices), indexType, drawCount, mode,
-        triCount: mode === gl.TRIANGLES ? Math.floor(drawCount / 3) : 0,
-        material: prim.material !== undefined ? materials[prim.material] || defaultMat : defaultMat,
-        localMin: lmin, localMax: lmax,
-      };
-    }).filter(Boolean));
-
-    const nodes = gltf.nodes || [], scene = gltf.scenes && gltf.scenes[gltf.scene || 0];
-    const rootIndices = scene && Array.isArray(scene.nodes) ? scene.nodes : nodes.map((_, i) => i);
-    const drawCalls = [], min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
-    const nodeDefs = new Array(nodes.length), baseWorldMats = new Array(nodes.length), nodeOrder = [], eyelidNodes = [];
-    let nodeCount = 0, triCount = 0;
-
-    function walkNode(nodeIdx, parentIdx, parentMat) {
-      const node = nodes[nodeIdx];
-      if (!node) return;
-      nodeCount++;
-      const name = node.name || "";
-      if (/eyelid/i.test(name)) eyelidNodes.push(nodeIdx);
-      const hasMat = Array.isArray(node.matrix) && node.matrix.length === 16;
-      const t = node.translation || [0, 0, 0], r = node.rotation || [0, 0, 0, 1], s = node.scale || [1, 1, 1];
-      const localMat = hasMat ? new Float32Array(node.matrix) : mat4FromTRS(t, r, s);
-      const worldMat = mat4Multiply(parentMat, localMat);
-      nodeDefs[nodeIdx] = { name, parent: parentIdx, matrix: hasMat ? localMat : null, t, r, s };
-      baseWorldMats[nodeIdx] = worldMat; nodeOrder.push(nodeIdx);
-      if (node.mesh !== undefined && uploadedMeshes[node.mesh]) {
-        for (const prim of uploadedMeshes[node.mesh]) {
-          triCount += prim.triCount; drawCalls.push({ prim, nodeIndex: nodeIdx, worldMat });
-          for (let c = 0; c < 8; c++) {
-            const p = transformPoint(worldMat, (c & 1) ? prim.localMax[0] : prim.localMin[0], (c & 2) ? prim.localMax[1] : prim.localMin[1], (c & 4) ? prim.localMax[2] : prim.localMin[2]);
-            expandBounds(min, max, p[0], p[1], p[2]);
-          }
-        }
-      }
-      if (Array.isArray(node.children)) node.children.forEach((child) => walkNode(child, nodeIdx, worldMat));
-    }
-    rootIndices.forEach((root) => walkNode(root, -1, mat4Identity()));
-    if (!Number.isFinite(min[0])) { min.splice(0, 3, -0.5, 0, -0.5); max.splice(0, 3, 0.5, 1, 0.5); }
-
-    const animations = (gltf.animations || []).map((anim) => {
-      let duration = 0;
-      const channels = (anim.channels || []).map((ch) => {
-        const tgt = ch.target, smp = (anim.samplers || [])[ch.sampler];
-        if (!tgt || tgt.node === undefined || !tgt.path || !smp) return null;
-        const times = readAccessor(gltf, buffers, smp.input), values = readAccessor(gltf, buffers, smp.output);
-        if (times.length) duration = Math.max(duration, times[times.length - 1]);
-        return { nodeIndex: tgt.node, path: tgt.path, times, values, interpolation: smp.interpolation || "LINEAR" };
-      }).filter(Boolean);
-      return { name: anim.name || "", duration, channels };
-    });
-
-    const eyelidSet = new Set(eyelidNodes);
-    const blinkAnim = animations.find((a) => /blink/i.test(a.name))
-      || animations.find((a) => a.channels.some((c) => eyelidSet.has(c.nodeIndex))) || null;
-    const idleAnims = animations.filter((a) => a !== blinkAnim && a.duration > 0 && a.channels.length > 0);
-    const blinkInfo = { anim: blinkAnim, eyelidNodes, closedTime: 0, startTime: 0, endTime: 0.24, hasBlink: Boolean(blinkAnim || eyelidNodes.length) };
-    if (blinkAnim && blinkAnim.channels.length) {
-      const refCh = blinkAnim.channels.find((c) => c.path === "rotation") || blinkAnim.channels[0], times = refCh.times;
-      const restQ = (refCh.path === "rotation" && times.length ? sampleChannel(refCh, times[0]) : null)
-        || (nodeDefs[refCh.nodeIndex] && nodeDefs[refCh.nodeIndex].r) || [0, 0, 0, 1];
-      let maxAng = -1, pFirst = 0, pLast = 0, sIdx = 0, eIdx = times.length - 1;
-      const angs = Array.from(times, (tm) => { const q = refCh.path === "rotation" ? sampleChannel(refCh, tm) : null; return q ? quatAngle(q, restQ) : 0; });
-      angs.forEach((a, i) => { if (a > maxAng + 1e-4) { maxAng = a; pFirst = pLast = i; } else if (Math.abs(a - maxAng) <= 1e-4) pLast = i; });
-      for (let i = pFirst; i >= 0; i--) if (angs[i] < 1e-3) { sIdx = i; break; }
-      for (let i = pLast; i < times.length; i++) if (angs[i] < 1e-3) { eIdx = i; break; }
-      blinkInfo.closedTime = (times[pFirst] + times[pLast]) * 0.5;
-      blinkInfo.startTime = times[sIdx] || 0;
-      blinkInfo.endTime = Math.max(blinkInfo.startTime + 0.08, times[eIdx] || blinkAnim.duration || 0.24);
-    }
-
-    const isBlend = (dc) => (dc.prim.material.isTranslucent ? 1 : 0);
-    drawCalls.sort((a, b) => isBlend(a) - isBlend(b));
-    return {
-      drawCalls, nodeDefs, nodeOrder, baseWorldMats, animations, idleAnims, blinkInfo, bounds: { min, max },
-      size: [max[0] - min[0], max[1] - min[1], max[2] - min[2]],
-      center: [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5, (min[2] + max[2]) * 0.5],
-      triCount, meshCount: uploadedMeshes.length, nodeCount, rawBytes: arrayBuffer,
-      dispose() { for (const prims of uploadedMeshes) for (const p of prims) { gl.deleteVertexArray(p.vao); p.buffers.forEach((b) => gl.deleteBuffer(b)); } },
-    };
-  }
-
-  // --- WebGL2 Shaders (Studio Backdrop, Plinth + Contact Shadows, Sculpted Studio PBR) ---
+  // --- WebGL2 Shaders (Studio Backdrop, Plinth + Contact Shadows, Normal-Mapped Satin PBR) ---
   const BACKDROP_VS = `#version 300 es
   out vec2 v_uv;
   void main() { vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); v_uv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.9999, 1.0); }`;
@@ -363,43 +62,44 @@
   const PBR_VS = `#version 300 es
   layout(location = 0) in vec3 a_position;
   layout(location = 1) in vec3 a_normal;
+  layout(location = 2) in vec2 a_uv;
+  layout(location = 3) in vec3 a_color;
   uniform mat4 u_model, u_viewProj;
   uniform mat3 u_normalMat;
-  uniform vec3 u_instOffset;
-  out vec3 v_worldPos, v_worldNormal, v_samplePos;
+  out vec3 v_worldPos, v_worldNormal, v_color;
+  out vec2 v_uv;
   void main() {
     vec4 wp = u_model * vec4(a_position, 1.0);
-    v_worldPos = wp.xyz; v_samplePos = wp.xyz - u_instOffset;
+    v_worldPos = wp.xyz;
     v_worldNormal = normalize(u_normalMat * a_normal);
+    v_uv = a_uv;
+    v_color = a_color;
     gl_Position = u_viewProj * wp;
   }`;
 
   const PBR_FS = `#version 300 es
   precision highp float;
   const float PI = 3.14159265359;
-  in vec3 v_worldPos, v_worldNormal, v_samplePos;
+  in vec3 v_worldPos, v_worldNormal, v_color;
+  in vec2 v_uv;
   uniform vec3 u_cameraPos, u_viewDir, u_baseColor, u_emissive, u_keyDir, u_fillDir, u_rimDir, u_skyColor, u_groundColor;
-  uniform float u_alpha, u_metallic, u_roughness, u_noiseSeed;
-  uniform int u_isOrtho, u_surfaceKind;
+  uniform float u_alpha, u_metallic, u_roughness, u_normalScale;
+  uniform int u_isOrtho, u_isOptical, u_hasNormalTex;
+  uniform sampler2D u_baseTex, u_normalTex, u_mrTex;
   out vec4 fragColor;
 
-  float hash31(vec3 p) {
-    p = fract(p * vec3(0.1031, 0.1030, 0.0973));
-    p += dot(p, p.yxz + 33.33);
-    return fract((p.x + p.y) * p.z);
-  }
-  float vnoise(vec3 p) {
-    vec3 i = floor(p), f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(
-      mix(mix(hash31(i), hash31(i + vec3(1, 0, 0)), f.x), mix(hash31(i + vec3(0, 1, 0)), hash31(i + vec3(1, 1, 0)), f.x), f.y),
-      mix(mix(hash31(i + vec3(0, 0, 1)), hash31(i + vec3(1, 0, 1)), f.x), mix(hash31(i + vec3(0, 1, 1)), hash31(i + vec3(1, 1, 1)), f.x), f.y), f.z);
-  }
-  vec3 bumpNormal(vec3 N, vec3 p, float strength) {
-    float c = vnoise(p), e = 0.08;
-    vec3 g = vec3(vnoise(p + vec3(e, 0.0, 0.0)), vnoise(p + vec3(0.0, e, 0.0)), vnoise(p + vec3(0.0, 0.0, e))) - c;
-    g -= N * dot(g, N);
-    return normalize(N - g * strength);
+  vec3 applyNormalMap(vec3 N, vec3 pos, vec2 uv) {
+    vec3 mapN = texture(u_normalTex, uv).xyz * 2.0 - 1.0;
+    mapN = normalize(vec3(mapN.xy * u_normalScale, max(mapN.z, 1e-4)));
+    vec3 dp1 = dFdx(pos), dp2 = dFdy(pos);
+    vec2 duv1 = dFdx(uv), duv2 = dFdy(uv);
+    vec3 dp2perp = cross(dp2, N), dp1perp = cross(N, dp1);
+    vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+    vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+    float maxLen2 = max(dot(T, T), dot(B, B));
+    if (maxLen2 < 1e-10) return N;
+    float invmax = inversesqrt(maxLen2);
+    return normalize(mat3(T * invmax, -B * invmax, N) * mapN);
   }
   float D_GGX(float NoH, float a) { float a2 = a * a, d = (NoH * NoH) * (a2 - 1.0) + 1.0; return a2 / (PI * d * d + 1e-6); }
   float G_Smith(float NoV, float NoL, float r) {
@@ -408,10 +108,10 @@
   }
   vec3 F_Schlick(float c, vec3 F0) { return F0 + (1.0 - F0) * pow(clamp(1.0 - c, 0.0, 1.0), 5.0); }
   vec3 studioEnv(vec3 R, float rough) {
-    vec3 env = mix(u_groundColor * 0.55, u_skyColor * 1.05, smoothstep(0.18, 0.92, clamp(R.y * 0.5 + 0.5, 0.0, 1.0)));
+    vec3 env = mix(u_groundColor * 0.55, u_skyColor * 1.10, smoothstep(0.16, 0.90, clamp(R.y * 0.5 + 0.5, 0.0, 1.0)));
     float sharp = (1.0 - rough) * (1.0 - rough);
-    return env + vec3(1.0, 0.97, 0.92) * smoothstep(0.68, 0.97, dot(R, u_keyDir)) * 1.25 * sharp
-               + vec3(0.82, 0.90, 1.0) * smoothstep(0.76, 0.98, dot(R, u_rimDir)) * 0.52 * sharp;
+    return env + vec3(1.0, 0.96, 0.90) * smoothstep(0.66, 0.96, dot(R, u_keyDir)) * 1.35 * sharp
+               + vec3(0.82, 0.92, 1.0) * smoothstep(0.72, 0.97, dot(R, u_rimDir)) * 0.72 * sharp;
   }
   vec3 evalLight(vec3 L, vec3 lCol, vec3 N, vec3 V, vec3 albedo, float met, float rough, vec3 F0, float coatW, inout vec3 specAcc) {
     float NoL = max(dot(N, L), 0.0);
@@ -419,9 +119,9 @@
     vec3 H = normalize(V + L);
     float NoV = max(dot(N, V), 1e-4), NoH = max(dot(N, H), 0.0), HoV = max(dot(H, V), 0.0);
     vec3 F = F_Schlick(HoV, F0);
-    vec3 spec = (D_GGX(NoH, max(rough * rough, 0.045)) * G_Smith(NoV, NoL, rough) * F) / (4.0 * NoV * NoL + 1e-4);
+    vec3 spec = (D_GGX(NoH, max(rough * rough, 0.04)) * G_Smith(NoV, NoL, rough) * F) / (4.0 * NoV * NoL + 1e-4);
     vec3 diff = (vec3(1.0) - F) * (1.0 - met) * albedo / PI;
-    float coat = coatW * (D_GGX(NoH, 0.0484) * G_Smith(NoV, NoL, 0.22) * (0.04 + 0.96 * pow(1.0 - HoV, 5.0))) / (4.0 * NoV * NoL + 1e-4);
+    float coat = coatW * (D_GGX(NoH, 0.036) * G_Smith(NoV, NoL, 0.19) * (0.04 + 0.96 * pow(1.0 - HoV, 5.0))) / (4.0 * NoV * NoL + 1e-4);
     vec3 specTerm = (spec + vec3(coat)) * lCol * NoL;
     specAcc += specTerm;
     return diff * lCol * NoL + specTerm;
@@ -432,47 +132,41 @@
   void main() {
     vec3 N = normalize(v_worldNormal);
     if (!gl_FrontFacing) N = -N;
+    if (u_hasNormalTex == 1 && u_normalScale > 0.0) N = applyNormalMap(N, v_worldPos, v_uv);
     vec3 V = u_isOrtho == 1 ? normalize(u_viewDir) : normalize(u_cameraPos - v_worldPos);
-    float rough = clamp(u_roughness, 0.06, 0.98), met = clamp(u_metallic, 0.0, 1.0);
-    vec3 albedo = max(u_baseColor, 0.0), tp = v_samplePos + vec3(u_noiseSeed, 0.0, u_noiseSeed * 0.61);
-    // Keep clearcoat/gloss strictly on eyes & glass (surfaceKind 0); chitin & matte gear stay velvety matte
-    float coatW = 0.0;
-    if (u_surfaceKind == 0) {
-      coatW = 0.22 * (1.0 - smoothstep(0.22, 0.50, rough));
-    } else if (u_surfaceKind == 1) {
-      float m1 = vnoise(tp * 6.5), m2 = vnoise(tp * 16.0 + 7.1), m3 = vnoise(tp * 40.0 + 19.3);
-      float mottle = m1 * 0.52 + m2 * 0.33 + m3 * 0.15;
-      albedo *= mix(vec3(0.72, 0.74, 0.68), vec3(1.18, 1.20, 1.08), smoothstep(0.26, 0.76, mottle));
-      float dust = smoothstep(0.50, 0.88, m1 * 0.68 + m2 * 0.32) * max(N.y, 0.0);
-      albedo = mix(albedo, albedo * 1.28 + vec3(0.025, 0.028, 0.020), dust * 0.32);
-      rough = clamp(rough + (m2 - 0.5) * 0.12 + (m3 - 0.5) * 0.06, 0.48, 0.96);
-      N = bumpNormal(N, tp * 30.0, 0.36);
-    } else if (u_surfaceKind == 2) {
-      float weave = vnoise(tp * 52.0) * 0.62 + vnoise(tp * 14.0 + 3.7) * 0.38;
-      albedo *= mix(0.84, 1.10, weave);
-      rough = clamp(rough + (weave - 0.5) * 0.10, 0.45, 0.96);
-      N = bumpNormal(N, tp * 48.0, 0.26);
-    } else {
-      float brush = vnoise(tp * vec3(24.0, 56.0, 24.0)) * 0.65 + vnoise(tp * 10.0) * 0.35;
-      albedo *= mix(0.86, 1.08, brush);
-      rough = clamp(rough + (brush - 0.5) * 0.14, 0.14, 0.78);
-    }
-    vec3 F0 = mix(vec3(0.04), albedo, met), specAcc = vec3(0.0);
-    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.97, 0.92) * 3.45, N, V, albedo, met, rough, F0, coatW, specAcc)
-            + evalLight(u_fillDir, vec3(0.70, 0.82, 0.98) * 0.54, N, V, albedo, met, rough, F0, coatW, specAcc)
-            + evalLight(u_rimDir, vec3(0.88, 0.94, 1.0) * 1.22, N, V, albedo, met, rough, F0, coatW, specAcc);
-    float ao = mix(0.64, 1.0, smoothstep(0.0, 0.32, v_worldPos.y)) * mix(0.56, 1.0, smoothstep(-0.35, 0.55, N.y));
-    vec3 ambDiff = mix(u_groundColor, u_skyColor, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.32;
+
+    vec4 baseSample = texture(u_baseTex, v_uv);
+    vec3 albedo = max(u_baseColor * baseSample.rgb, 0.0);
+    vec4 mrSample = texture(u_mrTex, v_uv);
+    float rough = clamp(u_roughness * mrSample.g, 0.05, 0.98);
+    float met = clamp(u_metallic * mrSample.b, 0.0, 1.0);
+
+    // Optical catchlights strictly on eyes & glass; satin chitin/cloth/metal use normal + MR maps
+    float coatW = u_isOptical == 1 ? 0.26 * (1.0 - smoothstep(0.18, 0.44, rough)) : 0.0;
+    vec3 F0 = mix(vec3(0.045), albedo, met), specAcc = vec3(0.0);
+    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.96, 0.90) * 3.35, N, V, albedo, met, rough, F0, coatW, specAcc)
+            + evalLight(u_fillDir, vec3(0.68, 0.80, 0.98) * 0.62, N, V, albedo, met, rough, F0, coatW, specAcc)
+            + evalLight(u_rimDir, vec3(0.86, 0.94, 1.0) * 1.65, N, V, albedo, met, rough, F0, coatW, specAcc);
+
+    vec3 bakedAo = clamp(v_color, 0.0, 1.0);
+    float aoScalar = dot(bakedAo, vec3(0.2126, 0.7152, 0.0722));
+    float geoAo = mix(0.76, 1.0, smoothstep(0.0, 0.26, v_worldPos.y)) * mix(0.74, 1.0, smoothstep(-0.38, 0.52, N.y));
+    vec3 directAo = mix(vec3(1.0), bakedAo, u_alpha < 0.99 ? 0.20 : 0.52);
+
     vec3 R = reflect(-V, N); float NoV = max(dot(N, V), 0.0);
+    float specOccl = clamp(pow(NoV + aoScalar, exp2(-16.0 * rough - 1.0)) - 1.0 + aoScalar, 0.0, 1.0);
+    vec3 ambDiff = mix(u_groundColor, u_skyColor, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.34 * bakedAo * geoAo;
     float envAtten = (1.0 - rough) * (1.0 - rough);
     vec3 F_env = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - NoV, 5.0);
-    vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.08, 0.92, envAtten) * mix(envAtten, 1.0, met);
-    vec3 envCoat = studioEnv(R, 0.22) * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * 0.28;
-    vec3 outCol = linearToSrgb(acesFilm((Lo + (ambDiff + envSpec + envCoat) * ao + u_emissive) * 1.03));
-    float outAlpha = u_alpha;
+    vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.16, 0.95, envAtten) * mix(envAtten, 1.0, met) * specOccl * geoAo;
+    vec3 envCoat = studioEnv(R, 0.19) * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * 0.32 * specOccl;
+
+    vec3 outCol = linearToSrgb(acesFilm((Lo * directAo + ambDiff + envSpec + envCoat + u_emissive) * 1.02));
+    float outAlpha = 1.0;
     if (u_alpha < 0.99) {
-      float specLuma = dot(acesFilm((specAcc + (envSpec + envCoat) * ao) * 1.03), vec3(0.2126, 0.7152, 0.0722));
-      outAlpha = clamp(u_alpha + pow(1.0 - NoV, 3.0) * 0.42 + specLuma * 0.55, 0.0, 0.90);
+      float baseA = clamp(u_alpha * baseSample.a, 0.0, 1.0);
+      float specLuma = dot(acesFilm((specAcc * directAo + envSpec + envCoat) * 1.02), vec3(0.2126, 0.7152, 0.0722));
+      outAlpha = clamp(baseA + pow(1.0 - NoV, 3.0) * 0.42 + specLuma * 0.55, 0.0, 0.90);
     }
     fragColor = vec4(outCol, outAlpha);
   }`;
@@ -558,20 +252,17 @@
     }
     const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
     const bufs = [
-      uploadBuffer(gl, gl.ARRAY_BUFFER, new Float32Array(pos), 0),
-      uploadBuffer(gl, gl.ARRAY_BUFFER, new Float32Array(norm), 1),
+      uploadBuffer(gl, gl.ARRAY_BUFFER, new Float32Array(pos), 0, 3),
+      uploadBuffer(gl, gl.ARRAY_BUFFER, new Float32Array(norm), 1, 3),
       uploadBuffer(gl, gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx)),
     ];
     gl.bindVertexArray(null);
     return { vao, count: idx.length, halfSpanX, radius, dispose() { gl.deleteVertexArray(vao); bufs.forEach((b) => gl.deleteBuffer(b)); } };
   }
 
-  function surfaceKindFor(mat) {
+  function isOpticalMat(mat) {
     const n = mat.name || "";
-    if (n === "chitin_team" || n === "chitin_dark") return 1;
-    if (n.startsWith("eye_") || n.startsWith("glass_") || (mat.metallic < 0.35 && mat.roughness < 0.22)) return 0;
-    if (mat.metallic >= 0.40 || n === "gear_steel" || n === "gear_gold_metal" || n === "gear_brass_trim") return 3;
-    return 2;
+    return n.startsWith("eye_") || n.startsWith("glass_") || (mat.metallic < 0.35 && mat.roughness < 0.22 && !mat.normalTex);
   }
 
   function applyAnimChannels(overrides, channels, t) {
@@ -633,17 +324,26 @@
       this.pbrProg = createProgram(gl, PBR_VS, PBR_FS);
       this.plinthProg = createProgram(gl, PLINTH_VS, PLINTH_FS);
       this.emptyVao = gl.createVertexArray();
+      this.fallbacks = createFallbackTextures(gl);
       this.plinth = null; this.plinthKey = "";
       this.uBack = getUniforms(gl, this.backdropProg, ["u_topColor", "u_midColor", "u_botColor"]);
       this.uPbr = getUniforms(gl, this.pbrProg, [
-        "u_model", "u_normalMat", "u_viewProj", "u_instOffset", "u_cameraPos", "u_viewDir", "u_isOrtho",
-        "u_baseColor", "u_alpha", "u_metallic", "u_roughness", "u_emissive", "u_noiseSeed", "u_surfaceKind",
+        "u_model", "u_normalMat", "u_viewProj", "u_cameraPos", "u_viewDir", "u_isOrtho",
+        "u_baseColor", "u_alpha", "u_metallic", "u_roughness", "u_emissive", "u_normalScale",
+        "u_isOptical", "u_hasNormalTex", "u_baseTex", "u_normalTex", "u_mrTex",
         "u_keyDir", "u_fillDir", "u_rimDir", "u_skyColor", "u_groundColor",
       ]);
       this.uPlinth = getUniforms(gl, this.plinthProg, [
         "u_viewProj", "u_topBase", "u_sideBase", "u_ringColor", "u_keyDir",
         "u_shadows[0]", "u_shadowCount", "u_halfSpanX", "u_radius",
       ]);
+      gl.useProgram(this.pbrProg);
+      gl.uniform1i(this.uPbr.u_baseTex, 0);
+      gl.uniform1i(this.uPbr.u_normalTex, 1);
+      gl.uniform1i(this.uPbr.u_mrTex, 2);
+      gl.useProgram(null);
+      gl.vertexAttrib2f(2, 0, 0);
+      gl.vertexAttrib3f(3, 1, 1, 1);
     }
 
     ensurePlinth(halfSpanX, radius) {
@@ -691,9 +391,9 @@
       }
       gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
       const camera = this.computeCamera(scene, cam, opts.width, opts.height, opts.overrideProj);
-      const keyDir = this.rotateLight(-0.58, 0.86, 0.56, camera.yaw);
-      const fillDir = this.rotateLight(0.75, 0.40, 0.35, camera.yaw);
-      const rimDir = this.rotateLight(0.38, 0.56, -0.82, camera.yaw);
+      const keyDir = this.rotateLight(-0.56, 0.84, 0.58, camera.yaw);
+      const fillDir = this.rotateLight(0.76, 0.42, 0.34, camera.yaw);
+      const rimDir = this.rotateLight(0.36, 0.52, -0.84, camera.yaw);
 
       if (opts.showPlinth !== false && !opts.transparent) {
         const plinth = this.ensurePlinth(scene.plinthSpanX, scene.plinthRadius);
@@ -711,6 +411,8 @@
 
       if (!scene.instances.length) return;
       gl.useProgram(this.pbrProg);
+      gl.vertexAttrib2f(2, 0, 0);
+      gl.vertexAttrib3f(3, 1, 1, 1);
       gl.uniformMatrix4fv(this.uPbr.u_viewProj, false, camera.viewProj);
       gl.uniform3fv(this.uPbr.u_cameraPos, camera.eye); gl.uniform3fv(this.uPbr.u_viewDir, camera.viewDir);
       gl.uniform1i(this.uPbr.u_isOrtho, camera.isOrtho ? 1 : 0);
@@ -726,8 +428,6 @@
         } else { gl.disable(gl.BLEND); gl.depthMask(true); }
         scene.instances.forEach((inst, instIdx) => {
           const worldMats = instMats[instIdx];
-          gl.uniform3f(this.uPbr.u_instOffset, inst.offsetMat ? inst.offsetMat[12] : 0, inst.offsetMat ? inst.offsetMat[13] : 0, inst.offsetMat ? inst.offsetMat[14] : 0);
-          gl.uniform1f(this.uPbr.u_noiseSeed, instIdx * 17.3);
           for (const item of inst.model.drawCalls) {
             const prim = item.prim, mat = prim.material;
             if (Boolean(mat.isTranslucent) !== wantBlend) continue;
@@ -738,15 +438,22 @@
             const nodeMat = worldMats[item.nodeIndex] || item.worldMat;
             const modelMat = inst.offsetMat ? mat4Multiply(inst.offsetMat, nodeMat) : nodeMat;
             gl.frontFace(mat3DetFromMat4(modelMat) < 0 ? gl.CW : gl.CCW);
+            gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, mat.baseTex || this.fallbacks.white);
+            gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, mat.normalTex || this.fallbacks.flatNormal);
+            gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, mat.mrTex || this.fallbacks.white);
             gl.uniformMatrix4fv(this.uPbr.u_model, false, modelMat); gl.uniformMatrix3fv(this.uPbr.u_normalMat, false, mat3NormalFromMat4(modelMat));
             gl.uniform3f(this.uPbr.u_baseColor, bc[0], bc[1], bc[2]); gl.uniform1f(this.uPbr.u_alpha, bc[3]);
             gl.uniform1f(this.uPbr.u_metallic, mat.metallic); gl.uniform1f(this.uPbr.u_roughness, mat.roughness);
-            gl.uniform1i(this.uPbr.u_surfaceKind, surfaceKindFor(mat)); gl.uniform3fv(this.uPbr.u_emissive, mat.emissive);
+            gl.uniform1f(this.uPbr.u_normalScale, mat.normalScale);
+            gl.uniform1i(this.uPbr.u_hasNormalTex, mat.normalTex && prim.hasUv ? 1 : 0);
+            gl.uniform1i(this.uPbr.u_isOptical, isOpticalMat(mat) ? 1 : 0);
+            gl.uniform3fv(this.uPbr.u_emissive, mat.emissive);
             gl.bindVertexArray(prim.vao);
             if (prim.indexed) gl.drawElements(prim.mode, prim.drawCount, prim.indexType, 0); else gl.drawArrays(prim.mode, 0, prim.drawCount);
           }
         });
       }
+      gl.activeTexture(gl.TEXTURE0);
       gl.bindVertexArray(null); gl.frontFace(gl.CCW); gl.depthMask(true); gl.disable(gl.BLEND);
     }
 
@@ -902,6 +609,8 @@
         ready: state.ready, ant: state.ant, team: state.team, angle: state.angle, blink: state.blinkMode,
         hasBlinkAnim: state.scene.instances.some((inst) => inst.model.blinkInfo && inst.model.blinkInfo.hasBlink),
         idleAnims: state.scene.instances.flatMap((inst) => (inst.model.idleAnims || []).map((a) => a.name)),
+        textureCount: state.scene.instances.reduce((sum, inst) => sum + (inst.model.textureCount || 0), 0),
+        hasVertexColors: state.scene.instances.some((inst) => Boolean(inst.model.hasVertexColors)),
         projection: state.cam.projection, yaw: Math.round(wrapAngleDeg(state.cam.yaw)), pitch: Math.round(state.cam.pitch),
         lineup: state.ant === "lineup", loadedCount: state.scene.instances.length, triCount: state.scene.triCount, error: state.error,
       };
@@ -936,7 +645,7 @@
       if (state.modelCache.has(id)) return state.modelCache.get(id);
       const resp = await fetch("models/" + encodeURIComponent(id) + ".glb", { cache: "no-cache" });
       if (!resp.ok) throw new Error("HTTP " + resp.status + " loading models/" + id + ".glb");
-      const parsed = parseGlb(await resp.arrayBuffer(), renderer.gl);
+      const parsed = await parseGlb(await resp.arrayBuffer(), renderer.gl);
       if (state.modelCache.has(id)) { parsed.dispose(); return state.modelCache.get(id); }
       state.modelCache.set(id, parsed);
       return parsed;
@@ -1004,7 +713,9 @@
         try {
           const buf = await file.arrayBuffer();
           if (seq !== state.loadSeq) return;
-          const parsed = parseGlb(buf, renderer.gl), stem = file.name.replace(/\.glb$/i, "").toLowerCase();
+          const parsed = await parseGlb(buf, renderer.gl);
+          if (seq !== state.loadSeq) { parsed.dispose(); return; }
+          const stem = file.name.replace(/\.glb$/i, "").toLowerCase();
           if (ANT_CLASSES.includes(stem)) {
             if (state.modelCache.has(stem)) state.modelCache.get(stem).dispose();
             state.modelCache.set(stem, parsed); lastId = stem;
