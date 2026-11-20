@@ -535,9 +535,9 @@ def _sculpt_head(scene: SceneBuilder, blink: float) -> None:
         ("right", (-0.114, hy + 0.142, hz + 0.052), (-0.138, hy + 0.214, hz + 0.036), (-0.172, hy + 0.278, hz + 0.020), (-0.212, hy + 0.300, hz + 0.056), (-0.226, hy + 0.276, hz + 0.104), +0.34),
     )
     for tag, base, mid_a, elbow, club1, club2, rz_s in ant_specs:
-        scene.add("antennae", swept_tube([base, mid_a, elbow], [0.022, 0.018, 0.020], radial_segs=10, smooth_subdiv=2, cap_rings=2, name=f"antenna_scape_{tag}", material="chitin_dark"))
-        scene.add("antennae", curved_tube([elbow, club1, club2], [0.018, 0.023, 0.029], samples_per_seg=4, radial_segs=10, cap_rings=3, name=f"antenna_club_{tag}", material="chitin_dark"))
-        scene.add("antennae", ellipsoid(0.036, 0.019, 0.036, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark").rotate_xyz(rx=0.20, rz=rz_s).translate(*base))
+        scene.add("antennae", swept_tube([base, mid_a, elbow], [0.026, 0.022, 0.025], radial_segs=12, smooth_subdiv=2, cap_rings=2, name=f"antenna_scape_{tag}", material="chitin_dark"))
+        scene.add("antennae", curved_tube([elbow, club1, club2], [0.024, 0.043, 0.052], samples_per_seg=5, radial_segs=14, cap_rings=5, name=f"antenna_club_{tag}", material="chitin_dark"))
+        scene.add("antennae", ellipsoid(0.039, 0.021, 0.039, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark").rotate_xyz(rx=0.20, rz=rz_s).translate(*base))
 
 
 def _build_head(scene: SceneBuilder, blink: float) -> None:
