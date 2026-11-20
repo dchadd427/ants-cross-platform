@@ -283,6 +283,7 @@ struct LevelPlan {
     uint32_t repeat_limit{12};
     uint32_t repeat_window{1200};
     uint32_t fallback_ticks{2400};
+    bool stall_walkable{true};           // the no-point trigger counts the food that the hill walks to: a lunchbox that no walk joins to the hill (a dead ant's, in a field of bombs) is none of it (false, `stallwalk=0`: the bot as it was, for which any lunchbox was)
     uint32_t gate_user_fails{16};        // the gate stops guiding for 900 ticks after this many clicks onto the entrance in a row that delivered nothing (0: it never stops)
     // islands (ISLANDS, SMALL: food beyond water; IslandTask, docs/BOTS.md "Islands"): a Swimmer digs bridges, the economy walks over them. Idle where nothing lies beyond water
     bool islands{false};                 // the island task is on (every level of the standard bot; a plan made by hand, as the tests do, has it off)
@@ -334,6 +335,7 @@ struct LevelPlan {
     bool field_set_off{true};            // a seat that has no ant to start the work lets a plain ant set one bomb off to get to a power-up of the kind
     bool field_serve{true};              // an ant takes only a power-up whose kind then reaches the work from it (a Swimmer power-up on a strip that fire walls cut off from the water is none)
     bool field_replan{true};             // a Stuck step of the field breach gets one fresh plan before its ant is given up
+    bool field_wake{true};               // an ant that the field breach gave up (and the task that waited) tries again when the bombs, fire walls or bridges of the map change, not only after its rest
     bool gate_spare_map_bombs{true};     // on a gate map the counters leave the map's own bombs (no team, 255) alone while the gate goals are live (Tactics::gate_goals_live): they are the gate, and the goals defuse those on the way. A bomb of a
                                          // team is countered as on any map, and so is a map bomb once the goals are exhausted or the bot is in the fallback
     // the flowers (docs/BOTS.md, "The flowers"; Hard's: Medium and Easy play none): what the bot does with the power-ups that the droppers let fall. `--tune flowers=0` switches all of it off (the bot as it was)

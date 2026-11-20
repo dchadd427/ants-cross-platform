@@ -31,6 +31,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "field") return flag(p.gate_field);                                   // the field breach (0: the gate goals' shore breach, as before)
     if (key == "fpick") return flag(p.field_pick);                                   // the field breach's click on the power-up under the ant (0: off the power-up and back on)
     if (key == "fwalk") return flag(p.field_walk);                                   // the field breach's walks by the engine's own walk (0: one tile where a bomb is next to the way)
+    if (key == "fwake") return flag(p.field_wake);                                   // a given-up ant of the field breach tries again when the map's bombs, fire walls or bridges change (0: after its rest only)
     if (key == "freplan") return flag(p.field_replan);                               // the field breach plans afresh once before it gives up a Stuck ant (0: it gives it up at once)
     if (key == "fserve") return flag(p.field_serve);                                 // the field breach takes only a power-up whose kind reaches the work from it (0: any power-up of the kind)
     if (key == "fsetoff") return flag(p.field_set_off);                              // the field breach's set-off by a plain ant when no ant can start the work (0: it waits)
@@ -183,6 +184,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "repeat") { p.repeat_limit = static_cast<uint32_t>(v); return true; }               // ... the same order sent this many times ...
     if (key == "repwindow") { p.repeat_window = static_cast<uint32_t>(v); return true; }           // ... within this many ticks with nothing banked
     if (key == "fallback") { p.fallback_ticks = static_cast<uint32_t>(v); return true; }           // ... and the plain economy this long
+    if (key == "stallwalk") return flag(p.stall_walkable);                                          // ... the no-point trigger ignores a lunchbox that no walk joins to the hill (0: it counted every lunchbox)
     if (key == "gategap") { p.gate_gap_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "idle") { p.bench_idle_ticks = static_cast<uint32_t>(v); return true; }
     if (key == "avoid") return flag(p.avoids_guarded_hills);

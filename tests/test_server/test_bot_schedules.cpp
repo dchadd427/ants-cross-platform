@@ -1,7 +1,8 @@
 // Tests of the schedules of the server's own matches of computer players (pacific_time.hpp, bot_match_spec.hpp, bot_schedules.hpp, db_schema.cpp version 9; docs/SERVER_REPLAYS.md "Schedules"): the Pacific clock written by hand
 // (the changes of 2026 to 2028 against the zone database's own seconds, and the two odd days: the hour that does not happen and the hour that happens twice), when a schedule runs next (every N minutes, at times of the
 // day, after a restart), the words that a batch and a schedule are made of, and the rows that the database keeps (a restart reads them back, the default is made once, a deleted default stays deleted, a copy of a
-// version 8 database migrates to 9 and keeps what it had). The routes and the limits are in the server suite (bot_admin_tests.hpp). No sockets, no rooms.
+// version 8 database migrates to 9 and keeps what it had; the spacing of a batch is kept with the rest of what a schedule starts, and the longest batch fits the column). The routes and the limits are in the server suite
+// (bot_admin_tests.hpp, bot_stagger_tests.hpp). No sockets, no rooms.
 #include <algorithm>
 #include <cstdlib>
 #include <fstream>
@@ -11,6 +12,7 @@
 #include <set>
 
 #include "../common/test_assert.hpp"
+#include "ants_net/protocol.hpp"
 #include "ants_server/bot_match_spec.hpp"
 #include "ants_server/bot_schedules.hpp"
 #include "ants_server/db_schema.hpp"
@@ -681,6 +683,74 @@ int main() {
         ASSERT_TRUE(store.create(patch_every("c", 30), kNow, c, why) && c.id == 4);
         ASSERT_TRUE(store.remove(4, why));
         ASSERT_TRUE(store.create(patch_every("d", 30), kNow, c, why) && c.id == 5);
+    } TEST_END();
+
+    TEST_CASE("BSC8.1 The spacing of a schedule is part of what it starts: it is kept in the row and read back after a restart, it is part of what makes one save the same as another, and the longest batch that a schedule can have (the longest name of a map, the widest teams, two hours' spacing) fits the column of the table") {
+        TempDir dir;
+        const std::string file = (dir.path / "ants.db").string();
+        int64_t id = 0;
+        std::string longest(net::kMaxMapNameChars - 4, 'm');                                         // (the longest name that a map can have)
+        longest += ".lvl";
+        {
+            db::Database database;
+            ASSERT_TRUE(open_server_db(database, file));
+            BotScheduleStore store(&database);
+            std::string why;
+            ASSERT_TRUE(store.open(kNow, why));
+            BotSchedulePatch p = patch_every("spaced", 30);
+            p.what.count = 5;
+            p.what.every_s = 180;
+            BotSchedule s;
+            ASSERT_TRUE(store.create(p, kNow, s, why));
+            id = s.id;
+            ASSERT_EQ(s.what.every_s, 180u);
+            BotSchedule again;
+            bool repeated = false;
+            ASSERT_TRUE(store.create(p, kNow + 1, again, why, &repeated) && repeated && again.id == id);                     // (the same save a moment later is the same schedule)
+            p.what.every_s = 240;
+            ASSERT_TRUE(store.create(p, kNow + 2, again, why, &repeated) && !repeated && again.id != id);                     // (another spacing is another schedule: a save with only the spacing changed is not the same save)
+            BotSchedulePatch widest = patch_every("widest", 30);
+            widest.what.count = 8;
+            widest.what.every_s = 7200;
+            widest.what.spec.map = longest;
+            widest.what.spec.rules = BotRules::Random;
+            widest.what.spec.teams = BotTeamsChoice::Split;
+            widest.what.spec.bots = 4;
+            widest.what.spec.split = 2;
+            BotSchedule wide;
+            ASSERT_TRUE(store.create(widest, kNow + 3, wide, why));
+            ASSERT_TRUE(ctl::to_json(bot_what_json(wide.what)).size() < 1000);                                                 // (the column holds 1,000 characters)
+            ASSERT_EQ(scalar(database, "SELECT COUNT(*) FROM bot_schedules WHERE length(what) > 1000"), int64_t{0});
+            ASSERT_EQ(scalar(database, "SELECT COUNT(*) FROM bot_schedules WHERE what LIKE '%\"every_s\":7200%'"), int64_t{1});
+            BotSchedulePatch change;
+            change.has_what = true;
+            change.what = s.what;
+            change.what.every_s = 90;
+            BotSchedule changed;
+            bool different = false;
+            ASSERT_TRUE(store.update(id, change, kNow + 4, changed, why, &different) && different && changed.what.every_s == 90u);
+            ASSERT_TRUE(store.update(id, change, kNow + 5, changed, why, &different) && !different);                          // (the same spacing again changes nothing)
+            database.close();
+        }
+        {
+            db::Database database;
+            ASSERT_TRUE(open_server_db(database, file));
+            BotScheduleStore store(&database);
+            std::string why;
+            ASSERT_TRUE(store.open(kNow + 3600, why));
+            const BotSchedule* back = store.find(id);
+            ASSERT_TRUE(back != nullptr && back->what.every_s == 90u && back->what.count == 5u);                               // (the spacing came back with the schedule)
+            bool widest_found = false;
+            for (const BotSchedule& s : store.list()) widest_found = widest_found || (s.name == "widest" && s.what.every_s == 7200u && s.what.spec.map == longest && s.what.count == 8u);
+            ASSERT_TRUE(widest_found);
+        }
+        BotScheduleStore memory(nullptr);                                                                                      // (without a database it is the same)
+        BotSchedulePatch q = patch_every("memory", 30);
+        q.what.count = 3;
+        q.what.every_s = 60;
+        BotSchedule kept;
+        std::string why;
+        ASSERT_TRUE(memory.create(q, kNow, kept, why) && memory.find(kept.id)->what.every_s == 60u);
     } TEST_END();
 
     std::cout << "\n" << g_test_count << " cases, " << g_assert_count << " assertions, " << g_test_failures << " failed\n";

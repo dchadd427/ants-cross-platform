@@ -14,6 +14,7 @@
 const R = require('./web_home_games_rig.js')(process.argv[2]);
 const { GUEST, check, same, flush, fakeSite, row, locked, lockedCards, listOf, page, wait, classes, find, first, home, tap, chooseHost, pressEscape, popOf, rowsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, leaves, seatsOf, myRoom, guestRoom, roomAs, Games,
         PUBLIC, PRIVATE, STARTING, NET0, KEY, E, C, hex, roomMessage, welcome, reject, helloBytes, helloRoom, grouped, RULES0, done, broke } = R;
+const LOCKED_ADJ = R.Games.TEXT.privateTag.toLowerCase().replace(' ', '-');         // the setting's one name, as Quick join's line says it before a noun ("2 invite-only rooms are locked")
 
 const KEY2 = Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x60 + i));
 const BEST = row('p4n8dz', 'Pebble', { map: 'ISLANDS.LVL', people: 3, free: 1, age: 312 });
@@ -630,19 +631,20 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
 {   // only locked rooms: nothing to join; the card says that Quick join skips them
     const env = await withRooms([locked('Maple', { map: 'SMALL.LVL' }), locked('Quill', { map: 'TREASURE.LVL' })]);
     await press(env);
-    same('only private rooms: the card of "no open games" (the page\'s own words) with one more line after the first, and no second client was opened', [title(env), find(card(env), 'gcline').map(textOf), env.sockets.length],
-        ['No open games right now.', ['Nobody is waiting for a player. Host one, and others can join you.', '2 private rooms are locked, so Quick join skips them.'], 0]);
+    same('only invite-only rooms: the card of "no open games" (the page\'s own words) with one more line after the first, and no second client was opened', [title(env), find(card(env), 'gcline').map(textOf), env.sockets.length],
+        ['No open games right now.', ['Nobody is waiting for a player. Host one, and others can join you.', '2 ' + LOCKED_ADJ + ' rooms are locked, so Quick join skips them.'], 0]);
+    check('... and nothing on the card says "private" or "link only" (the setting is called Invite only)', !/link only|\bprivate\b/i.test(textOf(card(env))));
     check('... the card is still described by its first line, and Host one! has the focus', card(env).getAttribute('aria-describedby') === 'gc-line' && first(card(env), 'gcline').id === 'gc-line' && env.focused === act(env, 'gyes'));
     tap(act(env, 'gstay'));
     env.site.body = listOf([locked('Maple')]);
     await wait(env, 31000);
     await press(env);
-    same('one private room: "1 private room is locked, so Quick join skips it."', find(card(env), 'gcline').map(textOf).slice(1), ['1 private room is locked, so Quick join skips it.']);
+    same('one invite-only room: the line says "room" and "it"', find(card(env), 'gcline').map(textOf).slice(1), ['1 ' + LOCKED_ADJ + ' room is locked, so Quick join skips it.']);
     tap(act(env, 'gstay'));
     env.site.body = listOf([]);
     await wait(env, 31000);
     await press(env);
-    same('no private room: the card is as it was, with the one line', find(card(env), 'gcline').map(textOf), ['Nobody is waiting for a player. Host one, and others can join you.']);
+    same('no invite-only room: the card is as it was, with the one line', find(card(env), 'gcline').map(textOf), ['Nobody is waiting for a player. Host one, and others can join you.']);
 }
 {   // joinable rooms and locked ones: the locked are not counted, not tried, not asked for, and the best joinable room is the best
     const env = await withRooms([locked('Aspen', { map: 'ISLANDS.LVL', people: 3, free: 1 })].concat(ROWS, [locked('Birch', { people: 3, free: 1 }), locked('Cedar', { people: 3, free: 1 })]));
@@ -669,7 +671,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     env.site.body = listOf([locked('Maya', { map: 'TREASURE.LVL', people: 1, free: 3 }), locked('Quill', { people: 3, free: 1 })]);
     await wait(env, 31000);
     await press(env);
-    same('with another private room too: "1 private room is locked, so Quick join skips it."', find(card(env), 'gcline').map(textOf).slice(1), ['1 private room is locked, so Quick join skips it.']);
+    same('with another invite-only room too: the line counts one', find(card(env), 'gcline').map(textOf).slice(1), ['1 ' + LOCKED_ADJ + ' room is locked, so Quick join skips it.']);
 }
 {   // BEST and the list: the first joinable room, with two or more, and a locked card is never BEST
     const site = fakeSite();

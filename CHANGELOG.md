@@ -26,6 +26,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.19.2 - 2026-11-20 - Invite only rooms, fewer stuck computer players
+
+**For players:**
+- **"Invite only" instead of "Private".** A room you keep to yourself shows in Open games, locked, and people join only with your link; the switch and every message now say so.
+- **Computer players on POPcOrN get stuck less.** Fewer seats end a match without a point, and they take more power-ups.
+
+**For operators:**
+- A schedule on the admin page can space its matches out ("Start one every X minutes"), like Start now.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/a89fd745...cd31da55)
+
 ## v0.19.1 - 2026-11-20 - Numbers over the ants without a border
 
 **For players:**
@@ -494,16 +505,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/308ce544...c7027eb3)
 
-## v0.12.150 - 2026-10-28 - Online rooms: at most 8,000 starting ants
+## Older versions (v0.12.150 and before)
 
-**For players:**
-- **Online rooms play at most 8,000 starting ants (all four colors added up).** Before, nothing limited the ants: a map with 40,000 ants passed the checker, and starting its match froze the whole server for about 11 seconds, with every room, the lobby and the health check, because setting the ants up takes time that grows with the square of their number. Now a map over 8,000 is refused before any ant is set up. A map that starts 8,000 ants or fewer, including the largest ones of the players (6,000 and 2,772 ants), plays online as before; none of the library's 540 maps starts more than 248.
-- **How you see the refusal.** The lobby tells the leader "This map starts too many ants to play online (8,000 at most): choose another map." and the room keeps its map. The map list marks the map "Too many ants to play online". In the Map Maker, **Play this map > With other players** says so and its button is off, and **Submit for approval** and test rooms get a sentence from the server. The map can still be opened, edited and saved, and played on your own computer or against bots.
-- **A match with many ants takes more of the server's places.** A match takes one place for every 10,000 cells of its map or every 400 starting ants, whichever is more: 2,400 ants take 6 places, 6,000 take 15 and 8,000 take 20 of the server's 48. A shipped map still takes one. So a 6,000-ant map now takes 15 of the 48 places (only 3 such matches at once; it took 3 before). Matches on a map above the cap are left out of the match history counts (only a recording made before the cap can be one). When a map needs more places than are free, the START waits as it does on any full server ("The server has no place for another match right now: try again in a minute.").
-
-**Rules / network:** none for the simulation and the network: network protocol 21, the simulation rules, the recordings and the map files are unchanged. One rule of online play is new, and a map that was accepted before can now be refused online: a room no longer plays a map that starts more than 8,000 ants.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/dd307dfd...bb58eaa2)
-## Older versions (v0.12.149 and before)
-
-Every release before v0.12.150, and the long notes of v0.12.149 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.151, and the long notes of v0.12.150 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

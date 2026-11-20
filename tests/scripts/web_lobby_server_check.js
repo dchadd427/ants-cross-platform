@@ -602,6 +602,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
     await scenario('the front page: Quick host makes a real room public, a second page sees it in the real list and joins it from there', async () => {
         if (!listBase) { console.log('SKIP: no public door was given: the front page\'s Games list was NOT run against the real list'); return; }
         const webDir = path.join(path.dirname(path.resolve(modulePath)), '..');
+        const GT = require(path.join(webDir, 'home', 'games.js')).TEXT;          // (the page's own words: a check names the chip or the button that the page has for a situation, and does not spell it)
         globalThis.AntsShapes = require(path.join(webDir, 'shapes.js'));
         const harness = require('./web_page_harness.js')(path.join(webDir, 'lobby.html'));
         const sockets = [];
@@ -634,7 +635,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         check('... and the real list says two people', (await listed()).lobbies.find((x) => x.code === room).people === 2);
         const priv = A.root.findAll((n) => String(n.className).split(/\s+/).indexOf('vbtn') !== -1 && n.getAttribute('aria-pressed') === 'false')[0];
         priv.click();
-        await step('the host presses Private: the guest\'s chip says so', () => () => B.root.findAll((n) => String(n.className).split(/\s+/).indexOf('vistag') !== -1)[0].textContent === 'Private room', 8000);
+        await step('the host presses Invite only: the guest\'s chip says so', () => () => B.root.findAll((n) => String(n.className).split(/\s+/).indexOf('vistag') !== -1)[0].textContent === GT.privateRoom, 8000);
         check('... and the real list has lost the room', (await listed()).lobbies.every((x) => x.code !== room));
         for (const ws of sockets) { try { ws.close(); } catch (e) { /* closed already */ } }
     });
@@ -645,6 +646,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
     await scenario('Quick join: the best open room of the real list, the question when others are in the room, a room that is full or started is skipped, three tries at most, Cancel leaves no seat behind', async () => {
         if (!listBase) { console.log('SKIP: no public door was given: Quick join was NOT run against the real list'); return; }
         const webDir = path.join(path.dirname(path.resolve(modulePath)), '..');
+        const GT = require(path.join(webDir, 'home', 'games.js')).TEXT;          // (the page's own words: a check names the button and the switch that the page has for a situation, and does not spell them)
         globalThis.AntsShapes = require(path.join(webDir, 'shapes.js'));
         const harness = require('./web_page_harness.js')(path.join(webDir, 'lobby.html'));
         const sockets = [];
@@ -731,11 +733,11 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         const Pv = onPage('Qjpriv');
         await step('a page lights Quick host', () => lit(Pv), 5000);
         Pv.home('host').click();
-        await step('Quick host asks again, and Private room is chosen', () => () => cardTitle(Pv) === 'Host a game' && (() => { const b = cardOf(Pv).findAll((n) => String(n.className).split(/\s+/).indexOf('btn') !== -1 && n.textContent === 'Private room')[0]; if (b) b.click(); return !!b; })(), 3000);
-        await step('Private room makes a real room, and the switch says Private (no Visibility was asked for)', () => () => Pv.screen() === 'room' && Pv.root.findAll((n) => n.getAttribute && n.getAttribute('aria-pressed') === 'true' && /Private/.test(n.textContent) && String(n.className).indexOf('vbtn') !== -1).length === 1, 8000);
+        await step('Quick host asks again, and Invite only is chosen', () => () => cardTitle(Pv) === 'Host a game' && (() => { const b = cardOf(Pv).findAll((n) => String(n.className).split(/\s+/).indexOf('btn') !== -1 && n.textContent === GT.hostPrivate)[0]; if (b) b.click(); return !!b; })(), 3000);
+        await step('Invite only makes a real room, and the switch says Invite only (no Visibility was asked for)', () => () => Pv.screen() === 'room' && Pv.root.findAll((n) => n.getAttribute && n.getAttribute('aria-pressed') === 'true' && n.textContent.indexOf(GT.private) === 0 && String(n.className).indexOf('vbtn') !== -1).length === 1, 8000);
         await sleep(1500);
         const mineRows = (await realRows()).filter((x) => x.host === 'Qjpriv');
-        check('... and the real door lists it only as a locked row (private, no code: a private room is for the people who have its link, and nothing in the list leads to it)', mineRows.length === 1 && mineRows[0].private === true && !('code' in mineRows[0]) && !/[0-9a-f]{32}/.test(JSON.stringify(mineRows)), JSON.stringify(mineRows));
+        check('... and the real door lists it only as a locked row (private on the wire, no code: an invite-only room is for the people who have its link, and nothing in the list leads to it)', mineRows.length === 1 && mineRows[0].private === true && !('code' in mineRows[0]) && !/[0-9a-f]{32}/.test(JSON.stringify(mineRows)), JSON.stringify(mineRows));
         Pv.roomBar('leave').click();
         await sleep(300);
 

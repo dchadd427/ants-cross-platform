@@ -1,6 +1,6 @@
 // The tests of the staggered start (BotWhat::every_s, BotMatches' waiting starts, the routes bot-matches and bot-matches/<id>/stop; docs/SERVER_REPLAYS.md "Start one every X minutes"): a batch with a spacing starts its first match now
 // and keeps the others as starts that wait, each for its time by the server's clock (the loop's pass, never a sleep); a waiting start is listed, can be stopped, and Stop all ends the batch; a start whose time comes while a limit
-// holds it back waits, it is not dropped, and the matches of people come first; what a match is dealt is drawn when it starts; a restart drops what waits; the bounds. Included by test_server_files.cpp after
+// holds it back waits, it is not dropped, and the matches of people come first; what a match is dealt is drawn when it starts; a restart drops what waits; the bounds; and the spacing of a schedule (its routes, its runs under the eight and people's share). Included by test_server_files.cpp after
 // bot_rotation_tests.hpp, whose fixtures it uses; test_server.cpp calls run_bot_stagger_tests().
 #pragma once
 
@@ -21,6 +21,25 @@ void stagger_step(BotDoor& d, uint32_t ms) {
 }
 
 ctl::JsonValue waiting_of(BotDoor& d) { return BotDoor::json(d.get("bot-matches")).get("waiting"); }
+
+// The body of a schedule as the page sends it: every 30 minutes, with the batch given
+std::string schedule_body(const std::string& name, const std::string& what) { return "{\"name\":\"" + name + "\",\"on\":true,\"when\":{\"kind\":\"every\",\"minutes\":30},\"what\":" + what + "}"; }
+
+// A schedule that runs every `minutes` and starts `count` matches of TINY with two bots, one every `every_s` seconds
+BotSchedulePatch spaced_schedule(const std::string& name, int minutes, uint32_t count, uint32_t every_s) {
+    BotSchedulePatch p;
+    p.has_name = true;
+    p.name = name;
+    p.has_when = true;
+    p.kind = BotSchedule::Kind::Every;
+    p.minutes = minutes;
+    p.has_what = true;
+    p.what.count = count;
+    p.what.every_s = every_s;
+    p.what.spec.map = "TINY.LVL";
+    p.what.spec.bots = 2;
+    return p;
+}
 
 std::vector<int64_t> numbers_of(const ctl::JsonValue& list, const char* field) {
     std::vector<int64_t> out;
@@ -310,5 +329,121 @@ void run_bot_stagger_tests() {
         d.w.now += 90000;
         d.bots->update(kBotWall0 + 390, d.w.now);
         ASSERT_TRUE(d.w.mgr.bot_match_count() == 2 && d.bots->waiting_count() == 1);
+    } TEST_END();
+
+    TEST_CASE("S3.298 The Spacing Of A Schedule Goes Through The Admin Routes As Start Now's Does: Whole Or Half Minutes From 0 To Two Hours Only (Checked On A New Schedule And On A Change), Kept In The Schedule And Listed, A Change Of The Spacing Alone Is A Change That Is Logged, And The Same Save Again Is Not") {
+        BotDoor d("botsched-routes");
+        const std::string flat = batch_body(4, "TINY.LVL", "highest-score", "2");
+        for (const char* bad : {"1", "15", "29", "45", "7230", "7260", "99999", "-30", "\"180\"", "1.5", "null", "[]"}) {
+            std::string what = flat;
+            what.insert(what.find(",\"map\""), std::string(",\"every_s\":") + bad);
+            const ctl::HttpResponse r = d.post("bot-schedules", schedule_body("Swarm", what));
+            ASSERT_TRUE(r.status == 400 && BotDoor::json(r).get("error").str() == "bad_spacing");
+        }
+        ASSERT_TRUE(d.schedules->list().empty() && d.log().empty());                                  // (nothing was made, nothing was logged)
+        for (const uint32_t ok : {0u, 30u, 90u, 7200u}) {
+            const ctl::HttpResponse r = d.post("bot-schedules", schedule_body("Swarm " + std::to_string(ok), spaced_body(4, ok)));
+            ASSERT_EQ(r.status, 200);
+            ASSERT_EQ(BotDoor::json(r).get("schedule").get("what").get("every_s").as_int_or(-1), static_cast<int64_t>(ok));
+        }
+        ASSERT_EQ(d.schedules->list().size(), size_t{4});
+        const ctl::JsonValue listed = BotDoor::json(d.get("bot-schedules")).get("schedules");
+        ASSERT_EQ(numbers_of([&] { ctl::JsonValue w = ctl::JsonValue::make_array(); for (size_t i = 0; i < listed.size(); ++i) w.push_back(listed.at(i).get("what")); return w; }(), "every_s"), (std::vector<int64_t>{0, 30, 90, 7200}));
+        std::vector<AuditEntry> log = d.log();
+        ASSERT_TRUE(log[0].action == "bot_schedule_added" && log[0].detail.find("one every 120 minutes") != std::string::npos && log[1].detail.find("one every 1.5 minutes") != std::string::npos);
+        ASSERT_TRUE(log[3].detail.find("one every") == std::string::npos);                          // (a spacing of 0 says nothing of one)
+        // a change of the spacing alone
+        const int64_t id = listed.at(3).get("id").as_int_or(0);
+        const size_t lines = d.log().size();
+        ASSERT_EQ(d.post("bot-schedules/" + std::to_string(id), "{\"what\":" + spaced_body(4, 240) + "}").status, 200);
+        ASSERT_EQ(d.schedules->find(id)->what.every_s, 240u);
+        log = d.log();
+        ASSERT_TRUE(log.size() == lines + 1 && log[0].action == "bot_schedule_changed" && log[0].target == "Swarm 7200" && log[0].detail.find("one every 4 minutes") != std::string::npos);
+        ASSERT_EQ(d.post("bot-schedules/" + std::to_string(id), "{\"what\":" + spaced_body(4, 240) + "}").status, 200);
+        ASSERT_EQ(d.log().size(), lines + 1);                                                          // (the same again changes nothing: no line)
+        std::string over = flat;
+        over.insert(over.find(",\"map\""), ",\"every_s\":7230");
+        const ctl::HttpResponse refused = d.post("bot-schedules/" + std::to_string(id), "{\"what\":" + over + "}");
+        ASSERT_TRUE(refused.status == 400 && BotDoor::json(refused).get("error").str() == "bad_spacing" && d.schedules->find(id)->what.every_s == 240u);          // (a refused change leaves the spacing as it was)
+        ASSERT_EQ(d.log().size(), lines + 1);
+    } TEST_END();
+
+    TEST_CASE("S3.299 A Run Of A Schedule With A Spacing Keeps The Limits: Eight Matches Hold The Run Back (It Is Skipped, Nothing Waits), With Seven Going It Starts The First And Lets The Four Others Wait, A Held Start Waits For A Place And For People And Is Not Dropped, People Come First, And A Deleted Schedule's Waiting Starts Go On And Can Be Stopped") {
+        {   // the eight matches
+            BotDoor d("botsched-cap");
+            std::string why;
+            BotSchedule s;
+            ASSERT_TRUE(d.schedules->create(spaced_schedule("Swarm", 5, 5, 60), kBotWall0, s, why));
+            ASSERT_EQ(d.post("bot-matches", batch_body(8, "TINY.LVL", "highest-score", "2")).status, 200);
+            (void)d.bots->take_notices();
+            d.bots->update(kBotWall0 + 300, d.w.now);
+            ASSERT_TRUE(d.w.mgr.bot_match_count() == 8 && d.bots->waiting_count() == 0);              // (the first match has no place: the run is skipped, nothing waits)
+            std::vector<std::string> notes = d.bots->take_notices();
+            ASSERT_TRUE(notes.size() == 1 && notes[0] == "bot schedule " + std::to_string(s.id) + ": started 0 of 5 (8 matches of computer players go already)");
+            ASSERT_EQ(d.schedules->find(s.id)->next_run, kBotWall0 + 600);
+            d.post("bot-matches/stop-all");
+            ASSERT_EQ(d.post("bot-matches", batch_body(7, "TINY.LVL", "highest-score", "2")).status, 200);
+            d.bots->update(kBotWall0 + 600, d.w.now);
+            ASSERT_TRUE(d.w.mgr.bot_match_count() == 8 && d.bots->waiting_count() == 4);              // (the first one takes the eighth place; the others wait for their time)
+            notes = d.bots->take_notices();
+            ASSERT_TRUE(notes.size() == 1 && notes[0] == "bot schedule " + std::to_string(s.id) + ": started 1 of 5, 4 waiting for their time");
+            ctl::JsonValue list = waiting_of(d);
+            ASSERT_TRUE(list.size() == 4 && list.at(0).get("schedule").str() == "Swarm" && !list.at(0).has("by") && list.at(0).get("n").as_int_or(0) == 2 && list.at(3).get("of").as_int_or(0) == 5);
+            d.w.now += 60000;
+            d.bots->update(kBotWall0 + 660, d.w.now);                                                  // (the time of the second: the eight are used)
+            ASSERT_TRUE(d.w.mgr.bot_match_count() == 8 && d.bots->waiting_count() == 4 && waiting_of(d).at(0).get("held").as_bool_or(false));
+            ASSERT_TRUE(d.bots->take_notices().empty());                                              // (waiting is not failing)
+            d.post("bot-matches/" + BotDoor::json(d.get("bot-matches")).get("matches").at(0).get("id").str() + "/stop");
+            d.w.now += 1000;
+            d.bots->update(kBotWall0 + 661, d.w.now);
+            ASSERT_TRUE(d.w.mgr.bot_match_count() == 8 && d.bots->waiting_count() == 3);              // (it took the place that came free)
+        }
+        {   // people first: a run is skipped while they use the places, and a start that waits is held
+            ServerLimits limits;
+            limits.demo_rooms = 8;
+            BotDoor d("botsched-people", limits);
+            std::string why;
+            BotSchedule s;
+            ASSERT_TRUE(d.schedules->create(spaced_schedule("Swarm", 5, 3, 60), kBotWall0, s, why));
+            for (int i = 0; i < 7; ++i) {
+                RoomSpec p = spec_of("sch-" + std::to_string(i), 2);
+                p.public_room = true;
+                ASSERT_TRUE(d.w.mgr.create_room(p, d.w.now).ok);
+            }
+            ASSERT_TRUE(d.w.mgr.people_busy());
+            (void)d.bots->take_notices();
+            d.bots->update(kBotWall0 + 300, d.w.now);
+            ASSERT_TRUE(d.w.mgr.bot_match_count() == 0 && d.bots->waiting_count() == 0);
+            const std::vector<std::string> notes = d.bots->take_notices();
+            ASSERT_TRUE(notes.size() == 1 && notes[0] == "bot schedule " + std::to_string(s.id) + ": started 0 of 3 (people's matches use 7 of the server's 8 places)");
+        }
+        {   // a start that waits is held by people, and a deleted schedule's waiting starts go on
+            ServerLimits limits;
+            limits.demo_rooms = 8;
+            BotDoor d("botsched-held", limits);
+            std::string why;
+            BotSchedule s;
+            ASSERT_TRUE(d.schedules->create(spaced_schedule("Swarm", 5, 3, 60), kBotWall0, s, why));
+            d.bots->update(kBotWall0 + 300, d.w.now);
+            ASSERT_TRUE(d.w.mgr.bot_match_count() == 1 && d.bots->waiting_count() == 2);
+            for (int i = 0; i < 7; ++i) {
+                RoomSpec p = spec_of("sch-held-" + std::to_string(i), 2);
+                p.public_room = true;
+                ASSERT_TRUE(d.w.mgr.create_room(p, d.w.now).ok);
+            }
+            (void)d.bots->take_notices();
+            d.w.now += 60000;
+            d.bots->update(kBotWall0 + 360, d.w.now);
+            d.w.now += 3000;
+            d.bots->update(kBotWall0 + 363, d.w.now);
+            ASSERT_TRUE(d.w.mgr.bot_match_count() == 1 && d.bots->waiting_count() == 2 && waiting_of(d).at(0).get("held").as_bool_or(false));          // (people use the places: it waits, it is not dropped)
+            ASSERT_TRUE(d.bots->take_notices().empty());
+            ASSERT_EQ(d.post("bot-schedules/" + std::to_string(s.id) + "/delete").status, 200);
+            ASSERT_TRUE(d.schedules->list().empty() && d.bots->waiting_count() == 2);                  // (the schedule is gone, what it let wait is not)
+            const ctl::JsonValue after = waiting_of(d);
+            ASSERT_TRUE(after.size() == 2 && after.at(0).get("schedule").str() == "Swarm");           // (still named by it)
+            ASSERT_EQ(d.post("bot-matches/" + after.at(1).get("id").str() + "/stop").status, 200);
+            ASSERT_EQ(d.bots->waiting_count(), size_t{1});
+        }
     } TEST_END();
 }

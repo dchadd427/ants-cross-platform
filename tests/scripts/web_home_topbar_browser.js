@@ -26,6 +26,7 @@ if (spawnSync('nginx', ['-v']).error) { console.log('SKIP: no nginx program: the
 
 const arg = (name) => (process.argv.indexOf(name) !== -1 ? process.argv[process.argv.indexOf(name) + 1] : null);
 const SHOTS = arg('--shots') ? path.resolve(arg('--shots')) : null;
+const GT = require(path.join(__dirname, '..', '..', 'web', 'home', 'games.js')).TEXT;          // (the page's own words: a check names the button that the page has for a situation, and does not spell it)
 const SIZES = [['w320', 320, 640], ['w360', 360, 740], ['w375', 375, 667], ['w390', 390, 844], ['w412', 412, 915], ['w600', 600, 800], ['w700', 700, 800], ['w701', 701, 800], ['w1180', 1180, 800], ['w1280', 1280, 800], ['side568', 568, 320], ['side667', 667, 375]];
 const NAMES = [['one', 'ab'], ['typical', 'maple'], ['medium', 'maple.leaf'], ['longest', 'LongestNameOfThirtyTwoCharacters'], ['accent', 'Zo\u00eb_M\u00fcller'], ['cjk', '\u5c71\u7530\u592a\u90ce']];
 const OLD = '261842000123456789';
@@ -52,7 +53,7 @@ class Site {                                              // login_site.py: the 
 }
 
 // the boxes of the bar's parts, in CSS pixels (null: not drawn)
-// the bar's buttons with no room, and the same bar when My room is shown (the page holds a room: Quick host, Private room, then Home; the count is put in by hand, see SHOW_COUNT)
+// the bar's buttons with no room, and the same bar when My room is shown (the page holds a room: Quick host, Invite only, then Home; the count is put in by hand, see SHOW_COUNT)
 const ROW = () => {
     const box = (s) => { const e = document.querySelector(s); if (!e || !e.getClientRects().length) return null; const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; };
     return { host: box('.hbar .quick.host'), join: box('.hbar .quick.join'), games: box('.hbar .games'), gamesInBar: document.querySelectorAll('.hbar .games').length, mine: box('.hbar .mine'), minex: box('.hbar .minex'), menu: box('.hbar .hmenu'), bar: box('.hbar'), chip: box('.hbar .hlogin'),
@@ -142,23 +143,23 @@ async function main() {
             check(s[0] + ' no room: the bar has no Games button (the list is on Home, a phone\'s strip has Games)', none.gamesInBar === 0 && none.games === null, JSON.stringify(none));
             if (s[0] === 'side568') check(s[0] + ' no room: held sideways the chip and the Menu are on the first row with Quick host and Quick join (no second row, no hole)', !!none.chip && Math.abs(none.chip[1] - none.host[1]) <= 4 && Math.abs(none.menu[1] - none.host[1]) <= 4, JSON.stringify(none));
             if (['w390', 'w1280', 'side667'].indexOf(s[0]) !== -1) await shot(page, 'noroom_' + s[0]);
-            // Quick host asks Public or Private first (a card over Home)
+            // Quick host asks Public or Invite only first (a card over Home)
             await page.waitForFunction(() => { const b = document.querySelector('.hbar .quick.host'); return b && !b.disabled; }, null, { timeout: 10000 });
             await page.focus('.hbar .quick.host');
             await page.keyboard.press('Enter');
             await sleep(150);
             const card = await page.evaluate(() => { const c = document.querySelector('.gconfirm'); if (!c) return null; const bs = [...c.querySelectorAll('button')].map((b) => { const r = b.getBoundingClientRect(); return { t: b.textContent, x: r.left, r: r.right, y: r.top, b: r.bottom, h: r.height, w: r.width }; }), r = c.getBoundingClientRect(); return { title: c.querySelector('h2').textContent, bs, box: { x: r.left, r: r.right, y: r.top, b: r.bottom }, focus: document.activeElement.textContent, role: c.getAttribute('role'), inert: document.querySelector('.hbar').hasAttribute('inert') }; });
-            check(s[0] + ' Quick host: the keyboard opens the card "Host a game" with Public room, Private room and Cancel, the focus on Public room', !!card && card.title === 'Host a game' && card.bs.map((x) => x.t).join('|') === 'Public room|Private room|Cancel' && card.focus === 'Public room' && card.role === 'dialog', JSON.stringify(card));
+            check(s[0] + ' Quick host: the keyboard opens the card "Host a game" with Public room, Invite only and Cancel, the focus on Public room', !!card && card.title === 'Host a game' && card.bs.map((x) => x.t).join('|') === [GT.hostPublic, GT.hostPrivate, GT.cancel].join('|') && card.focus === GT.hostPublic && card.role === 'dialog', JSON.stringify(card));
             check(s[0] + ' Quick host: the card and its three buttons are inside the window, every button 44 px or more high and wide, the page behind is inert', !!card && card.inert && card.box.x >= 0 && card.box.r <= s[1] + 0.5 && card.box.y >= 0 && card.box.b <= s[2] + 0.5 && card.bs.every((x) => x.h >= 44 && x.w >= 44 && x.x >= 0 && x.r <= s[1] + 0.5 && x.y >= 0 && x.b <= s[2] + 0.5), JSON.stringify(card));
             if (['w390', 'w1280'].indexOf(s[0]) !== -1) await shot(page, 'hostcard_' + s[0]);
             await page.keyboard.press('Tab');
-            check(s[0] + ' Quick host: Tab goes to Private room', (await page.evaluate(() => document.activeElement.textContent)) === 'Private room');
+            check(s[0] + ' Quick host: Tab goes to Invite only', (await page.evaluate(() => document.activeElement.textContent)) === GT.hostPrivate);
             await page.keyboard.press('Escape');
             await sleep(100);
             check(s[0] + ' Quick host: Escape cancels (no card, nothing made, the focus back on Quick host)', await page.evaluate(() => !document.querySelector('.gconfirm') && document.body.getAttribute('data-screen') === 'home' && /quick host|host/.test(document.activeElement.className)));
-            // a real room: Quick host, Private room (the page makes and holds a room and shows it), then Home
+            // a real room: Quick host, Invite only (the page makes and holds a room and shows it), then Home
             await page.focus('.hbar .quick.host'); await page.keyboard.press('Enter'); await sleep(150);
-            await page.locator('.gconfirm button', { hasText: 'Private room' }).click(); await sleep(500);
+            await page.locator('.gconfirm button', { hasText: GT.hostPrivate }).click(); await sleep(500);
             check(s[0] + ' a room: the page shows the Room, and My room is there when Home comes back', await page.evaluate(() => document.body.getAttribute('data-screen')) === 'room');
             await page.locator('.rhome').click(); await sleep(300);
             await page.evaluate(SHOW_COUNT);

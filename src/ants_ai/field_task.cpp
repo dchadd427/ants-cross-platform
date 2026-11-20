@@ -18,6 +18,24 @@ uint64_t FieldTask::sources(const BotView& view) const {
     return h;
 }
 
+// What the map holds that the work is done on: the number of its bombs, fire walls and bridges (a defuse, a fire put out or a bridge made by anybody changes it). A given-up ant and a task that
+// waits try again when it changes
+uint64_t FieldTask::world(const BotView& view) const {
+    if (world_tick_ == view.tick()) return world_;
+    uint64_t bridges = 0;
+    if (view.has_grid()) {
+        const sim::Grid& grid = view.grid();
+        for (int32_t y = 0; y < static_cast<int32_t>(grid.height()); ++y) {
+            for (int32_t x = 0; x < static_cast<int32_t>(grid.width()); ++x) {
+                if (grid.has_bridge_at(sim::TileCoord{x, y})) ++bridges;
+            }
+        }
+    }
+    world_ = mix(mix(mix(0xcbf29ce484222325ull, view.bombs().size()), view.fire_walls().size()), bridges);
+    world_tick_ = view.tick();
+    return world_;
+}
+
 void FieldTask::finish(AntLedger& ledger) {
     ledger.release_all(id());
     ant_ = 0;
@@ -41,6 +59,7 @@ void FieldTask::give_up(TaskContext& context, uint64_t now) {
     if (ant_ != 0) {
         context.ledger.release(ant_, id());
         rest_until_[ant_] = now + params_.rest_ticks;
+        rest_world_[ant_] = world(context.view);
     }
     ant_ = 0;
     pending_ = false;
@@ -50,7 +69,7 @@ void FieldTask::give_up(TaskContext& context, uint64_t now) {
     if (params_.ants_max == 0 || given_up_ % params_.ants_max == 0) {                                              // (ants_max ants in a row could do nothing: wait for a change)
         resting_ = true;
         active_ = false;
-        rest_sources_ = sources(context.view);
+        rest_sources_ = sources(context.view) ^ (tactics_.plan.field_wake ? world(context.view) : 0u);
     }
     hints_.route.clear();                                                                 // (a new ant plans afresh: the way of the one before led nowhere)
     hints_.fire_way.clear();
@@ -64,7 +83,7 @@ uint32_t FieldTask::choose_ant(TaskContext& context, const FieldPlan& plan, uint
     for (const AntView& a : context.view.mine()) {
         if (!a.takes_orders() || a.holding) continue;
         const auto rest = rest_until_.find(a.id);
-        if (rest != rest_until_.end() && now < rest->second) continue;
+        if (rest != rest_until_.end() && now < rest->second && !(tactics_.plan.field_wake && rest_world_[a.id] != world(context.view))) continue;
         const TaskId owner = context.ledger.owner(a.id);
         if (owner != kNoTask && owner != id() && context.ledger.rank(owner) >= context.ledger.rank(id())) continue;
         const int32_t cost = field_ant_cost(plan, context.view, context.map, context.seat, a, hints_);
@@ -83,7 +102,7 @@ void FieldTask::step(TaskContext& context) {
     if (!view.has_grid()) return;
     const uint64_t now = view.tick();
     if (resting_) {
-        if (sources(view) == rest_sources_) return;
+        if ((sources(view) ^ (tactics_.plan.field_wake ? world(view) : 0u)) == rest_sources_) return;
         resting_ = false;
         next_look_ = now;
     }

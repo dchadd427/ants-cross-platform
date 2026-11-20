@@ -1,9 +1,9 @@
 // Runs the front page's PUBLIC ROOM, QUICK HOST and JOIN (web/home/games.js with web/lobby.html's own script, docs/HOME_GAMES.md, docs/PUBLIC_ROOMS.md) in the fake browser of tests/scripts/web_page_harness.js against a
 // scripted game server and a fake GET /lobbies (the list itself, its looks and its words are web_home_games_check.js):
-//   1. the Room's switch: the leader's Public | Private, the guest's chip, the state that is the Room message's and never the press's, a double press, the page's pace, the place of the switch on a wide and a narrow window;
-//   2. what the room says: a room that went private after 30 minutes (the notice and its button), a host that changed, a leader's own "private", a guest; the repeat every 10 minutes, only while the Room shows, the tab is
+//   1. the Room's switch: the leader's Invite only | Public, the guest's chip, the state that is the Room message's and never the press's, a double press, the page's pace, the place of the switch on a wide and a narrow window;
+//   2. what the room says: a room that went invite only after 30 minutes (the notice and its button), a host that changed, a leader's own Invite only, a guest; the repeat every 10 minutes, only while the Room shows, the tab is
 //      visible and the leader looks at a public room;
-//   3. Quick host in every state: no room, a private room (alone, with others), a public room, a room of somebody else (the question), START waiting, a match that runs, a full server, a double press, a room that
+//   3. Quick host in every state: no room, an invite-only room (alone, with others), a public room, a room of somebody else (the question), START waiting, a match that runs, a full server, a double press, a room that
 //      is not ready yet;
 //   4. Join from the list and by code: the second client that only joins, the old room kept until the new one welcomes the page and let go of then, every refusal in plain words and the list asked again, a server that
 //      does not answer, the question when others are in the room, a double press;
@@ -14,6 +14,7 @@ const R = require('./web_home_games_rig.js')(process.argv[2]);
 const { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, hostCard, chooseHost, popOf, rowsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, visibilities, leaves, seatsOf, myRoom, guestRoom, roomAs,
         PUBLIC, PRIVATE, STARTING, NET0, KEY, E, C, hex, roomMessage, welcome, reject, helloBytes, helloName, helloRoom, grouped, RULES0, done, broke, pressEscape, pressElsewhere } = R;
 
+const TEXT = R.Games.TEXT;                        // (the page's own words: a check names the notice or the label that the page has for a situation, and does not spell it)
 const KEY2 = Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x60 + i));
 const visOf = (env) => first(env.root, 'vis');
 const pressed = (env) => visOf(env).children.map((b) => b.getAttribute('aria-pressed'));
@@ -35,9 +36,9 @@ const OTHERS = ['Maya', 'Sage'];
     check('before the page has a room the Room card has no switch and no chip (nothing of it is shown)', visOf(env).hidden === true && tagOf(env).hidden === true && noteOf(env).hidden === true);
     const sock = myRoom(env, ['Maya']);
     const vis = visOf(env);
-    check('the leader of a new room sees the switch: Private (link only) is the state, Public (listed in Open games) is the other, both can be pressed', vis.hidden === false && vis.getAttribute('role') === 'group' && vis.getAttribute('aria-label') === 'Who can find this room'
-          && textOf(vis.children[0]) === 'Privatelink only' && textOf(vis.children[1]) === 'Publiclisted in Open games' && state(env) === 'true,false' && vis.children.every((b) => b.disabled === false && b.type === 'button'));
-    check('... the line under it says what Public does ("Public rooms show your name and map in the Games list."), and no chip is shown', noteOf(env).hidden === false && noteOf(env).textContent === 'Public rooms show your name and map in the Games list.' && tagOf(env).hidden === true);
+    check('the leader of a new room sees the switch: Invite only is the state, Public is the other, both can be pressed', vis.hidden === false && vis.getAttribute('role') === 'group' && vis.getAttribute('aria-label') === TEXT.visLabel
+          && textOf(vis.children[0]) === TEXT.private + TEXT.privateSub && textOf(vis.children[1]) === TEXT.public + TEXT.publicSub + TEXT.publicWide && state(env) === 'true,false' && vis.children.every((b) => b.disabled === false && b.type === 'button'));
+    check('... the line under it says what an invite-only room is (it is in Open games, locked, with the host\'s name and map, and people join with the link), and no chip is shown', noteOf(env).hidden === false && noteOf(env).textContent === TEXT.noteHow && tagOf(env).hidden === true);
     tap(vis.children[1]);
     same('Public sends one Visibility message with the byte 1 (to this room\'s socket)', visibilities(sock), [1]);
     same('... and the switch still shows what the Room message last said (private) until the server says otherwise: nothing is assumed', pressed(env), ['true', 'false']);
@@ -50,11 +51,11 @@ const OTHERS = ['Maya', 'Sage'];
     tap(vis.children[1]);
     same('Public on a public room sends nothing (the switch is where the room is)', visibilities(sock), [1]);
     tap(vis.children[0]);
-    same('Private sends the byte 0', visibilities(sock), [1, 0]);
+    same('Invite only sends the byte 0', visibilities(sock), [1, 0]);
     same('... and the switch waits for the room', pressed(env), ['false', 'true']);
     sock.receive(roomAs(['Maya'], 0, PRIVATE));
     same('... a Room message that says private is private', pressed(env), ['true', 'false']);
-    check('... and nothing says that the room "went private": the leader chose it', toastOf(env).hidden === true);
+    check('... and nothing says that the room "went invite only": the leader chose it', toastOf(env).hidden === true);
     tap(vis.children[1]);
     check('a request that the page\'s pace holds back (two were sent a moment ago) sends nothing and says so under the switch', visibilities(sock).length === 2 && noteOf(env).textContent === 'One moment, then press again.' && state(env) === 'true,false');
     await wait(env, 1500);
@@ -72,7 +73,7 @@ const OTHERS = ['Maya', 'Sage'];
     const sock = guestRoom(env, 'Pebble', PUBLIC);
     check('a guest sees "Public room" in the heading line and no switch and no line under it', tagOf(env).hidden === false && tagOf(env).textContent === 'Public room' && visOf(env).hidden === true && noteOf(env).hidden === true);
     sock.receive(roomAs(['Pebble', 'Maya'], 1, PRIVATE));
-    check('... and "Private room" when the room says private', tagOf(env).textContent === 'Private room' && visOf(env).hidden === true);
+    check('... and the invite-only chip when the room says private', tagOf(env).textContent === TEXT.privateRoom && visOf(env).hidden === true);
     check('a guest sends no Visibility, however it is asked (the page does not send it)', visibilities(sock).length === 0 && env.last().sent.every((b) => b[0] !== 35));
     sock.receive(roomAs(['Pebble', 'Maya'], 1, PUBLIC));
     sock.receive(roomMessage([[E, ''], [C, 'Maya'], [E, ''], [E, '']], { you: 1, leader: 1, flags: PRIVATE }));
@@ -90,6 +91,27 @@ const OTHERS = ['Maya', 'Sage'];
     check('on a wide window it is not (it is in the heading line, with its line under the heading)', at(orderWide, 'vis') !== at(orderWide, 'slots') - 2, JSON.stringify(orderWide));
     check('(there is one switch, one chip and one line, however often the window is laid out again)', [orderWide, orderNarrow].every((o) => o.filter((n) => n === 'vis').length === 1 && o.filter((n) => n === 'vistag').length === 1 && o.filter((n) => n === 'visnote').length === 1));
 }
+{   // the words: the setting is called "Invite only" (the maintainer's word), and nothing that a person reads about it says "link only" or "private" (web_home_games_check.js holds the same rule for the Games list)
+    const RETIRED = /link only|\bprivate\b/i;
+    const env = await page();
+    const sock = myRoom(env, ['Maya']);
+    const vis = visOf(env);
+    const seen = [['the switch', vis.textContent], ['the line under it (invite only)', noteOf(env).textContent]];
+    same('the first button of the switch is called Invite only', textOf(vis.children[0].children[0]), 'Invite only');
+    sock.receive(roomAs(['Maya'], 0, PUBLIC));
+    seen.push(['the switch (public)', vis.textContent], ['the line under it (public)', noteOf(env).textContent]);
+    const guest = await page({ search: '?room=k7m2xq', options: { stayHome: false } });
+    const gs = guestRoom(guest, 'Pebble', PRIVATE);
+    seen.push(['the chip of a guest (invite only)', tagOf(guest).textContent]);
+    gs.receive(roomAs(['Pebble', 'Maya'], 1, PUBLIC));
+    seen.push(['the chip of a guest (public)', tagOf(guest).textContent]);
+    const quick = await page();
+    quick.home('host').click();
+    seen.push(['the question of Quick host', hostCard(quick) ? hostCard(quick).textContent : '']);
+    for (const key of Object.keys(TEXT)) if (typeof TEXT[key] === 'string') seen.push(['the page\'s word ' + key, TEXT[key]]);        // (the notices, the buttons and the tags are all in it)
+    same('the switch, its line, the chip, the question of Quick host and every notice say neither "link only" nor "private"', seen.filter((pair) => RETIRED.test(pair[1])).map((pair) => pair[0]), []);
+    check('(the words that were read are there: the switch, a line, a chip and the question)', seen.every((pair) => pair[1].length > 0));
+}
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 2. What the room says, and the repeat
@@ -98,14 +120,14 @@ const OTHERS = ['Maya', 'Sage'];
     const env = await page();
     const sock = myRoom(env, OTHERS, PUBLIC);
     sock.receive(roomAs(OTHERS, 0, PRIVATE));
-    check('a public room that the server made private (nobody did anything for 30 minutes) says so to its leader, with a button that makes it public again', toastTextOf(env) === 'Your room went private after 30 minutes. Make it public again?' && textOf(toastButtons(env)[0]) === 'Make it public' && textOf(toastButtons(env)[1]) === 'OK' && toastOf(env).className.indexOf('warn') !== -1);
+    check('a public room that the server made private (nobody did anything for 30 minutes) says so to its leader, with a button that makes it public again', toastTextOf(env) === TEXT.idle && textOf(toastButtons(env)[0]) === TEXT.makePublic && textOf(toastButtons(env)[1]) === TEXT.ok && toastOf(env).className.indexOf('warn') !== -1);
     check('... the switch says private (the Room message)', state(env) === 'true,false');
     tap(toastButtons(env)[0]);
     same('one tap sends Public, and the toast is gone', [visibilities(sock), toastOf(env).hidden], [[1], true]);
     sock.receive(roomAs(OTHERS, 0, PUBLIC));
     check('... and the room is public when the room says so', state(env) === 'false,true' && toastOf(env).hidden === true);
     sock.receive(roomAs(OTHERS, 0, PRIVATE));
-    check('(the next time is a new notice)', toastTextOf(env).indexOf('went private after 30 minutes') !== -1);
+    check('(the next time is a new notice)', toastTextOf(env) === TEXT.idle);
     tap(toastButtons(env)[1]);
     check('OK puts it away and sends nothing', toastOf(env).hidden === true && visibilities(sock).length === 1);
     sock.receive(roomAs(OTHERS, 0, PUBLIC));
@@ -122,7 +144,7 @@ const OTHERS = ['Maya', 'Sage'];
     sock.receive(roomAs(OTHERS, 0, PUBLIC));
     sock.receive(roomAs(OTHERS, 0, PRIVATE));
     tap(toastButtons(env)[0]);
-    check('"Make it public" with no request left to spend sends nothing and the notice stays (it is not gone for a tap that did nothing)', visibilities(sock).length === 2 && toastOf(env).hidden === false && toastTextOf(env).indexOf('went private after 30 minutes') !== -1);
+    check('"Make it public" with no request left to spend sends nothing and the notice stays (it is not gone for a tap that did nothing)', visibilities(sock).length === 2 && toastOf(env).hidden === false && toastTextOf(env) === TEXT.idle);
     await wait(env, 1500);
     tap(toastButtons(env)[0]);
     check('... a moment later the same tap sends it, and the notice goes', visibilities(sock).length === 3 && toastOf(env).hidden === true);
@@ -132,7 +154,7 @@ const OTHERS = ['Maya', 'Sage'];
     const sock = myRoom(env, OTHERS, PUBLIC);
     tap(visOf(env).children[0]);
     sock.receive(roomAs(OTHERS, 0, PRIVATE));
-    check('a room that the leader made private is private, and the toast says nothing of it (no "went private")', toastOf(env).hidden === true);
+    check('a room that the leader made private is private, and the toast says nothing of it (no "went invite only")', toastOf(env).hidden === true);
     const e2 = await page();
     const s2 = myRoom(e2, OTHERS, PUBLIC);
     s2.receive(roomMessage([[E, ''], [C, 'Maya'], [C, 'Sage'], [E, '']], { you: 1, leader: 1, flags: PUBLIC }));
@@ -142,18 +164,18 @@ const OTHERS = ['Maya', 'Sage'];
     const env = await page({ search: '?room=k7m2xq', options: { stayHome: false } });
     const sock = guestRoom(env, 'Pebble', PUBLIC);
     sock.receive(roomMessage([[E, ''], [C, 'Maya'], [C, 'Sage'], [E, '']], { you: 1, leader: 1, flags: PRIVATE }));
-    check('the host leaves and the player who has been there longest leads: the room is private again, and the toast says why', toastTextOf(env) === 'This room is private again because the host changed.' && toastOf(env).className.indexOf('warn') === -1);
+    check('the host leaves and the player who has been there longest leads: the room is private again, and the toast says why', toastTextOf(env) === TEXT.hostChanged && toastOf(env).className.indexOf('warn') === -1);
     check('... and the new host has the switch, private', visOf(env).hidden === false && state(env) === 'true,false');
     const guest = await page({ search: '?room=k7m2xq', options: { stayHome: false } });
     const gs = guestRoom(guest, 'Pebble', PUBLIC);
     gs.receive(roomMessage([[E, ''], [C, 'Sage'], [C, 'Maya'], [E, '']], { you: 2, leader: 1, flags: PRIVATE }));
-    check('a guest who stays a guest is told too (the room is private again because the host changed) and sees "Private room"', toastTextOf(guest) === 'This room is private again because the host changed.' && tagOf(guest).textContent === 'Private room' && visOf(guest).hidden === true);
+    check('a guest who stays a guest is told too (the room is private again because the host changed) and sees the invite-only chip', toastTextOf(guest) === TEXT.hostChanged && tagOf(guest).textContent === TEXT.privateRoom && visOf(guest).hidden === true);
 }
 {   // a guest sees the room go private by itself: the chip, no toast, no button
     const env = await page({ search: '?room=k7m2xq', options: { stayHome: false } });
     const sock = guestRoom(env, 'Pebble', PUBLIC);
     sock.receive(roomAs(['Pebble', 'Maya'], 1, PRIVATE));
-    check('a guest sees the idle room go private as the chip and nothing else (the one tap is the leader\'s)', toastOf(env).hidden === true && tagOf(env).textContent === 'Private room');
+    check('a guest sees the idle room go private as the chip and nothing else (the one tap is the leader\'s)', toastOf(env).hidden === true && tagOf(env).textContent === TEXT.privateRoom);
 }
 {   // the repeat: every 10 minutes, only while the Room shows, the tab is visible and the leader looks at a public room (and is there: touches something now and then)
     const env = await page({ options: { fakeClock: true } });
@@ -246,12 +268,12 @@ const OTHERS = ['Maya', 'Sage'];
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 3. Quick host
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-{   // no room: Quick host asks first, Public or Private (a card over Home; Escape and Cancel change nothing)
+{   // no room: Quick host asks first, Public or Invite only (a card over Home; Escape and Cancel change nothing)
     const env = await page();
     env.home('host').focus();
     env.home('host').click();
     const card = hostCard(env), words = card ? find(card, 'btn').map((b) => textOf(b)) : [];
-    same('Quick host with no room asks first: the card "Host a game" with Public room, Private room and Cancel, nothing made yet (no socket, still Home)', [!!card, words, env.sockets.length, env.screen()], [true, ['Public room', 'Private room', 'Cancel'], 0, 'home']);
+    same('Quick host with no room asks first: the card "Host a game" with Public room, Invite only and Cancel, nothing made yet (no socket, still Home)', [!!card, words, env.sockets.length, env.screen()], [true, [TEXT.hostPublic, TEXT.hostPrivate, TEXT.cancel], 0, 'home']);
     check('... Public room has the focus (one press makes the room), the card is a dialog, and every button is a target of 48 px (the style of the other cards)', !!card && env.focused === find(card, 'btn')[0] && card.getAttribute('role') === 'dialog' && card.getAttribute('aria-modal') === 'true' && find(card, 'gcbtns').length >= 1);
     pressEscape(env);
     check('Escape cancels: the card is gone, nothing was made, the focus is back on Quick host', hostCard(env) === null && env.sockets.length === 0 && env.screen() === 'home' && env.focused === env.home('host'));
@@ -275,8 +297,8 @@ const OTHERS = ['Maya', 'Sage'];
         check('a press that starts and ends on the dimmed page cancels as Cancel does: the card is gone, nothing was made (no first choice picked), the focus is back on Quick host', hostCard(env) === null && env.sockets.length === 0 && env.screen() === 'home' && env.focused === env.home('host'));
     }
     env.home('host').click();
-    chooseHost(env, 'Private room');
-    check('Private room makes the private room (one socket, the Room shows, My room is there) and never asks for Visibility(public), also after the Welcome', env.sockets.length === 1 && env.screen() === 'room' && hostCard(env) === null && env.home('mine').hidden === false);
+    chooseHost(env, TEXT.hostPrivate);
+    check('Invite only makes the private room (one socket, the Room shows, My room is there) and never asks for Visibility(public), also after the Welcome', env.sockets.length === 1 && env.screen() === 'room' && hostCard(env) === null && env.home('mine').hidden === false);
     const sock = env.last();
     env.arrive({ key: KEY, seats: seatsOf(['Maya']), room: { flags: PRIVATE } });
     same('... no Visibility message is sent, the room stays private', [visibilities(sock), pressed(env)], [[], ['true', 'false']]);
@@ -287,10 +309,10 @@ const OTHERS = ['Maya', 'Sage'];
     pub.arrive({ key: KEY, seats: seatsOf(['Maya']), room: { flags: PRIVATE } });
     same('Public room is Quick host as it was: a room and Visibility(public), once', [pub.sockets.length, visibilities(ps)], [1, [1]]);
     const two = await page();
-    two.home('host').click(); chooseHost(two, 'Private room');
+    two.home('host').click(); chooseHost(two, TEXT.hostPrivate);
     two.arrive({ key: KEY, seats: seatsOf(['Maya']), room: { flags: PRIVATE } });
     two.home('host').click();
-    check('with a room of the page\'s own (private) Quick host does not ask Public or Private again: it asks the old question about making it public, or flips it when alone', hostCard(two) === null);
+    check('with a room of the page\'s own (private) Quick host does not ask Public or Invite only again: it asks the old question about making it public, or flips it when alone', hostCard(two) === null);
 }
 {   // no room: it makes one, then sends Visibility(public) after the Welcome
     const env = await page();
@@ -324,13 +346,13 @@ const OTHERS = ['Maya', 'Sage'];
     tap(env.home('host'));
     const box = dialogOf(env);
     check('Quick host with a private room of yours that has others in it asks first: "Make your room public?", who is in it, and the answer that changes nothing has the focus; nothing was sent', !!box && textOf(first(box, 'gctitle')) === 'Make your room public?'
-          && textOf(first(box, 'gcline')) === 'Sage and Pip are in it. Anybody on the front page will be able to join it.' && textOf(first(box, 'gyes')) === 'Make it public' && textOf(first(box, 'gstay')) === 'Keep it private' && env.focused === first(box, 'gstay')
+          && textOf(first(box, 'gcline')) === 'Sage and Pip are in it. Anybody on the front page will be able to join it.' && textOf(first(box, 'gyes')) === TEXT.makePublic && textOf(first(box, 'gstay')) === TEXT.keepPrivate && env.focused === first(box, 'gstay')
           && visibilities(sock).length === 0 && env.screen() === 'home');
     tap(first(box, 'gstay'));
-    check('"Keep it private" changes nothing: the card is gone, nothing was sent, Home stays, no timer waits for the room to turn public', dialogOf(env) === null && visibilities(sock).length === 0 && env.screen() === 'home' && env.sockets.length === 1);
+    check('The answer that keeps the room as it is changes nothing: the card is gone, nothing was sent, Home stays, no timer waits for the room to turn public', dialogOf(env) === null && visibilities(sock).length === 0 && env.screen() === 'home' && env.sockets.length === 1);
     tap(env.home('host'));
     pressEscape(env);
-    check('Escape is "Keep it private"', dialogOf(env) === null && visibilities(sock).length === 0);
+    check('Escape is the answer that keeps the room as it is', dialogOf(env) === null && visibilities(sock).length === 0);
     tap(env.home('host'));
     tap(first(dialogOf(env), 'gyes'));
     check('"Make it public" flips it: Visibility(public) at once, the Room shows, no second room, nobody leaves', visibilities(sock).length === 1 && visibilities(sock)[0] === 1 && env.screen() === 'room' && env.sockets.length === 1 && leaves(sock) === 0);
@@ -487,7 +509,7 @@ const OTHERS = ['Maya', 'Sage'];
     tap(env.home('host'));
     same('Quick host sends Visibility(public)', visibilities(sock), [1]);
     await wait(env, 20500);
-    check('a room that has not said "public" after 20 seconds is told so ("Your room is still private. Use the Public switch in the room.")', toastTextOf(env) === 'Your room is still private. Use the Public switch in the room.' && toastOf(env).className.indexOf('warn') !== -1);
+    check('a room that has not said "public" after 20 seconds is told so (the notice that sends the leader to the Public switch)', toastTextOf(env) === TEXT.stillPrivate && toastOf(env).className.indexOf('warn') !== -1);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -518,7 +540,7 @@ const welcomed = (sock, seat, host, flags) => { sock.open(); sock.receive(welcom
     check('the other room has welcomed the page: now the own room is let go of (a Leave, the socket closed), and the page is in the other', leaves(own) === 1 && own.closed && env.$('code').textContent === 'k7m 2xq' && JSON.parse(env.session.data['ants.lobby']).c === 'k7m2xq');
     probe.receive(roomAs(['Pebble', 'Maya'], 1, PRIVATE));
     check('... it shows the Room, with the notice "Joined Pebble’s room." and the list put away', env.screen() === 'room' && toastTextOf(env) === 'Joined Pebble’s room.' && popOf(env).hidden === true && env.$('room-h').textContent === 'Pebble’s room');
-    check('... and as a guest of it the page has no switch, and the chip says what the room says', visOf(env).hidden === true && tagOf(env).textContent === 'Private room');
+    check('... and as a guest of it the page has no switch, and the chip says what the room says', visOf(env).hidden === true && tagOf(env).textContent === TEXT.privateRoom);
     check('(the page asked nobody for a name: the one the room showed went along)', env.$('name-step').hidden === true);
 }
 for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a match that has started', 3, 'The match in that room has already started.'], ['no such room (the game was taken off the list meanwhile)', 6, 'That game is not open any more.']]) {
@@ -910,7 +932,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     tap(visOf(env).children[0]);
     await wait(env, 11000);
     sock.receive(roomAs(['Maya', 'Sage'], 0, PRIVATE));
-    check('a Private press that nobody answered for 10 s is forgotten: the room that goes private then says so ("went private after 30 minutes") with its Make it public button', toastTextOf(env) === 'Your room went private after 30 minutes. Make it public again?' && toastButtons(env).length === 2);
+    check('an Invite only press that nobody answered for 10 s is forgotten: the room that goes private then says so (the notice of the idle room) with its Make it public button', toastTextOf(env) === TEXT.idle && toastButtons(env).length === 2);
     const quick = await page({ options: { fakeClock: true } });
     const qs = myRoom(quick, ['Maya', 'Sage'], PUBLIC);
     qs.receive(roomAs(['Maya', 'Sage'], 0, PUBLIC));
@@ -923,7 +945,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     tap(visOf(hold).children[1]);
     check('(a press that the page\'s pace holds back says "One moment, then press again.")', noteOf(hold).textContent === 'One moment, then press again.');
     await wait(hold, 1500);
-    check('... and the words go by themselves when the moment is over (nobody has to wait for a message of the room), and the switch can be pressed again', noteOf(hold).textContent === 'Public rooms show your name and map in the Games list.' && visOf(hold).children.every((b) => b.disabled === false));
+    check('... and the words go by themselves when the moment is over (nobody has to wait for a message of the room), and the switch can be pressed again', noteOf(hold).textContent === TEXT.noteHow && visOf(hold).children.every((b) => b.disabled === false));
 }
 {   // the notice of the list is behind the question card too
     const env = await withList();
@@ -1101,7 +1123,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     env.roomBar('rhome').click();
     tap(env.home('host'));
     sock.receive(roomAs(OTHERS, 0, PRIVATE));
-    check('a notice with a question ("Make it public") replaces the one that was there: one toast, its own two buttons (none of the old one is left)', toasts().length === 1 && toastButtons(env).length === 2 && toastTextOf(env).indexOf('went private after 30 minutes') !== -1);
+    check('a notice with a question ("Make it public") replaces the one that was there: one toast, its own two buttons (none of the old one is left)', toasts().length === 1 && toastButtons(env).length === 2 && toastTextOf(env) === TEXT.idle);
     await wait(env, 20000);
     check('... and it stays for as long as it is not answered', toastOf(env).hidden === false && toasts().length === 1);
     pressEscape(env);
