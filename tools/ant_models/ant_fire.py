@@ -63,23 +63,23 @@ _FIRE_RIGHT_ARM: List[Tuple[float, float, float]] = [
 
 
 def _brim_radial_and_y(theta: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Compute sleek fitted American firefighter helmet brim + steeper downward-sweeping rear neck guard."""
+    """Compute crisp flat horizontal American firefighter helmet brim + gently sloped rear ducktail."""
     cos_t = np.cos(theta)
     sin_t = np.sin(theta)
     front_w = np.clip(cos_t, 0.0, 1.0) ** 1.4
     side_w = sin_t * sin_t
-    rear_w = (0.5 * (1.0 - cos_t)) ** 1.25
+    rear_w = (0.5 * (1.0 - cos_t)) ** 1.30
 
-    # Tight fitted side brim (zero sun-hat flare) + crisp front bill + proud steeper downward-back
-    # rear neck-guard tail hugging smoothly behind the skull & neck.
-    x_flare = 0.15 * front_w + 0.13 * side_w + 0.22 * rear_w
-    z_flare = 0.26 * front_w + 0.16 * side_w + 0.90 * rear_w
-    y_shift = 0.015 * front_w - 0.016 * side_w - 0.195 * rear_w
+    # Crisp flat horizontal flare around front & sides (zero bucket-hat droop), flowing smoothly
+    # into the longer classic rear firefighter ducktail with only a gentle downward slope.
+    x_flare = 0.24 * front_w + 0.24 * side_w + 0.34 * rear_w
+    z_flare = 0.34 * front_w + 0.22 * side_w + 1.02 * rear_w
+    y_shift = 0.010 * front_w + 0.004 * side_w - 0.044 * rear_w
     return x_flare, z_flare, y_shift
 
 
 def _helmet_shell_deform(pos: np.ndarray) -> np.ndarray:
-    """Sculpt classic American traditional firefighter helmet: rounded bell dome + bold ducktail brim."""
+    """Sculpt classic American traditional firefighter helmet: tall bell dome + flat horizontal brim."""
     p = pos.copy()
     x, y, z = p[:, 0], p[:, 1], p[:, 2]
 
@@ -87,7 +87,8 @@ def _helmet_shell_deform(pos: np.ndarray) -> np.ndarray:
     y_max = float(y.max())
     h = np.clip((y - y_min) / max(1e-6, y_max - y_min), 0.0, 1.0)
 
-    brim = np.clip(1.0 - h / 0.32, 0.0, 1.0) ** 1.80
+    brim_t = np.clip(1.0 - h / 0.24, 0.0, 1.0)
+    brim = brim_t ** 1.60
 
     theta = np.arctan2(x, z)
     x_flare, z_flare, y_shift = _brim_radial_and_y(theta)
@@ -95,10 +96,11 @@ def _helmet_shell_deform(pos: np.ndarray) -> np.ndarray:
     p[:, 0] = x * (1.0 + brim * x_flare)
     p[:, 2] = z * (1.0 + brim * z_flare)
 
-    # Crisp rolled outer edge curl along both the front bill and the sweeping rear ducktail lip.
+    # Lift the brim base upward into a crisp flat horizontal shelf (eliminating bucket/bell droop).
+    flatten_lift = 0.044 * (brim_t ** 1.35)
     edge_mask = np.clip(1.0 - h / 0.06, 0.0, 1.0) ** 2
-    lip_curl = (0.011 * (0.5 + 0.5 * np.cos(theta)) + 0.010 * (0.5 * (1.0 - np.cos(theta)) ** 1.4)) * edge_mask
-    p[:, 1] = y + brim * y_shift + lip_curl
+    lip_curl = (0.008 * (0.5 + 0.5 * np.cos(theta)) + 0.009 * ((0.5 * (1.0 - np.cos(theta))) ** 1.3)) * edge_mask
+    p[:, 1] = y + flatten_lift + brim * y_shift + lip_curl
     return p
 
 
@@ -178,24 +180,24 @@ def _build_fire_helmet(
     hrx, _, hrz = head_radii
     eyelid_top_y = _measure_eyelid_max_y(scene, eye_left, closed_angle)
 
-    # Seat helmet brim snugly down right onto the top brow above the compact eyes (hiding forehead),
-    # with a ~28% taller proud classic 8-ribbed bell dome rising gracefully above the brim.
-    shell_y = max(eyelid_top_y + 0.008, head_top[1] - 0.100)
+    # Seat the crisp flat horizontal brim snugly right on the top brow above the compact eyes
+    # (`shell_y + y_base + 0.044` ~= eyelid_top_y + 0.012) while keeping the proud tall 8-ribbed dome.
+    shell_y = max(eyelid_top_y - 0.022, head_top[1] - 0.132)
     shell_z = hz - 0.006
-    dome_rx = hrx + 0.013
-    dome_ry = max(0.244, (head_top[1] - shell_y) + 0.154)
+    dome_rx = hrx + 0.012
+    dome_ry = max(0.278, (head_top[1] - shell_y) + 0.160)
     dome_rz = hrz + 0.018
 
-    # 1. Smooth rounded bell dome + wide horizontal-sweeping rear ducktail brim.
+    # 1. Tall rounded bell dome + crisp flat horizontal outward-flaring firefighter brim.
     dome = (
         hemisphere_shell(
             dome_rx,
             dome_ry,
             dome_rz,
-            thickness=0.022,
+            thickness=0.020,
             start_phi=-0.04,
             u_segs=56,
-            v_segs=24,
+            v_segs=26,
             e1=0.94,
             e2=0.94,
             deform_fn=_helmet_shell_deform,
@@ -206,7 +208,7 @@ def _build_fire_helmet(
     )
     scene.add("fire_helmet", dome)
 
-    # Clean rolled outer edge beading loop wrapping smoothly around the entire oval & ducktail brim.
+    # Clean rolled outer edge beading loop wrapping smoothly around the flat oval & ducktail brim.
     n_lip = 64
     lip_pts: List[Tuple[float, float, float]] = []
     start_phi = -0.04
@@ -219,15 +221,15 @@ def _build_fire_helmet(
         bz = dome_rz * c_phi * math.cos(ang)
         xf, zf, ys = _brim_radial_and_y(np.array([ang]))
         cos_a = math.cos(ang)
-        curl = 0.011 * (0.5 + 0.5 * cos_a) + 0.010 * (0.5 * ((1.0 - cos_a) ** 1.4))
+        curl = 0.008 * (0.5 + 0.5 * cos_a) + 0.009 * ((0.5 * (1.0 - cos_a)) ** 1.3)
         lx = hx + bx * (1.0 + float(xf[0]))
-        ly = shell_y + y_base + float(ys[0]) + curl - 0.004
+        ly = shell_y + y_base + 0.044 + float(ys[0]) + curl - 0.003
         lz = shell_z + bz * (1.0 + float(zf[0]))
         lip_pts.append((lx, ly, lz))
 
     brim_lip = swept_tube(
         lip_pts,
-        0.0145,
+        0.0135,
         radial_segs=10,
         closed=True,
         name="helmet_brim_lip",
@@ -235,24 +237,24 @@ def _build_fire_helmet(
     )
     scene.add("fire_helmet", brim_lip)
 
-    # Dark inner head-liner band contoured elliptically to the narrower-Z Pass 4 cranium.
+    # Dark inner head-liner band seated cleanly inside the dome above the flat horizontal brim.
     liner = (
         cylinder(hrx * 0.94, hrx * 0.97, 0.036, radial_segs=26, bevel=0.006, axis="y", name="helmet_liner", material="gear_dark")
         .scale(1.0, 1.0, hrz / max(1e-6, hrx))
-        .translate(hx, shell_y + 0.018, hz)
+        .translate(hx, shell_y + 0.056, hz)
     )
     scene.add("fire_helmet", liner)
 
-    # 2. Classic 8 radiating molded firefighter crown ribs meeting cleanly at the domed apex star.
+    # 2. Classic 8 radiating molded firefighter crown ribs ending cleanly at the flat brim crease.
     rib_specs = (
-        (0.0, 0.42, 0.020, "front"),
-        (180.0, 0.08, 0.022, "back"),
-        (90.0, 0.12, 0.018, "left"),
-        (-90.0, 0.12, 0.018, "right"),
-        (46.0, 0.14, 0.017, "fl"),
-        (-46.0, 0.14, 0.017, "fr"),
-        (134.0, 0.10, 0.017, "bl"),
-        (-134.0, 0.10, 0.017, "br"),
+        (0.0, 0.52, 0.020, "front"),
+        (180.0, 0.24, 0.022, "back"),
+        (90.0, 0.25, 0.018, "left"),
+        (-90.0, 0.25, 0.018, "right"),
+        (46.0, 0.26, 0.017, "fl"),
+        (-46.0, 0.26, 0.017, "fr"),
+        (134.0, 0.24, 0.017, "bl"),
+        (-134.0, 0.24, 0.017, "br"),
     )
     for az_deg, phi_end, peak_rad, tag in rib_specs:
         az = math.radians(az_deg)
@@ -306,8 +308,8 @@ def _build_fire_helmet(
         (-0.072, +0.099),
         (-0.032, +0.110),
     ]
-    shield_tilt_x = -16.0
-    shield_pos = (hx, shell_y + 0.120, shell_z + dome_rz + 0.002)
+    shield_tilt_x = -15.0
+    shield_pos = (hx, shell_y + 0.156, shell_z + dome_rz + 0.001)
 
     shield_plate = (
         extrude_polygon(shield_poly, depth=0.018, name="helmet_shield_plate", material="gear_gold_metal")
