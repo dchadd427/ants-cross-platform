@@ -178,6 +178,7 @@
             <p class="slots-note" id="slots-note" role="status"></p>
             <p class="slots-note teams-note" id="teams-note" role="status"></p>
             <p class="plan"><span class="plan-long" id="plan"></span><span class="plan-short" id="plan-short"></span></p>
+            <div id="direct"></div>
         </div>
         <aside class="side" aria-label="The match">
             <div class="maprow">
@@ -186,7 +187,6 @@
                 <button class="btn change" type="button" id="change-map" aria-haspopup="dialog" hidden>Change map</button></div>
             </div>
             <div id="gtype"></div>
-            <div id="direct"></div>
             <div class="go">
                 <button class="btn big" type="button" id="start">START!</button>
                 <p class="ready-line" id="ready-line" role="status" hidden></p>
@@ -574,6 +574,7 @@
             box.appendChild(el('span', 'ant ant-' + c.id));
             li.appendChild(box);
             var txt = el('div', 'txt');
+            var botLabel = '';
             txt.appendChild(el('span', 'cname', c.name));
             if (card.mode) {
                 var select = el('select', 'mode');
@@ -586,7 +587,7 @@
                     option.selected = o[0] === card.mode;
                     select.appendChild(option);
                 });
-                txt.appendChild(select); if (card.who.length) txt.appendChild(el('span', 'botname', card.who[0].text));      // (the bot's name, small, under the level switch)
+                txt.appendChild(select); botLabel = card.who.length ? card.who[0].text : '';      // (the bot's name is the line under the level switch, in place of "Computer player")
             } else {
                 var who = el('span', 'pname');
                 card.who.forEach(function (w) { who.appendChild(el('span', w.cls, w.text)); });
@@ -628,7 +629,7 @@
                     if (card.ready.title) chipMark.setAttribute('title', card.ready.title);
                     stat.appendChild(chipMark);
                 }
-                stat.appendChild(document.createTextNode(card.stat));
+                stat.appendChild(document.createTextNode(botLabel || card.stat));
                 txt.appendChild(stat);
             }
             if (card.teams) {
