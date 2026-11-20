@@ -599,7 +599,23 @@ def validate_glb(path_or_bytes: Union[str, os.PathLike, bytes, bytearray, memory
         if bo < 0 or bo + bl > declared_bin:
             raise ValueError(f"bufferView {bv_i}: [{bo}, {bo + bl}) exceeds buffer length {declared_bin}")
 
-    mat_names = [str(m.get("name", f"material_{i}")) for i, m in enumerate(doc["materials"])]
+    mat_names: List[str] = []
+    for m_i, mat in enumerate(doc["materials"]):
+        mat_names.append(str(mat.get("name", f"material_{m_i}")))
+        alpha_mode = mat.get("alphaMode", "OPAQUE")
+        if alpha_mode not in ("OPAQUE", "MASK", "BLEND"):
+            raise ValueError(f"Material {m_i}: unsupported alphaMode {alpha_mode!r}")
+        pbr = mat.get("pbrMetallicRoughness", {})
+        bcf = pbr.get("baseColorFactor")
+        if bcf is not None:
+            if not isinstance(bcf, list) or len(bcf) != 4:
+                raise ValueError(f"Material {m_i}: baseColorFactor must be a 4-element list")
+            for k, c in enumerate(bcf):
+                fc = float(c)
+                if not math.isfinite(fc) or fc < 0.0 or fc > 1.0:
+                    raise ValueError(f"Material {m_i}: baseColorFactor[{k}]={fc} out of [0, 1]")
+            if alpha_mode == "BLEND" and float(bcf[3]) <= 0.0:
+                raise ValueError(f"Material {m_i}: BLEND material must have alpha in (0, 1]")
     node_names = [str(n.get("name", f"node_{i}")) for i, n in enumerate(doc["nodes"])]
     world_mats = _compute_world_matrices(doc)
     mesh_nodes: Dict[int, List[int]] = {}

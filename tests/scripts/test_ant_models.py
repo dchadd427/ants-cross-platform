@@ -111,6 +111,8 @@ class MaterialsContract(unittest.TestCase):
         "eye_iris",
         "gear_steel",
         "gear_brass_trim",
+        "bomb_charge",
+        "bomb_cup_trim",
     )
 
     def test_all_canonical_materials_present(self):
@@ -146,11 +148,14 @@ class MaterialsContract(unittest.TestCase):
                     self.assertLess(bcf[k], spec.base_color[k], f"{name}[{k}] should be linear (< sRGB)")
             self.assertAlmostEqual(bcf[3], spec.base_color[3], places=6)
 
-        # Verify custom alpha stays linear (unconverted by EOTF).
+        # Verify custom alpha stays linear (unconverted by EOTF) and enables BLEND.
         translucent = materials.MaterialSpec("test_alpha", (0.5, 0.5, 0.5, 0.5), 0.0, 0.5)
-        bcf = translucent.to_gltf_dict()["pbrMetallicRoughness"]["baseColorFactor"]
+        t_dict = translucent.to_gltf_dict()
+        bcf = t_dict["pbrMetallicRoughness"]["baseColorFactor"]
         self.assertAlmostEqual(bcf[0], ((0.5 + 0.055) / 1.055) ** 2.4, places=5)
         self.assertAlmostEqual(bcf[3], 0.5, places=6)
+        self.assertEqual(t_dict["alphaMode"], "BLEND")
+        self.assertTrue(t_dict["doubleSided"])
 
         # Verify serialized GLB carries IEC-linear baseColorFactor in its JSON chunk.
         glb = gltf_writer.scene_to_glb_bytes(_make_pure_python_tetra_scene())
@@ -160,6 +165,26 @@ class MaterialsContract(unittest.TestCase):
         for k in range(3):
             self.assertAlmostEqual(glb_bcf[k], materials.srgb_to_linear(chitin.base_color[k]), places=5)
         self.assertAlmostEqual(glb_bcf[3], 1.0, places=6)
+
+    def test_glass_materials_emit_blend_alpha_mode(self):
+        for name in ("glass_tinted", "glass_clear"):
+            spec = materials.get_material(name)
+            gltf = spec.to_gltf_dict()
+            self.assertEqual(gltf["alphaMode"], "BLEND", name)
+            self.assertTrue(gltf["doubleSided"], name)
+            alpha = gltf["pbrMetallicRoughness"]["baseColorFactor"][3]
+            self.assertGreater(alpha, 0.0, name)
+            self.assertLess(alpha, 0.5, name)
+        # Opaque chitin remains OPAQUE with alpha == 1.0.
+        chitin_gltf = materials.get_material("chitin_team").to_gltf_dict()
+        self.assertEqual(chitin_gltf["alphaMode"], "OPAQUE")
+        self.assertAlmostEqual(chitin_gltf["pbrMetallicRoughness"]["baseColorFactor"][3], 1.0, places=6)
+
+        # Pure-stdlib GLB validator accepts BLEND glass materials cleanly.
+        glass_scene = _make_pure_python_tetra_scene()
+        glass_scene._nodes["body"][0].material = "glass_tinted"
+        stats = gltf_writer.validate_glb(gltf_writer.scene_to_glb_bytes(glass_scene))
+        self.assertEqual(stats["materials"], ["glass_tinted"])
 
     def test_unknown_material_raises(self):
         with self.assertRaises(KeyError):
@@ -494,6 +519,16 @@ class SoftwarePreviewRenderer(unittest.TestCase):
             arr = np.asarray(img)
             # Ant pixels should introduce real luminance & color variance beyond flat backdrop.
             self.assertGreater(float(arr.std()), 12.0)
+
+    def test_translucent_glass_reveals_opaque_eye_behind(self):
+        sc = mesh_core.SceneBuilder("glass_test")
+        sc.add("eye", mesh_core.sphere(0.35, u_segs=16, v_segs=12, name="eye", material="eye_white").translate(0.0, 0.5, 0.0))
+        sc.add("lens", mesh_core.rounded_box(0.8, 0.8, 0.04, bevel=0.01, segs=2, name="lens", material="glass_tinted").translate(0.0, 0.5, 0.45))
+        img = build_all.render_scene_orthographic(sc, width=64, height=64, yaw_deg=0.0, pitch_deg=0.0, view_span=1.2)
+        center_luma = float(img[30:34, 30:34].mean())
+        edge_luma = float(img[6:10, 6:10].mean())
+        # Bright white eye behind dark tinted glass must shine noticeably brighter than glass-only edges.
+        self.assertGreater(center_luma, edge_luma + 35.0)
 
 
 if __name__ == "__main__":

@@ -36,6 +36,13 @@ class MaterialSpec:
     metallic: float
     roughness: float
     double_sided: bool = False
+    alpha_mode: str = "OPAQUE"
+
+    def resolved_alpha_mode(self) -> str:
+        """Return effective glTF 2.0 alphaMode ('BLEND' when alpha < 1.0)."""
+        if self.alpha_mode != "OPAQUE":
+            return self.alpha_mode
+        return "BLEND" if self.base_color[3] < 0.9999 else "OPAQUE"
 
     def linear_base_color(self) -> Tuple[float, float, float, float]:
         """Return linear-space RGBA baseColorFactor per glTF 2.0 spec."""
@@ -43,6 +50,7 @@ class MaterialSpec:
 
     def to_gltf_dict(self) -> Dict[str, object]:
         """Serialize to a glTF 2.0 material object with IEC-linear baseColorFactor."""
+        mode = self.resolved_alpha_mode()
         return {
             "name": self.name,
             "pbrMetallicRoughness": {
@@ -50,20 +58,21 @@ class MaterialSpec:
                 "metallicFactor": round(float(self.metallic), 6),
                 "roughnessFactor": round(float(self.roughness), 6),
             },
-            "doubleSided": bool(self.double_sided),
+            "alphaMode": mode,
+            "doubleSided": bool(self.double_sided or mode == "BLEND"),
         }
 
 
 _SPECS: Tuple[MaterialSpec, ...] = (
     MaterialSpec(
         name="chitin_team",
-        base_color=(0.24, 0.43, 0.27, 1.0),
+        base_color=(0.24, 0.44, 0.27, 1.0),
         metallic=0.06,
         roughness=0.50,
     ),
     MaterialSpec(
         name="chitin_dark",
-        base_color=(0.09, 0.08, 0.07, 1.0),
+        base_color=(0.16, 0.31, 0.19, 1.0),
         metallic=0.06,
         roughness=0.52,
     ),
@@ -105,15 +114,19 @@ _SPECS: Tuple[MaterialSpec, ...] = (
     ),
     MaterialSpec(
         name="glass_tinted",
-        base_color=(0.05, 0.11, 0.16, 1.0),
-        metallic=0.26,
-        roughness=0.07,
+        base_color=(0.12, 0.24, 0.32, 0.30),
+        metallic=0.10,
+        roughness=0.06,
+        double_sided=True,
+        alpha_mode="BLEND",
     ),
     MaterialSpec(
         name="glass_clear",
-        base_color=(0.72, 0.85, 0.90, 1.0),
-        metallic=0.14,
-        roughness=0.07,
+        base_color=(0.85, 0.94, 0.99, 0.22),
+        metallic=0.08,
+        roughness=0.05,
+        double_sided=True,
+        alpha_mode="BLEND",
     ),
     MaterialSpec(
         name="fuse_white",
@@ -145,6 +158,18 @@ _SPECS: Tuple[MaterialSpec, ...] = (
         metallic=0.45,
         roughness=0.32,
     ),
+    MaterialSpec(
+        name="bomb_charge",
+        base_color=(0.84, 0.08, 0.55, 1.0),
+        metallic=0.04,
+        roughness=0.50,
+    ),
+    MaterialSpec(
+        name="bomb_cup_trim",
+        base_color=(0.24, 0.06, 0.09, 1.0),
+        metallic=0.18,
+        roughness=0.46,
+    ),
 )
 
 MATERIAL_ORDER: Tuple[str, ...] = tuple(spec.name for spec in _SPECS)
@@ -152,20 +177,20 @@ MATERIALS: Dict[str, MaterialSpec] = {spec.name: spec for spec in _SPECS}
 
 TEAM_COLORS: Dict[str, Dict[str, List[float]]] = {
     "green": {
-        "chitin_team": [0.24, 0.43, 0.27, 1.0],
-        "chitin_dark": [0.09, 0.08, 0.07, 1.0],
+        "chitin_team": [0.24, 0.44, 0.27, 1.0],
+        "chitin_dark": [0.16, 0.31, 0.19, 1.0],
     },
     "red": {
-        "chitin_team": [0.50, 0.16, 0.17, 1.0],
-        "chitin_dark": [0.12, 0.06, 0.06, 1.0],
+        "chitin_team": [0.52, 0.16, 0.18, 1.0],
+        "chitin_dark": [0.36, 0.10, 0.12, 1.0],
     },
     "blue": {
-        "chitin_team": [0.20, 0.31, 0.52, 1.0],
-        "chitin_dark": [0.07, 0.08, 0.13, 1.0],
+        "chitin_team": [0.20, 0.32, 0.54, 1.0],
+        "chitin_dark": [0.13, 0.22, 0.39, 1.0],
     },
     "black": {
-        "chitin_team": [0.34, 0.36, 0.40, 1.0],
-        "chitin_dark": [0.08, 0.08, 0.09, 1.0],
+        "chitin_team": [0.35, 0.37, 0.42, 1.0],
+        "chitin_dark": [0.23, 0.25, 0.29, 1.0],
     },
 }
 
