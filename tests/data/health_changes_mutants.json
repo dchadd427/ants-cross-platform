@@ -214,18 +214,8 @@
     {
       "id": "heal_color_changed",
       "file": "include/ants_app/health_changes.hpp",
-      "old": "constexpr Color kHealColor{132, 236, 120};",
-      "new": "constexpr Color kHealColor{132, 200, 120};",
-      "build": [
-        "test_health_changes"
-      ],
-      "test": "./build/tests/test_app/test_health_changes"
-    },
-    {
-      "id": "outline_opaque",
-      "file": "include/ants_app/health_changes.hpp",
-      "old": "constexpr uint8_t kOutlineAlpha = 217;",
-      "new": "constexpr uint8_t kOutlineAlpha = 255;",
+      "old": "constexpr Color kHealColor{255, 255, 255};",
+      "new": "constexpr Color kHealColor{255, 255, 230};",
       "build": [
         "test_health_changes"
       ],
@@ -296,16 +286,6 @@
       "file": "src/ants_app/renderer_health.cpp",
       "old": "    draw_deferred_digits();\n    draw_bars();\n    draw_health_changes();",
       "new": "    draw_deferred_digits();\n    draw_health_changes();\n    draw_bars();",
-      "build": [
-        "test_health_changes"
-      ],
-      "test": "./build/tests/test_app/test_health_changes"
-    },
-    {
-      "id": "heal_drawn_white",
-      "file": "src/ants_app/renderer_health.cpp",
-      "old": "const health::Color c = num.heal ? health::kHealColor : health::kDamageColor;",
-      "new": "const health::Color c = health::kDamageColor;",
       "build": [
         "test_health_changes"
       ],
@@ -466,6 +446,46 @@
       "file": "include/ants_app/health_changes.hpp",
       "old": "                items_[i].hidden = false;\n",
       "new": "",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "damage_number_gets_a_border",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "std::vector<uint32_t> pixels(static_cast<size_t>(w * h), 0u);",
+      "new": "std::vector<uint32_t> pixels(static_cast<size_t>(w * h), 0xD9000000u);",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "heal_sign_color_changed",
+      "file": "include/ants_app/health_changes.hpp",
+      "old": "constexpr Color kHealSignColor{110, 255, 120};",
+      "new": "constexpr Color kHealSignColor{110, 220, 120};",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "heal_plus_not_green",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "SDL_SetTextureColorMod(pic->texture, health::kHealSignColor.r, health::kHealSignColor.g, health::kHealSignColor.b);",
+      "new": "SDL_SetTextureColorMod(pic->texture, health::kHealColor.r, health::kHealColor.g, health::kHealColor.b);",
+      "build": [
+        "test_health_changes"
+      ],
+      "test": "./build/tests/test_app/test_health_changes"
+    },
+    {
+      "id": "heal_digits_green_too",
+      "file": "src/ants_app/renderer_health.cpp",
+      "old": "SDL_SetTextureColorMod(pic->texture, health::kHealColor.r, health::kHealColor.g, health::kHealColor.b);",
+      "new": "SDL_SetTextureColorMod(pic->texture, health::kHealSignColor.r, health::kHealSignColor.g, health::kHealSignColor.b);",
       "build": [
         "test_health_changes"
       ],

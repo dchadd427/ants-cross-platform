@@ -1,5 +1,6 @@
 // The numbers of the game in its TrueType font (the face that draw_text uses): the hit point numbers (Ctrl+L), the damage and heal numbers and the score numbers. White (the score: the digit
-// sprites' own color), a one pixel outline in near black, and drawn at the OUTPUT's resolution: the canvas is a picture that SDL's logical size scales into the window, so a glyph made at the
+// sprites' own color; the heal number: white digits and a green plus). The hit point, damage and heal numbers are plain glyphs with nothing round them; the score numbers that rise from a hill and the results page's have a near
+// black outline. Drawn at the OUTPUT's resolution: the canvas is a picture that SDL's logical size scales into the window, so a glyph made at the
 // canvas's size would be scaled (soft on a phone, where one canvas pixel is two or three device pixels). Here SDL's logical size is switched off for the moment that the numbers are copied
 // (begin_native / end_native), the glyphs are made at the size that the output shows them (the face opened at the size whose digit is the wanted number of device pixels tall) and every number
 // is placed with the canvas's own arithmetic (CanvasLayout::fit, the same that the screenshot uses). Drawing only; the old drawing stays behind Renderer::set_classic_numbers.
@@ -185,8 +186,8 @@ std::string font_text(const std::string& text, TTF_Font* font) {
 // Made once per (text, size, outline); the number of them is bounded.
 const Renderer::NumberPicture* Renderer::number_picture(const std::string& text, int32_t height_px, int32_t outline_px) {
 #ifdef ANTS_ENABLE_SDL_TTF
-    if (!renderer_ || text.empty() || number_path_.empty() || height_px < 4) return nullptr;
     const bool plain = outline_px <= 0;
+    if (!renderer_ || text.empty() || number_path_.empty() || height_px < (plain ? 2 : 4)) return nullptr;
     const int32_t o = plain ? 0 : std::max(1, outline_px);
     // `height_px` is what shows with the OLD outline (one scaled pixel, `base` here); the thicker outline grows outward from the glyphs, which keep the size that the old one left them
     // (the counters of 0 6 8 9 4 stay open). So what shows is `2 * (o - base)` taller and wider than asked, and the glyph is `height_px - 2 * base` tall. Plain: the glyph is `height_px` tall.
@@ -317,12 +318,12 @@ const Renderer::NumberPicture* Renderer::number_picture(const std::string& text,
 
 // A picture copied by the box of what shows. (x, y) is its left and top edge in canvas pixels (the middle when centred); `width_px` > 0 stretches it to that many output pixels wide,
 // about the same middle, so that a glyph takes the width of the sprite digit that it replaces.
-void Renderer::draw_number_box(const NativeFrame& f, const NumberPicture& pic, double x, double y, bool centre_x, bool centre_y, health::Color color, int32_t alpha, int32_t width_px) {
-    const double k = width_px > 0 ? static_cast<double>(width_px) / static_cast<double>(pic.box_w) : 1.0;
+void Renderer::draw_number_box(const NativeFrame& f, const NumberPicture& pic, double x, double y, bool centre_x, bool centre_y, health::Color color, int32_t alpha, double width_px, int32_t shift_px) {
+    const double k = width_px > 0.0 ? width_px / static_cast<double>(pic.box_w) : 1.0;
     const double sx = (k > 0.7 && k < 1.45) ? k : 1.0;       // (a stretch only where it stays slight)
     const int32_t box_w = static_cast<int32_t>(std::lround(static_cast<double>(pic.box_w) * sx));
-    int32_t dx = f.x + static_cast<int32_t>(std::lround(x * f.scale));
-    int32_t dy = f.y + static_cast<int32_t>(std::lround(y * f.scale));
+    int32_t dx = f.x + static_cast<int32_t>(std::lround(x * f.scale)) + shift_px;
+    int32_t dy = f.y + static_cast<int32_t>(std::lround(y * f.scale)) + shift_px;
     if (centre_x) dx -= box_w / 2;
     if (centre_y) dy -= pic.box_h / 2;
     const SDL_Rect dst{dx - static_cast<int32_t>(std::lround(static_cast<double>(pic.box_x) * sx)), dy - pic.box_y, static_cast<int32_t>(std::lround(static_cast<double>(pic.w) * sx)), pic.h};
@@ -331,31 +332,49 @@ void Renderer::draw_number_box(const NativeFrame& f, const NumberPicture& pic, d
     SDL_RenderCopy(renderer_, pic.texture, nullptr, &dst);
 }
 
-// The hit point numbers: where the old cell's ink stood (2 pixels under the sprite's position, and one scaled pixel out on the phone, where the old digits were outlined), as tall as the old ink
-// (10 canvas pixels, outline included on the phone: (10 + 2) x the scale), so they do not look larger.
+// The size of a plain digit and where it stands inside the frame that its number is placed by. A number's size is counted as it always was (what the old drawing's ink measured: the digit and one scaled font
+// pixel of margin on every side, `frame_px` tall in all) and the digit is what is left of it, `2 x margin` shorter; it stands `2 x margin` in from the frame's top left corner. Both are output pixels, and the
+// margin is `margin_scale` rounded, at least 1. So a number keeps the glyph's size and place that it had.
+namespace {
+
+struct DigitFrame {
+    int32_t digit_px;
+    int32_t margin_px;
+    int32_t inset_px() const { return 2 * margin_px; }
+};
+DigitFrame digit_frame(double frame_px, double margin_scale) {
+    const int32_t margin = std::max(1, static_cast<int32_t>(std::lround(margin_scale)));
+    const int32_t frame = std::max(4, static_cast<int32_t>(std::lround(frame_px)));
+    return DigitFrame{std::max(2, frame - 2 * margin), margin};
+}
+
+}  // namespace
+
+// The hit point numbers: plain glyphs where the old cell's ink stood (2 pixels under the sprite's position, and one scaled pixel out on the phone), as tall as the old ink
+// (10 canvas pixels: (10 + 2) x the scale less the margin on the phone).
 void Renderer::draw_font_digits(const LayoutRect& view, double zoom) {
     if (deferred_digits_.empty()) return;
     const NativeFrame f = begin_native();
     if (f.on) {
         const int32_t px = std::max(1, digit_scale_);
-        const int32_t pad = digit_outline_ ? px : 0;                             // (the old outline's width, canvas pixels)
-        const int32_t height_px = std::max(4, static_cast<int32_t>(std::lround(static_cast<double>(10 * px + 2 * pad) * f.scale)));
-        const int32_t outline_px = health::number_outline_px(static_cast<double>(std::max(1, pad)) * f.scale);
+        const int32_t pad = px > 1 ? px : 0;                                     // (the margin of the frame, canvas pixels: one scaled font pixel on the phone)
+        const DigitFrame fr = digit_frame(static_cast<double>(10 * px + 2 * pad) * f.scale, static_cast<double>(std::max(1, pad)) * f.scale);
         for (const DeferredDigits& d : deferred_digits_) {
             const int32_t sx = view.x + static_cast<int32_t>(std::floor((static_cast<double>(d.wx) - static_cast<double>(camera_.x)) * zoom));
             const int32_t sy = view.y + static_cast<int32_t>(std::floor((static_cast<double>(d.wy) - static_cast<double>(camera_.y)) * zoom));
-            const NumberPicture* pic = number_picture(d.text, height_px, outline_px);
+            const NumberPicture* pic = number_picture(d.text, fr.digit_px, 0);
             if (pic == nullptr) continue;
             const SDL_Rect at = placed(sx - pad, sy + 2 * px - pad, 0, 0);
-            draw_number_box(f, *pic, at.x, at.y, false, false, health::Color{255, 255, 255}, 255);
+            draw_number_box(f, *pic, at.x, at.y, false, false, health::Color{255, 255, 255}, 255, 0.0, fr.inset_px());
         }
         end_native(f);
     }
     deferred_digits_.clear();
 }
 
-// The damage and heal numbers: where the old ones stood (centred on the ant's body, rising), as tall as the old picture (10 canvas pixels and an outline: 12), and, with the age, smaller:
-// health::scale_at, about the number's own middle, so that it stays over the ant. Every size is its own picture (one output pixel steps, a bounded cache): crisp at every size.
+// The damage and heal numbers: plain glyphs where the old ones stood (centred on the ant's body, rising), as tall as the old picture (10 canvas pixels and a margin: 12), and, with the age, smaller:
+// health::scale_at, about the number's own middle, so that it stays over the ant. Every size is its own picture (one output pixel steps, a bounded cache): crisp at every size. The glyphs are squeezed
+// as they were fitted: the old ink's width (7 pixels a character and one more, times the scale) was shared between the glyphs and the margins round them, and the glyphs keep their share.
 void Renderer::draw_font_changes() {
     const NativeFrame f = begin_native();
     if (!f.on) return;
@@ -368,10 +387,18 @@ void Renderer::draw_font_changes() {
         const int32_t alpha = health::alpha_at(age);
         if (alpha <= 0 || num.hidden) continue;
         const double shrink = health::scale_at(age);
-        const int32_t height_px = std::max(4, static_cast<int32_t>(std::lround(static_cast<double>(health::kGlyphHeight + 2) * f.scale * shrink)));
-        const int32_t outline_px = health::number_outline_px(f.scale * shrink);
-        const std::string text = std::string(num.heal ? "+" : "-") + std::to_string(std::min<int32_t>(num.amount, 9999));
-        const NumberPicture* pic = number_picture(text, height_px, outline_px);
+        const DigitFrame fr = digit_frame(static_cast<double>(health::kGlyphHeight + 2) * f.scale * shrink, f.scale * shrink);
+        const std::string digits = std::to_string(std::min<int32_t>(num.amount, 9999));
+        const std::string text = std::string(num.heal ? "+" : "-") + digits;
+        int32_t plus_w = 0;                                          // (a heal number's plus and its digits, alone: where the green ends. Made before `pic`: a new picture may move the others)
+        int32_t digits_w = 0;
+        if (num.heal) {
+            const NumberPicture* plus_pic = number_picture("+", fr.digit_px, 0);
+            plus_w = plus_pic != nullptr ? plus_pic->box_w : 0;
+            const NumberPicture* digits_pic = number_picture(digits, fr.digit_px, 0);
+            digits_w = digits_pic != nullptr ? digits_pic->box_w : 0;
+        }
+        const NumberPicture* pic = number_picture(text, fr.digit_px, 0);
         if (pic == nullptr) continue;
         int32_t sx = 0;
         int32_t sy = 0;
@@ -381,8 +408,31 @@ void Renderer::draw_font_changes() {
         const int32_t width = static_cast<int32_t>(text.size()) * health::kGlyphAdvance + 2;
         if (!health::overlaps(health::Rect{sx - width / 2, centre - rise - 6, width, 12}, screen)) continue;
         const SDL_Rect at = placed(sx, centre - rise, 0, 0);
-        const int32_t old_ink = static_cast<int32_t>(text.size()) * health::kGlyphAdvance + 1;       // (the old glyphs' ink: 7 pixels a character and one more: "-2" is 15 wide)
-        draw_number_box(f, *pic, at.x, at.y, true, true, num.heal ? health::kHealColor : health::kDamageColor, alpha, static_cast<int32_t>(std::lround(static_cast<double>(old_ink) * f.scale * shrink)));
+        const double old_ink = static_cast<double>(std::lround(static_cast<double>(static_cast<int32_t>(text.size()) * health::kGlyphAdvance + 1) * f.scale * shrink));       // (the old glyphs' ink: 7 pixels a character and one more: "-2" is 15 wide)
+        const double glyphs = static_cast<double>(pic->box_w);
+        const double squeezed = old_ink * glyphs / (glyphs + 4.0 * static_cast<double>(fr.margin_px));       // (the margins on both sides were 4 x margin wide in all)
+        if (!num.heal) {
+            draw_number_box(f, *pic, at.x, at.y, true, true, health::kDamageColor, alpha, squeezed);
+            continue;
+        }
+        // A heal number is drawn twice, the same picture in two colors, each clipped to its part of it: the plus in green on the left of the middle of the gap between the plus and the digits, the digits in
+        // the heal color on the right of it. The glyphs keep the place and the squeeze that the whole text has.
+        const double k = squeezed / static_cast<double>(pic->box_w);
+        const double stretch = (k > 0.7 && k < 1.45) ? k : 1.0;                 // (as draw_number_box takes it)
+        const int32_t ink_left = f.x + static_cast<int32_t>(std::lround(at.x * f.scale)) - static_cast<int32_t>(std::lround(static_cast<double>(pic->box_w) * stretch)) / 2;
+        const double plus_right = static_cast<double>(ink_left) + static_cast<double>(plus_w) * stretch;
+        const double digits_left = static_cast<double>(ink_left) + static_cast<double>(pic->box_w - digits_w) * stretch;
+        const int32_t cut = static_cast<int32_t>(std::lround((plus_right + digits_left) / 2.0));
+        SDL_Rect whole{0, 0, 0, 0};
+        SDL_RenderGetClipRect(renderer_, &whole);
+        const int32_t split = std::clamp(cut, whole.x, whole.x + whole.w);
+        const SDL_Rect sign_side{whole.x, whole.y, split - whole.x, whole.h};
+        const SDL_Rect digit_side{split, whole.y, whole.x + whole.w - split, whole.h};
+        SDL_RenderSetClipRect(renderer_, &sign_side);
+        draw_number_box(f, *pic, at.x, at.y, true, true, health::kHealSignColor, alpha, squeezed);
+        SDL_RenderSetClipRect(renderer_, &digit_side);
+        draw_number_box(f, *pic, at.x, at.y, true, true, health::kHealColor, alpha, squeezed);
+        SDL_RenderSetClipRect(renderer_, &whole);
     }
     end_native(f);
 }
