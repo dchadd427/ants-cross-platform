@@ -2,6 +2,8 @@
 
 Material names are part of the shared contract with viewer.js so team shells
 (chitin_team and chitin_dark) can be swapped live at render time.
+All material colors are authored in sRGB and converted to linear light via the
+IEC 61966-2-1 EOTF when serialized to glTF 2.0 baseColorFactor (alpha linear).
 """
 from __future__ import annotations
 
@@ -55,75 +57,93 @@ class MaterialSpec:
 _SPECS: Tuple[MaterialSpec, ...] = (
     MaterialSpec(
         name="chitin_team",
-        base_color=(0.18, 0.56, 0.34, 1.0),
-        metallic=0.05,
-        roughness=0.30,
+        base_color=(0.24, 0.43, 0.27, 1.0),
+        metallic=0.06,
+        roughness=0.50,
     ),
     MaterialSpec(
         name="chitin_dark",
-        base_color=(0.08, 0.19, 0.13, 1.0),
+        base_color=(0.09, 0.08, 0.07, 1.0),
         metallic=0.06,
-        roughness=0.46,
+        roughness=0.52,
     ),
     MaterialSpec(
         name="eye_white",
-        base_color=(0.97, 0.98, 0.99, 1.0),
+        base_color=(0.93, 0.93, 0.87, 1.0),
         metallic=0.0,
-        roughness=0.14,
+        roughness=0.18,
     ),
     MaterialSpec(
         name="eye_pupil",
-        base_color=(0.07, 0.08, 0.11, 1.0),
-        metallic=0.05,
+        base_color=(0.04, 0.05, 0.06, 1.0),
+        metallic=0.04,
         roughness=0.08,
     ),
     MaterialSpec(
         name="gear_gold",
-        base_color=(0.95, 0.74, 0.18, 1.0),
-        metallic=0.14,
-        roughness=0.28,
-    ),
-    MaterialSpec(
-        name="gear_gold_metal",
-        base_color=(0.92, 0.69, 0.15, 1.0),
-        metallic=0.78,
-        roughness=0.22,
-    ),
-    MaterialSpec(
-        name="gear_accent",
-        base_color=(0.86, 0.17, 0.29, 1.0),
-        metallic=0.05,
-        roughness=0.32,
-    ),
-    MaterialSpec(
-        name="gear_dark",
-        base_color=(0.15, 0.17, 0.21, 1.0),
-        metallic=0.08,
+        base_color=(0.84, 0.67, 0.22, 1.0),
+        metallic=0.06,
         roughness=0.52,
     ),
     MaterialSpec(
+        name="gear_gold_metal",
+        base_color=(0.85, 0.65, 0.18, 1.0),
+        metallic=0.78,
+        roughness=0.28,
+    ),
+    MaterialSpec(
+        name="gear_accent",
+        base_color=(0.70, 0.14, 0.18, 1.0),
+        metallic=0.05,
+        roughness=0.48,
+    ),
+    MaterialSpec(
+        name="gear_dark",
+        base_color=(0.11, 0.11, 0.12, 1.0),
+        metallic=0.10,
+        roughness=0.58,
+    ),
+    MaterialSpec(
         name="glass_tinted",
-        base_color=(0.10, 0.22, 0.30, 1.0),
-        metallic=0.22,
-        roughness=0.08,
+        base_color=(0.05, 0.11, 0.16, 1.0),
+        metallic=0.26,
+        roughness=0.07,
     ),
     MaterialSpec(
         name="glass_clear",
-        base_color=(0.80, 0.93, 0.98, 1.0),
-        metallic=0.12,
-        roughness=0.06,
+        base_color=(0.72, 0.85, 0.90, 1.0),
+        metallic=0.14,
+        roughness=0.07,
     ),
     MaterialSpec(
         name="fuse_white",
-        base_color=(0.95, 0.92, 0.85, 1.0),
+        base_color=(0.88, 0.84, 0.75, 1.0),
+        metallic=0.0,
+        roughness=0.78,
+    ),
+    MaterialSpec(
+        name="prop_brown",
+        base_color=(0.40, 0.26, 0.16, 1.0),
         metallic=0.0,
         roughness=0.72,
     ),
     MaterialSpec(
-        name="prop_brown",
-        base_color=(0.48, 0.31, 0.19, 1.0),
-        metallic=0.0,
-        roughness=0.68,
+        name="eye_iris",
+        base_color=(0.58, 0.56, 0.24, 1.0),
+        metallic=0.05,
+        roughness=0.18,
+    ),
+    MaterialSpec(
+        name="gear_steel",
+        base_color=(0.62, 0.64, 0.66, 1.0),
+        metallic=0.72,
+        roughness=0.34,
+    ),
+    MaterialSpec(
+        name="gear_brass_trim",
+        base_color=(0.72, 0.36, 0.18, 1.0),
+        metallic=0.45,
+        roughness=0.32,
     ),
 )
 
@@ -132,20 +152,20 @@ MATERIALS: Dict[str, MaterialSpec] = {spec.name: spec for spec in _SPECS}
 
 TEAM_COLORS: Dict[str, Dict[str, List[float]]] = {
     "green": {
-        "chitin_team": [0.18, 0.56, 0.34, 1.0],
-        "chitin_dark": [0.08, 0.19, 0.13, 1.0],
+        "chitin_team": [0.24, 0.43, 0.27, 1.0],
+        "chitin_dark": [0.09, 0.08, 0.07, 1.0],
     },
     "red": {
-        "chitin_team": [0.68, 0.18, 0.22, 1.0],
-        "chitin_dark": [0.24, 0.07, 0.09, 1.0],
+        "chitin_team": [0.50, 0.16, 0.17, 1.0],
+        "chitin_dark": [0.12, 0.06, 0.06, 1.0],
     },
     "blue": {
-        "chitin_team": [0.22, 0.38, 0.72, 1.0],
-        "chitin_dark": [0.09, 0.14, 0.28, 1.0],
+        "chitin_team": [0.20, 0.31, 0.52, 1.0],
+        "chitin_dark": [0.07, 0.08, 0.13, 1.0],
     },
     "black": {
-        "chitin_team": [0.46, 0.48, 0.54, 1.0],
-        "chitin_dark": [0.13, 0.14, 0.17, 1.0],
+        "chitin_team": [0.34, 0.36, 0.40, 1.0],
+        "chitin_dark": [0.08, 0.08, 0.09, 1.0],
     },
 }
 

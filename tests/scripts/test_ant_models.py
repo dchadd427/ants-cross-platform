@@ -108,6 +108,9 @@ class MaterialsContract(unittest.TestCase):
         "glass_clear",
         "fuse_white",
         "prop_brown",
+        "eye_iris",
+        "gear_steel",
+        "gear_brass_trim",
     )
 
     def test_all_canonical_materials_present(self):
@@ -372,23 +375,62 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
 
     def test_base_ant_grounding_proportions_and_anchors(self):
         scene, anchors = base_ant.build_base_ant("ant_test")
-        for key in self.REQUIRED_ANCHORS:
+        for key in self.REQUIRED_ANCHORS + ("eyelid_closed_angle",):
             self.assertIn(key, anchors)
 
         self.assertAlmostEqual(anchors["ground_y"], 0.0, places=5)
         self.assertGreater(anchors["left_hand"][0], 0.0)
         self.assertLess(anchors["right_hand"][0], 0.0)
-        self.assertAlmostEqual(anchors["head_top"][1], 0.95, delta=0.03)
+        self.assertAlmostEqual(anchors["head_top"][1], 0.946, delta=0.03)
+        self.assertGreater(anchors["eyelid_closed_angle"], 0.9)
 
         glb_bytes = gltf_writer.scene_to_glb_bytes(scene)
         stats = gltf_writer.validate_glb(glb_bytes)
         self.assertGreater(stats["triangles"], 1000)
         self.assertAlmostEqual(stats["bbox_min"][1], 0.0, delta=1e-3)
-        self.assertTrue(0.98 <= stats["bbox_max"][1] <= 1.18, f"unexpected height {stats['bbox_max'][1]}")
+        self.assertTrue(1.00 <= stats["bbox_max"][1] <= 1.16, f"unexpected height {stats['bbox_max'][1]}")
         width = stats["dimensions"][0]
-        self.assertTrue(0.50 <= width <= 0.72, f"unexpected width {width}")
-        for expected_node in ("ant_test", "head", "eyes", "antennae", "body", "arms", "legs"):
+        self.assertTrue(0.42 <= width <= 0.56, f"unexpected slim width {width}")
+        self.assertLessEqual(width / stats["bbox_max"][1], 0.56, "expected upright slim W/H ratio")
+        for expected_node in ("ant_test", "head", "eyes", "eyelid_left", "eyelid_right", "antennae", "body", "arms", "legs"):
             self.assertIn(expected_node, stats["nodes"])
+        self.assertIn("Blink", stats["animations"])
+        self.assertIn("eye_iris", stats["materials"])
+
+    def test_blink_eyelid_pivots_and_animation_validation(self):
+        s_open, anchors = base_ant.build_base_ant("ant_open", blink=0.0)
+        s_closed, _ = base_ant.build_base_ant("ant_closed", blink=1.0)
+        doc_open, _ = gltf_writer.parse_glb(gltf_writer.scene_to_glb_bytes(s_open))
+        doc_closed, _ = gltf_writer.parse_glb(gltf_writer.scene_to_glb_bytes(s_closed))
+
+        nodes_open = {n["name"]: n for n in doc_open["nodes"]}
+        nodes_closed = {n["name"]: n for n in doc_closed["nodes"]}
+        self.assertEqual(nodes_open["eyelid_left"]["rotation"], [0.0, 0.0, 0.0, 1.0])
+        self.assertAlmostEqual(nodes_open["eyelid_left"]["translation"][0], anchors["eye_left"][0], places=4)
+        self.assertAlmostEqual(nodes_open["eyelid_right"]["translation"][0], anchors["eye_right"][0], places=4)
+        # Closed blink rotates eyelid nodes around +X (non-zero qx).
+        self.assertGreater(nodes_closed["eyelid_left"]["rotation"][0], 0.45)
+        self.assertGreater(nodes_closed["eyelid_right"]["rotation"][0], 0.45)
+
+        # Blink animation targets both eyelids with 6 keyframes.
+        self.assertEqual(len(doc_open["animations"]), 1)
+        blink_anim = doc_open["animations"][0]
+        self.assertEqual(blink_anim["name"], "Blink")
+        self.assertEqual(len(blink_anim["channels"]), 2)
+
+        # Validator rejects non-unit quaternion in animation track.
+        bad_scene, _ = base_ant.build_base_ant("ant_bad_anim")
+        bad_scene.animations[0].channels[0].values[2] = (5.0, 0.0, 0.0, 1.0)
+        bad_glb = gltf_writer.scene_to_glb_bytes(bad_scene)
+        with self.assertRaises(ValueError):
+            gltf_writer.validate_glb(bad_glb)
+
+        # Validator rejects non-monotonic timestamps.
+        bad_time_scene, _ = base_ant.build_base_ant("ant_bad_time")
+        bad_time_scene.animations[0].channels[0].times[3] = bad_time_scene.animations[0].channels[0].times[2]
+        bad_time_glb = gltf_writer.scene_to_glb_bytes(bad_time_scene)
+        with self.assertRaises(ValueError):
+            gltf_writer.validate_glb(bad_time_glb)
 
     def test_base_ant_variants_and_arm_pose_overrides(self):
         _, a_idle = base_ant.build_base_ant("idle")

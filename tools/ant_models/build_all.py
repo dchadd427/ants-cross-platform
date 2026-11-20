@@ -123,6 +123,7 @@ def build_all(
             "vertices": stats["vertices"],
             "nodes": stats["nodes"],
             "materials": stats["materials"],
+            "animations": stats.get("animations", []),
             "bbox_min": stats["bbox_min"],
             "bbox_max": stats["bbox_max"],
             "dimensions": stats["dimensions"],
@@ -163,8 +164,8 @@ def _aces_srgb(rgb):
     return np.clip(srgb * 255.0 + 0.5, 0.0, 255.0).astype(np.uint8)
 
 
-def _shade_vinyl(normals, view_dir, base_rgb, metallic: float, roughness: float):
-    """Stylized tabletop-vinyl PBR approximation with 3-point studio lighting."""
+def _shade_vinyl(normals, view_dir, base_rgb, metallic: float, roughness: float, world_pts=None, mottle: float = 0.0):
+    """Organic satin-chitin PBR studio approximation with moody contrast and subtle mottling."""
     import numpy as np
 
     n = normals / np.maximum(1e-8, np.linalg.norm(normals, axis=-1, keepdims=True))
@@ -172,12 +173,20 @@ def _shade_vinyl(normals, view_dir, base_rgb, metallic: float, roughness: float)
 
     # `base_rgb` is already IEC-linear RGB (matching glTF 2.0 baseColorFactor).
     albedo = np.clip(base_rgb, 0.0, 1.0)
+    if mottle > 0.0 and world_pts is not None:
+        # Subtle deterministic 3D organic chitin patina/mottling in linear space.
+        p = world_pts
+        grain = (
+            0.55 * np.sin(p[:, 0] * 19.0 + np.cos(p[:, 1] * 23.0 + p[:, 2] * 17.0))
+            + 0.45 * np.cos(p[:, 1] * 31.0 - p[:, 2] * 27.0 + np.sin(p[:, 0] * 29.0))
+        )
+        albedo = np.clip(albedo[None, :] * (1.0 + mottle * grain[:, None]), 0.0, 1.0)
 
-    # 3-point studio lights: warm key, cool fill, crisp rim backlight.
+    # 3-point moody studio lights: crisp top-left key, subdued cool fill, edge rim backlight.
     lights = (
-        (np.array([-0.48, 0.72, 0.50]), np.array([1.55, 1.48, 1.38])),
-        (np.array([0.70, 0.35, 0.45]), np.array([0.40, 0.48, 0.62])),
-        (np.array([0.22, 0.55, -0.80]), np.array([0.70, 0.78, 0.92])),
+        (np.array([-0.46, 0.74, 0.49]), np.array([1.72, 1.64, 1.52])),
+        (np.array([0.72, 0.30, 0.42]), np.array([0.28, 0.34, 0.44])),
+        (np.array([0.24, 0.56, -0.79]), np.array([0.62, 0.68, 0.78])),
     )
 
     f0 = (1.0 - metallic) * 0.04 + metallic * albedo
@@ -186,13 +195,13 @@ def _shade_vinyl(normals, view_dir, base_rgb, metallic: float, roughness: float)
     spec_exp = max(8.0, (2.0 / (alpha * alpha)) - 2.0)
     spec_norm = (spec_exp + 2.0) / 14.0
 
-    # Hemisphere ambient bounce (dark studio floor + soft sky dome).
+    # Low ambient bounce so eye sockets, brow furrow, and undersides drop into deep shadows.
     hemi = 0.5 * (n[..., 1:2] + 1.0)
-    ambient = (0.09 * (1.0 - hemi) * np.array([0.30, 0.28, 0.26]) + 0.22 * hemi * np.array([0.78, 0.85, 0.96]))
+    ambient = (0.04 * (1.0 - hemi) * np.array([0.26, 0.24, 0.22]) + 0.14 * hemi * np.array([0.74, 0.80, 0.90]))
     color = diffuse_albedo * ambient
 
     ndv = np.clip(np.sum(n * v, axis=-1, keepdims=True), 0.0, 1.0)
-    fresnel_rim = (1.0 - ndv) ** 3.8
+    fresnel_rim = (1.0 - ndv) ** 4.0
 
     for l_vec, l_col in lights:
         l_dir = l_vec / float(np.linalg.norm(l_vec))
@@ -201,13 +210,13 @@ def _shade_vinyl(normals, view_dir, base_rgb, metallic: float, roughness: float)
         h /= max(1e-8, float(np.linalg.norm(h)))
         ndh = np.clip(np.sum(n * h, axis=-1, keepdims=True), 0.0, 1.0)
 
-        # Primary PBR specular + subtle glossy vinyl clearcoat highlight.
+        # Primary PBR specular + subtle satin chitin sheen (not glossy candy clearcoat).
         spec = spec_norm * (ndh ** min(spec_exp, 140.0)) * f0
-        coat = 0.10 * (ndh ** 64.0) * (1.0 - 0.75 * roughness)
+        coat = 0.045 * (ndh ** 56.0) * (1.0 - 0.80 * roughness)
         color = color + (diffuse_albedo * ndl + (spec + coat) * (ndl > 0.0)) * l_col
 
-    # Subtle Fresnel studio rim sheen.
-    color = color + fresnel_rim * (0.06 + 0.12 * (1.0 - roughness)) * np.array([0.65, 0.74, 0.88])
+    # Restrained Fresnel rim so beveled edges read cleanly against dark studio backdrop.
+    color = color + fresnel_rim * (0.04 + 0.08 * (1.0 - roughness)) * np.array([0.62, 0.70, 0.82])
     return color
 
 
@@ -270,14 +279,17 @@ def render_scene_orthographic(
     cx_px = 0.5 * (width - 1)
     cy_px = 0.5 * (height - 1)
 
-    for part in scene.all_parts():
+    parts_iter = scene.world_parts() if hasattr(scene, "world_parts") else scene.all_parts()
+    for part in parts_iter:
         if len(part.indices) == 0:
             continue
         spec = get_material(part.material)
         rgba = material_linear_color(part.material, team=team)
         base_rgb = np.array(rgba[:3], dtype=np.float64)
+        mottle = 0.14 if part.material in ("chitin_team", "chitin_dark", "gear_gold", "prop_brown") else 0.0
 
-        pos = part.positions.astype(np.float64) - center[None, :]
+        world_pos = part.positions.astype(np.float64)
+        pos = world_pos - center[None, :]
         nrm = part.normals.astype(np.float64)
         idx = part.indices.reshape(-1, 3)
 
@@ -335,7 +347,12 @@ def render_scene_orthographic(
                 + w1[hit, None] * nrm[i1]
                 + w2[hit, None] * nrm[i2]
             )
-            shaded = _shade_vinyl(n_pix, cam_dir, base_rgb, spec.metallic, spec.roughness)
+            w_pix = (
+                w0[hit, None] * world_pos[i0]
+                + w1[hit, None] * world_pos[i1]
+                + w2[hit, None] * world_pos[i2]
+            ) if mottle > 0.0 else None
+            shaded = _shade_vinyl(n_pix, cam_dir, base_rgb, spec.metallic, spec.roughness, world_pts=w_pix, mottle=mottle)
             sub_col = color_buf[min_y : max_y + 1, min_x : max_x + 1]
             sub_col[hit] = shaded
 

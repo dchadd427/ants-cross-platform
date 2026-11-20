@@ -22,9 +22,12 @@ except ImportError:
     HAS_NUMPY = False
 
 if HAS_NUMPY:
-    from .base_ant import build_base_ant
+    from .base_ant import EYELID_CLOSED_ANGLE, build_base_ant
     from .mesh_core import (
+        AnimationChannel,
+        AnimationClip,
         MeshPart,
+        NodeTransform,
         SceneBuilder,
         capsule,
         catmull_rom_spline,
@@ -37,6 +40,9 @@ if HAS_NUMPY:
         hemisphere_shell,
         lathe,
         merge_parts,
+        quat_from_axis_angle,
+        quat_from_euler_xyz,
+        quat_mul,
         recompute_smooth_normals,
         rounded_box,
         signed_volume,
@@ -61,7 +67,11 @@ __all__ = [
     "scene_to_glb_bytes",
     "validate_glb",
     "write_glb",
+    "EYELID_CLOSED_ANGLE",
+    "AnimationChannel",
+    "AnimationClip",
     "MeshPart",
+    "NodeTransform",
     "SceneBuilder",
     "build_base_ant",
     "capsule",
@@ -75,6 +85,9 @@ __all__ = [
     "hemisphere_shell",
     "lathe",
     "merge_parts",
+    "quat_from_axis_angle",
+    "quat_from_euler_xyz",
+    "quat_mul",
     "recompute_smooth_normals",
     "rounded_box",
     "signed_volume",
