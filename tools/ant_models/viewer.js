@@ -21,11 +21,11 @@
     black: { label: "Black", team: rgbLinear([0.36, 0.38, 0.43]), dark: rgbLinear([0.14, 0.15, 0.18]) },
   };
   const ANGLES = {
-    "301": { label: "301 S", full: "301 S (Front)", yaw: 0, pitch: 50 },
-    "201": { label: "201 SE", full: "201 SE (3/4)", yaw: -45, pitch: 50 },
-    "901": { label: "901 E", full: "901 E (Side)", yaw: -90, pitch: 50 },
-    "801": { label: "801 NE", full: "801 NE (Back 3/4)", yaw: -135, pitch: 50 },
-    "701": { label: "701 N", full: "701 N (Back)", yaw: 180, pitch: 50 },
+    "301": { label: "301 S", full: "301 S (Front)", yaw: 0, pitch: 33 },
+    "201": { label: "201 SE", full: "201 SE (3/4)", yaw: -45, pitch: 33 },
+    "901": { label: "901 E", full: "901 E (Side)", yaw: -90, pitch: 33 },
+    "801": { label: "801 NE", full: "801 NE (Back 3/4)", yaw: -135, pitch: 33 },
+    "701": { label: "701 N", full: "701 N (Back)", yaw: 180, pitch: 33 },
     hero: { label: "Hero", full: "Hero Showcase", yaw: -28, pitch: 22 },
   };
   const SHEET_ANGLES = ["301", "201", "901", "801", "701"];
