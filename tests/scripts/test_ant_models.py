@@ -479,6 +479,7 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
     def test_base_ant_grounding_proportions_and_anchors(self):
         scene, anchors = base_ant.build_base_ant("ant_test")
         for key in self.REQUIRED_ANCHORS + (
+            "crouch",
             "eyelid_closed_angle",
             "foot_mid_left",
             "foot_mid_right",
@@ -488,11 +489,13 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
             self.assertIn(key, anchors)
 
         self.assertAlmostEqual(anchors["ground_y"], 0.0, places=5)
+        self.assertAlmostEqual(anchors["crouch"], 0.0, places=5)
         self.assertGreater(anchors["left_hand"][0], 0.0)
         self.assertLess(anchors["right_hand"][0], 0.0)
-        self.assertTrue(0.90 <= anchors["head_top"][1] <= 1.02, f"unexpected head_top {anchors['head_top'][1]}")
+        self.assertTrue(0.85 <= anchors["head_top"][1] <= 0.96, f"unexpected head_top {anchors['head_top'][1]}")
         hrx, hry, hrz = anchors["head_radii"]
-        self.assertGreater(hrx, hry, "heart-shield head should be wider across temples than tall")
+        self.assertLessEqual(hrx, 0.21, "head should stay compact (not an oversized bobblehead)")
+        self.assertGreater(hrx, hry, "compact soft-cube head should be slightly wider than tall")
         self.assertGreater(hry, hrz, "head should be narrower front-to-back than tall")
         self.assertGreater(anchors["eyelid_closed_angle"], 0.9)
 
@@ -500,7 +503,7 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
         stats = gltf_writer.validate_glb(glb_bytes)
         self.assertGreater(stats["triangles"], 1000)
         self.assertAlmostEqual(stats["bbox_min"][1], 0.0, delta=1e-3)
-        self.assertTrue(1.00 <= stats["bbox_max"][1] <= 1.20, f"unexpected height {stats['bbox_max'][1]}")
+        self.assertTrue(0.96 <= stats["bbox_max"][1] <= 1.15, f"unexpected height {stats['bbox_max'][1]}")
         width, _, depth = stats["dimensions"]
         self.assertTrue(0.40 <= width <= 0.56, f"unexpected slim width {width}")
         self.assertLessEqual(depth, 0.66, f"expected compact tucked Z depth matching 901 E sprite, got {depth}")
@@ -642,6 +645,21 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
         bad_time_glb = gltf_writer.scene_to_glb_bytes(bad_time_scene)
         with self.assertRaises(ValueError):
             gltf_writer.validate_glb(bad_time_glb)
+
+    def test_base_ant_crouch_stance(self):
+        _, a_up = base_ant.build_base_ant("ant_up", crouch=0.0)
+        for c_val in (0.12, 0.18, 0.22):
+            sc, anc = base_ant.build_base_ant(f"ant_crouch_{c_val}", crouch=c_val)
+            self.assertAlmostEqual(anc["crouch"], c_val, places=5)
+            self.assertAlmostEqual(a_up["head_top"][1] - anc["head_top"][1], c_val, delta=1e-3)
+            legs_min_y = min(float(p.bounds()[0][1]) for p in sc.get_node("legs"))
+            gaster_min_y = min(float(p.bounds()[0][1]) for p in sc.get_node("gaster"))
+            self.assertAlmostEqual(legs_min_y, 0.0, delta=1e-3, msg=f"feet must stay planted at crouch={c_val}")
+            self.assertGreater(gaster_min_y, 0.02, msg=f"gaster must clear ground at crouch={c_val}")
+            stats = gltf_writer.validate_glb(gltf_writer.scene_to_glb_bytes(sc))
+            self.assertAlmostEqual(stats["bbox_min"][1], 0.0, delta=1e-3)
+            self.assertIn("Idle", stats["animations"])
+            self.assertIn("Blink", stats["animations"])
 
     def test_base_ant_variants_and_arm_pose_overrides(self):
         _, a_idle = base_ant.build_base_ant("idle")
