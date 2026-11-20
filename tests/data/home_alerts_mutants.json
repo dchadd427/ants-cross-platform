@@ -299,10 +299,10 @@
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
   {
-   "id": "bell_dot_on_the_menu_stays",
+   "id": "bell_in_front_of_the_account_button",
    "file": "web/home/alerts.js",
-   "old": "dot ? ['al-dot'] : []",
-   "new": "['al-dot']",
+   "old": "env.menuBtn && env.menuBtn.parentNode === env.bar ? env.menuBtn : null",
+   "new": "env.bar.firstChild",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
   {
@@ -352,13 +352,6 @@
    "file": "web/home/alerts.js",
    "old": "dot = state === 'off' && !seen.is();",
    "new": "dot = state === 'off';",
-   "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
-  },
-  {
-   "id": "dot_on_the_menu_button_stays_after_looking",
-   "file": "web/home/alerts.js",
-   "old": ".concat(dot ? ['al-dot'] : [])",
-   "new": ".concat(state === 'off' ? ['al-dot'] : [])",
    "test": "python3 tests/scripts/test_web_home_alerts.py TheScripts TheWiring"
   },
   {

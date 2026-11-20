@@ -105,16 +105,16 @@ int main() {
     const Tiny tiny;
     if (!tiny.ok) std::cout << "  (cannot load TINY)\n";
 
-    TEST_CASE("RP12.1 This build plays 5, 8 and 9 for the original's game and 6, 7, 10, 11 and 12 for 187, nothing else; a 187 match is recorded under 12; a head may name 6, 7, 10, 11 or 12 only with the mode, and a refusal names all eight numbers") {
-        ASSERT_TRUE(kSimRulesBeforeLastSide == 5 && kSimRulesMode187Heal == 6 && kSimRulesMode187BeforeFireWall == 7 && kSimRulesBeforeFireWall == 8 && kSimRules == 9 && kSimRulesMode187BeforeEndFix == 10 && kSimRulesMode187BeforeNoDrops == 11 && kSimRulesMode187 == 12);
-        ASSERT_TRUE(sim_rules_for_mode(0) == 9 && sim_rules_for_mode(1) == 12 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
-        for (uint16_t rules = 0; rules < 14; ++rules) {
-            ASSERT_EQ(plays_mode_rules(0, rules), rules == 5 || rules == 8 || rules == 9);
+    TEST_CASE("RP12.1 This build plays 5, 8, 9 and 13 for the original's game and 6, 7, 10, 11 and 12 for 187, nothing else; a 187 match is recorded under 12; a head may name 6, 7, 10, 11 or 12 only with the mode, and a refusal names all nine numbers") {
+        ASSERT_TRUE(kSimRulesBeforeLastSide == 5 && kSimRulesMode187Heal == 6 && kSimRulesMode187BeforeFireWall == 7 && kSimRulesBeforeFireWall == 8 && kSimRules == 13 && kSimRulesBeforeEmptyRecord == 9 && kSimRulesMode187BeforeEndFix == 10 && kSimRulesMode187BeforeNoDrops == 11 && kSimRulesMode187 == 12);
+        ASSERT_TRUE(sim_rules_for_mode(0) == 13 && sim_rules_for_mode(1) == 12 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
+        for (uint16_t rules = 0; rules < 16; ++rules) {
+            ASSERT_EQ(plays_mode_rules(0, rules), rules == 5 || rules == 8 || rules == 9 || rules == 13);
             ASSERT_EQ(plays_mode_rules(k187, rules), rules == 6 || rules == 7 || rules == 10 || rules == 11 || rules == 12);
             ASSERT_FALSE(plays_mode_rules(2, rules));
             ASSERT_FALSE(plays_mode_rules(255, rules));
         }
-        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7, 8, 9, 10, 11 and 12"));
+        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7, 8, 9, 10, 11, 12 and 13"));
         // heads: the mode and the number go together
         Header head;
         head.map_name = "TINY.LVL";
@@ -147,7 +147,7 @@ int main() {
             h.sim_rules = 9;
             r.head = h;
             ASSERT_TRUE(encode(r, error).empty() && !plays_here(h));                         // (and 9)
-            h.sim_rules = 13;
+            h.sim_rules = 14;
             r.head = h;
             ASSERT_FALSE(encode(r, error).empty());                                          // (a number from a newer build is a file; it is just not played here)
             ASSERT_FALSE(plays_here(h));
@@ -164,8 +164,8 @@ int main() {
         }
         Header refused = head;
         refused.set_mode(k187);
-        refused.sim_rules = 13;
-        ASSERT_TRUE(rules_refusal(refused).find("simulation rules 5, 6, 7, 8, 9, 10, 11 and 12") != std::string::npos);
+        refused.sim_rules = 14;
+        ASSERT_TRUE(rules_refusal(refused).find("simulation rules 5, 6, 7, 8, 9, 10, 11, 12 and 13") != std::string::npos);
     } TEST_END();
 
     TEST_CASE("RP12.2 An old 187 recording (rules number 6, made by the build before the closed hill) plays to every hash it holds and to its final hash, byte for byte, and its play uses the hill; the same file under the number 7 is another match") {
@@ -261,7 +261,7 @@ int main() {
         head.map_name = "TINY.LVL";
         head.roster = 0x0F;
         Recorder rec(head);
-        ASSERT_EQ(rec.replay().head.sim_rules, 9);
+        ASSERT_EQ(rec.replay().head.sim_rules, 13);
         ASSERT_EQ(rec.replay().head.mode, 0);
         ASSERT_TRUE(plays_here(rec.replay().head));
         for (const uint16_t rules : {uint16_t{6}, uint16_t{7}, uint16_t{10}, uint16_t{11}, uint16_t{12}}) {

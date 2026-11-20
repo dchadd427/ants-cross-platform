@@ -1990,6 +1990,30 @@ def main():
             tab.ev("document.getElementById('pseudo-exit').click(); 1")
             time.sleep(0.8)
 
+        # a phone held sideways, as an iPhone has it: the screen's safe area leaves a black margin of 62 px at each side, and the way out of the page's own fullscreen lies in that margin, not over the corner of
+        # the picture (the minimap and its label); a tap on it still leaves
+        tab.emulate(844, 390, 3)
+        try:
+            tab.call("Emulation.setSafeAreaInsetsOverride", {"insets": {"top": 0, "left": 62, "bottom": 21, "right": 62}})
+        except Exception:
+            print("  (this browser cannot emulate a screen's safe area: the way out beside the picture is not checked)")
+        else:
+            time.sleep(1.5)
+            fs_now = json.loads(tab.ev("JSON.stringify((function(){var b=document.getElementById('fullscreen-btn').getBoundingClientRect();return [b.x+b.width/2,b.y+b.height/2];})())"))
+            tab.click(fs_now[0], fs_now[1])
+            time.sleep(1.2)
+            g = tab.geometry()
+            label = "fullscreen on a 844x390 phone with a safe area of 62 px"
+            check(g["pseudo"], "%s: the page's own fullscreen is open" % label)
+            out = json.loads(tab.ev("JSON.stringify((function(){var b=document.getElementById('pseudo-exit').getBoundingClientRect();return [b.left,b.top,b.right,b.bottom];})())"))
+            bx = g["box"]
+            check(out[0] >= bx[0] + bx[2] - 0.5 or out[2] <= bx[0] + 0.5, "%s: the way out lies beside the picture, not over it (button x %.1f to %.1f, picture x %.1f to %.1f)" % (label, out[0], out[2], bx[0], bx[0] + bx[2]))
+            check(out[0] >= 0 and out[2] <= 844 and out[1] >= 0 and out[3] <= 390, "%s: the way out is inside the screen" % label)
+            tab.click((out[0] + out[2]) / 2, (out[1] + out[3]) / 2)
+            time.sleep(1.0)
+            check(not tab.geometry()["pseudo"], "%s: a tap on the way out leaves the page's own fullscreen" % label)
+            tab.call("Emulation.setSafeAreaInsetsOverride", {"insets": {"top": 0, "left": 0, "bottom": 0, "right": 0}})
+
         download_fault_checks()
         load_fault_checks()
         if args.pointer or not args.quick:

@@ -32,7 +32,7 @@
 @media (forced-colors: active) { .al-sw { border-color: CanvasText; } .al-line.on .al-sw { background: Highlight; } .al-sw::after { background: CanvasText; } .al-line:focus-visible { outline-color: Highlight; } }
 @media (max-width: 700px) { .al-title { font-size: 24px; } }
 
-/* The bell in Home's top bar: in front of the account button on a phone, at the far right after the Menu in a wider window (as the approved pictures show); the Menu's button has the dot while the bell has no room (a phone held upright with a room held). 46 px targets, as the Menu's. */
+/* The bell in Home's top bar: right beside the Menu's button, on its left, in every state of the bar and at every width (the script puts it before the Menu's button, and the bar's own layout, web/home/home.css, places it: the Menu stays in the corner, a chip comes before the bell). 46 px targets, as the Menu's. */
 .hbar .al-bell { position: relative; flex: none; min-width: 46px; padding: 0; }
 .hbar .al-bell[hidden] { display: none; }
 .hbar .al-bell .al-ico { display: block; width: 26px; height: 26px; margin: auto; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -42,13 +42,4 @@
 .al-mark { position: absolute; top: -3px; right: -3px; display: grid; place-items: center; width: 22px; height: 22px; box-sizing: border-box; color: #0c0805; background: var(--gold); border: 2px solid #050a08; border-radius: 50%; }
 .al-mark .al-ico { width: 13px; height: 13px; margin: 0; stroke-width: 3; }
 .al-mark.al-dotmark { width: 16px; height: 16px; }
-@media (min-width: 640px) { .hbar .al-bell { order: 3; } }        /* (a window that is not a phone upright: the bell at the far right, after the Menu, as drawn) */
-@media (max-width: 720px) and (orientation: portrait) {
-    .hbar:not(:has(.hmine:not([hidden]))) .al-bell:not([hidden]) { order: 3; margin-left: auto; }
-    .hbar:not(:has(.hmine:not([hidden]))) .al-bell:not([hidden]) + .hlogin { margin-left: 0; }
-    .hbar:not(:has(.hmine:not([hidden]))) .al-bell:not([hidden]) + .hlogin[hidden] + .hmenu { margin-left: 0; }
-    .hbar:has(.hmine:not([hidden])) .al-bell { display: none; }
-    .hbar:has(.hmine:not([hidden])) .hmenu.al-dot { position: relative; }
-    .hbar:has(.hmine:not([hidden])) .hmenu.al-dot::after { content: ""; position: absolute; top: -3px; right: -3px; width: 16px; height: 16px; box-sizing: border-box; background: var(--gold); border: 2px solid #050a08; border-radius: 50%; }
-}
 @media (forced-colors: active) { .al-mark { border-color: CanvasText; background: Highlight; } }

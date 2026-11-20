@@ -380,7 +380,7 @@ void SimulationEngineImpl::set_holding(AntUnit& a, uint16_t amount, TileCoord ti
 // the arrival read from the object it had found by the clicked cell.
 void SimulationEngineImpl::start_harvest(AntUnit& a, TileCoord food_tile, uint16_t amount) {
     const TileCoord approach = (a.occ_tile.x >= 0) ? a.occ_tile : TileCoord{a.pixel_x / 32, a.pixel_y / 32};
-    const int32_t first = grid_.food_object_first_at(food_tile);
+    const int32_t first = bite_skips_empty_record_ ? grid_.food_object_first_with_units_at(food_tile) : grid_.food_object_first_at(food_tile);   // (the original's lookup is the second; the rules number 13 skips an emptied record, food_rules.cpp)
     const uint8_t dir = dir_from_to(approach, food_tile);
     set_action(a, AntUnit::kActionHarvest, dir, -1, -1, false);
     set_order_tile(a, food_tile);                                // +0xac

@@ -31,6 +31,7 @@
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_sim/command.hpp"
 #include "ants_sim/game_mode.hpp"
+#include "ants_sim/start_teams.hpp"
 
 namespace ants::ai {
 
@@ -154,6 +155,7 @@ struct ArenaSpec {
     uint32_t seed{1};                          // the engine's seed AND the controller's match seed
     std::vector<BotSpec> bots;                 // the seats that play: one bot each, seat 0 to 3, every seat once
     sim::GameMode game_mode{sim::GameMode::HighestScore};   // the rules of the match (set before init, like a room's Start does): Kills187 plays the game type 187
+    sim::StartTeams teams{};                   // the teams the match starts with: apply_start_teams right after init, as every start does (a room, a local game); free for all by default
     uint64_t max_ticks{0};                     // 0 = until the match is over (the map's own length); else at most this many ticks
     uint32_t latency_ticks{3};                 // the sink latency, see the top of this file
     /// The start hold of the bots (BotController::set_start_hold): the opening of a real match, a first look on tick 1 + the seat and a bucket of one token. The default is the product's
@@ -169,6 +171,36 @@ struct ArenaSpec {
     std::function<void(const sim::SimulationEngine&)> inspect;
     /// Called after every tick, once the bots have looked and the news and audio queues are empty (a test hook, like `inspect`; read-only)
     std::function<void(const sim::SimulationEngine&)> on_tick;
+};
+
+/// What the arena counts of the ants that stand still, and of the endgame (docs/BOTS.md, "When the food is gone"): per seat, from the engine's own state, looked at every 4th tick (each look
+/// counts 4). The yardstick is `bot_watch`'s: an ant is idle when it stands in an idle clip with no order, no waypoint and nothing in its hand, and has done so for kIdleTicks (5 s). The
+/// last food is the last look at which the units on the map's piles fell (a bite, from any pile, a lunchbox too): `after_*` count the ants and the idle ones from that look to the end
+/// (the whole match when no unit was ever taken). A raid is counted when a Thief's target becomes a team.
+class IdleTally {
+public:
+    static constexpr uint64_t kIdleTicks = 100;
+    static constexpr uint64_t kPeriod = 4;
+    struct Seat {
+        uint64_t ant_ticks{0};                 // the living ants of the seat, in ticks
+        uint64_t idle_ticks{0};                // ... of them, the idle ones
+        uint64_t after_ant_ticks{0};           // the same two, from the last food taken to the end
+        uint64_t after_idle_ticks{0};
+        uint32_t raids{0};                     // raids begun by the seat's Thieves
+        uint32_t raid_points{0};               // ... and what they took (the raid_amount of the Thief when it began)
+    };
+    void scan(sim::SimulationEngine& sim);
+    const Seat& seat(uint8_t s) const noexcept { return seats_[s < sim::MAX_PLAYERS ? s : 0]; }
+    /// The last look at which the food on the map fell (0: it never did)
+    uint64_t last_food() const noexcept { return last_food_; }
+
+private:
+    std::array<Seat, sim::MAX_PLAYERS> seats_{};
+    std::vector<uint64_t> idle_since_;         // by ant id: the tick at which the ant began to stand idle (0: it does not)
+    std::vector<uint8_t> target_team_;         // by ant id: the Thief's target team at the last look (255: none)
+    uint64_t units_{0};                        // the units on all piles at the last look
+    uint64_t last_food_{0};
+    bool started_{false};
 };
 
 class ExpeditionTask;
@@ -248,6 +280,12 @@ struct ArenaSeatResult {
     uint32_t refused_orders{0};                // of them, the ones that were followed by a first reaction of an ant they named within CantGoTally::kRefusedWindow ticks
     std::array<uint32_t, 6> took{};            // the power-ups that the seat's ants took, by the kind of ant they became (FlowerTally::Seat::took)
     uint32_t took_at_flowers{0};               // of them, the ones taken at a flower's drop tile
+    uint64_t ant_ticks{0};                     // the idle tally (IdleTally): the seat's living ants in ticks, the ones that stood idle, the same two from the last food taken to the end,
+    uint64_t idle_ticks{0};                    //     the raids its Thieves began and the points they took
+    uint64_t after_ant_ticks{0};
+    uint64_t after_idle_ticks{0};
+    uint32_t raids{0};
+    uint32_t raid_points{0};
     ExpeditionResult expedition;
     MinerFlightResult miner_flight;
     BotController::SeatStats stats;
@@ -267,6 +305,7 @@ struct ArenaResult {
     /// Units still lying on the piles that the hill of some playing seat can walk to (MapInfo's analysis of the start), the object whose units a bite takes counted once: 0 when
     /// the whole reachable pot was taken
     uint32_t reachable_units_left{0};
+    uint64_t last_food{0};                     // the last look at which the food on the map fell (IdleTally::last_food); 0: no unit was ever taken
     std::vector<DropTally::Drop> drops;        // the power-ups that dead typed ants left (DropTally)
     uint32_t landings{0};                      // the droplets of the flower droppers that landed (FlowerTally)
     std::array<uint32_t, 6> landed{};          // ... by the kind of ant they make (index = sim::AntType)

@@ -35,8 +35,8 @@
   {
    "id": "no_guard_for_the_closed_hill",
    "file": "src/ants_ai/heal_task.cpp",
-   "old": "if (!plan.heal || !hill.present || !v.hill_enterable()) {",
-   "new": "if (!plan.heal || !hill.present) {",
+   "old": "if ((!plan.heal && !gone_heal) || !hill.present || !v.hill_enterable()) {",
+   "new": "if ((!plan.heal && !gone_heal) || !hill.present) {",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI36.5 ' ./build/tests/test_ai/test_ai",
    "expect": "AI36.5"
   },

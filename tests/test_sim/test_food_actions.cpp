@@ -117,6 +117,33 @@ int count_sound(std::vector<AudioEvent>& ev, uint32_t id) {
     return n;
 }
 
+// Orders `n` Workers of seat 1, one after the other, onto `tile` (the next is ordered when the one before it carries food or has had 6 s) and returns how many of them carried food.
+int ants_that_eat(SimulationEngine& sim, TileCoord tile, int n) {
+    int fed = 0;
+    for (int i = 0; i < n; ++i) {
+        const uint32_t id = sim.spawn_unit(1, AntType::Worker, TileCoord{tile.x - 2, tile.y - 1 + i});
+        sim.issue_move_order(id, tile);
+        const AntUnit& a = sim.get_unit(id);
+        wait_ms(sim, 6000, [&]() { return a.is_holding(); });
+        if (a.is_holding()) ++fed;
+    }
+    return fed;
+}
+
+// A Worker of seat 0 that carries `points` dies on `tile` (a Thief that carries them as loot when `thief` is set): its food falls as a lunchbox where it stood.
+void carrier_dies_at(SimulationEngine& sim, TileCoord tile, uint16_t points, bool thief) {
+    const uint32_t id = sim.spawn_unit(0, thief ? AntType::Thief : AntType::Worker, tile);
+    AntUnit& a = sim.get_unit(id);
+    if (thief) {
+        a.steal_points(points);
+        a.is_thief_steal = true;
+    } else {
+        a.carried_points = points;
+        a.holding = 1;
+    }
+    sim.kill_unit(id);
+}
+
 bool load_map(const char* name, ants::assets::LevelData& level) {
     return level.load_lvl(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/" + name + ".LVL");
 }
@@ -673,6 +700,97 @@ void run_suite_4_duplicates() {
         ASSERT_EQ(a.carried_points, 50u);                               // its points per unit go with the ant
         ASSERT_EQ(objs[8].remaining, static_cast<uint16_t>(units_first - 1));   // ... but StartHarvest took the first object of the anchor
         ASSERT_EQ(objs[11].remaining, units_last);
+    } TEST_END();
+
+    TEST_CASE("4.2 A lunchbox that falls on the anchor of an emptied pile is eaten once (the rule of the empty record); the original's first-object lookup lets every ant eat it") {
+        for (const bool rule : {true, false}) {
+            SimulationEngine sim;
+            make_world(sim);
+            sim.set_bite_skips_empty_record(rule);
+            sim.grid_mut().drop_lunchbox(15, 15, 40);                         // a pile of one unit worth 40 ...
+            const uint32_t first = sim.spawn_unit(0, AntType::Worker, TileCoord{13, 15});
+            sim.issue_move_order(first, TileCoord{15, 15});
+            ASSERT_TRUE(wait_ms(sim, 6000, [&]() { return sim.get_unit(first).is_holding(); }) >= 0);
+            ASSERT_EQ(sim.get_unit(first).carried_points, 40u);
+            ASSERT_FALSE(sim.has_lunchbox_at({15, 15}));                       // ... that is gone, its record (index 0) stays
+            carrier_dies_at(sim, TileCoord{15, 15}, 45, false);                // a carrier dies on that very tile: a second record, behind the emptied one
+            ASSERT_EQ(sim.grid().food_objects().size(), 2u);
+            ASSERT_EQ(sim.grid().food_objects()[0].remaining, 0u);
+            ASSERT_TRUE(sim.has_lunchbox_at({15, 15}));
+            ASSERT_EQ(sim.get_lunchbox_points({15, 15}), 45u);
+            const int fed = ants_that_eat(sim, TileCoord{15, 15}, 3);
+            if (rule) {
+                ASSERT_EQ(fed, 1);                                              // the first bite takes the lunchbox's unit and the lunchbox is gone: the others find nothing
+                ASSERT_EQ(sim.grid().food_objects()[1].remaining, 0u);
+                ASSERT_FALSE(sim.has_lunchbox_at({15, 15}));
+            } else {
+                ASSERT_EQ(fed, 3);                                              // the bite is taken from the emptied record: the lunchbox stays and feeds everybody
+                ASSERT_EQ(sim.grid().food_objects()[1].remaining, 1u);
+                ASSERT_TRUE(sim.has_lunchbox_at({15, 15}));
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("4.3 The loot of a killed Thief falls as a lunchbox of its points and is eaten once, on the anchor of an emptied pile too (issue: food of a killed thief eaten over and over)") {
+        for (const bool rule : {true, false}) {
+            SimulationEngine sim;
+            make_world(sim);
+            sim.set_bite_skips_empty_record(rule);
+            sim.grid_mut().drop_lunchbox(20, 20, 30);
+            const uint32_t first = sim.spawn_unit(0, AntType::Worker, TileCoord{18, 20});
+            sim.issue_move_order(first, TileCoord{20, 20});
+            ASSERT_TRUE(wait_ms(sim, 6000, [&]() { return sim.get_unit(first).is_holding(); }) >= 0);
+            carrier_dies_at(sim, TileCoord{20, 20}, 50, true);                  // the Thief's loot: 50 points
+            ASSERT_EQ(sim.get_lunchbox_points({20, 20}), 50u);
+            const uint32_t eater = sim.spawn_unit(1, AntType::Worker, TileCoord{18, 20});
+            sim.issue_move_order(eater, TileCoord{20, 20});
+            ASSERT_TRUE(wait_ms(sim, 6000, [&]() { return sim.get_unit(eater).is_holding(); }) >= 0);
+            ASSERT_EQ(sim.get_unit(eater).carried_points, 50u);                 // the first ant gets the loot under either rule
+            ASSERT_EQ(sim.has_lunchbox_at({20, 20}), !rule);                    // and under the original's lookup the lunchbox is still there
+            ASSERT_EQ(ants_that_eat(sim, TileCoord{20, 20}, 2), rule ? 0 : 2);
+        }
+    } TEST_END();
+
+    TEST_CASE("4.4 A lunchbox that falls on the tile of an earlier, eaten lunchbox is a second record behind it and is eaten once too") {
+        for (const bool rule : {true, false}) {
+            SimulationEngine sim;
+            make_world(sim);
+            sim.set_bite_skips_empty_record(rule);
+            carrier_dies_at(sim, TileCoord{25, 25}, 35, false);
+            ASSERT_EQ(ants_that_eat(sim, TileCoord{25, 25}, 1), 1);             // the first lunchbox: one ant eats it, as always
+            ASSERT_FALSE(sim.has_lunchbox_at({25, 25}));
+            carrier_dies_at(sim, TileCoord{25, 25}, 35, false);                 // another carrier dies on the same tile
+            ASSERT_EQ(sim.grid().food_objects().size(), 2u);
+            ASSERT_EQ(ants_that_eat(sim, TileCoord{25, 25}, 3), rule ? 1 : 3);
+            ASSERT_EQ(sim.has_lunchbox_at({25, 25}), !rule);
+        }
+    } TEST_END();
+
+    TEST_CASE("4.5 The bite's lookup: the first object of the anchor that has a unit left, else the first object, else none; the default of an engine is the rule") {
+        SimulationEngine sim;
+        make_world(sim);
+        ASSERT_TRUE(sim.bite_skips_empty_record());
+        sim.set_bite_skips_empty_record(false);
+        sim.set_game_mode(GameMode::HighestScore);
+        ASSERT_TRUE(sim.bite_skips_empty_record());                              // set_game_mode puts the rule of a match played now back
+        const TileCoord anchor{30, 30};
+        ASSERT_EQ(sim.grid().food_object_first_with_units_at(anchor), -1);
+        const std::vector<std::pair<uint16_t, uint16_t>> lunchbox{{1, 356}, {0, kGone}};
+        const int32_t a = place_pile(sim, 30, 30, 1, 20, lunchbox);
+        const int32_t b = place_pile(sim, 30, 30, 1, 20, lunchbox);
+        const int32_t c = place_pile(sim, 30, 30, 1, 20, lunchbox);
+        place_pile(sim, 35, 30, 1, 20, lunchbox);                               // objects with a unit left on the same row and on the same column of the anchor never answer for it
+        place_pile(sim, 30, 36, 1, 20, lunchbox);
+        ASSERT_EQ(sim.grid().food_object_first_with_units_at(anchor), a);       // the first has its unit
+        bool changed = false;
+        sim.grid_mut().take_food(a, 1, changed);
+        ASSERT_EQ(sim.grid().food_object_first_with_units_at(anchor), b);       // the emptied first is skipped
+        ASSERT_EQ(sim.grid().food_object_first_at(anchor), a);                  // the original's lookup does not skip it
+        sim.grid_mut().take_food(c, 1, changed);
+        ASSERT_EQ(sim.grid().food_object_first_with_units_at(anchor), b);       // a later empty one changes nothing
+        sim.grid_mut().take_food(b, 1, changed);
+        ASSERT_EQ(sim.grid().food_object_first_with_units_at(anchor), a);       // none has a unit: the first, as the original gives it
+        ASSERT_EQ(sim.grid().food_object_first_with_units_at(TileCoord{31, 30}), -1);
     } TEST_END();
 }
 
