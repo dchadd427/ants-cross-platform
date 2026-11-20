@@ -84,7 +84,7 @@ A phone has no Ctrl+A, so the game page (`web/touch_keys.js` and `web/touch_keys
 - **Every target** is a real `<button>` of the site's look, at least 44 x 44 CSS pixels with 6 px between, named for a screen reader ("Select all ants"). **Shift** is named "Shift" and says `aria-pressed` while it is latched or locked.
 - **The setting.** The settings menu has a **Touch buttons** row, On or Off, in Video after Fullscreen mouse, on a touch screen only; it is remembered in the browser under `ants.touchkeys` (only `off` turns them off; a browser that cannot store keeps them on).
 
-## The chat box and the on-screen keyboard
+## The chat box, the options window's fields and the on-screen keyboard
 
 A phone has no keyboard that the game hears, and a browser opens its own only for a text field that a tap focuses. So `web/shell.html` keeps one (`#chat-keys`, the block ANTS_CHAT_BEGIN ... END): a real
 `<input>` inside the game's box, invisible (opacity 0; `display: none` cannot be focused), 16px (iOS Safari zooms the page into a smaller field), out of the tab order, taking no tap itself, and with the
@@ -98,6 +98,12 @@ attributes that keep a keyboard from correcting a chat line. A **tap** on the ma
 - **Enter** (the key, or a line break from the keyboard) mirrors the line and gives the game an Enter key press through SDL's queue (`Application::web_chat_do`): the same path as a keyboard's, so
   [All] / [Team] and the empty-line rule are the game's. The field is emptied and the keyboard closes. **Esc**, a **finger on the game outside the box**, and a chat that stops taking text (a dialog opens, the match
   ends: a poll every 400 ms) close it too (Esc leaves the typed draft in the game's chat line, as on a desktop), and the keyboard focus goes back to the game's canvas. A line that the game changes meanwhile (a quick chat text) shows in the field.
+- **The options window's four quick chat fields (F9 - F12)** take the same keyboard. While the window is open it has the screen: `ants_chat_probe(6)` says which boxes there are (0 the chat box, 1 the four
+  fields), `ants_chat_probe(10 + 4 * k + j)` is field k's x, y, width and height in the canvas's pixels (`Application::web_options_field`: the window's own numbers moved by its offset and the picture's), and the
+  chat box is no box then. A tap on a field tells the game which one (`ants_chat_do(4, k)`: it gets the focus, as the window's own press gives it one frame later) and the page's field starts with that
+  field's text. What is typed is mirrored into that field as for the chat line, shown at once, and written to the profile by the commit (`ants_chat_do(5, 0)`, at the end of every edit: one write for one
+  edit, not one for every character). **Done** (Enter, a line break) only closes the keyboard: an Enter that went to the game would close the window, which a person who is still typing does not want
+  (Return to Game closes it). A tap on another field moves the keyboard to it; a tap on nothing, the window closing, and the chat box coming back close it.
 - **No stray game input.** The field's `keydown`, `keypress` and `keyup` stop at the field (`stopPropagation`): SDL's handler on the window would type the letter a second time. A composition (an IME's, a
   predictive keyboard's) is not rewritten while it goes on.
 - **The desktop is as it was**: the field is focused by a finger only. A mouse click on the chat box, and a keyboard, are the game's own.
