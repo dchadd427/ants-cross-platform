@@ -632,7 +632,7 @@
     const pAnt = getP("ant"), pTeam = getP("team"), pColor = normalizeHex(params.get("color")), pAngle = getP("angle"), pProj = getP("proj"), pTurn = getP("turntable"), pBlink = getP("blink"), pIdle = getP("idle"), pSprite = getP("sprite");
     const pIdleTimeRaw = params.get("idleTime"), fixedIdleTime = pIdleTimeRaw !== null && Number.isFinite(Number(pIdleTimeRaw)) ? Number(pIdleTimeRaw) : null;
     const savedAnt = !params.has("lineup") && !params.has("ant") && savedView && (ANT_CLASSES.includes(savedView.ant) || savedView.ant === "lineup") ? savedView.ant : null;
-    const initAnt = pLineup ? "lineup" : (ANT_CLASSES.includes(pAnt) || pAnt === "lineup" ? pAnt : (savedAnt || "worker"));
+    const initAnt = pLineup ? "lineup" : (ANT_CLASSES.includes(pAnt) || pAnt === "lineup" ? pAnt : (savedAnt || "lineup"));
     const savedColor = normalizeHex(savedView && savedView.customColor);
     const initCustomColor = pColor || savedColor || DEFAULT_CUSTOM_HEX;
     const savedTeam = !params.has("team") && savedView && (savedView.team === "custom" || TEAMS[savedView.team]) ? savedView.team : null;
@@ -642,7 +642,7 @@
     const initProj = pProj === "ortho" || pProj === "persp" ? pProj
       : (!params.has("proj") && savedView && (savedView.proj === "ortho" || savedView.proj === "persp") ? savedView.proj : (ANGLES[initAngle] && initAngle !== "hero" ? "ortho" : "persp"));
     const initTurn = pTurn === "0" || pTurn === "false" ? false : (pTurn === "1" || pTurn === "true" ? true
-      : (!params.has("turntable") && savedView && typeof savedView.turntable === "boolean" ? savedView.turntable : (!motionQuery.matches && !pAngle && !pLineup)));
+      : (!params.has("turntable") && savedView && typeof savedView.turntable === "boolean" ? savedView.turntable : (!motionQuery.matches && !pAngle && initAnt !== "lineup")));
     const initSprite = pSprite === "0" || pSprite === "false" ? false : (pSprite === "1" || pSprite === "true" ? true
       : (!params.has("sprite") && savedView && typeof savedView.sprite === "boolean" ? savedView.sprite : true));
     const initBlink = pBlink === "closed" ? "closed" : (pBlink === "open" ? "open" : (motionQuery.matches ? "open" : "auto"));

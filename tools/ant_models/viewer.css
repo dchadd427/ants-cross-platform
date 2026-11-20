@@ -548,11 +548,26 @@ body {
 }
 
 @media (max-width: 720px) {
-  .controls-hint {
-    display: none;
+  .toolbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
   }
 
-  .toolbar-sep {
+  .toolbar-group {
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+  }
+
+  .sprite-inset {
+    inset-inline-end: 8px;
+    inset-block-end: 8px;
+    padding: 5px 6px;
+  }
+
+  .controls-hint {
     display: none;
   }
 
