@@ -61,15 +61,17 @@ def _mask_wrap_z(x: float, z_front: float, curve_depth: float = 0.064, half_w: f
 
 
 def _build_scuba_mask(scene: SceneBuilder, head_center: Tuple[float, float, float]) -> Tuple[float, float, float]:
-    """Build weathered oval yellow scuba mask, rubber skirt, recessed dark visor, and rear strap.
+    """Build true hollow weathered yellow scuba mask, rubber skirt, thin translucent visor, and rear strap.
 
+    There is zero opaque backing behind the thin curved `glass_tinted` visor so the ant's 3-part
+    eyes and blinking eyelids remain clearly visible through the translucent lens with zero clipping.
     Returns the left-side temple strap anchor `(x, y, z)` for mounting the banded snorkel keeper.
     """
     hx, hy, hz = head_center
     mask_y = hy - 0.008  # ~0.716, centered over Pass 2 eyes (0.712)
-    mask_z_front = hz + 0.298  # ~0.348, cleanly clear of blinking eyelids (Z <= 0.319)
-    rx_frame = 0.202
-    ry_frame = 0.124
+    mask_z_front = hz + 0.302  # ~0.352, cleanly clear of blinking eyelids (Z <= 0.319)
+    rx_frame = 0.208
+    ry_frame = 0.130
     oval_exp = 0.72
 
     n_loop = 48
@@ -79,15 +81,16 @@ def _build_scuba_mask(scene: SceneBuilder, head_center: Tuple[float, float, floa
         t = (i / n_loop) * 2.0 * math.pi
         ox = rx_frame * _spow(math.cos(t), oval_exp)
         oy = ry_frame * _spow(math.sin(t), oval_exp)
-        nose_notch = 0.012 * math.exp(-((ox / 0.052) ** 2)) * max(0.0, -math.sin(t))
-        fz = _mask_wrap_z(ox, mask_z_front, curve_depth=0.064, half_w=rx_frame)
+        nose_notch = 0.011 * math.exp(-((ox / 0.052) ** 2)) * max(0.0, -math.sin(t))
+        fz = _mask_wrap_z(ox, mask_z_front, curve_depth=0.062, half_w=rx_frame)
         frame_pts.append((hx + ox, mask_y + oy - nose_notch, fz))
-        skirt_pts.append((hx + ox * 0.96, mask_y + oy * 0.94 - nose_notch * 0.7, fz - 0.038))
+        # Hollow outer rubber face gasket framing outside the eyes (inner opening > +-0.184 X, +-0.104 Y).
+        skirt_pts.append((hx + ox * 0.99, mask_y + oy * 0.98 - nose_notch * 0.7, fz - 0.044))
 
-    # 1. Thick weathered mustard-yellow rounded-oval outer scuba frame.
+    # 1. Thick weathered mustard-yellow rounded-oval hollow scuba frame.
     frame = swept_tube(
         frame_pts,
-        (0.025, 0.030),
+        (0.024, 0.028),
         radial_segs=14,
         closed=True,
         name="scuba_mask_frame",
@@ -95,14 +98,14 @@ def _build_scuba_mask(scene: SceneBuilder, head_center: Tuple[float, float, floa
     )
     scene.add("scuba_mask", frame)
 
-    # Subtle recessed dark inner bezel lip giving the visor deep physical set-in depth.
+    # Subtle recessed dark inner viewport lip around the wide open eye window.
     inner_pts = [
-        (hx + (px - hx) * 0.90, mask_y + (py - mask_y) * 0.88, pz + 0.008)
+        (hx + (px - hx) * 0.93, mask_y + (py - mask_y) * 0.91, pz + 0.006)
         for px, py, pz in frame_pts
     ]
     inner_bezel = swept_tube(
         inner_pts,
-        0.009,
+        0.0075,
         radial_segs=10,
         closed=True,
         name="scuba_mask_inner_bezel",
@@ -110,10 +113,10 @@ def _build_scuba_mask(scene: SceneBuilder, head_center: Tuple[float, float, floa
     )
     scene.add("scuba_mask", inner_bezel)
 
-    # 2. Dark rubber face sealing skirt bridging the yellow frame solidly onto the cranium.
+    # 2. Hollow dark rubber sealing skirt bridging the yellow frame cleanly back onto the cranium.
     skirt_ring = swept_tube(
         skirt_pts,
-        (0.026, 0.048),
+        (0.021, 0.052),
         radial_segs=14,
         closed=True,
         name="scuba_mask_skirt",
@@ -124,16 +127,16 @@ def _build_scuba_mask(scene: SceneBuilder, head_center: Tuple[float, float, floa
     def _wrap_visor(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
         nx = p[:, 0] / rx_frame
-        p[:, 2] -= 0.064 * (nx * nx)
-        nose = 0.009 * np.exp(-((p[:, 0] / 0.052) ** 2)) * np.clip(-p[:, 1] / ry_frame, 0.0, 1.0)
+        p[:, 2] -= 0.062 * (nx * nx)
+        nose = 0.008 * np.exp(-((p[:, 0] / 0.052) ** 2)) * np.clip(-p[:, 1] / ry_frame, 0.0, 1.0)
         p[:, 1] -= nose
         return p
 
-    # Recessed glossy dark slate-teal visor seated cleanly ahead of blinking eyelids inside.
+    # 3. Thin curved translucent slate-teal glass visor pane cleanly ahead of eyes & blinking eyelids.
     visor = (
-        superellipsoid(rx_frame * 0.91, ry_frame * 0.87, 0.022, e1=0.70, e2=0.74, u_segs=30, v_segs=18, name="scuba_visor", material="glass_tinted")
+        superellipsoid(rx_frame * 0.94, ry_frame * 0.91, 0.009, e1=0.70, e2=0.74, u_segs=32, v_segs=18, name="scuba_visor", material="glass_tinted")
         .deform(_wrap_visor)
-        .translate(hx, mask_y, mask_z_front - 0.004)
+        .translate(hx, mask_y, mask_z_front + 0.002)
     )
     scene.add("scuba_mask", visor)
 
