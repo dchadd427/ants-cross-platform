@@ -37,8 +37,8 @@
     --bg-chrome: #181d25;
     --bg-surface: #202733;
     --bg-surface-hover: #293242;
-    --bg-pressed: #2d8a60;
-    --bg-pressed-hover: #359d6e;
+    --bg-pressed: #237450;
+    --bg-pressed-hover: #1c5f41;
     --bg-stage: #141922;
     --bg-overlay: rgba(20, 25, 34, 0.88);
     --bg-badge: #232b38;
@@ -64,8 +64,8 @@
     --bg-chrome: light-dark(#ffffff, #181d25);
     --bg-surface: light-dark(#f7f8fa, #202733);
     --bg-surface-hover: light-dark(#eceff4, #293242);
-    --bg-pressed: light-dark(#1d4d3a, #2d8a60);
-    --bg-pressed-hover: light-dark(#173f2f, #359d6e);
+    --bg-pressed: light-dark(#1d4d3a, #237450);
+    --bg-pressed-hover: light-dark(#173f2f, #1c5f41);
     --bg-stage: light-dark(#e9edf2, #141922);
     --bg-overlay: light-dark(rgba(255, 255, 255, 0.88), rgba(20, 25, 34, 0.88));
     --bg-badge: light-dark(#edf1f5, #232b38);

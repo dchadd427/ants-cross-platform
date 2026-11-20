@@ -6,11 +6,15 @@
     worker: "Worker", combat: "Combat", thief: "Thief",
     bomber: "Bomber", swimmer: "Swimmer", fire: "Fire", lineup: "All 6 Lineup",
   };
+  const srgbToLinear = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  const rgbLinear = (rgb) => rgb.map(srgbToLinear);
+
+  // Team swatch RGBs converted from sRGB to linear RGB to match glTF 2.0 baseColorFactor
   const TEAMS = {
-    green: { label: "Green", team: [0.18, 0.56, 0.34], dark: [0.08, 0.19, 0.13] },
-    red: { label: "Red", team: [0.68, 0.18, 0.22], dark: [0.24, 0.07, 0.09] },
-    blue: { label: "Blue", team: [0.22, 0.38, 0.72], dark: [0.09, 0.14, 0.28] },
-    black: { label: "Black", team: [0.46, 0.48, 0.54], dark: [0.13, 0.14, 0.17] },
+    green: { label: "Green", team: rgbLinear([0.18, 0.56, 0.34]), dark: rgbLinear([0.08, 0.19, 0.13]) },
+    red: { label: "Red", team: rgbLinear([0.68, 0.18, 0.22]), dark: rgbLinear([0.24, 0.07, 0.09]) },
+    blue: { label: "Blue", team: rgbLinear([0.22, 0.38, 0.72]), dark: rgbLinear([0.09, 0.14, 0.28]) },
+    black: { label: "Black", team: rgbLinear([0.46, 0.48, 0.54]), dark: rgbLinear([0.13, 0.14, 0.17]) },
   };
   const ANGLES = {
     "301": { label: "301 S", full: "301 S (Front)", yaw: 0, pitch: 50 },
@@ -155,9 +159,10 @@
     if (acc.bufferView === undefined) return new Float32Array(count * numComp);
     const bv = gltf.bufferViews[acc.bufferView], dv = new DataView(buffers[bv.buffer || 0]);
     const baseOff = (bv.byteOffset || 0) + (acc.byteOffset || 0), stride = bv.byteStride || numComp * compSize;
-    const out = acc.componentType === 5125 ? new Uint32Array(count * numComp)
-      : (acc.componentType === 5123 || acc.componentType === 5121 ? new Uint16Array(count * numComp) : new Float32Array(count * numComp));
-    const read = COMP_READERS[acc.componentType], norm = Boolean(acc.normalized);
+    const norm = Boolean(acc.normalized);
+    const out = !norm && acc.componentType === 5125 ? new Uint32Array(count * numComp)
+      : (!norm && (acc.componentType === 5123 || acc.componentType === 5121) ? new Uint16Array(count * numComp) : new Float32Array(count * numComp));
+    const read = COMP_READERS[acc.componentType];
     for (let i = 0; i < count; i++) {
       const row = baseOff + i * stride;
       for (let c = 0; c < numComp; c++) out[i * numComp + c] = read ? read(dv, row + c * compSize, norm) : 0;
@@ -212,6 +217,7 @@
     let gltf = null, binSlice = null;
     for (let offset = 12; offset + 8 <= totalLen;) {
       const chunkLen = dv.getUint32(offset, true), chunkType = dv.getUint32(offset + 4, true), start = offset + 8;
+      if (start + chunkLen > totalLen) throw new Error("Truncated .glb chunk");
       if (chunkType === 0x4e4f534a) gltf = JSON.parse(new TextDecoder("utf-8").decode(new Uint8Array(arrayBuffer, start, chunkLen)));
       else if (chunkType === 0x004e4942) binSlice = arrayBuffer.slice(start, start + chunkLen);
       offset = start + chunkLen;
@@ -386,13 +392,17 @@
   }
 
   vec3 acesFilm(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+  vec3 linearToSrgb(vec3 c) {
+    return mix(c * 12.92, 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+  }
 
   void main() {
     vec3 N = normalize(v_worldNormal);
     if (!gl_FrontFacing) N = -N;
     vec3 V = u_isOrtho == 1 ? normalize(u_viewDir) : normalize(u_cameraPos - v_worldPos);
     float rough = clamp(u_roughness, 0.06, 0.98), met = clamp(u_metallic, 0.0, 1.0);
-    vec3 albedo = pow(max(u_baseColor, 0.0), vec3(2.2));
+    // glTF 2.0 baseColorFactor and emissiveFactor are already linear RGB
+    vec3 albedo = max(u_baseColor, 0.0);
     vec3 F0 = mix(vec3(0.04), albedo, met);
     float coatW = mix(0.38, 0.10, met) * (1.0 - smoothstep(0.54, 0.86, rough));
 
@@ -409,7 +419,7 @@
     vec3 envCoat = studioEnv(R, 0.14) * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * 0.55;
 
     vec3 col = acesFilm((Lo + (ambDiff + envSpec + envCoat) * ao + u_emissive) * 1.08);
-    fragColor = vec4(pow(col, vec3(1.0 / 2.2)), u_alpha);
+    fragColor = vec4(linearToSrgb(col), u_alpha);
   }`;
 
   const PLINTH_VS = `#version 300 es
@@ -766,6 +776,7 @@
       dark: darkQuery.matches, turntable: initTurn, spritePreview: !(getP("sprite") === "0" || getP("sprite") === "false"),
       cam: { yaw: preset.yaw, pitch: preset.pitch, zoom: 1.0, projection: initProj },
       camTarget: null, dirty: true, spriteDirty: true, lastSpriteTime: 0,
+      loadSeq: 0, ready: false, error: "",
       modelCache: new Map(), customModel: null, scene: emptyScene(),
     };
 
@@ -820,9 +831,25 @@
       }
     }
 
+    function syncDebugState() {
+      window.__antViewer = {
+        ready: state.ready, ant: state.ant, team: state.team, angle: state.angle,
+        projection: state.cam.projection, yaw: Math.round(wrapAngleDeg(state.cam.yaw)),
+        pitch: Math.round(state.cam.pitch), lineup: state.ant === "lineup",
+        loadedCount: state.scene.instances.length, triCount: state.scene.triCount, error: state.error,
+      };
+    }
+
+    function publishState(ready, error = "") {
+      state.ready = ready;
+      state.error = error;
+      syncDebugState();
+    }
+
     function updateCameraReadout() {
       const yaw = Math.round(wrapAngleDeg(state.cam.yaw)), pitch = Math.round(state.cam.pitch);
       $("meta-camera").textContent = "Yaw " + yaw + "° · Pitch " + pitch + "° · " + (state.cam.projection === "ortho" ? "Ortho" : "Persp");
+      syncDebugState();
     }
 
     function updateUiState() {
@@ -846,18 +873,12 @@
       updateCameraReadout();
     }
 
-    function publishState(ready, error = "") {
-      window.__antViewer = {
-        ready, ant: state.ant, team: state.team, angle: state.angle, projection: state.cam.projection,
-        lineup: state.ant === "lineup", loadedCount: state.scene.instances.length, triCount: state.scene.triCount, error,
-      };
-    }
-
     async function fetchModel(id) {
       if (state.modelCache.has(id)) return state.modelCache.get(id);
       const resp = await fetch("models/" + encodeURIComponent(id) + ".glb");
       if (!resp.ok) throw new Error("HTTP " + resp.status + " loading models/" + id + ".glb");
       const parsed = parseGlb(await resp.arrayBuffer(), renderer.gl);
+      if (state.modelCache.has(id)) { parsed.dispose(); return state.modelCache.get(id); }
       state.modelCache.set(id, parsed);
       return parsed;
     }
@@ -875,10 +896,12 @@
     }
 
     async function selectAnt(antId) {
+      const seq = ++state.loadSeq;
       state.ant = antId; state.customLabel = ""; emptyOverlay.hidden = true; publishState(false);
       if (antId === "lineup") {
         announce("Loading all 6 ant models for lineup…");
         const res = await Promise.allSettled(ANT_CLASSES.map((id) => fetchModel(id).then((model) => ({ id, model }))));
+        if (seq !== state.loadSeq) return;
         const loaded = res.filter((r) => r.status === "fulfilled").map((r) => r.value);
         buildScene(loaded);
         if (!loaded.length) {
@@ -895,11 +918,13 @@
       try {
         announce("Loading " + (ANT_LABELS[antId] || antId) + " model…");
         const model = await fetchModel(antId);
+        if (seq !== state.loadSeq) return;
         buildScene([{ id: antId, model }]);
         updateUiState(); markDirty();
         announce("Loaded " + (ANT_LABELS[antId] || antId) + " (" + model.triCount.toLocaleString() + " triangles).");
         publishState(true);
       } catch (err) {
+        if (seq !== state.loadSeq) return;
         buildScene([]);
         showEmpty(
           "Could not load models/" + antId + ".glb",
@@ -928,11 +953,14 @@
     async function loadLocalFiles(fileList) {
       const files = Array.from(fileList || []).filter((f) => f.name.toLowerCase().endsWith(".glb"));
       if (!files.length) { announce("Please select or drop a .glb file."); return; }
+      const seq = ++state.loadSeq;
       let lastId = null;
       const loadedNames = [];
       for (const file of files) {
         try {
-          const parsed = parseGlb(await file.arrayBuffer(), renderer.gl);
+          const buf = await file.arrayBuffer();
+          if (seq !== state.loadSeq) return;
+          const parsed = parseGlb(buf, renderer.gl);
           const stem = file.name.replace(/\.glb$/i, "").toLowerCase();
           if (ANT_CLASSES.includes(stem)) {
             if (state.modelCache.has(stem)) state.modelCache.get(stem).dispose();
@@ -942,9 +970,12 @@
             state.customModel = parsed; state.customLabel = file.name; lastId = "custom";
           }
           loadedNames.push(file.name);
-        } catch (err) { announce("Failed to parse " + file.name + ": " + err.message); }
+        } catch (err) {
+          if (seq !== state.loadSeq) return;
+          announce("Failed to parse " + file.name + ": " + err.message);
+        }
       }
-      if (!loadedNames.length) return;
+      if (seq !== state.loadSeq || !loadedNames.length) return;
       emptyOverlay.hidden = true;
       const avail = ANT_CLASSES.filter((id) => state.modelCache.has(id)).map((id) => ({ id, model: state.modelCache.get(id) }));
       if (files.length > 1 && avail.length) {
