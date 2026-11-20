@@ -50,7 +50,7 @@ def _ring_across(center: Sequence[float], axis: Sequence[float], major_r: float,
     return torus_arc(major_r, minor_r, u_segs=16, v_segs=8, plane="xz", name=name, material="chitin_dark").transform(mat)
 
 
-def _add_carapace_details(scene: SceneBuilder) -> None:
+def _add_carapace_details(scene: SceneBuilder, anchors: dict) -> None:
     """Subtle smooth organic chitin accents fitted flush onto the rounded base thorax and limbs."""
     # Smooth curved breastplate crest hugging the fuller ovoid chest carapace (no boxy corners).
     crest = (
@@ -74,27 +74,35 @@ def _add_carapace_details(scene: SceneBuilder) -> None:
     )
     scene.add_mirrored("worker_carapace", cap)
 
-    # Slim wrist cuffs across each flowing forearm just behind the claw hand.
-    wrist, hand = np.asarray(_WORKER_ARM_LEFT[2]), np.asarray(_WORKER_ARM_LEFT[3])
-    scene.add_mirrored("worker_cuffs", _ring_across(wrist + 0.48 * (hand - wrist), hand - wrist, 0.0165, 0.0048, "wrist_cuff"))
+    # Slim wrist cuffs anchored cleanly to each staggered contrapposto forearm right behind the claw hand.
+    for side in ("left", "right"):
+        hand = np.asarray(anchors[f"{side}_hand"], dtype=np.float64)
+        hdir = np.asarray(anchors[f"{side}_hand_dir"], dtype=np.float64)
+        scene.add("worker_cuffs", _ring_across(hand - 0.026 * hdir, hdir, 0.0165, 0.0048, f"wrist_cuff_{side}"))
 
-    # Parent world-authored carapace & cuff nodes under upper_body so they breathe with Idle cleanly.
-    scene.attach_world_node("worker_carapace", "upper_body")
-    scene.attach_world_node("worker_cuffs", "upper_body")
+    # Parent canonical world-authored accents under upper_body in lockstep with stance contrapposto & Idle.
+    scene.attach_world_node("worker_carapace", "upper_body", preserve_world_pose=False)
+    scene.attach_world_node("worker_cuffs", "upper_body", preserve_world_pose=False)
 
 
 def build_worker(blink: float = 0.0) -> SceneBuilder:
-    """Build the classic unadorned Worker Ant (`blink` in [0, 1] sets resting eyelid closure)."""
-    scene, _ = build_base_ant(
+    """Build the curious, charming classic Worker Ant (`blink` in [0, 1] sets resting eyelid closure)."""
+    scene, anchors = build_base_ant(
         scene_name="ant_worker",
         include_brows=False,
+        brow_style="curious",
+        head_tilt_deg=4.5,
+        head_yaw_deg=-3.5,
+        eye_look=(0.06, 0.05),
         eye_scale_left=0.92,
         eye_scale_right=1.08,
-        left_arm_pose=_WORKER_ARM_LEFT,
-        right_arm_pose=_WORKER_ARM_RIGHT,
+        antenna_asymmetry=0.35,
+        stance_asymmetry=0.35,
+        left_arm_pose="idle",
+        right_arm_pose="idle",
         blink=blink,
     )
-    _add_carapace_details(scene)
+    _add_carapace_details(scene, anchors)
     scene.ground_to_y(0.0)
     return scene
 
