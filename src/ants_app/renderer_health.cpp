@@ -8,7 +8,7 @@
 // part of the world, the selection ears and the health marks, and under the panel, the HUD, the dialogs and the cursor. Drawing only: the tracker that holds them reads the snapshot, nothing is sent.
 //
 // Show health as: Number. The original's own Ctrl+L numbers (docs/GAME_REVERSE_ENGINEERING.md, "The health number"): right after an ant is drawn (draw_ant_number, called by the ant's draw), its hit points
-// in white, in the fixed system font (8 x 15 cells, not antialiased), the top left of the text at the sprite's position, so the digits hang to the lower right of it. No outline, no color, on a desktop; on a canvas shown small (a phone) they are scaled and outlined (health_marks.hpp, digit_scale).
+// in white, in the fixed system font (8 x 15 cells, not antialiased), the top left of the text at the sprite's position, so the digits hang to the lower right of it. No outline, no color; on a canvas shown small (a phone) they are scaled (health_marks.hpp, digit_scale).
 
 #include <cmath>
 #include <cstdint>
@@ -25,7 +25,6 @@ void Renderer::set_health_marks(health::Setting setting, double picture_px_per_c
     health_ = setting;
     health_thick_ = health::thick_for(picture_px_per_css);
     digit_scale_ = scale_digits ? health::digit_scale(picture_px_per_css) : 1;
-    digit_outline_ = scale_digits && health::digit_outlined(picture_px_per_css);
 }
 
 void Renderer::set_health_changes(health::ChangeTracker* tracker, int64_t now_ms) {
@@ -85,7 +84,7 @@ void Renderer::draw_ant_number(const ants::sim::AntSnapshot& ant, int32_t sprite
         deferred_digits_.push_back(DeferredDigits{std::to_string(ant.hp), sprite_x, sprite_y});
     } else {
         const LayoutRect view = world_view();
-        draw_fixed_text(std::to_string(ant.hp), view.x + (sprite_x - static_cast<int32_t>(camera_.x)), view.y + (sprite_y - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 255, 255, 255}, digit_scale_, digit_outline_);
+        draw_fixed_text(std::to_string(ant.hp), view.x + (sprite_x - static_cast<int32_t>(camera_.x)), view.y + (sprite_y - static_cast<int32_t>(camera_.y)), ants::assets::ColorRGBA{255, 255, 255, 255}, digit_scale_);
     }
 }
 
@@ -93,14 +92,14 @@ void Renderer::draw_ant_number(const ants::sim::AntSnapshot& ant, int32_t sprite
 void Renderer::draw_deferred_digits() {
     const LayoutRect view = layout_.view();
     const double z = static_cast<double>(camera_.zoom);
-    if (font_numbers()) {                                              // (the font's digits, white with an outline, the same place and size: renderer_numbers.cpp)
+    if (font_numbers()) {                                              // (the font's digits, plain white, the same place and size: renderer_numbers.cpp)
         draw_font_digits(view, z);
         return;
     }
     for (const DeferredDigits& d : deferred_digits_) {
         const int32_t sx = view.x + static_cast<int32_t>(std::floor((static_cast<double>(d.wx) - static_cast<double>(camera_.x)) * z));
         const int32_t sy = view.y + static_cast<int32_t>(std::floor((static_cast<double>(d.wy) - static_cast<double>(camera_.y)) * z));
-        draw_fixed_text(d.text, sx, sy, ants::assets::ColorRGBA{255, 255, 255, 255}, digit_scale_, digit_outline_);
+        draw_fixed_text(d.text, sx, sy, ants::assets::ColorRGBA{255, 255, 255, 255}, digit_scale_);
     }
     deferred_digits_.clear();
 }
@@ -123,7 +122,7 @@ static const char* const kFixedGlyphs[12][10] = {
     {".......", ".......", ".......", "...X...", "...X...", ".XXXXX.", "...X...", "...X...", ".......", "......."},   // + (new art, the same hand and weight as the minus; used by the heal numbers only)
 };
 
-void Renderer::draw_fixed_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, int32_t scale, bool outline) {
+void Renderer::draw_fixed_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color, int32_t scale) {
     if (!renderer_ || text.empty()) return;
     for (size_t g = 0; g < fixed_glyphs_.size(); ++g) {
         if (fixed_glyphs_[g] != nullptr) continue;
@@ -144,17 +143,6 @@ void Renderer::draw_fixed_text(const std::string& text, int32_t x, int32_t y, an
         const int32_t g = (c >= '0' && c <= '9') ? c - '0' : (c == '-' ? 10 : (c == '+' ? 11 : -1));
         if (g >= 0 && fixed_glyphs_[static_cast<size_t>(g)] != nullptr) {
             SDL_Texture* glyph = fixed_glyphs_[static_cast<size_t>(g)];
-            if (outline) {                                     // (a phone only: the glyph in black, one scaled pixel round it in the eight directions, then the glyph over it)
-                SDL_SetTextureColorMod(glyph, 0, 0, 0);
-                SDL_SetTextureAlphaMod(glyph, 255);
-                for (int32_t oy = -1; oy <= 1; ++oy) {
-                    for (int32_t ox = -1; ox <= 1; ++ox) {
-                        if (ox == 0 && oy == 0) continue;
-                        const SDL_Rect od = placed(cur_x + ox * scale, y + oy * scale, kFixedCellW * scale, kFixedCellH * scale);
-                        SDL_RenderCopy(renderer_, glyph, nullptr, &od);
-                    }
-                }
-            }
             SDL_SetTextureColorMod(glyph, color.r, color.g, color.b);
             SDL_SetTextureAlphaMod(glyph, color.a);
             const SDL_Rect dst = placed(cur_x, y, kFixedCellW * scale, kFixedCellH * scale);
@@ -164,8 +152,8 @@ void Renderer::draw_fixed_text(const std::string& text, int32_t x, int32_t y, an
     }
 }
 
-// The picture of one number's text ("-12", "+7"): the glyphs of the fixed font side by side at a 7 pixel step (the glyph is 7 wide, so the cell's blank column is dropped), white and opaque, with a one pixel outline
-// in near black (about 85 %) round the union of them, so that the outline is one even layer where two glyphs meet. Made once per text and tinted (the color) and faded (the opacity) when it is copied.
+// The picture of one number's text ("-12", "+7"): the glyphs of the fixed font side by side at a 7 pixel step (the glyph is 7 wide, so the cell's blank column is dropped), plain white and opaque, nothing round them.
+// Made once per text and tinted (the color) and faded (the opacity) when it is copied.
 const Renderer::ChangePicture* Renderer::change_picture(const std::string& text) {
     for (const ChangePicture& p : change_pictures_) {
         if (p.text == text) return p.texture != nullptr ? &p : nullptr;
@@ -178,36 +166,17 @@ const Renderer::ChangePicture* Renderer::change_picture(const std::string& text)
         change_pictures_.clear();
     }
     const int32_t n = static_cast<int32_t>(text.size());
-    const int32_t w = n * health::kGlyphAdvance + 2;
-    const int32_t h = health::kGlyphHeight + 2;
-    std::vector<uint8_t> ink(static_cast<size_t>(w * h), 0u);
+    const int32_t w = n * health::kGlyphAdvance;
+    const int32_t h = health::kGlyphHeight;
+    std::vector<uint32_t> pixels(static_cast<size_t>(w * h), 0u);
     for (int32_t i = 0; i < n; ++i) {
         const char c = text[static_cast<size_t>(i)];
         const int32_t g = (c >= '0' && c <= '9') ? c - '0' : (c == '-' ? 10 : (c == '+' ? 11 : -1));
         if (g < 0) continue;
         for (int32_t row = 0; row < health::kGlyphHeight; ++row) {
             for (int32_t col = 0; col < health::kGlyphAdvance; ++col) {
-                if (kFixedGlyphs[g][row][col] == 'X') ink[static_cast<size_t>((row + 1) * w + 1 + i * health::kGlyphAdvance + col)] = 1u;
+                if (kFixedGlyphs[g][row][col] == 'X') pixels[static_cast<size_t>(row * w + i * health::kGlyphAdvance + col)] = 0xFFFFFFFFu;     // the glyph: white, tinted by the color
             }
-        }
-    }
-    std::vector<uint32_t> pixels(static_cast<size_t>(w * h), 0u);
-    for (int32_t y = 0; y < h; ++y) {
-        for (int32_t x = 0; x < w; ++x) {
-            const size_t at = static_cast<size_t>(y * w + x);
-            if (ink[at] != 0u) {
-                pixels[at] = 0xFFFFFFFFu;                              // the glyph: white, tinted by the color
-                continue;
-            }
-            bool near = false;
-            for (int32_t dy = -1; dy <= 1 && !near; ++dy) {
-                for (int32_t dx = -1; dx <= 1 && !near; ++dx) {
-                    const int32_t xx = x + dx;
-                    const int32_t yy = y + dy;
-                    if (xx >= 0 && xx < w && yy >= 0 && yy < h && ink[static_cast<size_t>(yy * w + xx)] != 0u) near = true;
-                }
-            }
-            if (near) pixels[at] = static_cast<uint32_t>(health::kOutlineAlpha) << 24;      // near black, black under any tint
         }
     }
     SDL_Texture* tex = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, w, h);
@@ -245,7 +214,7 @@ void Renderer::draw_health_changes() {
         camera_.world_to_screen(num.wx, num.wy, sx, sy);
         const int32_t centre = sy - static_cast<int32_t>(std::lround(static_cast<double>(health::kBodyCentreAbove) * zoom));
         const int32_t rise = health::rise_at(age) + static_cast<int32_t>(num.level) * health::kLineHeight;
-        const int32_t top = centre - pic->h / 2 - rise;                  // (the picture is the glyphs with a one pixel outline round them)
+        const int32_t top = centre - pic->h / 2 - rise;                  // (the picture is the glyphs, nothing round them)
         const int32_t left = sx - pic->w / 2;
         if (!health::overlaps(health::Rect{left, top, pic->w, pic->h}, screen)) continue;
         const health::Color c = num.heal ? health::kHealColor : health::kDamageColor;

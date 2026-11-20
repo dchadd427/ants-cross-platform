@@ -195,7 +195,7 @@
       "id": "outline_eats_the_glyph",
       "file": "src/ants_app/renderer_numbers.cpp",
       "old": "    const int32_t digit_px = std::max(2, height_px - 2 * base);",
-      "new": "    const int32_t digit_px = std::max(2, height_px - 2 * o);",
+      "new": "    const int32_t digit_px = std::max(2, height_px - 2 * o + 0 * base);",
       "build": [
         "test_font_numbers"
       ],
@@ -426,6 +426,56 @@
       "file": "src/ants_app/scorecard.cpp",
       "old": "box_w - 1, 12, NumberAlign::Left, kLabelColor, true)) {\n        renderer.draw_text_squeezed",
       "new": "box_w - 1, 12, NumberAlign::Left, kLabelColor, false)) {\n        renderer.draw_text_squeezed",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "font_hit_points_get_a_border",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "const NumberPicture* pic = number_picture(d.text, fr.digit_px, 0);",
+      "new": "const NumberPicture* pic = number_picture(d.text, fr.digit_px + 2 * fr.margin_px, 2 * fr.margin_px);",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "font_damage_numbers_get_a_border",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "const NumberPicture* pic = number_picture(text, fr.digit_px, 0);",
+      "new": "const NumberPicture* pic = number_picture(text, fr.digit_px + 2 * fr.margin_px, 2 * fr.margin_px);",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "font_hit_points_not_kept_in_place",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "health::Color{255, 255, 255}, 255, 0.0, fr.inset_px());",
+      "new": "health::Color{255, 255, 255}, 255, 0.0, 0);",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "font_digit_is_the_whole_frame",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "return DigitFrame{std::max(2, frame - 2 * margin), margin};",
+      "new": "return DigitFrame{std::max(2, frame), margin};",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "font_damage_not_squeezed",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "old_ink * glyphs / (glyphs + 4.0 * static_cast<double>(fr.margin_px));",
+      "new": "old_ink + 0.0 * glyphs;",
       "build": [
         "test_font_numbers"
       ],
