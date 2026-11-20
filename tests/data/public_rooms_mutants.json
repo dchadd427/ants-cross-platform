@@ -872,10 +872,10 @@
    "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
-   "id": "codec_protocol_still_25",
+   "id": "codec_protocol_one_behind",
    "file": "include/ants_net/protocol.hpp",
-   "old": "inline constexpr uint16_t kProtocolVersion = 26;",
-   "new": "inline constexpr uint16_t kProtocolVersion = 25;",
+   "old": "inline constexpr uint16_t kProtocolVersion = 27;",
+   "new": "inline constexpr uint16_t kProtocolVersion = 26;",
    "build": [
     "test_lockstep",
     "test_lobby"
@@ -923,24 +923,24 @@
    "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
-   "id": "page_protocol_still_25",
+   "id": "page_protocol_one_behind",
    "file": "web/front/lobby_net.js",
-   "old": "var PROTOCOL = 26;",
-   "new": "var PROTOCOL = 25;",
+   "old": "var PROTOCOL = 27;",
+   "new": "var PROTOCOL = 26;",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
   },
   {
    "id": "page_visibility_is_type_34",
    "file": "web/front/lobby_net.js",
-   "old": "Visibility: 35, Last: 35 };",
-   "new": "Visibility: 34, Last: 35 };",
+   "old": "Visibility: 35, Ready: 41, Last: 41 };",
+   "new": "Visibility: 34, Ready: 41, Last: 41 };",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
   },
   {
    "id": "page_last_type_is_34",
    "file": "web/front/lobby_net.js",
-   "old": "Visibility: 35, Last: 35 };",
-   "new": "Visibility: 35, Last: 34 };",
+   "old": "Visibility: 35, Ready: 41, Last: 41 };",
+   "new": "Visibility: 35, Ready: 41, Last: 34 };",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
   },
   {

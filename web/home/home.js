@@ -353,7 +353,7 @@
             try { if (page.stalled) page.stalled(words); } catch (e) { /* what the page says is its own */ }
             gamesCall('stalled', words);
         }
-        function inert(on) { held = !!on; [bar, tabs, dock && dock.root, players && players.root].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } }); gamesCall('inert', held || going); }      // (a page that is on its way to the game takes no press again, whatever a dialog that closes says)
+        function inert(on) { held = !!on; [bar, racts, tabs, dock && dock.root, players && players.root].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } }); gamesCall('inert', held || going); }      // (a page that is on its way to the game takes no press again, whatever a dialog that closes says)
         // The chat dock (chat.js, chat.css) mounts into Home's div and is told which screen shows
         function dockShown() { try { if (dock) dock.shown(true); } catch (e) { /* the dock is its own */ } }
         function wantDock() {

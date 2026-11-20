@@ -333,12 +333,15 @@
                 else card.stat = 'In the room';
                 if (!ro && !s.me && !s.leader) { card.remove = removing !== i; card.ask = removing === i; }
                 if (busy) { card.stat = s.ingame ? 'In the game' : 'Opening the game…'; card.statCls += s.ingame ? ' in' : ' wait'; }      // START is pressed: whose game is open already
-                else if (s.leader) card.ready = { kind: 'chip', on: true, title: READY.hostReady };                                                     // (protocol 27: the host does not ready: pressing START is it)
-                else if (s.asked) card.ready = { kind: s.me ? 'button' : 'chip', on: s.ready, off: !!off };
-                else if (!s.results) card.ready = { kind: 'chip', on: true, title: READY.gameReady };
+
                 else if (ctx.back && !s.me && !s.leader && ctx.back.people.indexOf(s.name) !== -1) {          // the rematch: a person of the match is back in the room, or still on the results screen
                     card.stat = away.indexOf(i) !== -1 ? 'Still on the results screen…' : 'Back in the room';
                     card.statCls += away.indexOf(i) !== -1 ? ' away' : ' back';
+                }
+                if (!busy) {                                                                                                                              // (protocol 27: the host does not ready, pressing START is it; a person whom the START asks for has a switch of their own, or a mark; a game needs none)
+                    if (s.leader) card.ready = { kind: 'chip', on: true, title: READY.hostReady };
+                    else if (s.asked) { card.ready = { kind: s.me ? 'button' : 'chip', on: s.ready }; if (s.me && off) card.ready.off = true; }
+                    else if (!s.results) card.ready = { kind: 'chip', on: true, title: READY.gameReady };
                 }
             } else {
                 card.stat = s.kind === 'bot' ? 'Computer player' : s.kind === 'open' ? 'Takes the next player who joins.' : 'Stays out of the match.';
@@ -464,7 +467,7 @@
     }
 
     return {
-        READY: READY, waitingOn: waitingOn, readyLine: readyLine,
+        READY: READY,
         COLORS: COLORS, GRID: GRID, MAPS: MAPS, DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, KINDS: KINDS, CODE_CHARS: CODE_CHARS, TEXT: TEXT, HINT: HINT, META: META, ACTS: ACTS,
         mapByKey: mapByKey, mapOfFile: mapOfFile, validMapFile: validMapFile, communityName: communityName, nameCheck: nameCheck, makeCode: makeCode, codeText: codeText, typedCode: typedCode,
         levelWord: levelWord, article: article, listOf: listOf, modelOf: modelOf, playing: playing, hostName: hostName, nameOf: nameOf, nameAt: nameAt,

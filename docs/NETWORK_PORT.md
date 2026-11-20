@@ -931,6 +931,8 @@ A bite takes its unit from the first object of its food tile that still has one,
 
 ## Protocol 26: [`P2P_HINTS.md`](P2P_HINTS.md)
 
+## Protocol 27: [`READY_UP.md`](READY_UP.md)
+
 ## Reconnect (protocol 10): a player whose connection is lost can come back
 
 ### The behaviour that is decided

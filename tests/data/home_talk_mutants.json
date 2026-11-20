@@ -217,14 +217,14 @@
   {
    "id": "the_buttons_are_asked_for_twice",
    "file": "web/home/home.js",
-   "old": "wantPlayers(); wantTalk(); } } catch",
+   "old": "wantPlayers(); wantTalk(); wantRoomChat(); } } catch",
    "new": "wantPlayers(); wantTalk(); wantTalk(); } } catch",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
   {
    "id": "the_buttons_are_never_asked_for",
    "file": "web/home/home.js",
-   "old": "wantPlayers(); wantTalk(); } } catch",
+   "old": "wantPlayers(); wantTalk(); wantRoomChat(); } } catch",
    "new": "wantPlayers(); } } catch",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
