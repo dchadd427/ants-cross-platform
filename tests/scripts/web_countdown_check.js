@@ -4,6 +4,9 @@
 //     not ready, fullscreen of the browser's or the page's own, a game without the export);
 //   * it lies over the place that the game gave (probes 61 - 64, the canvas's pixels) in the stage's coordinates, the size of the game's place scaled with the picture (within 1 px), at least 28 CSS pixels tall and 80 wide, never wider than the card, with its text 0.55 x the height (12 to 20 px), and stays inside the
 //     card (its bottom above the card's bottom edge) and the picture; checked for a phone held sideways (844 x 390, 740 x 360, 667 x 375) and a desktop window (1280 x 800);
+//   * a card too small for it has no button of its own: the button of the finger floor (28 CSS pixels) may reach 4 CSS pixels above the hint line's gap, no more, so a picture below about 560 CSS pixels
+//     (a phone upright, or sideways with the page's header on) gets none and the header's Full button is the way; it never flickers (shown from one size on, at every larger one), it comes and goes with
+//     the picture's size at the next poll, and a picture of a tablet's or a desktop's size is as it was;
 //   * a click on it asks for fullscreen once (the page's own enterFullscreen: the click is the user gesture that a browser wants) and hides it; a click when the page is fullscreen already asks for nothing;
 //   * the button is made by the script (a child of the stage, with the page's .btn look), the poll runs every 250 ms, the card going away (the first turn) hides the button, and the page's other code is
 //     not touched: no listener on the canvas, none on the document.
@@ -24,16 +27,17 @@ const modulePath = process.argv[2];
 if (!modulePath) { console.log('usage: web_countdown_check.js countdown_button.js'); process.exit(2); }
 const C = require(require('path').resolve(modulePath));
 
-// The page: a stage at (10, 20) that is 480 x 270 CSS pixels with the canvas filling it (the game's picture 960 x 540: 0.5 CSS pixel per game pixel), and a game with a countdown card
+// The page: a stage at (10, 20) that is 576 x 324 CSS pixels with the canvas filling it (the game's picture 960 x 540: 0.6 CSS pixel per game pixel, the least scale at which the card holds the button), and a game with a countdown card
 function page(opts) {
     opts = opts || {};
     const calls = { fullscreen: 0, intervals: [], listeners: 0, children: [] };
     const game = { left: 28, button: [405, 306, 150, 32], logical: [960, 540] };
-    // opts.win: a window [w, h] that the picture (960 x 540 game pixels) is fitted into; by default the stage is 480 x 270 CSS pixels at (10, 20)
-    let rect = { left: 10, top: 20, width: 480, height: 270 };
+    // opts.win: a window [w, h] that the picture (960 x 540 game pixels) is fitted into; by default the stage is 576 x 324 CSS pixels at (10, 20)
+    let rect = { left: 10, top: 20, width: 576, height: 324 };
     if (opts.win) { const f = Math.min(opts.win[0] / 960, opts.win[1] / 540); rect = { left: (opts.win[0] - 960 * f) / 2, top: (opts.win[1] - 540 * f) / 2, width: 960 * f, height: 540 * f }; }
     const canvas = { getBoundingClientRect: () => rect, addEventListener() { calls.listeners++; } };
     const stage = { getBoundingClientRect: () => (opts.win ? { left: 0, top: 0, width: opts.win[0], height: opts.win[1] } : rect), appendChild(el) { calls.children.push(el); } };
+    const resize = (width) => { rect = { left: 10, top: 20, width, height: width * 540 / 960 }; };      // (the page's picture changes size: a turn of the phone, a window dragged)
     const state = { ready: opts.ready !== false, fullscreen: !!opts.fullscreen };
     const made = [];
     const doc = {
@@ -51,7 +55,7 @@ function page(opts) {
         if (what >= 61 && what <= 64) return game.button[what - 61];
         return -1;
     };
-    const p = { calls, game, canvas, stage, state, doc, made, ask };
+    const p = { calls, game, canvas, stage, state, doc, made, ask, resize };
     p.start = () => {
         const intervals = calls.intervals;
         C.forPage({
@@ -87,9 +91,9 @@ try {
         p.start();
         poll(p);
         expect('a countdown is on: the button is shown', [p.button.hidden, p.button.style.display], [false, '']);
-        // the game's place (405, 306) 150 x 32 in game pixels: 0.5 CSS pixel each, so 75 x 16 CSS pixels; the button is 80 wide (the width floor) and 28 tall (the height floor), centred on it,
-        // then kept inside the card: its bottom 2 px above the card's bottom edge (the place's bottom, 169, + 4): top 143; text 0.55 x 28 = 15.4 px
-        expect('over the game\'s place: 80 wide, 28 tall (the floors), inside the card, its text 15.4 px', [p.button.style.width, p.button.style.height, p.button.style.left, p.button.style.top, p.button.style.fontSize], ['80px', '28px', '200px', '143px', '15.4px']);
+        // the game's place (405, 306) 150 x 32 in game pixels: 0.6 CSS pixel each, so 90 x 19.2 CSS pixels; the button is 90 wide and 28 tall (the height floor), centred on it, then kept inside the card:
+        // its bottom 2 px above the card's bottom edge (the place's bottom, 202.8, + 4.8): top 177.6 (3.6 px above the hint line's gap: the card needs the room); text 0.55 x 28 = 15.4 px
+        expect('over the game\'s place: 90 wide, 28 tall (the height floor), inside the card, its text 15.4 px', [p.button.style.width, p.button.style.height, p.button.style.left, p.button.style.top, p.button.style.fontSize], ['90px', '28px', '243px', '177.6px', '15.4px']);
         p.game.left = -1;
         poll(p);
         expect('the card is gone (the first turn ran): the button goes', [p.button.hidden, p.button.style.display], [true, 'none']);
@@ -137,11 +141,53 @@ try {
         ph.start();
         poll(ph);
         expect('a phone held sideways: the button is under the old 44 tall and 120 wide', parseFloat(ph.button.style.height) < 44 && parseFloat(ph.button.style.width) < 120, true);
-        // a picture so small that the floor would make the button wider than the card: the card is the limit
-        const tiny = page({ win: [120, 68] });
-        tiny.start();
-        poll(tiny);
-        expect('a tiny picture: not wider than the card', parseFloat(tiny.button.style.width) <= 400 * (120 / 960) + 0.01, true);
+    }
+
+    // ---- a card too small for the button has none: a phone upright, a phone sideways with the header on, a tiny picture
+    {
+        // the picture in the page of a 390 pt phone held upright is 344 CSS px wide (0.36), of a 402 pt one 356, held sideways with the header on about 404 (0.42): the card is 124 to 170 px wide, the slot 12 to 18 px high
+        for (const win of [[344, 194], [356, 200], [404, 227], [120, 68]]) {
+            const p = page({ win });
+            p.start();
+            poll(p);
+            expect(win.join('x') + ': the card has no room for a finger\'s button: none is shown (the header\'s Full is the way)', [p.button.hidden, p.button.style.display], [true, 'none']);
+        }
+        // from a picture of 0.6 on, every picture has it, inside the card
+        for (const win of [[576, 324], [640, 360], [800, 450], [960, 540], [1280, 720], [1600, 900]]) {
+            const p = page({ win });
+            p.start();
+            poll(p);
+            expect(win.join('x') + ': a picture of a tablet\'s or a desktop\'s size has the button', p.button.hidden, false);
+        }
+        // the rule itself: shown, the button never reaches more than 4 CSS px above the hint line's gap (4 game pixels over the place); hidden only where it would; never a flicker
+        let seen = false, flicker = false;
+        for (let width = 200; width <= 1400; width += 8) {
+            const p = page({ win: [width, width * 540 / 960] });
+            p.start();
+            poll(p);
+            const f = width / 960;
+            const shown = !p.button.hidden;
+            if (shown) {
+                seen = true;
+                const slotTop = (p.canvas.getBoundingClientRect().top) + 306 * f;
+                const top = parseFloat(p.button.style.top);
+                if (!(top >= slotTop - 4 * f - 4 - 0.01)) { expect(width + ' wide: the button is not more than 4 px above the hint line\'s gap', top, '>= ' + (slotTop - 4 * f - 4)); }
+            } else if (seen) flicker = true;
+            const intrusion = 28 - (32 * f + 12 * f - 2);
+            expect(width + ' wide: shown exactly where the floor-sized button reaches 4 px above the hint line\'s gap at most', shown, intrusion <= 4);
+        }
+        expect('shown from one size on and at every larger one (no flicker)', [seen, flicker], [true, false]);
+        // it follows the picture: a phone turned (the picture grows), a window dragged
+        const q = page();
+        q.start();
+        poll(q);
+        expect('a picture of 0.6: the button is there', q.button.hidden, false);
+        q.resize(344);
+        poll(q);
+        expect('the picture shrinks to a phone upright\'s size: the next poll takes it away', [q.button.hidden, q.button.style.display], [true, 'none']);
+        q.resize(960);
+        poll(q);
+        expect('and it grows again: the button is back, over the place', [q.button.hidden, q.button.style.display, q.button.style.height], [false, '', '32px']);
     }
 
     // ---- a big place is the button's size; a place at the edge is kept inside the picture
@@ -150,14 +196,14 @@ try {
         p.game.button = [400, 400, 400, 100];
         p.start();
         poll(p);
-        expect('a place that is bigger than a finger is the button\'s size', [p.button.style.width, p.button.style.height], ['200px', '50px']);
+        expect('a place that is bigger than a finger is the button\'s size', [p.button.style.width, p.button.style.height], ['240px', '60px']);
         expect('and its text is 20 px at most', p.button.style.fontSize, '20px');
         const q = page();
         q.game.button = [900, 520, 150, 32];
         q.start();
         poll(q);
         const left = parseFloat(q.button.style.left), top = parseFloat(q.button.style.top), w = parseFloat(q.button.style.width), h = parseFloat(q.button.style.height);
-        expect('a place at the edge is kept inside the picture (480 x 270 CSS px)', [left >= 0, top >= 0, left + w <= 480, top + h <= 270], [true, true, true, true]);
+        expect('a place at the edge is kept inside the picture (576 x 324 CSS px)', [left >= 0, top >= 0, left + w <= 576, top + h <= 324], [true, true, true, true]);
     }
 
     // ---- when it is hidden

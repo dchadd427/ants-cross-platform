@@ -276,7 +276,7 @@
             display: flex;
             position: absolute;
             top: max(8px, env(safe-area-inset-top));
-            right: max(8px, env(safe-area-inset-right));
+            right: max(8px, calc((env(safe-area-inset-right) - 44px) / 2));      /* (in the black margin that a notch's safe area leaves, centered; over the picture's corner on a screen with none) */
             z-index: 1001;
             width: 44px;
             height: 44px;
@@ -923,7 +923,7 @@
         .livenow::before, .jtl::before { content: ""; width: 10px; height: 10px; flex: none; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 0 1px #000, 0 0 6px rgba(255, 90, 79, .9); }
         .rbar.over .livenow { background: rgba(58, 13, 17, .9); }
         @media (max-width: 700px) {
-            .rbar.islive { grid-template-columns: auto minmax(0, 1fr) auto auto auto; grid-template-areas: "tl tl tl tl tl" "play clock live pic fsx" "speed speed speed speed speed" "cam cam cam cam cam"; }
+            .rbar.islive { grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "tl tl tl tl" "play clock live pic" "speed speed speed speed" "cam cam cam cam"; }
             .rbar.over.islive { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; grid-template-areas: "tl tl tl tl tl tl" "play clock live cam pic fsx" "speed speed speed speed speed speed"; }
             .rbar.islive .clock { text-align: left; }
         }
