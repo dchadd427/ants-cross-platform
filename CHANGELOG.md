@@ -26,6 +26,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.18.2 - 2026-11-19 - Private rooms show in Open games, locked
+
+**For players:**
+- **Private rooms show in Open games, locked.** You see the map, the host and the seats with a padlock and a PRIVATE tag; you can join only with the room's link. Quick join skips them. Matches in private rooms stay watchable as before.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/cd4ac593...0b39b23a)
+
 ## v0.18.1 - 2026-11-19 - A note when a new version is out; computer players use the endgame
 
 **For players:**
