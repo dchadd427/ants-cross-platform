@@ -57,7 +57,7 @@ except ImportError:
 
 ArmPoseLike = Optional[Union[str, Sequence[Sequence[float]]]]
 
-EYELID_CLOSED_ANGLE = 1.80  # radians around local +X (~103 deg) from wide-open +53 deg to sealed -50 deg
+EYELID_CLOSED_ANGLE = 1.98  # radians around local +X (~113 deg) from hidden open rest to fully sealed blink
 BROW_STYLES: Tuple[str, ...] = ("curious", "sneaky", "eager", "wonder", "plucky", "none")
 
 # Per-class expressive brow curve profiles (scaled for Goldilocks smooth 1998 head):
@@ -203,12 +203,13 @@ def _build_mandibles(scene: SceneBuilder, head_center: Tuple[float, float, float
 
     # Compact, chubby rounded bean/teardrop tusks emerging right beneath each eye,
     # angling cleanly forward-and-downward and curving gently inward toward blunt tips
-    # (single smooth bean in side profile + cute rounded inner scallops from front 3/4).
+    # (single smooth bean in side profile + cute rounded inner scallops from front 3/4,
+    # aligned directly over agst301 & agst901 pixel landmarks).
     claw_pts = [
-        (0.068, hy - 0.078, hz + 0.122),
-        (0.080, hy - 0.114, hz + 0.168),
-        (0.068, hy - 0.148, hz + 0.194),
-        (0.044, hy - 0.162, hz + 0.200),
+        (0.074, hy - 0.080, hz + 0.122),
+        (0.088, hy - 0.116, hz + 0.168),
+        (0.074, hy - 0.150, hz + 0.194),
+        (0.048, hy - 0.164, hz + 0.200),
     ]
     claw_rads = [
         (0.030, 0.032),
@@ -230,11 +231,11 @@ def _build_mandibles(scene: SceneBuilder, head_center: Tuple[float, float, float
     # inner curve so the side silhouette stays one single clean plump bean.
     nub_upper = (
         ellipsoid(0.015, 0.014, 0.014, u_segs=12, v_segs=8, name="mandible_lobe_upper", material="chitin_team")
-        .translate(0.045, hy - 0.122, hz + 0.172)
+        .translate(0.052, hy - 0.124, hz + 0.172)
     )
     nub_lower = (
         ellipsoid(0.013, 0.013, 0.013, u_segs=12, v_segs=8, name="mandible_lobe_lower", material="chitin_team")
-        .translate(0.038, hy - 0.144, hz + 0.188)
+        .translate(0.044, hy - 0.146, hz + 0.188)
     )
 
     parts_left = [claw_main, nub_upper, nub_lower]
@@ -263,27 +264,36 @@ def _build_head(scene: SceneBuilder, head_center: Tuple[float, float, float], he
     _build_mandibles(scene, head_center, head_tilt_x)
 
 
-def _build_eyelid_shell(name: str, yaw_y: float, *, scale: float = 1.0) -> MeshPart:
+def _eyelid_outer_radius(scale: float = 1.0, aspect: float = 1.0) -> float:
+    """Spherical outer radius of the upper eyelid shell, guaranteed >= +0.008 inner clearance."""
+    return (max(0.0725, 0.0710 * float(aspect)) + 0.0126) * float(scale)
+
+
+def _build_eyelid_shell(name: str, yaw_y: float, *, scale: float = 1.0, aspect: float = 1.0) -> MeshPart:
     """Build a true spherical chitin_team upper eyelid shell in eye-local coordinates.
 
-    At scale=1.0, outer radius is 0.0856 with thickness 0.0038 -> constant inner
-    spherical radius 0.0818 everywhere around the eye pivot, strictly clearing the
-    <=0.0725 max radial extent of sclera + limbal + iris + pupil + catchlight
-    by >= +0.008 across blink=0..1 and any eye_look gaze offset.
+    At scale=1.0, aspect=1.0, outer radius is 0.0851 with thickness 0.0036 -> constant
+    inner spherical radius 0.0815 everywhere around the eye pivot; for vertically stretched
+    eyes (`aspect > 1.0`), the spherical envelope expands proportionally to guarantee
+    >= +0.008 clearance across blink=0..1 and any eye_look gaze offset while staying
+    tucked invisibly behind the smooth forehead when open (`blink=0`).
     """
     s = float(scale)
+    a = max(0.75, min(1.40, float(aspect)))
+    r_out = _eyelid_outer_radius(s, a)
+    open_rx = -1.16 - 0.28 * max(0.0, a - 1.0)
     lid = hemisphere_shell(
-        0.0856 * s,
-        0.0856 * s,
-        0.0856 * s,
-        thickness=0.0038 * s,
-        start_phi=-0.16,
+        r_out,
+        r_out,
+        r_out,
+        thickness=0.0036 * s,
+        start_phi=-0.15,
         u_segs=28,
         v_segs=12,
         name=name,
         material="chitin_team",
     )
-    return lid.rotate_xyz(rx=-1.08, ry=yaw_y)
+    return lid.rotate_xyz(rx=open_rx, ry=yaw_y)
 
 
 def _build_eyes(
@@ -296,6 +306,8 @@ def _build_eyes(
     blink: float = 0.0,
     eye_scale_left: float = 1.0,
     eye_scale_right: float = 1.0,
+    eye_aspect_left: float = 1.0,
+    eye_aspect_right: float = 1.0,
     eye_look: Tuple[float, float] = (0.0, 0.0),
 ) -> Dict[str, Any]:
     """Build simple, clean 1998-style eyes (bright white sclera, round glossy black dot pupil, soft glint) + brows."""
@@ -304,7 +316,7 @@ def _build_eyes(
         raise ValueError(f"Unknown brow_style {brow_style!r}; expected one of: {', '.join(BROW_STYLES)}")
 
     _, hy, hz = head_center
-    eye_y = hy + 0.002
+    eye_y_base = hy + 0.002
     eye_z = hz + 0.140
     eye_rx = -0.06 + head_tilt_x
     eye_ry = 0.15
@@ -314,73 +326,83 @@ def _build_eyes(
 
     s_l = max(0.70, min(1.35, float(eye_scale_left)))
     s_r = max(0.70, min(1.35, float(eye_scale_right)))
+    a_l = max(0.75, min(1.40, float(eye_aspect_left)))
+    a_r = max(0.75, min(1.40, float(eye_aspect_right)))
     eye_x_l = 0.0830 + 0.076 * (s_l - 1.0)
     eye_x_r = -(0.0830 + 0.076 * (s_r - 1.0))
+    # Bottom-anchor vertical aspect stretch so a taller eye rises upward above a shared pupil/cheek baseline.
+    eye_y_l = eye_y_base + 0.45 * 0.0710 * s_l * (a_l - 1.0)
+    eye_y_r = eye_y_base + 0.45 * 0.0710 * s_r * (a_r - 1.0)
 
     blink_clamped = max(0.0, min(1.0, float(blink)))
     rest_rot = quat_from_axis_angle((1.0, 0.0, 0.0), blink_clamped * EYELID_CLOSED_ANGLE)
 
-    for side, tag, ex, s, b_idx in ((1.0, "left", eye_x_l, s_l, 0), (-1.0, "right", eye_x_r, s_r, 1)):
+    for side, tag, ex, ey, s, a, b_idx in (
+        (1.0, "left", eye_x_l, eye_y_l, s_l, a_l, 0),
+        (-1.0, "right", eye_x_r, eye_y_r, s_r, a_r, 1),
+    ):
         yaw = side * eye_ry
+        a_p = 1.0 + 0.18 * (a - 1.0)
+        dy_p = -0.38 * 0.0710 * s * (a - 1.0)
         # Recessed ultra-delicate socket seam flush behind the sclera edge (no protruding ring/eyeliner).
         socket_rim = (
             torus_arc(0.0675 * s, 0.0032 * s, u_segs=26, v_segs=10, plane="xy", name=f"eye_socket_rim_{tag}", material="chitin_dark")
-            .scale(0.97, 1.03, 0.85)
+            .scale(0.97, 1.03 * a, 0.85)
             .translate(0.0, 0.0, -0.002 * s)
             .rotate_xyz(rx=eye_rx, ry=yaw)
-            .translate(ex, eye_y, eye_z)
+            .translate(ex, ey, eye_z)
         )
         sclera = (
-            ellipsoid(0.0678 * s, 0.0710 * s, 0.0646 * s, u_segs=24, v_segs=16, name=f"sclera_{tag}", material="eye_white")
+            ellipsoid(0.0678 * s, 0.0710 * s * a, 0.0646 * s, u_segs=24, v_segs=16, name=f"sclera_{tag}", material="eye_white")
             .rotate_xyz(rx=eye_rx, ry=yaw)
-            .translate(ex, eye_y, eye_z)
+            .translate(ex, ey, eye_z)
         )
         # Clean simplistic Option-A eyes: generous bright white sclera framing a crisp round glossy
         # black dot pupil (~52% of sclera width) with one subtle soft upper-left specular glint.
         limbal = (
-            ellipsoid(0.0372 * s, 0.0398 * s, 0.0265 * s, u_segs=22, v_segs=12, name=f"limbal_{tag}", material="eye_limbal")
-            .translate(-side * 0.0018 * s, 0.0010 * s, 0.0392 * s)
+            ellipsoid(0.0372 * s, 0.0398 * s * a_p, 0.0265 * s, u_segs=22, v_segs=12, name=f"limbal_{tag}", material="eye_limbal")
+            .translate(-side * 0.0018 * s, 0.0010 * s + dy_p, 0.0392 * s)
             .rotate_xyz(rx=-look_pitch, ry=look_yaw)
             .rotate_xyz(rx=eye_rx, ry=yaw)
-            .translate(ex, eye_y, eye_z)
+            .translate(ex, ey, eye_z)
         )
         iris = (
-            ellipsoid(0.0362 * s, 0.0388 * s, 0.0272 * s, u_segs=22, v_segs=12, name=f"iris_{tag}", material="eye_iris")
-            .translate(-side * 0.0020 * s, 0.0012 * s, 0.0400 * s)
+            ellipsoid(0.0362 * s, 0.0388 * s * a_p, 0.0272 * s, u_segs=22, v_segs=12, name=f"iris_{tag}", material="eye_iris")
+            .translate(-side * 0.0020 * s, 0.0012 * s + dy_p, 0.0400 * s)
             .rotate_xyz(rx=-look_pitch, ry=look_yaw)
             .rotate_xyz(rx=eye_rx, ry=yaw)
-            .translate(ex, eye_y, eye_z)
+            .translate(ex, ey, eye_z)
         )
         pupil = (
-            ellipsoid(0.0348 * s, 0.0372 * s, 0.0252 * s, u_segs=22, v_segs=14, name=f"pupil_{tag}", material="eye_pupil")
-            .translate(-side * 0.0020 * s, 0.0012 * s, 0.0436 * s)
+            ellipsoid(0.0348 * s, 0.0372 * s * a_p, 0.0252 * s, u_segs=22, v_segs=14, name=f"pupil_{tag}", material="eye_pupil")
+            .translate(-side * 0.0020 * s, 0.0012 * s + dy_p, 0.0436 * s)
             .rotate_xyz(rx=-look_pitch, ry=look_yaw)
             .rotate_xyz(rx=eye_rx, ry=yaw)
-            .translate(ex, eye_y, eye_z)
+            .translate(ex, ey, eye_z)
         )
-        # One small subtle upper-left catchlight glint well inside r_lid_inner = 0.0818 * s.
+        # One small subtle upper-left catchlight glint well inside the spherical eyelid inner radius.
         glint_main = (
             ellipsoid(0.0056 * s, 0.0060 * s, 0.0020 * s, u_segs=12, v_segs=10, name=f"catchlight_main_{tag}", material="eye_catchlight")
             .rotate_xyz(rx=-0.24, ry=-0.22)
-            .translate(-0.0122 * s, 0.0132 * s, 0.0672 * s)
+            .translate(-0.0122 * s, 0.0132 * s + dy_p, 0.0672 * s)
             .rotate_xyz(rx=-0.55 * look_pitch, ry=0.55 * look_yaw)
             .rotate_xyz(rx=eye_rx, ry=yaw)
-            .translate(ex, eye_y, eye_z)
+            .translate(ex, ey, eye_z)
         )
         scene.add("eyes", [socket_rim, sclera, limbal, iris, pupil, glint_main])
 
         lid_node = f"eyelid_{tag}"
-        scene.add(lid_node, _build_eyelid_shell(f"{lid_node}_shell", yaw_y=yaw, scale=s))
-        scene.set_node_transform(lid_node, translation=(ex, eye_y, eye_z), rotation=rest_rot)
+        scene.add(lid_node, _build_eyelid_shell(f"{lid_node}_shell", yaw_y=yaw, scale=s, aspect=a))
+        scene.set_node_transform(lid_node, translation=(ex, ey, eye_z), rotation=rest_rot)
 
         if style != "none":
             dy_in, dy_mid, dy_out, z_push = _BROW_PRESETS[style][b_idx]
             # Flush low-profile orbital arch blended smoothly into the forehead (no protruding crease).
             brow_pts = [
-                (ex - side * 0.050 * s, eye_y + (dy_in - 0.002) * s, eye_z + (z_push - 0.024) * s),
-                (ex - side * 0.015 * s, eye_y + (0.42 * dy_in + 0.58 * dy_mid) * s, eye_z + (z_push - 0.008) * s),
-                (ex + side * 0.016 * s, eye_y + dy_mid * s, eye_z + (z_push - 0.011) * s),
-                (ex + side * 0.050 * s, eye_y + (dy_out - 0.005) * s, eye_z + (z_push - 0.034) * s),
+                (ex - side * 0.050 * s, ey + (dy_in - 0.002) * s * a, eye_z + (z_push - 0.024) * s),
+                (ex - side * 0.015 * s, ey + (0.42 * dy_in + 0.58 * dy_mid) * s * a, eye_z + (z_push - 0.008) * s),
+                (ex + side * 0.016 * s, ey + dy_mid * s * a, eye_z + (z_push - 0.011) * s),
+                (ex + side * 0.050 * s, ey + (dy_out - 0.005) * s * a, eye_z + (z_push - 0.034) * s),
             ]
             r_scale = 0.96 if style == "sneaky" else (0.58 if style in ("wonder", "curious", "plucky") else 0.72)
             brow_cap = curved_tube(
@@ -401,9 +423,9 @@ def _build_eyes(
 
         if include_brows:
             lid_pts = [
-                (ex - side * 0.052 * s, eye_y + 0.072 * s, eye_z + 0.018 * s),
-                (ex, eye_y + 0.081 * s, eye_z + 0.020 * s),
-                (ex + side * 0.050 * s, eye_y + 0.063 * s, eye_z - 0.002 * s),
+                (ex - side * 0.052 * s, ey + 0.072 * s * a, eye_z + 0.018 * s),
+                (ex, ey + 0.081 * s * a, eye_z + 0.020 * s),
+                (ex + side * 0.050 * s, ey + 0.063 * s * a, eye_z - 0.002 * s),
             ]
             scene.add(
                 "eyes",
@@ -421,11 +443,11 @@ def _build_eyes(
     scene.add_blink_animation(("eyelid_left", "eyelid_right"), closed_angle=EYELID_CLOSED_ANGLE, name="Blink")
 
     return {
-        "eye_left": (eye_x_l, eye_y, eye_z),
-        "eye_right": (eye_x_r, eye_y, eye_z),
-        "eye_center": (0.0, eye_y, eye_z + 0.015),
-        "eye_radius": 0.071 * max(s_l, s_r),
-        "eyelid_outer_radius": 0.0856 * max(s_l, s_r),
+        "eye_left": (eye_x_l, eye_y_l, eye_z),
+        "eye_right": (eye_x_r, eye_y_r, eye_z),
+        "eye_center": (0.0, 0.5 * (eye_y_l + eye_y_r), eye_z + 0.015),
+        "eye_radius": 0.071 * max(s_l * max(1.0, a_l), s_r * max(1.0, a_r)),
+        "eyelid_outer_radius": max(_eyelid_outer_radius(s_l, a_l), _eyelid_outer_radius(s_r, a_r)),
         "eyelid_closed_angle": EYELID_CLOSED_ANGLE,
     }
 
@@ -1077,6 +1099,8 @@ def build_base_ant(
     include_idle: bool = True,
     eye_scale_left: float = 1.0,
     eye_scale_right: float = 1.0,
+    eye_aspect_left: float = 1.0,
+    eye_aspect_right: float = 1.0,
     eye_look: Tuple[float, float] = (0.0, 0.0),
     head_pitch_deg: float = -16.0,
     head_tilt_deg: float = 0.0,
@@ -1100,12 +1124,16 @@ def build_base_ant(
     _build_head(scene, head_center, head_tilt_x)
     s_l = max(0.70, min(1.35, float(eye_scale_left)))
     s_r = max(0.70, min(1.35, float(eye_scale_right)))
+    a_l = max(0.75, min(1.40, float(eye_aspect_left)))
+    a_r = max(0.75, min(1.40, float(eye_aspect_right)))
+    ey_l = head_center[1] + 0.002 + 0.45 * 0.0710 * s_l * (a_l - 1.0)
+    ey_r = head_center[1] + 0.002 + 0.45 * 0.0710 * s_r * (a_r - 1.0)
     eye_anchors: Dict[str, Any] = {
-        "eye_left": (0.0830 + 0.076 * (s_l - 1.0), head_center[1] + 0.002, head_center[2] + 0.140),
-        "eye_right": (-(0.0830 + 0.076 * (s_r - 1.0)), head_center[1] + 0.002, head_center[2] + 0.140),
-        "eye_center": (0.0, head_center[1] + 0.002, head_center[2] + 0.155),
-        "eye_radius": 0.071 * max(s_l, s_r),
-        "eyelid_outer_radius": 0.0856 * max(s_l, s_r),
+        "eye_left": (0.0830 + 0.076 * (s_l - 1.0), ey_l, head_center[2] + 0.140),
+        "eye_right": (-(0.0830 + 0.076 * (s_r - 1.0)), ey_r, head_center[2] + 0.140),
+        "eye_center": (0.0, 0.5 * (ey_l + ey_r), head_center[2] + 0.155),
+        "eye_radius": 0.071 * max(s_l * max(1.0, a_l), s_r * max(1.0, a_r)),
+        "eyelid_outer_radius": max(_eyelid_outer_radius(s_l, a_l), _eyelid_outer_radius(s_r, a_r)),
         "eyelid_closed_angle": EYELID_CLOSED_ANGLE,
     }
     if include_eyes:
@@ -1118,6 +1146,8 @@ def build_base_ant(
             blink=blink,
             eye_scale_left=s_l,
             eye_scale_right=s_r,
+            eye_aspect_left=a_l,
+            eye_aspect_right=a_r,
             eye_look=eye_look,
         )
 
