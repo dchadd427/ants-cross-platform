@@ -67,14 +67,14 @@ _SPECS: Tuple[MaterialSpec, ...] = (
     MaterialSpec(
         name="chitin_team",
         base_color=(0.24, 0.44, 0.27, 1.0),
-        metallic=0.06,
-        roughness=0.50,
+        metallic=0.02,
+        roughness=0.72,
     ),
     MaterialSpec(
         name="chitin_dark",
         base_color=(0.16, 0.31, 0.19, 1.0),
-        metallic=0.06,
-        roughness=0.52,
+        metallic=0.02,
+        roughness=0.76,
     ),
     MaterialSpec(
         name="eye_white",
@@ -91,8 +91,8 @@ _SPECS: Tuple[MaterialSpec, ...] = (
     MaterialSpec(
         name="gear_gold",
         base_color=(0.84, 0.67, 0.22, 1.0),
-        metallic=0.06,
-        roughness=0.52,
+        metallic=0.02,
+        roughness=0.74,
     ),
     MaterialSpec(
         name="gear_gold_metal",
@@ -103,14 +103,14 @@ _SPECS: Tuple[MaterialSpec, ...] = (
     MaterialSpec(
         name="gear_accent",
         base_color=(0.70, 0.14, 0.18, 1.0),
-        metallic=0.05,
-        roughness=0.48,
+        metallic=0.02,
+        roughness=0.70,
     ),
     MaterialSpec(
         name="gear_dark",
         base_color=(0.11, 0.11, 0.12, 1.0),
-        metallic=0.10,
-        roughness=0.58,
+        metallic=0.04,
+        roughness=0.78,
     ),
     MaterialSpec(
         name="glass_tinted",
@@ -161,14 +161,14 @@ _SPECS: Tuple[MaterialSpec, ...] = (
     MaterialSpec(
         name="bomb_charge",
         base_color=(0.84, 0.08, 0.55, 1.0),
-        metallic=0.04,
-        roughness=0.50,
+        metallic=0.02,
+        roughness=0.70,
     ),
     MaterialSpec(
         name="bomb_cup_trim",
         base_color=(0.24, 0.06, 0.09, 1.0),
-        metallic=0.18,
-        roughness=0.46,
+        metallic=0.10,
+        roughness=0.62,
     ),
 )
 

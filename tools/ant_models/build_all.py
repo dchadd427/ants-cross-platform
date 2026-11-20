@@ -210,13 +210,14 @@ def _shade_vinyl(normals, view_dir, base_rgb, metallic: float, roughness: float,
         h /= max(1e-8, float(np.linalg.norm(h)))
         ndh = np.clip(np.sum(n * h, axis=-1, keepdims=True), 0.0, 1.0)
 
-        # Primary PBR specular + subtle satin chitin sheen (not glossy candy clearcoat).
-        spec = spec_norm * (ndh ** min(spec_exp, 140.0)) * f0
-        coat = 0.045 * (ndh ** 56.0) * (1.0 - 0.80 * roughness)
+        # Primary PBR specular; reserve glossy clearcoat highlight strictly for smooth eyes/glass (roughness < 0.25).
+        spec = spec_norm * (ndh ** min(spec_exp, 140.0)) * f0 * ((1.0 - roughness) ** 1.4)
+        coat = 0.08 * (ndh ** 64.0) if roughness < 0.25 else 0.0
         color = color + (diffuse_albedo * ndl + (spec + coat) * (ndl > 0.0)) * l_col
 
-    # Restrained Fresnel rim so beveled edges read cleanly against dark studio backdrop.
-    color = color + fresnel_rim * (0.04 + 0.08 * (1.0 - roughness)) * np.array([0.62, 0.70, 0.82])
+    # Restrained Fresnel rim attenuated strongly on matte materials so chitin reads velvety, not plastic.
+    matte_atten = (1.0 - roughness) ** 2.0
+    color = color + fresnel_rim * (0.015 + 0.09 * matte_atten) * np.array([0.62, 0.70, 0.82])
     return color
 
 
