@@ -1,11 +1,13 @@
 """Sculpted 3D model for the classic Worker Ant.
 
 Built directly on `base_ant` so it keeps the iconic unadorned slim upright
-Worker silhouette (no headwear or tools), with a few subtle sculpted chitin
-finishing touches fitted to the base anatomy: a faceted chest carapace crest, a
-dorsal pronotum ridge, shoulder caps, and wrist cuffs. The base supplies the 3-part eyes, toothed mandibles,
-clubbed antennae, and the pivoted `eyelid_left` / `eyelid_right` nodes with the
-glTF 2.0 "Blink" clip.
+Worker silhouette (no headwear or tools), with subtle smooth sculpted chitin
+finishing touches fitted flush to the base anatomy: a curved chest carapace
+crest, a dorsal pronotum ridge, sleek shoulder fairings, and slim wrist cuffs.
+The base supplies the broad-crowned heart-shield head, huge 3-part alert eyes,
+plump lobster-claw mandibles, flowing ball-free insect legs, clubbed antennae,
+and the pivoted `eyelid_left` / `eyelid_right` nodes with the glTF 2.0 "Blink"
+clip.
 
 Coordinate system (glTF 2.0 right-handed):
   +Y = up (feet grounded cleanly at Y = 0.0)
@@ -25,12 +27,12 @@ except ImportError:
     from base_ant import build_base_ant  # type: ignore
     from mesh_core import SceneBuilder, superellipsoid, torus_arc  # type: ignore
 
-# Slightly poised idle arms (shoulder, elbow, wrist, hand) that keep the chest crest clear.
+# Slightly poised flowing idle arms anchored cleanly at base_ant's shoulder (0.092, 0.476, 0.014).
 _WORKER_ARM_LEFT = [
-    (0.106, 0.440, 0.020),
-    (0.218, 0.400, 0.078),
-    (0.196, 0.354, 0.184),
-    (0.164, 0.348, 0.222),
+    (0.092, 0.476, 0.014),
+    (0.194, 0.436, 0.064),
+    (0.172, 0.388, 0.156),
+    (0.144, 0.382, 0.190),
 ]
 _WORKER_ARM_RIGHT = [(-x, y, z) for x, y, z in _WORKER_ARM_LEFT]
 
@@ -49,19 +51,32 @@ def _ring_across(center: Sequence[float], axis: Sequence[float], major_r: float,
 
 
 def _add_carapace_details(scene: SceneBuilder) -> None:
-    """Subtle sculpted chitin plates fitted flush onto the base thorax and limbs."""
-    # Faceted breastplate crest over the chest plate, and a dorsal pronotum ridge on the back.
-    crest = superellipsoid(0.056, 0.058, 0.022, e1=0.40, e2=0.46, u_segs=14, v_segs=10, name="chest_crest", material="chitin_team").rotate_xyz(rx=0.18).translate(0.0, 0.380, 0.104)
-    ridge = superellipsoid(0.050, 0.028, 0.056, e1=0.40, e2=0.46, u_segs=14, v_segs=10, name="dorsal_ridge", material="chitin_team").rotate_xyz(rx=-0.22).translate(0.0, 0.452, -0.074)
+    """Subtle smooth organic chitin accents fitted flush onto the rounded base thorax and limbs."""
+    # Smooth curved breastplate crest hugging the ovoid chest carapace (no boxy corners).
+    crest = (
+        superellipsoid(0.056, 0.062, 0.024, e1=0.80, e2=0.84, u_segs=16, v_segs=12, name="chest_crest", material="chitin_team")
+        .rotate_xyz(rx=0.10)
+        .translate(0.0, 0.408, 0.096)
+    )
+    # Sleek dorsal pronotum ridge sitting flush atop the rounded rear dorsal carapace.
+    ridge = (
+        superellipsoid(0.048, 0.032, 0.046, e1=0.80, e2=0.84, u_segs=16, v_segs=10, name="dorsal_ridge", material="chitin_team")
+        .rotate_xyz(rx=-0.16)
+        .translate(0.0, 0.448, -0.088)
+    )
     scene.add("body", [crest, ridge])
 
-    # Team-colored shoulder caps over each arm socket.
-    cap = superellipsoid(0.036, 0.028, 0.034, e1=0.60, e2=0.70, u_segs=14, v_segs=10, name="shoulder_cap", material="chitin_team").rotate_xyz(rz=-0.32).translate(0.106, 0.458, 0.020)
+    # Subtle curved team-colored shoulder fairings blending smoothly into the upper arm roots.
+    cap = (
+        superellipsoid(0.032, 0.024, 0.030, e1=0.80, e2=0.84, u_segs=14, v_segs=10, name="shoulder_cap", material="chitin_team")
+        .rotate_xyz(rz=-0.34)
+        .translate(0.094, 0.486, 0.014)
+    )
     scene.add_mirrored("body", cap)
 
-    # Slim wrist cuffs across each forearm just behind the claw hand.
+    # Slim wrist cuffs across each flowing forearm just behind the claw hand.
     wrist, hand = np.asarray(_WORKER_ARM_LEFT[2]), np.asarray(_WORKER_ARM_LEFT[3])
-    scene.add_mirrored("arms", _ring_across(wrist + 0.45 * (hand - wrist), hand - wrist, 0.019, 0.0055, "wrist_cuff"))
+    scene.add_mirrored("arms", _ring_across(wrist + 0.48 * (hand - wrist), hand - wrist, 0.0165, 0.0048, "wrist_cuff"))
 
 
 def build_worker(blink: float = 0.0) -> SceneBuilder:
