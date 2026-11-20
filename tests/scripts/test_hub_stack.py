@@ -173,12 +173,14 @@ class TheServices(unittest.TestCase):
                         self.assertEqual(line.strip(), "%s: ${%s:-}" % (name, name), path)
                         self.assertTrue(path.startswith("docker-compose.st"), path)
 
-    def test_the_stack_has_these_three_services_and_no_profile(self):
+    def test_the_stack_has_these_services_and_only_the_relay_is_behind_a_profile(self):
         text = self.files["stack"]
-        self.assertEqual(top_level_keys(text, "services"), ["ants-beta", "ants-server", "ants-hub"])
+        self.assertEqual(top_level_keys(text, "services"), ["ants-beta", "ants-server", "ants-hub", "ants-turn"])
+        for name in ("ants-beta", "ants-server", "ants-hub"):
+            self.assertNotIn("profiles:", code(service(text, name)), name)
+        self.assertIn('profiles: ["relay"]', code(service(text, "ants-turn")), "the relay is optional: it starts only with the profile, so that the stack deploys without its three variables")
         for dockerfile in ("Dockerfile", "Dockerfile.server", "Dockerfile.hub"):
             self.assertIn("dockerfile: %s\n" % dockerfile, text)
-        self.assertNotIn("profiles:", code(text))
         for line in ("read_only: true", "cap_drop: [ALL]", 'security_opt: ["no-new-privileges:true"]', "pids_limit: 64"):
             self.assertIn(line, service(text, "ants-server"))
         ports = [int(m.group(1) or m.group(2)) for m in re.finditer(r'(?m)^\s+- "(?:\$\{ANTS_WEB_BIND_PREFIX:-\})?(?:127\.0\.0\.1:)?(?:\$\{[A-Z_]+:-(\d+)\}|(\d+)):\d+"\s*$', code(text))]

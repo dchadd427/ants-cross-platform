@@ -34,6 +34,7 @@
 #include <string>
 #include <vector>
 
+#include "ants_net/p2p.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_net/transport.hpp"
 #include "ants_net/turnlog.hpp"
@@ -93,6 +94,7 @@ struct ServerLimits {
     uint32_t live_delay_s{LiveBoard::kDefaultDelayS};                // the seconds that the public live door shows a match with two or more people late (--live-delay-seconds, 0 - 300; 0: as it is; live_board.hpp)
     size_t room_log_bytes{net::TurnLog::kDefaultMaxBytes};          // the limit of one room's turn log (16 MiB)
     uint64_t log_budget_bytes{256ull * 1024ull * 1024ull};          // the memory that all the rooms' logs may take together; a log that cannot grow is not kept (its room drops a lost seat at once)
+    std::shared_ptr<const net::TurnSettings> turn;                  // protocol 26: the relay that the players' channels go through (--turn-host and ANTS_TURN_SECRET); null: none, and nobody opens a channel
 };
 
 /// A public room's cap on the match's pauses: the match of a page's link that nobody comes back to must not hold one of the few public places for the server's 30 minutes. A public room takes the smaller of

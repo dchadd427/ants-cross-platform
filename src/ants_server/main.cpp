@@ -56,6 +56,11 @@
 //   --solo-countdown-seconds N
 //                      a room of exactly one person, with or without computer players, holds the first turn of its match the shorter of this and --start-countdown-seconds, with the same card (0 - 60, default 10,
 //                      0 = the plain 5 s dialog; the control interface's "solo_countdown_seconds")
+//   --turn-host HOST[:PORT]
+//                      protocol 26 (docs/P2P_HINTS.md): the relay that the players' browsers connect through (a coturn in shared-secret mode; the variable ANTS_TURN_HOST names it when the option is not
+//                      given). Needs the secret in the environment variable ANTS_TURN_SECRET (never on the command line). With both, every player of a match is handed a short-lived credential for it
+//                      and the players open channels that carry their orders to each other ahead of their turns; without either of them, nobody opens a channel and the match is what it always was
+//                      The relay's port is 3478 (TURN's own) unless the :PORT of the name or the environment variable ANTS_TURN_PORT says another (when both are given they must be the same number: else no relay).
 //   --log-mb N         the limit of one room's turn log, which a returning player is given the match from, in MiB (1 - 256, default 16); the logs of all the rooms together may take 256 MiB
 //   --restart-dir DIR  where the rooms that hold seats keep their RESTART RECORDS (restart_record.hpp, docs/NETWORK_PORT.md "Restart records"): from the start of its match to its end a room
 //                      writes every sealed turn to a file here (mode 600: it holds the keys of the seats) BEFORE the turn is sent to anybody, so that a server that is stopped, crashes or is
@@ -143,6 +148,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
@@ -150,6 +156,7 @@
 #include "ants_app/version.hpp"
 #include "ants_ctl/http.hpp"
 #include "ants_net/tcp.hpp"
+#include "ants_net/turn.hpp"
 #include "ants_net/ws.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_server/admin_audit.hpp"
@@ -205,6 +212,7 @@ struct Options {
     long solo_countdown_s{static_cast<long>(ants::net::kSoloCountdownSeconds)};       // --solo-countdown-seconds (a room of one person)
     long live_delay_s{static_cast<long>(ants::server::LiveBoard::kDefaultDelayS)};    // --live-delay-seconds (the public live door shows a match of two or more people this late)
     long log_mb{16};
+    std::string turn_host;                     // --turn-host (protocol 26: the relay; empty: the environment variable ANTS_TURN_HOST, else none)
     std::string restart_dir;                   // --restart-dir (empty: the folder "restart" in the results folder, when there is one)
     bool no_restart_records{false};
     long restart_vote_s{90};
@@ -247,9 +255,9 @@ void usage(FILE* to) {
                  "                    [--replay-port N] [--replay-any-interface] [--bot-match-every-min 0|5-1440] [--db FILE | --no-db] [--no-history]\n"
                  "                    [--submit-port N] [--submit-any-interface] [--submissions-dir DIR] [--submit-max-waiting N] [--submit-per-address N] [--submit-ignore-client-header]\n"
                  "                    [--test-map-port N] [--test-map-any-interface] [--test-maps-dir DIR] [--test-map-ignore-client-header]\n"
-                 "                    [--map-picture-program PATH --map-picture-archive FILE [--map-pictures-dir DIR]]\n"
+                 "                    [--map-picture-program PATH --map-picture-archive FILE [--map-pictures-dir DIR]] [--turn-host HOST[:PORT]]\n"
                  "  the control interface takes its secret from the environment variable ANTS_SERVER_SECRET; without it the server makes one and keeps it\n"
-                 "  in --secret-file (default: control-secret in --results-dir)\n");
+                 "  in --secret-file (default: control-secret in --results-dir); the relay's secret (--turn-host) from ANTS_TURN_SECRET, its port from ANTS_TURN_PORT\n");
 }
 
 bool parse_port(const char* text, uint16_t& out) {
@@ -422,6 +430,8 @@ int main(int argc, char** argv) {
                 std::fprintf(stderr, "--restart-dir takes a folder\n");
                 return 2;
             }
+        } else if (a == "--turn-host") {
+            o.turn_host = value("--turn-host");
         } else if (a == "--no-restart-records") {
             o.no_restart_records = true;
         } else if (a == "--hold-vote-seconds" || a == "--max-pause-seconds" || a == "--max-catch-up-seconds" || a == "--resume-countdown-seconds" || a == "--start-countdown-seconds" || a == "--solo-countdown-seconds" || a == "--live-delay-seconds" || a == "--log-mb" || a == "--restart-vote-seconds" ||
@@ -629,6 +639,16 @@ int main(int argc, char** argv) {
     limits.solo_countdown_s = static_cast<uint32_t>(o.solo_countdown_s);
     limits.live_delay_s = static_cast<uint32_t>(o.live_delay_s);
     limits.room_log_bytes = static_cast<size_t>(o.log_mb) * 1024u * 1024u;
+    {                                                                 // the relay of protocol 26: its name from the option or ANTS_TURN_HOST, its port from the name or ANTS_TURN_PORT (ants_net/turn.hpp)
+        const auto text = [](const char* v) { return std::string(v != nullptr ? v : ""); };
+        limits.turn = ants::net::make_turn_settings(o.turn_host.empty() ? text(std::getenv("ANTS_TURN_HOST")) : o.turn_host, text(std::getenv("ANTS_TURN_PORT")), text(std::getenv("ANTS_TURN_SECRET")));
+    }      // (the secret stays in this closure: not in a log, a record or a room's spec)
+    if (!o.turn_host.empty() && limits.turn == nullptr) {
+        std::fprintf(stderr, "--turn-host needs a host name (letters, digits, '.', '-', an optional :port that agrees with ANTS_TURN_PORT when that is set) and the secret in the environment variable ANTS_TURN_SECRET\n");
+        return 2;
+    }
+    log(limits.turn != nullptr ? "players' channels: on (relay " + limits.turn->urls.front().substr(5) + "; each player of a match is handed a short-lived credential for it; hints go between them ahead of the turns)"
+                               : std::string("players' channels: off (no relay: --turn-host or ANTS_TURN_HOST (the port: its :PORT or ANTS_TURN_PORT, 3478 otherwise), and ANTS_TURN_SECRET)"));
     ants::server::MapStore store{o.maps_dir, o.community_maps_dir};
     {
         std::vector<std::string> map_notes;

@@ -121,7 +121,7 @@ void HUD::render_match_countdown_new(IRenderer& renderer, const assets::AssetArc
         put_sprite(renderer, art, kDots[seat], r.x + 9, r.y + 8);
         std::string name = who.name.empty() ? std::string(kTeamNames[seat]) : who.name;
         if (seat == local_player_id_ && !who.computer) name += " (you)";
-        const char* tag = who.computer ? "bot" : "in";
+        const char* tag = countdown_tag(who);
         const int32_t tag_w = renderer.get_text_width(tag, FontSize::Px14);
         renderer.draw_text_squeezed(name, r.x + 28, r.y + (r.h - 18) / 2, cream, FontSize::Px18, r.w - 28 - tag_w - 12);
         renderer.draw_text(tag, r.right() - tag_w - 9, r.y + (r.h - 14) / 2, who.computer ? ColorRGBA{168, 194, 184, 255} : ColorRGBA{143, 224, 178, 255}, FontSize::Px14);

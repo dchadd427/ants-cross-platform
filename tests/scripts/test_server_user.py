@@ -28,7 +28,14 @@ class TheServerUser(unittest.TestCase):
         self.assertGreaterEqual(len(files), 3)
         for path in files:
             text = code(os.path.relpath(path, REPO))
-            self.assertNotIn("cap_add", text, path)
+            if "ants-turn:" in text:                                  # the relay (coturn, docs/SERVER.md): the one service that adds a capability, exactly the one that binds its port, after dropping all of them
+                start = text.index("  ants-turn:")
+                end = text.find("\n  ants-", start + 1)
+                relay = text[start:end if end != -1 else len(text)]
+                self.assertIn("cap_drop: [ALL]\n    cap_add: [NET_BIND_SERVICE]", relay, path)
+                self.assertEqual(text.count("cap_add"), 1, path)
+            else:
+                self.assertNotIn("cap_add", text, path)
             self.assertNotRegex(text, r"(?m)^\s*user:\s*[\"']?(0|root)\b", path)
 
 

@@ -86,9 +86,7 @@ sim::StateHash Prediction::derived_hash() const {
             for (const sim::Command& cmd : turn->commands) scratch.apply_command(cmd);
             return;
         }
-        for (const Pending& p : pending_) {
-            if (std::min(std::max(p.tick, next_receive), target) == tick) scratch.apply_command(p.command);
-        }
+        for (const sim::Command& cmd : commands_without_turn(tick, next_receive, target)) scratch.apply_command(cmd);
     };
     for (uint64_t t = c; t < target; ++t) {
         apply(t);
@@ -100,6 +98,41 @@ sim::StateHash Prediction::derived_hash() const {
 
 bool Prediction::predicts(sim::CommandType type) noexcept {
     return type == sim::CommandType::GroupMove || type == sim::CommandType::GroupSpecial || type == sim::CommandType::GroupAttack || type == sim::CommandType::Stop;
+}
+
+bool Prediction::SeqWindow::take(uint32_t seq) noexcept {
+    if (!any) {
+        any = true;
+        highest = seq;
+        bits = 1u;
+        return true;
+    }
+    if (seq > highest) {
+        const uint32_t d = seq - highest;
+        bits = d >= 64u ? 0u : bits << d;
+        bits |= 1u;
+        highest = seq;
+        return true;
+    }
+    const uint32_t d = highest - seq;
+    if (d >= 64u || ((bits >> d) & 1u) != 0u) return false;                    // a copy that was seen, or older than the window (every number in it was long since sealed or lost)
+    bits |= uint64_t{1} << d;
+    return true;
+}
+
+// The own orders that wait for `tick` (the tick a rebuild puts them at: not behind a turn in hand, not past the display tick) and the hints at `tick`, in the order that a turn has: by seat, each seat's
+// commands in the order they were given (a stable sort of own orders and hints, which are in that order each). A hint is put at its tick or later, never earlier than a turn in hand and never held back
+// to the display tick: a hint beyond the display tick waits for it.
+std::vector<sim::Command> Prediction::commands_without_turn(uint64_t tick, uint64_t next_receive, uint64_t target) const {
+    std::vector<sim::Command> out;
+    for (const Pending& p : pending_) {
+        if (std::min(std::max(p.tick, next_receive), target) == tick) out.push_back(p.command);
+    }
+    for (const Foreign& h : hints_) {
+        if (std::max(h.tick, next_receive) == tick) out.push_back(h.command);
+    }
+    std::stable_sort(out.begin(), out.end(), [](const sim::Command& a, const sim::Command& b) { return a.issuer < b.issuer; });
+    return out;
 }
 
 void Prediction::set_suspended(bool suspended) {
@@ -188,7 +221,10 @@ void Prediction::begin(uint64_t c) {
     if (c > stopped_at_ + 1u) shifts_.clear();                       // (what a stop left that nobody took: about a picture that is gone)
     running_ = true;
     stale_ = false;
+    stale_hint_ = false;
     pending_.clear();
+    hints_.clear();
+    sealed_seen_.clear();
     ++stats_.starts;
     target_lead_ = wanted_lead();
     lead_ = target_lead_;
@@ -206,11 +242,15 @@ void Prediction::stop() {
     }
     running_ = false;
     stale_ = false;
+    stale_hint_ = false;
     assumed_.clear();
     pending_.clear();
+    hints_.clear();
+    sealed_seen_.clear();
     audio_.clear();
     news_.clear();
     lags_.clear();                                                   // (what the orders taught is about the link and the buffer as they were: a host change, a rejoin or a pause may end with another lag)
+    phase_.clear();                                                  // (so is the phase of the seals and the delay)
 }
 
 sim::SimulationEngine& Prediction::engine() {
@@ -227,11 +267,17 @@ void Prediction::apply_commands_for(uint64_t tick) {
         for (const sim::Command& c : turn->commands) pred_.apply_command(c);
         applied = turn->commands;
     } else {
+        // (the rebuild has put every waiting order and hint at its tick already: `tick` is both the next-receive and the target here)
         for (const Pending& p : pending_) {
             if (p.tick != tick) continue;
-            pred_.apply_command(p.command);
             applied.push_back(p.command);
         }
+        for (const Foreign& h : hints_) {
+            if (h.tick != tick) continue;
+            applied.push_back(h.command);
+        }
+        std::stable_sort(applied.begin(), applied.end(), [](const sim::Command& a, const sim::Command& b) { return a.issuer < b.issuer; });
+        for (const sim::Command& c : applied) pred_.apply_command(c);
     }
     assumed_.push_back(std::move(applied));
 }
@@ -311,6 +357,7 @@ void Prediction::rebuild(uint64_t target, bool is_start) {
     if (target < c) target = c;
     if (!pending_.empty() && target < next_receive) target = next_receive;      // (an order is never applied behind a turn that is in hand: that turn was sealed without it)
     for (Pending& p : pending_) p.tick = std::min(std::max(p.tick, next_receive), target);
+    for (Foreign& h : hints_) h.tick = std::max(h.tick, next_receive);        // (a hint is never put behind a turn in hand; one beyond the display tick waits for it)
     ++generation_;
     std::vector<sim::AntSnapshot> after;                               // the rebuilt engine at the tick that was on screen (a rebuild may also catch up the ticks that a stale engine skipped)
     bool have_after = false;
@@ -341,10 +388,12 @@ void Prediction::rebuild(uint64_t target, bool is_start) {
         stats_.rebuild_ns_max = std::max(stats_.rebuild_ns_max, ns);
         if (stale_foreign_) ++stats_.rebuilds_foreign;
         else if (stale_own_timing_) ++stats_.rebuilds_own_timing;
+        else if (stale_hint_) ++stats_.rebuilds_hint;
         else ++stats_.rebuilds_other;
     }
     stale_foreign_ = false;
     stale_own_timing_ = false;
+    stale_hint_ = false;
 
     if (measure && have_after) {                                     // the same tick before and after: what the player would have seen change
         std::unordered_map<uint32_t, const sim::AntSnapshot*> was;
@@ -393,6 +442,16 @@ void Prediction::drop_lost_orders(uint64_t confirmed_tick_now) {
         ++stats_.commands_lost;
         stale_ = true;
     }
+    for (size_t i = 0; i < hints_.size();) {                         // a hint that no turn has carried for as long is dropped too (the server refused the order, or it never came)
+        if (confirmed_tick_now > hints_[i].born + cfg_.pending_timeout_ticks) {
+            hints_.erase(hints_.begin() + static_cast<std::ptrdiff_t>(i));
+            ++stats_.hints_dropped;
+            stale_ = true;
+            stale_hint_ = true;
+        } else {
+            ++i;
+        }
+    }
 }
 
 bool Prediction::submit(const sim::Command& command, sim::CommandResult& result) {
@@ -407,12 +466,31 @@ bool Prediction::submit(const sim::Command& command, sim::CommandResult& result)
     result = pred_.apply_command(command);
     assumed_.back().push_back(command);
     pending_.push_back(Pending{command, display_, confirmed_tick(), display_});
+    last_order_tick_ = display_;
+    // The tick that a hint of this order names: where the server will seal it, when the phase of its seals says (one more or less than the tick that this screen applies it at is the usual
+    // difference, and a hint a tick off is a whole step of a walking ant); never in a turn that has arrived, and never far from the display tick (then the phase is wrong, not the order)
+    Pending& given = pending_.back();
+    last_order_hint_tick_ = display_;
+    if (time_known_) {
+        given.given_ms = now_ms_;
+        given.timed = true;
+        if (const std::optional<uint64_t> sealed = phase_.sealed_turn_for(now_ms_)) {
+            if (*sealed + 2u >= display_ && *sealed <= display_ + 3u) {
+                const uint64_t k = std::max<uint64_t>(*sealed, next_receive);
+                given.phased = true;
+                given.hint_tick = k;
+                last_order_hint_tick_ = k;
+                ++stats_.order_hints_phase;
+            }
+        }
+    }
     ++stats_.commands_predicted;
     return true;
 }
 
 // A live turn is in the queue now. If the prediction has already started its tick, the turn must carry exactly what the prediction applied there.
 void Prediction::on_turn(const TurnMsg& turn) {
+    if (time_known_) phase_.note_arrival(turn.turn, now_ms_);
     if (!running_ || suspended_) return;
     ++stats_.turns_checked;
     const uint64_t n = turn.turn;
@@ -421,7 +499,10 @@ void Prediction::on_turn(const TurnMsg& turn) {
     bool own_timing = false;
     for (const sim::Command& cmd : turn.commands) {
         if (cmd.issuer != cfg_.seat) {
-            foreign = true;
+            if (!take_hint_for(cmd, n, wrong)) {                     // (a command that no hint announced: the prediction learns it now, as it always did)
+                foreign = true;
+                if (predicts(cmd.type)) sealed_seen_.push_back(SealedSeen{cmd, n, false});
+            }
             continue;
         }
         size_t i = 0;
@@ -431,6 +512,8 @@ void Prediction::on_turn(const TurnMsg& turn) {
             lags_.emplace_back(static_cast<uint32_t>(std::min<uint64_t>(n >= pending_[i].born ? n - pending_[i].born : 0u, cfg_.max_lead_ticks)), confirmed_tick());
             while (lags_.size() > cfg_.lag_samples) lags_.pop_front();
         }
+        if (pending_[i].timed) phase_.note_order(pending_[i].given_ms, n);
+        if (pending_[i].phased && n == pending_[i].hint_tick) ++stats_.order_hints_exact;
         if (pending_[i].tick != n) own_timing = true;                // sealed at another tick than the one at which the prediction applied it
         ++(n == pending_[i].first_tick ? stats_.sealed_exact : n < pending_[i].first_tick ? stats_.sealed_early : stats_.sealed_late);
         if (i > 0) {                                                 // the orders before it were given earlier and have not been sealed: the host did not take them
@@ -440,6 +523,7 @@ void Prediction::on_turn(const TurnMsg& turn) {
         pending_.erase(pending_.begin(), pending_.begin() + static_cast<std::ptrdiff_t>(i) + 1);
     }
     if (own_timing) wrong = true;
+    while (!sealed_seen_.empty() && sealed_seen_.front().turn + 64u < n) sealed_seen_.erase(sealed_seen_.begin());
     if (!stale_ && n >= base_tick_ && n <= display_) {
         const size_t index = static_cast<size_t>(n - base_tick_);
         if (index >= assumed_.size() || !(assumed_[index] == turn.commands)) wrong = true;
@@ -458,6 +542,92 @@ void Prediction::on_turn(const TurnMsg& turn) {
         p.tick = p.misses == 0 ? n + 1u : display_;                  // (a rebuild puts it no later than the display tick and never behind a turn in hand)
         ++p.misses;
     }
+    // A hint is a guess: the first turn that comes without it moves it to the next tick (the sealed tick of an order is most often one off), the second one drops it: the sealed stream wins
+    for (size_t i = 0; i < hints_.size();) {
+        if (hints_[i].tick > n) {
+            ++i;
+        } else if (hints_[i].misses == 0) {
+            hints_[i].tick = n + 1u;
+            ++hints_[i].misses;
+            ++i;
+        } else {
+            hints_.erase(hints_.begin() + static_cast<std::ptrdiff_t>(i));
+            ++stats_.hints_dropped;
+        }
+    }
+}
+
+// The sealed command `cmd` of another seat meets the hints. True when a hint announced it (the oldest hint of that seat that equals it: the hints are sorted by seat and number); the hints of that seat before
+// it were not sealed (the server takes a seat's orders in the order they came), so they are dropped. `wrong` is set when the prediction has to be corrected: a hint was dropped, or it stood at another tick.
+bool Prediction::take_hint_for(const sim::Command& cmd, uint64_t n, bool& wrong) {
+    size_t i = 0;
+    while (i < hints_.size() && !(hints_[i].command == cmd)) ++i;
+    if (i == hints_.size()) return false;
+    size_t first = i;
+    while (first > 0 && hints_[first - 1].command.issuer == cmd.issuer) --first;
+    if (first < i) {
+        stats_.hints_dropped += i - first;
+        wrong = true;
+        stale_hint_ = true;
+    }
+    if (hints_[i].tick == n) {
+        ++stats_.hints_confirmed;
+    } else {
+        ++stats_.hints_confirmed_moved;
+        wrong = true;
+        stale_hint_ = true;
+    }
+    hints_.erase(hints_.begin() + static_cast<std::ptrdiff_t>(first), hints_.begin() + static_cast<std::ptrdiff_t>(i) + 1);
+    return true;
+}
+
+Prediction::HintVerdict Prediction::hint(const sim::Command& command, uint32_t seq, uint64_t tick) {
+    ++stats_.hints_received;
+    if (!running_ || suspended_ || command.issuer >= sim::MAX_PLAYERS || command.issuer == cfg_.seat || !predicts(command.type) || hints_.size() >= cfg_.max_hints) {
+        ++stats_.hints_refused;
+        return HintVerdict::Refused;
+    }
+    if (!seen_[command.issuer].take(seq)) {
+        ++stats_.hints_duplicate;
+        return HintVerdict::Duplicate;
+    }
+    const uint64_t next_receive = runner_->next_turn_expected();
+    bool late = tick + cfg_.hint_max_age_ticks < next_receive;       // older than any order that is not sealed yet
+    for (SealedSeen& s : sealed_seen_) {
+        if (late || s.matched || !(s.command == command)) continue;
+        s.matched = true;                                           // the turn that carries this order came before its hint
+        late = true;
+    }
+    if (late) {
+        ++stats_.hints_late;
+        return HintVerdict::Late;
+    }
+    const uint64_t horizon = std::max<uint64_t>(display_, next_receive) + cfg_.max_lead_ticks;      // (a hint that stands far ahead of the display waits there for nothing: a number that no honest sender makes)
+    Foreign f{command, seq, std::min(std::max(tick, next_receive), horizon), confirmed_tick(), 0};
+    const uint64_t at = f.tick;
+    const auto pos = std::upper_bound(hints_.begin(), hints_.end(), f, [](const Foreign& a, const Foreign& b) {
+        return a.command.issuer != b.command.issuer ? a.command.issuer < b.command.issuer : a.seq < b.seq;
+    });
+    hints_.insert(pos, std::move(f));
+    ++stats_.hints_accepted;
+    if (stale_) return HintVerdict::Accepted;                       // (the rebuild that is due has it)
+    if (at < display_) {
+        stale_ = true;                                              // the engine is past the tick: a rebuild puts the order there
+        stale_hint_ = true;
+    } else if (at == display_) {
+        bool in_order = !assumed_.empty();                          // applied now, as an own order is, when that keeps the order of a turn (a rebuild would give the same engine); else a rebuild
+        if (in_order) {
+            for (const sim::Command& c : assumed_.back()) in_order = in_order && c.issuer < command.issuer;
+        }
+        if (in_order) {
+            pred_.apply_command(command);
+            assumed_.back().push_back(command);
+        } else {
+            stale_ = true;
+            stale_hint_ = true;
+        }
+    }
+    return HintVerdict::Accepted;
 }
 
 void Prediction::on_tick() {
