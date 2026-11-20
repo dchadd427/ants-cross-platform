@@ -557,6 +557,41 @@
    "old": "bot_waiting_stopped: 'Cancelled a waiting start on ', ",
    "new": "",
    "why": "the log does not word a cancelled waiting start"
+  },
+  {
+   "id": "bots_a_schedule_form_has_no_spacing_field",
+   "file": "web/admin_bots.js",
+   "old": "it starts as many as fit.', 'run');",
+   "new": "it starts as many as fit.', false);",
+   "why": "the form of a schedule has no field for the spacing"
+  },
+  {
+   "id": "bots_the_hint_of_a_schedule_says_now",
+   "file": "web/admin_bots.js",
+   "old": "first = withSpacing === 'run' ? 'when the schedule runs' : 'now'",
+   "new": "first = 'now'",
+   "why": "the hint of a schedule says that its first match starts now"
+  },
+  {
+   "id": "bots_a_spacing_that_the_server_refuses_is_not_told_in_a_schedule",
+   "file": "web/admin_bots.js",
+   "old": "e === 'bad_spacing' ? 'Start one every: 0 to '",
+   "new": "false ? 'Start one every: 0 to '",
+   "why": "a spacing that the server refuses in a schedule is not told"
+  },
+  {
+   "id": "bots_delete_does_not_say_that_the_waiting_starts_go_on",
+   "file": "web/admin_bots.js",
+   "old": "(s.what.count > 1 && s.what.every_s ? ' Its starts that still wait go on too.' : '')",
+   "new": "''",
+   "why": "the question of Delete does not say that the starts that wait go on"
+  },
+  {
+   "id": "bots_a_schedule_row_does_not_say_its_spacing",
+   "file": "web/admin_bots.js",
+   "old": "(w.count > 1 && w.every_s ? ', ' + spacingWords(w.every_s) : '')",
+   "new": "''",
+   "why": "a schedule row does not say its spacing"
   }
  ]
 }

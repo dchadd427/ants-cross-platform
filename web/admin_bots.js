@@ -132,12 +132,12 @@
         }
 
         // The choices of one batch of bot matches, as Start now and a schedule both have them: { node, value(), set(v), onChange, setCountLabel, refresh }. `ctx` is what the section knows (the maps of the server and the
-        // lists of the rotation, asked when they are needed: a call of the section can bring new ones while a form is open). `withSpacing` adds the field of the spacing: Start now has it, a schedule starts all its matches at once.
+        // lists of the rotation, asked when they are needed: a call of the section can bring new ones while a form is open). `withSpacing` adds the field of the spacing: 'now' for Start now, 'run' for a schedule (its first match starts when it runs).
         function choices(pre, ctx, init, countLabel, countWords, withSpacing) {
             var v = {}, listeners = [];
             Object.keys(init).forEach(function (k) { v[k] = k === 'levels' ? paddedLevels(init[k]) : init[k]; });
             if (typeof v.every_s !== 'number') v.every_s = 0;
-            var node = el('div');
+            var node = el('div'), first = withSpacing === 'run' ? 'when the schedule runs' : 'now';
             function changed() { sync(); listeners.forEach(function (fn) { fn(v); }); }
             var count = stepper(countLabel, pre + '-count', 1, CAP, v.count, function (n) { v.count = n; changed(); });
             var countHint = el('div', 'fh');
@@ -239,8 +239,8 @@
                 everyF.hidden = !(withSpacing && v.count > 1);
                 everyHint.className = 'fh' + (v.every_s < 0 ? ' bad' : '');
                 everyI.className = 'tinput' + (v.every_s < 0 ? ' err' : '');
-                everyHint.textContent = v.every_s < 0 ? 'Whole or half minutes, from 0 to ' + EVERY_MAX_MIN + '.' : v.every_s === 0 ? 'All ' + v.count + ' start at once. Give a time to start the first now and the others one after another.' :
-                    'The first starts now, then ' + spacingWords(v.every_s) + ': the last in ' + inWords((v.count - 1) * v.every_s) + '. A start that waits is lost if the server restarts; a schedule is kept.';
+                everyHint.textContent = v.every_s < 0 ? 'Whole or half minutes, from 0 to ' + EVERY_MAX_MIN + '.' : v.every_s === 0 ? 'All ' + v.count + ' start at once. Give a time to start the first ' + first + ' and the others one after another.' :
+                    'The first starts ' + first + ', then ' + spacingWords(v.every_s) + ': the last in ' + inWords((v.count - 1) * v.every_s) + '. A start that waits is lost if the server restarts' + (withSpacing === 'run' ? '.' : '; a schedule is kept.');
                 paintMapBtn();
                 mapHint.className = 'fh';
                 if (mp && mp.file === 'ISLANDS.LVL' && v.rules === '187') { mapHint.textContent = 'ISLANDS is not played in 187: its water joins no two hills, so nobody could be struck. Choose another map or the rules Highest score.'; mapHint.className = 'fh bad'; }
@@ -315,7 +315,7 @@
             function startLabel() { var n = picked ? picked.value().count : 1; return 'Start ' + plural(n, 'bot match', 'bot matches'); }
             function drawNow() {
                 nowForm.textContent = '';
-                picked = choices('now', ctx, defaults(), 'Matches to start', CAP + ' at the most, with the ones that run now.', true);
+                picked = choices('now', ctx, defaults(), 'Matches to start', CAP + ' at the most, with the ones that run now.', 'now');
                 startBtn = button(startLabel(), 'big ok', function () { start(); });
                 picked.onChange(function () { startBtn.textContent = startLabel(); });
                 add(nowForm, picked.node, startMsg, add(el('div', 'startrow'), startBtn));
@@ -561,7 +561,7 @@
             function askDelete(s) {
                 var t = el('span');
                 add(t, doc.createTextNode('Delete '), typed('span', null, s.name), doc.createTextNode('?'));
-                ask(t, 'It starts nothing from now on.' + (s.default ? ' This is the schedule that the server began with (' + whenWords(s).toLowerCase() + '): until you add another, nothing starts by itself.' : '') + ' Matches that it started and that still run go on.', 'Delete', 'bad', function () {
+                ask(t, 'It starts nothing from now on.' + (s.default ? ' This is the schedule that the server began with (' + whenWords(s).toLowerCase() + '): until you add another, nothing starts by itself.' : '') + ' Matches that it started and that still run go on.' + (s.what.count > 1 && s.what.every_s ? ' Its starts that still wait go on too.' : ''), 'Delete', 'bad', function () {
                     call('POST', '/admin/api/bot-schedules/' + s.id + '/delete', {}).then(function (r) {
                         if (st.dead) return;
                         if (r.status === 200 || (r.status === 404 && r.json && r.json.error === 'gone')) return loadAll(true);
@@ -619,7 +619,7 @@
                 }
                 drawWhen();
                 function sayForm(cls, parts) { msgBox.textContent = ''; if (!parts) return; var m = message(null, cls); parts.forEach(function (n) { add(m, doc.createTextNode(n)); }); add(msgBox, m); }
-                var what = choices('sc', ctx, s.what, 'Matches each time', '1 to ' + CAP + '. When fewer places are free at that time, it starts as many as fit.', false);
+                var what = choices('sc', ctx, s.what, 'Matches each time', '1 to ' + CAP + '. When fewer places are free at that time, it starts as many as fit.', 'run');
                 var onG = chipGroup('The schedule is', 'sc-on', [['on', 'On'], ['off', 'Off']], on ? 'on' : 'off', function (x) { on = x === 'on'; });
                 var save = button('Save', 'big ok', function () {
                     if (st.saving) return;                                                                     // (a second click while the first is on its way is the same save, not another schedule)
@@ -634,7 +634,7 @@
                         if (r.status === 200) { st.editing = null; return loadAll(true); }
                         if (refused(r)) return;
                         var e = r.json && r.json.error;
-                        sayForm('bad', [e === 'bad_every' ? 'Every N minutes: a whole number from 5 to 1440.' : e === 'no_times' ? 'Add at least one time of the day.' : e === 'bad_name' ? 'Give the schedule a name of 1 to 40 characters.' : e === 'too_many' ? 'There are 20 schedules already. Delete one first.' : e === 'gone' ? 'That schedule is not there any more. Cancel and reload the page.' : 'That did not work. Reload the page.']);
+                        sayForm('bad', [e === 'bad_spacing' ? 'Start one every: 0 to ' + EVERY_MAX_MIN + ' minutes, in whole or half minutes.' : e === 'bad_every' ? 'Every N minutes: a whole number from 5 to 1440.' : e === 'no_times' ? 'Add at least one time of the day.' : e === 'bad_name' ? 'Give the schedule a name of 1 to 40 characters.' : e === 'too_many' ? 'There are 20 schedules already. Delete one first.' : e === 'gone' ? 'That schedule is not there any more. Cancel and reload the page.' : 'That did not work. Reload the page.']);
                     }, function () { st.saving = false; save.disabled = false; sayForm('bad', ['The server did not answer. Try again.']); });
                 });
                 add(form, nameF, whenG.box, whenBox, el('hr'), el('div', 'flab', 'What it starts'), what.node, el('hr'), onG.box, msgBox,
