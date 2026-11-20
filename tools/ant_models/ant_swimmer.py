@@ -41,12 +41,12 @@ except ImportError:
         torus_arc,
     )
 
-# Compact right-arm hold keeping the yellow spade tucked cleanly inside Swimmer's authentic ~0.64-0.70 width.
+# Natural bent-elbow right-arm hold gripping the shovel D-handle cleanly at Swimmer's right side/front-right.
 _SWIMMER_RIGHT_ARM: List[Tuple[float, float, float]] = [
     (-0.114, 0.438, 0.022),
-    (-0.214, 0.408, 0.090),
-    (-0.214, 0.412, 0.210),
-    (-0.204, 0.428, 0.262),
+    (-0.214, 0.402, 0.080),
+    (-0.236, 0.380, 0.172),
+    (-0.230, 0.392, 0.234),
 ]
 
 
@@ -68,10 +68,10 @@ def _build_scuba_mask(scene: SceneBuilder, head_center: Tuple[float, float, floa
     Returns the left-side temple strap anchor `(x, y, z)` for mounting the banded snorkel keeper.
     """
     hx, hy, hz = head_center
-    mask_y = hy - 0.008  # ~0.716, centered over Pass 2 eyes (0.712)
-    mask_z_front = hz + 0.302  # ~0.352, cleanly clear of blinking eyelids (Z <= 0.319)
-    rx_frame = 0.208
-    ry_frame = 0.130
+    mask_y = hy - 0.008  # ~0.716, centered over Pass 3 wide-alert eyes (0.712)
+    mask_z_front = hz + 0.307  # ~0.357, generous +8mm clearance ahead of closed eyelids (Z <= 0.325)
+    rx_frame = 0.212
+    ry_frame = 0.132
     oval_exp = 0.72
 
     n_loop = 48
@@ -296,9 +296,9 @@ def _build_snorkel(scene: SceneBuilder, head_center: Tuple[float, float, float],
 def _build_scuba_tank(scene: SceneBuilder, back_anchor: Tuple[float, float, float]) -> None:
     """Build compact brushed-steel scuba air tank with brass gauge, valve, and harness on back-right (-X, -Z)."""
     bx, by, bz = back_anchor
-    tank_x = bx - 0.210  # Peeks prominently behind the ant's right shoulder (-X), matching HD reference
-    tank_y = by + 0.262  # ~0.630, valve peeks cleanly at shoulder/cheek level just like the HD reference
-    tank_z = bz - 0.044  # ~-0.186, clear behind the cranium & dorsal thorax
+    tank_x = bx - 0.194  # Tucked slightly tighter behind the ant's right shoulder (-X) for crisp 901 E depth
+    tank_y = by + 0.256  # ~0.624, valve peeks cleanly at shoulder/cheek level just like the HD reference
+    tank_z = bz - 0.028  # ~-0.170, snug against dorsal thorax behind cranium
 
     parts: List[MeshPart] = []
 
@@ -419,165 +419,160 @@ def _make_diving_flipper(name: str, length: float = 0.165, blade_w: float = 0.08
         top_mask = (p[:, 1] > 0.0).astype(np.float64)
         rail = np.exp(-((nx - 0.88) / 0.16) ** 2) * np.clip((u - 0.18) / 0.30, 0.0, 1.0)
         center_rib = np.exp(-((nx / 0.18) ** 2)) * np.clip((u - 0.20) / 0.25, 0.0, 1.0)
-        heel_pocket = np.exp(-((u / 0.24) ** 2))
-        p[:, 1] += top_mask * (0.007 * rail + 0.005 * center_rib + 0.014 * heel_pocket)
+        heel_pocket = np.exp(-((u / 0.34) ** 2))
+        p[:, 1] += top_mask * (0.007 * rail + 0.005 * center_rib + 0.024 * heel_pocket)
 
         # Taper blade thickness cleanly toward the tip while keeping underside strictly flat.
-        p[:, 1] = np.where(p[:, 1] > 0.0, p[:, 1] * (1.0 - 0.36 * u), -0.009)
+        p[:, 1] = np.where(p[:, 1] > 0.0, p[:, 1] * (1.0 - 0.32 * u), -0.009)
         return p
 
-    fin = rounded_box(blade_w, 0.018, length, bevel=0.006, segs=4, name=name, material="gear_dark").deform(_sculpt_fin)
+    fin = rounded_box(blade_w, 0.020, length, bevel=0.006, segs=4, name=name, material="gear_dark").deform(_sculpt_fin)
     bmin, _ = fin.bounds()
     # Ground flat sole strictly to Y = 0.0 and shift heel pocket over local Z = 0.
     return fin.translate(0.0, -float(bmin[1]), 0.34 * length)
 
 
 def _build_flippers(scene: SceneBuilder) -> None:
-    """Attach sculpted dark rubber diving flippers solidly on the ant's feet at Y = 0.0."""
+    """Attach sculpted dark rubber diving flippers solidly on the sturdy Pass 3 feet at Y = 0.0."""
     # Rear feet: (0.178, 0.0, -0.192), yaw = pi - 0.30 (pointing backward-outward).
-    rear_fin = _make_diving_flipper("flipper_rear", length=0.168, blade_w=0.090)
-    rear_placed = rear_fin.rotate_xyz(ry=math.pi - 0.34).translate(0.178, 0.0, -0.192)
+    rear_fin = _make_diving_flipper("flipper_rear", length=0.172, blade_w=0.094)
+    rear_placed = rear_fin.rotate_xyz(ry=math.pi - 0.32).translate(0.178, 0.0, -0.192)
     scene.add_mirrored("flippers", rear_placed)
 
     # Front/mid feet: (0.174, 0.0, +0.142), yaw = 0.28 (pointing forward-outward).
-    mid_fin = _make_diving_flipper("flipper_mid", length=0.150, blade_w=0.082)
-    mid_placed = mid_fin.rotate_xyz(ry=0.32).translate(0.174, 0.0, 0.142)
+    mid_fin = _make_diving_flipper("flipper_mid", length=0.156, blade_w=0.088)
+    mid_placed = mid_fin.rotate_xyz(ry=0.30).translate(0.174, 0.0, 0.142)
     scene.add_mirrored("flippers", mid_placed)
 
-    # Snug dark ankle boot collars seating each tarsus cleanly into its flipper pocket.
-    for tag, fx, fz in (("rear", 0.178, -0.192), ("mid", 0.174, 0.142)):
-        collar = (
-            cylinder(0.022, 0.018, 0.028, radial_segs=14, bevel=0.004, axis="y", name=f"flipper_collar_{tag}", material="gear_dark")
-            .translate(fx, 0.022, fz)
+    # Snug dark rubber ankle boot cuffs encasing the sturdier Pass 3 tarsus feet cleanly above Y = 0.0.
+    for tag, fx, fz, fyaw in (("rear", 0.178, -0.192, math.pi - 0.30), ("mid", 0.174, 0.142, 0.28)):
+        boot_vamp = (
+            superellipsoid(0.027, 0.019, 0.044, e1=0.72, e2=0.76, u_segs=14, v_segs=10, name=f"flipper_boot_{tag}", material="gear_dark")
+            .translate(0.0, 0.021, 0.018)
+            .rotate_xyz(ry=fyaw)
+            .translate(fx, 0.0, fz)
         )
+        collar = (
+            cylinder(0.028, 0.022, 0.036, radial_segs=14, bevel=0.005, axis="y", name=f"flipper_collar_{tag}", material="gear_dark")
+            .translate(fx, 0.026, fz)
+        )
+        scene.add_mirrored("flippers", boot_vamp)
         scene.add_mirrored("flippers", collar)
 
 
 def _build_shovel(scene: SceneBuilder, right_hand: Tuple[float, float, float]) -> None:
-    """Build compact cupped yellow spade shovel tucked tightly in the ant's right hand (-X side)."""
+    """Build smooth classic rounded-spade shovel gripped naturally by its D-handle in right hand (-X).
+
+    Local coordinates place the dark rubber D-handle grip bar directly at (0, 0, 0) so the ant's
+    right fist wraps cleanly around the grip bar with zero stiff poke-through behind the wrist,
+    while the shaft and smooth concave U-spade scoop extend forward-downward cleanly above Y = 0.0.
+    """
     hx, hy, hz = right_hand
     parts: List[MeshPart] = []
 
-    # 1. Compact cylindrical yellow shaft + dark grip sleeve.
-    shaft = (
-        cylinder(0.018, 0.021, 0.258, radial_segs=16, bevel=0.004, axis="y", name="shovel_shaft", material="gear_gold")
-        .translate(0.0, 0.014, 0.0)
-    )
-    parts.append(shaft)
-
-    grip_wrap = (
-        cylinder(0.023, 0.023, 0.076, radial_segs=16, bevel=0.004, axis="y", name="shovel_grip_wrap", material="gear_dark")
-        .translate(0.0, 0.000, 0.0)
-    )
-    parts.append(grip_wrap)
-
-    # 2. Compact D-grip handle at the rear/top end.
-    d_collar = (
-        cylinder(0.024, 0.022, 0.028, radial_segs=14, bevel=0.004, axis="y", name="shovel_d_collar", material="gear_gold_metal")
-        .translate(0.0, -0.112, 0.0)
-    )
-    parts.append(d_collar)
+    # 1. Ergonomic D-grip handle: dark rubber grip bar right at local (0, 0, 0) inside the ant's hand.
+    d_bar = capsule(0.017, 0.080, radial_segs=14, cap_rings=4, axis="x", name="shovel_d_grip", material="gear_dark")
+    parts.append(d_bar)
 
     d_arch = curved_tube(
         [
-            (-0.042, -0.198, 0.0),
-            (-0.050, -0.156, 0.0),
-            (-0.030, -0.122, 0.0),
-            (0.000, -0.114, 0.0),
-            (0.030, -0.122, 0.0),
-            (0.050, -0.156, 0.0),
-            (0.042, -0.198, 0.0),
+            (-0.044, 0.000, 0.0),
+            (-0.052, 0.044, 0.0),
+            (-0.030, 0.082, 0.0),
+            (0.000, 0.092, 0.0),
+            (0.030, 0.082, 0.0),
+            (0.052, 0.044, 0.0),
+            (0.044, 0.000, 0.0),
         ],
         0.014,
         samples_per_seg=4,
-        radial_segs=10,
+        radial_segs=12,
         cap_rings=2,
         name="shovel_d_arch",
         material="gear_gold",
     )
     parts.append(d_arch)
 
-    d_bar = (
-        capsule(0.016, 0.082, radial_segs=12, cap_rings=3, axis="x", name="shovel_d_grip", material="gear_dark")
-        .translate(0.0, -0.198, 0.0)
+    d_collar = (
+        cylinder(0.023, 0.025, 0.028, radial_segs=16, bevel=0.004, axis="y", name="shovel_d_collar", material="gear_gold_metal")
+        .translate(0.0, 0.096, 0.0)
     )
-    parts.append(d_bar)
+    parts.append(d_collar)
 
-    # 3. Brass ferrule socket connecting shaft into the spade blade.
+    # 2. Sturdy compact shaft extending forward-downward from the D-handle collar to the spade socket.
+    shaft_len = 0.168
+    shaft = (
+        cylinder(0.018, 0.021, shaft_len, radial_segs=16, bevel=0.004, axis="y", name="shovel_shaft", material="gear_gold")
+        .translate(0.0, 0.096 + 0.5 * shaft_len, 0.0)
+    )
+    parts.append(shaft)
+
+    # Tapered metallic ferrule socket smoothly bridging shaft into the top of the spade blade.
+    ferrule_y = 0.096 + shaft_len + 0.018  # ~0.282
     ferrule = (
-        cylinder(0.024, 0.032, 0.058, radial_segs=16, bevel=0.005, axis="y", name="shovel_ferrule", material="gear_gold_metal")
-        .translate(0.0, 0.148, 0.005)
+        cylinder(0.022, 0.030, 0.054, radial_segs=18, bevel=0.005, axis="y", name="shovel_ferrule", material="gear_gold_metal")
+        .translate(0.0, ferrule_y, 0.004)
     )
     parts.append(ferrule)
 
-    # 4. Chunky cupped rounded-spade blade sculpted cleanly for tabletop readability.
-    blade_w = 0.172
-    blade_l = 0.194
-    blade_cy = 0.252
+    # 3. Clean, silky-smooth concave rounded-spade scoop (single unified contour, zero double-wedge tip).
+    blade_w = 0.164
+    blade_l = 0.188
+    blade_cy = ferrule_y + 0.014 + 0.5 * blade_l  # ~0.390
 
-    def _spade_half_width_factor(u_arr: np.ndarray) -> np.ndarray:
-        t = np.clip((u_arr - 0.50) / 0.50, 0.0, 1.0)
-        return np.sqrt(np.maximum(0.05, 1.0 - (t ** 2.1) * 0.88))
-
-    def _sculpt_spade(pos: np.ndarray) -> np.ndarray:
+    def _sculpt_smooth_spade(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
+        # u = 0 at top foot-step shoulder, u = 1 at smooth rounded U-spade cutting tip.
         u = np.clip((p[:, 1] + 0.5 * blade_l) / blade_l, 0.0, 1.0)
-        p[:, 0] *= _spade_half_width_factor(u)
-        nx = p[:, 0] / (0.5 * blade_w)
-        cup_z = 0.022 * (nx * nx) + 0.018 * (u * u)
-        p[:, 2] = p[:, 2] * (1.0 - 0.28 * u) + cup_z
+
+        # Single continuous rounded-shield outline: full smooth shoulders down to u=0.38,
+        # curving seamlessly into a classic rounded garden-spade tip with zero corners or bumps.
+        t_tip = np.clip((u - 0.38) / 0.62, 0.0, 1.0)
+        width_scale = (1.0 - 0.86 * (t_tip ** 2.05)) ** 0.52
+        # Soft slight inward rounding at the very top shoulder corners (u < 0.10).
+        t_top = np.clip((0.10 - u) / 0.10, 0.0, 1.0)
+        width_scale *= 1.0 - 0.08 * (t_top * t_top)
+        p[:, 0] *= width_scale
+
+        # Subtle concave dish cup across width (+Z = scoop hollow) + smooth longitudinal scoop curve.
+        nx = p[:, 0] / max(1e-6, 0.5 * blade_w)
+        cup_z = 0.024 * (nx * nx) + 0.018 * (u * u)
+        # Rolled top foot-tread lip curl at the shoulder (u -> 0) and sleek tapered cutting edge (u -> 1).
+        top_roll = 0.010 * (np.clip((0.12 - u) / 0.12, 0.0, 1.0) ** 2)
+        thick_scale = 1.0 - 0.42 * (u ** 1.3)
+        p[:, 2] = p[:, 2] * thick_scale + cup_z + top_roll
         return p
 
     blade_core = (
-        rounded_box(blade_w, blade_l, 0.024, bevel=0.009, segs=4, name="shovel_blade", material="gear_gold")
-        .deform(_sculpt_spade)
-        .translate(0.0, blade_cy, -0.005)
+        rounded_box(blade_w, blade_l, 0.020, bevel=0.007, segs=6, name="shovel_blade", material="gear_gold")
+        .deform(_sculpt_smooth_spade)
+        .translate(0.0, blade_cy, -0.006)
     )
     parts.append(blade_core)
 
-    tread_bar = (
-        capsule(0.013, blade_w * 0.82, radial_segs=12, cap_rings=3, axis="x", name="shovel_tread_bar", material="gear_gold_metal")
-        .translate(0.0, blade_cy - 0.5 * blade_l + 0.011, 0.009)
-    )
-    parts.append(tread_bar)
-
+    # Smooth flush dorsal spine socket rib tapering gracefully down the upper scoop center.
     blade_rib = (
-        capsule(0.014, 0.076, radial_segs=10, cap_rings=3, axis="y", name="shovel_blade_rib", material="gear_gold_metal")
-        .translate(0.0, blade_cy - 0.042, 0.009)
+        lathe(
+            [(0.022, 0.0), (0.017, 0.036), (0.011, 0.072), (0.000, 0.092)],
+            radial_segs=14,
+            cap_bottom=True,
+            cap_top=False,
+            axis="y",
+            name="shovel_blade_rib",
+            material="gear_gold_metal",
+        )
+        .scale(1.0, 1.0, 0.65)
+        .translate(0.0, ferrule_y + 0.024, 0.004)
     )
     parts.append(blade_rib)
 
-    edge_pts: List[Tuple[float, float, float]] = []
-    n_edge = 16
-    for i in range(n_edge + 1):
-        ang = -0.5 * math.pi + math.pi * (i / n_edge)
-        t = math.cos(ang)
-        u = 0.50 + 0.50 * t
-        half_w = (0.5 * blade_w) * float(_spade_half_width_factor(np.array([u]))[0])
-        ex = math.copysign(half_w, math.sin(ang)) * abs(math.sin(ang)) ** 0.75 if abs(ang) > 1e-4 else 0.0
-        ey = (blade_cy - 0.5 * blade_l) + blade_l * u
-        nx = ex / (0.5 * blade_w)
-        ez = -0.005 + 0.022 * (nx * nx) + 0.018 * (u * u)
-        edge_pts.append((ex, ey, ez))
-
-    blade_edge = swept_tube(
-        edge_pts,
-        0.008,
-        radial_segs=10,
-        cap_start=True,
-        cap_end=True,
-        closed=False,
-        cap_rings=2,
-        name="shovel_blade_edge",
-        material="gear_gold_metal",
-    )
-    parts.append(blade_edge)
-
-    # Tucked neatly at the ant's right hand (-X) keeping total Swimmer width ~0.65-0.68 and Y >= 0.14.
+    # Orient shovel naturally from the gripped D-handle bar in right hand (-X):
+    # angled steeply downward and slightly forward beside Swimmer's right side for compact depth
+    # while keeping the smooth curved spade scoop well above Y = 0.0.
     for part in parts:
         placed = (
-            part.rotate_xyz(rx=114.0, ry=-8.0, rz=10.0, degrees=True)
-            .translate(hx - 0.032, hy - 0.004, hz + 0.014)
+            part.rotate_xyz(rx=132.0, ry=-12.0, rz=14.0, degrees=True)
+            .translate(hx - 0.004, hy - 0.002, hz + 0.008)
         )
         scene.add("shovel", placed)
 
