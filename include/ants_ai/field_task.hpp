@@ -74,6 +74,7 @@ private:
     void give_up(TaskContext& context, uint64_t now);
     uint32_t choose_ant(TaskContext& context, const FieldPlan& plan, uint64_t now);
     uint64_t sources(const BotView& view) const;
+    uint64_t world(const BotView& view) const;                         // (kept for the tick it was read at)
 
     Tactics& tactics_;
     Params params_;
@@ -93,6 +94,9 @@ private:
     uint8_t seen_hp_{0};
     sim::AntType seen_type_{sim::AntType::Worker};
     std::map<uint32_t, uint64_t> rest_until_;   // ants given up, and until when
+    std::map<uint32_t, uint64_t> rest_world_;   // ... and what the map held then (FieldTask::world)
+    mutable uint64_t world_tick_{~uint64_t{0}};
+    mutable uint64_t world_{0};
     uint32_t given_up_{0};
     uint32_t orders_{0};
     uint32_t set_offs_{0};

@@ -164,8 +164,8 @@
   {
    "id": "no_rest",
    "file": "src/ants_ai/field_task.cpp",
-   "old": "        if (rest != rest_until_.end() && now < rest->second) continue;",
-   "new": "        if (rest != rest_until_.end() && now < rest->second && false) continue;",
+   "old": "        if (rest != rest_until_.end() && now < rest->second && !(tactics_.plan.field_wake && rest_world_[a.id] != world(context.view))) continue;",
+   "new": "        if (rest != rest_until_.end() && now < rest->second && !(tactics_.plan.field_wake && rest_world_[a.id] != world(context.view)) && false) continue;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI29.10' ./build/tests/test_ai/test_ai",
    "expect": "AI29.10"
   },
@@ -180,8 +180,8 @@
   {
    "id": "waits_for_ever",
    "file": "src/ants_ai/field_task.cpp",
-   "old": "        if (sources(view) == rest_sources_) return;",
-   "new": "        if (sources(view) == rest_sources_ || true) return;",
+   "old": "        if ((sources(view) ^ (tactics_.plan.field_wake ? world(view) : 0u)) == rest_sources_) return;",
+   "new": "        if ((sources(view) ^ (tactics_.plan.field_wake ? world(view) : 0u)) == rest_sources_ || true) return;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI29.10' ./build/tests/test_ai/test_ai",
    "expect": "AI29.10"
   },
@@ -518,6 +518,38 @@
    "new": "if (false && view.dying_at(c)) t.occupied[t.at(c)] = 1;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI29.20 ' ./build/tests/test_ai/test_ai",
    "expect": "AI29.20"
+  },
+  {
+   "id": "wake_never_retries_a_rested_ant",
+   "file": "src/ants_ai/field_task.cpp",
+   "old": " && !(tactics_.plan.field_wake && rest_world_[a.id] != world(context.view))) continue;",
+   "new": ") continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.22 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.22"
+  },
+  {
+   "id": "wake_ignores_the_switch",
+   "file": "src/ants_ai/field_task.cpp",
+   "old": "!(tactics_.plan.field_wake && rest_world_[a.id] != world(context.view))",
+   "new": "!(rest_world_[a.id] != world(context.view))",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.22 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.22"
+  },
+  {
+   "id": "wake_leaves_the_waiting_task_asleep",
+   "file": "src/ants_ai/field_task.cpp",
+   "old": "if ((sources(view) ^ (tactics_.plan.field_wake ? world(view) : 0u)) == rest_sources_) return;",
+   "new": "if (sources(view) == rest_sources_) return;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.22 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.22"
+  },
+  {
+   "id": "wake_ignores_the_bridges",
+   "file": "src/ants_ai/field_task.cpp",
+   "old": "if (grid.has_bridge_at(sim::TileCoord{x, y})) ++bridges;",
+   "new": "if (false) ++bridges;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI29.22 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI29.22"
   }
  ]
 }

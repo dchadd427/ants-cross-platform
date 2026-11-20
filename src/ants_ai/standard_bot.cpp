@@ -14,6 +14,13 @@ constexpr uint8_t kRankFight = 5;
 constexpr uint8_t kRankGates = 6;                 // (a gate goal exists only while the food is walled off for the seat; a Sealed vault (HELLRAISER) is raided again and again, so the goal repeats while the vault has food: the Fire ant or Bomber is worth more to the bot than to the mines, the walls or a fight)
 constexpr uint64_t kGoneMinTick = 3600;           // (the food-gone batch: work that banks nothing is only called lost after the first 3 minutes, which an expedition over water or a breach of a wall needs for its first food)
 constexpr uint64_t kBreachTicks = 2400;           // (the opening of a gate map: the fire walls against a thief and the trips to the power-ups of the own side wait this long at most, 2 minutes)
+
+// Whether the seat's ants walk to the pile: its analysis of the start says so; a lunchbox (a dead ant's: it is not in the analysis) lies in the component of the hill
+bool pile_walks(const MapInfo& map, uint8_t seat, const PileView& p) {
+    const PileInfo* info = map.pile(p.index);
+    if (info != nullptr) return info->approach[seat].reachable();
+    return map.ant_component(seat, p.anchor) >= 0 && map.ant_component(seat, p.anchor) == map.hill_component(seat);
+}
 }  // namespace
 
 void StandardBot::start(const BotContext& context) {
@@ -118,11 +125,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     {
         // nothing to do: every pile is eaten, or what is left is out of the hill's reach (a lunchbox that no walk joins to the hill is no pile) and the island, gate or field work has banked nothing for plan.gone_stall ticks
         bool walkable_food = false;
-        for (const PileView& p : view.piles()) {
-            const PileInfo* info = map->pile(p.index);
-            const bool walks = info != nullptr ? info->approach[seat_].reachable() : (map->ant_component(seat_, p.anchor) >= 0 && map->ant_component(seat_, p.anchor) == map->hill_component(seat_));
-            walkable_food = walkable_food || walks;
-        }
+        for (const PileView& p : view.piles()) walkable_food = walkable_food || pile_walks(*map, seat_, p);
         const bool nothing_to_do = !walkable_food && (view.piles().empty() || !tactics_.far_work || (now >= progress_tick_ + plan.gone_stall && now >= kGoneMinTick));
         if (!nothing_to_do) no_work_since_ = 0;
         else if (no_work_since_ == 0) no_work_since_ = std::max<uint64_t>(now, 1u);
@@ -358,8 +361,12 @@ bool StandardBot::detect_stall(const BotView& view) {
     // food that the own hill can reach lies on the map (a map whose last reachable pile is gone leaves nothing to bank, and nothing to stall at)
     const MapInfo* map = view.map() != nullptr ? view.map() : map_;
     for (const PileView& p : view.piles()) {
-        const PileInfo* info = map != nullptr ? map->pile(p.index) : nullptr;
-        if (info == nullptr || info->approach[seat_].reachable()) return true;
+        if (map == nullptr || !plan.stall_walkable) {                           // (no analysis, or the bot as it was: a pile the analysis does not know, a lunchbox, counts)
+            const PileInfo* info = map != nullptr ? map->pile(p.index) : nullptr;
+            if (info == nullptr || info->approach[seat_].reachable()) return true;
+        } else if (pile_walks(*map, seat_, p)) {
+            return true;
+        }
     }
     return false;
 }

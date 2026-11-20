@@ -14,6 +14,8 @@
 //   AI56.9  with the food gone an idle Swimmer (gone_swap) becomes the Thief; a Bomber or Fire Ant does not for the steals when an enemy box shows enough and the hill walks to that hill: never when it does not
 //   AI56.10 the game type 187 has no food by its rules: the batch never begins there
 //   AI56.11 with the food gone a fight is taken only when it is won: an assault asks for gone_odds_percent of the strength near the target, and gone_wipe_odds_percent against a team that a wipe-out forces to hatch
+//   AI56.12 the stall detector's no-point rule counts the food that the hill walks to: a lunchbox that a ring of rocks shuts off is none of it (the breach of a walled map is not cut off by a dead ant's lunchbox
+//           in the field), one in the open is; the switch off is the rule as it was
 //   AI56.7  the arena's idle tally counts the ants that stand idle from five seconds on (nothing but standing bots: all of them), the ants and the idle ones from the last food taken to the end, and the
 //           raids that Thieves begin; a match whose food is taken has a last food and fewer ants after it than in all
 #include <algorithm>
@@ -418,6 +420,33 @@ void run_gone_tests() {
             bool attacked = false;
             for (const auto& e : rig.proposed) attacked = attacked || e.second.type == CommandType::GroupAttack;
             ASSERT_EQ(attacked, c.expect);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI56.12 The Stall Detector's No-Point Rule Counts The Food That The Hill Walks To: A Lunchbox That A Ring Of Rocks Shuts Off Is None Of It, One In The Open Is, And With The Switch Off Any Lunchbox Was")
+    {
+        for (const bool ring : {true, false}) {
+            for (const bool rule : {true, false}) {
+                sim::SimulationEngine sim;
+                empty_field(sim, 5612);
+                for (int i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10 + i, 10});
+                if (ring) {                                                                  // a closed room in the field (the analysis of the start knows it: no walk of the hill leads in)
+                    for (int d = -3; d <= 3; ++d) {
+                        for (const TileCoord& r : {TileCoord{30 + d, 27}, TileCoord{30 + d, 33}, TileCoord{27, 30 + d}, TileCoord{33, 30 + d}}) sim.set_terrain(r.x, r.y, sim::TERRAIN_OBSTACLE);
+                    }
+                }
+                LevelPlan plan = plan_of(Level::Hard, false);                                // (no food-gone batch: the stall detector is the subject)
+                plan.repeat_limit = 0;                                                       // (the clock rule alone)
+                plan.stall_ticks = 400;
+                plan.fallback_ticks = 1000;
+                plan.stall_walkable = rule;
+                Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+                const uint32_t x = ring ? 30u : 14u;                                              // a dead ant's lunchbox, dropped after the start: the analysis has no pile for it
+                sim.grid_mut().drop_lunchbox(x, x, 40);
+                rig.run(1600);
+                const bool stalled = rig.as<StandardBot>().stalls() > 0;
+                ASSERT_EQ(stalled, !ring || !rule);
+            }
         }
     } TEST_END();
 }
