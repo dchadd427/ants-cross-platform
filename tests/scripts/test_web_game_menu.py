@@ -163,7 +163,14 @@ class TheStyle(unittest.TestCase):
             self.assertNotIn(name, css, "the style of the button over the picture is gone")
             self.assertNotIn(name, script, "the script makes no button over the picture")
         self.assertNotIn("stage.appendChild(", re.sub(r"stage\.appendChild\(scrim\);", "", script), "only the panel's dimmed screen goes into the stage")
-        self.assertNotIn("position: absolute", css.split("/* the dimmed screen and the panel */")[0], "no button of the menu is placed over the picture")
+        # No button of the menu is placed over the picture. The one rule before the panel's that positions anything is the gear of a recording's or a live match's bar, which the bar's grid has no cell for:
+        # it is placed by the page's own bar (under the picture: `.rbar:not(.over)`), never by the bar that lies over the picture in fullscreen (`.rbar.over`) or by a button of the header
+        buttons = re.sub(r"/\*.*?\*/", "", css.split("/* the dimmed screen and the panel */")[0], flags=re.S)
+        placed = [(selector.strip(), body) for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", buttons) if re.search(r"position:\s*(absolute|fixed)", body)]
+        self.assertEqual(len(placed), 1, "one button of the menu is placed, the gear of the page's bar")
+        for selector, _ in placed:
+            for one in selector.split(","):
+                self.assertRegex(one.strip(), r"^\.rbar:not\(\.over\) \.gm-bar$", "only the gear on the page's own bar (not the one over the picture) is placed")
 
 
 # The stage's wheel listener (web/shell.html, "THE BARS"): in fullscreen it cancels the wheel over a bar so that nothing else happens there. The settings panel is a child of the stage, so its wheel was cancelled too
