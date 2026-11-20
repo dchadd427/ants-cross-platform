@@ -40,7 +40,7 @@ except ImportError:
     HAS_PIL = False
 
 if HAS_NUMPY:
-    from tools.ant_models import base_ant, build_all, mesh_core  # noqa: E402
+    from tools.ant_models import base_ant, build_all, mesh_core, textures  # noqa: E402
 
 
 class _TinyPart:
@@ -285,10 +285,16 @@ class MeshCorePrimitives(unittest.TestCase):
     def _assert_valid_closed_mesh(self, part, *, min_tris: int = 8):
         self.assertEqual(part.positions.dtype, np.float32, part.name)
         self.assertEqual(part.normals.dtype, np.float32, part.name)
+        self.assertEqual(part.uvs.dtype, np.float32, part.name)
+        self.assertEqual(part.colors.dtype, np.float32, part.name)
         self.assertEqual(part.indices.dtype, np.uint32, part.name)
+        self.assertEqual(part.uvs.shape, (len(part.positions), 2), part.name)
+        self.assertEqual(part.colors.shape, (len(part.positions), 3), part.name)
         self.assertGreaterEqual(part.triangle_count(), min_tris, part.name)
         self.assertTrue(np.all(np.isfinite(part.positions)), part.name)
         self.assertTrue(np.all(np.isfinite(part.normals)), part.name)
+        self.assertTrue(np.all(np.isfinite(part.uvs)), part.name)
+        self.assertTrue(np.all(np.isfinite(part.colors)), part.name)
 
         n_lens = np.linalg.norm(part.normals.astype(np.float64), axis=1)
         self.assertTrue(np.allclose(n_lens, 1.0, atol=1e-4), f"{part.name}: non-unit normals")
@@ -421,6 +427,54 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
             self.assertIn(expected_node, stats["nodes"])
         self.assertIn("Blink", stats["animations"])
         self.assertIn("eye_iris", stats["materials"])
+        self.assertTrue(stats["has_uvs"])
+        self.assertTrue(stats["has_ao"])
+        self.assertGreaterEqual(stats["textures"], 3)
+        self.assertGreaterEqual(stats["images"], 3)
+        self.assertLess(stats["byte_length"], 1_800_000)
+
+    def test_pbr_textures_and_baked_crevice_ao(self):
+        # Verify all 4 procedural texture families encode valid PNGs and cache deterministically.
+        for fam, exp_size in (("chitin", 256), ("cloth", 128), ("metal", 128), ("rubber", 128)):
+            p1 = textures.get_texture_pack(fam)
+            p2 = textures.get_texture_pack(fam)
+            self.assertIs(p1, p2)
+            self.assertEqual(p1.size, exp_size)
+            for png in (p1.base_color_png, p1.normal_png, p1.metallic_roughness_png):
+                self.assertIsNotNone(png)
+                self.assertTrue(png.startswith(b"\x89PNG\r\n\x1a\n"))
+                iw, ih = struct.unpack_from(">II", png, 16)
+                self.assertEqual((iw, ih), (exp_size, exp_size))
+
+        # Verify baked crevice AO creates real depth variation while respecting floors.
+        scene, _ = base_ant.build_base_ant("ao_test")
+        mesh_core.bake_scene_ao(scene)
+        chitin_ao = np.concatenate([p.colors[:, 0] for p in scene.all_parts() if p.material == "chitin_team"])
+        eye_ao = np.concatenate([p.colors[:, 0] for p in scene.all_parts() if p.material == "eye_white"])
+        self.assertGreaterEqual(float(chitin_ao.min()), 0.43)
+        self.assertLessEqual(float(chitin_ao.max()), 1.001)
+        self.assertGreater(float(chitin_ao.max() - chitin_ao.min()), 0.12, "expected real crevice AO contrast")
+        self.assertGreaterEqual(float(eye_ao.min()), 0.77, "eyes must stay bright inside sockets")
+
+        # Verify embedded textures, compact U16 indices, and normalized U8 VEC4 COLOR_0 in GLB JSON.
+        glb = gltf_writer.scene_to_glb_bytes(scene)
+        doc, _ = gltf_writer.parse_glb(glb)
+        mats = {m["name"]: m for m in doc["materials"]}
+        self.assertIn("baseColorTexture", mats["chitin_team"]["pbrMetallicRoughness"])
+        self.assertIn("metallicRoughnessTexture", mats["chitin_team"]["pbrMetallicRoughness"])
+        self.assertIn("normalTexture", mats["chitin_team"])
+        self.assertGreaterEqual(float(mats["chitin_team"]["normalTexture"]["scale"]), 0.85)
+        # Optical eyes remain pure untextured gloss.
+        self.assertNotIn("normalTexture", mats["eye_white"])
+        self.assertNotIn("baseColorTexture", mats["eye_white"]["pbrMetallicRoughness"])
+        # Small primitives pack indices as UNSIGNED_SHORT and COLOR_0 as normalized UBYTE VEC4.
+        prim0 = doc["meshes"][0]["primitives"][0]
+        idx_acc = doc["accessors"][prim0["indices"]]
+        col_acc = doc["accessors"][prim0["attributes"]["COLOR_0"]]
+        self.assertEqual(idx_acc["componentType"], gltf_writer.COMPONENT_UNSIGNED_SHORT)
+        self.assertEqual(col_acc["componentType"], gltf_writer.COMPONENT_UNSIGNED_BYTE)
+        self.assertEqual(col_acc["type"], "VEC4")
+        self.assertTrue(col_acc["normalized"])
 
     def test_blink_eyelid_pivots_and_animation_validation(self):
         s_open, anchors = base_ant.build_base_ant("ant_open", blink=0.0)
@@ -527,6 +581,14 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
             self.assertIn("custom", ids)
             self.assertNotEqual(m2["models_hash"], m1["models_hash"])
             self.assertEqual(m2["version"], "v-" + m2["build_hash"][:8])
+
+            # Dynamic viewer file discovery hashes all viewer*.html/.css/.js files present.
+            viewer_files = build_all._discover_viewer_files()
+            for fname in viewer_files:
+                self.assertTrue(fname.startswith("viewer"))
+                self.assertTrue(fname.endswith((".html", ".css", ".js")))
+            if os.path.isfile(os.path.join(build_all.THIS_DIR, "viewer.html")):
+                self.assertIn("viewer.html", viewer_files)
 
 
 @unittest.skipUnless(HAS_NUMPY and HAS_PIL, "numpy and Pillow are needed")

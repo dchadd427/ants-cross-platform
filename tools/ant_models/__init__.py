@@ -29,6 +29,7 @@ if HAS_NUMPY:
         MeshPart,
         NodeTransform,
         SceneBuilder,
+        bake_scene_ao,
         capsule,
         catmull_rom_spline,
         cone,
@@ -51,6 +52,7 @@ if HAS_NUMPY:
         swept_tube,
         torus_arc,
     )
+    from .textures import TexturePack, get_texture_pack
 
 __all__ = [
     "HAS_NUMPY",
@@ -73,7 +75,10 @@ __all__ = [
     "MeshPart",
     "NodeTransform",
     "SceneBuilder",
+    "TexturePack",
+    "bake_scene_ao",
     "build_base_ant",
+    "get_texture_pack",
     "capsule",
     "catmull_rom_spline",
     "cone",
