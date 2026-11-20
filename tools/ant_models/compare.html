@@ -11,6 +11,7 @@
   <script src="viewer_render.js" defer></script>
   <script src="compare.js" defer></script>
   <script src="viewer_version.js" defer></script>
+  <script src="viewer_status.js" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -28,6 +29,10 @@
         <span class="badge" id="badge-team">Green</span>
         <span class="badge" id="badge-angle">301 S</span>
         <span class="badge badge-version" id="badge-version" title="Loaded 3D build version" hidden></span>
+        <button type="button" class="status-pill-btn" id="btn-status" aria-haspopup="dialog" aria-controls="status-dialog" data-busy="false" title="View live build progress and queue">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="status-btn-label">Status</span>
+        </button>
       </div>
     </header>
 
@@ -242,6 +247,7 @@
     </footer>
   </div>
 
+  <dialog id="status-dialog" class="status-dialog" closedby="any" aria-labelledby="status-dialog-title"></dialog>
   <div id="update-toast" class="update-toast" aria-hidden="true" hidden></div>
 </body>
 </html>
