@@ -81,8 +81,8 @@ except ImportError:
 
 Vec3 = Tuple[float, float, float]
 
-# Proud upright boxy-rounded commando head perched high ABOVE the bigger muscular back on a real neck.
-HEAD_CENTER: Vec3 = (0.0, 1.024, 0.068)
+# Forward-leaning prowling commando head perched cleanly on a proud dark muscular neck (`acst901`).
+HEAD_CENTER: Vec3 = (0.0, 1.008, 0.144)
 HEAD_SCALE = 1.00
 EYE_OFFSET: Vec3 = (0.098, -0.002, 0.128)  # left eye relative to head center
 
@@ -250,9 +250,9 @@ def _build_torso(scene: SceneBuilder) -> np.ndarray:
     scene.add("body", abs_parts)
 
     pelvis = superellipsoid(0.165, 0.096, 0.142, e1=0.86, e2=0.88, u_segs=18, v_segs=12, name="pelvis_core", material="chitin_dark").translate(0.0, 0.300, -0.055)
-    # Elevated sturdy muscular dark neck rising clearly & proudly ABOVE the bigger back and bandoliers!
-    neck = superellipsoid(0.146, 0.112, 0.136, e1=0.70, e2=0.82, u_segs=18, v_segs=12, name="neck_collar", material="chitin_dark").rotate_xyz(rx=0.08).translate(0.0, 0.838, 0.026)
-    neck_ring = torus_arc(0.144, 0.013, u_segs=20, v_segs=8, plane="xz", name="neck_band", material="chitin_dark").scale(1.02, 1.0, 0.92).rotate_xyz(rx=0.08).translate(0.0, 0.850, 0.028)
+    # Sturdy muscular dark neck leaning boldly forward (`+Z`) out of the armored collar (`acst901`).
+    neck = superellipsoid(0.144, 0.118, 0.152, e1=0.70, e2=0.82, u_segs=18, v_segs=12, name="neck_collar", material="chitin_dark").rotate_xyz(rx=0.28).translate(0.0, 0.824, 0.072)
+    neck_ring = torus_arc(0.142, 0.013, u_segs=20, v_segs=8, plane="xz", name="neck_band", material="chitin_dark").scale(1.02, 1.0, 0.94).rotate_xyz(rx=0.28).translate(0.0, 0.844, 0.088)
     scene.add("body", [pelvis, neck, neck_ring])
 
     # Smooth curved scale-plated armored pauldrons seated cleanly on the outer shoulders outside the bandolier straps.
@@ -645,35 +645,49 @@ def _sturdy_foot(name: str) -> MeshPart:
 
 
 def _build_flowing_leg(scene: SceneBuilder, label: str, ctrl: Sequence[Vec3], foot_yaw: float) -> None:
-    """Short, tucked, 100% smooth twist-free dark muscular insect leg (zero knee clipping/glitches!)."""
+    """Digitigrade backwards-knee (`< \\`) muscular dark insect leg matching `acst901`/`acst801`."""
     pts = [np.asarray(p, dtype=np.float64) for p in ctrl]
     leg = curved_tube(
         pts,
-        [(0.052, 0.056), (0.054, 0.056), (0.044, 0.046), (0.036, 0.036)],
+        [(0.052, 0.056), (0.048, 0.050), (0.044, 0.046), (0.036, 0.038), (0.032, 0.034)],
         samples_per_seg=6,
         radial_segs=16,
         cap_rings=3,
         name=f"leg_flow_{label}",
         material="chitin_dark",
     )
-    foot = _sturdy_foot(f"tarsus_{label}").rotate_xyz(ry=foot_yaw).translate(pts[-1][0], 0.0, pts[-1][2] + 0.004)
+    foot = _sturdy_foot(f"tarsus_{label}").rotate_xyz(ry=foot_yaw).translate(pts[-1][0], 0.0, pts[-1][2] + 0.008)
     scene.add_mirrored("legs", leg)
     scene.add_mirrored("legs", foot)
 
 
 def _build_legs(scene: SceneBuilder) -> None:
-    """Short, compact crouched muscular dark legs tucked neatly underneath the hunched bulk."""
+    """Digitigrade backwards-knee dark insect legs sweeping sharply back to hocks then forward-down."""
+    # Mid/front pair: hip -> sweep out & back to backwards knee (<) -> angle forward-down (\) to foot.
     _build_flowing_leg(
         scene,
         "mid",
-        [(0.155, 0.304, 0.040), (0.254, 0.256, 0.096), (0.256, 0.142, 0.132), (0.238, 0.036, 0.146)],
-        foot_yaw=0.22,
+        [
+            (0.152, 0.312, +0.034),
+            (0.228, 0.284, -0.026),
+            (0.264, 0.228, -0.076),
+            (0.248, 0.118, +0.006),
+            (0.232, 0.032, +0.084),
+        ],
+        foot_yaw=0.20,
     )
+    # Rear pair: rear hip -> sweep sharply back to backwards hock (<) under gaster -> forward-down (\) to foot.
     _build_flowing_leg(
         scene,
         "rear",
-        [(0.150, 0.284, -0.095), (0.262, 0.248, -0.164), (0.264, 0.138, -0.202), (0.248, 0.036, -0.214)],
-        foot_yaw=math.pi - 0.24,
+        [
+            (0.146, 0.292, -0.088),
+            (0.226, 0.268, -0.184),
+            (0.262, 0.214, -0.268),
+            (0.246, 0.110, -0.184),
+            (0.230, 0.032, -0.098),
+        ],
+        foot_yaw=0.16,
     )
 
 
@@ -981,7 +995,7 @@ def build_combat(blink: float = 0.0) -> SceneBuilder:
     scene.attach_world_node("gaster_group", "upper_body")
     scene.attach_world_node("gaster", "gaster_group")
 
-    scene.set_node_transform("head_group", translation=(0.0, 0.848, 0.030))
+    scene.set_node_transform("head_group", translation=(0.0, 0.842, 0.084))
     scene.attach_world_node("head_group", "upper_body")
     for hc_name in ("head", "eyes", "eyelid_left", "eyelid_right", "antennae"):
         scene.attach_world_node(hc_name, "head_group")
