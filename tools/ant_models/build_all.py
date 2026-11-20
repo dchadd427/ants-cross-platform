@@ -31,14 +31,14 @@ except ImportError:
 ANT_CLASSES: Tuple[str, ...] = ("worker", "combat", "thief", "bomber", "swimmer", "fire")
 DEFAULT_OUT_DIR = os.path.join(THIS_DIR, "models")
 
-# Canonical studio angles: (label, yaw_deg, pitch_deg).
+# Canonical studio angles matching original 1998 ~33 deg isometric camera: (label, yaw_deg, pitch_deg).
 PREVIEW_ANGLES: Tuple[Tuple[str, float, float], ...] = (
     ("Hero", -28.0, 22.0),
-    ("301 S", 0.0, 50.0),
-    ("201 SE", -45.0, 50.0),
-    ("901 E", -90.0, 50.0),
-    ("801 NE", -135.0, 50.0),
-    ("701 N", 180.0, 50.0),
+    ("301 S", 0.0, 33.0),
+    ("201 SE", -45.0, 33.0),
+    ("901 E", -90.0, 33.0),
+    ("801 NE", -135.0, 33.0),
+    ("701 N", 180.0, 33.0),
 )
 
 

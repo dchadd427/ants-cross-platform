@@ -406,23 +406,34 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
 
     def test_base_ant_grounding_proportions_and_anchors(self):
         scene, anchors = base_ant.build_base_ant("ant_test")
-        for key in self.REQUIRED_ANCHORS + ("eyelid_closed_angle",):
+        for key in self.REQUIRED_ANCHORS + (
+            "eyelid_closed_angle",
+            "foot_mid_left",
+            "foot_mid_right",
+            "foot_rear_left",
+            "foot_rear_right",
+        ):
             self.assertIn(key, anchors)
 
         self.assertAlmostEqual(anchors["ground_y"], 0.0, places=5)
         self.assertGreater(anchors["left_hand"][0], 0.0)
         self.assertLess(anchors["right_hand"][0], 0.0)
-        self.assertAlmostEqual(anchors["head_top"][1], 0.946, delta=0.03)
+        self.assertTrue(0.95 <= anchors["head_top"][1] <= 1.06, f"unexpected head_top {anchors['head_top'][1]}")
+        hrx, hry, hrz = anchors["head_radii"]
+        self.assertGreater(hry, hrx, "egg-shield head should be taller than wide")
+        self.assertGreater(hrx, hrz, "head should be narrower front-to-back than wide")
         self.assertGreater(anchors["eyelid_closed_angle"], 0.9)
 
         glb_bytes = gltf_writer.scene_to_glb_bytes(scene)
         stats = gltf_writer.validate_glb(glb_bytes)
         self.assertGreater(stats["triangles"], 1000)
         self.assertAlmostEqual(stats["bbox_min"][1], 0.0, delta=1e-3)
-        self.assertTrue(1.00 <= stats["bbox_max"][1] <= 1.16, f"unexpected height {stats['bbox_max'][1]}")
-        width = stats["dimensions"][0]
-        self.assertTrue(0.42 <= width <= 0.56, f"unexpected slim width {width}")
-        self.assertLessEqual(width / stats["bbox_max"][1], 0.56, "expected upright slim W/H ratio")
+        self.assertTrue(1.00 <= stats["bbox_max"][1] <= 1.20, f"unexpected height {stats['bbox_max'][1]}")
+        width, _, depth = stats["dimensions"]
+        self.assertTrue(0.40 <= width <= 0.56, f"unexpected slim width {width}")
+        self.assertLessEqual(depth, 0.66, f"expected compact tucked Z depth matching 901 E sprite, got {depth}")
+        self.assertGreaterEqual(stats["bbox_min"][2], -0.38, f"gaster protrudes too far back: {stats['bbox_min'][2]}")
+        self.assertLessEqual(width / stats["bbox_max"][1], 0.50, "expected upright slim W/H ratio")
         for expected_node in ("ant_test", "head", "eyes", "eyelid_left", "eyelid_right", "antennae", "body", "arms", "legs"):
             self.assertIn(expected_node, stats["nodes"])
         self.assertIn("Blink", stats["animations"])
