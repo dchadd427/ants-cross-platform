@@ -188,10 +188,9 @@ struct RoomRow {
     bool winner{false};
 };
 
-/// One row of the public list of games (GET /lobbies, docs/SERVER.md "Lobby rooms"; Room::listing): a public lobby room that a newcomer can join now. Only what the list shows: the room's code (the link, public on purpose), the
-/// leader's name, the map's file name, the game mode and numbers; never an address, a key, a platform, another person's name or the plan's letters.
-struct LobbyListing {
-    std::string code;
+/// What the list of games says of a lobby room that a newcomer could join: the leader's name, the map's file name, the game mode and the seats. Public and private rooms share it. It has no member for a code, a key or an id: a row that is
+/// made of nothing else cannot carry what leads to the room.
+struct ListedSeats {
     std::string host;                       // the leader's name, as the room shows it
     std::string map;                        // the plan's map (a file name)
     uint8_t mode{0};                        // sim::GameMode as a byte
@@ -199,8 +198,17 @@ struct LobbyListing {
     uint8_t bots{0};                        // the colors that nobody holds and the plan gives to a bot
     uint8_t free_colors{0};                 // the colors that a newcomer can take (nobody holds them and the plan calls them Open)
     uint8_t size{0};                        // the colors in the match: people + bots + free_colors (a color that nobody holds and the plan calls Nobody is not)
+};
+
+/// One row of the public list of games (GET /lobbies, docs/SERVER.md "Lobby rooms"; Room::listing): a public lobby room that a newcomer can join now. Only what the list shows: the room's code (the link, public on purpose), the
+/// leader's name, the map's file name, the game mode and numbers; never an address, a key, a platform, another person's name or the plan's letters.
+struct LobbyListing : ListedSeats {
+    std::string code;
     uint32_t age_ms{0};                     // how long the room has been public, in ms
 };
+
+/// One row of the same list for a PRIVATE lobby room (Room::private_listing): shown as a locked card that nobody joins from. Nothing but ListedSeats: no code, no key, no id, no age (docs/PUBLIC_ROOMS.md "Private rooms in the list").
+using PrivateListing = ListedSeats;
 
 struct RoomStatus {
     std::string code;
@@ -411,6 +419,8 @@ public:
     /// Protocol 22: a public lobby room that a newcomer can join now fills `out` and is true. Listed = a lobby room that waits (no match has begun or loads), that its leader made public, whose START does not wait, that has a
     /// person whose connection is open (a room that only holds seats is nobody's: it goes within a minute), at least one color that a newcomer can take, and no seat kept for a person of the match who is not back. Cheap: no status is built.
     bool listing(uint32_t now_ms, LobbyListing& out) const;
+    /// The same for a lobby room that its leader has NOT made public: it fills `out` (no code: PrivateListing has none) and is true under every condition of `listing` but the public one. The page shows it as a locked card; nobody joins from it.
+    bool private_listing(PrivateListing& out) const;
     /// A waiting lobby room that has had nobody in it since the last pass (a held seat is somebody) and that no Hello has reached since (the room reads it in its next pass: a lobby that a visitor was just
     /// sent to is not empty, whatever the room's last pass saw), and for how long (0 for every other room)
     bool empty_lobby() const noexcept { return lobby_waiting() && empty_ && !arrived_; }
@@ -457,6 +467,8 @@ public:
     uint32_t abandoned_ms(uint32_t now_ms) const;
 
 private:
+    bool lobby_joinable(size_t& free_now) const;             // a lobby room that waits and takes a newcomer (the conditions of both listings except the leader's choice); free_now: the colors a newcomer can take
+    void list_seats(ListedSeats& out, size_t free_now) const;       // the leader's name, the map, the mode and the seats of a room that lobby_joinable
     void fail(const std::string& reason, uint32_t now_ms);
     void begin_match(uint32_t now_ms);
     void finish(const std::string& reason, uint32_t now_ms);

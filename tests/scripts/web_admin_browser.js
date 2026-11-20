@@ -85,19 +85,26 @@ function world() {
 }
 
 // ---- the matches of computer players of the pictures: four that go, the maps that may be named, the schedules; the calls of the section answer as the game server does (docs/MAP_SUBMISSIONS.md "Bot matches on the admin page")
-const BOT_MAPS = [
-    { file: 'TINY.LVL', name: 'TINY', group: 'original', width: 32, height: 32, places: 1 , minutes: 6, random: true }, { file: 'SMALL.LVL', name: 'SMALL', group: 'original', width: 48, height: 48, places: 1 , minutes: 8, random: true }, { file: 'MEDIUM.LVL', name: 'MEDIUM', group: 'original', width: 64, height: 64, places: 1 , minutes: 10, random: true },
-    { file: 'GAUNTLET.LVL', name: 'GAUNTLET', group: 'original', width: 64, height: 64, places: 1 , minutes: 12, random: true }, { file: 'TREASURE.LVL', name: 'TREASURE', group: 'original', width: 96, height: 96, places: 1 , minutes: 12, random: true }, { file: 'ISLANDS.LVL', name: 'ISLANDS', group: 'original', width: 96, height: 96, places: 1 , minutes: 20, random: true },
-    { file: 'POPcOrN.lvl', name: 'POPcOrN', group: 'library', width: 64, height: 64, places: 1 , minutes: 12, random: true }, { file: 'HELLRAISER.lvl', name: 'HELLRAISER', group: 'library', width: 64, height: 64, places: 1 , minutes: 15, random: true }, { file: 'Bombz Away.lvl', name: 'Bombz Away', group: 'library', width: 64, height: 64, places: 1 , minutes: 10, random: true },
-    { file: 'Cave Crossing.lvl', name: 'Cave Crossing', group: 'players', width: 31, height: 31, places: 1 , minutes: 12, random: true }, { file: 'Fight Island.lvl', name: 'Fight Island', group: 'players', width: 150, height: 150, places: 3 , minutes: 20, random: true },
-    { file: 'Mossy Ridge.lvl', name: 'Mossy Ridge', group: 'players', width: 31, height: 31, places: 1 , minutes: 10, random: true }, { file: 'Old Bridge.lvl', name: 'Old Bridge', group: 'players', width: 128, height: 128, places: 2 , minutes: 14, random: true },
-    { file: 'Ultimate Chess.lvl', name: 'Ultimate Chess', group: 'players', width: 120, height: 120, places: 2, minutes: 60, random: false }
-];
-const BOT_ROTATION = { count: 1, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' };
+// every map of the made-up server: the original's six (their sizes and minutes from docs/GAMEPLAY.md), the library of the repository (Community-Maps/maps.json: name, size, seats and minutes as they are) and a few approved maps of
+// the players (made up, apart from the name of Fight Island); a row has what a room can do with the map (`playable`, and a plain `reason` when not), as GET bot-options gives it
+const nameOf = (file) => file.replace(/\.lvl$/i, '');
+function catalogRow(file, group, width, height, players, minutes, places, extra) { return Object.assign({ file, name: nameOf(file), group, width, height, players, minutes, places: places || 1, random: minutes <= 30, playable: true }, extra || {}); }
+const LIBRARY = JSON.parse(fs.readFileSync(path.join(ROOT, 'Community-Maps', 'maps.json'), 'utf8')).maps;
+const BOT_MAPS = [['TINY.LVL', 31, 6], ['SMALL.LVL', 40, 8], ['MEDIUM.LVL', 60, 10], ['GAUNTLET.LVL', 60, 10], ['TREASURE.LVL', 60, 12], ['ISLANDS.LVL', 60, 12]].map((o) => catalogRow(o[0], 'original', o[1], o[1], 4, o[2]))
+    .concat(LIBRARY.map((m) => catalogRow(m.file, 'library', m.width, m.height, m.players, m.minutes)))
+    .concat([catalogRow('Cave Crossing.lvl', 'players', 31, 31, 4, 12), catalogRow('Fight Island.lvl', 'players', 150, 150, 4, 20, 3), catalogRow('Mossy Ridge.lvl', 'players', 31, 31, 4, 10), catalogRow('Old Bridge.lvl', 'players', 128, 128, 4, 14, 2),
+        catalogRow('Big Meadow.lvl', 'players', 200, 160, 4, 15, 1, { playable: false, reason: 'it starts too many ants for a room' }), catalogRow('Two Hills.lvl', 'players', 31, 31, 2, 10, 1, { playable: false, reason: 'it has no place for four seats' })]);
+const ROTATION_DEFAULTS = { 'highest-score': ['TINY.LVL', 'SMALL.LVL', 'MEDIUM.LVL', 'GAUNTLET.LVL', 'TREASURE.LVL', 'ISLANDS.LVL', 'POPcOrN.lvl', 'HELLRAISER.lvl', 'Bombz Away.lvl'], '187': ['TINY.LVL', 'SMALL.LVL', 'MEDIUM.LVL', 'GAUNTLET.LVL', 'TREASURE.LVL', 'Fight Island.lvl'] };
+function rotationEntry(file) {                                       // an entry of a list of the rotation: the map's row, and whether the list can draw it now
+    const m = W.bots.maps.filter((x) => x.file === file)[0];
+    if (!m) return { file, name: nameOf(file), group: 'players', state: 'skipped', reason: 'taken down' };          // (a map that the server has lost: it knows no size any more)
+    return Object.assign({}, m, m.playable === false ? { state: 'skipped', reason: m.reason } : { state: 'ok' });
+}
+const BOT_ROTATION = { count: 1, every_s: 0, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' };
 function botMatch(id, name, rules, seats, teams, startedIso, extra) { return Object.assign({ id, name, rules, seats, teams, started: at(startedIso), live: id + '-live' }, extra); }
 function botsWorld() {
     return {
-        people: 14, total: 48, refuse: null, nextId: 40, nextSched: 4,
+        people: 14, total: 48, refuse: null, nextId: 40, nextSched: 4, maps: BOT_MAPS.slice(), rotation: null, waiting: [],
         matches: [
             botMatch('m1', 'MEDIUM', 'highest-score', [{ seat: 0, level: 'hard' }, { seat: 2, level: 'medium' }, { seat: 3, level: 'hard' }], 'ffa', '2026-11-16T21:14:00Z', { schedule: 'Hourly rotation', live: 'MEDIUM-20261116-211400Z' }),
             botMatch('m2', 'TREASURE', '187', [{ seat: 0, level: 'hard' }, { seat: 1, level: 'hard' }, { seat: 2, level: 'medium' }, { seat: 3, level: 'easy' }], '03-12', '2026-11-16T21:16:00Z', { by: 'basil', live: 'TREASURE-20261116-211600Z' }),
@@ -106,8 +113,8 @@ function botsWorld() {
         ],
         schedules: [
             { id: 1, name: 'Hourly rotation', default: true, on: true, when: { kind: 'every', minutes: 60 }, what: BOT_ROTATION, last: at('2026-11-16T21:14:00Z'), next: at('2026-11-16T22:14:00Z') },
-            { id: 2, name: 'Evening swarm', default: false, on: true, when: { kind: 'times', times: ['18:00', '20:00', '22:00'] }, what: { count: 4, map: 'random:rotation', rules: 'highest-score', bots: '4', levels: ['hard', 'hard', 'medium', 'medium'], teams: 'random', split: '' }, last: at('2026-11-16T04:00:00Z'), next: at('2026-11-17T02:00:00Z') },
-            { id: 3, name: 'ISLANDS practice', default: false, on: false, when: { kind: 'every', minutes: 30 }, what: { count: 2, map: 'ISLANDS.LVL', rules: 'highest-score', bots: 'random', levels: ['easy', 'easy', 'easy', 'easy'], teams: 'ffa', split: '' }, last: at('2026-11-15T20:30:00Z'), next: null }
+            { id: 2, name: 'Evening swarm', default: false, on: true, when: { kind: 'times', times: ['18:00', '20:00', '22:00'] }, what: { count: 4, every_s: 0, map: 'random:rotation', rules: 'highest-score', bots: '4', levels: ['hard', 'hard', 'medium', 'medium'], teams: 'random', split: '' }, last: at('2026-11-16T04:00:00Z'), next: at('2026-11-17T02:00:00Z') },
+            { id: 3, name: 'ISLANDS practice', default: false, on: false, when: { kind: 'every', minutes: 30 }, what: { count: 2, every_s: 0, map: 'ISLANDS.LVL', rules: 'highest-score', bots: 'random', levels: ['easy', 'easy', 'easy', 'easy'], teams: 'ffa', split: '' }, last: at('2026-11-15T20:30:00Z'), next: null }
         ],
         audit: [
             { at: at('2026-11-16T21:16:00Z'), who: 'basil', ref: REF.basil, action: 'bot_started', target: '2 matches', detail: 'TREASURE, Fight Island · 187 · 4 and 2 bots' },
@@ -125,8 +132,17 @@ function fullHouse() {
 }
 function botApi(req, p, json) {
     const B = W.bots;
-    if (p === '/admin/api/bot-matches' && req.method === 'GET') { json(200, { matches: B.matches, cap: 8, places: { people: B.people, bots: B.matches.length, total: B.total, bots_max: 16 }, replays: true, untrusted: true, untrusted_fields: ['name', 'by', 'schedule'] }); return true; }
-    if (p === '/admin/api/bot-options') { json(200, { maps: BOT_MAPS, rotation: { 'highest-score': 9, '187': 6 }, random_max_minutes: 30, untrusted: true, untrusted_fields: ['name'] }); return true; }
+    if (p === '/admin/api/bot-matches' && req.method === 'GET') { json(200, { matches: B.matches, waiting: B.waiting, waiting_max: 32, cap: 8, places: { people: B.people, bots: B.matches.length, total: B.total, bots_max: 16 }, replays: true, untrusted: true, untrusted_fields: ['name', 'by', 'schedule'] }); return true; }
+    if (p === '/admin/api/bot-options') { json(200, { maps: B.maps, checking: 0, random_max_minutes: 30, untrusted: true, untrusted_fields: ['name'] }); return true; }
+    if (p === '/admin/api/bot-rotation' && req.method === 'GET') {
+        const lists = {}, defaults = {};
+        Object.keys(ROTATION_DEFAULTS).forEach((k) => {
+            lists[k] = (B.rotation ? B.rotation[k] : ROTATION_DEFAULTS[k]).map(rotationEntry);
+            defaults[k] = ROTATION_DEFAULTS[k].map((f) => ({ file: f, name: nameOf(f) }));
+        });
+        json(200, { lists, defaults, max: 100, checking: 0, untrusted: true, untrusted_fields: ['name'] });
+        return true;
+    }
     if (p === '/admin/api/bot-schedules' && req.method === 'GET') { json(200, { schedules: B.schedules, max: 20, scheduling: B.scheduling !== false, untrusted: true, untrusted_fields: ['name'] }); return true; }
     if (p.indexOf('/admin/api/bot-') !== 0 || req.method !== 'POST') return false;
     let raw = '';
@@ -143,12 +159,19 @@ function botApi(req, p, json) {
             if (body.map === 'ISLANDS.LVL' && body.rules === '187') return json(409, { error: 'map_187' });
             const names = ['SMALL', 'GAUNTLET', 'TREASURE', 'POPcOrN', 'MEDIUM', 'TINY'];
             const file = BOT_MAPS.filter((x) => x.file === body.map)[0];
-            const made = B.stopShort ? 1 : body.count;
+            const spaced = body.every_s > 0 && body.count > 1;
+            const made = B.stopShort ? 1 : spaced ? 1 : body.count;
             for (let i = 0; i < made; i++) B.matches.push(botMatch('n' + (B.nextId++), file ? file.name : names[i % names.length], body.rules === '187' ? '187' : 'highest-score', [{ seat: 0, level: 'hard' }, { seat: 2, level: 'hard' }], 'ffa', '2026-11-16T21:20:00Z', { by: 'basil', live: null }));
+            if (spaced) {                                                                                      // (the first starts now, the others wait: one every every_s seconds)
+                for (let i = 1; i < body.count; i++) B.waiting.push({ id: 'w' + (B.nextId++), name: file ? file.name : 'the rotation', what: Object.assign({}, body, { count: 1, every_s: 0 }), n: i + 1, of: body.count, at: at('2026-11-16T21:20:00Z') + i * body.every_s, held: false, by: 'basil' });
+                return json(200, { started: 1, asked: body.count, queued: body.count - 1, every_s: body.every_s });
+            }
             return json(200, B.stopShort ? { started: made, asked: body.count, stopped_for: B.stopShort } : { started: body.count, asked: body.count });
         }
-        if (p === '/admin/api/bot-matches/stop-all') { const n = B.matches.length; B.matches = []; return json(200, { stopped: n }); }
-        if ((m = /^\/admin\/api\/bot-matches\/([A-Za-z0-9_-]+)\/stop$/.exec(p))) { B.matches = B.matches.filter((x) => x.id !== m[1]); return json(200, { stopped: 1 }); }
+        if (p === '/admin/api/bot-rotation') { B.rotation = Object.assign({}, B.rotation || ROTATION_DEFAULTS, { [body.rules]: body.maps }); return json(200, { count: body.maps.length, changed: true }); }
+        if (p === '/admin/api/bot-rotation/reset') { B.rotation = Object.assign({}, B.rotation || ROTATION_DEFAULTS, { [body.rules]: ROTATION_DEFAULTS[body.rules] }); return json(200, { count: ROTATION_DEFAULTS[body.rules].length, changed: true }); }
+        if (p === '/admin/api/bot-matches/stop-all') { const n = B.matches.length, d = B.waiting.length; B.matches = []; B.waiting = []; return json(200, { stopped: n, dropped: d }); }
+        if ((m = /^\/admin\/api\/bot-matches\/([A-Za-z0-9_-]+)\/stop$/.exec(p))) { B.matches = B.matches.filter((x) => x.id !== m[1]); B.waiting = B.waiting.filter((x) => x.id !== m[1]); return json(200, { stopped: 1 }); }
         if (p === '/admin/api/bot-schedules' || (m = /^\/admin\/api\/bot-schedules\/(\d+)$/.exec(p))) {
             const cur = m ? B.schedules.filter((x) => x.id === +m[1])[0] : null;
             if (m && !cur) return json(404, { error: 'gone' });
@@ -265,11 +288,14 @@ async function openBots(pg) {
     await pg.waitForSelector('.b-run .meter');
     await pg.waitForSelector('.b-sched .blist, .b-sched .none');
 }
+const openMap = async (pg, pre) => { await pg.click('#' + pre + '-map'); await pg.waitForSelector('.mp-q'); await pg.waitForTimeout(120); };
+const chooseMap = async (pg, pre, query, name) => { await openMap(pg, pre); await pg.fill('.mp-q', query); await pg.locator('.mrow', { hasText: name }).first().click(); await pg.waitForTimeout(120); };
+const addMapIn = async (pg, column) => { await pg.locator('.b-rot .rcol').nth(column).locator('.rfoot .btn.big').click(); await pg.waitForSelector('.mp-q'); await pg.waitForTimeout(120); };
 const chipOf = (pg, group, text) => pg.locator('[aria-labelledby="' + group + '-l"] button', { hasText: new RegExp('^' + text + '$') }).first().click();
 async function fillStart(pg) {                         // three matches, Fight Island, 187, four bots Hard Hard Medium Easy, a split of 1 and 2 against 3 and 4
     const plus = pg.locator('.b-now .step button').nth(1);
     await plus.click(); await plus.click();
-    await pg.selectOption('#now-map', 'Fight Island.lvl');
+    await chooseMap(pg, 'now', 'fight island', 'Fight Island');
     await chipOf(pg, 'now-rules', '187');
     await chipOf(pg, 'now-bots', '4');
     await pg.selectOption('#now-lv0', 'hard'); await pg.selectOption('#now-lv1', 'hard'); await pg.selectOption('#now-lv2', 'medium'); await pg.selectOption('#now-lv3', 'easy');
@@ -284,8 +310,8 @@ const BOT_SCENES = [
     ['1d_start_now_refused_people_busy', { who: 'admin', crop: '.b-now', setup: () => { W.bots.refuse = 'busy'; W.bots.people = 40; } }, async (pg) => { await openBots(pg); await pg.click('.b-now .startrow .btn'); await pg.waitForSelector('.b-now .msg.bad'); }],
     ['1e_start_now_refused_over_the_limit', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); const plus = pg.locator('.b-now .step button').nth(1); for (let i = 0; i < 5; i++) await plus.click(); await pg.click('.b-now .startrow .btn'); await pg.waitForSelector('.b-now .msg.bad'); }],
     ['1f_start_now_all_places_taken', { who: 'admin', crop: '.b-now', setup: fullHouse }, async (pg) => { await openBots(pg); await pg.waitForSelector('.b-now .msg.bad'); }],
-    ['1g_start_now_islands_in_187', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); await pg.selectOption('#now-map', 'ISLANDS.LVL'); await chipOf(pg, 'now-rules', '187'); }],
-    ['1h_start_now_long_map', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); await pg.selectOption('#now-map', 'Ultimate Chess.lvl'); }],
+    ['1g_start_now_islands_in_187', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); await chooseMap(pg, 'now', 'islands', 'ISLANDS'); await chipOf(pg, 'now-rules', '187'); }],
+    ['1h_start_now_long_map', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); await chooseMap(pg, 'now', 'ultimate', 'Ultimate Chess'); }],
     ['1i_start_now_stopped_short', { who: 'admin', crop: '.b-now', setup: () => { W.bots.stopShort = 'budget'; } }, async (pg) => { await openBots(pg); await pg.locator('.b-now .step button').nth(1).click(); await pg.locator('.b-now .step button').nth(1).click(); await pg.click('.b-now .startrow .btn'); await pg.waitForSelector('.b-now .msg.ok'); await pg.waitForTimeout(300); }],
     ['2_running', { who: 'admin', crop: '.b-run' }, openBots],
     ['2b_running_none', { who: 'admin', crop: '.b-run', setup: () => { W.bots.matches = []; } }, openBots],
@@ -303,7 +329,7 @@ const BOT_SCENES = [
         await pg.locator('.tm2 button[aria-label="Remove 18:00"]').click();
         const plus = pg.locator('.sform .step button').nth(1);
         await plus.click(); await plus.click(); await plus.click();
-        await pg.selectOption('#sc-map', 'random:players');
+        await openMap(pg, 'sc'); await pg.locator('.mrow', { hasText: 'Random from the players’ maps' }).first().click(); await pg.waitForTimeout(120);
         await chipOf(pg, 'sc-rules', '187');
         await chipOf(pg, 'sc-bots', '3');
         await pg.selectOption('#sc-lv0', 'hard'); await pg.selectOption('#sc-lv1', 'hard'); await pg.selectOption('#sc-lv2', 'medium');
@@ -313,7 +339,85 @@ const BOT_SCENES = [
     ['3f_schedules_switched_off', { who: 'admin', crop: '.b-sched', setup: () => { W.bots.scheduling = false; } }, openBots],
     ['3d_schedule_refused_by_the_form', { who: 'admin', crop: '.b-sched' }, async (pg) => { await openBots(pg); await pg.click('.b-sched .sfoot .btn'); await pg.waitForSelector('.sform'); await pg.fill('#sc-min', '3'); await pg.locator('.sform .sfoot .btn', { hasText: 'Save' }).click(); await pg.waitForSelector('.sform .msg.bad'); }],
     ['3e_schedule_delete_question', { who: 'admin', dialog: true }, async (pg) => { await openBots(pg); await pg.locator('.b-sched .brow .bb button', { hasText: 'Delete' }).first().click(); await pg.waitForSelector('.dlg'); await pg.waitForTimeout(150); }],
-    ['4_log_bot_matches', { who: 'admin', crop: '#secpanel', width: 1000 }, async (pg) => { await openSection(pg, 'log'); await pg.waitForSelector('.alist2 .arow2'); await pg.locator('.lhead .chip', { hasText: 'Bot matches' }).click(); await pg.waitForTimeout(150); }]
+    ['4_log_bot_matches', { who: 'admin', crop: '#secpanel', width: 1000 }, async (pg) => { await openSection(pg, 'log'); await pg.waitForSelector('.alist2 .arow2'); await pg.locator('.lhead .chip', { hasText: 'Bot matches' }).click(); await pg.waitForTimeout(150); }],
+    // the Map choice (a box over the page, a sheet on a phone), the Rotation and the staggered start: the scenes of the approved pictures, one subject each
+    ['m1_start_now_map_closed', { who: 'admin', crop: '.b-now' }, async (pg) => { await openBots(pg); await chooseMap(pg, 'now', 'popcorn 3', 'PoPcOrN 3'); }],
+    ['m2_map_choice_open', { who: 'admin', dialog: true }, async (pg) => { await openBots(pg); await openMap(pg, 'now'); }],
+    ['m2c_map_choice_library_letters', { who: 'admin', dialog: true }, async (pg) => {
+        await openBots(pg); await openMap(pg, 'now');
+        await pg.locator('.mlet', { hasText: /^P/ }).click();
+        await pg.evaluate(() => { const l = document.querySelector('.mp-list'); const n = Array.prototype.slice.call(l.querySelectorAll('.mlet')).filter((b) => /^N/.test(b.textContent))[0]; l.scrollTop = (n || l.querySelector('.mlet')).offsetTop - 4; });
+        await pg.waitForTimeout(100);
+    }],
+    ['m3_map_search_pop', { who: 'admin', dialog: true }, async (pg) => { await openBots(pg); await openMap(pg, 'now'); await pg.fill('.mp-q', 'pop'); await pg.waitForTimeout(100); }],
+    ['m4_map_cannot_be_played', { who: 'admin', dialog: true }, async (pg) => { await openBots(pg); await openMap(pg, 'now'); await pg.locator('.mp-chips .chip', { hasText: /^Players/ }).click(); await pg.evaluate(() => { const l = document.querySelector('.mp-list'); l.scrollTop = l.scrollHeight; }); await pg.waitForTimeout(100); }],
+    ['m5_rotation_defaults', { who: 'admin', crop: '.b-rot', width: 1000 }, openBots],
+    ['m6_rotation_add_a_map', { who: 'admin', dialog: true }, async (pg) => {
+        await openBots(pg); await addMapIn(pg, 0);
+        await pg.fill('.mp-q', 'popcorn 3'); await pg.locator('.mrow', { hasText: 'PoPcOrN 3.lvl'.replace(/\.lvl$/, '') }).first().click(); await pg.waitForTimeout(150);
+    }],
+    ['m6b_rotation_added_not_saved', { who: 'admin', crop: '.b-rot', width: 1000 }, async (pg) => {
+        await openBots(pg); await addMapIn(pg, 0);
+        await pg.fill('.mp-q', 'popcorn 3'); await pg.locator('.mrow', { hasText: 'PoPcOrN 3' }).first().click();
+        await pg.locator('.dlg-foot .btn', { hasText: 'Done' }).click(); await pg.waitForTimeout(150);
+    }],
+    ['m6d_rotation_empty_list', { who: 'admin', crop: '.b-rot', width: 1000 }, async (pg) => {
+        await openBots(pg);
+        for (let i = 0; i < 6; i++) await pg.locator('.b-rot .rcol').nth(1).locator('.rrow .btn').first().click();
+        await pg.waitForTimeout(150);
+    }],
+    ['m7_rotation_long_map_warning', { who: 'admin', dialog: true }, async (pg) => {
+        await openBots(pg); await addMapIn(pg, 0);
+        await pg.fill('.mp-q', 'ultimate'); await pg.locator('.mrow', { hasText: 'Ultimate Chess' }).first().click(); await pg.waitForSelector('.mwarn'); await pg.waitForTimeout(100);
+    }],
+    ['m7c_rotation_islands_in_187_asked', { who: 'admin', dialog: true }, async (pg) => {
+        await openBots(pg); await addMapIn(pg, 1);
+        await pg.fill('.mp-q', 'islands'); await pg.locator('.mrow', { hasText: 'ISLANDS' }).first().click(); await pg.waitForSelector('.mwarn'); await pg.waitForTimeout(100);
+    }],
+    ['m8_rotation_skipped_maps', { who: 'admin', crop: '.b-rot', width: 1000, setup: () => {                       // (two maps of the lists were taken down meanwhile: they are not on the server's list any more)
+        const B = W.bots;
+        B.rotation = { 'highest-score': ROTATION_DEFAULTS['highest-score'].concat(['Mossy Ridge.lvl']), '187': ROTATION_DEFAULTS['187'] };
+        B.maps = B.maps.filter((m) => m.file !== 'Mossy Ridge.lvl' && m.file !== 'Fight Island.lvl');
+    } }, openBots],
+    ['m9_rotation_back_to_defaults_question', { who: 'admin', dialog: true, setup: () => {                          // (an edited list: Highest score without ISLANDS and with three maps added)
+        W.bots.rotation = { 'highest-score': ROTATION_DEFAULTS['highest-score'].filter((f) => f !== 'ISLANDS.LVL').concat(['PoPcOrN 3.lvl', 'Killing Trez.LVL', 'Cave Crossing.lvl']), '187': ROTATION_DEFAULTS['187'] };
+    } }, async (pg) => {
+        await openBots(pg);
+        await pg.locator('.b-rot .rcol').nth(0).locator('.rfoot .btn.ghost').click(); await pg.waitForSelector('.dlg'); await pg.waitForTimeout(150);
+    }],
+    ['m10_schedule_form_map_choice', { who: 'admin', cropFn: { a: '.sform > .shead', b: '.sform .mapf', side: '.sform' } }, async (pg) => {
+        await openBots(pg);
+        await pg.click('.b-sched .sfoot .btn'); await pg.waitForSelector('.sform');
+        await chooseMap(pg, 'sc', 'killing trez', 'Killing Trez');
+    }],
+    ['m10b_schedule_row_map_gone', { who: 'admin', crop: '.b-sched', setup: () => {
+        const B = W.bots;
+        B.maps = B.maps.filter((m) => m.file !== 'Mossy Ridge.lvl');
+        B.schedules.push({ id: 4, name: 'Mossy Ridge practice', default: false, on: true, when: { kind: 'every', minutes: 120 }, what: { count: 2, every_s: 0, map: 'Mossy Ridge.lvl', rules: 'highest-score', bots: '4', levels: ['medium', 'medium', 'medium', 'medium'], teams: 'ffa', split: '' }, last: 0, next: at('2026-11-16T23:20:00Z') });
+    } }, openBots],
+    // the staggered start: the field of Start now with five matches, and the Running list with the starts that wait
+    ['s1_start_now_spacing_field', { who: 'admin', crop: '.b-now' }, async (pg) => {
+        await openBots(pg);
+        const plus = pg.locator('.b-now .step button').nth(1);
+        for (let i = 0; i < 4; i++) await plus.click();
+        await pg.locator('.b-now .minrow .chip', { hasText: /^3 min$/ }).click(); await pg.waitForTimeout(100);
+    }],
+    ['s2_running_waiting_starts', { who: 'admin', crop: '.b-run', setup: () => {
+        const B = W.bots, now = at('2026-11-16T21:20:00Z');
+        B.waiting = [
+            { id: 'w41', name: 'the rotation', what: { count: 1, every_s: 0, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' }, n: 2, of: 5, at: now + 180, held: false, by: 'basil' },
+            { id: 'w42', name: 'the rotation', what: { count: 1, every_s: 0, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' }, n: 3, of: 5, at: now + 360, held: false, by: 'basil' },
+            { id: 'w43', name: 'the rotation', what: { count: 1, every_s: 0, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' }, n: 4, of: 5, at: now + 540, held: false, by: 'basil' },
+            { id: 'w44', name: 'the rotation', what: { count: 1, every_s: 0, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' }, n: 5, of: 5, at: now + 720, held: false, by: 'basil' }
+        ];
+        B.matches = B.matches.slice(0, 3);
+    } }, openBots],
+    ['s2b_running_waiting_start_held', { who: 'admin', crop: '.b-run', setup: () => {
+        const B = W.bots, now = at('2026-11-16T21:20:00Z');
+        fullHouse();
+        B.waiting = [{ id: 'w41', name: 'TREASURE', what: { count: 1, every_s: 0, map: 'TREASURE.LVL', rules: '187', bots: '4', levels: ['hard', 'hard', 'hard', 'hard'], teams: 'ffa', split: '' }, n: 3, of: 4, at: now - 20, held: true, by: 'basil' },
+            { id: 'w42', name: 'TREASURE', what: { count: 1, every_s: 0, map: 'TREASURE.LVL', rules: '187', bots: '4', levels: ['hard', 'hard', 'hard', 'hard'], teams: 'ffa', split: '' }, n: 4, of: 4, at: now + 160, held: false, by: 'basil' }];
+    } }, openBots]
 ];
 // one subject cut out of the page: a desktop at 1x and a phone at 2x (never wider than 1000 px); the question is the window of a phone and its own box on a desktop
 async function shoot(pg, spec, file, sizeName) {
@@ -322,6 +426,15 @@ async function shoot(pg, spec, file, sizeName) {
         if (phone) { await pg.screenshot({ path: file }); return; }
         const r = await pg.evaluate(() => { const b = document.querySelector('.dlg').getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; });
         await pg.screenshot({ path: file, clip: { x: Math.max(0, r.x - 40), y: Math.max(0, r.y - 40), width: r.w + 80, height: r.h + 80 } });
+        return;
+    }
+    if (spec.cropFn) {                                  // a part of the page between two elements: from the top of the first to the bottom of the second, and the panel's sides
+        const c = await pg.evaluate(({ a, b, side, vw }) => {
+            const ra = document.querySelector(a).getBoundingClientRect(), rb = document.querySelector(b).getBoundingClientRect(), rs = document.querySelector(side).getBoundingClientRect();
+            return { x0: rs.left + scrollX, x1: rs.right + scrollX, y0: ra.top + scrollY, y1: rb.bottom + scrollY, vw };
+        }, Object.assign({ vw: await pg.evaluate(() => innerWidth) }, spec.cropFn));
+        const cx0 = phone ? 0 : Math.max(0, c.x0 - 14), cx1 = phone ? c.vw : Math.min(c.vw, c.x1 + 18);
+        await pg.screenshot({ path: file, fullPage: true, clip: { x: cx0, y: Math.max(0, c.y0 - 12), width: cx1 - cx0, height: c.y1 - c.y0 + 24 } });
         return;
     }
     const r = await pg.evaluate(({ sels, vw }) => {
@@ -372,7 +485,7 @@ async function checks_of(pg, label, size) {
     for (const [name, spec, steps] of BOTS_ONLY ? BOT_SCENES : SCENES.concat(BOT_SCENES)) {
         if (ONLY && name.indexOf(ONLY) !== 0) continue;
         for (const sizeName of SHOTS ? ['phone', 'desktop'] : ['narrow', 'phone', 'desktop']) {
-            const size = spec.crop || spec.clip || spec.dialog ? Object.assign({}, SIZES[sizeName], sizeName === 'desktop' ? { dsf: 1 } : {}, sizeName === 'desktop' && spec.width ? { width: spec.width } : {}) : SIZES[sizeName];       // (a subject cut out of the page: a desktop at 1x)
+            const size = spec.crop || spec.clip || spec.dialog || spec.cropFn ? Object.assign({}, SIZES[sizeName], sizeName === 'desktop' ? { dsf: 1 } : {}, sizeName === 'desktop' && spec.width ? { width: spec.width } : {}) : SIZES[sizeName];       // (a subject cut out of the page: a desktop at 1x)
             W = world();
             who = WHO[spec.who];
             hubRefuses = false;
@@ -391,7 +504,7 @@ async function checks_of(pg, label, size) {
             await checks_of(pg, name + '_' + sizeName, size);
             check(name + '_' + sizeName + ': no error of the script and no refusal of the policy', errors.length === 0, errors.join(' | '));
             if (SHOTS) {
-                if (spec.crop || spec.clip || spec.dialog) await shoot(pg, spec, path.join(SHOTS, name + '_' + sizeName + '.png'), sizeName);
+                if (spec.crop || spec.clip || spec.dialog || spec.cropFn) await shoot(pg, spec, path.join(SHOTS, name + '_' + sizeName + '.png'), sizeName);
                 else await pg.screenshot({ path: path.join(SHOTS, name + '_' + sizeName + '.png'), fullPage: !spec.window });
             }
             await ctx.close();

@@ -237,11 +237,20 @@ public:
     bool start_bot_match(uint32_t now_ms, const BotMatchSpec& spec, std::string& code, std::string& why, BotRefusal* refusal = nullptr, uint8_t* mode = nullptr);
     /// How many map files were loaded and judged for the lists of the matches of computer players since the server started (a verdict that is kept is not loaded again)
     size_t bot_map_loads() const noexcept { return bot_map_loads_; }
-    /// The maps that a match of computer players may be asked to play: the original's six, three maps of the library and every approved map of the players, in that order, each with its size and its places; only
-    /// those that a room can play now (a map that the server lacks or cannot play is not in it)
-    std::vector<BotMapOption> bot_map_options() const;
-    /// How many maps of the rotation's list for those rules a room can play now (docs/SERVER_REPLAYS.md: nine for the original's game and six for 187 when the server has them all)
-    size_t bot_rotation_maps(bool kills_187) const;
+    /// The catalog: every map that the server has, for a match of computer players to name (the original's six, then the library, then every approved map of the players: a map of the test store never), each with its size,
+    /// seats, minutes and places, and whether a room can play it now and, if not, why. A map's verdict is kept (see bot_match_map_refusal), so a call asks the disk for sizes and times only; the files whose verdict is not kept
+    /// are loaded and judged, at most `max_loads` of them (kBotLoadAll: every one), and the others are listed with `checked` false. `unchecked`, when given, gets how many those are.
+    std::vector<BotMapOption> bot_map_options(size_t max_loads = kBotCatalogLoads, size_t* unchecked = nullptr) const;
+    /// Loads and judges up to `max_loads` maps of the catalog whose verdict is not kept, so that the first call of the page finds them kept (the main loop calls it in a pass in which nothing else is started). Returns how many
+    /// it loaded; 0 when every map of the catalog has its verdict.
+    size_t warm_bot_maps(size_t max_loads);
+    /// Whether the catalog has a map by this exact file name, and if it does whether it is an approved map of the players (its group "players")
+    bool bot_catalog_has(const std::string& file, bool& approved) const;
+    /// The list of the rotation for those rules, and the one that replaces it (a list that BotMatches has checked against the catalog). A server starts with bot_rotation_defaults().
+    const std::vector<BotRotationEntry>& bot_rotation(bool kills_187) const { return bot_rotation_[kills_187 ? 1 : 0]; }
+    void set_bot_rotation(bool kills_187, std::vector<BotRotationEntry> list) { bot_rotation_[kills_187 ? 1 : 0] = std::move(list); }
+    /// Judges one map as a list of the rotation or a choice would (the same kept verdict) for the page: "" when a room can play it now, else why not
+    std::string bot_map_refusal(const std::string& file, bool approved, uint32_t& minutes, uint32_t* places = nullptr) const { return bot_match_map_refusal(file, approved, minutes, places); }
     /// The matches of computer players that go now (a room that waits, loads or runs), the oldest first. `now_ms` only dates the rooms' statuses.
     std::vector<BotMatchInfo> bot_matches(uint32_t now_ms) const;
     /// How many matches of computer players go now, and the places that they take together (OnlineLimits::weight of each)
@@ -295,6 +304,9 @@ public:
     /// The public list of games (protocol 22; GET /lobbies): the lobby rooms that Room::listing lists, at most kMaxListedLobbies, the best first: more people, then the longer listed, then the smaller code. Cheap: a pass over
     /// the rooms with a predicate, no status. A room that is private, full, starting, empty or kept for a rematch is not in it.
     std::vector<LobbyListing> lobbies(uint32_t now_ms) const;
+    /// The lobby rooms that Room::private_listing lists: rooms that their leaders did not make public, for the locked cards of the list. At most kMaxListedLobbies, in an order that is made of the rows' own fields (more people,
+    /// then map, host and numbers) and of nothing else: the pass over the rooms goes by code, and no order may teach anything about a code.
+    std::vector<PrivateListing> private_lobbies() const;
 
     size_t room_count() const noexcept { return rooms_.size(); }
     /// The rooms of matches that gave their code to the lobby of their rematch and answer their last connections (see the paragraph at the top), and the lobbies that were opened again so
@@ -343,6 +355,18 @@ private:
     /// `places` (when asked) what a match on it takes (OnlineLimits::weight). The file is loaded and judged once: the verdict is kept by the file's path, size and time (and the approved record's hash), so that the
     /// admin page's lists and the draw of a map do not load every map of the server at every call; a map that was taken down is never answered from it, one that was replaced is judged again.
     std::string bot_match_map_refusal(const std::string& file, bool approved, uint32_t& minutes, uint32_t* places = nullptr) const;
+    struct BotMapVerdict {
+        std::string path;
+        uint64_t size{0};
+        int64_t stamp{0};
+        uint64_t hash{0};
+        std::string refusal;
+        uint32_t minutes{0};
+        uint32_t places{1};
+        bool done{true};                         // the answer is final: false is the answer of a call that was not let load the file (nothing of the file is known)
+    };
+    /// The verdict of a map, `out.done` true when it is the file's own: false, with nothing loaded, when it is not kept and `may_load` is false
+    void bot_map_verdict(const std::string& file, bool approved, bool may_load, BotMapVerdict& out) const;
     void restore_step(uint32_t now_ms);
     size_t next_to_restore() const;
     JobEnd advance(Restoring& job, uint32_t slice_ms, const std::function<uint32_t()>& clock, uint32_t now_ms);
@@ -408,15 +432,8 @@ private:
     uint32_t next_bot_start_ms_{0};
     std::vector<std::string> bot_notes_;         // what the timer did, for the log (take_notices)
     std::set<std::string> bot_maps_skipped_;     // the maps of the lists that the last match found that a room cannot play (each is named in the log once, not at every match)
-    struct BotMapVerdict {
-        std::string path;
-        uint64_t size{0};
-        int64_t stamp{0};
-        uint64_t hash{0};
-        std::string refusal;
-        uint32_t minutes{0};
-        uint32_t places{1};
-    };
+    std::vector<BotRotationEntry> bot_rotation_[2]{bot_rotation_defaults(false), bot_rotation_defaults(true)};      // the two lists of the rotation: the original's game, 187
+    size_t bot_warm_at_{0};                      // where warm_bot_maps goes on in the catalog
     mutable std::map<std::string, BotMapVerdict> bot_map_verdicts_;      // by the map's file name (see bot_match_map_refusal)
     mutable size_t bot_map_loads_{0};
     std::vector<std::string> room_notes_;        // what the rooms said (Room::take_notes), for the log (take_notices)

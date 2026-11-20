@@ -280,6 +280,7 @@ COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/
 # The admin page (docs/MAP_SUBMISSIONS.md "The admin page"): the address /admin is typed, nothing links to it; its API and the logon are paths of docker/nginx.conf
 COPY --from=builder /src/web/admin.html /usr/share/nginx/html/admin.html
 COPY web/admin.css /usr/share/nginx/html/admin.css
+COPY web/admin_map_pick.js /usr/share/nginx/html/admin_map_pick.js
 COPY web/admin_bots.js /usr/share/nginx/html/admin_bots.js
 COPY web/admin_page.js /usr/share/nginx/html/admin_page.js
 

@@ -79,7 +79,7 @@ cp -f "${SCRIPT_DIR}/web/lvl_core_api.js" "${DIST_DIR}/"
 MAPMAKER_VERSION="v$(head -n 1 "${SCRIPT_DIR}/web/MAPMAKER_VERSION" | tr -d '[:space:]')" && grep -q "data-maker=\"${MAPMAKER_VERSION}\"" "${SCRIPT_DIR}/web/mapmaker.html"
 sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" "${SCRIPT_DIR}/web/mapmaker.html" > "${DIST_DIR}/mapmaker.html"   # the map maker (docs/MAP_EDITOR.md); its scripts are in front/
 sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" "${SCRIPT_DIR}/web/admin.html" > "${DIST_DIR}/admin.html"   # the admin page (docs/MAP_SUBMISSIONS.md): typed by hand, with the bar and its stamps
-cp -f "${SCRIPT_DIR}/web/admin.css" "${SCRIPT_DIR}/web/admin_bots.js" "${SCRIPT_DIR}/web/admin_page.js" "${DIST_DIR}/"
+cp -f "${SCRIPT_DIR}/web/admin.css" "${SCRIPT_DIR}/web/admin_map_pick.js" "${SCRIPT_DIR}/web/admin_bots.js" "${SCRIPT_DIR}/web/admin_page.js" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.js" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.wasm" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.data" "${DIST_DIR}/"

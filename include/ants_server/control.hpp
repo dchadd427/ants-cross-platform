@@ -35,7 +35,7 @@
 //   (ended: the match is over, remembered for 15 minutes; replay: the file it was kept as, "" when it was not); GET /history and GET /history/<id> as above; GET /maps -> 200 {"format": 1, "maps":
 //   [{"file", "width", "height", "minutes", "players", "description", "plays", "thumb" (an address on the site, left out when the map has no picture), "original": true (only the six maps of the original game)}]}
 //   (map_store.hpp: the originals first, then the others by file name; plays are 0 without a database); GET /lobbies -> 200 {"format": 1, "lobbies": [{"code", "host" (the leader's name), "map", "mode", "people", "bots",
-//   "free", "size", "age" (seconds listed)}], "count"}, the public lobby rooms that a newcomer can join now, at most 50, the best first (network protocol 22, docs/SERVER.md "Lobby rooms"); 404 for everything else: handle_public_replays)
+//   "free", "size", "age" (seconds listed)}, ...rows of private rooms: {"private": true, "host", "map", "mode", "people", "bots", "free", "size"} with no code], "count" (the public rows)}, the public lobby rooms that a newcomer can join now, at most 50, the best first, then the private ones, at most 50 (network protocol 22, docs/PUBLIC_ROOMS.md); 404 for everything else: handle_public_replays)
 //
 // A status: {"code", "state": "waiting|loading|running|finished|failed", "map", "fog", "mode" ("highest-score" | "187"), "expected", "joined", "early_start", "leader": seat | null (while the room waits or
 // loads), "ignored_start_requests", "seat_moves" (the colors the leader moved a player to), "ignored_seat_moves", "players": [{"seat", "name"}], "ticks", "turns" (one per tick: turns of 50 ms, protocol 8), "age_seconds", "reason",
