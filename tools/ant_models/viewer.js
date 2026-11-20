@@ -14,12 +14,47 @@
   };
   const srgbToLinear = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
   const rgbLinear = (rgb) => rgb.map(srgbToLinear);
+  const DEFAULT_CUSTOM_HEX = "#7c3aed";
   const TEAMS = {
     green: { label: "Green", team: rgbLinear([0.24, 0.45, 0.27]), dark: rgbLinear([0.10, 0.22, 0.13]) },
     red: { label: "Red", team: rgbLinear([0.54, 0.16, 0.18]), dark: rgbLinear([0.24, 0.06, 0.07]) },
     blue: { label: "Blue", team: rgbLinear([0.20, 0.33, 0.56]), dark: rgbLinear([0.08, 0.14, 0.28]) },
     black: { label: "Black", team: rgbLinear([0.36, 0.38, 0.43]), dark: rgbLinear([0.14, 0.15, 0.18]) },
   };
+
+  function normalizeHex(raw) {
+    if (typeof raw !== "string") return null;
+    const s = raw.trim().replace(/^#/, "");
+    if (/^[0-9a-f]{6}$/i.test(s)) return "#" + s.toLowerCase();
+    if (/^[0-9a-f]{3}$/i.test(s)) return "#" + (s[0] + s[0] + s[1] + s[1] + s[2] + s[2]).toLowerCase();
+    return null;
+  }
+
+  function deriveCustomTeam(hex) {
+    const clean = normalizeHex(hex) || DEFAULT_CUSTOM_HEX;
+    const r = parseInt(clean.slice(1, 3), 16) / 255;
+    const g = parseInt(clean.slice(3, 5), 16) / 255;
+    const b = parseInt(clean.slice(5, 7), 16) / 255;
+    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    let dr, dg, db;
+    if (lum < 0.09) {
+      const lift = 0.12;
+      dr = clamp(r * 0.65 + lift, 0.09, 0.24);
+      dg = clamp(g * 0.65 + lift, 0.09, 0.24);
+      db = clamp(b * 0.65 + lift * 1.08, 0.10, 0.26);
+    } else {
+      const scale = lum > 0.82 ? 0.38 : 0.44, sat = 1.18;
+      dr = clamp((lum + (r - lum) * sat) * scale, 0.04, 0.48);
+      dg = clamp((lum + (g - lum) * sat) * scale, 0.04, 0.48);
+      db = clamp((lum + (b - lum) * sat) * scale, 0.04, 0.48);
+    }
+    return {
+      hex: clean, label: "Custom " + clean.toUpperCase(), slug: "custom-" + clean.slice(1),
+      team: rgbLinear([r, g, b]), dark: rgbLinear([dr, dg, db]),
+    };
+  }
+
+  const resolveTeam = (id, customHex) => (id === "custom" ? deriveCustomTeam(customHex) : (TEAMS[id] || TEAMS.green));
   const ANGLES = {
     "301": { label: "301 S", full: "301 S (Front)", yaw: 0, pitch: 33 },
     "201": { label: "201 SE", full: "201 SE (3/4)", yaw: -45, pitch: 33 },
@@ -398,7 +433,7 @@
     }
 
     drawScene(scene, cam, opts) {
-      const gl = this.gl, pal = opts.dark ? STUDIO_PALETTE.dark : STUDIO_PALETTE.light, team = TEAMS[opts.team] || TEAMS.green;
+      const gl = this.gl, pal = opts.dark ? STUDIO_PALETTE.dark : STUDIO_PALETTE.light, team = opts.teamColors || resolveTeam(opts.team, opts.customColor);
       gl.viewport(0, 0, opts.width, opts.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       if (!opts.transparent) {
         gl.disable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE);
@@ -517,17 +552,18 @@
 
   // --- Toolbar Roving-Tabindex Fallback (ONLY when native focusGroup is unsupported) ---
   function installToolbarRovingTabindex(toolbarEl) {
-    const getButtons = () => Array.from(toolbarEl.querySelectorAll("button:not(:disabled)"));
-    const init = getButtons();
+    const sel = "button:not(:disabled), input.team-color-input:not(:disabled)";
+    const getItems = () => Array.from(toolbarEl.querySelectorAll(sel));
+    const init = getItems();
     if (!init.length) return;
     init.forEach((b, i) => b.setAttribute("tabindex", i === 0 ? "0" : "-1"));
     const activate = (target, doFocus) => {
-      for (const b of getButtons()) b.setAttribute("tabindex", b === target ? "0" : "-1");
+      for (const b of getItems()) b.setAttribute("tabindex", b === target ? "0" : "-1");
       if (doFocus) target.focus();
     };
-    toolbarEl.addEventListener("focusin", (e) => { const btn = e.target.closest("button"); if (btn && toolbarEl.contains(btn)) activate(btn, false); });
+    toolbarEl.addEventListener("focusin", (e) => { const item = e.target.closest(sel); if (item && toolbarEl.contains(item)) activate(item, false); });
     toolbarEl.addEventListener("keydown", (e) => {
-      const list = getButtons(), idx = list.indexOf(document.activeElement);
+      const list = getItems(), idx = list.indexOf(document.activeElement);
       if (idx < 0) return;
       const next = e.key === "ArrowRight" ? list[(idx + 1) % list.length]
         : e.key === "ArrowLeft" ? list[(idx - 1 + list.length) % list.length]
@@ -548,6 +584,7 @@
     const statusEl = $("status-region"), spriteInset = $("sprite-inset");
     const spriteCanvas = $("sprite-canvas"), spriteCtx = spriteCanvas.getContext("2d");
     const emptyOverlay = $("empty-overlay"), fileInput = $("glb-file-input");
+    const colorInput = $("input-team-color"), customSwatch = $("swatch-custom");
     if (!("focusGroup" in HTMLElement.prototype)) installToolbarRovingTabindex(toolbarEl);
 
     const RELOAD_STORAGE_KEY = "ants_viewer_reload_state_v1";
@@ -565,11 +602,14 @@
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const params = new URLSearchParams(window.location.search), getP = (k) => (params.get(k) || "").toLowerCase();
     const pLineup = getP("lineup") === "1" || getP("lineup") === "true";
-    const pAnt = getP("ant"), pTeam = getP("team"), pAngle = getP("angle"), pProj = getP("proj"), pTurn = getP("turntable"), pBlink = getP("blink"), pIdle = getP("idle"), pSprite = getP("sprite");
+    const pAnt = getP("ant"), pTeam = getP("team"), pColor = normalizeHex(params.get("color")), pAngle = getP("angle"), pProj = getP("proj"), pTurn = getP("turntable"), pBlink = getP("blink"), pIdle = getP("idle"), pSprite = getP("sprite");
     const pIdleTimeRaw = params.get("idleTime"), fixedIdleTime = pIdleTimeRaw !== null && Number.isFinite(Number(pIdleTimeRaw)) ? Number(pIdleTimeRaw) : null;
     const savedAnt = !params.has("lineup") && !params.has("ant") && savedView && (ANT_CLASSES.includes(savedView.ant) || savedView.ant === "lineup") ? savedView.ant : null;
     const initAnt = pLineup ? "lineup" : (ANT_CLASSES.includes(pAnt) || pAnt === "lineup" ? pAnt : (savedAnt || "worker"));
-    const initTeam = TEAMS[pTeam] ? pTeam : (!params.has("team") && savedView && TEAMS[savedView.team] ? savedView.team : "green");
+    const savedColor = normalizeHex(savedView && savedView.customColor);
+    const initCustomColor = pColor || savedColor || DEFAULT_CUSTOM_HEX;
+    const savedTeam = !params.has("team") && savedView && (savedView.team === "custom" || TEAMS[savedView.team]) ? savedView.team : null;
+    const initTeam = (pTeam === "custom" || TEAMS[pTeam]) ? pTeam : (pColor ? "custom" : (savedTeam || "green"));
     const savedAngle = !params.has("angle") && savedView && (ANGLES[savedView.angle] || savedView.angle === "custom") ? savedView.angle : null;
     const initAngle = ANGLES[pAngle] ? pAngle : (savedAngle || "hero");
     const initProj = pProj === "ortho" || pProj === "persp" ? pProj
@@ -586,7 +626,7 @@
     const useSavedCam = !params.has("angle") && savedView && Number.isFinite(savedView.yaw) && Number.isFinite(savedView.pitch) && Number.isFinite(savedView.zoom);
     let pendingUpdatedVer = savedView && typeof savedView.updatedVersion === "string" ? savedView.updatedVersion : "";
     const state = {
-      ant: initAnt, customLabel: "", team: initTeam, angle: initAngle, blinkMode: initBlink, idleAnim: initIdle, fixedIdleTime,
+      ant: initAnt, customLabel: "", team: initTeam, customColor: initCustomColor, angle: initAngle, blinkMode: initBlink, idleAnim: initIdle, fixedIdleTime,
       dark: darkQuery.matches, turntable: initTurn, spritePreview: initSprite,
       cam: {
         yaw: useSavedCam ? wrapAngleDeg(savedView.yaw) : preset.yaw,
@@ -597,9 +637,10 @@
       camTarget: null, dirty: true, spriteDirty: true, lastSpriteTime: 0, loadSeq: 0, ready: false, error: "",
       modelCache: new Map(), customModel: null, scene: emptyScene(),
     };
+    const activeTeam = () => resolveTeam(state.team, state.customColor);
     window.__antViewerGetState = () => ({
       ant: state.ant === "custom" ? "" : state.ant,
-      team: state.team, angle: state.angle, proj: state.cam.projection,
+      team: state.team, customColor: state.customColor, angle: state.angle, proj: state.cam.projection,
       turntable: state.turntable, idle: state.idleAnim, sprite: state.spritePreview,
       yaw: state.cam.yaw, pitch: state.cam.pitch, zoom: state.cam.zoom,
     });
@@ -657,7 +698,7 @@
 
     function syncDebugState() {
       window.__antViewer = {
-        ready: state.ready, ant: state.ant, team: state.team, angle: state.angle, blink: state.blinkMode, idle: state.idleAnim,
+        ready: state.ready, ant: state.ant, team: state.team, customColor: state.customColor, angle: state.angle, blink: state.blinkMode, idle: state.idleAnim,
         hasBlinkAnim: state.scene.instances.some((inst) => inst.model.blinkInfo && inst.model.blinkInfo.hasBlink),
         idleAnims: state.scene.instances.flatMap((inst) => (inst.model.idleAnims || []).map((a) => a.name)),
         textureCount: state.scene.instances.reduce((sum, inst) => sum + (inst.model.textureCount || 0), 0),
@@ -676,13 +717,15 @@
       for (const [attr, val] of [["ant", state.ant], ["team", state.team], ["angle", state.angle], ["projection", state.cam.projection]]) {
         toolbarEl.querySelectorAll("button[data-" + attr + "]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset[attr] === val)));
       }
+      if (colorInput && colorInput.value.toLowerCase() !== state.customColor) colorInput.value = state.customColor;
+      if (customSwatch) customSwatch.style.backgroundColor = state.customColor;
       $("btn-turntable").setAttribute("aria-pressed", String(state.turntable));
       $("btn-idle").setAttribute("aria-pressed", String(state.idleAnim));
       $("btn-sprite-scale").setAttribute("aria-pressed", String(state.spritePreview));
       $("btn-blink-hold").setAttribute("aria-pressed", String(state.blinkMode === "closed"));
       spriteInset.hidden = !state.spritePreview;
       const antLabel = state.ant === "custom" ? (state.customLabel || "Custom .GLB") : (ANT_LABELS[state.ant] || state.ant);
-      const teamLabel = (TEAMS[state.team] || TEAMS.green).label, angleLabel = ANGLES[state.angle] ? ANGLES[state.angle].label : "Custom";
+      const teamLabel = activeTeam().label, angleLabel = ANGLES[state.angle] ? ANGLES[state.angle].label : "Custom";
       $("badge-ant").textContent = antLabel; $("badge-team").textContent = teamLabel;
       $("badge-angle").textContent = angleLabel; $("sprite-angle-tag").textContent = angleLabel;
       $("meta-active").textContent = antLabel + " · " + teamLabel + " · " + angleLabel;
@@ -802,10 +845,11 @@
       const size = 256, out = document.createElement("canvas"), tmp = document.createElement("canvas");
       out.width = size * SHEET_ANGLES.length; out.height = size + 44; tmp.width = size; tmp.height = size;
       const ctx = out.getContext("2d"), tCtx = tmp.getContext("2d");
+      const teamObj = activeTeam();
       SHEET_ANGLES.forEach((key, idx) => {
         const info = ANGLES[key], x = idx * size;
         const img = renderer.renderOffscreenPixels(size, size, state.scene, { yaw: info.yaw, pitch: info.pitch, zoom: 1, projection: "ortho" }, {
-          transparent: true, showPlinth: false, dark: false, team: state.team, blinkMode: state.blinkMode,
+          transparent: true, showPlinth: false, dark: false, team: state.team, teamColors: teamObj, blinkMode: state.blinkMode,
           idleAnim: state.idleAnim, fixedIdleTime: state.fixedIdleTime, overrideProj: "ortho",
         });
         tCtx.putImageData(img, 0, 0); ctx.drawImage(tmp, x, 0);
@@ -816,7 +860,7 @@
         ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(info.full, x + size * 0.5, size + 22.5);
       });
       const slug = state.ant === "custom" ? (state.customLabel || "custom").replace(/\.glb$/i, "").replace(/[^a-z0-9_-]+/gi, "_") : state.ant;
-      const fileName = "ants-" + slug + "-" + state.team + "-5angle.png";
+      const fileName = "ants-" + slug + "-" + (teamObj.slug || state.team) + "-5angle.png";
       out.toBlob((blob) => {
         if (!blob) { announce("PNG export failed."); return; }
         triggerDownload(blob, fileName); announce("Exported 5-angle PNG sprite sheet (" + fileName + ").");
@@ -856,6 +900,10 @@
       const btn = e.target.closest("button");
       if (!btn) return;
       if (btn.dataset.ant) selectAnt(btn.dataset.ant);
+      else if (btn.dataset.team === "custom") {
+        if (state.team === "custom" && colorInput) colorInput.click();
+        else { state.team = "custom"; updateUiState(); markDirty(); announce("Team color set to " + activeTeam().label + "."); }
+      }
       else if (btn.dataset.team && TEAMS[btn.dataset.team]) { state.team = btn.dataset.team; updateUiState(); markDirty(); announce("Team color set to " + TEAMS[state.team].label + "."); }
       else if (btn.dataset.angle) { setAnglePreset(btn.dataset.angle); announce("Camera set to " + ANGLES[btn.dataset.angle].full + "."); }
       else if (btn.dataset.projection) { state.cam.projection = btn.dataset.projection === "ortho" ? "ortho" : "persp"; updateUiState(); markDirty(); announce("Projection set to " + (state.cam.projection === "ortho" ? "Orthographic." : "Perspective.")); }
@@ -869,6 +917,18 @@
       else if (btn.id === "btn-reset-view") { const key = ANGLES[state.angle] ? state.angle : "hero"; setAnglePreset(key); announce("View reset to " + ANGLES[key].full + "."); }
       else if (btn.id === "btn-load-glb") fileInput.click();
     });
+
+    if (colorInput) {
+      const applyPickedColor = () => {
+        const hex = normalizeHex(colorInput.value);
+        if (!hex) return;
+        state.customColor = hex; state.team = "custom"; updateUiState(); markDirty();
+        announce("Team color set to " + activeTeam().label + ".");
+      };
+      colorInput.addEventListener("click", () => { if (state.team !== "custom") { state.team = "custom"; updateUiState(); markDirty(); announce("Team color set to " + activeTeam().label + "."); } });
+      colorInput.addEventListener("input", applyPickedColor);
+      colorInput.addEventListener("change", applyPickedColor);
+    }
 
     fileInput.addEventListener("change", () => { if (fileInput.files && fileInput.files.length) { loadLocalFiles(fileInput.files); fileInput.value = ""; } });
 
@@ -972,7 +1032,7 @@
       if (state.dirty) {
         const [w, h] = renderer.resize();
         renderer.drawScene(state.scene, state.cam, {
-          width: w, height: h, transparent: false, showPlinth: true, dark: state.dark, team: state.team,
+          width: w, height: h, transparent: false, showPlinth: true, dark: state.dark, team: state.team, teamColors: activeTeam(),
           blinkMode: state.blinkMode, idleAnim: state.idleAnim, fixedIdleTime: state.fixedIdleTime,
         });
         state.dirty = false;
@@ -983,7 +1043,7 @@
         if (state.scene.instances.length) {
           const spriteCam = { yaw: state.cam.yaw, pitch: state.cam.pitch, zoom: 1.0, projection: "ortho" };
           spriteCtx.putImageData(renderer.renderOffscreenPixels(spriteCanvas.width, spriteCanvas.height, state.scene, spriteCam, {
-            transparent: true, showPlinth: false, dark: false, team: state.team,
+            transparent: true, showPlinth: false, dark: false, team: state.team, teamColors: activeTeam(),
             blinkMode: state.blinkMode, idleAnim: state.idleAnim, fixedIdleTime: state.fixedIdleTime, overrideProj: "ortho",
           }), 0, 0);
         }

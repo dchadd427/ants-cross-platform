@@ -240,13 +240,37 @@ body {
 }
 
 .toolbar button:focus-visible,
+.team-color-input:focus-visible,
 #stage:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
+.team-color-input {
+  appearance: none;
+  inline-size: 34px;
+  block-size: 32px;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.team-color-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.team-color-input::-webkit-color-swatch,
+.team-color-input::-moz-color-swatch {
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 3px;
+}
+
 @media (hover: hover) {
-  .toolbar button:hover {
+  .toolbar button:hover,
+  .team-color-input:hover {
     background: var(--bg-surface-hover);
     border-color: var(--border-strong);
   }
@@ -259,6 +283,7 @@ body {
 
 @media (prefers-reduced-motion: no-preference) {
   .toolbar button,
+  .team-color-input,
   .drop-overlay {
     transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, opacity 160ms ease;
   }
@@ -269,6 +294,12 @@ body {
     min-inline-size: 44px;
     min-block-size: 44px;
     padding: 6px 12px;
+  }
+
+  .team-color-input {
+    inline-size: 44px;
+    block-size: 44px;
+    padding: 5px;
   }
 }
 
@@ -296,6 +327,10 @@ body {
 
 .swatch-black {
   background: #575c66;
+}
+
+.swatch-custom {
+  background: #7c3aed;
 }
 
 /* 3D Stage */
@@ -543,7 +578,8 @@ body {
 }
 
 @media (forced-colors: active) {
-  .toolbar button {
+  .toolbar button,
+  .team-color-input {
     border: 1px solid ButtonBorder;
     background: ButtonFace;
     color: ButtonText;
@@ -557,6 +593,7 @@ body {
   }
 
   .toolbar button:focus-visible,
+  .team-color-input:focus-visible,
   #stage:focus-visible {
     outline: 2px solid Highlight;
     outline-offset: 2px;
@@ -575,7 +612,8 @@ body {
     border: 1px solid CanvasText;
   }
 
-  .swatch {
+  .swatch,
+  .team-color-input {
     forced-color-adjust: none;
     border: 1px solid CanvasText;
   }
