@@ -940,7 +940,7 @@ void run_protocol13_tests() {
 
     TEST_CASE("N2.101 Protocol 14 And 15, The Message: SeatMove Is The Type 31, Two Different Seats 0 .. 3 And The Guard (A 32-Bit Number That Is Never 0, Little Endian), Seven Bytes And Nothing Else; Every Other Pair Of Seats, A Guard Of 0, Every Truncation, Every Extra Byte And Every Other Type Is Refused, A Refused Message Leaves Its Target Alone, The Layout Of Protocol 14 Is Refused, And No Other Message Is Taken For It; The Guard Is The Seating Hash: The State And The Name Of Each Seat, Nothing Else Of The Room Message") {
         ASSERT_EQ(kProtocolVersion, 25);
-        ASSERT_TRUE(static_cast<int>(MsgType::SeatMove) == 31 && static_cast<int>(MsgType::Last) == 35);
+        ASSERT_TRUE(static_cast<int>(MsgType::SeatMove) == 31 && static_cast<int>(MsgType::Last) == 40);
         // the layout, byte by byte: the type, the seat of the player that moves, the seat that it takes, the guard
         ASSERT_TRUE(encode(SeatMoveMsg{0, 1, 0x04030201u}) == (std::vector<uint8_t>{31, 0, 1, 1, 2, 3, 4}));
         ASSERT_TRUE(encode(SeatMoveMsg{3, 2, 0xFFFFFFFFu}) == (std::vector<uint8_t>{31, 3, 2, 255, 255, 255, 255}));
@@ -1824,7 +1824,7 @@ void run_protocol16_tests() {
     } TEST_END();
 
     TEST_CASE("N2.108 Protocol 16, The Name: NameMsg Is The Type 33, A Length Byte And A Name Of 1 .. 32 Printable Characters (0x20 .. 0x7E) That Neither Starts Nor Ends With A Space; Every Other Name, Every Truncation, Every Extra Byte And Every Other Type Is Refused And Leaves Its Target Alone; The Encoder Cuts A Longer Name To 32 Characters And Drops The Characters That Do Not Travel") {
-        ASSERT_TRUE(static_cast<int>(MsgType::Name) == 33 && static_cast<int>(MsgType::Last) == static_cast<int>(MsgType::Visibility) && kMaxNameChars == 32);
+        ASSERT_TRUE(static_cast<int>(MsgType::Name) == 33 && static_cast<int>(MsgType::Last) == static_cast<int>(MsgType::Signal) && kMaxNameChars == 32);
         // the layout, byte by byte
         const std::vector<uint8_t> want = {33, 3, 'A', 'n', 'n'};
         {
@@ -1942,7 +1942,7 @@ void run_protocol16_tests() {
     } TEST_END();
 
     TEST_CASE("N2.110 Protocol 16, The Removal: RemoveMsg Is The Type 34, A Seat 0 .. 3 And The Guard (A 32-Bit Number That Is Never 0, Little Endian), Six Bytes And Nothing Else; Every Other Seat, A Guard Of 0, Every Truncation, Every Extra Byte And Every Other Type Is Refused And Leaves Its Target Alone") {
-        ASSERT_TRUE(static_cast<int>(MsgType::Remove) == 34 && static_cast<int>(MsgType::Last) == static_cast<int>(MsgType::Visibility) && static_cast<int>(MsgType::Name) == 33);
+        ASSERT_TRUE(static_cast<int>(MsgType::Remove) == 34 && static_cast<int>(MsgType::Last) == static_cast<int>(MsgType::Signal) && static_cast<int>(MsgType::Name) == 33);
         // the layout, byte by byte: the type, the seat of the person who goes, the guard (little endian)
         ASSERT_TRUE(encode(RemoveMsg{2, 0x04030201u}) == (std::vector<uint8_t>{34, 2, 1, 2, 3, 4}));
         ASSERT_TRUE(encode(RemoveMsg{0, 0xFFFFFFFFu}) == (std::vector<uint8_t>{34, 0, 255, 255, 255, 255}));
@@ -2204,13 +2204,13 @@ void run_protocol16_tests() {
     } TEST_END();
 
     TEST_CASE("N2.113 Protocol 22, The Visibility: VisibilityMsg Is The Type 35 And One Byte, 0 (Private) Or 1 (Public), Two Bytes And Nothing Else; Every Other Value, Every Truncation, Every Extra Byte And Every Other Type Byte Is Refused; MsgType::Last Is 35; The Room's Flag kRoomPublic (8) Is A Lobby Room's: The Decoder Refuses It In Any Other Room And Every Flag Byte Outside The Four Rule Bits; The Protocol Number Is 22") {
-        ASSERT_EQ(kProtocolVersion, uint16_t{24});
-        ASSERT_TRUE(static_cast<int>(MsgType::Visibility) == 35 && static_cast<int>(MsgType::Last) == 35 && static_cast<int>(MsgType::Remove) == 34 && kRoomPublic == 8);
+        ASSERT_EQ(kProtocolVersion, uint16_t{25});
+        ASSERT_TRUE(static_cast<int>(MsgType::Visibility) == 35 && static_cast<int>(MsgType::Last) == 40 && static_cast<int>(MsgType::Remove) == 34 && kRoomPublic == 8);
         // the layout, byte by byte: the type and the choice
         ASSERT_TRUE(encode(VisibilityMsg{true}) == (std::vector<uint8_t>{35, 1}));
         ASSERT_TRUE(encode(VisibilityMsg{false}) == (std::vector<uint8_t>{35, 0}));
         ASSERT_EQ(peek_type(encode(VisibilityMsg{true})), MsgType::Visibility);
-        ASSERT_EQ(peek_type(std::vector<uint8_t>{36, 0}), MsgType::None);                                         // (nothing above the last type is a message)
+        ASSERT_EQ(peek_type(std::vector<uint8_t>{41, 0}), MsgType::None);                                         // (nothing above the last type is a message)
         for (const bool choice : {false, true}) {
             VisibilityMsg got;
             got.is_public = !choice;

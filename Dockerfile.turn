@@ -1,4 +1,6 @@
 # The relay of the players' channels (docs/SERVER.md "The relay for the players' channels"): the official coturn image with this repository's configuration (docker/turnserver.conf: no secret and no
-# address in it; the stack gives the secret, the public address and the name on the command line). Pinned: raise the tag on purpose.
+# address in it; the stack gives the secret, the public address and the name on the command line) and an entry point that refuses to start without them (docker/turn-entrypoint.sh). Pinned: raise the tag on purpose.
 FROM coturn/coturn:4.19.2
 COPY docker/turnserver.conf /etc/coturn/turnserver.conf
+COPY --chmod=0755 docker/turn-entrypoint.sh /usr/local/bin/ants-turn-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/ants-turn-entrypoint.sh"]

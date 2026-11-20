@@ -208,8 +208,7 @@ services:
       ANTS_TURN_SECRET: ${ANTS_TURN_SECRET:-}
       ANTS_TURN_EXTERNAL_IP: ${ANTS_TURN_EXTERNAL_IP:-}
       ANTS_TURN_HOST: ${ANTS_TURN_HOST:-}
-    # The relay refuses to start unless all three are set (an empty secret would be a key that everybody knows): the check runs before the image's own entry point, which then expands `$` in the command.
-    entrypoint: ["/bin/sh", "-c", 'if [ -z "$$ANTS_TURN_SECRET" ] || [ -z "$$ANTS_TURN_EXTERNAL_IP" ] || [ -z "$$ANTS_TURN_HOST" ]; then echo "ants-turn: set ANTS_TURN_SECRET, ANTS_TURN_EXTERNAL_IP and ANTS_TURN_HOST" >&2; exit 1; fi; exec /usr/local/bin/docker-entrypoint.sh "$$@"', "sh"]
+    # (The image's entry point, docker/turn-entrypoint.sh, refuses to start unless all three are set, then expands `$` in the arguments below.)
     command: ["-c", "/etc/coturn/turnserver.conf", "--static-auth-secret=$$ANTS_TURN_SECRET", "--external-ip=$$ANTS_TURN_EXTERNAL_IP", "--realm=$$ANTS_TURN_HOST"]
     read_only: true
     cap_drop: [ALL]
