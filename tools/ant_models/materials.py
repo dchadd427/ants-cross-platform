@@ -36,6 +36,13 @@ class MaterialSpec:
     metallic: float
     roughness: float
     double_sided: bool = False
+    alpha_mode: str = "OPAQUE"
+
+    def resolved_alpha_mode(self) -> str:
+        """Return effective glTF 2.0 alphaMode ('BLEND' when alpha < 1.0)."""
+        if self.alpha_mode != "OPAQUE":
+            return self.alpha_mode
+        return "BLEND" if self.base_color[3] < 0.9999 else "OPAQUE"
 
     def linear_base_color(self) -> Tuple[float, float, float, float]:
         """Return linear-space RGBA baseColorFactor per glTF 2.0 spec."""
@@ -43,6 +50,7 @@ class MaterialSpec:
 
     def to_gltf_dict(self) -> Dict[str, object]:
         """Serialize to a glTF 2.0 material object with IEC-linear baseColorFactor."""
+        mode = self.resolved_alpha_mode()
         return {
             "name": self.name,
             "pbrMetallicRoughness": {
@@ -50,7 +58,8 @@ class MaterialSpec:
                 "metallicFactor": round(float(self.metallic), 6),
                 "roughnessFactor": round(float(self.roughness), 6),
             },
-            "doubleSided": bool(self.double_sided),
+            "alphaMode": mode,
+            "doubleSided": bool(self.double_sided or mode == "BLEND"),
         }
 
 
@@ -105,15 +114,19 @@ _SPECS: Tuple[MaterialSpec, ...] = (
     ),
     MaterialSpec(
         name="glass_tinted",
-        base_color=(0.05, 0.11, 0.16, 1.0),
-        metallic=0.26,
-        roughness=0.07,
+        base_color=(0.12, 0.24, 0.32, 0.30),
+        metallic=0.10,
+        roughness=0.06,
+        double_sided=True,
+        alpha_mode="BLEND",
     ),
     MaterialSpec(
         name="glass_clear",
-        base_color=(0.72, 0.85, 0.90, 1.0),
-        metallic=0.14,
-        roughness=0.07,
+        base_color=(0.85, 0.94, 0.99, 0.22),
+        metallic=0.08,
+        roughness=0.05,
+        double_sided=True,
+        alpha_mode="BLEND",
     ),
     MaterialSpec(
         name="fuse_white",

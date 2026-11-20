@@ -279,82 +279,101 @@ def render_scene_orthographic(
     cx_px = 0.5 * (width - 1)
     cy_px = 0.5 * (height - 1)
 
-    parts_iter = scene.world_parts() if hasattr(scene, "world_parts") else scene.all_parts()
-    for part in parts_iter:
+    all_world = scene.world_parts() if hasattr(scene, "world_parts") else scene.all_parts()
+    opaque_parts = []
+    blend_parts = []
+    for part in all_world:
         if len(part.indices) == 0:
             continue
         spec = get_material(part.material)
-        rgba = material_linear_color(part.material, team=team)
-        base_rgb = np.array(rgba[:3], dtype=np.float64)
-        mottle = 0.14 if part.material in ("chitin_team", "chitin_dark", "gear_gold", "prop_brown") else 0.0
+        if spec.resolved_alpha_mode() == "BLEND" or spec.base_color[3] < 0.999:
+            blend_parts.append(part)
+        else:
+            opaque_parts.append(part)
 
-        world_pos = part.positions.astype(np.float64)
-        pos = world_pos - center[None, :]
-        nrm = part.normals.astype(np.float64)
-        idx = part.indices.reshape(-1, 3)
+    for is_blend, bucket in ((False, opaque_parts), (True, blend_parts)):
+        for part in bucket:
+            spec = get_material(part.material)
+            rgba = material_linear_color(part.material, team=team)
+            base_rgb = np.array(rgba[:3], dtype=np.float64)
+            base_alpha = float(rgba[3])
+            mottle = 0.14 if (not is_blend and part.material in ("chitin_team", "chitin_dark", "gear_gold", "prop_brown")) else 0.0
 
-        sx = cx_px + (pos @ right) * scale
-        sy = cy_px - (pos @ up) * scale
-        sz = pos @ cam_dir
+            world_pos = part.positions.astype(np.float64)
+            pos = world_pos - center[None, :]
+            nrm = part.normals.astype(np.float64)
+            idx = part.indices.reshape(-1, 3)
 
-        x0, x1, x2 = sx[idx[:, 0]], sx[idx[:, 1]], sx[idx[:, 2]]
-        y0, y1, y2 = sy[idx[:, 0]], sy[idx[:, 1]], sy[idx[:, 2]]
-        z0, z1, z2 = sz[idx[:, 0]], sz[idx[:, 1]], sz[idx[:, 2]]
+            sx = cx_px + (pos @ right) * scale
+            sy = cy_px - (pos @ up) * scale
+            sz = pos @ cam_dir
 
-        # Screen-space signed area (note +Y is down in image coords, so CCW front faces have area < 0).
-        area = (x1 - x0) * (y2 - y0) - (y1 - y0) * (x2 - x0)
-        vis = np.nonzero(area < -1e-6)[0]
-        if len(vis) == 0:
-            continue
+            x0, x1, x2 = sx[idx[:, 0]], sx[idx[:, 1]], sx[idx[:, 2]]
+            y0, y1, y2 = sy[idx[:, 0]], sy[idx[:, 1]], sy[idx[:, 2]]
+            z0, z1, z2 = sz[idx[:, 0]], sz[idx[:, 1]], sz[idx[:, 2]]
 
-        # Painter order front-to-back improves early z-reject.
-        tri_z = (z0[vis] + z1[vis] + z2[vis]) / 3.0
-        vis = vis[np.argsort(-tri_z)]
-
-        for t_i in vis:
-            ax, ay, az = x0[t_i], y0[t_i], z0[t_i]
-            bx, by, bz = x1[t_i], y1[t_i], z1[t_i]
-            cx, cy, cz = x2[t_i], y2[t_i], z2[t_i]
-
-            min_x = max(0, int(math.floor(min(ax, bx, cx))))
-            max_x = min(width - 1, int(math.ceil(max(ax, bx, cx))))
-            min_y = max(0, int(math.floor(min(ay, by, cy))))
-            max_y = min(height - 1, int(math.ceil(max(ay, by, cy))))
-            if min_x > max_x or min_y > max_y:
+            # Screen-space signed area (+Y is down in image coords, so CCW front faces have area < 0).
+            area = (x1 - x0) * (y2 - y0) - (y1 - y0) * (x2 - x0)
+            vis = np.nonzero(area < -1e-6)[0]
+            if len(vis) == 0:
                 continue
 
-            inv_a = 1.0 / area[t_i]
-            px = np.arange(min_x, max_x + 1, dtype=np.float64)[None, :] + 0.5
-            py = np.arange(min_y, max_y + 1, dtype=np.float64)[:, None] + 0.5
+            tri_z = (z0[vis] + z1[vis] + z2[vis]) / 3.0
+            # Opaque front-to-back for early z-reject; translucent back-to-front for clean blending.
+            vis = vis[np.argsort(tri_z if is_blend else -tri_z)]
 
-            w0 = ((bx - px) * (cy - py) - (by - py) * (cx - px)) * inv_a
-            w1 = ((cx - px) * (ay - py) - (cy - py) * (ax - px)) * inv_a
-            w2 = 1.0 - w0 - w1
-            mask = (w0 >= -1e-4) & (w1 >= -1e-4) & (w2 >= -1e-4)
-            if not np.any(mask):
-                continue
+            for t_i in vis:
+                ax, ay, az = x0[t_i], y0[t_i], z0[t_i]
+                bx, by, bz = x1[t_i], y1[t_i], z1[t_i]
+                cx, cy, cz = x2[t_i], y2[t_i], z2[t_i]
 
-            z_interp = w0 * az + w1 * bz + w2 * cz
-            sub_z = z_buf[min_y : max_y + 1, min_x : max_x + 1]
-            hit = mask & (z_interp > sub_z)
-            if not np.any(hit):
-                continue
+                min_x = max(0, int(math.floor(min(ax, bx, cx))))
+                max_x = min(width - 1, int(math.ceil(max(ax, bx, cx))))
+                min_y = max(0, int(math.floor(min(ay, by, cy))))
+                max_y = min(height - 1, int(math.ceil(max(ay, by, cy))))
+                if min_x > max_x or min_y > max_y:
+                    continue
 
-            sub_z[hit] = z_interp[hit]
-            i0, i1, i2 = idx[t_i]
-            n_pix = (
-                w0[hit, None] * nrm[i0]
-                + w1[hit, None] * nrm[i1]
-                + w2[hit, None] * nrm[i2]
-            )
-            w_pix = (
-                w0[hit, None] * world_pos[i0]
-                + w1[hit, None] * world_pos[i1]
-                + w2[hit, None] * world_pos[i2]
-            ) if mottle > 0.0 else None
-            shaded = _shade_vinyl(n_pix, cam_dir, base_rgb, spec.metallic, spec.roughness, world_pts=w_pix, mottle=mottle)
-            sub_col = color_buf[min_y : max_y + 1, min_x : max_x + 1]
-            sub_col[hit] = shaded
+                inv_a = 1.0 / area[t_i]
+                px = np.arange(min_x, max_x + 1, dtype=np.float64)[None, :] + 0.5
+                py = np.arange(min_y, max_y + 1, dtype=np.float64)[:, None] + 0.5
+
+                w0 = ((bx - px) * (cy - py) - (by - py) * (cx - px)) * inv_a
+                w1 = ((cx - px) * (ay - py) - (cy - py) * (ax - px)) * inv_a
+                w2 = 1.0 - w0 - w1
+                mask = (w0 >= -1e-4) & (w1 >= -1e-4) & (w2 >= -1e-4)
+                if not np.any(mask):
+                    continue
+
+                z_interp = w0 * az + w1 * bz + w2 * cz
+                sub_z = z_buf[min_y : max_y + 1, min_x : max_x + 1]
+                hit = mask & (z_interp > sub_z)
+                if not np.any(hit):
+                    continue
+
+                i0, i1, i2 = idx[t_i]
+                n_pix = (
+                    w0[hit, None] * nrm[i0]
+                    + w1[hit, None] * nrm[i1]
+                    + w2[hit, None] * nrm[i2]
+                )
+                w_pix = (
+                    w0[hit, None] * world_pos[i0]
+                    + w1[hit, None] * world_pos[i1]
+                    + w2[hit, None] * world_pos[i2]
+                ) if mottle > 0.0 else None
+                shaded = _shade_vinyl(n_pix, cam_dir, base_rgb, spec.metallic, spec.roughness, world_pts=w_pix, mottle=mottle)
+                sub_col = color_buf[min_y : max_y + 1, min_x : max_x + 1]
+                if not is_blend:
+                    sub_z[hit] = z_interp[hit]
+                    sub_col[hit] = shaded
+                else:
+                    # Fresnel glass reflection keeps edges/highlights crisp while eyes read clearly behind.
+                    n_unit = n_pix / np.maximum(1e-8, np.linalg.norm(n_pix, axis=-1, keepdims=True))
+                    ndv = np.clip(np.sum(n_unit * cam_dir, axis=-1, keepdims=True), 0.0, 1.0)
+                    spec_luma = np.clip(np.mean(shaded, axis=-1, keepdims=True), 0.0, 1.0)
+                    g_alpha = np.clip(base_alpha + ((1.0 - ndv) ** 3.0) * 0.42 + spec_luma * 0.45, 0.0, 0.90)
+                    sub_col[hit] = g_alpha * shaded + (1.0 - g_alpha) * sub_col[hit]
 
     return _aces_srgb(color_buf)
 
