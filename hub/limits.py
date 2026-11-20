@@ -1,6 +1,7 @@
 """Every number the hub enforces, in one place (docs/HUB.md, "Limits"), and the small counters that enforce them. No I/O: the clock is given."""
 import collections
 import ipaddress
+import math
 from dataclasses import dataclass
 
 
@@ -108,6 +109,20 @@ class Limits:
     picture_refill_seconds: float = 1.0
     picture_serve_burst: int = 240      # /hub/pic/ answers for one client address: a burst of 240 (one whole list of the front page), then twenty a second (nginx has the same numbers in front)
     picture_serve_refill_seconds: float = 0.05
+    commands_start_burst: int = 3       # `/bots COUNT ...` (docs/HUB_COMMANDS.md): an account may start this many at once, across all its tabs, then one every `commands_start_refill_seconds` ...
+    commands_start_refill_seconds: float = 10.0
+    commands_control_burst: int = 5     # ... `/bots status` and `/bots stop`: a burst of 5, then one every 2 seconds ...
+    commands_control_refill_seconds: float = 2.0
+    commands_other_burst: int = 10      # ... every other command of a person (`/help`, `/ignore`, `/unignore`) and every word that is no command of the account's own: a burst of 10, then one every 2 seconds
+    commands_other_refill_seconds: float = 2.0
+    ignore_max: int = 50                # people that one account ignores (memory only)
+    door_connect_seconds: float = 3.0   # the hub's call to the game server's admin door (hub/gamedoor.py): the connection ...
+    door_seconds: float = 10.0          # ... and the whole call (the head and the body read, the connection closed)
+    door_body_max: int = 131072         # what is read of an answer (the head and the body together); more is an answer that is not the game server's
+    door_inflight: int = 2              # `/bots` commands that wait for the game server at one time, for the whole hub (an account has one)
+    catalog_seconds: float = 300.0      # how long the game server's list of maps is kept
+    catalog_entries_max: int = 2000     # maps of that list that the hub reads (a longer list is not read at all)
+    catalog_body_max: int = 524288      # what is read of the answer that holds that list (the rows of the real list are about 150 bytes: 2,000 maps are about 300 KB; the other calls read door_body_max)
 
     @property
     def prune_from_bytes(self):
@@ -220,6 +235,14 @@ class RateByAddress:
     def forget_idle(self, now):
         for key in [k for k, b in self.buckets.items() if b.ready(now) and b.tokens >= self.burst]:
             del self.buckets[key]
+
+    def wait_seconds(self, key, now):
+        """Whole seconds (at least one) until the bucket of `key` has a token again: what a refusal tells the page."""
+        bucket = self.buckets.get(key)
+        if bucket is None:
+            return 1
+        bucket.ready(now)
+        return max(1, math.ceil((1.0 - bucket.tokens) * bucket.refill))
 
 
 class RateByAccount(RateByAddress):

@@ -65,6 +65,7 @@ VP_BUDGET, VP_GZIP_BUDGET = 4_200, 1_900            # vp.js: the screen numbers 
 CHAT_BUDGET, CHAT_GZIP_BUDGET = 98_000, 30_000
 TALK_BUDGET, TALK_GZIP_BUDGET = 80_600, 28_900
 MOD_BUDGET, MOD_GZIP_BUDGET = 71_300, 20_800        # mod.js and mod.css: the moderation sheet (loaded for a visitor with a role only)
+CMDS_BUDGET, CMDS_GZIP_BUDGET = 52_500, 16_000       # cmds.js and cmds.css: the helper of the chat's commands, the /bots builder and the private answers (loaded for an account that has commands only)
 SPLIT_BUDGET, SPLIT_GZIP_BUDGET = 16_000, 5_200     # split.js and split.css: the drag handles of Home
 ALERTS_BUDGET, ALERTS_GZIP_BUDGET = 25_000, 8_300   # alerts.js and alerts.css: the alerts sheet, the join alert and the bell of Home
 ALERT_CORE_BUDGET, ALERT_CORE_GZIP_BUDGET = 13_000, 4_400   # web/alert_core.js: the switches, the tab alert and the sound table that the front page and the game page share

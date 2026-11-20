@@ -48,7 +48,7 @@ COSTS = {
     "test_mutate_tool.Project": 6, "test_nginx_stats.TheBlocksRun": 6, "test_run_tests.ParallelRunner": 6, "test_web_map_maker_link.TheChecksAreNotVacuous": 6,
     "test_web_shapes.TheMutantsOfThePicker": 6, "test_cmake_version.CcacheSupport": 5,
     "test_hub_roles.TheLiveRoles": 30, "test_hub_roles.TheLookup": 6, "test_hub_roles.TheSecrets": 5,
-    "test_hub_powers.TheLiveHub": 45, "test_hub_powers.TheRealProcess": 31, "test_hub_powers.TheFreshCheck": 6, "test_hub_powers.TheIdIsLikeAPassword": 5,
+    "test_web_home_cmds.TheChecksAreNotVacuous": 6, "test_hub_powers.TheLiveHub": 45, "test_hub_powers.TheRealProcess": 31, "test_hub_powers.TheFreshCheck": 6, "test_hub_powers.TheIdIsLikeAPassword": 5,
 }
 
 # The mutation classes that run as several units (the groups of this table, `NAME[K/N]`, K from 1): each unit gets the environment variable SHARD_ENV, "K/N", and the class (through

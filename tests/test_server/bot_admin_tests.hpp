@@ -1,5 +1,5 @@
 // The tests of what the admin page asks of the server's own matches of computer players, and of the schedules that start them (RoomManager::start_bot_match with its choices and its limits, BotMatches, BotScheduleStore, the
-// routes of SubmissionApi that hand the page's calls over; docs/SERVER_REPLAYS.md "Matches of computer players" and "Schedules", docs/MAP_SUBMISSIONS.md "The admin page"): the limit of eight matches, of sixteen places and
+// routes of SubmissionApi that hand the page's calls over; docs/SERVER_REPLAYS.md "Matches of computer players" and "Schedules", docs/MAP_SUBMISSIONS.md "The admin page"): the limit of eighty matches, of 160 places and
 // of what people use; the choices (levels, rules, bots, teams and splits, the maps); stop and stop all; every route behind the door's pass, token and origin; what Start now answers, and what the log keeps; the schedule
 // routes; and the schedules that run rooms (a run that a limit holds back is skipped, not queued; a restart does not run at once; the days of the clock change). Included by test_server_files.cpp after bot_match_tests.hpp,
 // whose fixtures it uses; test_server.cpp calls run_bot_admin_tests(). The Pacific clock and the store alone are test_bot_schedules.cpp.
@@ -167,18 +167,18 @@ std::vector<std::string> start_many(World& w, const BotMatchSpec& spec, size_t m
 }  // namespace
 
 void run_bot_admin_tests() {
-    TEST_CASE("S3.270 At Most Eight Matches Of Computer Players Go At Once And Sixteen Places Are Theirs; A Ninth Match Or A Seventeenth Place Is Refused With The Reason, A Stopped Match Frees Its Place, And Matches Start A Second Apart") {
+    TEST_CASE("S3.270 At Most Eighty Matches Of Computer Players Go At Once And 160 Places Are Theirs; An Eighty-First Match Or A 161st Place Is Refused With The Reason, A Stopped Match Frees Its Place, And Matches Start A Second Apart") {
         ReplayClock clock;
         std::string why;
-        {   // eight: the ninth is refused, and no room is made for it
+        {   // eighty: the eighty-first is refused, and no room is made for it
             World w;
             ASSERT_TRUE(w.mgr.enable_replays(replay_config("botadmin-cap", &clock), false, why));
             (void)w.mgr.take_notices();
             w.mgr.seed_bot_matches(31u);
             BotRefusal refusal = BotRefusal::None;
-            std::vector<std::string> codes = start_many(w, BotMatchSpec(), 20, &refusal, &why);
+            std::vector<std::string> codes = start_many(w, BotMatchSpec(), 100, &refusal, &why);
             ASSERT_EQ(codes.size(), kBotMatchesMax);
-            ASSERT_TRUE(refusal == BotRefusal::Cap && why.find("8 matches of computer players go already") != std::string::npos);
+            ASSERT_TRUE(refusal == BotRefusal::Cap && why.find("80 matches of computer players go already") != std::string::npos);
             ASSERT_EQ(w.mgr.bot_match_count(), kBotMatchesMax);
             ASSERT_EQ(w.mgr.list(w.now).size(), kBotMatchesMax);
             ASSERT_TRUE(w.mgr.stop_bot_match(codes[3], w.now));                          // (a stopped match is no longer one that goes: its place is free at once)
@@ -188,25 +188,25 @@ void run_bot_admin_tests() {
             ASSERT_EQ(w.mgr.bot_match_count(), kBotMatchesMax);
             ASSERT_FALSE(w.mgr.start_bot_match(w.now, BotMatchSpec(), code, reason));
         }
-        {   // sixteen places: a match on a big map takes more than one
+        {   // 160 places: a match on a big map takes more than one
             ListedWorld w("botadmin-places-maps");
             ASSERT_TRUE(w.mgr.enable_replays(replay_config("botadmin-places", &clock), false, why));
             (void)w.mgr.take_notices();
             w.mgr.seed_bot_matches(32u);
             BotRefusal refusal = BotRefusal::None;
-            const std::vector<std::string> big = start_many(w, fight_island_spec(), 10, &refusal, &why);
-            ASSERT_EQ(big.size(), size_t{5});                                           // (150 x 150 is three places: five take fifteen, the sixth would take eighteen)
-            ASSERT_TRUE(refusal == BotRefusal::Places && why.find("18 of the 16 places") != std::string::npos);
-            ASSERT_EQ(w.mgr.bot_places(), 15u);
+            const std::vector<std::string> big = start_many(w, fight_island_spec(), 70, &refusal, &why);
+            ASSERT_EQ(big.size(), size_t{53});                                          // (150 x 150 is three places: 53 take 159, the 54th would take 162)
+            ASSERT_TRUE(refusal == BotRefusal::Places && why.find("162 of the 160 places") != std::string::npos);
+            ASSERT_EQ(w.mgr.bot_places(), 159u);
             BotMatchSpec tiny;
             tiny.map = "TINY.LVL";
-            ASSERT_EQ(start_many(w, tiny, 1).size(), size_t{1});                         // (one more place: sixteen, and six matches)
-            ASSERT_EQ(w.mgr.bot_places(), 16u);
-            ASSERT_EQ(w.mgr.bot_match_count(), size_t{6});
+            ASSERT_EQ(start_many(w, tiny, 1).size(), size_t{1});                         // (one more place: 160, and 54 matches)
+            ASSERT_EQ(w.mgr.bot_places(), 160u);
+            ASSERT_EQ(w.mgr.bot_match_count(), size_t{54});
             refusal = BotRefusal::None;
-            ASSERT_TRUE(start_many(w, tiny, 1, &refusal).empty() && refusal == BotRefusal::Places);         // (seven matches are under eight, but seventeen places are over sixteen)
+            ASSERT_TRUE(start_many(w, tiny, 1, &refusal).empty() && refusal == BotRefusal::Places);         // (55 matches are under eighty, but 161 places are over 160)
             ASSERT_TRUE(w.mgr.stop_bot_match(big[0], w.now));
-            ASSERT_EQ(w.mgr.bot_places(), 13u);
+            ASSERT_EQ(w.mgr.bot_places(), 157u);
             ASSERT_EQ(start_many(w, tiny, 3).size(), size_t{3});                         // (the places that it held are free)
         }
         {   // people first: while their matches use more than three of every four places, none starts
@@ -251,8 +251,8 @@ void run_bot_admin_tests() {
             ASSERT_TRUE(at[0] != 0 && at[1] != 0 && at[2] != 0);
             ASSERT_TRUE(at[1] - at[0] >= kBotStartGapMs - 20 && at[2] - at[1] >= kBotStartGapMs - 20);
             ASSERT_TRUE(at[1] - at[0] <= kBotStartGapMs + 200 && at[2] - at[1] <= kBotStartGapMs + 200);          // (a second apart, and no longer than that)
-            ASSERT_EQ(kBotMatchesMax, size_t{8});
-            ASSERT_EQ(kBotPlacesMax, 16u);
+            ASSERT_EQ(kBotMatchesMax, size_t{80});
+            ASSERT_EQ(kBotPlacesMax, 160u);
         }
     } TEST_END();
 
@@ -545,7 +545,7 @@ void run_bot_admin_tests() {
             const char* method;
             const char* tail;
         };
-        const Route routes[] = {{"GET", "bot-matches"},          {"GET", "bot-options"},         {"GET", "bot-schedules"},    {"POST", "bot-matches"},          {"POST", "bot-matches/stop-all"},
+        const Route routes[] = {{"GET", "bot-matches"},          {"GET", "bot-matches/summary"}, {"GET", "bot-options"},         {"GET", "bot-schedules"},    {"POST", "bot-matches"},          {"POST", "bot-matches/stop-all"},
                                 {"POST", "bot-matches/m1/stop"}, {"POST", "bot-schedules"},      {"POST", "bot-schedules/1"}, {"POST", "bot-schedules/1/delete"}, {"GET", "bot-rotation"},
                                 {"POST", "bot-rotation"},        {"POST", "bot-rotation/reset"}};
         const std::string start = batch_body(2, "TINY.LVL", "highest-score", "2");
@@ -613,7 +613,7 @@ void run_bot_admin_tests() {
         ASSERT_EQ(bare.post("bot-matches", start, kBotRefDave, "dave", {{"x-ants-csrf", "<erase>"}}).status, 403);
     } TEST_END();
 
-    TEST_CASE("S3.275 Start Now Through The Door: The Answer Is How Many Started; Over The Limit Of Eight Is Refused Whole With What Runs And What Is Free; A Batch That Does Not Fit The Places Starts As Many As Fit; People's Matches Hold It Back; The Log Keeps What Was Done And Never A Refusal") {
+    TEST_CASE("S3.275 Start Now Through The Door: The Answer Is How Many Started; A Batch Over The Limit Of Eighty Starts What Fits And Queues The Rest (It Is Never Refused For A Limit); A Batch That Does Not Fit The Places Waits For Them; People's Matches Hold It Back; The Log Keeps What Was Done") {
         {
             BotDoor d("botadmin-start");
             ctl::HttpResponse r = d.post("bot-matches", batch_body(2, "TINY.LVL", "highest-score", "2", "ffa"));
@@ -625,8 +625,8 @@ void run_bot_admin_tests() {
             ASSERT_TRUE(log[0].detail.find("TINY.LVL") != std::string::npos && log[0].detail.find("rules highest score") != std::string::npos && log[0].detail.size() <= 200);
             // what goes now
             const ctl::JsonValue list = BotDoor::json(d.get("bot-matches"));
-            ASSERT_TRUE(list.get("matches").size() == 2 && list.get("cap").as_int_or(0) == 8 && list.get("untrusted").as_bool_or(false) && list.get("replays").as_bool_or(false));
-            ASSERT_TRUE(list.get("places").get("people").as_int_or(-1) == 0 && list.get("places").get("bots").as_int_or(-1) == 2 && list.get("places").get("bots_max").as_int_or(-1) == 16);
+            ASSERT_TRUE(list.get("matches").size() == 2 && list.get("cap").as_int_or(0) == 80 && list.get("untrusted").as_bool_or(false) && list.get("replays").as_bool_or(false));
+            ASSERT_TRUE(list.get("places").get("people").as_int_or(-1) == 0 && list.get("places").get("bots").as_int_or(-1) == 2 && list.get("places").get("bots_max").as_int_or(-1) == 160 && list.get("queues").size() == 0 && list.get("queue_max").as_int_or(0) == 10000);
             std::set<std::string> fields;
             for (size_t i = 0; i < list.get("untrusted_fields").size(); ++i) fields.insert(list.get("untrusted_fields").at(i).str());
             ASSERT_EQ(fields, (std::set<std::string>{"name", "by", "schedule"}));
@@ -641,18 +641,10 @@ void run_bot_admin_tests() {
                 ASSERT_TRUE(codes.count(m.get("id").str()) == 0 && m.get("id").str().size() < 6);                         // (the page's name for a match is not the room's code)
             }
             ASSERT_EQ(ids.size(), size_t{2});
-            // the limit: eight at once; a batch that is over it is refused whole
-            r = d.post("bot-matches", batch_body(7, "TINY.LVL", "highest-score", "2"));
-            ASSERT_EQ(r.status, 409);
-            const ctl::JsonValue over = BotDoor::json(r);
-            ASSERT_TRUE(over.get("error").str() == "cap" && over.get("running").as_int_or(-1) == 2 && over.get("asked").as_int_or(-1) == 7 && over.get("free").as_int_or(-1) == 6);
-            ASSERT_TRUE(d.w.mgr.bot_match_count() == 2 && d.log().size() == 1);                                           // (nothing was started, and a refusal is no line of the log)
             ASSERT_EQ(d.post("bot-matches", batch_body(6, "TINY.LVL", "highest-score", "2")).status, 200);
             ASSERT_EQ(d.w.mgr.bot_match_count(), size_t{8});
-            r = d.post("bot-matches", batch_body(1, "TINY.LVL", "highest-score", "2"));
-            ASSERT_TRUE(r.status == 409 && BotDoor::json(r).get("free").as_int_or(-1) == 0 && BotDoor::json(r).get("running").as_int_or(-1) == 8);
             // a batch of the wrong shape: its own code, nothing started
-            for (const auto& bad : std::vector<std::pair<std::string, std::string>>{{batch_body(0), "bad_count"}, {batch_body(9), "bad_count"}, {batch_body(1, "random:nothing"), "bad_map"}, {batch_body(1, "random:rotation", "both"), "bad_rules"},
+            for (const auto& bad : std::vector<std::pair<std::string, std::string>>{{batch_body(0), "bad_count"}, {batch_body(10001), "bad_count"}, {batch_body(1, "random:nothing"), "bad_map"}, {batch_body(1, "random:rotation", "both"), "bad_rules"},
                                                                                    {batch_body(1, "random:rotation", "random", "5"), "bad_bots"}, {batch_body(1, "random:rotation", "random", "2", "random", "", "[\"loud\"]"), "bad_levels"},
                                                                                    {batch_body(1, "random:rotation", "random", "2", "pairs"), "bad_teams"}, {batch_body(1, "random:rotation", "random", "2", "split", "12-34"), "bad_split"}}) {
                 r = d.post("bot-matches", bad.first);
@@ -678,19 +670,18 @@ void run_bot_admin_tests() {
             ASSERT_TRUE(r.status == 200 && BotDoor::json(r).get("stopped").as_int_or(-1) == 0);
             ASSERT_EQ(BotDoor::json(d.get("bot-matches")).get("matches").size(), size_t{0});
         }
-        {   // the places: five matches on the big map take fifteen; a batch of four starts as many as fit (one, then the next would be over)
+        {   // the places: 53 matches on the big map take 159 of the 160; a batch of eight starts the one that fits and the rest wait for places (nothing is refused: the queue holds them)
             BotDoor d("botadmin-places");
-            const ctl::HttpResponse four = d.post("bot-matches", batch_body(4, "Fight Island.lvl", "187", "2"));
-            ASSERT_MSG(four.status == 200, four.body);
-            ASSERT_EQ(d.w.mgr.bot_places(), 12u);
-            ctl::HttpResponse r = d.post("bot-matches", batch_body(2, "Fight Island.lvl", "187", "2"));
+            for (int i = 0; i < 6; ++i) ASSERT_EQ(d.post("bot-matches", batch_body(8, "Fight Island.lvl", "187", "2")).status, 200);
+            ASSERT_EQ(d.w.mgr.bot_places(), 144u);
+            ctl::HttpResponse r = d.post("bot-matches", batch_body(8, "Fight Island.lvl", "187", "2"));
             ASSERT_EQ(r.status, 200);
-            ASSERT_TRUE(BotDoor::json(r).get("started").as_int_or(0) == 1 && BotDoor::json(r).get("asked").as_int_or(0) == 2 && BotDoor::json(r).get("stopped_for").str() == "places");
-            ASSERT_EQ(d.w.mgr.bot_places(), 15u);
-            r = d.post("bot-matches", batch_body(1, "Fight Island.lvl", "187", "2"));
-            const ctl::JsonValue full = BotDoor::json(r);
-            ASSERT_TRUE(r.status == 409 && full.get("error").str() == "places" && full.get("used").as_int_or(0) == 15 && full.get("max").as_int_or(0) == 16);
-            ASSERT_EQ(d.log().size(), size_t{2});                                                                            // (the two starts: the refusal is not in the log)
+            const ctl::JsonValue a = BotDoor::json(r);
+            ASSERT_TRUE(a.get("started").as_int_or(0) == 5 && a.get("asked").as_int_or(0) == 8 && a.get("queued").as_int_or(0) == 3 && a.get("held").str() == "places" && !a.has("stopped_for"));
+            ASSERT_EQ(d.w.mgr.bot_places(), 159u);
+            const ctl::JsonValue list = BotDoor::json(d.get("bot-matches"));
+            ASSERT_TRUE(list.get("queues").size() == 1 && list.get("queues").at(0).get("remaining").as_int_or(0) == 3 && list.get("queues").at(0).get("held").as_bool_or(false) && list.get("queues").at(0).get("why").str() == "places");
+            ASSERT_EQ(d.log().size(), size_t{7});                                                                            // (the seven batches: nothing else makes a line)
             r = d.post("bot-matches", batch_body(1, "ISLANDS.LVL", "187", "2"));
             ASSERT_TRUE(r.status == 409 && BotDoor::json(r).get("error").str() == "map_187");
             r = d.post("bot-matches", batch_body(1, "Nowhere.lvl", "highest-score", "2"));
@@ -707,10 +698,10 @@ void run_bot_admin_tests() {
             }
             const ctl::HttpResponse r = d.post("bot-matches", batch_body(1));
             const ctl::JsonValue busy = BotDoor::json(r);
-            ASSERT_TRUE(r.status == 409 && busy.get("error").str() == "busy" && busy.get("people").as_int_or(0) == 7 && busy.get("total").as_int_or(0) == 8);
-            ASSERT_TRUE(d.w.mgr.bot_match_count() == 0 && d.log().empty());
+            ASSERT_TRUE(r.status == 200 && busy.get("started").as_int_or(-1) == 0 && busy.get("queued").as_int_or(0) == 1 && busy.get("held").str() == "people");          // (people come first: the match waits, it is not refused)
+            ASSERT_TRUE(d.w.mgr.bot_match_count() == 0 && d.log().size() == 1);
             const ctl::JsonValue list = BotDoor::json(d.get("bot-matches"));
-            ASSERT_TRUE(list.get("places").get("people").as_int_or(0) == 7 && list.get("places").get("total").as_int_or(0) == 8);
+            ASSERT_TRUE(list.get("places").get("people").as_int_or(0) == 7 && list.get("places").get("total").as_int_or(0) == 8 && list.get("queues").size() == 1 && list.get("queues").at(0).get("why").str() == "people");
         }
         {   // no replays: a match that nobody could look at again is not played
             BotDoor d("botadmin-noreplay", ServerLimits(), false);
@@ -849,13 +840,14 @@ void run_bot_admin_tests() {
             ASSERT_EQ(d.w.mgr.bot_match_count(), size_t{3});
             const ctl::JsonValue list = BotDoor::json(d.get("bot-matches"));
             ASSERT_TRUE(list.get("matches").size() == 3 && list.get("matches").at(0).get("schedule").str() == "Quick swarm" && !list.get("matches").at(0).has("by") && list.get("matches").at(0).get("started").as_int_or(0) == kBotWall0 + 300);
-            // the limit is shared with Start now: five more fill the eight
-            ASSERT_EQ(d.post("bot-matches", batch_body(5, "TINY.LVL", "highest-score", "2")).status, 200);
+            // the limit is shared with Start now: it queues the rest of its batch, the passes of the loop start them, and the eighty are full
+            ASSERT_EQ(d.post("bot-matches", batch_body(77, "TINY.LVL", "highest-score", "2")).status, 200);
+            for (int i = 0; i < 60 && d.w.mgr.bot_match_count() < kBotMatchesMax; ++i) d.bots->update(kBotWall0 + 300, d.w.now);
             ASSERT_EQ(d.w.mgr.bot_match_count(), kBotMatchesMax);
             d.bots->update(kBotWall0 + 600, d.w.now);                                                                          // (due, and held back: skipped)
             ASSERT_EQ(d.w.mgr.bot_match_count(), kBotMatchesMax);
             notes = d.bots->take_notices();
-            ASSERT_TRUE(notes.size() == 1 && notes[0] == "bot schedule " + std::to_string(s.id) + ": started 0 of 3 (8 matches of computer players go already)");
+            ASSERT_TRUE(notes.size() == 1 && notes[0] == "bot schedule " + std::to_string(s.id) + ": started 0 of 3 (80 matches of computer players go already)");
             ASSERT_TRUE(d.schedules->find(s.id)->last_run == kBotWall0 + 300 && d.schedules->find(s.id)->next_run == kBotWall0 + 900);       // (the next run is five minutes on: it is not waiting for a place)
             ASSERT_EQ(d.post("bot-matches/stop-all").status, 200);                                                             // (places are free again)
             d.bots->update(kBotWall0 + 601, d.w.now);
@@ -863,16 +855,18 @@ void run_bot_admin_tests() {
             ASSERT_TRUE(d.w.mgr.bot_match_count() == 0 && d.bots->take_notices().empty());                                    // (and the skipped run was not queued: nothing starts until the next time)
             d.bots->update(kBotWall0 + 900, d.w.now);
             ASSERT_EQ(d.w.mgr.bot_match_count(), size_t{3});
-            // as many as fit: six go, a run of five starts two
+            // as many as fit: seventy-eight go, a run of five starts two
             ASSERT_TRUE(d.schedules->remove(s.id, why));
-            ASSERT_EQ(d.post("bot-matches", batch_body(3, "TINY.LVL", "highest-score", "2")).status, 200);
+            ASSERT_EQ(d.post("bot-matches", batch_body(75, "TINY.LVL", "highest-score", "2")).status, 200);
+            for (int i = 0; i < 80 && d.w.mgr.bot_match_count() < 78; ++i) d.bots->update(kBotWall0 + 900, d.w.now);
+            ASSERT_TRUE(d.w.mgr.bot_match_count() == 78 && d.bots->waiting_count() == 0);
             BotSchedule five;
             ASSERT_TRUE(d.schedules->create(every("Five", 5, 5), kBotWall0 + 900, five, why));
             (void)d.bots->take_notices();
             d.bots->update(kBotWall0 + 900 + 300, d.w.now);
             ASSERT_EQ(d.w.mgr.bot_match_count(), kBotMatchesMax);
             notes = d.bots->take_notices();
-            ASSERT_TRUE(notes.size() == 1 && notes[0] == "bot schedule " + std::to_string(five.id) + ": started 2 of 5 (8 matches of computer players go already)");
+            ASSERT_TRUE(notes.size() == 1 && notes[0] == "bot schedule " + std::to_string(five.id) + ": started 2 of 5 (80 matches of computer players go already)");
         }
         {   // the matches of people come first: a run that they hold back is skipped too
             ServerLimits limits;
@@ -1110,20 +1104,20 @@ void run_bot_admin_tests() {
         ASSERT_TRUE(closed.status == 403 && closed.body == kBotClosed);
     } TEST_END();
 
-    TEST_CASE("S3.282 A Match Of Computer Players Is Not Played When The Store Has No Room To Keep It This Hour: The Start Is Refused With The Reason (409 budget, The Number An Hour), A Batch Starts As Many As The Room Allows, And The Room Is Used By A Match That Was Kept, Not By One That Was Stopped At Once") {
+    TEST_CASE("S3.282 The Hour's Budget Of Recordings Never Refuses A Match Of Computer Players: A Match Is Played Whatever The Budget, It Is KEPT Only While A Slot Is Reserved For It (The Slots Are Counted Among The Matches That Go, Not At Their End), A Match Without A Slot Writes No File And Never Pushes A Person's Recording Out, And A Stopped Match Gives Its Slot Back") {
         BotDoor d("botadmin-budget", ServerLimits(), true, true, 2);
         ASSERT_EQ(d.w.mgr.replay_store()->bot_saves_left(), size_t{2});
         const ctl::HttpResponse batch = d.post("bot-matches", batch_body(3, "TINY.LVL", "highest-score", "2"));
         ASSERT_EQ(batch.status, 200);
         const ctl::JsonValue answer = BotDoor::json(batch);
-        ASSERT_TRUE(answer.get("started").as_int_or(0) == 2 && answer.get("asked").as_int_or(0) == 3 && answer.get("stopped_for").str() == "budget");
-        const ctl::HttpResponse over = d.post("bot-matches", batch_body(1, "TINY.LVL", "highest-score", "2"));
-        ASSERT_TRUE(over.status == 409 && BotDoor::json(over).get("error").str() == "budget" && BotDoor::json(over).get("per_hour").as_int_or(0) == 2);
+        ASSERT_TRUE(answer.get("started").as_int_or(0) == 3 && answer.get("asked").as_int_or(0) == 3 && !answer.has("stopped_for") && !answer.has("held"));          // (all three play)
+        ASSERT_EQ(d.w.mgr.bot_kept_count(), size_t{2});                                                                         // (two hold a slot; the third plays and is not kept)
         std::string code, reason;
         BotRefusal refusal = BotRefusal::None;
-        ASSERT_FALSE(d.w.mgr.start_bot_match(d.w.now, BotMatchSpec(), code, reason, &refusal));
-        ASSERT_TRUE(refusal == BotRefusal::Budget && reason.find("2 recordings") != std::string::npos);
-        ASSERT_EQ(d.post("bot-matches/stop-all").status, 200);                                                                  // (stopped at once: nothing was kept, nothing was used)
+        ASSERT_TRUE(d.w.mgr.start_bot_match(d.w.now, BotMatchSpec(), code, reason, &refusal));                                  // (a fourth, over the budget: still played)
+        ASSERT_EQ(d.w.mgr.bot_kept_count(), size_t{2});
+        ASSERT_EQ(d.post("bot-matches/stop-all").status, 200);                                                                  // (stopped at once: nothing was kept, nothing was used, the slots are free)
+        ASSERT_EQ(d.w.mgr.bot_kept_count(), size_t{0});
         ASSERT_EQ(d.w.mgr.replay_store()->bot_saves_left(), size_t{2});
         ASSERT_EQ(d.post("bot-matches", batch_body(1, "TINY.LVL", "highest-score", "2")).status, 200);
         d.w.run(40000);                                                                                                         // (it plays 40 s of its 6 minutes)
@@ -1132,7 +1126,18 @@ void run_bot_admin_tests() {
         ASSERT_EQ(d.w.mgr.replay_store()->count(), size_t{1});
         ASSERT_EQ(d.w.mgr.replay_store()->bot_saves_left(), size_t{1});                                                         // (this hour's room is used by what was kept)
         ASSERT_EQ(d.w.mgr.replay_store()->bot_count(), size_t{1});
-        ASSERT_EQ(BotDoor::json(d.post("bot-matches", batch_body(2, "TINY.LVL", "highest-score", "2"))).get("started").as_int_or(0), 1);
+        ASSERT_EQ(BotDoor::json(d.post("bot-matches", batch_body(2, "TINY.LVL", "highest-score", "2"))).get("started").as_int_or(0), 2);       // (two play: one with the last slot, one without)
+        ASSERT_EQ(d.w.mgr.bot_kept_count(), size_t{1});
+        d.w.run(40000);
+        d.clock.now += 40;
+        ASSERT_EQ(d.post("bot-matches/stop-all").status, 200);                                                                  // (both stopped after 30 s: the one with the slot is kept, the other writes no file)
+        size_t without_slot = 0;
+        for (const RoomStatus& ended : d.w.mgr.take_ended(d.w.now)) {
+            if (ended.bots_only && !ended.replay_kept && ended.replay_note.find("were used") != std::string::npos) ++without_slot;          // (it says why: no slot of the hour's budget was reserved for it, not that the store refused it)
+        }
+        ASSERT_EQ(without_slot, size_t{1});
+        ASSERT_EQ(d.w.mgr.replay_store()->count(), size_t{2});
+        ASSERT_EQ(d.w.mgr.replay_store()->bot_count(), size_t{2});
         d.clock.now += 3700;                                                                                                    // (the hour has passed)
         ASSERT_EQ(d.w.mgr.replay_store()->bot_saves_left(), size_t{2});
     } TEST_END();

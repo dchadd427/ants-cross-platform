@@ -154,6 +154,7 @@ class Client:
         """Connect and do the handshake; `status` is the HTTP status line, `reply_headers` the answer's headers. login="1001:maple.leaf" sends the test-login header; `trailer` is sent in the same write as the handshake."""
         self.sock = socket.create_connection(("127.0.0.1", port), timeout=timeout)
         self.timeout = timeout
+        self.cmds = None                                    # the rows of the last `cmds` frame that recv_reply skipped
         self.buffer = b""
         headers = dict(headers or {})
         if login:
@@ -209,7 +210,7 @@ class Client:
             raise AssertionError("unexpected opcode %d" % opcode)
 
     def recv_reply(self, timeout=None, total=10.0):
-        """The next text frame that is not the online count. The hub's clock sends {"t":"online","n":..} to every socket when the number of people changed (at most once in online_seconds), at a moment
+        """The next text frame that is not the online count or the account's list of commands (a `cmds` frame follows the welcome of a person who is logged in and every change of role: it is kept in `cmds`, and is no answer to anything that a test said). The hub's clock sends {"t":"online","n":..} to every socket when the number of people changed (at most once in online_seconds), at a moment
         that no test controls: it can come just before the answer to what a socket sent. A test that waits for that answer (an error, say) reads past the count; one that tests the count asks for it with
         recv_json. Only a frame that is exactly the count is skipped (any other frame is the answer, a wrong one too), and the whole wait is bounded by `total` seconds: when the answer does not come, the
         failure names the counts that were skipped."""
@@ -225,6 +226,9 @@ class Client:
                 raise AssertionError("no answer within %s s; counts skipped: %r" % (total, skipped))
             if isinstance(msg, dict) and set(msg) == {"t", "n"} and msg["t"] == "online":
                 skipped.append(msg)
+                continue
+            if isinstance(msg, dict) and set(msg) == {"t", "rows"} and msg["t"] == "cmds":
+                self.cmds = msg["rows"]                  # (the commands that a person who is logged in has: sent after the welcome, and after a change of role, and no answer to anything that a test said)
                 continue
             return msg
 

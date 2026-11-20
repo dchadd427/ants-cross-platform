@@ -222,6 +222,7 @@ class TheHandshake(RigTest):
         client = hc.Client(self.rig.port, login="1001:alice", trailer=hc.say("early bird"))
         self.clients.append(client)
         self.assertEqual(client.recv_json()["t"], "welcome")
+        self.assertEqual(client.recv_json()["t"], "cmds")                          # (the commands of a person who is logged in follow the welcome)
         self.assertEqual(client.recv_json()["text"], "early bird")
 
     def test_a_head_that_never_ends_and_a_client_that_never_speaks(self):

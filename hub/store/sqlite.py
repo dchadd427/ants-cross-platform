@@ -582,6 +582,10 @@ class Store(StoreBase):
         self.db.execute("INSERT INTO modlog (at, actor, action, target, detail) VALUES (?, ?, ?, ?, ?)", (int(self.clock()), actor, action, target, detail))
         self.db.execute("DELETE FROM modlog WHERE id IN (SELECT id FROM modlog WHERE id <= (SELECT id FROM modlog ORDER BY id DESC LIMIT 1 OFFSET ?) ORDER BY id LIMIT ?)", (self.max_modlog, TRIM_ROWS))
 
+    def log_action(self, note):
+        with self.transaction():
+            self.write_note(note)
+
     def actions(self, since=0, limit=1000):
         rows = self.db.execute("SELECT id, at, actor, action, target, detail FROM modlog WHERE at >= ? ORDER BY id DESC LIMIT ?", (int(since), int(limit))).fetchall()
         return [Action(*r) for r in rows]

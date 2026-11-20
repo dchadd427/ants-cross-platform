@@ -15,6 +15,7 @@ GATE_SETTING = "ANTS_ADMIN_GATE_SECRET"                    # the one setting of 
 GATE_SETTING_OLD = "ANTS_HUB_ADMIN_GATE_SECRET"            # its name before the two services shared one: still read, when the new name is not set, until the release after this one
 GATE_DISTINCT = 8                                        # a key of fewer different characters than this (one repeated character) is not a key
 SAMPLE_GATE_KEY = "canary-gate-key-5d8f0c1e7a9b4263-q"      # the made-up key of the known answer in docs/HUB.md: published, so never a key (the game server refuses it too)
+GAME_ADMIN_URL = re.compile(r"http://([A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?):([0-9]{1,5})\Z")      # ANTS_HUB_GAME_ADMIN_URL: `http://` and a host of letters, digits, dots and dashes, a colon and a port, nothing else
 MIN_RECHECK_SECONDS = 60
 MAX_RECHECK_SECONDS = 3600
 RECHECK_SECONDS = 180                                       # how often the role of everybody who is here is asked again (ANTS_HUB_ROLE_RECHECK_SECONDS)
@@ -46,6 +47,7 @@ class Config:
     admin_gate_sample: bool = False                                         # the setting is the documents' sample key (refused: the start says so, apart from a key that is simply not good)
     admin_gate_given: bool = False                                          # whether the setting was there at all (a value that is there and is no good is said at the start; one that is absent is said as well, differently)
     discord_test_url: str = ""                                              # TESTS ONLY: where the fake Discord of the tests listens (a loopback address, refused for any other)
+    game_admin_url: str = ""                                                # where the game server's admin door is, `http://host:port` (hub/gamedoor.py: `/bots`); "" is none, and `/bots` answers `off`
 
     @property
     def login_on(self):
@@ -113,6 +115,15 @@ def parse_test_url(url):
     return "%s://%s:%d" % (parts.scheme, "[%s]" % host if ":" in host else host, port)
 
 
+def parse_game_admin_url(url):
+    """'http://ants-server:4030' (a host of letters, digits, dots and dashes, and a port from 1 to 65535: nothing after the port, no path, no user, no query) for the game server's admin door, else a ConfigError
+    that never says the value."""
+    found = GAME_ADMIN_URL.match(url.strip())
+    if not found or not 1 <= int(found.group(2)) <= 65535:
+        raise ConfigError("ANTS_HUB_GAME_ADMIN_URL must be like http://ants-server:4030 (http, a host name or address of letters, digits, dots and dashes, and a port from 1 to 65535, nothing else)")
+    return "http://%s:%d" % (found.group(1), int(found.group(2)))
+
+
 def load(env):
     try:
         port = int(env.get("ANTS_HUB_PORT", "4040"))
@@ -162,4 +173,6 @@ def load(env):
         cfg.discord_test_url = parse_test_url(env["ANTS_HUB_TEST_DISCORD_URL"])
     if cfg.test_login and cfg.login_on:
         raise ConfigError("ANTS_HUB_TEST_LOGIN=1 and the Discord login cannot both be on")
+    if env.get("ANTS_HUB_GAME_ADMIN_URL", "").strip():
+        cfg.game_admin_url = parse_game_admin_url(env["ANTS_HUB_GAME_ADMIN_URL"])
     return cfg
