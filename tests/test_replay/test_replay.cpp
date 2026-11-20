@@ -395,7 +395,7 @@ Played play_scripted(const Map& m, uint32_t seed, uint32_t turns, uint8_t roster
         rec.on_tick(engine);
         if (tap != nullptr && tap->every != 0 && (turn + 1) % tap->every == 0) {
             std::string why;
-            tap->files.push_back(rec.snapshot(why));
+            tap->files.push_back(rec.snapshot(rec.turns(), why));
             tap->turns.push_back(turn + 1);
             tap->hashes.push_back(engine.state_hash().total);
         }
@@ -2389,7 +2389,7 @@ int main(int argc, char* argv[]) {
         }
     } TEST_END();
 
-    TEST_CASE("RP8.3 Recorder::snapshot: A Match That Runs Is Snapshotted Again And Again Without Changing The Recording; Each Snapshot Plays On The Real Map Up To Its Turns With Every Hash Right And Ends In The State The Match Was In, And Its Commands And Hashes Are The Start Of The Final File's; Nothing For A Recording That Failed, Is Finished Or Has Run No Turn") {
+    TEST_CASE("RP8.3 Recorder::snapshot(turns): A Match That Runs Is Snapshotted Again And Again Without Changing The Recording; Each Snapshot Plays On The Real Map Up To Its Turns With Every Hash Right And Ends In The State The Match Was In, And Its Commands And Hashes Are The Start Of The Final File's; Nothing For A Recording That Failed, Is Finished Or Has Run No Turn") {
         SnapshotTap tap;
         tap.every = 90;
         const Played p = play_scripted(tiny, 31, 450, 0x0F, sim::StartTeams{}, false, &tap);
@@ -2422,32 +2422,59 @@ int main(int argc, char* argv[]) {
             ASSERT_EQ(o.hash, tap.hashes[k]);
         }
         ASSERT_TRUE(decoded(tap.files.back()).replay.commands.size() == p.replay.commands.size());         // (the last snapshot is the whole match so far: all its commands)
-        // a recording that cannot be a file, one that is finished and one with no turn give nothing, and say why
+        // a snapshot cut at an earlier turn is byte for byte the snapshot that was taken when the match had run that many turns: nothing of what came after is in it (the viewer who is shown the match late)
+        {
+            Replay running = p.replay;
+            running.complete = false;                                               // (the match as a recorder that still runs holds it)
+            std::string cut_error;
+            for (size_t k = 0; k < tap.files.size(); ++k) ASSERT_EQ(encode_snapshot_until(running, tap.turns[k], cut_error), tap.files[k]);
+            for (const uint32_t turns : {0u, 1u, 37u, 100u, 101u, 299u, 449u, 450u}) {
+                const std::vector<uint8_t> cut = encode_snapshot_until(running, turns, cut_error);
+                const Decoded d = decoded(cut);
+                ASSERT_TRUE(d.ok && !d.replay.complete && d.replay.total_turns == turns);
+                for (const TimedCommand& tc : d.replay.commands) ASSERT_TRUE(tc.turn < turns);
+                ASSERT_EQ(d.replay.hashes.size(), static_cast<size_t>(turns / 100));
+                size_t expected = 0;
+                while (expected < running.commands.size() && running.commands[expected].turn < turns) ++expected;
+                ASSERT_EQ(d.replay.commands.size(), expected);                      // (every order before the turn is there, none from it on)
+            }
+            ASSERT_TRUE(encode_snapshot_until(p.replay, 100, cut_error).empty() && contains(cut_error, "without its end"));         // (a replay that is whole is no match that runs)
+            ASSERT_TRUE(encode_snapshot_until(running, kMaxTurns + 1, cut_error).empty() && !cut_error.empty());
+        }
+        // a recording that cannot be a file, one that is finished and one that is asked for more turns than it has run give nothing, and say why
         sim::SimulationEngine engine;
         engine.init(tiny.level, 1, 0x0F);
         std::string error;
         Recorder fresh(head_for(tiny, "TINY", 1, 0x0F));
-        ASSERT_TRUE(fresh.snapshot(error).empty() && contains(error, "no turn"));
+        {
+            const std::vector<uint8_t> zero = fresh.snapshot(0, error);             // (a match that has run no turn: its head and `live` 0, which is what a page needs to show the opening)
+            ASSERT_FALSE(zero.empty());
+            const Decoded z = decoded(zero);
+            ASSERT_TRUE(z.ok && !z.replay.complete && z.replay.total_turns == 0 && z.replay.commands.empty() && z.replay.hashes.empty());
+            ASSERT_EQ(count_chunks(zero, "live"), 1u);
+        }
+        ASSERT_TRUE(fresh.snapshot(1, error).empty() && contains(error, "more turns"));
         fresh.on_command(make_command(CommandType::Hatch, 0, 0, 0, {}));
-        ASSERT_TRUE(fresh.snapshot(error).empty() && contains(error, "no turn"));    // (a command before the first tick is not a turn)
+        ASSERT_TRUE(decoded(fresh.snapshot(0, error)).replay.commands.empty());      // (a command before the first tick is not in the snapshot of turn 0)
+        ASSERT_TRUE(fresh.snapshot(1, error).empty() && contains(error, "more turns"));
         engine.tick();
         fresh.on_tick(engine);
-        const std::vector<uint8_t> one = fresh.snapshot(error);
+        const std::vector<uint8_t> one = fresh.snapshot(1, error);
         ASSERT_FALSE(one.empty());
         const Decoded first = decoded(one);
         ASSERT_TRUE(first.ok && !first.replay.complete && first.replay.total_turns == 1 && first.replay.commands.size() == 1);
         ASSERT_TRUE(fresh.turns() == 1 && fresh.commands() == 1 && fresh.failure().empty() && !fresh.finished());        // (it changed nothing)
         ASSERT_FALSE(fresh.finish(engine, error).empty());
-        ASSERT_TRUE(fresh.snapshot(error).empty() && contains(error, "finished"));
+        ASSERT_TRUE(fresh.snapshot(1, error).empty() && contains(error, "finished"));
         Recorder spoiled(head_for(tiny, "TINY", 1, 0x0F));
         engine.tick();
         spoiled.on_tick(engine);
-        ASSERT_FALSE(spoiled.snapshot(error).empty());
+        ASSERT_FALSE(spoiled.snapshot(1, error).empty());
         net::TurnMsg late;
         late.turn = 9;                                                              // a turn that was not seen: the recording is lost
         spoiled.on_turn(late, engine);
         ASSERT_FALSE(spoiled.failure().empty());
-        ASSERT_TRUE(spoiled.snapshot(error).empty() && error == spoiled.failure());
+        ASSERT_TRUE(spoiled.snapshot(1, error).empty() && error == spoiled.failure());
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count

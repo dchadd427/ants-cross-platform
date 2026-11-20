@@ -6,8 +6,10 @@ import json, os
 from PIL import Image
 from common import *
 import pieces as PC, lettering as LET
+import fullscreen_button as FS
 
 V0 = 778
+SHIFT = 8              # the Help, Options and Quit buttons sit this far left of where the original has them, to make room for the Fullscreen button
 FRAMES = ['up', 'press1', 'press2', 'latched'] + ['rise%d' % n for n in range(6, 10)]
 
 RASTER = {}        # sprites that are carvings, not drawings: name -> (kind, frame) for carve.pedestal_image
@@ -49,7 +51,7 @@ def catalog():
     add('status_box', PC.status_box(960, uid='s_st'), V0, 252, 'right', 'top', group='frame')
     for nm, x in (('Help', 18), ('Options', 67), ('Quit', 121)):
         for st in ('up', 'hover', 'down'):
-            add('button_%s_%s' % (nm.lower(), st), PC.button(nm, st, uid='s_b%s%s' % (nm, st)), V0 + x, 7, 'right', 'top', group='buttons')
+            add('button_%s_%s' % (nm.lower(), st), PC.button(nm, st, uid='s_b%s%s' % (nm, st)), V0 + x - SHIFT, 7, 'right', 'top', group='buttons')
     for nm, x in (('All', 74), ('Team', 121)):
         for st in ('up', 'hover', 'down'):
             add('send_%s_%s' % (nm.lower(), st), PC.all_button(state=st, uid='s_a%s%s' % (nm, st), name=nm), V0 + x, 503, 'right', 'bottom', group='buttons')
@@ -71,6 +73,9 @@ def catalog():
     add('egg_hatch2', svg(17, 14, ''), V0 + 75, 159, 'right', 'top', group='card'); RASTER['egg_hatch2'] = carve.egg_open_image
     add('egg_hatch3', svg(19, 6, ''), V0 + 73, 167, 'right', 'top', group='card'); RASTER['egg_hatch3'] = carve.egg_bits_image
     add('lunch_box', svg(34, 40, ''), V0 + 139, 131, 'right', 'top', note='shown while every selected ant carries food', group='card'); RASTER['lunch_box'] = carve.lunch_box_image
+    for leave in (False, True):
+        for st in ('up', 'hover', 'down'):
+            add('button_fullscreen%s_%s' % ('_leave' if leave else '', st), FS.button(st, leave), FS.X, FS.Y, 'right', 'top', note='right of Quit', group='buttons')
     return c
 
 def animations():
@@ -81,7 +86,7 @@ def animations():
     out = {}
     def P(sprite, x, y): return {'sprite': sprite, 'x': x, 'y': y}
     for nm, o, x in (('help', 'buthlp', 18), ('options', 'butopt', 67), ('quit', 'butqit', 121)):
-        for st, suf in (('up', 'u'), ('hover', 'r'), ('down', 'd')): out[o + suf] = [{'ms': ms(o + suf)[0], 'parts': [P('button_%s_%s' % (nm, st), V0 + x, 7)]}]
+        for st, suf in (('up', 'u'), ('hover', 'r'), ('down', 'd')): out[o + suf] = [{'ms': ms(o + suf)[0], 'parts': [P('button_%s_%s' % (nm, st), V0 + x - SHIFT, 7)]}]
     for nm, o, x in (('all', 'butall', 74), ('team', 'butals', 121)):
         for st, suf in (('up', 'u'), ('hover', 'r'), ('down', 'd')): out[o + suf] = [{'ms': ms(o + suf)[0], 'parts': [P('send_%s_%s' % (nm, st), V0 + x, 503)]}]
     out['butcanu'] = [{'ms': 1000, 'parts': [P('stop_up', V0 + 130, 172)]}]; out['butcand'] = [{'ms': 1000, 'parts': [P('stop_down', V0 + 130, 172)]}]
@@ -110,7 +115,7 @@ def animations():
     return out
 
 def export(scales=(1, 2, 3)):
-    """renders the catalog and the cursors: ({scale: {sprite name: RGBA picture of size * scale}}, the catalog's rows, the animations)"""
+    """renders the catalog, the cursors and the windows: ({scale: {sprite name: RGBA picture of size * scale}}, the catalog's rows, the animations, the names of the sprites whose 2x picture the game makes from the 3x one)"""
     cat = catalog()
     # shelf packing on a sheet 1000 wide (the drawing sheet of the browser, not the game's sheet)
     place = []; x = y = rowh = 0
@@ -137,4 +142,8 @@ def export(scales=(1, 2, 3)):
     pictures, rows, anims = cursors.export(scales)                              # the cursors are in the same sheets (their animations are marked `cursor`: pack.py)
     for k in scales:
         out[k].update(pictures[k])
-    return out, [e for _, _, e in cat] + rows, dict(animations(), **anims)
+    import dialogs
+    dpictures, drows, danims, derived = dialogs.export(scales, out)                         # the windows' art (their animations replace the original's window pictures)
+    for k in scales:
+        out[k].update(dpictures[k])
+    return out, [e for _, _, e in cat] + rows + drows, dict(animations(), **anims, **danims), derived

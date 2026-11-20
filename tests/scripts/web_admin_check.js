@@ -1438,7 +1438,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             const sent = posts(w);
             same('Start sends one call, with the page\'s token, JSON and what was chosen', [sent.length, sent[0].url, sent[0].headers['X-Ants-Csrf'], sent[0].headers['Content-Type'], sent[0].credentials], [1, '/admin/api/bot-matches', 'csrf-token-1', 'application/json', 'same-origin']);
             same('...and the body is the batch in the server\'s words', sent[0].body, { count: 3, map: 'Fight Island.lvl', rules: '187', bots: '4', levels: ['hard', 'hard', 'medium', 'easy'], teams: 'split', split: '13-24' });
-            same('the answer is told, and the lists are asked again', [texts(app, '.b-now .msg.ok'), w.calls.filter((c) => c.method === 'GET').map((c) => c.url)], [['Started 3 bot matches. They show on the live list in about 30 seconds.'], ['/admin/api/bot-matches', '/admin/api/bot-options', '/admin/api/bot-schedules']]);
+            same('the answer is told, and the lists are asked again', [texts(app, '.b-now .msg.ok'), w.calls.filter((c) => c.method === 'GET').map((c) => c.url)], [['Started 3 bot matches. They show on the live list in a few seconds.'], ['/admin/api/bot-matches', '/admin/api/bot-options', '/admin/api/bot-schedules']]);
             same('the form keeps what was chosen after a start', [texts(app, '.b-now .stepv'), chipOn(app, 'now-rules'), chipOn(app, 'now-bots')], [['3'], ['187'], ['4']]);
             // the default batch
             const d = await opened();
@@ -1486,7 +1486,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             const p = await opened();
             p.w.replies['POST /admin/api/bot-matches'] = { status: 200, json: { started: 2, asked: 3, stopped_for: 'places' } };
             await press(p.app, 'Start 1 bot match');
-            same('a batch that started as many as fit says how many, and why not all', texts(p.app, '.b-now .msg.ok'), ['Started 2 of 3 bot matches. The rest would take more places than bot matches may have. They show on the live list in about 30 seconds.']);
+            same('a batch that started as many as fit says how many, and why not all', texts(p.app, '.b-now .msg.ok'), ['Started 2 of 3 bot matches. The rest would take more places than bot matches may have. They show on the live list in a few seconds.']);
             const l = await opened({ me: who('Dave') });
             l.w.replies['POST /admin/api/bot-matches'] = { status: 401, json: { error: 'not_signed_in' } };
             await press(l.app, 'Start 1 bot match');
@@ -1658,7 +1658,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
                     const { w, app } = await opened();
                     w.replies['POST /admin/api/bot-matches'] = { status: 200, json: { started: 1, asked: 3, stopped_for: why } };
                     await press(app, 'Start 1 bot match');
-                    same('a batch that stopped short, ' + why + ': its own sentence', texts(app, '.b-now .msg.ok'), ['Started 1 of 3 bot matches. ' + words + ' They show on the live list in about 30 seconds.']);
+                    same('a batch that stopped short, ' + why + ': its own sentence', texts(app, '.b-now .msg.ok'), ['Started 1 of 3 bot matches. ' + words + ' They show on the live list in a few seconds.']);
                 }
                 const { w, app } = await opened();
                 w.replies['POST /admin/api/bot-matches'] = { status: 409, json: { error: 'budget', per_hour: 30 } };

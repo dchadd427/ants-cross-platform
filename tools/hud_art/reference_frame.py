@@ -6,7 +6,7 @@ usage: reference_frame.py WIDTH HEIGHT [--scale 1|2|3] [--art DIR] --out FILE.pn
     python3 tools/hud_art/reference_frame.py 960 540 --out tests/data/hud_art/frame_16x9_1x.png
 
 It follows only the rules that include/ants_app/hud_art.hpp states for the manifest (anchors, slices) and the picture's own layout: the frame's eight pieces; the pieces that stand at rest on an
-idle match screen (the help, options and quit buttons, the All button, the three score windows of the other teams). The map view is left transparent. Pure Python 3 with Pillow and numpy.
+idle match screen (the help, options and quit buttons, the Fullscreen button, the All button, the three score windows of the other teams). The map view is left transparent. Pure Python 3 with Pillow and numpy.
 """
 import argparse
 import os
@@ -85,7 +85,7 @@ def compose(width, height, scale, folder):
         whole(name)
     for box in BOTTOM_BOXES[width]:
         whole('score_window', box - 2, height - 17)
-    for name in ('button_help_up', 'button_options_up', 'button_quit_up', 'send_all_up'):
+    for name in ('button_help_up', 'button_options_up', 'button_quit_up', 'button_fullscreen_up', 'send_all_up'):
         whole(name)
     return out
 

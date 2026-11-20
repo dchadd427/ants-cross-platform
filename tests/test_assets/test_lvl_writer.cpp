@@ -430,7 +430,7 @@ void w2_refusals() {
             {"block 1 has 65536 records, a file holds at most 65,535", [](LevelData& l) { l.anthill_spawns.assign(65536, AnthillSpawn{0, 0, 0, 255}); }},
             {"food pile #1 (row 0, column 0) has no stages: the original stops reading block 2 at such a pile", [](LevelData& l) { l.food_schedules[1].variants.clear(); }},
             {"food pile #0 has 65536 stages", [](LevelData& l) { l.food_schedules[0].variants.assign(65536, FoodItemVariant{1, 253}); }},
-            {"block 2 has 65536 food piles", [](LevelData& l) { l.food_schedules.assign(65536, l.food_schedules[1]); }},
+            {"block 2 has 65536 food piles", [](LevelData& l) { const FoodSchedule pile = l.food_schedules[1]; l.food_schedules.assign(65536, pile); }},     // (a copy: assign() from an element of the vector that it refills would read freed memory)
             {"waypoint #0 (row 1, column 1) has no trigger (flag 0) but holds an interval or chances", [](LevelData& l) { l.waypoints[0].param = 5; }},
             {"waypoint #0 (row 1, column 1) has no trigger (flag 0) but holds an interval or chances", [](LevelData& l) { l.waypoints[0].probabilities[4] = -0.0; }},
             {"block 4 has 65536 waypoints", [](LevelData& l) { l.waypoints.assign(65536, Waypoint{}); }},

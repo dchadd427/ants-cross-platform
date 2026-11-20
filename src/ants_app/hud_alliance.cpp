@@ -114,12 +114,11 @@ void HUD::update_alliance_dialog(const sim::WorldState& world) {
 }
 
 void HUD::render_alliance_dialog(IRenderer& renderer, const assets::AssetArchive& assets) {
-    using assets::ColorRGBA;
-    draw_std_dialog(renderer, assets);
-    // the label (30, 10) of the dialog, 24 px, centred, color (31, 23, 51); 270 px wide in the invitation, 240 px in the other two
-    draw_label(renderer, alliance_text_, 130, 110, alliance_dialog_ == AllianceDialog::Invitation ? 270 : 240, ColorRGBA{31, 23, 51, 255}, FontSize::Px24, true);
+    draw_dialog_frame(renderer, assets);
+    // the label (30, 10) of the dialog, 24 px, centred, color (31, 23, 51); 270 px wide in the invitation, 240 px in the other two (the new look's face has the dialog's inner width for all three)
+    draw_dialog_sentence(renderer, assets, alliance_text_, window_art::kAlliance, 130, 110, alliance_dialog_ == AllianceDialog::Invitation ? 270 : 240, FontSize::Px24);
     auto button = [&](const UIButton& b, const char* up, const char* hover, const char* down) {
-        if (b.w > 0) draw_animation_frame0(renderer, assets, b.is_pressed ? down : (b.is_active ? hover : up), 100, 100);
+        if (b.w > 0) draw_dialog_button(renderer, assets, b.is_pressed ? down : (b.is_active ? hover : up), 100, 100);
     };
     switch (alliance_dialog_) {
         case AllianceDialog::Invitation:

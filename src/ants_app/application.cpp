@@ -786,6 +786,11 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_replay_do(int what, int value) {
     if (g_web_app != nullptr && g_web_app->replay_mode()) g_web_app->replay_control(static_cast<ants::app::ReplayControl>(what), value);
 }
 
+// The page's fullscreen, said to the game: the HUD's Fullscreen button shows the picture that leaves while it is on (the browser's own and the page's alike; web/hud_fullscreen.js tells it at every change)
+extern "C" EMSCRIPTEN_KEEPALIVE void ants_set_page_fullscreen(int on) {
+    if (g_web_app != nullptr) g_web_app->set_page_fullscreen(on != 0);
+}
+
 // For the page's browser check (tests/scripts/web_edge_check.py): what the game believes about the pointer and the view, read-only. 0 and 1: the pointer's x and y on the picture (what the
 // game draws its cursor at and scrolls from); 2: 1 while the game takes the pointer as gone from its window (no cursor, no scrolling); 3 and 4: the map view's origin in world pixels
 // (-1 outside a match); 5: 1 while a dialog of the match is open (options, quit, quick help, the "get ready" dialog: the edges do not scroll then); 6: the view's zoom times 100.
@@ -801,6 +806,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_replay_do(int what, int value) {
 // is doing (touch_control.hpp Mode: 0 idle, 1 waiting, 2 left button, 3 right button, 4 minimap, 5 two fingers), 36: the slop in picture pixels times 100.
 // The picking, for the page's browser check of a replay (tests/scripts/web_camera_check.py): 50: the ants that are picked, plus 1000 when a base is picked and 100000 when an ant is inspected (0: nothing is picked; -1 outside a match).
 // The countdown card (protocol 21), for the page's Fullscreen button (web/countdown_button.js): 60 - 65, see Application::countdown_probe (application_net.cpp).
+// The HUD's own Fullscreen button, for the page (web/hud_fullscreen.js): 70 - 76, see Application::hud_probe (application_net.cpp); the page tells the game whether it is fullscreen (ants_set_page_fullscreen).
 // Anything else, or no game: -1.
 extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
     if (g_web_app == nullptr) return -1;
@@ -865,6 +871,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
         case 34: return static_cast<int>(g_web_app->touch().fingers());
         case 35: return static_cast<int>(g_web_app->touch().mode());
         case 36: return static_cast<int>(g_web_app->touch_slop() * 100.0 + 0.5);
+        case 70: case 71: case 72: case 73: case 74: case 75: case 76: return g_web_app->hud_probe(what);                          // (the HUD's Fullscreen button: application_net.cpp)
         case 60: case 61: case 62: case 63: case 64: case 65: return g_web_app->countdown_probe(what);                // (the countdown card, protocol 21: application_net.cpp)
         case 50: return g_web_app->match_running() ? static_cast<int>(g_web_app->hud().get_selected_ant_ids().size()) + (g_web_app->hud().get_selected_base_team_id() >= 0 ? 1000 : 0) + (g_web_app->hud().get_selected_ant_id() != 0 ? 100000 : 0) : -1;
         default: return net_overlay_probe(g_web_app->net_overlay_now(), what);                 // (16 and 10000 and up; anything else is -1)

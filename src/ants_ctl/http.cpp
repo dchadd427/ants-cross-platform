@@ -3,6 +3,7 @@
 #include "ants_ctl/http.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cerrno>
 #include <cstring>
 #include <utility>
@@ -142,6 +143,19 @@ bool safe_header_value(std::string_view s) {
         const unsigned char u = static_cast<unsigned char>(c);
         return u >= 0x20 && u <= 0x7E;
     });
+}
+
+// The name of a header that a handler may add (HttpResponse::headers): "X-" and letters, digits and '-' (no character that ends the line), and not the one "X-" header that the server sends itself, in any case
+bool safe_extra_header_name(std::string_view s) {
+    if (s.size() < 3 || s.size() > 40 || s[0] != 'X' || s[1] != '-') return false;
+    if (!std::all_of(s.begin(), s.end(), [](char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-'; })) return false;
+    constexpr std::string_view own = "x-content-type-options";
+    if (s.size() == own.size()) {
+        bool same = true;
+        for (size_t i = 0; i < s.size() && same; ++i) same = std::tolower(static_cast<unsigned char>(s[i])) == own[i];
+        if (same) return false;
+    }
+    return true;
 }
 
 const char* reason_phrase(int status) {
@@ -597,7 +611,11 @@ void HttpServer::Impl::dispatch(Conn& c, uint32_t now, const Handler& handler) {
         return respond_error(c, now, 500, "internal error");
     }
     const std::string_view type = safe_header_value(response.content_type) ? std::string_view(response.content_type) : std::string_view("application/json");
-    respond(c, now, response.status, type, response.body);
+    std::string extra;
+    for (const auto& header : response.headers) {
+        if (safe_extra_header_name(header.first) && safe_header_value(header.second)) extra += header.first + ": " + header.second + "\r\n";
+    }
+    respond(c, now, response.status, type, response.body, extra.c_str());
 }
 
 // One connection's turn. False when it is finished (or lost) and must be dropped.

@@ -279,7 +279,7 @@ void test_pieces(const assets::AssetArchive& arc, const Art& art) {
             check(count(rest, "button_help_up") == 1 && count(rest, "button_options_up") == 1 && count(rest, "button_quit_up") == 1, at + "at rest each button of the top bar is drawn, up, once");
             check(count(rest, "send_all_up") == 1 && count(rest, "send_team_up") == 0, at + "the All button is drawn, up; the Team button only while there is an ally");
             // the pointer over Help (a hit zone of the original's size and place)
-            const LayoutRect help{layout.right(476), 7, 46, 23};
+            const LayoutRect help{layout.right(476 - 8), 7, 46, 23};            // (8 pixels left of the original's place: the Fullscreen button stands right of Quit)
             rig.hud.handle_mouse_motion(help.x + 10, help.y + 10, rig.sim, rig.cam);
             ArtSpy over(arc);
             rig.hud.render(over, arc, rig.world(), rig.cam);
@@ -302,5 +302,381 @@ void test_pieces(const assets::AssetArchive& arc, const Art& art) {
         HudRig dressed(arc, layout);
         dressed.hud.set_art(&art);
         check(plain.hud.layout() == dressed.hud.layout() && plain.hud.chat_box_rect() == dressed.hud.chat_box_rect(), std::string(shape.name) + ": the art changes no rectangle of the HUD");
+    }
+}
+
+// ---- the windows of the match in the new look, and the Fullscreen button -----------------------------------------------------------------------------------------------------------------------
+
+namespace {
+
+using window_art::kDialogRect;
+
+/// The copies of the nine pieces of the panel (not the HUD frame's panel_top)
+size_t panel_copies(const ArtSpy& spy, const Art& art) {
+    size_t n = 0;
+    for (const char* name : {"panel_tl", "panel_t", "panel_tr", "panel_l", "panel_c", "panel_r", "panel_bl", "panel_b", "panel_br"}) n += spy.of_sprite(art, name).size();
+    return n;
+}
+
+size_t copies_of(const ArtSpy& spy, const Art& art, const std::string& name) { return spy.of_sprite(art, name).size(); }
+
+/// True when `name` was drawn exactly once at (x, y)
+bool once_at(const ArtSpy& spy, const Art& art, const std::string& name, int32_t x, int32_t y) {
+    const std::vector<ArtSpy::Copy> c = spy.of_sprite(art, name);
+    return c.size() == 1 && c[0].x == x && c[0].y == y && c[0].sx == 0 && c[0].sy == 0;
+}
+
+/// The copies of every sprite whose name starts with `prefix`
+size_t copies_with_prefix(const ArtSpy& spy, const Art& art, const std::string& prefix) {
+    size_t n = 0;
+    for (const hud_art::Sprite& s : art.sprites()) {
+        if (s.name.compare(0, prefix.size(), prefix) == 0) n += copies_of(spy, art, s.name);
+    }
+    return n;
+}
+
+ArtSpy render_once(HudRig& rig, const assets::AssetArchive& arc, bool face = true) {
+    ArtSpy spy(arc);
+    spy.dialog_face = face;
+    rig.hud.render(spy, arc, rig.world(), rig.cam);
+    return spy;
+}
+
+bool has_text(const ArtSpy& spy, const std::string& text, FontSize size) {
+    for (const ArtSpy::Ev& e : spy.of(ArtSpy::Kind::Text)) {
+        if (e.name == text && e.size == size) return true;
+    }
+    return false;
+}
+
+/// The manifest without an animation and its frames
+std::string without_anim_text(const std::string& text, const std::string& name) {
+    const size_t at = text.find("\nanim " + name + "\n");
+    if (at == std::string::npos) return text;
+    size_t end = at + 1;
+    for (;;) {
+        end = text.find('\n', end);
+        if (end == std::string::npos) return text.substr(0, at);
+        end += 1;
+        if (text.compare(end, 6, "frame ") != 0) break;
+    }
+    return text.substr(0, at) + "\n" + text.substr(end);
+}
+
+std::string manifest_text() {
+    std::ifstream f(art_folder() + "/hud_art.txt");
+    return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+}
+
+}  // namespace
+
+void test_windows(const assets::AssetArchive& arc, const Art& art) {
+    group("windows-draw", "the Fullscreen button in both looks; the quit and alliance questions, Get ready, the options window and its veil, the quick help and the countdown card in the new look, and each as the original's without it");
+
+    // ---- the Fullscreen button right of Quit
+    for (const Shape& shape : kShapes) {
+        const ScreenLayout layout = ScreenLayout::with_size(shape.w, shape.h);
+        const std::string at = std::string(shape.name) + ": ";
+        const int32_t dx = layout.dx();
+        {   // the new look
+            HudRig rig(arc, layout);
+            rig.hud.set_art(&art);
+            const UIButton& fb = rig.hud.fullscreen_button();
+            check(fb.x == layout.right(619) && fb.y == 7 && fb.w == 21 && fb.h == 23 && fb.x + fb.w == layout.width, at + "new art: the button stands right of Quit, 21 x 23, ending at the picture's edge");
+            check(rig.hud.help_button().x == layout.right(468) && rig.hud.options_button().x == layout.right(517) && rig.hud.quit_button().x == layout.right(571), at + "new art: Help, Options and Quit stand 8 pixels left of the original's places");
+            check(rig.hud.help_button().x + rig.hud.help_button().w <= rig.hud.options_button().x && rig.hud.quit_button().x + rig.hud.quit_button().w <= fb.x, at + "new art: the four buttons do not overlap");
+            int calls = 0;
+            rig.hud.set_on_fullscreen([&] { ++calls; });
+            const ArtSpy rest = render_once(rig, arc);
+            check(once_at(rest, art, "button_fullscreen_up", fb.x, fb.y) && copies_with_prefix(rest, art, "button_fullscreen") == 1, at + "new art: at rest the button's up picture, once, on its rectangle");
+            rig.hud.handle_mouse_motion(fb.x + 5, fb.y + 5, rig.sim, rig.cam);
+            check(once_at(render_once(rig, arc), art, "button_fullscreen_hover", fb.x, fb.y), at + "new art: the pointer on it: its hover picture");
+            rig.hud.handle_mouse_down(fb.x + 5, fb.y + 5, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+            check(once_at(render_once(rig, arc), art, "button_fullscreen_down", fb.x, fb.y) && calls == 0, at + "new art: pressed: its pressed picture, and nothing acts at the press");
+            rig.hud.set_fullscreen_state(true);
+            check(once_at(render_once(rig, arc), art, "button_fullscreen_leave_down", fb.x, fb.y), at + "new art: while the game is full screen the picture is the one that leaves");
+            rig.hud.handle_mouse_up(fb.x + 5, fb.y + 5, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+            check(calls == 1 && rig.hud.fullscreen_clicks() == 1 && !rig.hud.is_modal_open(), at + "new art: the release on the button acts once (and opens no window)");
+            check(once_at(render_once(rig, arc), art, "button_fullscreen_leave_hover", fb.x, fb.y), at + "new art: the picture that leaves, hovered");
+            rig.hud.set_fullscreen_state(false);
+            rig.hud.handle_mouse_down(fb.x + 5, fb.y + 5, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+            rig.hud.handle_mouse_motion(fb.x - 30, fb.y + 100, rig.sim, rig.cam);
+            rig.hud.handle_mouse_up(fb.x - 30, fb.y + 100, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+            check(calls == 1, at + "new art: a press on it and a release away from it acts on nothing");
+            rig.hud.handle_mouse_down(fb.x + 5, fb.y + 5, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+            rig.hud.handle_mouse_up(fb.x - 30, fb.y + 100, SDL_BUTTON_LEFT, rig.sim, rig.cam);          // (a release that comes with no move before it, as a lifted finger does)
+            check(calls == 1 && !rig.hud.fullscreen_button().is_pressed, at + "new art: ...also when the release is the first news of the pointer away from the button");
+            rig.hud.handle_mouse_down(fb.x + 5, fb.y + 5, SDL_BUTTON_RIGHT, rig.sim, rig.cam);
+            rig.hud.handle_mouse_up(fb.x + 5, fb.y + 5, SDL_BUTTON_RIGHT, rig.sim, rig.cam);
+            check(calls == 1, at + "new art: the right button does not act on it");
+            check(rig.hud.fullscreen_button_active(), at + "new art: the button is active over the match");
+            rig.hud.open_options();
+            rig.hud.handle_mouse_down(fb.x + 5, fb.y + 5, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+            check(!rig.hud.fullscreen_button().is_pressed && !rig.hud.fullscreen_button_active(), at + "new art: with the options window open the button takes no press and is not active");
+        }
+        {   // the Classic look
+            HudRig rig(arc, layout);
+            const UIButton& fb = rig.hud.fullscreen_button();
+            ArtSpy rest(arc);
+            rig.hud.render(rest, arc, rig.world(), rig.cam);
+            if (layout.is_classic()) {
+                check(fb.w == 0 && rig.hud.help_button().x == 476 && rig.hud.options_button().x == 525 && rig.hud.quit_button().x == 579, at + "the original's own picture with the original's art has no Fullscreen button and its buttons stay");
+                check(rest.blended.empty() && rest.has_sprite_at("buthelpu.bmp", 476, 7) == false, at + "...and draws nothing of the corner that the other pictures draw");
+                check(!rig.hud.fullscreen_button_active(), at + "...nothing to click");
+                continue;
+            }
+            check(fb.x == layout.right(619) && fb.y == 7 && fb.w == 20 && fb.h == 23 && rig.hud.help_button().x == layout.right(468) && rig.hud.quit_button().x == layout.right(571), at + "classic art: the button and the three moved buttons stand where the new art's do (20 wide)");
+            check(rest.has_sprite_at("buthelpu.bmp", 468 + dx, 7) && rest.has_sprite_at("butoptu.bmp", 517 + dx, 7) && rest.has_sprite_at("butquitu.bmp", 571 + dx, 7), at + "classic art: the original's three buttons are drawn at their new places, at rest too");
+            bool plate = false, button = false;
+            for (const ArtSpy::Blended& b : rest.blended) {
+                plate = plate || (b.x == layout.right(469) && b.y == 7 && b.w == 171 && b.h == 24);
+                button = button || (b.x == fb.x && b.y == fb.y && b.w == 20 && b.h == 23);
+            }
+            check(plate && button && rest.blended.size() == 2, at + "classic art: the plate is laid over the old places, and the button is the original's pieces with a picture");
+            rig.hud.handle_mouse_down(fb.x + 5, fb.y + 5, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+            ArtSpy held(arc);
+            rig.hud.render(held, arc, rig.world(), rig.cam);
+            check(held.blended.size() == 2 && held.blended.back().rgba != rest.blended.back().rgba, at + "classic art: held, the button's picture changes");
+            int calls = 0;
+            rig.hud.set_on_fullscreen([&] { ++calls; });
+            rig.hud.handle_mouse_up(fb.x + 5, fb.y + 5, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+            check(calls == 1, at + "classic art: the release acts");
+            rig.hud.handle_mouse_motion(layout.right(476 - 8) + 5, 12, rig.sim, rig.cam);        // the pointer on Help: the original's small label is laid over the picture, at the new place
+            ArtSpy over(arc);
+            rig.hud.render(over, arc, rig.world(), rig.cam);
+            check(over.has_sprite_at("buthelpr.bmp", 476 + dx, 10), at + "classic art: the label of a hovered Help is 8 pixels left of the original's place (484 + dx)");
+        }
+    }
+
+    // ---- the dialogs
+    const ScreenLayout wide = ScreenLayout::with_size(960, 540);
+    {
+        HudRig rig(arc, wide);
+        rig.hud.set_art(&art);
+        rig.hud.open_quit_dialog();
+        const ArtSpy spy = render_once(rig, arc);
+        const size_t panel = hud_art::panel_draws(art, kDialogRect).size();
+        check(panel > 8 && panel_copies(spy, art) == panel, "quit: the dialog's panel is the nine pieces, over the original's rectangle (100, 100) 320 x 224");
+        check(once_at(spy, art, "dlg_btn_yes_up", 180, 260) && once_at(spy, art, "dlg_btn_no_up", 292, 260), "quit: Yes and No are the set's, at the original's places");
+        check(!spy.has_sprite_at("yes1.bmp", 180, 260) && !spy.has_sprite_at("no1.bmp", 292, 260) && spy.count(ArtSpy::Kind::Sprite) < 40, "quit: none of the original's dialog pieces is drawn");
+        check(spy.lines.size() == 1 && spy.lines[0].text == "Do you really want to quit?" && spy.lines[0].baseline == 196 && spy.lines[0].em_tenths == 200 && spy.lines[0].x == 260 - 270 / 2, "quit: the sentence is one line in the windows' face, centred in the dialog, its baseline 96 down");
+        check(!has_text(spy, "Do you really want to quit?", FontSize::Px24), "quit: ...and not also the original's text");
+        const ArtSpy plain = render_once(rig, arc, false);
+        check(plain.lines.empty() && has_text(plain, "Do you really want to quit?", FontSize::Px24) && once_at(plain, art, "dlg_btn_yes_up", 180, 260), "quit: a renderer without the windows' face draws the original's text in the new window");
+        const LayoutPoint m = wide.modal_offset();
+        rig.hud.handle_mouse_motion(m.x + 204, m.y + 272, rig.sim, rig.cam);
+        check(once_at(render_once(rig, arc), art, "dlg_btn_yes_hover", 180, 260), "quit: the pointer on Yes: its hover picture");
+        rig.hud.handle_mouse_down(m.x + 204, m.y + 272, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+        check(once_at(render_once(rig, arc), art, "dlg_btn_yes_down", 180, 260), "quit: pressed: its pressed picture");
+        rig.hud.handle_mouse_up(m.x + 204, m.y + 272, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+    }
+    {
+        HudRig rig(arc, wide);                                                             // the same dialog without the art, and with a set that lacks one of its pictures
+        rig.hud.open_quit_dialog();
+        const ArtSpy classic = render_once(rig, arc);
+        check(classic.has_sprite_at("yes1.bmp", 180, 260) && classic.has_sprite_at("no1.bmp", 292, 260) && panel_copies(classic, art) == 0 && classic.lines.empty(), "quit without the art: the original's dialog, its buttons and its text");
+        Art damaged;
+        check(damaged.parse(without_anim_text(manifest_text(), "no3")), "(a set without the pressed picture of No is read)");
+        rig.hud.set_art(&damaged);
+        const ArtSpy fallback = render_once(rig, arc);
+        check(fallback.has_sprite_at("yes1.bmp", 180, 260) && fallback.has_sprite_at("no1.bmp", 292, 260) && panel_copies(fallback, damaged) == 0 && fallback.lines.empty(), "quit with a set that lacks a picture of the dialog: the original's whole dialog");
+        check(has_text(fallback, "Do you really want to quit?", FontSize::Px24), "...with the original's text");
+    }
+    {
+        HudRig rig(arc, wide);
+        rig.hud.set_art(&art);
+        sim::WorldState w = rig.sim.get_world_state();
+        w.pending_invite_from[0] = 1;                                                      // Bea (Red) asks this player
+        rig.hud.update(w, 0);
+        rig.override_world = w;
+        const ArtSpy spy = render_once(rig, arc);
+        check(once_at(spy, art, "dlg_btn_accept_up", 152, 260) && once_at(spy, art, "dlg_btn_decline_up", 284, 260) && copies_with_prefix(spy, art, "dlg_btn_") == 2, "invitation: Accept and Decline are the set's, at the original's places");
+        bool box = spy.lines.size() >= 2;
+        for (size_t i = 0; i < spy.lines.size(); ++i) {
+            box = box && spy.lines[i].baseline == 100 + 30 + static_cast<int32_t>(i) * 26 && spy.dialog_text_width(spy.lines[i].text, spy.lines[i].em_tenths) <= 292;
+        }
+        check(box, "invitation: the sentence wraps in the dialog's inner width less a margin (292), 26 pixels from line to line, the first baseline 30 down");
+        rig.hud.handle_mouse_motion(wide.modal_offset().x + 192, wide.modal_offset().y + 272, rig.sim, rig.cam);
+        check(once_at(render_once(rig, arc), art, "dlg_btn_accept_hover", 152, 260), "invitation: the pointer on Accept: its hover picture");
+    }
+    {
+        HudRig rig(arc, wide);
+        rig.hud.set_art(&art);
+        rig.hud.start_match_modal(true);
+        const ArtSpy spy = render_once(rig, arc);
+        check(panel_copies(spy, art) > 0 && copies_with_prefix(spy, art, "dlg_btn_") == 0, "get ready: the new panel, no button");
+        check(spy.lines.size() >= 2 && spy.lines.back().text == "Waiting for others..." && spy.lines.back().baseline == 308 && spy.lines.back().em_tenths == 180 && spy.lines[0].em_tenths == 260 && spy.lines[0].baseline == 138, "get ready: the words in the windows' face (26 and 18), the footer's baseline 208 down");
+    }
+}
+
+void test_windows_more(const assets::AssetArchive& arc, const Art& art) {
+    group("windows-more", "the options window and its veil, the quick help, the countdown card and the windows' face with the real renderer");
+    const ScreenLayout wide = ScreenLayout::with_size(960, 540);
+    const ScreenLayout classic = ScreenLayout::classic();
+    const auto veil_fills = [](const ArtSpy& spy) {
+        std::vector<LayoutRect> out;
+        for (const ArtSpy::Ev& e : spy.of(ArtSpy::Kind::Fill)) {
+            if (e.color.a == window_art::kVeil.a && e.color.r == 0 && e.color.g == 0 && e.color.b == 0) out.push_back(LayoutRect{e.x, e.y, e.w, e.h});
+        }
+        return out;
+    };
+    const auto named = [](const ArtSpy& spy, const std::string& prefix) {
+        size_t n = 0;
+        for (const ArtSpy::Ev& e : spy.of(ArtSpy::Kind::Named)) n += e.name.compare(0, prefix.size(), prefix) == 0 ? 1u : 0u;
+        return n;
+    };
+
+    // ---- the options window
+    for (const ScreenLayout& layout : {wide, classic}) {
+        const std::string at = std::string(layout.is_classic() ? "4:3" : "16:9") + ": ";
+        HudRig rig(arc, layout);
+        rig.hud.set_art(&art);
+        rig.hud.open_options();
+        const LayoutPoint o = layout.options_offset();
+        const ArtSpy spy = render_once(rig, arc);
+        check(panel_copies(spy, art) > 0 && copies_with_prefix(spy, art, "op_part_") >= 1, at + "options: the new panel and the window's fixed pieces");
+        bool each_once = true;
+        for (const hud_art::Sprite& s : art.sprites()) {
+            if (s.name.compare(0, 8, "op_part_") == 0) each_once = each_once && copies_of(spy, art, s.name) == 1;
+        }
+        check(each_once, at + "options: every fixed piece once");
+        check(copies_of(spy, art, "op_thumb_up") == 3, at + "options: three sliders, three thumbs");
+        check(once_at(spy, art, "dlg_btn_return_up", 351, 425), at + "options: Return to Game at the original's place");
+        check(copies_of(spy, art, "op_on_chosen") == 2 && copies_of(spy, art, "op_off_up") == 2, at + "options: Chat and Quick Help are On: the On switches are chosen, the Off switches up");
+        bool at_places = true;
+        for (const ArtSpy::Copy& c : spy.of_sprite(art, "op_on_chosen")) at_places = at_places && c.y == 290 && (c.x == 103 || c.x == 356);
+        for (const ArtSpy::Copy& c : spy.of_sprite(art, "op_off_up")) at_places = at_places && c.y == 290 && (c.x == 151 || c.x == 404);
+        check(at_places, at + "options: the switches stand where the original's did");
+        // the veil
+        const std::vector<LayoutRect> bands = veil_fills(spy);
+        const LayoutRect card = window_art::kOptionsRect.moved(o.x, o.y);
+        const LayoutRect pic{0, 0, layout.width, layout.height};
+        std::vector<int> grid(static_cast<size_t>(pic.w) * static_cast<size_t>(pic.h), 0);
+        for (const LayoutRect& b : bands) {
+            for (int32_t y = b.y; y < b.bottom(); ++y) for (int32_t x = b.x; x < b.right(); ++x) ++grid[static_cast<size_t>(y) * static_cast<size_t>(pic.w) + static_cast<size_t>(x)];
+        }
+        bool once = true, clear = true;
+        for (int32_t y = 0; y < pic.h; ++y) {
+            for (int32_t x = 0; x < pic.w; ++x) {
+                const int n = grid[static_cast<size_t>(y) * static_cast<size_t>(pic.w) + static_cast<size_t>(x)];
+                if (card.contains(x, y)) clear = clear && n == 0; else once = once && n == 1;
+            }
+        }
+        check(bands.size() == 4 && once && clear, at + "options: the veil is drawn over every pixel of the picture but the card, once, in any shape");
+        check(named(spy, "dith") == 0 && spy.count(ArtSpy::Kind::Sprite) < 30, at + "options: the original's checker and its pieces are not drawn");
+        // the states of the switches and the thumb
+        rig.hud.handle_mouse_motion(o.x + 175, o.y + 300, rig.sim, rig.cam);                  // over Chat Off (up)
+        check(copies_of(render_once(rig, arc), art, "op_off_hover") == 1, at + "options: the pointer on a switch that is not chosen: its hover picture");
+        rig.hud.handle_mouse_down(o.x + 175, o.y + 300, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+        check(copies_of(render_once(rig, arc), art, "op_off_down") == 1, at + "options: held and not yet chosen: pressed in, plain");
+        rig.hud.handle_mouse_up(o.x + 175, o.y + 300, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+        check(!rig.hud.options().chat && copies_of(render_once(rig, arc), art, "op_off_chosen") == 1 && copies_of(render_once(rig, arc), art, "op_on_up") == 1, at + "options: released: Off is chosen, On is up again");
+        rig.hud.update(rig.world(), 0);                                                       // (the pointer is polled every 50 ms: it is still on the chosen switch)
+        check(copies_of(render_once(rig, arc), art, "op_off_chosen_hover") == 1, at + "options: the pointer on the chosen switch: its hover picture");
+        rig.hud.handle_mouse_motion(o.x + 100, o.y + 100, rig.sim, rig.cam);
+        check(copies_of(render_once(rig, arc), art, "op_off_chosen") == 1, at + "options: the pointer away: the chosen switch");
+        const ScreenSlider& s0 = rig.hud.options_screen().slider(0);
+        rig.hud.handle_mouse_motion(s0.thumb_left() + o.x + 5, s0.thumb_top() + o.y + 5, rig.sim, rig.cam);
+        rig.hud.update(rig.world(), 0);
+        check(copies_of(render_once(rig, arc), art, "op_thumb_hover") == 1, at + "options: the pointer on a slider's thumb: its hover picture");
+        rig.hud.handle_mouse_down(s0.thumb_left() + o.x + 5, s0.thumb_top() + o.y + 5, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+        check(copies_of(render_once(rig, arc), art, "op_thumb_held") == 1, at + "options: dragged: the held thumb");
+        rig.hud.handle_mouse_up(s0.thumb_left() + o.x + 5, s0.thumb_top() + o.y + 5, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+        // the window is modal, veil or not: a press under the veil is the window's, and nothing under it takes it
+        HudRig modal(arc, layout);
+        modal.hud.set_art(&art);
+        modal.hud.open_options();
+        const bool took = modal.hud.handle_mouse_down(modal.hud.help_button().x + 5, 12, SDL_BUTTON_LEFT, modal.sim, modal.cam);
+        check(took && !modal.hud.help_button().is_pressed && modal.hud.options_screen().is_open(), at + "options: a press on Help under the veil is taken by the window, and Help does not act");
+        check(modal.hud.handle_mouse_down(layout.view().x + 5, layout.view().y + 5, SDL_BUTTON_LEFT, modal.sim, modal.cam) && !modal.hud.is_input_captured(), at + "options: a press on the map under the veil captures nothing");
+        // the original's art keeps its checker and draws no veil
+        HudRig plain(arc, layout);
+        plain.hud.open_options();
+        const ArtSpy original = render_once(plain, arc);
+        check(veil_fills(original).empty() && (layout.is_classic() || named(original, "dith200.bmp") > 0), at + "options without the art: no veil, the original's checker round the card");
+    }
+
+    // ---- the quick help
+    {
+        HudRig rig(arc, wide);
+        rig.hud.set_art(&art);
+        rig.hud.open_quick_help();
+        const ArtSpy spy = render_once(rig, arc);
+        const LayoutPoint q = wide.quick_help_offset();
+        check(panel_copies(spy, art) > 0 && copies_with_prefix(spy, art, "qh_part_") >= 1, "quick help: the new panel and the window's pieces");
+        check(once_at(spy, art, "qh_pedestal_move", 217, 201) && once_at(spy, art, "qh_pedestal_special", 474, 404), "quick help: the two pedestal pictures at the original's places");
+        check(once_at(spy, art, "cursor_curfd01", 226, 344) && copies_of(spy, art, "cursor_c_normal") == 2, "quick help: the new food cursor and pointer");
+        window_art::KeptPictures kept;
+        check(kept.build(arc) && spy.blended.size() == kept.pictures().size(), "quick help: the original's pictures are laid over the wells, all of them");
+        bool same = spy.blended.size() == kept.pictures().size();
+        for (size_t i = 0; same && i < spy.blended.size(); ++i) same = spy.blended[i].x == kept.pictures()[i].x && spy.blended[i].y == kept.pictures()[i].y && spy.blended[i].rgba == kept.pictures()[i].rgba;
+        check(same, "quick help: ...at the places and with the pixels that were cut");
+        check(once_at(spy, art, "dlg_btn_return_up", 529, 437), "quick help: Return to Game at the original's place");
+        rig.hud.handle_mouse_motion(q.x + 578, q.y + 450, rig.sim, rig.cam);
+        check(once_at(render_once(rig, arc), art, "dlg_btn_return_hover", 529, 437), "quick help: the pointer on Return: its hover picture");
+        rig.hud.handle_mouse_down(q.x + 578, q.y + 450, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+        check(once_at(render_once(rig, arc), art, "dlg_btn_return_down", 529, 437), "quick help: pressed: its pressed picture");
+        rig.hud.handle_mouse_up(q.x + 578, q.y + 450, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+        check(!rig.hud.is_modal_open(), "quick help: the release on Return closes it");
+        HudRig plain(arc, wide);
+        plain.hud.open_quick_help();
+        const ArtSpy original = render_once(plain, arc);
+        check(panel_copies(original, art) == 0 && original.blended.size() == 2 /* (the Classic corner's plate and button, no picture of the quick help) */ && [&] { for (const ArtSpy::Ev& e : original.events) if (e.name == "breturn1.bmp" && e.x == 529 && e.y == 437) return true; return false; }(), "quick help without the art: the original's two bitmaps and Return button");
+    }
+
+    // ---- the countdown card
+    {
+        HudRig rig(arc, wide);
+        rig.hud.set_art(&art);
+        std::array<CountdownSeat, 4> seats{};
+        seats[0] = {true, false, "Ann"};
+        seats[1] = {true, false, "Bea"};
+        seats[2] = {true, true, "Pip (bot, Hard)"};
+        seats[3] = {false, false, ""};
+        rig.hud.start_match_countdown(23400, seats);
+        const CountdownCardLayout l = countdown_card_layout(wide.view());
+        const ArtSpy spy = render_once(rig, arc);
+        check(panel_copies(spy, art) > 0 && once_at(spy, art, "cd_title", l.card.x + 77, l.card.y + 20) && once_at(spy, art, "cd_count_box", l.card.x + 114, l.card.y + 79), "countdown: the new panel, the title and the count's box, in the middle of the map view");
+        check(copies_of(spy, art, "cd_seat") == 3 && once_at(spy, art, "cd_dot_0", l.seat[0].x + 9, l.seat[0].y + 8) && once_at(spy, art, "cd_dot_1", l.seat[1].x + 9, l.seat[1].y + 8) &&
+                  once_at(spy, art, "cd_dot_2", l.seat[2].x + 9, l.seat[2].y + 8) && copies_of(spy, art, "cd_dot_3") == 0, "countdown: a row and a color dot for each color that plays, on the card's own seats");
+        check(once_at(spy, art, "dlg_btn_fullscreen_up", l.button.x, l.button.y), "countdown: the native game's Fullscreen button, on the card's place");
+        check(has_text(spy, "24", FontSize::Px96) && has_text(spy, "seconds to the start", FontSize::Px18) && has_text(spy, "Ann (you)", FontSize::Px18) && has_text(spy, "bot", FontSize::Px14), "countdown: the count, the words under it, the names and the tags are the game's own text");
+        bool lines = false;
+        for (const ArtSpy::Line& line : spy.lines) lines = lines || (line.text == "Everybody is in. Say hello in the chat." && line.baseline == l.card.y + 300 && line.em_tenths == 135);
+        check(lines && spy.lines.size() == 2, "countdown: the card's own words (the subtitle and the hint) are in the windows' face");
+        rig.hud.handle_mouse_down(l.button.x + 5, l.button.y + 5, SDL_BUTTON_LEFT, rig.sim, rig.cam);
+        check(once_at(render_once(rig, arc), art, "dlg_btn_fullscreen_down", l.button.x, l.button.y), "countdown: held, the button's pressed picture");
+        HudRig plain(arc, wide);
+        plain.hud.start_match_countdown(23400, seats);
+        const ArtSpy original = render_once(plain, arc);
+        check(panel_copies(original, art) == 0 && !original.of(ArtSpy::Kind::Fill).empty(), "countdown without the art: the original's flat card");
+    }
+
+    // ---- the windows' face with the real renderer
+    {
+        RendererRig rig(arc, 960, 540);
+        check(rig.ok, "(a renderer)");
+        if (rig.ok) {
+            check(!rig.renderer.dialog_text_ready(), "the real renderer has no windows' face until it is given the file");
+            rig.renderer.set_dialog_font_path(art_folder() + "/LibreBaskerville-Regular.ttf");
+            const int32_t w = rig.renderer.dialog_text_width("Do you really want to quit?", 200);
+            check(rig.renderer.dialog_text_ready() && w > 200 && w < 296, "the shipped face opens; the quit question at 20 pixels is a line of about 270 pixels (" + std::to_string(w) + ")");
+            check(rig.renderer.dialog_text_width("Do you really want to quit?", 260) > w && rig.renderer.dialog_text_width("", 200) == 0, "a larger size is wider; no text, no width");
+            rig.renderer.begin_frame();
+            rig.renderer.fill_rect(0, 0, 960, 540, assets::ColorRGBA{219, 75, 19, 255});
+            rig.renderer.draw_dialog_text("Do you really want to quit?", 100, 200, window_art::kInk, 200);
+            const std::vector<uint8_t> px = rig.read();
+            int ink = 0, below = 0;
+            for (int32_t y = 180; y < 206; ++y) {
+                for (int32_t x = 100; x < 100 + w; ++x) {
+                    const uint8_t* p = &px[(static_cast<size_t>(y) * 960u + static_cast<size_t>(x)) * 4u];
+                    ink += (std::abs(p[0] - 31) < 40 && std::abs(p[1] - 23) < 40 && std::abs(p[2] - 51) < 40) ? 1 : 0;
+                }
+            }
+            for (int32_t x = 100; x < 100 + w; ++x) below += px[(static_cast<size_t>(215) * 960u + static_cast<size_t>(x)) * 4u] == 219 ? 0 : 1;
+            check(ink > 300 && below == 0, "the real renderer draws the sentence in the dialogs' ink on its baseline (and nothing 15 pixels below it)");
+            rig.renderer.set_dialog_font_path(art_folder() + "/no_such_face.ttf");
+            check(!rig.renderer.dialog_text_ready(), "a face that does not open: no face, the original's text is drawn");
+        }
     }
 }

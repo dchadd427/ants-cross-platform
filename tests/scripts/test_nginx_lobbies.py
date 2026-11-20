@@ -137,8 +137,8 @@ class TheText(unittest.TestCase):
         self.assertNotEqual(body.group(1), re.search(r"return 404 '(\{.*\})';", REPLAYS_OFF).group(1))      # (the page tells the two apart by the word)
 
     def test_the_block_is_the_live_block_but_for_the_zone_the_key_the_path_and_the_fallback(self):
-        def lines(block, *own):
-            return [l.strip() for l in block.splitlines() if l.strip() and not l.strip().startswith(own)]
+        def lines(block, *own):                                                           # (the life of the one entry is each block's own number: the list of games keeps its entry two seconds, the matches that run one second; every other rule is the same)
+            return [re.sub(r"proxy_cache_valid 200 \d+s;", "proxy_cache_valid 200 <N>s;", l.strip()) for l in block.splitlines() if l.strip() and not l.strip().startswith(own)]
         own = ("limit_req zone=", "proxy_cache_key", "proxy_pass ", "error_page", "proxy_read_timeout")
         self.assertEqual(lines(BLOCK, *own), lines(LIVE, *own))                           # (one door, one set of headers, checks, cache rules and the other timeouts: they cannot drift apart)
 

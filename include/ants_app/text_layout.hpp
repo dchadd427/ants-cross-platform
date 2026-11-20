@@ -4,12 +4,19 @@
 // GetTextExtentPoint32A and draws every line with DrawTextA into the label's box; here IRenderer::get_text_width and draw_text stand in for them.
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
 #include "ants_app/renderer.hpp"
 
 namespace ants::app {
+
+/// How wide a line is, in pixels, in whatever face the caller draws it in
+using WidthFn = std::function<int32_t(const std::string&)>;
+
+/// The same wrap for any face: `width_of` measures a line (the new windows' sentences are in another face than the original's labels)
+std::vector<std::string> wrap_label_with(const WidthFn& width_of, const std::string& text, int32_t width);
 
 /// The original's greedy word wrap (FUN_0102b0b5): from the start of a line the text is scanned character by character; the scan stops when the width of
 /// the text so far reaches `width`, and the line ends at the last word end that was seen before (a line that holds no word end is cut one character

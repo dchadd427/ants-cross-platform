@@ -53,6 +53,8 @@ is_light() {    # is_light PATH: 0 when the path is one of the light kinds and n
         web/lobby.html | web/shell.html | web/shapes.js | web/rejoin_key.js) return 1 ;;
         web/front/lobby_net.js | web/front/lobby_chat.js | web/front/player_name.js | web/front/rematch.js | web/front/game_modes.js | web/front/game_type.js | web/front/map_picker.js) return 1 ;;
         web/home/home.js | web/home/games.js) return 1 ;;
+        # the alerts (docs/HOME_SCREEN.md "Alerts"): the page harness loads the shared script, and the front page's part when it loads the parts after the first paint
+        web/alert_core.js | web/home/alerts.js) return 1 ;;
         tests/scripts/web_fill_check.js | tests/scripts/web_lobby_server_check.js | tests/scripts/web_lobby_handoff_check.js | tests/scripts/web_page_harness.js) return 1 ;;
         # ---- the light kinds ----
         web/* | docs/*) return 0 ;;

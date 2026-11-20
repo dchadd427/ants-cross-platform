@@ -462,16 +462,22 @@ void run_bot_admin_tests() {
                 for (const auto& seat : m.seats) ASSERT_TRUE(seat.second == "medium" || seat.second == "hard");
                 ASSERT_TRUE(m.code.size() >= 4 && m.state != RoomState::Finished);
             }
-            // the live id comes with the public list: after 30 seconds of play
+            // the live id comes with the public list, which shows a match from its start: the matches are listed once they run (20 seconds on, well before a replay is kept), under the same ids as later
             w.run(20000);
-            for (const BotMatchInfo& m : w.mgr.bot_matches(w.now)) ASSERT_TRUE(m.live_id.empty());
-            w.run(30000);
             std::set<std::string> board;
             for (const LiveMatch& live : w.mgr.live_board().list()) board.insert(live.id);
             ASSERT_EQ(board.size(), size_t{3});
             info = w.mgr.bot_matches(w.now);
             ASSERT_EQ(info.size(), size_t{3});
-            for (const BotMatchInfo& m : info) ASSERT_TRUE(!m.live_id.empty() && board.count(m.live_id) == 1);
+            std::map<std::string, std::string> id_of;
+            for (const BotMatchInfo& m : info) {
+                ASSERT_TRUE(!m.live_id.empty() && board.count(m.live_id) == 1);
+                id_of[m.code] = m.live_id;
+            }
+            w.run(30000);
+            info = w.mgr.bot_matches(w.now);
+            ASSERT_EQ(info.size(), size_t{3});
+            for (const BotMatchInfo& m : info) ASSERT_TRUE(id_of.count(m.code) == 1 && id_of[m.code] == m.live_id);
             ASSERT_TRUE(info[0].code != info[1].code && info[0].live_id != info[1].live_id);
         }
     } TEST_END();

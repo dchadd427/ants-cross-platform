@@ -38,9 +38,11 @@ add_library(ants_app STATIC
     renderer_health.cpp
     renderer_art.cpp
     hud_art.cpp
+    window_art.cpp
     png_decode.cpp
     renderer_numbers.cpp
     renderer_text.cpp
+    renderer_dialog_text.cpp
     renderer_terrain.cpp
     renderer_units.cpp
     renderer_world_image.cpp
@@ -49,6 +51,7 @@ add_library(ants_app STATIC
     hud_radar.cpp
     hud_match_start.cpp
     hud_alliance.cpp
+    hud_windows.cpp
     hud_chat.cpp
     hud_keys.cpp
     hud_pointer.cpp

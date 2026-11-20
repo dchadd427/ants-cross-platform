@@ -5,7 +5,7 @@
 //   * Everything from the list is UNTRUSTED text: checked field by field (parseList), drawn with textContent, never as markup or a link, and a row that is not of the shape is dropped. At most 50 rows. The one address that a
 //     row's text makes is its map's picture (a checked file name, percent-encoded: AntsMapPicker.previewPath).
 //   * Matches that run now (GET /live, docs/REPLAYS.md "Live") stand in the list below the open rooms as rows with a Live mark and Watch (/play?live=<id>: the same tab, a new one only while the page holds a room); they are always shown (the open rooms first; nothing is kept in
-//     this browser). The door carries no room code and a room that is listed is waiting, so a running match is never a room's row. /live is looked at every 10 s at the most, only while the list shows, and a
+//     this browser). The door carries no room code and a room that is listed is waiting, so a running match is never a room's row. /live is looked at every 5 s (and at once, 1.5 s apart at the least, when a room of the list has gone: it may have started its match, which is listed from its start), only while the list shows, and a
 //     server without that door (404) or a failed look only hides the section.
 //   * The list is polled (30 s closed, 5 s open, never while the tab is hidden or the Room shows, +-20 % of jitter, doubled after a failure). Nothing that goes wrong here reaches Home, the Room or the hand-off:
 //     every call out of this file is guarded, and a failed look is only "the list is off".
@@ -36,7 +36,7 @@
     var RETRY_MS = 1300;                                 // a request that the page's pace held back is made again after this long (the pace is one every 1.25 s)
     var PENDING_MS = 20000;                              // Quick host waits this long for a room that is not ready (then it is forgotten: a room must not turn public much later)
     var LIVE_URL = '/live';                              // the site's own address of the matches that run now (no query, no credentials)
-    var LIVE_EVERY = 10000, LIVE_CAP = 300000;           // ms between two looks at /live (never less: the page's own door asks no faster), the longest wait after failures
+    var LIVE_EVERY = 5000, LIVE_SOON = 1500, LIVE_CAP = 300000;           // ms between two looks at /live (never less: the page's own door asks no faster), the shortest wait when a room has gone (it may have started its match), the longest wait after failures
     var LIVE_MAX = 50;                                   // matches that are shown (the door lists 50 at the most)
     var LIVE_ID = /^[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/;           // the shape of a match's id (docs/SERVER.md "Live matches"): nothing else is ever put into an address
     var BOT_NAME = /^Bot \(|\(bot(, [^()]+)?\)$/;           // a computer player's name as a server writes it ("Pip (bot, Hard)", "Kit (bot, idle)"; the older "Bot (Medium)"): the rule of the lobby's name check, which keeps these names from people
@@ -53,7 +53,7 @@
         noneLine: 'Nobody is waiting for a player. Host one, and others can join you.', noneYours: 'Your room goes public with its map and your friends in it.', noneNew: 'A new room opens for you, and it goes public.', joiningCode: 'Joining the room…', joinFirst: ' Wait for it, or cancel it in the list.', opening: 'The game is opening. If it does not, reload this page.',
         already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went private after 30 minutes. Make it public again?',
         hostChanged: 'This room is private again because the host changed.', stillPrivate: 'Your room is still private. Use the Public switch in the room.',
-        watch: 'Watch', liveMark: 'Live', mode187: '187', inProgress: 'In progress', soFar: ' so far', nobodyNamed: 'Players not named',
+        watch: 'Watch', liveMark: 'Live', mode187: '187', inProgress: 'In progress', soFar: ' so far', starting: 'Starting\u2026', nobodyNamed: 'Players not named',
         full: 'That room is full.', started: 'The match in that room has already started.', gone: 'That game is not open any more.', silent: 'The server did not answer. Try again in a moment.'
     };
 
@@ -85,7 +85,7 @@
             var m = /^(Green|Red|Blue|Black)(?: \(([\s\S]*)\))?$/.exec(list[i]);
             who.push(m ? { seat: SEATS.indexOf(m[1]), name: m[2] || m[1] } : { seat: -1, name: list[i] });
         }
-        return { id: raw.id, map: file, mapKey: known ? known.key : '', mapName: known ? known.name : rules.communityName(file).slice(0, 28), seconds: isFinite(secs) && secs > 0 ? Math.min(Math.floor(secs), 359999) : 0, who: who, mode187: raw.mode === '187' };
+        return { id: raw.id, map: file, mapKey: known ? known.key : '', mapName: known ? known.name : rules.communityName(file).slice(0, 28), seconds: isFinite(secs) && secs > 0 ? Math.min(Math.floor(secs), 359999) : 0, who: who, mode187: raw.mode === '187', starting: raw.turns === 0 };         // (a match that has run no turn yet: its room has just started it, and the row says so)
     }
     // The matches of an answer ({ live: [...] }), at most 50, an id once, in the door's order (newest first); null when the answer is not that shape (the section is hidden)
     function parseLive(data, rules) {
@@ -101,7 +101,9 @@
     }
     // How long a match has run, as a clock: 0:07, 12:00, 61:05
     function clockText(s) { return Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60); }
-    // The wait before the next look at /live: 10 s doubled for every failure in a row up to 5 minutes, then 0 to +20 % (random: 0 to 1): never under 10 s
+    // What a row says of its match's length: "Starting..." until its first turn has run, then the clock "0:07 so far"
+    function lengthWords(e) { return e.starting ? TEXT.starting : clockText(e.seconds) + TEXT.soFar; }
+    // The wait before the next look at /live: 5 s doubled for every failure in a row up to 5 minutes, then 0 to +20 % (random: 0 to 1): never under 5 s
     function liveDelay(failures, random) {
         var wait = Math.min(LIVE_CAP, LIVE_EVERY * Math.pow(2, Math.min(failures, 10)));
         return Math.round(wait * (1 + JITTER * Math.max(0, Math.min(1, random))));
@@ -542,7 +544,7 @@
         // One match that runs now: the map's square, the map (the room's host is not known: the door carries no room), a red Live mark (and the tag 187 beside it for a match of mode 187), the players (a dot of their color and their names) and how long it has run; Watch opens the
         // player on it in this tab, or in a NEW one while the page holds a room, so that its seat stays (markWatch)
         function liveNode(e) {
-            var li = el('li', 'gitem glive'), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots'), who = el('span', 'gwho'), len = el('span', 'glen', clockText(e.seconds) + TEXT.soFar);
+            var li = el('li', 'gitem glive'), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots'), who = el('span', 'gwho'), len = el('span', 'glen', lengthWords(e));
             var names = e.who.map(function (w) { return w.name; }).join(', ') || TEXT.nobodyNamed, go = el('a', 'btn gwatch', TEXT.watch), marks = el('span', 'gmarks'), kind = e.mode187 ? TEXT.mode187 + ' match' : 'match';
             dots.setAttribute('aria-hidden', 'true');
             e.who.forEach(function (w) { var d = el('i', 'gdot ' + (BOT_NAME.test(w.name) ? 'bot' : 'player')); d.className += w.seat < 0 ? ' cn' : ' c' + w.seat; dots.appendChild(d); });          // (a computer player is a ring, as in the open rooms; a color that the door does not know is a neutral dot)
@@ -552,7 +554,7 @@
             line.appendChild(dots); line.appendChild(who); line.appendChild(len);
             text.appendChild(top); text.appendChild(line); li.appendChild(picOf(e)); li.appendChild(text);
             go.setAttribute('href', '/play?live=' + encodeURIComponent(e.id)); go.setAttribute('data-live', e.id); go.addEventListener('click', function () { markWatch(go, e.id); }); markWatch(go, e.id);
-            go.setAttribute('aria-label', 'Watch the ' + kind + ' on ' + e.mapName + ', ' + names + ', ' + clockText(e.seconds) + TEXT.soFar);
+            go.setAttribute('aria-label', 'Watch the ' + kind + ' on ' + e.mapName + ', ' + names + ', ' + lengthWords(e));
             li.appendChild(go);
             liveLens.push({ id: e.id, node: len, link: go, names: names, map: e.mapName, kind: kind });
             return li;
@@ -571,7 +573,7 @@
             }
             live.forEach(function (e, i) {
                 var l = liveLens[i];
-                if (l) { l.node.textContent = clockText(e.seconds) + TEXT.soFar; l.link.setAttribute('aria-label', 'Watch the ' + l.kind + ' on ' + l.map + ', ' + l.names + ', ' + clockText(e.seconds) + TEXT.soFar); }
+                if (l) { l.node.textContent = lengthWords(e); l.link.setAttribute('aria-label', 'Watch the ' + l.kind + ' on ' + l.map + ', ' + l.names + ', ' + lengthWords(e)); }
             });
         }
         function countLine(n) {                            // the list's head: "3 open, 2 in progress" while the matches are shown, else "3 waiting - updates live"
@@ -799,25 +801,32 @@
         function settle(data) {
             var list = null;
             try { list = parseList(data, rules); } catch (e) { list = null; }
+            var before = rows, hadList = loaded && !off;
             loaded = true;
             if (list === null) { off = true; failures++; rows = []; } else { off = false; failures = 0; rows = list; }
             paintPill();
             if (isOpen) paintList();
             schedule();
+            // a room that was on the list and is not any more may have started its match, which is on /live from the moment it starts: look at /live now (never faster than 1.5 s apart)
+            if (hadList && list !== null && before.some(function (r) { return !rows.some(function (n) { return n.code === r.code; }); })) pollLive(true);
         }
 
-        // ---- the looks at GET /live: the matches that run now, only while the list shows (Home, a visible tab), 10 s apart at the least ----
+        // ---- the looks at GET /live: the matches that run now, only while the list shows (Home, a visible tab), 5 s apart (1.5 s when a room has gone) ----
         function drawn() { try { return !docked || !pop.getClientRects || pop.getClientRects().length > 0; } catch (e) { return true; } }          // (a phone's Chat or Players view covers the docked list: nothing shows the matches, so nothing asks)
         function liveWanted() { return !gone && visible() && onHome() && isOpen && drawn(); }
-        function scheduleLive(ms) {
+        function scheduleLive(ms, soon) {
             if (liveTimer !== null) { cancel(liveTimer); liveTimer = null; }
             if (!liveWanted() || liveBusy) return;
-            liveTimer = later(guard(function () { liveTimer = null; pollLive(); }), ms === undefined ? liveDelay(liveFails, random()) : ms);
+            liveTimer = later(guard(function () { liveTimer = null; pollLive(soon); }), ms === undefined ? liveDelay(liveFails, random()) : ms);
         }
-        function pollLive() {                              // a look at once when 10 s have gone since the last one ended (after failures: when their wait has gone), else when they have
+        function pollLive(soon) {                          // a look at once when 5 s have gone since the last one ended (after failures: when their wait has gone), else when they have; `soon`: a room has gone from the list, so 1.5 s are enough
             if (!liveWanted() || liveBusy) return;
-            var wait = lastLive ? (liveFails ? liveDelay(liveFails, 0) : LIVE_EVERY) - (now() - lastLive) : 0;
-            if (wait > 0) { if (liveTimer === null) scheduleLive(wait); return; }
+            var wait = lastLive ? (liveFails ? liveDelay(liveFails, 0) : soon === true ? LIVE_SOON : LIVE_EVERY) - (now() - lastLive) : 0;
+            if (wait > 0) {
+                if (soon === true && !liveFails && liveTimer !== null) { cancel(liveTimer); liveTimer = null; }       // (the look that waits is brought forward)
+                if (liveTimer === null) scheduleLive(wait, soon === true);
+                return;
+            }
             if (liveTimer !== null) { cancel(liveTimer); liveTimer = null; }
             if (typeof win.fetch !== 'function') { settleLive(null); return; }
             liveBusy = true;
@@ -891,5 +900,5 @@
         };
     }
 
-    return { TEXT: TEXT, rowOf: rowOf, parseList: parseList, liveOf: liveOf, parseLive: parseLive, liveDelay: liveDelay, clockText: clockText, LIVE_EVERY: LIVE_EVERY, delayOf: delayOf, countText: countText, bestOrder: bestOrder, seatsOf: seatsOf, mount: mount, EVERY_CLOSED: EVERY_CLOSED, EVERY_OPEN: EVERY_OPEN, REFRESH_MS: REFRESH_MS, ROWS_MAX: ROWS_MAX };
+    return { TEXT: TEXT, rowOf: rowOf, parseList: parseList, liveOf: liveOf, parseLive: parseLive, liveDelay: liveDelay, clockText: clockText, LIVE_EVERY: LIVE_EVERY, LIVE_SOON: LIVE_SOON, delayOf: delayOf, countText: countText, bestOrder: bestOrder, seatsOf: seatsOf, mount: mount, EVERY_CLOSED: EVERY_CLOSED, EVERY_OPEN: EVERY_OPEN, REFRESH_MS: REFRESH_MS, ROWS_MAX: ROWS_MAX };
 });

@@ -8,7 +8,7 @@ namespace ants::app {
 namespace {
 
 // One paragraph (no '\n' inside), the loop of FUN_0102b0b5
-void wrap_paragraph(const IRenderer& renderer, const std::string& text, int32_t width, FontSize size, std::vector<std::string>& lines) {
+void wrap_paragraph(const WidthFn& width_of, const std::string& text, int32_t width, std::vector<std::string>& lines) {
     const size_t len = text.size();
     size_t p = 0;
     while (p < len) {
@@ -18,7 +18,7 @@ void wrap_paragraph(const IRenderer& renderer, const std::string& text, int32_t 
         int32_t count = 0;                                         // characters scanned so far
         size_t q = p;
         while (q < len) {
-            if (renderer.get_text_width(text.substr(p, q - p + 1), size) >= width) break;      // the text so far has reached the width
+            if (width_of(text.substr(p, q - p + 1)) >= width) break;      // the text so far has reached the width
             if (text[q] != ' ' && (q + 1 >= len || text[q + 1] == ' ')) last_word_end = count;
             ++count;
             ++q;
@@ -32,7 +32,7 @@ void wrap_paragraph(const IRenderer& renderer, const std::string& text, int32_t 
 
 }  // namespace
 
-std::vector<std::string> wrap_label_text(const IRenderer& renderer, const std::string& text, int32_t width, FontSize size) {
+std::vector<std::string> wrap_label_with(const WidthFn& width_of, const std::string& text, int32_t width) {
     std::vector<std::string> lines;
     if (width <= 0) {
         if (!text.empty()) lines.push_back(text);
@@ -41,11 +41,15 @@ std::vector<std::string> wrap_label_text(const IRenderer& renderer, const std::s
     size_t start = 0;
     while (start <= text.size()) {
         const size_t next = text.find('\n', start);
-        wrap_paragraph(renderer, text.substr(start, next == std::string::npos ? std::string::npos : next - start), width, size, lines);
+        wrap_paragraph(width_of, text.substr(start, next == std::string::npos ? std::string::npos : next - start), width, lines);
         if (next == std::string::npos) break;
         start = next + 1;
     }
     return lines;
+}
+
+std::vector<std::string> wrap_label_text(const IRenderer& renderer, const std::string& text, int32_t width, FontSize size) {
+    return wrap_label_with([&](const std::string& line) { return renderer.get_text_width(line, size); }, text, width);
 }
 
 std::string fit_text(const IRenderer& renderer, std::string text, int32_t width, FontSize size) {

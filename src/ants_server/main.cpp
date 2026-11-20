@@ -2,7 +2,7 @@
 //
 //   ants_server --maps DIR [--port 4001] [--ws-port 4002] [--ctl-port 4010] [--public] [--ws-any-interface] [--ctl-any-interface] [--results-dir DIR] [--secret-file PATH] [--max-rooms N]
 //               [--reconnect | --no-reconnect] [--hold-vote-seconds N] [--max-pause-seconds N] [--max-catch-up-seconds N]
-//               [--resume-countdown-seconds N] [--start-countdown-seconds N] [--solo-countdown-seconds N] [--log-mb N]
+//               [--resume-countdown-seconds N] [--start-countdown-seconds N] [--solo-countdown-seconds N] [--live-delay-seconds N] [--log-mb N]
 //               [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds N] [--restart-budget-mb N]
 //               [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days N] [--replays-max-mb N] [--replay-port N] [--replay-any-interface]
 //               [--bot-match-every-min N] [--db FILE | --no-db] [--no-history]
@@ -49,6 +49,10 @@
 //   --start-countdown-seconds N
 //                      protocol 21: a room with two or more people holds the first turn of its match this long, with the chat open, instead of the 5 s "Get ready" dialog (0 - 60, default 30, 0 = none; the
 //                      control interface's "countdown_seconds")
+//   --live-delay-seconds N
+//                      the public live door (--replay-port; GET /live and GET /live/<id>, docs/SERVER_REPLAYS.md) shows a match with TWO OR MORE PEOPLE this many seconds late: the snapshot that it hands
+//                      out is cut that far behind the match, so nobody who plays it, or watches with one who does, sees what is current (0 - 300, default 30, 0 = as it is). A match of computer players,
+//                      or of one person with computer players, is shown as it is
 //   --solo-countdown-seconds N
 //                      a room of exactly one person, with or without computer players, holds the first turn of its match the shorter of this and --start-countdown-seconds, with the same card (0 - 60, default 10,
 //                      0 = the plain 5 s dialog; the control interface's "solo_countdown_seconds")
@@ -198,6 +202,7 @@ struct Options {
     long resume_countdown_s{10};
     long start_countdown_s{static_cast<long>(ants::net::kMatchCountdownSeconds)};     // --start-countdown-seconds (protocol 21)
     long solo_countdown_s{static_cast<long>(ants::net::kSoloCountdownSeconds)};       // --solo-countdown-seconds (a room of one person)
+    long live_delay_s{static_cast<long>(ants::server::LiveBoard::kDefaultDelayS)};    // --live-delay-seconds (the public live door shows a match of two or more people this late)
     long log_mb{16};
     std::string restart_dir;                   // --restart-dir (empty: the folder "restart" in the results folder, when there is one)
     bool no_restart_records{false};
@@ -235,7 +240,7 @@ void usage(FILE* to) {
                  "                    [--results-dir DIR] [--secret-file PATH] [--max-rooms N] [--community-maps DIR]\n"
                  "                    [--demo-rooms N --demo-map NAME [--demo-maps A.LVL,B.LVL,...] [--demo-lobbies N]]\n"
                  "                    [--reconnect | --no-reconnect] [--hold-vote-seconds 5-3600] [--max-pause-seconds 60-86400]\n"
-                 "                    [--max-catch-up-seconds 10-3600] [--resume-countdown-seconds 0-60] [--start-countdown-seconds 0-60] [--solo-countdown-seconds 0-60] [--log-mb 1-256]\n"
+                 "                    [--max-catch-up-seconds 10-3600] [--resume-countdown-seconds 0-60] [--start-countdown-seconds 0-60] [--solo-countdown-seconds 0-60] [--live-delay-seconds 0-300] [--log-mb 1-256]\n"
                  "                    [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds 30-3600] [--restart-budget-mb 1-4096]\n"
                  "                    [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days 1-3650] [--replays-max-mb 1-4096]\n"
                  "                    [--replay-port N] [--replay-any-interface] [--bot-match-every-min 0|5-1440] [--db FILE | --no-db] [--no-history]\n"
@@ -418,7 +423,7 @@ int main(int argc, char** argv) {
             }
         } else if (a == "--no-restart-records") {
             o.no_restart_records = true;
-        } else if (a == "--hold-vote-seconds" || a == "--max-pause-seconds" || a == "--max-catch-up-seconds" || a == "--resume-countdown-seconds" || a == "--start-countdown-seconds" || a == "--solo-countdown-seconds" || a == "--log-mb" || a == "--restart-vote-seconds" ||
+        } else if (a == "--hold-vote-seconds" || a == "--max-pause-seconds" || a == "--max-catch-up-seconds" || a == "--resume-countdown-seconds" || a == "--start-countdown-seconds" || a == "--solo-countdown-seconds" || a == "--live-delay-seconds" || a == "--log-mb" || a == "--restart-vote-seconds" ||
                    a == "--restart-budget-mb" || a == "--replays-days" || a == "--replays-max-mb") {
             const char* text = value(a.c_str());
             char* end = nullptr;
@@ -431,6 +436,7 @@ int main(int argc, char** argv) {
             else if (a == "--resume-countdown-seconds") { lo = 0; hi = 60; target = &o.resume_countdown_s; }
             else if (a == "--start-countdown-seconds") { lo = 0; hi = 60; target = &o.start_countdown_s; }
             else if (a == "--solo-countdown-seconds") { lo = 0; hi = 60; target = &o.solo_countdown_s; }
+            else if (a == "--live-delay-seconds") { lo = 0; hi = static_cast<long>(ants::server::LiveBoard::kMaxDelayS); target = &o.live_delay_s; }
             else if (a == "--restart-vote-seconds") { lo = 30; hi = 3600; target = &o.restart_vote_s; }
             else if (a == "--restart-budget-mb") { lo = 1; hi = 4096; target = &o.restart_budget_mb; }
             else if (a == "--replays-days") { lo = 1; hi = 3650; target = &o.replays_days; }
@@ -620,6 +626,7 @@ int main(int argc, char** argv) {
     limits.resume_countdown_ms = static_cast<uint32_t>(o.resume_countdown_s * 1000);
     limits.countdown_s = static_cast<uint32_t>(o.start_countdown_s);
     limits.solo_countdown_s = static_cast<uint32_t>(o.solo_countdown_s);
+    limits.live_delay_s = static_cast<uint32_t>(o.live_delay_s);
     limits.room_log_bytes = static_cast<size_t>(o.log_mb) * 1024u * 1024u;
     ants::server::MapStore store{o.maps_dir, o.community_maps_dir};
     {
@@ -925,6 +932,8 @@ int main(int argc, char** argv) {
     log(o.start_countdown_s > 0 && o.solo_countdown_s > 0
             ? "a room of one person holds the first turn of its match " + std::to_string(std::min(o.solo_countdown_s, o.start_countdown_s)) + " s, with the same card (--solo-countdown-seconds)"
             : "a room of one person keeps the plain 5 s dialog (--solo-countdown-seconds 0 or --start-countdown-seconds 0)");
+    log(o.live_delay_s > 0 ? "the live door shows a match with two or more people " + std::to_string(o.live_delay_s) + " s late (--live-delay-seconds); a match without people, or with one, as it is"
+                           : "the live door shows every match as it is (--live-delay-seconds 0)");
     if (tcp) log("TCP game port " + std::to_string(tcp->port()) + (o.is_public ? " (all interfaces)" : " (this machine only)"));
     if (ws) log("WebSocket port " + std::to_string(ws->port()) + (o.ws_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only: put a TLS proxy in front)"));
     if (submit_http) log("map submissions on port " + std::to_string(submit_http->port()) + (o.submit_any_interface ? " (all interfaces: the host must restrict it)" : " (this machine only)") + ": POST /submissions, GET /submissions, GET /submissions/<id>, POST /submissions/<id>/withdraw and /admin/api/..., no secret");
