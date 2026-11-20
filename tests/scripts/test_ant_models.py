@@ -418,10 +418,10 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
         self.assertAlmostEqual(anchors["ground_y"], 0.0, places=5)
         self.assertGreater(anchors["left_hand"][0], 0.0)
         self.assertLess(anchors["right_hand"][0], 0.0)
-        self.assertTrue(0.95 <= anchors["head_top"][1] <= 1.06, f"unexpected head_top {anchors['head_top'][1]}")
+        self.assertTrue(0.90 <= anchors["head_top"][1] <= 1.02, f"unexpected head_top {anchors['head_top'][1]}")
         hrx, hry, hrz = anchors["head_radii"]
-        self.assertGreater(hry, hrx, "egg-shield head should be taller than wide")
-        self.assertGreater(hrx, hrz, "head should be narrower front-to-back than wide")
+        self.assertGreater(hrx, hry, "heart-shield head should be wider across temples than tall")
+        self.assertGreater(hry, hrz, "head should be narrower front-to-back than tall")
         self.assertGreater(anchors["eyelid_closed_angle"], 0.9)
 
         glb_bytes = gltf_writer.scene_to_glb_bytes(scene)
@@ -474,7 +474,8 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
         self.assertIn("baseColorTexture", mats["chitin_team"]["pbrMetallicRoughness"])
         self.assertIn("metallicRoughnessTexture", mats["chitin_team"]["pbrMetallicRoughness"])
         self.assertIn("normalTexture", mats["chitin_team"])
-        self.assertGreaterEqual(float(mats["chitin_team"]["normalTexture"]["scale"]), 0.85)
+        chitin_ns = float(mats["chitin_team"]["normalTexture"]["scale"])
+        self.assertTrue(0.18 <= chitin_ns <= 0.30, f"expected subtle chitin normal scale, got {chitin_ns}")
         # Optical eyes remain pure untextured gloss.
         self.assertNotIn("normalTexture", mats["eye_white"])
         self.assertNotIn("baseColorTexture", mats["eye_white"]["pbrMetallicRoughness"])
@@ -507,6 +508,29 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
         blink_anim = doc_open["animations"][0]
         self.assertEqual(blink_anim["name"], "Blink")
         self.assertEqual(len(blink_anim["channels"]), 2)
+
+        # Geometric eyelid radial clearance: inner eyelid strictly clears sclera+iris+pupil across blink=0..1.
+        for b_val in (0.0, 0.25, 0.5, 0.75, 1.0):
+            sc_b, a_b = base_ant.build_base_ant(f"clearance_{b_val}", blink=b_val)
+            w_parts = sc_b.world_parts()
+            for side_sign, eye_key, lid_name in ((1.0, "eye_left", "eyelid_left_shell"), (-1.0, "eye_right", "eyelid_right_shell")):
+                pivot = np.asarray(a_b[eye_key], dtype=np.float64)
+                eye_verts = np.vstack(
+                    [
+                        p.positions.astype(np.float64)
+                        for p in sc_b.get_node("eyes")
+                        if p.material in ("eye_white", "eye_iris", "eye_pupil")
+                        and float(p.positions[:, 0].mean()) * side_sign > 0.0
+                    ]
+                )
+                r_eye_max = float(np.linalg.norm(eye_verts - pivot[None, :], axis=1).max())
+                lid_verts = np.vstack([p.positions.astype(np.float64) for p in w_parts if p.name == lid_name])
+                r_lid_inner = float(np.linalg.norm(lid_verts - pivot[None, :], axis=1).min())
+                self.assertGreaterEqual(
+                    r_lid_inner - r_eye_max,
+                    0.006,
+                    f"{lid_name} at blink={b_val}: clearance {r_lid_inner - r_eye_max:.5f} < 0.006",
+                )
 
         # Validator rejects non-unit quaternion in animation track.
         bad_scene, _ = base_ant.build_base_ant("ant_bad_anim")

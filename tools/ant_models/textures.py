@@ -234,43 +234,43 @@ def _build_chitin_pack(size: int) -> TexturePack:
     dust_speck = _smoothstep(0.72, 0.94, speckle)
 
     height = (
-        0.38 * pit_a
-        + 0.24 * pit_b
+        0.40 * pit_a
+        + 0.22 * pit_b
         + 0.08 * cell_ridge
-        + 0.16 * curved_stria
-        + 0.14 * speckle
-        - 0.22 * scratches
+        + 0.18 * curved_stria
+        + 0.12 * speckle
+        - 0.14 * scratches
     )
     height = np.clip(height, 0.0, 1.0)
 
-    # Neutral luminance patina (~0.76..1.00, mean ~0.91) so team colors stay rich & natural.
+    # Silky, tasteful neutral patina (~0.92..1.00, mean ~0.968) with gentle micro-grain.
     albedo = (
-        0.79
-        + 0.075 * pit_a
-        + 0.035 * pit_b
-        + 0.055 * patina_broad
-        + 0.035 * patina_med
-        + 0.025 * curved_stria
-        - 0.055 * dust_speck
-        + 0.040 * scratches
+        0.932
+        + 0.024 * pit_a
+        + 0.012 * pit_b
+        + 0.018 * patina_broad
+        + 0.012 * patina_med
+        + 0.008 * curved_stria
+        - 0.012 * dust_speck
+        + 0.010 * scratches
     )
 
-    # Real micro-roughness contrast: glossy-satin raised chitin ridges (~0.58 * 0.58 = 0.34)
-    # vs rougher pores, dusty speckles, and faint wear scuffs (~1.00 * 0.58 = 0.58).
+    # Smooth satin micro-roughness breakup: sleek carapace (~0.70 * 0.52 = 0.36)
+    # vs softly matte pores and faint scuffs (~1.00 * 0.52 = 0.52).
     rough_mult = (
-        0.58
-        + 0.24 * (1.0 - pit_a)
-        + 0.12 * (1.0 - pit_b)
-        + 0.10 * dust_speck
-        + 0.16 * scratches
-        + 0.06 * (1.0 - patina_med)
+        0.70
+        + 0.15 * (1.0 - pit_a)
+        + 0.08 * (1.0 - pit_b)
+        + 0.05 * dust_speck
+        + 0.08 * scratches
+        + 0.04 * (1.0 - patina_med)
     )
     return TexturePack(
         family="chitin",
         size=size,
-        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.74, 1.0)),
-        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=5.0)),
-        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.58, 1.0)),
+        base_color_png=_gray_to_rgb_png(np.clip(albedo, 0.92, 1.0)),
+        normal_png=_encode_png_rgb(_height_to_normal_rgb(height, strength=2.8)),
+        metallic_roughness_png=_mr_to_rgb_png(np.clip(rough_mult, 0.68, 1.0)),
     )
 
 

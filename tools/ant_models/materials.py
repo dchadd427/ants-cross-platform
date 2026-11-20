@@ -90,17 +90,17 @@ _SPECS: Tuple[MaterialSpec, ...] = (
         name="chitin_team",
         base_color=(0.24, 0.45, 0.27, 1.0),
         metallic=0.06,
-        roughness=0.58,
+        roughness=0.52,
         texture_family="chitin",
-        normal_scale=0.92,
+        normal_scale=0.22,
     ),
     MaterialSpec(
         name="chitin_dark",
         base_color=(0.10, 0.22, 0.13, 1.0),
         metallic=0.06,
-        roughness=0.62,
+        roughness=0.56,
         texture_family="chitin",
-        normal_scale=0.96,
+        normal_scale=0.24,
     ),
     MaterialSpec(
         name="eye_white",
@@ -120,7 +120,7 @@ _SPECS: Tuple[MaterialSpec, ...] = (
         metallic=0.04,
         roughness=0.64,
         texture_family="cloth",
-        normal_scale=0.72,
+        normal_scale=0.36,
     ),
     MaterialSpec(
         name="gear_gold_metal",
@@ -128,7 +128,7 @@ _SPECS: Tuple[MaterialSpec, ...] = (
         metallic=0.82,
         roughness=0.32,
         texture_family="metal",
-        normal_scale=0.62,
+        normal_scale=0.30,
     ),
     MaterialSpec(
         name="gear_accent",
@@ -136,7 +136,7 @@ _SPECS: Tuple[MaterialSpec, ...] = (
         metallic=0.04,
         roughness=0.60,
         texture_family="cloth",
-        normal_scale=0.68,
+        normal_scale=0.35,
     ),
     MaterialSpec(
         name="gear_dark",
@@ -144,7 +144,7 @@ _SPECS: Tuple[MaterialSpec, ...] = (
         metallic=0.08,
         roughness=0.66,
         texture_family="rubber",
-        normal_scale=0.70,
+        normal_scale=0.34,
     ),
     MaterialSpec(
         name="glass_tinted",
@@ -168,7 +168,7 @@ _SPECS: Tuple[MaterialSpec, ...] = (
         metallic=0.0,
         roughness=0.76,
         texture_family="cloth",
-        normal_scale=0.74,
+        normal_scale=0.38,
     ),
     MaterialSpec(
         name="prop_brown",
@@ -176,7 +176,7 @@ _SPECS: Tuple[MaterialSpec, ...] = (
         metallic=0.02,
         roughness=0.70,
         texture_family="cloth",
-        normal_scale=0.68,
+        normal_scale=0.36,
     ),
     MaterialSpec(
         name="eye_iris",
@@ -190,7 +190,7 @@ _SPECS: Tuple[MaterialSpec, ...] = (
         metallic=0.76,
         roughness=0.38,
         texture_family="metal",
-        normal_scale=0.64,
+        normal_scale=0.32,
     ),
     MaterialSpec(
         name="gear_brass_trim",
@@ -198,7 +198,7 @@ _SPECS: Tuple[MaterialSpec, ...] = (
         metallic=0.52,
         roughness=0.36,
         texture_family="metal",
-        normal_scale=0.60,
+        normal_scale=0.30,
     ),
     MaterialSpec(
         name="bomb_charge",
@@ -206,7 +206,7 @@ _SPECS: Tuple[MaterialSpec, ...] = (
         metallic=0.04,
         roughness=0.60,
         texture_family="cloth",
-        normal_scale=0.64,
+        normal_scale=0.34,
     ),
     MaterialSpec(
         name="bomb_cup_trim",
@@ -214,7 +214,7 @@ _SPECS: Tuple[MaterialSpec, ...] = (
         metallic=0.14,
         roughness=0.54,
         texture_family="rubber",
-        normal_scale=0.66,
+        normal_scale=0.32,
     ),
 )
 

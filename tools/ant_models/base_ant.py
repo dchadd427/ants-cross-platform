@@ -49,7 +49,7 @@ except ImportError:
 
 ArmPoseLike = Optional[Union[str, Sequence[Sequence[float]]]]
 
-EYELID_CLOSED_ANGLE = 1.66  # radians around local +X (~95 deg) from wide-open +45 deg to sealed -50 deg
+EYELID_CLOSED_ANGLE = 1.80  # radians around local +X (~103 deg) from wide-open +53 deg to sealed -50 deg
 
 # Canonical left-side (+X) arm control curves: [shoulder, elbow, wrist, hand].
 _ARM_PRESETS_LEFT: Dict[str, List[Tuple[float, float, float]]] = {
@@ -93,93 +93,128 @@ _ARM_PRESETS_LEFT: Dict[str, List[Tuple[float, float, float]]] = {
 
 
 def _head_sculpt_fn(pos: np.ndarray) -> np.ndarray:
-    """Sculpt a tall, smooth rounded egg-shield insect cranium matching original Ants proportions.
+    """Sculpt the iconic broad-crowned inverted-heart/shield ant cranium (never egg-shaped).
 
-    Preserves a full rounded upper crown (never squashed or square-cornered), adds a crisp
-    subtle vertical V-groove center cranial seam, clean shallow orbital framing for big alert
-    eyes, and a graceful organic egg/shield taper down to the clypeus and mandibles.
+    Wider across the upper temples/brows than tall, with a gently flattened rounded crown
+    plateau, crisp central vertical V-brow seam dipping between the two huge expressive eyes,
+    and cheeks tapering cleanly inward below the eyes into a compact chin framed by the
+    chunky lobster-claw mandibles.
     """
     p = pos.copy()
     x, y, z = p[:, 0], p[:, 1], p[:, 2]
     ax = np.abs(x)
     front_mask = np.clip((z - 0.01) / 0.16, 0.0, 1.0)
 
-    # 1. Crisp, subtle vertical V-groove center cranial seam running up the rounded forehead.
+    # 1. Gentle rounded crown plateau (eliminates tall pointy egg-head silhouette).
+    crown_cap = 0.184 - 0.016 * np.clip((z + 0.06) / 0.24, 0.0, 1.0)
+    over_crown = np.maximum(0.0, y - crown_cap)
+    p[:, 1] = y - 0.44 * over_crown
+    y = p[:, 1]
+
+    # 2. Broad expressive upper temples / brows giving the classic heart-shield top silhouette.
+    temple_band = np.exp(-((y - 0.056) / 0.095) ** 2)
+    p[:, 0] *= 1.0 + 0.045 * temple_band
+    ax = np.abs(p[:, 0])
+
+    # 3. Crisp subtle vertical V-brow seam dipping from the crown plateau down between the eyes.
     seam = (
-        np.exp(-((ax / 0.015) ** 1.6))
-        * np.exp(-((y - 0.098) / 0.096) ** 2)
-        * np.clip((z + 0.01) / 0.15, 0.0, 1.0)
+        np.exp(-((ax / 0.018) ** 1.5))
+        * np.exp(-((y - 0.086) / 0.088) ** 2)
+        * np.clip((z + 0.02) / 0.16, 0.0, 1.0)
     )
-    p[:, 2] -= 0.010 * seam
-    p[:, 1] -= 0.004 * seam
+    p[:, 2] -= 0.012 * seam
+    p[:, 1] -= 0.008 * seam
 
-    # 2. Clean shallow orbital seat so big alert eyes sit proud and flush without dark hollows.
+    # 4. Clean shallow orbital seat matching the wide-spanning big eyes (zero dark sunken hollows).
     socket = (
-        np.exp(-(((ax - 0.086) / 0.064) ** 2 + ((y + 0.022) / 0.068) ** 2))
-        * np.clip((z - 0.06) / 0.12, 0.0, 1.0)
+        np.exp(-(((ax - 0.1015) / 0.078) ** 2 + ((y - 0.008) / 0.080) ** 2))
+        * np.clip((z - 0.06) / 0.13, 0.0, 1.0)
     )
-    p[:, 2] -= 0.009 * socket
+    p[:, 2] -= 0.010 * socket
 
-    # 3. Gentle rounded egg-shield taper below the eyes into the sculpted clypeus chin.
-    lower = np.clip((-y - 0.024) / 0.220, 0.0, 1.0)
-    p[:, 0] *= 1.0 - 0.32 * (lower ** 1.38)
-    p[:, 2] *= 1.0 - 0.12 * (lower ** 1.45)
+    # 5. Graceful inverted-heart taper below the eyes down to a compact narrow chin/muzzle.
+    lower = np.clip((-y - 0.014) / 0.198, 0.0, 1.0)
+    p[:, 0] *= 1.0 - 0.50 * (lower ** 1.16)
+    p[:, 2] *= 1.0 - 0.18 * (lower ** 1.32)
 
-    clypeus = np.exp(-((x / 0.052) ** 2)) * np.exp(-((y + 0.118) / 0.062) ** 2) * front_mask
-    p[:, 2] += 0.013 * clypeus
+    clypeus = np.exp(-((x / 0.050) ** 2)) * np.exp(-((y + 0.110) / 0.054) ** 2) * front_mask
+    p[:, 2] += 0.014 * clypeus
 
-    # 4. Soft occipital taper into the slender neck at the lower rear of the skull.
-    rear_low = np.clip((-z - 0.03) / 0.15, 0.0, 1.0) * np.clip((-y + 0.04) / 0.25, 0.0, 1.0)
-    p[:, 0] *= 1.0 - 0.15 * rear_low
+    # 6. Clean occipital taper into the short tucked neck at the lower rear of the skull.
+    rear_low = np.clip((-z - 0.03) / 0.16, 0.0, 1.0) * np.clip((-y + 0.03) / 0.22, 0.0, 1.0)
+    p[:, 0] *= 1.0 - 0.18 * rear_low
     p[:, 2] += 0.014 * rear_low
     return p
 
 
 def _build_mandibles(scene: SceneBuilder, head_center: Tuple[float, float, float], head_tilt_x: float) -> None:
-    """Build curved sculpted toothed chitin pincer mandibles + dark mouth cleft."""
+    """Build plump, chunky rounded lobster-claw mandibles with crisp pale notched inner pincers."""
     _, hy, hz = head_center
 
-    jaw_pts = [
-        (0.072, hy - 0.162, hz + 0.094),
-        (0.094, hy - 0.190, hz + 0.144),
-        (0.074, hy - 0.204, hz + 0.194),
-        (0.026, hy - 0.206, hz + 0.212),
+    # Chunky rounded outer lobster-claw mitten curving smoothly under each cheek toward chin center.
+    claw_pts = [
+        (0.088, hy - 0.122, hz + 0.110),
+        (0.098, hy - 0.146, hz + 0.164),
+        (0.072, hy - 0.158, hz + 0.200),
+        (0.034, hy - 0.158, hz + 0.204),
     ]
-    jaw_rads = [
-        (0.021, 0.028),
-        (0.022, 0.032),
-        (0.016, 0.024),
-        (0.007, 0.011),
+    claw_rads = [
+        (0.028, 0.030),
+        (0.041, 0.039),
+        (0.038, 0.036),
+        (0.021, 0.022),
     ]
-    jaw_left = swept_tube(
-        jaw_pts,
-        jaw_rads,
-        radial_segs=10,
-        smooth_subdiv=3,
-        cap_rings=2,
-        name="mandible_jaw",
+    claw_main = curved_tube(
+        claw_pts,
+        claw_rads,
+        samples_per_seg=4,
+        radial_segs=14,
+        cap_rings=3,
+        name="mandible_claw",
         material="chitin_team",
     )
-    if abs(head_tilt_x) > 1e-6:
-        jaw_left = jaw_left.translate(0.0, -hy, -hz).rotate_xyz(rx=head_tilt_x).translate(0.0, hy, hz)
-    scene.add_mirrored("head", jaw_left)
 
-    for t_idx, (tx, ty, tz, rad, hgt, rz_deg) in enumerate(
+    # Plump inner lobster thumb-pincer tucked snugly on the upper-inner side of each claw pod.
+    thumb_pts = [
+        (0.074, hy - 0.138, hz + 0.172),
+        (0.052, hy - 0.140, hz + 0.198),
+        (0.028, hy - 0.146, hz + 0.206),
+    ]
+    claw_thumb = curved_tube(
+        thumb_pts,
+        [(0.022, 0.022), (0.020, 0.019), (0.012, 0.013)],
+        samples_per_seg=3,
+        radial_segs=10,
+        cap_rings=2,
+        name="mandible_thumb",
+        material="chitin_team",
+    )
+
+    # Small crisp pale/off-white rounded bite-notches lining the facing inner pincer tips.
+    teeth: List[MeshPart] = []
+    for t_idx, (tx, ty, tz, rx_t, ry_t, rz_t) in enumerate(
         (
-            (0.052, hy - 0.202, hz + 0.190, 0.010, 0.024, 74.0),
-            (0.032, hy - 0.205, hz + 0.204, 0.008, 0.020, 86.0),
+            (0.022, hy - 0.145, hz + 0.212, 0.011, 0.0085, 0.009),
+            (0.024, hy - 0.160, hz + 0.211, 0.012, 0.009, 0.0095),
+            (0.036, hy - 0.170, hz + 0.202, 0.0095, 0.008, 0.0085),
         )
     ):
         tooth = (
-            cone(rad, hgt, radial_segs=8, name=f"mandible_tooth_{t_idx}", material="chitin_team")
-            .rotate_xyz(rx=12.0, ry=-18.0, rz=rz_deg, degrees=True)
+            ellipsoid(rx_t, ry_t, rz_t, u_segs=10, v_segs=8, name=f"mandible_tooth_{t_idx}", material="fuse_white")
+            .rotate_xyz(ry=-0.25, rz=0.20)
             .translate(tx, ty, tz)
         )
-        scene.add_mirrored("head", tooth)
+        teeth.append(tooth)
+
+    parts_left = [claw_main, claw_thumb] + teeth
+    if abs(head_tilt_x) > 1e-6:
+        parts_left = [p.translate(0.0, -hy, -hz).rotate_xyz(rx=head_tilt_x).translate(0.0, hy, hz) for p in parts_left]
+    for p in parts_left:
+        scene.add_mirrored("head", p)
 
     mouth_cleft = (
-        ellipsoid(0.040, 0.022, 0.034, u_segs=14, v_segs=8, name="mouth_cleft", material="chitin_dark")
-        .translate(0.0, hy - 0.186, hz + 0.126)
+        ellipsoid(0.042, 0.024, 0.036, u_segs=14, v_segs=8, name="mouth_cleft", material="chitin_dark")
+        .translate(0.0, hy - 0.156, hz + 0.146)
     )
     scene.add("head", mouth_cleft)
 
@@ -187,7 +222,7 @@ def _build_mandibles(scene: SceneBuilder, head_center: Tuple[float, float, float
 def _build_head(scene: SceneBuilder, head_center: Tuple[float, float, float], head_tilt_x: float) -> None:
     hx, hy, hz = head_center
     cranium = (
-        superellipsoid(0.212, 0.244, 0.180, e1=0.84, e2=0.86, u_segs=36, v_segs=28, name="cranium", material="chitin_team")
+        superellipsoid(0.232, 0.212, 0.188, e1=0.72, e2=0.80, u_segs=38, v_segs=30, name="cranium", material="chitin_team")
         .deform(_head_sculpt_fn)
         .rotate_xyz(rx=head_tilt_x)
         .translate(hx, hy, hz)
@@ -197,25 +232,24 @@ def _build_head(scene: SceneBuilder, head_center: Tuple[float, float, float], he
 
 
 def _build_eyelid_shell(name: str, yaw_y: float) -> MeshPart:
-    """Build a smooth curved chitin_team upper eyelid shell in eye-local coordinates.
+    """Build a true spherical chitin_team upper eyelid shell in eye-local coordinates.
 
-    At neutral rotation (0, 0, 0, 1) the front lip sits tucked cleanly clear of the
-    eye so the ant looks wide-open and alert. Rotating around local +X by
-    +EYELID_CLOSED_ANGLE sweeps the convex shell smoothly down to seal 100% of
-    sclera, iris, and pupil flush inside the orbital rim.
+    Outer radius is 0.1010 with thickness 0.0040 -> constant inner spherical radius
+    0.0970 everywhere around the eye pivot, strictly clearing the <=0.0898 max radial
+    extent of sclera + iris + pupil by >= +0.0072 at EVERY blink angle in [0.0, 1.0].
     """
     lid = hemisphere_shell(
-        0.072,
-        0.077,
-        0.068,
-        thickness=0.0055,
-        start_phi=-0.14,
-        u_segs=24,
-        v_segs=10,
+        0.1010,
+        0.1010,
+        0.1010,
+        thickness=0.0040,
+        start_phi=-0.16,
+        u_segs=28,
+        v_segs=12,
         name=name,
         material="chitin_team",
     )
-    return lid.rotate_xyz(rx=-0.92, ry=yaw_y)
+    return lid.rotate_xyz(rx=-1.08, ry=yaw_y)
 
 
 def _build_eyes(
@@ -226,66 +260,74 @@ def _build_eyes(
     include_brows: bool = False,
     blink: float = 0.0,
 ) -> Dict[str, Any]:
-    """Build bold, wide-open alert 3-part eyes + pivoted blinkable eyelids."""
+    """Build huge wide-spanning expressive 3-part eyes (~83% face width) + zero-phasing blink lids."""
     _, hy, hz = head_center
-    eye_x = 0.086
-    eye_y = hy - 0.022
-    eye_z = hz + 0.152
+    eye_x = 0.1015
+    eye_y = hy + 0.008
+    eye_z = hz + 0.140
 
-    # Clean sculpted orbital socket rim framing each big alert eye.
+    # Build sclera, iris, and pupil in eye-local space so every vertex stays strictly within
+    # radius <= 0.0898 of the eye pivot (guaranteed >= +0.0072 clearance inside the 0.0970 inner lid).
+    eye_rx = -0.08 + head_tilt_x
+    eye_ry = 0.16
+
+    # Clean sculpted orbital socket rim framing each huge alert eye behind the sweeping lid arc.
     socket_rim = (
-        torus_arc(0.069, 0.009, u_segs=24, v_segs=8, plane="xy", name="eye_socket_rim", material="chitin_dark")
-        .scale(0.95, 1.04, 0.88)
-        .rotate_xyz(rx=-0.14 + head_tilt_x, ry=0.22)
-        .translate(eye_x, eye_y, eye_z + 0.004)
+        torus_arc(0.091, 0.0085, u_segs=26, v_segs=8, plane="xy", name="eye_socket_rim", material="chitin_dark")
+        .scale(0.96, 1.02, 0.85)
+        .translate(0.0, 0.0, 0.006)
+        .rotate_xyz(rx=eye_rx, ry=eye_ry)
+        .translate(eye_x, eye_y, eye_z)
     )
     scene.add_mirrored("eyes", socket_rim)
 
-    # Big warm cream-white sclera sized harmoniously to the tall rounded egg-shield head.
+    # Huge warm cream-white sclera (~83% of face width across both eyes, ~41% of head height).
     sclera_left = (
-        superellipsoid(0.068, 0.075, 0.050, e1=0.88, e2=0.90, u_segs=22, v_segs=16, name="sclera", material="eye_white")
-        .rotate_xyz(rx=-0.14 + head_tilt_x, ry=0.22)
+        ellipsoid(0.086, 0.0895, 0.080, u_segs=24, v_segs=16, name="sclera", material="eye_white")
+        .rotate_xyz(rx=eye_rx, ry=eye_ry)
         .translate(eye_x, eye_y, eye_z)
     )
     scene.add_mirrored("eyes", sclera_left)
 
-    # Vivid olive-amber iris dome seated cleanly on the front surface of the sclera.
+    # Vivid olive-amber iris seated smoothly flush on the front dome of the sclera (max r <= 0.087).
     iris_left = (
-        ellipsoid(0.041, 0.045, 0.020, u_segs=20, v_segs=12, name="iris", material="eye_iris")
-        .rotate_xyz(rx=-0.12 + head_tilt_x, ry=0.16)
-        .translate(eye_x - 0.005, eye_y + 0.003, eye_z + 0.036)
+        ellipsoid(0.049, 0.052, 0.017, u_segs=20, v_segs=12, name="iris", material="eye_iris")
+        .translate(-0.004, 0.002, 0.067)
+        .rotate_xyz(rx=eye_rx, ry=eye_ry)
+        .translate(eye_x, eye_y, eye_z)
     )
     scene.add_mirrored("eyes", iris_left)
 
-    # Crisp obsidian pupil centered cleanly inside the iris ring.
+    # Crisp obsidian pupil centered cleanly inside the iris ring (max r <= 0.088).
     pupil_left = (
-        ellipsoid(0.023, 0.025, 0.014, u_segs=16, v_segs=10, name="pupil", material="eye_pupil")
-        .rotate_xyz(rx=-0.12 + head_tilt_x, ry=0.14)
-        .translate(eye_x - 0.006, eye_y + 0.004, eye_z + 0.045)
+        ellipsoid(0.027, 0.029, 0.011, u_segs=16, v_segs=10, name="pupil", material="eye_pupil")
+        .translate(-0.005, 0.003, 0.075)
+        .rotate_xyz(rx=eye_rx, ry=eye_ry)
+        .translate(eye_x, eye_y, eye_z)
     )
     scene.add_mirrored("eyes", pupil_left)
 
-    # Pivoted blinkable upper eyelid nodes (one per eye, pivoted right at each eye center).
+    # Pivoted blinkable spherical upper eyelid nodes centered exactly at each eye pivot.
     blink_clamped = max(0.0, min(1.0, float(blink)))
     rest_rot = quat_from_axis_angle((1.0, 0.0, 0.0), blink_clamped * EYELID_CLOSED_ANGLE)
 
-    scene.add("eyelid_left", _build_eyelid_shell("eyelid_left_shell", yaw_y=+0.20))
+    scene.add("eyelid_left", _build_eyelid_shell("eyelid_left_shell", yaw_y=+eye_ry))
     scene.set_node_transform("eyelid_left", translation=(eye_x, eye_y, eye_z), rotation=rest_rot)
 
-    scene.add("eyelid_right", _build_eyelid_shell("eyelid_right_shell", yaw_y=-0.20))
+    scene.add("eyelid_right", _build_eyelid_shell("eyelid_right_shell", yaw_y=-eye_ry))
     scene.set_node_transform("eyelid_right", translation=(-eye_x, eye_y, eye_z), rotation=rest_rot)
 
     scene.add_blink_animation(("eyelid_left", "eyelid_right"), closed_angle=EYELID_CLOSED_ANGLE, name="Blink")
 
     if include_brows:
         lid_pts = [
-            (0.036, eye_y + 0.072, eye_z + 0.014),
-            (0.086, eye_y + 0.086, eye_z + 0.016),
-            (0.140, eye_y + 0.064, eye_z - 0.006),
+            (0.032, eye_y + 0.088, eye_z + 0.020),
+            (0.1015, eye_y + 0.102, eye_z + 0.022),
+            (0.168, eye_y + 0.078, eye_z - 0.006),
         ]
         lid_left = curved_tube(
             lid_pts,
-            [0.0075, 0.0095, 0.0065],
+            [0.008, 0.010, 0.007],
             samples_per_seg=3,
             radial_segs=8,
             cap_rings=2,
@@ -297,7 +339,9 @@ def _build_eyes(
     return {
         "eye_left": (eye_x, eye_y, eye_z),
         "eye_right": (-eye_x, eye_y, eye_z),
-        "eye_center": (0.0, eye_y, eye_z + 0.014),
+        "eye_center": (0.0, eye_y, eye_z + 0.018),
+        "eye_radius": 0.0895,
+        "eyelid_outer_radius": 0.1010,
         "eyelid_closed_angle": EYELID_CLOSED_ANGLE,
     }
 
@@ -305,23 +349,23 @@ def _build_eyes(
 def _build_antennae(scene: SceneBuilder, head_center: Tuple[float, float, float]) -> Dict[str, Tuple[float, float, float]]:
     """Build smooth continuous flowing insect antennae with gently flared sensory tips."""
     _, hy, hz = head_center
-    base_l = (0.088, hy + 0.194, hz + 0.022)
-    root_l = (0.082, hy + 0.178, hz + 0.018)
-    mid1_l = (0.112, hy + 0.270, hz + 0.032)
-    bend_l = (0.132, hy + 0.332, hz + 0.052)
-    mid2_l = (0.150, hy + 0.344, hz + 0.098)
-    tip_l = (0.160, hy + 0.300, hz + 0.146)
+    base_l = (0.104, hy + 0.166, hz + 0.026)
+    root_l = (0.098, hy + 0.150, hz + 0.022)
+    mid1_l = (0.130, hy + 0.246, hz + 0.038)
+    bend_l = (0.152, hy + 0.308, hz + 0.060)
+    mid2_l = (0.170, hy + 0.318, hz + 0.108)
+    tip_l = (0.178, hy + 0.274, hz + 0.156)
 
     antenna = swept_tube(
-        [root_l, base_l, mid1_l, bend_l, mid2_l, (0.158, hy + 0.318, hz + 0.130), tip_l],
+        [root_l, base_l, mid1_l, bend_l, mid2_l, (0.170, hy + 0.302, hz + 0.140), tip_l],
         [
-            (0.019, 0.019),
-            (0.015, 0.016),
-            (0.012, 0.013),
+            (0.020, 0.020),
+            (0.016, 0.017),
             (0.013, 0.014),
-            (0.016, 0.018),
-            (0.019, 0.021),
-            (0.010, 0.012),
+            (0.014, 0.015),
+            (0.017, 0.019),
+            (0.021, 0.023),
+            (0.011, 0.013),
         ],
         radial_segs=10,
         smooth_subdiv=3,
@@ -332,7 +376,7 @@ def _build_antennae(scene: SceneBuilder, head_center: Tuple[float, float, float]
     scene.add_mirrored("antennae", antenna)
 
     socket_left = (
-        ellipsoid(0.022, 0.011, 0.022, u_segs=12, v_segs=8, name="antenna_socket", material="chitin_dark")
+        ellipsoid(0.024, 0.012, 0.024, u_segs=12, v_segs=8, name="antenna_socket", material="chitin_dark")
         .rotate_xyz(rx=0.22, rz=-0.30)
         .translate(*base_l)
     )
@@ -357,7 +401,7 @@ def _gaster_keel_fn(pos: np.ndarray) -> np.ndarray:
 
 def _build_body(scene: SceneBuilder) -> Dict[str, Tuple[float, float, float]]:
     """Build slim organic ovoid thorax, short pinched petiole, and compact tucked gaster."""
-    # Continuous smooth neck + slim tapered teardrop insect thorax (curved organic profile, never boxy).
+    # Continuous smooth compact neck + slim tapered teardrop insect thorax (head anchored snugly).
     thorax_profile = [
         (0.000, 0.240),
         (0.040, 0.250),
@@ -366,11 +410,10 @@ def _build_body(scene: SceneBuilder) -> Dict[str, Tuple[float, float, float]]:
         (0.086, 0.362),
         (0.094, 0.412),
         (0.092, 0.450),
-        (0.078, 0.482),
-        (0.056, 0.506),
-        (0.048, 0.536),
-        (0.052, 0.584),
-        (0.000, 0.598),
+        (0.076, 0.478),
+        (0.058, 0.500),
+        (0.056, 0.542),
+        (0.000, 0.554),
     ]
     thorax_core = (
         lathe(thorax_profile, radial_segs=24, cap_bottom=False, cap_top=False, axis="y", name="thorax_core", material="chitin_dark")
@@ -381,9 +424,9 @@ def _build_body(scene: SceneBuilder) -> Dict[str, Tuple[float, float, float]]:
     scene.add("body", thorax_core)
 
     neck_collar = (
-        torus_arc(0.056, 0.009, u_segs=18, v_segs=8, plane="xz", name="neck_collar", material="chitin_dark")
+        torus_arc(0.058, 0.009, u_segs=18, v_segs=8, plane="xz", name="neck_collar", material="chitin_dark")
         .rotate_xyz(rx=0.10)
-        .translate(0.0, 0.500, 0.008)
+        .translate(0.0, 0.490, 0.008)
     )
     scene.add("body", neck_collar)
 
@@ -479,7 +522,7 @@ def _build_body(scene: SceneBuilder) -> Dict[str, Tuple[float, float, float]]:
         scene.add("body", band)
 
     return {
-        "neck_center": (0.0, 0.532, 0.012),
+        "neck_center": (0.0, 0.508, 0.012),
         "thorax_center": (0.0, 0.388, -0.008),
         "back_anchor": (0.0, 0.412, -0.118),
         "gaster_center": (0.0, 0.242, -0.236),
@@ -705,22 +748,24 @@ def build_base_ant(
 ) -> Tuple[SceneBuilder, Dict[str, Any]]:
     """Build the sculpted insectoid base ant and return `(SceneBuilder, anchors)`."""
     scene = SceneBuilder(name=scene_name)
-    head_center = (0.0, 0.778, 0.026)
-    head_radii = (0.212, 0.244, 0.180)
+    head_center = (0.0, 0.742, 0.028)
+    head_radii = (0.232, 0.212, 0.188)
 
     _build_head(scene, head_center, head_tilt_x)
     eye_anchors: Dict[str, Any] = {
-        "eye_left": (0.086, head_center[1] - 0.022, head_center[2] + 0.152),
-        "eye_right": (-0.086, head_center[1] - 0.022, head_center[2] + 0.152),
-        "eye_center": (0.0, head_center[1] - 0.022, head_center[2] + 0.166),
+        "eye_left": (0.1015, head_center[1] + 0.008, head_center[2] + 0.140),
+        "eye_right": (-0.1015, head_center[1] + 0.008, head_center[2] + 0.140),
+        "eye_center": (0.0, head_center[1] + 0.008, head_center[2] + 0.158),
+        "eye_radius": 0.0895,
+        "eyelid_outer_radius": 0.1010,
         "eyelid_closed_angle": EYELID_CLOSED_ANGLE,
     }
     if include_eyes:
         eye_anchors = _build_eyes(scene, head_center, head_tilt_x, include_brows=include_brows, blink=blink)
 
     ant_anchors = {
-        "antenna_base_left": (0.088, head_center[1] + 0.194, head_center[2] + 0.022),
-        "antenna_base_right": (-0.088, head_center[1] + 0.194, head_center[2] + 0.022),
+        "antenna_base_left": (0.104, head_center[1] + 0.166, head_center[2] + 0.026),
+        "antenna_base_right": (-0.104, head_center[1] + 0.166, head_center[2] + 0.026),
     }
     if include_antennae:
         ant_anchors = _build_antennae(scene, head_center)
@@ -732,12 +777,12 @@ def build_base_ant(
 
     anchors: Dict[str, Any] = {
         "head_center": head_center,
-        "head_top": (head_center[0], head_center[1] + head_radii[1], head_center[2]),
+        "head_top": (head_center[0], head_center[1] + 0.198, head_center[2]),
         "head_front": (head_center[0], head_center[1], head_center[2] + head_radii[2]),
         "head_back": (head_center[0], head_center[1], head_center[2] - head_radii[2]),
-        "head_radius": 0.212,
+        "head_radius": 0.232,
         "head_radii": head_radii,
-        "brow_y": head_center[1] + 0.070,
+        "brow_y": head_center[1] + 0.094,
         "ground_y": 0.0,
         "shoulder_left": sh_l,
         "shoulder_right": sh_r,
