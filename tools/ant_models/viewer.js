@@ -409,7 +409,7 @@
   vec3 F_Schlick(float c, vec3 F0) { return F0 + (1.0 - F0) * pow(clamp(1.0 - c, 0.0, 1.0), 5.0); }
   vec3 studioEnv(vec3 R, float rough) {
     vec3 env = mix(u_groundColor * 0.55, u_skyColor * 1.05, smoothstep(0.18, 0.92, clamp(R.y * 0.5 + 0.5, 0.0, 1.0)));
-    float sharp = mix(1.0, 0.14, rough);
+    float sharp = (1.0 - rough) * (1.0 - rough);
     return env + vec3(1.0, 0.97, 0.92) * smoothstep(0.68, 0.97, dot(R, u_keyDir)) * 1.25 * sharp
                + vec3(0.82, 0.90, 1.0) * smoothstep(0.76, 0.98, dot(R, u_rimDir)) * 0.52 * sharp;
   }
@@ -435,24 +435,23 @@
     vec3 V = u_isOrtho == 1 ? normalize(u_viewDir) : normalize(u_cameraPos - v_worldPos);
     float rough = clamp(u_roughness, 0.06, 0.98), met = clamp(u_metallic, 0.0, 1.0);
     vec3 albedo = max(u_baseColor, 0.0), tp = v_samplePos + vec3(u_noiseSeed, 0.0, u_noiseSeed * 0.61);
-    float coatW = 0.04;
+    // Keep clearcoat/gloss strictly on eyes & glass (surfaceKind 0); chitin & matte gear stay velvety matte
+    float coatW = 0.0;
     if (u_surfaceKind == 0) {
-      coatW = 0.18 * (1.0 - smoothstep(0.22, 0.55, rough));
+      coatW = 0.22 * (1.0 - smoothstep(0.22, 0.50, rough));
     } else if (u_surfaceKind == 1) {
       float m1 = vnoise(tp * 6.5), m2 = vnoise(tp * 16.0 + 7.1), m3 = vnoise(tp * 40.0 + 19.3);
       float mottle = m1 * 0.52 + m2 * 0.33 + m3 * 0.15;
       albedo *= mix(vec3(0.72, 0.74, 0.68), vec3(1.18, 1.20, 1.08), smoothstep(0.26, 0.76, mottle));
       float dust = smoothstep(0.50, 0.88, m1 * 0.68 + m2 * 0.32) * max(N.y, 0.0);
       albedo = mix(albedo, albedo * 1.28 + vec3(0.025, 0.028, 0.020), dust * 0.32);
-      rough = clamp(rough + (m2 - 0.5) * 0.16 + (m3 - 0.5) * 0.08, 0.28, 0.94);
-      N = bumpNormal(N, tp * 30.0, 0.38);
-      coatW = 0.10 * (1.0 - smoothstep(0.52, 0.88, rough));
+      rough = clamp(rough + (m2 - 0.5) * 0.12 + (m3 - 0.5) * 0.06, 0.48, 0.96);
+      N = bumpNormal(N, tp * 30.0, 0.36);
     } else if (u_surfaceKind == 2) {
       float weave = vnoise(tp * 52.0) * 0.62 + vnoise(tp * 14.0 + 3.7) * 0.38;
       albedo *= mix(0.84, 1.10, weave);
-      rough = clamp(rough + (weave - 0.5) * 0.12, 0.32, 0.96);
+      rough = clamp(rough + (weave - 0.5) * 0.10, 0.45, 0.96);
       N = bumpNormal(N, tp * 48.0, 0.26);
-      coatW = 0.03 * (1.0 - smoothstep(0.42, 0.72, rough));
     } else {
       float brush = vnoise(tp * vec3(24.0, 56.0, 24.0)) * 0.65 + vnoise(tp * 10.0) * 0.35;
       albedo *= mix(0.86, 1.08, brush);
@@ -463,11 +462,12 @@
             + evalLight(u_fillDir, vec3(0.70, 0.82, 0.98) * 0.54, N, V, albedo, met, rough, F0, coatW, specAcc)
             + evalLight(u_rimDir, vec3(0.88, 0.94, 1.0) * 1.22, N, V, albedo, met, rough, F0, coatW, specAcc);
     float ao = mix(0.64, 1.0, smoothstep(0.0, 0.32, v_worldPos.y)) * mix(0.56, 1.0, smoothstep(-0.35, 0.55, N.y));
-    vec3 ambDiff = mix(u_groundColor, u_skyColor, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.30;
+    vec3 ambDiff = mix(u_groundColor, u_skyColor, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.32;
     vec3 R = reflect(-V, N); float NoV = max(dot(N, V), 0.0);
+    float envAtten = (1.0 - rough) * (1.0 - rough);
     vec3 F_env = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - NoV, 5.0);
-    vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.88, 0.14, rough);
-    vec3 envCoat = studioEnv(R, 0.22) * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * 0.26;
+    vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.08, 0.92, envAtten) * mix(envAtten, 1.0, met);
+    vec3 envCoat = studioEnv(R, 0.22) * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * 0.28;
     vec3 outCol = linearToSrgb(acesFilm((Lo + (ambDiff + envSpec + envCoat) * ao + u_emissive) * 1.03));
     float outAlpha = u_alpha;
     if (u_alpha < 0.99) {
@@ -934,7 +934,7 @@
 
     async function fetchModel(id) {
       if (state.modelCache.has(id)) return state.modelCache.get(id);
-      const resp = await fetch("models/" + encodeURIComponent(id) + ".glb");
+      const resp = await fetch("models/" + encodeURIComponent(id) + ".glb", { cache: "no-cache" });
       if (!resp.ok) throw new Error("HTTP " + resp.status + " loading models/" + id + ".glb");
       const parsed = parseGlb(await resp.arrayBuffer(), renderer.gl);
       if (state.modelCache.has(id)) { parsed.dispose(); return state.modelCache.get(id); }
@@ -944,7 +944,7 @@
 
     async function loadManifest() {
       try {
-        const resp = await fetch("models/manifest.json");
+        const resp = await fetch("models/manifest.json", { cache: "no-cache" });
         if (!resp.ok) return;
         const data = await resp.json();
         if (data && Array.isArray(data.models)) {
