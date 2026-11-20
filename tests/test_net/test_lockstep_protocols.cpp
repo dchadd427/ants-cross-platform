@@ -1285,8 +1285,8 @@ void run_protocol15_tests() {
         // the layout of the first seat, and the end of the message: the platform byte after the round trip time, then ... map, fog, you, leader, team_a, team_b, flags
         ASSERT_TRUE(bytes.size() > 20 && bytes[0] == 12);
         ASSERT_TRUE(bytes[1] == 2 && bytes[2] == 3 && bytes[3] == 'A' && bytes[4] == 'n' && bytes[5] == 'n' && bytes[6] == 30 && bytes[7] == 0 && bytes[8] == kOsWindows);
-        const size_t end = bytes.size() - 6;                                                             // (protocol 16 ends the message with five more bytes: the plan of each color and the seats that hold a game; N2.107 reads them; protocol 17 one more, the game mode, N2.112)
-        ASSERT_TRUE(bytes[end] == 0 && bytes[end + 1] == 0 && bytes[end + 2] == 0 && bytes[end + 3] == 0 && bytes[end + 4] == 0 && bytes[end + 5] == 0);       // (a room that is no lobby room, and has the original's game mode, writes zeros)
+        const size_t end = bytes.size() - 7;                                                             // (protocol 27 ends the message with the ready mask, N2.114; protocol 16 ends it with five more bytes: the plan of each color and the seats that hold a game; N2.107 reads them; protocol 17 one more, the game mode, N2.112)
+        ASSERT_TRUE(bytes[end] == 0 && bytes[end + 1] == 0 && bytes[end + 2] == 0 && bytes[end + 3] == 0 && bytes[end + 4] == 0 && bytes[end + 5] == 0 && bytes[end + 6] == 0);       // (a room that is no lobby room, and has the original's game mode and no ready mark, writes zeros)
         ASSERT_TRUE(bytes[end - 6] == 1 && bytes[end - 5] == 1 && bytes[end - 4] == 0 && bytes[end - 3] == 0 && bytes[end - 2] == 1 && bytes[end - 1] == 1);        // fog, you, leader, team_a, team_b, flags
         RoomMsg back;
         ASSERT_TRUE(decode(bytes, back));
@@ -1752,7 +1752,7 @@ void run_protocol16_tests() {
         room.plan = {PlanKind::Open, PlanKind::Hard, PlanKind::Easy, PlanKind::Nobody};
         room.in_game = 0x03;                                                                            // the persons of seats 0 and 1 run a game, the one of seat 3 a page
         const std::vector<uint8_t> bytes = encode(room);
-        const size_t end = bytes.size() - 1;                                                            // (protocol 17 ends the message with the game mode, N2.112; the lobby bytes are the five before it)
+        const size_t end = bytes.size() - 2;                                                            // (protocol 27 ends the message with the ready mask, N2.114, and protocol 17 before it with the game mode, N2.112; the lobby bytes are the five before them)
         ASSERT_TRUE(kRoomLobby == 2 && kRoomStarting == 4 && kRoomLeaderStarts == 1 && bytes.back() == 0);
         ASSERT_TRUE(bytes[end - 6] == 3 && bytes[end - 5] == 0 && bytes[end - 4] == 3 && bytes[end - 3] == 1 && bytes[end - 2] == 4 && bytes[end - 1] == 3);       // the flags, the four kinds, the games
         RoomMsg back;
@@ -2289,6 +2289,94 @@ void run_protocol16_tests() {
             RoomMsg got;
             ASSERT_TRUE(decode(b, got) && got.is_public() && got.lobby() && !got.starting() && got.leader_starts());
             ASSERT_EQ(seating_hash(lobby), seating_hash(shown));                                                  // (the flag is no part of the seating that a color move's guard is made of)
+        }
+    } TEST_END();
+    TEST_CASE("N2.114 Protocol 27, Ready Up: ReadyMsg Is The Type 41 And One Byte, 0 Or 1, Two Bytes And Nothing Else (Every Other Value, Truncation, Extra Byte And Type Byte Is Refused); The Room Message Ends With The Ready Mask, A Byte That The Decoder Takes Only For A Lobby Room's Person Who Is A Page And Does Not Lead; The Seating Guard Does Not See It") {
+        ASSERT_EQ(kProtocolVersion, uint16_t{27});
+        ASSERT_TRUE(static_cast<int>(MsgType::Ready) == 41 && static_cast<int>(MsgType::Last) == 41 && static_cast<int>(MsgType::Signal) == 40);
+        ASSERT_TRUE(encode(ReadyMsg{true}) == (std::vector<uint8_t>{41, 1}));
+        ASSERT_TRUE(encode(ReadyMsg{false}) == (std::vector<uint8_t>{41, 0}));
+        ASSERT_EQ(peek_type(encode(ReadyMsg{true})), MsgType::Ready);
+        for (const bool choice : {false, true}) {
+            ReadyMsg got;
+            got.ready = !choice;
+            const std::vector<uint8_t> bytes = encode(ReadyMsg{choice});
+            ASSERT_TRUE(bytes.size() == 2 && decode(bytes, got) && got.ready == choice && encode(got) == bytes);
+        }
+        {   // every value above 1, every prefix and every extra byte is refused, the target is left alone, and no other type byte is a ReadyMsg
+            ReadyMsg keep;
+            keep.ready = true;
+            for (unsigned value = 2; value < 256; ++value) ASSERT_FALSE(decode(std::vector<uint8_t>{41, static_cast<uint8_t>(value)}, keep));
+            const std::vector<uint8_t> full = encode(ReadyMsg{false});
+            for (size_t cut = 0; cut < full.size(); ++cut) ASSERT_FALSE(decode(std::vector<uint8_t>(full.begin(), full.begin() + static_cast<std::ptrdiff_t>(cut)), keep));
+            for (unsigned extra = 0; extra < 256; ++extra) {
+                std::vector<uint8_t> longer = full;
+                longer.push_back(static_cast<uint8_t>(extra));
+                ASSERT_FALSE(decode(longer, keep));
+            }
+            for (unsigned type = 0; type < 256; ++type) {
+                if (type == 41) continue;
+                std::vector<uint8_t> other = full;
+                other[0] = static_cast<uint8_t>(type);
+                ASSERT_FALSE(decode(other, keep));
+            }
+            VisibilityMsg vis;
+            ASSERT_FALSE(decode(encode(VisibilityMsg{true}), keep) || decode(encode(ReadyMsg{true}), vis));          // (the two messages that are two bytes are not each other)
+            ASSERT_TRUE(keep.ready);
+        }
+        {   // the Room message: the ready mask is the last byte, and a room that has none ends with a zero there
+            RoomMsg room = server_room_of(0);
+            room.flags = kRoomLeaderStarts | kRoomLobby;
+            room.ready = 0x08;                                                                                       // seat 3 (Cat) says Ready; the leader is seat 0
+            const std::vector<uint8_t> bytes = encode(room);
+            ASSERT_EQ(bytes.back(), uint8_t{0x08});
+            RoomMsg got;
+            ASSERT_TRUE(decode(bytes, got) && got.ready == 0x08 && got.seat_ready(3) && !got.seat_ready(1) && !got.seat_ready(0) && encode(got) == bytes);
+            ASSERT_FALSE(decode(std::vector<uint8_t>(bytes.begin(), bytes.end() - 1), got));                           // (a Room of protocol 26 has no such byte: it is no Room now)
+            RoomMsg none = room;
+            none.ready = 0;
+            ASSERT_EQ(encode(none).back(), uint8_t{0});
+            ASSERT_EQ(seating_hash(room), seating_hash(none));                                                       // (the marks are no part of the seating that a color move's guard is made of)
+        }
+        {   // every byte, for each of the four seats, in a lobby room whose leader is seat 0 (Ann), with a person in seats 1 and 3, an empty seat 2, and, in a second room, a bot, a game and the leader's own seat
+            for (unsigned bits = 0; bits < 256; ++bits) {
+                RoomMsg m = server_room_of(0);
+                m.flags = kRoomLeaderStarts | kRoomLobby;
+                m.ready = static_cast<uint8_t>(bits);
+                RoomMsg got;
+                const bool took = decode(encode(m), got);
+                const bool allowed = (bits & ~0x0Au) == 0;                                                           // seats 1 and 3 hold persons who are pages and do not lead; 0 leads and 2 is empty
+                if (took != allowed) std::cout << "\n    mask " << bits << (took ? " is taken" : " is refused");
+                ASSERT_TRUE(took == allowed);
+            }
+            RoomMsg bot = server_room_of(0);
+            bot.flags = kRoomLeaderStarts | kRoomLobby;
+            bot.slots[2] = RoomMsg::Slot{SlotState::Bot, "Bot (Easy)", 0, 0};
+            bot.ready = 0x04;
+            RoomMsg got;
+            ASSERT_FALSE(decode(encode(bot), got));                                                                  // (a computer player is always ready: no mark)
+            RoomMsg game = server_room_of(0);
+            game.flags = kRoomLeaderStarts | kRoomLobby;
+            game.in_game = 0x02;
+            game.ready = 0x02;
+            ASSERT_FALSE(decode(encode(game), got));                                                                 // (a game needs no Ready)
+            game.ready = 0x08;
+            ASSERT_TRUE(decode(encode(game), got));                                                                  // (the page in seat 3 may say it while the game in seat 1 does not)
+            RoomMsg own = server_room_of(1);
+            own.flags = kRoomLeaderStarts | kRoomLobby;
+            own.ready = 0x02;
+            ASSERT_FALSE(decode(encode(own), got));                                                                  // (the leader, seat 1 here, never readies)
+            own.ready = 0x01;
+            ASSERT_TRUE(decode(encode(own), got));
+            RoomMsg plain = server_room_of(0);
+            plain.ready = 0x02;
+            ASSERT_FALSE(decode(encode(plain), got));                                                                // (a room that is no lobby room has no marks)
+            plain.ready = 0;
+            ASSERT_TRUE(decode(encode(plain), got));
+            RoomMsg nolead = server_room_of(kNoLeader);
+            nolead.flags = kRoomLeaderStarts | kRoomLobby;
+            nolead.ready = 0x01;
+            ASSERT_TRUE(decode(encode(nolead), got));                                                                // (no leader: every person's mark may be shown)
         }
     } TEST_END();
 }

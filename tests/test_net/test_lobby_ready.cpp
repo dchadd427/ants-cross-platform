@@ -93,7 +93,7 @@ void run_lobby_ready_tests() {
         ASSERT_FALSE(again.host.starting());
     } TEST_END();
 
-    TEST_CASE("N4.61 Ready Up (Protocol 27): The Leader Does Not Ready (A Ready From The Leader Is Ignored And Counted, Never Shown, And The START Does Not Wait For Them); A Person Who Becomes The Leader Has No Mark; A Mark Goes With Its Person When The Colors Change Places") {
+    TEST_CASE("N4.61 Ready Up (Protocol 27): The Leader Does Not Ready (A Ready From The Leader Is Ignored And Counted, Never Shown, And The START Does Not Wait For Them); A Person Who Becomes The Leader Starts With No Mark; A Mark Goes With Its Person When The Colors Change Places") {
         Room room(lobby_room_config(403));
         const std::vector<size_t> g = pages(room, {"Ann", "Bob", "Cat"});
         const size_t ann = g[0], bob = g[1], cat = g[2];
@@ -113,22 +113,18 @@ void run_lobby_ready_tests() {
         ASSERT_TRUE(room.guests[ann].lobby->request_seat_move(3, 2));
         room.run(100);
         ASSERT_TRUE(layout(room.host.room()) == "Ann@0 Bob@2 Cat@3" && all_show(room, "23"));
-        // Bob takes the mark back, then the leader leaves: Bob leads now (nobody else was before him), whatever the mark was, and Cat's mark stays
-        room.run(1000);
-        ASSERT_TRUE(room.guests[bob].lobby->request_ready(false));
-        room.run(100);
-        ASSERT_TRUE(all_show(room, "3"));
+        // the leader leaves: Bob (ready) leads now and starts with no mark, Cat's mark stays, and the START waits for nobody else
         room.guests[ann].lobby->leave();
         room.run(300);
-        ASSERT_TRUE(room.guests[bob].lobby->is_leader() && all_show(room, "3") && room.host.everyone_ready());
-        // a person who was ready and comes to lead has no mark: Cat is ready, Bob (the leader) leaves, and Cat leads without one
+        ASSERT_TRUE(room.guests[bob].lobby->is_leader() && all_show(room, "3") && room.host.everyone_ready() && !room.host.ready(2));
+        // Bob (the leader) leaves too: Cat (ready) leads without a mark
         room.guests[bob].lobby->leave();
         room.run(300);
         ASSERT_TRUE(room.guests[cat].lobby->is_leader() && all_show(room, "") && room.host.everyone_ready());
         ASSERT_FALSE(room.host.ready(3));
     } TEST_END();
 
-    TEST_CASE("N4.62 Ready Up (Protocol 27): A Map, A Plan, The Teams And The Mode Chosen By The Leader Leave Every Mark As It Was; A Person Whose Link Ends, Or Who Takes The Seat Over, Is Not Ready; A START That Stands Keeps The Marks, And The START Of The Match Uses Them Up") {
+    TEST_CASE("N4.62 Ready Up (Protocol 27): A Map, A Plan, The Teams And The Mode Chosen By The Leader Leave Every Mark As It Was; A Person Whose Link Ends, Or Who Takes The Seat Over, Is Not Ready; A START That Stands Keeps The Marks") {
         using K = PlanKind;
         {   // the leader changes everything there is to change: the marks stay
             Room room(lobby_room_config(404));
@@ -142,7 +138,7 @@ void run_lobby_ready_tests() {
             plan.mode = 1;
             ASSERT_TRUE(room.guests[ann].lobby->request_plan(plan));
             room.run(100);
-            ASSERT_TRUE(plan_text(room.host.room()) == "ooooh 0+1" || plan_text(room.host.room()) == "oooh 0+1");
+            ASSERT_EQ(plan_text(room.host.room()), std::string("oooh 0+1"));
             ASSERT_TRUE(room.host.room().map_name == "ISLANDS.LVL" && room.host.room().mode == 1);
             ASSERT_TRUE(all_show(room, "12") && room.host.everyone_ready() && room.host.ready_changes() == 2u);
             room.run(1000);
@@ -166,9 +162,6 @@ void run_lobby_ready_tests() {
             room.run(100);
             ASSERT_FALSE(room.host.starting());
             ASSERT_EQ(notices_of(*room.guests[ann].lobby).size(), size_t{1});
-            const size_t again = join_keyed(room, "Bob", bob_key, 255, std::string());
-            room.guests[again].lobby = nullptr;
-            room.guests.pop_back();
             ClientLobby::Config back = page_config("Bob");
             back.key = bob_key;
             const size_t bob2 = join_with(room, back);
@@ -178,12 +171,12 @@ void run_lobby_ready_tests() {
             room.run(100);
             ASSERT_TRUE(all_show(room, "12") && room.host.everyone_ready());
         }
-        {   // a START that stands keeps the marks (the pages go to the game page: their links end, and the marks are not lost), and the match's START uses them up
+        {   // a START that stands keeps the marks: the pages go to the game page, their links end, and the marks are not lost
             HostLobby::Config hc = lobby_room_config(406);
             hc.start_wait_ms = 5000;
             Room room(hc);
-            const std::vector<size_t> g = pages(room, {"Ann", "Pia"});
-            const size_t ann = g[0], pia = g[1];
+            const size_t ann = room.join_seat("Ann");                                           // (the leader's own game is open: only Pia's page is left to come)
+            const size_t pia = join_with(room, page_config("Pia"));
             room.run(300);
             const SeatKey pia_key = room.guests[pia].lobby->key();
             ASSERT_TRUE(room.guests[pia].lobby->request_ready(true));
@@ -194,12 +187,11 @@ void run_lobby_ready_tests() {
             ASSERT_TRUE(room.host.starting() && all_show(room, "1"));
             room.guests[pia].client_end->close();                                              // (the page goes to the game page)
             room.run(100);
-            ASSERT_TRUE(room.host.held(1) && room.host.starting() && room.host.everyone_ready());
+            ASSERT_TRUE(room.host.held(1) && room.host.starting() && room.host.everyone_ready() && all_show(room, "1"));       // (a seat that is held while the START waits keeps its mark)
             const size_t pia_game = join_keyed(room, "Pia", pia_key);
             room.run(100);
-            ASSERT_TRUE(room.host.in_game(1) && !leader_starts(room.host).empty());
+            ASSERT_TRUE(room.host.in_game(1) && !leader_starts(room.host).empty() && all_show(room, ""));                     // (a game has no mark to show: it needs none)
             ASSERT_TRUE(room.host.start(5, 6, room.now));
-            ASSERT_EQ(ready_text(room.host.room()), std::string());                           // (a START uses the marks up)
             room.run(100);
             ASSERT_EQ(room.guests[pia_game].lobby->phase(), ClientLobby::Phase::Loading);
         }

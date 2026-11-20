@@ -246,14 +246,19 @@ void run_lobby_rematch_tests() {
             ASSERT_TRUE(ap.request_start());
             room.run(200);
             ASSERT_EQ(notices_of(ap), (std::vector<std::string>{"These players are not back from the match yet: Bob and Cat."}));
-            join_with(room, page_with_key("Bob", key_with(2)));
+            const size_t bob = join_with(room, page_with_key("Bob", key_with(2)));
             room.run(200);
             ASSERT_TRUE(ap.request_start());
             room.run(200);
             ASSERT_FALSE(room.host.starting());
             ASSERT_EQ(notices_of(ap), (std::vector<std::string>{"Cat is not back from the match yet."}));
-            join_with(room, page_with_key("Cat", key_with(3)));
+            const size_t cat = join_with(room, page_with_key("Cat", key_with(3)));
             room.run(200);
+            ASSERT_TRUE(ap.request_start());                                                   // (everybody is back, nobody is ready yet: the START waits for that, as in any lobby room)
+            room.run(200);
+            ASSERT_FALSE(room.host.starting());
+            ASSERT_EQ(notices_of(ap), (std::vector<std::string>{"These players are not ready yet: Bob and Cat."}));
+            pages_ready(room, {bob, cat});
             ASSERT_TRUE(ap.request_start());
             room.run(200);
             ASSERT_TRUE(room.host.starting() && ap.room().starting());

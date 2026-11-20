@@ -246,7 +246,7 @@ void run_protocol_tests() {
         bad_lag.seat = 255;
         ASSERT_FALSE(decode(encode(bad_lag), lag2));
         // unknown types (24 was one until protocol 7 gave it to StartRequest, 25 until protocol 8 gave it to Lag, 26 - 30 until protocol 10 gave them to Presence, Vote, CatchUp, TurnBatch, CaughtUp, 31 until protocol 14 gave it to SeatMove, 32 until protocol 16 gave it to Plan, 33 until protocol 16 gave it to Name, and 34 until protocol 16 gave it to Remove)
-        for (uint8_t type : std::vector<uint8_t>{0, 41, 100, 255}) {
+        for (uint8_t type : std::vector<uint8_t>{0, 42, 100, 255}) {
             const std::vector<uint8_t> m = {type, 0, 0, 0, 0};
             ASSERT_EQ(peek_type(m), MsgType::None);
         }
@@ -462,7 +462,7 @@ void run_protocol_tests() {
         ASSERT_EQ(kNoLeader, 255);
         // every value of the leader: nobody, and each seat that a guest holds; the byte is the fourth before the room's two team bytes, its rules and (protocol 16) its five lobby bytes and (protocol 17) its mode, the receiver's own seat
         // ("you") the one before it
-        const size_t lobby_tail = 5 + 1;
+        const size_t lobby_tail = 5 + 1 + 1;                                                            // (the lobby bytes, the mode of protocol 17 and the ready mask of protocol 27)
         for (const uint8_t leader : {uint8_t{255}, uint8_t{0}, uint8_t{1}, uint8_t{3}}) {
             RoomMsg r = server_room_of(leader);
             for (const uint8_t you : {uint8_t{255}, uint8_t{0}, uint8_t{1}, uint8_t{3}}) {                     // (the receiver may or may not be the leader)
@@ -572,7 +572,7 @@ void run_protocol_tests() {
         for (const MsgType t : {MsgType::Presence, MsgType::Vote, MsgType::CatchUp, MsgType::TurnBatch, MsgType::CaughtUp}) {
             ASSERT_EQ(peek_type(std::vector<uint8_t>{static_cast<uint8_t>(t)}), t);
         }
-        ASSERT_EQ(peek_type(std::vector<uint8_t>{41}), MsgType::None);                  // (35 is the Visibility of protocol 22, N2.113; 31 is the SeatMove of protocol 14, N2.101; 32 the PlanMsg, 33 the NameMsg and 34 the RemoveMsg of protocol 16, N2.106, N2.108 and N2.110)
+        ASSERT_EQ(peek_type(std::vector<uint8_t>{42}), MsgType::None);                  // (35 is the Visibility of protocol 22, N2.113; 31 is the SeatMove of protocol 14, N2.101; 32 the PlanMsg, 33 the NameMsg and 34 the RemoveMsg of protocol 16, N2.106, N2.108 and N2.110)
 
         // ---- the keys: zero is no key, a key matches only itself, and never "no key" ----
         {

@@ -1,5 +1,5 @@
 // Tests of the room before a match: the lobby messages, joining and refusing, leaving, the start barrier (Start, Loaded, Begin), cancelled
-// starts, kicking, hostile guests, a whole match started through the lobby, the rematch of a lobby room, and public lobby rooms.
+// starts, kicking, hostile guests, a whole match started through the lobby, the rematch of a lobby room, public lobby rooms and ready up.
 #include "lobby_fixtures.hpp"
 
 int main() {
@@ -11,6 +11,7 @@ int main() {
     run_lobby_rooms_tests();
     run_lobby_rematch_tests();
     run_lobby_public_tests();
+    run_lobby_ready_tests();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";

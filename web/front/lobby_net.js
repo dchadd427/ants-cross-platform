@@ -350,7 +350,7 @@
     // argument, and a request whose guard is not the seating of the room as it is now (somebody joined, left, was renamed or moved meanwhile) is not sent (false); without a guard the room as it is now counts.
     // Limits: connectMs (20 s) is how long a socket may take to open, silenceMs (8 s) how long a link that is open may say nothing (the server pings every second), stableMs (10 s) how long a link must stay
     // online before its loss counts as a first loss again (else the waits of the way back go on growing); 0 for a limit waits for the browser.
-    // [burst, a second] of each kind of request, KEPT BELOW the server's own (include/ants_net/flood.hpp: a color move or a plan 6 and 4, a name, a removal or a visibility 3 and 1, a Ready 4 and 2, a line of chat 5 and 1). The server drops a request
+    // [burst, a second] of each kind of request, KEPT BELOW the server's own (include/ants_net/flood.hpp: a color move or a plan 6 and 4, a name, a removal, a visibility or a Ready 3 and 1, a line of chat 5 and 1). The server drops a request
     // beyond its own without a word (the sender sees nothing and the room does not change; a connection that goes on is thrown out), and it counts the moment at which it HANDLES a request, not the moment at which it was
     // sent. A page that paced itself at exactly the server's rate lost a request whenever the network (or the server's own loop) delayed one request and not the next: two that were 1000 ms apart arrive 990 ms apart, and
     // the second finds 0.99 of a token (seen once on the macOS CI for the chat, then reproduced for a rename and a plan). So every kind keeps a request in reserve (a burst one smaller than the server's: the server always
@@ -359,7 +359,7 @@
     // and about 1.5 s for a name, a removal or a line; a longer hold-up can still lose a request (then the screen follows the room). tests/scripts/web_lobby_client_check.js replays the page's requests of every kind
     // through the server's own bucket (it reads the limits from flood.hpp) with delays of 0 to 150 ms on every request and a hold-up of 333 or 1400 ms on one; tests/scripts/web_lobby_server_check.js sends them
     // through a link that jitters by 150 ms to the real server.
-    var BUDGETS = { move: [5, 3.2], plan: [5, 3.2], rename: [2, 0.8], remove: [2, 0.8], visibility: [2, 0.8], ready: [3, 1.6], chat: [4, 0.8] };
+    var BUDGETS = { move: [5, 3.2], plan: [5, 3.2], rename: [2, 0.8], remove: [2, 0.8], visibility: [2, 0.8], ready: [2, 0.8], chat: [4, 0.8] };
     function LobbyClient(opts) {
         this.url = opts.url;
         this.code = opts.code;

@@ -1670,7 +1670,7 @@ void run_protocol17_tests() {
             const std::vector<uint8_t> original = encode(plain);
             plain.mode = 1;
             const std::vector<uint8_t> bytes = encode(plain);
-            ASSERT_TRUE(bytes.size() == original.size() && bytes.back() == 1 && original.back() == 0 && std::equal(bytes.begin(), bytes.end() - 1, original.begin()));
+            ASSERT_TRUE(bytes.size() == original.size() && bytes[bytes.size() - 2] == 1 && original[original.size() - 2] == 0 && bytes.back() == 0 && original.back() == 0 && std::equal(bytes.begin(), bytes.end() - 2, original.begin()));      // (the mode, then the ready mask of protocol 27)
             RoomMsg back;
             ASSERT_TRUE(decode(bytes, back) && back.mode == 1 && !back.lobby() && encode(back) == bytes);
             ASSERT_TRUE(decode(original, back) && back.mode == 0 && encode(back) == original);
@@ -1683,13 +1683,15 @@ void run_protocol17_tests() {
             for (const std::vector<uint8_t>& base : {bytes, encode(lobby)}) {
                 for (unsigned value = 0; value < 256; ++value) {
                     std::vector<uint8_t> one = base;
-                    one.back() = static_cast<uint8_t>(value);
+                    one[one.size() - 2] = static_cast<uint8_t>(value);                               // (the mode: the byte before the ready mask of protocol 27)
                     RoomMsg got;
                     ASSERT_EQ(decode(one, got), value <= sim::kLastGameMode);
                     if (value <= sim::kLastGameMode) ASSERT_TRUE(got.mode == value && encode(got) == one);
                 }
-                std::vector<uint8_t> v16(base.begin(), base.end() - 1);                              // protocol 16's Room: no mode byte
+                std::vector<uint8_t> v16(base.begin(), base.end() - 2);                              // protocol 16's Room: no mode byte (and no ready mask)
                 ASSERT_FALSE(decode(v16, back));
+                std::vector<uint8_t> v26(base.begin(), base.end() - 1);                              // protocol 26's Room: the mode, no ready mask
+                ASSERT_FALSE(decode(v26, back));
                 std::vector<uint8_t> longer = base;
                 longer.push_back(0);
                 ASSERT_FALSE(decode(longer, back));
