@@ -9,7 +9,8 @@ Parts (--only): watch (a match at its present: the tag, Pause and
 "Jump to live", the file that grows, the feed that stops and comes back), ends (a match that ends and was kept, one that ends and was not kept, a kept replay that is slow to appear), cards
 (a link to a match that is over, to one that is not live, an id that is not of the shape), replay (a plain replay is as it was: no live marks, no polling), rewind (Back 30 seconds: where a press seeks, play / pause and speed kept, not on a live match, the bar at 390 px), picture (a spectator's Picture button: the four shapes, the bar as wide as the picture, Esc and a click elsewhere, a phone's place for the button, fullscreen), bar (the REPLAY tag lies outside the picture
 in a phone's and a computer's window, and a phone's fullscreen bar: a finger on the picture never calls it, a tap or a swipe up from the bottom edge does, a swipe down or its tab hides it, the first time a
-note says how to bring it back; a mouse works as ever).
+note says how to bring it back; a mouse works as ever), gear (the Settings button of the bar, made as web/game_menu.js makes it, in a live bar and a recording's at the
+phone sizes: nothing past the screen, nothing on anything, the clock wide enough, the gear above the timeline).
 
 Exit status 0: every check passed; 1: a check failed; 3: the check could not be made (no browser); 2 is the status of a bad command line.
 """
@@ -226,7 +227,7 @@ class Door:
             return self.send(h, 200, b"\0" * 2000, "application/octet-stream")
         if path == "/index.wasm":
             return self.send(h, 200, b"\0asm", "application/wasm")
-        if path in ("/matches.css", "/match_stats.css", "/death_map.css", "/replay_stats.css"):
+        if path in ("/matches.css", "/match_stats.css", "/death_map.css", "/replay_stats.css", "/game_menu.css"):
             return self.send(h, 200, open(os.path.join(WEB, path[1:]), "rb").read(), "text/css")
         if path.startswith("/front/") or path in ("/favicon.png", "/favicon.ico"):
             f = os.path.join(WEB, path[1:])
@@ -291,10 +292,10 @@ SHOWN = "function (id) { var e = document.getElementById(id); return !!e && !e.h
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--browser", default=os.environ.get("CHROME", ""), help="a Chromium-based browser (default: look for one)")
-    ap.add_argument("--only", default="", help="one part: watch, late, ends, cards, replay, rewind, picture, bar, hide or scrub (default: all)")
+    ap.add_argument("--only", default="", help="one part: watch, late, ends, cards, replay, rewind, picture, bar, hide, scrub or gear (default: all)")
     ap.add_argument("--shots", default="", help="a folder to save screenshots in")
     args = ap.parse_args()
-    parts = ("watch", "late", "ends", "cards", "replay", "rewind", "picture", "bar", "hide", "scrub")
+    parts = ("watch", "late", "ends", "cards", "replay", "rewind", "picture", "bar", "hide", "scrub", "gear")
     if args.only and args.only not in parts:
         print("--only is one of: " + ", ".join(parts))
         return 2
@@ -706,6 +707,50 @@ def main():
             check(tab.ev("document.getElementById('rbar').classList.contains('islive')") is True, "(the bar is the live one)")
             shot(tab, "rewind-live-none")
             tab.close()
+
+        if args.only in ("", "gear"):
+            print("[web live] part gear: the Settings button of the bar (made by web/game_menu.js, placed by web/game_menu.css) in a live bar and a recording's bar")
+            # the stand-in cannot load the menu: the button is made here as the script makes it (the same classes, the word in a span) and the menu's own stylesheet is linked
+            gear = ("(function () { var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'game_menu.css'; document.head.appendChild(l);"
+                    " var b = document.createElement('button'); b.type = 'button'; b.id = 'settings-btn-bar'; b.className = 'btn sm gm-btn gm-bar'; var t = document.createElement('span'); t.className = 'gm-txt'; t.textContent = 'Settings'; b.appendChild(t);"
+                    " var w = document.getElementById('picwrap'); w.parentNode.insertBefore(b, w); return 1; })()")
+            gearprobe = ("(function () { var o = { boxes: [], vw: window.innerWidth, doc: document.documentElement.scrollWidth };"
+                         " ['b-play', 'b-rew', 'clock', 'livebox', 'b-cam', 'speed', 'tl', 'picwrap', 'b-fsx', 'settings-btn-bar'].forEach(function (id) { var e = document.getElementById(id); if (!e || getComputedStyle(e).display === 'none' || e.hidden || !e.getClientRects().length) return;"
+                         " var r = e.getBoundingClientRect(); o.boxes.push([id, r.left, r.top, r.right, r.bottom]); });"
+                         " return o; })()")
+            # phones upright and sideways in the page, a phone sideways in fullscreen: nothing of the bar runs past the screen, nothing lies on anything, the page does not scroll sideways, and the gear is above the timeline.
+            # (A phone upright in fullscreen has a bar of its own faults, unrelated to this button: not asked here. The stand-in's clock is a longer text than the page's, so the clock's width is not asked either.)
+            for (width, height, mobile, full) in ((360, 844, True, False), (390, 844, True, False), (402, 874, True, False), (412, 844, True, False), (430, 844, True, False), (667, 375, True, True), (844, 390, True, True)):
+                for mode in ("live", "replay"):
+                    fresh(kept_at=1.0) if mode == "replay" else fresh()
+                    tab = new_tab(width, height, 2 if mobile else 1, mobile)
+                    open_page(tab, "/play?replay=" + KEPT if mode == "replay" else "/play?live=" + ID)
+                    until(tab, READY)
+                    if mode == "replay":
+                        tab.ev("__stub.total = 20000; __stub.turn = 1000; __stub.state = 3")
+                    else:
+                        tab.ev("__stub.state = 3; __stub.turn = Math.max(0, Module._ants_replay_get(8) - 50 * 20)")
+                    time.sleep(0.7)
+                    tab.ev(gear)
+                    time.sleep(0.5)
+                    if full:
+                        fx, fy = centre(tab, "fullscreen-btn")
+                        (tab.tap if mobile else tab.click)(fx, fy)
+                        until(tab, "document.getElementById('rbar').classList.contains('over')", 10)
+                        time.sleep(0.6)
+                    g = tab.ev(gearprobe)
+                    boxes = {b[0]: b for b in g["boxes"]}
+                    label = "%dx%d %s, %s" % (width, height, "fullscreen" if full else "page", mode)
+                    check("settings-btn-bar" in boxes, "%s: the bar has the Settings button" % label)
+                    off = [b[0] for b in g["boxes"] if b[1] < -0.5 or b[3] > g["vw"] + 0.5 or b[2] < -0.5]
+                    check(not off and g["doc"] <= g["vw"], "%s: nothing runs past the screen and the page does not scroll sideways (past: %s, page %d of %d px)" % (label, off or "none", g["doc"], g["vw"]))
+                    laps = [(a[0], b[0]) for n, a in enumerate(g["boxes"]) for b in g["boxes"][n + 1:] if not (a[3] <= b[1] + 0.5 or b[3] <= a[1] + 0.5 or a[4] <= b[2] + 0.5 or b[4] <= a[2] + 0.5)]
+                    check(not laps, "%s: nothing lies on anything (%s)" % (label, laps or "none"))
+                    if not full and width <= 700 and "settings-btn-bar" in boxes and "tl" in boxes:
+                        check(boxes["settings-btn-bar"][4] <= boxes["tl"][2] + 0.5, "%s: the gear lies above the timeline (gear bottom %d, timeline top %d)" % (label, boxes["settings-btn-bar"][4], boxes["tl"][2]))
+                    if args.shots and (width, height) in ((390, 844), (844, 390)):
+                        shot(tab, "gear-%s-%dx%d-%s" % (mode, width, height, "fullscreen" if full else "page"))
+                    tab.close()
 
         if args.only in ("", "picture"):
             print("[web live] part picture: the replay bar's Picture button, and the bar as wide as the picture")

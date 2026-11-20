@@ -3,12 +3,15 @@
 //   * what the page types lands in the game's own chat line (printable ASCII, at most 100 characters), Backspace and clear edit it, and what is not text is refused;
 //   * Enter is a key press through the event queue: the line is sent and the box empties, exactly as for a keyboard (the HUD's rules: nothing when the box is empty);
 //   * a dialog or the option "Participate In Chat" off closes the box to all of it, and a typed line stays what it was.
-//   * the catch-up screen and the results refuse text too (the recording's clause is pinned in test_replay_app, RA7.1).
+//   * the catch-up screen and the results refuse text too (the recording's clause is pinned in test_replay_app, RA7.1);
+//   * the options window (open: it has the screen) has the keyboard's boxes instead: its four quick chat fields, where the window's own press would focus them, one of them with the focus, what the
+//     page types shown in it at once and written to the profile by the commit (one write for one edit), the chat line left alone, Enter closing the window as a keyboard's does.
 // Usage: test_web_chat. Exit code 0 when every check passes.
 #include <SDL.h>
 
 #include <cstdio>
 #include <cstdlib>
+#include <optional>
 #include <string>
 
 #include "zoom_scene.hpp"
@@ -114,8 +117,87 @@ void test_closed() {
     check(!app.web_chat_available() && !app.web_chat_do(1, 'a'), "not with Participate In Chat off");
     app.hud().options().chat = true;
     app.hud().open_options();
-    check(!app.web_chat_available(), "not while the options window is open");
+    check(app.web_text_mode() == 1 && app.hud().get_chat_input() == "kept", "while the options window is open its fields are the boxes, and the chat line is as it was");
+    check(app.web_chat_do(0, 0) && app.hud().get_chat_input() == "kept", "(an edit goes to the field with the focus, not to the chat line)");
     app.hud().close_options();
+    check(app.web_text_mode() == 0 && app.hud().get_chat_input() == "kept", "the chat box is the box again when the window closes");
+}
+
+void test_options_fields() {
+    std::printf("[options] the options window's four quick chat fields take the phone's keyboard\n");
+    for (const Aspect aspect : {Aspect::Wide16x9, Aspect::Classic4x3}) {
+        AppRig rig(aspect, 1.0f, false, std::string(), true, true);
+        check(rig.ok, "the match is up");
+        if (!rig.ok) continue;
+        Application& app = rig.app;
+        check(app.web_text_mode() == 0 && !app.web_chat_do(4, 1) && !app.web_chat_do(5, 0), "the chat box is the box before the window opens: the options operations do nothing");
+        app.hud().open_options();
+        check(app.web_chat_available() && app.web_text_mode() == 1, "the open window has fields that take text");
+        const LayoutPoint window = app.hud().open_window_offset();
+        for (size_t k = 0; k < 4; ++k) {
+            const LayoutRect box = app.web_options_field(k);
+            check(box.x == app.picture().x + window.x + OptionsScreen::EDIT_X[k] && box.y == app.picture().y + window.y + OptionsScreen::EDIT_Y[k] && box.w == 141 && box.h == 15, "field " + std::to_string(k) + " is where the window draws it, moved by the window's offset and the picture's");
+            check(box.x >= 0 && box.right() <= app.canvas().width && box.y >= 0 && box.bottom() <= app.canvas().height, "field " + std::to_string(k) + " is inside the canvas");
+            const OptionsScreen& screen = app.hud().options_screen();
+            const int32_t mx = box.x + box.w / 2 - app.picture().x - window.x, my = box.y + box.h / 2 - app.picture().y - window.y;
+            check(screen.edit(k).hit(mx, my) && !screen.edit(k).hit(mx, my + box.h) && !screen.edit(k).hit(mx - box.w, my), "a finger in field " + std::to_string(k) + " is a press that the window focuses it for");
+        }
+        check(app.web_options_field(4).w == 0 && app.web_options_field(99).h == 0, "there is no fifth field");
+        check(app.hud().options_focused_edit() == std::optional<size_t>(0), "F9 has the focus when the window opens");
+        check(!app.web_chat_do(4, 4) && !app.web_chat_do(4, -1), "a field that does not exist is refused");
+        check(app.web_chat_do(4, 2) && app.hud().options_focused_edit() == std::optional<size_t>(2), "the page gives F11 the focus (the window's own press does the same one frame later)");
+        check(app.web_text_line() == app.hud().get_quick_chat_key(2) && !app.web_text_line().empty(), "the line that the keyboard starts with is that field's text");
+        app.hud().options().chat = false;
+        check(app.web_chat_available(), "the fields take text with Participate In Chat off too");
+        app.hud().options().chat = true;
+    }
+}
+
+void test_options_typing() {
+    std::printf("[options typing] the page's characters land in the field, the commit writes them\n");
+    AppRig rig(Aspect::Wide16x9, 1.0f, false, std::string(), true, true);
+    check(rig.ok, "the match is up");
+    if (!rig.ok) return;
+    Application& app = rig.app;
+    type(app, "chat line");
+    app.hud().open_options();
+    const std::string was = app.hud().get_quick_chat_key(1);
+    app.web_chat_do(4, 1);
+    app.web_chat_do(0, 0);
+    type(app, "Hold the line");
+    check(app.web_text_line() == "Hold the line" && app.hud().options_screen().edit(1).text() == "Hold the line", "the characters are in the field at once");
+    check(app.hud().get_quick_chat_key(1) == was, "and not yet written to the profile: the edit is one write, at the commit");
+    check(app.web_chat_do(2, 0) && app.web_text_line() == "Hold the lin", "Backspace takes one off");
+    check(!app.web_chat_do(1, 7) && !app.web_chat_do(1, 127) && !app.web_chat_do(1, 233) && !app.web_chat_do(1, 0x1F600) && app.web_text_line() == "Hold the lin", "control codes and non-ASCII are refused");
+    check(!app.web_chat_do(9, 0), "an operation that does not exist does nothing");
+    check(app.web_chat_do(5, 0) && app.hud().get_quick_chat_key(1) == "Hold the lin", "the commit writes the text to the profile's quick chat F10");
+    check(app.hud().get_quick_chat_key(0) != "Hold the lin" && app.hud().get_quick_chat_key(2) != "Hold the lin", "the other fields are as they were");
+    check(app.web_chat_do(0, 0) && app.web_text_line().empty() && app.web_chat_do(5, 0) && app.hud().get_quick_chat_key(1).empty(), "clearing and committing empties the field and the quick chat");
+    type(app, std::string(130, 'x'));
+    check(app.web_text_line().size() == OptionsState::QUICK_CHAT_MAX, "a field holds 100 characters, as the profile's");
+    app.web_chat_do(5, 0);
+    app.hud().close_options();
+    check(app.hud().get_chat_input() == "chat line", "the chat line was never touched");
+    app.hud().open_options();
+    check(app.hud().get_quick_chat_key(1).size() == OptionsState::QUICK_CHAT_MAX, "the window opens again with the text that was written");
+    app.hud().close_options();
+}
+
+void test_options_enter() {
+    std::printf("[options enter] Enter is the window's own key\n");
+    AppRig rig(Aspect::Wide16x9, 1.0f, false, std::string(), true, true);
+    check(rig.ok, "the match is up");
+    if (!rig.ok) return;
+    Application& app = rig.app;
+    app.hud().open_options();
+    app.web_chat_do(4, 3);
+    app.web_chat_do(0, 0);
+    type(app, "Retreat");
+    app.web_chat_do(5, 0);
+    check(app.web_chat_do(3, 0) && app.hud().is_options_open(), "Enter is taken and goes through the queue: the window is still open until the frame reads it");
+    app.run_frame_with_delta(0.016f);
+    check(!app.hud().is_options_open() && app.web_text_mode() == 0, "the frame closed the window, as a keyboard's Enter does");
+    check(app.hud().get_quick_chat_key(3) == "Retreat", "and the text stays");
 }
 
 void test_other_refusals() {
@@ -152,6 +234,9 @@ int main(int argc, char* argv[]) {
     test_typing();
     test_enter();
     test_closed();
+    test_options_fields();
+    test_options_typing();
+    test_options_enter();
     test_other_refusals();
     test_not_a_match();
     std::printf("\nweb chat: %d checks, %d failures\n", g_checks, g_failures);
