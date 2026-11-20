@@ -118,7 +118,7 @@ class TheText(unittest.TestCase):
             self.assertFalse(key.startswith(mine) or mine.startswith(key), key)           # (no other door's entry is this one's)
         path = re.search(r"proxy_cache_path (\S+) keys_zone=ants_stats_cache:(\d+)m max_size=(\d+)m", HEAD)
         self.assertIsNotNone(path)
-        self.assertEqual(int(path.group(3)), 8)                                           # (the list is 6 kB at the most: the cache of the numbers has the room)
+        self.assertEqual(int(path.group(3)), 8)                                           # (the list is 30 kB at the most: the cache of the numbers has the room)
 
     def test_an_old_answer_is_served_only_while_a_new_one_is_fetched_never_because_the_server_is_silent(self):
         self.assertIn("proxy_cache_use_stale updating;", BLOCK)

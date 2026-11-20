@@ -3,6 +3,7 @@
 // Playwright (`require('playwright')`), a Chromium that it can start and a built ants_server.
 //   1. two browser contexts: the first makes its room public with Quick host (a real room, a real Visibility), the second opens the Games list and sees that room in the answer of the real /lobbies door (the host's name,
 //      the map, the seats), joins it from the list (a second client that only joins; the page's own room goes when the new one welcomes it), and the first sees the guest in its room;
+//   1k. a private room is a locked card in a third browser's list (no code in the real answer or in the page, nothing to press, Quick join skips it), and a Yours card in its host's own;
 //   2. what a screen shows: with --shots DIR, pictures of Home (the count on the Games button), the Games list (rows and the empty state), the Room (public and private, a guest's chip), the card of the question and the notices,
 //      at 390 x 844, 844 x 390 and 1280 x 800 (the sizes of the approved pictures), named games4_*.png, and a few measurements (every target at least 44 px, nothing wider than the window).
 //   0c. the pictures of the rows: a map of the players shows the library's (the picture is there, loaded), a map that has none leaves the plain square with no broken image, an original shows its own, and no list of maps is fetched for it.
@@ -219,6 +220,47 @@ async function flows() {
             site.close();
         }
 
+        // ---- 1k. a private room is a LOCKED card for everybody else (docs/PUBLIC_ROOMS.md): the real answer holds it with no code, a second browser sees a card with a padlock and nothing to press, Quick join skips it, the room's code is nowhere in
+        // what the answer says or in what that page holds, and the host's own list tags it Yours (the name is whatever the page calls the person: a guest name, since the page asks the site) ------------------------------------------------
+        {
+            const host = await newPage(browser, live, 'Maple', SIZES[2]);
+            await lit(host);
+            await host.click('.quick.host');
+            await host.waitForSelector('.gconfirm .gyes');
+            await host.evaluate(() => [...document.querySelectorAll('.gconfirm .gyes')].filter((b) => b.textContent === 'Private room')[0].click());
+            await until('the private room is made', async () => (await screenOf(host)) === 'room' && (await host.evaluate(() => /^[a-z0-9_-]+$/.test(new URL(document.getElementById('link').value).searchParams.get('room') || ''))), 10000);
+            const code = await host.evaluate(() => new URL(document.getElementById('link').value).searchParams.get('room'));
+            const name = 'Guest ' + await host.evaluate(() => window.localStorage.getItem('ants.guest'));       // (the page calls the person a guest: the digits that it made once and kept)
+            const watcher = await newPage(browser, live, 'Rowan', SIZES[2]);
+            await lit(watcher);
+            const text = await until('the real list holds the private room', async () => { const t = await (await watcher.request.get(live.url + '/lobbies')).text(); return t.indexOf('"private":true') !== -1 ? t : null; }, 12000);
+            const body = JSON.parse(text);
+            check('the real /lobbies door holds the private room as a row of its own kind: private, the host\'s name, the map and the seats (one person, three free colors), and no code; the room\'s code is nowhere in the answer', body.lobbies.length === 1 && body.lobbies[0].private === true && !('code' in body.lobbies[0]) && body.lobbies[0].host === name && body.lobbies[0].people === 1 && body.lobbies[0].free === 3 && body.count === 0 && text.indexOf(code) === -1, text);
+            await watcher.evaluate(() => document.querySelector('.htab.t-games').click());
+            await until('the locked card is in the list', async () => (await watcher.evaluate(() => document.querySelectorAll('.glist .gpriv').length)) === 1, 12000);
+            const card = await watcher.evaluate(() => { const c = document.querySelector('.glist .gpriv'); return { name: c.querySelector('.gname').textContent, tag: c.querySelector('.gprivtag').textContent, count: c.querySelector('.gcount').textContent, controls: c.querySelectorAll('button, a, input, [tabindex], [href], [data-code]').length, lock: !!c.querySelector('.glockbox'), told: c.querySelector('.sr').textContent, head: document.querySelector('.gpcount').textContent, pill: document.querySelector('.htab.t-games .pill').textContent, joins: document.querySelectorAll('.glist .gjoin').length, strip: !document.querySelector('.gempty').hidden && document.querySelector('.gempty').classList.contains('gslim') }; });
+            check('a second browser: the Games list holds one card, the host\'s, tagged PRIVATE, with a padlock, one of four seats and NOTHING to press (no button, link, field, focus stop or code), a slim strip instead of the big empty card, no Join anywhere', card.name === name && card.tag === 'Private' && card.count === '1/4' && card.controls === 0 && card.lock && card.joins === 0 && card.strip, JSON.stringify(card));
+            check('... the heading says none open, 1 private; the count on the Games button is 0 (a locked room is not a game to join); a screen reader hears that it cannot be joined', card.head === 'none open, 1 private' && card.pill === '0' && /^Private room, cannot join\./.test(card.told), JSON.stringify(card));
+            const swept = await watcher.evaluate((c) => ({ html: document.documentElement.outerHTML.indexOf(c) !== -1, text: document.body.innerText.indexOf(c) !== -1, url: location.href.indexOf(c) !== -1 }), code);
+            check('the room\'s code is nowhere in the second page: not in a text, not in an attribute, not in its address', !swept.html && !swept.text && !swept.url, JSON.stringify(swept));
+            await watcher.click('.glist .gpriv .glockbox', { force: true });
+            await watcher.click('.glist .gpriv .gname', { force: true });
+            await sleep(400);
+            const people = async () => (await (await watcher.request.get(live.url + '/lobbies')).json()).lobbies[0].people;
+            check('a press on the card (the padlock, the name) does nothing: the page stays on Home, no card, no toast, and the room still has its one person', await screenOf(watcher) === 'home' && (await watcher.evaluate(() => !document.querySelector('.gconfirm') && document.querySelector('.gtoast').hidden)) && await people() === 1);
+            await watcher.click('.quick.join');
+            await watcher.waitForSelector('.gconfirm .gcline');
+            const lines = await watcher.evaluate(() => [...document.querySelectorAll('.gconfirm .gcline')].map((e) => e.textContent));
+            check('Quick join skips it: the card says "No open games right now." with the line "1 private room is locked, so Quick join skips it.", and the room still has its one person', lines.length === 2 && lines[1] === '1 private room is locked, so Quick join skips it.' && (await textOf(watcher, '.gconfirm .gctitle')) === 'No open games right now.' && await people() === 1, JSON.stringify(lines));
+            await watcher.click('.gconfirm .gstay');
+            await host.click('.rhome');
+            await until('the host is on Home', async () => (await screenOf(host)) === 'home', 8000);
+            const own = await until('the host\'s own private room is a locked card tagged Yours', async () => (await host.evaluate(() => { const c = document.querySelector('.glist .gpriv'); return c && c.querySelector('.gyours') ? { yours: c.querySelector('.gyours').textContent, controls: c.querySelectorAll('button, a').length, head: document.querySelector('.gpcount').textContent } : null; })), 12000);
+            check('the host\'s own list shows the room as a locked card tagged Yours (found by its host, map and seats: a locked row has no code), with nothing to press; the heading counts it', own.yours === 'Yours' && own.controls === 0 && own.head === 'none open, 1 private', JSON.stringify(own));
+            for (const p of [host, watcher]) check('no script error in the page', p.errors.length === 0, p.errors.join(' | '));
+            for (const p of [host, watcher]) await p.context().close();
+        }
+
         // ---- 1. two contexts against the real server --------------------------------------------------------------------------------------------------------------------------------------------
         const maple = await newPage(browser, live, 'Maple', SIZES[2]);
         await lit(maple);
@@ -231,7 +273,7 @@ async function flows() {
         await lit(sage);
         const list = await until('the real list holds the room', async () => { const r = await (await sage.request.get(live.url + '/lobbies')).json(); return r.lobbies.some((x) => x.code === code) ? r : null; }, 10000);
         const mine = list.lobbies.find((x) => x.code === code);
-        check('the real /lobbies door lists the public room: its code, the host\'s name, the map (the server\'s default) and the seats (one person, three free colors)', mine.host === 'Maple' && /\.LVL$/.test(mine.map) && mine.people === 1 && mine.free === 3 && mine.size === 4);
+        check('the real /lobbies door lists the public room: its code, the host\'s name, the map (the server\'s default) and the seats (one person, three free colors)', mine.host === 'Maple' && /\.LVL$/.test(mine.map) && mine.people === 1 && mine.free === 3 && mine.size === 4, JSON.stringify(mine));
         await sage.evaluate(() => document.querySelector('.htab.t-games').click());
         await until('the row is in the popover', async () => (await textOf(sage, '.glist .gname')) === 'Maple', 12000);
         check('a second browser sees the room in its Games list (the count on the button too) and joins from it', (await textOf(sage, '.htab.t-games .pill')) === '1' && (await textOf(sage, '.glist .gcount')) === '1/4');
@@ -779,8 +821,7 @@ async function flows() {
         }
     } finally {
         for (const s of [live, fake, emptySite, offSite]) s.close();
-        await browser.close();
-        server.stop();
+        try { await browser.close(); } finally { server.stop(); }       // (the server goes even when the browser would not close)
     }
 }
 

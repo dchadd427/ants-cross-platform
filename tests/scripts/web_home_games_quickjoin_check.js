@@ -7,11 +7,12 @@
 //   4. nothing to join (an empty list, a list that is off), Host one!, Not now;
 //   5. the own room: left out by its code, asked about first when others are in it, kept until the Welcome;
 //   6. Cancel (its 700 ms, the second client let go of, no seat left behind), Escape, a double press, going Home and back, START, a stalled hand-off, a page that is on its way to a game, a match that runs;
-//   7. Leave room: asks only when other people are in the room, the same card, keyboard and touch.
+//   7. Leave room: asks only when other people are in the room, the same card, keyboard and touch;
+//   8. private rooms (locked cards): never counted, never tried, never asked for by a Hello, a line on the card when nothing else is open.
 // tests/scripts/test_web_home_games.py runs this with node (the quick tier). usage: node web_home_games_quickjoin_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const R = require('./web_home_games_rig.js')(process.argv[2]);
-const { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, chooseHost, pressEscape, popOf, rowsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, leaves, seatsOf, myRoom, guestRoom, roomAs, Games,
+const { GUEST, check, same, flush, fakeSite, row, locked, lockedCards, listOf, page, wait, classes, find, first, home, tap, chooseHost, pressEscape, popOf, rowsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, leaves, seatsOf, myRoom, guestRoom, roomAs, Games,
         PUBLIC, PRIVATE, STARTING, NET0, KEY, E, C, hex, roomMessage, welcome, reject, helloBytes, helloRoom, grouped, RULES0, done, broke } = R;
 
 const KEY2 = Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x60 + i));
@@ -621,6 +622,72 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     await wait(env, 16000);
     env.home('minex').click();
     check('the X stays off on a page whose hand-off did not come (it never asks, it never leaves)', card(env) === null && leaves(own) === 0 && env.home('minex').disabled === true);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 8. Private rooms are locked: Quick join does not count them, does not try them, and says so when nothing else is open
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{   // only locked rooms: nothing to join; the card says that Quick join skips them
+    const env = await withRooms([locked('Maple', { map: 'SMALL.LVL' }), locked('Quill', { map: 'TREASURE.LVL' })]);
+    await press(env);
+    same('only private rooms: the card of "no open games" (the page\'s own words) with one more line after the first, and no second client was opened', [title(env), find(card(env), 'gcline').map(textOf), env.sockets.length],
+        ['No open games right now.', ['Nobody is waiting for a player. Host one, and others can join you.', '2 private rooms are locked, so Quick join skips them.'], 0]);
+    check('... the card is still described by its first line, and Host one! has the focus', card(env).getAttribute('aria-describedby') === 'gc-line' && first(card(env), 'gcline').id === 'gc-line' && env.focused === act(env, 'gyes'));
+    tap(act(env, 'gstay'));
+    env.site.body = listOf([locked('Maple')]);
+    await wait(env, 31000);
+    await press(env);
+    same('one private room: "1 private room is locked, so Quick join skips it."', find(card(env), 'gcline').map(textOf).slice(1), ['1 private room is locked, so Quick join skips it.']);
+    tap(act(env, 'gstay'));
+    env.site.body = listOf([]);
+    await wait(env, 31000);
+    await press(env);
+    same('no private room: the card is as it was, with the one line', find(card(env), 'gcline').map(textOf), ['Nobody is waiting for a player. Host one, and others can join you.']);
+}
+{   // joinable rooms and locked ones: the locked are not counted, not tried, not asked for, and the best joinable room is the best
+    const env = await withRooms([locked('Aspen', { map: 'ISLANDS.LVL', people: 3, free: 1 })].concat(ROWS, [locked('Birch', { people: 3, free: 1 }), locked('Cedar', { people: 3, free: 1 })]));
+    await press(env);
+    same('the card looks through the open games only: "Looking through 5 open games for the best one."', find(card(env), 'gcline').map(textOf), ['Looking through 5 open games for the best one.']);
+    check('... the Hello of the second client is for the best joinable room (a Hello names a code, and a locked room has none to name)', env.sockets.length === 1 && askedFor(env.last()) === 'p4n8dz');
+    for (const wanted of CODES.slice(1, 3)) {                     // the tries go down the joinable rooms, three at most, and no locked room is among them
+        env.last().open().receive(reject(1));
+        await wait(env, 400);
+        check('... a room that is full: the next joinable one is tried, and it is ' + wanted, env.sockets.length > 1 && askedFor(env.last()) === wanted);
+    }
+    const asked = env.sockets.map((sock) => helloRoom(sock.sent[0] || sock.open().sent[0]));
+    same('the three rooms that were tried are the best three joinable ones, in order', asked, CODES.slice(0, 3));
+}
+{   // the page's own private room is a locked card of the list, and Quick join does not say that it skips it (it is the page's own room)
+    const env = await withRooms([]);
+    myRoom(env, ['Maya']);
+    env.site.body = listOf([locked('Maya', { map: 'TREASURE.LVL', people: 1, free: 3 })]);
+    env.roomBar('rhome').click();
+    await wait(env, 31000);
+    await press(env);
+    same('only the own private room is in the list: the card says that nobody is waiting and nothing about locked rooms', [title(env), find(card(env), 'gcline').map(textOf)], ['No open games right now.', ['Nobody is waiting for a player. Host one, and others can join you.']]);
+    tap(act(env, 'gstay'));
+    env.site.body = listOf([locked('Maya', { map: 'TREASURE.LVL', people: 1, free: 3 }), locked('Quill', { people: 3, free: 1 })]);
+    await wait(env, 31000);
+    await press(env);
+    same('with another private room too: "1 private room is locked, so Quick join skips it."', find(card(env), 'gcline').map(textOf).slice(1), ['1 private room is locked, so Quick join skips it.']);
+}
+{   // BEST and the list: the first joinable room, with two or more, and a locked card is never BEST
+    const site = fakeSite();
+    site.body = listOf([locked('Aspen', { people: 3, free: 1 }), row('c1v3rr', 'Clover', { map: 'TREASURE.LVL', people: 2, bots: 1, free: 1, age: 200 }), BEST]);
+    const env = await page({ site });
+    tap(env.home('games'));
+    await flush();
+    same('BEST is the best joinable room, and no locked card has it', [find(popOf(env), 'gbest').length, textOf(first(rowsOf(env)[0], 'gname')), find(lockedCards(env)[0], 'gbest').length], [1, 'Pebble', 0]);
+}
+{   // the scripted game server: a Hello is only ever for a room that has a code; a press on everything in the page reaches none for a private room
+    const env = await withRooms([locked('Maple'), locked('Quill', { people: 3, free: 1 })]);
+    tap(env.home('games'));
+    await flush();
+    for (const li of lockedCards(env)) li.all().forEach((e) => { try { e.click(); } catch (x) { /* a part with no press */ } });
+    tap(env.home('join'));
+    await flush();
+    tap(act(env, 'gstay'));
+    check('Quick join and a press on every part of every locked card: not one connection to the game server was made', env.sockets.length === 0);
 }
 
 done('Quick join and Leave room');

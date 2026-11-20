@@ -4,6 +4,7 @@
 //   * The room's state is the server's word: the switch is drawn from the last Room message, never from what a press asked, and a request that the page's pace holds back sends nothing.
 //   * Everything from the list is UNTRUSTED text: checked field by field (parseList), drawn with textContent, never as markup or a link, and a row that is not of the shape is dropped. At most 50 rows. The one address that a
 //     row's text makes is its map's picture (a checked file name, percent-encoded: AntsMapPicker.previewPath).
+//   * Private rooms (rows that say `private: true`, docs/PUBLIC_ROOMS.md) stand after the joinable rooms as LOCKED cards: a padlock, a PRIVATE tag, no button, no link. A private row has no code (one that has is dropped), and Quick join never tries one.
 //   * Matches that run now (GET /live, docs/REPLAYS.md "Live") stand in the list below the open rooms as rows with a Live mark and Watch (/play?live=<id>: the same tab, a new one only while the page holds a room); they are always shown (the open rooms first; nothing is kept in
 //     this browser). The door carries no room code and a room that is listed is waiting, so a running match is never a room's row. /live is looked at every 5 s (and at once, 1.5 s apart at the least, when a room of the list has gone: it may have started its match, which is listed from its start), only while the list shows, and a
 //     server without that door (404) or a failed look only hides the section.
@@ -42,7 +43,9 @@
     var BOT_NAME = /^Bot \(|\(bot(, [^()]+)?\)$/;           // a computer player's name as a server writes it ("Pip (bot, Hard)", "Kit (bot, idle)"; the older "Bot (Medium)"): the rule of the lobby's name check, which keeps these names from people
     var SEATS = ['Green', 'Red', 'Blue', 'Black'];       // the colors of seats 0 - 3, in the words of the door's players strings
     var NARROW = 720;                                    // px: the page's phone layout (web/lobby.html)
-    var SEAT_PERSON = 1, SEAT_CLIENT = 2;                // the Room message's states of a color that a person holds (lobby_net.js SLOT)
+    var SEAT_EMPTY = 0, SEAT_PERSON = 1, SEAT_CLIENT = 2;      // the Room message's states of a color (lobby_net.js SLOT; a server's lobby has persons as Client only)
+    var PLAN_EASY = 1, PLAN_HARD = 3;                    // its plan kinds that are a computer player (lobby_net.js PLAN)
+    var LOCKED_SHOWN = 6;                                // locked cards that are drawn; the rest is the line "and 6 more private rooms"
     var TEXT = {
         title: 'Open games', loading: 'Looking for games…', off: 'Games list is off right now', offHint: 'Join by code still works.', none: 'none waiting',
         emptyTitle: 'No open games right now.', emptyLine: 'Rooms show up here when their host switches them to Public.', hostOne: 'Host one!', quickHost: 'Quick host', quickJoin: 'Quick join',
@@ -53,24 +56,29 @@
         noneLine: 'Nobody is waiting for a player. Host one, and others can join you.', noneYours: 'Your room goes public with its map and your friends in it.', noneNew: 'A new room opens for you, and it goes public.', joiningCode: 'Joining the room…', joinFirst: ' Wait for it, or cancel it in the list.', opening: 'The game is opening. If it does not, reload this page.',
         already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went private after 30 minutes. Make it public again?',
         hostChanged: 'This room is private again because the host changed.', stillPrivate: 'Your room is still private. Use the Public switch in the room.',
+        privateTag: 'Private', noneJoin: 'No open games to join right now.',
         watch: 'Watch', liveMark: 'Live', mode187: '187', inProgress: 'In progress', soFar: ' so far', starting: 'Starting\u2026', nobodyNamed: 'Players not named',
         full: 'That room is full.', started: 'The match in that room has already started.', gone: 'That game is not open any more.', silent: 'The server did not answer. Try again in a moment.'
     };
 
     // ---- the pure parts ----
     function whole(v, max) { return typeof v === 'number' && isFinite(v) && Math.floor(v) === v && v >= 0 && v <= max; }
-    // One row of the list as the page may show it, or null. The nine fields of docs/PUBLIC_ROOMS.md, each of its type and in its range (unknown extra fields are ignored): code (what a room code may be, no capital), host (printable ASCII,
-    // up to 32: the server's own rule for a name), map (a map file's name), mode, people, bots, free and size (people + bots + free = size, 1 to 4, a color for a newcomer), age.
-    function rowOf(raw, rules) {
-        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-        if (typeof raw.code !== 'string' || !/^[a-z0-9_-]{1,32}$/.test(raw.code)) return null;
+    // The fields that a joinable row and a locked row share, or null: host (printable ASCII, up to 32: the server's own rule for a name), map (a map file's name), mode, people, bots, free and size (people + bots + free = size, 1 to 4, a color for a newcomer).
+    function seatsRow(raw, rules) {
         if (typeof raw.host !== 'string' || !/^[\x20-\x7e]{0,32}$/.test(raw.host)) return null;
         if (typeof raw.map !== 'string' || !rules.validMapFile(raw.map)) return null;
         if (typeof raw.mode !== 'string' || !/^[\x20-\x7e]{0,32}$/.test(raw.mode)) return null;
-        if (!whole(raw.people, 4) || !whole(raw.bots, 4) || !whole(raw.free, 4) || !whole(raw.size, 4) || !whole(raw.age, 2147483647)) return null;
+        if (!whole(raw.people, 4) || !whole(raw.bots, 4) || !whole(raw.free, 4) || !whole(raw.size, 4)) return null;
         if (raw.size < 1 || raw.free < 1 || raw.people + raw.bots + raw.free !== raw.size) return null;
         var known = rules.mapOfFile(raw.map);
-        return { code: raw.code, host: raw.host.replace(/^ +| +$/g, '') || 'Player', map: raw.map, mapKey: known ? known.key : '', mapName: known ? known.name : rules.communityName(raw.map).slice(0, 28), people: raw.people, bots: raw.bots, free: raw.free, size: raw.size, age: raw.age };
+        return { host: raw.host.replace(/^ +| +$/g, '') || 'Player', map: raw.map, mapKey: known ? known.key : '', mapName: known ? known.name : rules.communityName(raw.map).slice(0, 28), people: raw.people, bots: raw.bots, free: raw.free, size: raw.size };
+    }
+    // One row of the list as the page may show it, or null. The nine fields of docs/PUBLIC_ROOMS.md, each of its type and in its range (unknown extra fields are ignored): code (what a room code may be, no capital), age, and the seven of seatsRow.
+    function rowOf(raw, rules) {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+        if (typeof raw.code !== 'string' || !/^[a-z0-9_-]{1,32}$/.test(raw.code) || !whole(raw.age, 2147483647)) return null;
+        var r = seatsRow(raw, rules);
+        return r && { code: raw.code, host: r.host, map: r.map, mapKey: r.mapKey, mapName: r.mapName, people: r.people, bots: r.bots, free: r.free, size: r.size, age: raw.age };
     }
     // One match of the door's answer to GET /live as the page may show it, or null: the id of the server's shape, the map as the door sends it (the whole file name, like a room's: 'TREASURE.LVL', 'DRY LAND.lvl'; else the one in the id), the seconds it has run (or its turns / 20), and at most four
     // players as the door writes them ("Green (Ann)", "Red", "Blue (Bot (Medium))"): a color word and the name, printable ASCII only, and the game mode (the word '187' marks a match of mode 187; any other value, or none, is a plain match).
@@ -120,6 +128,19 @@
         }
         return rows;
     }
+    // One locked row (a private room), or null: `private` is true, the fields of seatsRow, and NO `code` key. Nothing else is read, so nothing that leads to the room can be drawn.
+    function lockedOf(raw, rules) {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw) || raw.private !== true || Object.prototype.hasOwnProperty.call(raw, 'code')) return null;
+        var row = seatsRow(raw, rules);
+        if (row) row.mode187 = raw.mode === '187';
+        return row;
+    }
+    // The locked rows of an answer ({ format: 1, lobbies: [...] }), at most 50, in its order (none when it is not that shape: parseList says that the list is off)
+    function parseLocked(data, rules) {
+        var list = data && typeof data === 'object' && !Array.isArray(data) && data.format === 1 && Array.isArray(data.lobbies) ? data.lobbies : [], out = [];
+        for (var i = 0; i < list.length && i < SCAN_MAX && out.length < ROWS_MAX; i++) { var row = lockedOf(list[i], rules); if (row) out.push(row); }
+        return out;
+    }
     // The wait before the next look: the base (30 s closed, 5 s open) doubled for every failure in a row, up to the cap, +-20 % (random: 0 to 1)
     function delayOf(open, failures, random) {
         var base = open ? EVERY_OPEN : EVERY_CLOSED, cap = open ? CAP_OPEN : CAP_CLOSED;
@@ -150,7 +171,7 @@
 
         var docked = !!env.dock, rows = [], loaded = false, off = false, failures = 0, isOpen = docked, polling = false, round = 0, pollTimer = null, gone = !!env.handoff, joining = false, joinButtons = [];
         var tracked = null, lastRoom = null, lastSent = 0, refreshTimer = null, refreshFor = null, pending = null, pendingTimer = null, askedAt = 0, locked = false, lockTimer = null, hint = '', lastInput = now(), lastLook = 0, floorTimer = null, joinSeq = 0, cancelTimer = null, paintedSig = null;
-        var dialog = null, noticeKind = '', quiet = [], finding = false;
+        var dialog = null, noticeKind = '', quiet = [], finding = false, priv = [];             // priv: the locked rows (private rooms) of the last good answer
         var live = [], liveLoaded = false, liveOff = false, liveFails = 0, liveTimer = null, liveBusy = false, liveRound = 0, lastLive = 0, liveSig = null, liveLens = [];
         var sided = [], matches = false, talk = null;                   // sided: the ids of matches whose Watch the page showed while it held a room; matches: it held a room, so its Matches links were new tabs; talk: the channel of those tabs
 
@@ -467,7 +488,8 @@
         liveBox.hidden = true; liveBox.appendChild(liveHead); liveBox.appendChild(liveList);
         popJoin.hidden = true; popJoin.setAttribute('role', 'status'); popJoin.appendChild(popJoinText); popJoin.appendChild(popJoinStop);
         popEmpty.appendChild(el('span', 'ant ant-green')); popEmpty.firstChild.setAttribute('aria-hidden', 'true');
-        popEmpty.appendChild(el('p', 'gemtitle', TEXT.emptyTitle)); popEmpty.appendChild(el('p', 'gemline', TEXT.emptyLine));
+        var popEmptyTitle = el('p', 'gemtitle', TEXT.emptyTitle);
+        popEmpty.appendChild(popEmptyTitle); popEmpty.appendChild(el('p', 'gemline', TEXT.emptyLine));
         popEmpty.appendChild(button('gemhost', TEXT.hostTitle, guard(function () { quickHost(); })));       // (Host a game: the same as Quick host in the bar)
         popOff.appendChild(el('p', 'gemtitle', TEXT.off)); popOff.appendChild(el('p', 'gemline', TEXT.offHint));
         [['player', TEXT.legendPlayer], ['bot', TEXT.legendBot], ['open', TEXT.legendOpen]].forEach(function (k) { var s = el('span', 'gleg'); s.appendChild(el('i', 'gdot ' + k[0])); s.appendChild(doc.createTextNode(k[1])); popLegend.appendChild(s); });
@@ -475,7 +497,7 @@
         codeInput.setAttribute('spellcheck', 'false'); codeInput.setAttribute('aria-describedby', 'gc-hint'); codeHint.id = 'gc-hint';
         codeRow.appendChild(codeInput); codeRow.appendChild(codeGo); codeRow.appendChild(codeClose); codeBox.appendChild(codeRow); codeBox.appendChild(codeHint);
         codeLink.type = 'button'; codeBox.id = 'gc-box'; codeBox.hidden = true; codeLink.setAttribute('aria-expanded', 'false'); codeLink.setAttribute('aria-controls', 'gc-box'); codeClose.setAttribute('aria-label', TEXT.closeCode);
-        [popList, popLoad, popEmpty, popOff, liveBox].forEach(function (n) { popBody.appendChild(n); });
+        [popEmpty, popList, popLoad, popOff, liveBox].forEach(function (n) { popBody.appendChild(n); });
         [popHead, codeBox, popJoin, popNote, popBody, popLegend].forEach(function (n) { pop.appendChild(n); });
         if (docked) pop.className += ' gdock';
         (env.dock || host).appendChild(pop);
@@ -491,6 +513,28 @@
 
         function visibleRows() { var own = ownCode(); return bestOrder(rows.filter(function (r) { return r.code !== own; })); }          // the OTHER rooms, best first (Quick join and BEST)
         function listRows() { var own = ownCode(); return rows.filter(function (r) { return r.code === own; }).concat(visibleRows()); }      // the list: the page's own public room first (tagged Yours), then the others
+        // The page's own private room among the locked rows. A locked row has no code, so the room is found by what the row shows (host, map, mode, seats) against the Room message: at worst a look-alike is tagged, or a stale answer shows it plain.
+        function ownLocked() {
+            var c = client(), room = c && c.room, leader = room && room.slots && room.slots[room.leader];
+            if (!room || !room.lobby || room.isPublic || !leader) return -1;
+            var people = 0, bots = 0, free = 0, name = (leader.name || 'Player ' + (room.leader + 1)).replace(/^ +| +$/g, '') || 'Player';
+            for (var i = 0; i < room.slots.length; i++) {
+                var st = room.slots[i].state, kind = room.plan[i];
+                if (st === SEAT_CLIENT) people++;
+                else if (st === SEAT_EMPTY && kind >= PLAN_EASY && kind <= PLAN_HARD) bots++;
+                else if (st === SEAT_EMPTY && kind === 0) free++;
+            }
+            for (var k = 0; k < priv.length; k++) {
+                var r = priv[k];
+                if (r.host === name && r.map === room.map && r.mode187 === (room.mode === 1) && r.people === people && r.bots === bots && r.free === free) return k;
+            }
+            return -1;
+        }
+        function lockedList() {                            // [{ row, yours }]: the locked rows, the page's own private room first (tagged Yours)
+            var at = ownLocked(), out = at < 0 ? [] : [{ row: priv[at], yours: true }];
+            priv.forEach(function (r, i) { if (i !== at) out.push({ row: r, yours: false }); });
+            return out;
+        }
         function paintPill() {                              // the count beside Games (and on the phone's tab, which copies it): the open rooms and the matches in progress together
             var n = listRows().length, m = live.length, shown = loaded && !off;
             parts.pill.hidden = !shown;
@@ -511,15 +555,24 @@
             pic.setAttribute('aria-hidden', 'true');
             return pic;
         }
-        function rowNode(row, onList, best, yours) {
-            var li = el(onList ? 'li' : 'div', 'gitem'), seats = seatsOf(row), pic = picOf(row), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots');
+        // `lock` ('private', or 'yours' for the page's own): a locked card (a private room): dimmed, with the tags PRIVATE, Yours and 187 and a padlock where Join stands. No button, link, focus stop or data-code; a screen reader hears one sentence (the pieces are hidden from it).
+        function rowNode(row, onList, best, yours, lock) {
+            var li = el(onList ? 'li' : 'div', lock ? 'gitem gpriv' : 'gitem'), seats = seatsOf(row), pic = picOf(row), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots');
             dots.setAttribute('aria-hidden', 'true');
             top.appendChild(el('span', 'gname', row.host)); top.appendChild(el('span', 'gmapname', row.mapName));
             seats.dots.forEach(function (kind, i) { dots.appendChild(el('i', 'gdot ' + kind + ' c' + i)); });
             line.appendChild(dots); line.appendChild(el('span', 'gcount', seats.count)); line.appendChild(el('span', 'gbots', seats.bots));
+            if (lock) {
+                var marks = el('span', 'gmarks');
+                marks.appendChild(el('span', 'gprivtag', TEXT.privateTag)); if (lock === 'yours') marks.appendChild(el('span', 'gyours', TEXT.yours)); if (row.mode187) marks.appendChild(el('span', 'gmode', TEXT.mode187));
+                top.appendChild(marks); text.setAttribute('aria-hidden', 'true');
+            }
             if (best || yours) top.appendChild(el('span', yours ? 'gyours' : 'gbest', yours ? TEXT.yours : TEXT.best));       // (beside the map's name; a narrow row wraps it under)
             text.appendChild(top); text.appendChild(line); li.appendChild(pic); li.appendChild(text);
-            if (onList && !yours) {
+            if (lock) {
+                var pad = el('span', 'glockbox'), tell = el('span', 'sr', 'Private room, cannot join. ' + (lock === 'yours' ? 'Yours. ' : '') + possessive(row.host) + ' room, ' + row.mapName + ', ' + seats.count + ' seats taken, ' + seats.bots + '.');
+                pad.setAttribute('aria-hidden', 'true'); li.appendChild(pad); li.appendChild(tell);
+            } else if (onList && !yours) {
                 var b = button('gjoin', TEXT.join, guard(function () { joinRow(row); }));
                 b.setAttribute('aria-label', 'Join ' + possessive(row.host) + ' room, ' + seats.count + ' seats taken, ' + seats.bots + ', ' + row.mapName); b.setAttribute('data-code', row.code);
                 joinButtons.push(b); li.appendChild(b);
@@ -576,24 +629,32 @@
                 if (l) { l.node.textContent = lengthWords(e); l.link.setAttribute('aria-label', 'Watch the ' + l.kind + ' on ' + l.map + ', ' + l.names + ', ' + lengthWords(e)); }
             });
         }
-        function countLine(n) {                            // the list's head: "3 open, 2 in progress" while the matches are shown, else "3 waiting - updates live"
+        function countLine(n, p) {                         // the list's head: "3 open, 3 private, 2 in progress" (a part only when there is one: "none open, 2 private"), else "3 waiting - updates live"
             if (!loaded || off) return '';
-            if (liveShown() && live.length) return countText(n) + ' open, ' + countText(live.length) + ' in progress';
-            return n === 0 ? TEXT.none : countText(n) + ' waiting' + TEXT.live;
+            var m = liveShown() ? live.length : 0, parts;
+            if (!p && !m) return n === 0 ? TEXT.none : countText(n) + ' waiting' + TEXT.live;
+            parts = [!n && p ? 'none open' : countText(n) + ' open'];
+            if (p) parts.push(countText(p) + ' private');
+            if (m) parts.push(countText(m) + ' in progress');
+            return parts.join(', ');
         }
         function paintList() {
-            var shown = listRows(), lead = shown.length - visibleRows().length, active = doc.activeElement, focusCode = active && active.getAttribute ? active.getAttribute('data-code') : null;
-            popCount.textContent = countLine(shown.length);
+            var shown = listRows(), lead = shown.length - visibleRows().length, active = doc.activeElement, focusCode = active && active.getAttribute ? active.getAttribute('data-code') : null, locks = lockedList();
+            popCount.textContent = countLine(shown.length, locks.length);
             paintLive();
             paintPill();
-            popLoad.hidden = loaded; popOff.hidden = !(loaded && off); popEmpty.hidden = !(loaded && !off && !shown.length && !(liveShown() && live.length)); popList.hidden = !(loaded && !off && shown.length); popLegend.hidden = popList.hidden;
+            popLoad.hidden = loaded; popOff.hidden = !(loaded && off); popEmpty.hidden = !(loaded && !off && !shown.length && (locks.length || !(liveShown() && live.length)));
+            popEmpty.className = locks.length ? 'gempty gslim' : 'gempty'; popEmptyTitle.textContent = locks.length ? TEXT.noneJoin : TEXT.emptyTitle;         // (private rooms but none to join: the card becomes a slim strip above the locked cards)
+            popList.hidden = !(loaded && !off && (shown.length || locks.length)); popLegend.hidden = popList.hidden;
             popNote.hidden = !popNote.textContent;
-            var sig = JSON.stringify(shown.map(function (r) { return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size]; }).concat(lead));       // (the rows are made again only when what they show changed: a press that straddles a repaint is not lost, and a focus stays)
+            var sig = JSON.stringify(shown.map(function (r) { return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size]; }).concat(lead, locks.map(function (l) { return [l.row.host, l.row.map, l.row.mode187, l.row.people, l.row.bots, l.row.free, l.row.size, l.yours]; })));       // (the rows are made again only when what they show changed: a press that straddles a repaint is not lost, and a focus stays)
             if (sig === paintedSig) return;
             paintedSig = sig;
             while (popList.firstChild) popList.removeChild(popList.firstChild);
             joinButtons = [];
             shown.forEach(function (r, n) { popList.appendChild(rowNode(r, true, n === lead && shown.length - lead > 1, n < lead)); });
+            locks.slice(0, LOCKED_SHOWN).forEach(function (l) { popList.appendChild(rowNode(l.row, true, false, false, l.yours ? 'yours' : 'private')); });
+            if (locks.length > LOCKED_SHOWN) { var more = locks.length - LOCKED_SHOWN; popList.appendChild(el('li', 'gmore', 'and ' + (locks.length >= ROWS_MAX ? (ROWS_MAX - LOCKED_SHOWN) + '+' : more) + ' more private room' + (more === 1 ? '' : 's'))); }
             busy(joining, popJoinText.textContent);
             if (focusCode) { var again = popList.querySelector('[data-code="' + focusCode + '"]'); if (again && again.focus) again.focus(); }
         }
@@ -693,6 +754,10 @@
             if (typeof win.fetch !== 'function') { settle(null); done(); return; }
             look(LIST_URL).then(function (data) { settle(data); done(); });
         }
+        function lockedLine() {                                    // "2 private rooms are locked, so Quick join skips them." (not the page's own room); '' when there are none
+            var n = priv.length - (ownLocked() >= 0 ? 1 : 0);
+            return n <= 0 ? '' : (n === 1 ? '1 private room is locked, so Quick join skips it.' : countText(n) + ' private rooms are locked, so Quick join skips them.');
+        }
         function stopFinding() { finding = false; joinSeq++; try { if (page.cancel) page.cancel(); } catch (e) { /* the page's own */ } }
         function lookLine(n) { return 'Looking through ' + n + (n === 1 ? ' open game' : ' open games') + ' for the best one.'; }
         function findingCard(mine, n, opener) {
@@ -700,9 +765,9 @@
                 onClose: function () { if (mine === joinSeq) stopFinding(); } });
         }
         function nobody(off, opener) {                             // nothing to join, or every room was filled meanwhile: Host one! is Quick host
-            var c = client(), mine = c && c.room && c.room.lobby;
+            var c = client(), mine = c && c.room && c.room.lobby, note = lockedLine();
             finding = false;
-            card({ mark: 'shadow', stack: true, title: off ? TEXT.off : TEXT.emptyTitle, lines: [TEXT.noneLine], acts: [{ text: TEXT.hostOne, cls: 'gyes big', run: hostOne }, { text: TEXT.notNow, cls: 'gstay', back: true, before: mine ? TEXT.noneYours : TEXT.noneNew }], focus: 0, opener: opener });
+            card({ mark: 'shadow', stack: true, title: off ? TEXT.off : TEXT.emptyTitle, lines: note ? [TEXT.noneLine, note] : [TEXT.noneLine], acts: [{ text: TEXT.hostOne, cls: 'gyes big', run: hostOne }, { text: TEXT.notNow, cls: 'gstay', back: true, before: mine ? TEXT.noneYours : TEXT.noneNew }], focus: 0, opener: opener });
         }
         function welcomed(row) {                           // the page is in the room: the card says so, and the Room opens by itself or at a press
             finding = false;
@@ -799,11 +864,13 @@
             look(LIST_URL).then(function (data) { if (mine === round) { polling = false; settle(data); } }, function () { if (mine === round) { polling = false; settle(null); } });
         }
         function settle(data) {
-            var list = null;
+            var list = null, locks = [];
             try { list = parseList(data, rules); } catch (e) { list = null; }
+            try { locks = list === null ? [] : parseLocked(data, rules); } catch (e) { locks = []; }
             var before = rows, hadList = loaded && !off;
             loaded = true;
             if (list === null) { off = true; failures++; rows = []; } else { off = false; failures = 0; rows = list; }
+            priv = locks;
             paintPill();
             if (isOpen) paintList();
             schedule();
@@ -900,5 +967,5 @@
         };
     }
 
-    return { TEXT: TEXT, rowOf: rowOf, parseList: parseList, liveOf: liveOf, parseLive: parseLive, liveDelay: liveDelay, clockText: clockText, LIVE_EVERY: LIVE_EVERY, LIVE_SOON: LIVE_SOON, delayOf: delayOf, countText: countText, bestOrder: bestOrder, seatsOf: seatsOf, mount: mount, EVERY_CLOSED: EVERY_CLOSED, EVERY_OPEN: EVERY_OPEN, REFRESH_MS: REFRESH_MS, ROWS_MAX: ROWS_MAX };
+    return { TEXT: TEXT, rowOf: rowOf, parseList: parseList, lockedOf: lockedOf, parseLocked: parseLocked, liveOf: liveOf, parseLive: parseLive, liveDelay: liveDelay, clockText: clockText, LIVE_EVERY: LIVE_EVERY, LIVE_SOON: LIVE_SOON, delayOf: delayOf, countText: countText, bestOrder: bestOrder, seatsOf: seatsOf, mount: mount, EVERY_CLOSED: EVERY_CLOSED, EVERY_OPEN: EVERY_OPEN, REFRESH_MS: REFRESH_MS, ROWS_MAX: ROWS_MAX };
 });
