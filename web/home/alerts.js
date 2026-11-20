@@ -5,10 +5,10 @@
 //   * A person (never a computer player: the lobby's `joined` event is for people) joins the room that this page holds: on Home a toast over the page says who and where, with Open (the Room's own toast stays for the Room);
 //     while the page is in the background the tab's title blinks. The switch for it turns both off. The sound, once one is approved, plays with it.
 //   * Everything that is said (names) becomes DOM text with createElement and textContent only, never markup.
-//   * The bell in the top bar (next to the account button) shows where the alerts stand on this device: a dot when notifications are not set up (the browser's permission is still "default"), plain when they are on
+//   * The bell in the top bar (right beside the Menu's button, on its left, behind the account button when there is one) shows where the alerts stand on this device: a dot when notifications are not set up (the browser's permission is still "default"), plain when they are on
 //     ("granted"), struck through when the browser blocks them ("denied"), an arrow on an iPhone that has not installed the app (it has no notifications before that), and plain for a visitor who is not logged in. It
 //     READS the permission (Notification.permission) and never asks for it: no call of requestPermission anywhere, on load or on a press. A press opens the sheet. A browser with no notifications at all has no bell
-//     (the Menu's row stays). On a phone held upright while the page holds a room the bell has no room beside My room: it is not drawn and the Menu's button has the dot.
+//     (the Menu's row stays). The bell is drawn in every state of the bar, a room held or not, on a phone and in a wide window, so that the Menu's button stays in the corner and has no dot.
 // ES5, no module system: a page gets AntsHomeAlerts, node gets module.exports (tests/scripts/web_home_alerts_check.js). It uses the class .gshade of web/home/games.css, and looks out for the .gtoast that the Games list shows.
 (function (root, factory) {
     var api = factory();
@@ -31,7 +31,7 @@
 
     function shorten(name) { name = String(name); return name.length > NAME_MAX ? name.slice(0, NAME_MAX - 1) + '\u2026' : name; }
 
-    // mount({ doc, win, core (AntsAlertCore), ctl: { screen() -> 'home'|'room', show(name, how) }, bar (the right end of Home's bar: the bell goes in front of its first button), menuBtn (Home's Menu button: it gets the dot),
+    // mount({ doc, win, core (AntsAlertCore), ctl: { screen() -> 'home'|'room', show(name, how) }, bar (the right end of Home's bar), menuBtn (Home's Menu button, a child of bar: the bell goes in front of it),
     //         signedIn() (whether the visitor is logged in), dock() (the chat dock, when it is there: its tap(fn) says when the visitor changes), table (optional: the sound table) }) -> { row(onPress), open(opener), close(), alert(kind, data), refresh(), flash }
     function mount(env) {
         var doc = env.doc, win = env.win, core = env.core, ctl = env.ctl;
@@ -182,7 +182,6 @@
             if (!bell) return;
             var state = stateNow(), dot = state === 'off' && !seen.is();      // (the dot: not set up, and the sheet not looked at yet)
             bell.hidden = !state;
-            if (env.menuBtn) env.menuBtn.className = String(env.menuBtn.className).split(/\s+/).filter(function (c) { return c && c !== 'al-dot'; }).concat(dot ? ['al-dot'] : []).join(' ');
             if (!state || state + dot === drawn) return;
             drawn = state + dot;
             var words = state === 'guest' ? title() : BELL[state], ic = icon(state === 'blocked' ? 'bellx' : 'bell'), m = mark(state);
@@ -195,7 +194,7 @@
             if (!env.bar || !env.bar.insertBefore) return;
             bell = el('button', 'btn al-bell'); bell.type = 'button'; bell.hidden = true;
             bell.addEventListener('click', function () { open(bell); });         // (a press opens the sheet and nothing else: the browser is never asked)
-            env.bar.insertBefore(bell, env.bar.firstChild);
+            env.bar.insertBefore(bell, env.menuBtn && env.menuBtn.parentNode === env.bar ? env.menuBtn : null);          // (right before the Menu's button: its right edge is one gap from the Menu's, whoever else is in the bar)
             refresh();
             try { win.addEventListener('focus', refresh); doc.addEventListener('visibilitychange', refresh); } catch (e) { /* the bell is read again when the page asks */ }
             try {                                          // the browser says when its permission changes (reading it never asks)
