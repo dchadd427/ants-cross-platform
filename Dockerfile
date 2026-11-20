@@ -247,6 +247,9 @@ COPY web/hud_fullscreen.js /usr/share/nginx/html/hud_fullscreen.js
 # The screen stays on while a match is played or a recording plays (docs/PLAY_IN_BROWSER.md "The screen stays on"): the game page asks the browser for a Screen Wake Lock (wake_lock.js)
 COPY web/wake_lock.js /usr/share/nginx/html/wake_lock.js
 
+# The data channels to the other players of a match (docs/P2P_HINTS.md): the game's hints travel between the browsers through the operator's relay (p2p.js, called by the game's wasm_rtc.cpp)
+COPY web/p2p.js /usr/share/nginx/html/p2p.js
+
 # The touch buttons for the game's hotkeys (docs/TOUCH.md "The hotkey buttons"): the game page makes them on a touch screen during a match (touch_keys.js, touch_keys.css)
 COPY web/touch_keys.js /usr/share/nginx/html/touch_keys.js
 COPY web/touch_keys.css /usr/share/nginx/html/touch_keys.css

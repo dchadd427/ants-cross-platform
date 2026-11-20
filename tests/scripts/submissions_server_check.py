@@ -30,6 +30,7 @@ SERVER = os.path.join(REPO, BUILD, "src", "ants_server", "ants_server")
 LVL_TOOL = os.path.join(REPO, BUILD, "lvl_tool")
 THUMB = os.path.join(REPO, BUILD, "src", "ants_thumb", "ants_thumb")          # (the picture maker: with it the server draws the pictures of the maps; without it they answer 404)
 CHD = os.path.join(REPO, "Original-Ants", "ants.chd")
+PICTURE_SECONDS = 120                                  # (how long a test waits for a picture: the maker draws one at a time, and a child process may take 30 seconds on a busy machine before the server kills it)
 SECRET = admin_pass.TEST_SECRET                        # (the key of the pass: a made-up one)
 REF_DAVE = "0123456789abcdef"
 REF_MIA = "fedcba9876543210"
@@ -43,6 +44,17 @@ def free_port():
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import quick_http
     return quick_http.free_port()
+
+
+def wait_for_picture(ask, seconds=PICTURE_SECONDS):
+    """The answer of ask() for a picture, which the picture maker draws behind the request (docs/MAP_SUBMISSIONS.md "Pictures": one child process at a time, a picture that is not made yet is a 404): a 404 is asked
+    again until `seconds` have passed when the maker is built (a deadline for a machine that is busy: the answer comes as soon as the picture is there); a server that has none answers 404 for good."""
+    until = time.monotonic() + (seconds if os.path.exists(THUMB) else 0)
+    while True:
+        answer = ask()
+        if answer[0] != 404 or time.monotonic() >= until:
+            return answer
+        time.sleep(0.2)
 
 
 class Server:
@@ -149,13 +161,7 @@ class TheWholeWay(unittest.TestCase):
         return self.owner.call(method, path, body)
 
     def picture_of(self, ask):
-        """The answer of ask() for a picture, which the picture maker draws behind the request (docs/MAP_SUBMISSIONS.md "Pictures"): a 404 is asked again for up to 30 seconds when the maker is built; a server that has none answers 404 for good."""
-        until = time.time() + (30 if os.path.exists(THUMB) else 0)
-        while True:
-            answer = ask()
-            if answer[0] != 404 or time.time() >= until:
-                return answer
-            time.sleep(0.2)
+        return wait_for_picture(ask)
 
     def assert_picture(self, answer):
         """With the picture maker: a PNG of 300 x 300 pixels, the picture of the setup screen's box; without it: a 404, so that the page keeps its empty square."""

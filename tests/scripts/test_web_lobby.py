@@ -534,7 +534,7 @@ class TheGamePage(PageCase):
         join = self.page[self.page.index("function joinArguments(search, secure, host) {"):]
         join = join[:join.index("return out;", join.index("if (join && "))]                                     # (the first "return out;" is the one of an address that cannot be read)
         self.assertEqual(re.findall(r"out\.args\.push\('(--[a-z-]+)'", join),
-                         ["--join-url", "--room", "--room-map", "--room-seats", "--room-teams", "--room-leader-start", "--platform", "--seat", "--fill-bots", "--teams", "--start-when", "--name"])
+                         ["--join-url", "--room", "--room-map", "--room-seats", "--room-teams", "--room-leader-start", "--platform", "--direct", "--seat", "--fill-bots", "--teams", "--start-when", "--name"])
         self.assertIn("var roomTeams = antsTeamsArg(q.get('roomteams'));", join)
         self.assertIn("var platform = antsPlatformArg(q.get('platform'));", join)
         self.assertNotIn("navigator", join)                                                                    # (the page does not look for the platform: it is the address's word or none)
@@ -610,7 +610,7 @@ class TheDocuments(unittest.TestCase):
         rows = [[cell.strip() for cell in line.strip("|").split("|")] for line in table.splitlines()[2:]]
         self.assertEqual([(row[0], row[2]) for row in rows], [("`roommap`", "`--room-map <key>`"), ("`roomseats`", "`--room-seats <n>`"), ("`roomteams`", "`--room-teams <A+B>`"),
                                                               ("`roomleaderstart`", "`--room-leader-start`"), ("`platform`", "`--platform <word>`")])
-        self.assertIn("`--join-url`, `--room`, `--room-map`, `--room-seats`, `--room-teams`, `--room-leader-start`, `--platform`, `--seat`, `--fill-bots`, `--teams`, `--start-when`, `--name`, then the page's own `--aspect`", page)
+        self.assertIn("`--join-url`, `--room`, `--room-map`, `--room-seats`, `--room-teams`, `--room-leader-start`, `--platform`, `--direct`, `--seat`, `--fill-bots`, `--teams`, `--start-when`, `--name`, then the page's own `--aspect`", page)
         for stale in ("`demo-<map>-4p-", "a word of the room's code", "demo-treasure-4p-", "is a word of the code itself", "a word of the code itself"):                 # (the old codes named the map, the seats and the teams)
             self.assertNotIn(stale, page, stale)
 
