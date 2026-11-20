@@ -564,7 +564,7 @@ void SimulationEngineImpl::remove_ant(AntUnit& a) {
         const auto& cell = grid_.get_cell(tile);
         if (cell.is_empty_overlay() && grid_.terrain_class_at(tile) != movement::kTerrainWater && !grid_.is_solid_object(tile)) {
             grid_.drop_lunchbox(static_cast<uint32_t>(tile.x), static_cast<uint32_t>(tile.y),
-                                static_cast<uint32_t>(std::max<int32_t>(0, a.carried_signed())));   // (a thief's debt drops an empty lunchbox: what the original's lunchbox does with a negative amount is not known)
+                                static_cast<uint32_t>(std::max<int32_t>(0, a.carried_signed())));   // (a thief's debt drops an empty lunchbox; the original drops 65,536 minus the debt, a 16-bit word: docs/GAME_REVERSE_ENGINEERING.md 5.40, "A lunchbox on the anchor of an emptied record")
         }
     }
     a.clear_inventory();

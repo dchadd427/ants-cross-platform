@@ -86,7 +86,7 @@ Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) secti
 - When the clip ends, one unit is taken (the pile shows its next stage or disappears). The ant carries the points of one unit, "Got Food!" is posted and the ant heads for its hill. After the deposit it walks back to the pile.
 - Two ants that begin on the last unit both get food.
 - An ant that already carries food answers "Can't - already have food.".
-- A lunchbox dropped by a dead carrier is a food object of one unit.
+- A lunchbox dropped by a dead carrier is a food object of one unit, and it is eaten once: the first ant that bites it takes it (rules number 13; before it, a lunchbox that fell on the anchor of an emptied pile could be eaten again and again, as in the original, [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) 5.40).
 - Food is finite: nothing respawns.
 
 Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) section 5.40.

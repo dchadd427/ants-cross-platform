@@ -98,6 +98,7 @@ public:
     GameMode game_mode_{GameMode::HighestScore};   // the rules of the match (set before init, kept by it)
     uint8_t started_mask_{0x0F};            // bit p: team p had an ant, an egg (187 now: an egg that could hatch) or a hatch when the match began (set by init and init_test_world): the teams that were really in the match; the last-side rule needs two of them
     bool last_side_rule_{true};             // the original's game only: the end rule of the rules number 8 (a recording of 5 plays without it: set_last_side_rule); 187 has its own end rule
+    bool bite_skips_empty_record_{true};    // both modes: the bite of the rules numbers 13 and later takes its unit from the first object of the anchor that has one (a recording of 5 to 12 plays with the original's first object: set_bite_skips_empty_record)
     bool fire_wall_as_original_{true};      // both modes: the loader of the rules numbers 9 and later (a recording of 5 to 8 plays with the remake's overlay on a named fire wall: set_fire_wall_as_original)
     bool hill_open_187_{false};             // 187 only: the rules of the recordings before the closed hill (set_hill_open_187); the original's game never reads it
     bool end_fix_187_{true};                // 187 only: the end rule of the rules number 11 (a recording of 6, 7 or 10 plays without it: set_end_fix_187); the original's game never reads it

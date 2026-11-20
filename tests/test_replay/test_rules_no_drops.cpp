@@ -1,5 +1,5 @@
 // Tests of the rules number 12 of game mode 187 (ants_replay/replay.hpp, docs/REPLAYS.md "Which files play: sim_rules", docs/GAMEPLAY.md "187"): nothing is put on the ground, no power-up from an ant of a special type
-// that dies or that takes another. The numbers 6, 7, 10 and 11 (187) keep the drops of the original's game, and every number belongs to one mode. This build plays 5, 8 and 9 for the original's game and 6, 7, 10, 11 and 12 for 187.
+// that dies or that takes another. The numbers 6, 7, 10 and 11 (187) keep the drops of the original's game, and every number belongs to one mode. This build plays 5, 8, 9 and 13 for the original's game and 6, 7, 10, 11 and 12 for 187.
 //   RP16.1  the numbers: what a build plays, what a head may say, what a match is recorded under, what a refusal says
 //   RP16.2  the recordings of the old numbers (11, 10, 7 and 6), made in code on the match of no_drops_scenario.hpp, play to the hashes that the build before the number made of them, with the power-ups on the ground
 //   RP16.3  the same match recorded under 12 leaves nothing on the ground at any turn and is another match; each file is another match under the other number
@@ -178,18 +178,18 @@ int main() {
     std::cout << "=== Rules number 12 of game mode 187 (11, 10, 7 and 6 keep the drops of the original's game) ===\n";
     const assets::LevelData level = scenario::level();
 
-    TEST_CASE("RP16.1 This build plays 5, 8 and 9 for the original's game and 6, 7, 10, 11 and 12 for 187, nothing else; a 187 match is recorded under 12; every number names its one mode; a refusal names all eight") {
+    TEST_CASE("RP16.1 This build plays 5, 8, 9 and 13 for the original's game and 6, 7, 10, 11 and 12 for 187, nothing else; a 187 match is recorded under 12; every number names its one mode; a refusal names all nine") {
         ASSERT_TRUE(kSimRulesMode187 == 12 && kSimRulesMode187BeforeNoDrops == 11 && kSimRulesMode187BeforeEndFix == 10 && kSimRulesMode187BeforeFireWall == 7 && kSimRulesMode187Heal == 6);
-        ASSERT_TRUE(kSimRules == 9 && kSimRulesBeforeFireWall == 8 && kSimRulesBeforeLastSide == 5 && kSimRulesNewest == 12);
-        ASSERT_TRUE(sim_rules_for_mode(0) == 9 && sim_rules_for_mode(1) == 12 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
+        ASSERT_TRUE(kSimRules == 13 && kSimRulesBeforeEmptyRecord == 9 && kSimRulesBeforeFireWall == 8 && kSimRulesBeforeLastSide == 5 && kSimRulesNewest == 13);
+        ASSERT_TRUE(sim_rules_for_mode(0) == 13 && sim_rules_for_mode(1) == 12 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
         for (uint16_t rules = 0; rules < 17; ++rules) {
-            ASSERT_EQ(plays_mode_rules(0, rules), rules == 5 || rules == 8 || rules == 9);
+            ASSERT_EQ(plays_mode_rules(0, rules), rules == 5 || rules == 8 || rules == 9 || rules == 13);
             ASSERT_EQ(plays_mode_rules(k187, rules), rules == 6 || rules == 7 || rules == 10 || rules == 11 || rules == 12);
             ASSERT_FALSE(plays_mode_rules(2, rules));
             ASSERT_FALSE(plays_mode_rules(255, rules));
             ASSERT_EQ(fire_wall_as_original_rules(rules), rules >= 9);                       // (10, 11 and 12 have the loader of the original, as 9 does)
         }
-        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7, 8, 9, 10, 11 and 12"));
+        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7, 8, 9, 10, 11, 12 and 13"));
         Header head;
         head.map_name = "TINY.LVL";
         head.roster = 0x0F;
@@ -202,8 +202,8 @@ int main() {
                 r.head = h;
                 std::string error;
                 const std::vector<uint8_t> bytes = encode(r, error);
-                const bool mode_has_it = mode == 0 ? (rules == 5 || rules == 8 || rules == 9) : (rules == 6 || rules == 7 || rules == 10 || rules == 11 || rules == 12);
-                const bool other_mode_has_it = mode == 0 ? (rules == 6 || rules == 7 || rules == 10 || rules == 11 || rules == 12) : (rules == 5 || rules == 8 || rules == 9);
+                const bool mode_has_it = mode == 0 ? (rules == 5 || rules == 8 || rules == 9 || rules == 13) : (rules == 6 || rules == 7 || rules == 10 || rules == 11 || rules == 12);
+                const bool other_mode_has_it = mode == 0 ? (rules == 6 || rules == 7 || rules == 10 || rules == 11 || rules == 12) : (rules == 5 || rules == 8 || rules == 9 || rules == 13);
                 ASSERT_EQ(plays_here(h), mode_has_it);
                 ASSERT_EQ(!bytes.empty(), !other_mode_has_it && (mode == 0 || rules >= 6));      // (a number of another mode is no file; 4 and 13 are files, only not played)
                 if (!bytes.empty()) {
@@ -220,10 +220,10 @@ int main() {
             ASSERT_EQ(rec.replay().head.sim_rules, 12);                                      // (a mode that is not 0 gets the number of that mode whatever the head said)
         }
         Recorder fresh(head);
-        ASSERT_TRUE(fresh.replay().head.sim_rules == 9 && fresh.replay().head.mode == 0);
+        ASSERT_TRUE(fresh.replay().head.sim_rules == 13 && fresh.replay().head.mode == 0);
         Header foreign = head;
-        foreign.sim_rules = 13;
-        ASSERT_TRUE(rules_refusal(foreign).find("simulation rules 13; this build plays simulation rules 5, 6, 7, 8, 9, 10, 11 and 12") != std::string::npos);
+        foreign.sim_rules = 14;
+        ASSERT_TRUE(rules_refusal(foreign).find("simulation rules 14; this build plays simulation rules 5, 6, 7, 8, 9, 10, 11, 12 and 13") != std::string::npos);
     } TEST_END();
 
     TEST_CASE("RP16.2 A recording of the number 11, 10, 7 or 6, made in code on the match of the scenario, plays to every hash it holds and to the final hash that the build before the number made of it; under 11, 10 and 7 the dead leave power-ups") {
@@ -258,7 +258,7 @@ int main() {
         const Outcome new_as_old = play(with_rules(now.replay, 11), level);
         ASSERT_TRUE(!new_as_old.ok && new_as_old.first_bad_turn > 0u);
         // a number nobody plays is not played
-        ASSERT_FALSE(play(with_rules(now.replay, 13), level).ran);
+        ASSERT_FALSE(play(with_rules(now.replay, 14), level).ran);
         ASSERT_FALSE(play(with_rules(now.replay, 9), level).ran);
     } TEST_END();
 
