@@ -91,6 +91,7 @@ def build_worker(blink: float = 0.0) -> SceneBuilder:
         scene_name="ant_worker",
         include_brows=False,
         brow_style="curious",
+        head_pitch_deg=-12.0,
         head_tilt_deg=4.5,
         head_yaw_deg=-3.5,
         eye_look=(0.06, 0.05),

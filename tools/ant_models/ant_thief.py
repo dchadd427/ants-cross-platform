@@ -992,11 +992,12 @@ def _add_rogue_strap_and_loot_pouch(scene: SceneBuilder, anchors: dict) -> None:
 
 
 def _add_thief_idle_animation(scene: SceneBuilder) -> None:
-    """Attach authentic `atst301` 2.52s sneaky whole-head whip-pan lookout `"Idle"` clip.
+    """Attach authentic `atst301` 2.52s crouched left <-> right weight-pivot `"Idle"` clip.
 
-    Synced directly to `"IdleLookout"` eye darts (hold left 1.10s -> 160ms center-bob whip-pan
-    -> hold right 1.10s -> 160ms whip-pan back), with pleated bandana tails swinging in
-    follow-through and legs staying planted solidly at Y = 0.0.
+    Synced directly to `"IdleLookout"` eye darts (hold weight left 1.10s -> 160ms arc-hop
+    slide across center -> hold weight right 1.10s -> 160ms arc-hop back). The head stays
+    facing forward with only subtle weight-shift lean/inertia, bandana tails trail the hops,
+    and all 4 legs stay planted solidly at Y = 0.0 with hips seamlessly nested inside pelvis.
     """
     times = [0.00, 0.55, 1.10, 1.18, 1.26, 1.38, 1.81, 2.36, 2.44, 2.52]
 
@@ -1009,33 +1010,47 @@ def _add_thief_idle_animation(scene: SceneBuilder) -> None:
         return xf.rotation if xf is not None else (0.0, 0.0, 0.0, 1.0)
 
     channels: List[AnimationChannel] = []
-    # Upper-body sneaky breath & upward center peek bob during each 160ms whip-pan.
+    # Authentic `atst301` crouched weight-shift: slide +-0.050 in X with +0.022 center arc-hop lift
+    # and natural lean roll into the planted left/right leg (legs stay grounded at Y = 0.0).
     bx, by, bz = _rest_t("upper_body")
-    body_dys = [0.000, 0.013, 0.000, 0.038, 0.005, 0.000, 0.013, 0.000, 0.038, 0.000]
-    body_yaws = [-0.07, -0.08, -0.07, 0.00, +0.07, +0.07, +0.08, +0.07, 0.00, -0.07]
+    body_dxs = [-0.050, -0.052, -0.050, 0.000, +0.050, +0.052, +0.052, +0.050, 0.000, -0.050]
+    body_dys = [0.000, 0.007, 0.000, 0.022, 0.003, 0.000, 0.007, 0.000, 0.022, 0.000]
+    body_rolls = [+0.095, +0.100, +0.095, 0.000, -0.095, -0.100, -0.100, -0.095, 0.000, +0.095]
+    body_yaws = [-0.030, -0.032, -0.030, 0.000, +0.030, +0.032, +0.032, +0.030, 0.000, -0.030]
     body_r0 = _rest_r("upper_body")
-    channels.append(AnimationChannel("upper_body", "translation", list(times), [(bx, by + dy, bz) for dy in body_dys]))
+    channels.append(
+        AnimationChannel(
+            "upper_body",
+            "translation",
+            list(times),
+            [(bx + dx, by + dy, bz) for dx, dy in zip(body_dxs, body_dys)],
+        )
+    )
     channels.append(
         AnimationChannel(
             "upper_body",
             "rotation",
             list(times),
-            [quat_mul(body_r0, quat_from_euler_xyz(rx=0.025 if abs(yw) > 0.01 else -0.02, ry=yw)) for yw in body_yaws],
+            [
+                quat_mul(body_r0, quat_from_euler_xyz(rx=-0.022 if abs(dx) < 1e-4 else 0.018, ry=yw, rz=rl))
+                for dx, yw, rl in zip(body_dxs, body_yaws, body_rolls)
+            ],
         )
     )
 
-    # Whole-head sneaky lookout whip-pan (`+-0.38 rad` yaw, subtle crouch pitch & peek tilt).
+    # Head stays facing FORWARD (`|ry| <= 0.055 rad`, NO wide turn!): subtle counter-stabilizing
+    # lean & crisp inertia nod during each 160ms arc-hop weight shift.
     head_poses = [
-        (+0.04, -0.38, +0.04),
-        (+0.02, -0.38, +0.05),
-        (+0.04, -0.38, +0.04),
-        (-0.05, 0.00, 0.00),
-        (+0.04, +0.38, -0.04),
-        (+0.03, +0.38, -0.04),
-        (+0.02, +0.38, -0.05),
-        (+0.04, +0.38, -0.04),
-        (-0.05, 0.00, 0.00),
-        (+0.04, -0.38, +0.04),
+        (+0.015, -0.050, -0.045),
+        (+0.006, -0.055, -0.048),
+        (+0.015, -0.050, -0.045),
+        (-0.028, 0.000, 0.000),
+        (+0.012, +0.055, +0.048),
+        (+0.018, +0.050, +0.045),
+        (+0.006, +0.055, +0.048),
+        (+0.015, +0.050, +0.045),
+        (-0.028, 0.000, 0.000),
+        (+0.015, -0.050, -0.045),
     ]
     head_r0 = _rest_r("head_group")
     channels.append(
@@ -1047,17 +1062,17 @@ def _add_thief_idle_animation(scene: SceneBuilder) -> None:
         )
     )
 
-    # Pleated bandana tails swing in follow-through lag & overshoot after each snappy whip-pan!
+    # Pleated bandana tails trail & flutter naturally with each snappy 160ms sideways weight shift.
     tail_poses = [
         (0.00, 0.00, 0.00),
-        (0.02, -0.04, +0.03),
+        (0.01, -0.02, +0.02),
         (0.00, 0.00, 0.00),
-        (-0.04, -0.20, -0.08),
-        (-0.02, -0.14, -0.06),
-        (0.03, +0.09, +0.04),
-        (0.02, +0.03, -0.02),
+        (-0.03, -0.10, -0.07),
+        (-0.02, -0.08, -0.05),
+        (0.02, +0.05, +0.04),
+        (0.01, +0.02, -0.02),
         (0.00, 0.00, 0.00),
-        (-0.04, +0.20, +0.08),
+        (-0.03, +0.10, +0.07),
         (0.00, 0.00, 0.00),
     ]
     tail_r0 = _rest_r("bandana_tails")
@@ -1070,19 +1085,19 @@ def _add_thief_idle_animation(scene: SceneBuilder) -> None:
         )
     )
 
-    # Alert antenna perk & subtle gaster counterbalance.
+    # Perky antenna bounce on each arc-hop & gentle gaster counterbalance sway opposite the lean.
     for node_name, sign in (("antenna_left", 1.0), ("antenna_right", -1.0)):
         if node_name in scene.nodes and scene.get_node(node_name):
             r0 = _rest_r(node_name)
             ant_vals = [
-                quat_mul(r0, quat_from_euler_xyz(rx=-0.06 if i in (3, 8) else 0.03 * math.sin(i), rz=sign * 0.05 * math.cos(i)))
+                quat_mul(r0, quat_from_euler_xyz(rx=-0.05 if i in (3, 8) else 0.02 * math.sin(i), rz=sign * 0.04 * math.cos(i)))
                 for i in range(len(times))
             ]
             ant_vals[-1] = ant_vals[0]
             channels.append(AnimationChannel(node_name, "rotation", list(times), ant_vals))
     if "gaster_group" in scene.nodes:
         g0 = _rest_r("gaster_group")
-        g_vals = [quat_mul(g0, quat_from_euler_xyz(rx=-1.3 * dy)) for dy in body_dys]
+        g_vals = [quat_mul(g0, quat_from_euler_xyz(rx=-1.2 * dy, rz=-0.45 * rl)) for dy, rl in zip(body_dys, body_rolls)]
         g_vals[-1] = g_vals[0]
         channels.append(AnimationChannel("gaster_group", "rotation", list(times), g_vals))
 
@@ -1102,6 +1117,7 @@ def build_thief(blink: float = 0.0, gaze: float = -0.25) -> SceneBuilder:
         include_brows=False,
         include_idle=False,
         brow_style="sneaky",
+        head_pitch_deg=-13.0,
         head_tilt_deg=-4.5,
         head_yaw_deg=4.0,
         antenna_asymmetry=0.40,

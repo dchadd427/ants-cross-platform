@@ -999,11 +999,11 @@ def build_combat(blink: float = 0.0) -> SceneBuilder:
     scene.attach_world_node("right_forearm_group", "right_arm_group")
     scene.attach_world_node("right_forearm", "right_forearm_group")
 
-    # Subtle tough-guy Rambo swagger attitude (~3 deg head & shoulder tilt; feet remain grounded at Y=0!).
+    # Subtle tough-guy Rambo swagger attitude + 12 deg chin-up pitch toward the 33 deg overhead camera!
     ub_xf = scene.get_node_transform("upper_body")
     scene.set_node_transform("upper_body", translation=ub_xf.translation, rotation=quat_from_euler_xyz(ry=0.042, rz=-0.024))
     hd_xf = scene.get_node_transform("head_group")
-    scene.set_node_transform("head_group", translation=hd_xf.translation, rotation=quat_from_euler_xyz(rx=0.038, ry=-0.058, rz=0.054))
+    scene.set_node_transform("head_group", translation=hd_xf.translation, rotation=quat_from_euler_xyz(rx=-math.radians(12.0), ry=-0.058, rz=0.054))
 
     scene.ground_to_y(0.0)
     _add_combat_idle_animation(scene)
