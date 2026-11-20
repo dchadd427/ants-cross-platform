@@ -514,7 +514,12 @@ def bake_scene_ao(scene: Any, *, grid_res: int = 56) -> Any:
             gnd_ao = 0.82 + 0.18 * gnd
 
             ao = (1.0 - np.clip(occ * 0.74 + conc * 0.26, 0.0, 0.58)) * gnd_ao
-            floor_ao = 0.78 if p.material in ("eye_white", "eye_iris", "eye_pupil", "eye_limbal") else 0.44
+            if p.material in ("eye_white", "eye_iris", "eye_pupil", "eye_limbal"):
+                floor_ao = 0.78
+            elif p.name.startswith("mandible_"):
+                floor_ao = 0.76
+            else:
+                floor_ao = 0.44
             ao = np.clip(ao, floor_ao, 1.0).astype(np.float32)
             p.colors = np.clip(base_tint * ao[:, None], floor_ao, 1.0).astype(np.float32)
     return scene

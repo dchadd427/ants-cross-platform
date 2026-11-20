@@ -70,20 +70,24 @@
 
       <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
 
-      <div class="toolbar-group" role="group" aria-label="Canonical angle">
+      <div class="toolbar-group" role="group" aria-label="8-way compass angle">
         <span class="group-label" aria-hidden="true">Angle</span>
         <button type="button" data-angle="301" aria-pressed="true" title="301 South Front (yaw 0, pitch 45)">301 S</button>
         <button type="button" data-angle="201" aria-pressed="false" title="201 South-East 3/4 (yaw -45, pitch 45)">201 SE</button>
         <button type="button" data-angle="901" aria-pressed="false" title="901 East Side (yaw -90, pitch 45)">901 E</button>
         <button type="button" data-angle="801" aria-pressed="false" title="801 North-East Back 3/4 (yaw -135, pitch 45)">801 NE</button>
         <button type="button" data-angle="701" aria-pressed="false" title="701 North Back (yaw 180, pitch 45)">701 N</button>
+        <button type="button" data-angle="801_nw" aria-pressed="false" title="801 North-West (mirrored 801 NE, yaw +135, pitch 45)">NW</button>
+        <button type="button" data-angle="901_w" aria-pressed="false" title="901 West Side (mirrored 901 E, yaw +90, pitch 45)">W</button>
+        <button type="button" data-angle="201_sw" aria-pressed="false" title="201 South-West (mirrored 201 SE, yaw +45, pitch 45)">SW</button>
       </div>
 
       <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
 
-      <div class="toolbar-group" role="group" aria-label="3D render resolution">
-        <span class="group-label" aria-hidden="true">3D</span>
+      <div class="toolbar-group" role="group" aria-label="3D render resolution and silhouette">
+        <span class="group-label" aria-hidden="true">View</span>
         <button type="button" id="btn-pixel-mode" aria-pressed="false" title="Render live 3D at 1x 1998 sprite resolution for apples-to-apples comparison (P)">1&times; Pixel</button>
+        <button type="button" id="btn-silhouette" aria-pressed="false" title="Toggle high-contrast silhouette comparison on both sides (S)">Silhouette</button>
       </div>
 
       <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
@@ -204,7 +208,7 @@
               aria-label="Live 3D ant model viewport aligned with 1998 sprite. Drag to orbit, scroll or pinch to zoom. Press arrow keys to orbit, plus or minus to zoom, R to reset to canonical angle, I to toggle idle animation, 1 through 5 for canonical angles, or Escape to return to All 6."
             ></canvas>
             <span class="compare-pill compare-pill-right" id="solo-3d-pill" aria-hidden="true">Live 3D &middot; 301 S</span>
-            <div class="solo-hint" aria-hidden="true">Drag: Orbit &middot; Scroll/Pinch: Zoom &middot; Arrows: Orbit &middot; R: Reset Angle &middot; Esc: All 6</div>
+            <div class="solo-hint" aria-hidden="true">Drag L/R: Synced 360&deg; Rotate &middot; Drag U/D: Pitch &middot; Scroll/Pinch: Zoom &middot; R: Reset &middot; Esc: All 6</div>
           </div>
         </div>
       </section>

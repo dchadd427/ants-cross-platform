@@ -11,7 +11,32 @@
   const ORIGINAL_TEAMS = ["green", "red", "blue", "black"];
   const SPEEDS = [0.5, 1, 1.5];
   const GROUND_FRAC = 0.87;
+  const CANONICAL_PITCH = ANGLES["301"].pitch;
   const RELOAD_STATE_KEY = "ants_viewer_reload_state_v1";
+
+  const COMPASS_DIRS = [
+    { id: "301", angle: "301", flip: false, yaw: 0, dir: "S", label: "301 S", full: "301 S (Front)" },
+    { id: "201", angle: "201", flip: false, yaw: -45, dir: "SE", label: "201 SE", full: "201 SE (Front-Right)" },
+    { id: "901", angle: "901", flip: false, yaw: -90, dir: "E", label: "901 E", full: "901 E (Side Right)" },
+    { id: "801", angle: "801", flip: false, yaw: -135, dir: "NE", label: "801 NE", full: "801 NE (Back-Right)" },
+    { id: "701", angle: "701", flip: false, yaw: 180, dir: "N", label: "701 N", full: "701 N (Back)" },
+    { id: "801_nw", angle: "801", flip: true, yaw: 135, dir: "NW", label: "801 NW \u00b7 flip", full: "801 NW (Back-Left, mirrored)" },
+    { id: "901_w", angle: "901", flip: true, yaw: 90, dir: "W", label: "901 W \u00b7 flip", full: "901 W (Side Left, mirrored)" },
+    { id: "201_sw", angle: "201", flip: true, yaw: 45, dir: "SW", label: "201 SW \u00b7 flip", full: "201 SW (Front-Left, mirrored)" },
+  ];
+  const COMPASS_BY_ID = Object.fromEntries(COMPASS_DIRS.map((d) => [d.id, d]));
+  const COMPASS_BY_SHORT = Object.fromEntries(COMPASS_DIRS.map((d) => [d.dir.toLowerCase(), d]));
+
+  function compassForYaw(yawDeg) {
+    const norm = ((-yawDeg % 360) + 360) % 360;
+    return COMPASS_DIRS[Math.round(norm / 45) % 8];
+  }
+
+  function resolveCompassQuery(raw) {
+    if (!raw) return null;
+    const k = raw.toLowerCase();
+    return COMPASS_BY_ID[k] || COMPASS_BY_SHORT[k] || null;
+  }
 
   function formatSec(sec) {
     return Number.isFinite(sec) && sec > 0 ? sec.toFixed(2) + "s" : "\u2014";
@@ -44,6 +69,7 @@
     const btnBackAll = document.getElementById("btn-back-all");
     const btnSoloReset = document.getElementById("btn-solo-reset-angle");
     const btnPixelMode = document.getElementById("btn-pixel-mode");
+    const btnSilhouette = document.getElementById("btn-silhouette");
     const btnIdle = document.getElementById("btn-idle");
     const btnSyncReset = document.getElementById("btn-sync-reset");
     const studioTab = document.getElementById("tab-studio");
@@ -62,14 +88,17 @@
 
     const cardCanvases = new Map();
     const cardCycles = new Map();
+    const cardOrigPills = [];
     const card3dPills = [];
     for (const cls of ANT_CLASSES) {
       const cv = gridEl.querySelector(`[data-canvas-ant="${cls}"]`);
       if (cv) cardCanvases.set(cls, { canvas: cv, ctx: cv.getContext("2d") });
       const cy = gridEl.querySelector(`[data-cycle-for="${cls}"]`);
       if (cy) cardCycles.set(cls, cy);
-      const pill = gridEl.querySelector(`[data-card-ant="${cls}"] .compare-pill-right`);
-      if (pill) card3dPills.push(pill);
+      const lPill = gridEl.querySelector(`[data-card-ant="${cls}"] .compare-pill-left`);
+      if (lPill) cardOrigPills.push(lPill);
+      const rPill = gridEl.querySelector(`[data-card-ant="${cls}"] .compare-pill-right`);
+      if (rPill) card3dPills.push(rPill);
     }
     const soloOrigCtx = soloOrigCanvas.getContext("2d");
     const solo3dCtx = solo3dCanvas.getContext("2d");
@@ -90,9 +119,11 @@
     const qAnt = (params.get("ant") || "").toLowerCase();
     const qTeam = (params.get("team") || "").toLowerCase();
     const qAngle = (params.get("angle") || "").toLowerCase();
+    const qYaw = params.has("yaw") && Number.isFinite(Number(params.get("yaw"))) ? wrapAngleDeg(Number(params.get("yaw"))) : null;
     const qSpeed = Number(params.get("speed"));
     const qIdle = params.get("idle");
     const qPixel = params.get("pixel");
+    const qSil = params.get("silhouette");
     const qTime = params.has("t") ? Number(params.get("t")) : NaN;
     const darkMq = window.matchMedia("(prefers-color-scheme: dark)");
 
@@ -104,15 +135,23 @@
     const initTeam = ORIGINAL_TEAMS.includes(qTeam)
       ? qTeam
       : (savedState && ORIGINAL_TEAMS.includes(savedState.team) ? savedState.team : "green");
-    const initAngle = SHEET_ANGLES.includes(qAngle)
-      ? qAngle
-      : (savedState && SHEET_ANGLES.includes(savedState.angle) ? savedState.angle : "301");
+    const qCompass = resolveCompassQuery(qAngle);
+    const savedCompass = savedState ? resolveCompassQuery(savedState.compassId || savedState.angle) : null;
+    const initYaw = qYaw !== null
+      ? qYaw
+      : (qCompass ? qCompass.yaw
+        : (savedState && Number.isFinite(savedState.yaw) ? wrapAngleDeg(savedState.yaw)
+          : (savedCompass ? savedCompass.yaw : 0)));
+    const initCompass = compassForYaw(initYaw);
     const initIdle = qIdle !== null
       ? qIdle !== "0"
       : (savedState && typeof savedState.idle === "boolean" ? savedState.idle : true);
     const initPixel = qPixel !== null
       ? (qPixel === "1" || qPixel.toLowerCase() === "true")
       : (savedState && typeof savedState.pixelMode === "boolean" ? savedState.pixelMode : false);
+    const initSil = qSil !== null
+      ? (qSil === "1" || qSil.toLowerCase() === "true")
+      : (savedState && typeof savedState.silhouette === "boolean" ? savedState.silhouette : false);
     const initSpeed = SPEEDS.includes(qSpeed)
       ? qSpeed
       : (savedState && SPEEDS.includes(savedState.speed) ? savedState.speed : 1);
@@ -120,13 +159,18 @@
     const state = {
       ant: initAnt,
       team: initTeam,
-      angle: initAngle,
+      angle: initCompass.angle,
+      compass: initCompass,
+      flipped: initCompass.flip,
+      yaw: initYaw,
+      pitch: CANONICAL_PITCH,
+      zoom: 1.0,
       idle: initIdle,
       pixelMode: initPixel,
+      silhouette: initSil,
       speed: initSpeed,
       simTime: Number.isFinite(qTime) && qTime >= 0 ? qTime : 0,
       dark: darkMq.matches,
-      soloCam: { yaw: ANGLES[initAngle].yaw, pitch: ANGLES[initAngle].pitch, zoom: 1.0, projection: "ortho" },
       soloOrbited: false,
       origBundle: null,
       origMetrics: null,
@@ -145,6 +189,10 @@
     const offCanvas = document.createElement("canvas");
     offCanvas.width = 256;
     offCanvas.height = 256;
+    const silCanvas = document.createElement("canvas");
+    silCanvas.width = 64;
+    silCanvas.height = 64;
+    const silCtx = silCanvas.getContext("2d");
     let renderer;
     try {
       renderer = new AntRenderer(offCanvas, { premultipliedAlpha: true });
@@ -166,12 +214,30 @@
       state.dirty = true;
     }
 
+    function syncCompassFromYaw() {
+      const comp = compassForYaw(state.yaw);
+      state.compass = comp;
+      state.angle = comp.angle;
+      state.flipped = comp.flip;
+      const offYaw = Math.abs(wrapAngleDeg(state.yaw - comp.yaw)) >= 1.0;
+      const offPitch = Math.abs(state.pitch - CANONICAL_PITCH) >= 0.5;
+      const offZoom = Math.abs(state.zoom - 1.0) >= 0.01;
+      state.soloOrbited = offYaw || offPitch || offZoom;
+    }
+
     function syncStudioLink() {
       if (!studioTab) return;
       const q = new URLSearchParams();
       q.set("ant", state.ant === "all" ? "lineup" : state.ant);
       q.set("team", state.team);
-      q.set("angle", state.angle);
+      const exactCanon = !state.flipped && Math.abs(wrapAngleDeg(state.yaw - state.compass.yaw)) < 1.0;
+      if (exactCanon) {
+        q.set("angle", state.angle);
+      } else {
+        q.set("yaw", String(Math.round(state.yaw)));
+        q.set("proj", "ortho");
+      }
+      if (state.silhouette) q.set("silhouette", "1");
       studioTab.setAttribute("href", "viewer.html?" + q.toString());
     }
 
@@ -182,9 +248,14 @@
         ant: state.ant,
         team: state.team,
         angle: state.angle,
-        pitch: (ANGLES[state.angle] || ANGLES["301"]).pitch,
+        compass: state.compass.id,
+        dir: state.compass.dir,
+        flipped: state.flipped,
+        yaw: Number(state.yaw.toFixed(1)),
+        pitch: Number(state.pitch.toFixed(1)),
         idle: state.idle,
         pixelMode: state.pixelMode,
+        silhouette: state.silhouette,
         speed: state.speed,
         simTime: Number(state.simTime.toFixed(3)),
         soloOrbited: state.soloOrbited,
@@ -200,8 +271,11 @@
       ant: state.ant,
       team: state.team,
       angle: state.angle,
+      compassId: state.compass.id,
+      yaw: state.yaw,
       idle: state.idle,
       pixelMode: state.pixelMode,
+      silhouette: state.silhouette,
       speed: state.speed,
     });
 
@@ -216,12 +290,19 @@
         if (cardCy) cardCy.textContent = text;
         if (state.ant === cls) {
           soloCycleEl.textContent = text;
-          soloAnimEl.textContent = origEntry ? `${origEntry.anim_name} (${origEntry.frame_count}f)` : "\u2014";
+          const flipTag = state.flipped ? " flip" : "";
+          soloAnimEl.textContent = origEntry ? `${origEntry.anim_name}${flipTag} (${origEntry.frame_count}f)` : "\u2014";
         }
       }
     }
 
     function updateUiState() {
+      syncCompassFromYaw();
+      const comp = state.compass;
+      const offYaw = Math.abs(wrapAngleDeg(state.yaw - comp.yaw)) >= 1.0;
+      const offPitch = Math.abs(state.pitch - CANONICAL_PITCH) >= 0.5;
+      const yawDisp = Math.round(state.yaw);
+
       toolbarEl.querySelectorAll("button[data-ant]").forEach((b) => {
         b.setAttribute("aria-pressed", String(b.dataset.ant === state.ant));
       });
@@ -229,39 +310,46 @@
         b.setAttribute("aria-pressed", String(b.dataset.team === state.team));
       });
       toolbarEl.querySelectorAll("button[data-angle]").forEach((b) => {
-        b.setAttribute("aria-pressed", String(b.dataset.angle === state.angle));
+        b.setAttribute("aria-pressed", String(b.dataset.angle === comp.id));
       });
       toolbarEl.querySelectorAll("button[data-speed]").forEach((b) => {
         b.setAttribute("aria-pressed", String(Number(b.dataset.speed) === state.speed));
       });
       btnIdle.setAttribute("aria-pressed", String(state.idle));
       if (btnPixelMode) btnPixelMode.setAttribute("aria-pressed", String(state.pixelMode));
+      if (btnSilhouette) btnSilhouette.setAttribute("aria-pressed", String(state.silhouette));
 
       const isSolo = state.ant !== "all";
       gridEl.hidden = isSolo;
       soloEl.hidden = !isSolo;
 
-      const angleInfo = ANGLES[state.angle] || ANGLES["301"];
       badgeAnt.textContent = isSolo ? ANT_LABELS[state.ant] : "All 6";
       badgeTeam.textContent = TEAMS[state.team].label;
-      badgeAngle.textContent = angleInfo.label;
+      badgeAngle.textContent = offYaw
+        ? `${comp.dir} (${comp.angle}${comp.flip ? " flip" : ""}) \u00b7 ${yawDisp}\u00b0`
+        : comp.label;
       if (metaProj) {
-        metaProj.textContent = state.pixelMode
-          ? `Ortho ${angleInfo.pitch}\u00b0 \u00b7 1\u00d7 Pixel`
-          : `Ortho ${angleInfo.pitch}\u00b0 \u00b7 Shared Ground`;
+        const modeBits = [
+          `Ortho ${Math.round(state.pitch)}\u00b0`,
+          state.pixelMode ? "1\u00d7 Pixel" : "Shared Ground",
+        ];
+        if (state.silhouette) modeBits.push("Silhouette");
+        metaProj.textContent = modeBits.join(" \u00b7 ");
       }
       metaPlay.textContent = `${state.idle ? "Playing" : "Paused"} \u00b7 ${state.speed}\u00d7`;
 
-      const pillLabel = state.pixelMode ? "Live 3D \u00b7 1\u00d7" : "Live 3D";
-      for (const pill of card3dPills) pill.textContent = pillLabel;
+      const origCardLabel = comp.flip ? "1998 Orig \u00b7 flip" : "1998 Original";
+      for (const pill of cardOrigPills) pill.textContent = origCardLabel;
+      const base3d = state.pixelMode ? "Live 3D \u00b7 1\u00d7" : "Live 3D";
+      const card3dLabel = offYaw || comp.flip ? `${base3d} \u00b7 ${yawDisp}\u00b0` : base3d;
+      for (const pill of card3dPills) pill.textContent = card3dLabel;
 
       if (isSolo) {
         soloTitleEl.textContent = ANT_LABELS[state.ant] + " Ant";
         btnSoloReset.disabled = !state.soloOrbited;
-        const modeTag = state.pixelMode ? "Live 3D \u00b7 1\u00d7" : "Live 3D";
-        solo3dPill.textContent = state.soloOrbited
-          ? `${modeTag} \u00b7 Yaw ${Math.round(state.soloCam.yaw)}\u00b0 Pitch ${Math.round(state.soloCam.pitch)}\u00b0`
-          : `${modeTag} \u00b7 ${angleInfo.label}`;
+        solo3dPill.textContent = offPitch
+          ? `${base3d} \u00b7 Yaw ${yawDisp}\u00b0 Pitch ${Math.round(state.pitch)}\u00b0`
+          : (offYaw ? `${base3d} \u00b7 ${comp.dir} ${yawDisp}\u00b0` : `${base3d} \u00b7 ${comp.label}`);
       }
 
       updateCycleLabels();
@@ -270,18 +358,18 @@
     }
 
     function resetSoloCamera() {
-      const preset = ANGLES[state.angle] || ANGLES["301"];
-      state.soloCam.yaw = preset.yaw;
-      state.soloCam.pitch = preset.pitch;
-      state.soloCam.zoom = 1.0;
-      state.soloOrbited = false;
+      state.yaw = state.compass.yaw;
+      state.pitch = CANONICAL_PITCH;
+      state.zoom = 1.0;
+      syncCompassFromYaw();
     }
 
     function selectAnt(id) {
       const next = ANT_CLASSES.includes(id) ? id : "all";
       const changed = state.ant !== next;
       state.ant = next;
-      resetSoloCamera();
+      state.pitch = CANONICAL_PITCH;
+      state.zoom = 1.0;
       updateUiState();
       markDirty();
       if (changed) {
@@ -300,12 +388,14 @@
     }
 
     function selectAngle(angleKey) {
-      if (!SHEET_ANGLES.includes(angleKey)) return;
-      state.angle = angleKey;
-      resetSoloCamera();
+      const comp = resolveCompassQuery(angleKey);
+      if (!comp) return;
+      state.yaw = comp.yaw;
+      state.pitch = CANONICAL_PITCH;
+      state.zoom = 1.0;
       updateUiState();
       markDirty();
-      announce("Canonical angle set to " + ANGLES[angleKey].full + ".");
+      announce("Angle set to " + comp.full + ".");
     }
 
     function toggleIdle() {
@@ -320,6 +410,13 @@
       updateUiState();
       markDirty();
       announce(state.pixelMode ? "3D side switched to 1x 1998 pixel resolution." : "3D side switched to HD resolution.");
+    }
+
+    function toggleSilhouette() {
+      state.silhouette = !state.silhouette;
+      updateUiState();
+      markDirty();
+      announce(state.silhouette ? "Silhouette view enabled on both sides." : "Silhouette view disabled.");
     }
 
     function selectSpeed(spd) {
@@ -349,12 +446,15 @@
     }
 
     function computeSpan(cls, yawDeg, pitchDeg) {
-      const key = `${cls}:${yawDeg.toFixed(1)}:${pitchDeg.toFixed(1)}`;
+      const ry = Math.round(wrapAngleDeg(yawDeg));
+      const rp = Math.round(pitchDeg);
+      const key = `${cls}:${ry}:${rp}`;
       if (state.spanCache.has(key)) return state.spanCache.get(key);
+      if (state.spanCache.size > 480) state.spanCache.clear();
       const sc = state.scenes.get(cls);
       if (!sc) return { vMin: -0.1, vMax: 1.0, span: 1.1 };
       const inst = sc.instances[0];
-      const p = pitchDeg * DEG, y = yawDeg * DEG;
+      const p = rp * DEG, y = ry * DEG;
       const ux = -Math.sin(p) * Math.sin(y), uy = Math.cos(p), uz = -Math.sin(p) * Math.cos(y);
       let vMin = Infinity, vMax = -Infinity;
       for (const dc of inst.model.drawCalls) {
@@ -520,8 +620,31 @@
       const dy = Math.round(groundY - entry.foot_y * pxScale);
       const shadowRx = Math.max(12, Math.min(panelW * 0.34, entry.vis_w * pxScale * 0.42));
       drawContactShadow(ctx, x0 + panelW * 0.5, groundY, shadowRx, Math.max(4, shadowRx * 0.22));
+      let srcImg = rec.img, sx = frameIdx * entry.fw;
+      if (state.silhouette) {
+        if (silCanvas.width !== entry.fw || silCanvas.height !== entry.fh) {
+          silCanvas.width = entry.fw;
+          silCanvas.height = entry.fh;
+        }
+        silCtx.globalCompositeOperation = "source-over";
+        silCtx.clearRect(0, 0, entry.fw, entry.fh);
+        silCtx.drawImage(rec.img, sx, 0, entry.fw, entry.fh, 0, 0, entry.fw, entry.fh);
+        silCtx.globalCompositeOperation = "source-in";
+        silCtx.fillStyle = state.dark ? "#e8eef8" : "#11161f";
+        silCtx.fillRect(0, 0, entry.fw, entry.fh);
+        srcImg = silCanvas;
+        sx = 0;
+      }
+      ctx.save();
       ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(rec.img, frameIdx * entry.fw, 0, entry.fw, entry.fh, dx, dy, dw, dh);
+      if (state.flipped) {
+        ctx.translate(dx + dw, dy);
+        ctx.scale(-1, 1);
+        ctx.drawImage(srcImg, sx, 0, entry.fw, entry.fh, 0, 0, dw, dh);
+      } else {
+        ctx.drawImage(srcImg, sx, 0, entry.fw, entry.fh, dx, dy, dw, dh);
+      }
+      ctx.restore();
     }
 
     function ensureOffscreenSize(w, h) {
@@ -531,12 +654,11 @@
       }
     }
 
-    function draw3dAnt(ctx, cls, x0, panelW, panelH, groundY, fixedHalfH, pxScale, cam, useCanonicalAnchor) {
+    function draw3dAnt(ctx, cls, x0, panelW, panelH, groundY, fixedHalfH, pxScale, cam) {
       const sc = state.scenes.get(cls);
       if (!sc) return;
-      const canon = ANGLES[state.angle] || ANGLES["301"];
-      const anchorYaw = useCanonicalAnchor ? canon.yaw : cam.yaw;
-      const anchorPitch = useCanonicalAnchor ? canon.pitch : cam.pitch;
+      const anchorYaw = cam.yaw;
+      const anchorPitch = CANONICAL_PITCH;
       const span = computeSpan(cls, anchorYaw, anchorPitch);
 
       const shadowRx = Math.max(12, Math.min(panelW * 0.34, (panelH / (2 * fixedHalfH)) * sc.instances[0].model.size[0] * 0.38));
@@ -560,6 +682,7 @@
           blinkMode: "auto",
           idleAnim: true,
           fixedIdleTime: state.simTime,
+          silhouette: state.silhouette,
           overrideProj: "ortho",
           fixedHalfH: lowFixedHalfH,
           customTarget: [0, targetY, 0],
@@ -591,6 +714,7 @@
         blinkMode: "auto",
         idleAnim: true,
         fixedIdleTime: state.simTime,
+        silhouette: state.silhouette,
         overrideProj: "ortho",
         fixedHalfH,
         customTarget: [0, targetY, 0],
@@ -611,8 +735,8 @@
 
     function renderAll() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const canon = ANGLES[state.angle] || ANGLES["301"];
-      const canonCam = { yaw: canon.yaw, pitch: canon.pitch, zoom: 1.0, projection: "ortho" };
+      const gridCam = { yaw: state.yaw, pitch: CANONICAL_PITCH, zoom: 1.0, projection: "ortho" };
+      const soloCam = { yaw: state.yaw, pitch: state.pitch, zoom: state.zoom, projection: "ortho" };
 
       if (state.ant === "all") {
         let minHalfW = Infinity, minH = Infinity;
@@ -640,7 +764,7 @@
           const halfHForCard = scParams.fixedHalfH * (sz.h / minH);
           drawStudioBackdrop(rec.ctx, sz.w, sz.h, groundY, true);
           drawOrigSprite(rec.ctx, cls, 0, sz.halfW, groundY, scParams.pxScale);
-          draw3dAnt(rec.ctx, cls, sz.halfW, rightW, sz.h, groundY, halfHForCard, scParams.pxScale, canonCam, true);
+          draw3dAnt(rec.ctx, cls, sz.halfW, rightW, sz.h, groundY, halfHForCard, scParams.pxScale, gridCam);
         }
       } else {
         const [ow, oh] = syncCanvasBacking(soloOrigCanvas, dpr);
@@ -651,7 +775,9 @@
           state.lastPxScaleLabel = scParams.scaleText;
           metaScale.textContent = `Worker-locked \u00b7 ${scParams.scaleText} pixel scale`;
         }
-        soloOrigPill.textContent = `1998 Original \u00b7 ${scParams.scaleText}`;
+        soloOrigPill.textContent = state.flipped
+          ? `1998 Original \u00b7 flip \u00b7 ${scParams.scaleText}`
+          : `1998 Original \u00b7 ${scParams.scaleText}`;
 
         const gOrig = Math.round(oh * scParams.gFrac);
         drawStudioBackdrop(soloOrigCtx, ow, oh, gOrig, false);
@@ -659,7 +785,7 @@
 
         const g3d = Math.round(rh * scParams.gFrac);
         drawStudioBackdrop(solo3dCtx, rw, rh, g3d, false);
-        draw3dAnt(solo3dCtx, state.ant, 0, rw, rh, g3d, scParams.fixedHalfH * (rh / panelH), scParams.pxScale, state.soloCam, true);
+        draw3dAnt(solo3dCtx, state.ant, 0, rw, rh, g3d, scParams.fixedHalfH * (rh / panelH), scParams.pxScale, soloCam);
       }
     }
 
@@ -732,13 +858,53 @@
       else if (btn.dataset.angle) selectAngle(btn.dataset.angle);
       else if (btn.dataset.speed) selectSpeed(Number(btn.dataset.speed));
       else if (btn === btnPixelMode) togglePixelMode();
+      else if (btn === btnSilhouette) toggleSilhouette();
       else if (btn === btnIdle) toggleIdle();
       else if (btn === btnSyncReset) syncReset();
     });
 
+    let suppressStageClickUntil = 0;
+    function attachHorizontalDrag(el, matchFn, sensitivity) {
+      let drag = null;
+      el.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0 && e.pointerType === "mouse") return;
+        const target = matchFn(e.target);
+        if (!target) return;
+        drag = { id: e.pointerId, target, startX: e.clientX, startY: e.clientY, lastX: e.clientX, active: false };
+      });
+      el.addEventListener("pointermove", (e) => {
+        if (!drag || e.pointerId !== drag.id) return;
+        const totalDx = Math.abs(e.clientX - drag.startX);
+        const totalDy = Math.abs(e.clientY - drag.startY);
+        if (!drag.active) {
+          if (totalDy > 10 && totalDy > totalDx * 1.2) { drag = null; return; }
+          if (totalDx <= 6) return;
+          drag.active = true;
+          try { el.setPointerCapture(e.pointerId); } catch (_) {}
+        }
+        const dx = e.clientX - drag.lastX;
+        drag.lastX = e.clientX;
+        state.yaw = wrapAngleDeg(state.yaw - dx * sensitivity);
+        updateUiState();
+        markDirty();
+      });
+      const finish = (e) => {
+        if (!drag || e.pointerId !== drag.id) return;
+        if (drag.active) suppressStageClickUntil = performance.now() + 260;
+        drag = null;
+      };
+      el.addEventListener("pointerup", finish);
+      el.addEventListener("pointercancel", finish);
+      el.addEventListener("lostpointercapture", finish);
+    }
+
+    attachHorizontalDrag(gridEl, (t) => t.closest("[data-stage-ant]"), 0.55);
+    attachHorizontalDrag(soloOrigCanvas, () => soloOrigCanvas, 0.5);
+
     gridEl.addEventListener("click", (e) => {
       const focusBtn = e.target.closest("button[data-focus-ant]");
       if (focusBtn) { selectAnt(focusBtn.dataset.focusAnt); return; }
+      if (performance.now() < suppressStageClickUntil) return;
       const stageHit = e.target.closest("[data-stage-ant]");
       if (stageHit) selectAnt(stageHit.dataset.stageAnt);
     });
@@ -748,7 +914,7 @@
       resetSoloCamera();
       updateUiState();
       markDirty();
-      announce("3D camera reset to " + ANGLES[state.angle].full + ".");
+      announce("3D camera reset to " + state.compass.full + ".");
     });
 
     darkMq.addEventListener("change", (e) => {
@@ -776,16 +942,14 @@
       const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pointers.size === 1) {
-        state.soloCam.yaw = wrapAngleDeg(state.soloCam.yaw - dx * 0.45);
-        state.soloCam.pitch = clamp(state.soloCam.pitch + dy * 0.35, -10, 85);
-        state.soloOrbited = true;
+        state.yaw = wrapAngleDeg(state.yaw - dx * 0.45);
+        state.pitch = clamp(state.pitch + dy * 0.35, -10, 85);
         updateUiState();
         markDirty();
       } else if (pointers.size === 2) {
         const dist = pinchDist();
         if (lastPinch > 1 && dist > 1) {
-          state.soloCam.zoom = clamp(state.soloCam.zoom * (lastPinch / dist), 0.45, 2.5);
-          state.soloOrbited = true;
+          state.zoom = clamp(state.zoom * (lastPinch / dist), 0.45, 2.5);
           updateUiState();
           markDirty();
         }
@@ -802,30 +966,28 @@
     solo3dCanvas.addEventListener("gesturechange", preventPinchZoom, { passive: false });
     solo3dCanvas.addEventListener("wheel", (e) => {
       e.preventDefault();
-      state.soloCam.zoom = clamp(state.soloCam.zoom * Math.exp(e.deltaY * 0.0012), 0.45, 2.5);
-      state.soloOrbited = true;
+      state.zoom = clamp(state.zoom * Math.exp(e.deltaY * 0.0012), 0.45, 2.5);
       updateUiState();
       markDirty();
     }, { passive: false });
 
     solo3dCanvas.addEventListener("keydown", (e) => {
       const sy = e.shiftKey ? 4 : 12, sp = e.shiftKey ? 3 : 8;
-      if (e.key === "ArrowLeft") state.soloCam.yaw = wrapAngleDeg(state.soloCam.yaw + sy);
-      else if (e.key === "ArrowRight") state.soloCam.yaw = wrapAngleDeg(state.soloCam.yaw - sy);
-      else if (e.key === "ArrowUp") state.soloCam.pitch = clamp(state.soloCam.pitch + sp, -10, 85);
-      else if (e.key === "ArrowDown") state.soloCam.pitch = clamp(state.soloCam.pitch - sp, -10, 85);
-      else if (e.key === "+" || e.key === "=") state.soloCam.zoom = clamp(state.soloCam.zoom * 0.88, 0.45, 2.5);
-      else if (e.key === "-" || e.key === "_") state.soloCam.zoom = clamp(state.soloCam.zoom * 1.14, 0.45, 2.5);
+      if (e.key === "ArrowLeft") state.yaw = wrapAngleDeg(state.yaw + sy);
+      else if (e.key === "ArrowRight") state.yaw = wrapAngleDeg(state.yaw - sy);
+      else if (e.key === "ArrowUp") state.pitch = clamp(state.pitch + sp, -10, 85);
+      else if (e.key === "ArrowDown") state.pitch = clamp(state.pitch - sp, -10, 85);
+      else if (e.key === "+" || e.key === "=") state.zoom = clamp(state.zoom * 0.88, 0.45, 2.5);
+      else if (e.key === "-" || e.key === "_") state.zoom = clamp(state.zoom * 1.14, 0.45, 2.5);
       else if (e.key === "r" || e.key === "R") {
         e.preventDefault();
         resetSoloCamera();
         updateUiState();
         markDirty();
-        announce("3D camera reset to " + ANGLES[state.angle].full + ".");
+        announce("3D camera reset to " + state.compass.full + ".");
         return;
       } else return;
       e.preventDefault();
-      state.soloOrbited = true;
       updateUiState();
       markDirty();
     });
@@ -841,12 +1003,23 @@
       } else if (e.key === "p" || e.key === "P") {
         e.preventDefault();
         togglePixelMode();
+      } else if (e.key === "s" || e.key === "S") {
+        e.preventDefault();
+        toggleSilhouette();
       } else if ((e.key === "r" || e.key === "R") && document.activeElement !== solo3dCanvas) {
         e.preventDefault();
         syncReset();
-      } else if (e.key >= "1" && e.key <= "5") {
+      } else if (e.key >= "1" && e.key <= "8") {
         e.preventDefault();
-        selectAngle(SHEET_ANGLES[Number(e.key) - 1]);
+        selectAngle(COMPASS_DIRS[Number(e.key) - 1].id);
+      } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight")
+        && document.activeElement !== solo3dCanvas
+        && (!toolbarEl.contains(document.activeElement))) {
+        e.preventDefault();
+        const step = e.shiftKey ? 5 : 15;
+        state.yaw = wrapAngleDeg(state.yaw + (e.key === "ArrowLeft" ? step : -step));
+        updateUiState();
+        markDirty();
       }
     });
 
