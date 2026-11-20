@@ -2,7 +2,7 @@
 
 What changed in each release of the Ants remake, newest first, a few lines each: what a player sees and, only when it changed, the rules or the network protocol. The version is the one line of the file `VERSION` (how it moves: [`docs/WORKFLOW.md`](docs/WORKFLOW.md)); every build also has a build id, the short git commit, shown by `ants --version`, `ants_server --version` and the footer of the web page.
 
-An entry is 5 - 15 lines in a fixed template: the heading `## vX.Y.Z - YYYY-MM-DD - title`, then **For players:** (1 - 6 bullets), **Rules / network:** (only if the rules or the network protocol changed: what, and the protocol number), **Fixes:** (optional, one line each) and **Details:** (a link to the commit range). No test counts and no mutation or review lists: those belong in commit messages and documents. A change that goes live writes its entry under **Next** (a section headed `## Next`, above the newest release) in its own pull request, and `tools/release.py` turns it into the entry when `VERSION` moves (each such change bumps the version, by default the patch number).
+An entry is 5 - 15 lines in a fixed template: the heading `## vX.Y.Z - YYYY-MM-DD - title`, then **For players:** (1 - 6 bullets), **Rules / network:** (only if the rules or the network protocol changed: what, and the protocol number), **Fixes:** (optional, one line each), **For operators:** (optional: what only the person who runs a server or the site sees) and **Details:** (a link to the commit range). The "What's new" window of the site shows the bullets under **For players:** and **Fixes:** and nothing else, so a line about the administration page, a server setting, an environment variable or the database goes under **For operators:**; a release that has only such lines has no **For players:** paragraph. No test counts and no mutation or review lists: those belong in commit messages and documents. A change that goes live writes its entry under **Next** (a section headed `## Next`, above the newest release) in its own pull request, and `tools/release.py` turns it into the entry when `VERSION` moves (each such change bumps the version, by default the patch number).
 
 <!--
 Template of an entry (copy it, keep the labels and the order, leave out a paragraph that has nothing to say):
@@ -10,12 +10,15 @@ Template of an entry (copy it, keep the labels and the order, leave out a paragr
 ## vX.Y.Z - YYYY-MM-DD - title
 
 **For players:**
-- one bullet: what a player or a server owner sees or can do now
+- one bullet: what a player sees or can do now
 
 **Rules / network:** only when the rules or the protocol changed: what, and "network protocol N: a vA.B.C game cannot join"
 
 **Fixes:**
 - one line each (optional)
+
+**For operators:** only for what a person who runs a server or the site sees (the administration page, a setting, an environment variable, the database); a release with only such lines has no "For players" paragraph
+- one bullet each
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ed3f1214...b2150865)
 

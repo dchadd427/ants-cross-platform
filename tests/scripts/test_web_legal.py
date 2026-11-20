@@ -108,7 +108,7 @@ class TheLegalPage(unittest.TestCase):
         self.assertIn('<link rel="stylesheet" href="/front/classic.css">', self.page)
         self.assertIn('<div class="pt"><h1>Legal</h1><p>', self.page)
         self.assertIn('<link rel="stylesheet" href="/site_nav.css">', self.page)
-        self.assertEqual(re.findall(r"<script[^>]*>", self.page), ['<script src="/site_nav.js">'])               # (the site bar's Menu: no other script)
+        self.assertEqual(re.findall(r"<script[^>]*>", self.page), ['<script src="/site_nav.js">', '<script src="/update_notice.js">'])               # (the site bar's Menu and the update notice: no other script)
         self.assertIn('<header class="sb" data-live="menu" ', self.page)
         self.assertEqual(re.findall(r'<nav aria-label="Pages">(.*?)</nav>', self.page, re.S)[0].count('aria-current'), 0)      # (Legal is not one of the bar's five: it is in the Menu)
         self.assertEqual(sorted(re.findall(r"@@\w+@@", self.page)), ["@@BUILD_DATE@@", "@@BUILD_ID@@", "@@GAME_VERSION@@"])      # (what the build fills in: the bar's three stamps, for the last line of the Menu)
