@@ -1892,9 +1892,51 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             w.calls.length = 0;
             await press(app, 'Start 1 bot match');
             same('one match sends no spacing, whatever the box held', posts(w)[0].body.every_s, 0);
-            // the schedule form has no such field: a schedule starts its matches at once, and keeps a spacing that it has
+        }
+        {   // the spacing of a schedule: the same field as Start now, kept in the schedule, said in its row, sent by Save
+            const wb = botWorld();
+            wb.schedules[1].what.every_s = 180;                                                  // (Evening swarm: four matches, one every 3 minutes)
+            const { w, app } = await opened({ bots: wb });
+            const everyBox = (a) => all(a, 'input').filter((n) => n.id === 'sc-every')[0];
+            same('a schedule with a spacing says it in its row; one without says nothing of it', [texts(app, '.b-sched .brow .bs').filter((t) => /^4 matches/.test(t)), texts(app, '.b-sched .brow .bs').filter((t) => /^1 match/.test(t))],
+                [['4 matches, one every 3 minutes · a random map of the rotation · rules Highest score · 4 bots · levels Hard, Hard, Medium, Medium · random teams'], ['1 match · a random map of the rotation · random rules · 2 to 4 bots · levels Medium or Hard · random teams']]);
+            await press(app, 'Edit', 1);
+            const field = everyBox(app).parentNode.parentNode.parentNode;
+            same('the form of a schedule has the field of Start now: the same label, unit and presets, with the schedule\'s own spacing in it, and a hint that says when the first match starts', [field.hidden, texts(app, '.sform label').filter((t) => /^Start one every/.test(t)), everyBox(app).value, texts(app, '.sform .minrow .chip').filter((t) => /min$|once$/.test(t) && t !== '15 min' && t !== '30 min'), texts(app, '.sform .fh').filter((t) => /^The first starts/.test(t))],
+                [false, ['Start one every'], '3', ['All at once', '1 min', '2 min', '3 min', '5 min', '10 min'], ['The first starts when the schedule runs, then one every 3 minutes: the last in 9 minutes. A start that waits is lost if the server restarts.']]);
+            everyBox(app).value = '1,5'; everyBox(app).fire('input', {});
+            await settle();
+            await press(app, 'Save');
+            same('Save sends the spacing in seconds, inside the schedule\'s batch, with the rest as it was', [posts(w).length, posts(w)[0].url, posts(w)[0].body.what], [1, '/admin/api/bot-schedules/2', { count: 4, every_s: 90, map: 'random:rotation', rules: 'highest-score', bots: '4', levels: ['hard', 'hard', 'medium', 'medium'], teams: 'random', split: '' }]);
+            same('and the form is closed, the row says the new spacing', [all(app, '.sform').length, texts(app, '.b-sched .brow .bs').filter((t) => /^4 matches/.test(t)).length], [0, 1]);
+            // with one match there is nothing to space; a spacing that is not a number of half minutes is told and sent as no number
             await press(app, 'Add a schedule');
-            same('the form of a schedule has no spacing field', [all(app, 'input').filter((n) => n.id === 'sc-every').length], [0]);
+            same('a new schedule has no spacing and one match: the field is not shown', [everyBox(app).parentNode.parentNode.parentNode.hidden, everyBox(app).value], [true, '0']);
+            const plus = all(app, '.sform .step .btn')[1];
+            plus.click(); plus.click(); await settle();
+            same('with three matches it shows, at 0 minutes: all at once, said for a schedule', [everyBox(app).parentNode.parentNode.parentNode.hidden, texts(app, '.sform .fh').filter((t) => /start at once/.test(t))], [false, ['All 3 start at once. Give a time to start the first when the schedule runs and the others one after another.']]);
+            await press(app, '5 min', 1);                                                         // (the second: the first is the one of Start now)
+            same('a preset puts its minutes in the box', everyBox(app).value, '5');
+            everyBox(app).value = '121'; everyBox(app).fire('input', {});
+            await settle();
+            same('a spacing over two hours is told in red', [texts(app, '.sform .fh.bad'), everyBox(app).className], [['Whole or half minutes, from 0 to 120.'], 'tinput err']);
+            w.calls.length = 0;
+            w.replies['POST /admin/api/bot-schedules'] = { status: 400, json: { error: 'bad_spacing' } };
+            await press(app, 'Save');
+            same('the page sends it as it is, and the server\'s refusal is told above Save in its words', [posts(w)[0].body.what.every_s, texts(app, '.sform .msg.bad')], [-1, ['Start one every: 0 to 120 minutes, in whole or half minutes.']]);
+            delete w.replies['POST /admin/api/bot-schedules'];
+            everyBox(app).value = '3'; everyBox(app).fire('input', {});
+            for (let i = 0; i < 2; i++) all(app, '.sform .step .btn')[0].click();
+            await settle();
+            w.calls.length = 0;
+            await press(app, 'Save');
+            same('one match sends no spacing, whatever the box held', posts(w)[0].body.what.every_s, 0);
+            // the question of Delete says that the starts that wait go on, for a schedule that has some
+            await press(app, 'Delete', 1);
+            same('the question of Delete for a schedule with a spacing says that its waiting starts go on', texts(app, '.dlg .lead'), ['It starts nothing from now on. Matches that it started and that still run go on. Its starts that still wait go on too.']);
+            await press(app, 'Cancel');
+            await press(app, 'Delete', 0);
+            same('and for a schedule without one it does not', texts(app, '.dlg .lead')[0].indexOf('starts that still wait') < 0, true);
             await press(app, 'Cancel');
         }
         {   // the starts that wait are listed in Running, each with its time, each can be stopped, and Stop all ends them with the matches

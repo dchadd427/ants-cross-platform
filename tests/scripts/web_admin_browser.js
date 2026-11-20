@@ -412,6 +412,24 @@ const BOT_SCENES = [
         ];
         B.matches = B.matches.slice(0, 3);
     } }, openBots],
+    // the spacing in a schedule: the field of its form, its row, and the starts that it lets wait
+    ['p1_schedule_form_spacing_field', { who: 'admin', cropFn: { a: '.sform > .shead', b: '.sform .mapf', side: '.sform' } }, async (pg) => {
+        await openBots(pg);
+        await pg.click('.b-sched .sfoot .btn'); await pg.waitForSelector('.sform');
+        await pg.fill('#sc-name', 'Evening swarm');
+        const plus = pg.locator('.sform .step button').nth(1);
+        for (let i = 0; i < 3; i++) await plus.click();
+        await pg.locator('.sform .minrow .chip', { hasText: /^3 min$/ }).click(); await pg.waitForTimeout(100);
+    }],
+    ['p2_schedule_row_with_spacing', { who: 'admin', crop: '.b-sched', setup: () => { W.bots.schedules[1].what.every_s = 180; } }, openBots],
+    ['p3_running_waiting_starts_of_a_schedule', { who: 'admin', crop: '.b-run', setup: () => {
+        const B = W.bots, now = at('2026-11-16T21:20:00Z');
+        const what = { count: 1, every_s: 0, map: 'random:rotation', rules: 'highest-score', bots: '4', levels: ['hard', 'hard', 'medium', 'medium'], teams: 'random', split: '' };
+        B.matches = B.matches.slice(0, 3);
+        B.matches[0] = Object.assign({}, B.matches[0], { schedule: 'Evening swarm' });
+        delete B.matches[0].by;
+        B.waiting = [2, 3, 4].map((n) => ({ id: 'w5' + n, name: 'the rotation', what, n, of: 4, at: now + (n - 1) * 180, held: false, schedule: 'Evening swarm' }));
+    } }, openBots],
     ['s2b_running_waiting_start_held', { who: 'admin', crop: '.b-run', setup: () => {
         const B = W.bots, now = at('2026-11-16T21:20:00Z');
         fullHouse();

@@ -1,5 +1,5 @@
 {
- "note": "Mutants of what the admin page may ask of the server's own matches of computer players, and of the schedules that start them (src/ants_server/room_manager_bots.cpp, bot_matches.cpp, bot_schedules.cpp, pacific_time.cpp, submissions_http.cpp and the constants of bot_match_spec.hpp and bot_schedules.hpp; docs/SERVER_REPLAYS.md 'Matches of computer players' and 'Schedules', docs/MAP_SUBMISSIONS.md 'Bot matches on the admin page') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the limit of eight matches and of sixteen places (and a big map's weight), people first (three of every four places), the second between two starts, Stop that never touches a room of people, every new route behind the door's pass and token, the lines of the admin log, a run that a limit holds back that is skipped and never queued, the log that names a schedule by its number, the limits of the schedules (20, 12 times, 5 to 1440 minutes, 40 characters), a restart that does not run at once and makes nothing up, the default that is made once, and the Pacific clock (the second Sunday of March, the first of November, the hour that does not happen and the hour that happens twice). Each is caught by test_server S3.270 to S3.277 (the first block: the server suite, ANTS_TEST_FILTER=S3.27) or by test_bot_schedules (BSC). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_admin_mutants.json --keep-going --jobs 1. Every mutant must be caught. The page's own rules are proved by the broken copies of tests/scripts/test_web_admin.py. The rotation lists and the staggered start add: a named map is looked up in the catalog and never on the disk, ISLANDS by name in 187 stays refused, a list may not be empty or hold more than 100 maps or a name twice or a name that is no map of the server or a new map that a room cannot play, a map that a room cannot play is never drawn, a change of a list is logged and one that changes nothing is not, the spacing of a batch and its bounds, the 32 waiting starts, a batch that needs room for its first match only, a held start that waits and is not dropped (and moves the starts after it), a stop of one waiting start and of all, the waiting starts that go on while the schedules are off, the catalog's bounded loads, and the store of the lists (the defaults are no row, an empty list or a name twice is no list).",
+ "note": "Mutants of what the admin page may ask of the server's own matches of computer players, and of the schedules that start them (src/ants_server/room_manager_bots.cpp, bot_matches.cpp, bot_schedules.cpp, pacific_time.cpp, submissions_http.cpp and the constants of bot_match_spec.hpp and bot_schedules.hpp; docs/SERVER_REPLAYS.md 'Matches of computer players' and 'Schedules', docs/MAP_SUBMISSIONS.md 'Bot matches on the admin page') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the limit of eight matches and of sixteen places (and a big map's weight), people first (three of every four places), the second between two starts, Stop that never touches a room of people, every new route behind the door's pass and token, the lines of the admin log, a run that a limit holds back that is skipped and never queued, the log that names a schedule by its number, the limits of the schedules (20, 12 times, 5 to 1440 minutes, 40 characters), a restart that does not run at once and makes nothing up, the default that is made once, and the Pacific clock (the second Sunday of March, the first of November, the hour that does not happen and the hour that happens twice). Each is caught by test_server S3.270 to S3.277 (the first block: the server suite, ANTS_TEST_FILTER=S3.27) or by test_bot_schedules (BSC). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_admin_mutants.json --keep-going --jobs 1. Every mutant must be caught. The page's own rules are proved by the broken copies of tests/scripts/test_web_admin.py. The rotation lists and the staggered start add: a named map is looked up in the catalog and never on the disk, ISLANDS by name in 187 stays refused, a list may not be empty or hold more than 100 maps or a name twice or a name that is no map of the server or a new map that a room cannot play, a map that a room cannot play is never drawn, a change of a list is logged and one that changes nothing is not, the spacing of a batch and its bounds, the 32 waiting starts, a batch that needs room for its first match only, a held start that waits and is not dropped (and moves the starts after it), a stop of one waiting start and of all, the waiting starts that go on while the schedules are off, the catalog's bounded loads, and the store of the lists (the defaults are no row, an empty list or a name twice is no list). The spacing of a schedule adds: a run that ignores it, a refused spacing that is taken, a start that waits and is dropped by the eight or by people's share, a deleted schedule that cancels what it let wait, a spacing that is not kept in the row, and a column of the table too short for the longest batch.",
  "mutants": [
   {
    "id": "bot_cap_is_nine",
@@ -702,6 +702,87 @@
    "build": "test_bot_rotation",
    "test": "timeout 300 ./build/tests/test_server/test_bot_rotation",
    "expect": "BRO1.2"
+  },
+  {
+   "id": "a_schedule_run_ignores_its_spacing",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "const Batch batch = run_batch(s.what, std::string(), s.name, now_s, now_ms);",
+   "new": "BotWhat flat = s.what; flat.every_s = 0; const Batch batch = run_batch(flat, std::string(), s.name, now_s, now_ms);",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.299"
+  },
+  {
+   "id": "a_schedule_takes_a_spacing_that_is_not_one",
+   "file": "src/ants_server/bot_schedules.cpp",
+   "old": "if (!parse_bot_what(body.get(\"what\"), patch.what, error)) return false;",
+   "new": "if (!parse_bot_what(body.get(\"what\"), patch.what, error) && error != \"bad_spacing\") return false;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.298"
+  },
+  {
+   "id": "a_start_held_by_the_eight_is_dropped",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "if (refusal == BotRefusal::Cap || refusal == BotRefusal::Places",
+   "new": "if (refusal == BotRefusal::Places",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.299"
+  },
+  {
+   "id": "a_start_held_by_people_is_dropped",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "|| refusal == BotRefusal::PeopleBusy || refusal == BotRefusal::Budget) {",
+   "new": "|| refusal == BotRefusal::Budget) {",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.299"
+  },
+  {
+   "id": "a_deleted_schedule_cancels_the_starts_that_it_let_wait",
+   "file": "src/ants_server/bot_matches.cpp",
+   "old": "const std::string name = row != nullptr ? row->name : std::string();",
+   "new": "const std::string name = row != nullptr ? row->name : std::string();\n    waiting_.erase(std::remove_if(waiting_.begin(), waiting_.end(), [&](const Waiting& w) { return !name.empty() && w.schedule == name; }), waiting_.end());",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.299"
+  },
+  {
+   "id": "a_schedule_keeps_no_spacing_in_its_row",
+   "file": "src/ants_server/bot_match_spec.cpp",
+   "old": "o.set(\"every_s\", ctl::JsonValue::make_int(static_cast<int64_t>(what.every_s)));",
+   "new": "(void)what;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.298"
+  },
+  {
+   "id": "the_column_of_a_schedule_is_too_short_for_its_spacing",
+   "file": "src/ants_server/db_schema.cpp",
+   "old": "\" what TEXT NOT NULL CHECK (length(what) <= 1000),\"",
+   "new": "\" what TEXT NOT NULL CHECK (length(what) <= 150),\"",
+   "build": "test_bot_schedules",
+   "test": "timeout 300 ./build/tests/test_server/test_bot_schedules",
+   "expect": "BSC8.1"
+  },
+  {
+   "id": "a_run_of_a_schedule_starts_past_the_eight",
+   "file": "src/ants_server/room_manager_bots.cpp",
+   "old": "if (bot_match_count() >= kBotMatchesMax) return refuse",
+   "new": "if (bot_match_count() > kBotMatchesMax) return refuse",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.299"
+  },
+  {
+   "id": "a_run_of_a_schedule_starts_while_people_use_the_places",
+   "file": "src/ants_server/room_manager_bots.cpp",
+   "old": "return limits_.demo_rooms != 0 && public_places() * kBotPeopleShareDenominator > limits_.demo_rooms * kBotPeopleShareNumerator;",
+   "new": "return false;",
+   "build": "test_server",
+   "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
+   "expect": "S3.299"
   }
  ]
 }
