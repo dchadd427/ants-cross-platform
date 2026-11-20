@@ -142,7 +142,7 @@ async function main() {
             check(s[0] + ' no room: the bar has no Games button (the list is on Home, a phone\'s strip has Games)', none.gamesInBar === 0 && none.games === null, JSON.stringify(none));
             if (s[0] === 'side568') check(s[0] + ' no room: held sideways the chip and the Menu are on the first row with Quick host and Quick join (no second row, no hole)', !!none.chip && Math.abs(none.chip[1] - none.host[1]) <= 4 && Math.abs(none.menu[1] - none.host[1]) <= 4, JSON.stringify(none));
             if (['w390', 'w1280', 'side667'].indexOf(s[0]) !== -1) await shot(page, 'noroom_' + s[0]);
-            // Quick host asks Public or Private first (a card over Home)
+            // Quick host asks Public or Invite only first (a card over Home)
             await page.waitForFunction(() => { const b = document.querySelector('.hbar .quick.host'); return b && !b.disabled; }, null, { timeout: 10000 });
             await page.focus('.hbar .quick.host');
             await page.keyboard.press('Enter');

@@ -1,10 +1,10 @@
-// The public Room and the Games list (docs/HOME_GAMES.md, docs/PUBLIC_ROOMS.md): the Room's Public | Private switch, Quick host, and the Games list (GET /lobbies: rows, Join, Join by code), a popover under the Home bar or docked
+// The public Room and the Games list (docs/HOME_GAMES.md, docs/PUBLIC_ROOMS.md): the Room's Public | Invite only switch, Quick host, and the Games list (GET /lobbies: rows, Join, Join by code), a popover under the Home bar or docked
 // in Home's body. Loaded by web/home/home.js after the first paint, with games.css (until then the buttons that it lights stay disabled). ES5: a page gets AntsHomeGames, node gets module.exports
 // (tests/scripts/web_home_games_check.js). The client, model and session are the page's own (web/lobby.html), read through `page`.
 //   * The room's state is the server's word: the switch is drawn from the last Room message, never from what a press asked, and a request that the page's pace holds back sends nothing.
 //   * Everything from the list is UNTRUSTED text: checked field by field (parseList), drawn with textContent, never as markup or a link, and a row that is not of the shape is dropped. At most 50 rows. The one address that a
 //     row's text makes is its map's picture (a checked file name, percent-encoded: AntsMapPicker.previewPath).
-//   * Private rooms (rows that say `private: true`, docs/PUBLIC_ROOMS.md) stand after the joinable rooms as LOCKED cards: a padlock, a PRIVATE tag, no button, no link. A private row has no code (one that has is dropped), and Quick join never tries one.
+//   * Private rooms (rows that say `private: true`, docs/PUBLIC_ROOMS.md) stand after the joinable rooms as LOCKED cards: a padlock, an INVITE ONLY tag, no button, no link. A private row has no code (one that has is dropped), and Quick join never tries one.
 //   * Matches that run now (GET /live, docs/REPLAYS.md "Live") stand in the list below the open rooms as rows with a Live mark and Watch (/play?live=<id>: the same tab, a new one only while the page holds a room); they are always shown (the open rooms first; nothing is kept in
 //     this browser). The door carries no room code and a room that is listed is waiting, so a running match is never a room's row. /live is looked at every 5 s (and at once, 1.5 s apart at the least, when a room of the list has gone: it may have started its match, which is listed from its start), only while the list shows, and a
 //     server without that door (404) or a failed look only hides the section.
@@ -29,7 +29,7 @@
     var REFRESH_MS = 600000;                             // a public room that the leader looks at says "public" again every 10 minutes (the server's idle rule is 30)
     var ACTIVE_MS = 1200000;                             // a leader who touched nothing (pointer, key, touch) for this long is not at the Room: the repeat stops
     var WATCH_CHANNEL = 'ants-watch', WATCH_SEEN = 50;   // the channel on which a tab that this page opened asks for it (web/site_nav.js); the matches that were listed while the page held a room: this many are remembered
-    var ASK_MS = 10000;                                  // a Private that was asked for is told from a room that went private by itself for this long
+    var ASK_MS = 10000;                                  // an Invite only that was asked for is told from a room that went invite only by itself for this long
     var TRIES_MAX = 3, TRY_GAP_MS = 300;                 // Quick join tries this many rooms, one after the other, with a wait of 0 to this many ms (random) between two
     var JOINED_MS = 1500;                                // the card "Joined Pebble's room" stands this long, then the Room shows (a press on its button is quicker)
     var CANCEL_AFTER_MS = 700;                           // the Cancel of a Join that waits takes no press for this long (it stands where Join stood: a double press is not a Cancel)
@@ -45,18 +45,18 @@
     var NARROW = 720;                                    // px: the page's phone layout (web/lobby.html)
     var SEAT_EMPTY = 0, SEAT_PERSON = 1, SEAT_CLIENT = 2;      // the Room message's states of a color (lobby_net.js SLOT; a server's lobby has persons as Client only)
     var PLAN_EASY = 1, PLAN_HARD = 3;                    // its plan kinds that are a computer player (lobby_net.js PLAN)
-    var LOCKED_SHOWN = 6;                                // locked cards that are drawn; the rest is the line "and 6 more private rooms"
+    var LOCKED_SHOWN = 6;                                // locked cards that are drawn; the rest is the line "and 6 more invite-only rooms"
     var TEXT = {
         title: 'Open games', loading: 'Looking for games…', off: 'Games list is off right now', offHint: 'Join by code still works.', none: 'none waiting',
         emptyTitle: 'No open games right now.', emptyLine: 'Rooms show up here when their host switches them to Public.', hostOne: 'Host one!', quickHost: 'Quick host', quickJoin: 'Quick join',
         legendPlayer: 'player', legendBot: 'bot', legendOpen: 'open seat', code: 'Join by code', haveCode: 'Have a code?', closeCode: 'Close', codePlaceholder: 'Room code, like k7m 2xq', join: 'Join',
-        private: 'Private', privateSub: 'link only', public: 'Public', publicSub: 'listed', publicWide: ' in Open games', publicRoom: 'Public room', privateRoom: 'Private room', visLabel: 'Who can find this room',
-        noteHow: 'Public rooms show your name and map in the Games list.', noteListed: 'Listed. Anyone on the front page can join from Open games. The link works too.', noteWait: 'One moment, then press again.',
-        ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', keepPrivate: 'Keep it private', hostTitle: 'Host a game', hostLine: 'Who can join? A public room shows in Open games. A private room is for the people you send its link to.', hostPublic: 'Public room', hostPrivate: 'Private room', leaveJoin: 'Leave and join', leaveHost: 'Leave and host', cancel: 'Cancel', reload: 'Reload', best: 'BEST', yours: 'Yours', live: ' · updates live', finding: 'Finding a game…', looking: 'Looking for open games…', roomOpening: 'Opening the room…', goRoom: 'Go to the room', leaveRoom: 'Leave room', notNow: 'Not now',
+        private: 'Invite only', privateSub: 'locked', public: 'Public', publicSub: 'listed', publicWide: ' in Open games', publicRoom: 'Public room', privateRoom: 'Invite-only room', visLabel: 'Who can join this room',
+        noteHow: 'Others see it in Open games, locked, with your name and map. People join only with your link.', noteListed: 'Listed. Anyone on the front page can join from Open games. The link works too.', noteWait: 'One moment, then press again.',
+        ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', keepPrivate: 'Keep it invite only', hostTitle: 'Host a game', hostLine: 'Who can join? A public room shows in Open games, and anyone can join it. An invite-only room shows there locked; people join only with your link.', hostPublic: 'Public room', hostPrivate: 'Invite only', leaveJoin: 'Leave and join', leaveHost: 'Leave and host', cancel: 'Cancel', reload: 'Reload', best: 'BEST', yours: 'Yours', live: ' · updates live', finding: 'Finding a game…', looking: 'Looking for open games…', roomOpening: 'Opening the room…', goRoom: 'Go to the room', leaveRoom: 'Leave room', notNow: 'Not now',
         noneLine: 'Nobody is waiting for a player. Host one, and others can join you.', noneYours: 'Your room goes public with its map and your friends in it.', noneNew: 'A new room opens for you, and it goes public.', joiningCode: 'Joining the room…', joinFirst: ' Wait for it, or cancel it in the list.', opening: 'The game is opening. If it does not, reload this page.',
-        already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went private after 30 minutes. Make it public again?',
-        hostChanged: 'This room is private again because the host changed.', stillPrivate: 'Your room is still private. Use the Public switch in the room.',
-        privateTag: 'Private', noneJoin: 'No open games to join right now.',
+        already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went invite only after 30 minutes. Make it public again?',
+        hostChanged: 'This room is invite only again because the host changed.', stillPrivate: 'Your room is still invite only. Use the Public switch in the room.',
+        privateTag: 'Invite only', noneJoin: 'No open games to join right now.',
         watch: 'Watch', liveMark: 'Live', mode187: '187', inProgress: 'In progress', soFar: ' so far', starting: 'Starting\u2026', nobodyNamed: 'Players not named',
         full: 'That room is full.', started: 'The match in that room has already started.', gone: 'That game is not open any more.', silent: 'The server did not answer. Try again in a moment.'
     };
@@ -246,7 +246,7 @@
             notice('running', TEXT.running, 'warn', rejoinOffered() ? [{ text: TEXT.rejoin, run: function () { doc.getElementById('rejoin-go').click(); } }] : []);
         }
 
-        // ---- the Public | Private switch of the Room's card (a guest reads it; the leader changes it) ----
+        // ---- the Public | Invite only switch of the Room's card (a guest reads it; the leader changes it) ----
         var visBox = el('div', 'vis'), visPrivate = el('button', 'btn vbtn'), visPublic = el('button', 'btn vbtn'), visTag = el('span', 'vistag'), visNote = el('p', 'visnote');
         visBox.setAttribute('role', 'group'); visBox.setAttribute('aria-label', TEXT.visLabel); visBox.hidden = true; visTag.hidden = true; visNote.hidden = true; visNote.setAttribute('role', 'status');
         [visPrivate, visPublic].forEach(function (b) { b.type = 'button'; visBox.appendChild(b); });
@@ -311,7 +311,7 @@
             notice('public', 'Your room is public now. It shows in ' + TEXT.title + (names.length ? '; ' + rules.listOf(names) + (names.length > 1 ? ' stay' : ' stays') + ' in it.' : '.'), '', []);
         }
         function wentPrivate(c, prev, room) {              // the room was public a Room message ago: the leader asked, another person leads now, or nobody did anything for 30 minutes
-            var asked = askedAt && now() - askedAt < ASK_MS;                   // (a Private that the server dropped is not the reason of a room that goes private half an hour later)
+            var asked = askedAt && now() - askedAt < ASK_MS;                   // (an Invite only that the server dropped is not the reason of a room that goes invite only half an hour later)
             askedAt = 0;
             if (asked) return;
             var changed = Net.diffRooms(prev, room).some(function (e) { return e.type === 'host'; });
@@ -378,7 +378,7 @@
             track(client());
             ctl.show('room', 'push');
         }
-        function chooseHost() {                            // Quick host with no room asks first: Public (listed, Visibility(public) when the room is ready) or Private (a link only); Escape or Cancel changes nothing
+        function chooseHost() {                            // Quick host with no room asks first: Public (listed, Visibility(public) when the room is ready) or Invite only (the room is listed, locked; people join only by its link); Escape or Cancel changes nothing
             card({ title: TEXT.hostTitle, lines: [TEXT.hostLine], stack: true, acts: [{ text: TEXT.hostPublic, cls: 'gyes', run: startHost }, { text: TEXT.hostPrivate, cls: 'gyes', run: startPrivate }, { text: TEXT.cancel, cls: 'gstay', back: true }], focus: 0, opener: parts.quickHost });
         }
         function stillJoining() {                          // a press while a Join of the list waits: the list shows it again (with its Cancel), and the toast says why nothing else starts
@@ -555,7 +555,7 @@
             pic.setAttribute('aria-hidden', 'true');
             return pic;
         }
-        // `lock` ('private', or 'yours' for the page's own): a locked card (a private room): dimmed, with the tags PRIVATE, Yours and 187 and a padlock where Join stands. No button, link, focus stop or data-code; a screen reader hears one sentence (the pieces are hidden from it).
+        // `lock` ('private', or 'yours' for the page's own): a locked card (a private room): dimmed, with the tags INVITE ONLY, Yours and 187 and a padlock where Join stands. No button, link, focus stop or data-code; a screen reader hears one sentence (the pieces are hidden from it).
         function rowNode(row, onList, best, yours, lock) {
             var li = el(onList ? 'li' : 'div', lock ? 'gitem gpriv' : 'gitem'), seats = seatsOf(row), pic = picOf(row), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots');
             dots.setAttribute('aria-hidden', 'true');
@@ -570,7 +570,7 @@
             if (best || yours) top.appendChild(el('span', yours ? 'gyours' : 'gbest', yours ? TEXT.yours : TEXT.best));       // (beside the map's name; a narrow row wraps it under)
             text.appendChild(top); text.appendChild(line); li.appendChild(pic); li.appendChild(text);
             if (lock) {
-                var pad = el('span', 'glockbox'), tell = el('span', 'sr', 'Private room, cannot join. ' + (lock === 'yours' ? 'Yours. ' : '') + possessive(row.host) + ' room, ' + row.mapName + ', ' + seats.count + ' seats taken, ' + seats.bots + '.');
+                var pad = el('span', 'glockbox'), tell = el('span', 'sr', 'Invite-only room, cannot join. ' + (lock === 'yours' ? 'Yours. ' : '') + possessive(row.host) + ' room, ' + row.mapName + ', ' + seats.count + ' seats taken, ' + seats.bots + '.');
                 pad.setAttribute('aria-hidden', 'true'); li.appendChild(pad); li.appendChild(tell);
             } else if (onList && !yours) {
                 var b = button('gjoin', TEXT.join, guard(function () { joinRow(row); }));
@@ -629,12 +629,12 @@
                 if (l) { l.node.textContent = lengthWords(e); l.link.setAttribute('aria-label', 'Watch the ' + l.kind + ' on ' + l.map + ', ' + l.names + ', ' + lengthWords(e)); }
             });
         }
-        function countLine(n, p) {                         // the list's head: "3 open, 3 private, 2 in progress" (a part only when there is one: "none open, 2 private"), else "3 waiting - updates live"
+        function countLine(n, p) {                         // the list's head: "3 open, 3 invite only, 2 in progress" (a part only when there is one: "none open, 2 invite only"), else "3 waiting - updates live"
             if (!loaded || off) return '';
             var m = liveShown() ? live.length : 0, parts;
             if (!p && !m) return n === 0 ? TEXT.none : countText(n) + ' waiting' + TEXT.live;
             parts = [!n && p ? 'none open' : countText(n) + ' open'];
-            if (p) parts.push(countText(p) + ' private');
+            if (p) parts.push(countText(p) + ' invite only');
             if (m) parts.push(countText(m) + ' in progress');
             return parts.join(', ');
         }
@@ -654,7 +654,7 @@
             joinButtons = [];
             shown.forEach(function (r, n) { popList.appendChild(rowNode(r, true, n === lead && shown.length - lead > 1, n < lead)); });
             locks.slice(0, LOCKED_SHOWN).forEach(function (l) { popList.appendChild(rowNode(l.row, true, false, false, l.yours ? 'yours' : 'private')); });
-            if (locks.length > LOCKED_SHOWN) { var more = locks.length - LOCKED_SHOWN; popList.appendChild(el('li', 'gmore', 'and ' + (locks.length >= ROWS_MAX ? (ROWS_MAX - LOCKED_SHOWN) + '+' : more) + ' more private room' + (more === 1 ? '' : 's'))); }
+            if (locks.length > LOCKED_SHOWN) { var more = locks.length - LOCKED_SHOWN; popList.appendChild(el('li', 'gmore', 'and ' + (locks.length >= ROWS_MAX ? (ROWS_MAX - LOCKED_SHOWN) + '+' : more) + ' more invite-only room' + (more === 1 ? '' : 's'))); }
             busy(joining, popJoinText.textContent);
             if (focusCode) { var again = popList.querySelector('[data-code="' + focusCode + '"]'); if (again && again.focus) again.focus(); }
         }
@@ -754,9 +754,9 @@
             if (typeof win.fetch !== 'function') { settle(null); done(); return; }
             look(LIST_URL).then(function (data) { settle(data); done(); });
         }
-        function lockedLine() {                                    // "2 private rooms are locked, so Quick join skips them." (not the page's own room); '' when there are none
+        function lockedLine() {                                    // "2 invite-only rooms are locked, so Quick join skips them." (not the page's own room); '' when there are none
             var n = priv.length - (ownLocked() >= 0 ? 1 : 0);
-            return n <= 0 ? '' : (n === 1 ? '1 private room is locked, so Quick join skips it.' : countText(n) + ' private rooms are locked, so Quick join skips them.');
+            return n <= 0 ? '' : (n === 1 ? '1 invite-only room is locked, so Quick join skips it.' : countText(n) + ' invite-only rooms are locked, so Quick join skips them.');
         }
         function stopFinding() { finding = false; joinSeq++; try { if (page.cancel) page.cancel(); } catch (e) { /* the page's own */ } }
         function lookLine(n) { return 'Looking through ' + n + (n === 1 ? ' open game' : ' open games') + ' for the best one.'; }
