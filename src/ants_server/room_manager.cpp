@@ -1080,6 +1080,26 @@ std::vector<LobbyListing> RoomManager::lobbies(uint32_t now_ms) const {
     return list;
 }
 
+std::vector<PrivateListing> RoomManager::private_lobbies() const {
+    std::vector<PrivateListing> list;
+    for (const auto& entry : rooms_) {
+        PrivateListing row;
+        if (entry.second->private_listing(row)) list.push_back(std::move(row));
+    }
+    // a total order of the fields that the row shows (rooms are visited by code: a stable sort of ties would leave that order in the answer; rows that tie in every field are the same row)
+    std::sort(list.begin(), list.end(), [](const PrivateListing& a, const PrivateListing& b) {
+        if (a.people != b.people) return a.people > b.people;
+        if (a.map != b.map) return a.map < b.map;
+        if (a.host != b.host) return a.host < b.host;
+        if (a.mode != b.mode) return a.mode < b.mode;
+        if (a.bots != b.bots) return a.bots < b.bots;
+        if (a.free_colors != b.free_colors) return a.free_colors < b.free_colors;
+        return a.size < b.size;
+    });
+    if (list.size() > kMaxListedLobbies) list.resize(kMaxListedLobbies);
+    return list;
+}
+
 BusyCounts RoomManager::busy(uint32_t now_ms) const {
     BusyCounts counts;
     for (const auto& entry : rooms_) {
