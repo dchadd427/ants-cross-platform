@@ -73,16 +73,15 @@ except ImportError:
         torus_arc,
     )
 
-# Extreme lookout gaze: eyeballs turn all the way into the left/right corners (+-35.5 deg)
-# on a spherical sclera without sinking behind the sclera or clipping the dark orbital rim.
-GAZE_ANGLE = 0.62
+# Calibrated clean lookout gaze (+-19.5 deg): both eyeballs track harmoniously together across
+# the full IdleLookout sweep with 100% of iris/pupil/catchlights visible on the spherical sclera
+# and zero clipping into the skull, socket rim, or domino mask nose bridge.
+GAZE_ANGLE = 0.34
 
-# Sly mischievous half-hooded asymmetric rest lids peeking cleanly beneath the domino mask rim;
-# spherical shells still seal 100% cleanly on Blink.
-_LID_DROOP: Dict[str, Tuple[float, float]] = {
-    "eyelid_left": (0.48, 0.14),
-    "eyelid_right": (0.36, -0.09),
-}
+# Clean balanced resting eyelid angle (symmetrical, zero crooked roll); tucked neatly under
+# the top rim of the domino mask at rest and sealing 100% cleanly on Blink.
+_LID_REST_DROOP = 0.0
+_THIEF_BLINK_ANGLE = EYELID_CLOSED_ANGLE + 0.04
 
 # Stealthy low hiding crouch (`#162`) tuned with Thief's sleek roguish skull (~85% of Worker height, H ~ 0.87).
 THIEF_CROUCH = 0.145
@@ -280,11 +279,12 @@ def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
                 scale=axf.scale,
             )
 
-    # Refit eye anchors cleanly into the deeper orbital hollows so eyes nest harmoniously in the mask.
+    # Refit eye anchors cleanly forward of the recessed orbital hollow (`z_skull ~ 0.1256`) so the
+    # entire spherical eye dome sits proud with zero cranium or nose-bridge clipping at any gaze angle.
     eye_y = hy - 0.004
-    eye_z = hz + 0.114
-    anchors["eye_left"] = (0.083, eye_y, eye_z)
-    anchors["eye_right"] = (-0.083, eye_y, eye_z)
+    eye_z = hz + 0.123
+    anchors["eye_left"] = (0.084, eye_y, eye_z)
+    anchors["eye_right"] = (-0.084, eye_y, eye_z)
     anchors["eye_center"] = (0.0, eye_y, eye_z + 0.012)
     return cranium
 
@@ -417,7 +417,7 @@ def _build_unified_domino_mask(
         perim_v[3 * n_side + k] = _mask_v_limits(u3)[0]
 
     # Solve exact smooth 3D clearance curve around the left eye + spherical eyelid shell.
-    target_clear = lid_outer_r + 0.0045
+    target_clear = lid_outer_r + 0.0025
     hole_s = np.zeros(m_ring, dtype=np.float64)
     ray_du = np.zeros(m_ring, dtype=np.float64)
     ray_dv = np.zeros(m_ring, dtype=np.float64)
@@ -725,108 +725,111 @@ def _add_knot_and_tails(scene: SceneBuilder, caster: _CraniumCaster) -> None:
 
 
 def _build_spherical_eyelid(name: str, r_outer: float, thickness: float, yaw_y: float) -> MeshPart:
-    """True spherical chitin_team upper eyelid shell matching `base_ant` clearance invariant."""
-    lid = hemisphere_shell(r_outer, r_outer, r_outer, thickness=thickness, start_phi=-0.16, u_segs=28, v_segs=12, name=name, material="chitin_team")
-    return lid.rotate_xyz(rx=-1.08, ry=yaw_y)
+    """Sleek symmetrical spherical chitin_team upper eyelid tucked cleanly under the mask brow."""
+    lid = hemisphere_shell(r_outer, r_outer, r_outer, thickness=thickness, start_phi=-0.14, u_segs=28, v_segs=12, name=name, material="chitin_team")
+    return lid.rotate_xyz(rx=-1.14, ry=yaw_y)
 
 
 def _add_shifty_eyes(scene: SceneBuilder, anchors: dict, blink: float, gaze: float) -> float:
-    """Build Thief's trimmed spherical shifty eyes (`+-0.62 rad`) with huge ~72% curved irises + lids.
+    """Build Thief's clean, bright, harmoniously tracking spherical 5-part eyes + sleek lids.
 
-    Returns the exact spherical `lid_outer_r` so the unified domino mask cutout clears the
-    sweeping eyelid shell cleanly at every blink and gaze angle.
+    Uses a true uniform sphere sclera (`r = 0.061`, zero Y-stretch) with forward-aligned
+    eyeball pivots rotating `+-GAZE_ANGLE` (`+-0.34 rad`) so 100% of both irises, pupils,
+    and dual studio catchlights stay crisp on the bright warm-ivory sclera across all gaze
+    frames with zero skull, socket, or domino-mask clipping.
     """
     sclera_r = 0.061
-    lid_outer_r = 0.075
+    lid_outer_r = 0.074
     for side, sign in (("left", 1.0), ("right", -1.0)):
         eye = np.asarray(anchors[f"eye_{side}"], dtype=np.float64)
-        yaw = 0.16 * sign
+        yaw = 0.12 * sign
 
-        # Clean sculpted dark orbital socket rim framing each expressive shifty eye.
+        # Clean sculpted dark orbital socket bezel framing the spherical eye without clipping it.
         scene.add(
             "eyes",
-            torus_arc(0.0655, 0.0068, u_segs=26, v_segs=8, plane="xy", name=f"eye_socket_rim_{side}", material="chitin_dark")
-            .scale(0.97, 1.03, 0.85)
-            .translate(0.0, 0.0, 0.005)
-            .rotate_xyz(rx=-0.08, ry=yaw)
+            torus_arc(0.0635, 0.0058, u_segs=26, v_segs=8, plane="xy", name=f"eye_socket_rim_{side}", material="chitin_dark")
+            .scale(0.98, 1.00, 0.86)
+            .translate(0.0, 0.0, -0.002)
+            .rotate_xyz(rx=-0.06, ry=yaw)
             .translate(eye),
         )
-        # True spherical-front warm cream-white sclera matching compact non-alien head proportions.
-        sclera_local = ellipsoid(sclera_r, sclera_r * 1.04, sclera_r, u_segs=24, v_segs=18, name=f"sclera_{side}", material="eye_white").rotate_xyz(rx=-0.08, ry=yaw)
+        # True uniform sphere warm-ivory sclera (rotationally invariant — zero stretch mismatch!).
+        sclera_local = sphere(sclera_r, u_segs=26, v_segs=18, name=f"sclera_{side}", material="eye_white")
         scene.add("eyes", sclera_local.translate(eye))
 
-        # Pivoted eyeball node carrying curved spherical-cap 5-part sparkling eyes: dark limbal ring,
-        # rich olive iris (~73%), glossy pupil (~48%), and dual wet-eye studio catchlights!
+        # Harmoniously forward-aligned pivoted eyeball carrying crisp 5-part sparkling eyes:
+        # dark limbal ring, rich olive iris, glossy pupil, and dual upper-left/lower-right catchlights.
         ball = f"eye_ball_{side}"
         limbal = _spherical_eye_cap(
             sclera_r,
-            ang_x=0.87,
-            ang_y=0.90,
-            thickness=0.0014,
+            ang_x=0.68,
+            ang_y=0.70,
+            thickness=0.0012,
             u_segs=26,
             v_segs=6,
             name=f"limbal_{side}",
             material="eye_limbal",
-        ).rotate_xyz(rx=-0.08)
+        ).rotate_xyz(rx=-0.06)
         iris = _spherical_eye_cap(
-            sclera_r + 0.0010,
-            ang_x=0.77,
-            ang_y=0.80,
-            thickness=0.0014,
+            sclera_r + 0.0008,
+            ang_x=0.60,
+            ang_y=0.62,
+            thickness=0.0012,
             u_segs=26,
             v_segs=6,
             name=f"iris_{side}",
             material="eye_iris",
-        ).rotate_xyz(rx=-0.08)
+        ).rotate_xyz(rx=-0.06)
         pupil = _spherical_eye_cap(
-            sclera_r + 0.0020,
-            ang_x=0.49,
-            ang_y=0.51,
-            thickness=0.0014,
+            sclera_r + 0.0016,
+            ang_x=0.38,
+            ang_y=0.40,
+            thickness=0.0012,
             u_segs=22,
             v_segs=5,
             name=f"pupil_{side}",
             material="eye_pupil",
-        ).rotate_xyz(rx=-0.08)
+        ).rotate_xyz(rx=-0.06)
+        # Dual wet-eye studio catchlights (viewer upper-left -X,+Y and lower-right +X,-Y on BOTH eyes).
         glint_main = (
-            ellipsoid(0.0092, 0.0102, 0.0024, u_segs=14, v_segs=10, name=f"catchlight_main_{side}", material="eye_catchlight")
-            .rotate_xyz(rx=-0.16, ry=-0.22)
-            .translate(-0.012, 0.0075, sclera_r + 0.0007)
-            .rotate_xyz(rx=-0.08)
+            ellipsoid(0.0080, 0.0090, 0.0020, u_segs=14, v_segs=10, name=f"catchlight_main_{side}", material="eye_catchlight")
+            .rotate_xyz(rx=-0.20, ry=-0.20)
+            .translate(-0.0115, 0.0120, sclera_r + 0.0004)
+            .rotate_xyz(rx=-0.06)
         )
         glint_bounce = (
-            ellipsoid(0.0038, 0.0038, 0.0020, u_segs=10, v_segs=8, name=f"catchlight_bounce_{side}", material="eye_catchlight")
-            .rotate_xyz(rx=0.22, ry=0.22)
-            .translate(0.014, -0.014, sclera_r + 0.0003)
-            .rotate_xyz(rx=-0.08)
+            ellipsoid(0.0036, 0.0036, 0.0016, u_segs=10, v_segs=8, name=f"catchlight_bounce_{side}", material="eye_catchlight")
+            .rotate_xyz(rx=0.20, ry=0.20)
+            .translate(0.0120, -0.0115, sclera_r + 0.0002)
+            .rotate_xyz(rx=-0.06)
         )
         scene.add(ball, [limbal, iris, pupil, glint_main, glint_bounce])
         gaze_clamped = max(-1.0, min(1.0, float(gaze)))
         scene.set_node_transform(ball, translation=eye, rotation=quat_from_axis_angle((0.0, 1.0, 0.0), gaze_clamped * GAZE_ANGLE))
 
-        # Mathematically guaranteed radial eyelid clearance: inner spherical radius >= r_eye_max + 0.0076
-        # so zero sclera/limbal/iris/pupil/catchlight vertex ever phases through at ANY blink or gaze angle.
+        # Sleek symmetrical spherical eyelid: inner radius = r_eye_max + 0.0068, thickness = 0.0032
+        # so zero sclera/limbal/iris/pupil/catchlight vertex ever penetrates at any blink or gaze angle.
         eye_local_pts = np.vstack([p.positions for p in (sclera_local, limbal, iris, pupil, glint_main, glint_bounce)]).astype(np.float64)
         r_eye_max = float(np.max(np.linalg.norm(eye_local_pts, axis=1)))
-        lid_thick = 0.0040
-        lid_outer_r = r_eye_max + 0.0076 + lid_thick
+        lid_thick = 0.0032
+        lid_outer_r = r_eye_max + 0.0068 + lid_thick
         lid = f"eyelid_{side}"
-        droop, roll = _LID_DROOP[lid]
-        shell = _build_spherical_eyelid(f"{lid}_shell", lid_outer_r, lid_thick, yaw_y=yaw).rotate_xyz(rz=roll).rotate_xyz(rx=droop)
+        shell = _build_spherical_eyelid(f"{lid}_shell", lid_outer_r, lid_thick, yaw_y=yaw).rotate_xyz(rx=_LID_REST_DROOP)
         scene.add(lid, shell)
-        remaining = EYELID_CLOSED_ANGLE - droop
+        remaining = _THIEF_BLINK_ANGLE - _LID_REST_DROOP
         scene.set_node_transform(lid, translation=eye, rotation=quat_from_axis_angle((1.0, 0.0, 0.0), max(0.0, min(1.0, float(blink))) * remaining))
 
-    # Shared "Blink" clip timing (each lid closes smoothly by its remaining angle).
+    # Shared "Blink" clip timing (both symmetrical lids sweep smoothly down and seal 100% cleanly).
     times = [0.0, 2.40, 2.48, 2.56, 2.68, 3.00]
-    blink_channels = []
-    for lid, (droop, _) in _LID_DROOP.items():
-        q_open = (0.0, 0.0, 0.0, 1.0)
-        q_closed = quat_from_axis_angle((1.0, 0.0, 0.0), EYELID_CLOSED_ANGLE - droop)
-        blink_channels.append(AnimationChannel(lid, "rotation", list(times), [q_open, q_open, q_closed, q_closed, q_open, q_open]))
+    q_open = (0.0, 0.0, 0.0, 1.0)
+    q_closed = quat_from_axis_angle((1.0, 0.0, 0.0), _THIEF_BLINK_ANGLE - _LID_REST_DROOP)
+    blink_channels = [
+        AnimationChannel(f"eyelid_{side}", "rotation", list(times), [q_open, q_open, q_closed, q_closed, q_open, q_open])
+        for side in ("left", "right")
+    ]
     scene.add_animation("Blink", blink_channels)
 
-    # Authentic `atst301` lookout loop (2.52s): dart ALL THE WAY left (-0.62) and ALL THE WAY right (+0.62).
+    # Authentic `atst301` lookout loop (2.52s): dart crisply left (-0.34) and right (+0.34) in sync with Idle!
     q_left = quat_from_axis_angle((0.0, 1.0, 0.0), -GAZE_ANGLE)
     q_right = quat_from_axis_angle((0.0, 1.0, 0.0), +GAZE_ANGLE)
     look_times = [0.0, 1.10, 1.26, 2.36, 2.52]
@@ -1086,12 +1089,12 @@ def _add_thief_idle_animation(scene: SceneBuilder) -> None:
     scene.add_animation("Idle", channels, replace=True)
 
 
-def build_thief(blink: float = 0.0, gaze: float = -0.42) -> SceneBuilder:
+def build_thief(blink: float = 0.0, gaze: float = -0.25) -> SceneBuilder:
     """Build the sly, mischievous Rogue Bandit Thief Ant.
 
     `blink` in [0, 1] sets resting eyelid closure; `gaze` in [-1, 1] turns
-    the shifty lookout eyes from full far-left (-1) to full far-right (+1)
-    (defaults to `-0.42` for a sly sideways rest glance composing with IdleLookout).
+    the shifty lookout eyes cleanly left (-1) to right (+1)
+    (defaults to `-0.25` for a subtle harmonious sideways rest glance).
     """
     scene, anchors = build_base_ant(
         scene_name="ant_thief",
@@ -1133,7 +1136,7 @@ def build_thief(blink: float = 0.0, gaze: float = -0.42) -> SceneBuilder:
     return scene
 
 
-def build_ant(blink: float = 0.0, gaze: float = -0.42) -> SceneBuilder:
+def build_ant(blink: float = 0.0, gaze: float = -0.25) -> SceneBuilder:
     """Canonical module entrypoint for `build_all.py`."""
     return build_thief(blink=blink, gaze=gaze)
 
