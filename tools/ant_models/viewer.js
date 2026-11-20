@@ -70,12 +70,12 @@
     light: {
       bgTop: [0.855, 0.880, 0.918], bgMid: [0.958, 0.966, 0.978], bgBot: [0.780, 0.816, 0.862],
       plinthTop: [0.68, 0.71, 0.76], plinthSide: [0.42, 0.46, 0.52], plinthRing: [0.45, 0.49, 0.56],
-      sky: [0.62, 0.69, 0.80], ground: [0.16, 0.17, 0.20],
+      sky: [0.56, 0.70, 0.82], ground: [0.18, 0.17, 0.18], rimBoost: 0.62,
     },
     dark: {
-      bgTop: [0.075, 0.092, 0.128], bgMid: [0.138, 0.165, 0.215], bgBot: [0.055, 0.068, 0.095],
-      plinthTop: [0.095, 0.112, 0.145], plinthSide: [0.048, 0.060, 0.082], plinthRing: [0.19, 0.24, 0.31],
-      sky: [0.44, 0.52, 0.66], ground: [0.07, 0.08, 0.10],
+      bgTop: [0.072, 0.092, 0.130], bgMid: [0.136, 0.168, 0.220], bgBot: [0.052, 0.068, 0.098],
+      plinthTop: [0.095, 0.114, 0.148], plinthSide: [0.048, 0.060, 0.082], plinthRing: [0.19, 0.25, 0.32],
+      sky: [0.38, 0.56, 0.68], ground: [0.08, 0.08, 0.09], rimBoost: 1.0,
     },
   };
 
@@ -118,8 +118,8 @@
   in vec3 v_worldPos, v_worldNormal, v_color;
   in vec2 v_uv;
   uniform vec3 u_cameraPos, u_viewDir, u_baseColor, u_emissive, u_keyDir, u_fillDir, u_rimDir, u_skyColor, u_groundColor;
-  uniform float u_alpha, u_metallic, u_roughness, u_normalScale;
-  uniform int u_isOrtho, u_isOptical, u_hasNormalTex;
+  uniform float u_alpha, u_metallic, u_roughness, u_normalScale, u_rimBoost;
+  uniform int u_isOrtho, u_matKind, u_hasNormalTex;
   uniform sampler2D u_baseTex, u_normalTex, u_mrTex;
   out vec4 fragColor;
 
@@ -152,10 +152,13 @@
   }
   vec3 F_Schlick(float c, vec3 F0) { return F0 + (1.0 - F0) * pow(clamp(1.0 - c, 0.0, 1.0), 5.0); }
   vec3 studioEnv(vec3 R, float rough) {
-    vec3 env = mix(u_groundColor * 0.55, u_skyColor * 1.10, smoothstep(0.16, 0.90, clamp(R.y * 0.5 + 0.5, 0.0, 1.0)));
+    vec3 env = mix(u_groundColor * 0.58, u_skyColor * 1.14, smoothstep(0.14, 0.90, clamp(R.y * 0.5 + 0.5, 0.0, 1.0)));
     float sharp = (1.0 - rough) * (1.0 - rough);
-    return env + vec3(1.0, 0.96, 0.90) * smoothstep(0.66, 0.96, dot(R, u_keyDir)) * 1.35 * sharp
-               + vec3(0.82, 0.92, 1.0) * smoothstep(0.72, 0.97, dot(R, u_rimDir)) * 0.72 * sharp;
+    float glintExp = mix(22.0, 220.0, sharp);
+    float keySoft = smoothstep(0.66, 0.96, dot(R, u_keyDir)) * 1.38 + pow(max(dot(R, u_keyDir), 0.0), glintExp) * 1.85 * sharp;
+    float fillStrip = smoothstep(0.76, 0.98, dot(R, u_fillDir)) * 0.52;
+    float rimSoft = smoothstep(0.70, 0.97, dot(R, u_rimDir)) * 0.88 + pow(max(dot(R, u_rimDir), 0.0), glintExp * 0.7) * 0.95 * sharp;
+    return env + vec3(1.0, 0.95, 0.87) * keySoft * sharp + vec3(0.64, 0.88, 1.0) * fillStrip * sharp + vec3(0.84, 0.96, 1.0) * rimSoft * sharp;
   }
   vec3 evalLight(vec3 L, vec3 lCol, vec3 N, vec3 V, vec3 albedo, float met, float rough, vec3 F0, float coatW, inout vec3 specAcc) {
     float NoL = max(dot(N, L), 0.0);
@@ -163,9 +166,9 @@
     vec3 H = normalize(V + L);
     float NoV = max(dot(N, V), 1e-4), NoH = max(dot(N, H), 0.0), HoV = max(dot(H, V), 0.0);
     vec3 F = F_Schlick(HoV, F0);
-    vec3 spec = (D_GGX(NoH, max(rough * rough, 0.04)) * G_Smith(NoV, NoL, rough) * F) / (4.0 * NoV * NoL + 1e-4);
+    vec3 spec = (D_GGX(NoH, max(rough * rough, 0.032)) * G_Smith(NoV, NoL, rough) * F) / (4.0 * NoV * NoL + 1e-4);
     vec3 diff = (vec3(1.0) - F) * (1.0 - met) * albedo / PI;
-    float coat = coatW * (D_GGX(NoH, 0.036) * G_Smith(NoV, NoL, 0.19) * (0.04 + 0.96 * pow(1.0 - HoV, 5.0))) / (4.0 * NoV * NoL + 1e-4);
+    float coat = coatW * (D_GGX(NoH, 0.024) * G_Smith(NoV, NoL, 0.16) * (0.04 + 0.96 * pow(1.0 - HoV, 5.0))) / (4.0 * NoV * NoL + 1e-4);
     vec3 specTerm = (spec + vec3(coat)) * lCol * NoL;
     specAcc += specTerm;
     return diff * lCol * NoL + specTerm;
@@ -182,7 +185,7 @@
 
     vec4 baseSample = texture(u_baseTex, v_uv);
     vec4 mrSample = texture(u_mrTex, v_uv);
-    float rough = clamp(u_roughness * mrSample.g, 0.05, 0.98);
+    float rough = clamp(u_roughness * mrSample.g, 0.04, 0.98);
     float met = clamp(u_metallic * mrSample.b, 0.0, 1.0);
     float microCav = 1.0;
     if (u_hasNormalTex == 1) {
@@ -191,32 +194,45 @@
     }
     vec3 albedo = max(u_baseColor * baseSample.rgb * microCav, 0.0);
 
-    // Optical catchlights strictly on eyes & glass; satin chitin/cloth/metal use normal + MR maps
-    float coatW = u_isOptical == 1 ? 0.26 * (1.0 - smoothstep(0.18, 0.44, rough)) : 0.0;
+    // Optical specular glints on eyes & glass; warm key + cool-teal fill + crisp rim on character forms
+    float coatW = u_matKind == 1 ? 0.34 * (1.0 - smoothstep(0.18, 0.42, rough)) : 0.0;
     vec3 F0 = mix(vec3(0.045), albedo, met), specAcc = vec3(0.0);
-    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.96, 0.90) * 3.25, N, V, albedo, met, rough, F0, coatW, specAcc)
-            + evalLight(u_fillDir, vec3(0.76, 0.86, 1.0) * 0.92, N, V, albedo, met, rough, F0, coatW, specAcc)
-            + evalLight(u_rimDir, vec3(0.86, 0.94, 1.0) * 1.65, N, V, albedo, met, rough, F0, coatW, specAcc);
+    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.94, 0.85) * 3.30, N, V, albedo, met, rough, F0, coatW, specAcc)
+            + evalLight(u_fillDir, vec3(0.58, 0.84, 0.96) * 0.94, N, V, albedo, met, rough, F0, coatW, specAcc)
+            + evalLight(u_rimDir, vec3(0.84, 0.96, 1.0) * 1.90, N, V, albedo, met, rough, F0, coatW, specAcc);
 
     vec3 bakedAo = clamp(v_color, 0.0, 1.0);
-    float aoScalar = dot(bakedAo, vec3(0.2126, 0.7152, 0.0722)) * microCav;
-    float geoAo = mix(0.76, 1.0, smoothstep(0.0, 0.26, v_worldPos.y)) * mix(0.74, 1.0, smoothstep(-0.38, 0.52, N.y));
-    vec3 directAo = mix(vec3(1.0), bakedAo, u_alpha < 0.99 ? 0.20 : 0.52);
+    vec3 aoRich = pow(bakedAo, vec3(1.28));
+    float aoScalar = dot(aoRich, vec3(0.2126, 0.7152, 0.0722)) * microCav;
+    float geoAo = mix(0.75, 1.0, smoothstep(0.0, 0.26, v_worldPos.y)) * mix(0.72, 1.0, smoothstep(-0.38, 0.52, N.y));
+    vec3 directAo = mix(vec3(1.0), aoRich, u_alpha < 0.99 ? 0.18 : 0.62);
 
     vec3 R = reflect(-V, N); float NoV = max(dot(N, V), 0.0);
     float specOccl = clamp(pow(NoV + aoScalar, exp2(-16.0 * rough - 1.0)) - 1.0 + aoScalar, 0.0, 1.0);
-    vec3 ambDiff = mix(u_groundColor, u_skyColor, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.34 * bakedAo * geoAo;
+    vec3 ambDiff = mix(u_groundColor, u_skyColor, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.35 * aoRich * geoAo;
     float envAtten = (1.0 - rough) * (1.0 - rough);
     vec3 F_env = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - NoV, 5.0);
-    vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.16, 0.95, envAtten) * mix(envAtten, 1.0, met) * specOccl * geoAo;
-    vec3 envCoat = studioEnv(R, 0.19) * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * 0.32 * specOccl;
+    vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.18, 1.05, envAtten) * mix(envAtten, 1.0, met) * specOccl * geoAo;
+    vec3 envCoat = studioEnv(R, 0.14) * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * 0.42 * specOccl;
 
-    vec3 outCol = linearToSrgb(acesFilm((Lo * directAo + ambDiff + envSpec + envCoat + u_emissive) * 1.04));
+    // Warm organic subsurface sheen across chitin terminators + crisp Fresnel contour rim
+    vec3 sssBounce = vec3(0.0);
+    if (u_matKind == 2) {
+      float wrapKey = clamp((dot(N, u_keyDir) + 0.28) / 1.28, 0.0, 1.0);
+      float termBand = wrapKey * (1.0 - max(dot(N, u_keyDir), 0.0));
+      sssBounce = (albedo * vec3(1.18, 1.08, 0.88) + vec3(0.012, 0.010, 0.005)) * termBand * 0.44 * aoRich * geoAo;
+    }
+    float fresnelRim = pow(1.0 - NoV, 3.2) * smoothstep(-0.25, 0.72, N.y);
+    float rimMask = mix(0.45, 1.0, clamp(dot(N, u_rimDir) * 0.55 + 0.55, 0.0, 1.0));
+    vec3 rimTint = mix(vec3(0.76, 0.92, 1.0), albedo * 1.45 + vec3(0.28, 0.36, 0.42), u_matKind == 2 ? 0.42 : 0.18);
+    vec3 rimGlow = rimTint * fresnelRim * rimMask * (u_matKind == 1 ? 0.40 : (u_matKind == 2 ? 0.34 : 0.24)) * u_rimBoost * aoRich * geoAo;
+
+    vec3 outCol = linearToSrgb(acesFilm((Lo * directAo + ambDiff + envSpec + envCoat + sssBounce + rimGlow + u_emissive) * 1.03));
     float outAlpha = 1.0;
     if (u_alpha < 0.99) {
       float baseA = clamp(u_alpha * baseSample.a, 0.0, 1.0);
-      float specLuma = dot(acesFilm((specAcc * directAo + envSpec + envCoat) * 1.04), vec3(0.2126, 0.7152, 0.0722));
-      outAlpha = clamp(baseA + pow(1.0 - NoV, 3.0) * 0.42 + specLuma * 0.55, 0.0, 0.90);
+      float specLuma = dot(acesFilm((specAcc * directAo + envSpec + envCoat + rimGlow) * 1.03), vec3(0.2126, 0.7152, 0.0722));
+      outAlpha = clamp(baseA + pow(1.0 - NoV, 3.0) * 0.44 + specLuma * 0.58, 0.0, 0.90);
     }
     fragColor = vec4(outCol, outAlpha);
   }`;
@@ -310,9 +326,11 @@
     return { vao, count: idx.length, halfSpanX, radius, dispose() { gl.deleteVertexArray(vao); bufs.forEach((b) => gl.deleteBuffer(b)); } };
   }
 
-  function isOpticalMat(mat) {
+  function matKindFor(mat) {
     const n = mat.name || "";
-    return n.startsWith("eye_") || n.startsWith("glass_") || (mat.metallic < 0.35 && mat.roughness < 0.22 && !mat.normalTex);
+    if (n.startsWith("eye_") || n.startsWith("glass_") || (mat.metallic < 0.35 && mat.roughness < 0.22 && !mat.normalTex)) return 1;
+    if (n.startsWith("chitin_")) return 2;
+    return 0;
   }
 
   function applyAnimChannels(overrides, channels, t) {
@@ -382,8 +400,8 @@
       this.uPbr = getUniforms(gl, this.pbrProg, [
         "u_model", "u_normalMat", "u_viewProj", "u_cameraPos", "u_viewDir", "u_isOrtho",
         "u_baseColor", "u_alpha", "u_metallic", "u_roughness", "u_emissive", "u_normalScale",
-        "u_isOptical", "u_hasNormalTex", "u_baseTex", "u_normalTex", "u_mrTex",
-        "u_keyDir", "u_fillDir", "u_rimDir", "u_skyColor", "u_groundColor",
+        "u_matKind", "u_hasNormalTex", "u_baseTex", "u_normalTex", "u_mrTex",
+        "u_keyDir", "u_fillDir", "u_rimDir", "u_skyColor", "u_groundColor", "u_rimBoost",
       ]);
       this.uPlinth = getUniforms(gl, this.plinthProg, [
         "u_viewProj", "u_topBase", "u_sideBase", "u_ringColor", "u_keyDir",
@@ -443,9 +461,9 @@
       }
       gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
       const camera = this.computeCamera(scene, cam, opts.width, opts.height, opts.overrideProj);
-      const keyDir = this.rotateLight(-0.78, 0.58, 0.24, camera.yaw);
-      const fillDir = this.rotateLight(0.84, 0.26, 0.22, camera.yaw);
-      const rimDir = this.rotateLight(0.32, 0.50, -0.84, camera.yaw);
+      const keyDir = this.rotateLight(-0.74, 0.62, 0.30, camera.yaw);
+      const fillDir = this.rotateLight(0.84, 0.28, 0.22, camera.yaw);
+      const rimDir = this.rotateLight(0.38, 0.54, -0.82, camera.yaw);
 
       if (opts.showPlinth !== false && !opts.transparent) {
         const plinth = this.ensurePlinth(scene.plinthSpanX, scene.plinthRadius);
@@ -470,6 +488,7 @@
       gl.uniform1i(this.uPbr.u_isOrtho, camera.isOrtho ? 1 : 0);
       gl.uniform3fv(this.uPbr.u_keyDir, keyDir); gl.uniform3fv(this.uPbr.u_fillDir, fillDir); gl.uniform3fv(this.uPbr.u_rimDir, rimDir);
       gl.uniform3fv(this.uPbr.u_skyColor, pal.sky); gl.uniform3fv(this.uPbr.u_groundColor, pal.ground);
+      gl.uniform1f(this.uPbr.u_rimBoost, opts.transparent ? 0.85 : pal.rimBoost);
 
       // 2-pass rendering across all instances: Pass 0 opaque, Pass 1 translucent glass lenses
       const instMats = scene.instances.map((inst) => evaluateWorldMats(inst, opts));
@@ -486,6 +505,14 @@
             let bc = mat.baseColor;
             if (mat.name === "chitin_team") bc = [team.team[0], team.team[1], team.team[2], bc[3]];
             else if (mat.name === "chitin_dark") bc = [team.dark[0], team.dark[1], team.dark[2], bc[3]];
+            else if (mat.name === "chitin_highlight") {
+              bc = [
+                team.team[0] * 0.66 + 0.28,
+                team.team[1] * 0.66 + 0.31,
+                team.team[2] * 0.66 + 0.24,
+                bc[3],
+              ];
+            }
             if (mat.doubleSided) gl.disable(gl.CULL_FACE); else { gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); }
             const nodeMat = worldMats[item.nodeIndex] || item.worldMat;
             const modelMat = inst.offsetMat ? mat4Multiply(inst.offsetMat, nodeMat) : nodeMat;
@@ -498,7 +525,7 @@
             gl.uniform1f(this.uPbr.u_metallic, mat.metallic); gl.uniform1f(this.uPbr.u_roughness, mat.roughness);
             gl.uniform1f(this.uPbr.u_normalScale, mat.normalScale);
             gl.uniform1i(this.uPbr.u_hasNormalTex, mat.normalTex && prim.hasUv ? 1 : 0);
-            gl.uniform1i(this.uPbr.u_isOptical, isOpticalMat(mat) ? 1 : 0);
+            gl.uniform1i(this.uPbr.u_matKind, matKindFor(mat));
             gl.uniform3fv(this.uPbr.u_emissive, mat.emissive);
             gl.bindVertexArray(prim.vao);
             if (prim.indexed) gl.drawElements(prim.mode, prim.drawCount, prim.indexType, 0); else gl.drawArrays(prim.mode, 0, prim.drawCount);
@@ -942,7 +969,9 @@
     let lastPinch = 0;
     const pinchDist = () => { const [a, b] = Array.from(pointers.values()); return Math.hypot(b.x - a.x, b.y - a.y); };
     stageCanvas.addEventListener("pointerdown", (e) => {
-      stageCanvas.setPointerCapture(e.pointerId); pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (e.pointerType === "touch") e.preventDefault();
+      try { stageCanvas.setPointerCapture(e.pointerId); } catch (_) {}
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pointers.size === 2) lastPinch = pinchDist();
       state.camTarget = null; if (state.turntable) { state.turntable = false; updateUiState(); }
     });
@@ -962,6 +991,11 @@
     });
     const endPtr = (e) => { pointers.delete(e.pointerId); if (pointers.size < 2) lastPinch = 0; };
     stageCanvas.addEventListener("pointerup", endPtr); stageCanvas.addEventListener("pointercancel", endPtr);
+    stageCanvas.addEventListener("lostpointercapture", endPtr);
+    const preventPinchZoom = (e) => { if (!e.touches || e.touches.length >= 2) e.preventDefault(); };
+    stageCanvas.addEventListener("touchmove", preventPinchZoom, { passive: false });
+    stageCanvas.addEventListener("gesturestart", preventPinchZoom, { passive: false });
+    stageCanvas.addEventListener("gesturechange", preventPinchZoom, { passive: false });
     stageCanvas.addEventListener("wheel", (e) => { e.preventDefault(); state.camTarget = null; state.cam.zoom = clamp(state.cam.zoom * Math.exp(e.deltaY * 0.0012), 0.35, 3.2); markDirty(); }, { passive: false });
 
     stageCanvas.addEventListener("keydown", (e) => {
