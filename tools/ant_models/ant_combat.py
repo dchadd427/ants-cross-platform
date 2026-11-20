@@ -377,10 +377,15 @@ def _commando_head_deform(pos: np.ndarray) -> np.ndarray:
     return p
 
 
-def _build_eyelid_shell(name: str, yaw_y: float, r_outer: float, thickness: float) -> MeshPart:
-    """Spherical upper eyelid shell in eye-local space; inner radius clears eye at ALL blink frames."""
-    lid = hemisphere_shell(r_outer, r_outer, r_outer, thickness=thickness, start_phi=-0.10, u_segs=26, v_segs=12, name=name, material="chitin_team")
-    return lid.rotate_xyz(rx=-0.94, ry=yaw_y)
+# Menacing heavy half-closed resting upper eyelid droop (composes cleanly with Blink!).
+COMBAT_LID_DROOP = 0.36
+
+
+def _build_eyelid_shell(name: str, sign: float, r_outer: float, thickness: float) -> MeshPart:
+    """Spherical upper eyelid shell with fierce inward V-scowl & menacing resting half-droop."""
+    lid = hemisphere_shell(r_outer, r_outer, r_outer, thickness=thickness, start_phi=-0.12, u_segs=26, v_segs=12, name=name, material="chitin_team")
+    # Tilt sharply inward toward nose bridge (`rz = +0.20 * sign`) and drop into fierce scowl rest.
+    return lid.rotate_xyz(rx=-0.96, ry=0.26 * sign).rotate_xyz(rz=0.18 * sign).rotate_xyz(rx=COMBAT_LID_DROOP)
 
 
 def _sculpt_head(scene: SceneBuilder, blink: float) -> None:
@@ -393,74 +398,94 @@ def _sculpt_head(scene: SceneBuilder, blink: float) -> None:
     )
     scene.add("head", cranium)
 
-    # Bold wide V-angled armored brow ridge overhanging both fierce eyes.
+    # Thick, fiercely furrowed V-shaped armored brow ridge diving low toward the nose bridge!
     brow_pts = [
-        (0.015, hy + 0.036, hz + 0.194),
-        (0.074, hy + 0.056, hz + 0.192),
-        (0.140, hy + 0.072, hz + 0.166),
-        (0.194, hy + 0.078, hz + 0.116),
-        (0.216, hy + 0.070, hz + 0.052),
+        (0.012, hy + 0.022, hz + 0.198),
+        (0.068, hy + 0.048, hz + 0.200),
+        (0.136, hy + 0.068, hz + 0.174),
+        (0.194, hy + 0.078, hz + 0.120),
+        (0.218, hy + 0.068, hz + 0.052),
     ]
-    brow_rads = [(0.023, 0.020), (0.033, 0.025), (0.035, 0.026), (0.030, 0.022), (0.020, 0.016)]
+    brow_rads = [(0.028, 0.024), (0.038, 0.029), (0.039, 0.030), (0.032, 0.024), (0.021, 0.017)]
     brow = curved_tube(brow_pts, brow_rads, samples_per_seg=4, radial_segs=12, cap_rings=3, name="brow_ledge", material="chitin_team")
     scene.add_mirrored("head", brow)
+    # Recessed dark center scowl furrow right where the thick V-brows collide above the nose bridge.
+    scene.add("head", ellipsoid(0.015, 0.024, 0.016, u_segs=12, v_segs=8, name="brow_furrow", material="chitin_dark").translate(0.0, hy + 0.024, hz + 0.196))
 
-    # Crisp flush steel armor rivets along the arched forehead V-plate seam.
-    for r_i, (rx, ry, rz) in enumerate(((0.044, 0.084, 0.172), (0.098, 0.112, 0.146), (0.150, 0.128, 0.104))):
-        pos = np.array([hx + rx, hy + ry, hz + rz])
-        nrm = _normalize(np.array([rx * 0.85, ry + 0.14, rz]))
-        scene.add_mirrored("head", _rivet(pos, nrm, f"crown_rivet_{r_i}", radius=0.0068))
-
-    # Expressive fierce 3-part eyes tucked right under the V-brow: trimmed sclera (~10% tighter
-    # per #148) with huge rich olive-green irises (~72%) and glossy obsidian pupils (~47%).
+    # Living, sparkling 5-part fierce eyes (ivory sclera + dark limbal ring + olive iris + obsidian
+    # pupil + dual studio-aligned wet-eye catchlight glints) glaring slightly up from under the brow!
     ex, ey, ez = EYE_OFFSET
-    eye = np.array([ex, hy + ey, hz + ez])
-    scene.add_mirrored(
-        "eyes",
-        torus_arc(0.080, 0.010, u_segs=26, v_segs=8, plane="xy", name="orbital_rim", material="chitin_dark")
-        .scale(1.02, 0.89, 0.86)
-        .rotate_xyz(rx=-0.08, ry=0.27)
-        .translate(eye + np.array([0.002, -0.002, 0.004])),
-    )
-    scene.add_mirrored(
-        "eyes",
-        ellipsoid(0.082, 0.071, 0.046, u_segs=20, v_segs=12, name="orbital_socket", material="chitin_dark")
-        .rotate_xyz(rx=-0.08, ry=0.27)
-        .translate(eye + np.array([0.0, 0.0, -0.016])),
-    )
-    sclera = (
-        superellipsoid(0.077, 0.067, 0.064, e1=0.94, e2=0.96, u_segs=24, v_segs=16, name="sclera", material="eye_white")
-        .rotate_xyz(rx=-0.08, ry=0.27)
-        .translate(eye)
-    )
-    # Curved ellipsoid iris & pupil seated smoothly into the sclera dome (r_max stays <= 0.078).
-    iris = (
-        ellipsoid(0.053, 0.051, 0.024, u_segs=22, v_segs=12, name="iris", material="eye_iris")
-        .translate(-0.003, -0.002, 0.043)
-        .rotate_xyz(rx=-0.06, ry=0.18)
-        .translate(eye)
-    )
-    pupil = (
-        ellipsoid(0.034, 0.033, 0.016, u_segs=18, v_segs=10, name="pupil", material="eye_pupil")
-        .translate(-0.004, -0.002, 0.053)
-        .rotate_xyz(rx=-0.06, ry=0.16)
-        .translate(eye)
-    )
-    scene.add_mirrored("eyes", sclera)
-    scene.add_mirrored("eyes", iris)
-    scene.add_mirrored("eyes", pupil)
-
-    # Exact radial eyelid clearance: spherical inner surface strictly outside max eye radius + 0.0075
-    # so zero sclera/iris/pupil pixel ever phases through mid-blink at any blink angle in [0, 1].
-    eye_pts = np.vstack([sclera.positions, iris.positions, pupil.positions]).astype(np.float64)
-    r_eye_max = float(np.max(np.linalg.norm(eye_pts - eye[None, :], axis=1)))
+    eye_l = np.array([ex, hy + ey, hz + ez])
     lid_thick = 0.0065
+    r_eye_max = 0.077
+    for node, tag, sign in (("eyelid_left", "left", 1.0), ("eyelid_right", "right", -1.0)):
+        eye = np.array([sign * ex, hy + ey, hz + ez])
+        yaw = 0.27 * sign
+        scene.add(
+            "eyes",
+            torus_arc(0.080, 0.010, u_segs=26, v_segs=8, plane="xy", name=f"orbital_rim_{tag}", material="chitin_dark")
+            .scale(1.02, 0.89, 0.86)
+            .rotate_xyz(rx=-0.08, ry=yaw)
+            .translate(eye + np.array([0.002 * sign, -0.002, 0.004])),
+        )
+        scene.add(
+            "eyes",
+            ellipsoid(0.082, 0.071, 0.046, u_segs=20, v_segs=12, name=f"orbital_socket_{tag}", material="chitin_dark")
+            .rotate_xyz(rx=-0.08, ry=yaw)
+            .translate(eye + np.array([0.0, 0.0, -0.016])),
+        )
+        sclera = (
+            superellipsoid(0.077, 0.067, 0.064, e1=0.94, e2=0.96, u_segs=24, v_segs=16, name=f"sclera_{tag}", material="eye_white")
+            .rotate_xyz(rx=-0.08, ry=yaw)
+            .translate(eye)
+        )
+        # Fierce slightly-upward (`y=+0.004`) intense forward-locked glare under the heavy V-brow!
+        limbal = (
+            ellipsoid(0.056, 0.054, 0.024, u_segs=24, v_segs=12, name=f"limbal_{tag}", material="eye_limbal")
+            .translate(-0.004 * sign, 0.003, 0.0425)
+            .rotate_xyz(rx=-0.10, ry=0.18 * sign)
+            .translate(eye)
+        )
+        iris = (
+            ellipsoid(0.050, 0.048, 0.025, u_segs=22, v_segs=12, name=f"iris_{tag}", material="eye_iris")
+            .translate(-0.004 * sign, 0.0035, 0.0435)
+            .rotate_xyz(rx=-0.10, ry=0.18 * sign)
+            .translate(eye)
+        )
+        pupil = (
+            ellipsoid(0.032, 0.031, 0.016, u_segs=18, v_segs=10, name=f"pupil_{tag}", material="eye_pupil")
+            .translate(-0.005 * sign, 0.004, 0.0540)
+            .rotate_xyz(rx=-0.10, ry=0.16 * sign)
+            .translate(eye)
+        )
+        # Dual wet-eye specular catchlight glints aligned consistently to the upper-left (-X, +Y) studio key!
+        # Main glint sits right below the heavy scowling lid so both eyes catch a fierce living spark.
+        glint_main = (
+            ellipsoid(0.0098, 0.0110, 0.0028, u_segs=14, v_segs=10, name=f"catchlight_main_{tag}", material="eye_catchlight")
+            .rotate_xyz(rx=-0.16, ry=-0.20)
+            .translate(-0.014, 0.0085, 0.0682)
+            .rotate_xyz(rx=-0.08, ry=0.17 * sign)
+            .translate(eye)
+        )
+        glint_bounce = (
+            ellipsoid(0.0044, 0.0044, 0.0022, u_segs=10, v_segs=8, name=f"catchlight_bounce_{tag}", material="eye_catchlight")
+            .rotate_xyz(rx=0.22, ry=0.22)
+            .translate(0.016, -0.014, 0.0675)
+            .rotate_xyz(rx=-0.08, ry=0.17 * sign)
+            .translate(eye)
+        )
+        scene.add("eyes", [sclera, limbal, iris, pupil, glint_main, glint_bounce])
+        eye_pts = np.vstack([p.positions for p in (sclera, limbal, iris, pupil, glint_main, glint_bounce)]).astype(np.float64)
+        r_eye_max = max(r_eye_max, float(np.max(np.linalg.norm(eye_pts - eye[None, :], axis=1))))
+
+    # Spherical eyelids strictly outside max eye+catchlight radius + 0.0075; Blink closes remaining angle!
     lid_outer_r = r_eye_max + 0.0075 + lid_thick
-    rest = quat_from_axis_angle((1.0, 0.0, 0.0), max(0.0, min(1.0, float(blink))) * EYELID_CLOSED_ANGLE)
+    rem = EYELID_CLOSED_ANGLE - COMBAT_LID_DROOP
+    rest = quat_from_axis_angle((1.0, 0.0, 0.0), max(0.0, min(1.0, float(blink))) * rem)
     for node, sign in (("eyelid_left", 1.0), ("eyelid_right", -1.0)):
-        scene.add(node, _build_eyelid_shell(f"{node}_shell", yaw_y=0.26 * sign, r_outer=lid_outer_r, thickness=lid_thick))
-        scene.set_node_transform(node, translation=(sign * eye[0], eye[1], eye[2]), rotation=rest)
-    scene.add_blink_animation(("eyelid_left", "eyelid_right"), closed_angle=EYELID_CLOSED_ANGLE, name="Blink")
+        scene.add(node, _build_eyelid_shell(f"{node}_shell", sign=sign, r_outer=lid_outer_r, thickness=lid_thick))
+        scene.set_node_transform(node, translation=(sign * eye_l[0], eye_l[1], eye_l[2]), rotation=rest)
+    scene.add_blink_animation(("eyelid_left", "eyelid_right"), closed_angle=rem, name="Blink")
 
     # Flush tapered V-chin clypeus + dark mouth recess + plump chunky lobster-claw mandibles.
     scene.add(
@@ -504,12 +529,15 @@ def _sculpt_head(scene: SceneBuilder, blink: float) -> None:
         )
         scene.add_mirrored("head", tooth)
 
-    # Short sturdy kinked 2-segment dark antennae perched at the upper-outer forehead temples.
-    base = (0.114, hy + 0.142, hz + 0.058)
-    elbow = (0.154, hy + 0.264, hz + 0.062)
-    scene.add_mirrored("antennae", swept_tube([base, (0.128, hy + 0.208, hz + 0.058), elbow], [0.022, 0.018, 0.020], radial_segs=10, smooth_subdiv=2, cap_rings=2, name="antenna_scape", material="chitin_dark"))
-    scene.add_mirrored("antennae", curved_tube([elbow, (0.182, hy + 0.288, hz + 0.118), (0.198, hy + 0.256, hz + 0.168)], [0.018, 0.023, 0.029], samples_per_seg=4, radial_segs=10, cap_rings=3, name="antenna_club", material="chitin_dark"))
-    scene.add_mirrored("antennae", ellipsoid(0.036, 0.019, 0.036, u_segs=12, v_segs=8, name="antenna_socket", material="chitin_dark").rotate_xyz(rx=0.20, rz=-0.30).translate(*base))
+    # Asymmetric battle-ready dark antennae: left (+X) cocked forward, right (-X) swept boldly back!
+    ant_specs = (
+        ("left",  (+0.114, hy + 0.142, hz + 0.060), (+0.132, hy + 0.208, hz + 0.072), (+0.156, hy + 0.262, hz + 0.088), (+0.184, hy + 0.280, hz + 0.146), (+0.196, hy + 0.242, hz + 0.192), -0.30),
+        ("right", (-0.114, hy + 0.142, hz + 0.052), (-0.138, hy + 0.214, hz + 0.036), (-0.172, hy + 0.278, hz + 0.020), (-0.212, hy + 0.300, hz + 0.056), (-0.226, hy + 0.276, hz + 0.104), +0.34),
+    )
+    for tag, base, mid_a, elbow, club1, club2, rz_s in ant_specs:
+        scene.add("antennae", swept_tube([base, mid_a, elbow], [0.022, 0.018, 0.020], radial_segs=10, smooth_subdiv=2, cap_rings=2, name=f"antenna_scape_{tag}", material="chitin_dark"))
+        scene.add("antennae", curved_tube([elbow, club1, club2], [0.018, 0.023, 0.029], samples_per_seg=4, radial_segs=10, cap_rings=3, name=f"antenna_club_{tag}", material="chitin_dark"))
+        scene.add("antennae", ellipsoid(0.036, 0.019, 0.036, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark").rotate_xyz(rx=0.20, rz=rz_s).translate(*base))
 
 
 def _build_head(scene: SceneBuilder, blink: float) -> None:
@@ -917,10 +945,12 @@ def _add_combat_idle_animation(scene: SceneBuilder) -> None:
     ])
     times = [round(r[0], 4) for r in rows]
     bx, by, bz = scene.get_node_transform("upper_body").translation
+    ub_r0 = scene.get_node_transform("upper_body").rotation
+    hd_r0 = scene.get_node_transform("head_group").rotation
     scene.add_animation("Idle", [
         AnimationChannel("upper_body", "translation", list(times), [(bx, by + r[1], bz) for r in rows]),
-        AnimationChannel("upper_body", "rotation", list(times), [quat_from_euler_xyz(rx=r[2]) for r in rows]),
-        AnimationChannel("head_group", "rotation", list(times), [r[3] for r in rows]),
+        AnimationChannel("upper_body", "rotation", list(times), [quat_mul(ub_r0, quat_from_euler_xyz(rx=r[2])) for r in rows]),
+        AnimationChannel("head_group", "rotation", list(times), [quat_mul(hd_r0, r[3]) for r in rows]),
         AnimationChannel("left_arm_group", "rotation", list(times), [r[4] for r in rows]),
         AnimationChannel("right_arm_group", "rotation", list(times), [r[5] for r in rows]),
         AnimationChannel("right_forearm_group", "rotation", list(times), [r[6] for r in rows]),
@@ -968,6 +998,12 @@ def build_combat(blink: float = 0.0) -> SceneBuilder:
     scene.set_node_transform("right_forearm_group", translation=el_r)
     scene.attach_world_node("right_forearm_group", "right_arm_group")
     scene.attach_world_node("right_forearm", "right_forearm_group")
+
+    # Subtle tough-guy Rambo swagger attitude (~3 deg head & shoulder tilt; feet remain grounded at Y=0!).
+    ub_xf = scene.get_node_transform("upper_body")
+    scene.set_node_transform("upper_body", translation=ub_xf.translation, rotation=quat_from_euler_xyz(ry=0.042, rz=-0.024))
+    hd_xf = scene.get_node_transform("head_group")
+    scene.set_node_transform("head_group", translation=hd_xf.translation, rotation=quat_from_euler_xyz(rx=0.038, ry=-0.058, rz=0.054))
 
     scene.ground_to_y(0.0)
     _add_combat_idle_animation(scene)

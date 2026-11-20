@@ -77,10 +77,11 @@ except ImportError:
 # on a spherical sclera without sinking behind the sclera or clipping the dark orbital rim.
 GAZE_ANGLE = 0.62
 
-# Subtle mischievous half-lidded rest; spherical lids still seal 100% cleanly on Blink.
+# Sly mischievous half-hooded asymmetric rest lids peeking cleanly beneath the domino mask rim;
+# spherical shells still seal 100% cleanly on Blink.
 _LID_DROOP: Dict[str, Tuple[float, float]] = {
-    "eyelid_left": (0.16, 0.06),
-    "eyelid_right": (0.10, -0.05),
+    "eyelid_left": (0.48, 0.14),
+    "eyelid_right": (0.36, -0.09),
 }
 
 # Stealthy low hiding crouch (`#162`) matching original `atst301` (~85% of Worker height, H ~ 0.86).
@@ -604,38 +605,61 @@ def _add_shifty_eyes(scene: SceneBuilder, anchors: dict, blink: float, gaze: flo
         sclera_local = ellipsoid(sclera_r, sclera_r * 1.04, sclera_r, u_segs=24, v_segs=18, name=f"sclera_{side}", material="eye_white").rotate_xyz(rx=-0.08, ry=yaw)
         scene.add("eyes", sclera_local.translate(eye))
 
-        # Pivoted eyeball node carrying curved spherical-cap huge ~73% olive iris & ~48% glossy pupil!
+        # Pivoted eyeball node carrying curved spherical-cap 5-part sparkling eyes: dark limbal ring,
+        # rich olive iris (~73%), glossy pupil (~48%), and dual wet-eye studio catchlights!
         ball = f"eye_ball_{side}"
-        iris = _spherical_eye_cap(
+        limbal = _spherical_eye_cap(
             sclera_r,
-            ang_x=0.81,   # sin(0.81) = 0.72 -> iris fills ~73% of sclera diameter!
-            ang_y=0.84,
-            thickness=0.0017,
+            ang_x=0.87,
+            ang_y=0.90,
+            thickness=0.0014,
+            u_segs=26,
+            v_segs=6,
+            name=f"limbal_{side}",
+            material="eye_limbal",
+        ).rotate_xyz(rx=-0.08)
+        iris = _spherical_eye_cap(
+            sclera_r + 0.0010,
+            ang_x=0.77,
+            ang_y=0.80,
+            thickness=0.0014,
             u_segs=26,
             v_segs=6,
             name=f"iris_{side}",
             material="eye_iris",
         ).rotate_xyz(rx=-0.08)
         pupil = _spherical_eye_cap(
-            sclera_r + 0.0015,
-            ang_x=0.50,   # sin(0.50) = 0.48 -> dark glossy pupil fills ~48% of sclera diameter!
-            ang_y=0.52,
-            thickness=0.0015,
+            sclera_r + 0.0020,
+            ang_x=0.49,
+            ang_y=0.51,
+            thickness=0.0014,
             u_segs=22,
             v_segs=5,
             name=f"pupil_{side}",
             material="eye_pupil",
         ).rotate_xyz(rx=-0.08)
-        scene.add(ball, [iris, pupil])
+        glint_main = (
+            ellipsoid(0.0092, 0.0102, 0.0024, u_segs=14, v_segs=10, name=f"catchlight_main_{side}", material="eye_catchlight")
+            .rotate_xyz(rx=-0.16, ry=-0.22)
+            .translate(-0.012, 0.0075, sclera_r + 0.0007)
+            .rotate_xyz(rx=-0.08)
+        )
+        glint_bounce = (
+            ellipsoid(0.0038, 0.0038, 0.0020, u_segs=10, v_segs=8, name=f"catchlight_bounce_{side}", material="eye_catchlight")
+            .rotate_xyz(rx=0.22, ry=0.22)
+            .translate(0.014, -0.014, sclera_r + 0.0003)
+            .rotate_xyz(rx=-0.08)
+        )
+        scene.add(ball, [limbal, iris, pupil, glint_main, glint_bounce])
         gaze_clamped = max(-1.0, min(1.0, float(gaze)))
         scene.set_node_transform(ball, translation=eye, rotation=quat_from_axis_angle((0.0, 1.0, 0.0), gaze_clamped * GAZE_ANGLE))
 
-        # Mathematically guaranteed radial eyelid clearance: inner spherical radius >= r_eye_max + 0.0078
-        # so zero sclera/iris/pupil vertex can ever phase through at ANY blink or gaze angle.
-        eye_local_pts = np.vstack([sclera_local.positions, iris.positions, pupil.positions]).astype(np.float64)
+        # Mathematically guaranteed radial eyelid clearance: inner spherical radius >= r_eye_max + 0.0076
+        # so zero sclera/limbal/iris/pupil/catchlight vertex ever phases through at ANY blink or gaze angle.
+        eye_local_pts = np.vstack([p.positions for p in (sclera_local, limbal, iris, pupil, glint_main, glint_bounce)]).astype(np.float64)
         r_eye_max = float(np.max(np.linalg.norm(eye_local_pts, axis=1)))
         lid_thick = 0.0040
-        lid_outer_r = r_eye_max + 0.0078 + lid_thick
+        lid_outer_r = r_eye_max + 0.0076 + lid_thick
         lid = f"eyelid_{side}"
         droop, roll = _LID_DROOP[lid]
         shell = _build_spherical_eyelid(f"{lid}_shell", lid_outer_r, lid_thick, yaw_y=yaw).rotate_xyz(rz=roll).rotate_xyz(rx=droop)
@@ -705,10 +729,10 @@ def _add_rogue_strap_and_loot_pouch(scene: SceneBuilder, anchors: dict) -> None:
     pts = catmull_rom_spline(strap_ctrl, samples_per_seg=6, closed=True)
     out_n = np.array([_normalize(p - pivot + (np.array([0.0, 0.16, 0.0]) if p[1] > 0.46 + dy_c else 0.0)) for p in pts])
 
-    # Push strap cleanly outside ONLY the world-space thorax meshes (exclude gaster & petiole).
-    body_mat = scene.get_world_matrix("body")
+    # Push strap cleanly outside ONLY the neutral canonical thorax meshes (exclude gaster & petiole).
+    tc_vec = np.asarray(anchors["thorax_center"], dtype=np.float64)
     thorax_parts = [
-        p.transform(body_mat) for p in scene.get_node("body")
+        p.translate(tc_vec) for p in scene.get_node("body")
         if not p.name.startswith(("gaster", "petiole"))
     ]
     body_verts = np.vstack([p.positions for p in thorax_parts]).astype(np.float64)
@@ -913,39 +937,54 @@ def _add_thief_idle_animation(scene: SceneBuilder) -> None:
     scene.add_animation("Idle", channels, replace=True)
 
 
-def build_thief(blink: float = 0.0, gaze: float = 0.0) -> SceneBuilder:
-    """Build the iconic Rogue Bandit Thief Ant.
+def build_thief(blink: float = 0.0, gaze: float = -0.42) -> SceneBuilder:
+    """Build the sly, mischievous Rogue Bandit Thief Ant.
 
     `blink` in [0, 1] sets resting eyelid closure; `gaze` in [-1, 1] turns
-    the shifty lookout eyes from full far-left (-1) to full far-right (+1).
+    the shifty lookout eyes from full far-left (-1) to full far-right (+1)
+    (defaults to `-0.42` for a sly sideways rest glance composing with IdleLookout).
     """
     scene, anchors = build_base_ant(
         scene_name="ant_thief",
         include_eyes=False,
         include_brows=False,
         include_idle=False,
+        brow_style="sneaky",
+        head_tilt_deg=-4.5,
+        head_yaw_deg=4.0,
+        antenna_asymmetry=0.40,
+        stance_asymmetry=0.45,
         crouch=THIEF_CROUCH,
         left_arm_pose=_THIEF_ARM_LEFT,
         right_arm_pose=_THIEF_ARM_RIGHT,
     )
     lid_outer_r = _add_shifty_eyes(scene, anchors, blink, gaze)
-    cranium = next(p for p in scene.world_parts() if p.name == "cranium")
+    # Ray-cast against the canonical neutral (pre-tilt) cranium so mask & knot inherit head_group tilt 1:1!
+    neck_vec = np.asarray(anchors["neck_center"], dtype=np.float64)
+    cranium_local = next(p for p in scene.get_node("head") if p.name == "cranium")
+    cranium = cranium_local.translate(neck_vec)
     caster = _CraniumCaster(cranium, anchors["head_center"])
     _build_unified_domino_mask(scene, caster, anchors, lid_outer_r)
     _add_knot_and_tails(scene, caster)
     _add_rogue_strap_and_loot_pouch(scene, anchors)
 
-    # Parent Thief's custom head-riding gear & eyes under head_group and strap/pouch under upper_body.
+    # Parent Thief's canonical neutral head gear & eyes in 1:1 lockstep under tilted `head_group`
+    # (matching `head`'s exact `-neck_center` local origin so zero drift occurs under stance_asymmetry!).
     for head_child in ("eyes", "eye_ball_left", "eye_ball_right", "eyelid_left", "eyelid_right", "gear_bandana", "bandana_tails"):
-        scene.attach_world_node(head_child, "head_group")
-    scene.attach_world_node("gear_rogue", "upper_body")
+        cur_xf = scene.get_node_transform(head_child)
+        cur_t = np.asarray(cur_xf.translation, dtype=np.float64) if cur_xf is not None else np.zeros(3)
+        scene.attach_world_node(head_child, "head_group", preserve_world_pose=False)
+        xf = scene.get_node_transform(head_child)
+        local_t = tuple(float(c) for c in (cur_t - neck_vec))
+        scene.set_node_transform(head_child, translation=local_t, rotation=xf.rotation, scale=xf.scale)
+    scene.attach_world_node("gear_rogue", "upper_body", preserve_world_pose=False)
 
     scene.ground_to_y(0.0)
     _add_thief_idle_animation(scene)
     return scene
 
 
-def build_ant(blink: float = 0.0, gaze: float = 0.0) -> SceneBuilder:
+def build_ant(blink: float = 0.0, gaze: float = -0.42) -> SceneBuilder:
     """Canonical module entrypoint for `build_all.py`."""
     return build_thief(blink=blink, gaze=gaze)
 
