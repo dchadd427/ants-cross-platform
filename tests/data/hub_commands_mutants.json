@@ -1,0 +1,253 @@
+{
+ "note": "Mutants of the chat's commands (hub/commands.py, hub/gamedoor.py, hub/chat.py `on_say`, hub/store/base.py `check_note`; docs/HUB_COMMANDS.md) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose (a command of a higher role that is not answered as a word that is no command, a bound of /bots, a split that needs no bots, a map name that is sent as typed, a command that is a line, a pass that is reused or lives too long or carries the id, a POST with no token, an answer that is read without a cap, a list of maps that is never kept, a role that is not confirmed, a limit that is gone, calls on their way that are not held to one and two, a list with a row above the role, a change of role that does not send the list, an ignored person whose line is sent or left in the welcome, a person with a role who is hidden or ignored, an ignore list with no end, a log row that is missing or that may hold an id), and a test of tests/scripts/test_hub_commands.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_commands_mutants.json --keep-going --jobs 1 --baseline-every 15; every mutant must be caught.",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest tests.scripts.test_hub_commands"
+ },
+ "mutants": [
+  {
+   "id": "bots_is_a_moderators_command",
+   "file": "hub/commands.py",
+   "old": "Command(\"bots\", 2,",
+   "new": "Command(\"bots\", 1,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "a_command_above_the_rank_is_answered_with_its_own_word",
+   "file": "hub/commands.py",
+   "old": "            return self.not_yours(peer)",
+   "new": "            return self.reply(peer, command.word, \"unknown\") if command is not None else self.not_yours(peer)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "the_count_may_be_one_past_ten_thousand",
+   "file": "hub/commands.py",
+   "old": "MAX_COUNT = 10000",
+   "new": "MAX_COUNT = 10001",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "the_spacing_may_be_one_past_120_minutes",
+   "file": "hub/commands.py",
+   "old": "MAX_EVERY = 120",
+   "new": "MAX_EVERY = 121",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "a_split_does_not_need_its_number_of_bots",
+   "file": "hub/commands.py",
+   "old": "    if teams in SPLIT_BOTS and chosen.get(\"bots\") != SPLIT_BOTS[teams]:",
+   "new": "    if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "an_option_may_come_twice",
+   "file": "hub/commands.py",
+   "old": "        if word not in OPTIONS or word in chosen:",
+   "new": "        if word not in OPTIONS:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "the_map_name_is_sent_as_typed",
+   "file": "hub/commands.py",
+   "old": "            map_file = found ",
+   "new": "            map_file = args.map_name ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "a_command_is_a_line_as_well",
+   "file": "hub/chat.py",
+   "old": "            return self.commands.run(peer, line)",
+   "new": "            self.commands.run(peer, line)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "a_command_is_only_a_line",
+   "file": "hub/chat.py",
+   "old": "        elif line.startswith(\"/\"):",
+   "new": "        elif False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "two_slashes_say_both",
+   "file": "hub/chat.py",
+   "old": "            line = line[1:]  ",
+   "new": "            line = line[0:]  ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "the_nonce_of_the_pass_is_always_the_same",
+   "file": "hub/gamedoor.py",
+   "old": "\"nonce\": secrets.token_hex(8)",
+   "new": "\"nonce\": \"0123456789abcdef\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "the_pass_lives_an_hour",
+   "file": "hub/gamedoor.py",
+   "old": "\"exp\": int(self.wall()) + PASS_SECONDS",
+   "new": "\"exp\": int(self.wall()) + 3600",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "the_pass_carries_the_id",
+   "file": "hub/gamedoor.py",
+   "old": "\"name\": who.username,",
+   "new": "\"name\": who.account_id,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "the_post_has_no_token",
+   "file": "hub/gamedoor.py",
+   "old": "headers += [(CSRF_HEADER, hmac.new(self.csrf_key, b\"csrf1\\0\" + ref.encode(\"ascii\"), hashlib.sha256).hexdigest()[:32]), (\"Content-Type\", \"application/json\")]",
+   "new": "headers += [(\"Content-Type\", \"application/json\")]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "the_answer_is_read_without_a_cap",
+   "file": "hub/gamedoor.py",
+   "old": "status, answer, _ = await read_answer(None, reader, body_max)",
+   "new": "status, answer, _ = await read_answer(None, reader, 10 ** 9)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "the_list_of_maps_is_never_kept",
+   "file": "hub/gamedoor.py",
+   "old": "        if self.maps is not None and now < self.maps_until:",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "the_role_is_not_confirmed_before_bots",
+   "file": "hub/commands.py",
+   "old": "        if not roles.fresh([account]) and not await roles.confirm([account]):\n            return False",
+   "new": "        if False:\n            return False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "the_limit_of_an_account_is_gone",
+   "file": "hub/commands.py",
+   "old": "        if bucket.take(key, now):\n            return False",
+   "new": "        if True:\n            return False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "a_second_call_may_be_on_its_way",
+   "file": "hub/commands.py",
+   "old": "        if key in self.flights or len(self.flights) >= chat.limits.door_inflight:",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "the_hub_may_have_any_number_of_calls_on_their_way",
+   "file": "hub/commands.py",
+   "old": "        if key in self.flights or len(self.flights) >= chat.limits.door_inflight:",
+   "new": "        if key in self.flights:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "a_list_has_a_row_above_the_role",
+   "file": "hub/commands.py",
+   "old": "for c in REGISTRY if c.rank <= rank]",
+   "new": "for c in REGISTRY if c.rank <= rank + 1]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "a_change_of_role_does_not_send_the_list",
+   "file": "hub/chat.py",
+   "old": "self.commands.send_list(peer)                  # (the commands that the account has are the commands of its new role)",
+   "new": "pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "the_welcome_history_has_the_lines_of_an_ignored_person",
+   "file": "hub/chat.py",
+   "old": "lines = [l for l in self.recent() if not self.commands.hides(l, you)]",
+   "new": "lines = self.recent()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "a_live_line_of_an_ignored_person_is_sent",
+   "file": "hub/chat.py",
+   "old": "            if self.commands.hides(entry, who):\n                continue",
+   "new": "            if False:\n                continue",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "an_ignored_person_who_holds_a_role_now_is_hidden",
+   "file": "hub/commands.py",
+   "old": "        return not self.chat.is_mod(entry.account)",
+   "new": "        return True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "a_line_written_by_a_moderator_may_be_hidden",
+   "file": "hub/commands.py",
+   "old": "        if not self.ignores or who is None or not entry.account or entry.mod:",
+   "new": "        if not self.ignores or who is None or not entry.account:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "a_person_who_holds_a_role_may_be_ignored",
+   "file": "hub/commands.py",
+   "old": "        if chat.roles.role_of(target) != \"none\" or self.is_owner(target):",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "the_list_of_the_ignored_has_no_end",
+   "file": "hub/commands.py",
+   "old": "        if chat.ref(target) not in mine and len(mine) >= chat.limits.ignore_max:",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "ignore_is_matched_against_the_username",
+   "file": "hub/commands.py",
+   "old": "            if who is not None and not getattr(peer, \"closed\", False) and who.name.casefold() == want:",
+   "new": "            if who is not None and not getattr(peer, \"closed\", False) and who.username.casefold() == want:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "a_log_detail_may_be_as_long_as_an_id",
+   "file": "hub/store/base.py",
+   "old": "\"bots_start\": re.compile(r\"[0-9]{1,6} every [0-9]{1,5}s\\Z\")",
+   "new": "\"bots_start\": re.compile(r\"[0-9]{1,20} every [0-9]{1,5}s\\Z\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "a_stop_is_not_logged",
+   "file": "hub/commands.py",
+   "old": "        self.note(peer, \"bots_stop\", \"stopped %d dropped %d\" % (stopped, dropped))",
+   "new": "        pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "a_start_is_logged_whatever_the_game_server_said",
+   "file": "hub/commands.py",
+   "old": "        status, data = answer\n        if status != 200:\n            return self.refused(peer, status, data)",
+   "new": "        status, data = answer\n        self.note(peer, \"bots_start\", \"%d every %ds\" % (args.count, args.every_s))\n        if status != 200:\n            return self.refused(peer, status, data)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "forget_keeps_the_list_of_the_ignored",
+   "file": "hub/login.py",
+   "old": "        self.hub.chat.commands.forget(who.account_id)               # (the list of the people that it ignores, and its place on the lists of the others)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
+  },
+  {
+   "id": "the_catalog_is_read_up_to_the_other_calls_cap",
+   "file": "hub/limits.py",
+   "old": "catalog_body_max: int = 524288",
+   "new": "catalog_body_max: int = 131072",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  },
+  {
+   "id": "the_catalog_has_no_cap",
+   "file": "hub/limits.py",
+   "old": "catalog_body_max: int = 524288",
+   "new": "catalog_body_max: int = 524288000",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_commands"
+  }
+ ]
+}

@@ -26,6 +26,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.19.3 - 2026-11-20 - Commands in the chat
+
+**For players:**
+- **Commands in the chat.** Type "/" to see the commands you can use, with a helper that fills them in. Everyone has /help, /ignore and /unignore. A mistyped command is answered only to you, and "//" at the start posts a line that begins with a slash.
+
+**For operators:**
+- Administrators can start computer-player matches from the chat with /bots (up to 10,000 in a queue, run 80 at a time with a load guard), see them with /bots status and end them with /bots stop. The hub reaches the game server through ANTS_HUB_GAME_ADMIN_URL (docs/HUB_COMMANDS.md).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0f2ebe70...9454806f)
+
 ## v0.19.2 - 2026-11-20 - Invite only rooms, fewer stuck computer players
 
 **For players:**

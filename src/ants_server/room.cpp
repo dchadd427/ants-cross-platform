@@ -871,6 +871,10 @@ std::string Room::replay_keep(replay::Recorder& recorder) {
         replay_note_ = "the match ran less than " + std::to_string(kReplayMinTurns / net::kTurnsPerSecond) + " seconds, so it is not kept";
         return std::string();
     }
+    if (!spec_.keep_replay) {
+        replay_note_ = "the match was played and is not kept: the hour's recordings of computer players were used";
+        return std::string();
+    }
     std::string error;
     const std::vector<uint8_t> bytes = recorder.finish(*sim_, error);
     if (bytes.empty()) {

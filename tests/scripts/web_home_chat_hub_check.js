@@ -28,16 +28,19 @@ function dockFor(hub, o) {                               // the real script, rea
     const root = {};
     new Function('self', 'setTimeout', 'clearTimeout', chatSource)(root, (fn, ms) => setTimeout(fn, ms), (id) => clearTimeout(id));
     const env = { elements: {}, innerHTMLWrites: [] };
-    const doc = { hidden: false, listeners: {}, createElement: (t) => new El(env, t), addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); } };
+    const doc = { hidden: false, listeners: {}, createElement: (t) => new El(env, t), createTextNode: (t) => ({ isText: true, textContent: String(t), parent: null }), addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); } };
     env.doc = doc;
-    const win = { innerWidth: o.width || 1280, innerHeight: 800, location: { protocol: 'http:', host: hub.http.replace('http://', '') }, listeners: {}, addEventListener(t, fn) { (win.listeners[t] = win.listeners[t] || []).push(fn); } };
+    const QUIET = { DateTimeFormat: function () { return { format: () => '' }; } };
+    const win = { innerWidth: o.width || 1280, innerHeight: 800, Intl: QUIET, location: { protocol: 'http:', host: hub.http.replace('http://', '') }, listeners: {}, addEventListener(t, fn) { (win.listeners[t] = win.listeners[t] || []).push(fn); } };
     const errors = [];
     const sockets = [];
     class Counted extends MiniWebSocket { constructor(url) { super(url); sockets.push(this); } }
     const host = new El(env, 'div', 'home');
-    const dock = root.AntsHomeChat.mount({ doc, win, host, Intl: { DateTimeFormat: function () { return { format: () => '' }; } }, WebSocket: Counted, error: (e) => errors.push(e) });
+    const loads = [];
+    const load = (base, done) => { loads.push(base); win.AntsHomeCmds = require(path.join(H.lobbyDir, 'home', 'cmds.js')); setTimeout(done, 0); };       // (home.js loads the helper's two files; here the real script is handed over)
+    const dock = root.AntsHomeChat.mount({ doc, win, host, Intl: QUIET, WebSocket: Counted, error: (e) => errors.push(e), load: o.noLoad ? undefined : load });
     dock.shown(true);
-    const view = { dock, env, errors, sockets, log: one(dock.root, 'gc-log') };
+    const view = { dock, env, errors, sockets, loads, win, log: one(dock.root, 'gc-log') };
     view.lines = () => view.log.children.filter((r) => String(r.className).indexOf('gc-day') === -1);       // (the day dividers are not lines)
     view.rows = () => view.log.children.slice(1).filter((r) => String(r.className).indexOf('gc-day') === -1).map((r) => r.textContent);
     view.note = () => one(dock.root, 'gc-note').textContent;
@@ -143,25 +146,27 @@ async function main() {
         const answers = () => v.log.children.slice(1).filter((r) => cls(r).indexOf('gc-private') !== -1).map((r) => r.children.slice(1).map((c) => c.textContent).join('\n'));
         const say = (text) => { one(v.dock.root, 'gc-input').value = text; one(v.dock.root, 'gc-form').fire('submit', { preventDefault() {} }); };
         check('a moderator\'s welcome: the field is on', await until(() => v.dock.state() === 'live') && one(v.dock.root, 'gc-input').disabled === false && v.dock.root.getAttribute('data-role') === 'mod');
+        check('the hub\'s `cmds` frame is what loads the helper (the file is asked for once, and by the dock)', await until(() => v.loads.length === 1) && v.loads[0] === 'home/cmds');
         say('/help');
-        check('/help is answered by the page and the hub is told nothing', answers().length === 1 && hub.received.filter((m) => m.t === 'say').length === 0);
+        check('/help is never sent and the dock makes no answer for it: the field holds a slash, which is how the helper opens', answers().length === 0 && hub.received.filter((m) => m.t === 'say').length === 0 && one(v.dock.root, 'gc-input').value === '/' && one(v.dock.root, 'gh-pop') !== null);
         say('/kick bob');
-        check('a good /kick: ok, and everybody is shown the hub\'s own line, as a quiet line with no author', await until(() => answers().length === 2) && answers()[1] === 'Done: the person was removed.' && await until(() => v.rows().indexOf('bob was kicked.') !== -1) && cls(v.log.children[v.log.children.length - 1]).indexOf('gc-event') !== -1);
+        check('a good /kick: ok, and everybody is shown the hub\'s own line, as a quiet line with no author', await until(() => answers().length === 1) && answers()[0] === 'Done: the person was removed.' && await until(() => v.rows().indexOf('bob was kicked.') !== -1) && cls(v.log.children[v.log.children.length - 1]).indexOf('gc-event') !== -1);
         say('/ban bob');
-        check('a moderator\'s /ban: the hub says power, and the page says it in words, privately', await until(() => answers().length === 3) && answers()[2] === 'You are not allowed to do that');
+        check('a moderator\'s /ban is a command of a higher role: the hub answers it as a word that is no command, and the page says it in words, privately, under the quiet echo of what was typed', await until(() => answers().length === 2) && answers()[1] === '/ban bob\nThat command is not one that you have. Type /help to see the commands.');
         const before = v.rows().length;
         await sleep(2600); say('/kick nobody');
         await sleep(2600); say('/kick boss');
         await sleep(2600); say('/kick');
-        check('a name that is nobody\'s (who), an admin (power) and a command that is not right (bad): each in its words; nothing is posted for anybody', await until(() => answers().length === 6, 6000) && answers().slice(3).join('|') === 'Nobody by that name is here|You are not allowed to do that|That command is not right. Type /help to see the commands.' && v.rows().length === before + 3 && hub.commands.length === 5);
+        check('a name that is nobody\'s (who), an admin (power) and a command that is not right (bad): each in its words; nothing is posted for anybody', await until(() => answers().length === 5, 6000) && answers().slice(2).join('|') === 'Nobody by that name is here|You are not allowed to do that|That command is not right. Type /help to see the commands.' && v.rows().length === before + 3 && hub.commands.length === 4);
         hub.you(Object.assign({ mod: true, role: 'admin' }, ME));
         check('the hub makes the visitor an admin (a `you` frame): the data-role follows, no reload, the socket stays', await until(() => v.dock.root.getAttribute('data-role') === 'admin') && hub.upgrades === 1);
         await sleep(2600); say('/bans');
-        check('/bans, an admin\'s: the private list', await until(() => answers().length === 7) && answers()[6] === 'People who are banned\ncarol 2023-11-14');
+        check('/bans, an admin\'s: the private list', await until(() => answers().length === 6) && answers()[5] === 'People who are banned\ncarol 2023-11-14');
         hub.set({ roleDown: true }); await sleep(2600); say('/mute bob 5');
-        check('a role that Discord could not confirm: the hub says role, the page says so', await until(() => answers().length === 8) && answers()[7] === 'Could not confirm your role, try again in a moment');
+        check('a role that Discord could not confirm: the hub says role, the page says so', await until(() => answers().length === 7) && answers()[6] === 'Could not confirm your role, try again in a moment');
         hub.you(Object.assign({ mod: false, role: 'none' }, ME));
-        check('the hub takes the role away: the commands go (a command word is not sent, "you are not allowed")', await until(() => v.dock.root.getAttribute('data-role') === 'none') && (await sleep(2600), say('/mute bob 5'), answers()[8] === 'You are not allowed to do that') && hub.commands.length === 7);
+        check('the hub takes the role away: its `cmds` shrink to the three of everybody, and a command of the old role is answered as any word that is no command ("not one that you have"); the hub does not run it', await until(() => v.dock.root.getAttribute('data-role') === 'none')
+              && (await sleep(2600), say('/mute bob 5'), await until(() => answers().length === 8)) && answers()[7] === '/mute bob 5\nThat command is not one that you have. Type /help to see the commands.' && hub.commands.length === 6);
         check('and the page threw nothing', v.errors.length === 0);
         await hub.close();
     }

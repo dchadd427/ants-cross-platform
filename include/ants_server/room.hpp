@@ -138,6 +138,9 @@ struct RoomSpec {
     /// The server's own match of computer players alone (RoomManager::start_bot_match): every seat of the room is a bot (`bots` as many as `players`), no person is needed to start it or to keep it going, and it is
     /// played at the normal speed like any other. Only the server makes such a room (the control interface has no key for it); it holds no seats (`reconnect` false), so no restart record is kept for it.
     bool bots_only{false};
+    /// Whether the match is kept as a replay when it ends (RoomManager::start_bot_match gives it only while the hour's budget of recordings of computer players has a slot reserved for it): false plays the match, records
+    /// it for the live list, and writes no file. A room of people always keeps.
+    bool keep_replay{true};
     /// The room does not try to start its match until this long after it was made (milliseconds; 0: at once): the server's own matches of computer players are made one after another with a gap, so that setting up
     /// their engines is spread over the passes of the main loop (bot_match_spec.hpp: kBotStartGapMs). Only the server sets it.
     uint32_t start_hold_ms{0};
@@ -412,6 +415,8 @@ public:
     const std::string& live_id() const noexcept { return live_id_; }
     /// The server's own match of computer players alone (RoomSpec::bots_only)
     bool bots_only() const noexcept { return spec_.bots_only; }
+    /// Whether the match will be kept as a replay when it ends (RoomSpec::keep_replay)
+    bool keep_replay() const noexcept { return spec_.keep_replay; }
     /// A lobby room (protocol 16) ...
     bool lobby() const noexcept { return spec_.lobby; }
     /// ... that waits (no match has been started): it is in the server's pool of lobbies, and holds no place of the public rooms

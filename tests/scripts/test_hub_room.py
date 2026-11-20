@@ -1127,6 +1127,7 @@ class TheHubOnRealSockets(unittest.TestCase):
             client = hc.Client(rig.port, login="2001:visitor1")
             self.addCleanup(client.close)
             self.assertEqual(client.recv_json()["t"], "welcome")
+            self.assertEqual(client.recv_json()["t"], "cmds")                          # (the commands of a person who is logged in follow the welcome)
             for n in range(3):
                 client.say("line %d" % n)
                 self.assertEqual(client.recv_json()["t"], "line")
@@ -1165,8 +1166,10 @@ class TheHubOnRealSockets(unittest.TestCase):
 
 class TheDocumentsSayWhatTheCodeDoes(unittest.TestCase):
     def setUp(self):
-        with open(os.path.join(REPO, "docs", "HUB.md"), encoding="utf-8") as f:
-            self.doc = f.read()
+        self.doc = ""
+        for name in ("HUB.md", "HUB_COMMANDS.md"):                                                  # (the moderation section, with the command line's words, is in the second: a pure move of the first)
+            with open(os.path.join(REPO, "docs", name), encoding="utf-8") as f:
+                self.doc += f.read()
 
     def test_the_numbers_of_the_document_are_the_limits_of_the_code(self):
         d = limitmod.Limits()

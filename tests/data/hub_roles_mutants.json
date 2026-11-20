@@ -399,8 +399,8 @@
   {
    "id": "a_command_from_a_person_with_no_role_is_posted",
    "file": "hub/chat.py",
-   "old": "        if line.split(\" \")[0].lower() in COMMANDS:",
-   "new": "        if False:",
+   "old": "        elif line.startswith(\"/\"):",
+   "new": "        elif False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheChatAsksTheRoles tests.scripts.test_hub_roles.TheLiveRoles tests.scripts.test_hub_roles.TheMapping"
   },
   {
@@ -482,9 +482,9 @@
   },
   {
    "id": "a_command_word_in_capitals_is_posted",
-   "file": "hub/chat.py",
-   "old": "if line.split(\" \")[0].lower() in COMMANDS:",
-   "new": "if line.split(\" \")[0] in COMMANDS:",
+   "file": "hub/commands.py",
+   "old": "        word = lower(line.split(\" \", 1)[0][1:])",
+   "new": "        word = line.split(\" \", 1)[0][1:]",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheChatAsksTheRoles"
   },
   {

@@ -10,7 +10,7 @@ import signal
 import sys
 import time
 
-from . import admindoor, chat as chatmod, config as configmod, http, limits as limitmod, roles as rolesmod, session as sessionmod, store as storemod, text as textrules, ws
+from . import admindoor, chat as chatmod, config as configmod, gamedoor, http, limits as limitmod, roles as rolesmod, session as sessionmod, store as storemod, text as textrules, ws
 from .log import Log
 
 WS_PATH = "/hub/ws"
@@ -130,6 +130,8 @@ class Hub:
         self.pruning = False                        # True while the oldest lines are being deleted to make room (from prune_from_percent of the limit down to prune_to_percent)
         self.routes = getattr(sessions, "routes", None) or {}
         self.admin = admindoor.Door(self)                # (the admin page's door: hub/admindoor.py)
+        self.chat.commands.is_owner = self.admin.is_owner
+        self.chat.commands.door = gamedoor.GameDoor(cfg.game_admin_url, cfg.admin_gate_secret if cfg.admin_gate_on else "", self.limits, clock, store.clock, self.chat.ref, self.admin.is_owner)       # (`/bots`: hub/gamedoor.py)
         if hasattr(sessions, "attach"):
             sessions.attach(self)
 
@@ -148,6 +150,7 @@ class Hub:
             self.sessions.pictures.stop()
         for task in list(self.chat.busy.values()):
             task.cancel()
+        self.chat.commands.stop()
         if self.server:
             self.server.close()
         for peer in list(self.chat.peers):
@@ -254,6 +257,7 @@ class Hub:
             self.chat.peers.add(peer)
             writer.write(http.response(101, headers={"Upgrade": "websocket", "Connection": "Upgrade", "Sec-WebSocket-Accept": ws.accept_key(key)}))
             peer.send_text(chatmod.dumps(self.chat.welcome(peer)))
+            self.chat.commands.send_list(peer)                       # (the commands that the account has: none for a reader)
         except BaseException:
             self.per_address.remove(address)
             if peer is not None:
@@ -377,6 +381,7 @@ class Hub:
             self.chat.pics_limits.forget_idle(now)
             self.chat.wait_limits.forget_idle(now)
             self.chat.named_limits.forget_idle(now)
+            self.chat.commands.forget_idle(now)
             self.admin.forget_idle(now)
             if hasattr(self.sessions, "forget_idle"):
                 self.sessions.forget_idle(now, wall)
@@ -448,6 +453,8 @@ def main(env=None):
     if (cfg.login_client_id or cfg.login_client_secret) and not cfg.login_on:
         log.event("warning", what="discord_login_off_needs_id_secret_and_site_address")
     admindoor.warn(cfg, log)
+    if cfg.game_admin_url and not cfg.admin_gate_on:
+        log.event("warning", what="bots_command_off_no_good_admin_key")
     if cfg.roles_partial:
         log.event("warning", what="discord_roles_off_needs_token_server_and_a_role")
     if (os.environ if env is None else env).get("ANTS_HUB_MODS", "").strip():
