@@ -245,6 +245,35 @@ void run_credential_tests() {
         ASSERT_FALSE(static_cast<bool>(make_turn_signer("")));
         ASSERT_EQ(make_turn_signer(secret)(name), credential);
     } TEST_END();
+
+    TEST_CASE("P25.11 The Relay's Port Is One Number: The Name's, The Environment's Or TURN's Own 3478, Never Two That Differ; The Addresses A Player Is Given Follow It") {
+        const auto urls = [](const std::string& host, const std::string& port_env) -> std::vector<std::string> {
+            const auto turn = make_turn_settings(host, port_env, "a shared secret");
+            return turn ? turn->urls : std::vector<std::string>{};
+        };
+        const std::vector<std::string> standard = {"stun:turn.example.org:3478", "turn:turn.example.org:3478?transport=udp", "turn:turn.example.org:3478?transport=tcp"};
+        const std::vector<std::string> other = {"stun:turn.example.org:3480", "turn:turn.example.org:3480?transport=udp", "turn:turn.example.org:3480?transport=tcp"};
+        ASSERT_TRUE(urls("turn.example.org", "") == standard);                               // (no port said: TURN's own)
+        ASSERT_TRUE(urls("turn.example.org:3478", "") == standard);
+        ASSERT_TRUE(urls("turn.example.org:3480", "") == other);                             // (the name says it)
+        ASSERT_TRUE(urls("turn.example.org", "3480") == other);                              // (the environment says it: the stack's ANTS_TURN_PORT)
+        ASSERT_TRUE(urls("turn.example.org:3480", "3480") == other);                         // (both say it and agree)
+        ASSERT_TRUE(urls("turn.example.org:3480", "03480") == other);                        // (the same number written another way)
+        ASSERT_TRUE(urls("turn.example.org:3480", "3481").empty());                          // (two numbers: no relay, not a guess)
+        ASSERT_TRUE(urls("turn.example.org", "3481:3482").empty() && urls("turn.example.org", "0").empty() && urls("turn.example.org", "65536").empty());
+        ASSERT_TRUE(urls("turn.example.org", "-1").empty() && urls("turn.example.org", "34 80").empty() && urls("turn.example.org", "abc").empty() && urls("turn.example.org", "123456").empty());
+        ASSERT_TRUE(urls("turn.example.org", "65535").size() == 3u && urls("turn.example.org:1", "").size() == 3u);
+        for (const char* bad : {"", ":3478", "turn.example.org:", "turn.example.org:0", "turn.example.org:65536", "turn.example.org:x", "-turn.example.org", ".example.org", "turn example.org", "turn.example.org/x", "turn_example.org", "[::1]:3478"}) {
+            ASSERT_TRUE(urls(bad, "").empty());
+        }
+        ASSERT_TRUE(urls(std::string(101, 'a'), "").empty());
+        ASSERT_FALSE(static_cast<bool>(make_turn_settings("turn.example.org", "", "")));      // (no secret, no relay)
+        const auto turn = make_turn_settings("turn.example.org", "3480", "a shared secret");
+        ASSERT_TRUE(turn && turn->usable());
+        const std::string name = turn_username(1700003600u, "0123456789abcdef");
+        ASSERT_EQ(turn->credential(name), turn_credential("a shared secret", name));         // (the secret signs, and is nowhere in the addresses)
+        for (const std::string& u : turn->urls) ASSERT_TRUE(u.find("a shared secret") == std::string::npos);
+    } TEST_END();
 }
 
 void run_rule_tests() {

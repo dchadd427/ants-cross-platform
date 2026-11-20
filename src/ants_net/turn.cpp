@@ -42,4 +42,41 @@ std::function<std::string(const std::string&)> make_turn_signer(const std::strin
     return [secret](const std::string& username) { return turn_credential(secret, username); };
 }
 
+namespace {
+
+// A port in decimal, 1 - 65535, nothing else around it; 0 when it is not one (0 is no port: "0" gives it too)
+uint32_t parse_relay_port(const std::string& text) {
+    if (text.empty() || text.size() > 5 || text.find_first_not_of("0123456789") != std::string::npos) return 0;
+    const unsigned long v = std::stoul(text);
+    return v <= 65535 ? static_cast<uint32_t>(v) : 0u;
+}
+
+}  // namespace
+
+std::shared_ptr<const TurnSettings> make_turn_settings(const std::string& host, const std::string& port_env, const std::string& secret) {
+    if (host.empty() || secret.empty() || host.size() > 100) return nullptr;
+    const size_t colon = host.find(':');
+    const std::string name = host.substr(0, colon);
+    uint32_t port = 3478;
+    if (colon != std::string::npos) {
+        port = parse_relay_port(host.substr(colon + 1));
+        if (port == 0) return nullptr;
+    }
+    if (!port_env.empty()) {
+        const uint32_t env_port = parse_relay_port(port_env);
+        if (env_port == 0 || (colon != std::string::npos && env_port != port)) return nullptr;        // (one number: the host's and the environment's agree or there is no relay)
+        port = env_port;
+    }
+    if (name.empty() || name.front() == '.' || name.front() == '-') return nullptr;
+    for (const char c : name) {
+        const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-';
+        if (!ok) return nullptr;
+    }
+    auto turn = std::make_shared<TurnSettings>();
+    const std::string at = name + ":" + std::to_string(port);
+    turn->urls = {"stun:" + at, "turn:" + at + "?transport=udp", "turn:" + at + "?transport=tcp"};
+    turn->credential = make_turn_signer(secret);
+    return turn;
+}
+
 }  // namespace ants::net

@@ -60,6 +60,7 @@
 //                      protocol 26 (docs/P2P_HINTS.md): the relay that the players' browsers connect through (a coturn in shared-secret mode; the variable ANTS_TURN_HOST names it when the option is not
 //                      given). Needs the secret in the environment variable ANTS_TURN_SECRET (never on the command line). With both, every player of a match is handed a short-lived credential for it
 //                      and the players open channels that carry their orders to each other ahead of their turns; without either of them, nobody opens a channel and the match is what it always was
+//                      The relay's port is 3478 (TURN's own) unless the :PORT of the name or the environment variable ANTS_TURN_PORT says another (when both are given they must be the same number: else no relay).
 //   --log-mb N         the limit of one room's turn log, which a returning player is given the match from, in MiB (1 - 256, default 16); the logs of all the rooms together may take 256 MiB
 //   --restart-dir DIR  where the rooms that hold seats keep their RESTART RECORDS (restart_record.hpp, docs/NETWORK_PORT.md "Restart records"): from the start of its match to its end a room
 //                      writes every sealed turn to a file here (mode 600: it holds the keys of the seats) BEFORE the turn is sent to anybody, so that a server that is stopped, crashes or is
@@ -255,32 +256,7 @@ void usage(FILE* to) {
                  "                    [--test-map-port N] [--test-map-any-interface] [--test-maps-dir DIR] [--test-map-ignore-client-header]\n"
                  "                    [--map-picture-program PATH --map-picture-archive FILE [--map-pictures-dir DIR]] [--turn-host HOST[:PORT]]\n"
                  "  the control interface takes its secret from the environment variable ANTS_SERVER_SECRET; without it the server makes one and keeps it\n"
-                 "  in --secret-file (default: control-secret in --results-dir); the relay's secret (--turn-host) from ANTS_TURN_SECRET\n");
-}
-
-// The relay of protocol 26 from the option and the environment: its host name (letters, digits, '.', '-', an optional :port) and the secret of its credentials. Null when either is missing or the host is
-// not a name: no relay, and no player is given a credential.
-std::shared_ptr<const ants::net::TurnSettings> make_turn_settings(const char* host_text, const char* secret_text) {
-    const std::string host = host_text != nullptr ? host_text : "";
-    const std::string secret = secret_text != nullptr ? secret_text : "";
-    if (host.empty() || secret.empty() || host.size() > 100) return nullptr;
-    const size_t colon = host.find(':');
-    const std::string name = host.substr(0, colon);
-    std::string port = "3478";
-    if (colon != std::string::npos) {
-        port = host.substr(colon + 1);
-        if (port.empty() || port.size() > 5 || port.find_first_not_of("0123456789") != std::string::npos || std::stoul(port) == 0 || std::stoul(port) > 65535) return nullptr;
-    }
-    if (name.empty() || name.front() == '.' || name.front() == '-') return nullptr;
-    for (const char c : name) {
-        const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-';
-        if (!ok) return nullptr;
-    }
-    auto turn = std::make_shared<ants::net::TurnSettings>();
-    const std::string at = name + ":" + port;
-    turn->urls = {"stun:" + at, "turn:" + at + "?transport=udp", "turn:" + at + "?transport=tcp"};
-    turn->credential = ants::net::make_turn_signer(secret);
-    return turn;
+                 "  in --secret-file (default: control-secret in --results-dir); the relay's secret (--turn-host) from ANTS_TURN_SECRET, its port from ANTS_TURN_PORT\n");
 }
 
 bool parse_port(const char* text, uint16_t& out) {
@@ -662,13 +638,16 @@ int main(int argc, char** argv) {
     limits.solo_countdown_s = static_cast<uint32_t>(o.solo_countdown_s);
     limits.live_delay_s = static_cast<uint32_t>(o.live_delay_s);
     limits.room_log_bytes = static_cast<size_t>(o.log_mb) * 1024u * 1024u;
-    limits.turn = make_turn_settings(o.turn_host.empty() ? std::getenv("ANTS_TURN_HOST") : o.turn_host.c_str(), std::getenv("ANTS_TURN_SECRET"));      // (the secret stays in this closure: not in a log, a record or a room's spec)
+    {                                                                 // the relay of protocol 26: its name from the option or ANTS_TURN_HOST, its port from the name or ANTS_TURN_PORT (ants_net/turn.hpp)
+        const auto text = [](const char* v) { return std::string(v != nullptr ? v : ""); };
+        limits.turn = ants::net::make_turn_settings(o.turn_host.empty() ? text(std::getenv("ANTS_TURN_HOST")) : o.turn_host, text(std::getenv("ANTS_TURN_PORT")), text(std::getenv("ANTS_TURN_SECRET")));
+    }      // (the secret stays in this closure: not in a log, a record or a room's spec)
     if (!o.turn_host.empty() && limits.turn == nullptr) {
-        std::fprintf(stderr, "--turn-host needs a host name (letters, digits, '.', '-', an optional :port) and the secret in the environment variable ANTS_TURN_SECRET\n");
+        std::fprintf(stderr, "--turn-host needs a host name (letters, digits, '.', '-', an optional :port that agrees with ANTS_TURN_PORT when that is set) and the secret in the environment variable ANTS_TURN_SECRET\n");
         return 2;
     }
-    log(limits.turn != nullptr ? "players' channels: on (each player of a match is handed a short-lived credential for the relay; hints go between them ahead of the turns)"
-                               : "players' channels: off (no relay: --turn-host or ANTS_TURN_HOST, and ANTS_TURN_SECRET)");
+    log(limits.turn != nullptr ? "players' channels: on (relay " + limits.turn->urls.front().substr(5) + "; each player of a match is handed a short-lived credential for it; hints go between them ahead of the turns)"
+                               : std::string("players' channels: off (no relay: --turn-host or ANTS_TURN_HOST (the port: its :PORT or ANTS_TURN_PORT, 3478 otherwise), and ANTS_TURN_SECRET)"));
     ants::server::MapStore store{o.maps_dir, o.community_maps_dir};
     {
         std::vector<std::string> map_notes;

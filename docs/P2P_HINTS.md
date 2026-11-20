@@ -57,7 +57,7 @@ The server relays a `Signal` only between two players who are both ready; a `P2p
 
 ## Command line and page
 
-`--direct on|off` (default off: this player allows direct connections) and `--no-p2p` (no channel at all), see [`COMMAND_LINE.md`](COMMAND_LINE.md). The page passes `--direct on` when the Room's switch was on (localStorage `ants.direct`) and `--no-p2p` for `?p2p=off`. The server: `--turn-host HOST[:PORT]` (or `ANTS_TURN_HOST`) and `ANTS_TURN_SECRET`, see [`SERVER.md`](SERVER.md). Without both, protocol 26 changes nothing about a match except the computer players' hints.
+`--direct on|off` (default off: this player allows direct connections) and `--no-p2p` (no channel at all), see [`COMMAND_LINE.md`](COMMAND_LINE.md). The page passes `--direct on` when the Room's switch was on (localStorage `ants.direct`) and `--no-p2p` for `?p2p=off`. The server: `--turn-host HOST[:PORT]` (or `ANTS_TURN_HOST`), `ANTS_TURN_PORT` (3478 unless set) and `ANTS_TURN_SECRET`, see [`SERVER.md`](SERVER.md). Without both, protocol 26 changes nothing about a match except the computer players' hints.
 
 ## Measured effect (a rig on virtual time, not real networks)
 

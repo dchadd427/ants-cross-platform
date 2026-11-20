@@ -7,7 +7,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
+
+#include "ants_net/p2p.hpp"
 
 namespace ants::net {
 
@@ -19,5 +22,10 @@ std::string turn_credential(const std::string& secret, const std::string& userna
 bool turn_credential_valid(const std::string& secret, const std::string& username, const std::string& credential, uint32_t now);
 /// The function that TurnSettings::credential holds: it signs a username with `secret` and keeps the secret to itself. An empty secret makes an empty function (no relay).
 std::function<std::string(const std::string&)> make_turn_signer(const std::string& secret);
+/// What the server tells its players about its relay, from the relay's name (`host`: "HOST" or "HOST:PORT": letters, digits, '.', '-'), the port of the environment (`port_env`, ANTS_TURN_PORT: empty, none) and
+/// the secret. The port is the one the host names, else the environment's, else 3478 (TURN's own); it is ONE number: a host that names a port and an environment that names another is refused, as is
+/// a port that is not 1 - 65535, a name that is not a name or an empty secret. Null when refused: no relay, and no player is given a credential. The addresses are stun:HOST:PORT and turn:HOST:PORT with
+/// ?transport=udp and ?transport=tcp.
+std::shared_ptr<const TurnSettings> make_turn_settings(const std::string& host, const std::string& port_env, const std::string& secret);
 
 }  // namespace ants::net

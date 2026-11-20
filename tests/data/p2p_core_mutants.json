@@ -1,5 +1,5 @@
 {
- "note": "Mutants of protocol 26 (docs/P2P_HINTS.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the prediction's matching rule for a hint (where it goes, doubled and late hints, the order of a turn, confirmed, moved once, dropped, the limits), the server's session (the credential and its expiry, who is ready, the rule of the address and the violation, the sender's seat stamped by the connection, the limits, who is told, a computer player's hint at the tick of its turn), the wire (what each decoder refuses), the rule of the address in the text of a candidate, the relay's credential (RFC 2104, the expiry), the tick that a hint names (the phase of the server's seals: when it is known, what it learns from the orders that came back, where it is not trusted), and the game's side (a channel's seat, the server's hint, a relay with no address, the tick of a hint, the clock that the game gives the prediction, the mark).",
+ "note": "Mutants of protocol 26 (docs/P2P_HINTS.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the prediction's matching rule for a hint (where it goes, doubled and late hints, the order of a turn, confirmed, moved once, dropped, the limits), the server's session (the credential and its expiry, who is ready, the rule of the address and the violation, the sender's seat stamped by the connection, the limits, who is told, a computer player's hint at the tick of its turn), the wire (what each decoder refuses), the rule of the address in the text of a candidate, the relay's credential (RFC 2104, the expiry), the tick that a hint names (the phase of the server's seals: when it is known, what it learns from the orders that came back, where it is not trusted), and the game's side (a channel's seat, the server's hint, a relay with no address, the tick of a hint, the clock that the game gives the prediction, the mark), and the relay's one port (ants_net/turn.hpp make_turn_settings).",
  "mutants": [
   {
    "id": "hint_that_came_after_its_turn_is_applied_again",
@@ -690,6 +690,66 @@
     "test_netgame"
    ],
    "test": "ANTS_TEST_FILTER=N25 timeout 900 ./build/tests/test_net/test_netgame"
+  },
+  {
+   "id": "relay_environment_port_is_ignored",
+   "file": "src/ants_net/turn.cpp",
+   "old": "        port = env_port;\n",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "relay_two_ports_that_differ_are_taken",
+   "file": "src/ants_net/turn.cpp",
+   "old": "(colon != std::string::npos && env_port != port)",
+   "new": "false",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "relay_default_port_is_not_turns_own",
+   "file": "src/ants_net/turn.cpp",
+   "old": "    uint32_t port = 3478;\n",
+   "new": "    uint32_t port = 3479;\n",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "relay_port_above_65535_is_taken",
+   "file": "src/ants_net/turn.cpp",
+   "old": "return v <= 65535 ?",
+   "new": "return v <= 99999 ?",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "relay_environment_port_is_not_checked",
+   "file": "src/ants_net/turn.cpp",
+   "old": "if (env_port == 0 || (colon",
+   "new": "if ((colon",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "relay_without_a_secret_is_taken",
+   "file": "src/ants_net/turn.cpp",
+   "old": "    if (host.empty() || secret.empty() || host.size() > 100) return nullptr;\n    const size_t colon",
+   "new": "    if (host.empty() || host.size() > 100) return nullptr;\n    const size_t colon",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=P25 timeout 900 ./build/tests/test_net/test_lockstep"
   }
  ]
 }
