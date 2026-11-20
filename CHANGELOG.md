@@ -23,6 +23,15 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.18.0 - 2026-11-19 - Dropped food can be taken only once
+
+**For players:**
+- **Food dropped by a dying ant can be taken only once.** When a thief carrying food died on a spot where a food pile had already been emptied, its lunch box could be eaten again and again for full points. Now the first ant to take it empties it, and it is gone. The 1998 game has the same flaw; this fix is a deliberate change from it.
+
+**Rules / network:** the original game's rules number moves from 9 to 13 (game mode 187 keeps 12); recordings of earlier numbers still play as they were recorded. Network protocol 25: a v0.17 page or game cannot join a v0.18 match, so reload the page.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/837d81c1...9e729c46)
+
 ## v0.17.13 - 2026-11-19 - Phone fixes: keyboard in Options, watch bar, countdown, full-screen exit
 
 **For players:**

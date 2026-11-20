@@ -1,0 +1,250 @@
+{
+ "note": "Mutants of the rules number 13 of the original's game for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): a bite takes its unit from the first object of its food tile that has one (the lookup and what it falls back to, the engine's setting, its default and its reset, the player's setting from the head's number, the numbers that have the rule and the ones that are played, recorded or refused), and the lunchbox of a killed carrier or thief that the rule is about. Each build is the targets of test_food_actions and test_rules_empty_record, and each test run is the one that must notice.",
+ "mutants": [
+  {
+   "id": "bite_never_skips_an_empty_record",
+   "file": "src/ants_sim/action_system.cpp",
+   "old": "const int32_t first = bite_skips_empty_record_ ? grid_.food_object_first_with_units_at(food_tile) : grid_.food_object_first_at(food_tile);",
+   "new": "const int32_t first = grid_.food_object_first_at(food_tile);",
+   "build": [
+    "test_food_actions",
+    "test_rules_empty_record"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_food_actions && timeout 600 ./build/tests/test_replay/test_rules_empty_record",
+   "expect": "4.2"
+  },
+  {
+   "id": "bite_always_skips_whatever_the_number",
+   "file": "src/ants_sim/action_system.cpp",
+   "old": "const int32_t first = bite_skips_empty_record_ ? grid_.food_object_first_with_units_at(food_tile) : grid_.food_object_first_at(food_tile);",
+   "new": "const int32_t first = grid_.food_object_first_with_units_at(food_tile);",
+   "build": [
+    "test_food_actions",
+    "test_rules_empty_record"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_food_actions && timeout 600 ./build/tests/test_replay/test_rules_empty_record",
+   "expect": "4.2"
+  },
+  {
+   "id": "lookup_takes_the_last_object_with_units",
+   "file": "src/ants_sim/grid.cpp",
+   "old": "int32_t Grid::food_object_first_with_units_at(TileCoord anchor) const noexcept {\n    for (size_t i = 0; i < food_objects_.size(); ++i) {\n        if (food_objects_[i].row == anchor.y && food_objects_[i].col == anchor.x && food_objects_[i].remaining > 0) return static_cast<int32_t>(i);\n    }\n    return food_object_first_at(anchor);",
+   "new": "int32_t Grid::food_object_first_with_units_at(TileCoord anchor) const noexcept {\n    int32_t found = -1;\n    for (size_t i = 0; i < food_objects_.size(); ++i) {\n        if (food_objects_[i].row == anchor.y && food_objects_[i].col == anchor.x && food_objects_[i].remaining > 0) found = static_cast<int32_t>(i);\n    }\n    if (found >= 0) return found;\n    return food_object_first_at(anchor);",
+   "build": [
+    "test_food_actions"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_food_actions",
+   "expect": "4.5"
+  },
+  {
+   "id": "lookup_gives_none_when_every_object_is_empty",
+   "file": "src/ants_sim/grid.cpp",
+   "old": "    }\n    return food_object_first_at(anchor);\n}\n\nint32_t Grid::food_object_at_cell",
+   "new": "    }\n    return -1;\n}\n\nint32_t Grid::food_object_at_cell",
+   "build": [
+    "test_food_actions"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_food_actions",
+   "expect": "4.5"
+  },
+  {
+   "id": "lookup_ignores_the_column_of_the_anchor",
+   "file": "src/ants_sim/grid.cpp",
+   "old": "food_objects_[i].row == anchor.y && food_objects_[i].col == anchor.x && food_objects_[i].remaining > 0",
+   "new": "food_objects_[i].row == anchor.y && food_objects_[i].remaining > 0",
+   "build": [
+    "test_food_actions"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_food_actions",
+   "expect": "4.5"
+  },
+  {
+   "id": "lookup_ignores_the_row_of_the_anchor",
+   "file": "src/ants_sim/grid.cpp",
+   "old": "food_objects_[i].row == anchor.y && food_objects_[i].col == anchor.x && food_objects_[i].remaining > 0",
+   "new": "food_objects_[i].col == anchor.x && food_objects_[i].remaining > 0",
+   "build": [
+    "test_food_actions"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_food_actions",
+   "expect": "4.5"
+  },
+  {
+   "id": "lookup_counts_an_empty_object",
+   "file": "src/ants_sim/grid.cpp",
+   "old": "food_objects_[i].col == anchor.x && food_objects_[i].remaining > 0",
+   "new": "food_objects_[i].col == anchor.x && food_objects_[i].remaining >= 0",
+   "build": [
+    "test_food_actions"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_food_actions",
+   "expect": "4.2"
+  },
+  {
+   "id": "set_game_mode_leaves_the_rule_as_it_was",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "impl_->fire_wall_as_original_ = true; impl_->bite_skips_empty_record_ = true;",
+   "new": "impl_->fire_wall_as_original_ = true;",
+   "build": [
+    "test_food_actions"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_food_actions",
+   "expect": "4.5"
+  },
+  {
+   "id": "engine_starts_with_the_original_lookup",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "bool bite_skips_empty_record_{true};",
+   "new": "bool bite_skips_empty_record_{false};",
+   "build": [
+    "test_food_actions"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_food_actions",
+   "expect": "4.5"
+  },
+  {
+   "id": "setter_ignores_its_argument",
+   "file": "src/ants_sim/food_rules.cpp",
+   "old": "impl_->bite_skips_empty_record_ = on;",
+   "new": "impl_->bite_skips_empty_record_ = on || true;",
+   "build": [
+    "test_food_actions",
+    "test_rules_empty_record"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_food_actions && timeout 600 ./build/tests/test_replay/test_rules_empty_record",
+   "expect": "4.2"
+  },
+  {
+   "id": "getter_answers_the_rule_of_a_match_now",
+   "file": "src/ants_sim/food_rules.cpp",
+   "old": "return impl_->bite_skips_empty_record_;",
+   "new": "return true;",
+   "build": [
+    "test_rules_empty_record"
+   ],
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_empty_record",
+   "expect": "RP17.1"
+  },
+  {
+   "id": "player_ignores_the_number_of_the_head",
+   "file": "src/ants_replay/player.cpp",
+   "old": "engine.set_bite_skips_empty_record(bite_skips_empty_record_rules(sim_rules_of(replay.head)));",
+   "new": "engine.set_bite_skips_empty_record(true);",
+   "build": [
+    "test_rules_empty_record"
+   ],
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_empty_record",
+   "expect": "RP17."
+  },
+  {
+   "id": "player_never_sets_the_rule",
+   "file": "src/ants_replay/player.cpp",
+   "old": "    engine.set_bite_skips_empty_record(bite_skips_empty_record_rules(sim_rules_of(replay.head)));       // (a match recorded before the rule of the empty record takes every bite from the first object of the food tile, as the original does, in either mode)\n",
+   "new": "",
+   "build": [
+    "test_rules_empty_record"
+   ],
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_empty_record",
+   "expect": "RP17.3"
+  },
+  {
+   "id": "rule_starts_one_number_too_early",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "return rules >= kSimRulesEmptyRecordFirst;",
+   "new": "return rules >= kSimRulesMode187;",
+   "build": [
+    "test_rules_empty_record"
+   ],
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_empty_record",
+   "expect": "RP17.1"
+  },
+  {
+   "id": "rule_starts_one_number_too_late",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "return rules >= kSimRulesEmptyRecordFirst;",
+   "new": "return rules > kSimRulesEmptyRecordFirst;",
+   "build": [
+    "test_rules_empty_record"
+   ],
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_empty_record",
+   "expect": "RP17.1"
+  },
+  {
+   "id": "number_9_is_not_played",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "(rules == kSimRules || rules == kSimRulesBeforeEmptyRecord || rules == kSimRulesBeforeFireWall || rules == kSimRulesBeforeLastSide)",
+   "new": "(rules == kSimRules || rules == kSimRulesBeforeFireWall || rules == kSimRulesBeforeLastSide)",
+   "build": [
+    "test_rules_empty_record"
+   ],
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_empty_record",
+   "expect": "RP17.1"
+  },
+  {
+   "id": "number_13_is_not_recorded",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "? kSimRules : mode == static_cast<uint8_t>(sim::GameMode::Kills187) ? kSimRulesMode187",
+   "new": "? kSimRulesBeforeEmptyRecord : mode == static_cast<uint8_t>(sim::GameMode::Kills187) ? kSimRulesMode187",
+   "build": [
+    "test_rules_empty_record"
+   ],
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_empty_record",
+   "expect": "RP17.1"
+  },
+  {
+   "id": "refusal_forgets_the_new_number",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "std::to_string(kSimRulesMode187) + \" and \" + std::to_string(kSimRules);",
+   "new": "std::to_string(kSimRulesMode187) + \" and \" + std::to_string(kSimRulesMode187);",
+   "build": [
+    "test_rules_empty_record"
+   ],
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_empty_record",
+   "expect": "RP17.1"
+  },
+  {
+   "id": "head_check_lets_13_name_another_mode",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "(h.sim_rules == kSimRules || h.sim_rules == kSimRulesBeforeEmptyRecord || h.sim_rules == kSimRulesBeforeFireWall) && h.mode != 0",
+   "new": "(h.sim_rules == kSimRulesBeforeEmptyRecord || h.sim_rules == kSimRulesBeforeFireWall) && h.mode != 0",
+   "build": [
+    "test_rules_empty_record"
+   ],
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_empty_record",
+   "expect": "RP17.1"
+  },
+  {
+   "id": "a_killed_thiefs_loot_is_not_dropped",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "if (a.is_holding() && grid_.in_bounds(tile) && !drops_nothing_187()) {",
+   "new": "if (a.is_holding() && !a.is_thief_steal && grid_.in_bounds(tile) && !drops_nothing_187()) {",
+   "build": [
+    "test_food_actions"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_food_actions",
+   "expect": "4.3"
+  },
+  {
+   "id": "a_killed_carriers_lunchbox_is_worth_nothing",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "static_cast<uint32_t>(std::max<int32_t>(0, a.carried_signed())));",
+   "new": "uint32_t{0});",
+   "build": [
+    "test_food_actions"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_food_actions",
+   "expect": "4.2"
+  },
+  {
+   "id": "a_lunchbox_keeps_its_unit_after_a_bite",
+   "file": "src/ants_sim/action_system.cpp",
+   "old": "if (obj >= 0) grid_.take_food(obj, 1, changed);",
+   "new": "if (obj >= 0 && !grid_.food_objects()[static_cast<size_t>(obj)].stage_tiles.empty() && grid_.food_objects()[static_cast<size_t>(obj)].stage_tiles[0] != 356) grid_.take_food(obj, 1, changed);",
+   "build": [
+    "test_food_actions"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_food_actions",
+   "expect": "4.2"
+  }
+ ]
+}

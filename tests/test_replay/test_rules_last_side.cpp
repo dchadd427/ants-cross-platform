@@ -117,20 +117,20 @@ int main() {
     std::cout << "=== Rules numbers of the original's game: 5 and 8 ===\n";
     const assets::LevelData level = scenario::level();
 
-    TEST_CASE("RP13.1 This build plays 5, 8 and 9 for the original's game and 6, 7, 10, 11 and 12 for 187, nothing else; a match of the original's game is recorded under 9, a 187 match under 12; every number names its one mode; a refusal names all eight") {
-        ASSERT_TRUE(kSimRules == 9 && kSimRulesBeforeFireWall == 8 && kSimRulesBeforeLastSide == 5 && kSimRulesMode187Heal == 6 && kSimRulesMode187BeforeFireWall == 7 && kSimRulesMode187BeforeEndFix == 10 && kSimRulesMode187BeforeNoDrops == 11 && kSimRulesMode187 == 12);
-        ASSERT_TRUE(sim_rules_for_mode(0) == 9 && sim_rules_for_mode(1) == 12 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
-        for (uint16_t rules = 0; rules < 14; ++rules) {
-            ASSERT_EQ(plays_mode_rules(0, rules), rules == 5 || rules == 8 || rules == 9);
+    TEST_CASE("RP13.1 This build plays 5, 8, 9 and 13 for the original's game and 6, 7, 10, 11 and 12 for 187, nothing else; a match of the original's game is recorded under 9, a 187 match under 12; every number names its one mode; a refusal names all nine") {
+        ASSERT_TRUE(kSimRules == 13 && kSimRulesBeforeEmptyRecord == 9 && kSimRulesBeforeFireWall == 8 && kSimRulesBeforeLastSide == 5 && kSimRulesMode187Heal == 6 && kSimRulesMode187BeforeFireWall == 7 && kSimRulesMode187BeforeEndFix == 10 && kSimRulesMode187BeforeNoDrops == 11 && kSimRulesMode187 == 12);
+        ASSERT_TRUE(sim_rules_for_mode(0) == 13 && sim_rules_for_mode(1) == 12 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
+        for (uint16_t rules = 0; rules < 16; ++rules) {
+            ASSERT_EQ(plays_mode_rules(0, rules), rules == 5 || rules == 8 || rules == 9 || rules == 13);
             ASSERT_EQ(plays_mode_rules(k187, rules), rules == 6 || rules == 7 || rules == 10 || rules == 11 || rules == 12);
             ASSERT_FALSE(plays_mode_rules(2, rules));
             ASSERT_FALSE(plays_mode_rules(255, rules));
         }
-        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7, 8, 9, 10, 11 and 12"));
+        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7, 8, 9, 10, 11, 12 and 13"));
         Header head;
         head.map_name = "TINY.LVL";
         head.roster = 0x0F;
-        ASSERT_EQ(head.sim_rules, 9);                                                        // (a head that nobody changed is a head of the original's game now)
+        ASSERT_EQ(head.sim_rules, 13);                                                        // (a head that nobody changed is a head of the original's game now)
         for (const uint16_t rules : {uint16_t{5}, uint16_t{8}, uint16_t{9}}) {
             Header h = head;
             h.sim_rules = rules;
@@ -163,7 +163,7 @@ int main() {
         {
             Header h = head;
             h.set_mode(k187);
-            h.sim_rules = 13;
+            h.sim_rules = 14;
             Replay r;
             r.head = h;
             std::string error;
@@ -182,16 +182,16 @@ int main() {
         }
         Header plain = head;
         Recorder fresh(plain);
-        ASSERT_TRUE(fresh.replay().head.sim_rules == 9 && fresh.replay().head.mode == 0);
+        ASSERT_TRUE(fresh.replay().head.sim_rules == 13 && fresh.replay().head.mode == 0);
         plain.sim_rules = 5;
         Recorder old(plain);
         ASSERT_EQ(old.replay().head.sim_rules, 5);
         // the refusal of a number nobody plays names the eight that this build does
         Header foreign = head;
-        foreign.sim_rules = 13;
-        ASSERT_TRUE(rules_refusal(foreign).find("simulation rules 5, 6, 7, 8, 9, 10, 11 and 12") != std::string::npos);
+        foreign.sim_rules = 14;
+        ASSERT_TRUE(rules_refusal(foreign).find("simulation rules 5, 6, 7, 8, 9, 10, 11, 12 and 13") != std::string::npos);
         foreign.sim_rules = 4;
-        ASSERT_TRUE(rules_refusal(foreign).find("with simulation rules 4; this build plays simulation rules 5, 6, 7, 8, 9, 10, 11 and 12") != std::string::npos);
+        ASSERT_TRUE(rules_refusal(foreign).find("with simulation rules 4; this build plays simulation rules 5, 6, 7, 8, 9, 10, 11, 12 and 13") != std::string::npos);
     } TEST_END();
 
     TEST_CASE("RP13.2 A recording under the number 5 that hits the state (one side left, no food) and goes on to the clock plays to every hash it holds and to the final hash that the build before the rule made of it") {

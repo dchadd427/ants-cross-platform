@@ -925,6 +925,10 @@ No layout changed: a bot is named `Pip (bot, Hard)`; the Room message's planned 
 
 187 puts nothing on the ground (rules number 12): [`GAMEPLAY.md`](GAMEPLAY.md#187-a-game-type-of-the-remake); the rules numbers: [`REPLAYS.md`](REPLAYS.md#the-file).
 
+## Protocol 25: nothing on the wire
+
+A bite takes its unit from the first object of its food tile that still has one, so a lunchbox that falls on the anchor of an emptied pile is eaten once (the original's game, rules number 13): [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) 5.40, "A lunchbox on the anchor of an emptied record"; the rules numbers: [`REPLAYS.md`](REPLAYS.md#the-file).
+
 ## Reconnect (protocol 10): a player whose connection is lost can come back
 
 ### The behaviour that is decided
