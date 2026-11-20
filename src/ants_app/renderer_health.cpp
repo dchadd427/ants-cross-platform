@@ -217,9 +217,19 @@ void Renderer::draw_health_changes() {
         const int32_t top = centre - pic->h / 2 - rise;                  // (the picture is the glyphs, nothing round them)
         const int32_t left = sx - pic->w / 2;
         if (!health::overlaps(health::Rect{left, top, pic->w, pic->h}, screen)) continue;
-        const health::Color c = num.heal ? health::kHealColor : health::kDamageColor;
-        SDL_SetTextureColorMod(pic->texture, c.r, c.g, c.b);
         SDL_SetTextureAlphaMod(pic->texture, static_cast<uint8_t>(alpha));
+        if (num.heal) {                                                  // (the plus, the first glyph, in green; the digits in the heal color)
+            const SDL_Rect sign_src{0, 0, health::kGlyphAdvance, pic->h};
+            const SDL_Rect digit_src{health::kGlyphAdvance, 0, pic->w - health::kGlyphAdvance, pic->h};
+            const SDL_Rect sign_dst = placed(left, top, sign_src.w, sign_src.h);
+            const SDL_Rect digit_dst = placed(left + health::kGlyphAdvance, top, digit_src.w, digit_src.h);
+            SDL_SetTextureColorMod(pic->texture, health::kHealSignColor.r, health::kHealSignColor.g, health::kHealSignColor.b);
+            SDL_RenderCopy(renderer_, pic->texture, &sign_src, &sign_dst);
+            SDL_SetTextureColorMod(pic->texture, health::kHealColor.r, health::kHealColor.g, health::kHealColor.b);
+            SDL_RenderCopy(renderer_, pic->texture, &digit_src, &digit_dst);
+            continue;
+        }
+        SDL_SetTextureColorMod(pic->texture, health::kDamageColor.r, health::kDamageColor.g, health::kDamageColor.b);
         const SDL_Rect dst = placed(left, top, pic->w, pic->h);
         SDL_RenderCopy(renderer_, pic->texture, nullptr, &dst);
     }

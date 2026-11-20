@@ -108,20 +108,51 @@ constexpr hc::Setting kOff{hc::When::Off, hc::Style::Bar};
 constexpr hc::Setting kNumbers{hc::When::All, hc::Style::Number};
 
 /// How many pixels of `box` are darker, in some channel, than both the ground's value (the frame without the number, `none`) and the number's own color (r, g, b), by more than `kBlendSlack` levels: a number
-/// drawn plainly (digits white or green, edge pixels that color blended with what is behind them) has none, a border has them all round the digits (it darkens the ground by tens of levels).
+/// drawn plainly (digits white or green, edge pixels that color blended with what is behind them) has none, a border has them all round the digits (it darkens the ground by tens of levels). A number of two
+/// colors (a heal number: white digits, green plus) passes a pixel that is not darker than the ground and the one color or than the ground and the other (`r2` >= 0).
 /// The slack is SDL's: its software renderer on x86 (2.30 of Linux) rounds the blend of an almost transparent texel down by up to 2 levels of the ground, for any texture.
 constexpr int kBlendSlack = 4;
-int unbordered(const Picture& none, const Picture& with, const Box& box, int r, int g, int b) {
-    const int color[3] = {r, g, b};
+int unbordered(const Picture& none, const Picture& with, const Box& box, int r, int g, int b, int r2 = -1, int g2 = -1, int b2 = -1) {
+    const int color[2][3] = {{r, g, b}, {r2, g2, b2}};
     int n = 0;
     for (int y = box.y0; y <= box.y1; ++y) {
         for (int x = box.x0; x <= box.x1; ++x) {
-            bool darker = false;
-            for (int c = 0; c < 3; ++c) darker = darker || with.at(x, y)[c] + kBlendSlack < std::min<int>(none.at(x, y)[c], color[c]);
-            n += darker ? 1 : 0;
+            bool darker_than_all = true;
+            for (int k = 0; k < (r2 >= 0 ? 2 : 1); ++k) {
+                bool darker = false;
+                for (int c = 0; c < 3; ++c) darker = darker || with.at(x, y)[c] + kBlendSlack < std::min<int>(none.at(x, y)[c], color[k][c]);
+                darker_than_all = darker_than_all && darker;
+            }
+            n += darker_than_all ? 1 : 0;
         }
     }
     return n;
+}
+
+/// A heal number's colors in `box`: how many pixels are exactly the green of the plus and exactly the white of the digits (the cores of the glyphs), and whether the green is left of every white one
+struct HealColors {
+    int green{0};
+    int white{0};
+    bool plus_first{false};
+};
+HealColors heal_colors(const Picture& none, const Picture& with, const Box& box) {
+    HealColors h;
+    int last_green = -(1 << 20), first_white = 1 << 20;
+    for (int y = box.y0; y <= box.y1; ++y) {
+        for (int x = box.x0; x <= box.x1; ++x) {
+            if (std::memcmp(with.at(x, y), none.at(x, y), 3) == 0) continue;
+            const uint8_t* p = with.at(x, y);
+            if (p[0] == hc::kHealSignColor.r && p[1] == hc::kHealSignColor.g && p[2] == hc::kHealSignColor.b) {
+                ++h.green;
+                last_green = std::max(last_green, x);
+            } else if (p[0] == hc::kHealColor.r && p[1] == hc::kHealColor.g && p[2] == hc::kHealColor.b) {
+                ++h.white;
+                first_white = std::min(first_white, x);
+            }
+        }
+    }
+    h.plus_first = h.green > 0 && h.white > 0 && last_green < first_white;
+    return h;
 }
 
 Picture shoot(PixelRig& rig, hc::ChangeTracker* tracker, int64_t now, hc::Setting marks = kOff) {
@@ -183,19 +214,14 @@ void test_drawing(const assets::AssetArchive& arc) {
     }
     check(white >= 6, "the digits are white (" + std::to_string(white) + " white pixels)");
     check(unbordered(none, font, df, 255, 255, 255) == 0, "and have no border: no pixel of -2 is darker than both the ground and white (" + std::to_string(unbordered(none, font, df, 255, 255, 255)) + " pixels)");
-    {   // the heal number is green
+    {   // the heal number: white digits (the heal color) and a green plus, nothing round them
         hc::ChangeTracker th = with_number(600, 500, 3, true);
         const Picture on = shoot(rig, &th, 0);
         const Box d = delta(none, on);
-        int green = 0;
-        for (int y = d.y0; y <= d.y1; ++y) {
-            for (int x = d.x0; x <= d.x1; ++x) {
-                const uint8_t* p = on.at(x, y);
-                if (p[1] > 190 && p[1] > p[0] + 40 && p[1] > p[2] + 40) ++green;
-            }
-        }
-        check(green >= 6, "+3 is pale green (" + std::to_string(green) + " pixels)");
-        check(unbordered(none, on, d, 132, 236, 120) == 0, "...and has no border either (" + std::to_string(unbordered(none, on, d, 132, 236, 120)) + " pixels darker than both the ground and that green)");
+        const HealColors h = heal_colors(none, on, d);
+        check(h.green >= 1 && h.white >= 1 && h.plus_first, "+3: a green plus (" + std::to_string(h.green) + " pixels of exactly the plus color) left of white digits (" + std::to_string(h.white) + " pixels of exactly the heal color)");
+        check(unbordered(none, on, d, hc::kHealColor.r, hc::kHealColor.g, hc::kHealColor.b, hc::kHealSignColor.r, hc::kHealSignColor.g, hc::kHealSignColor.b) == 0,
+              "...and has no border either (" + std::to_string(unbordered(none, on, d, 255, 255, 255, 110, 255, 120)) + " pixels darker than the ground and each of the two colors)");
     }
     // ---- the shrink: sizes at birth, mid-life and the end, and the middle that does not move
     {
@@ -471,7 +497,14 @@ void test_face_and_outline(const assets::AssetArchive& arc) {
         hc::ChangeTracker th = with_number(600, 500, 7, true);
         const Picture n2 = shoot_output(rig, &th, 0);
         const Box dh = delta(n0, n2);
-        check(dh.n > 30 && unbordered(n0, n2, dh, 132, 236, 120) == 0, "+7 at output scale " + std::to_string(k) + ": no border (" + std::to_string(unbordered(n0, n2, dh, 132, 236, 120)) + " pixels darker than both the ground and the green)");
+        const HealColors hk = heal_colors(n0, n2, dh);
+        check(dh.n > 30 && hk.green >= 1 && hk.white >= 1 && hk.plus_first, "+7 at output scale " + std::to_string(k) + ": a green plus left of white digits (" + std::to_string(hk.green) + " and " + std::to_string(hk.white) + " pixels of exactly those colors)");
+        check(unbordered(n0, n2, dh, hc::kHealColor.r, hc::kHealColor.g, hc::kHealColor.b, hc::kHealSignColor.r, hc::kHealSignColor.g, hc::kHealSignColor.b) == 0,
+              "+7 at output scale " + std::to_string(k) + ": no border (" + std::to_string(unbordered(n0, n2, dh, 255, 255, 255, 110, 255, 120)) + " pixels darker than the ground and each of the two colors)");
+        const Picture healed_fading = shoot_output(rig, &th, 450);
+        const Box dhf = delta(n0, healed_fading);
+        check(dhf.n > 20 && unbordered(n0, healed_fading, dhf, hc::kHealColor.r, hc::kHealColor.g, hc::kHealColor.b, hc::kHealSignColor.r, hc::kHealSignColor.g, hc::kHealSignColor.b) == 0,
+              "+7 at output scale " + std::to_string(k) + " and 0.45 s, fading and smaller: no border either (" + std::to_string(unbordered(n0, healed_fading, dhf, 255, 255, 255, 110, 255, 120)) + " pixels)");
         const Picture faded = shoot_output(rig, &t, 450);
         const Box df = delta(n0, faded);
         check(df.n > 20 && unbordered(n0, faded, df, 255, 255, 255) == 0, "-2 at output scale " + std::to_string(k) + " and 0.45 s, fading and smaller: no border either (" + std::to_string(unbordered(n0, faded, df, 255, 255, 255)) + " pixels)");

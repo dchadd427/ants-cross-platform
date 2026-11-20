@@ -4,7 +4,7 @@
 //     make nothing, a number outlives its ant, at most 2 per sign per ant and 48 on the screen, and the opacity and the rise of a number over its 0.6 s;
 //   * the tracker on the real engine: a melee hit costs 1 and a Combat Ant's 2, a bomb costs the one ant that steps on it 2, a fire wall costs 1 to each ant on its tile, drowning changes nothing, and a hurt
 //     ant sent home shows one +N when it comes out;
-//   * the drawing on a real renderer (the software renderer, the dummy video driver), every pixel against numbers written down here: plain white digits for damage, pale green for a heal, with nothing round them, their place
+//   * the drawing on a real renderer (the software renderer, the dummy video driver), every pixel against numbers written down here: plain white digits for damage, white digits and a green plus for a heal, with nothing round them, their place
 //     over the ant at every zoom, their one size, the rise and the fade, the number that follows its ant and the one that outlives it, the clip to the view, the z-order over the health bars, a canvas shown small
 //     (twice the size at most) and Off, which changes no pixel.
 // The setting's storage and its menu row are in test_game_menu; a recording played with the numbers On and Off, with the same state hash at every tick, is RA10.3 of test_replay_app.
@@ -482,21 +482,31 @@ void test_drawing(const assets::AssetArchive& arc) {
         check(std::memcmp(on.at(sx - 7, sy - 8), none.at(sx - 7, sy - 8), 3) == 0 && std::memcmp(on.at(sx + 6, sy - 8), none.at(sx + 6, sy - 8), 3) == 0 && std::memcmp(on.at(sx - 4, sy - 14), none.at(sx - 4, sy - 14), 3) == 0 &&
                   std::memcmp(on.at(sx + 3, sy - 14), none.at(sx + 3, sy - 14), 3) == 0 && std::memcmp(on.at(sx + 3, sy - 3), none.at(sx + 3, sy - 3), 3) == 0, "...and so are the ones beside the glyphs and over the 1's top and under its foot");
     }
-    {   // a heal number, "+3": pale green
+    {   // a heal number, "+3": a green plus and white digits, nothing round them
         hc::ChangeTracker t = with_number(1, 600, 500, 3, true);
         const Picture on = shoot(rig, &t, 0);
         const Delta d = delta(none, on);
         check(d.n > 15 && d.x0 == sx - 6 && d.x1 == sx + 6 && d.y0 == sy - 13 && d.y1 == sy - 4, "+3 stands where -1 stood (its box is the same height): " + num(d.x0 - sx) + ".." + num(d.x1 - sx) + " x " + num(d.y0 - sy) + ".." + num(d.y1 - sy));
-        bool plus = is(on, sx - 4, sy - 8, 132, 236, 120) && is(on, sx - 7 + 3, sy - 10, 132, 236, 120) && is(on, sx - 7 + 3, sy - 6, 132, 236, 120);
-        for (int x = sx - 6; x <= sx - 2; ++x) plus = plus && is(on, x, sy - 8, 132, 236, 120);
-        check(plus, "the plus is pale green (132, 236, 120): a cross of 5 x 5 pixels, in the hand of the minus");
-        int green_not = 0;                                                 // (no border here either: every changed pixel is that green)
+        const hc::Color sign = hc::kHealSignColor;
+        check(sign.r == 110 && sign.g == 255 && sign.b == 120 && hc::kHealColor.r == 255 && hc::kHealColor.g == 255 && hc::kHealColor.b == 255, "the heal number's plus is green (110, 255, 120) and its digits are white (255, 255, 255)");
+        bool plus = is(on, sx - 4, sy - 8, sign.r, sign.g, sign.b) && is(on, sx - 7 + 3, sy - 10, sign.r, sign.g, sign.b) && is(on, sx - 7 + 3, sy - 6, sign.r, sign.g, sign.b);
+        for (int x = sx - 6; x <= sx - 2; ++x) plus = plus && is(on, x, sy - 8, sign.r, sign.g, sign.b);
+        check(plus, "the plus is that green: a cross of 5 x 5 pixels, in the hand of the minus");
+        bool digit = is(on, sx + 0, sy - 12, 255, 255, 255) && is(on, sx + 6, sy - 12, 255, 255, 255) && is(on, sx + 1, sy - 4, 255, 255, 255);     // (the top row and the foot of the 3)
+        for (int x = sx + 1; x <= sx + 5; ++x) digit = digit && is(on, x, sy - 13, 255, 255, 255) && is(on, x, sy - 4, 255, 255, 255);
+        check(digit, "the 3 is white (the heal color), its first and last rows 5 pixels wide");
+        int other = 0, green_right_of_white = 0, last_green = -1000, first_white = 1000;   // (no border: every changed pixel is the green or the white; the green is the plus only, left of every white pixel)
         for (int y = d.y0; y <= d.y1; ++y) {
             for (int x = d.x0; x <= d.x1; ++x) {
-                if (std::memcmp(on.at(x, y), none.at(x, y), 3) != 0 && !is(on, x, y, 132, 236, 120)) ++green_not;
+                if (std::memcmp(on.at(x, y), none.at(x, y), 3) == 0) continue;
+                if (is(on, x, y, sign.r, sign.g, sign.b)) last_green = std::max(last_green, x);
+                else if (is(on, x, y, 255, 255, 255)) first_white = std::min(first_white, x);
+                else ++other;
             }
         }
-        check(green_not == 0, "+3 has no border: every changed pixel is that green (" + num(green_not) + " other)");
+        green_right_of_white = last_green >= first_white ? 1 : 0;
+        check(other == 0, "+3 has no border: every changed pixel is the green or the white (" + num(other) + " other)");
+        check(last_green > -1000 && first_white < 1000 && green_right_of_white == 0, "...and the green is the plus only, left of the white digits (green up to " + num(last_green - sx) + ", white from " + num(first_white - sx) + ")");
     }
     {   // the rise and the fade
         int top_age[3] = {0, 0, 0};

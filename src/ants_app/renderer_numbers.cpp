@@ -1,5 +1,5 @@
 // The numbers of the game in its TrueType font (the face that draw_text uses): the hit point numbers (Ctrl+L), the damage and heal numbers and the score numbers. White (the score: the digit
-// sprites' own color; the heal number: pale green). The hit point, damage and heal numbers are plain glyphs with nothing round them; the score numbers that rise from a hill and the results page's have a near
+// sprites' own color; the heal number: white digits and a green plus). The hit point, damage and heal numbers are plain glyphs with nothing round them; the score numbers that rise from a hill and the results page's have a near
 // black outline. Drawn at the OUTPUT's resolution: the canvas is a picture that SDL's logical size scales into the window, so a glyph made at the
 // canvas's size would be scaled (soft on a phone, where one canvas pixel is two or three device pixels). Here SDL's logical size is switched off for the moment that the numbers are copied
 // (begin_native / end_native), the glyphs are made at the size that the output shows them (the face opened at the size whose digit is the wanted number of device pixels tall) and every number
@@ -388,7 +388,16 @@ void Renderer::draw_font_changes() {
         if (alpha <= 0 || num.hidden) continue;
         const double shrink = health::scale_at(age);
         const DigitFrame fr = digit_frame(static_cast<double>(health::kGlyphHeight + 2) * f.scale * shrink, f.scale * shrink);
-        const std::string text = std::string(num.heal ? "+" : "-") + std::to_string(std::min<int32_t>(num.amount, 9999));
+        const std::string digits = std::to_string(std::min<int32_t>(num.amount, 9999));
+        const std::string text = std::string(num.heal ? "+" : "-") + digits;
+        int32_t plus_w = 0;                                          // (a heal number's plus and its digits, alone: where the green ends. Made before `pic`: a new picture may move the others)
+        int32_t digits_w = 0;
+        if (num.heal) {
+            const NumberPicture* plus_pic = number_picture("+", fr.digit_px, 0);
+            plus_w = plus_pic != nullptr ? plus_pic->box_w : 0;
+            const NumberPicture* digits_pic = number_picture(digits, fr.digit_px, 0);
+            digits_w = digits_pic != nullptr ? digits_pic->box_w : 0;
+        }
         const NumberPicture* pic = number_picture(text, fr.digit_px, 0);
         if (pic == nullptr) continue;
         int32_t sx = 0;
@@ -402,7 +411,28 @@ void Renderer::draw_font_changes() {
         const double old_ink = static_cast<double>(std::lround(static_cast<double>(static_cast<int32_t>(text.size()) * health::kGlyphAdvance + 1) * f.scale * shrink));       // (the old glyphs' ink: 7 pixels a character and one more: "-2" is 15 wide)
         const double glyphs = static_cast<double>(pic->box_w);
         const double squeezed = old_ink * glyphs / (glyphs + 4.0 * static_cast<double>(fr.margin_px));       // (the margins on both sides were 4 x margin wide in all)
-        draw_number_box(f, *pic, at.x, at.y, true, true, num.heal ? health::kHealColor : health::kDamageColor, alpha, squeezed);
+        if (!num.heal) {
+            draw_number_box(f, *pic, at.x, at.y, true, true, health::kDamageColor, alpha, squeezed);
+            continue;
+        }
+        // A heal number is drawn twice, the same picture in two colors, each clipped to its part of it: the plus in green on the left of the middle of the gap between the plus and the digits, the digits in
+        // the heal color on the right of it. The glyphs keep the place and the squeeze that the whole text has.
+        const double k = squeezed / static_cast<double>(pic->box_w);
+        const double stretch = (k > 0.7 && k < 1.45) ? k : 1.0;                 // (as draw_number_box takes it)
+        const int32_t ink_left = f.x + static_cast<int32_t>(std::lround(at.x * f.scale)) - static_cast<int32_t>(std::lround(static_cast<double>(pic->box_w) * stretch)) / 2;
+        const double plus_right = static_cast<double>(ink_left) + static_cast<double>(plus_w) * stretch;
+        const double digits_left = static_cast<double>(ink_left) + static_cast<double>(pic->box_w - digits_w) * stretch;
+        const int32_t cut = static_cast<int32_t>(std::lround((plus_right + digits_left) / 2.0));
+        SDL_Rect whole{0, 0, 0, 0};
+        SDL_RenderGetClipRect(renderer_, &whole);
+        const int32_t split = std::clamp(cut, whole.x, whole.x + whole.w);
+        const SDL_Rect sign_side{whole.x, whole.y, split - whole.x, whole.h};
+        const SDL_Rect digit_side{split, whole.y, whole.x + whole.w - split, whole.h};
+        SDL_RenderSetClipRect(renderer_, &sign_side);
+        draw_number_box(f, *pic, at.x, at.y, true, true, health::kHealSignColor, alpha, squeezed);
+        SDL_RenderSetClipRect(renderer_, &digit_side);
+        draw_number_box(f, *pic, at.x, at.y, true, true, health::kHealColor, alpha, squeezed);
+        SDL_RenderSetClipRect(renderer_, &whole);
     }
     end_native(f);
 }

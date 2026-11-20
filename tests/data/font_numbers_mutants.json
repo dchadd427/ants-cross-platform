@@ -94,8 +94,8 @@
     {
       "id": "shrink_about_the_corner",
       "file": "src/ants_app/renderer_numbers.cpp",
-      "old": "        draw_number_box(f, *pic, at.x, at.y, true, true, num.heal ?",
-      "new": "        draw_number_box(f, *pic, at.x, at.y, false, false, num.heal ?",
+      "old": "draw_number_box(f, *pic, at.x, at.y, true, true, health::kDamageColor, alpha, squeezed);",
+      "new": "draw_number_box(f, *pic, at.x, at.y, false, false, health::kDamageColor, alpha, squeezed);",
       "build": [
         "test_font_numbers"
       ],
@@ -476,6 +476,46 @@
       "file": "src/ants_app/renderer_numbers.cpp",
       "old": "old_ink * glyphs / (glyphs + 4.0 * static_cast<double>(fr.margin_px));",
       "new": "old_ink + 0.0 * glyphs;",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "font_heal_plus_not_green",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "draw_number_box(f, *pic, at.x, at.y, true, true, health::kHealSignColor, alpha, squeezed);",
+      "new": "draw_number_box(f, *pic, at.x, at.y, true, true, health::kHealColor, alpha, squeezed);",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "font_heal_digits_green_too",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "draw_number_box(f, *pic, at.x, at.y, true, true, health::kHealColor, alpha, squeezed);",
+      "new": "draw_number_box(f, *pic, at.x, at.y, true, true, health::kHealSignColor, alpha, squeezed);",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "font_heal_green_runs_into_the_digits",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "const int32_t cut = static_cast<int32_t>(std::lround((plus_right + digits_left) / 2.0));",
+      "new": "const int32_t cut = static_cast<int32_t>(std::lround(digits_left + 100.0 + 0.0 * plus_right));",
+      "build": [
+        "test_font_numbers"
+      ],
+      "test": "./build/tests/test_app/test_font_numbers"
+    },
+    {
+      "id": "font_heal_digits_run_into_the_plus",
+      "file": "src/ants_app/renderer_numbers.cpp",
+      "old": "const int32_t cut = static_cast<int32_t>(std::lround((plus_right + digits_left) / 2.0));",
+      "new": "const int32_t cut = static_cast<int32_t>(std::lround(plus_right - 100.0 + 0.0 * digits_left));",
       "build": [
         "test_font_numbers"
       ],

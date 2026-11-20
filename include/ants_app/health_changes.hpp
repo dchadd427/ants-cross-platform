@@ -47,7 +47,8 @@ inline int32_t number_outline_px(double base_scale) noexcept {
 }
 
 constexpr Color kDamageColor{255, 255, 255};     // the color of the original's Ctrl+L numbers
-constexpr Color kHealColor{132, 236, 120};
+constexpr Color kHealColor{255, 255, 255};       // the digits of a heal number: white, as the damage number's, so that they show on pale ground too
+constexpr Color kHealSignColor{110, 255, 120};   // the plus of a heal number: green, so that it reads as healing
 
 /// The opacity (0 .. 255) of a number of this age: solid for kSolidMs, then a linear fade to nothing at kLifeMs
 constexpr int32_t alpha_at(int32_t age_ms) noexcept {
