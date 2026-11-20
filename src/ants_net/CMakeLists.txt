@@ -16,6 +16,7 @@ add_library(ants_net STATIC
     netgame.cpp
     netgame_match.cpp
     p2p.cpp
+    seal_phase.cpp
 )
 
 # Raw sockets (TCP, the UDP of the LAN discovery, and the WebSocket server for browsers behind a proxy) exist on native platforms only (a browser itself

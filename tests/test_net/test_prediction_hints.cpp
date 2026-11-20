@@ -485,6 +485,266 @@ void run_property_tests() {
     } TEST_END();
 }
 
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// The tick that a hint names: the turn that the server will seal the order in, from the phase of its seals
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+// The physical seals, in ms: the server seals turn k at seal0 + 50 k, an order given at t reaches it at t + up (+ jitter) and is sealed in the first turn that is sealed after that, and the turn
+// reaches this machine `down` (+ jitter) later. From `change_ms` on the way up takes up2 instead of up.
+struct SealModel {
+    int64_t seal0{13};
+    int64_t up{17};
+    int64_t down{21};
+    uint32_t up_jitter{0};
+    uint32_t down_jitter{0};
+    int64_t change_ms{-1};
+    int64_t up2{0};
+    uint32_t late_every{0};                                                                 // every n-th order is sealed one turn later than it should (a stall of the server)
+    uint32_t scatter{0};                                                                    // every order is sealed 0 .. this turns later than it should (a stream with no rhythm)
+};
+
+struct Answer {
+    std::optional<uint64_t> predicted;
+    uint64_t truth{0};
+    uint32_t at{0};
+    bool disturbed{false};
+};
+
+// The owner's side, minute by minute (1 ms steps): every turn that arrives and every order that comes back is noted, and at each order the question is asked first
+std::vector<Answer> run_seal_model(const SealModel& m, const std::vector<uint32_t>& order_times, uint32_t seed, SealPhase& sp) {
+    Lcg rng(seed);
+    const uint32_t end_ms = order_times.back() + 2000u;
+    std::vector<int64_t> arrival;
+    for (int64_t k = 0; m.seal0 + 50 * k < static_cast<int64_t>(end_ms); ++k) {
+        int64_t at = m.seal0 + 50 * k + m.down + (m.down_jitter != 0 ? rng.below(m.down_jitter + 1) : 0u);
+        if (!arrival.empty() && at <= arrival.back()) at = arrival.back() + 1;              // (the turns keep their order)
+        arrival.push_back(at);
+    }
+    struct Back {
+        uint32_t given;
+        uint64_t sealed;
+    };
+    std::vector<Back> back;
+    std::vector<Answer> out;
+    size_t next_turn = 0, next_order = 0;
+    for (uint32_t ms = 0; ms <= end_ms; ++ms) {
+        while (next_turn < arrival.size() && arrival[next_turn] == static_cast<int64_t>(ms)) {
+            sp.note_arrival(next_turn, ms);
+            for (size_t i = 0; i < back.size();) {
+                if (back[i].sealed == next_turn) {
+                    sp.note_order(back[i].given, back[i].sealed);
+                    back.erase(back.begin() + static_cast<std::ptrdiff_t>(i));
+                } else {
+                    ++i;
+                }
+            }
+            ++next_turn;
+        }
+        while (next_order < order_times.size() && order_times[next_order] == ms) {
+            const int64_t up = m.change_ms >= 0 && static_cast<int64_t>(ms) >= m.change_ms ? m.up2 : m.up;
+            const int64_t reaches = static_cast<int64_t>(ms) + up + (m.up_jitter != 0 ? rng.below(m.up_jitter + 1) : 0u);
+            const int64_t v = reaches - m.seal0;
+            uint64_t truth = v <= 0 ? 0u : static_cast<uint64_t>((v + 49) / 50);
+            Answer a;
+            a.predicted = sp.sealed_turn_for(ms);
+            if (m.late_every != 0 && (next_order + 1) % m.late_every == 0) {
+                ++truth;
+                a.disturbed = true;
+            }
+            if (m.scatter != 0) truth += rng.below(m.scatter + 1);
+            a.truth = truth;
+            a.at = ms;
+            out.push_back(a);
+            back.push_back(Back{ms, truth});
+            ++next_order;
+        }
+    }
+    if (std::getenv("DBGM")) for (size_t i = 0; i < out.size(); ++i) std::cout << "DBG " << i << " at " << out[i].at << " pred " << (out[i].predicted ? static_cast<long long>(*out[i].predicted) : -1) << " truth " << out[i].truth << (out[i].disturbed ? " late" : "") << "\n";
+    return out;
+}
+
+std::vector<uint32_t> order_times(uint32_t count, uint32_t first = 2000, uint32_t every = 137) {
+    std::vector<uint32_t> t;
+    for (uint32_t i = 0; i < count; ++i) t.push_back(first + i * every);
+    return t;
+}
+
+size_t right_answers(const std::vector<Answer>& a, size_t from, size_t to) {
+    size_t n = 0;
+    for (size_t i = from; i < to && i < a.size(); ++i) n += (a[i].predicted && *a[i].predicted == a[i].truth) ? 1u : 0u;
+    return n;
+}
+
+void run_tick_tests() {
+    TEST_CASE("RH6.1 From The Phase Of The Seals And The Orders That Came Back, The Turn Of The Next Order Is Named Exactly, Whatever Moment Of The Tick It Is Given At; Before That Nothing Is Named") {
+        SealPhase sp;
+        const std::vector<Answer> a = run_seal_model(SealModel{}, order_times(60), 1, sp);
+        ASSERT_EQ(a.size(), size_t{60});
+        ASSERT_TRUE(!a[0].predicted);                                                       // (no order has come back: the delay is not known)
+        ASSERT_TRUE(right_answers(a, 6, a.size()) * 100u >= (a.size() - 6) * 90u);             // (the orders that stand at the very edge of what the orders so far allow are the exception: a few in a hundred)
+        SealPhase none;
+        ASSERT_TRUE(!none.sealed_turn_for(5000) && !none.delay_ms());
+    } TEST_END();
+
+    TEST_CASE("RH6.2 A Link That Jitters By A Fifth Of A Tick Each Way Is Named Right In Nearly Every Case") {
+        SealModel m;
+        m.up_jitter = 10;
+        m.down_jitter = 10;
+        SealPhase sp;
+        const std::vector<Answer> a = run_seal_model(m, order_times(240, 2000, 131), 2, sp);
+        const size_t right = right_answers(a, 10, a.size());
+        ASSERT_TRUE(right * 100u >= (a.size() - 10) * 85u);
+    } TEST_END();
+
+    TEST_CASE("RH6.3 Arrivals That Keep No Rhythm Give No Phase And So No Answer, Neither Do A Few Turns; A Second Of Steady Ones Do") {
+        SealModel scattered;
+        scattered.down_jitter = 400;
+        SealPhase sp;
+        const std::vector<Answer> a = run_seal_model(scattered, order_times(60), 3, sp);
+        ASSERT_TRUE(!sp.phase_known());
+        for (const Answer& x : a) ASSERT_TRUE(!x.predicted);
+        SealPhase few;
+        for (uint64_t k = 0; k < 3; ++k) few.note_arrival(k, static_cast<uint32_t>(1000 + 50 * k));
+        ASSERT_TRUE(!few.phase_known());
+        SealPhase steady;
+        for (uint64_t k = 0; k < 24; ++k) steady.note_arrival(k, static_cast<uint32_t>(1000 + 50 * k));
+        ASSERT_TRUE(steady.phase_known());
+        ASSERT_EQ(steady.phase_ms(), int64_t{1000});
+    } TEST_END();
+
+    TEST_CASE("RH6.4 A Link That Gets Slower Is Learned Again From The Orders Of The Next Seconds: The Answers Are Right Again Within Six Orders, Before The Old Delay's Orders Are Out Of The Window") {
+        SealModel m;
+        m.change_ms = 2000 + 30 * 137;
+        m.up2 = m.up + 65;
+        SealPhase sp;
+        const std::vector<Answer> a = run_seal_model(m, order_times(80), 4, sp);
+        ASSERT_TRUE(right_answers(a, 6, 30) * 100u >= 24u * 90u);
+        ASSERT_TRUE(right_answers(a, 36, 46) * 100u >= 10u * 80u);                          // (six orders after the change: the newer orders outweigh the ones of the old delay)
+        ASSERT_TRUE(right_answers(a, 46, a.size()) * 100u >= (a.size() - 46) * 90u);
+    } TEST_END();
+
+    TEST_CASE("RH6.5 An Order That The Server Sealed Late Does Not Move The Answer For The Others: The Delay That Fits Most Orders Is Used") {
+        SealModel m;
+        m.late_every = 7;
+        SealPhase sp;
+        const std::vector<Answer> a = run_seal_model(m, order_times(100), 5, sp);
+        size_t checked = 0, right = 0;
+        for (size_t i = 10; i < a.size(); ++i) {
+            if (a[i].disturbed) continue;
+            ++checked;
+            right += a[i].predicted && *a[i].predicted == a[i].truth ? 1u : 0u;
+        }
+        ASSERT_TRUE(checked > 70u);
+        ASSERT_TRUE(right * 100u >= checked * 90u);
+    } TEST_END();
+
+    TEST_CASE("RH6.6 A Stream That Keeps No Rhythm Teaches Nothing: When No Delay Fits Half Of The Orders There Is No Answer") {
+        SealModel m;
+        m.scatter = 9;
+        SealPhase sp;
+        const std::vector<Answer> a = run_seal_model(m, order_times(80), 6, sp);
+        ASSERT_TRUE(sp.phase_known());
+        ASSERT_TRUE(!sp.delay_ms());
+        for (size_t i = 30; i < a.size(); ++i) ASSERT_TRUE(!a[i].predicted);
+    } TEST_END();
+    TEST_CASE("RH6.7 A Hint Names The Turn That The Server Seals The Order In, Not The Tick That This Screen Applied It At: The Two Differ When The Lead Is Not The Lag, And Every Order After The First Few Is Named Right") {
+        Scenario sc = hint_scenario(51);                                                    // the server seals an order 6 steps after it was given ...
+        sc.lead_ms = 300;                                                                   // ... and the display stands 2 ticks short of that: the order that is applied there is sealed 2 ticks later
+        sc.clock = true;
+        Rig rig(sc);
+        rig.run(30);
+        size_t counted = 0, named = 0, displayed = 0;
+        for (uint32_t j = 0; j < 20; ++j) {
+            const uint64_t sealed_at = rig.step_no() + sc.uplink;
+            rig.issue(walk(rig, 0, static_cast<int16_t>(10 + j), 30));
+            Prediction& p = *rig.prediction();
+            if (j == 0) ASSERT_EQ(p.last_order_hint_tick(), p.last_order_tick());           // (no order has come back: nothing is known, the screen's tick is named)
+            if (j >= 6) {
+                ++counted;
+                named += p.last_order_hint_tick() == sealed_at ? 1u : 0u;
+                displayed += p.last_order_tick() == sealed_at ? 1u : 0u;
+            }
+            rig.run(5 + j % 4);
+        }
+        rig.run_quiet(30);
+        ASSERT_EQ(named, counted);
+        ASSERT_EQ(displayed, 0u);
+        const Prediction::Stats& st = rig.prediction()->stats();
+        ASSERT_TRUE(st.order_hints_phase >= counted);
+        ASSERT_TRUE(st.order_hints_exact >= counted);
+        ASSERT_EQ(st.commands_lost, 0u);
+    } TEST_END();
+    TEST_CASE("RH6.8 Where The Phase Cannot Be Trusted The Hint Names The Display Tick, As It Did Before: With No Clock, And When The Phase Puts The Turn Far From The Screen's Tick") {
+        {
+            Scenario sc = hint_scenario(52);
+            sc.uplink = 2;
+            sc.lead_ms = 100;
+            Rig rig(sc);                                                                    // (the owner never gave it a clock)
+            rig.run(30);
+            for (uint32_t j = 0; j < 12; ++j) {
+                rig.issue(walk(rig, 0, static_cast<int16_t>(10 + j), 30));
+                ASSERT_EQ(rig.prediction()->last_order_hint_tick(), rig.prediction()->last_order_tick());
+                rig.run(7);
+            }
+            ASSERT_EQ(rig.prediction()->stats().order_hints_phase, 0u);
+        }
+        for (const int64_t skew : {int64_t{5000}, int64_t{-3000}, int64_t{100}}) {         // (a clock that is far off, or off by two ticks: the turn that the phase names is not near the screen's tick)
+            Scenario sc = hint_scenario(52);
+            sc.uplink = 2;
+            sc.lead_ms = 100;
+            sc.clock = true;
+            Rig rig(sc);
+            rig.run(30);
+            for (uint32_t j = 0; j < 10; ++j) {
+                rig.issue(walk(rig, 0, static_cast<int16_t>(10 + j), 30));
+                rig.run(5 + j % 3);
+            }
+            const uint64_t named = rig.prediction()->stats().order_hints_phase;
+            ASSERT_TRUE(named >= 6u);                                                       // (the phase works: the first orders are named by it)
+            rig.order_skew_ms = skew;
+            rig.issue(walk(rig, 0, 12, 40));
+            ASSERT_EQ(rig.prediction()->last_order_hint_tick(), rig.prediction()->last_order_tick());
+            ASSERT_EQ(rig.prediction()->stats().order_hints_phase, named);
+        }
+    } TEST_END();
+
+    TEST_CASE("RH6.9 A Hint Never Names A Turn That Has Arrived Already: The Server Cannot Have Sealed An Order That Was Given Now In It") {
+        Scenario sc = hint_scenario(53);
+        sc.uplink = 2;
+        sc.lead_ms = 100;
+        sc.clock = true;
+        Rig rig(sc);
+        rig.run(30);
+        for (uint32_t j = 0; j < 10; ++j) {
+            rig.issue(walk(rig, 0, static_cast<int16_t>(10 + j), 30));
+            rig.run(5 + j % 3);
+        }
+        rig.order_skew_ms = -200;                                                           // the clock says that the order was given 4 ticks ago: its turn would be one that is in hand
+        const uint64_t named = rig.prediction()->stats().order_hints_phase;
+        rig.issue(walk(rig, 0, 12, 40));
+        ASSERT_EQ(rig.prediction()->stats().order_hints_phase, named + 1u);                 // (the phase named it, and the turn was put at the first one that is not in hand)
+        ASSERT_EQ(rig.prediction()->last_order_hint_tick(), rig.runner().next_turn_expected());
+    } TEST_END();
+    TEST_CASE("RH6.10 What The Phase Has Learned Is Forgotten When The Prediction Stops: A Host Change Or A Rejoin May Bring Another Rhythm And Another Delay") {
+        Scenario sc = hint_scenario(54);
+        sc.uplink = 2;
+        sc.lead_ms = 100;
+        sc.clock = true;
+        Rig rig(sc);
+        rig.run(30);
+        for (uint32_t j = 0; j < 8; ++j) {
+            rig.issue(walk(rig, 0, static_cast<int16_t>(10 + j), 30));
+            rig.run(6);
+        }
+        ASSERT_TRUE(rig.prediction()->seal_phase().phase_known());
+        ASSERT_TRUE(rig.prediction()->seal_phase().orders() >= 3u);
+        rig.prediction()->set_suspended(true);
+        ASSERT_TRUE(!rig.prediction()->seal_phase().phase_known());
+        ASSERT_EQ(rig.prediction()->seal_phase().orders(), size_t{0});
+    } TEST_END();
+}
+
 }  // namespace
 
 int main() {
@@ -493,6 +753,7 @@ int main() {
     run_rule_tests();
     run_order_tests();
     run_property_tests();
+    run_tick_tests();
     std::cout << "\n=======================================================\n"
               << " PREDICTION HINTS TEST SUMMARY\n=======================================================\n"
               << " Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Passed:           " << (g_test_count - g_test_failures) << "\n Failed:           "

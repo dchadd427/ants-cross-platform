@@ -250,6 +250,7 @@ void Prediction::stop() {
     audio_.clear();
     news_.clear();
     lags_.clear();                                                   // (what the orders taught is about the link and the buffer as they were: a host change, a rejoin or a pause may end with another lag)
+    phase_.clear();                                                  // (so is the phase of the seals and the delay)
 }
 
 sim::SimulationEngine& Prediction::engine() {
@@ -466,12 +467,30 @@ bool Prediction::submit(const sim::Command& command, sim::CommandResult& result)
     assumed_.back().push_back(command);
     pending_.push_back(Pending{command, display_, confirmed_tick(), display_});
     last_order_tick_ = display_;
+    // The tick that a hint of this order names: where the server will seal it, when the phase of its seals says (one more or less than the tick that this screen applies it at is the usual
+    // difference, and a hint a tick off is a whole step of a walking ant); never in a turn that has arrived, and never far from the display tick (then the phase is wrong, not the order)
+    Pending& given = pending_.back();
+    last_order_hint_tick_ = display_;
+    if (time_known_) {
+        given.given_ms = now_ms_;
+        given.timed = true;
+        if (const std::optional<uint64_t> sealed = phase_.sealed_turn_for(now_ms_)) {
+            if (*sealed + 2u >= display_ && *sealed <= display_ + 3u) {
+                const uint64_t k = std::max<uint64_t>(*sealed, next_receive);
+                given.phased = true;
+                given.hint_tick = k;
+                last_order_hint_tick_ = k;
+                ++stats_.order_hints_phase;
+            }
+        }
+    }
     ++stats_.commands_predicted;
     return true;
 }
 
 // A live turn is in the queue now. If the prediction has already started its tick, the turn must carry exactly what the prediction applied there.
 void Prediction::on_turn(const TurnMsg& turn) {
+    if (time_known_) phase_.note_arrival(turn.turn, now_ms_);
     if (!running_ || suspended_) return;
     ++stats_.turns_checked;
     const uint64_t n = turn.turn;
@@ -493,6 +512,8 @@ void Prediction::on_turn(const TurnMsg& turn) {
             lags_.emplace_back(static_cast<uint32_t>(std::min<uint64_t>(n >= pending_[i].born ? n - pending_[i].born : 0u, cfg_.max_lead_ticks)), confirmed_tick());
             while (lags_.size() > cfg_.lag_samples) lags_.pop_front();
         }
+        if (pending_[i].timed) phase_.note_order(pending_[i].given_ms, n);
+        if (pending_[i].phased && n == pending_[i].hint_tick) ++stats_.order_hints_exact;
         if (pending_[i].tick != n) own_timing = true;                // sealed at another tick than the one at which the prediction applied it
         ++(n == pending_[i].first_tick ? stats_.sealed_exact : n < pending_[i].first_tick ? stats_.sealed_early : stats_.sealed_late);
         if (i > 0) {                                                 // the orders before it were given earlier and have not been sealed: the host did not take them

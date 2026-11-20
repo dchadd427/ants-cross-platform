@@ -76,14 +76,14 @@ struct HintMatch {
 };
 
 void run_hint_netgame_tests() {
-    TEST_CASE("N25.1 An Order That The Prediction Applied Is Sent To The Other Players As A Hint, With The Player's Own Numbers (1, 2, 3 ...) And The Tick It Was Applied At; A Game With No Transport Sends None") {
+    TEST_CASE("N25.1 An Order That The Prediction Applied Is Sent To The Other Players As A Hint, With The Player's Own Numbers (1, 2, 3 ...) And The Tick That The Prediction Names For It; A Game With No Transport Sends None") {
         HintMatch m;
         ASSERT_TRUE(m.ok);
         m.t.run(1000);                                                                   // (the P2pConfig that the game says once the match plays)
         ASSERT_TRUE(m.guest->net.predicting());
         const uint32_t ant = m.own_ant();
         ASSERT_EQ(m.guest->net.submit(order(1, ant, 12, 12)).status, sim::CommandResult::Status::Applied);
-        const uint64_t applied_at = m.guest->net.prediction()->last_order_tick();
+        const uint64_t named_at = m.guest->net.prediction()->last_order_hint_tick();
         m.t.run(300);
         ASSERT_EQ(m.guest->net.submit(order(1, ant, 14, 12)).status, sim::CommandResult::Status::Applied);
         m.t.run(300);
@@ -93,7 +93,7 @@ void run_hint_netgame_tests() {
         ASSERT_TRUE(first.seq == 1 && second.seq == 2);
         ASSERT_TRUE(first.command.issuer == 1 && first.command.type == CommandType::GroupMove && first.command.tile_x == 12 && second.command.tile_x == 14);
         ASSERT_TRUE(first.tick >= 1 && second.tick > first.tick);
-        ASSERT_EQ(uint64_t{first.tick}, applied_at);                                       // (the tick at which this player's own screen applied the order)
+        ASSERT_EQ(uint64_t{first.tick}, named_at);                                         // (the tick that the prediction names for it: the turn that the server will seal it in, or this screen's tick until it knows)
         ASSERT_EQ(m.guest->net.hint_counts().sent, uint64_t{2});
         // Hatch is not predicted, so it is not hinted
         sim::Command hatch;
@@ -197,6 +197,31 @@ void run_hint_netgame_tests() {
         ASSERT_TRUE(m.guest->net.peer_link(0) == PeerLink::Direct);
         m.guest->net.leave();
         ASSERT_EQ(m.channels.closed, 1);
+    } TEST_END();
+    TEST_CASE("N25.6 The Game Gives The Prediction Its Clock: After A Few Seconds Of Turns And A Few Orders The Hints Name The Turn That The Phase Of The Seals Gives, And Every Hint Carries The Tick That The Prediction Named, Which Is Not Always The Screen's") {
+        HintMatch m;
+        ASSERT_TRUE(m.ok);
+        m.t.run(2500);                                                                   // (turns arrive: the phase is known)
+        ASSERT_TRUE(m.guest->net.predicting());
+        const uint32_t ant = m.own_ant();
+        std::vector<uint64_t> named;
+        size_t differing = 0;
+        for (uint32_t j = 0; j < 18; ++j) {
+            if (j >= 12) m.guest->net.prediction()->set_time_ms(m.t.now + 100);          // (a clock two ticks ahead for this order: the phase names a later turn than the screen's tick)
+            ASSERT_EQ(m.guest->net.submit(order(1, ant, static_cast<int16_t>(10 + j), 12)).status, sim::CommandResult::Status::Applied);
+            named.push_back(m.guest->net.prediction()->last_order_hint_tick());
+            differing += named.back() != m.guest->net.prediction()->last_order_tick() ? 1u : 0u;
+            m.t.run(230 + 31 * (j % 3));                                                 // (the orders are given at different moments of the tick)
+        }
+        m.t.run(500);
+        ASSERT_TRUE(m.guest->net.prediction()->stats().order_hints_phase >= 8u);
+        ASSERT_TRUE(differing >= 3u);
+        ASSERT_EQ(m.channels.sent_hints.size(), named.size());
+        for (size_t i = 0; i < named.size(); ++i) {
+            HintMsg h;
+            ASSERT_TRUE(decode(m.channels.sent_hints[i], h));
+            ASSERT_EQ(uint64_t{h.tick}, named[i]);
+        }
     } TEST_END();
 }
 

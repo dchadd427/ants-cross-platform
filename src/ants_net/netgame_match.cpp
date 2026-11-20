@@ -125,6 +125,7 @@ void NetGame::make_prediction() {
     pc.wall_clock = prediction_wall_clock_;
     pc.cpu_clock = prediction_cpu_clock_;
     prediction_ = std::make_unique<Prediction>(sim_, *r, pc);
+    prediction_->set_time_ms(now_);
 }
 
 // What an order of this player takes to reach the engine, in ms. The measured delay of the last orders when there is one (it includes everything: the way to the host, the wait for the
@@ -322,7 +323,7 @@ sim::CommandResult NetGame::submit(const sim::Command& command) {
     // the immediate feedback of the click is predict_order_ack's guess, as it was before the prediction existed.
     if (prediction_ && prediction_->submit(c, result)) {
         if (p2p_ != nullptr && p2p_config_sent_) {                                              // the other players learn the order from this machine ahead of its turn (the server's turn is what counts)
-            p2p_->send_hint(encode(HintMsg{++hint_seq_, static_cast<uint32_t>(std::min<uint64_t>(prediction_->last_order_tick(), kMaxHintTick)), c}));
+            p2p_->send_hint(encode(HintMsg{++hint_seq_, static_cast<uint32_t>(std::min<uint64_t>(prediction_->last_order_hint_tick(), kMaxHintTick)), c}));
             ++hint_counts_.sent;
         }
         return result;

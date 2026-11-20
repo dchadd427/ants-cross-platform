@@ -1,5 +1,5 @@
 {
- "note": "Mutants of protocol 25 (docs/P2P_HINTS.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the prediction's matching rule for a hint (where it goes, doubled and late hints, the order of a turn, confirmed, moved once, dropped, the limits), the server's session (the credential and its expiry, who is ready, the rule of the address and the violation, the sender's seat stamped by the connection, the limits, who is told, a computer player's hint at the tick of its turn), the wire (what each decoder refuses), the rule of the address in the text of a candidate, the relay's credential (RFC 2104, the expiry), and the game's side (a channel's seat, the server's hint, a relay with no address, the tick of a hint, the mark).",
+ "note": "Mutants of protocol 25 (docs/P2P_HINTS.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the prediction's matching rule for a hint (where it goes, doubled and late hints, the order of a turn, confirmed, moved once, dropped, the limits), the server's session (the credential and its expiry, who is ready, the rule of the address and the violation, the sender's seat stamped by the connection, the limits, who is told, a computer player's hint at the tick of its turn), the wire (what each decoder refuses), the rule of the address in the text of a candidate, the relay's credential (RFC 2104, the expiry), the tick that a hint names (the phase of the server's seals: when it is known, what it learns from the orders that came back, where it is not trusted), and the game's side (a channel's seat, the server's hint, a relay with no address, the tick of a hint, the clock that the game gives the prediction, the mark).",
  "mutants": [
   {
    "id": "hint_that_came_after_its_turn_is_applied_again",
@@ -494,7 +494,7 @@
   {
    "id": "hint_is_sent_with_the_wrong_tick",
    "file": "src/ants_net/netgame_match.cpp",
-   "old": "std::min<uint64_t>(prediction_->last_order_tick(), kMaxHintTick)",
+   "old": "std::min<uint64_t>(prediction_->last_order_hint_tick(), kMaxHintTick)",
    "new": "std::min<uint64_t>(prediction_->display_tick() + 7, kMaxHintTick)",
    "build": [
     "test_netgame"
@@ -526,6 +526,166 @@
    "file": "src/ants_net/netgame_match.cpp",
    "old": "        if (!hints_enabled_) continue;\n        ++hint_counts_.from_peers;",
    "new": "        ++hint_counts_.from_peers;",
+   "build": [
+    "test_netgame"
+   ],
+   "test": "ANTS_TEST_FILTER=N25 timeout 900 ./build/tests/test_net/test_netgame"
+  },
+  {
+   "id": "phase_turn_rounds_down",
+   "file": "src/ants_net/seal_phase.cpp",
+   "old": "int64_t ceil_div(int64_t a, int64_t b) noexcept { return a >= 0 ? (a + b - 1) / b : -((-a) / b); }",
+   "new": "int64_t ceil_div(int64_t a, int64_t b) noexcept { return a / b; }",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "phase_known_with_no_rhythm",
+   "file": "src/ants_net/seal_phase.cpp",
+   "old": "    phase_known_ = v[n - 1 - n / 4] - v[n / 4] <= cfg_.max_spread_ms;",
+   "new": "    phase_known_ = true;",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "phase_known_from_three_arrivals",
+   "file": "src/ants_net/seal_phase.cpp",
+   "old": "    if (arrivals_.size() < cfg_.min_arrivals) return;\n",
+   "new": "",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "delay_taken_when_the_orders_do_not_agree",
+   "file": "src/ants_net/seal_phase.cpp",
+   "old": "    if (best * 2 < total) return std::nullopt;",
+   "new": "    if (best * 2 < total * 0) return std::nullopt;",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "old_orders_count_as_much_as_new_ones",
+   "file": "src/ants_net/seal_phase.cpp",
+   "old": "weight = weight * 9 / 10)",
+   "new": "weight = weight * 10 / 10)",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "delay_from_the_last_order_only",
+   "file": "src/ants_net/seal_phase.cpp",
+   "old": "for (size_t i = orders_.size(); i-- > 0; weight = weight * 9 / 10) {",
+   "new": "for (size_t i = orders_.size(); i-- > orders_.size() - 1; weight = weight * 9 / 10) {",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "hint_tick_far_below_the_display_tick_is_named",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "            if (*sealed + 2u >= display_ && *sealed <= display_ + 3u) {",
+   "new": "            if (*sealed <= display_ + 3u) {",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "hint_tick_far_beyond_the_display_tick_is_named",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "            if (*sealed + 2u >= display_ && *sealed <= display_ + 3u) {",
+   "new": "            if (*sealed + 2u >= display_) {",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "hint_names_a_turn_that_has_arrived",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "                const uint64_t k = std::max<uint64_t>(*sealed, next_receive);",
+   "new": "                const uint64_t k = *sealed;",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "orders_that_came_back_teach_nothing",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "        if (pending_[i].timed) phase_.note_order(pending_[i].given_ms, n);\n",
+   "new": "",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "turns_that_arrive_teach_nothing",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "    if (time_known_) phase_.note_arrival(turn.turn, now_ms_);\n",
+   "new": "",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "phase_survives_a_stop",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "    phase_.clear();                                                  // (so is the phase of the seals and the delay)\n",
+   "new": "",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "phase_hint_is_not_counted_when_sealed_where_it_named",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "        if (pending_[i].phased && n == pending_[i].hint_tick) ++stats_.order_hints_exact;",
+   "new": "        if (pending_[i].phased && n == pending_[i].hint_tick + 1u) ++stats_.order_hints_exact;",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "order_is_named_by_the_display_tick",
+   "file": "src/ants_net/prediction.cpp",
+   "old": "                given.hint_tick = k;\n                last_order_hint_tick_ = k;\n",
+   "new": "                given.hint_tick = k;\n",
+   "build": [
+    "test_prediction_hints"
+   ],
+   "test": "env -u ANTS_TEST_FILTER timeout 900 ./build/tests/test_net/test_prediction_hints"
+  },
+  {
+   "id": "game_does_not_give_the_prediction_its_clock",
+   "file": "src/ants_net/netgame.cpp",
+   "old": "    if (prediction_) prediction_->set_time_ms(now_ms);",
+   "new": "",
+   "build": [
+    "test_netgame"
+   ],
+   "test": "ANTS_TEST_FILTER=N25 timeout 900 ./build/tests/test_net/test_netgame"
+  },
+  {
+   "id": "hint_is_sent_with_the_display_tick",
+   "file": "src/ants_net/netgame_match.cpp",
+   "old": "std::min<uint64_t>(prediction_->last_order_hint_tick(), kMaxHintTick)",
+   "new": "std::min<uint64_t>(prediction_->last_order_tick(), kMaxHintTick)",
    "build": [
     "test_netgame"
    ],

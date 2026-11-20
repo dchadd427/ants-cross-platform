@@ -181,6 +181,7 @@ struct Scenario {
     uint32_t extra_workers{0};     // workers added to every player beyond the six ants (the tests of a selection of more than 32 ants)
     bool fog{false};               // Fog of War: the views are also compared with the oracle's explored ground (it is no part of the state hash)
     uint8_t seat{0};               // the player whose orders are predicted (every test but the hints' order of a turn: seat 0)
+    bool clock{false};             // the prediction is given a clock: a step is 50 ms of it, and the turns and the orders are timed by the step that they happen in (the tests of the tick that a hint names)
     Prediction::Config prediction{rig_config()};
     // The rig's prediction has the lead that the scenario names and keeps it (the tests hold a wrong lead to account, and the exact one to exactness): it does not learn its lead and has no bias
     // (the tests of the learning and of the bias switch them on), and no budget (the tests run on busy machines: a stall of the test process is not the prediction's cost; the tests of the
@@ -232,6 +233,7 @@ public:
     // The player (seat 0) gives an order now: the prediction applies it at once and the server seals it `uplink` steps from now
     sim::CommandResult issue(const Command& c) {
         sim::CommandResult r;
+        if (pred_ && sc_.clock) pred_->set_time_ms(static_cast<uint32_t>(clock_ms() + order_skew_ms));
         if (pred_) pred_->submit(c, r);
         inbox_[step_ + sc_.uplink].push_back(c);
         ++own_orders;
@@ -254,6 +256,7 @@ public:
     void set_uplink(uint32_t steps) { sc_.uplink = steps; }
 
     void step(bool frame = true) {
+        if (pred_ && sc_.clock) pred_->set_time_ms(static_cast<uint32_t>(clock_ms()));
         // 1. the server seals the turn of this step; the oracle runs it at once
         TurnMsg t;
         t.turn = step_;
@@ -354,6 +357,7 @@ public:
     std::vector<uint64_t> post;     // ... and after them (before the tick runs)
     std::vector<View> views;
     uint32_t own_orders{0};
+    int64_t order_skew_ms{0};                                 // the clock that an order is timed by is this far from the step's (a wrong clock: the tests of the limits of the phase)
     std::vector<Prediction::HintVerdict> hint_verdicts;       // what became of each hint that was delivered, in order
     uint32_t derived_checks{0};
     uint32_t derived_mismatches{0};
@@ -374,6 +378,7 @@ private:
         }
     }
     uint64_t v_last_hash() const { return views.back().hash; }
+    int64_t clock_ms() const { return 10000 + static_cast<int64_t>(step_) * sim::TICK_MS; }
 
     Scenario sc_;
     sim::SimulationEngine confirmed_;

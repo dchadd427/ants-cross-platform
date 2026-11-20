@@ -54,6 +54,7 @@
 
 #include "ants_net/lockstep.hpp"
 #include "ants_net/protocol.hpp"
+#include "ants_net/seal_phase.hpp"
 #include "ants_sim/command.hpp"
 #include "ants_sim/sim_engine.hpp"
 
@@ -139,6 +140,9 @@ public:
         uint64_t hints_confirmed_moved{0};        // matched by a sealed command at another tick than the one where the hint stood (one correction)
         uint64_t hints_dropped{0};                // not confirmed: the turn came without it twice, the server did not seal it before an older one of the seat, or it timed out
         uint64_t rebuilds_hint{0};                // rebuilds because of a hint (it arrived behind the display tick, or a turn did not confirm it)
+        // The hints of this seat's own orders (last_order_hint_tick()): the tick that each named, against the turn that sealed the order
+        uint64_t order_hints_phase{0};            // named by the phase of the server's seals (the others named the display tick)
+        uint64_t order_hints_exact{0};            // ... of those, sealed in the turn that the hint named (against sealed_exact: sealed at the tick that this screen applied the order at)
         // Corrections (measure_corrections only): what a rebuild changed in the picture, compared at the display tick before and after
         uint64_t corrections{0};                  // rebuilds that were measured
         uint64_t corrections_visible{0};          // ... in which at least one ant stood elsewhere afterwards
@@ -202,8 +206,8 @@ public:
     bool submit(const sim::Command& command, sim::CommandResult& result);
     /// What became of a hint
     enum class HintVerdict : uint8_t { Accepted, Refused, Duplicate, Late };
-    /// Another seat's order, ahead of its turn: `command` (its issuer is the sender), the sender's own number for it (`seq`, 1, 2, 3 ... : a copy of a hint that was seen is a Duplicate) and the tick at which the
-    /// sender's own screen applied it (`tick`). Applied to the predicted engine at once when the display tick is not past it, else the engine is rebuilt with it; see HINTS at the top for the matching rule.
+    /// Another seat's order, ahead of its turn: `command` (its issuer is the sender), the sender's own number for it (`seq`, 1, 2, 3 ... : a copy of a hint that was seen is a Duplicate) and the turn that the
+    /// sender expects the server to seal it in (`tick`: last_order_hint_tick() of the sender). Applied to the predicted engine at once when the display tick is not past it, else the engine is rebuilt with it; see HINTS at the top for the matching rule.
     HintVerdict hint(const sim::Command& command, uint32_t seq, uint64_t tick);
     /// The hints that no turn has confirmed or dropped yet
     size_t pending_hints() const noexcept { return hints_.size(); }
@@ -228,8 +232,17 @@ public:
     bool stale() const noexcept { return running_ && stale_; }
     /// The own orders that no turn has carried yet
     size_t pending_orders() const noexcept { return pending_.size(); }
-    /// The tick at which the last order that submit() took was applied: what a hint of that order says (0 before there is one)
+    /// The tick at which the last order that submit() took was applied on this screen (0 before there is one)
     uint64_t last_order_tick() const noexcept { return last_order_tick_; }
+    /// The tick that a hint of the last order names: the turn that the server will most likely seal it in, from the phase of its seals (SealPhase); until that phase is known, the tick at which this screen
+    /// applied it (last_order_tick()). 0 before there is an order.
+    uint64_t last_order_hint_tick() const noexcept { return last_order_hint_tick_; }
+    /// The clock of the owner, in ms (any origin, one value for all the calls of a frame): the time of the orders and of the turns that arrive. Without it the hints name the display tick.
+    void set_time_ms(uint32_t ms) noexcept {
+        now_ms_ = ms;
+        time_known_ = true;
+    }
+    const SealPhase& seal_phase() const noexcept { return phase_; }
     const Stats& stats() const noexcept { return stats_; }
     /// The cues and news that the predicted ticks made since the last call (each tick that the engine ran, once per run: see PredictedAudio::generation). Nothing is kept while off.
     std::vector<PredictedAudio> take_audio();
@@ -256,6 +269,10 @@ private:
         uint64_t born{0};                         // the confirmed tick when the player gave it: a lost order is told by the time that has passed since THEN (a correction moves `tick`)
         uint64_t first_tick{0};                   // the tick at which it was applied when it was given: what the player aimed at (the statistics)
         uint32_t misses{0};                       // the turns of its tick that arrived without it
+        uint32_t given_ms{0};                     // the owner's clock when the player gave it (time_known only)
+        bool timed{false};
+        bool phased{false};                       // its hint was named by the phase of the server's seals ...
+        uint64_t hint_tick{0};                    // ... at this tick
     };
 
     struct Foreign {
@@ -323,6 +340,10 @@ private:
     std::array<SeqWindow, sim::MAX_PLAYERS> seen_;
     bool stale_hint_{false};                       // a hint is why it went stale (the statistics)
     uint64_t last_order_tick_{0};
+    uint64_t last_order_hint_tick_{0};
+    SealPhase phase_;
+    uint32_t now_ms_{0};
+    bool time_known_{false};
     uint32_t lead_{3};
     uint32_t target_lead_{3};
     uint32_t estimate_lag_{2};                    // the owner's estimate of the lag of an order (set_expected_delay_ms), in ticks
