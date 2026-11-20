@@ -377,8 +377,8 @@ def _commando_head_deform(pos: np.ndarray) -> np.ndarray:
     return p
 
 
-# Menacing heavy half-closed resting upper eyelid droop (composes cleanly with Blink!).
-COMBAT_LID_DROOP = 0.36
+# Fierce scowling upper eyelid droop tuned to reveal crisp bright white sclera around compact pupils.
+COMBAT_LID_DROOP = 0.22
 
 
 def _build_eyelid_shell(name: str, sign: float, r_outer: float, thickness: float) -> MeshPart:
@@ -439,43 +439,36 @@ def _sculpt_head(scene: SceneBuilder, blink: float) -> None:
             .rotate_xyz(rx=-0.08, ry=yaw)
             .translate(eye)
         )
-        # Fierce slightly-upward (`y=+0.004`) intense forward-locked glare under the heavy V-brow!
+        # Focused compact 1998-style glossy black dot pupils (~40% of eyeball face) leaving plenty
+        # of crisp bright white sclera clearly visible beneath the fierce V-scowl brow (`acst301`).
         limbal = (
-            ellipsoid(0.056, 0.054, 0.024, u_segs=24, v_segs=12, name=f"limbal_{tag}", material="eye_limbal")
-            .translate(-0.004 * sign, 0.003, 0.0425)
+            ellipsoid(0.032, 0.031, 0.018, u_segs=22, v_segs=12, name=f"limbal_{tag}", material="eye_limbal")
+            .translate(-0.004 * sign, 0.002, 0.0520)
             .rotate_xyz(rx=-0.10, ry=0.18 * sign)
             .translate(eye)
         )
         iris = (
-            ellipsoid(0.050, 0.048, 0.025, u_segs=22, v_segs=12, name=f"iris_{tag}", material="eye_iris")
-            .translate(-0.004 * sign, 0.0035, 0.0435)
+            ellipsoid(0.029, 0.028, 0.019, u_segs=20, v_segs=12, name=f"iris_{tag}", material="eye_iris")
+            .translate(-0.004 * sign, 0.0025, 0.0525)
             .rotate_xyz(rx=-0.10, ry=0.18 * sign)
             .translate(eye)
         )
         pupil = (
-            ellipsoid(0.032, 0.031, 0.016, u_segs=18, v_segs=10, name=f"pupil_{tag}", material="eye_pupil")
-            .translate(-0.005 * sign, 0.004, 0.0540)
+            ellipsoid(0.026, 0.025, 0.016, u_segs=18, v_segs=10, name=f"pupil_{tag}", material="eye_pupil")
+            .translate(-0.005 * sign, 0.003, 0.0565)
             .rotate_xyz(rx=-0.10, ry=0.16 * sign)
             .translate(eye)
         )
-        # Dual wet-eye specular catchlight glints aligned consistently to the upper-left (-X, +Y) studio key!
-        # Main glint sits right below the heavy scowling lid so both eyes catch a fierce living spark.
+        # Single clean soft upper-left (-X, +Y) catchlight dot matching the iconic 1998 black-dot eye look.
         glint_main = (
-            ellipsoid(0.0098, 0.0110, 0.0028, u_segs=14, v_segs=10, name=f"catchlight_main_{tag}", material="eye_catchlight")
+            ellipsoid(0.0074, 0.0080, 0.0022, u_segs=14, v_segs=10, name=f"catchlight_main_{tag}", material="eye_catchlight")
             .rotate_xyz(rx=-0.16, ry=-0.20)
-            .translate(-0.014, 0.0085, 0.0682)
+            .translate(-0.010, 0.009, 0.0678)
             .rotate_xyz(rx=-0.08, ry=0.17 * sign)
             .translate(eye)
         )
-        glint_bounce = (
-            ellipsoid(0.0044, 0.0044, 0.0022, u_segs=10, v_segs=8, name=f"catchlight_bounce_{tag}", material="eye_catchlight")
-            .rotate_xyz(rx=0.22, ry=0.22)
-            .translate(0.016, -0.014, 0.0675)
-            .rotate_xyz(rx=-0.08, ry=0.17 * sign)
-            .translate(eye)
-        )
-        scene.add("eyes", [sclera, limbal, iris, pupil, glint_main, glint_bounce])
-        eye_pts = np.vstack([p.positions for p in (sclera, limbal, iris, pupil, glint_main, glint_bounce)]).astype(np.float64)
+        scene.add("eyes", [sclera, limbal, iris, pupil, glint_main])
+        eye_pts = np.vstack([p.positions for p in (sclera, limbal, iris, pupil, glint_main)]).astype(np.float64)
         r_eye_max = max(r_eye_max, float(np.max(np.linalg.norm(eye_pts - eye[None, :], axis=1))))
 
     # Spherical eyelids strictly outside max eye+catchlight radius + 0.0082 (stays >= 6.5 mm after 0.80x scale)!
@@ -563,39 +556,39 @@ def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray
     pts_r = [np.array([-p[0], p[1], p[2]], dtype=np.float64) for p in pts]
     sh_r, mid_r, el_r, wr_r, fi_r = pts_r
 
-    # Left (+X) continuous flowing ape arm; right (-X) split seamlessly at elbow for bicep flex!
-    # Thick, meaty bodybuilder upper arms (0.130) clearly dominating the sleeker forearms (0.100).
-    scene.add("arm_left", curved_tube(pts, [0.108, 0.132, 0.104, 0.100, 0.080], samples_per_seg=5, radial_segs=16, cap_rings=3, name="gorilla_arm_left", material="chitin_team"))
+    # Left (+X) continuous flowing muscular arm; right (-X) split seamlessly at elbow for bicep flex!
+    # Athletic, defined upper arms (0.114) tapering to sleeker forearms (0.086) (~14% trimmer, zero ballooning).
+    scene.add("arm_left", curved_tube(pts, [0.094, 0.114, 0.090, 0.086, 0.070], samples_per_seg=5, radial_segs=16, cap_rings=3, name="gorilla_arm_left", material="chitin_team"))
     scene.add("right_upper_arm", [
-        curved_tube([sh_r, mid_r, el_r], [0.108, 0.132, 0.104], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_upper_right", material="chitin_team"),
-        sphere(0.102, u_segs=14, v_segs=10, name="elbow_joint_right", material="chitin_team").translate(el_r),
+        curved_tube([sh_r, mid_r, el_r], [0.094, 0.114, 0.090], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_upper_right", material="chitin_team"),
+        sphere(0.088, u_segs=14, v_segs=10, name="elbow_joint_right", material="chitin_team").translate(el_r),
     ])
-    scene.add("right_forearm", curved_tube([el_r, wr_r, fi_r], [0.104, 0.100, 0.080], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_forearm_right", material="chitin_team"))
+    scene.add("right_forearm", curved_tube([el_r, wr_r, fi_r], [0.090, 0.086, 0.070], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_forearm_right", material="chitin_team"))
 
     def _add_arm_pair(part: MeshPart, *, right_node: str) -> None:
         scene.add("arm_left", part)
         scene.add(right_node, part.mirror_x(f"{part.name}_right"))
 
-    # Sculpted bulging Rambo bicep peak (front-inner -> pops UP during flex) & horseshoe tricep belly.
-    _add_arm_pair(superellipsoid(0.088, 0.124, 0.094, e1=0.78, e2=0.82, u_segs=14, v_segs=10, name="bicep_peak", material="chitin_team").rotate_xyz(rx=0.40, ry=-0.16, rz=0.38).translate(0.456, 0.514, 0.090), right_node="right_upper_arm")
-    _add_arm_pair(superellipsoid(0.084, 0.116, 0.088, e1=0.80, e2=0.84, u_segs=12, v_segs=8, name="tricep_belly", material="chitin_team").rotate_xyz(rx=0.34, rz=0.40).translate(0.506, 0.520, -0.020), right_node="right_upper_arm")
+    # Crisp sculpted athletic bicep peak (front-inner -> pops UP during flex) & defined tricep belly.
+    _add_arm_pair(superellipsoid(0.076, 0.108, 0.082, e1=0.78, e2=0.82, u_segs=14, v_segs=10, name="bicep_peak", material="chitin_team").rotate_xyz(rx=0.40, ry=-0.16, rz=0.38).translate(0.456, 0.514, 0.078), right_node="right_upper_arm")
+    _add_arm_pair(superellipsoid(0.072, 0.100, 0.076, e1=0.80, e2=0.84, u_segs=12, v_segs=8, name="tricep_belly", material="chitin_team").rotate_xyz(rx=0.34, rz=0.40).translate(0.498, 0.520, -0.016), right_node="right_upper_arm")
 
     # Sculpted outer forearm gauntlet shell + recessed dark armor seam cuffs & elbow cop.
     gauntlet = (
-        superellipsoid(0.102, 0.098, 0.118, e1=0.76, e2=0.80, u_segs=16, v_segs=12, name="forearm_gauntlet", material="chitin_team")
+        superellipsoid(0.088, 0.086, 0.104, e1=0.76, e2=0.80, u_segs=16, v_segs=12, name="forearm_gauntlet", material="chitin_team")
         .rotate_xyz(rx=0.58, ry=-0.38, rz=0.18)
         .translate(0.478, 0.304, 0.162)
     )
     _add_arm_pair(gauntlet, right_node="right_forearm")
-    _add_arm_pair(_ring_on_segment(mid, el, 0.64, 0.116, 0.008, name="bracer_seam_0", material="chitin_dark"), right_node="right_upper_arm")
-    _add_arm_pair(_ring_on_segment(el, wr, 0.36, 0.106, 0.0085, name="gauntlet_seam_0", material="chitin_dark"), right_node="right_forearm")
-    _add_arm_pair(_ring_on_segment(el, wr, 0.72, 0.102, 0.0085, name="gauntlet_seam_1", material="chitin_dark"), right_node="right_forearm")
-    _add_arm_pair(_ring_on_segment(el, wr, 0.96, 0.092, 0.014, name="gauntlet_cuff", material="chitin_dark"), right_node="right_forearm")
+    _add_arm_pair(_ring_on_segment(mid, el, 0.64, 0.100, 0.0075, name="bracer_seam_0", material="chitin_dark"), right_node="right_upper_arm")
+    _add_arm_pair(_ring_on_segment(el, wr, 0.36, 0.092, 0.0080, name="gauntlet_seam_0", material="chitin_dark"), right_node="right_forearm")
+    _add_arm_pair(_ring_on_segment(el, wr, 0.72, 0.088, 0.0080, name="gauntlet_seam_1", material="chitin_dark"), right_node="right_forearm")
+    _add_arm_pair(_ring_on_segment(el, wr, 0.96, 0.080, 0.013, name="gauntlet_cuff", material="chitin_dark"), right_node="right_forearm")
 
     elbow_cop = (
-        superellipsoid(0.064, 0.058, 0.036, e1=0.76, e2=0.82, u_segs=14, v_segs=10, name="elbow_cop", material="chitin_team")
+        superellipsoid(0.056, 0.052, 0.032, e1=0.76, e2=0.82, u_segs=14, v_segs=10, name="elbow_cop", material="chitin_team")
         .rotate_xyz(rx=0.42, ry=-0.32, rz=-0.26)
-        .translate(el + np.array([0.028, 0.008, -0.042]))
+        .translate(el + np.array([0.024, 0.008, -0.038]))
     )
     _add_arm_pair(elbow_cop, right_node="right_forearm")
 
@@ -603,14 +596,14 @@ def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray
     for k in range(6):
         ang = 2.0 * math.pi * k / 6.0 + 0.25
         local_n = np.array([math.cos(ang), 0.0, math.sin(ang)])
-        local_p = local_n * 0.104 + np.array([0.0, 0.84 * length, 0.0])
+        local_p = local_n * 0.090 + np.array([0.0, 0.84 * length, 0.0])
         world_p = (mat @ np.append(local_p, 1.0))[:3]
         world_n = mat[:3, :3] @ local_n
-        _add_arm_pair(_rivet(world_p, world_n, f"gauntlet_rivet_{k}", radius=0.011), right_node="right_forearm")
+        _add_arm_pair(_rivet(world_p, world_n, f"gauntlet_rivet_{k}", radius=0.010), right_node="right_forearm")
 
-    # Big chunky dark clawed gorilla fists held wide and low (clear above Y = 0.0).
+    # Sturdy dark clawed brawler fists held wide and low (clear above Y = 0.0).
     _add_arm_pair(
-        superellipsoid(0.084, 0.078, 0.088, e1=0.68, e2=0.74, u_segs=16, v_segs=12, name="fist_palm", material="chitin_dark")
+        superellipsoid(0.076, 0.072, 0.080, e1=0.68, e2=0.74, u_segs=16, v_segs=12, name="fist_palm", material="chitin_dark")
         .rotate_xyz(rx=0.25, ry=-0.42, rz=0.12)
         .translate(fi),
         right_node="right_forearm",
@@ -732,12 +725,12 @@ def _conform_belt_to_torso(
 
 
 def _make_brass_bullet_pad(center: np.ndarray, width_dir: np.ndarray, out_n: np.ndarray, tangent: np.ndarray, label: str) -> List[MeshPart]:
-    """One ribbed woven-gold ammo loop housing a crisp metallic-brass bullet cartridge."""
+    """One bright sunny-yellow ribbed ammo loop housing a crisp yellow cartridge (`acst301`)."""
     mat = _frame(center, width_dir, out_n, tangent)
-    loop_pad = rounded_box(0.084, 0.032, 0.042, bevel=0.010, segs=1, name=f"bandolier_pad_{label}", material="gear_gold").transform(mat)
-    casing = cylinder(0.016, 0.016, 0.114, radial_segs=8, bevel=0.0, axis="x", name=f"bullet_case_{label}", material="gear_gold_metal").translate(-0.006, 0.006, 0.0).transform(mat)
+    loop_pad = rounded_box(0.084, 0.032, 0.042, bevel=0.010, segs=1, name=f"bandolier_pad_{label}", material="gear_yellow_plastic").transform(mat)
+    casing = cylinder(0.016, 0.016, 0.114, radial_segs=8, bevel=0.0, axis="x", name=f"bullet_case_{label}", material="gear_yellow_plastic").translate(-0.006, 0.006, 0.0).transform(mat)
     tip_prof = [(0.000, 0.048), (0.0155, 0.048), (0.000, 0.076)]
-    tip = lathe(tip_prof, radial_segs=8, cap_bottom=False, cap_top=False, axis="x", name=f"bullet_tip_{label}", material="gear_brass_trim").translate(0.0, 0.006, 0.0).transform(mat)
+    tip = lathe(tip_prof, radial_segs=8, cap_bottom=False, cap_top=False, axis="x", name=f"bullet_tip_{label}", material="gear_gold").translate(0.0, 0.006, 0.0).transform(mat)
     return [loop_pad, casing, tip]
 
 
@@ -805,9 +798,9 @@ def _build_bandoliers(scene: SceneBuilder, torso_verts: np.ndarray) -> None:
     for tag, pos in crossings.items():
         tilt = 14.0 if tag == "front" else -16.0
         face = 1.0 if tag == "front" else -1.0
-        frame = rounded_box(0.150, 0.150, 0.036, bevel=0.012, segs=2, name=f"buckle_frame_{tag}", material="gear_gold_metal").rotate_xyz(rx=tilt, rz=45.0, degrees=True).translate(*pos)
+        frame = rounded_box(0.150, 0.150, 0.036, bevel=0.012, segs=2, name=f"buckle_frame_{tag}", material="gear_yellow_plastic").rotate_xyz(rx=tilt, rz=45.0, degrees=True).translate(*pos)
         recess = rounded_box(0.094, 0.094, 0.042, bevel=0.008, segs=1, name=f"buckle_recess_{tag}", material="gear_dark").rotate_xyz(rx=tilt, rz=45.0, degrees=True).translate(*pos)
-        boss = superellipsoid(0.039, 0.039, 0.022, e1=0.74, e2=0.74, u_segs=14, v_segs=8, name=f"buckle_boss_{tag}", material="gear_brass_trim").rotate_xyz(rx=tilt, degrees=True).translate(pos[0], pos[1], pos[2] + 0.018 * face)
+        boss = superellipsoid(0.039, 0.039, 0.022, e1=0.74, e2=0.74, u_segs=14, v_segs=8, name=f"buckle_boss_{tag}", material="gear_gold").rotate_xyz(rx=tilt, degrees=True).translate(pos[0], pos[1], pos[2] + 0.018 * face)
         scene.add("gear_bandolier", [frame, recess, boss])
 
 
@@ -840,13 +833,13 @@ def _build_right_bicep_cloth(
     axial = rel @ t
     near_band = np.abs(axial) < 0.056
     sub = rel[near_band] if np.any(near_band) else rel
-    radii = np.full(n_ring, 0.114, dtype=np.float64)
+    radii = np.full(n_ring, 0.096, dtype=np.float64)
     for i, d in enumerate(band_out):
         proj = sub @ d
         perp = sub - proj[:, None] * d[None, :] - (sub @ t)[:, None] * t[None, :]
-        in_wedge = (proj > 0.02) & (np.abs(perp @ np.cross(t, d)) < 0.038)
+        in_wedge = (proj > 0.02) & (np.abs(perp @ np.cross(t, d)) < 0.034)
         if np.any(in_wedge):
-            radii[i] = max(0.112, float(np.max(proj[in_wedge])))
+            radii[i] = max(0.094, float(np.max(proj[in_wedge])))
     for _ in range(3):
         radii = 0.25 * np.roll(radii, 1) + 0.50 * radii + 0.25 * np.roll(radii, -1)
     band_r = radii + 0.006  # snug proud wrap hugging the beefier bicep cleanly with zero clipping
@@ -1013,11 +1006,11 @@ def build_combat(blink: float = 0.0) -> SceneBuilder:
     scene.attach_world_node("right_forearm_group", "right_arm_group")
     scene.attach_world_node("right_forearm", "right_forearm_group")
 
-    # Subtle tough-guy Rambo swagger attitude + 12 deg chin-up pitch toward the 33 deg overhead camera!
+    # Subtle tough-guy Rambo swagger attitude + 15 deg chin-up pitch toward the 45 deg game camera!
     ub_xf = scene.get_node_transform("upper_body")
     scene.set_node_transform("upper_body", translation=ub_xf.translation, rotation=quat_from_euler_xyz(ry=0.042, rz=-0.024))
     hd_xf = scene.get_node_transform("head_group")
-    scene.set_node_transform("head_group", translation=hd_xf.translation, rotation=quat_from_euler_xyz(rx=-math.radians(12.0), ry=-0.058, rz=0.054))
+    scene.set_node_transform("head_group", translation=hd_xf.translation, rotation=quat_from_euler_xyz(rx=-math.radians(15.0), ry=-0.058, rz=0.054))
 
     scene.ground_to_y(0.0)
     _add_combat_idle_animation(scene)

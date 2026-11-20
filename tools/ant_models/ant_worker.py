@@ -51,26 +51,27 @@ def _ring_across(center: Sequence[float], axis: Sequence[float], major_r: float,
 
 
 def _add_carapace_details(scene: SceneBuilder, anchors: dict) -> None:
-    """Subtle smooth organic chitin accents fitted flush onto the rounded base thorax and limbs."""
-    # Smooth curved breastplate crest hugging the fuller ovoid chest carapace (no boxy corners).
+    """Subtle smooth organic chitin accents fitted flush onto the petite slim base thorax and limbs."""
+    # Petite curved breastplate crest hugging the slim chest carapace (`z_max ~ 0.096`).
     crest = (
-        superellipsoid(0.056, 0.062, 0.024, e1=0.80, e2=0.84, u_segs=16, v_segs=12, name="chest_crest", material="chitin_team")
+        superellipsoid(0.042, 0.048, 0.018, e1=0.80, e2=0.84, u_segs=16, v_segs=12, name="chest_crest", material="chitin_team")
         .rotate_xyz(rx=0.10)
-        .translate(0.0, 0.412, 0.108)
+        .translate(0.0, 0.402, 0.080)
     )
-    # Sleek dorsal pronotum ridge sitting flush atop the rounded rear dorsal carapace.
+    # Sleek dorsal pronotum ridge sitting flush atop the slim rear dorsal carapace (`z_min ~ -0.096`).
     ridge = (
-        superellipsoid(0.048, 0.032, 0.046, e1=0.80, e2=0.84, u_segs=16, v_segs=10, name="dorsal_ridge", material="chitin_team")
+        superellipsoid(0.036, 0.024, 0.034, e1=0.80, e2=0.84, u_segs=16, v_segs=10, name="dorsal_ridge", material="chitin_team")
         .rotate_xyz(rx=-0.16)
-        .translate(0.0, 0.452, -0.094)
+        .translate(0.0, 0.432, -0.072)
     )
     scene.add("worker_carapace", [crest, ridge])
 
-    # Subtle curved team-colored shoulder fairings blending smoothly into the upper arm roots.
+    # Subtle curved team-colored shoulder fairings anchored dynamically onto the narrow shoulders.
+    sh_l = anchors["shoulder_left"]
     cap = (
-        superellipsoid(0.032, 0.024, 0.030, e1=0.80, e2=0.84, u_segs=14, v_segs=10, name="shoulder_cap", material="chitin_team")
+        superellipsoid(0.024, 0.018, 0.022, e1=0.80, e2=0.84, u_segs=14, v_segs=10, name="shoulder_cap", material="chitin_team")
         .rotate_xyz(rz=-0.34)
-        .translate(0.108, 0.488, 0.016)
+        .translate(sh_l[0], sh_l[1] + 0.008, sh_l[2])
     )
     scene.add_mirrored("worker_carapace", cap)
 
@@ -78,7 +79,7 @@ def _add_carapace_details(scene: SceneBuilder, anchors: dict) -> None:
     for side in ("left", "right"):
         hand = np.asarray(anchors[f"{side}_hand"], dtype=np.float64)
         hdir = np.asarray(anchors[f"{side}_hand_dir"], dtype=np.float64)
-        scene.add("worker_cuffs", _ring_across(hand - 0.026 * hdir, hdir, 0.0165, 0.0048, f"wrist_cuff_{side}"))
+        scene.add("worker_cuffs", _ring_across(hand - 0.022 * hdir, hdir, 0.0145, 0.0044, f"wrist_cuff_{side}"))
 
     # Parent canonical world-authored accents under upper_body in lockstep with stance contrapposto & Idle.
     scene.attach_world_node("worker_carapace", "upper_body", preserve_world_pose=False)
@@ -91,12 +92,12 @@ def build_worker(blink: float = 0.0) -> SceneBuilder:
         scene_name="ant_worker",
         include_brows=False,
         brow_style="curious",
-        head_pitch_deg=-12.0,
+        head_pitch_deg=-18.0,
         head_tilt_deg=4.5,
         head_yaw_deg=-3.5,
         eye_look=(0.06, 0.05),
-        eye_scale_left=0.92,
-        eye_scale_right=1.08,
+        eye_scale_left=1.10,
+        eye_scale_right=0.92,
         antenna_asymmetry=0.35,
         stance_asymmetry=0.35,
         left_arm_pose="idle",

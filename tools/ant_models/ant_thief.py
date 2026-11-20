@@ -50,6 +50,7 @@ try:
         rounded_box,
         sphere,
         superellipsoid,
+        swept_tube,
         torus_arc,
     )
 except ImportError:
@@ -70,6 +71,7 @@ except ImportError:
         rounded_box,
         sphere,
         superellipsoid,
+        swept_tube,
         torus_arc,
     )
 
@@ -83,21 +85,21 @@ GAZE_ANGLE = 0.34
 _LID_REST_DROOP = 0.0
 _THIEF_BLINK_ANGLE = EYELID_CLOSED_ANGLE + 0.04
 
-# Stealthy low hiding crouch (`#162`) tuned with Thief's sleek roguish skull (~85% of Worker height, H ~ 0.87).
-THIEF_CROUCH = 0.145
+# Stealthy low hiding crouch (`#162`) tuned with `core`'s 1998 anatomy & Thief's sleek skull (H ~ 0.86).
+THIEF_CROUCH = 0.138
 
-# Nimble asymmetric rogue arm pose anchored cleanly at crouched shoulders (±0.106, 0.478 - c, 0.016).
+# Nimble asymmetric rogue arm pose anchored cleanly at `core`'s narrow petite shoulders (±0.078, 0.456 - c, 0.014).
 _THIEF_ARM_LEFT = [
-    (0.106, 0.478 - THIEF_CROUCH, 0.016),
-    (0.198, 0.436 - THIEF_CROUCH, 0.088),
-    (0.172, 0.444 - THIEF_CROUCH, 0.194),
-    (0.136, 0.460 - THIEF_CROUCH, 0.232),
+    (0.078, 0.456 - THIEF_CROUCH, 0.014),
+    (0.148, 0.422 - THIEF_CROUCH, 0.072),
+    (0.132, 0.426 - THIEF_CROUCH, 0.160),
+    (0.104, 0.438 - THIEF_CROUCH, 0.192),
 ]
 _THIEF_ARM_RIGHT = [
-    (-0.106, 0.478 - THIEF_CROUCH, 0.016),
-    (-0.208, 0.440 - THIEF_CROUCH, 0.062),
-    (-0.188, 0.378 - THIEF_CROUCH, 0.156),
-    (-0.156, 0.370 - THIEF_CROUCH, 0.196),
+    (-0.078, 0.456 - THIEF_CROUCH, 0.014),
+    (-0.156, 0.424 - THIEF_CROUCH, 0.054),
+    (-0.142, 0.370 - THIEF_CROUCH, 0.132),
+    (-0.118, 0.362 - THIEF_CROUCH, 0.164),
 ]
 
 _U_SEGS = 72
@@ -235,17 +237,20 @@ def _paint_thief_cranium_colors(cranium: MeshPart) -> MeshPart:
 
 
 def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
-    """Replace `base_ant`'s rounder cranium with Thief's sleek tapered roguish skull and refit sockets."""
+    """Replace `base_ant`'s rounder cranium with Thief's sleek tapered roguish skull, refit sockets,
+    and sweep antennae cleanly UP-AND-BACKWARD (`-Z`) matching `atst901`/`atst801`!
+    """
     hx, hy, hz = anchors["head_center"]
+    s_h = 1.12
     cranium = (
         superellipsoid(0.194, 0.161, 0.156, e1=0.68, e2=0.68, u_segs=38, v_segs=30, name="cranium", material="chitin_team")
         .deform(_thief_head_deform)
     )
-    cranium = _paint_thief_cranium_colors(cranium).translate(hx, hy, hz)
+    cranium = _paint_thief_cranium_colors(cranium).scale(s_h, s_h, s_h).translate(hx, hy, hz)
 
     # Swap cranium inside `head` (vertices are in canonical neutral space; `head` transform applies -neck)
-    # and raise/pull in mouth_cleft + mandibles to seat flush beneath the sleek tapered cheeks.
-    jaw_dy, jaw_dz = 0.014, -0.016
+    # and seat `core`'s enlarged plump mandibles flush beneath Thief's sleek tapered cheeks.
+    jaw_dy, jaw_dz = 0.019, -0.019
     head_parts = scene.get_node("head")
     new_head_parts: List[MeshPart] = []
     for p in head_parts:
@@ -267,25 +272,70 @@ def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
             scale=mand_xf.scale,
         )
 
-    # Seat both antenna bases snugly into the sleeker lower crown (zero floating sockets!).
-    for node_name, sign in (("antenna_left", 1.0), ("antenna_right", -1.0)):
-        axf = scene.get_node_transform(node_name)
-        if axf is not None:
-            ax0, ay0, az0 = axf.translation
-            scene.set_node_transform(
-                node_name,
-                translation=(ax0 + 0.004 * sign, ay0 - 0.015, az0 - 0.006),
-                rotation=axf.rotation,
-                scale=axf.scale,
-            )
+    # Rebuild Thief's antennae sweeping cleanly UP-AND-BACKWARD (`-Z`, streamlined stealth ears
+    # with chunky clubbed distal tips matching `atst901`/`atst801`/`atst201`) on Thief's sleek crown!
+    neck_vec = np.asarray(anchors["neck_center"], dtype=np.float64)
+    ant_rads = [
+        (0.020, 0.020),
+        (0.016, 0.017),
+        (0.015, 0.016),
+        (0.020, 0.022),
+        (0.028, 0.030),
+        (0.034, 0.036),
+        (0.024, 0.026),
+    ]
+    ant_defs = (
+        (
+            "antenna_left",
+            "left",
+            (+0.096, hy + 0.148, hz + 0.026),
+            [
+                (-0.004, -0.018, 0.002),
+                (0.000, 0.000, 0.000),
+                (+0.024, +0.072, -0.032),
+                (+0.044, +0.136, -0.078),
+                (+0.054, +0.172, -0.126),
+                (+0.058, +0.176, -0.164),
+                (+0.060, +0.160, -0.184),
+            ],
+        ),
+        (
+            "antenna_right",
+            "right",
+            (-0.096, hy + 0.148, hz + 0.024),
+            [
+                (+0.004, -0.018, 0.002),
+                (0.000, 0.000, 0.000),
+                (-0.028, +0.064, -0.040),
+                (-0.052, +0.122, -0.094),
+                (-0.064, +0.150, -0.144),
+                (-0.068, +0.148, -0.178),
+                (-0.070, +0.132, -0.196),
+            ],
+        ),
+    )
+    for node_name, tag, base_w, local_pts in ant_defs:
+        stalk = swept_tube(
+            local_pts,
+            ant_rads,
+            radial_segs=14,
+            smooth_subdiv=3,
+            cap_rings=4,
+            name=f"antenna_stalk_{tag}",
+            material="chitin_dark",
+        )
+        socket = ellipsoid(0.028, 0.015, 0.028, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark").translate(0.0, -0.004, 0.0)
+        scene.nodes[node_name] = [stalk, socket]
+        rel = np.asarray(base_w, dtype=np.float64) - neck_vec
+        scene.set_node_transform(node_name, translation=(float(rel[0]), float(rel[1]), float(rel[2])))
 
-    # Refit eye anchors cleanly forward of the recessed orbital hollow (`z_skull ~ 0.1256`) so the
-    # entire spherical eye dome sits proud with zero cranium or nose-bridge clipping at any gaze angle.
-    eye_y = hy - 0.004
-    eye_z = hz + 0.123
-    anchors["eye_left"] = (0.084, eye_y, eye_z)
-    anchors["eye_right"] = (-0.084, eye_y, eye_z)
-    anchors["eye_center"] = (0.0, eye_y, eye_z + 0.012)
+    # Refit eye anchors cleanly forward of the scaled sleek orbital hollow so the spherical eyes
+    # sit proudly inside the domino mask with zero cranium or nose-bridge clipping at any gaze angle.
+    eye_y = hy - 0.005
+    eye_z = hz + 0.138
+    anchors["eye_left"] = (0.094, eye_y, eye_z)
+    anchors["eye_right"] = (-0.094, eye_y, eye_z)
+    anchors["eye_center"] = (0.0, eye_y, eye_z + 0.013)
     return cranium
 
 
@@ -731,88 +781,71 @@ def _build_spherical_eyelid(name: str, r_outer: float, thickness: float, yaw_y: 
 
 
 def _add_shifty_eyes(scene: SceneBuilder, anchors: dict, blink: float, gaze: float) -> float:
-    """Build Thief's clean, bright, harmoniously tracking spherical 5-part eyes + sleek lids.
+    """Build Thief's cute, simple 1998-style harmoniously tracking spherical eyes + sleek lids.
 
-    Uses a true uniform sphere sclera (`r = 0.061`, zero Y-stretch) with forward-aligned
-    eyeball pivots rotating `+-GAZE_ANGLE` (`+-0.34 rad`) so 100% of both irises, pupils,
-    and dual studio catchlights stay crisp on the bright warm-ivory sclera across all gaze
-    frames with zero skull, socket, or domino-mask clipping.
+    Uses a true uniform sphere bright-white sclera (`r = 0.068`, zero Y-stretch) with a big
+    cute glossy jet-black dot pupil and ONE small soft upper-left specular glint (zero busy
+    double-glint or piercing iris ring), tracking cleanly `+-0.34 rad` in `IdleLookout`.
     """
-    sclera_r = 0.061
-    lid_outer_r = 0.074
+    sclera_r = 0.068
+    lid_outer_r = 0.081
     for side, sign in (("left", 1.0), ("right", -1.0)):
         eye = np.asarray(anchors[f"eye_{side}"], dtype=np.float64)
         yaw = 0.12 * sign
 
-        # Clean sculpted dark orbital socket bezel framing the spherical eye without clipping it.
+        # Subtle dark orbital socket rim framing the bright white spherical eye cleanly.
         scene.add(
             "eyes",
-            torus_arc(0.0635, 0.0058, u_segs=26, v_segs=8, plane="xy", name=f"eye_socket_rim_{side}", material="chitin_dark")
+            torus_arc(0.0705, 0.0056, u_segs=26, v_segs=8, plane="xy", name=f"eye_socket_rim_{side}", material="chitin_dark")
             .scale(0.98, 1.00, 0.86)
             .translate(0.0, 0.0, -0.002)
             .rotate_xyz(rx=-0.06, ry=yaw)
             .translate(eye),
         )
-        # True uniform sphere warm-ivory sclera (rotationally invariant — zero stretch mismatch!).
+        # True uniform sphere bright warm-white sclera (rotationally invariant — zero stretch mismatch!).
         sclera_local = sphere(sclera_r, u_segs=26, v_segs=18, name=f"sclera_{side}", material="eye_white")
         scene.add("eyes", sclera_local.translate(eye))
 
-        # Harmoniously forward-aligned pivoted eyeball carrying crisp 5-part sparkling eyes:
-        # dark limbal ring, rich olive iris, glossy pupil, and dual upper-left/lower-right catchlights.
+        # Harmoniously forward-aligned pivoted eyeball carrying simple cute 1998 black-dot eyes:
+        # soft charcoal halo + big cute glossy jet-black dot pupil + ONE small soft upper-left glint.
         ball = f"eye_ball_{side}"
         limbal = _spherical_eye_cap(
             sclera_r,
-            ang_x=0.68,
-            ang_y=0.70,
+            ang_x=0.48,
+            ang_y=0.50,
             thickness=0.0012,
             u_segs=26,
             v_segs=6,
             name=f"limbal_{side}",
             material="eye_limbal",
         ).rotate_xyz(rx=-0.06)
-        iris = _spherical_eye_cap(
-            sclera_r + 0.0008,
-            ang_x=0.60,
-            ang_y=0.62,
-            thickness=0.0012,
-            u_segs=26,
-            v_segs=6,
-            name=f"iris_{side}",
-            material="eye_iris",
-        ).rotate_xyz(rx=-0.06)
         pupil = _spherical_eye_cap(
-            sclera_r + 0.0016,
-            ang_x=0.38,
-            ang_y=0.40,
-            thickness=0.0012,
-            u_segs=22,
-            v_segs=5,
+            sclera_r + 0.0010,
+            ang_x=0.45,
+            ang_y=0.47,
+            thickness=0.0014,
+            u_segs=24,
+            v_segs=6,
             name=f"pupil_{side}",
             material="eye_pupil",
         ).rotate_xyz(rx=-0.06)
-        # Dual wet-eye studio catchlights (viewer upper-left -X,+Y and lower-right +X,-Y on BOTH eyes).
+        # Single soft upper-left (-X, +Y) catchlight dot aligned consistently on BOTH eyes.
         glint_main = (
-            ellipsoid(0.0080, 0.0090, 0.0020, u_segs=14, v_segs=10, name=f"catchlight_main_{side}", material="eye_catchlight")
+            ellipsoid(0.0070, 0.0078, 0.0020, u_segs=14, v_segs=10, name=f"catchlight_main_{side}", material="eye_catchlight")
             .rotate_xyz(rx=-0.20, ry=-0.20)
-            .translate(-0.0115, 0.0120, sclera_r + 0.0004)
+            .translate(-0.0105, 0.0110, sclera_r + 0.0005)
             .rotate_xyz(rx=-0.06)
         )
-        glint_bounce = (
-            ellipsoid(0.0036, 0.0036, 0.0016, u_segs=10, v_segs=8, name=f"catchlight_bounce_{side}", material="eye_catchlight")
-            .rotate_xyz(rx=0.20, ry=0.20)
-            .translate(0.0120, -0.0115, sclera_r + 0.0002)
-            .rotate_xyz(rx=-0.06)
-        )
-        scene.add(ball, [limbal, iris, pupil, glint_main, glint_bounce])
+        scene.add(ball, [limbal, pupil, glint_main])
         gaze_clamped = max(-1.0, min(1.0, float(gaze)))
         scene.set_node_transform(ball, translation=eye, rotation=quat_from_axis_angle((0.0, 1.0, 0.0), gaze_clamped * GAZE_ANGLE))
 
-        # Sleek symmetrical spherical eyelid: inner radius = r_eye_max + 0.0068, thickness = 0.0032
-        # so zero sclera/limbal/iris/pupil/catchlight vertex ever penetrates at any blink or gaze angle.
-        eye_local_pts = np.vstack([p.positions for p in (sclera_local, limbal, iris, pupil, glint_main, glint_bounce)]).astype(np.float64)
+        # Sleek symmetrical spherical eyelid: inner radius = r_eye_max + 0.0072, thickness = 0.0034
+        # so zero sclera/limbal/pupil/catchlight vertex ever penetrates at any blink or gaze angle.
+        eye_local_pts = np.vstack([p.positions for p in (sclera_local, limbal, pupil, glint_main)]).astype(np.float64)
         r_eye_max = float(np.max(np.linalg.norm(eye_local_pts, axis=1)))
-        lid_thick = 0.0032
-        lid_outer_r = r_eye_max + 0.0068 + lid_thick
+        lid_thick = 0.0034
+        lid_outer_r = r_eye_max + 0.0072 + lid_thick
         lid = f"eyelid_{side}"
         shell = _build_spherical_eyelid(f"{lid}_shell", lid_outer_r, lid_thick, yaw_y=yaw).rotate_xyz(rx=_LID_REST_DROOP)
         scene.add(lid, shell)
@@ -866,21 +899,21 @@ def _sculpted_strap_loop(pts: np.ndarray, out_normals: np.ndarray, half_w: float
 
 def _add_rogue_strap_and_loot_pouch(scene: SceneBuilder, anchors: dict) -> None:
     """Add dark leather crossbody utility strap, brass chest buckle, and cinched brown loot pouch."""
-    # Anchor strap and pouch cleanly relative to `thorax_center` so they drop cleanly with crouch!
+    # Anchor strap and pouch cleanly onto `core`'s petite slim thorax (`rx~0.078`, `z~[-0.096,+0.096]`).
     tc = np.asarray(anchors["thorax_center"], dtype=np.float64)
-    dy_c = float(tc[1]) - 0.394
+    dy_c = float(tc[1]) - 0.384
     strap_ctrl = [
-        (-0.082, 0.498 + dy_c, 0.008),   # over right shoulder beside neck
-        (-0.048, 0.454 + dy_c, 0.108),   # upper-right chest
-        (0.020, 0.394 + dy_c, 0.116),    # center-left chest
-        (0.088, 0.340 + dy_c, 0.060),    # left waist front
-        (0.090, 0.342 + dy_c, -0.056),   # left rear hip
-        (0.022, 0.404 + dy_c, -0.124),   # mid back
-        (-0.068, 0.464 + dy_c, -0.110),  # upper-right back
+        (-0.062, 0.464 + dy_c, 0.006),   # over right shoulder beside neck
+        (-0.036, 0.430 + dy_c, 0.088),   # upper-right chest
+        (0.016, 0.384 + dy_c, 0.094),    # center-left chest
+        (0.066, 0.338 + dy_c, 0.048),    # left waist front
+        (0.066, 0.340 + dy_c, -0.046),   # left rear hip
+        (0.016, 0.392 + dy_c, -0.096),   # mid back
+        (-0.052, 0.440 + dy_c, -0.086),  # upper-right back
     ]
-    pivot = np.array([0.0, 0.396 + dy_c, -0.008])
+    pivot = np.array([0.0, 0.384 + dy_c, -0.006])
     pts = catmull_rom_spline(strap_ctrl, samples_per_seg=6, closed=True)
-    out_n = np.array([_normalize(p - pivot + (np.array([0.0, 0.16, 0.0]) if p[1] > 0.46 + dy_c else 0.0)) for p in pts])
+    out_n = np.array([_normalize(p - pivot + (np.array([0.0, 0.14, 0.0]) if p[1] > 0.435 + dy_c else 0.0)) for p in pts])
 
     # Push strap cleanly outside ONLY the neutral canonical thorax meshes (already in world coords).
     thorax_parts = [
@@ -891,48 +924,48 @@ def _add_rogue_strap_and_loot_pouch(scene: SceneBuilder, anchors: dict) -> None:
     v_rel = body_verts - pivot[None, :]
     shifts = np.zeros(len(pts))
     for i, (p, o) in enumerate(zip(pts, out_n)):
-        sub = body_verts[(v_rel @ o) > 0.02]
+        sub = body_verts[(v_rel @ o) > 0.015]
         if len(sub) == 0:
             continue
         diff = sub - p[None, :]
         proj = diff @ o
         perp = diff - proj[:, None] * o[None, :]
-        near = np.sum(perp * perp, axis=1) < (0.036 ** 2)
+        near = np.sum(perp * perp, axis=1) < (0.030 ** 2)
         if np.any(near):
-            shifts[i] = float(np.max(proj[near])) + 0.006
+            shifts[i] = float(np.max(proj[near])) + 0.005
     for _ in range(2):
         shifts = 0.25 * np.roll(shifts, 1) + 0.50 * shifts + 0.25 * np.roll(shifts, -1)
     pts = pts + shifts[:, None] * out_n
-    scene.add("gear_rogue", _sculpted_strap_loop(pts, out_n, half_w=0.019, half_t=0.006, name="rogue_crossbody_strap"))
+    scene.add("gear_rogue", _sculpted_strap_loop(pts, out_n, half_w=0.015, half_t=0.005, name="rogue_crossbody_strap"))
 
     # Crisp brass chest buckle + keeper bar seated right on the front strap segment.
     front_idx = int(np.argmax(pts[:, 2]))
-    b_pos = pts[front_idx] + 0.008 * out_n[front_idx]
-    buckle_frame = rounded_box(0.046, 0.040, 0.014, bevel=0.004, segs=2, name="strap_buckle_frame", material="gear_gold_metal").rotate_xyz(rx=10.0, rz=-42.0, degrees=True).translate(b_pos)
-    buckle_inner = rounded_box(0.026, 0.021, 0.017, bevel=0.003, segs=2, name="strap_buckle_cut", material="gear_dark").rotate_xyz(rx=10.0, rz=-42.0, degrees=True).translate(b_pos)
-    buckle_pin = rounded_box(0.008, 0.036, 0.017, bevel=0.003, segs=2, name="strap_buckle_pin", material="gear_brass_trim").rotate_xyz(rx=10.0, rz=-42.0, degrees=True).translate(b_pos + np.array([0.0, 0.0, 0.003]))
+    b_pos = pts[front_idx] + 0.006 * out_n[front_idx]
+    buckle_frame = rounded_box(0.036, 0.032, 0.012, bevel=0.0035, segs=2, name="strap_buckle_frame", material="gear_gold_metal").rotate_xyz(rx=10.0, rz=-42.0, degrees=True).translate(b_pos)
+    buckle_inner = rounded_box(0.020, 0.016, 0.015, bevel=0.0025, segs=2, name="strap_buckle_cut", material="gear_dark").rotate_xyz(rx=10.0, rz=-42.0, degrees=True).translate(b_pos)
+    buckle_pin = rounded_box(0.0065, 0.029, 0.015, bevel=0.0025, segs=2, name="strap_buckle_pin", material="gear_brass_trim").rotate_xyz(rx=10.0, rz=-42.0, degrees=True).translate(b_pos + np.array([0.0, 0.0, 0.0025]))
     scene.add("gear_rogue", [buckle_frame, buckle_inner, buckle_pin])
 
-    # Compact cinched canvas/brown loot pouch slung neatly on the right-back flank (-X, -Z)
-    # clear above the perked crouched gaster and widened rear leg.
-    pouch_ctr = np.array([-0.106, 0.392 + dy_c, -0.130])
+    # Compact cinched canvas/brown loot pouch slung neatly on the slim right-back flank (-X, -Z)
+    # clear above the crouched gaster and digitigrade backwards-knee rear leg.
+    pouch_ctr = np.array([-0.084, 0.392 + dy_c, -0.104])
     pouch_prof = [
-        (0.000, -0.062),
-        (0.034, -0.058),
-        (0.056, -0.040),
-        (0.064, -0.010),
-        (0.057, +0.020),
-        (0.036, +0.040),
-        (0.023, +0.050),  # cinched drawstring neck
-        (0.036, +0.068),  # gathered ruffled sack top
-        (0.026, +0.076),
-        (0.000, +0.070),
+        (0.000, -0.052),
+        (0.028, -0.048),
+        (0.046, -0.033),
+        (0.053, -0.008),
+        (0.047, +0.017),
+        (0.030, +0.033),
+        (0.019, +0.042),  # cinched drawstring neck
+        (0.030, +0.057),  # gathered ruffled sack top
+        (0.022, +0.063),
+        (0.000, +0.058),
     ]
     def _sack_pleat(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
         ang = np.arctan2(p[:, 0], p[:, 2])
         r = np.hypot(p[:, 0], p[:, 2])
-        pleat = 1.0 + 0.07 * np.sin(ang * 5.0) * np.clip((p[:, 1] + 0.035) / 0.10, 0.0, 1.0)
+        pleat = 1.0 + 0.07 * np.sin(ang * 5.0) * np.clip((p[:, 1] + 0.030) / 0.085, 0.0, 1.0)
         scale = np.where(r > 1e-5, pleat, 1.0)
         p[:, 0] *= scale
         p[:, 2] *= scale
@@ -948,9 +981,9 @@ def _add_rogue_strap_and_loot_pouch(scene: SceneBuilder, anchors: dict) -> None:
     scene.add("gear_rogue", sack)
 
     # Golden woven drawstring cord cinched around the sack neck + two tiny dangling cord ends.
-    neck_local = np.array([0.0, 0.050, 0.0])
+    neck_local = np.array([0.0, 0.042, 0.0])
     neck_ring = (
-        torus_arc(0.026, 0.0068, u_segs=18, v_segs=8, plane="xz", name="pouch_drawstring", material="gear_gold")
+        torus_arc(0.022, 0.0058, u_segs=18, v_segs=8, plane="xz", name="pouch_drawstring", material="gear_gold")
         .translate(neck_local)
         .rotate_xyz(rx=-0.26, ry=0.34, rz=-0.34)
         .translate(pouch_ctr)
@@ -958,14 +991,14 @@ def _add_rogue_strap_and_loot_pouch(scene: SceneBuilder, anchors: dict) -> None:
     scene.add("gear_rogue", neck_ring)
 
     # Tiny dangling golden drawstring tassels + brass clasp anchoring pouch straight to the strap.
-    for t_i, dx in enumerate((-0.010, 0.012)):
+    for t_i, dx in enumerate((-0.008, 0.010)):
         tassel = curved_tube(
             [
-                pouch_ctr + np.array([0.016 + dx, 0.044, -0.018]),
-                pouch_ctr + np.array([0.008 + dx * 1.4, 0.018, -0.038]),
-                pouch_ctr + np.array([0.004 + dx * 1.8, -0.004, -0.044]),
+                pouch_ctr + np.array([0.014 + dx, 0.036, -0.015]),
+                pouch_ctr + np.array([0.007 + dx * 1.4, 0.014, -0.032]),
+                pouch_ctr + np.array([0.003 + dx * 1.8, -0.004, -0.037]),
             ],
-            [0.0055, 0.005, 0.007],
+            [0.0048, 0.0044, 0.0060],
             samples_per_seg=3,
             radial_segs=8,
             cap_rings=2,
@@ -975,19 +1008,19 @@ def _add_rogue_strap_and_loot_pouch(scene: SceneBuilder, anchors: dict) -> None:
         scene.add("gear_rogue", tassel)
 
     # Find nearest rear-right strap point and bridge solidly with a leather hanger + brass clasp.
-    rear_right = np.argmin(np.linalg.norm(pts - (pouch_ctr + np.array([0.024, 0.072, 0.035]))[None, :], axis=1))
+    rear_right = np.argmin(np.linalg.norm(pts - (pouch_ctr + np.array([0.020, 0.060, 0.030]))[None, :], axis=1))
     strap_anchor = pts[int(rear_right)]
-    pouch_neck_world = pouch_ctr + np.array([0.018, 0.044, 0.014])
+    pouch_neck_world = pouch_ctr + np.array([0.015, 0.037, 0.012])
     hanger = curved_tube(
-        [strap_anchor, 0.5 * (strap_anchor + pouch_neck_world) + np.array([-0.005, 0.010, -0.005]), pouch_neck_world],
-        [0.010, 0.009, 0.009],
+        [strap_anchor, 0.5 * (strap_anchor + pouch_neck_world) + np.array([-0.004, 0.008, -0.004]), pouch_neck_world],
+        [0.0085, 0.0078, 0.0078],
         samples_per_seg=3,
         radial_segs=8,
         cap_rings=2,
         name="pouch_hanger",
         material="gear_dark",
     )
-    clasp = sphere(0.012, u_segs=12, v_segs=8, name="pouch_clasp", material="gear_gold_metal").translate(0.5 * (strap_anchor + pouch_neck_world) + np.array([-0.004, 0.008, -0.004]))
+    clasp = sphere(0.010, u_segs=12, v_segs=8, name="pouch_clasp", material="gear_gold_metal").translate(0.5 * (strap_anchor + pouch_neck_world) + np.array([-0.003, 0.007, -0.003]))
     scene.add("gear_rogue", [hanger, clasp])
 
 
@@ -1013,7 +1046,7 @@ def _add_thief_idle_animation(scene: SceneBuilder) -> None:
     # Authentic `atst301` crouched weight-shift: slide +-0.050 in X with +0.022 center arc-hop lift
     # and natural lean roll into the planted left/right leg (legs stay grounded at Y = 0.0).
     bx, by, bz = _rest_t("upper_body")
-    body_dxs = [-0.050, -0.052, -0.050, 0.000, +0.050, +0.052, +0.052, +0.050, 0.000, -0.050]
+    body_dxs = [-0.048, -0.050, -0.048, 0.000, +0.048, +0.050, +0.050, +0.048, 0.000, -0.048]
     body_dys = [0.000, 0.007, 0.000, 0.022, 0.003, 0.000, 0.007, 0.000, 0.022, 0.000]
     body_rolls = [+0.095, +0.100, +0.095, 0.000, -0.095, -0.100, -0.100, -0.095, 0.000, +0.095]
     body_yaws = [-0.030, -0.032, -0.030, 0.000, +0.030, +0.032, +0.032, +0.030, 0.000, -0.030]
@@ -1104,12 +1137,12 @@ def _add_thief_idle_animation(scene: SceneBuilder) -> None:
     scene.add_animation("Idle", channels, replace=True)
 
 
-def build_thief(blink: float = 0.0, gaze: float = -0.25) -> SceneBuilder:
+def build_thief(blink: float = 0.0, gaze: float = -0.22) -> SceneBuilder:
     """Build the sly, mischievous Rogue Bandit Thief Ant.
 
     `blink` in [0, 1] sets resting eyelid closure; `gaze` in [-1, 1] turns
     the shifty lookout eyes cleanly left (-1) to right (+1)
-    (defaults to `-0.25` for a subtle harmonious sideways rest glance).
+    (defaults to `-0.22` for a subtle harmonious sideways rest glance).
     """
     scene, anchors = build_base_ant(
         scene_name="ant_thief",
@@ -1117,7 +1150,7 @@ def build_thief(blink: float = 0.0, gaze: float = -0.25) -> SceneBuilder:
         include_brows=False,
         include_idle=False,
         brow_style="sneaky",
-        head_pitch_deg=-13.0,
+        head_pitch_deg=-15.5,
         head_tilt_deg=-4.5,
         head_yaw_deg=4.0,
         antenna_asymmetry=0.40,
@@ -1152,7 +1185,7 @@ def build_thief(blink: float = 0.0, gaze: float = -0.25) -> SceneBuilder:
     return scene
 
 
-def build_ant(blink: float = 0.0, gaze: float = -0.25) -> SceneBuilder:
+def build_ant(blink: float = 0.0, gaze: float = -0.22) -> SceneBuilder:
     """Canonical module entrypoint for `build_all.py`."""
     return build_thief(blink=blink, gaze=gaze)
 
