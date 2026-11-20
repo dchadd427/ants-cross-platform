@@ -12,7 +12,9 @@ namespace ants::app {
 void HUD::render_match_start_modal(IRenderer& renderer, const assets::AssetArchive& assets) {
     if (match_countdown_) {                       // protocol 21: the card, in the picture's own pixels in the middle of the map view (the caller's offset is the original dialog's)
         renderer.set_origin(0, 0);
+        renderer.set_alpha_scale(card_opacity_);                                  // (see-through while the player moves the view)
         render_match_countdown(renderer, assets);
+        renderer.set_alpha_scale(255);
         return;
     }
     // Start modal (Ants.exe 0x1017127): std_dialg at origin (100,100), one wrapped centred label (string 105) in the
@@ -145,7 +147,8 @@ void HUD::render_match_countdown(IRenderer& renderer, const assets::AssetArchive
 #endif
 }
 
-// A press while the card is up (protocol 21): the map is out of reach, the chat's buttons, Quit and Fullscreen are not. The press only captures the button; the release acts on it.
+// A press while the card is up (protocol 21): nothing of the match is in reach (a press on the map takes hold of the ground, on the minimap moves the view), the chat's buttons, Quit and Fullscreen are. The
+// press only captures the button; the release acts on it.
 bool HUD::handle_countdown_mouse_down(int32_t x, int32_t y, uint8_t button) {
     if (button != SDL_BUTTON_LEFT) return true;
     if (quit_button_.contains(x, y)) {
@@ -160,6 +163,14 @@ bool HUD::handle_countdown_mouse_down(int32_t x, int32_t y, uint8_t button) {
     } else if (countdown_card_layout(layout_.view()).button.contains(x, y)) {
         countdown_button_pressed_ = true;
         play_sfx(sim::SoundID::ButtonClick);
+    } else if (over_minimap(x, y)) {                  // looking around (countdown_takes_camera): the view follows the pointer on the minimap while the button is held, as in the match
+        if (countdown_takes_camera()) is_radar_dragging_ = true;
+    } else if (over_map(x, y)) {                      // a press on the map takes hold of the ground: nothing is picked, nothing is ordered
+        if (countdown_takes_camera()) {
+            look_dragging_ = true;
+            look_x_ = x;
+            look_y_ = y;
+        }
     }
     return true;
 }

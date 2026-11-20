@@ -92,7 +92,9 @@ void Renderer::draw_dialog_text(const std::string& text, int32_t x, int32_t base
         }
         const SDL_Rect at = placed(x, top, it->second.width, it->second.height);
         const SDL_FRect dst{static_cast<float>(at.x) + dx, static_cast<float>(at.y) + dy, static_cast<float>(at.w), static_cast<float>(at.h)};
+        if (alpha_scale_ != 255) SDL_SetTextureAlphaMod(it->second.texture, scaled_alpha(c.a));      // (the countdown card, see-through)
         SDL_RenderCopyF(renderer_, it->second.texture, nullptr, &dst);
+        if (alpha_scale_ != 255) SDL_SetTextureAlphaMod(it->second.texture, c.a);
     };
     draw(ants::assets::ColorRGBA{255, 196, 147, 46}, 1.0f, 1.0f);
     draw(color, 0.0f, 0.0f);

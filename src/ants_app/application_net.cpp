@@ -207,6 +207,7 @@ int Application::countdown_probe(int what) const noexcept {
         case 63: return web_countdown_button().w;
         case 64: return web_countdown_button().h;
         case 65: return match_running() ? static_cast<int>(hud_.get_chat_log().size()) : -1;
+        case 66: return hud_.is_match_countdown_active() ? hud_.countdown_card_opacity() : -1;
         default: return -1;
     }
 }

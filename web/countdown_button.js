@@ -18,6 +18,7 @@
     'use strict';
 
     var POLL_MS = 250;
+    var FADE_POLL_MS = 60;                                           // how often the button takes the card's opacity (the card goes see-through in 100 ms: ants_probe 66)
     var MIN_H = 28;                                                  // CSS pixels: the least height that a finger hits on a phone (32 would reach past the card's bottom edge)
     var MIN_W = 80;                                                  // CSS pixels: the least width that holds "Fullscreen" on one line
     var CARD_BELOW = 8;                                              // game pixels from the place's bottom to the card's bottom edge (card 346 high, place at 306, 32 high)
@@ -78,11 +79,18 @@
             return true;
         }
 
+        function fade() {                                            // the card is see-through while the player moves the view (ants_probe 66: its opacity 0 .. 255, -1 when there is none): the button goes with it
+            if (!page.ready()) return;                               // (before the game is up the page must not ask: Emscripten's first call of an export that is not there yet leaves it undefined for good)
+            var opacity = page.ask(66);
+            button.style.opacity = opacity >= 0 && opacity < 255 ? String(Math.round(opacity / 255 * 100) / 100) : '';
+        }
+
         function refresh() {
             var show = !!page.ready() && page.ask(60) >= 0 && !page.isFullscreen();
             if (show && !place()) show = false;
             button.hidden = !show;
             button.style.display = show ? '' : 'none';
+            fade();
         }
 
         button.addEventListener('click', function () {
@@ -90,7 +98,8 @@
             refresh();
         });
         (page.every || function (fn, ms) { return setInterval(fn, ms); })(refresh, POLL_MS);
-        return { button: button, refresh: refresh, place: place };
+        (page.every || function (fn, ms) { return setInterval(fn, ms); })(fade, FADE_POLL_MS);
+        return { button: button, refresh: refresh, place: place, fade: fade };
     }
 
     return { forPage: forPage, POLL_MS: POLL_MS, MIN_H: MIN_H, MIN_W: MIN_W, CARD_W: CARD_W };

@@ -14,6 +14,12 @@
 
 namespace ants::app {
 
+/// The card while the player looks around: how much of itself it shows (of 255), how long after the view stopped it is solid again, and how fast it goes (the steps are the HUD's 50 ms)
+inline constexpr int32_t kCardSeeThrough = 100;
+inline constexpr uint32_t kCardRestSteps = 20;           // 1 s
+inline constexpr uint32_t kCardFadeOutSteps = 2;         // to see-through: 100 ms
+inline constexpr uint32_t kCardFadeInSteps = 6;          // back to solid: 300 ms
+
 inline constexpr int32_t kCountdownCardW = 400;
 inline constexpr int32_t kCountdownCardH = 346;
 

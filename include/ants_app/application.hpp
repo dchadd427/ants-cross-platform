@@ -742,6 +742,10 @@ private:
     float replay_speed_{1.0f};
     AutoCamera auto_camera_;                              // the camera of a replay (auto_camera.hpp): Auto locks on the biggest action and follows it, Manual leaves the view where the viewer put it
     int camera_taken_{0};                                 // how many times the viewer has taken the camera from Auto (ReplayValue::CameraTaken)
+    bool look_seen_{false};                               // track_look_around: the view's place at the last frame of the countdown card
+    float look_x_{0.0f};
+    float look_y_{0.0f};
+    float look_zoom_{0.0f};
     float camera_zoom_seen_{0.0f};                        // the zoom of the last frame: a change keeps Auto, at the viewer's zoom
     double camera_pan_px_{0.0};                           // what two fingers have panned lately (a pinch drifts a pixel or two: that is not taking the camera)
     double camera_pan_at_ms_{0.0};
@@ -959,6 +963,7 @@ private:
     bool presentation_hidden_{false};                     // macOS: the game has made the Dock and the menu bar leave the fullscreen Space that the window is in (update_mouse_grab gives them back)
 #endif
     bool button_outside_window(const SDL_MouseButtonEvent& button) const;   // the position SDL delivered (before the clamp) lies outside the window, not merely the picture
+    void track_look_around();                             // the countdown card: when the view moved since the last frame the card turns see-through (application_view.cpp)
     void update_auto_camera(float dt);                    // a replay's frame: the camera model moves the view (Auto) and the minimap's ring shows the busiest place (application_view.cpp)
     void take_camera();                                   // the viewer moved the view by hand (the edge of the screen, the minimap, two fingers): Manual
     void show_start_view();                               // the view at the start of a match: scrolled just far enough to show the square around the hill's anchor tile

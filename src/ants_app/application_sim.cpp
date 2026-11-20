@@ -77,6 +77,8 @@ void Application::update_simulation(float dt) {
         return;
     }
 
+    track_look_around();                                              // (the countdown card turns see-through while the view moves)
+
     // The damage and heal numbers' clock: real time, while the match or the replay runs (a pause stops it, so a number stays where it is)
     if (state_ == AppState::Playing && !(replay_mode_ && replay_paused_) && !(network_active() && net_->paused())) health_clock_ms_ += static_cast<double>(std::min(dt, 0.1f)) * 1000.0;
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -246,6 +247,9 @@ public:
     /// Everything that is drawn afterwards is moved by (x, y), until set_origin(0, 0): a window of the original's own 640 x 480 screen (the options screen, the quick help, a dialog) is drawn
     /// with its own numbers and put where the picture wants it. Not a clip: nothing is cut. A renderer that records its calls sees them as they are given (without the move).
     virtual void set_origin(int32_t x, int32_t y) { (void)x; (void)y; }
+    /// Everything that is drawn afterwards (rectangles, text, the pieces of the HUD art) is laid over what is there with this share of its own opacity, 0 (not at all) .. 255 (as it is), until
+    /// set_alpha_scale(255): the countdown card is see-through while the player moves the view. A renderer that records its calls (the test renderers) ignores it.
+    virtual void set_alpha_scale(int32_t alpha) { (void)alpha; }
     virtual void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) = 0;
     virtual void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) = 0;
     virtual void draw_text(const std::string& text, int32_t x, int32_t y, ants::assets::ColorRGBA color) = 0;
@@ -510,6 +514,8 @@ public:
     /// (for the tests) pretends that the device takes no texture with a side above `limit` pixels (0: the device's own limit), as a small phone's does
     void set_art_texture_limit(int32_t limit) noexcept { art_texture_limit_ = limit; }
     void set_origin(int32_t x, int32_t y) override { origin_ = LayoutPoint{x, y}; }
+    void set_alpha_scale(int32_t alpha) override { alpha_scale_ = static_cast<uint8_t>(std::clamp(alpha, 0, 255)); }
+    int32_t alpha_scale() const noexcept { return alpha_scale_; }
     const LayoutPoint& origin() const noexcept { return origin_; }
     void fill_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) override;
     void draw_rect(int32_t x, int32_t y, int32_t w, int32_t h, ants::assets::ColorRGBA color) override;
@@ -778,6 +784,10 @@ private:
     int32_t canvas_h_{CANVAS_HEIGHT};
     LayoutRect picture_{0, 0, CANVAS_WIDTH, CANVAS_HEIGHT};
     bool picture_inset_{false};            // the picture is smaller than the canvas: its corner is added to every position and it is the clip
+    uint8_t alpha_scale_{255};             // set_alpha_scale: the share of its opacity that what is drawn keeps (255: all of it)
+    uint8_t scaled_alpha(uint8_t a) const noexcept { return alpha_scale_ == 255 ? a : static_cast<uint8_t>((static_cast<int32_t>(a) * alpha_scale_ + 127) / 255); }
+    /// One copy of a texture whose own opacity is `own_alpha`, kept under the alpha scale (set_alpha_scale): every picture of a window that goes through it is see-through with the rest
+    void copy_scaled(SDL_Texture* tex, const SDL_Rect* src, const SDL_Rect* dst, int32_t own_alpha = 255);
     LayoutPoint origin_{};                 // set_origin: what a window of the original's own screen is moved by (nothing, outside the HUD's pages and dialogs)
     /// A rectangle of the picture's own coordinates as SDL gets it (the picture's corner added, and the origin of a window)
     SDL_Rect placed(int32_t x, int32_t y, int32_t w, int32_t h) const noexcept { return SDL_Rect{x + picture_.x + origin_.x, y + picture_.y + origin_.y, w, h}; }

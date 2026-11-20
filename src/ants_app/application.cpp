@@ -890,7 +890,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
         case 35: return static_cast<int>(g_web_app->touch().mode());
         case 36: return static_cast<int>(g_web_app->touch_slop() * 100.0 + 0.5);
         case 70: case 71: case 72: case 73: case 74: case 75: case 76: return g_web_app->hud_probe(what);                          // (the HUD's Fullscreen button: application_net.cpp)
-        case 60: case 61: case 62: case 63: case 64: case 65: return g_web_app->countdown_probe(what);                // (the countdown card, protocol 21: application_net.cpp)
+        case 60: case 61: case 62: case 63: case 64: case 65: case 66: return g_web_app->countdown_probe(what);                // (the countdown card, protocol 21: application_net.cpp)
         case 50: return g_web_app->match_running() ? static_cast<int>(g_web_app->hud().get_selected_ant_ids().size()) + (g_web_app->hud().get_selected_base_team_id() >= 0 ? 1000 : 0) + (g_web_app->hud().get_selected_ant_id() != 0 ? 100000 : 0) : -1;
         default: return net_overlay_probe(g_web_app->net_overlay_now(), what);                 // (16 and 10000 and up; anything else is -1)
     }

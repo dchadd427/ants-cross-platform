@@ -93,7 +93,7 @@ void Renderer::draw_art(const hud_art::Art& art, int32_t sprite, int32_t x, int3
     SDL_SetTextureScaleMode(tex, std::fabs(output - static_cast<double>(scale)) < 1e-6 ? SDL_ScaleModeNearest : SDL_ScaleModeLinear);
     const SDL_Rect src = {(s->sheet_x + sx) * scale, (s->sheet_y + sy) * scale, sw * scale, sh * scale};
     const SDL_Rect dst = placed(x, y, w, h);
-    SDL_RenderCopy(renderer_, tex, &src, &dst);
+    copy_scaled(tex, &src, &dst);                                                              // (the sheet is shared: a see-through copy puts its opacity back)
 }
 
 }  // namespace ants::app
