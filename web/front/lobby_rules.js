@@ -391,7 +391,7 @@
         lost: function () { return 'Connection lost. Getting you back in…'; },
         unreachable: function () { return 'Cannot reach the game server. Check your connection; trying again…'; },
         away: function () { return 'This room was opened in another window, so it is closed here.'; },
-        version: function () { return 'A newer version of Ants is out. Reload the page to update.'; },
+        version: function () { return 'A new version of Ants is out. Reload the page to update.'; },
         noroom: function () { return 'There is no room with that code. Check it, or ask the host to send the link again.'; },
         notback: function (a) { return a.server + ' START waits for them: wait, or press Remove on their color to start without them.'; },
         notice: function (a) { return a.server; }

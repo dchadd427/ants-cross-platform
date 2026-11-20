@@ -7,7 +7,7 @@
 //     that place scaled with the picture (150 x 32 game pixels of the card's own button, so it fits the card on a phone held sideways: about 92 x 28 CSS pixels on a card 240 wide), the height never
 //     less than 28 CSS pixels (the finger floor on a phone) and the width never less than 80 (the word fits on one line), never wider than the card (400 game pixels); its text 0.55 x the height (12 to
 //     20 px) on one line; centred on the game's place, then kept inside the card (its bottom at least 2 px above the card's bottom edge, 8 game pixels under the place; its top not above the card's
-//     hint line, 4 game pixels over the place; the card wins when both cannot hold) and inside the picture. inside the picture. It is a child of the stage, not of the picture's box: it is not the game's touch, and it goes with the stage into the
+//     hint line, 4 game pixels over the place; the card wins when both cannot hold) and inside the picture. It is a child of the stage, not of the picture's box: it is not the game's touch, and it goes with the stage into the
 //     browser's fullscreen (where it is hidden: the stage is fullscreen already). Its click is the Fullscreen button of the header's: the page's own enterFullscreen.
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsCountdown, node gets module.exports (tests/scripts/web_countdown_check.js runs it with fakes).
 (function (root, factory) {

@@ -6,6 +6,8 @@ usage: release.py X.Y.Z "title" [--date YYYY-MM-DD] [--dry-run] [--root DIR] [--
   - VERSION becomes X.Y.Z (it must be higher than the version now in the file)
   - the top draft section of CHANGELOG.md, the one headed "## Next" (above the newest release; the template at the top of that file), becomes
     "## vX.Y.Z - DATE - title"; the tool refuses, with a message, when there is no such section or it is empty
+  - the lines under "**For players:**" and "**Fixes:**" of the draft must not name the operator's side (the administration page, a setting, an environment variable, the database: they go under
+    "**For operators:**"), because the site's "What's new" window shows those two labels to everybody (tools/changelog_to_html.py); the tool refuses a draft that does
   - the README's "Current version: vX.Y.Z" names the new version (the date of the heading is today's Pacific date unless --date says otherwise)
   - tools/check_version_consistency.py must be happy before the files are changed (else nothing is touched) and is run again when they are written
 
@@ -25,6 +27,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import changelog_to_html as changelog                # noqa: E402  (the same folder)
 import check_version_consistency as consistency     # noqa: E402  (the same folder)
 
 SEMVER = r"[0-9]+\.[0-9]+\.[0-9]+"
@@ -182,8 +185,11 @@ def run(args, root):
     new["VERSION"] = version + "\n"
     new["CHANGELOG.md"], entry = convert_changelog(old["CHANGELOG.md"], version, date, title)
     new["README.md"] = replace_once(README_RE, old["README.md"], lambda m: m.group(1) + version, "README.md", "'Current version: vX.Y.Z' line")
-    if "**For players:**" not in entry:
+    if "**For players:**" not in entry and "**For operators:**" not in entry:
         print('release: warning: the draft has no "**For players:**" paragraph (the template at the top of CHANGELOG.md)', file=sys.stderr)
+    named = [line for found in changelog.shipped_lines("## v%s - %s - %s\n\n%s\n" % (version, date, title, entry)) for line in changelog.operator_side(found[0], found[2], found[3])]
+    if named:        # the "What's new" window of the site shows these two labels to everybody (tools/changelog_to_html.py)
+        raise Refused('the draft names the operator\'s side under "For players" or "Fixes": move it under "**For operators:**" (the template at the top of CHANGELOG.md)\n  ' + "\n  ".join(named))
 
     with tempfile.TemporaryDirectory() as scratch:                  # the result must pass the consistency check before anything is written
         for name, text in new.items():

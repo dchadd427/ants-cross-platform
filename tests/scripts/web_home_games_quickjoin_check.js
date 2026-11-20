@@ -193,7 +193,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     env.last().open().receive(reject(2));
     await flush();
     await wait(env, 800);
-    check('a server of another version: the page\'s own banner asks for a reload, the card goes, no other room is tried (all of them would say it), and no toast of the list says anything more', !env.$('banner').hidden && env.$('banner-x').textContent === 'Reload' && /newer version of Ants/.test(env.$('banner-text').textContent) && card(env) === null && env.sockets.length === 1 && toastOf(env).hidden === true);
+    check('a server of another version: the page\'s own banner asks for a reload, the card goes, no other room is tried (all of them would say it), and no toast of the list says anything more', !env.$('banner').hidden && env.$('banner-x').textContent === 'Reload' && /new version of Ants/.test(env.$('banner-text').textContent) && card(env) === null && env.sockets.length === 1 && toastOf(env).hidden === true);
     const silent = await withRooms(ROWS);
     await press(silent);
     silent.last().open();
