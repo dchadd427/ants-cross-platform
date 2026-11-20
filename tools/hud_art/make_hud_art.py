@@ -5,7 +5,7 @@ usage: make_hud_art.py [--out DIR] [--work DIR] [--chrome PROGRAM]
 
     python3 tools/hud_art/make_hud_art.py                  writes assets/hud_art/sheet_1x.png, sheet_2x.png, sheet_3x.png and hud_art.txt
 
-Needs Python 3 with Pillow and numpy, and Google Chrome or Chromium (headless; it renders the SVG pieces). About half a minute. The scratch files go to --work (default: a folder of the
+Needs Python 3 with Pillow and numpy, and Google Chrome or Chromium (headless; it renders the SVG pieces); the libdeflate library is optional (sheets 5% smaller: README.md, "Size"). About two minutes. The scratch files go to --work (default: a folder of the
 system's temporary folder, or ANTS_HUD_ART_WORK); nothing else is written.
 """
 import argparse
@@ -28,8 +28,8 @@ def main():
     import cursors
     import sprites
     import pack
-    images, rows, anims = sprites.export()
-    sizes = pack.pack(images, rows, anims, args.out, cursor_anims=cursors.CURSORS)
+    images, rows, anims, derived = sprites.export()
+    sizes = pack.pack(images, rows, anims, args.out, cursor_anims=cursors.CURSORS, derived=derived)
     for name, size in sizes.items():
         print('%-14s %9d bytes' % (name, size))
     print('%d sprites, %d animations' % (len(rows), len(anims)))

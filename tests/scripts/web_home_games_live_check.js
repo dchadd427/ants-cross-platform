@@ -1,7 +1,7 @@
 // Runs the matches IN PROGRESS of the Games list (web/home/games.js, docs/HOME_GAMES.md "The Games list", docs/REPLAYS.md "Live") in the fake browser of tests/scripts/web_page_harness.js, against a fake GET /lobbies and a fake GET /live:
-//   1. the pure parts: a match of the door's answer on a table (the id's shape, the map, the players' words, markup and look-alike characters in a name), the list (50 at the most, an id once, not a list), the waits (10 s at the least);
+//   1. the pure parts: a match of the door's answer on a table (the id's shape, the map, the players' words, markup and look-alike characters in a name), the list (50 at the most, an id once, not a list), the waits (5 s at the least);
 //   2. the rows: a red Live mark, the map, who plays, how long it has run, Watch = /play?live=<id> (the same tab; a NEW one only while the page holds a room), the head "N open, M in progress", the Games button that counts the open rooms only, the empty line;
-//   3. the looks at /live: never faster than 10 s apart, none while the list is not shown (a closed popover, a hidden tab, the Room, after the hand-off), a server with no live door (404) or a failed look hides the
+//   3. the looks at /live: never faster than 5 s apart (1.5 s when a room has gone from the list), none while the list is not shown (a closed popover, a hidden tab, the Room, after the hand-off), a server with no live door (404) or a failed look hides the
 //      section with no error and the list goes on;
 //   4. no switch and nothing kept: the rows always show, an old stored word is ignored and left as it was, a blocked storage changes nothing.
 // usage: node web_home_games_live_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
@@ -64,10 +64,10 @@ const M = 'TREASURE.LVL';
     same('an id that is a name of Object is an id once, as any other', proto.map((e) => e.id), ['__proto__-20261109-120000Z', 'constructor-20261109-120000Z']);
     for (const [what, value] of [['null', null], ['a list', []], ['a number', 5], ['no live', { count: 0 }], ['live as an object', { live: {} }], ['live as a text', { live: 'x' }]]) check('an answer that is ' + what + ' is no list (the section is hidden)', Games.parseLive(value, RULES0) === null);
     check('an empty list is a list (nothing is playing)', Games.parseLive({ live: [] }, RULES0).length === 0);
-    same('the waits: 10 s doubled for every failure up to 5 minutes, then 0 to +20 % (never less than 10 s)', [Games.liveDelay(0, 0), Games.liveDelay(0, 1), Games.liveDelay(0, 0.5), Games.liveDelay(1, 0), Games.liveDelay(2, 0), Games.liveDelay(5, 0), Games.liveDelay(50, 0), Games.liveDelay(0, -5), Games.liveDelay(0, 9)],
-        [10000, 12000, 11000, 20000, 40000, 300000, 300000, 10000, 12000]);
+    same('the waits: 5 s doubled for every failure up to 5 minutes, then 0 to +20 % (never less than 5 s)', [Games.liveDelay(0, 0), Games.liveDelay(0, 1), Games.liveDelay(0, 0.5), Games.liveDelay(1, 0), Games.liveDelay(2, 0), Games.liveDelay(6, 0), Games.liveDelay(50, 0), Games.liveDelay(0, -5), Games.liveDelay(0, 9)],
+        [5000, 6000, 5500, 10000, 20000, 300000, 300000, 5000, 6000]);
     same('the seconds are at most 359999 (99:59:59), and a number below it is whole', [Games.liveOf({ id: 'A-20261109-120000Z', seconds: 1e9 }, RULES0).seconds, Games.liveOf({ id: 'A-20261109-120000Z', seconds: 359999.9 }, RULES0).seconds, Games.liveOf({ id: 'A-20261109-120000Z', turns: 1e12 }, RULES0).seconds], [359999, 359999, 359999]);
-    same('the least wait is the door\'s own pace: 10 s', Games.LIVE_EVERY, 10000);
+    same('the least wait is the door\'s own pace: 5 s (and 1.5 s when a room has gone)', [Games.LIVE_EVERY, Games.LIVE_SOON], [5000, 1500]);
     same('how long it has run, as a clock', [Games.clockText(0), Games.clockText(7), Games.clockText(60), Games.clockText(125), Games.clockText(3665)], ['0:00', '0:07', '1:00', '2:05', '61:05']);
 }
 
@@ -89,10 +89,10 @@ const M = 'TREASURE.LVL';
     check('the open rooms are the rows of the first list and the matches are under it, in a box with its own heading', find(popOf(env), 'gitem').length === 3 && first(boxOf(env), 'gsub').textContent === 'In progress' && boxOf(env).hidden === false);
     check('a row of an open room still has its Join', first(popOf(env), 'gjoin') !== null && first(popOf(env), 'gjoin').textContent === 'Join');
     check('the picture of a match is the map\'s square (an original\'s own)', first(rows[0], 'gmap').findAll((e) => e.tagName === 'img').length === 1 && /preview_treasure\.png$/.test(first(rows[0], 'gmap').findAll((e) => e.tagName === 'img')[0].src));
-    await wait(env, 12500);
+    await wait(env, 5500);
     check('a look later the clock of a match is the door\'s (the rows stay, only the time is written again)', looksAtLive(env) === 2 && liveRows(env)[0] === rows[0]);
     env.site.live.body = answer([LIVE('TREASURE-20261109-120000Z', { seconds: 135, players: ['Green (Ann)', 'Red (Bot (Medium))'] })]);
-    await wait(env, 10500);
+    await wait(env, 6500);
     same('a match that ended is gone from the list and the one that goes on says its new time', liveRows(env).map((li) => [first(li, 'gname').textContent, first(li, 'glen').textContent]), [['Treasure', '2:15 so far']]);
     check('... and the head follows', headOf(env) === '1 open, 1 in progress', headOf(env));
     await wait(env, 31000);
@@ -240,21 +240,21 @@ function watchTab(bus, side) {
 // ---- 3. the looks at /live ----
 {
     const env = await livePage();
-    await wait(env, 9500);
-    check('the next look is 10 s after the first, not before', looksAtLive(env) === 1);
-    await wait(env, 2600);
-    await wait(env, 12000); await wait(env, 12000);
+    await wait(env, 4500);
+    check('the next look is 5 s after the first, not before', looksAtLive(env) === 1);
+    await wait(env, 1600);
+    await wait(env, 6000); await wait(env, 6000);
     const t = env.site.live.times;
-    check('the looks are 10 s apart at the least (and not more than 12 s: +20 %)', t.length >= 4 && t.every((x, i) => i === 0 || (x - t[i - 1] >= 10000 && x - t[i - 1] <= 12500)), JSON.stringify(t));
+    check('the looks are 5 s apart at the least (and not more than 6 s: +20 %)', t.length >= 4 && t.every((x, i) => i === 0 || (x - t[i - 1] >= 5000 && x - t[i - 1] <= 6250)), JSON.stringify(t));
     env.hide(true);
     const n = looksAtLive(env);
     await wait(env, 120000);
     check('a tab that is out of sight looks at /live not at all', looksAtLive(env) === n);
     env.hide(false);
     await flush();
-    check('... and looks again when it is back (and the 10 s have gone)', looksAtLive(env) === n + 1);
+    check('... and looks again when it is back (and the 5 s have gone)', looksAtLive(env) === n + 1);
 }
-{   // a popover: no look while it is closed, and every 10 s while it is open
+{   // a popover: no look while it is closed, and every 5 s while it is open
     const site = R.fakeSite(); site.live.reject = false; site.live.body = answer(SAMPLE);
     const env = await page({ site, options: { popover: true } });
     await wait(env, 60000);
@@ -262,9 +262,9 @@ function watchTab(bus, side) {
     tap(env.home('games'));
     await flush();
     check('... it looks when it opens', looksAtLive(env) === 1);
-    await wait(env, 9500);
-    check('... and 10 s later, not before', looksAtLive(env) === 1);
-    await wait(env, 3000);
+    await wait(env, 4500);
+    check('... and 5 s later, not before', looksAtLive(env) === 1);
+    await wait(env, 1600);
     check('... then again', looksAtLive(env) === 2);
     check('the rows are in the popover too', liveRows(env).length === 2);
     tap(env.home('games'));
@@ -284,7 +284,7 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     check('... with no error, no notice and no toast', R.toastTextOf(env) === '' && first(popOf(env), 'gpnote').hidden === true);
     const times = site.live.times.slice();
     await wait(env, 100000);
-    check('... and the looks go on slowly (doubled after every failure, up to 5 minutes), never faster than 10 s', site.live.times.length <= times.length + 3 && site.live.times.every((x, i) => i === 0 || x - site.live.times[i - 1] >= 10000), JSON.stringify(site.live.times));
+    check('... and the looks go on slowly (doubled after every failure, up to 5 minutes), never faster than 5 s', site.live.times.length <= times.length + 3 && site.live.times.every((x, i) => i === 0 || x - site.live.times[i - 1] >= 5000), JSON.stringify(site.live.times));
     check('... the count beside Games is the open game alone (no match is shown, so none is counted)', R.pillOf(env).textContent === '1' && env.home('games').getAttribute('aria-label') === 'Games, 1 open');
 }
 {   // a door that answers again after a failure
@@ -292,11 +292,11 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     const env = await page({ site, options: { popover: false } });
     check('(no live door at first: hidden)', boxOf(env).hidden === true);
     site.live.reject = false; site.live.body = answer(SAMPLE);
-    await wait(env, 25000);
-    check('a door that answers later brings the rows', liveRows(env).length === 2 && boxOf(env).hidden === false);
     await wait(env, 13000);
+    check('a door that answers later brings the rows', liveRows(env).length === 2 && boxOf(env).hidden === false);
+    await wait(env, 6500);
     const t = site.live.times;
-    check('a good answer ends the slow pace: the next look is 10 to 12 s after it, not 20 s or more', t.length === 3 && t[2] - t[1] >= 10000 && t[2] - t[1] <= 12500, JSON.stringify(t));
+    check('a good answer ends the slow pace: the next look is 5 to 6 s after it, not 10 s or more', t.length === 3 && t[2] - t[1] >= 5000 && t[2] - t[1] <= 6250, JSON.stringify(t));
 }
 {   // the hand-off: START reaches the page; no more looks
     const env = await livePage({ search: '?room=k7m2xq', options: { stayHome: false } });
@@ -319,23 +319,23 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     check('nothing looks at /live while the Room shows', looksAtLive(env) === n);
     env.roomBar('rhome').click();
     await flush();
-    check('Home comes back: a look at once (the 10 s have gone)', env.screen() === 'home' && looksAtLive(env) === n + 1);
+    check('Home comes back: a look at once (the 5 s have gone)', env.screen() === 'home' && looksAtLive(env) === n + 1);
 }
 
-{   // the 10 s hold across the page's own comings and goings: the Room and back, a tab that hides and shows
+{   // the 5 s hold across the page's own comings and goings: the Room and back, a tab that hides and shows
     const env = await livePage();
-    await wait(env, 3000);
+    await wait(env, 1500);
     myRoom(env, ['Maya'], R.PRIVATE);
-    await wait(env, 3000);
+    await wait(env, 1500);
     env.roomBar('rhome').click();
     await flush();
-    check('Home is back 6 s after the look: no look yet (10 s must have gone since the last one)', env.screen() === 'home' && looksAtLive(env) === 1, looksAtLive(env));
-    await wait(env, 2000);
+    check('Home is back 3 s after the look: no look yet (5 s must have gone since the last one)', env.screen() === 'home' && looksAtLive(env) === 1, looksAtLive(env));
+    await wait(env, 1000);
     env.hide(true); env.hide(false);
     await flush();
-    check('... nor for a tab that hides and shows at 8 s', looksAtLive(env) === 1, looksAtLive(env));
-    await wait(env, 3500);
-    check('... the look comes when the 10 s have gone (once, not once for each coming back)', looksAtLive(env) === 2, looksAtLive(env));
+    check('... nor for a tab that hides and shows at 4 s', looksAtLive(env) === 1, looksAtLive(env));
+    await wait(env, 1700);
+    check('... the look comes when the 5 s have gone (once, not once for each coming back)', looksAtLive(env) === 2, looksAtLive(env));
 }
 {   // one look at a time: a look that is not over is not asked a second time, whatever comes back to Home meanwhile
     const site = R.fakeSite(); site.live.reject = false; site.live.hang = true;
@@ -353,21 +353,21 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     const site = R.fakeSite(); site.live.reject = false; site.live.status = 404; site.live.body = { error: 'not found' };
     const env = await page({ site, options: { popover: false } });
     check('(the first look is the 404)', looksAtLive(env) === 1);
-    await wait(env, 3000);
+    await wait(env, 1500);
     myRoom(env, ['Maya'], R.PRIVATE);
-    await wait(env, 12000);
+    await wait(env, 6000);
     env.roomBar('rhome').click();
     await flush();
-    check('Home is back 15 s after a failed look: no look (a failure waits 20 s, not 10)', env.screen() === 'home' && looksAtLive(env) === 1, looksAtLive(env));
+    check('Home is back 7.5 s after a failed look: no look (a failure waits 10 s, not 5)', env.screen() === 'home' && looksAtLive(env) === 1, looksAtLive(env));
     env.hide(true); env.hide(false);
     await flush();
     check('... nor for a tab that shows again', looksAtLive(env) === 1, looksAtLive(env));
-    await wait(env, 6000);
-    check('... it comes when the 20 s have gone', looksAtLive(env) === 2, looksAtLive(env));
-    await wait(env, 25000);
-    check('... and a second failure waits 40 s: nothing 25 s after it', looksAtLive(env) === 2, looksAtLive(env));
+    await wait(env, 3000);
+    check('... it comes when the 10 s have gone', looksAtLive(env) === 2, looksAtLive(env));
+    await wait(env, 12000);
+    check('... and a second failure waits 20 s: nothing 12 s after it', looksAtLive(env) === 2, looksAtLive(env));
 }
-{   // the 10 s are counted from the END of a look: a look that takes 7 s holds the next one back until 10 s after its end
+{   // the 5 s are counted from the END of a look: a look that takes 7 s holds the next one back until 5 s after its end
     const site = R.fakeSite(); site.live.reject = false; site.live.defer = true; site.live.body = answer(SAMPLE);
     const env = await page({ site, options: { popover: false } });
     await wait(env, 7000);
@@ -378,9 +378,46 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     check('(it ended 3 s ago: 10 s after its start)', liveRows(env).length === 2 && looksAtLive(env) === 1, looksAtLive(env));
     env.hide(true); env.hide(false);
     await flush();
-    check('a tab that shows again 10 s after the START of a look and 3 s after its END asks nothing (the 10 s run from the end)', looksAtLive(env) === 1, looksAtLive(env));
-    await wait(env, 8500);
-    check('... the next look comes 10 to 12 s after the end', looksAtLive(env) === 2, looksAtLive(env));
+    check('a tab that shows again 10 s after the START of a look and 3 s after its END asks nothing (the 5 s run from the end)', looksAtLive(env) === 1, looksAtLive(env));
+    await wait(env, 3000);
+    check('... the next look comes 5 to 6 s after the end', looksAtLive(env) === 2, looksAtLive(env));
+}
+{   // a match whose room has just started it (no turn run) says "Starting..."; the clock comes with its first turn; a screen reader is told too
+    const starting = LIVE('TREASURE-20261109-120000Z', { turns: 0, seconds: 0, players: ['Green (Ann)', 'Red (Cy)'] });
+    const youngest = LIVE('ISLANDS-20261109-115900Z', { map: 'ISLANDS.LVL', turns: 20, seconds: 1, players: ['Blue (Dee)', 'Black (Eve)'] });
+    same('a match with turns 0 is starting; one with a turn or more, one with no turns in its answer and one whose turns are not 0 as a number are not', [0, 1, undefined, null, '0', '', false, -0].map((t) => Games.liveOf(LIVE('A-20261109-120000Z', { turns: t, seconds: undefined }), RULES0).starting),
+        [true, false, false, false, false, false, false, true]);
+    const env = await livePage({ rows: [starting, youngest] });
+    same('the row of a match that has run no turn says it is starting (and the next one has its clock)', liveRows(env).map((li) => first(li, 'glen').textContent), ['Starting\u2026', '0:01 so far']);
+    same('... and a screen reader is told the same', liveRows(env).map((li) => watchOf(li).getAttribute('aria-label')), ['Watch the match on Treasure, Ann, Cy, Starting\u2026', 'Watch the match on Islands, Dee, Eve, 0:01 so far']);
+    check('... with Watch and the Live mark as for any match', liveRows(env).every((li) => first(li, 'glive-mark').textContent === 'Live' && watchOf(li).textContent === 'Watch'));
+    env.site.live.body = answer([Object.assign({}, starting, { turns: 40, seconds: 2 }), youngest]);
+    await wait(env, 6200);
+    same('the first turns have run: the row has its clock, in the row that is still there', liveRows(env).map((li) => first(li, 'glen').textContent), ['0:02 so far', '0:01 so far']);
+}
+{   // a room that is gone from the list may have started its match: /live is looked at in 1.5 s, not at the next 5 s; a room that came, a failed look and an unchanged list bring nothing forward
+    const room = (code, host) => row(code, host);
+    const look = async (what, mutate, expectSoon) => {
+        const site = R.fakeSite(); site.live.reject = false; site.live.defer = true; site.live.body = answer(SAMPLE);
+        site.body = listOf([room('k7m2xq', 'Pebble'), room('p3d9ha', 'Fern')]);
+        const env = await page({ site, options: { popover: false } });
+        await wait(env, 4000);
+        site.live.waiting.splice(0).forEach((release) => release());                // (the first look at /live ends at 4 s: the next one is due 5 s after that, at 9 s)
+        await flush();
+        mutate(site);
+        await wait(env, 2600);                                                       // (the list is looked at again at 5 to 6 s)
+        await wait(env, 2300);
+        site.live.waiting.splice(0).forEach((release) => release());
+        await flush();
+        check(what + (expectSoon ? ': /live is looked at before the next regular look (at 9 s)' : ': nothing is brought forward'), expectSoon ? looksAtLive(env) === 2 : looksAtLive(env) === 1, looksAtLive(env));
+        return env;
+    };
+    await look('a room of the list has gone', (site) => { site.body = listOf([room('p3d9ha', 'Fern')]); }, true);
+    await look('every room has gone', (site) => { site.body = listOf([]); }, true);
+    await look('a room has come', (site) => { site.body = listOf([room('k7m2xq', 'Pebble'), room('p3d9ha', 'Fern'), room('m4pl33', 'Maple')]); }, false);
+    await look('the list is the same', () => {}, false);
+    await look('a room is replaced by another (one has gone)', (site) => { site.body = listOf([room('k7m2xq', 'Pebble'), room('m4pl33', 'Maple')]); }, true);
+    await look('the look at the list fails (an empty list that is no answer)', (site) => { site.status = 503; }, false);
 }
 {   // the focus on a Watch stays when the rows are made again
     const env = await livePage();

@@ -6,7 +6,7 @@
 //   entry), picker (the map list's script is loaded too), noWebSocket, WebSocket, realTime, noHome (without web/home/home.js: the page says that it could not load all of
 //   its parts), label (the site label that the Dockerfile stamps into the footer, as a labelled build has it: Home is the same either way), win (an object: more of the window: matchMedia, MutationObserver), popover (the Games list is mounted with no dock: the popover under the Games button, which Home itself never asks for), stayHome (the page opens on Home and nobody presses My room: without it, a plain visit presses My room, as a person does, so that the checks of the room itself have a room),
 //   fakeClock (Date.now() of the scripts that the page loads is the fake clock's: env.advance(ms) moves it, so the pace of the client's requests and the waits of web/home/games.js follow the clock that the
-//   timers follow), lazy (what the page loads after its first paint, web/home/games.js and games.css: true loads them when the page asks, which is when env.advance(0) runs the page's own
+//   timers follow), lazy (what the page loads after its first paint, web/home/games.js, games.css, alerts.js and alerts.css: true loads them when the page asks, which is when env.advance(0) runs the page's own
 //   timer; without it nothing comes, as a page whose script is slow; 'script': the script fails to load; an object: what the script puts on the window, for a script that is broken). env.hide(true | false) hides the tab or shows it (visibilitychange).
 // Used by tests/scripts/web_name_check.js (the page's rules, its name card, its room), tests/scripts/web_home_screen_check.js (Home and the Room) and tests/scripts/web_lobby_server_check.js.
 'use strict';
@@ -203,7 +203,7 @@ function runLobby(search, stored, options) {
             if (options.copyResult === 'throws') throw new Error('not allowed');
             return options.copyResult !== false;
         },
-        hidden: false, listeners: {}, capturing: {},
+        hidden: false, title: 'Ants (1998)', hasFocus() { return !doc.hidden; }, listeners: {}, capturing: {},
         addEventListener(t, fn, capture) { const book = capture ? doc.capturing : doc.listeners; (book[t] = book[t] || []).push(fn); },
         removeEventListener() {},
     };
@@ -286,7 +286,7 @@ function runLobby(search, stored, options) {
         : { WebSocket: options.noWebSocket ? undefined : options.WebSocket || FakeSocket, setTimeout: setTimer, clearTimeout: clearTimer, Date: options.fakeClock ? { now: () => CLOCK_START + env.clock } : undefined, Math: options.fakeClock ? fakeMath : undefined };
     env.scope = scope;                                   // (what a script of the page is run with)
     // what the page loads after its first paint (a script and a style that it appends to the document: the page puts them in the head, else in the body, which is where this fake has them): of the files of the
-    // Games list (home/games.js, home/games.css) the file is run when it is appended and its onload is called, as a browser does a moment later; any other file stays an element that the page appended (the chat
+    // Games list and of the alerts (home/games.js, home/games.css, home/alerts.js, home/alerts.css) the file is run when it is appended and its onload is called, as a browser does a moment later; any other file stays an element that the page appended (the chat
     // dock's checks run those themselves)
     env.lazyLoads = [];
     env.lazyErrors = [];
@@ -294,7 +294,7 @@ function runLobby(search, stored, options) {
     doc.body.appendChild = function (c) {
         plainAppend(c);
         const file = String(c.tagName === 'script' ? c.src : c.tagName === 'link' ? c.href : '');
-        if (file !== 'home/games.js' && file !== 'home/games.css') return c;
+        if (['home/games.js', 'home/games.css', 'home/alerts.js', 'home/alerts.css'].indexOf(file) === -1) return c;
         env.lazyLoads.push(file);
         if (!options.lazy) return c;
         if (c.tagName === 'script') {
@@ -306,6 +306,7 @@ function runLobby(search, stored, options) {
         return c;
     };
     win.AntsRejoinKey = loadFile('rejoin_key.js', scope).AntsRejoinKey;
+    win.AntsAlertCore = loadFile('alert_core.js', scope).AntsAlertCore;       // (a script tag of the page: the switches, the tab alert and the sound table of web/alert_core.js)
     win.AntsLobbyRules = loadFront('lobby_rules.js', scope).AntsLobbyRules;
     win.AntsPlayerName = loadFront('player_name.js', scope).AntsPlayerName;
     win.AntsLobbyNet = loadFront('lobby_net.js', scope).AntsLobbyNet;

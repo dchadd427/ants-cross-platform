@@ -552,11 +552,12 @@ void test_hud_anchoring() {
             const UIButton* w;
             bool right;
             bool bottom;
+            int32_t left{0};            // how far the wide picture puts it left of its right anchored place: the three buttons of the top bar stand 8 pixels left of it, for the Fullscreen button
         };
         const Item items[] = {
-            {"Help", &classic.help_button(), &wide.help_button(), true, false},
-            {"Options", &classic.options_button(), &wide.options_button(), true, false},
-            {"Quit", &classic.quit_button(), &wide.quit_button(), true, false},
+            {"Help", &classic.help_button(), &wide.help_button(), true, false, 8},
+            {"Options", &classic.options_button(), &wide.options_button(), true, false, 8},
+            {"Quit", &classic.quit_button(), &wide.quit_button(), true, false, 8},
             {"the move pedestal", &classic.get_move_pedestal_button(), &wide.get_move_pedestal_button(), true, false},
             {"the ability pedestal", &classic.get_ability_pedestal_button(), &wide.get_ability_pedestal_button(), true, false},
             {"Stop", &classic.stop_button(), &wide.stop_button(), true, false},
@@ -568,7 +569,7 @@ void test_hud_anchoring() {
             {"the quit dialog's No", &classic.quit_no_button(), &wide.quit_no_button(), false, false},
         };
         for (const Item& item : items) {
-            const LayoutRect want = rect_of(*item.c).moved(item.right ? dx : 0, item.bottom ? dy : 0);
+            const LayoutRect want = rect_of(*item.c).moved((item.right ? dx : 0) - item.left, item.bottom ? dy : 0);
             check_rect(rect_of(*item.w), want, where + item.name + (item.right ? (item.bottom ? " (right and bottom anchored)" : " (right anchored)") : " (a picture of the original's screen: stays)"));
             if (item.right) check(rect_of(*item.w).right() <= shape.w && rect_of(*item.w).bottom() <= shape.h, where + item.name + " is on the screen");
         }
@@ -599,7 +600,7 @@ void test_hud_layout_survives_init() {
     hud.set_layout(layout);
     const LayoutRect help = rect_of(hud.help_button());
     const LayoutRect send_to = rect_of(hud.send_to_button());
-    check(help.x == 796 && send_to.x == 852 && send_to.y == 503, "the layout is in place");
+    check(help.x == 788 && send_to.x == 852 && send_to.y == 503, "the layout is in place");
     hud.init(1);
     check(hud.layout() == layout, "init keeps the layout");
     check_rect(rect_of(hud.help_button()), help, "init(1): Help is where the layout put it");

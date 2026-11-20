@@ -74,15 +74,15 @@
   {
    "id": "topbar_menu_waits_for_the_chip",
    "file": "web/home/home.css",
-   "old": ".hbar .hlogin[hidden] ~ .hmenu { margin-left: auto; }",
+   "old": ".hbar .hlogin[hidden] ~ .al-bell:not([hidden]) { margin-left: auto; }",
    "new": "",
    "test": "node tests/scripts/web_home_topbar_browser.js"
   },
   {
    "id": "topbar_sideways_chip_column_not_kept",
    "file": "web/home/home.css",
-   "old": "repeat(2, minmax(0, 1fr)) 46px auto;",
-   "new": "repeat(2, minmax(0, 1fr)) auto auto;",
+   "old": "repeat(2, minmax(0, 1fr)) 46px 46px auto;",
+   "new": "repeat(2, minmax(0, 1fr)) auto auto auto;",
    "test": "node tests/scripts/web_home_topbar_browser.js"
   },
   {

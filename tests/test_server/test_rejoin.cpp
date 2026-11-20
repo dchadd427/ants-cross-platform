@@ -3,6 +3,9 @@
 // is stopped and started again over its records, a machine that starts from nothing with the key it was given, the refusals of the server and the vote of the others: what the player's machine
 // does by itself, and what it reports to its screens (PauseInfo, the events) and to the place that keeps the key (set_on_key, set_on_forget_key).
 #include "rejoin_fixtures.hpp"
+#include "live_fixtures.hpp"
+#include "ants_server/control.hpp"
+
 
 void run_way_back_tests() {
     TEST_CASE("RJ1.1 A Link Cut In The Middle Of A Match: The NetGame Comes Back By Itself (A New Link, The Hello With Its Key, The Turns It Lacks), The Match Goes On, And Both Machines And The Referee End In The Same State") {
@@ -1994,6 +1997,60 @@ void run_way_back_tests() {
         const RoomStatus end = w.status("RJ-28");
         ASSERT_TRUE(end.state == RoomState::Finished && end.referee_hash != 0);
         ASSERT_TRUE(all_equal({&a, &b2}) && a.sim.state_hash().total == end.referee_hash);
+    } TEST_END();
+
+    TEST_CASE("RJ1.29 A Match Of Two People Stays Shown Late Through A Cut Link, The Pause, The Catch-Up And The Rejoin (The Delay Was Counted From The Seats When The Match Began): At Every Step The Snapshot Of The Public Live Door Ends At (Turns Run - Delay) And Holds No Order From After It, And The Person Who Came Back Changes Nothing") {
+        ServerLimits limits;
+        limits.live_delay_s = 10;                                                        // (200 turns: the same code as 30 s, in less time)
+        World w("rj-live", limits);
+        ASSERT_TRUE(w.server.start(w.now));
+        ReplayConfig config;
+        config.dir = (fs::path(temp_dir_for("rj-live-replays")) / "replays").string();
+        config.game_version = "v0.0.0-test";
+        config.build_id = "abc123";
+        config.min_free_bytes = 0;
+        config.clock_s = [&w]() { return static_cast<int64_t>(1791469929) + static_cast<int64_t>(w.now / 1000); };       // (the world's clock: one second of the board is a second of the test)
+        std::string why;
+        ASSERT_TRUE(w.server.mgr->enable_replays(config, false, why));
+        ASSERT_TRUE(w.server.mgr->create_room(held_spec("RJ-LIVE"), w.server_now()).ok);
+        Machine& a = w.join("Ann", "RJ-LIVE");
+        Machine& b = w.join("Bob", "RJ-LIVE");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 12000 + kPre));
+        w.run(25000);
+        ASSERT_TRUE(w.status("RJ-LIVE").state == RoomState::Running && w.status("RJ-LIVE").ticks > 400);
+        uint32_t looks = 0;
+        // what the public door hands out now: the one snapshot of the one match on the board, checked every time it is asked for
+        const auto ask = [&]() {
+            w.run(1000);                                                                 // (a new second: a new snapshot)
+            ctl::HttpRequest rq;
+            rq.method = "GET";
+            rq.path = "/live";
+            ctl::JsonValue list;
+            ASSERT_TRUE(ctl::parse_json(handle_public_replays(*w.server.mgr, rq, w.server_now()).body, list, nullptr));
+            ASSERT_EQ(list.get("live").size(), size_t{1});
+            rq.path = "/live/" + list.get("live").at(0).get("id").str();
+            const ctl::HttpResponse r = handle_public_replays(*w.server.mgr, rq, w.server_now());
+            uint32_t hn = 0, hs = 0, hd = 0;
+            ASSERT_TRUE(r.status == 200 && live_header(r, hn, hs, hd));
+            ASSERT_EQ(hd, 200u);                                                         // (the delay of the match, through the pause and the rejoin)
+            ASSERT_EQ(hs, hn > hd ? hn - hd : 0u);
+            replay::Replay shown;
+            std::string error;
+            ASSERT_TRUE(replay::decode(reinterpret_cast<const uint8_t*>(r.body.data()), r.body.size(), shown, error) && !shown.complete && shown.total_turns == hs);
+            for (const replay::TimedCommand& tc : shown.commands) ASSERT_TRUE(tc.turn < hs);
+            ++looks;
+        };
+        ask();
+        ASSERT_TRUE(w.server.cut_newest());                                              // Bob's cable
+        ASSERT_TRUE(w.run_until([&]() { return w.status("RJ-LIVE").paused; }, 2000));
+        ask();                                                                           // (the match is held for everybody: the snapshot stands where it was, still cut)
+        ASSERT_TRUE(w.run_until([&]() { return !w.status("RJ-LIVE").paused && w.status("RJ-LIVE").rejoins == 1; }, 20000));
+        ask();                                                                           // (Bob is back, caught up)
+        w.run(3000);
+        ask();
+        ask();
+        ASSERT_EQ(looks, 5u);
+        ASSERT_TRUE(w.status("RJ-LIVE").state == RoomState::Running && w.status("RJ-LIVE").rejoins == 1);
     } TEST_END();
 }
 

@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstring>
+#include <limits>
 
 namespace ants::app {
 
@@ -139,13 +140,14 @@ constexpr std::array<uint8_t, 29> kLengthExtra = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 
 constexpr std::array<uint16_t, 30> kDistBase = {1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577};
 constexpr std::array<uint8_t, 30> kDistExtra = {0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13};
 
-bool inflate_codes(Bits& bits, const Huffman& lit, const Huffman& dist, std::vector<uint8_t>& out, size_t limit) {
+bool inflate_codes(Bits& bits, const Huffman& lit, const Huffman& dist, std::vector<uint8_t>& out, size_t limit, size_t stop) {
     for (;;) {
         const int sym = lit.decode(bits);
         if (sym < 0 || bits.overrun()) return false;
         if (sym < 256) {
             if (out.size() >= limit) return false;
             out.push_back(static_cast<uint8_t>(sym));
+            if (out.size() >= stop) return true;
         } else if (sym == 256) {
             return true;
         } else {
@@ -158,6 +160,7 @@ bool inflate_codes(Bits& bits, const Huffman& lit, const Huffman& dist, std::vec
             if (bits.overrun() || d > out.size() || out.size() + len > limit) return false;
             const size_t from = out.size() - d;
             for (size_t i = 0; i < len; ++i) out.push_back(out[from + i]);     // (the copy may overlap itself: a run)
+            if (out.size() >= stop) return true;
         }
     }
 }
@@ -223,7 +226,10 @@ int paeth(int a, int b, int c) {
 
 }  // namespace
 
-bool inflate_raw(const uint8_t* data, size_t size, std::vector<uint8_t>& out, size_t limit) {
+namespace {
+
+/// Inflates until the stream ends, or (when `stop` is smaller than the stream) until `out` holds `stop` bytes or more
+bool inflate_until(const uint8_t* data, size_t size, std::vector<uint8_t>& out, size_t limit, size_t stop) {
     Bits bits(data, size);
     out.clear();
     for (;;) {
@@ -247,15 +253,27 @@ bool inflate_raw(const uint8_t* data, size_t size, std::vector<uint8_t>& out, si
             Huffman lit;
             Huffman dist;
             if (type == 1 ? !fixed_tables(lit, dist) : !dynamic_tables(bits, lit, dist)) return false;
-            if (bits.overrun() || !inflate_codes(bits, lit, dist, out, limit)) return false;
+            if (bits.overrun() || !inflate_codes(bits, lit, dist, out, limit, stop)) return false;
         } else {
             return false;
         }
+        if (out.size() >= stop) return !bits.overrun();
         if (final_block != 0) return !bits.overrun();
     }
 }
 
-bool decode_png_rgba(const uint8_t* data, size_t size, DecodedImage& out) {
+}  // namespace
+
+bool inflate_raw(const uint8_t* data, size_t size, std::vector<uint8_t>& out, size_t limit) {
+    return inflate_until(data, size, out, limit, std::numeric_limits<size_t>::max());
+}
+
+bool inflate_raw_prefix(const uint8_t* data, size_t size, std::vector<uint8_t>& out, size_t want) {
+    constexpr size_t kOvershoot = 65536 + 258;                  // (the most that the last block or copy can add past `want`)
+    return inflate_until(data, size, out, want + kOvershoot, want) && out.size() >= want;
+}
+
+bool decode_png_rgba(const uint8_t* data, size_t size, DecodedImage& out, int32_t rows) {
     out = DecodedImage{};
     static constexpr uint8_t kSignature[8] = {0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a};
     if (data == nullptr || size < 8 + 25 || std::memcmp(data, kSignature, 8) != 0) return false;
@@ -285,15 +303,17 @@ bool decode_png_rgba(const uint8_t* data, size_t size, DecodedImage& out) {
     constexpr uint64_t kMaxPixels = 32u * 1024u * 1024u;       // (the sheets are a few million; a file of another size is not ours)
     if (!header || width == 0 || height == 0 || static_cast<uint64_t>(width) * height > kMaxPixels || idat.size() < 6) return false;
     if ((idat[0] & 0x0f) != 8 || ((idat[0] << 8) | idat[1]) % 31 != 0 || (idat[1] & 0x20) != 0) return false;        // zlib: deflate, a good header, no preset dictionary
+    if (rows < 0 || (rows > 0 && static_cast<uint32_t>(rows) > height)) return false;
+    const uint32_t take = rows > 0 ? static_cast<uint32_t>(rows) : height;         // (the rows to read: all of them, or the first `rows`)
     const size_t stride = static_cast<size_t>(width) * 4u;
-    const size_t want = (stride + 1) * height;
+    const size_t want = (stride + 1) * take;
     std::vector<uint8_t> raw;
     raw.reserve(want);
-    if (!inflate_raw(idat.data() + 2, idat.size() - 2, raw, want) || raw.size() != want) return false;
+    if (take == height ? (!inflate_raw(idat.data() + 2, idat.size() - 2, raw, want) || raw.size() != want) : !inflate_raw_prefix(idat.data() + 2, idat.size() - 2, raw, want)) return false;
     out.width = static_cast<int32_t>(width);
-    out.height = static_cast<int32_t>(height);
-    out.rgba.assign(stride * height, 0);
-    for (uint32_t y = 0; y < height; ++y) {
+    out.height = static_cast<int32_t>(take);
+    out.rgba.assign(stride * take, 0);
+    for (uint32_t y = 0; y < take; ++y) {
         const uint8_t filter = raw[y * (stride + 1)];
         const uint8_t* in = raw.data() + y * (stride + 1) + 1;
         uint8_t* row = out.rgba.data() + y * stride;

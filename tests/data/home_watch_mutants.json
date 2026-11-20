@@ -9,10 +9,10 @@
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
-   "id": "live_looks_come_faster_than_10_s",
+   "id": "live_looks_come_faster_than_5_s",
    "file": "web/home/games.js",
-   "old": "var LIVE_EVERY = 10000, LIVE_CAP = 300000;",
-   "new": "var LIVE_EVERY = 2000, LIVE_CAP = 300000;",
+   "old": "var LIVE_EVERY = 5000, LIVE_SOON = 1500, LIVE_CAP = 300000;",
+   "new": "var LIVE_EVERY = 1000, LIVE_SOON = 1500, LIVE_CAP = 300000;",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
@@ -263,8 +263,8 @@
   {
    "id": "live_backoff_is_not_held_when_the_list_shows_again",
    "file": "web/home/games.js",
-   "old": "(liveFails ? liveDelay(liveFails, 0) : LIVE_EVERY)",
-   "new": "LIVE_EVERY",
+   "old": "(liveFails ? liveDelay(liveFails, 0) : soon === true ? LIVE_SOON : LIVE_EVERY)",
+   "new": "(soon === true ? LIVE_SOON : LIVE_EVERY)",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
@@ -431,22 +431,22 @@
   {
    "id": "live_tag_on_every_match",
    "file": "web/home/games.js",
-   "old": "who: who, mode187: raw.mode === '187' };",
-   "new": "who: who, mode187: true };",
+   "old": "who: who, mode187: raw.mode === '187', starting: raw.turns === 0 };",
+   "new": "who: who, mode187: true, starting: raw.turns === 0 };",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
    "id": "live_tag_on_no_match",
    "file": "web/home/games.js",
-   "old": "who: who, mode187: raw.mode === '187' };",
-   "new": "who: who, mode187: false };",
+   "old": "who: who, mode187: raw.mode === '187', starting: raw.turns === 0 };",
+   "new": "who: who, mode187: false, starting: raw.turns === 0 };",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
    "id": "live_tag_on_any_word_that_is_not_highest_score",
    "file": "web/home/games.js",
-   "old": "mode187: raw.mode === '187' };",
-   "new": "mode187: typeof raw.mode === 'string' && raw.mode !== 'highest-score' };",
+   "old": "mode187: raw.mode === '187', starting: raw.turns === 0 };",
+   "new": "mode187: typeof raw.mode === 'string' && raw.mode !== 'highest-score', starting: raw.turns === 0 };",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
@@ -483,6 +483,41 @@
    "old": "line-height: 16px; text-transform: uppercase; white-space: nowrap; color: #d8c9ff;",
    "new": "line-height: 26px; text-transform: uppercase; white-space: nowrap; color: #d8c9ff;",
    "test": "node tests/scripts/web_home_watch_browser.js"
+  },
+  {
+   "id": "live_row_never_says_starting",
+   "file": "web/home/games.js",
+   "old": "starting: raw.turns === 0 };",
+   "new": "starting: false };",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_row_says_starting_for_every_match",
+   "file": "web/home/games.js",
+   "old": "starting: raw.turns === 0 };",
+   "new": "starting: true };",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_row_says_starting_for_a_match_that_has_run",
+   "file": "web/home/games.js",
+   "old": "starting: raw.turns === 0 };",
+   "new": "starting: raw.turns <= 20 };",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_look_is_not_brought_forward_when_a_room_has_gone",
+   "file": "web/home/games.js",
+   "old": "})) pollLive(true);",
+   "new": "})) pollLive();",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_look_is_brought_forward_when_a_room_has_come",
+   "file": "web/home/games.js",
+   "old": "before.some(function (r) { return !rows.some(function (n) { return n.code === r.code; }); })",
+   "new": "rows.some(function (n) { return !before.some(function (r) { return n.code === r.code; }); })",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   }
  ]
 }

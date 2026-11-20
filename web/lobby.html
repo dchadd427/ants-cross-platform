@@ -353,6 +353,7 @@
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
 
+<script src="alert_core.js"></script>
 <script src="rejoin_key.js"></script>
 <script src="front/map_maker_link.js"></script><script src="front/lobby_rules.js"></script>
 <script src="front/lobby_net.js"></script><script src="front/player_name.js"></script>
@@ -862,7 +863,8 @@
         }
         function onJoined(e) {
             if (!model || e.seat === model.you) return;
-            say(e.name + ' joined as ' + COLORS[e.seat].name + '.');
+            var text = e.name + ' joined as ' + COLORS[e.seat].name + '.';
+            if (!Home.alert('join', { name: e.name, text: text })) say(text);      // (Home's own alert, web/home/alerts.js, takes the place of the toast on Home, and the tab's title blinks in the background; the Room keeps this toast)
             glow([e.seat]);
         }
         function onStatus(status) {

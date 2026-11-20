@@ -8,6 +8,7 @@
 #include "ants_app/config_store.hpp"
 #include "ants_app/renderer.hpp"
 #include "ants_app/screen_button.hpp"
+#include "ants_app/hud_art.hpp"
 #include "ants_app/screen_controls.hpp"
 #include "ants_assets/asset_archive.hpp"
 
@@ -97,8 +98,9 @@ public:
     /// Called with the setting that a callback has just changed (the owner applies and stores it)
     void set_on_change(std::function<void(OptionSetting)> cb) { on_change_ = std::move(cb); }
 
-    /// Draws the window composite and its controls; `now_ms` drives the caret
-    void render(IRenderer& renderer, const assets::AssetArchive& assets, uint32_t now_ms);
+    /// Draws the window composite and its controls; `now_ms` drives the caret. With `art` (a HUD art set that has the options window, window_art::Pieces::options) the window is drawn in the new look: the
+    /// panel, the lettering, the controls and the fields' bezels come from the set in the place of the original's pieces, and the original's dim ring is not drawn (the caller lays the veil)
+    void render(IRenderer& renderer, const assets::AssetArchive& assets, uint32_t now_ms, const hud_art::Art* art = nullptr);
 
     // The controls (read-only, for the tests and the drawing)
     const ScreenButton& return_button() const noexcept { return return_; }
@@ -114,6 +116,7 @@ private:
     void choose_chat(bool on);
     void choose_quick_help(bool on);
     void draw_edit(IRenderer& renderer, const ScreenEdit& edit, uint32_t now_ms) const;
+    void render_new(IRenderer& renderer, const hud_art::Art& art, uint32_t now_ms);
 
     OptionsState state_{};
     bool open_{false};
@@ -125,6 +128,8 @@ private:
     ScreenToggle help_off_{HELP_OFF_X, TOGGLE_Y, TOGGLE_W, TOGGLE_H};
     std::array<ScreenEdit, 4> edits_{};
     std::function<void(OptionSetting)> on_change_;
+    int32_t pointer_x_{-1000};                         // where the pointer was at the last move (the window's own numbers): the thumb under it shows its hover picture in the new look
+    int32_t pointer_y_{-1000};
 };
 
 }  // namespace ants::app

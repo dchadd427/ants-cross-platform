@@ -1,0 +1,45 @@
+/* The alerts of the front page (web/home/alerts.js, docs/HOME_SCREEN.md "Alerts"): the sheet that the Menu opens, the Menu's row, and the join toast. The colors, .btn and .gshade are the page's own (web/lobby.html, web/home/games.css). Every target is at least 44 px. */
+.hmenubox .mitem .al-ico { flex: none; width: 22px; height: 22px; margin-right: 12px; fill: none; stroke: #a8cfc0; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.al-card { box-sizing: border-box; width: min(540px, 100%); max-height: 100%; overflow-y: auto; overscroll-behavior: contain; padding: 16px 20px 18px; text-align: left; color: var(--cream); background: #050b0e;
+    border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+.al-top { display: flex; align-items: center; gap: 10px; margin: 0 0 4px; }
+.al-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 26px; font-weight: 500; line-height: 1.2; overflow-wrap: anywhere; }
+.al-x { flex: none; width: 46px; min-width: 46px; height: 46px; min-height: 46px; padding: 0; font-size: 30px; line-height: 1; }
+.al-x .al-ico { display: block; width: 22px; height: 22px; margin: auto; fill: none; stroke: var(--cream); stroke-width: 2; stroke-linecap: round; }
+.al-h { margin: 16px 0 2px; font-size: 13px; line-height: 1.3; letter-spacing: .09em; text-transform: uppercase; color: #a8cfc0; }
+.al-lead { margin: 0 0 4px; font-size: 15px; line-height: 1.4; color: #b9d9cc; }
+.al-line { display: flex; align-items: center; gap: 14px; box-sizing: border-box; width: 100%; min-height: 58px; padding: 8px 0; text-align: left; color: inherit; font: inherit; background: none; border: 0; border-bottom: 1px solid #17382f; cursor: pointer; }
+.al-line:last-of-type { border-bottom: 0; }
+.al-line:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.al-tx { flex: 1 1 auto; min-width: 0; }
+.al-t, .al-s { display: block; overflow-wrap: anywhere; }
+.al-t { font-size: 17px; line-height: 1.25; }
+.al-s { margin-top: 2px; font-size: 14px; line-height: 1.35; color: #a8cfc0; }
+.al-sw { flex: none; position: relative; width: 56px; height: 34px; border-radius: 17px; background: #0b1117; border: 2px solid #3f6b5d; box-sizing: border-box; }
+.al-sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #8fb3a6; }
+.al-line.on .al-sw { background: var(--teal); border-color: var(--frame-hi); }
+.al-line.on .al-sw::after { left: 25px; background: var(--cream); }
+.al-toast { box-sizing: border-box; position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 65; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; width: max-content; max-width: min(560px, calc(100vw - 24px)); padding: 2px 6px 2px 14px;
+    transform: translateX(-50%); animation: al-in .2s; color: var(--cream); background: #050b0e; border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+.al-toast[hidden] { display: none; }
+.al-sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.al-toast span { flex: 1 1 120px; min-width: 0; }
+.al-toast .al-btns { display: flex; gap: 10px; margin-left: auto; }
+.al-toast .btn { min-height: 44px; }
+@keyframes al-in { from { opacity: 0; transform: translate(-50%, 10px); } }
+@media (prefers-reduced-motion: reduce) { .al-toast { animation: none; } }
+.al-toast .al-ico { flex: none; width: 24px; height: 24px; margin-left: 4px; fill: none; stroke: #7fd3a8; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+@media (forced-colors: active) { .al-sw { border-color: CanvasText; } .al-line.on .al-sw { background: Highlight; } .al-sw::after { background: CanvasText; } .al-line:focus-visible { outline-color: Highlight; } }
+@media (max-width: 700px) { .al-title { font-size: 24px; } }
+
+/* The bell in Home's top bar: right beside the Menu's button, on its left, in every state of the bar and at every width (the script puts it before the Menu's button, and the bar's own layout, web/home/home.css, places it: the Menu stays in the corner, a chip comes before the bell). 46 px targets, as the Menu's. */
+.hbar .al-bell { position: relative; flex: none; min-width: 46px; padding: 0; }
+.hbar .al-bell[hidden] { display: none; }
+.hbar .al-bell .al-ico { display: block; width: 26px; height: 26px; margin: auto; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.hbar .al-bell[data-state="on"] .al-ico path:first-child { fill: var(--cream); }
+.hbar .al-bell[data-state="blocked"] { color: #ffc9c1; background: #3a1216; border-color: #ff7a6b; }
+.hbar .al-bell[data-state="blocked"] .al-ico { color: #ffb3a8; }
+.al-mark { position: absolute; top: -3px; right: -3px; display: grid; place-items: center; width: 22px; height: 22px; box-sizing: border-box; color: #0c0805; background: var(--gold); border: 2px solid #050a08; border-radius: 50%; }
+.al-mark .al-ico { width: 13px; height: 13px; margin: 0; stroke-width: 3; }
+.al-mark.al-dotmark { width: 16px; height: 16px; }
+@media (forced-colors: active) { .al-mark { border-color: CanvasText; background: Highlight; } }

@@ -293,6 +293,17 @@ void Application::update_mouse_grab() {
 #endif
 }
 
+bool Application::fullscreen_now() const noexcept {
+#if defined(__EMSCRIPTEN__)
+    return page_fullscreen_;
+#else
+    if (config_.headless) return config_.fullscreen;          // (no real window to ask: what was asked for, which toggle_fullscreen keeps up to date)
+    if (window_ == nullptr) return false;
+    if ((SDL_GetWindowFlags(window_) & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != 0) return true;
+    return os_fullscreen(window_);                            // (a macOS fullscreen Space is the window's fullscreen too)
+#endif
+}
+
 bool Application::toggle_fullscreen() {
 #if defined(__EMSCRIPTEN__)
     return false;                                         // the page's own button does it (a browser asks for the fullscreen itself)

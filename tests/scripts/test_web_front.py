@@ -783,7 +783,7 @@ class ThePageUsesTheArt(unittest.TestCase):
 
     def test_nothing_is_loaded_from_another_site(self):
         scripts = re.findall(r'<script[^>]*\bsrc="([^"]*)"', self.page)
-        self.assertEqual(scripts, ["rejoin_key.js"] + ["front/" + name for name in SCRIPT_FILES] + ["shapes.js", "map_files.js", "home/home.js"])      # (the seat-key reader (web/rejoin_key.js), the folder's scripts, in this order, then the pages' table of the shapes (web/shapes.js) and the game page's file-fetching script (web/map_files.js, warm()), and no other)
+        self.assertEqual(scripts, ["alert_core.js", "rejoin_key.js"] + ["front/" + name for name in SCRIPT_FILES] + ["shapes.js", "map_files.js", "home/home.js"])      # (the seat-key reader (web/rejoin_key.js), the folder's scripts, in this order, then the pages' table of the shapes (web/shapes.js) and the game page's file-fetching script (web/map_files.js, warm()), and no other)
         self.assertEqual(len(re.findall(r"<script\b", self.page)), len(scripts) + 1)       # (and the one inline script that is the page's)
         self.assertNotRegex(self.page, r'<script[^>]*type="module"')
         for name in SCRIPT_FILES:

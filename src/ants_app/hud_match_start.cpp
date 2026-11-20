@@ -15,32 +15,19 @@ void HUD::render_match_start_modal(IRenderer& renderer, const assets::AssetArchi
         render_match_countdown(renderer, assets);
         return;
     }
-    using assets::ColorRGBA;
-
     // Start modal (Ants.exe 0x1017127): std_dialg at origin (100,100), one wrapped centred label (string 105) in the
     // rect (130,110) 240x160, footer (string 104) in (130,290) 240x20, animated worker portrait at (245,250).
     const int32_t mx = 100;
     const int32_t my = 100;
 
-    const auto* seq = assets.find_animation("std_dialg");
-    if (seq && !seq->subitems.empty()) {
-        const auto& frames = seq->subitems[0].frames;
-        for (size_t i = frames.size(); i-- > 0; ) {
-            renderer.draw_sprite(frames[i].sprite_index, mx + frames[i].dx, my + frames[i].dy);
-        }
-    } else {
-        renderer.fill_rect(mx, my, 320, 224, ColorRGBA{219, 75, 19, 255});
-        renderer.draw_rect(mx, my, 320, 224, ColorRGBA{36, 82, 77, 255});
-    }
-
-    // Dark slate text color #1F1733 (COLORREF 0x33171F)
-    const ColorRGBA text_color{31, 23, 51, 255};
+    // (the sentences are the dialogs' own ink, #1F1733: COLORREF 0x33171F)
+    draw_dialog_frame(renderer, assets);
 
     // Label: "Get ready to play!  You are the <Color> Ants." (string 105): the original's wrapped, centred label of 35 px letters in the box
     // (30, 10) 240 x 160 of the dialog (FUN_01017127: FUN_0102b0b5 wraps it, DrawTextA centres every line, the lines are one cell height apart)
     static const char* TEAM_NAMES[4] = {"Green", "Red", "Blue", "Black"};
     const std::string label = std::string("Get ready to play!  You are the ") + TEAM_NAMES[local_player_id_ % 4] + " Ants.";
-    draw_label(renderer, label, mx + 30, my + 10, 240, text_color, FontSize::Px35, true);
+    draw_dialog_sentence(renderer, assets, label, window_art::kGetReady, mx + 30, my + 10, 240, FontSize::Px35);
 
     // Animated portrait of the local color's worker ant (agst301: 12 frames, 1650 ms loop), anchor (245,250)
     renderer.set_hud_team(local_player_id_);
@@ -57,7 +44,7 @@ void HUD::render_match_start_modal(IRenderer& renderer, const assets::AssetArchi
     renderer.set_hud_team(0);
 
     // Footer: "Waiting for others..." (string 104): a centred label of 24 px letters in the box (30, 190) 240 x 20
-    draw_label(renderer, "Waiting for others...", mx + 30, my + 190, 240, text_color, FontSize::Px24, true);
+    draw_dialog_sentence(renderer, assets, "Waiting for others...", window_art::kWaiting, mx + 30, my + 190, 240, FontSize::Px24);
 }
 
 // The keys of the chat while the countdown card is up (protocol 21): the chat's own keys and nothing of the match. Backspace edits the line, Enter sends it (to the team when the player has an ally, as
@@ -88,8 +75,11 @@ bool HUD::handle_countdown_key(int32_t key, uint16_t mod, bool repeat) {
 // The countdown card (protocol 21, countdown_card.hpp): the "Get ready to play!" dialog of every match, bigger while the host holds the first turn for 30 s. The colors are the original's: the clay
 // orange of the dialog, the thin green frame, the dark violet letters (#1F1733), and the black boxes of the setup screens for the count and the colors.
 void HUD::render_match_countdown(IRenderer& renderer, const assets::AssetArchive& assets) {
+    if (art_ != nullptr && window_pieces(assets).countdown) {          // the new look: render_match_countdown_new (hud_windows.cpp)
+        render_match_countdown_new(renderer, assets);
+        return;
+    }
     using assets::ColorRGBA;
-    (void)assets;
     const CountdownCardLayout l = countdown_card_layout(layout_.view());
     const LayoutRect& c = l.card;
     const ColorRGBA clay{219, 75, 19, 255};
