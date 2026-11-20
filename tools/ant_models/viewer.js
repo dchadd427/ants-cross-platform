@@ -89,7 +89,7 @@
   out vec4 fragColor;
 
   vec3 applyNormalMap(vec3 N, vec3 pos, vec2 uv, out float slope) {
-    vec3 mapN = texture(u_normalTex, uv, -0.35).xyz * 2.0 - 1.0;
+    vec3 mapN = texture(u_normalTex, uv).xyz * 2.0 - 1.0;
     vec2 scaledXY = mapN.xy * u_normalScale;
     slope = length(scaledXY);
     mapN = normalize(vec3(scaledXY, max(mapN.z, 1e-4)));
@@ -145,17 +145,16 @@
     if (u_hasNormalTex == 1 && u_normalScale > 0.0) N = applyNormalMap(N, v_worldPos, v_uv, normSlope);
     vec3 V = u_isOrtho == 1 ? normalize(u_viewDir) : normalize(u_cameraPos - v_worldPos);
 
-    vec4 baseSample = texture(u_baseTex, v_uv, -0.35);
-    vec4 mrSample = texture(u_mrTex, v_uv, -0.35);
+    vec4 baseSample = texture(u_baseTex, v_uv);
+    vec4 mrSample = texture(u_mrTex, v_uv);
     float rough = clamp(u_roughness * mrSample.g, 0.05, 0.98);
     float met = clamp(u_metallic * mrSample.b, 0.0, 1.0);
-    vec3 texCol = u_hasNormalTex == 1 ? clamp(mix(vec3(0.84), baseSample.rgb, 1.22), 0.45, 1.12) : baseSample.rgb;
     float microCav = 1.0;
     if (u_hasNormalTex == 1) {
       float pitDepth = smoothstep(0.62, 0.98, mrSample.g);
-      microCav = clamp(1.0 - (pitDepth * 0.60 + clamp(normSlope, 0.0, 1.0) * 0.45) * mix(0.15, 0.08, met), 0.82, 1.0);
+      microCav = clamp(1.0 - (pitDepth * 0.60 + clamp(normSlope, 0.0, 1.0) * 0.45) * mix(0.03, 0.015, met), 0.94, 1.0);
     }
-    vec3 albedo = max(u_baseColor * texCol * microCav, 0.0);
+    vec3 albedo = max(u_baseColor * baseSample.rgb * microCav, 0.0);
 
     // Optical catchlights strictly on eyes & glass; satin chitin/cloth/metal use normal + MR maps
     float coatW = u_isOptical == 1 ? 0.26 * (1.0 - smoothstep(0.18, 0.44, rough)) : 0.0;
