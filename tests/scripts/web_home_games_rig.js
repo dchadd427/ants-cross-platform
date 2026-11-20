@@ -82,7 +82,7 @@ const classes = (e) => String(e.className).split(/\s+/);
 const find = (root, cls) => root.findAll((e) => classes(e).indexOf(cls) !== -1);
 const first = (root, cls) => find(root, cls)[0] || null;
 const home = (env, cls) => first(env.$('home'), cls);
-const hostCard = (env) => { const c = first(env.doc.body, 'gconfirm'); return c && textOf(first(c, 'gctitle')) === 'Host a game' ? c : null; };       // (the question that Quick host asks with no room: Public room, Private room, Cancel)
+const hostCard = (env) => { const c = first(env.doc.body, 'gconfirm'); return c && textOf(first(c, 'gctitle')) === 'Host a game' ? c : null; };       // (the question that Quick host asks with no room: Public room, Invite only, Cancel)
 const chooseHost = (env, word) => { const c = hostCard(env); const b = c && find(c, 'btn').filter((x) => textOf(x) === word)[0]; if (b) b.click(); return !!b; };
 // (a press on a button; a disabled one takes none, as in a browser. A press on Quick host that gets the question "Host a game" is answered "Public room", the way that Quick host always went; the checks of the question itself press it by hand)
 const tap = (b) => { if (b && !b.disabled) { b.click(); if (b.env && b.env.doc && /\bhost\b/.test(b.className || '')) chooseHost(b.env, 'Public room'); } };
