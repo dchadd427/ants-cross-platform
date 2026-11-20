@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.17.12 - 2026-11-19 - New windows, a Fullscreen button, live matches at once, alerts
+
+**For players:**
+- **A new look for the game's windows.** Options, Quick Help, the quit question and the other windows over the match get brushed-metal buttons, sliders and switches with the New art; Classic keeps the original's. The game behind an open window is darkened evenly.
+- **A Fullscreen button in the game's top bar,** right of Quit. On an iPhone, where Safari has no full screen for pages, it uses the page's own full screen.
+- **Matches show as in progress the moment they start,** with Watch. A match between people is shown to watchers 30 seconds late; matches of computer players are shown almost live.
+- **Alerts on Ants & Uncles:** a note when someone joins your room, and the tab blinks when your match starts while you are in another tab. Both can be turned off under the bell, next to the menu button.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.11 page or game still joins. Under the hood: the game, the game server and the web pages are rebuilt.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/30ddce44...9548c0a5)
+
 ## v0.17.11 - 2026-11-18 - Your orders act at once online, one window for watching
 
 **For players:**
@@ -457,30 +469,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/10bc34ae...6bd2e893)
 
-## v0.12.146 - 2026-10-27 - Map Maker: the game's pictures at every zoom
+## Older versions (v0.12.146 and before)
 
-**For players:**
-- **The Map Maker now draws the game's pictures at every zoom.** Before, a map under 10 pixels a cell (a whole 60 x 60 map on a short window or a phone, every 81 x 100 map, any big Extended map zoomed out) turned into flat colored squares. Now the grass, rocks, toys, food and hills stay pictures at any size, up to a whole 512 x 512 map.
-- Under 4 pixels a cell, or when more than 12,000 cells are in view, the ground itself is its smooth average color (a tile's texture in 2 or 3 pixels is only a lattice, and a picture for every cell costs time); the objects are still pictures on it. Start ants are small team-colored dots under 12 pixels a cell, a little smaller under 5.
-- Speed, measured in a slow test browser with no graphics card (no real phone was tried): a whole 81 x 100 map takes about 100 ms to draw (4 ms before) and a whole 480 x 480 map about 250 to 300 ms (30 before); panning stays cheap. Maps of 40 x 40 or smaller never went under 10 pixels, so they look as before.
-- Only the picture on the screen changes: no map, file or game rule is touched. Map Maker v1.6.1.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/305c793f...4f724792)
-
-## v0.12.145 - 2026-10-27 - Map Maker: clearer hills on the small map, and a small map you can hide, move and lock
-
-**For players:**
-- **The hills on the small map are easy to see.** Each team's hill is a square with a 1 pixel edge (black, or white for the black team) and a bright fill for green, red and blue (the black team keeps a dark fill), at least 10 pixels wide on any map, so it no longer disappears on dirt, mud or water or on a 480 x 480 map. The starting ants are small squares, left out beside their own hill.
-- **Hide it.** A Hide button on the small map takes it away and leaves a small Show map button in its place, so the corner of the map can be reached. A phone's small map is smaller too (108 pixels, no caption).
-- **Move it.** Drag the grip (the dots at the top left of the small map) anywhere inside the map, with a mouse or a finger; the arrow keys move it 16 pixels from the grip, Home or a double tap puts it back in the corner. A smaller window brings it back inside.
-- **Lock it.** The lock button next to Hide keeps the small map where it is: it cannot be dragged or moved by the keys until it is unlocked. Hide and Show still work. The place, the lock and the hiding are remembered in this browser. Map Maker v1.6.0.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the web page only). No map of the library changes.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/bbf956a1...3b60fa2f)
-
-## Older versions (v0.12.144 and before)
-
-Every release before v0.12.145, and the long notes of v0.12.144 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.147, and the long notes of v0.12.146 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
