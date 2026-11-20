@@ -154,8 +154,8 @@
   {
    "id": "played_text_lacks_10",
    "file": "src/ants_replay/replay.cpp",
-   "old": "std::to_string(kSimRules) + \", \" +\n           std::to_string(kSimRulesMode187BeforeEndFix) + \", \" + std::to_string(kSimRulesMode187BeforeNoDrops) + \" and \"",
-   "new": "std::to_string(kSimRules) + \", \" +\n           std::to_string(kSimRulesMode187BeforeNoDrops) + \" and \"",
+   "old": "std::to_string(kSimRulesBeforeEmptyRecord) + \", \" +\n           std::to_string(kSimRulesMode187BeforeEndFix) + \", \" + std::to_string(kSimRulesMode187BeforeNoDrops) + \", \"",
+   "new": "std::to_string(kSimRulesBeforeEmptyRecord) + \", \" +\n           std::to_string(kSimRulesMode187BeforeNoDrops) + \", \"",
    "build": "test_rules_end_fix",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
    "expect": "RP15.1"

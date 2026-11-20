@@ -495,6 +495,13 @@ int32_t Grid::food_object_first_at(TileCoord anchor) const noexcept {
     return -1;
 }
 
+int32_t Grid::food_object_first_with_units_at(TileCoord anchor) const noexcept {
+    for (size_t i = 0; i < food_objects_.size(); ++i) {
+        if (food_objects_[i].row == anchor.y && food_objects_[i].col == anchor.x && food_objects_[i].remaining > 0) return static_cast<int32_t>(i);
+    }
+    return food_object_first_at(anchor);
+}
+
 int32_t Grid::food_object_at_cell(TileCoord cell) const noexcept {
     if (!in_bounds(cell)) return -1;
     const TileCell& c = get_cell(cell);

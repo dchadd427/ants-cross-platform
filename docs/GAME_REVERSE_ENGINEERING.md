@@ -2160,7 +2160,7 @@ in `ants.chd` (the original was never run, so timings come from the clip tables)
   `AddScore(carried)` for whatever is carried, with the "Score going up" text only when it is positive (`0x101e198`). Two thieves that raid a 60-point hill together both
   read 60 at their arrival (loot 50 each) and leave it at -40; the score box draws 0 for it (`FUN_01010452` clamps to 0 .. 999999), the results show the real number.
   A thief that raids a victim below zero takes a negative loot: the victim gets the points back and the thief carries the debt to its own hill, where the deposit lowers
-  its team's score. (What the original's lunchbox message does with a negative carried amount when such a thief dies is not known; the remake drops an empty one.)
+  its team's score. (The lunchbox of such a thief when it dies is read in 5.40, "A lunchbox on the anchor of an emptied record": the original drops 65,536 minus the debt as the points of the lunchbox; the remake still drops an empty one.)
 
 * **Remake mapping**. `src/ants_sim/action_system.cpp` (hill, hatch, raid), `movement_system.cpp` (SetAction cleanup, step
   callbacks, path ends, ring goal check, fairness rule), `ant_unit.hpp` (`home_state`, `home_priority`, `home_time_ms`,
@@ -2566,6 +2566,31 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `inc
 * **Lunchbox** *(`FUN_0100fdf8` -> `FUN_01008ca0`, called when an ant that carries food is removed on land, 5.36)*: a food object of one unit worth the points the dead ant
   carried, stages {1 -> tile 356, 0 -> gone}, appended to the table. A lunchbox is picked up exactly like a pile, by any team's ant that is ordered onto it (there is no
   pick-up by walking over it or standing on it), and two ants that start on it together both get its points.
+
+* **A lunchbox on the anchor of an emptied record** *(issue 522; read in `Ants.exe` with Capstone on 2026-11-19, and in a 12-minute TREASURE match of the beta played again with `replay_tool` and a logging
+  program of the same engine, rules number 9)*. What a killed carrier drops, and why the food of a killed thief was eaten over and over:
+
+  * **What drops, worker and thief alike.** `RemoveAnt` (`FUN_0100cd9f`, `0x100ce53 .. 0x100cecf`) drops when the ant holds something (`+0xe8 != 0`), runs on the owner's machine (`FUN_0100cd7d`), and the
+    layer-2 tile of the ant's own tile is `0x7ffe` (`FUN_01008b3d`), its terrain class is not 2 (`FUN_01008af7`, water) and its solid bit is clear (`FUN_0100cf0f`). It builds message `0x25` (`0x10241bc`: the
+    tile and the LOW WORD of `+0xf0`), posts it (`FUN_0100d791`), and its handler (`0x10241da`) calls `FUN_0100fdf8` and so `FUN_01008ca0` with one unit, the points, and the stages
+    {1 -> tile `0x164`, 0 -> gone}. No ant type is tested: a worker's food and a thief's loot are the same fields after `SetHolding` (`FUN_0101ac8c`; a thief's `FUN_0101ac64` also sets `+0xec`), so both fall as
+    a lunchbox worth what they carried, 50 points at most for a thief. The points are a 16-bit word on the way (the message field and `+0x0e` of the object, written by `FUN_01009df8`): a thief that took a negative
+    loot (5.35) leaves a lunchbox of 65,536 minus its debt, which a bite then carries as a positive amount. The remake drops an empty lunchbox for it; that is not changed here.
+  * **The table never shrinks.** `FUN_01008ca0` appends. The only function that deletes an object is `FUN_01008bed`, and its only caller is `SetTile` (`0x10073c6`), which runs it when the tile that it replaces is
+    a food tile (`FUN_010071dd`) and its sixth argument is not 0. The cleanup of a bite (`FUN_0101e342`, `SetTile` at `0x101e3e4`), `FUN_01008ca0` (`0x1008d19`) and the loader pass 0, so an emptied pile or lunchbox
+    keeps its record for the rest of the match.
+  * **The quirk.** A lunchbox that falls on a tile that is the anchor of an emptied record (an emptied pile, or an earlier lunchbox) is a second object of that anchor behind an empty one. The click, the walk and the
+    arrival (`0x101ce07`) use the LAST object of the cell, the lunchbox, which has its unit; the bite (`FUN_0102178a` -> `FUN_01008c63`) re-reads the FIRST object of the anchor, the empty one: `TakeFood` takes
+    nothing from it, `changed` stays 0 and the pile is not redrawn, and the ant carries the points of the lunchbox that it was sent with. Nothing ever changes the lunchbox, so any number of ants eat it, one after
+    the other, for the rest of the match. **The original does this too**, and the remake reproduced it already ("Two lookups" above); a lunchbox is eaten once only when it is the only object of its anchor,
+    which is the usual case. The tile has to be free (rule above), but an emptied pile or lunchbox leaves its anchor free, and the carrier has to die exactly on that tile.
+  * **Seen in the match of the issue** (TREASURE, one person and three Hard computer players, rules 9). A Black thief that carried 50 points died at turn 11,967 (9:58) on tile (41, 14), the anchor of the pile of
+    10 units that was emptied at turn 4,080: the lunchbox became object 20 of the table, behind the emptied object 3. Ants of Green were ordered onto the tile from turn 12,136 on and carried 50 points 15 times, to
+    turn 14,334, and the lunchbox still had its unit and its tile at the end. Under the rules number 13 the same orders give one bite and the lunchbox is gone at turn 12,136.
+  * **The rule number 13 is a deviation from the original, on purpose.** A bite takes its unit from the first object of the anchor that has one (`Grid::food_object_first_with_units_at`, used by
+    `start_harvest`), and from the first object when none has: the lunchbox is eaten once, and nothing else changes (a pile, a file's duplicated anchors, two ants that start on the last unit together all play as
+    before). The setting is `SimulationEngine::set_bite_skips_empty_record`; a recording of the rules numbers 5, 8 and 9 (and 187's 6, 7, 10, 11 and 12) plays with the original's lookup and keeps its hashes
+    (`test_rules_empty_record`, `test_food_actions` 4.2 - 4.5). Whether the remake keeps this deviation is the maintainer's decision: without the rule (`replay::kSimRulesEmptyRecordFirst`) the remake is the original again.
 
 * **Removed as invented** (v0.0.37): the respawn reading of Block 2, the 8-tick bite with a per-pile bite counter and its variants list, the harvest at any adjacent or
   standing position, the bite decided by a counter at the tick, `TileCell::lunchbox_points`, the lunchbox pick-up by any ant on the tile, the `is_food_order` flag of the

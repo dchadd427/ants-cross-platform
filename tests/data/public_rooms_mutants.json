@@ -872,10 +872,10 @@
    "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
-   "id": "codec_protocol_still_23",
+   "id": "codec_protocol_still_24",
    "file": "include/ants_net/protocol.hpp",
-   "old": "inline constexpr uint16_t kProtocolVersion = 24;",
-   "new": "inline constexpr uint16_t kProtocolVersion = 23;",
+   "old": "inline constexpr uint16_t kProtocolVersion = 25;",
+   "new": "inline constexpr uint16_t kProtocolVersion = 24;",
    "build": [
     "test_lockstep",
     "test_lobby"
@@ -923,10 +923,10 @@
    "test": "ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.34 timeout 900 ./build/tests/test_net/test_lobby && ANTS_TEST_FILTER=N4.49c timeout 900 ./build/tests/test_net/test_lobby"
   },
   {
-   "id": "page_protocol_still_23",
+   "id": "page_protocol_still_24",
    "file": "web/front/lobby_net.js",
-   "old": "var PROTOCOL = 24;",
-   "new": "var PROTOCOL = 23;",
+   "old": "var PROTOCOL = 25;",
+   "new": "var PROTOCOL = 24;",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
   },
   {

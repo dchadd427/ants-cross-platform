@@ -378,6 +378,10 @@ public:
     const std::vector<FoodObject>& food_objects() const noexcept { return food_objects_; }
     /// FUN_01008c63: the FIRST object (table order) whose anchor is `anchor`; -1 when there is none.
     int32_t food_object_first_at(TileCoord anchor) const noexcept;
+    /// The rules number 13 (docs/GAME_REVERSE_ENGINEERING.md 5.40, "A lunchbox on the anchor of an emptied record"): the first object of the table with that anchor that still has a unit left, and when none has one the first object
+    /// as food_object_first_at gives it. The original's lookup takes the first object whatever it holds; the table never shrinks, so a lunchbox that falls on the anchor of an emptied pile (or of an earlier lunchbox) stands behind that
+    /// emptied record, and every bite looked it up instead of the lunchbox and left the lunchbox as it was.
+    int32_t food_object_first_with_units_at(TileCoord anchor) const noexcept;
     /// The object a cell belongs to (TileInfo mask 0x80): the cell's layer-2 tile must be a food tile; its anchor bytes give the
     /// anchor; the LAST object (table order) with that anchor is the answer; -1 when there is none.
     int32_t food_object_at_cell(TileCoord cell) const noexcept;
