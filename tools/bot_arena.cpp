@@ -3,7 +3,7 @@
 //
 // Usage:
 //   bot_arena [--map NAMES] [--seeds A..B] [--seat N=KIND[:LEVEL[:STYLE]]]... [--ticks full|N] [--latency-ticks N] [--rotate] [--repeat N] [--replay-check]
-//             [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR] [--tune K=V,...] [--ally-standard | --ally-pairs]
+//             [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR] [--tune K=V,...] [--teams A+B] [--ally-standard | --ally-pairs]
 //   bot_arena --selftest
 //   bot_arena --write-baselines [--threads N] [--maps-dir DIR] > tests/test_ai/baselines.inc
 //
@@ -25,6 +25,7 @@
 //   --swimmer-trace   after every match one SWT line per seat (the ticks of its 3rd, 5th and 8th Swimmer, the most it had alive, the Swimmers alive and the score at every minute, its idle ants
 //                     from the third minute on, the water tiles its Swimmers finished as bridges, the power-ups its ants took by kind) and one SWL line (the power-ups left on the ground at every minute); nothing is sent, the match is the same
 //   --tune K=V,...    the same tuning for every standard bot of the run (the keys of apply_tune). BOT_DIAG=1 in the environment makes the standard bots print what their tasks did (counts of attack orders, raids, walls, ...) to stderr when a match is over.
+//   --teams A+B       the match starts with seats A and B as a team and the other two as the other team (the rooms' and the game's own way: apply_start_teams after init; seats given as digits 0 to 3); free for all by default
 //   --ally-standard   the first two standard bots of a match team up (the lower seat invites at its first look, the other accepts by its accept rule); --ally-pairs: every two seats with the same standard spec team up (2 + 2 for [A, A, B, B]). Test-only: no bot of the game invites.
 //   --threads N       matches played at the same time (default 1; every match is independent, the report is sorted by map, seed and arrangement)
 //   --out FILE        write the JSON report (fixed key order; the maps' NAMES only, no paths). The file is opened BEFORE the first match (an unwritable path costs nothing) and
@@ -216,7 +217,7 @@ private:
 void print_usage(std::FILE* to) {
     std::fprintf(to,
         "Usage: bot_arena [--map NAMES] [--seeds A..B] [--seat N=KIND[:LEVEL[:STYLE]]]... [--ticks full|N] [--latency-ticks N] [--rotate] [--repeat N]\n"
-        "                 [--game-mode highest-score|187] [--replay-check] [--save-replays DIR] [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR] [--tune K=V,...] [--ally-pairs]\n"
+        "                 [--game-mode highest-score|187] [--replay-check] [--save-replays DIR] [--threads N] [--out report.json] [--quiet] [--no-wall-time] [--maps-dir DIR] [--tune K=V,...] [--teams A+B] [--ally-pairs]\n"
         "       bot_arena --selftest\n"
         "       bot_arena --write-baselines [--threads N] [--maps-dir DIR] > tests/test_ai/baselines.inc\n"
         "Plays matches of computer players headless with the real engine. See the top of tools/bot_arena.cpp and docs/BOTS.md.\n"
@@ -226,6 +227,7 @@ void print_usage(std::FILE* to) {
         "                     saboteur rusher gang gang2 turtle aggr1 .. aggr9; levels easy medium hard; styles aggressive economic raider defensive random, standard bots only: Hard plays aggressive or raider).\n"
         "                     KIND may be standard+K=V,K=V: a standard bot with its own tuning (see --tune). Default: four standard bots at medium level. %s.\n"
         "  --game-mode M      highest-score (the original's game, default) or 187 (no food, the kills are the score)\n"
+        "  --teams A+B        seats A and B start as a team and the other two as the other team (digits 0 to 3, like the game's --teams; default: free for all)\n"
         "  --ticks full|N     until the match is over (default) or at most N ticks\n"
         "  --latency-ticks N  sink latency in ticks (default 3; 0 = commands applied at once)\n"
         "  --rotate           every distinct arrangement of the bots over the seats\n"
@@ -422,6 +424,10 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
             uint8_t mode = 0;
             if (!net::parse_game_mode_name(v, mode)) { err = "--game-mode needs 'highest-score' or '187', not '" + v + "'"; return false; }
             o.game_mode = static_cast<sim::GameMode>(mode);
+        } else if (s == "--teams") {
+            if (!value("--teams", v)) return false;
+            std::string why;
+            if (!sim::parse_start_teams(v, o.teams, why)) { err = "--teams " + v + ": " + why; return false; }
         } else if (s == "--ticks") {
             if (!value("--ticks", v)) return false;
             if (v == "full") o.ticks = 0;
@@ -580,7 +586,7 @@ std::vector<std::vector<ai::BotSpec>> arrangements(const std::vector<ai::BotSpec
 bool same_match(const ai::ArenaResult& a, const ai::ArenaResult& b) {
     if (a.error != b.error || a.ticks != b.ticks || a.steps != b.steps || a.hash != b.hash || a.match_over != b.match_over || a.initial_ticks != b.initial_ticks ||
         a.checkpoints != b.checkpoints || a.seats.size() != b.seats.size() || a.news_events != b.news_events || a.audio_events != b.audio_events || a.peak_queue != b.peak_queue ||
-        a.reachable_units_left != b.reachable_units_left || a.landings != b.landings || a.landed != b.landed) {
+        a.reachable_units_left != b.reachable_units_left || a.last_food != b.last_food || a.landings != b.landings || a.landed != b.landed) {
         return false;
     }
     for (size_t i = 0; i < a.seats.size(); ++i) {
@@ -590,7 +596,7 @@ bool same_match(const ai::ArenaResult& a, const ai::ArenaResult& b) {
             x.banked != y.banked || x.raided != y.raided || x.kills != y.kills || x.losses != y.losses || x.stats.decisions != y.stats.decisions || x.stats.intents != y.stats.intents ||
             x.stats.released != y.stats.released || x.stats.expired != y.stats.expired || x.stats.pruned != y.stats.pruned || x.stats.superseded != y.stats.superseded ||
             x.stats.filtered != y.stats.filtered || x.stats.rejected != y.stats.rejected || x.stalls != y.stalls || x.cantgo != y.cantgo || x.cantgo_began != y.cantgo_began ||
-            x.orders != y.orders || x.attack_orders != y.attack_orders || x.bombs_planted != y.bombs_planted || x.fires_lit != y.fires_lit || x.war_ticks != y.war_ticks || x.fire_hunts != y.fire_hunts || x.mines_planted != y.mines_planted || x.ramp_unjams != y.ramp_unjams || x.rushes != y.rushes || x.rush_ticks != y.rush_ticks || x.rush_attacks != y.rush_attacks || x.refused_orders != y.refused_orders || x.took != y.took || x.took_at_flowers != y.took_at_flowers || !(x.expedition == y.expedition) || !(x.miner_flight == y.miner_flight)) {
+            x.orders != y.orders || x.attack_orders != y.attack_orders || x.bombs_planted != y.bombs_planted || x.fires_lit != y.fires_lit || x.war_ticks != y.war_ticks || x.fire_hunts != y.fire_hunts || x.mines_planted != y.mines_planted || x.ramp_unjams != y.ramp_unjams || x.rushes != y.rushes || x.rush_ticks != y.rush_ticks || x.rush_attacks != y.rush_attacks || x.refused_orders != y.refused_orders || x.took != y.took || x.took_at_flowers != y.took_at_flowers || x.ant_ticks != y.ant_ticks || x.idle_ticks != y.idle_ticks || x.after_ant_ticks != y.after_ant_ticks || x.after_idle_ticks != y.after_idle_ticks || x.raids != y.raids || x.raid_points != y.raid_points || !(x.expedition == y.expedition) || !(x.miner_flight == y.miner_flight)) {
             return false;
         }
     }
@@ -652,6 +658,7 @@ ai::ArenaSpec spec_of(const Options& o, const LoadedMap& m, const Job& j, bool r
     s.max_ticks = o.ticks;
     s.latency_ticks = o.latency;
     s.game_mode = o.game_mode;
+    s.teams = o.teams;
     s.record = record;
     s.extra_kinds = {"aggressor", "aggressor2", "saboteur", "rusher", "gang", "gang2", "turtle", "aggr1", "aggr2", "aggr3", "aggr4", "aggr5", "aggr6", "aggr7", "aggr8", "aggr9"};
     for (const ai::BotSpec& b : j.bots) {
@@ -688,6 +695,7 @@ void save_replay(const LoadedMap& m, const Job& job, const ai::ArenaSpec& spec, 
     head.seed = spec.seed;
     head.fog = false;
     head.set_mode(static_cast<uint8_t>(spec.game_mode));
+    head.teams = spec.teams;
     for (const ai::BotSpec& b : job.bots) {
         if (b.seat >= sim::MAX_PLAYERS) return;
         head.roster = static_cast<uint8_t>(head.roster | (1u << b.seat));
@@ -697,6 +705,7 @@ void save_replay(const LoadedMap& m, const Job& job, const ai::ArenaSpec& spec, 
     sim.set_fog_of_war_enabled(false);
     sim.set_game_mode(spec.game_mode);
     sim.init(m.level, spec.seed, head.roster);
+    sim::apply_start_teams(sim, spec.teams);
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) sim.set_player_name(seat, ((head.roster >> seat) & 1u) != 0 ? head.names[seat] : std::string());
     replay::Recorder rec(head);
     size_t next = 0;
@@ -946,7 +955,7 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
     JsonWriter j(&out);
     j.begin_object();
     j.field("tool", "bot_arena");
-    j.field("format", uint64_t{6});                                   // 2: banked and raided replace the engine's food_deposited, food_stolen and food_lost (never fed, always 0); 3: the can't-go counts per seat; 4: the flowers (landings per match, the power-ups taken per seat); 5: the expedition per seat; 6: the Bomber flight to the ring pile per seat
+    j.field("format", uint64_t{7});                                   // 2: banked and raided replace the engine's food_deposited, food_stolen and food_lost (never fed, always 0); 3: the can't-go counts per seat; 4: the flowers (landings per match, the power-ups taken per seat); 5: the expedition per seat; 6: the Bomber flight to the ring pile per seat; 7: the idle tally per seat, last_food and reachable_units_left per match
     j.field("note", kKindsNote);
     j.key("options");
     j.begin_object();
@@ -960,6 +969,7 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
     j.field_bool("rotate", o.rotate);
     j.field("repeat", uint64_t{o.repeat});
     j.field_bool("replay_check", o.replay_check);
+    if (o.teams.set) j.field("teams", sim::start_teams_text(o.teams));                                                       // (only when teams were asked for: a report of free for all is the report of before)
     if (o.game_mode != sim::GameMode::HighestScore) j.field("game_mode", sim::game_mode_name(o.game_mode));      // (only when it is not the original's game: a report of the original rules is the report of before)
     j.end_object();
     j.key("matches");
@@ -984,6 +994,8 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
         j.field("match_ticks", r.result.initial_ticks);
         j.field_bool("match_over", r.result.match_over);
         j.field("hash", hex64(r.result.hash));
+        j.field("reachable_units_left", uint64_t{r.result.reachable_units_left});            // the units left on the piles that some hill walks to
+        j.field("last_food", r.result.last_food);                           // the last look at which the food on the map fell (0: never)
         j.field("landings", uint64_t{r.result.landings});
         j.key("landed");                                                    // by the kind of ant that the landing makes
         j.begin_object();
@@ -1049,6 +1061,15 @@ bool write_report(std::ostream& out, const Options& o, const std::vector<LoadedM
             for (size_t k = 1; k < s.took.size(); ++k) j.field(kind_name(k), uint64_t{s.took[k]});
             j.end_object();
             j.field("took_at_flowers", uint64_t{s.took_at_flowers});
+            j.key("idle");                                                  // the idle tally (docs/BOTS.md, "When the food is gone"): ant-ticks, the idle ones, the same two from the last food taken to the end, raids begun and the points they took
+            j.begin_object();
+            j.field("ant_ticks", s.ant_ticks);
+            j.field("idle_ticks", s.idle_ticks);
+            j.field("after_ant_ticks", s.after_ant_ticks);
+            j.field("after_idle_ticks", s.after_idle_ticks);
+            j.field("raids", uint64_t{s.raids});
+            j.field("raid_points", uint64_t{s.raid_points});
+            j.end_object();
             j.key("expedition");                                            // the flights over water of a standard bot (all 0 where it made none); the ticks are 0 for what never happened
             j.begin_object();
             j.field("planned", uint64_t{s.expedition.planned});
