@@ -293,6 +293,9 @@ public:
     /// The public list of games (protocol 22; GET /lobbies): the lobby rooms that Room::listing lists, at most kMaxListedLobbies, the best first: more people, then the longer listed, then the smaller code. Cheap: a pass over
     /// the rooms with a predicate, no status. A room that is private, full, starting, empty or kept for a rematch is not in it.
     std::vector<LobbyListing> lobbies(uint32_t now_ms) const;
+    /// The lobby rooms that Room::private_listing lists: rooms that their leaders did not make public, for the locked cards of the list. At most kMaxListedLobbies, in an order that is made of the rows' own fields (more people,
+    /// then map, host and numbers) and of nothing else: the pass over the rooms goes by code, and no order may teach anything about a code.
+    std::vector<PrivateListing> private_lobbies() const;
 
     size_t room_count() const noexcept { return rooms_.size(); }
     /// The rooms of matches that gave their code to the lobby of their rematch and answer their last connections (see the paragraph at the top), and the lobbies that were opened again so

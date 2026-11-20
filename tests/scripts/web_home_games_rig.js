@@ -53,6 +53,8 @@ function fakeSite() {
     return n;
 }
 const row = (code, host, o) => Object.assign({ code, host, map: 'TREASURE.LVL', mode: 'highest-score', people: 2, bots: 0, free: 2, size: 4, age: 10 }, o || {});
+// a row of a private room (a locked card): no code, no age
+const locked = (host, o) => Object.assign({ private: true, host, map: 'TREASURE.LVL', mode: 'highest-score', people: 2, bots: 0, free: 2, size: 4 }, o || {});
 const listOf = (rows) => ({ format: 1, lobbies: rows, count: rows.length });
 // One page on Home with its fake site; the page's lazy load runs (env.advance(0)) unless options.lazy says no; env.site is the site, env.looks() how many looks at the list there were
 async function page(o) {
@@ -89,6 +91,7 @@ const pressElsewhere = (env, target) => (env.doc.capturing.click || []).concat(e
 const popOf = (env) => home(env, 'gpop');
 const rowsOf = (env) => find(popOf(env), 'gitem').filter((e) => e.tagName === 'li');
 const joinOf = (li) => li.findAll((e) => e.tagName === 'button')[0];
+const lockedCards = (env) => find(popOf(env), 'gpriv');
 const textOf = (e) => e.textContent;
 const toastOf = (env) => first(env.body, 'gtoast');
 const toastTextOf = (env) => (toastOf(env).hidden ? '' : toastOf(env).children[0].textContent);
@@ -116,6 +119,6 @@ const roomAs = (names, me, flags, o) => roomMessage(seatsOf(names), Object.assig
 
 const done = (title) => { console.log(title + ': ' + checks + ' checks, ' + failures + ' failed'); process.exit(failures === 0 ? 0 : 1); };
 const broke = (e) => { console.log('FAIL the check itself broke: ' + (e && e.stack || e)); process.exit(1); };
-return { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, hostCard, chooseHost, pressEscape, pressElsewhere, popOf, rowsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, visibilities, leaves, seatsOf,
+return { GUEST, check, same, flush, fakeSite, row, locked, lockedCards, listOf, page, wait, classes, find, first, home, tap, hostCard, chooseHost, pressEscape, pressElsewhere, popOf, rowsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, visibilities, leaves, seatsOf,
          PUBLIC, PRIVATE, STARTING, myRoom, guestRoom, roomAs, Games, PopoverGames, H, NET0, KEY, E, C, hex, roomMessage, welcome, reject, helloBytes, helloName, helloRoom, grouped, runLobby, RULES0, lobbyDir, done, broke };
 };

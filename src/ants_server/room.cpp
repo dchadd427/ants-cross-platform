@@ -1154,17 +1154,19 @@ uint32_t Room::abandoned_ms(uint32_t now_ms) const {
     return now_ms - last_person_ms_;
 }
 
-// A public lobby room that a newcomer can join now (room.hpp). Each condition is one thing a visitor would be sent to a dead end by: a room that has begun or loads, one that is private, one whose START waits (it takes nobody
+// A lobby room that a newcomer could join now (room.hpp), whatever its leader chose. Each condition is one thing a visitor would be sent to a dead end by: a room that has begun or loads, one whose START waits (it takes nobody
 // new), one nobody is at, one with no free color, one that keeps seats for the people of its last match.
-bool Room::listing(uint32_t now_ms, LobbyListing& out) const {
-    if (!lobby_waiting() || !lobby_.is_public()) return false;                 // (a room that waits is a lobby in its open phase: Loading and Running are other states of the room)
+bool Room::lobby_joinable(size_t& free_now) const {
+    if (!lobby_waiting()) return false;                                        // (a room that waits is a lobby in its open phase: Loading and Running are other states of the room)
     if (lobby_.starting() || lobby_.any_reserved()) return false;
     const uint8_t leader = lobby_.leader();
     if (leader >= sim::MAX_PLAYERS || lobby_.connected() == 0) return false;
-    const size_t free_now = lobby_.open_colors();
-    if (free_now == 0) return false;
-    out = LobbyListing{};
-    out.code = spec_.code;
+    free_now = lobby_.open_colors();
+    return free_now != 0;
+}
+
+void Room::list_seats(ListedSeats& out, size_t free_now) const {
+    const uint8_t leader = lobby_.leader();
     const std::string& leader_name = lobby_.room().slots[leader].name;
     out.host = leader_name.empty() ? "Player " + std::to_string(static_cast<unsigned>(leader) + 1u) : leader_name;      // (a Hello with no name: the list names the person as the lobby names a player who gave none)
     out.map = lobby_.map_name();
@@ -1173,7 +1175,25 @@ bool Room::listing(uint32_t now_ms, LobbyListing& out) const {
     out.bots = static_cast<uint8_t>(lobby_.bot_colors());
     out.free_colors = static_cast<uint8_t>(free_now);
     out.size = static_cast<uint8_t>(lobby_.match_colors());
+}
+
+// A public lobby room that a newcomer can join now (room.hpp).
+bool Room::listing(uint32_t now_ms, LobbyListing& out) const {
+    size_t free_now = 0;
+    if (!lobby_joinable(free_now) || !lobby_.is_public()) return false;
+    out = LobbyListing{};
+    out.code = spec_.code;
+    list_seats(out, free_now);
     out.age_ms = lobby_.listed_age_ms(now_ms);
+    return true;
+}
+
+// The same room when its leader has not made it public: the seats and nothing else (the code is the room's key, and a PrivateListing has no place for it), and no age (a private room is not "listed" for any time).
+bool Room::private_listing(PrivateListing& out) const {
+    size_t free_now = 0;
+    if (!lobby_joinable(free_now) || lobby_.is_public()) return false;
+    out = PrivateListing{};
+    list_seats(out, free_now);
     return true;
 }
 

@@ -497,7 +497,8 @@ ctl::HttpResponse handle_public_live(const RoomManager& rooms, const ctl::HttpRe
 }
 
 // GET /lobbies of the public door: the public list of games (RoomManager::lobbies), read only. Only what a visitor may see: the room's code (the link, public on purpose), the leader's name, the map's file name, the mode and numbers;
-// never an address, a key, a platform, another person's name or chat. A query or another method is a 404, as for /live; a server that offers no lobby rooms has an empty list.
+// never an address, a key, a platform, another person's name or chat. After the public rows come the PRIVATE rooms (RoomManager::private_lobbies), each a row of its own kind that is built from a PrivateListing and so has no code: the
+// page draws it as a locked card, and nothing in it leads to the room. A query or another method is a 404, as for /live; a server that offers no lobby rooms has an empty list. `count` is the public rows alone.
 ctl::HttpResponse handle_public_lobbies(const RoomManager& rooms, const ctl::HttpRequest& request, uint32_t now_ms) {
     if (request.method != "GET" || !request.query.empty()) return error_response(404, "not found");
     JsonValue list = JsonValue::make_array();
@@ -515,10 +516,22 @@ ctl::HttpResponse handle_public_lobbies(const RoomManager& rooms, const ctl::Htt
         list.push_back(std::move(e));
     }
     const int64_t count = static_cast<int64_t>(list.items().size());
+    for (const PrivateListing& l : rooms.private_lobbies()) {
+        JsonValue e = JsonValue::make_object();
+        e.set("private", JsonValue::make_bool(true));
+        e.set("host", JsonValue::make_string(l.host));
+        e.set("map", JsonValue::make_string(l.map));
+        e.set("mode", JsonValue::make_string(sim::game_mode_name(static_cast<sim::GameMode>(l.mode))));
+        e.set("people", JsonValue::make_int(l.people));
+        e.set("bots", JsonValue::make_int(l.bots));
+        e.set("free", JsonValue::make_int(l.free_colors));
+        e.set("size", JsonValue::make_int(l.size));
+        list.push_back(std::move(e));
+    }
     JsonValue o = JsonValue::make_object();
     o.set("format", JsonValue::make_int(1));
     o.set("lobbies", std::move(list));
-    o.set("count", JsonValue::make_int(count));                  // (the number of entries listed, at most kMaxListedLobbies)
+    o.set("count", JsonValue::make_int(count));                  // (the public rows listed, at most kMaxListedLobbies: the rows of private rooms come after them and are not counted)
     return json_response(200, o);
 }
 
