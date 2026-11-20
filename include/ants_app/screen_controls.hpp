@@ -201,6 +201,17 @@ public:
     /// Whether the caret is drawn: from the focus on it shows for 150 ms, is gone for 150 ms, and so on
     bool caret_visible(uint32_t now_ms) const noexcept { return focused_ && ((now_ms - focus_ms_) / CARET_HALF_PERIOD_MS) % 2 == 0; }
 
+    /// A phone's keyboard leaves its text here (the page's real text field, Application::web_chat_do): the printable ASCII characters of `text`, at most the field's limit. True when the text changed
+    bool set_text(const std::string& text) {
+        std::string clean;
+        for (const char c : text) {
+            if (c >= 0x20 && c <= 0x7e && clean.size() < max_) clean.push_back(c);
+        }
+        if (clean == text_) return false;
+        text_ = std::move(clean);
+        return true;
+    }
+
     /// FUN_01011d86: a key id of the original. True when the text changed (the owner's callback runs with it)
     bool on_char(int32_t key_id) {
         if (!focused_) return false;

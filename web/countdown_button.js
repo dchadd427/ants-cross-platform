@@ -22,6 +22,7 @@
     var MIN_W = 80;                                                  // CSS pixels: the least width that holds "Fullscreen" on one line
     var CARD_BELOW = 8;                                              // game pixels from the place's bottom to the card's bottom edge (card 346 high, place at 306, 32 high)
     var HINT_GAP = 4;                                                // game pixels from the hint line's bottom to the place's top
+    var MAX_INTRUDE = 4;                                             // CSS pixels: how far the button of the least height may reach up into the hint line before the card is too small for it
     var CARD_W = 400;                                                // the card's width in game pixels (include/ants_app/countdown_card.hpp): the button is never wider
 
     // page: { doc, stage, canvas, ask(what), ready(), isFullscreen(), enter(), every(fn, ms) (setInterval by default) }
@@ -54,6 +55,7 @@
             var fx = rect.width / logicalW, fy = rect.height / logicalH;
             var slotW = page.ask(63) * fx, slotH = page.ask(64) * fy;
             if (!(slotW > 0 && slotH > 0)) return false;
+            if (MIN_H - (slotH + (CARD_BELOW + HINT_GAP) * fy - 2) > MAX_INTRUDE) return false;   // a card this small (a phone upright, or sideways with the header on) has no room for a finger's button between its hint line and its bottom edge: the page's own Full button is the way
             var h = Math.max(MIN_H, slotH), w = Math.max(MIN_W, slotW);   // the place's size; a floor on one side does not widen the other
             w = Math.min(w, CARD_W * fx, rect.width);
             h = Math.min(h, rect.height);

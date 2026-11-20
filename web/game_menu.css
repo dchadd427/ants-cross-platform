@@ -8,6 +8,14 @@
 .btn.gm-top { min-height: 44px; }
 @media (max-width: 1139px) { .gm-top .gm-txt { display: none; } .gm-top { min-width: 44px; justify-content: center; } }   /* the gear alone below 1140 px: the bar keeps one row (a 360 px phone has Home, Settings, Fullscreen and Menu) */
 
+/* the Settings button of the bar of a recording or a live match: the bar's grid (web/shell.html .rbar) has no cell for it, so a narrow bar gets the gear alone, and the page's bar (not the fullscreen one,
+   which lies over the picture) puts it above the right end of the timeline, beside the tag, where it takes no room from the controls */
+@media (max-width: 700px) {
+    .rbar .gm-bar .gm-txt { display: none; }
+    .rbar .gm-bar { min-width: 44px; justify-content: center; }
+    .rbar:not(.over) .gm-bar { position: absolute; right: 0; bottom: calc(100% + 4px); min-height: 36px; }
+}
+
 /* the dimmed screen and the panel */
 .gm-scrim { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, .64); cursor: default;
             animation: gm-fade .12s ease-out; -webkit-user-select: none; user-select: none; touch-action: manipulation; overscroll-behavior: contain; }
