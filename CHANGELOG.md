@@ -26,6 +26,14 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.18.1 - 2026-11-19 - A note when a new version is out; computer players use the endgame
+
+**For players:**
+- **A note when a new version is out.** A strip at the top of Ants & Uncles, a room and the other pages offers Reload or Later, and "What's new" lists what changed since your last visit. Nothing shows during a match; it waits for the results.
+- **Computer players waste less time once the food is gone.** An idle Bomber or Swimmer fetches a Fire power-up, a Swimmer becomes the Thief for the last steals, hurt ants walk home to heal, and late fights need a clear advantage.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1b9ed00f...bdc50e13)
+
 ## v0.18.0 - 2026-11-19 - Dropped food can be taken only once
 
 **For players:**
@@ -476,27 +484,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ec8fa2fa...9ee59ee3)
 
-## v0.12.148 - 2026-10-28 - Map Maker: the editor starts with less code
+## Older versions (v0.12.148 and before)
 
-**For players:**
-- **No change for players.** The Map Maker looks and works as before, and a map you save or download is byte for byte what it was.
-- **The editor starts with less code.** Copy, Save as a new map, Start an Extended map / Make a Classic map and Crop to fit now load the first time you use one of them (two small scripts fetched at once, about 29 KB, 9 KB gzipped), so the Map Maker opens with about 7% less script. On a slow network that first dialog may take a moment (an estimate, not measured). If the scripts cannot load (no network), the page says so in plain words and asks again the next time.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2e45f112...67c5b473)
-
-## v0.12.147 - 2026-10-27 - Map Maker: each start ant faces its own way
-
-**For players:**
-- **Map Maker: each start ant now faces its own way.** Before, every starting ant on the map stood facing south. In the game each one starts facing one of seven directions picked at random when a match begins (never north), so the Map Maker now shows each ant facing one of those seven, for every ant type (worker, combat, thief, bomber, swimmer, fire) and team color.
-- **It is an example, not what the match will do.** The game picks the facings again for every match, so the map has none; the editor makes one up from each ant's cell (the same every time, so nothing jumps when you put other ants or pan), and the Ants box says so in one line. Nothing is saved in the map: the file is byte for byte what it was.
-- The page fetches 36 KB more of pictures when it opens (the extra standing ants), cached after the first visit. Map Maker v1.6.2.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/10bc34ae...6bd2e893)
-
-## Older versions (v0.12.146 and before)
-
-Every release before v0.12.147, and the long notes of v0.12.146 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.149, and the long notes of v0.12.148 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
