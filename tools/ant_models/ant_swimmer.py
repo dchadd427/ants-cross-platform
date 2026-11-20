@@ -19,14 +19,12 @@ try:
         AnimationClip,
         MeshPart,
         SceneBuilder,
-        capsule,
         curved_tube,
         cylinder,
         lathe,
         quat_from_euler_xyz,
         quat_mul,
         rounded_box,
-        sphere,
         superellipsoid,
         swept_tube,
         torus_arc,
@@ -38,25 +36,23 @@ except ImportError:
         AnimationClip,
         MeshPart,
         SceneBuilder,
-        capsule,
         curved_tube,
         cylinder,
         lathe,
         quat_from_euler_xyz,
         quat_mul,
         rounded_box,
-        sphere,
         superellipsoid,
         swept_tube,
         torus_arc,
     )
 
-# Relaxed confident right-arm pose holding the upright shovel shaft beside his right hip/side.
+# Lowered right-arm grip starting at slim thorax shoulder (-0.078, 0.456, 0.014) holding horizontal beach shovel.
 _SWIMMER_RIGHT_ARM: List[Tuple[float, float, float]] = [
-    (-0.106, 0.478, 0.016),
-    (-0.206, 0.416, 0.044),
-    (-0.258, 0.402, 0.128),
-    (-0.278, 0.412, 0.168),
+    (-0.078, 0.456, 0.014),
+    (-0.164, 0.368, 0.018),
+    (-0.204, 0.282, 0.044),
+    (-0.214, 0.256, 0.062),
 ]
 
 
@@ -155,20 +151,20 @@ def _build_scuba_mask(
     eye_max_x, eye_max_dy, eye_max_z = _measure_eyelid_world_envelope(scene, eye_left, closed_angle)
 
     mask_y = ey + 0.004
-    oval_exp = 0.74
+    oval_exp = 1.0  # Pure smooth horizontal ellipse (p=2.0, zero flat sides or boxy corners!)
     curve_depth = 0.052
 
-    # Wide crystal-clear open oval window framed cleanly around the compact non-alien rich-iris eyes.
-    rx_in = max(hrx * 0.80, (eye_max_x - hx) + 0.014)
-    ry_in = max(0.094, eye_max_dy + 0.014)
-    wall_t = 0.038  # Bold chunky yellow molded scuba bezel sized harmoniously to the compact head
+    # Wide smooth true-oval open window framing both cute eyes & eyelids cleanly with generous corner margin.
+    rx_in = max(hrx * 0.86, (eye_max_x - hx) + 0.025)
+    ry_in = max(0.104, eye_max_dy + 0.020)
+    wall_t = 0.040  # Bold chunky smooth yellow plastic scuba bezel matching asst301..701
     rx_out = rx_in + wall_t
 
     # Seat the translucent visor safely ahead of eyelid sweep even at the curved outer corner of the eye.
     eye_nx = (eye_max_x - hx) / max(1e-6, rx_out)
-    visor_z_center = max(eye_left[2] + 0.094, eye_max_z + 0.012 + curve_depth * (eye_nx * eye_nx))
+    visor_z_center = max(eye_left[2] + 0.102, eye_max_z + 0.012 + curve_depth * (eye_nx * eye_nx))
 
-    # 1. Bold, chunky deep-rimmed molded yellow-gold oval scuba housing (beveled front + deep side wall).
+    # 1. Bold, chunky deep-rimmed smooth yellow plastic oval scuba housing (zero cloth weave).
     frame_prof = [
         (0.00, -0.046),
         (0.86, -0.048),
@@ -189,7 +185,7 @@ def _build_scuba_mask(
         curve_depth=curve_depth,
         radial_segs=56,
         name="scuba_mask_frame",
-        material="gear_gold",
+        material="gear_yellow_plastic",
     ).translate(hx, mask_y, visor_z_center)
     scene.add("scuba_mask", frame)
 
@@ -243,9 +239,9 @@ def _build_scuba_mask(
         p[:, 1] -= nose
         return p
 
-    # 3. Thin curved translucent slate-teal glass visor cleanly ahead of both big eyes & eyelids.
+    # 3. Thin curved translucent smooth-oval glass visor cleanly ahead of both eyes & eyelids.
     visor = (
-        superellipsoid(rx_in + 0.005, ry_in + 0.005, 0.008, e1=0.72, e2=0.74, u_segs=36, v_segs=18, name="scuba_visor", material="glass_tinted")
+        superellipsoid(rx_in + 0.005, ry_in + 0.005, 0.008, e1=1.0, e2=1.0, u_segs=36, v_segs=18, name="scuba_visor", material="glass_tinted")
         .deform(_wrap_visor)
         .translate(hx, mask_y, visor_z_center + 0.006)
     )
@@ -278,10 +274,10 @@ def _build_scuba_mask(
     )
     scene.add("scuba_mask", strap)
 
-    # Bold yellow temple strap anchor hinges connecting outer mask wall cleanly to the rear strap.
+    # Bold smooth yellow plastic temple strap anchor hinges connecting outer mask wall to rear strap.
     for side_sign, tag in ((+1.0, "left"), (-1.0, "right")):
         buckle = (
-            rounded_box(0.038, 0.068, 0.070, bevel=0.012, segs=3, name=f"scuba_buckle_{tag}", material="gear_gold")
+            rounded_box(0.038, 0.068, 0.070, bevel=0.012, segs=3, name=f"scuba_buckle_{tag}", material="gear_yellow_plastic")
             .rotate_xyz(ry=side_sign * 0.30)
             .translate(hx + side_sign * max(hrx, rx_out - 0.022), mask_y + 0.004, hz + hrz * 0.68)
         )
@@ -315,20 +311,20 @@ def _build_snorkel(
     tube_x = cx + 0.028
     tube_z = cz + 0.008
 
-    # Dark rubber mouthpiece seated near the lower-left mandible/cheek of the compact head.
+    # Dark rubber mouthpiece seated near the lower-left mandible/cheek of the bigger 1998-style head.
     mouthpiece = (
-        rounded_box(0.070, 0.038, 0.042, bevel=0.012, segs=3, name="snorkel_mouthpiece", material="gear_dark")
+        rounded_box(0.074, 0.040, 0.044, bevel=0.012, segs=3, name="snorkel_mouthpiece", material="gear_dark")
         .rotate_xyz(ry=-0.35)
-        .translate(hx + 0.066, hy - 0.142, hz + 0.158)
+        .translate(hx + 0.076, hy - 0.160, hz + 0.184)
     )
     scene.add("snorkel", mouthpiece)
 
     # Lower dark curved flex-hose sweeping from mouthpiece around left cheek into vertical tactical shaft.
     flex_pts = [
-        (hx + 0.086, hy - 0.142, hz + 0.164),
-        (hx + 0.160, hy - 0.138, hz + 0.158),
-        (tube_x - 0.006, hy - 0.104, tube_z + 0.012),
-        (tube_x, hy - 0.044, tube_z + 0.006),
+        (hx + 0.098, hy - 0.160, hz + 0.190),
+        (hx + 0.182, hy - 0.156, hz + 0.182),
+        (tube_x - 0.006, hy - 0.118, tube_z + 0.014),
+        (tube_x, hy - 0.050, tube_z + 0.006),
     ]
     flex_hose = curved_tube(
         flex_pts,
@@ -372,13 +368,13 @@ def _build_snorkel(
     )
     scene.add("snorkel", mid_collar)
 
-    # Upper weathered yellow-gold cylindrical tactical top barrel rising cleanly above head_top.
+    # Upper smooth molded yellow plastic snorkel barrel rising cleanly above head_top.
     upper_base_y = collar_y + 0.010
-    upper_top_y = head_top[1] + 0.180
+    upper_top_y = head_top[1] + 0.175
     upper_h = max(0.220, upper_top_y - upper_base_y)
     upper_top_y = upper_base_y + upper_h
     upper_barrel = (
-        cylinder(0.034, 0.035, upper_h, radial_segs=22, bevel=0.006, axis="y", name="snorkel_upper_gold", material="gear_gold")
+        cylinder(0.034, 0.035, upper_h, radial_segs=22, bevel=0.006, axis="y", name="snorkel_upper_gold", material="gear_yellow_plastic")
         .translate(tube_x, upper_base_y + 0.5 * upper_h, tube_z)
     )
     scene.add("snorkel", upper_barrel)
@@ -418,9 +414,9 @@ def _build_scuba_tank(
     """Build compact brushed-steel scuba air tank with brass gauge, valve, and harness on back-right (-X, -Z)."""
     bx, by, bz = back_anchor
     _, ty, tz = thorax_center
-    tank_x = bx - 0.178
-    tank_y = by + 0.250
-    tank_z = bz - 0.026
+    tank_x = bx - 0.168
+    tank_y = by + 0.252
+    tank_z = bz - 0.072
 
     parts: List[MeshPart] = []
 
@@ -495,22 +491,22 @@ def _build_scuba_tank(
         scene.add("scuba_tank", placed)
 
     bracket = (
-        rounded_box(0.140, 0.088, 0.042, bevel=0.013, segs=3, name="scuba_tank_bracket", material="gear_dark")
+        rounded_box(0.128, 0.080, 0.040, bevel=0.012, segs=3, name="scuba_tank_bracket", material="gear_dark")
         .rotate_xyz(ry=-0.20)
-        .translate(bx - 0.086, by + 0.135, bz - 0.014)
+        .translate(bx - 0.078, by + 0.124, bz - 0.032)
     )
     scene.add("scuba_tank", bracket)
 
     for side_sign, tag in ((+1.0, "left"), (-1.0, "right")):
         h_pts = [
-            (bx - 0.072 + side_sign * 0.050, by + 0.145, bz - 0.010),
-            (side_sign * 0.088, ty + 0.128, tz - 0.032),
-            (side_sign * 0.086, ty + 0.112, tz + 0.064),
-            (side_sign * 0.076, ty + 0.020, tz + 0.120),
+            (bx - 0.062 + side_sign * 0.044, by + 0.130, bz - 0.024),
+            (side_sign * 0.066, ty + 0.106, tz - 0.026),
+            (side_sign * 0.064, ty + 0.094, tz + 0.050),
+            (side_sign * 0.058, ty + 0.016, tz + 0.094),
         ]
         h_strap = curved_tube(
             h_pts,
-            (0.010, 0.016),
+            (0.009, 0.014),
             samples_per_seg=4,
             radial_segs=8,
             cap_rings=2,
@@ -544,33 +540,34 @@ def _make_diving_flipper(name: str, length: float = 0.155, blade_w: float = 0.08
 
 
 def _build_flippers(scene: SceneBuilder, anchors: Dict[str, Any]) -> None:
-    """Attach sculpted dark rubber diving flippers individually onto all 4 contrapposto foot anchors at Y = 0.0."""
-    mid_l = anchors.get("foot_mid_left", (0.162, 0.0, 0.100))
+    """Attach bold ~1.55x larger frogman diving flippers individually onto all 4 feet at Y = 0.0."""
+    mid_l = anchors.get("foot_mid_left", (0.152, 0.0, 0.094))
     mid_r = anchors.get("foot_mid_right", (-mid_l[0], 0.0, mid_l[2]))
-    rear_l = anchors.get("foot_rear_left", (0.166, 0.0, -0.124))
+    rear_l = anchors.get("foot_rear_left", (0.160, 0.0, -0.028))
     rear_r = anchors.get("foot_rear_right", (-rear_l[0], 0.0, rear_l[2]))
 
-    rear_yaw = math.pi - 0.26
-    mid_yaw = 0.24
+    rear_yaw = math.pi - 0.34
+    mid_yaw = 0.28
 
-    for tag, foot_pos, length, blade_w, yaw_signed in (
-        ("rear_left", rear_l, 0.158, 0.088, +rear_yaw),
-        ("rear_right", rear_r, 0.158, 0.088, -rear_yaw),
-        ("mid_left", mid_l, 0.144, 0.082, +mid_yaw),
-        ("mid_right", mid_r, 0.144, 0.082, -mid_yaw),
+    for tag, foot_pos, length, blade_w, yaw_signed, boot_z_off in (
+        ("rear_left", rear_l, 0.232, 0.132, +rear_yaw, -0.010),
+        ("rear_right", rear_r, 0.232, 0.132, -rear_yaw, -0.010),
+        ("mid_left", mid_l, 0.222, 0.126, +mid_yaw, +0.018),
+        ("mid_right", mid_r, 0.222, 0.126, -mid_yaw, +0.018),
     ):
         fx, _, fz = foot_pos
         fin = _make_diving_flipper(f"flipper_{tag}", length=length, blade_w=blade_w)
         scene.add("flippers", fin.rotate_xyz(ry=yaw_signed).translate(fx, 0.0, fz))
 
+        # Snug dark rubber boot pocket encasing the curved digitigrade tarsus cleanly above Y = 0.0.
         boot_vamp = (
-            superellipsoid(0.026, 0.019, 0.042, e1=0.72, e2=0.76, u_segs=14, v_segs=10, name=f"flipper_boot_{tag}", material="gear_dark")
-            .translate(0.0, 0.021, 0.018)
+            superellipsoid(0.027, 0.019, 0.052, e1=0.72, e2=0.76, u_segs=14, v_segs=10, name=f"flipper_boot_{tag}", material="gear_dark")
+            .translate(0.0, 0.021, boot_z_off)
             .rotate_xyz(ry=yaw_signed)
             .translate(fx, 0.0, fz)
         )
         collar = (
-            cylinder(0.027, 0.021, 0.036, radial_segs=14, bevel=0.005, axis="y", name=f"flipper_collar_{tag}", material="gear_dark")
+            cylinder(0.028, 0.022, 0.038, radial_segs=14, bevel=0.005, axis="y", name=f"flipper_collar_{tag}", material="gear_dark")
             .translate(fx, 0.026, fz)
         )
         scene.add("flippers", boot_vamp)
@@ -582,141 +579,125 @@ def _build_shovel(
     right_hand: Tuple[float, float, float],
     right_hand_dir: Tuple[float, float, float],
 ) -> None:
-    """Build an unmistakable classic spade shovel carried upright with its wide yellow blade pointing UP.
+    """Build Swimmer's authentic horizontal one-piece yellow plastic sandbox hand shovel (`asst901`).
 
-    Local coordinates: (0, 0, 0) sits directly inside the ant's right pincer-grip pocket on the lower-mid
-    wooden shaft; -Y descends to the yellow D-grip handle, +Y rises to the widened scooped yellow spade.
+    Local coordinates: (0, 0, 0) sits directly inside Swimmer's lowered right fist at hip height;
+    -Z extends backward into the hollow rounded-square D-handle loop (open along X so side view 901 E
+    sees right through the loop!), and +Z extends forward into the wide rounded-leaf beach sand-scoop.
+    All parts use smooth molded `gear_yellow_plastic` (zero wood shaft, zero woven canvas texture).
     """
     hx, hy, hz = right_hand
     dx, dy, dz = right_hand_dir
-    # Seat the wooden shaft directly inside the pincer-finger pocket (24mm along hand_dir from palm).
-    grip_x = hx + 0.024 * dx
-    grip_y = hy + 0.024 * dy
-    grip_z = hz + 0.024 * dz
+    grip_x = hx + 0.020 * dx
+    grip_y = hy + 0.020 * dy
+    grip_z = hz + 0.020 * dz
     parts: List[MeshPart] = []
 
-    # 1. Sturdy straight cylindrical wooden shaft (`prop_brown`) gripped solidly at local Y = 0.
-    shaft_bot_y = -0.116
-    shaft_top_y = +0.168
-    shaft_len = shaft_top_y - shaft_bot_y
+    # 1. Rear hollow rounded-square D-ring handle loop lying in the YZ plane (visible open hole in 901 E!).
+    d_front_z = -0.128
+    d_back_z = -0.236
+    d_half_y = 0.044
+    d_loop_pts = [
+        (0.0, +d_half_y * 0.55, d_front_z),
+        (0.0, +d_half_y, d_front_z - 0.018),
+        (0.0, +d_half_y, d_back_z + 0.016),
+        (0.0, +d_half_y * 0.55, d_back_z),
+        (0.0, -d_half_y * 0.55, d_back_z),
+        (0.0, -d_half_y, d_back_z + 0.016),
+        (0.0, -d_half_y, d_front_z - 0.018),
+        (0.0, -d_half_y * 0.55, d_front_z),
+    ]
+    d_loop = curved_tube(
+        d_loop_pts,
+        (0.015, 0.015),
+        samples_per_seg=3,
+        radial_segs=12,
+        closed=True,
+        name="shovel_d_loop",
+        material="gear_yellow_plastic",
+    )
+    parts.append(d_loop)
+
+    # Molded junction boss joining the rear D-handle loop smoothly into the horizontal shaft.
+    d_boss = (
+        cylinder(0.022, 0.020, 0.028, radial_segs=16, bevel=0.005, axis="z", name="shovel_d_boss", material="gear_yellow_plastic")
+        .translate(0.0, 0.0, d_front_z + 0.010)
+    )
+    parts.append(d_boss)
+
+    # 2. Short chunky molded yellow plastic horizontal shaft gripped right through local (0, 0, 0).
+    shaft_back_z = d_front_z + 0.016
+    shaft_front_z = +0.092
     shaft = (
-        cylinder(0.0175, 0.0175, shaft_len, radial_segs=18, bevel=0.0035, axis="y", name="shovel_shaft", material="prop_brown")
-        .translate(0.0, 0.5 * (shaft_bot_y + shaft_top_y), 0.0)
+        cylinder(0.0185, 0.0195, shaft_front_z - shaft_back_z, radial_segs=18, bevel=0.004, axis="z", name="shovel_shaft", material="gear_yellow_plastic")
+        .translate(0.0, 0.0, 0.5 * (shaft_back_z + shaft_front_z))
     )
     parts.append(shaft)
 
-    # 2. Classic chunky yellow D-grip handle capping the bottom end of the wooden shaft cleanly.
-    bot_collar = (
-        cylinder(0.023, 0.021, 0.024, radial_segs=16, bevel=0.004, axis="y", name="shovel_d_collar", material="gear_gold_metal")
-        .translate(0.0, shaft_bot_y - 0.005, 0.0)
+    # Smooth flared one-piece molded plastic neck transitioning from shaft into the wide sand scoop.
+    neck_back_z = shaft_front_z - 0.012
+    neck_front_z = shaft_front_z + 0.048
+    neck = (
+        cylinder(0.020, 0.032, neck_front_z - neck_back_z, radial_segs=18, bevel=0.005, axis="z", name="shovel_neck", material="gear_yellow_plastic")
+        .scale(1.18, 0.82, 1.0)
+        .translate(0.0, -0.002, 0.5 * (neck_back_z + neck_front_z))
     )
-    parts.append(bot_collar)
+    parts.append(neck)
 
-    d_base_y = shaft_bot_y - 0.014
-    d_bot_y = d_base_y - 0.072
-    d_yoke = curved_tube(
-        [
-            (-0.044, d_bot_y, 0.0),
-            (-0.050, d_base_y - 0.038, 0.0),
-            (-0.024, d_base_y - 0.007, 0.0),
-            (0.000, d_base_y, 0.0),
-            (+0.024, d_base_y - 0.007, 0.0),
-            (+0.050, d_base_y - 0.038, 0.0),
-            (+0.044, d_bot_y, 0.0),
-        ],
-        0.013,
-        samples_per_seg=4,
-        radial_segs=12,
-        cap_rings=2,
-        name="shovel_d_arch",
-        material="gear_gold",
-    )
-    parts.append(d_yoke)
+    # 3. Wide chunky rounded-leaf / beach sand-scoop blade pointing FORWARD (+Z) horizontally at hip height.
+    blade_w = 0.220
+    blade_l = 0.256
+    blade_start_z = neck_front_z - 0.014
+    blade_cz = blade_start_z + 0.5 * blade_l
 
-    d_crossbar = (
-        capsule(0.0145, 0.092, radial_segs=14, cap_rings=4, axis="x", name="shovel_d_bar", material="gear_gold")
-        .translate(0.0, d_bot_y - 0.002, 0.0)
-    )
-    parts.append(d_crossbar)
-
-    for s_sign, tag in ((-1.0, "left"), (+1.0, "right")):
-        d_cap = (
-            cylinder(0.016, 0.016, 0.012, radial_segs=14, bevel=0.003, axis="x", name=f"shovel_d_collar_{tag}", material="gear_gold_metal")
-            .translate(s_sign * 0.036, d_bot_y - 0.002, 0.0)
-        )
-        parts.append(d_cap)
-
-    # 3. Tapered brass blade-socket ferrule with twin steel rivets flaring upward into the spade base.
-    ferrule_bot_y = shaft_top_y - 0.010
-    ferrule_top_y = shaft_top_y + 0.054
-    ferrule = (
-        cylinder(0.020, 0.027, ferrule_top_y - ferrule_bot_y, radial_segs=18, bevel=0.004, axis="y", name="shovel_ferrule", material="gear_gold_metal")
-        .translate(0.0, 0.5 * (ferrule_bot_y + ferrule_top_y), 0.002)
-    )
-    parts.append(ferrule)
-
-    for z_sign, tag in ((+1.0, "front"), (-1.0, "back")):
-        rivet = (
-            sphere(0.0058, u_segs=8, v_segs=6, name=f"shovel_rivet_{tag}", material="gear_steel")
-            .translate(0.0, ferrule_bot_y + 0.018, z_sign * 0.022)
-        )
-        parts.append(rivet)
-
-    # 4. Classic broad scooped yellow spade blade pointing UP (stepped bottom foot-treads + rounded top nose).
-    blade_w = 0.236
-    blade_l = 0.220
-    blade_base_y = ferrule_top_y - 0.008
-    blade_cy = blade_base_y + 0.5 * blade_l
-
-    def _sculpt_classic_shovel_blade(pos: np.ndarray) -> np.ndarray:
+    def _sculpt_beach_scoop(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
-        # u = 0.0 at flat stepped tread shoulder near ferrule -> u = 1.0 at classic rounded top spade tip.
-        u = np.clip((p[:, 1] + 0.5 * blade_l) / blade_l, 0.0, 1.0)
+        # u = 0.0 at rear rounded shoulder -> u = 1.0 at friendly wide rounded beach-scoop nose.
+        u = np.clip((p[:, 2] + 0.5 * blade_l) / blade_l, 0.0, 1.0)
 
-        # Classic broad garden/trench spade planform: full wide sides up to 52%, then graceful rounded point.
-        t_tip = np.clip((u - 0.50) / 0.50, 0.0, 1.0)
-        width_scale = (1.0 - 0.84 * (t_tip ** 2.05)) ** 0.54
-        t_corner = np.clip((0.06 - u) / 0.06, 0.0, 1.0)
-        width_scale *= 1.0 - 0.04 * (t_corner * t_corner)
-        p[:, 0] *= width_scale
+        # Classic plump rounded-leaf sandbox shovel planform: flares smoothly out from neck, wide mid belly, rounded nose.
+        t_rear = np.clip((0.26 - u) / 0.26, 0.0, 1.0)
+        t_tip = np.clip((u - 0.44) / 0.56, 0.0, 1.0)
+        rear_taper = 1.0 - 0.56 * (t_rear ** 1.75)
+        tip_taper = (1.0 - 0.86 * (t_tip ** 2.05)) ** 0.55
+        p[:, 0] *= rear_taper * tip_taper
 
         nx = p[:, 0] / max(1e-6, 0.5 * blade_w)
-        # Smooth concave scoop dish curving forward (+Z) along side walls and top nose.
-        cup_z = 0.031 * (nx * nx) + 0.021 * (u ** 1.7)
-        # Crisp turned-forward foot-tread shoulders flanking the socket collar.
-        shoulder_mask = np.clip((np.abs(nx) - 0.18) / 0.16, 0.0, 1.0)
-        tread_step = 0.023 * (np.clip((0.12 - u) / 0.12, 0.0, 1.0) ** 1.5) * shoulder_mask
-        thick_scale = 1.0 - 0.40 * (u ** 1.25)
-        p[:, 2] = p[:, 2] * thick_scale + cup_z + tread_step
+        # Deep chunky molded plastic sand-scoop dish (concave upward +Y along side walls & front lip).
+        scoop_y = 0.038 * (nx * nx) + 0.024 * (u ** 1.75)
+        # Raised curved rear heel lip hugging behind the neck like a real sandbox toy scoop.
+        heel_lip = 0.022 * (np.clip((0.18 - u) / 0.18, 0.0, 1.0) ** 1.6) * (0.35 + 0.65 * (nx * nx))
+        thick_scale = 1.0 - 0.32 * (u ** 1.2)
+        p[:, 1] = p[:, 1] * thick_scale + scoop_y + heel_lip - 0.016
         return p
 
     blade_core = (
-        rounded_box(blade_w, blade_l, 0.020, bevel=0.0065, segs=6, name="shovel_blade", material="gear_gold")
-        .deform(_sculpt_classic_shovel_blade)
-        .translate(0.0, blade_cy, -0.006)
+        rounded_box(blade_w, 0.022, blade_l, bevel=0.008, segs=6, name="shovel_blade", material="gear_yellow_plastic")
+        .deform(_sculpt_beach_scoop)
+        .translate(0.0, 0.0, blade_cz)
     )
     parts.append(blade_core)
 
-    # Smooth tapered central socket spine rib rising up the lower half of the spade blade.
-    blade_rib = (
+    # Molded central plastic strengthening spine tapering cleanly into the scoop dish.
+    blade_spine = (
         lathe(
-            [(0.023, 0.000), (0.017, 0.032), (0.011, 0.068), (0.000, 0.092)],
+            [(0.024, 0.000), (0.018, 0.036), (0.011, 0.076), (0.000, 0.104)],
             radial_segs=14,
             cap_bottom=True,
             cap_top=False,
-            axis="y",
-            name="shovel_blade_rib",
-            material="gear_gold_metal",
+            axis="z",
+            name="shovel_spine",
+            material="gear_yellow_plastic",
         )
-        .scale(1.0, 1.0, 0.68)
-        .translate(0.0, blade_base_y + 0.006, 0.003)
+        .scale(1.0, 0.65, 1.0)
+        .translate(0.0, -0.006, blade_start_z + 0.004)
     )
-    parts.append(blade_rib)
+    parts.append(blade_spine)
 
-    # Proud relaxed upright carry beside right side/shoulder: wide yellow spade points UP with a gentle
-    # outward-back lean clearing the scuba mask, tank, and arm while the D-grip hangs cleanly below the fist.
+    # Horizontal waist-level carry matching asst901 & asst201: bold upright scoop roll exposes the chunky
+    # rounded-leaf yellow blade broadly in BOTH 901 E side and 301 S front views while clearing legs & fins.
     for part in parts:
-        placed = part.rotate_xyz(rx=-10.0, ry=-20.0, rz=14.0, degrees=True)
+        placed = part.rotate_xyz(rx=5.0, ry=-6.0, rz=62.0, degrees=True)
         scene.add("shovel", placed)
     scene.set_node_transform("shovel", translation=(grip_x, grip_y, grip_z))
 
@@ -838,7 +819,7 @@ def build_swimmer(blink: float = 0.0) -> SceneBuilder:
         brow_style="wonder",
         head_tilt_deg=4.0,
         head_yaw_deg=-2.5,
-        head_pitch_deg=-12.0,
+        head_pitch_deg=-15.5,
         eye_look=(0.04, 0.10),
         antenna_asymmetry=0.30,
         stance_asymmetry=0.25,
