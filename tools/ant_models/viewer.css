@@ -382,19 +382,19 @@ body {
 }
 
 .swatch-green {
-  background: #3d6e45;
+  background: #57976f;
 }
 
 .swatch-red {
-  background: #80292b;
+  background: #8f2e38;
 }
 
 .swatch-blue {
-  background: #334f85;
+  background: #576ba8;
 }
 
 .swatch-black {
-  background: #575c66;
+  background: #737582;
 }
 
 .swatch-custom {
@@ -721,7 +721,15 @@ body {
   flex: 1 1 auto;
   min-block-size: 170px;
   background: var(--bg-stage);
-  cursor: pointer;
+  cursor: grab;
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.compare-card-stage:active {
+  cursor: grabbing;
 }
 
 .compare-card-canvas {
@@ -828,6 +836,18 @@ body {
   display: block;
   inline-size: 100%;
   block-size: 100%;
+}
+
+#solo-orig-canvas {
+  cursor: grab;
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+#solo-orig-canvas:active {
+  cursor: grabbing;
 }
 
 #solo-3d-canvas {

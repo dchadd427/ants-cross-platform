@@ -37,35 +37,39 @@
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const params = new URLSearchParams(window.location.search), getP = (k) => (params.get(k) || "").toLowerCase();
     const pLineup = getP("lineup") === "1" || getP("lineup") === "true";
-    const pAnt = getP("ant"), pTeam = getP("team"), pColor = normalizeHex(params.get("color")), pAngle = getP("angle"), pProj = getP("proj"), pTurn = getP("turntable"), pBlink = getP("blink"), pIdle = getP("idle"), pSprite = getP("sprite");
+    const pAnt = getP("ant"), pTeam = getP("team"), pColor = normalizeHex(params.get("color")), pAngle = getP("angle"), pProj = getP("proj"), pTurn = getP("turntable"), pBlink = getP("blink"), pIdle = getP("idle"), pSprite = getP("sprite"), pSil = getP("silhouette");
     const pIdleTimeRaw = params.get("idleTime"), fixedIdleTime = pIdleTimeRaw !== null && Number.isFinite(Number(pIdleTimeRaw)) ? Number(pIdleTimeRaw) : null;
+    const pYaw = params.has("yaw") && Number.isFinite(Number(params.get("yaw"))) ? wrapAngleDeg(Number(params.get("yaw"))) : null;
+    const pPitch = params.has("pitch") && Number.isFinite(Number(params.get("pitch"))) ? clamp(Number(params.get("pitch")), -10, 85) : null;
     const savedAnt = !params.has("lineup") && !params.has("ant") && savedView && (ANT_CLASSES.includes(savedView.ant) || savedView.ant === "lineup") ? savedView.ant : null;
     const initAnt = pLineup ? "lineup" : (ANT_CLASSES.includes(pAnt) || pAnt === "lineup" ? pAnt : (savedAnt || "lineup"));
     const savedColor = normalizeHex(savedView && savedView.customColor);
     const initCustomColor = pColor || savedColor || DEFAULT_CUSTOM_HEX;
     const savedTeam = !params.has("team") && savedView && (savedView.team === "custom" || TEAMS[savedView.team]) ? savedView.team : null;
     const initTeam = (pTeam === "custom" || TEAMS[pTeam]) ? pTeam : (pColor ? "custom" : (savedTeam || "green"));
-    const savedAngle = !params.has("angle") && savedView && (ANGLES[savedView.angle] || savedView.angle === "custom") ? savedView.angle : null;
-    const initAngle = ANGLES[pAngle] ? pAngle : (savedAngle || "301");
+    const savedAngle = !params.has("angle") && pYaw === null && savedView && (ANGLES[savedView.angle] || savedView.angle === "custom") ? savedView.angle : null;
+    const initAngle = ANGLES[pAngle] ? pAngle : (pYaw !== null ? "custom" : (savedAngle || "301"));
     const initProj = pProj === "ortho" || pProj === "persp" ? pProj
-      : (!params.has("proj") && savedView && (savedView.proj === "ortho" || savedView.proj === "persp") ? savedView.proj : (ANGLES[initAngle] && initAngle !== "hero" ? "ortho" : "persp"));
+      : (!params.has("proj") && pYaw === null && savedView && (savedView.proj === "ortho" || savedView.proj === "persp") ? savedView.proj : (initAngle === "hero" ? "persp" : "ortho"));
     const initTurn = pTurn === "0" || pTurn === "false" ? false : (pTurn === "1" || pTurn === "true" ? true
       : (!params.has("turntable") && savedView && typeof savedView.turntable === "boolean" ? savedView.turntable : false));
     const initSprite = pSprite === "0" || pSprite === "false" ? false : (pSprite === "1" || pSprite === "true" ? true
       : (!params.has("sprite") && savedView && typeof savedView.sprite === "boolean" ? savedView.sprite : true));
+    const initSil = pSil === "1" || pSil === "true" ? true : (pSil === "0" || pSil === "false" ? false
+      : (!params.has("silhouette") && savedView && typeof savedView.silhouette === "boolean" ? savedView.silhouette : false));
     const initBlink = pBlink === "closed" ? "closed" : (pBlink === "open" ? "open" : (motionQuery.matches ? "open" : "auto"));
     const initIdle = fixedIdleTime !== null ? false : (pIdle === "0" || pIdle === "false" ? false : (pIdle === "1" || pIdle === "true" ? true
       : (!params.has("idle") && savedView && typeof savedView.idle === "boolean" ? savedView.idle : !motionQuery.matches)));
 
     const preset = ANGLES[initAngle] || ANGLES["301"];
-    const useSavedCam = !params.has("angle") && savedView && Number.isFinite(savedView.yaw) && Number.isFinite(savedView.pitch) && Number.isFinite(savedView.zoom);
+    const useSavedCam = !params.has("angle") && pYaw === null && savedView && Number.isFinite(savedView.yaw) && Number.isFinite(savedView.pitch) && Number.isFinite(savedView.zoom);
     let pendingUpdatedVer = savedView && typeof savedView.updatedVersion === "string" ? savedView.updatedVersion : "";
     const state = {
       ant: initAnt, customLabel: "", team: initTeam, customColor: initCustomColor, angle: initAngle, blinkMode: initBlink, idleAnim: initIdle, fixedIdleTime,
-      dark: darkQuery.matches, turntable: initTurn, spritePreview: initSprite,
+      dark: darkQuery.matches, turntable: initTurn, spritePreview: initSprite, silhouette: initSil,
       cam: {
-        yaw: useSavedCam ? wrapAngleDeg(savedView.yaw) : preset.yaw,
-        pitch: useSavedCam ? clamp(savedView.pitch, -10, 85) : preset.pitch,
+        yaw: pYaw !== null ? pYaw : (useSavedCam ? wrapAngleDeg(savedView.yaw) : preset.yaw),
+        pitch: pPitch !== null ? pPitch : (useSavedCam ? clamp(savedView.pitch, -10, 85) : preset.pitch),
         zoom: useSavedCam ? clamp(savedView.zoom, 0.35, 3.2) : 1.0,
         projection: initProj,
       },
@@ -76,7 +80,7 @@
     window.__antViewerGetState = () => ({
       ant: state.ant === "custom" ? "" : state.ant,
       team: state.team, customColor: state.customColor, angle: state.angle, proj: state.cam.projection,
-      turntable: state.turntable, idle: state.idleAnim, sprite: state.spritePreview,
+      turntable: state.turntable, idle: state.idleAnim, sprite: state.spritePreview, silhouette: state.silhouette,
       yaw: state.cam.yaw, pitch: state.cam.pitch, zoom: state.cam.zoom,
     });
 
@@ -137,13 +141,15 @@
       if (ANT_CLASSES.includes(state.ant)) q.set("ant", state.ant);
       if (TEAMS[state.team]) q.set("team", state.team);
       if (SHEET_ANGLES.includes(state.angle)) q.set("angle", state.angle);
+      else if (state.angle === "custom") q.set("yaw", String(Math.round(state.cam.yaw)));
+      if (state.silhouette) q.set("silhouette", "1");
       const qs = q.toString();
       compareTab.setAttribute("href", qs ? ("compare.html?" + qs) : "compare.html");
     }
 
     function syncDebugState() {
       window.__antViewer = {
-        ready: state.ready, ant: state.ant, team: state.team, customColor: state.customColor, angle: state.angle, blink: state.blinkMode, idle: state.idleAnim,
+        ready: state.ready, ant: state.ant, team: state.team, customColor: state.customColor, angle: state.angle, blink: state.blinkMode, idle: state.idleAnim, silhouette: state.silhouette,
         hasBlinkAnim: state.scene.instances.some((inst) => inst.model.blinkInfo && inst.model.blinkInfo.hasBlink),
         idleAnims: state.scene.instances.flatMap((inst) => (inst.model.idleAnims || []).map((a) => a.name)),
         textureCount: state.scene.instances.reduce((sum, inst) => sum + (inst.model.textureCount || 0), 0),
@@ -167,6 +173,7 @@
       $("btn-turntable").setAttribute("aria-pressed", String(state.turntable));
       $("btn-idle").setAttribute("aria-pressed", String(state.idleAnim));
       $("btn-sprite-scale").setAttribute("aria-pressed", String(state.spritePreview));
+      if ($("btn-silhouette")) $("btn-silhouette").setAttribute("aria-pressed", String(state.silhouette));
       $("btn-blink-hold").setAttribute("aria-pressed", String(state.blinkMode === "closed"));
       spriteInset.hidden = !state.spritePreview;
       const antLabel = state.ant === "custom" ? (state.customLabel || "Custom .GLB") : (ANT_LABELS[state.ant] || state.ant);
@@ -342,6 +349,11 @@
       updateUiState(); markDirty(); announce("Idle animation " + (state.idleAnim ? "enabled." : "paused."));
     }
 
+    function toggleSilhouette() {
+      state.silhouette = !state.silhouette;
+      updateUiState(); markDirty(); announce("Silhouette view " + (state.silhouette ? "enabled." : "disabled."));
+    }
+
     toolbarEl.addEventListener("click", (e) => {
       const btn = e.target.closest("button");
       if (!btn) return;
@@ -356,6 +368,7 @@
       else if (btn.id === "btn-turntable") { state.turntable = !state.turntable; state.camTarget = null; updateUiState(); markDirty(false); announce("Turntable spin " + (state.turntable ? "enabled." : "paused.")); }
       else if (btn.id === "btn-idle") toggleIdle();
       else if (btn.id === "btn-sprite-scale") { state.spritePreview = !state.spritePreview; updateUiState(); markDirty(true); announce("48px sprite-scale preview " + (state.spritePreview ? "shown." : "hidden.")); }
+      else if (btn.id === "btn-silhouette") toggleSilhouette();
       else if (btn.id === "btn-blink-hold") toggleBlinkHold();
       else if (btn.id === "btn-blink") triggerBlink();
       else if (btn.id === "btn-export-sheet") exportFiveAngleSheet();
@@ -428,6 +441,7 @@
       else if (e.key === "-" || e.key === "_") state.cam.zoom = clamp(state.cam.zoom * 1.14, 0.35, 3.2);
       else if (e.key === "b" || e.key === "B") { e.preventDefault(); if (e.shiftKey) toggleBlinkHold(); else triggerBlink(); return; }
       else if (e.key === "i" || e.key === "I") { e.preventDefault(); toggleIdle(); return; }
+      else if (e.key === "s" || e.key === "S") { e.preventDefault(); toggleSilhouette(); return; }
       else {
         manual = false;
         const key = (e.key === "r" || e.key === "R") ? (ANGLES[state.angle] ? state.angle : "301")
@@ -438,6 +452,12 @@
       }
       e.preventDefault();
       if (manual) { state.camTarget = null; if (state.turntable) state.turntable = false; updateUiState(); markDirty(); }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      if (document.activeElement === stageCanvas) return;
+      if (e.key === "s" || e.key === "S") { e.preventDefault(); toggleSilhouette(); }
     });
 
     new ResizeObserver(() => markDirty(false)).observe(stageCanvas);
@@ -486,7 +506,7 @@
         const [w, h] = renderer.resize();
         renderer.drawScene(state.scene, state.cam, {
           width: w, height: h, transparent: false, showPlinth: true, dark: state.dark, team: state.team, teamColors: activeTeam(),
-          blinkMode: state.blinkMode, idleAnim: state.idleAnim, fixedIdleTime: state.fixedIdleTime,
+          blinkMode: state.blinkMode, idleAnim: state.idleAnim, fixedIdleTime: state.fixedIdleTime, silhouette: state.silhouette,
         });
         state.dirty = false;
       }
@@ -496,8 +516,8 @@
         if (state.scene.instances.length) {
           const spriteCam = { yaw: state.cam.yaw, pitch: state.cam.pitch, zoom: 1.0, projection: "ortho" };
           spriteCtx.putImageData(renderer.renderOffscreenPixels(spriteCanvas.width, spriteCanvas.height, state.scene, spriteCam, {
-            transparent: true, showPlinth: false, dark: false, team: state.team, teamColors: activeTeam(),
-            blinkMode: state.blinkMode, idleAnim: state.idleAnim, fixedIdleTime: state.fixedIdleTime, overrideProj: "ortho",
+            transparent: true, showPlinth: false, dark: state.dark, team: state.team, teamColors: activeTeam(),
+            blinkMode: state.blinkMode, idleAnim: state.idleAnim, fixedIdleTime: state.fixedIdleTime, silhouette: state.silhouette, overrideProj: "ortho",
           }), 0, 0);
         }
       }
