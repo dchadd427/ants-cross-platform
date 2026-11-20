@@ -275,6 +275,54 @@ LevelPlan plan_for(Level level) noexcept {
             p.hit_follow_up = true;
             break;
     }
+    // The food-gone batch (docs/BOTS.md, "When the food is gone"): when no food is left to get, a bot gets points some other way, by stealing and by fighting, instead of standing. Every level has it, the weaker
+    // the level the later it begins and the more it asks before it risks its last ant: Hard begins after 20 seconds of no work and steals for 10 points, Medium after 40 and for 15, Easy after 80 and for 30 and keeps its last ant
+    // out of every fight that has points to lose. `--tune gone=0` is the bot before the batch.
+    p.gone = true;
+    switch (level) {
+        case Level::Easy:
+            p.gone_stall = 3000;
+            p.gone_wait = 1600;
+            p.gone_raid_min = 30;
+            p.gone_assault_min = 2;
+            p.gone_margin = 10000;
+            p.gone_wipe_ants = 0;
+            p.gone_swap = false;
+            p.gone_odds_percent = 250;
+            p.gone_wipe_odds_percent = 250;
+            p.gone_heal_hp = 5;
+            p.gone_trip_ticks = 500;
+            break;
+        case Level::Medium:
+            p.gone_stall = 1800;
+            p.gone_wait = 800;
+            p.gone_raid_min = 15;
+            p.gone_assault_min = 2;
+            p.gone_margin = 100;
+            p.gone_wipe_ants = 1;
+            p.gone_odds_percent = 200;
+            p.gone_wipe_odds_percent = 100;
+            p.gone_heal_hp = 6;
+            p.gone_trip_ticks = 700;
+            break;
+        case Level::Hard:
+            p.gone_stall = 1200;
+            p.gone_wait = 400;
+            p.gone_raid_min = 10;
+            p.gone_assault_min = 2;
+            p.gone_margin = 50;
+            p.gone_wipe_ants = 2;
+            p.gone_odds_percent = 200;
+            p.gone_wipe_odds_percent = 80;
+            p.gone_heal_hp = 7;
+            p.gone_trip_ticks = 900;
+            break;
+    }
+    // The idle swap (docs/BOT_GONE.md): Medium and Hard; Hard after 15 seconds of standing, Medium after 30. Easy's ants stand as they did.
+    if (level != Level::Easy) {
+        p.idle_swap = true;
+        p.idle_swap_ticks = level == Level::Hard ? 300u : 600u;
+    }
     // The thief batch (docs/BOTS.md, "Thieves: the answer to a raid"): Medium and Hard look at a hole again while a thief walks to it, and do not take a Fire power-up that the ant could not carry home.
     // The meeting with an enemy Thief and the trap (thief_guard, thief_trap) are built and OFF: measured on TREASURE they cost the seat points (docs/BOTS.md). `--tune thief_batch=0` is the bot before the batch.
     if (level != Level::Easy) {
@@ -320,6 +368,11 @@ void without_defence_batch(LevelPlan& p) noexcept {
 void without_hit_cadence(LevelPlan& p) noexcept { p.hit_in_clip = p.hit_follow_up = false; }
 
 void without_heal(LevelPlan& p) noexcept { p.heal = false; }
+
+void without_gone_batch(LevelPlan& p) noexcept {
+    p.gone = false;
+    p.idle_swap = false;
+}
 
 void without_group_fight(LevelPlan& p) noexcept { p.group_fight = false; }
 

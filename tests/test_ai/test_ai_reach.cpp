@@ -295,7 +295,7 @@ void run_reach_tests() {
                     b.level = Level::Hard;
                     spec.bots.push_back(b);
                 }
-                spec.factory = [guard](const BotSpec& b) { return std::make_unique<StandardBot>(b.level, b.style, [guard](LevelPlan& p) { p.reach_guard = guard; p.island_mine_reach = false; }); };
+                spec.factory = [guard](const BotSpec& b) { return std::make_unique<StandardBot>(b.level, b.style, [guard](LevelPlan& p) { p.reach_guard = guard; p.island_mine_reach = false; without_gone_batch(p); }); };
                 const ArenaResult r = play_match(spec);
                 ASSERT_TRUE(r.error.empty());
                 ASSERT_TRUE(r.match_over);

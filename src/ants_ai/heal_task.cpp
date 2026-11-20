@@ -62,7 +62,8 @@ void HealTask::step(TaskContext& c) {
     const BotView& v = c.view;
     const LevelPlan& plan = tactics_.plan;
     const HillInfo& hill = c.map.hill(c.seat);
-    if (!plan.heal || !hill.present || !v.hill_enterable()) {                    // off, no hill, or the hill is closed (the game type 187): nothing is ordered, and what was held is given back
+    const bool gone_heal = tactics_.gone && plan.gone && plan.gone_heal;     // (the food-gone batch: with the food gone an idle ant that is hurt walks home from wherever a walk leads, whatever the plan's heal says)
+    if ((!plan.heal && !gone_heal) || !hill.present || !v.hill_enterable()) {   // off, no hill, or the hill is closed (the game type 187): nothing is ordered, and what was held is given back
         release_all(c.ledger);
         seen_.clear();
         hurt_.clear();
@@ -142,13 +143,14 @@ void HealTask::step(TaskContext& c) {
         if (a.hp >= sim::AntUnit::MAX_HP || jobs_.count(a.id) != 0) continue;
         const int32_t walk = walk_home_tiles(c.map, c.seat, a.tile);
         const Seen before = sample(a, walk);
-        if (a.hp > plan.heal_hp || left_alone_.count(a.id) != 0) continue;
+        const bool gone_ant = gone_heal && a.hp <= plan.gone_heal_hp && a.idle() && walk >= 0 && walk <= plan.gone_heal_walk;     // (an idle hurt ant, with the food gone)
+        if ((a.hp > plan.heal_hp && !gone_ant) || left_alone_.count(a.id) != 0) continue;
         if (!a.takes_orders() || a.state == sim::UnitState::Stunned || a.tile.chebyshev_dist(hill.entrance) <= kMoundTiles) continue;
         const bool nearer = a.state == sim::UnitState::Walking && before.walk >= 0 && walk >= 0 && walk < before.walk;      // heading for the hill
         if (a.hp == 1 && nearer) continue;                                       // the engine walks an ant with 1 hit point home by itself
         const auto recent = hurt_.find(a.id);
         const bool blow = recent != hurt_.end() && now <= recent->second + plan.heal_recent_ticks;
-        if (!heal_wanted(plan, a.hp, striker_near(v, a.tile, plan.heal_danger_tiles), blow, walk)) continue;
+        if (!gone_ant && !(plan.heal && heal_wanted(plan, a.hp, striker_near(v, a.tile, plan.heal_danger_tiles), blow, walk))) continue;
         if (tactics_.wall_demand && a.id == tactics_.wall_keeper) {              // the keeper of the walls stays while a Thief stands at the hole
             bool thief = false;
             for (const AntView& e : v.others()) thief = thief || (e.type == sim::AntType::Thief && !(v.ally() < sim::MAX_PLAYERS && e.team == v.ally()) && e.tile.chebyshev_dist(hill.raid) <= kThiefTiles);

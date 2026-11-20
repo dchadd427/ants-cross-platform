@@ -9,8 +9,9 @@
 //   4. the page never asks the browser for anything: no permission is requested, no service worker is registered, the permission is still "default".
 //   5. the bell in the top bar (a site with a fake chat hub, so that the visitor is logged in or not): for a logged in visitor the dot (not set up), the plain bell (on), the struck bell (blocked by the browser),
 //      the arrow of an iPhone that has not installed the app, none where the browser has no notifications; the plain bell for a visitor who is not logged in; at 320, 390, 721, 1000 and 1280 px wide, with and without
-//      a room held: the bell and Quick host, Quick join, My room, the account button and the Menu's button lie inside the window and none is over another, every target is 44 px or more, a phone held upright with a
-//      room has the dot on the Menu's button and no bell; a press opens the sheet, the dot goes for good (also after a reload) once the sheet has been opened, and no press and no load asks the browser for anything.
+//      a room held: the bell and Quick host, Quick join, My room, the account button and the Menu's button lie inside the window and none is over another, every target is 44 px or more; the bell stands right
+//      beside the Menu's button (one gap to its left, the same top and height) for a visitor who is logged in or not, with or without a room, at those widths and held sideways, and the account button comes before
+//      the bell; a press opens the sheet, the dot goes for good (also after a reload) once the sheet has been opened, and no press and no load asks the browser for anything.
 //   --shots DIR takes the pictures of the build (alerts_*.png).
 //   node tests/scripts/web_home_alerts_browser.js [--web DIR] [--shots DIR]      (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox)
 // Needs `playwright` (npm) and a Chromium that it can start; without them it says so and exits 0 (nothing was checked). Exit status: 0 every check passed (or none could be made), 1 a check failed.
@@ -216,7 +217,7 @@ const over = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b
             await context.close();
         }
         // ---- 5. the bell ----
-        const signed = await startSite({ name: 'Maya', mod: false, role: 'none' }), guest = await startSite(null);
+        const signed = await startSite({ name: 'Maya', mod: false, role: 'none' }), guest = await startSite(null), longName = await startSite({ name: 'LongestNameOfThirtyTwoCharacters', mod: false, role: 'none' });
         const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1';
         async function bellPage(site, w, h, ratio, touch, scenario) {
             const context = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: ratio, hasTouch: touch, isMobile: touch, userAgent: scenario.ua });
@@ -240,7 +241,10 @@ const over = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b
             return out;
         });
         const clash = (c) => { const names = Object.keys(c), bad = []; for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) if (over(c[names[i]], c[names[j]])) bad.push(names[i] + '/' + names[j]); return bad; };
-        const bellState = (page) => page.evaluate(() => { const b = document.querySelector('.hbar .al-bell'); return b ? { hidden: b.hidden || !b.getClientRects().length, state: b.getAttribute('data-state'), label: b.getAttribute('aria-label'), marks: b.querySelectorAll('.al-mark').length, dot: document.querySelector('.hbar .hmenu').classList.contains('al-dot'), after: getComputedStyle(document.querySelector('.hbar .hmenu'), '::after').content } : null; });
+        // the gap between neighbors in the bar: the column gap of the bar's own row (a phone's bar, where the right-hand group is `display: contents`) or of the group (a wide bar)
+const gapOf = (page) => page.evaluate(() => { const g = document.querySelector('.hbar .hright'), bar = document.querySelector('.hbar'); return parseFloat(getComputedStyle(getComputedStyle(g).display === 'contents' ? bar : g).columnGap) || 0; });
+const BESIDE = (c, gap) => !!c.bell && !!c.menu && Math.abs(c.menu.l - c.bell.r - gap) < 0.75 && Math.abs(c.bell.t - c.menu.t) < 0.5 && Math.abs(c.bell.h - c.menu.h) < 0.5 && (!c.chip || c.chip.r <= c.bell.l + 0.5);
+const bellState = (page) => page.evaluate(() => { const b = document.querySelector('.hbar .al-bell'); return b ? { hidden: b.hidden || !b.getClientRects().length, state: b.getAttribute('data-state'), label: b.getAttribute('aria-label'), marks: b.querySelectorAll('.al-mark').length, menuDot: document.querySelector('.hbar .hmenu').classList.contains('al-dot') || getComputedStyle(document.querySelector('.hbar .hmenu'), '::after').content !== 'none' && getComputedStyle(document.querySelector('.hbar .hmenu'), '::after').content !== 'normal' } : null; });
         for (const [name, w, h, ratio, touch] of [['w320', 320, 640, 2, true], ['phone', 390, 844, 2, true], ['w721', 721, 800, 1, false], ['desktop', 1000, 720, 1, false], ['wide', 1280, 800, 1, false]]) {
             const upright = touch && h > w;
             const { context, page } = await bellPage(signed, w, h, ratio, touch, { permission: 'default' });
@@ -249,10 +253,10 @@ const over = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b
             const label = (x) => 'bell ' + name + ': ' + x;
             check(label('a logged in visitor who has not set notifications up: the bell with a dot, named for a reader'), !!c.bell && st.state === 'off' && st.marks === 1 && st.label === 'Alerts: not set up on this device' && c.bell.w >= 44 && c.bell.h >= 44, JSON.stringify(st) + JSON.stringify(c.bell));
             check(label('Quick host, Quick join, the account button, the Menu and the bell are inside the window and none is over another'), c.host && c.join && c.menu && c.chip && [c.host, c.join, c.menu, c.chip, c.bell].every((r) => r.l >= -0.5 && r.r <= w + 0.5 && r.t >= -0.5 && r.b <= h + 0.5) && clash(c).length === 0, clash(c).join() + ' ' + JSON.stringify(c));
-            const wide = w >= 721, last = (k) => (wide && k.bell ? k.bell : k.menu);          // a wide window: the bell is the last of the group, after the Menu; a phone: in front of the account button
-            check(label('the group of the account button, the Menu and the bell is at the right edge of the bar'), last(c).r >= w - 36 && last(c).r <= w, JSON.stringify(last(c)));
-            check(label(wide ? 'the bell stands after the Menu, on its line' : 'the bell stands next to the account button, in front of it'), (wide ? c.bell.l >= c.menu.r - 0.5 && c.chip.r <= c.menu.l + 0.5 : c.bell.r <= c.chip.l + 0.5) && Math.abs((c.bell.t + c.bell.b) / 2 - (c.chip.t + c.chip.b) / 2) < 6, JSON.stringify([c.bell, c.chip, c.menu]));
-            check(label('the Menu\'s button has no dot while the bell is there'), st.dot === true && (st.after === 'none' || st.after === 'normal'), JSON.stringify(st));
+            const last = (k) => k.menu;                                              // the Menu's button is in the corner, whoever else is in the bar
+            check(label('the group of the account button, the bell and the Menu is at the right edge of the bar, the Menu last'), last(c).r >= w - 36 && last(c).r <= w, JSON.stringify(last(c)));
+            check(label('the bell stands right beside the Menu\'s button (one gap to its left, same top and height), the account button before the bell'), BESIDE(c, await gapOf(page)), JSON.stringify([c.chip, c.bell, c.menu, await gapOf(page)]));
+            check(label('the Menu\'s button has no dot of its own'), st.menuDot === false, JSON.stringify(st));
             await shot(page, 'bell_' + name + '_off');
             // a room held: My room joins the row
             await page.click('.hbar .quick.host');
@@ -265,47 +269,63 @@ const over = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b
             c = await controls(page); st = await bellState(page);
             check(label('with a room held: My room, Quick host, Quick join, the account button and the Menu are inside the window and none is over another (or over the bell)'), !!c.mine && [c.host, c.join, c.menu, c.chip, c.mine].every((r) => r && r.l >= -0.5 && r.r <= w + 0.5 && r.t >= -0.5 && r.b <= h + 0.5) && clash(c).length === 0, clash(c).join() + ' ' + JSON.stringify(c));
             check(label('with a room held the last button of the group is still at the right edge'), last(c).r >= w - 36 && last(c).r <= w, JSON.stringify(last(c)));
-            if (upright) {
-                check(label('a phone held upright with a room has no room for the bell: it is not drawn, and the Menu\'s button has the dot'), !c.bell && st.hidden === true && st.dot === true && st.after !== 'none' && st.after !== 'normal', JSON.stringify(st));
-                check(label('the Menu\'s button is still a target of 44 px'), c.menu.w >= 44 && c.menu.h >= 44);
-            } else check(label('a room held at this width: the bell keeps its place'), !!c.bell && c.bell.w >= 44 && c.bell.h >= 44, JSON.stringify(c.bell));
+            check(label('a room held: the bell keeps its place right beside the Menu\'s button, and both are targets of 44 px'), BESIDE(c, await gapOf(page)) && c.bell.w >= 44 && c.bell.h >= 44 && c.menu.w >= 44 && c.menu.h >= 44, JSON.stringify([c.bell, c.menu, await gapOf(page)]));
+            check(label('a room held: the Menu\'s button has no dot of its own'), st.menuDot === false, JSON.stringify(st));
             await shot(page, 'bell_' + name + '_room');
             await page.click('.hbar .hmenu'); await sleep(150);
             check(label('the Menu\'s button opens the Menu as before'), await page.evaluate(() => !!document.querySelector('.hmenubox') && !document.querySelector('.hmenubox').hidden && !!document.querySelector('.hmenubox .al-menu')));
             await page.keyboard.press('Escape');
-            if (c.bell) {
-                await page.click('.hbar .al-bell');
-                check(label('a press on the bell opens the sheet, and the browser was not asked'), !!(await box(page, '.al-card')) && await page.evaluate(() => window.__asked === 0 && Notification.permission === 'default'));
-                await page.keyboard.press('Escape');
-                check(label('Escape closes it and the focus is on the bell'), await page.evaluate(() => document.activeElement === document.querySelector('.hbar .al-bell')));
-            }
-            if (!c.bell) {                                 // a phone upright with a room: no bell, the Menu's row opens the sheet
-                await page.click('.hbar .hmenu'); await sleep(150); await page.click('.hmenubox .al-menu'); await sleep(150);
-                check(label('the Menu\'s row opens the sheet'), !!(await box(page, '.al-card')));
-                await page.keyboard.press('Escape');
-            }
+            await page.click('.hbar .al-bell');
+            check(label('a press on the bell opens the sheet, and the browser was not asked'), !!(await box(page, '.al-card')) && await page.evaluate(() => window.__asked === 0 && Notification.permission === 'default'));
+            await page.keyboard.press('Escape');
+            check(label('Escape closes it and the focus is on the bell'), await page.evaluate(() => document.activeElement === document.querySelector('.hbar .al-bell')));
+            await page.click('.hbar .hmenu'); await sleep(150); await page.click('.hmenubox .al-menu'); await sleep(150);
+            check(label('the Menu\'s row opens the sheet too'), !!(await box(page, '.al-card')));
+            await page.keyboard.press('Escape');
             st = await bellState(page);
-            check(label('the sheet has been opened: the dot is gone for good, from the bell and from the Menu\'s button'), st.dot === false && (st.after === 'none' || st.after === 'normal') && (st.hidden || st.marks === 0) && (st.hidden || st.state === 'off'), JSON.stringify(st));
+            check(label('the sheet has been opened: the dot is gone for good from the bell'), st.menuDot === false && st.marks === 0 && st.state === 'off', JSON.stringify(st));
             await page.reload({ waitUntil: 'load' });
             await until('the dock knows the visitor again', () => page.evaluate(() => { const b = document.querySelector('.hbar .al-bell'); return b && b.getAttribute('data-state') === 'off'; }));
             await sleep(300);
             st = await bellState(page);
-            check(label('and after a reload (kept in this browser): no dot on the bell, none on the Menu\'s button'), st.marks === 0 && st.dot === false && (st.after === 'none' || st.after === 'normal'), JSON.stringify(st));
+            check(label('and after a reload (kept in this browser): no dot on the bell, none on the Menu\'s button'), st.marks === 0 && st.menuDot === false, JSON.stringify(st));
             check(label('the browser was never asked: not on load, not by a press'), await page.evaluate(() => window.__asked === 0));
             await context.close();
+        }
+        // the bell's place: right beside the Menu's button for a visitor who is logged in or not, with or without a room, at five widths and a phone held sideways (two compact rows at 600 x 360, one low row at 844 x 390)
+        for (const [name, w, h, ratio, touch] of [['w320', 320, 640, 2, true], ['phone', 390, 844, 2, true], ['w721', 721, 800, 1, false], ['desktop', 1000, 720, 1, false], ['wide', 1280, 800, 1, false], ['sideways600', 600, 360, 2, true], ['sideways844', 844, 390, 3, true]]) {
+            for (const [who, site, want] of [['logged in', signed, 'off'], ['not logged in', guest, 'guest'], ['logged in with the longest name', longName, 'off']]) {
+                const { context, page } = await bellPage(site, w, h, ratio, touch, { permission: 'default' });
+                await until('the bell is drawn', () => page.evaluate((s) => { const b = document.querySelector('.hbar .al-bell'); return b && b.getAttribute('data-state') === s && b.getClientRects().length > 0; }, want));
+                await sleep(200);
+                let c = await controls(page);
+                check('bell place ' + name + ', ' + who + ': right beside the Menu\'s button, one gap to its left, the same top and height' + (who !== 'not logged in' ? ', the account button before it' : ''), BESIDE(c, await gapOf(page)) && (who === 'not logged in' || !!c.chip) && c.menu.r >= w - 36 && c.menu.r <= w && clash(c).length === 0, JSON.stringify([c, await gapOf(page)]));
+                await shot(page, 'place_' + name + '_' + (who === 'not logged in' ? 'out' : who === 'logged in' ? 'in' : 'long'));
+                await page.click('.hbar .quick.host');
+                await until('the host card', () => page.evaluate(() => !!document.querySelector('.gshade .gyes')));
+                await page.evaluate(() => document.querySelector('.gshade .gyes').click());
+                await until('the Room', () => page.evaluate(() => document.body.dataset.screen === 'room' && document.getElementById('code') && document.getElementById('code').textContent.length > 3));
+                await page.click('.rbar .rhome');
+                await until('Home', () => page.evaluate(() => document.body.dataset.screen === 'home' && !!document.querySelector('.hbar .hmine .mine') && document.querySelector('.hbar .hmine .mine').getClientRects().length > 0));
+                await sleep(300);
+                c = await controls(page);
+                check('bell place ' + name + ', ' + who + ', a room held: right beside the Menu\'s button, one gap to its left, the same top and height, My room and the others inside the window and over no other', BESIDE(c, await gapOf(page)) && !!c.mine && c.menu.r >= w - 36 && c.menu.r <= w && clash(c).length === 0 && [c.host, c.join, c.menu, c.bell, c.mine].every((r) => r && r.l >= -0.5 && r.r <= w + 0.5 && r.t >= -0.5 && r.b <= h + 0.5), JSON.stringify([c, await gapOf(page)]));
+                await shot(page, 'place_' + name + '_' + (who === 'not logged in' ? 'out' : who === 'logged in' ? 'in' : 'long') + '_room');
+                await context.close();
+            }
         }
         // the states, on a phone and on a wide window
         for (const [name, w, h, ratio, touch] of [['phone', 390, 844, 2, true], ['wide', 1280, 800, 1, false]]) {
             for (const [label, site, scenario, want] of [
-                ['on', signed, { permission: 'granted' }, { state: 'on', marks: 0, dot: false, text: 'Alerts: on for this device' }],
-                ['blocked', signed, { permission: 'denied' }, { state: 'blocked', marks: 0, dot: false, text: 'Alerts: blocked in this browser' }],
-                ['an iPhone that has not installed the app', signed, { none: true, ua: IPHONE }, { state: 'needs', marks: 1, dot: false, text: 'Alerts: need the app on the Home Screen' }],
-                ['a visitor who is not logged in', guest, { permission: 'default' }, { state: 'guest', marks: 0, dot: false, text: 'Alerts' }],
+                ['on', signed, { permission: 'granted' }, { state: 'on', marks: 0, text: 'Alerts: on for this device' }],
+                ['blocked', signed, { permission: 'denied' }, { state: 'blocked', marks: 0, text: 'Alerts: blocked in this browser' }],
+                ['an iPhone that has not installed the app', signed, { none: true, ua: IPHONE }, { state: 'needs', marks: 1, text: 'Alerts: need the app on the Home Screen' }],
+                ['a visitor who is not logged in', guest, { permission: 'default' }, { state: 'guest', marks: 0, text: 'Alerts' }],
             ]) {
                 const { context, page } = await bellPage(site, w, h, ratio, touch, scenario);
                 await until('the bell is in its state', () => page.evaluate((s) => { const b = document.querySelector('.hbar .al-bell'); return b && b.getAttribute('data-state') === s; }, want.state));
                 const st = await bellState(page), c = await controls(page);
-                check('bell ' + name + ', ' + label + ': the state, its name and its marks', st.state === want.state && st.label === want.text && st.marks === want.marks && st.dot === want.dot && !st.hidden, JSON.stringify(st));
+                check('bell ' + name + ', ' + label + ': the state, its name and its marks', st.state === want.state && st.label === want.text && st.marks === want.marks && st.menuDot === false && !st.hidden, JSON.stringify(st));
                 check('bell ' + name + ', ' + label + ': lies inside the window, over no other button, 44 px or more', c.bell && c.bell.w >= 44 && c.bell.h >= 44 && c.bell.l >= 0 && c.bell.r <= w && clash(c).length === 0, clash(c).join() + JSON.stringify(c.bell));
                 await shot(page, 'bell_' + name + '_' + want.state);
                 await page.click('.hbar .al-bell');
@@ -317,7 +337,7 @@ const over = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b
             check('bell ' + name + ', a browser with no notifications: no bell, and the Menu still has the row', !(await box(none.page, '.hbar .al-bell')) && await none.page.evaluate(() => { document.querySelector('.hbar .hmenu').click(); return !!document.querySelector('.hmenubox .al-menu'); }));
             await none.context.close();
         }
-        signed.close(); guest.close();
+        signed.close(); guest.close(); longName.close();
         check('no error on any page', errors.length === 0, errors.join(' | '));
     } finally { await browser.close(); server.close(); }
     console.log(checks + ' checks, ' + failures + ' failed');
