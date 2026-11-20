@@ -75,18 +75,18 @@ except ImportError:
         torus_arc,
     )
 
-# Calibrated clean lookout gaze (+-19.5 deg): both eyeballs track harmoniously together across
-# the full IdleLookout sweep with 100% of iris/pupil/catchlights visible on the spherical sclera
-# and zero clipping into the skull, socket rim, or domino mask nose bridge.
-GAZE_ANGLE = 0.34
+# Hard shifty lookout gaze (+-0.72 rad = +-41.2 deg): black pupils tuck ALL THE WAY flush
+# into the far-left & far-right eye corners (zero white sliver past the pupil on the gaze side,
+# matching `atst301` #0 & #3) while staying strictly on the spherical sclera with zero clipping.
+GAZE_ANGLE = 0.72
 
 # Clean balanced resting eyelid angle (symmetrical, zero crooked roll); tucked neatly under
 # the top rim of the domino mask at rest and sealing 100% cleanly on Blink.
 _LID_REST_DROOP = 0.0
 _THIEF_BLINK_ANGLE = EYELID_CLOSED_ANGLE + 0.04
 
-# Stealthy low hiding crouch (`#162`) tuned with `core`'s 1998 anatomy & Thief's sleek skull (H ~ 0.86).
-THIEF_CROUCH = 0.138
+# Stealthy low hiding crouch calibrated via 50%-alpha pixel overlay against `atst301`/`atst901`.
+THIEF_CROUCH = 0.132
 
 # Nimble asymmetric rogue arm pose anchored cleanly at `core`'s narrow petite shoulders (±0.078, 0.456 - c, 0.014).
 _THIEF_ARM_LEFT = [
@@ -141,71 +141,70 @@ class _CraniumCaster:
 
 
 def _thief_head_deform(pos: np.ndarray) -> np.ndarray:
-    """Sculpt Thief's sleek, angular roguish ant head (neither a round ball nor a flat pancake).
+    """Sculpt Thief's compact, sleek, smoothly rounded-crown roguish ant head (`atst301`/`atst901`).
 
-    Subtly lowers the crown into a taut organic dome, sharpens the temple planes and wide
-    roguish cheekbones, and sweeps down into a sleek tapered insectoid jaw framing the
-    lobster-claw mandibles (avoiding both bowling-ball roundness and a pointy alien chin).
+    Narrowed & trimmed vs the old wide boxy dome so the skull fits pixel-for-pixel inside
+    `atst301`/`atst701`: a compact gently-arched green crown extending cleanly above the
+    higher-riding yellow bandana (never a tall exposed forehead wall, never flat/flush),
+    sleek tapered cheeks, and a clean aerodynamic rear occipital sweep into the neck.
     """
     p = pos.copy()
     x, y, z = p[:, 0], p[:, 1], p[:, 2]
     ax = np.abs(x)
     front_mask = np.clip((z + 0.01) / 0.13, 0.0, 1.0)
 
-    # 1. Sleek lowered crown (gentle natural arch — removes the tall round dome without pancaking).
-    crown = np.clip((y - 0.082) / 0.080, 0.0, 1.0)
-    p[:, 1] -= 0.007 * (crown ** 1.65)
-    p[:, 0] *= 1.0 - 0.055 * (crown ** 1.75)
-    p[:, 2] *= 1.0 - 0.055 * (crown ** 1.75)
+    # 1. Smoothly rounded, compact crown (gently curved dome above the bandana — zero tall forehead!).
+    crown = np.clip((y - 0.068) / 0.084, 0.0, 1.0)
+    p[:, 1] -= 0.010 * (crown ** 1.60)
+    p[:, 0] *= 1.0 - 0.065 * (crown ** 1.70)
+    p[:, 2] *= 1.0 - 0.060 * (crown ** 1.70)
 
-    # 2. Wider roguish brow/cheekbones + crisper, subtly flatter side temple planes.
-    brow_flare = np.exp(-(((y - 0.016) / 0.064) ** 2)) * np.clip((ax - 0.07) / 0.11, 0.0, 1.0)
-    p[:, 0] += np.sign(x) * 0.009 * brow_flare
-    temple_flat = np.clip((ax - 0.140) / 0.055, 0.0, 1.0) * np.exp(-(((y - 0.032) / 0.075) ** 2))
-    p[:, 0] -= np.sign(x) * 0.009 * temple_flat
+    # 2. Subtle sleek temple sculpting (zero wide boxy temple flare!).
+    temple_trim = np.clip((ax - 0.132) / 0.052, 0.0, 1.0) * np.exp(-(((y - 0.020) / 0.070) ** 2))
+    p[:, 0] -= np.sign(x) * 0.007 * temple_trim
 
-    # 3. Sleek angled roguish brow ridge, subtle forehead Y-suture, and deeper recessed eye sockets.
-    brow_y = 0.058 + 0.065 * np.minimum(ax, 0.18)
-    brow_shelf = np.exp(-(((y - brow_y) / 0.028) ** 2)) * np.clip((z - 0.02) / 0.12, 0.0, 1.0)
-    p[:, 2] += 0.012 * brow_shelf
+    # 3. Gentle brow ridge, subtle forehead Y-suture, and cleanly recessed orbital hollows.
+    brow_y = 0.052 + 0.055 * np.minimum(ax, 0.16)
+    brow_shelf = np.exp(-(((y - brow_y) / 0.026) ** 2)) * np.clip((z - 0.02) / 0.12, 0.0, 1.0)
+    p[:, 2] += 0.009 * brow_shelf
 
     socket = (
-        np.exp(-(((ax - 0.083) / 0.064) ** 2 + ((y + 0.004) / 0.058) ** 2))
+        np.exp(-(((ax - 0.080) / 0.060) ** 2 + ((y + 0.008) / 0.054) ** 2))
         * np.clip((z - 0.02) / 0.12, 0.0, 1.0)
     )
-    p[:, 2] -= 0.028 * socket
+    p[:, 2] -= 0.024 * socket
 
-    seam_stem = np.exp(-((ax / 0.014) ** 2)) * np.exp(-(((y - 0.060) / 0.048) ** 2)) * front_mask
-    branch_x = 0.014 + np.clip(y - 0.064, 0.0, 0.09) * 0.92
+    seam_stem = np.exp(-((ax / 0.013) ** 2)) * np.exp(-(((y - 0.052) / 0.044) ** 2)) * front_mask
+    branch_x = 0.013 + np.clip(y - 0.056, 0.0, 0.08) * 0.88
     seam_branch = (
-        np.exp(-(((ax - branch_x) / 0.014) ** 2))
-        * np.clip((y - 0.060) / 0.020, 0.0, 1.0)
-        * np.clip((0.145 - y) / 0.036, 0.0, 1.0)
+        np.exp(-(((ax - branch_x) / 0.013) ** 2))
+        * np.clip((y - 0.052) / 0.020, 0.0, 1.0)
+        * np.clip((0.128 - y) / 0.032, 0.0, 1.0)
         * np.clip((z + 0.02) / 0.12, 0.0, 1.0)
     )
     radial = p / np.maximum(1e-6, np.linalg.norm(p, axis=1, keepdims=True))
-    p -= (0.0052 * np.maximum(seam_stem, 0.68 * seam_branch))[:, None] * radial
+    p -= (0.0046 * np.maximum(seam_stem, 0.65 * seam_branch))[:, None] * radial
 
-    # 4. Crisp roguish cheekbones tapering cleanly into a sleek angled ant jaw (zero round cheeks, zero alien chin!).
+    # 4. Sleek tapered ant cheeks & jaw framing the plump bean mandibles cleanly.
     cheek = (
-        np.exp(-(((ax - 0.124) / 0.052) ** 2 + ((y + 0.028) / 0.040) ** 2))
+        np.exp(-(((ax - 0.114) / 0.048) ** 2 + ((y + 0.028) / 0.036) ** 2))
         * np.clip((z + 0.02) / 0.12, 0.0, 1.0)
     )
-    p[:, 0] += np.sign(x) * 0.0085 * cheek
-    p[:, 2] += 0.007 * cheek
+    p[:, 0] += np.sign(x) * 0.005 * cheek
+    p[:, 2] += 0.006 * cheek
 
-    lower = np.clip((-y - 0.020) / 0.142, 0.0, 1.0)
-    p[:, 0] *= 1.0 - 0.25 * (lower ** 1.38)
-    p[:, 2] *= 1.0 - 0.14 * (lower ** 1.38)
+    lower = np.clip((-y - 0.016) / 0.132, 0.0, 1.0)
+    p[:, 0] *= 1.0 - 0.24 * (lower ** 1.38)
+    p[:, 2] *= 1.0 - 0.12 * (lower ** 1.38)
 
-    clypeus = np.exp(-((x / 0.042) ** 2)) * np.exp(-(((y + 0.088) / 0.038) ** 2)) * front_mask
-    p[:, 2] += 0.011 * clypeus
+    clypeus = np.exp(-((x / 0.040) ** 2)) * np.exp(-(((y + 0.082) / 0.034) ** 2)) * front_mask
+    p[:, 2] += 0.010 * clypeus
 
-    # 5. Clean aerodynamic occipital taper behind the lower skull into the neck (sleek 901 E side profile!).
-    rear_low = np.clip((-z - 0.01) / 0.14, 0.0, 1.0) * np.clip((-y + 0.03) / 0.17, 0.0, 1.0)
-    p[:, 0] *= 1.0 - 0.16 * rear_low
-    p[:, 2] += 0.020 * rear_low
-    p[:, 1] += 0.014 * rear_low
+    # 5. Clean aerodynamic occipital taper behind the lower skull into the neck (`atst901` profile).
+    rear_low = np.clip((-z - 0.01) / 0.14, 0.0, 1.0) * np.clip((-y + 0.02) / 0.15, 0.0, 1.0)
+    p[:, 0] *= 1.0 - 0.15 * rear_low
+    p[:, 2] += 0.018 * rear_low
+    p[:, 1] += 0.012 * rear_low
     return p
 
 
@@ -216,13 +215,13 @@ def _paint_thief_cranium_colors(cranium: MeshPart) -> MeshPart:
     ax = np.abs(x)
     front_mask = np.clip((z - 0.01) / 0.12, 0.0, 1.0)
     socket_ring = (
-        np.exp(-(((ax - 0.083) / 0.064) ** 2 + ((y + 0.004) / 0.060) ** 2))
+        np.exp(-(((ax - 0.080) / 0.060) ** 2 + ((y + 0.008) / 0.056) ** 2))
         * np.clip((z - 0.02) / 0.11, 0.0, 1.0)
     )
-    seam_stem = np.exp(-((ax / 0.016) ** 1.5)) * np.exp(-(((y - 0.060) / 0.048) ** 2)) * front_mask
-    mouth_shadow = np.exp(-((ax / 0.064) ** 2 + ((y + 0.118) / 0.040) ** 2)) * front_mask
-    cheek_hi = np.exp(-(((ax - 0.116) / 0.056) ** 2 + ((y + 0.036) / 0.042) ** 2)) * front_mask
-    brow_hi = np.exp(-(((ax - 0.083) / 0.054) ** 2 + ((y - 0.066) / 0.026) ** 2)) * front_mask
+    seam_stem = np.exp(-((ax / 0.015) ** 1.5)) * np.exp(-(((y - 0.052) / 0.044) ** 2)) * front_mask
+    mouth_shadow = np.exp(-((ax / 0.060) ** 2 + ((y + 0.108) / 0.036) ** 2)) * front_mask
+    cheek_hi = np.exp(-(((ax - 0.106) / 0.052) ** 2 + ((y + 0.032) / 0.038) ** 2)) * front_mask
+    brow_hi = np.exp(-(((ax - 0.080) / 0.050) ** 2 + ((y - 0.058) / 0.024) ** 2)) * front_mask
     lum = (
         0.89
         + 0.09 * cheek_hi
@@ -237,20 +236,21 @@ def _paint_thief_cranium_colors(cranium: MeshPart) -> MeshPart:
 
 
 def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
-    """Replace `base_ant`'s rounder cranium with Thief's sleek tapered roguish skull, refit sockets,
-    and sweep antennae cleanly UP-AND-BACKWARD (`-Z`) matching `atst901`/`atst801`!
+    """Replace `base_ant`'s head with Thief's overlay-calibrated narrower, lower-crowned skull,
+    refit sockets/mandibles, and sweep chunky dark antennae cleanly UP-AND-BACKWARD (`-Z`).
     """
     hx, hy, hz = anchors["head_center"]
-    s_h = 1.12
+    # Calibrated directly via 50%-alpha pixel overlay vs `atst301`/`atst901`/`atst701`:
+    # ~15% narrower skull (`rx=0.184`) + compact gently-domed crown (`ry=0.150`) + smooth oval depth (`rz=0.168`).
     cranium = (
-        superellipsoid(0.194, 0.161, 0.156, e1=0.68, e2=0.68, u_segs=38, v_segs=30, name="cranium", material="chitin_team")
+        superellipsoid(0.184, 0.150, 0.168, e1=0.78, e2=0.80, u_segs=38, v_segs=30, name="cranium", material="chitin_team")
         .deform(_thief_head_deform)
     )
-    cranium = _paint_thief_cranium_colors(cranium).scale(s_h, s_h, s_h).translate(hx, hy, hz)
+    cranium = _paint_thief_cranium_colors(cranium).translate(hx, hy, hz)
 
     # Swap cranium inside `head` (vertices are in canonical neutral space; `head` transform applies -neck)
-    # and seat `core`'s enlarged plump mandibles flush beneath Thief's sleek tapered cheeks.
-    jaw_dy, jaw_dz = 0.019, -0.019
+    # and seat `core`'s plump bean mandibles flush beneath Thief's compact sleek jaw.
+    jaw_dy, jaw_dz = 0.030, -0.012
     head_parts = scene.get_node("head")
     new_head_parts: List[MeshPart] = []
     for p in head_parts:
@@ -272,45 +272,45 @@ def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
             scale=mand_xf.scale,
         )
 
-    # Rebuild Thief's antennae sweeping cleanly UP-AND-BACKWARD (`-Z`, streamlined stealth ears
-    # with chunky clubbed distal tips matching `atst901`/`atst801`/`atst201`) on Thief's sleek crown!
+    # Rebuild Thief's antennae sweeping cleanly UP-AND-BACKWARD (`-Z`, streamlined stealth silhouette
+    # with chunky clubbed distal tips matching `atst301`/`atst901`/`atst201`) on Thief's lowered crown!
     neck_vec = np.asarray(anchors["neck_center"], dtype=np.float64)
     ant_rads = [
-        (0.020, 0.020),
-        (0.016, 0.017),
+        (0.019, 0.019),
         (0.015, 0.016),
-        (0.020, 0.022),
-        (0.028, 0.030),
-        (0.034, 0.036),
-        (0.024, 0.026),
+        (0.015, 0.016),
+        (0.019, 0.021),
+        (0.027, 0.029),
+        (0.032, 0.034),
+        (0.023, 0.025),
     ]
     ant_defs = (
         (
             "antenna_left",
             "left",
-            (+0.096, hy + 0.148, hz + 0.026),
+            (+0.078, hy + 0.122, hz + 0.022),
             [
                 (-0.004, -0.018, 0.002),
                 (0.000, 0.000, 0.000),
-                (+0.024, +0.072, -0.032),
-                (+0.044, +0.136, -0.078),
-                (+0.054, +0.172, -0.126),
-                (+0.058, +0.176, -0.164),
-                (+0.060, +0.160, -0.184),
+                (+0.022, +0.058, -0.030),
+                (+0.040, +0.106, -0.074),
+                (+0.050, +0.132, -0.118),
+                (+0.054, +0.134, -0.152),
+                (+0.056, +0.118, -0.170),
             ],
         ),
         (
             "antenna_right",
             "right",
-            (-0.096, hy + 0.148, hz + 0.024),
+            (-0.078, hy + 0.122, hz + 0.020),
             [
                 (+0.004, -0.018, 0.002),
                 (0.000, 0.000, 0.000),
-                (-0.028, +0.064, -0.040),
-                (-0.052, +0.122, -0.094),
-                (-0.064, +0.150, -0.144),
-                (-0.068, +0.148, -0.178),
-                (-0.070, +0.132, -0.196),
+                (-0.026, +0.052, -0.036),
+                (-0.048, +0.096, -0.088),
+                (-0.060, +0.116, -0.134),
+                (-0.064, +0.114, -0.164),
+                (-0.066, +0.098, -0.180),
             ],
         ),
     )
@@ -324,33 +324,33 @@ def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
             name=f"antenna_stalk_{tag}",
             material="chitin_dark",
         )
-        socket = ellipsoid(0.028, 0.015, 0.028, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark").translate(0.0, -0.004, 0.0)
+        socket = ellipsoid(0.026, 0.014, 0.026, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark").translate(0.0, -0.004, 0.0)
         scene.nodes[node_name] = [stalk, socket]
         rel = np.asarray(base_w, dtype=np.float64) - neck_vec
         scene.set_node_transform(node_name, translation=(float(rel[0]), float(rel[1]), float(rel[2])))
 
-    # Refit eye anchors cleanly forward of the scaled sleek orbital hollow so the spherical eyes
-    # sit proudly inside the domino mask with zero cranium or nose-bridge clipping at any gaze angle.
-    eye_y = hy - 0.005
-    eye_z = hz + 0.138
-    anchors["eye_left"] = (0.094, eye_y, eye_z)
-    anchors["eye_right"] = (-0.094, eye_y, eye_z)
-    anchors["eye_center"] = (0.0, eye_y, eye_z + 0.013)
+    # Refit eye anchors cleanly forward of the narrower skull so spherical eyes sit proudly inside
+    # the domino mask with zero cranium or nose-bridge clipping even at hard +-0.58 rad lookout gaze.
+    eye_y = hy - 0.010
+    eye_z = hz + 0.130
+    anchors["eye_left"] = (0.082, eye_y, eye_z)
+    anchors["eye_right"] = (-0.082, eye_y, eye_z)
+    anchors["eye_center"] = (0.0, eye_y, eye_z + 0.012)
     return cranium
 
 
 def _mask_v_limits(theta: float) -> Tuple[float, float]:
-    """Outer bottom/top elevation bounds for Thief's sleek, tailored domino mask + headband.
+    """Outer bottom/top elevation bounds for Thief's sleek, high-riding domino mask + headband.
 
-    Wraps cleanly across the lower brow (revealing Thief's sleek tapered green ant crown
-    above), sweeps cleanly beneath both eyes with a tailored domino cheek dip clearing the
-    mandibles, and tapers smoothly into a fitted wrap around the temples and back.
+    Rides high around the brow/crown so only a compact, gently-rounded green ant crown peeks
+    above the golden wrap (`atst301`/`atst901`), sweeps cleanly beneath both eyes with a tailored
+    domino cheek dip clearing the mandibles, and wraps smoothly around the temples and back.
     """
     a = abs(math.atan2(math.sin(theta), math.cos(theta)))
-    v_top = 0.425 + 0.075 * math.exp(-((a / 1.05) ** 2))
-    cheek_dip = -0.295 * math.exp(-(((a - 0.58) / 0.38) ** 2))
-    nose_dip = -0.130 * math.exp(-((a / 0.25) ** 2))
-    v_bot = -0.068 + cheek_dip + nose_dip
+    v_top = 0.565 + 0.095 * math.exp(-((a / 1.15) ** 2))
+    cheek_dip = -0.320 * math.exp(-(((a - 0.54) / 0.36) ** 2))
+    nose_dip = -0.155 * math.exp(-((a / 0.24) ** 2))
+    v_bot = -0.095 + cheek_dip + nose_dip
     return v_bot, v_top
 
 
@@ -467,7 +467,7 @@ def _build_unified_domino_mask(
         perim_v[3 * n_side + k] = _mask_v_limits(u3)[0]
 
     # Solve exact smooth 3D clearance curve around the left eye + spherical eyelid shell.
-    target_clear = lid_outer_r + 0.0025
+    target_clear = lid_outer_r + 0.0018
     hole_s = np.zeros(m_ring, dtype=np.float64)
     ray_du = np.zeros(m_ring, dtype=np.float64)
     ray_dv = np.zeros(m_ring, dtype=np.float64)
@@ -479,7 +479,7 @@ def _build_unified_domino_mask(
         ray_du[k], ray_dv[k] = du_n, dv_n
 
         # Binary search smallest angular radius clearing the 3D eyelid sphere cleanly.
-        lo, hi = 0.24, min(0.56, dist_perim * 0.74)
+        lo, hi = 0.22, min(0.56, dist_perim * 0.74)
         for _ in range(10):
             mid = 0.5 * (lo + hi)
             uu, vv = u_eye + mid * du_n, v_eye + mid * dv_n
@@ -489,11 +489,11 @@ def _build_unified_domino_mask(
                 lo = mid
             else:
                 hi = mid
-        # Keep lush continuous bridge (>= 0.125 rad) and under-eye cheek strip cleanly clear.
+        # Keep continuous nose bridge (>= 0.115 rad) and under-eye cheek strip cleanly clear.
         max_s = dist_perim * 0.76
         if du_n < -1e-4:
-            max_s = min(max_s, (u_eye - 0.125) / (-du_n))
-        hole_s[k] = min(hi, max(0.22, max_s))
+            max_s = min(max_s, (u_eye - 0.115) / (-du_n))
+        hole_s[k] = min(hi, max(0.20, max_s))
 
     # Light circular smoothing so the punched oval eye cutout is silky-smooth with zero kinks.
     for _ in range(3):
@@ -716,58 +716,59 @@ def _pleated_cloth_tail(
 
 
 def _add_knot_and_tails(scene: SceneBuilder, caster: _CraniumCaster) -> None:
-    """Build the plump folded left-temple knot and two large sweeping pleated cloth tails."""
-    theta = math.radians(104.0)
+    """Build the crisp left-temple knot and two wide, flattened, fanned-out V-flap cloth tails."""
+    theta = math.radians(100.0)
     e_b, e_t = _mask_v_limits(theta)
-    d = _direction(theta, 0.48 * (e_b + e_t) + 0.02)
-    knot = caster.center + d * (caster.radius(d) + 0.019)
+    d = _direction(theta, 0.48 * (e_b + e_t) + 0.01)
+    knot = caster.center + d * (caster.radius(d) + 0.016)
 
     scene.add(
         "gear_bandana",
-        superellipsoid(0.043, 0.038, 0.040, e1=0.72, e2=0.76, u_segs=18, v_segs=14, name="bandana_knot", material="gear_gold")
+        superellipsoid(0.036, 0.032, 0.034, e1=0.72, e2=0.76, u_segs=18, v_segs=14, name="bandana_knot", material="gear_gold")
         .rotate_xyz(rx=0.14, ry=-0.34, rz=0.18)
         .translate(knot),
     )
     scene.add(
         "gear_bandana",
-        torus_arc(0.031, 0.0095, u_segs=18, v_segs=8, plane="xy", name="knot_cinch_fold", material="gear_gold")
+        torus_arc(0.027, 0.0082, u_segs=18, v_segs=8, plane="xy", name="knot_cinch_fold", material="gear_gold")
         .rotate_xyz(rx=0.20, ry=1.26, rz=0.18)
-        .translate(knot + 0.008 * d),
+        .translate(knot + 0.007 * d),
     )
 
     up = np.array([0.0, 1.0, 0.0])
-    out = _normalize(np.array([1.0, 0.0, -0.34]))
-    back = _normalize(np.array([0.24, 0.0, -1.0]))
+    out = _normalize(np.array([1.0, 0.0, -0.28]))
+    back = _normalize(np.array([0.18, 0.0, -1.0]))
 
-    # Compact, perky twin pleated bandana tails (~38% shorter per #191, matching `atst301`/`atst901`).
+    # Wide crisp V-fanned flat cloth ribbon flaps (~45% thinner & noticeably broader than tubes,
+    # matching `atst301`/`atst201`/`atst701` open V-fan bandana silhouette!).
     upper = [
-        knot - 0.008 * out + 0.003 * up,
-        knot + 0.044 * out + 0.014 * up + 0.018 * back,
-        knot + 0.095 * out + 0.026 * up + 0.046 * back,
-        knot + 0.135 * out + 0.033 * up + 0.072 * back,
-        knot + 0.156 * out + 0.032 * up + 0.088 * back,
+        knot - 0.008 * out + 0.004 * up,
+        knot + 0.048 * out + 0.022 * up + 0.018 * back,
+        knot + 0.104 * out + 0.046 * up + 0.044 * back,
+        knot + 0.152 * out + 0.064 * up + 0.068 * back,
+        knot + 0.182 * out + 0.072 * up + 0.086 * back,
     ]
     lower = [
-        knot - 0.006 * out - 0.006 * up,
-        knot + 0.047 * out - 0.024 * up + 0.024 * back,
-        knot + 0.102 * out - 0.046 * up + 0.060 * back,
-        knot + 0.144 * out - 0.050 * up + 0.094 * back,
-        knot + 0.166 * out - 0.042 * up + 0.114 * back,
+        knot - 0.006 * out - 0.008 * up,
+        knot + 0.050 * out - 0.032 * up + 0.024 * back,
+        knot + 0.108 * out - 0.066 * up + 0.060 * back,
+        knot + 0.158 * out - 0.086 * up + 0.094 * back,
+        knot + 0.190 * out - 0.092 * up + 0.116 * back,
     ]
     tail_u = _pleated_cloth_tail(
         upper,
-        half_widths=[0.021, 0.042, 0.052, 0.036, 0.010],
-        half_thicknesses=[0.017, 0.018, 0.016, 0.013, 0.008],
-        face_hint=(-0.38, 0.34, 0.86),
-        twist_deg=(-8.0, 22.0),
+        half_widths=[0.020, 0.050, 0.068, 0.054, 0.014],
+        half_thicknesses=[0.0085, 0.0090, 0.0082, 0.0068, 0.0046],
+        face_hint=(-0.24, 0.62, 0.75),
+        twist_deg=(-6.0, 14.0),
         name="bandana_tail_upper",
     ).translate(-knot)
     tail_l = _pleated_cloth_tail(
         lower,
-        half_widths=[0.021, 0.039, 0.048, 0.033, 0.010],
-        half_thicknesses=[0.016, 0.017, 0.015, 0.012, 0.008],
-        face_hint=(-0.22, 0.58, 0.78),
-        twist_deg=(10.0, -18.0),
+        half_widths=[0.020, 0.046, 0.064, 0.050, 0.014],
+        half_thicknesses=[0.0085, 0.0090, 0.0082, 0.0068, 0.0046],
+        face_hint=(-0.18, 0.68, 0.71),
+        twist_deg=(8.0, -12.0),
         name="bandana_tail_lower",
     ).translate(-knot)
     scene.add("bandana_tails", [tail_u, tail_l])
@@ -783,20 +784,20 @@ def _build_spherical_eyelid(name: str, r_outer: float, thickness: float, yaw_y: 
 def _add_shifty_eyes(scene: SceneBuilder, anchors: dict, blink: float, gaze: float) -> float:
     """Build Thief's cute, simple 1998-style harmoniously tracking spherical eyes + sleek lids.
 
-    Uses a true uniform sphere bright-white sclera (`r = 0.068`, zero Y-stretch) with a big
-    cute glossy jet-black dot pupil and ONE small soft upper-left specular glint (zero busy
-    double-glint or piercing iris ring), tracking cleanly `+-0.34 rad` in `IdleLookout`.
+    Uses a true uniform sphere bright-white sclera (`r = 0.064`, zero Y-stretch) with a crisp
+    glossy jet-black dot pupil and ONE small soft upper-left specular glint, tracking HARD
+    left/right `+-0.58 rad` in `IdleLookout` so pupils tuck flush into the eye corners.
     """
-    sclera_r = 0.068
-    lid_outer_r = 0.081
+    sclera_r = 0.064
+    lid_outer_r = 0.077
     for side, sign in (("left", 1.0), ("right", -1.0)):
         eye = np.asarray(anchors[f"eye_{side}"], dtype=np.float64)
-        yaw = 0.12 * sign
+        yaw = 0.10 * sign
 
         # Subtle dark orbital socket rim framing the bright white spherical eye cleanly.
         scene.add(
             "eyes",
-            torus_arc(0.0705, 0.0056, u_segs=26, v_segs=8, plane="xy", name=f"eye_socket_rim_{side}", material="chitin_dark")
+            torus_arc(0.0665, 0.0052, u_segs=26, v_segs=8, plane="xy", name=f"eye_socket_rim_{side}", material="chitin_dark")
             .scale(0.98, 1.00, 0.86)
             .translate(0.0, 0.0, -0.002)
             .rotate_xyz(rx=-0.06, ry=yaw)
@@ -811,8 +812,8 @@ def _add_shifty_eyes(scene: SceneBuilder, anchors: dict, blink: float, gaze: flo
         ball = f"eye_ball_{side}"
         limbal = _spherical_eye_cap(
             sclera_r,
-            ang_x=0.48,
-            ang_y=0.50,
+            ang_x=0.51,
+            ang_y=0.53,
             thickness=0.0012,
             u_segs=26,
             v_segs=6,
@@ -821,8 +822,8 @@ def _add_shifty_eyes(scene: SceneBuilder, anchors: dict, blink: float, gaze: flo
         ).rotate_xyz(rx=-0.06)
         pupil = _spherical_eye_cap(
             sclera_r + 0.0010,
-            ang_x=0.45,
-            ang_y=0.47,
+            ang_x=0.48,
+            ang_y=0.50,
             thickness=0.0014,
             u_segs=24,
             v_segs=6,
@@ -831,9 +832,9 @@ def _add_shifty_eyes(scene: SceneBuilder, anchors: dict, blink: float, gaze: flo
         ).rotate_xyz(rx=-0.06)
         # Single soft upper-left (-X, +Y) catchlight dot aligned consistently on BOTH eyes.
         glint_main = (
-            ellipsoid(0.0070, 0.0078, 0.0020, u_segs=14, v_segs=10, name=f"catchlight_main_{side}", material="eye_catchlight")
+            ellipsoid(0.0066, 0.0074, 0.0019, u_segs=14, v_segs=10, name=f"catchlight_main_{side}", material="eye_catchlight")
             .rotate_xyz(rx=-0.20, ry=-0.20)
-            .translate(-0.0105, 0.0110, sclera_r + 0.0005)
+            .translate(-0.0098, 0.0102, sclera_r + 0.0005)
             .rotate_xyz(rx=-0.06)
         )
         scene.add(ball, [limbal, pupil, glint_main])
@@ -862,7 +863,7 @@ def _add_shifty_eyes(scene: SceneBuilder, anchors: dict, blink: float, gaze: flo
     ]
     scene.add_animation("Blink", blink_channels)
 
-    # Authentic `atst301` lookout loop (2.52s): dart crisply left (-0.34) and right (+0.34) in sync with Idle!
+    # Authentic `atst301` lookout loop (2.52s): dart HARD left (-GAZE_ANGLE) & HARD right (+GAZE_ANGLE) in sync with Idle!
     q_left = quat_from_axis_angle((0.0, 1.0, 0.0), -GAZE_ANGLE)
     q_right = quat_from_axis_angle((0.0, 1.0, 0.0), +GAZE_ANGLE)
     look_times = [0.0, 1.10, 1.26, 2.36, 2.52]
@@ -1137,12 +1138,12 @@ def _add_thief_idle_animation(scene: SceneBuilder) -> None:
     scene.add_animation("Idle", channels, replace=True)
 
 
-def build_thief(blink: float = 0.0, gaze: float = -0.22) -> SceneBuilder:
+def build_thief(blink: float = 0.0, gaze: float = -1.0) -> SceneBuilder:
     """Build the sly, mischievous Rogue Bandit Thief Ant.
 
     `blink` in [0, 1] sets resting eyelid closure; `gaze` in [-1, 1] turns
-    the shifty lookout eyes cleanly left (-1) to right (+1)
-    (defaults to `-0.22` for a subtle harmonious sideways rest glance).
+    the shifty lookout eyes HARD left (-1) to HARD right (+1)
+    (defaults to `-1.0` matching `atst301` frame #0 and `IdleLookout` t=0).
     """
     scene, anchors = build_base_ant(
         scene_name="ant_thief",
@@ -1185,7 +1186,7 @@ def build_thief(blink: float = 0.0, gaze: float = -0.22) -> SceneBuilder:
     return scene
 
 
-def build_ant(blink: float = 0.0, gaze: float = -0.22) -> SceneBuilder:
+def build_ant(blink: float = 0.0, gaze: float = -1.0) -> SceneBuilder:
     """Canonical module entrypoint for `build_all.py`."""
     return build_thief(blink=blink, gaze=gaze)
 
