@@ -26,6 +26,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.19.1 - 2026-11-20 - Numbers over the ants without a border
+
+**For players:**
+- **Health, damage and heal numbers have no black border.** The heal number now shows white digits with a green plus, so it reads on pale ground and over a green ant.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ceabe493...cf1bbe63)
+
 ## v0.19.0 - 2026-11-20 - Smoother ants online, a direct-connection switch
 
 **For players:**
