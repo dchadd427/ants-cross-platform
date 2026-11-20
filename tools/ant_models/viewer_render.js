@@ -16,7 +16,7 @@
   const rgbLinear = (rgb) => rgb.map(srgbToLinear);
   const DEFAULT_CUSTOM_HEX = "#7c3aed";
   const TEAMS = {
-    green: { label: "Green", team: rgbLinear([0.28, 0.51, 0.35]), dark: rgbLinear([0.13, 0.27, 0.21]) },
+    green: { label: "Green", team: rgbLinear([0.25, 0.51, 0.40]), dark: rgbLinear([0.13, 0.28, 0.25]) },
     red: { label: "Red", team: rgbLinear([0.52, 0.16, 0.20]), dark: rgbLinear([0.24, 0.07, 0.10]) },
     blue: { label: "Blue", team: rgbLinear([0.28, 0.36, 0.60]), dark: rgbLinear([0.12, 0.17, 0.33]) },
     black: { label: "Black", team: rgbLinear([0.39, 0.40, 0.45]), dark: rgbLinear([0.17, 0.18, 0.22]) },
@@ -161,7 +161,7 @@
     float rimSoft = smoothstep(0.70, 0.97, dot(R, u_rimDir)) * 0.88 + pow(max(dot(R, u_rimDir), 0.0), glintExp * 0.7) * 0.95 * sharp;
     return env + vec3(1.0, 0.95, 0.87) * keySoft * sharp + vec3(0.64, 0.88, 1.0) * fillStrip * sharp + vec3(0.84, 0.96, 1.0) * rimSoft * sharp;
   }
-  vec3 evalLight(vec3 L, vec3 lCol, vec3 N, vec3 V, vec3 albedo, float met, float rough, vec3 F0, float coatW, inout vec3 specAcc) {
+  vec3 evalLight(vec3 L, vec3 lCol, vec3 N, vec3 V, vec3 albedo, float met, float rough, vec3 F0, float coatW, float coatRough, inout vec3 specAcc) {
     float NoL = max(dot(N, L), 0.0);
     if (NoL <= 0.0) return vec3(0.0);
     vec3 H = normalize(V + L);
@@ -169,7 +169,8 @@
     vec3 F = F_Schlick(HoV, F0);
     vec3 spec = (D_GGX(NoH, max(rough * rough, 0.032)) * G_Smith(NoV, NoL, rough) * F) / (4.0 * NoV * NoL + 1e-4);
     vec3 diff = (vec3(1.0) - F) * (1.0 - met) * albedo / PI;
-    float coat = coatW * (D_GGX(NoH, 0.024) * G_Smith(NoV, NoL, 0.16) * (0.04 + 0.96 * pow(1.0 - HoV, 5.0))) / (4.0 * NoV * NoL + 1e-4);
+    float coatA = max(coatRough * coatRough, 0.018);
+    float coat = coatW * (D_GGX(NoH, coatA) * G_Smith(NoV, NoL, coatRough) * (0.06 + 0.94 * pow(1.0 - HoV, 5.0))) / (4.0 * NoV * NoL + 1e-4);
     vec3 specTerm = (spec + vec3(coat)) * lCol * NoL;
     specAcc += specTerm;
     return diff * lCol * NoL + specTerm;
@@ -199,11 +200,13 @@
     }
     vec3 albedo = max(u_baseColor * baseSample.rgb * microCav, 0.0);
 
-    float coatW = u_matKind == 1 ? 0.34 * (1.0 - smoothstep(0.18, 0.42, rough)) : 0.0;
+    float coatW = u_matKind == 1 ? 0.34 * (1.0 - smoothstep(0.18, 0.42, rough)) : (u_matKind == 2 ? 0.72 : 0.0);
+    float coatR = u_matKind == 2 ? 0.19 : 0.16;
+    float keyCoat = u_matKind == 2 ? 1.18 : coatW;
     vec3 F0 = mix(vec3(0.045), albedo, met), specAcc = vec3(0.0);
-    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.97, 0.93) * 1.98, N, V, albedo, met, rough, F0, coatW, specAcc)
-            + evalLight(u_fillDir, vec3(0.84, 0.92, 1.0) * 0.84, N, V, albedo, met, rough, F0, coatW, specAcc)
-            + evalLight(u_rimDir, vec3(0.88, 0.96, 1.0) * 1.12, N, V, albedo, met, rough, F0, coatW, specAcc);
+    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.98, 0.95) * 1.88, N, V, albedo, met, rough, F0, keyCoat, coatR, specAcc)
+            + evalLight(u_fillDir, vec3(0.84, 0.92, 1.0) * 0.80, N, V, albedo, met, rough, F0, coatW * 0.35, coatR, specAcc)
+            + evalLight(u_rimDir, vec3(0.88, 0.96, 1.0) * 1.12, N, V, albedo, met, rough, F0, coatW * 0.45, coatR, specAcc);
 
     vec3 bakedAo = clamp(v_color, 0.0, 1.0);
     vec3 aoSoft = mix(vec3(1.0), bakedAo, 0.72);
@@ -213,11 +216,11 @@
 
     vec3 R = reflect(-V, N); float NoV = max(dot(N, V), 0.0);
     float specOccl = clamp(pow(NoV + aoScalar, exp2(-16.0 * rough - 1.0)) - 1.0 + aoScalar, 0.0, 1.0);
-    vec3 ambDiff = mix(u_groundColor * 1.08, u_skyColor, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.42 * aoSoft * geoAo;
+    vec3 ambDiff = mix(u_groundColor * 1.06, u_skyColor, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.40 * aoSoft * geoAo;
     float envAtten = (1.0 - rough) * (1.0 - rough);
     vec3 F_env = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - NoV, 5.0);
     vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.16, 0.92, envAtten) * mix(envAtten, 1.0, met) * specOccl * geoAo;
-    vec3 envCoat = studioEnv(R, 0.14) * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * 0.36 * specOccl;
+    vec3 envCoat = studioEnv(R, coatR) * ((0.05 + 0.95 * pow(1.0 - NoV, 5.0)) * coatW) * (u_matKind == 2 ? 0.24 : 0.36) * specOccl;
 
     vec3 sssBounce = vec3(0.0);
     if (u_matKind == 2) {
