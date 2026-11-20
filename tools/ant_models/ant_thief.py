@@ -1,8 +1,11 @@
 """Sculpted 3D model for the nimble Thief Ant.
 
-Built on `base_ant` (keeping its 3-part eyes, toothed mandibles, and pivoted
-`eyelid_left` / `eyelid_right` nodes with the glTF 2.0 "Blink" clip) with the
-Thief's signature gear:
+Built on `base_ant` (keeping its toothed mandibles and anatomy) with the Thief's
+own shifty eyes and signature gear:
+- Static sockets and sclera with pivoted `eye_ball_left` / `eye_ball_right`
+  nodes (iris + pupil) that dart left and right in the "IdleLookout" glTF 2.0
+  clip, replaying the original lookout loop, plus half-lidded `eyelid_left` /
+  `eyelid_right` nodes driven by the shared "Blink" timing
 - A tightly wrapped woven mustard-gold cloth headband across the brow, ABOVE
   the eyes, leaving the domed crown exposed on top and the eyes unobstructed
 - A plump knot on the ant's left (+X) temple with two leaf-shaped cloth tails
@@ -25,11 +28,23 @@ from typing import List, Sequence, Tuple
 import numpy as np
 
 try:
-    from .base_ant import build_base_ant
-    from .mesh_core import MeshPart, SceneBuilder, catmull_rom_spline, recompute_smooth_normals, superellipsoid, torus_arc
+    from .base_ant import EYELID_CLOSED_ANGLE, _build_eyelid_shell, build_base_ant
+    from .mesh_core import (
+        AnimationChannel, MeshPart, SceneBuilder, catmull_rom_spline, ellipsoid, quat_from_axis_angle,
+        recompute_smooth_normals, superellipsoid, torus_arc,
+    )
 except ImportError:
-    from base_ant import build_base_ant  # type: ignore
-    from mesh_core import MeshPart, SceneBuilder, catmull_rom_spline, recompute_smooth_normals, superellipsoid, torus_arc  # type: ignore
+    from base_ant import EYELID_CLOSED_ANGLE, _build_eyelid_shell, build_base_ant  # type: ignore
+    from mesh_core import (  # type: ignore
+        AnimationChannel, MeshPart, SceneBuilder, catmull_rom_spline, ellipsoid, quat_from_axis_angle,
+        recompute_smooth_normals, superellipsoid, torus_arc,
+    )
+
+# Lookout gaze: eyeballs turn around local +Y; -GAZE_ANGLE looks left, +GAZE_ANGLE looks right.
+GAZE_ANGLE = 0.30
+# Mischievous half-lidded rest: lids sit pre-rotated by this much (left lid lower, slight roll),
+# so the Blink clip only needs the remaining angle to reach the base's sealed pose.
+_LID_DROOP = {"eyelid_left": (0.22, 0.10), "eyelid_right": (0.15, -0.08)}
 
 # Nimble asymmetric arms: left hand raised forward (light-fingered), right low and ready.
 _THIEF_ARM_LEFT = [(0.114, 0.438, 0.022), (0.214, 0.394, 0.104), (0.188, 0.408, 0.222), (0.150, 0.428, 0.262)]
@@ -200,15 +215,60 @@ def _add_knot_and_tails(scene: SceneBuilder, caster: _CraniumCaster) -> None:
     scene.add("gear_bandana", _leaf_tail(lower, [0.020, 0.042, 0.052, 0.036, 0.008], [0.016, 0.016, 0.014, 0.011, 0.008], (-0.15, 0.70, 0.70), (8.0, -16.0), name="bandana_tail_lower"))
 
 
-def build_thief(blink: float = 0.0) -> SceneBuilder:
-    """Build the nimble Thief Ant (`blink` in [0, 1] sets the resting eyelid closure)."""
+def _add_shifty_eyes(scene: SceneBuilder, anchors: dict, blink: float, gaze: float) -> None:
+    """Static sockets + sclera, pivoted darting eyeballs (iris + pupil), droopy blinkable lids.
+
+    Exports the shared "Blink" clip (eyelids) and the "IdleLookout" clip (eyeballs) that
+    replays the original lookout loop: hold left, dart right, hold right, dart back.
+    """
+    for side, sign in (("left", 1.0), ("right", -1.0)):
+        eye = np.asarray(anchors[f"eye_{side}"], dtype=np.float64)
+        yaw = 0.20 * sign
+        scene.add("eyes", torus_arc(0.066, 0.011, u_segs=22, v_segs=8, plane="xy", name=f"eye_socket_rim_{side}", material="chitin_dark").scale(0.95, 1.04, 0.90).rotate_xyz(rx=-0.18, ry=yaw).translate(eye + np.array([0.0, 0.0, 0.006])))
+        scene.add("eyes", superellipsoid(0.063, 0.069, 0.052, e1=0.88, e2=0.90, u_segs=20, v_segs=16, name=f"sclera_{side}", material="eye_white").rotate_xyz(rx=-0.18, ry=yaw).translate(eye))
+
+        # Eyeball node: iris + pupil in eye-local space on the sclera front, turned around +Y.
+        ball = f"eye_ball_{side}"
+        scene.add(ball, ellipsoid(0.034, 0.038, 0.020, u_segs=18, v_segs=12, name=f"iris_{side}", material="eye_iris").rotate_xyz(rx=-0.16, ry=0.15 * sign).translate(-0.004 * sign, 0.003, 0.038))
+        scene.add(ball, ellipsoid(0.019, 0.021, 0.014, u_segs=14, v_segs=10, name=f"pupil_{side}", material="eye_pupil").rotate_xyz(rx=-0.16, ry=0.13 * sign).translate(-0.006 * sign, 0.004, 0.047))
+        scene.set_node_transform(ball, translation=eye, rotation=quat_from_axis_angle((0.0, 1.0, 0.0), max(-1.0, min(1.0, float(gaze))) * GAZE_ANGLE))
+
+        lid = f"eyelid_{side}"
+        droop, roll = _LID_DROOP[lid]
+        shell = _build_eyelid_shell(f"{lid}_shell", yaw_y=0.18 * sign).rotate_xyz(rz=roll).rotate_xyz(rx=droop)
+        scene.add(lid, shell)
+        remaining = EYELID_CLOSED_ANGLE - droop
+        scene.set_node_transform(lid, translation=eye, rotation=quat_from_axis_angle((1.0, 0.0, 0.0), max(0.0, min(1.0, float(blink))) * remaining))
+
+    # Blink: same timing as the shared clip, each lid closing by its remaining angle.
+    times = [0.0, 2.40, 2.48, 2.56, 2.68, 3.00]
+    blink_channels = []
+    for lid, (droop, _) in _LID_DROOP.items():
+        q_open, q_closed = (0.0, 0.0, 0.0, 1.0), quat_from_axis_angle((1.0, 0.0, 0.0), EYELID_CLOSED_ANGLE - droop)
+        blink_channels.append(AnimationChannel(lid, "rotation", list(times), [q_open, q_open, q_closed, q_closed, q_open, q_open]))
+    scene.add_animation("Blink", blink_channels)
+
+    # IdleLookout: authentic lookout loop (2.52 s): hold left, snappy dart right, hold, dart back.
+    q_left, q_right = quat_from_axis_angle((0.0, 1.0, 0.0), -GAZE_ANGLE), quat_from_axis_angle((0.0, 1.0, 0.0), GAZE_ANGLE)
+    look_times = [0.0, 1.10, 1.26, 2.36, 2.52]
+    look_vals = [q_left, q_left, q_right, q_right, q_left]
+    scene.add_animation("IdleLookout", [AnimationChannel(f"eye_ball_{s}", "rotation", list(look_times), list(look_vals)) for s in ("left", "right")])
+
+
+def build_thief(blink: float = 0.0, gaze: float = 0.0) -> SceneBuilder:
+    """Build the nimble Thief Ant.
+
+    `blink` in [0, 1] sets the resting eyelid closure; `gaze` in [-1, 1] turns the eyeballs
+    from full left (-1) to full right (+1).
+    """
     scene, anchors = build_base_ant(
         scene_name="ant_thief",
+        include_eyes=False,
         include_brows=False,
         left_arm_pose=_THIEF_ARM_LEFT,
         right_arm_pose=_THIEF_ARM_RIGHT,
-        blink=blink,
     )
+    _add_shifty_eyes(scene, anchors, blink, gaze)
     cranium = next(p for p in scene.get_node("head") if p.name == "cranium")
     caster = _CraniumCaster(cranium, anchors["head_center"])
     scene.add("gear_bandana", _build_headband(caster))
@@ -218,9 +278,9 @@ def build_thief(blink: float = 0.0) -> SceneBuilder:
     return scene
 
 
-def build_ant(blink: float = 0.0) -> SceneBuilder:
+def build_ant(blink: float = 0.0, gaze: float = 0.0) -> SceneBuilder:
     """Canonical module entrypoint for `build_all.py`."""
-    return build_thief(blink=blink)
+    return build_thief(blink=blink, gaze=gaze)
 
 
 __all__ = ["build_ant", "build_thief"]
