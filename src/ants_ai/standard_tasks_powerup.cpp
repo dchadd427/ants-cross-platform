@@ -17,14 +17,28 @@ using standard_detail::tile_index;
 
 namespace {
 
-// A worker that may be sent for a power-up: empty hands, healthy, takes orders, is not on a power-up tile
-bool usable_for_powerup(const BotView& view, const AntView& a) {
-    if (a.type != view.default_ant_type() || a.holding || a.carried_points > 0 || a.hp < 5) return false;
+// A worker that may be sent for a power-up: empty hands, healthy, takes orders, is not on a power-up tile. With `typed_ok` (PowerUpTask::swappable) an idle typed ant is one as well: an ant that takes
+// another power-up leaves its old one on a free tile beside it (docs/GAMEPLAY.md)
+bool usable_for_powerup(const BotView& view, const AntView& a, bool typed_ok = false) {
+    if ((a.type != view.default_ant_type() && !typed_ok) || a.holding || a.carried_points > 0 || a.hp < 5) return false;
     if (!a.takes_orders() || a.state == sim::UnitState::Stunned) return false;
     return view.powerup_at(a.tile) == nullptr;
 }
 
 }  // namespace
+
+// An idle typed ant that may be sent for a power-up of `kind` (docs/BOT_GONE.md): a Thief for the steals of the food-gone batch (an idle Swimmer: the ferry is over; the Fire Ant is the keeper of the walls against the thieves, the Bomber lays the mines), or the Fire power-up
+// that a Bomber or Swimmer takes after standing idle for LevelPlan::idle_swap_ticks (the bot has none: the caller asks only then)
+bool PowerUpTask::swappable(const AntView& a, sim::AntType kind, uint64_t now) const {
+    const LevelPlan& plan = tactics_.plan;
+    if (!a.idle()) return false;
+    if (kind == sim::AntType::Thief) {
+        return tactics_.gone && tactics_.gone_thief && plan.gone && plan.gone_swap && a.type == sim::AntType::Swimmer;
+    }
+    if (kind != sim::AntType::Fire || !plan.idle_swap || (a.type != sim::AntType::Bomber && a.type != sim::AntType::Swimmer)) return false;
+    const auto since = idle_since_.find(a.id);
+    return since != idle_since_.end() && now >= since->second + plan.idle_swap_ticks;
+}
 
 bool PowerUpTask::blacklisted(uint32_t ant, sim::TileCoord tile, uint64_t tick) const noexcept {
     const auto it = black_.find({ant, key_of(tile)});
@@ -107,7 +121,7 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
     if (cands.empty()) return false;
     std::vector<const AntView*> ants;
     for (const AntView& a : v.mine()) {
-        if (!usable_for_powerup(v, a) || takes_.count(a.id) != 0) continue;
+        if (!usable_for_powerup(v, a, swappable(a, kind, now)) || takes_.count(a.id) != 0) continue;
         const TaskId owner = c.ledger.owner(a.id);
         if (owner != kNoTask && owner != id() && c.ledger.rank(owner) >= c.ledger.rank(id())) continue;     // the ants of a fight, the walls and the raids are not taken
         ants.push_back(&a);
@@ -152,7 +166,8 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
         }
         if (best == nullptr) continue;
         const uint32_t walk = static_cast<uint32_t>(MapInfo::walking_ticks(best_cost)) + 5u;           // the pick-up comes 8 d + 5 ticks after the order on grass (measured in the engine)
-        if (walk > (is_link_flower(p.tile) ? params_.link_trip_ticks : params_.max_trip_ticks)) continue;
+        const uint32_t trip_limit = tactics_.gone && kind == sim::AntType::Thief ? std::max(params_.max_trip_ticks, tactics_.plan.gone_trip_ticks) : params_.max_trip_ticks;      // (the food-gone batch: a Thief for the steals is worth a longer walk)
+        if (walk > (is_link_flower(p.tile) ? params_.link_trip_ticks : trip_limit)) continue;
         if (static_cast<uint64_t>(v.ticks_left()) < walk + 17u + 2u * c.profile.reaction_delay + 100u) continue;
         // a contest: an enemy ant whose walk to the power-up is no longer than ours (the engine's walking speed, a tenth quicker for the diagonal runs of the estimate).
         // On a gate map Medium does not give a trip up for an enemy that is as near, when the power-up lies on the hill's side or in the component of the ant (skip_contest): its longer reaction delay
@@ -189,6 +204,7 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
         t.walk_ticks = walk;
         takes_[best->id] = t;
         ++started_;
+        if (best->type != v.default_ant_type()) ++swaps_;                                 // (an idle typed ant: docs/BOT_GONE.md)
         return true;
     }
     return false;
@@ -353,6 +369,15 @@ void PowerUpTask::step(TaskContext& c) {
     for (const uint32_t ant : c.ledger.ants_of(id())) {                                 // an ant whose trip is over (or never left) is free again (the watcher waits for a landing)
         if (takes_.count(ant) == 0 && ant != watch_.ant) c.ledger.release(ant, id());
     }
+    if (tactics_.plan.idle_swap) {                                                      // who stands idle with empty hands, since when (the idle swap)
+        for (const AntView& a : v.mine()) {
+            if (a.idle() && !a.holding && a.carried_points == 0) idle_since_.emplace(a.id, now);
+            else idle_since_.erase(a.id);
+        }
+        if (idle_since_.size() > v.mine().size() + 16) {                                // (the dead are forgotten)
+            for (auto it = idle_since_.begin(); it != idle_since_.end();) it = find_ant(v.mine(), it->first) == nullptr ? idle_since_.erase(it) : std::next(it);
+        }
+    }
     for (auto it = black_.begin(); it != black_.end();) it = it->second <= now ? black_.erase(it) : std::next(it);
     for (auto it = tile_black_.begin(); it != tile_black_.end();) it = it->second <= now ? tile_black_.erase(it) : std::next(it);
     for (auto it = fields_.begin(); it != fields_.end();) it = now >= it->second.tick + params_.field_ttl_ticks ? fields_.erase(it) : std::next(it);        // (a field that is older than its time is searched again when it is asked for)
@@ -424,7 +449,10 @@ void PowerUpTask::step(TaskContext& c) {
 
     // 2. new trips for what is wanted and missing, in the order of value (Fire, Bomber, Thief, Combat, Swimmer), as many as max_active allows: the opening sends them all at the first look
     for (const sim::AntType kind : tactics_.plan.opening_order) {
-        const size_t want = tactics_.wants[static_cast<size_t>(kind)];
+        size_t want = tactics_.wants[static_cast<size_t>(kind)];
+        if (want == 0 && kind == sim::AntType::Fire && tactics_.plan.idle_swap) {          // the idle swap: a Bomber or Swimmer that has stood idle long enough wants the Fire power-up, when the bot has no Fire Ant
+            for (const AntView& a : v.mine()) want = std::max<size_t>(want, swappable(a, kind, now) ? 1u : 0u);
+        }
         if (want == 0) continue;
         size_t have = 0;
         for (const AntView& a : v.mine()) have += a.type == kind ? 1u : 0u;

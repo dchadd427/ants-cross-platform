@@ -403,13 +403,19 @@ class TheRealDockerfileReplayed(Scratch):
         self.assertIn("Generated from CHANGELOG.md when the site image is built", page)
         self.assertEqual(sorted(name for name in os.listdir(self.html("plain")) if name.startswith("changelog")), ["changelog.html"])
 
+    def test_the_data_file_of_the_update_notice_is_made_beside_the_changelog_page_with_the_live_version(self):
+        with open(os.path.join(self.html("plain"), "whats_new.json"), encoding="utf-8") as f:
+            data = json.load(f)
+        self.assertEqual(data["version"], read("VERSION").strip())
+        self.assertGreaterEqual(len(data["releases"]), 1)
+
     def test_the_builder_got_what_the_dockerignore_lets_through_and_nothing_else(self):
         src = os.path.join(self.site["plain"], "src")
         for name in ("CMakeLists.txt", "VERSION", "include", "src", "web", "Original-Ants", "assets", "docker", "changelog"):
             self.assertTrue(os.path.exists(os.path.join(src, name)), name)
         for name in ("tests", "docs", "README.md", "run_tests.sh", ".github"):
             self.assertFalse(os.path.exists(os.path.join(src, name)), name)
-        self.assertEqual(sorted(os.listdir(os.path.join(src, "changelog"))), ["CHANGELOG.md", "changelog.html", "changelog_to_html.py"])
+        self.assertEqual(sorted(os.listdir(os.path.join(src, "changelog"))), ["CHANGELOG.md", "changelog.html", "changelog_to_html.py", "whats_new.json"])
         self.assertFalse(os.path.exists(os.path.join(src, "gitinfo", "config")), "a clone's .git/config is never part of the build")
 
 

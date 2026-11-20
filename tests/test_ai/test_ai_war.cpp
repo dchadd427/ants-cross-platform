@@ -736,7 +736,7 @@ void run_war_tests() {
         {   // (e) sooner: the plan's Hard assault begins at tick 600; a bot that is behind (war tier 1, 2 or 3 from the start) goes at tick 300, one that is not at tick 600
             for (const int32_t deficit : {20, 50, 90}) {
                 for (const bool rule : {true, false}) {
-                    LevelPlan p = plan_for(Level::Hard);
+                    LevelPlan p = plan_without_gone(Level::Hard);
                     p.raider_hunt = p.sabotage = false;
                     p.war_bombers = p.war_fires = p.mine_per_pile = p.mine_gate = 0;
                     p.behind_war = rule;
