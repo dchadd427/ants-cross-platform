@@ -69,6 +69,7 @@ void play_and_quit(World& w, const std::string& code, const net::PlanMsg& plan, 
         ASSERT_TRUE(pia.lobby->request_visibility(true));
         w.run(300);
     }
+    w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
     ASSERT_TRUE(pia.lobby->request_start());
     w.run(300);
     ASSERT_TRUE(w.status(code).starting);
@@ -143,6 +144,7 @@ void run_rematch_tests() {
         lobby = lobby_of(w, code);
         ASSERT_TRUE(lobby.has_value() && lobby->reserved == 0x2 && lobby->leader == 0);
         // START waits for Bob: not taken, the host is told who is missing
+        w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
         ASSERT_TRUE(pia_back.lobby->request_start());
         w.run(300);
         lobby = lobby_of(w, code);
@@ -152,6 +154,7 @@ void run_rematch_tests() {
         ASSERT_TRUE(pia_back.lobby->request_remove(1));
         w.run(300);
         ASSERT_TRUE(bob_results.lobby->phase() == net::ClientLobby::Phase::Rejected && bob_results.lobby->reject_reason() == net::RejectReason::Kicked);
+        w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
         ASSERT_TRUE(pia_back.lobby->request_start());
         w.run(300);
         lobby = lobby_of(w, code);
@@ -203,6 +206,7 @@ void run_rematch_tests() {
         w.run(300);
         ASSERT_TRUE(pia_back.lobby->is_leader() && !bob_back.lobby->is_leader());
         ASSERT_EQ(games_of(pia_back.lobby->room()), std::string("0000"));
+        w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
         ASSERT_TRUE(pia_back.lobby->request_start());                                              // nobody is missing: START is taken, the pages go to the games
         w.run(300);
         ASSERT_TRUE(lobby_of(w, code).has_value() && lobby_of(w, code)->starting);
@@ -371,6 +375,7 @@ void run_rematch_tests() {
             w.run(300);
             ASSERT_TRUE(bob.lobby->phase() == net::ClientLobby::Phase::InRoom && bob.lobby->my_seat() == 1 && !net::key_matches(bob.lobby->key(), p.bob));
             ASSERT_EQ(games_of(pia_back.lobby->room()), std::string("0100"));                          // (Bob is a game in the room, and nobody is waited for)
+            w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
             ASSERT_TRUE(pia_back.lobby->request_start());
             w.run(300);
             ASSERT_TRUE(lobby_of(w, code).has_value() && lobby_of(w, code)->starting);
@@ -446,6 +451,7 @@ void run_rematch_tests() {
         ASSERT_TRUE(pia.lobby->is_leader() && bob.lobby->my_seat() == 1 && cid.lobby->my_seat() == 2);
         ASSERT_TRUE(pia.lobby->request_plan(plan_of({K::Open, K::Open, K::Open, K::Nobody})));
         w.run(300);
+        w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
         ASSERT_TRUE(pia.lobby->request_start());
         w.run(300);
         const net::SeatKey kp = pia.lobby->key(), kb = bob.lobby->key(), kc = cid.lobby->key();
@@ -531,6 +537,7 @@ void run_rematch_tests() {
             w.next_key = net::SeatKey{};
             w.run(300);
             ASSERT_TRUE(pia.lobby->is_leader() && lobby_of(w, code)->reserved == 0);
+            w.pages_ready();                                                             // (protocol 27: the START waits for the other pages' Ready)
             ASSERT_TRUE(pia.lobby->request_start());
             w.run(300);
             pia.end->close();

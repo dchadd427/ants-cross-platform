@@ -1,0 +1,248 @@
+/* The Room inside Home (web/home/home.js, docs/HOME_SCREEN.md "The Room", docs/PLAY_IN_BROWSER.md "Your room"): the page's room panel (#lobby) takes the games' place in Home's body while <body data-screen="room">; the bar, the players and the chat
+   box stay. It is drawn to fit with no scrolling of the page at 1920 x 1080, 1600 x 900, 1366 x 768 and 1280 x 800: a header (the name, who can join, the code, Leave room), the link and its notes, the four colors in two rows of two
+   with the ants at twice their size (three on a window 960 px high or more), the map, the game type and START in one column beside them, and the notes under the colors. A window lower than the room needs (a laptop with its toolbars) scrolls
+   the panel inside itself, with START at its bottom; a phone (up to 700 px wide) shows it as the first of three views, one column that scrolls, START and its line at the bottom. The colors, .btn, .panel and .ant are the page's own
+   (web/lobby.html). Every target is at least 44 px high and wide on a phone, and a finger's size elsewhere (the Remove and Team buttons are smaller with a mouse). */
+
+/* ---- which one shows ---- */
+body[data-screen="home"] #lobby { display: none; }
+body[data-screen="room"] .hmain .gdock { display: none; }
+.hmain > #lobby { grid-area: 1 / 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 10px 16px 8px; --k: 2; }
+.hmain > #lobby > * { flex: none; }
+.hmain > #lobby > .r-body { flex: 1 1 auto; min-height: 0; }
+#lobby .invite-note { margin: 0; }
+option { background: #0b1612; color: var(--cream); }
+
+/* ---- the header: the name and who can join, the code, Leave room ---- */
+.r-top { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.r-top .head { flex: 1 1 auto; margin: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; justify-content: flex-start; }
+.r-top .head .hl { display: inline-flex; align-items: center; gap: 8px; }
+.r-top h2 { font-size: 22px; }
+.r-top .vis { display: inline-flex; margin: 0; gap: 8px; }
+.r-top .vis .btn { min-height: 40px; padding: 4px 12px; font-size: 15px; box-shadow: var(--bevel-sm), 2px 3px 0 var(--shadow); }
+.r-top .vis .btn small { font-size: 12px; }
+.r-top .code { margin-left: auto; font-size: 14px; }
+.r-acts { display: flex; align-items: center; gap: 10px; flex: none; }
+.r-acts .btn { min-height: 44px; padding: 6px 14px; font-size: 16px; }
+.leave { color: var(--cream); background: var(--sheen) #9d0d17; border-color: var(--edge); box-shadow: var(--bevel), 3px 4px 0 #3b0d10; }       /* (red like Leave game in the game's menu: the pressed and forced-colors looks are .btn's) */
+.leave:hover { background-color: #b5222c; }
+.r-link { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; }
+.invite { display: flex; gap: 10px; flex: 0 1 470px; min-width: 260px; }
+.invite input { appearance: none; min-height: 42px; padding: 6px 12px; font-size: 15px; flex: 1 1 auto; min-width: 0; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+.invite .btn { min-height: 44px; padding: 6px 14px; font-size: 16px; }
+.share { display: none; }
+.r-notes { flex: 1 1 260px; min-width: 0; display: grid; gap: 2px; align-content: center; }
+.r-notes .visnote, .r-notes .invite-note { margin: 0; font-size: 13px; line-height: 1.3; }
+.r-notes .invite-note { display: block; color: var(--muted); }
+.hint { margin-top: 6px; font-size: 14px; color: #f2c48c; }
+
+/* ---- the body: the colors at the left, the match at the right ---- */
+.r-body { display: grid; grid-template-columns: minmax(0, 1fr) clamp(270px, 25vw, 340px); gap: 14px 18px; margin-top: 8px; }
+.r-seats { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.r-seats > * { flex: none; }
+.side { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.side > * { flex: none; }
+.room-notice { margin: 3px 0 0; font-size: 12px; line-height: 1.3; color: var(--muted); }
+
+/* ---- the four colors ---- */
+.slots { list-style: none; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin: 0; padding: 0; }
+.slot { --accent: #79bf93; position: relative; display: grid; grid-template-columns: calc(24px * var(--k) + 4px) minmax(0, 1fr); gap: 0 10px; align-items: center; padding: 8px 8px 6px; min-height: 0;
+    background: linear-gradient(180deg, #0f1820, #080c11); border: 2px solid var(--edge); border-radius: 6px; box-shadow: inset 0 0 0 1px #17382f, inset 0 4px 0 var(--accent); color: var(--cream); }
+.slot[data-c="red"] { --accent: #d4707f; } .slot[data-c="blue"] { --accent: #8f8fd6; } .slot[data-c="black"] { --accent: #b3afb9; }
+.slot .antbox { position: relative; align-self: center; height: calc(41px * var(--k)); }
+.slot .antbox::after { content: ""; position: absolute; left: 50%; bottom: -3px; width: calc(20px * var(--k)); height: calc(5px * var(--k)); transform: translateX(-50%); background: radial-gradient(closest-side, rgba(0, 0, 0, .75), transparent); z-index: 0; }
+.slot.k-open .ant, .slot.k-nobody .ant { filter: brightness(0) invert(1); opacity: .13; animation: none; }
+.slot.k-open { border-style: dashed; border-color: #2b6b4f; background: #0a1016; }
+.slot.k-nobody { background: #0a0d10; }
+.slot .txt { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0; align-content: center; }
+.slot .txt > * { grid-column: 1 / -1; }
+.slot .txt > .cname { grid-column: 1; grid-row: 1; align-self: center; }
+.slot .txt > .teamset { grid-column: 2; grid-row: 1; margin: 0 30px 0 0; align-self: center; }
+.cname { font-size: 12px; letter-spacing: .14em; line-height: 1.3; text-transform: uppercase; color: var(--accent); }
+.pname { font-size: 19px; line-height: 1.2; display: flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; min-width: 0; overflow-wrap: anywhere; }
+.slot.k-open .pname, .slot.k-nobody .pname, .slot.k-bot .pname { color: #a8c2b8; }
+.botname { display: block; font-size: 13px; line-height: 1.2; color: #a8c2b8; overflow-wrap: anywhere; }
+.you { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--gold); background: #2a2208; border: 1px solid #6b5a14; border-radius: 3px; padding: 0 6px; line-height: 1.5; }
+.pstat { font-size: 13px; line-height: 1.3; color: var(--muted); min-height: 0; }
+.pstat.in, .pstat.wait { display: flex; align-items: center; }       /* (START has been pressed: each player's line says whether their game is open yet) */
+.pstat.in::before, .pstat.wait::before { content: ""; flex: none; width: 9px; height: 9px; margin-right: 8px; border-radius: 50%; box-shadow: 0 0 0 1px #000; }
+.pstat.in { color: #b6e8c8; } .pstat.in::before { background: #44e08a; box-shadow: 0 0 0 1px #000, 0 0 7px rgba(68, 224, 138, .8); }
+.pstat.wait { color: #f2d68a; } .pstat.wait::before { background: var(--gold); animation: wait-blink 1.1s ease-in-out infinite; }
+@keyframes wait-blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+.pname input { min-width: 0; width: 100%; font-size: 19px; line-height: 1.1; color: var(--cream); background: #0b1117; border: 2px solid var(--frame-hi); border-radius: 3px; padding: 0 6px; }
+.slot .tab { position: absolute; left: 12px; top: -2px; transform: translateY(-50%); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #1a1405; background: var(--gold); border: 2px solid var(--edge); border-radius: 3px; padding: 0 8px; line-height: 1.5; }
+.slot.fresh { animation: fresh 1.6s ease-out; }
+@keyframes fresh { 0% { box-shadow: inset 0 0 0 1px #17382f, inset 0 4px 0 var(--accent), 0 0 0 4px var(--gold); } 100% { box-shadow: inset 0 0 0 1px #17382f, inset 0 4px 0 var(--accent), 0 0 0 0 rgba(246, 208, 88, 0); } }
+.slot.lifted { opacity: .4; outline: 2px dashed var(--gold); outline-offset: 2px; }
+.slot.picked { outline: 3px solid var(--gold); outline-offset: 2px; }
+.slot.drop { outline: 3px solid var(--gold); outline-offset: 3px; background: linear-gradient(180deg, #1c2a1c, #101a12); }
+.slot.drop::after { content: attr(data-drop); position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 3; background: var(--gold); color: #1a1405; padding: 3px 14px; border-radius: 4px; border: 2px solid var(--edge); box-shadow: 2px 3px 0 var(--shadow); font-size: 15px; white-space: nowrap; pointer-events: none; }
+.slot.picked-target { cursor: pointer; outline: 2px dashed #b9a24a; outline-offset: 2px; }
+.slot.picked-target::after { content: attr(data-drop); position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); background: #2a2208; color: var(--gold); border: 1px solid #6b5a14; font-size: 13px; padding: 1px 10px; border-radius: 4px; white-space: nowrap; pointer-events: none; }
+.slot.removing { outline: 3px solid #e08a7d; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .pstat.wait::before { animation: none; } }
+/* the token that follows the pointer while a player is dragged: the ant and the name, so that the color under it stays in view */
+.chip { --k: 2; position: fixed; z-index: 60; pointer-events: none; display: flex; align-items: center; gap: 12px; padding: 8px 18px 8px 8px; background: #0f1820; color: var(--cream); border: 3px solid var(--gold); border-radius: 8px; transform: rotate(-2deg); box-shadow: 0 14px 26px rgba(0, 0, 0, .55); }
+.chip .ant { margin: 0; animation: none; background-position-x: 0; }
+.chip b { display: block; font-weight: 500; font-size: 22px; line-height: 1.1; }
+.chip small { display: block; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+/* the host's Remove button on another player's color: small, the color of a warning, and always followed by a question */
+.rm { flex: none; min-height: 26px; padding: 0 9px; font-size: 13px; line-height: 1.1; cursor: pointer; color: #f6c9c0; background: #1f1011; border: 2px solid #7a3b34; border-radius: 6px; }
+.rm:hover { color: #ffe4de; background: #2c1514; border-color: #c4655a; }
+.rmask { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 2px; }
+.rmask span { flex: 1 1 100%; font-size: 14px; line-height: 1.3; color: #ffe4de; overflow-wrap: anywhere; }
+.rmask .rm { min-height: 38px; padding: 4px 18px; font-size: 16px; }
+.rmask .rm.yes { color: #1a0a08; background: #e08a7d; border-color: #7a3b34; }
+.rmask .rm.yes:hover { background: #eca396; }
+.rmask .rm.keep { color: var(--cream); background: #0b1117; border-color: var(--frame-hi); }
+.rmask .rm.keep:hover { background: #13222b; }
+.mode { appearance: none; -webkit-appearance: none; width: 100%; max-width: none; margin: 1px 0 2px; min-height: 38px; padding: 4px 38px 4px 10px; font-size: 16px; color: var(--cream); cursor: pointer;
+    background: #0b1117 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22'%3E%3Crect x='1' y='1' width='20' height='20' rx='2' fill='%232b6357' stroke='%23050a08' stroke-width='2'/%3E%3Cpath d='M6 9l5 5 5-5' fill='none' stroke='%23f4ece2' stroke-width='2.4'/%3E%3C/svg%3E") no-repeat right 8px center / 20px;
+    border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); }
+.grip { position: absolute; top: 3px; right: 0; width: 32px; height: 32px; display: grid; place-items: center; background: none; border: 0; border-radius: 4px; cursor: grab; touch-action: none; }
+.grip i { display: block; width: 14px; height: 22px; background: radial-gradient(circle, #8fb3a6 1.7px, transparent 2.2px) 0 0 / 7px 7px; }
+.grip:hover { background: #13222b; }
+.slots-note { margin: 4px 0 0; font-size: 12.5px; line-height: 1.25; color: var(--muted); min-height: 0; }
+.slots-note:empty { display: none; }
+.teams-note { margin-top: 1px; } .teams-note.warn { color: #f2c48c; }
+.plan { margin: 5px 0 0; font-size: 13px; line-height: 1.3; color: var(--cream); overflow-wrap: anywhere; }
+.plan-short { display: none; }
+/* Team 1 and Team 2 on every color that plays (when three or four play): lit when the color is on that team */
+.teamset { display: flex; gap: 5px; margin: 0; }
+.teamset button { flex: 0 0 auto; min-width: 0; min-height: 32px; padding: 2px 8px; font-size: 14px; line-height: 1.1; cursor: pointer; color: var(--muted); background: #0b1117; border: 2px solid #28493e; border-radius: 6px; }
+.teamset button:hover { border-color: var(--frame-hi); color: var(--cream); }
+.teamset button[aria-pressed="true"] { color: var(--gold); background: #1c1b0e; border-color: var(--gold); }
+.teamset button[aria-disabled="true"] { border-style: dashed; color: #8da39a; background: #090d11; }
+
+/* ---- Ready (docs/READY_UP.md): a person's own switch, a mark on every other card; the host's, a computer player's and a game's are always Ready ---- */
+.rdy-btn { margin: 0 0 0 auto; min-height: 40px; min-width: 96px; padding: 4px 12px; font-size: 16px; }
+.rdy-btn[aria-pressed="true"] { color: #d8f7e3; background: #14452d; border-color: var(--edge); box-shadow: inset 0 0 0 2px #44e08a, 2px 3px 0 var(--shadow); text-shadow: none; background-image: none; }
+.rdy-btn[aria-pressed="true"]::before { content: ""; width: 6px; height: 11px; border: solid #44e08a; border-width: 0 3px 3px 0; transform: rotate(40deg); margin: -3px 4px 0 0; }
+.rdy-chip { display: inline-flex; align-items: center; gap: 5px; margin: 0 8px 0 0; padding: 0 8px; font-size: 12px; line-height: 20px; letter-spacing: .02em; white-space: nowrap; color: #b6e8c8; background: #0f2a1d; border: 1px solid #3b976f; border-radius: 10px; vertical-align: 1px; }
+.rdy-chip::before { content: ""; width: 5px; height: 9px; margin: -2px 2px 0 0; border: solid #44e08a; border-width: 0 2.5px 2.5px 0; transform: rotate(40deg); }
+.rdy-chip.no { color: #c9d6d0; background: #0b1117; border: 1px dashed #4f6f64; }
+.rdy-chip.no::before { width: 8px; height: 8px; margin: 0 2px 0 0; border: 1.5px solid #8fb3a6; border-radius: 50%; transform: none; }
+.rdy-chip.bot { opacity: .72; }
+.ready-line { margin: 0; font-size: 14px; line-height: 1.3; color: #f2d68a; text-align: left; }
+.ready-line.ok { color: #b6e8c8; }
+
+/* ---- the match: the map, the game type, Direct connection, START ---- */
+.maprow { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 4px 12px; align-items: center; }
+.tv { margin: 2px 0; width: 84px; max-width: 100%; border: 3px solid var(--edge); background: var(--edge); box-shadow: 0 0 0 2px var(--frame), 0 0 0 4px var(--edge), 3px 4px 0 4px var(--shadow); }
+.tv img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; }
+.mapcard { display: grid; gap: 3px; justify-items: start; min-width: 0; text-align: left; }
+.map-name { font-size: 24px; line-height: 1.1; overflow-wrap: anywhere; }
+.map-facts { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 4px; } .map-facts:empty { display: none; }
+.map-facts span { padding: 0 7px; font-size: 12px; color: var(--cream); background: #0f1820; border: 1px solid #28493e; border-radius: 10px; }
+.map-facts .tag { color: #1a1405; background: var(--gold); border-color: var(--gold); text-transform: uppercase; letter-spacing: .06em; font-size: 12px; }
+.info { text-align: left; font-size: 13px; line-height: 1.25; color: var(--cream); }
+.change { min-height: 44px; min-width: 0; width: 100%; padding: 4px 10px; font-size: 15px; margin-top: 2px; }
+.gtype { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 3px 10px; }
+.gtype > * { grid-column: 1 / -1; }
+.gtype > .gt-label { grid-column: 1; } .gtype > .gt-field { grid-column: 2; }
+.gt-label { font-size: 13px; line-height: 1.2; }
+.gt-combo { min-height: 44px; font-size: 18px; padding: 4px 40px 4px 12px; }
+.gt-line, .gt-gline { text-align: left; font-size: 12.5px; line-height: 1.25; }
+.direct { margin: 0; gap: 3px; }
+.dr-row { gap: 10px; }
+.dr-label { font-size: 14px; }
+.dr-help { font-size: 12.5px; line-height: 1.25; }
+.go { display: grid; gap: 6px; margin-top: auto; }
+.go .btn.big { min-height: 52px; font-size: 26px; padding: 4px 20px; }
+.start-note { margin: 0; font-size: 13px; }
+body.offline .slots, body.offline .maprow, body.offline .gtype { filter: saturate(.4) brightness(.72); }
+body.joining .maprow, body.joining .gtype, body.joining .direct { visibility: hidden; }      /* (the map is not known until the player is in the room) */
+
+/* ---- a big screen: the same room, one step larger (the ants at three times their size) ---- */
+@media (min-width: 1500px) and (min-height: 960px) {
+    .hmain > #lobby { --k: 3; padding: 14px 22px 12px; }
+    .r-top h2 { font-size: 25px; }
+    .r-top .vis .btn { min-height: 44px; font-size: 16px; }
+    .r-top .code { font-size: 16px; }
+    .invite input { min-height: 46px; font-size: 16px; }
+    .invite .btn { min-height: 46px; }
+    .r-notes .visnote, .r-notes .invite-note { font-size: 14px; }
+    .slots { gap: 14px; }
+    .slot { padding: 12px 10px 10px; gap: 0 14px; }
+    .cname { font-size: 13px; }
+    .pname { font-size: 22px; }
+    .pstat { font-size: 14px; }
+    .you { font-size: 12px; }
+    .mode { min-height: 44px; font-size: 18px; }
+    .botname { font-size: 14px; }
+    .teamset button { min-height: 36px; font-size: 15px; padding: 2px 10px; }
+    .rdy-btn { min-height: 44px; font-size: 18px; min-width: 110px; }
+    .rdy-chip { font-size: 13px; line-height: 22px; }
+    .slots-note { font-size: 14px; margin-top: 8px; }
+    .plan { font-size: 15px; margin-top: 8px; }
+    .maprow { grid-template-columns: 112px minmax(0, 1fr); gap: 4px 16px; }
+    .tv { width: 112px; }
+    .map-name { font-size: 30px; }
+    .map-facts span { font-size: 13px; }
+    .info { font-size: 14px; }
+    .gt-label { font-size: 15px; }
+    .gt-combo { min-height: 46px; font-size: 19px; }
+    .gt-line, .gt-gline { font-size: 14px; }
+    .go .btn.big { min-height: 62px; font-size: 30px; }
+    .ready-line { font-size: 15px; }
+    .room-notice { font-size: 13px; }
+    .r-body { gap: 16px 26px; margin-top: 12px; }
+}
+
+/* ---- a window lower than the room needs (a laptop with the browser's toolbars): the panel scrolls inside itself, the page never moves, START stays at the bottom of the panel ---- */
+@media (min-width: 701px) and (max-height: 759px) {
+    .hmain > #lobby { overflow-y: auto; overscroll-behavior: contain; }
+    .hmain > #lobby > .r-body { flex: none; min-height: auto; }
+    .go { position: sticky; bottom: -8px; z-index: 3; padding: 6px 0 8px; background: var(--inset); box-shadow: 0 -10px 10px -6px var(--inset); }
+}
+
+/* ---- a phone, or a window up to 700 px wide: the room is the first of three views, one column that scrolls; START and its line stay at the bottom ---- */
+@media (max-width: 700px) {
+    .hmain > #lobby { display: block; padding: 10px 10px 0; overflow-y: auto; overscroll-behavior: contain; }
+    #home[data-tab="players"] #lobby, #home[data-tab="chat"] #lobby { display: none; }
+    .r-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "hl acts" "vis vis" "code code"; gap: 4px 8px; align-items: center; }
+    .r-top .head { display: contents; }
+    .r-top .head .hl { grid-area: hl; } .r-top .vis { grid-area: vis; margin: 4px 0 0; gap: 8px; } .r-top .code { grid-area: code; margin: 0; }
+    .r-top .vis .btn { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 4px 6px; font-size: 15px; }
+    .r-top h2 { font-size: 20px; }
+    .r-acts { grid-area: acts; margin-left: auto; }
+    .r-acts .btn { padding: 6px 10px; }
+    .r-link { display: block; margin-top: 6px; }
+    .invite { flex: none; min-width: 0; }
+    .invite input { display: none; }
+    .invite .btn { min-height: 48px; flex: 1 1 0; }
+    .share { display: inline-flex; }
+    .r-notes { margin-top: 4px; }
+    .r-body { display: block; margin-top: 8px; }
+    .slots { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .slot { padding: 10px 8px 8px; }
+    .slot .txt > .teamset { grid-column: 1 / -1; grid-row: auto; margin: 4px 0 0; }
+    .teamset button { min-height: 44px; padding: 2px 14px; }
+    .mode { min-height: 44px; }
+    .rm { min-height: 40px; padding: 2px 12px; }
+    .rmask .rm { min-height: 44px; }
+    .rdy-btn { min-height: 44px; }
+    .grip { width: 44px; height: 44px; right: 0; top: 2px; }
+    .plan-long { display: none; } .plan-short { display: inline; }
+    .side { margin-top: 10px; gap: 10px; }
+    .maprow { grid-template-columns: 84px minmax(0, 1fr); }
+    .go { position: sticky; bottom: 0; z-index: 20; margin: 0 -10px; padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)); background: var(--inset); border-top: 3px solid var(--frame); gap: 6px; }
+    .go .btn.big { min-height: 58px; font-size: 26px; }
+    .ready-line { color: #f2d68a; font-weight: 500; }
+    .ready-line.ok { color: #b6e8c8; }
+    .room-notice { margin: 8px 0 0; }
+    .change { min-width: 0; padding: 4px 16px; }
+    .toast { bottom: 150px; }
+    .dr-switch { width: 72px; min-width: 72px; height: 44px; }
+}
+@media (min-width: 560px) and (max-width: 700px) and (max-height: 500px) {          /* (a phone held sideways: two columns, the colors and the match) */
+    .slots { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .r-body { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 12px; }
+    .side { margin-top: 0; }
+}
+@media (max-width: 374px) {
+    .pname, .pname input { font-size: 17px; }
+    .teamset button { padding: 3px 6px; font-size: 14px; }
+    .maprow { grid-template-columns: 72px minmax(0, 1fr); } .tv { width: 72px; } .map-name { font-size: 21px; }
+}
+@media (pointer: coarse) { .grip { width: 44px; height: 44px; right: 0; top: 2px; } .rm { min-height: 40px; padding: 2px 12px; } }

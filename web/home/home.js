@@ -1,8 +1,8 @@
-// The two screens of the front page (web/lobby.html, docs/HOME_SCREEN.md): Home (a top bar over the games, the players and the chat) and the Room (the room page under a slim bar). One page, one WebSocket: the page's client, model and
-// session storage are never touched here, so Home <-> Room is a class on <body> (data-screen, home.css) and one render(): no request, the seat is never dropped. Text and properties only, never markup. ES5:
+// The front page (web/lobby.html, docs/HOME_SCREEN.md): Home, a top bar over the games, the players and the chat, and the Room, which takes the games' place inside it while the page shows it (the players, the chat and the bar stay).
+// One page, one WebSocket: the page's client, model and session storage are never touched here, so Games <-> Room is a class on <body> (data-screen, home.css) and one render(): no request, the seat is never dropped. Text and properties only, never markup. ES5:
 // a page gets AntsHome, node gets module.exports (tests/scripts/web_home_screen_check.js).
 //   * Home is "/", the Room "/#room" (pushState: Back goes to Home); a link ("?room=CODE") opens the Room; the page writes no history until a button is pressed.
-//   * A plain visit makes no room (Quick host makes one; My room is there only while the page holds a room). Quick host and Games are lit by games.js, which loads after the first paint. START reaches a guest on Home as on the Room: Home says so.
+//   * A plain visit makes no room (Quick host makes one; My room is there only while the page holds a room, and it shows the room in the games' place, and the games again when it is pressed once more). Quick host and Games are lit by games.js, which loads after the first paint. START reaches a guest on Home as on the Room: Home says so.
 (function (root, factory) {
     var api = factory();
     if (typeof module === 'object' && module.exports) module.exports = api;
@@ -17,7 +17,7 @@
     var OPENING_MS = 15000, GIVE_UP_MS = 60000;          // a hand-off that is still here after the first has been slow: Home takes presses again, and says so; after the second the page says that it did not come
     var GAMES = 'home/games';                            // the Games list, Quick host and the Room's switch (games.js, games.css): loaded once, after the first paint
     var TEXT = {
-        name: 'Ants!', quickHost: 'Quick host', quickJoin: 'Quick join', mine: 'My room', games: 'Games', menu: 'Menu', login: 'Log in', home: 'Home', leave: 'Leave room', leaveMine: 'Leave my room', opening: 'Opening the game…', left: 'You left the room.',
+        name: 'Ants!', quickHost: 'Quick host', quickJoin: 'Quick join', mine: 'My room', games: 'Games', room: 'Room', menu: 'Menu', login: 'Log in', leave: 'Leave room', leaveMine: 'Leave my room', opening: 'Opening the game…', left: 'You left the room.',
         slow: 'The game is slow to open. Reload this page to get your seat back.', failed: 'The game did not open. Reload this page to get your seat back.',
         players: 'Players', chat: 'Chat', views: 'Home views'
     };
@@ -91,11 +91,11 @@
     }
 
     // ---- the screens ----
-    // mount({ doc, win, host (Home's div), lobby (the page's grid: the Room's bar goes before it), page: { info() -> { client, model, offline }, make(), leave(), how(), stalled(words) (optional), ... } })
+    // mount({ doc, win, host (Home's div), room (the page's room: it goes into Home's body, in the games' place while the Room shows), page: { info() -> { client, model, offline }, make(), leave(), how(), stalled(words) (optional), ... } })
     // returns { start, sync, opening, show, screen, inert, menu, dock }
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, page = env.page;
-        var fitting = null, screen = 'home', menuOpen = false, menuFor = null, menuBox = null, factsBox = null, going = false, held = false, stalled = false, goingTimer = null, failTimer = null, said = '', dock = null, asked = false, games = null, askedGames = false, players = null, askedPlayers = false, askedTalk = false, split = null;
+        var fitting = null, roomChat = null, askedRoomChat = false, screen = 'home', menuOpen = false, menuFor = null, menuBox = null, factsBox = null, going = false, held = false, stalled = false, goingTimer = null, failTimer = null, said = '', dock = null, asked = false, games = null, askedGames = false, players = null, askedPlayers = false, askedTalk = false, split = null;
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -122,6 +122,7 @@
         var bar = el('header', 'hbar');
         var quickHost = stub('quick host', TEXT.quickHost), quickJoin = stub('quick join', TEXT.quickJoin);
         var mine = button('hchip mine', '', function () { openRoom(); });
+        mine.setAttribute('aria-pressed', 'false');
         var mineName = el('span', 'name', TEXT.mine), minePill = el('span', 'pill'); minePill.hidden = true;
         mine.appendChild(mineName); mine.appendChild(minePill); mine.hidden = true;       // (My room is there only while the page holds a room: sync() shows it)
         var mineX = button('minex', '', function () { leaveFrom(mineX); });        // the round X badge on My room's corner: it leaves the room as the Room's Leave room does (a room with other people in it is asked about first)
@@ -137,27 +138,23 @@
         var tabs = el('nav', 'htabs'), tab = 'games', tabBtns = {}; tabs.setAttribute('aria-label', TEXT.views);
         TABS.forEach(function (t) {
             var b = button('htab t-' + t[0], '', function () { pick(t[0]); }), pill = el('span', 'pill'); pill.hidden = true;
-            b.appendChild(el('span', 'name', t[1])); b.appendChild(pill); tabs.appendChild(b); tabBtns[t[0]] = { b: b, pill: pill };
+            var label = el('span', 'name', t[1]); b.appendChild(label); b.appendChild(pill); tabs.appendChild(b); tabBtns[t[0]] = { b: b, pill: pill, name: label };
         });
         var opening = el('div', 'hopen', TEXT.opening); opening.setAttribute('role', 'status'); opening.setAttribute('aria-live', 'polite'); opening.hidden = true;
         host.appendChild(bar); host.appendChild(main); host.appendChild(opening); host.appendChild(tabs); host.setAttribute('data-tab', tab);
 
-        // The Room: the slim bar before the page's own room card
-        var rbar = el('header', 'rbar');
-        var homeBtn = button('rhome', '', function () { show('home', 'push'); });
-        var chev = el('span', 'chev', '‹'); chev.setAttribute('aria-hidden', 'true');
-        homeBtn.appendChild(chev); homeBtn.appendChild(el('span', '', TEXT.home));
+        // The Room: its Leave room button, in the room's own header (the page's markup has the place: #r-acts), and the room itself in Home's body
         var leave = button('leave', TEXT.leave, function () { leaveFrom(leave); });
         function leaveFrom(opener) {                        // Leave room (the Room's button and the X beside My room): at once when alone, else the list asks first; then Home says that the room was left
             if (stalled) return;
             var go = function () { page.leave(); show('home', 'push'); gamesCall('said', TEXT.left); if (screen === 'home' && (!doc.activeElement || doc.activeElement === doc.body || doc.activeElement === opener)) away().focus(); };
             if (!asking(go, opener)) go();
         }
-        var menuRoom = menuButton();
-        [homeBtn, heading(), el('span', 'grow'), leave, menuRoom].forEach(function (n) { rbar.appendChild(n); });
-        env.lobby.parentNode.insertBefore(rbar, env.lobby);
+        var racts = doc.getElementById('r-acts');
+        if (racts) racts.appendChild(leave);
+        if (env.room) main.appendChild(env.room);
 
-        // ---- the Menu: one box for both bars ----
+        // ---- the Menu ----
         function newTab(a, on) {
             if (on) { a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer'); } else { a.removeAttribute('target'); a.removeAttribute('rel'); }
         }
@@ -201,7 +198,7 @@
             return out;
         }
         function placeMenu() {                              // under the whole bar (on a phone the bar has three rows), and no taller than what is left of the window: the rest scrolls inside it
-            var r = (menuFor === menuHome ? bar : rbar).getBoundingClientRect(), top = Math.round(r.bottom + 6);
+            var r = bar.getBoundingClientRect(), top = Math.round(r.bottom + 6);
             menuBox.style.top = top + 'px';
             menuBox.style.maxHeight = Math.max(MENU_MIN_HEIGHT, (win.innerHeight || 0) - top - MENU_GAP) + 'px';
         }
@@ -272,29 +269,32 @@
             if (fitting) fitting.fit();
             if (how === 'push') push(from, name);
             sync();
-            if (name === 'home') wantDock();
+            wantDock();
             dockShown();
             gamesCall('shown', name);
             if (how !== 'first') {
                 try { win.scrollTo(0, 0); } catch (e) { /* no scrolling here */ }
-                var next = name === 'room' ? homeBtn : mine.hidden ? away() : mine;
+                var next = mine.hidden ? away() : mine;
                 if (next.focus) next.focus();
             }
         }
-        function openRoom() {                               // My room: the first press makes the room; it and every later press show it
+        function openRoom() {                               // My room: the first press makes the room and shows it; a press while the room shows brings the games back (the room stays), and the next shows the room again
             if (!page.info().client) page.make();
-            show('room', 'push');
+            show(screen === 'room' ? 'home' : 'room', 'push');
         }
         function away() { return !quickHost.disabled ? quickHost : menuHome; }       // (where the focus goes when My room is not there: the first button that takes a press)
         function sync() {
             var info = page.info(), n = info.client ? countOf(info.model) : null;
             mine.hidden = mineBox.hidden = !info.client;
+            mine.setAttribute('aria-pressed', screen === 'room' && info.client ? 'true' : 'false');
+            tabBtns.games.name.textContent = screen === 'room' && info.client ? TEXT.room : TEXT.games;
             if (mine.hidden && (doc.activeElement === mine || doc.activeElement === mineX)) away().focus();       // (the room ended under the focus: it goes to Quick host, not to nowhere)
             minePill.textContent = n ? n.people + '/' + n.size : '';
             minePill.hidden = !n;
             mine.setAttribute('aria-label', n ? TEXT.mine + ', ' + n.people + ' of ' + n.size : TEXT.mine);
             marks();
             gamesCall('sync');
+            if (roomChat) roomChat.sync();
         }
         // A part that loads after the first paint (its script and style): once both are there onReady mounts it; a part that does not come leaves its buttons as they are
         function lazy(base, onReady) {
@@ -331,7 +331,7 @@
             wantSplit();
             wantGames();
             win.addEventListener('popstate', function (e) { show(screenOf(e && e.state, win.location.hash, !!page.info().client), 'pop'); });
-            fitting = heightGuard(win, doc, function () { return screen === 'home'; });
+            fitting = heightGuard(win, doc, function () { return true; });
             readout(win, doc);
             win.addEventListener('resize', function () { if (menuOpen) placeMenu(); var ph = phone(); if (dock && ph !== was) dock.open(ph ? tab === 'chat' : (win.innerHeight || 0) >= 601); was = ph; });
         }
@@ -353,14 +353,14 @@
             try { if (page.stalled) page.stalled(words); } catch (e) { /* what the page says is its own */ }
             gamesCall('stalled', words);
         }
-        function inert(on) { held = !!on; [bar, rbar, tabs, dock && dock.root, players && players.root].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } }); gamesCall('inert', held || going); }      // (a page that is on its way to the game takes no press again, whatever a dialog that closes says)
+        function inert(on) { held = !!on; [bar, tabs, dock && dock.root, players && players.root].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } }); gamesCall('inert', held || going); }      // (a page that is on its way to the game takes no press again, whatever a dialog that closes says)
         // The chat dock (chat.js, chat.css) mounts into Home's div and is told which screen shows
-        function dockShown() { try { if (dock) dock.shown(screen === 'home'); } catch (e) { /* the dock is its own */ } }
+        function dockShown() { try { if (dock) dock.shown(true); } catch (e) { /* the dock is its own */ } }
         function wantDock() {
             if (asked) return;
             asked = true;
             var parts = 2;
-            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); } } catch (e) { dock = null; } }
+            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); wantRoomChat(); } } catch (e) { dock = null; } }
             function load() {
                 try {
                     var tail = doc.head || doc.body, css = el('link'), js = el('script');
@@ -370,6 +370,16 @@
                 } catch (e) { /* no chat */ }
             }
             if (typeof win.requestAnimationFrame === 'function') win.requestAnimationFrame(function () { setTimeout(load, 0); }); else setTimeout(load, 0);
+        }
+
+        function wantRoomChat() {                           // the room's tab of the chat box (roomchat.js, roomchat.css), after the dock: the room's chat moves into the box and the two are one tap apart
+            if (askedRoomChat || !dock || !doc.getElementById('chat')) return;
+            askedRoomChat = true;
+            lazy('home/roomchat', function () {
+                if (!win.AntsHomeRoomChat) return;
+                roomChat = win.AntsHomeRoomChat.mount({ doc: doc, win: win, dock: dock, chat: doc.getElementById('chat'), news: function (n) { var p = tabBtns.chat.pill; p.textContent = n > 99 ? '99+' : String(n); p.hidden = !n || (tab === 'chat' && phone()); } });
+                if (roomChat) roomChat.sync();
+            });
         }
 
         function wantPlayers() {                            // the players list (players.js, players.css), after the dock: it uses its socket
@@ -414,7 +424,9 @@
             lazy('home/talk', function () { if (win.AntsHomeTalk) win.AntsHomeTalk.mount({ doc: doc, win: win, dock: dock }); });
         }
 
-        return { start: start, sync: sync, opening: say, alert: function (kind, data) { try { return !!alerts && alerts.alert(kind, data); } catch (e) { return false; } }, show: show, screen: function () { return screen; }, inert: inert, menu: function () { return menuOpen; }, dock: function () { return dock; } };
+        return { start: start, sync: sync, opening: say, alert: function (kind, data) { try { return !!alerts && alerts.alert(kind, data); } catch (e) { return false; } }, show: show, screen: function () { return screen; }, inert: inert, menu: function () { return menuOpen; }, dock: function () { return dock; },
+            roomChatSeen: function () { try { return roomChat ? roomChat.seen() : null; } catch (e) { return null; } },
+            roomChatNews: function (text) { try { return !!roomChat && roomChat.news(text); } catch (e) { return false; } } };
     }
 
     return { HASH: HASH, TEXT: TEXT, MENU_MAIN: MENU_MAIN, MENU_SMALL: MENU_SMALL, countOf: countOf, fitHeight: fitHeight, heightGuard: heightGuard, readout: readout, screenOf: screenOf, firstScreen: firstScreen, mount: mount };

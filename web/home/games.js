@@ -255,12 +255,11 @@
         (function () { var s = el('small', '', TEXT.publicSub); s.appendChild(el('span', 'vwide', TEXT.publicWide)); visPublic.appendChild(s); })();
         visPrivate.addEventListener('click', guard(function () { choose(false); }));
         visPublic.addEventListener('click', guard(function () { choose(true); }));
-        function narrow() { try { return win.matchMedia ? win.matchMedia('(max-width: ' + NARROW + 'px)').matches : (win.innerWidth || 1000) <= NARROW; } catch (e) { return false; } }
-        function placeVis() {                              // wide: in the heading line (before the code) and its note under it; a phone: under the link's note, before the colors
-            var h = doc.getElementById('room-h'), slots = doc.getElementById('slots'), head = h && ((h.parentNode && h.parentNode.parentNode) || h.parentNode);
-            if (!head || !slots || !slots.parentNode) return;
-            if (narrow()) { slots.parentNode.insertBefore(visBox, slots); slots.parentNode.insertBefore(visNote, slots); }
-            else { head.insertBefore(visBox, (head.querySelector && head.querySelector('.code')) || null); (head.parentNode || head).insertBefore(visNote, head.nextSibling || null); }
+        function placeVis() {                              // the switch in the room's heading line (before the code) and its note with the room's other notes (web/home/room.css lays both out, a phone's too)
+            var h = doc.getElementById('room-h'), notes = doc.getElementById('r-notes'), head = h && ((h.parentNode && h.parentNode.parentNode) || h.parentNode);
+            if (!head) return;
+            head.insertBefore(visBox, (head.querySelector && head.querySelector('.code')) || null);
+            if (notes) notes.insertBefore(visNote, notes.firstChild || null);
         }
         (function () { var h = doc.getElementById('room-h'); if (h && h.parentNode) h.parentNode.appendChild(visTag); placeVis(); })();
         function paintVis() {
@@ -935,7 +934,7 @@
             if (!visible() && liveTimer !== null) { cancel(liveTimer); liveTimer = null; }
             poll(); schedule(); armRefresh(); pollLive();
         }));
-        win.addEventListener('resize', guard(function () { if (isOpen) place(); placeVis(); placeToast(); }));
+        win.addEventListener('resize', guard(function () { if (isOpen) place(); placeToast(); }));
         var toastWatch = win.MutationObserver ? new win.MutationObserver(guard(function () { if (!toast.hidden) placeToast(); pollLive(); })) : null, lastFocus = null;
         if (toastWatch) toastWatch.observe(doc.body, { attributes: true, subtree: true, attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden'] });       // (the list is drawn or covered again: the looks at /live follow; a phone's view, the chat's fold or one of the page's strips changes: the toast is placed again)
         doc.addEventListener('focusin', guard(function (e) { if (e && e.target && !toast.contains(e.target)) lastFocus = e.target; }));       // (where the focus was before it went to the toast)
