@@ -26,6 +26,21 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.19.0 - 2026-11-20 - Smoother ants online, a direct-connection switch
+
+**For players:**
+- **Other players' ants move more smoothly online.** During a match your game hears the other players' orders a little earlier, through a relay, so their ants jump back into place less often. The server still decides everything, exactly as before.
+- **A "Direct connection" switch in the room**, off by default. With it on for both of you, the link skips the relay and can be faster for players near each other, but you can see each other's IP address. The countdown card shows "relay" or "direct" next to each player.
+- **Computer players' orders arrive early too,** so their ants are corrected less on your screen.
+
+**Rules / network:** network protocol 26: a v0.18 page or game cannot join a v0.19 match, so reload the page. The rules and the recordings are unchanged.
+
+**For operators:**
+- The relay (coturn) runs in the stack with `COMPOSE_PROFILES=relay` and the `ANTS_TURN_*` settings, including `ANTS_TURN_PORT` when another TURN server holds 3478 (docs/SERVER.md).
+- The admin page's Bot matches can use any map by name, an editable rotation, and "Start one every X minutes" (database migration 10).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/06f28456...fb4e3ef0)
+
 ## v0.18.2 - 2026-11-19 - Private rooms show in Open games, locked
 
 **For players:**
@@ -482,15 +497,6 @@ Work that is not released yet is written in the same template under a heading th
 **Rules / network:** none for the simulation and the network: network protocol 21, the simulation rules, the recordings and the map files are unchanged. One rule of online play is new, and a map that was accepted before can now be refused online: a room no longer plays a map that starts more than 8,000 ants.
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/dd307dfd...bb58eaa2)
-## v0.12.149 - 2026-10-28 - On a phone the health numbers are bigger and outlined
+## Older versions (v0.12.149 and before)
 
-**For players:**
-- **On a phone the health numbers are bigger and outlined.** In the browser, "Show health as: Number" had digits 2 to 3 CSS pixels tall on a phone, too small to read. On a small screen they now grow (about 8 CSS pixels tall or more: three times as big on a phone held upright, twice on its side) and get a thin black outline about 1 CSS pixel wide. The desktop game, and the browser in a normal desktop window, are unchanged: the original's white digits, pixel for pixel.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ec8fa2fa...9ee59ee3)
-
-## Older versions (v0.12.148 and before)
-
-Every release before v0.12.149, and the long notes of v0.12.148 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.150, and the long notes of v0.12.149 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
