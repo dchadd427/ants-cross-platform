@@ -35,6 +35,7 @@ import numpy as np
 try:
     from .base_ant import EYELID_CLOSED_ANGLE
     from .mesh_core import (
+        AnimationChannel,
         MeshPart,
         SceneBuilder,
         catmull_rom_spline,
@@ -45,6 +46,8 @@ try:
         hemisphere_shell,
         lathe,
         quat_from_axis_angle,
+        quat_from_euler_xyz,
+        quat_mul,
         recompute_smooth_normals,
         rounded_box,
         sphere,
@@ -55,6 +58,7 @@ try:
 except ImportError:
     from base_ant import EYELID_CLOSED_ANGLE  # type: ignore
     from mesh_core import (  # type: ignore
+        AnimationChannel,
         MeshPart,
         SceneBuilder,
         catmull_rom_spline,
@@ -65,6 +69,8 @@ except ImportError:
         hemisphere_shell,
         lathe,
         quat_from_axis_angle,
+        quat_from_euler_xyz,
+        quat_mul,
         recompute_smooth_normals,
         rounded_box,
         sphere,
@@ -75,10 +81,10 @@ except ImportError:
 
 Vec3 = Tuple[float, float, float]
 
-# Bold, forward-tucked wide armored shield head nestled proudly into the hunched gorilla shoulders.
-HEAD_CENTER: Vec3 = (0.0, 0.752, 0.228)
-HEAD_SCALE = 1.16
-EYE_OFFSET: Vec3 = (0.104, -0.002, 0.130)  # left eye relative to head center before HEAD_SCALE
+# Proud upright boxy-rounded commando head perched clearly ABOVE shoulders on a real dark neck.
+HEAD_CENTER: Vec3 = (0.0, 0.968, 0.072)
+HEAD_SCALE = 1.00
+EYE_OFFSET: Vec3 = (0.098, -0.002, 0.128)  # left eye relative to head center
 
 # Wide-sweeping curved gorilla arm path (left +X; right -X mirrors cleanly; ~1.28 W total).
 ARM_PTS_LEFT: List[Vec3] = [
@@ -203,80 +209,96 @@ def _sculpted_ribbon_mesh(
 # Rounded hunched dome torso, curved scale-plated pauldrons, compact gaster
 # ---------------------------------------------------------------------------
 
-def _hunch_egg_deform(pos: np.ndarray) -> np.ndarray:
-    """Sculpt a smooth organic rounded hunched gorilla dome/egg (zero boxy corners)."""
+def _upright_torso_deform(pos: np.ndarray) -> np.ndarray:
+    """Sculpt broad upright muscular commando shoulders tapering to hips (ZERO hunchback hump!)."""
     p = pos.copy()
     x, y, z = p[:, 0], p[:, 1], p[:, 2]
-    # Broad curved upper shoulders tapering smoothly into a pear/egg lower torso.
-    upper = np.clip((y + 0.04) / 0.28, 0.0, 1.0)
-    lower = np.clip(-y / 0.26, 0.0, 1.0)
-    p[:, 0] = x * (1.0 + 0.08 * upper - 0.24 * (lower ** 1.45))
+    upper = np.clip((y + 0.04) / 0.24, 0.0, 1.0)
+    lower = np.clip(-y / 0.24, 0.0, 1.0)
+    p[:, 0] = x * (1.0 + 0.09 * upper - 0.24 * (lower ** 1.45))
     p[:, 2] = z * (1.0 - 0.14 * (lower ** 1.35))
-    # Gentle rounded trapezius crown rising smoothly behind the tucked neck.
-    hump = np.exp(-(x / 0.28) ** 2) * np.clip((-z + 0.08) / 0.30, 0.0, 1.0) * upper
-    p[:, 1] = y + 0.045 * hump
-    # Subtle smooth dorsal spine groove down the rounded upper back.
+    # Gently slope rear upper back downward behind the neck (eliminating any hunchback dome!).
+    rear_slope = np.clip((-z) / 0.22, 0.0, 1.0) * upper
+    p[:, 1] = y - 0.022 * rear_slope
     spine = np.exp(-(x / 0.024) ** 2) * np.clip((-z) / 0.18, 0.0, 1.0)
     p[:, 2] += 0.008 * spine
     return p
 
 
 def _build_torso(scene: SceneBuilder) -> np.ndarray:
-    """Build the rounded hunched gorilla dome torso, scale-plated pauldrons, and compact gaster."""
-    # Deep rounded muscular core anchoring chest underside and hips cleanly.
+    """Build upright broad muscular commando torso, visible dark neck, pauldrons, and compact gaster."""
     core = (
-        superellipsoid(0.245, 0.215, 0.195, e1=0.86, e2=0.88, u_segs=22, v_segs=14, name="thorax_core", material="chitin_dark")
-        .translate(0.0, 0.505, -0.025)
+        superellipsoid(0.242, 0.205, 0.190, e1=0.84, e2=0.88, u_segs=22, v_segs=14, name="thorax_core", material="chitin_dark")
+        .translate(0.0, 0.495, -0.015)
     )
-    # Iconic smooth rounded hunched dome/egg upper-back carapace (no square fridge top!).
+    # Broad upright armored upper torso peaking cleanly at shoulder height (~0.77, no hunchback!).
     dorsal = (
-        superellipsoid(0.320, 0.245, 0.232, e1=0.84, e2=0.86, u_segs=26, v_segs=18, name="dorsal_carapace", material="chitin_team")
-        .deform(_hunch_egg_deform)
-        .rotate_xyz(rx=0.18)
-        .translate(0.0, 0.625, -0.045)
+        superellipsoid(0.312, 0.202, 0.202, e1=0.82, e2=0.86, u_segs=26, v_segs=18, name="dorsal_carapace", material="chitin_team")
+        .deform(_upright_torso_deform)
+        .rotate_xyz(rx=0.06)
+        .translate(0.0, 0.568, -0.025)
     )
-    # Smooth rounded barrel chest dome fusing organically into the hunched carapace.
     chest = (
-        superellipsoid(0.270, 0.205, 0.165, e1=0.82, e2=0.86, u_segs=22, v_segs=16, name="barrel_chest", material="chitin_team")
-        .rotate_xyz(rx=0.14)
-        .translate(0.0, 0.545, 0.078)
+        superellipsoid(0.264, 0.192, 0.158, e1=0.82, e2=0.86, u_segs=22, v_segs=16, name="barrel_chest", material="chitin_team")
+        .rotate_xyz(rx=0.08)
+        .translate(0.0, 0.530, 0.072)
     )
     pec_l = (
-        superellipsoid(0.132, 0.108, 0.072, e1=0.82, e2=0.84, u_segs=16, v_segs=12, name="pectoral_plate", material="chitin_team")
-        .rotate_xyz(rx=0.18, ry=0.28, rz=-0.06)
-        .translate(0.120, 0.580, 0.155)
+        superellipsoid(0.130, 0.102, 0.068, e1=0.82, e2=0.84, u_segs=16, v_segs=12, name="pectoral_plate", material="chitin_team")
+        .rotate_xyz(rx=0.14, ry=0.28, rz=-0.06)
+        .translate(0.118, 0.565, 0.148)
     )
     left_pec, right_pec = scene.add_mirrored("body", pec_l)
     scene.add("body", [core, dorsal, chest])
 
     # Rounded segmented lower abdominal plates tapering neatly into the crouched pelvis.
     abs_parts: List[MeshPart] = []
-    for i, (y, rx, rz, z) in enumerate(((0.398, 0.175, 0.115, 0.072), (0.338, 0.142, 0.096, 0.048))):
-        plate = superellipsoid(rx, 0.040, rz, e1=0.76, e2=0.82, u_segs=18, v_segs=10, name=f"ab_plate_{i}", material="chitin_team").rotate_xyz(rx=0.16).translate(0.0, y, z)
-        seam = torus_arc(rx * 0.94, 0.0065, u_segs=18, v_segs=6, plane="xz", name=f"ab_seam_{i}", material="chitin_dark").scale(1.0, 1.0, rz / rx).rotate_xyz(rx=0.16).translate(0.0, y - 0.022, z)
+    for i, (y, rx, rz, z) in enumerate(((0.392, 0.172, 0.112, 0.068), (0.334, 0.140, 0.094, 0.046))):
+        plate = superellipsoid(rx, 0.038, rz, e1=0.76, e2=0.82, u_segs=18, v_segs=10, name=f"ab_plate_{i}", material="chitin_team").rotate_xyz(rx=0.14).translate(0.0, y, z)
+        seam = torus_arc(rx * 0.94, 0.0065, u_segs=18, v_segs=6, plane="xz", name=f"ab_seam_{i}", material="chitin_dark").scale(1.0, 1.0, rz / rx).rotate_xyz(rx=0.14).translate(0.0, y - 0.020, z)
         abs_parts.append(plate)
         scene.add("body", seam)
     scene.add("body", abs_parts)
 
     pelvis = superellipsoid(0.165, 0.096, 0.142, e1=0.86, e2=0.88, u_segs=18, v_segs=12, name="pelvis_core", material="chitin_dark").translate(0.0, 0.300, -0.055)
-    neck = superellipsoid(0.146, 0.092, 0.138, e1=0.86, e2=0.88, u_segs=16, v_segs=10, name="neck_collar", material="chitin_dark").rotate_xyz(rx=0.36).translate(0.0, 0.678, 0.126)
-    scene.add("body", [pelvis, neck])
+    # Visible sturdy muscular dark neck rising cleanly ABOVE the shoulders & crossed bandoliers!
+    neck = (
+        superellipsoid(0.144, 0.104, 0.134, e1=0.70, e2=0.82, u_segs=18, v_segs=12, name="neck_collar", material="chitin_dark")
+        .rotate_xyz(rx=0.10)
+        .translate(0.0, 0.780, 0.032)
+    )
+    neck_ring = (
+        torus_arc(0.142, 0.013, u_segs=20, v_segs=8, plane="xz", name="neck_band", material="chitin_dark")
+        .scale(1.02, 1.0, 0.92)
+        .rotate_xyz(rx=0.10)
+        .translate(0.0, 0.790, 0.034)
+    )
+    scene.add("body", [pelvis, neck, neck_ring])
 
-    # Smooth curved scale-plated armored pauldrons draping organically over the wide ape shoulders.
+    # Smooth curved scale-plated armored pauldrons: upper cap on torso, outer deltoid cap on arm roots!
     pauldron_specs = (
-        ((0.305, 0.768, -0.015), (0.178, 0.076, 0.168), -0.44),
-        ((0.402, 0.688, -0.005), (0.140, 0.064, 0.146), -0.82),
+        ((0.302, 0.728, -0.010), (0.172, 0.068, 0.158), -0.44),
+        ((0.398, 0.658, -0.004), (0.136, 0.060, 0.140), -0.82),
     )
     plate_parts: List[MeshPart] = []
+
+    def _add_shoulder_pair(part: MeshPart, on_arm: bool) -> None:
+        if on_arm:
+            scene.add("arm_left", part)
+            scene.add("right_upper_arm", part.mirror_x(f"{part.name}_right"))
+        else:
+            scene.add_mirrored("body", part)
+
     for idx, (ctr, (rx, ry, rz), roll) in enumerate(pauldron_specs):
         e1, e2 = 0.74, 0.80
+        on_arm = idx == 1
         plate = superellipsoid(rx, ry, rz, e1=e1, e2=e2, u_segs=20, v_segs=12, name=f"pauldron_{idx}", material="chitin_team").rotate_xyz(rz=roll).translate(*ctr)
         plate_parts.append(plate)
         rot = np.array([[math.cos(roll), -math.sin(roll), 0.0], [math.sin(roll), math.cos(roll), 0.0], [0.0, 0.0, 1.0]])
         for r_i, (lx, lz) in enumerate(((0.56 * rx, 0.0), (0.34 * rx, 0.56 * rz), (0.34 * rx, -0.56 * rz))):
             local = np.array([lx, _super_top(rx, ry, rz, e1, e2, lx, lz) - 0.002, lz])
             normal = rot @ np.array([0.22 * lx / rx, 1.0, 0.22 * lz / rz])
-            scene.add_mirrored("body", _rivet(rot @ local + np.asarray(ctr), normal, f"pauldron_rivet_{idx}_{r_i}", radius=0.012))
+            _add_shoulder_pair(_rivet(rot @ local + np.asarray(ctr), normal, f"pauldron_rivet_{idx}_{r_i}", radius=0.012), on_arm)
         trim = (
             torus_arc(0.92 * rz, 0.008, u_segs=20, v_segs=6, plane="xz", name=f"pauldron_seam_{idx}", material="chitin_dark")
             .scale(rx / rz, 1.0, 1.0)
@@ -284,11 +306,10 @@ def _build_torso(scene: SceneBuilder) -> np.ndarray:
             .rotate_xyz(rz=roll)
             .translate(*ctr)
         )
-        scene.add_mirrored("body", trim)
-    for plate in plate_parts:
-        scene.add_mirrored("body", plate)
+        _add_shoulder_pair(trim, on_arm)
+        _add_shoulder_pair(plate, on_arm)
 
-    # Row of 3 smooth overlapping curved armor scales rimming the outer ape deltoid crest.
+    # Row of 3 smooth overlapping curved armor scales riding organically on the outer deltoid arms.
     for s_idx, (z_off, yaw_z) in enumerate(((-0.072, -0.28), (0.0, 0.0), (0.072, 0.28))):
         sc_ctr = np.array([0.442, 0.622, 0.005 + z_off])
         scale_plate = (
@@ -303,9 +324,9 @@ def _build_torso(scene: SceneBuilder) -> np.ndarray:
             .translate(sc_ctr)
         )
         riv_n = _normalize(np.array([0.92, 0.34, z_off * 2.4]))
-        scene.add_mirrored("body", scale_plate)
-        scene.add_mirrored("body", scale_rim)
-        scene.add_mirrored("body", _rivet(sc_ctr + 0.035 * riv_n, riv_n, f"scale_rivet_{s_idx}", radius=0.010))
+        _add_shoulder_pair(scale_plate, True)
+        _add_shoulder_pair(scale_rim, True)
+        _add_shoulder_pair(_rivet(sc_ctr + 0.035 * riv_n, riv_n, f"scale_rivet_{s_idx}", radius=0.010), True)
 
     # Compact pointed 3-step gaster tucked tightly down-back behind the hips (keeps 901 E depth tight!).
     gaster_profile = [
@@ -320,7 +341,7 @@ def _build_torso(scene: SceneBuilder) -> np.ndarray:
         .rotate_xyz(rx=tilt)
         .translate(0.0, 0.195, -0.345)
     )
-    scene.add("body", gaster)
+    scene.add("gaster", gaster)
     for idx, (z_ring, maj_r) in enumerate(((-0.224, 0.098), (-0.288, 0.062))):
         y_ring = 0.195 + (z_ring + 0.345) * math.sin(-tilt)
         ring = (
@@ -329,7 +350,7 @@ def _build_torso(scene: SceneBuilder) -> np.ndarray:
             .rotate_xyz(rx=tilt)
             .translate(0.0, y_ring, z_ring)
         )
-        scene.add("body", ring)
+        scene.add("gaster", ring)
 
     shell = [core, dorsal, chest, left_pec, right_pec, pelvis] + abs_parts + plate_parts + [p.mirror_x() for p in plate_parts]
     return np.vstack([p.positions for p in shell]).astype(np.float64)
@@ -339,39 +360,38 @@ def _build_torso(scene: SceneBuilder) -> np.ndarray:
 # Wide armored shield head, huge fierce eyes, zero-phase eyelids, lobster claws
 # ---------------------------------------------------------------------------
 
-def _shield_head_deform(pos: np.ndarray) -> np.ndarray:
-    """Sculpt a wide domed-crown armored heart-shield head with V-brow overhang & tapered chin."""
+def _commando_head_deform(pos: np.ndarray) -> np.ndarray:
+    """Sculpt a compact, strong, softly-rounded boxy commando head (ZERO pointy alien chin!)."""
     p = pos.copy()
     x, y, z = pos[:, 0], pos[:, 1], pos[:, 2]
     ax = np.abs(x)
     front = np.clip((z + 0.02) / 0.18, 0.0, 1.0)
 
-    # Broad upper-brow temples curving into a compact smoothly domed crown (~30% forehead height).
-    temple_band = np.exp(-((y - 0.045) / 0.095) ** 2)
-    crown = np.clip((y - 0.085) / 0.115, 0.0, 1.0)
-    p[:, 0] *= 1.0 + 0.05 * temple_band - 0.10 * (crown ** 1.65)
-    p[:, 2] *= 1.0 - 0.08 * (crown ** 1.65)
+    # Strong squared-off softly-rounded crown & broad temples (non-egg, non-alien!).
+    crown = np.clip((y - 0.10) / 0.09, 0.0, 1.0)
+    p[:, 0] *= 1.0 - 0.04 * (crown ** 1.8)
+    p[:, 2] *= 1.0 - 0.04 * (crown ** 1.8)
 
-    # Crisp overhanging V-angled brow shelf sweeping from center nose bridge across both temples.
-    brow_y = 0.046 + 0.19 * np.minimum(ax, 0.22)
+    # Crisp overhanging V-angled brow shelf sweeping across both fierce eyes.
+    brow_y = 0.044 + 0.18 * np.minimum(ax, 0.21)
     brow_shelf = np.exp(-((y - brow_y) / 0.036) ** 2) * np.clip((z - 0.05) / 0.14, 0.0, 1.0)
-    p[:, 2] += 0.026 * brow_shelf
+    p[:, 2] += 0.024 * brow_shelf
 
     # Crisp narrow vertical center cranial seam + subtle V forehead armor-plate groove.
     v_seam = np.exp(-(x / 0.013) ** 2) * np.clip((y + 0.022) / 0.075, 0.0, 1.0) * front
-    v_plate_y = 0.052 + 0.48 * ax
-    plate_seam = np.exp(-((y - v_plate_y) / 0.014) ** 2) * np.clip((ax - 0.012) / 0.04, 0.0, 1.0) * np.clip((0.185 - ax) / 0.04, 0.0, 1.0) * front
+    v_plate_y = 0.050 + 0.44 * ax
+    plate_seam = np.exp(-((y - v_plate_y) / 0.014) ** 2) * np.clip((ax - 0.012) / 0.04, 0.0, 1.0) * np.clip((0.180 - ax) / 0.04, 0.0, 1.0) * front
     radial = p / np.maximum(1e-6, np.linalg.norm(p, axis=1, keepdims=True))
-    p -= (0.013 * v_seam + 0.0075 * plate_seam)[:, None] * radial
+    p -= (0.012 * v_seam + 0.007 * plate_seam)[:, None] * radial
 
-    # Deep recessed orbital hollows sized cleanly for the huge wide-spanning eyes.
-    socket = np.exp(-(((ax - EYE_OFFSET[0]) / 0.080) ** 2 + ((y - EYE_OFFSET[1]) / 0.068) ** 2)) * np.clip((z - 0.04) / 0.14, 0.0, 1.0)
-    p[:, 2] -= 0.044 * socket
+    # Deep recessed orbital hollows sized cleanly for the soulful olive-iris eyes.
+    socket = np.exp(-(((ax - EYE_OFFSET[0]) / 0.074) ** 2 + ((y - EYE_OFFSET[1]) / 0.064) ** 2)) * np.clip((z - 0.04) / 0.14, 0.0, 1.0)
+    p[:, 2] -= 0.040 * socket
 
-    # Strong clean heart-shield taper below the eyes into a compact V-chin.
-    lower = np.clip((-y - 0.010) / 0.175, 0.0, 1.0)
-    p[:, 0] *= 1.0 - 0.39 * (lower ** 1.28)
-    p[:, 2] *= 1.0 - 0.13 * (lower ** 1.35)
+    # Full, strong, gently-rounded commando jaw & cheeks (only subtle -14% taper, ZERO alien chin!).
+    lower = np.clip((-y - 0.025) / 0.165, 0.0, 1.0)
+    p[:, 0] *= 1.0 - 0.14 * (lower ** 1.45)
+    p[:, 2] *= 1.0 - 0.08 * (lower ** 1.45)
     return p
 
 
@@ -383,21 +403,21 @@ def _build_eyelid_shell(name: str, yaw_y: float, r_outer: float, thickness: floa
 
 def _sculpt_head(scene: SceneBuilder, blink: float) -> None:
     hx, hy, hz = HEAD_CENTER
-    # Wide domed-crown armored shield head with tapered cheeks & compact forehead (~30% above eyes).
+    # Compact, strong, softly-rounded boxy commando head (`e1=0.72, e2=0.78`, full rounded jaw!).
     cranium = (
-        superellipsoid(0.238, 0.188, 0.194, e1=0.80, e2=0.84, u_segs=32, v_segs=24, name="cranium", material="chitin_team")
-        .deform(_shield_head_deform)
+        superellipsoid(0.226, 0.182, 0.186, e1=0.72, e2=0.78, u_segs=32, v_segs=24, name="cranium", material="chitin_team")
+        .deform(_commando_head_deform)
         .translate(hx, hy, hz)
     )
     scene.add("head", cranium)
 
-    # Bold wide V-angled armored brow ridge overhanging the full width of both huge eyes.
+    # Bold wide V-angled armored brow ridge overhanging both fierce eyes.
     brow_pts = [
-        (0.015, hy + 0.036, hz + 0.200),
-        (0.076, hy + 0.056, hz + 0.198),
-        (0.146, hy + 0.074, hz + 0.172),
-        (0.204, hy + 0.082, hz + 0.120),
-        (0.228, hy + 0.074, hz + 0.054),
+        (0.015, hy + 0.036, hz + 0.194),
+        (0.074, hy + 0.056, hz + 0.192),
+        (0.140, hy + 0.072, hz + 0.166),
+        (0.194, hy + 0.078, hz + 0.116),
+        (0.216, hy + 0.070, hz + 0.052),
     ]
     brow_rads = [(0.023, 0.020), (0.033, 0.025), (0.035, 0.026), (0.030, 0.022), (0.020, 0.016)]
     brow = curved_tube(brow_pts, brow_rads, samples_per_seg=4, radial_segs=12, cap_rings=3, name="brow_ledge", material="chitin_team")
@@ -409,36 +429,40 @@ def _sculpt_head(scene: SceneBuilder, blink: float) -> None:
         nrm = _normalize(np.array([rx * 0.85, ry + 0.14, rz]))
         scene.add_mirrored("head", _rivet(pos, nrm, f"crown_rivet_{r_i}", radius=0.0068))
 
-    # Huge fierce wide-spanning 3-part eyes (~78-80% of face width) tucked right under the V-brow.
+    # Expressive fierce 3-part eyes tucked right under the V-brow: trimmed sclera (~10% tighter
+    # per #148) with huge rich olive-green irises (~72%) and glossy obsidian pupils (~47%).
     ex, ey, ez = EYE_OFFSET
     eye = np.array([ex, hy + ey, hz + ez])
     scene.add_mirrored(
         "eyes",
-        torus_arc(0.088, 0.011, u_segs=26, v_segs=8, plane="xy", name="orbital_rim", material="chitin_dark")
+        torus_arc(0.080, 0.010, u_segs=26, v_segs=8, plane="xy", name="orbital_rim", material="chitin_dark")
         .scale(1.02, 0.89, 0.86)
         .rotate_xyz(rx=-0.08, ry=0.27)
         .translate(eye + np.array([0.002, -0.002, 0.004])),
     )
     scene.add_mirrored(
         "eyes",
-        ellipsoid(0.090, 0.078, 0.048, u_segs=20, v_segs=12, name="orbital_socket", material="chitin_dark")
+        ellipsoid(0.082, 0.071, 0.046, u_segs=20, v_segs=12, name="orbital_socket", material="chitin_dark")
         .rotate_xyz(rx=-0.08, ry=0.27)
         .translate(eye + np.array([0.0, 0.0, -0.016])),
     )
     sclera = (
-        superellipsoid(0.085, 0.074, 0.066, e1=0.92, e2=0.94, u_segs=24, v_segs=16, name="sclera", material="eye_white")
+        superellipsoid(0.077, 0.067, 0.064, e1=0.94, e2=0.96, u_segs=24, v_segs=16, name="sclera", material="eye_white")
         .rotate_xyz(rx=-0.08, ry=0.27)
         .translate(eye)
     )
+    # Curved ellipsoid iris & pupil seated smoothly into the sclera dome (r_max stays <= 0.078).
     iris = (
-        ellipsoid(0.049, 0.049, 0.013, u_segs=20, v_segs=12, name="iris", material="eye_iris")
-        .rotate_xyz(rx=-0.06, ry=0.19)
-        .translate(eye + np.array([0.004, -0.003, 0.058]))
+        ellipsoid(0.053, 0.051, 0.024, u_segs=22, v_segs=12, name="iris", material="eye_iris")
+        .translate(-0.003, -0.002, 0.043)
+        .rotate_xyz(rx=-0.06, ry=0.18)
+        .translate(eye)
     )
     pupil = (
-        ellipsoid(0.025, 0.025, 0.009, u_segs=16, v_segs=10, name="pupil", material="eye_pupil")
-        .rotate_xyz(rx=-0.06, ry=0.17)
-        .translate(eye + np.array([0.002, -0.003, 0.065]))
+        ellipsoid(0.034, 0.033, 0.016, u_segs=18, v_segs=10, name="pupil", material="eye_pupil")
+        .translate(-0.004, -0.002, 0.053)
+        .rotate_xyz(rx=-0.06, ry=0.16)
+        .translate(eye)
     )
     scene.add_mirrored("eyes", sclera)
     scene.add_mirrored("eyes", iris)
@@ -448,7 +472,7 @@ def _sculpt_head(scene: SceneBuilder, blink: float) -> None:
     # so zero sclera/iris/pupil pixel ever phases through mid-blink at any blink angle in [0, 1].
     eye_pts = np.vstack([sclera.positions, iris.positions, pupil.positions]).astype(np.float64)
     r_eye_max = float(np.max(np.linalg.norm(eye_pts - eye[None, :], axis=1)))
-    lid_thick = 0.0075
+    lid_thick = 0.0065
     lid_outer_r = r_eye_max + 0.0075 + lid_thick
     rest = quat_from_axis_angle((1.0, 0.0, 0.0), max(0.0, min(1.0, float(blink))) * EYELID_CLOSED_ANGLE)
     for node, sign in (("eyelid_left", 1.0), ("eyelid_right", -1.0)):
@@ -520,39 +544,52 @@ def _build_head(scene: SceneBuilder, blink: float) -> None:
 # ---------------------------------------------------------------------------
 
 def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Build wide-sweeping curved muscular ape arms + riveted gauntlets + dark clawed fists.
+    """Build articulated muscular ape arms (left whole; right split at elbow for bicep flex!).
 
     Returns `(right_bicep_center, right_bicep_tangent, right_arm_verts)` for the `-X` cloth wrap.
     """
     pts = [np.asarray(p, dtype=np.float64) for p in ARM_PTS_LEFT]
     sh, mid, el, wr, fi = pts
+    pts_r = [np.array([-p[0], p[1], p[2]], dtype=np.float64) for p in pts]
+    sh_r, mid_r, el_r, wr_r, fi_r = pts_r
 
-    # Continuous flowing curved gorilla arm (no stuck-on elbow ball spheres!).
-    arm_rads = [0.094, 0.104, 0.098, 0.108, 0.082]
-    arm_mesh = curved_tube(pts, arm_rads, samples_per_seg=5, radial_segs=16, cap_rings=3, name="gorilla_arm", material="chitin_team")
-    scene.add_mirrored("arms", arm_mesh)
+    # Left (+X) continuous flowing ape arm; right (-X) split seamlessly at elbow for bicep flex!
+    scene.add("arm_left", curved_tube(pts, [0.094, 0.104, 0.098, 0.108, 0.082], samples_per_seg=5, radial_segs=16, cap_rings=3, name="gorilla_arm_left", material="chitin_team"))
+    scene.add(
+        "right_upper_arm",
+        [
+            curved_tube([sh_r, mid_r, el_r], [0.094, 0.104, 0.098], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_upper_right", material="chitin_team"),
+            sphere(0.096, u_segs=14, v_segs=10, name="elbow_joint_right", material="chitin_team").translate(el_r),
+        ],
+    )
+    scene.add(
+        "right_forearm",
+        curved_tube([el_r, wr_r, fi_r], [0.098, 0.108, 0.082], samples_per_seg=5, radial_segs=16, cap_rings=4, name="gorilla_forearm_right", material="chitin_team"),
+    )
 
-    # Sculpted curved outer forearm gauntlet shell + recessed dark armor seam cuffs.
+    def _add_arm_pair(part: MeshPart, *, right_node: str) -> None:
+        scene.add("arm_left", part)
+        scene.add(right_node, part.mirror_x(f"{part.name}_right"))
+
+    # Sculpted outer forearm gauntlet shell + recessed dark armor seam cuffs & elbow cop.
     gauntlet = (
         superellipsoid(0.110, 0.104, 0.124, e1=0.76, e2=0.80, u_segs=18, v_segs=12, name="forearm_gauntlet", material="chitin_team")
         .rotate_xyz(rx=0.58, ry=-0.38, rz=0.18)
         .translate(0.478, 0.304, 0.162)
     )
-    scene.add_mirrored("arms", gauntlet)
-    scene.add_mirrored("arms", _ring_on_segment(mid, el, 0.36, 0.102, 0.008, name="bracer_seam_0", material="chitin_dark"))
-    scene.add_mirrored("arms", _ring_on_segment(el, wr, 0.36, 0.112, 0.0085, name="gauntlet_seam_0", material="chitin_dark"))
-    scene.add_mirrored("arms", _ring_on_segment(el, wr, 0.72, 0.106, 0.0085, name="gauntlet_seam_1", material="chitin_dark"))
-    scene.add_mirrored("arms", _ring_on_segment(el, wr, 0.96, 0.094, 0.014, name="gauntlet_cuff", material="chitin_dark"))
+    _add_arm_pair(gauntlet, right_node="right_forearm")
+    _add_arm_pair(_ring_on_segment(mid, el, 0.36, 0.102, 0.008, name="bracer_seam_0", material="chitin_dark"), right_node="right_upper_arm")
+    _add_arm_pair(_ring_on_segment(el, wr, 0.36, 0.112, 0.0085, name="gauntlet_seam_0", material="chitin_dark"), right_node="right_forearm")
+    _add_arm_pair(_ring_on_segment(el, wr, 0.72, 0.106, 0.0085, name="gauntlet_seam_1", material="chitin_dark"), right_node="right_forearm")
+    _add_arm_pair(_ring_on_segment(el, wr, 0.96, 0.094, 0.014, name="gauntlet_cuff", material="chitin_dark"), right_node="right_forearm")
 
-    # Flush curved elbow armor plate blended seamlessly along the rear-outer bend of the ape arm.
     elbow_cop = (
         superellipsoid(0.064, 0.058, 0.036, e1=0.76, e2=0.82, u_segs=14, v_segs=10, name="elbow_cop", material="chitin_team")
         .rotate_xyz(rx=0.42, ry=-0.32, rz=-0.26)
         .translate(el + np.array([0.028, 0.008, -0.042]))
     )
-    scene.add_mirrored("arms", elbow_cop)
+    _add_arm_pair(elbow_cop, right_node="right_forearm")
 
-    # Metallic steel stud ring around each armored gauntlet cuff.
     mat, length = _axis_frame(el, wr)
     for k in range(6):
         ang = 2.0 * math.pi * k / 6.0 + 0.25
@@ -560,14 +597,14 @@ def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray
         local_p = local_n * 0.104 + np.array([0.0, 0.84 * length, 0.0])
         world_p = (mat @ np.append(local_p, 1.0))[:3]
         world_n = mat[:3, :3] @ local_n
-        scene.add_mirrored("arms", _rivet(world_p, world_n, f"gauntlet_rivet_{k}", radius=0.011))
+        _add_arm_pair(_rivet(world_p, world_n, f"gauntlet_rivet_{k}", radius=0.011), right_node="right_forearm")
 
     # Big chunky dark clawed gorilla fists held wide and low (clear above Y = 0.0).
-    scene.add_mirrored(
-        "arms",
+    _add_arm_pair(
         superellipsoid(0.084, 0.078, 0.088, e1=0.68, e2=0.74, u_segs=16, v_segs=12, name="fist_palm", material="chitin_dark")
         .rotate_xyz(rx=0.25, ry=-0.42, rz=0.12)
         .translate(fi),
+        right_node="right_forearm",
     )
     claws = (
         ((0.036, 0.040, 0.052), (0.014, 0.024, 0.108), (-0.022, -0.008, 0.114)),
@@ -576,16 +613,16 @@ def _build_arms(scene: SceneBuilder) -> Tuple[np.ndarray, np.ndarray, np.ndarray
     )
     for c_idx, ctrl in enumerate(claws):
         c_pts = [fi + np.asarray(c) for c in ctrl]
-        scene.add_mirrored("arms", curved_tube(c_pts, [0.026, 0.022, 0.010], samples_per_seg=3, radial_segs=10, cap_rings=2, name=f"fist_claw_{c_idx}", material="chitin_dark"))
+        _add_arm_pair(curved_tube(c_pts, [0.026, 0.022, 0.010], samples_per_seg=3, radial_segs=10, cap_rings=2, name=f"fist_claw_{c_idx}", material="chitin_dark"), right_node="right_forearm")
     thumb = [fi + np.array(c) for c in ((-0.048, 0.040, 0.026), (-0.074, 0.026, 0.074), (-0.046, -0.004, 0.104))]
-    scene.add_mirrored("arms", curved_tube(thumb, [0.026, 0.022, 0.010], samples_per_seg=3, radial_segs=10, cap_rings=2, name="fist_thumb", material="chitin_dark"))
+    _add_arm_pair(curved_tube(thumb, [0.026, 0.022, 0.010], samples_per_seg=3, radial_segs=10, cap_rings=2, name="fist_thumb", material="chitin_dark"), right_node="right_forearm")
 
     # Sample exact right (-X) bicep center, tangent, and arm vertices so the hot-magenta cloth hugs flush.
     sampled = catmull_rom_spline(ARM_PTS_LEFT, samples_per_seg=10)
-    idx = 14  # cleanly seated on the lower-mid outer bicep right above the elbow bend (matching acst sprites)
+    idx = 14
     p_l = sampled[idx]
     t_l = _normalize(sampled[idx + 1] - sampled[idx - 1])
-    right_arm_verts = np.vstack([p.positions for p in scene.get_node("arms") if p.positions[:, 0].mean() < 0.0]).astype(np.float64)
+    right_arm_verts = np.vstack([p.positions for p in scene.get_node("right_upper_arm") + scene.get_node("right_forearm")]).astype(np.float64)
     return np.array([-p_l[0], p_l[1], p_l[2]]), _normalize(np.array([-t_l[0], t_l[1], t_l[2]])), right_arm_verts
 
 
@@ -681,25 +718,25 @@ def _make_brass_bullet_pad(center: np.ndarray, width_dir: np.ndarray, out_n: np.
 def _build_bandoliers(scene: SceneBuilder, torso_verts: np.ndarray) -> None:
     """Crossed ribbed woven-gold bullet bandoliers over BOTH chest and back with brass X-buckles."""
     belt_ctrl = [
-        (0.220, 0.865, -0.060),   # over rounded left shoulder behind head
-        (0.232, 0.745, 0.165),    # upper-left chest
-        (0.125, 0.595, 0.258),    # left pectoral
-        (0.000, 0.480, 0.278),    # front chest X crossing
-        (-0.145, 0.395, 0.232),   # lower-right abdomen
-        (-0.245, 0.348, 0.105),   # right front hip
-        (-0.262, 0.352, -0.075),  # right side hip
-        (-0.190, 0.435, -0.255),  # lower-right back
-        (0.000, 0.560, -0.312),   # back X crossing
-        (0.172, 0.720, -0.275),   # upper-left back
-        (0.220, 0.828, -0.168),   # rear left shoulder slope
+        (0.214, 0.785, -0.025),   # over upright left shoulder beside the dark muscular neck
+        (0.224, 0.695, 0.155),    # upper-left chest
+        (0.122, 0.568, 0.245),    # left pectoral
+        (0.000, 0.468, 0.266),    # front chest X crossing
+        (-0.142, 0.388, 0.222),   # lower-right abdomen
+        (-0.240, 0.344, 0.098),   # right front hip
+        (-0.256, 0.348, -0.072),  # right side hip
+        (-0.186, 0.428, -0.238),  # lower-right back
+        (0.000, 0.540, -0.286),   # back X crossing
+        (0.168, 0.678, -0.242),   # upper-left back
+        (0.214, 0.758, -0.135),   # rear left shoulder slope
     ]
-    pivot = np.array([0.0, 0.535, -0.025])
-    crossings = {"front": np.array([0.0, 0.480, 0.305]), "back": np.array([0.0, 0.560, -0.340])}
+    pivot = np.array([0.0, 0.515, -0.015])
+    crossings = {"front": np.array([0.0, 0.468, 0.292]), "back": np.array([0.0, 0.540, -0.314])}
 
     for belt_idx, sign in enumerate((1.0, -1.0)):
         raw = np.array([(sign * x, y, z) for x, y, z in belt_ctrl], dtype=np.float64)
         pts = catmull_rom_spline(raw, samples_per_seg=6, closed=True)
-        out_n = np.array([_normalize(p - pivot + (np.array([0.0, 0.28, 0.0]) if p[1] > 0.75 else 0.0)) for p in pts])
+        out_n = np.array([_normalize(p - pivot + (np.array([0.0, 0.28, 0.0]) if p[1] > 0.70 else 0.0)) for p in pts])
         pts = _conform_belt_to_torso(pts, out_n, torso_verts, pivot, clearance=0.014)
         if belt_idx == 1:
             pts = pts + (0.030 * np.exp(-((pts[:, 0] / 0.11) ** 2)))[:, None] * out_n
@@ -843,6 +880,66 @@ def _build_right_bicep_cloth(
         )
 
 
+def _quat_shortest_arc(a: np.ndarray, b: np.ndarray) -> Tuple[float, float, float, float]:
+    au, bu = _normalize(a), _normalize(b)
+    ang = math.acos(max(-1.0, min(1.0, float(np.dot(au, bu)))))
+    return quat_from_axis_angle(tuple(np.cross(au, bu)), ang)
+
+
+def _quat_rot_mat(q: Tuple[float, float, float, float]) -> np.ndarray:
+    x, y, z, w = q
+    return np.array([
+        [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - z * w), 2.0 * (x * z + y * w)],
+        [2.0 * (x * y + z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - x * w)],
+        [2.0 * (x * z - y * w), 2.0 * (y * z + x * w), 1.0 - 2.0 * (x * x + y * y)],
+    ], dtype=np.float64)
+
+
+def _add_combat_idle_animation(scene: SceneBuilder) -> None:
+    """Authentic `acst301` 7.82s heavy muscular heave + 900ms bodybuilder right-arm bicep flex!"""
+    q_id = (0.0, 0.0, 0.0, 1.0)
+    sh_r = np.array([-ARM_PTS_LEFT[0][0], ARM_PTS_LEFT[0][1], ARM_PTS_LEFT[0][2]])
+    el_r = np.array([-ARM_PTS_LEFT[2][0], ARM_PTS_LEFT[2][1], ARM_PTS_LEFT[2][2]])
+    fi_r = np.array([-ARM_PTS_LEFT[4][0], ARM_PTS_LEFT[4][1], ARM_PTS_LEFT[4][2]])
+    q_sh_ext = _quat_shortest_arc(el_r - sh_r, np.array([-1.0, 0.06, 0.10]))
+    r_sh = _quat_rot_mat(q_sh_ext)
+    q_el_ext = _quat_shortest_arc(fi_r - el_r, r_sh.T @ np.array([-1.0, 0.02, 0.10]))
+    z_loc = tuple(r_sh.T @ np.array([0.0, 0.0, 1.0]))
+    q_el_mid = quat_mul(quat_from_axis_angle(z_loc, -0.92), q_el_ext)
+    q_el_flex = quat_mul(quat_from_axis_angle(z_loc, -1.85), q_el_ext)
+    q_el_hi = quat_mul(quat_from_axis_angle(z_loc, -1.96), q_el_ext)
+
+    rows = []
+    # 5 calm, weighty muscular breathing heaves across [0.00, 5.90] (1.18s each)
+    for b in range(5):
+        t0 = b * 1.18
+        rows.append((t0, 0.000, 0.00, q_id, q_id, q_id, q_id, 0.00))
+        rows.append((t0 + 0.56, 0.048, -0.036, quat_from_euler_xyz(rx=0.045), quat_from_euler_xyz(rx=-0.03, rz=0.11), quat_from_euler_xyz(rx=-0.03, rz=-0.11), quat_from_euler_xyz(rz=0.06), -0.06))
+    # Emote: extend right (-X) arm sideways -> curl up -> hold 900ms bicep flex -> lower smoothly
+    rows.extend([
+        (5.90, 0.000, 0.000, q_id, q_id, q_id, q_id, 0.00),
+        (6.08, 0.034, -0.030, quat_from_euler_xyz(rx=-0.02, ry=-0.14), quat_from_euler_xyz(rz=0.09), q_sh_ext, q_el_ext, -0.04),
+        (6.17, 0.048, -0.042, quat_from_euler_xyz(rx=-0.04, ry=-0.20), quat_from_euler_xyz(rz=0.11), q_sh_ext, q_el_mid, -0.06),
+        (6.26, 0.058, -0.052, quat_from_euler_xyz(rx=-0.05, ry=-0.24, rz=0.04), quat_from_euler_xyz(rz=0.14), q_sh_ext, q_el_flex, -0.08),
+        (6.71, 0.064, -0.058, quat_from_euler_xyz(rx=-0.06, ry=-0.26, rz=0.05), quat_from_euler_xyz(rz=0.15), q_sh_ext, q_el_hi, -0.09),
+        (7.16, 0.056, -0.050, quat_from_euler_xyz(rx=-0.05, ry=-0.22, rz=0.04), quat_from_euler_xyz(rz=0.13), q_sh_ext, q_el_flex, -0.07),
+        (7.32, 0.030, -0.024, quat_from_euler_xyz(rx=-0.02, ry=-0.10), quat_from_euler_xyz(rz=0.07), q_sh_ext, q_el_mid, -0.04),
+        (7.50, 0.010, -0.008, q_id, q_id, quat_from_euler_xyz(rz=-0.20), q_id, -0.02),
+        (7.82, 0.000, 0.000, q_id, q_id, q_id, q_id, 0.00),
+    ])
+    times = [round(r[0], 4) for r in rows]
+    bx, by, bz = scene.get_node_transform("upper_body").translation
+    scene.add_animation("Idle", [
+        AnimationChannel("upper_body", "translation", list(times), [(bx, by + r[1], bz) for r in rows]),
+        AnimationChannel("upper_body", "rotation", list(times), [quat_from_euler_xyz(rx=r[2]) for r in rows]),
+        AnimationChannel("head_group", "rotation", list(times), [r[3] for r in rows]),
+        AnimationChannel("left_arm_group", "rotation", list(times), [r[4] for r in rows]),
+        AnimationChannel("right_arm_group", "rotation", list(times), [r[5] for r in rows]),
+        AnimationChannel("right_forearm_group", "rotation", list(times), [r[6] for r in rows]),
+        AnimationChannel("gaster_group", "rotation", list(times), [quat_from_euler_xyz(rx=r[7]) for r in rows]),
+    ], replace=True)
+
+
 def build_combat(blink: float = 0.0) -> SceneBuilder:
     """Build the low, wide, rounded hunched armored Combat Ant (`blink` in [0, 1])."""
     scene = SceneBuilder(name="ant_combat")
@@ -852,7 +949,40 @@ def build_combat(blink: float = 0.0) -> SceneBuilder:
     _build_legs(scene)
     _build_bandoliers(scene, torso_verts)
     _build_right_bicep_cloth(scene, cloth_ctr, cloth_tan, right_arm_verts)
+
+    # Assemble clean hierarchical rig keeping `legs` rooted solidly on Y = 0.0!
+    sh_l = ARM_PTS_LEFT[0]
+    sh_r = (-ARM_PTS_LEFT[0][0], ARM_PTS_LEFT[0][1], ARM_PTS_LEFT[0][2])
+    el_r = (-ARM_PTS_LEFT[2][0], ARM_PTS_LEFT[2][1], ARM_PTS_LEFT[2][2])
+
+    scene.set_node_transform("upper_body", translation=(0.0, 0.460, -0.025))
+    scene.attach_world_node("body", "upper_body")
+    scene.attach_world_node("gear_bandolier", "upper_body")
+
+    scene.set_node_transform("gaster_group", translation=(0.0, 0.255, -0.155))
+    scene.attach_world_node("gaster_group", "upper_body")
+    scene.attach_world_node("gaster", "gaster_group")
+
+    scene.set_node_transform("head_group", translation=(0.0, 0.790, 0.036))
+    scene.attach_world_node("head_group", "upper_body")
+    for hc_name in ("head", "eyes", "eyelid_left", "eyelid_right", "antennae"):
+        scene.attach_world_node(hc_name, "head_group")
+
+    scene.set_node_transform("left_arm_group", translation=sh_l)
+    scene.attach_world_node("left_arm_group", "upper_body")
+    scene.attach_world_node("arm_left", "left_arm_group")
+
+    scene.set_node_transform("right_arm_group", translation=sh_r)
+    scene.attach_world_node("right_arm_group", "upper_body")
+    scene.attach_world_node("right_upper_arm", "right_arm_group")
+    scene.attach_world_node("gear_bow", "right_arm_group")
+
+    scene.set_node_transform("right_forearm_group", translation=el_r)
+    scene.attach_world_node("right_forearm_group", "right_arm_group")
+    scene.attach_world_node("right_forearm", "right_forearm_group")
+
     scene.ground_to_y(0.0)
+    _add_combat_idle_animation(scene)
     return scene
 
 

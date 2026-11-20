@@ -1,17 +1,20 @@
 """Sculpted high-detail 3D model for the iconic Rogue Bandit Thief Ant.
 
 Built on `base_ant` (keeping its broad heart-shield head, chunky lobster-claw
-mandibles, and flowing ball-free legs) with Thief's signature bandit headband,
-rogue gear, and extreme shifty lookout eyes:
-- One single seamless sculpted woven-gold bandit headband (`gear_gold` with soft
-  rolled cloth hems) ray-cast flush onto the base cranium right across the brow
-  above both huge eyes, with full clearance for extreme gaze and blinking lids
+mandibles, and flowing ball-free legs) with Thief's signature full domino
+bandit mask, rogue gear, and extreme shifty lookout eyes:
+- One single unified continuous sculpted woven-gold domino mask + headband
+  shell (`gear_gold`) ray-cast flush across the forehead, nose bridge, upper
+  cheeks, temples, and back, with two clean softly-beveled oval eye cutouts
+  punched directly out of the single watertight cloth surface (zero separate
+  bolted-on strips or seam cracks)
 - Plump side knot on the left temple (`+X`) with two large, sweeping, pleated
   cloth tails flaring boldly back-left across every camera angle
-- Extreme shifty lookout eyes: huge spherical sclera matching `base_ant` scale
-  with pivoted `eye_ball_left` / `eye_ball_right` nodes rotating `+-0.62 rad`
-  in the `"IdleLookout"` glTF 2.0 clip, plus half-lidded spherical eyelids with
-  guaranteed `>= +0.007` radial clearance across all blink and gaze frames
+- Extreme shifty lookout eyes: trimmed spherical sclera (`#148`) with huge
+  curved spherical-cap olive irises (~72%) and dark glossy pupils (~46%) on
+  pivoted `eye_ball_left` / `eye_ball_right` nodes rotating `+-0.62 rad` in
+  the `"IdleLookout"` glTF 2.0 clip, plus spherical eyelids with guaranteed
+  `>= +0.007` radial clearance across all blink and gaze frames
 - Rogue utility gear: dark leather crossbody strap (`gear_dark`) with brass
   chest buckle (`gear_gold_metal` / `gear_brass_trim`) carrying a compact
   cinched brown canvas loot pouch (`prop_brown` + `gear_gold` drawstring +
@@ -41,6 +44,8 @@ try:
         hemisphere_shell,
         lathe,
         quat_from_axis_angle,
+        quat_from_euler_xyz,
+        quat_mul,
         recompute_smooth_normals,
         rounded_box,
         sphere,
@@ -59,6 +64,8 @@ except ImportError:
         hemisphere_shell,
         lathe,
         quat_from_axis_angle,
+        quat_from_euler_xyz,
+        quat_mul,
         recompute_smooth_normals,
         rounded_box,
         sphere,
@@ -76,18 +83,21 @@ _LID_DROOP: Dict[str, Tuple[float, float]] = {
     "eyelid_right": (0.10, -0.05),
 }
 
-# Nimble asymmetric rogue arm pose anchored cleanly at base_ant's shoulder (0.092, 0.476, 0.014).
+# Stealthy low hiding crouch (`#162`) matching original `atst301` (~85% of Worker height, H ~ 0.86).
+THIEF_CROUCH = 0.155
+
+# Nimble asymmetric rogue arm pose anchored cleanly at crouched shoulders (±0.106, 0.478 - c, 0.016).
 _THIEF_ARM_LEFT = [
-    (0.092, 0.476, 0.014),
-    (0.188, 0.436, 0.088),
-    (0.166, 0.448, 0.194),
-    (0.132, 0.466, 0.232),
+    (0.106, 0.478 - THIEF_CROUCH, 0.016),
+    (0.198, 0.436 - THIEF_CROUCH, 0.088),
+    (0.172, 0.444 - THIEF_CROUCH, 0.194),
+    (0.136, 0.460 - THIEF_CROUCH, 0.232),
 ]
 _THIEF_ARM_RIGHT = [
-    (-0.092, 0.476, 0.014),
-    (-0.200, 0.440, 0.060),
-    (-0.184, 0.378, 0.156),
-    (-0.154, 0.370, 0.196),
+    (-0.106, 0.478 - THIEF_CROUCH, 0.016),
+    (-0.208, 0.440 - THIEF_CROUCH, 0.062),
+    (-0.188, 0.378 - THIEF_CROUCH, 0.156),
+    (-0.156, 0.370 - THIEF_CROUCH, 0.196),
 ]
 
 _U_SEGS = 72
@@ -128,76 +138,311 @@ class _CraniumCaster:
         return float(np.max(t[hit])) if np.any(hit) else 0.23
 
 
-def _band_limits(theta: float) -> Tuple[float, float]:
-    """Elevation angles (bot, top) for the single-piece woven bandit headband across the heart-shield head.
+def _mask_v_limits(theta: float) -> Tuple[float, float]:
+    """Outer bottom/top elevation bounds for the unified single-piece domino mask + headband.
 
-    Sits cleanly across the brow right above both huge eyes (clearing the `0.099`-radius
-    blinking eyelids with zero clipping) while leaving the smooth rounded green crown &
-    antenna roots clearly visible above, then wraps plushly around the temples & back.
+    Wraps plushly across the brow (below antenna sockets), dips gracefully underneath both
+    eyes along the upper cheeks (clearing the lobster-claw mandibles cleanly), arches subtly
+    at the lower nose bridge, and tapers smoothly into a bold wrap around temples and back.
     """
-    ang = math.atan2(math.sin(theta), math.cos(theta))
-    abs_a = abs(ang)
-
-    # Clean upper hem well below the antenna sockets so the smooth green crown reads clearly.
-    elev_top = 0.655 - 0.035 * math.exp(-((abs_a / 0.90) ** 2))
-
-    # Plush continuous wrap along temples and back of the broad heart-shield head.
-    elev_bot = -0.040
-
-    # Smooth continuous brow arch clearing both huge eyes & sweeping eyelids (|theta| ~ 0.58 rad).
-    eye_arch = math.exp(-(((abs_a - 0.58) / 0.44) ** 2))
-    elev_bot += 0.485 * eye_arch
-
-    # Subtle mischievous brow-bridge dip right between the two huge eyes.
-    bridge = math.exp(-((abs_a / 0.24) ** 2))
-    elev_bot += 0.295 * bridge
-    return elev_bot, elev_top
+    a = abs(math.atan2(math.sin(theta), math.cos(theta)))
+    v_top = 0.540 + 0.155 * math.exp(-((a / 1.15) ** 2))
+    cheek_dip = -0.315 * math.exp(-(((a - 0.56) / 0.42) ** 2))
+    nose_dip = -0.165 * math.exp(-((a / 0.28) ** 2))
+    v_bot = -0.115 + cheek_dip + nose_dip
+    return v_bot, v_top
 
 
-def _build_headband(scene: SceneBuilder, caster: _CraniumCaster) -> None:
-    """Build ONE single seamless sculpted woven-gold bandit headband with soft rolled cloth hems."""
-    thetas = np.linspace(0.0, 2.0 * math.pi, _U_SEGS, endpoint=False)
-    vs = np.linspace(0.0, 1.0, _V_SEGS)
-    dirs = np.zeros((_U_SEGS, _V_SEGS, 3))
-    radii = np.zeros((_U_SEGS, _V_SEGS))
-    for ui, th in enumerate(thetas):
-        e_b, e_t = _band_limits(float(th))
-        for vi, v in enumerate(vs):
-            dirs[ui, vi] = _direction(float(th), e_b + v * (e_t - e_b))
-            radii[ui, vi] = caster.radius(dirs[ui, vi])
+def _spherical_eye_cap(
+    radius: float,
+    ang_x: float,
+    ang_y: float,
+    thickness: float,
+    *,
+    u_segs: int = 24,
+    v_segs: int = 6,
+    name: str,
+    material: str,
+) -> MeshPart:
+    """Closed curved elliptical cap hugging a sphere of `radius` around +Z (zero flat rim poke-out)."""
+    phis = np.linspace(0.0, 1.0, v_segs + 1)[1:]
+    thetas = np.linspace(0.0, 2.0 * math.pi, u_segs, endpoint=False)
+    r_out = radius + thickness
+    r_in = max(0.002, radius - 0.003)
 
-    # Bridge cranial center furrow & smooth taut cloth tension across the broad forehead.
-    bridged = np.maximum.reduce([np.roll(radii, k, axis=0) for k in (-2, -1, 0, 1, 2)])
-    for _ in range(3):
-        bridged = 0.25 * np.roll(bridged, 1, axis=0) + 0.50 * bridged + 0.25 * np.roll(bridged, -1, axis=0)
-    bridged = np.maximum(bridged, radii + 0.002)
+    def _cap_pts(r_surf: float) -> List[np.ndarray]:
+        pts = [np.array([0.0, 0.0, r_surf])]
+        for s in phis:
+            for th in thetas:
+                ax = s * ang_x * math.cos(th)
+                ay = s * ang_y * math.sin(th)
+                ang = math.hypot(ax, ay)
+                sa = math.sin(ang) / max(1e-8, ang)
+                pts.append(np.array([r_surf * sa * ax, r_surf * sa * ay, r_surf * math.cos(ang)]))
+        return pts
 
-    ring_len = 2 * _V_SEGS + 2
-    rings: List[np.ndarray] = []
-    for ui, th in enumerate(thetas):
-        outer, inner = [], []
-        for vi, v in enumerate(vs):
-            edge = math.sin(v * math.pi) ** 0.34
-            fold = 0.0034 * math.sin(v * 3.0 * math.pi + 0.5 * math.cos(th)) * edge
-            thick = 0.013 + 0.016 * edge + fold
-            outer.append(caster.center + dirs[ui, vi] * (bridged[ui, vi] + thick))
-            inner.append(caster.center + dirs[ui, vi] * (bridged[ui, vi] - 0.008))
-        outer_a, inner_a = np.array(outer), np.array(inner)
-        top_mid = 0.5 * (outer_a[-1] + inner_a[-1]) + 0.0065 * _normalize(outer_a[-1] - outer_a[-2])
-        bot_mid = 0.5 * (outer_a[0] + inner_a[0]) + 0.0065 * _normalize(outer_a[0] - outer_a[1])
-        rings.append(np.vstack([outer_a, top_mid[None, :], inner_a[::-1], bot_mid[None, :]]))
+    outer = _cap_pts(r_out)
+    inner = _cap_pts(r_in)
+    n_cap = len(outer)
+    positions = np.asarray(outer + inner, dtype=np.float32)
 
-    positions = np.vstack(rings).astype(np.float32)
     tris: List[Tuple[int, int, int]] = []
-    for ui in range(_U_SEGS):
-        b0, b1 = ui * ring_len, ((ui + 1) % _U_SEGS) * ring_len
-        for k in range(ring_len):
-            nk = (k + 1) % ring_len
+    # Outer surface fan + rings (+Z outward)
+    for k in range(u_segs):
+        nk = (k + 1) % u_segs
+        tris.append((0, 1 + k, 1 + nk))
+    for r in range(v_segs - 1):
+        b0, b1 = 1 + r * u_segs, 1 + (r + 1) * u_segs
+        for k in range(u_segs):
+            nk = (k + 1) % u_segs
             tris.append((b0 + k, b1 + k, b1 + nk))
             tris.append((b0 + k, b1 + nk, b0 + nk))
+    # Inner back surface (reversed winding)
+    for k in range(u_segs):
+        nk = (k + 1) % u_segs
+        tris.append((n_cap, n_cap + 1 + nk, n_cap + 1 + k))
+    for r in range(v_segs - 1):
+        b0, b1 = n_cap + 1 + r * u_segs, n_cap + 1 + (r + 1) * u_segs
+        for k in range(u_segs):
+            nk = (k + 1) % u_segs
+            tris.append((b0 + k, b1 + nk, b1 + k))
+            tris.append((b0 + k, b0 + nk, b1 + nk))
+    # Outer rim seam closing the cap into a watertight solid
+    bo = 1 + (v_segs - 1) * u_segs
+    bi = n_cap + 1 + (v_segs - 1) * u_segs
+    for k in range(u_segs):
+        nk = (k + 1) % u_segs
+        tris.append((bo + k, bi + k, bi + nk))
+        tris.append((bo + k, bi + nk, bo + nk))
+
     indices = np.asarray(tris, dtype=np.uint32).reshape(-1)
-    band = MeshPart("bandit_headband", "gear_gold", positions, recompute_smooth_normals(positions, indices), indices).ensure_outward()
-    scene.add("gear_bandana", band)
+    return MeshPart(name, material, positions, recompute_smooth_normals(positions, indices), indices).ensure_outward()
+
+
+def _build_unified_domino_mask(
+    scene: SceneBuilder,
+    caster: _CraniumCaster,
+    anchors: dict,
+    lid_outer_r: float,
+) -> None:
+    """Build ONE single continuous watertight woven-gold domino mask + headband shell.
+
+    Uses an exact 3-patch vertex-welded topology (left eye patch + mirrored right eye patch +
+    rear wrap band) with two smooth oval eye cutouts punched directly out of the continuous
+    cloth surface and soft rolled cloth bevels around all 4 rims (zero bolted-on pieces!).
+    """
+    hc = caster.center
+    eye_l = np.asarray(anchors["eye_left"], dtype=np.float64)
+    rel_eye = eye_l - hc
+    u_eye = math.atan2(float(rel_eye[0]), float(rel_eye[2]))
+    v_eye = math.atan2(float(rel_eye[1]), math.hypot(float(rel_eye[0]), float(rel_eye[2])))
+
+    u_outer = 1.18
+    n_side = 12
+    m_ring = 4 * n_side
+    n_rad = 6
+    n_back = 36
+
+    # Build ordered CCW perimeter around Left Eye Patch [0, u_outer] x [v_bot(u), v_top(u)].
+    perim_u = np.zeros(m_ring, dtype=np.float64)
+    perim_v = np.zeros(m_ring, dtype=np.float64)
+    vb_out, vt_out = _mask_v_limits(u_outer)
+    vb_mid, vt_mid = _mask_v_limits(0.0)
+    for k in range(n_side):
+        f = k / n_side
+        # Side 0: outer temple u = u_outer, rising bottom -> top
+        perim_u[k] = u_outer
+        perim_v[k] = vb_out + f * (vt_out - vb_out)
+        # Side 1: top brow hem, sweeping u_outer -> 0
+        u1 = u_outer * (1.0 - f)
+        perim_u[n_side + k] = u1
+        perim_v[n_side + k] = _mask_v_limits(u1)[1]
+        # Side 2: center nose bridge u = 0, falling top -> bottom
+        perim_u[2 * n_side + k] = 0.0
+        perim_v[2 * n_side + k] = vt_mid + f * (vb_mid - vt_mid)
+        # Side 3: bottom cheek hem, sweeping 0 -> u_outer
+        u3 = u_outer * f
+        perim_u[3 * n_side + k] = u3
+        perim_v[3 * n_side + k] = _mask_v_limits(u3)[0]
+
+    # Solve exact smooth 3D clearance curve around the left eye + spherical eyelid shell.
+    target_clear = lid_outer_r + 0.0045
+    hole_s = np.zeros(m_ring, dtype=np.float64)
+    ray_du = np.zeros(m_ring, dtype=np.float64)
+    ray_dv = np.zeros(m_ring, dtype=np.float64)
+    for k in range(m_ring):
+        du = perim_u[k] - u_eye
+        dv = perim_v[k] - v_eye
+        dist_perim = max(1e-6, math.hypot(du, dv))
+        du_n, dv_n = du / dist_perim, dv / dist_perim
+        ray_du[k], ray_dv[k] = du_n, dv_n
+
+        # Binary search smallest angular radius clearing the 3D eyelid sphere cleanly.
+        lo, hi = 0.24, min(0.56, dist_perim * 0.72)
+        for _ in range(10):
+            mid = 0.5 * (lo + hi)
+            uu, vv = u_eye + mid * du_n, v_eye + mid * dv_n
+            d = _direction(uu, vv)
+            p_surf = hc + d * (caster.radius(d) + 0.014)
+            if float(np.linalg.norm(p_surf - eye_l)) < target_clear:
+                lo = mid
+            else:
+                hi = mid
+        # Keep lush continuous bridge (>= 0.135 rad) and under-eye cheek strip cleanly clear.
+        max_s = dist_perim * 0.75
+        if du_n < -1e-4:
+            max_s = min(max_s, (u_eye - 0.135) / (-du_n))
+        hole_s[k] = min(hi, max(0.22, max_s))
+
+    # Light circular smoothing so the punched oval eye cutout is silky-smooth with zero kinks.
+    for _ in range(3):
+        hole_s = 0.25 * np.roll(hole_s, 1) + 0.50 * hole_s + 0.25 * np.roll(hole_s, -1)
+    hole_u = u_eye + hole_s * ray_du
+    hole_v = v_eye + hole_s * ray_dv
+
+    # Weld all 3 surface regions into one shared vertex/triangle table via exact quantized (u, v) keys.
+    vert_map: Dict[Tuple[int, int], int] = {}
+    uv_list: List[Tuple[float, float]] = []
+    is_boundary_hint: List[float] = []  # 0 at rim, 1 in cloth interior (for plush edge rounding)
+
+    def _get_vert(u: float, v: float, interior: float) -> int:
+        # Wrap periodic u cleanly into (-pi, pi] so u = +u_outer and u = -u_outer match seamlessly.
+        uw = math.atan2(math.sin(u), math.cos(u))
+        key = (int(round(uw * 100000.0)), int(round(v * 100000.0)))
+        idx = vert_map.get(key)
+        if idx is None:
+            idx = len(uv_list)
+            vert_map[key] = idx
+            uv_list.append((uw, v))
+            is_boundary_hint.append(interior)
+        else:
+            is_boundary_hint[idx] = min(is_boundary_hint[idx], interior)
+        return idx
+
+    surf_tris: List[Tuple[int, int, int]] = []
+
+    def _add_eye_patch(mirror: bool) -> None:
+        grid = np.zeros((n_rad + 1, m_ring), dtype=np.int32)
+        for r in range(n_rad + 1):
+            t = r / n_rad
+            # Smooth radial easing gives denser quads right around the rolled eye opening.
+            te = 0.55 * t + 0.45 * (t * t)
+            for k in range(m_ring):
+                u = (1.0 - te) * hole_u[k] + te * perim_u[k]
+                v = (1.0 - te) * hole_v[k] + te * perim_v[k]
+                # Interior metric: 0 on eye cutout & top/bottom rims, 1 across bridge/temple interiors.
+                on_top_bot = (n_side <= k <= 2 * n_side) or (k >= 3 * n_side) or (k == 0)
+                rim_dist = min(t, (1.0 - t) if on_top_bot else 1.0)
+                grid[r, k] = _get_vert(-u if mirror else u, v, min(1.0, rim_dist * 3.0))
+        for r in range(n_rad):
+            for k in range(m_ring):
+                nk = (k + 1) % m_ring
+                a, b, c, d_i = int(grid[r, k]), int(grid[r, nk]), int(grid[r + 1, nk]), int(grid[r + 1, k])
+                # In (u, v), k sweeps CCW while r sweeps outward, so (a, c, b) faces strictly outward (+d).
+                if mirror:
+                    surf_tris.append((a, b, c))
+                    surf_tris.append((a, c, d_i))
+                else:
+                    surf_tris.append((a, c, b))
+                    surf_tris.append((a, d_i, c))
+
+    _add_eye_patch(mirror=False)
+    _add_eye_patch(mirror=True)
+
+    # Back & outer-temple wrap band seamlessly welding u = +u_outer around back to u = 2*pi - u_outer.
+    back_us = np.linspace(u_outer, 2.0 * math.pi - u_outer, n_back + 1)
+    back_grid = np.zeros((n_back + 1, n_side + 1), dtype=np.int32)
+    for ci, u in enumerate(back_us):
+        vb, vt = _mask_v_limits(float(u))
+        for ri in range(n_side + 1):
+            f = ri / n_side
+            v = vb + f * (vt - vb)
+            back_grid[ci, ri] = _get_vert(float(u), v, min(1.0, min(f, 1.0 - f) * 3.5))
+    for ci in range(n_back):
+        for ri in range(n_side):
+            a = int(back_grid[ci, ri])
+            b = int(back_grid[ci + 1, ri])
+            c = int(back_grid[ci + 1, ri + 1])
+            d_i = int(back_grid[ci, ri + 1])
+            surf_tris.append((a, b, c))
+            surf_tris.append((a, c, d_i))
+
+    # Project every unique mask vertex onto the cranium + bridge forehead crease for taut cloth drape.
+    n_surf = len(uv_list)
+    dirs = np.zeros((n_surf, 3), dtype=np.float64)
+    r_raw = np.zeros(n_surf, dtype=np.float64)
+    for i, (u, v) in enumerate(uv_list):
+        d = _direction(u, v)
+        dirs[i] = d
+        r_raw[i] = caster.radius(d)
+
+    # Smooth taut cloth bridging over the subtle forehead center crease using graph-neighbor averaging.
+    adj: List[List[int]] = [[] for _ in range(n_surf)]
+    for a, b, c in surf_tris:
+        adj[a].extend((b, c))
+        adj[b].extend((a, c))
+        adj[c].extend((a, b))
+    r_bridged = r_raw.copy()
+    for _ in range(4):
+        nxt = r_bridged.copy()
+        for i in range(n_surf):
+            if adj[i]:
+                nxt[i] = max(r_raw[i] + 0.002, 0.55 * r_bridged[i] + 0.45 * float(np.mean(r_bridged[adj[i]])))
+        r_bridged = nxt
+
+    pos_out = np.zeros((n_surf, 3), dtype=np.float64)
+    pos_in = np.zeros((n_surf, 3), dtype=np.float64)
+    for i, (u, v) in enumerate(uv_list):
+        edge_w = max(0.0, min(1.0, is_boundary_hint[i])) ** 0.55
+        fold = 0.0022 * math.sin(v * 14.0 + 0.6 * math.cos(u)) * edge_w
+        thick = 0.0115 + 0.0075 * edge_w + fold
+        pos_out[i] = hc + dirs[i] * (r_bridged[i] + thick)
+        pos_in[i] = hc + dirs[i] * (r_bridged[i] - 0.008)
+
+    # Guarantee EVERY single outer-surface triangle faces strictly outward along +dirs.
+    t_arr = np.asarray(surf_tris, dtype=np.int32)
+    tri_n = np.cross(pos_out[t_arr[:, 1]] - pos_out[t_arr[:, 0]], pos_out[t_arr[:, 2]] - pos_out[t_arr[:, 0]])
+    tri_d = dirs[t_arr[:, 0]] + dirs[t_arr[:, 1]] + dirs[t_arr[:, 2]]
+    flipped = np.einsum("ij,ij->i", tri_n, tri_d) < 0.0
+    if np.any(flipped):
+        t_arr[flipped] = t_arr[flipped][:, [0, 2, 1]]
+
+    # Automatically discover ALL open boundary half-edges (top hem, bottom hem, left/right eye cutouts)
+    # and seal them with a soft rounded bevel mid-ring into one 100% watertight solid cloth shell!
+    edge_counts: Dict[Tuple[int, int], int] = {}
+    dir_edges: List[Tuple[int, int]] = []
+    for a, b, c in t_arr:
+        for e0, e1 in ((int(a), int(b)), (int(b), int(c)), (int(c), int(a))):
+            key = (e0, e1) if e0 < e1 else (e1, e0)
+            edge_counts[key] = edge_counts.get(key, 0) + 1
+            dir_edges.append((e0, e1))
+    boundary_edges = [(e0, e1) for e0, e1 in dir_edges if edge_counts[(e0, e1) if e0 < e1 else (e1, e0)] == 1]
+
+    # Build soft rounded bevel ring for every boundary vertex (flush cushion, zero inward eye shrink).
+    b_verts = sorted({v for e in boundary_edges for v in e})
+    mid_idx_map: Dict[int, int] = {}
+    mid_pts: List[np.ndarray] = []
+    for v_i in b_verts:
+        mid_idx_map[v_i] = 2 * n_surf + len(mid_pts)
+        # Gently puff the bevel midpoint slightly outward along the cloth normal for a rolled-hem look.
+        mid_pts.append(0.58 * pos_out[v_i] + 0.42 * pos_in[v_i] + 0.0022 * dirs[v_i])
+
+    all_pos = np.vstack([pos_out, pos_in, np.asarray(mid_pts, dtype=np.float64)]).astype(np.float32)
+    all_tris: List[Tuple[int, int, int]] = [(int(a), int(b), int(c)) for a, b, c in t_arr]
+    # Reversed inner shell
+    all_tris.extend((n_surf + int(a), n_surf + int(c), n_surf + int(b)) for a, b, c in t_arr)
+    # Rolled bevel wall stitching outer -> mid -> inner along every boundary edge
+    for a, b in boundary_edges:
+        ma, mb = mid_idx_map[a], mid_idx_map[b]
+        ia, ib = n_surf + a, n_surf + b
+        all_tris.append((a, mb, b))
+        all_tris.append((a, ma, mb))
+        all_tris.append((ma, ib, mb))
+        all_tris.append((ma, ia, ib))
+
+    indices = np.asarray(all_tris, dtype=np.uint32).reshape(-1)
+    mask = MeshPart("bandit_mask", "gear_gold", all_pos, recompute_smooth_normals(all_pos, indices), indices).ensure_outward()
+    scene.add("gear_bandana", mask)
 
 
 def _pleated_cloth_tail(
@@ -272,7 +517,7 @@ def _pleated_cloth_tail(
 def _add_knot_and_tails(scene: SceneBuilder, caster: _CraniumCaster) -> None:
     """Build the plump folded left-temple knot and two large sweeping pleated cloth tails."""
     theta = math.radians(104.0)
-    e_b, e_t = _band_limits(theta)
+    e_b, e_t = _mask_v_limits(theta)
     d = _direction(theta, 0.45 * (e_b + e_t) + 0.04)
     knot = caster.center + d * (caster.radius(d) + 0.032)
 
@@ -293,44 +538,40 @@ def _add_knot_and_tails(scene: SceneBuilder, caster: _CraniumCaster) -> None:
     out = _normalize(np.array([1.0, 0.0, -0.34]))
     back = _normalize(np.array([0.24, 0.0, -1.0]))
 
-    # Dramatic sweeping upper cloth tail fanning cleanly outward (+X), gently up, and back (-Z).
+    # Sleek sweeping upper cloth tail fanning more horizontally outward (+X) & back (-Z) (no bunny ear!).
     upper = [
-        knot - 0.010 * out + 0.006 * up,
-        knot + 0.068 * out + 0.044 * up + 0.024 * back,
-        knot + 0.148 * out + 0.096 * up + 0.066 * back,
-        knot + 0.212 * out + 0.136 * up + 0.108 * back,
-        knot + 0.246 * out + 0.156 * up + 0.136 * back,
+        knot - 0.010 * out + 0.004 * up,
+        knot + 0.072 * out + 0.020 * up + 0.028 * back,
+        knot + 0.154 * out + 0.038 * up + 0.074 * back,
+        knot + 0.218 * out + 0.048 * up + 0.120 * back,
+        knot + 0.252 * out + 0.046 * up + 0.150 * back,
     ]
-    # Sweeping lower cloth tail fanning clearly below and back-outward for a bold twin-V silhouette.
+    # Sweeping lower cloth tail fanning cleanly below and back-outward for a sleek horizontal-V scarf.
     lower = [
         knot - 0.008 * out - 0.008 * up,
-        knot + 0.074 * out - 0.032 * up + 0.038 * back,
-        knot + 0.162 * out - 0.066 * up + 0.096 * back,
-        knot + 0.232 * out - 0.062 * up + 0.154 * back,
-        knot + 0.270 * out - 0.038 * up + 0.194 * back,
+        knot + 0.076 * out - 0.036 * up + 0.040 * back,
+        knot + 0.164 * out - 0.072 * up + 0.098 * back,
+        knot + 0.232 * out - 0.076 * up + 0.156 * back,
+        knot + 0.268 * out - 0.062 * up + 0.194 * back,
     ]
-    scene.add(
-        "gear_bandana",
-        _pleated_cloth_tail(
-            upper,
-            half_widths=[0.024, 0.052, 0.072, 0.054, 0.011],
-            half_thicknesses=[0.019, 0.020, 0.019, 0.015, 0.009],
-            face_hint=(-0.38, 0.34, 0.86),
-            twist_deg=(-8.0, 24.0),
-            name="bandana_tail_upper",
-        ),
-    )
-    scene.add(
-        "gear_bandana",
-        _pleated_cloth_tail(
-            lower,
-            half_widths=[0.024, 0.048, 0.066, 0.048, 0.011],
-            half_thicknesses=[0.018, 0.019, 0.018, 0.014, 0.009],
-            face_hint=(-0.22, 0.58, 0.78),
-            twist_deg=(10.0, -20.0),
-            name="bandana_tail_lower",
-        ),
-    )
+    tail_u = _pleated_cloth_tail(
+        upper,
+        half_widths=[0.024, 0.052, 0.072, 0.054, 0.011],
+        half_thicknesses=[0.019, 0.020, 0.019, 0.015, 0.009],
+        face_hint=(-0.38, 0.34, 0.86),
+        twist_deg=(-8.0, 24.0),
+        name="bandana_tail_upper",
+    ).translate(-knot)
+    tail_l = _pleated_cloth_tail(
+        lower,
+        half_widths=[0.024, 0.048, 0.066, 0.048, 0.011],
+        half_thicknesses=[0.018, 0.019, 0.018, 0.014, 0.009],
+        face_hint=(-0.22, 0.58, 0.78),
+        twist_deg=(10.0, -20.0),
+        name="bandana_tail_lower",
+    ).translate(-knot)
+    scene.add("bandana_tails", [tail_u, tail_l])
+    scene.set_node_transform("bandana_tails", translation=tuple(float(c) for c in knot))
 
 
 def _build_spherical_eyelid(name: str, r_outer: float, thickness: float, yaw_y: float) -> MeshPart:
@@ -339,54 +580,63 @@ def _build_spherical_eyelid(name: str, r_outer: float, thickness: float, yaw_y: 
     return lid.rotate_xyz(rx=-1.08, ry=yaw_y)
 
 
-def _add_shifty_eyes(scene: SceneBuilder, anchors: dict, blink: float, gaze: float) -> None:
-    """Build Thief's huge spherical shifty eyes (`+-0.62 rad` full left/right dart) + zero-phase lids.
+def _add_shifty_eyes(scene: SceneBuilder, anchors: dict, blink: float, gaze: float) -> float:
+    """Build Thief's trimmed spherical shifty eyes (`+-0.62 rad`) with huge ~72% curved irises + lids.
 
-    A true spherical sclera centered at each eye pivot matches `base_ant`'s huge eye ratio
-    (~82% of face width) while letting the iris and pupil rotate all the way into the far-left
-    and far-right corners without sinking behind the sclera, clipping the rim, or phasing
-    through the closing spherical eyelid at any blink or gaze angle.
+    Returns the exact spherical `lid_outer_r` so the unified domino mask cutout clears the
+    sweeping eyelid shell cleanly at every blink and gaze angle.
     """
-    sclera_r = 0.083
+    sclera_r = 0.064
+    lid_outer_r = 0.079
     for side, sign in (("left", 1.0), ("right", -1.0)):
         eye = np.asarray(anchors[f"eye_{side}"], dtype=np.float64)
         yaw = 0.16 * sign
 
-        # Clean sculpted dark orbital socket rim framing each huge alert shifty eye.
+        # Clean sculpted dark orbital socket rim framing each expressive shifty eye.
         scene.add(
             "eyes",
-            torus_arc(0.089, 0.0085, u_segs=26, v_segs=8, plane="xy", name=f"eye_socket_rim_{side}", material="chitin_dark")
-            .scale(0.97, 1.02, 0.85)
-            .translate(0.0, 0.0, 0.006)
+            torus_arc(0.069, 0.0072, u_segs=26, v_segs=8, plane="xy", name=f"eye_socket_rim_{side}", material="chitin_dark")
+            .scale(0.97, 1.03, 0.85)
+            .translate(0.0, 0.0, 0.005)
             .rotate_xyz(rx=-0.08, ry=yaw)
             .translate(eye),
         )
-        # True spherical-front warm cream-white sclera so extreme +-0.62 rad gaze stays flush.
-        sclera_local = ellipsoid(sclera_r, sclera_r * 1.035, sclera_r, u_segs=24, v_segs=18, name=f"sclera_{side}", material="eye_white").rotate_xyz(rx=-0.08, ry=yaw)
+        # True spherical-front warm cream-white sclera matching compact non-alien head proportions.
+        sclera_local = ellipsoid(sclera_r, sclera_r * 1.04, sclera_r, u_segs=24, v_segs=18, name=f"sclera_{side}", material="eye_white").rotate_xyz(rx=-0.08, ry=yaw)
         scene.add("eyes", sclera_local.translate(eye))
 
-        # Pivoted eyeball node carrying curved olive iris + pupil cleanly on the spherical sclera.
+        # Pivoted eyeball node carrying curved spherical-cap huge ~73% olive iris & ~48% glossy pupil!
         ball = f"eye_ball_{side}"
-        iris = (
-            ellipsoid(0.047, 0.049, 0.014, u_segs=20, v_segs=12, name=f"iris_{side}", material="eye_iris")
-            .rotate_xyz(rx=-0.08)
-            .translate(0.0, 0.002, sclera_r - 0.012)
-        )
-        pupil = (
-            ellipsoid(0.026, 0.028, 0.009, u_segs=16, v_segs=10, name=f"pupil_{side}", material="eye_pupil")
-            .rotate_xyz(rx=-0.08)
-            .translate(0.0, 0.003, sclera_r - 0.004)
-        )
+        iris = _spherical_eye_cap(
+            sclera_r,
+            ang_x=0.81,   # sin(0.81) = 0.72 -> iris fills ~73% of sclera diameter!
+            ang_y=0.84,
+            thickness=0.0017,
+            u_segs=26,
+            v_segs=6,
+            name=f"iris_{side}",
+            material="eye_iris",
+        ).rotate_xyz(rx=-0.08)
+        pupil = _spherical_eye_cap(
+            sclera_r + 0.0015,
+            ang_x=0.50,   # sin(0.50) = 0.48 -> dark glossy pupil fills ~48% of sclera diameter!
+            ang_y=0.52,
+            thickness=0.0015,
+            u_segs=22,
+            v_segs=5,
+            name=f"pupil_{side}",
+            material="eye_pupil",
+        ).rotate_xyz(rx=-0.08)
         scene.add(ball, [iris, pupil])
         gaze_clamped = max(-1.0, min(1.0, float(gaze)))
         scene.set_node_transform(ball, translation=eye, rotation=quat_from_axis_angle((0.0, 1.0, 0.0), gaze_clamped * GAZE_ANGLE))
 
-        # Mathematically guaranteed radial eyelid clearance: inner spherical radius >= r_eye_max + 0.0080
-        # so zero sclera/iris/pupil vertex can ever phase through at ANY blink or gaze angle (even after 0.97 scale).
+        # Mathematically guaranteed radial eyelid clearance: inner spherical radius >= r_eye_max + 0.0078
+        # so zero sclera/iris/pupil vertex can ever phase through at ANY blink or gaze angle.
         eye_local_pts = np.vstack([sclera_local.positions, iris.positions, pupil.positions]).astype(np.float64)
         r_eye_max = float(np.max(np.linalg.norm(eye_local_pts, axis=1)))
-        lid_thick = 0.0042
-        lid_outer_r = r_eye_max + 0.0080 + lid_thick
+        lid_thick = 0.0040
+        lid_outer_r = r_eye_max + 0.0078 + lid_thick
         lid = f"eyelid_{side}"
         droop, roll = _LID_DROOP[lid]
         shell = _build_spherical_eyelid(f"{lid}_shell", lid_outer_r, lid_thick, yaw_y=yaw).rotate_xyz(rz=roll).rotate_xyz(rx=droop)
@@ -409,6 +659,7 @@ def _add_shifty_eyes(scene: SceneBuilder, anchors: dict, blink: float, gaze: flo
     look_times = [0.0, 1.10, 1.26, 2.36, 2.52]
     look_vals = [q_left, q_left, q_right, q_right, q_left]
     scene.add_animation("IdleLookout", [AnimationChannel(f"eye_ball_{s}", "rotation", list(look_times), list(look_vals)) for s in ("left", "right")])
+    return lid_outer_r
 
 
 def _sculpted_strap_loop(pts: np.ndarray, out_normals: np.ndarray, half_w: float, half_t: float, name: str) -> MeshPart:
@@ -437,25 +688,28 @@ def _sculpted_strap_loop(pts: np.ndarray, out_normals: np.ndarray, half_w: float
     return MeshPart(name, "gear_dark", positions, recompute_smooth_normals(positions, indices), indices).ensure_outward()
 
 
-def _add_rogue_strap_and_loot_pouch(scene: SceneBuilder) -> None:
+def _add_rogue_strap_and_loot_pouch(scene: SceneBuilder, anchors: dict) -> None:
     """Add dark leather crossbody utility strap, brass chest buckle, and cinched brown loot pouch."""
-    # Conformed closed diagonal strap hugging the sleeker raised teardrop thorax (`thorax_center y=0.389`).
+    # Anchor strap and pouch cleanly relative to `thorax_center` so they drop cleanly with crouch!
+    tc = np.asarray(anchors["thorax_center"], dtype=np.float64)
+    dy_c = float(tc[1]) - 0.394
     strap_ctrl = [
-        (-0.072, 0.495, 0.008),   # over right shoulder beside neck
-        (-0.044, 0.452, 0.098),   # upper-right chest
-        (0.018, 0.392, 0.106),    # center-left chest
-        (0.078, 0.338, 0.056),    # left waist front
-        (0.082, 0.340, -0.052),   # left rear hip
-        (0.020, 0.402, -0.114),   # mid back
-        (-0.062, 0.460, -0.102),  # upper-right back
+        (-0.082, 0.498 + dy_c, 0.008),   # over right shoulder beside neck
+        (-0.048, 0.454 + dy_c, 0.108),   # upper-right chest
+        (0.020, 0.394 + dy_c, 0.116),    # center-left chest
+        (0.088, 0.340 + dy_c, 0.060),    # left waist front
+        (0.090, 0.342 + dy_c, -0.056),   # left rear hip
+        (0.022, 0.404 + dy_c, -0.124),   # mid back
+        (-0.068, 0.464 + dy_c, -0.110),  # upper-right back
     ]
-    pivot = np.array([0.0, 0.395, -0.008])
+    pivot = np.array([0.0, 0.396 + dy_c, -0.008])
     pts = catmull_rom_spline(strap_ctrl, samples_per_seg=6, closed=True)
-    out_n = np.array([_normalize(p - pivot + (np.array([0.0, 0.16, 0.0]) if p[1] > 0.46 else 0.0)) for p in pts])
+    out_n = np.array([_normalize(p - pivot + (np.array([0.0, 0.16, 0.0]) if p[1] > 0.46 + dy_c else 0.0)) for p in pts])
 
-    # Push strap cleanly outside ONLY the thorax meshes (exclude gaster & petiole so back strap hugs snugly).
+    # Push strap cleanly outside ONLY the world-space thorax meshes (exclude gaster & petiole).
+    body_mat = scene.get_world_matrix("body")
     thorax_parts = [
-        p for p in scene.get_node("body")
+        p.transform(body_mat) for p in scene.get_node("body")
         if not p.name.startswith(("gaster", "petiole"))
     ]
     body_verts = np.vstack([p.positions for p in thorax_parts]).astype(np.float64)
@@ -485,8 +739,8 @@ def _add_rogue_strap_and_loot_pouch(scene: SceneBuilder) -> None:
     scene.add("gear_rogue", [buckle_frame, buckle_inner, buckle_pin])
 
     # Compact cinched canvas/brown loot pouch slung neatly on the right-back flank (-X, -Z)
-    # above the compact gaster and clear of the flowing rear leg.
-    pouch_ctr = np.array([-0.098, 0.368, -0.128])
+    # clear above the perked crouched gaster and widened rear leg.
+    pouch_ctr = np.array([-0.106, 0.392 + dy_c, -0.130])
     pouch_prof = [
         (0.000, -0.062),
         (0.034, -0.058),
@@ -562,6 +816,104 @@ def _add_rogue_strap_and_loot_pouch(scene: SceneBuilder) -> None:
     scene.add("gear_rogue", [hanger, clasp])
 
 
+def _add_thief_idle_animation(scene: SceneBuilder) -> None:
+    """Attach authentic `atst301` 2.52s sneaky whole-head whip-pan lookout `"Idle"` clip.
+
+    Synced directly to `"IdleLookout"` eye darts (hold left 1.10s -> 160ms center-bob whip-pan
+    -> hold right 1.10s -> 160ms whip-pan back), with pleated bandana tails swinging in
+    follow-through and legs staying planted solidly at Y = 0.0.
+    """
+    times = [0.00, 0.55, 1.10, 1.18, 1.26, 1.38, 1.81, 2.36, 2.44, 2.52]
+
+    def _rest_t(node: str) -> Tuple[float, float, float]:
+        xf = scene.get_node_transform(node)
+        return xf.translation if xf is not None else (0.0, 0.0, 0.0)
+
+    def _rest_r(node: str) -> Tuple[float, float, float, float]:
+        xf = scene.get_node_transform(node)
+        return xf.rotation if xf is not None else (0.0, 0.0, 0.0, 1.0)
+
+    channels: List[AnimationChannel] = []
+    # Upper-body sneaky breath & upward center peek bob during each 160ms whip-pan.
+    bx, by, bz = _rest_t("upper_body")
+    body_dys = [0.000, 0.013, 0.000, 0.038, 0.005, 0.000, 0.013, 0.000, 0.038, 0.000]
+    body_yaws = [-0.07, -0.08, -0.07, 0.00, +0.07, +0.07, +0.08, +0.07, 0.00, -0.07]
+    body_r0 = _rest_r("upper_body")
+    channels.append(AnimationChannel("upper_body", "translation", list(times), [(bx, by + dy, bz) for dy in body_dys]))
+    channels.append(
+        AnimationChannel(
+            "upper_body",
+            "rotation",
+            list(times),
+            [quat_mul(body_r0, quat_from_euler_xyz(rx=0.025 if abs(yw) > 0.01 else -0.02, ry=yw)) for yw in body_yaws],
+        )
+    )
+
+    # Whole-head sneaky lookout whip-pan (`+-0.38 rad` yaw, subtle crouch pitch & peek tilt).
+    head_poses = [
+        (+0.04, -0.38, +0.04),
+        (+0.02, -0.38, +0.05),
+        (+0.04, -0.38, +0.04),
+        (-0.05, 0.00, 0.00),
+        (+0.04, +0.38, -0.04),
+        (+0.03, +0.38, -0.04),
+        (+0.02, +0.38, -0.05),
+        (+0.04, +0.38, -0.04),
+        (-0.05, 0.00, 0.00),
+        (+0.04, -0.38, +0.04),
+    ]
+    head_r0 = _rest_r("head_group")
+    channels.append(
+        AnimationChannel(
+            "head_group",
+            "rotation",
+            list(times),
+            [quat_mul(head_r0, quat_from_euler_xyz(rx=rx, ry=ry, rz=rz)) for rx, ry, rz in head_poses],
+        )
+    )
+
+    # Pleated bandana tails swing in follow-through lag & overshoot after each snappy whip-pan!
+    tail_poses = [
+        (0.00, 0.00, 0.00),
+        (0.02, -0.04, +0.03),
+        (0.00, 0.00, 0.00),
+        (-0.04, -0.20, -0.08),
+        (-0.02, -0.14, -0.06),
+        (0.03, +0.09, +0.04),
+        (0.02, +0.03, -0.02),
+        (0.00, 0.00, 0.00),
+        (-0.04, +0.20, +0.08),
+        (0.00, 0.00, 0.00),
+    ]
+    tail_r0 = _rest_r("bandana_tails")
+    channels.append(
+        AnimationChannel(
+            "bandana_tails",
+            "rotation",
+            list(times),
+            [quat_mul(tail_r0, quat_from_euler_xyz(rx=rx, ry=ry, rz=rz)) for rx, ry, rz in tail_poses],
+        )
+    )
+
+    # Alert antenna perk & subtle gaster counterbalance.
+    for node_name, sign in (("antenna_left", 1.0), ("antenna_right", -1.0)):
+        if node_name in scene.nodes and scene.get_node(node_name):
+            r0 = _rest_r(node_name)
+            ant_vals = [
+                quat_mul(r0, quat_from_euler_xyz(rx=-0.06 if i in (3, 8) else 0.03 * math.sin(i), rz=sign * 0.05 * math.cos(i)))
+                for i in range(len(times))
+            ]
+            ant_vals[-1] = ant_vals[0]
+            channels.append(AnimationChannel(node_name, "rotation", list(times), ant_vals))
+    if "gaster_group" in scene.nodes:
+        g0 = _rest_r("gaster_group")
+        g_vals = [quat_mul(g0, quat_from_euler_xyz(rx=-1.3 * dy)) for dy in body_dys]
+        g_vals[-1] = g_vals[0]
+        channels.append(AnimationChannel("gaster_group", "rotation", list(times), g_vals))
+
+    scene.add_animation("Idle", channels, replace=True)
+
+
 def build_thief(blink: float = 0.0, gaze: float = 0.0) -> SceneBuilder:
     """Build the iconic Rogue Bandit Thief Ant.
 
@@ -572,17 +924,25 @@ def build_thief(blink: float = 0.0, gaze: float = 0.0) -> SceneBuilder:
         scene_name="ant_thief",
         include_eyes=False,
         include_brows=False,
+        include_idle=False,
+        crouch=THIEF_CROUCH,
         left_arm_pose=_THIEF_ARM_LEFT,
         right_arm_pose=_THIEF_ARM_RIGHT,
     )
-    _add_shifty_eyes(scene, anchors, blink, gaze)
-    cranium = next(p for p in scene.get_node("head") if p.name == "cranium")
+    lid_outer_r = _add_shifty_eyes(scene, anchors, blink, gaze)
+    cranium = next(p for p in scene.world_parts() if p.name == "cranium")
     caster = _CraniumCaster(cranium, anchors["head_center"])
-    _build_headband(scene, caster)
+    _build_unified_domino_mask(scene, caster, anchors, lid_outer_r)
     _add_knot_and_tails(scene, caster)
-    _add_rogue_strap_and_loot_pouch(scene)
-    scene.scale_all(0.97)
+    _add_rogue_strap_and_loot_pouch(scene, anchors)
+
+    # Parent Thief's custom head-riding gear & eyes under head_group and strap/pouch under upper_body.
+    for head_child in ("eyes", "eye_ball_left", "eye_ball_right", "eyelid_left", "eyelid_right", "gear_bandana", "bandana_tails"):
+        scene.attach_world_node(head_child, "head_group")
+    scene.attach_world_node("gear_rogue", "upper_body")
+
     scene.ground_to_y(0.0)
+    _add_thief_idle_animation(scene)
     return scene
 
 
