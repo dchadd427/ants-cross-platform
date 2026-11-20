@@ -167,19 +167,6 @@
     </footer>
   </div>
 
-  <dialog
-    id="update-dialog"
-    class="update-dialog"
-    role="alertdialog"
-    aria-labelledby="update-title"
-    aria-describedby="update-body"
-  >
-    <h2 id="update-title">New 3D Models Available</h2>
-    <p id="update-body">A newer build of the 3D ant models is ready.</p>
-    <div class="update-actions">
-      <button type="button" id="btn-refresh-now" class="update-primary">Refresh Now</button>
-      <button type="button" id="btn-refresh-later" class="update-secondary">Later</button>
-    </div>
-  </dialog>
+  <div id="update-toast" class="update-toast" aria-hidden="true" hidden></div>
 </body>
 </html>

@@ -523,87 +523,23 @@ body {
   }
 }
 
-/* Centered Auto-Refresh Version Modal */
-.update-dialog {
-  margin: auto;
-  padding: 20px 24px;
-  max-inline-size: min(420px, calc(100vw - 32px));
+/* Non-Blocking Centered Auto-Refresh Toast */
+.update-toast {
+  position: fixed;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 40;
+  padding: 12px 20px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-strong);
   background: var(--bg-chrome);
   color: var(--ink-primary);
   box-shadow: var(--shadow-card);
-  text-align: center;
-}
-
-.update-dialog::backdrop {
-  background: rgba(10, 14, 22, 0.56);
-  backdrop-filter: blur(4px);
-}
-
-.update-dialog h2 {
-  margin: 0 0 8px;
-  font-size: 17px;
-  font-weight: 700;
-}
-
-.update-dialog p {
-  margin: 0 0 18px;
-  color: var(--ink-secondary);
   font-size: 13.5px;
-  line-height: 1.45;
-}
-
-.update-actions {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-}
-
-.update-actions button {
-  appearance: none;
-  min-inline-size: 96px;
-  min-block-size: 36px;
-  padding: 6px 14px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  font: inherit;
-  font-size: 13px;
   font-weight: 600;
-  cursor: pointer;
-}
-
-.update-primary {
-  background: var(--bg-pressed);
-  border-color: var(--border-pressed);
-  color: var(--ink-pressed);
-}
-
-.update-secondary {
-  background: var(--bg-surface);
-  color: var(--ink-primary);
-}
-
-.update-actions button:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-
-@media (hover: hover) {
-  .update-primary:hover {
-    background: var(--bg-pressed-hover);
-  }
-
-  .update-secondary:hover {
-    background: var(--bg-surface-hover);
-  }
-}
-
-@media (pointer: coarse) {
-  .update-actions button {
-    min-block-size: 44px;
-    padding: 8px 16px;
-  }
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 @media (forced-colors: active) {
@@ -635,15 +571,8 @@ body {
   .controls-hint,
   .empty-card,
   .drop-card,
-  .update-dialog {
+  .update-toast {
     border: 1px solid CanvasText;
-  }
-
-  .update-primary {
-    background: Highlight;
-    color: HighlightText;
-    border-color: Highlight;
-    forced-color-adjust: none;
   }
 
   .swatch {

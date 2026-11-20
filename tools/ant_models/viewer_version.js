@@ -2,6 +2,8 @@
 
 (() => {
   const POLL_MS = 3000;
+  const RELOAD_DELAY_MS = 300;
+  const STORAGE_KEY = "ants_viewer_reload_state_v1";
 
   function parseManifest(data) {
     if (!data || typeof data !== "object") return null;
@@ -26,33 +28,30 @@
     return { version, buildHash, displayVersion, modelHashes, sig };
   }
 
-  function diffUpdatedModels(baseMap, nextMap) {
-    const changed = [];
-    for (const [id, hash] of nextMap.entries()) {
-      if (baseMap.get(id) !== hash) changed.push(id);
+  function saveReloadState(updatedVersion) {
+    try {
+      const snap = typeof window.__antViewerGetState === "function" ? window.__antViewerGetState() : {};
+      const payload = { ...snap, updatedVersion: updatedVersion || "" };
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch (_) {
+      // Ignore storage errors in restricted browsing modes
     }
-    return changed.sort();
   }
 
   function initVersionWatcher() {
     if (window.location.protocol !== "http:" && window.location.protocol !== "https:") return;
 
     const badge = document.getElementById("badge-version");
-    const dialog = document.getElementById("update-dialog");
-    const bodyEl = document.getElementById("update-body");
-    const btnRefresh = document.getElementById("btn-refresh-now");
-    const btnLater = document.getElementById("btn-refresh-later");
+    const toast = document.getElementById("update-toast");
     const statusEl = document.getElementById("status-region");
-    if (!dialog || !bodyEl || !btnRefresh || !btnLater) return;
 
     const params = new URLSearchParams(window.location.search);
     const pollParam = (params.get("poll") || "").toLowerCase();
     const pollingEnabled = pollParam !== "0" && pollParam !== "false";
 
     let initial = null;
-    let shownSig = "";
-    let dismissedSig = "";
     let inFlight = false;
+    let reloading = false;
 
     function publishVersionState(latest) {
       window.__antVersion = {
@@ -60,6 +59,7 @@
         buildHash: initial ? initial.buildHash : "",
         latestVersion: latest ? latest.displayVersion : (initial ? initial.displayVersion : ""),
         updateAvailable: Boolean(initial && latest && latest.sig !== initial.sig),
+        reloading,
       };
     }
 
@@ -69,38 +69,22 @@
       return parseManifest(await resp.json());
     }
 
-    function showUpdatePrompt(next) {
-      const changed = diffUpdatedModels(initial.modelHashes, next.modelHashes);
-      const verText = next.displayVersion ? ("Build " + next.displayVersion + " is ready.") : "A newer build is ready.";
-      const detail = changed.length ? (" Updated: " + changed.join(", ") + ".") : " Viewer or build assets changed.";
-      bodyEl.textContent = verText + detail;
-      shownSig = next.sig;
-      if (!dialog.open) {
-        if (typeof dialog.showModal === "function") dialog.showModal();
-        else dialog.setAttribute("open", "");
+    function triggerAutoReload(next) {
+      if (reloading) return;
+      reloading = true;
+      publishVersionState(next);
+      saveReloadState(next.displayVersion);
+      const msg = next.displayVersion ? ("Updating to " + next.displayVersion + "…") : "Updating 3D models…";
+      if (toast) {
+        toast.textContent = msg;
+        toast.hidden = false;
       }
-      if (statusEl) {
-        statusEl.textContent = "New 3D models available" + (next.displayVersion ? " (" + next.displayVersion + ")." : ".");
-      }
+      if (statusEl) statusEl.textContent = msg;
+      window.setTimeout(() => window.location.reload(), RELOAD_DELAY_MS);
     }
-
-    function dismissCurrent() {
-      dismissedSig = shownSig;
-      if (dialog.open) {
-        if (typeof dialog.close === "function") dialog.close();
-        else dialog.removeAttribute("open");
-      }
-    }
-
-    btnRefresh.addEventListener("click", () => window.location.reload());
-    btnLater.addEventListener("click", dismissCurrent);
-    dialog.addEventListener("cancel", (e) => {
-      e.preventDefault();
-      dismissCurrent();
-    });
 
     async function checkOnce() {
-      if (inFlight) return;
+      if (inFlight || reloading) return;
       inFlight = true;
       try {
         const next = await fetchManifest();
@@ -115,9 +99,7 @@
           return;
         }
         publishVersionState(next);
-        if (next.sig !== initial.sig && next.sig !== dismissedSig && next.sig !== shownSig) {
-          showUpdatePrompt(next);
-        }
+        if (next.sig !== initial.sig) triggerAutoReload(next);
       } catch (_) {
         // Ignore transient network errors while polling locally
       } finally {

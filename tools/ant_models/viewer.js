@@ -533,27 +533,58 @@
     const emptyOverlay = $("empty-overlay"), fileInput = $("glb-file-input");
     if (!("focusGroup" in HTMLElement.prototype)) installToolbarRovingTabindex(toolbarEl);
 
+    const RELOAD_STORAGE_KEY = "ants_viewer_reload_state_v1";
+    let savedView = null;
+    try {
+      const raw = window.sessionStorage.getItem(RELOAD_STORAGE_KEY);
+      if (raw) {
+        window.sessionStorage.removeItem(RELOAD_STORAGE_KEY);
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") savedView = parsed;
+      }
+    } catch (_) {}
+
     const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const params = new URLSearchParams(window.location.search), getP = (k) => (params.get(k) || "").toLowerCase();
     const pLineup = getP("lineup") === "1" || getP("lineup") === "true";
-    const pAnt = getP("ant"), pTeam = getP("team"), pAngle = getP("angle"), pProj = getP("proj"), pTurn = getP("turntable"), pBlink = getP("blink"), pIdle = getP("idle");
+    const pAnt = getP("ant"), pTeam = getP("team"), pAngle = getP("angle"), pProj = getP("proj"), pTurn = getP("turntable"), pBlink = getP("blink"), pIdle = getP("idle"), pSprite = getP("sprite");
     const pIdleTimeRaw = params.get("idleTime"), fixedIdleTime = pIdleTimeRaw !== null && Number.isFinite(Number(pIdleTimeRaw)) ? Number(pIdleTimeRaw) : null;
-    const initAnt = pLineup ? "lineup" : (ANT_CLASSES.includes(pAnt) || pAnt === "lineup" ? pAnt : "worker");
-    const initTeam = TEAMS[pTeam] ? pTeam : "green", initAngle = ANGLES[pAngle] ? pAngle : "hero";
-    const initProj = pProj === "ortho" || pProj === "persp" ? pProj : (ANGLES[pAngle] && pAngle !== "hero" ? "ortho" : "persp");
-    const initTurn = pTurn === "0" || pTurn === "false" ? false : (pTurn === "1" || pTurn === "true" ? true : (!motionQuery.matches && !pAngle && !pLineup));
+    const savedAnt = !params.has("lineup") && !params.has("ant") && savedView && (ANT_CLASSES.includes(savedView.ant) || savedView.ant === "lineup") ? savedView.ant : null;
+    const initAnt = pLineup ? "lineup" : (ANT_CLASSES.includes(pAnt) || pAnt === "lineup" ? pAnt : (savedAnt || "worker"));
+    const initTeam = TEAMS[pTeam] ? pTeam : (!params.has("team") && savedView && TEAMS[savedView.team] ? savedView.team : "green");
+    const savedAngle = !params.has("angle") && savedView && (ANGLES[savedView.angle] || savedView.angle === "custom") ? savedView.angle : null;
+    const initAngle = ANGLES[pAngle] ? pAngle : (savedAngle || "hero");
+    const initProj = pProj === "ortho" || pProj === "persp" ? pProj
+      : (!params.has("proj") && savedView && (savedView.proj === "ortho" || savedView.proj === "persp") ? savedView.proj : (ANGLES[initAngle] && initAngle !== "hero" ? "ortho" : "persp"));
+    const initTurn = pTurn === "0" || pTurn === "false" ? false : (pTurn === "1" || pTurn === "true" ? true
+      : (!params.has("turntable") && savedView && typeof savedView.turntable === "boolean" ? savedView.turntable : (!motionQuery.matches && !pAngle && !pLineup)));
+    const initSprite = pSprite === "0" || pSprite === "false" ? false : (pSprite === "1" || pSprite === "true" ? true
+      : (!params.has("sprite") && savedView && typeof savedView.sprite === "boolean" ? savedView.sprite : true));
     const initBlink = pBlink === "closed" ? "closed" : (pBlink === "open" ? "open" : (motionQuery.matches ? "open" : "auto"));
     const initIdle = fixedIdleTime !== null ? false : (pIdle === "0" || pIdle === "false" ? false : (pIdle === "1" || pIdle === "true" ? true : !motionQuery.matches));
 
-    const preset = ANGLES[initAngle];
+    const preset = ANGLES[initAngle] || ANGLES.hero;
+    const useSavedCam = !params.has("angle") && savedView && Number.isFinite(savedView.yaw) && Number.isFinite(savedView.pitch) && Number.isFinite(savedView.zoom);
+    let pendingUpdatedVer = savedView && typeof savedView.updatedVersion === "string" ? savedView.updatedVersion : "";
     const state = {
       ant: initAnt, customLabel: "", team: initTeam, angle: initAngle, blinkMode: initBlink, idleAnim: initIdle, fixedIdleTime,
-      dark: darkQuery.matches, turntable: initTurn, spritePreview: !(getP("sprite") === "0" || getP("sprite") === "false"),
-      cam: { yaw: preset.yaw, pitch: preset.pitch, zoom: 1.0, projection: initProj },
+      dark: darkQuery.matches, turntable: initTurn, spritePreview: initSprite,
+      cam: {
+        yaw: useSavedCam ? wrapAngleDeg(savedView.yaw) : preset.yaw,
+        pitch: useSavedCam ? clamp(savedView.pitch, -10, 85) : preset.pitch,
+        zoom: useSavedCam ? clamp(savedView.zoom, 0.35, 3.2) : 1.0,
+        projection: initProj,
+      },
       camTarget: null, dirty: true, spriteDirty: true, lastSpriteTime: 0, loadSeq: 0, ready: false, error: "",
       modelCache: new Map(), customModel: null, scene: emptyScene(),
     };
+    window.__antViewerGetState = () => ({
+      ant: state.ant === "custom" ? "" : state.ant,
+      team: state.team, angle: state.angle, proj: state.cam.projection,
+      turntable: state.turntable, sprite: state.spritePreview,
+      yaw: state.cam.yaw, pitch: state.cam.pitch, zoom: state.cam.zoom,
+    });
 
     const announce = (msg) => { statusEl.textContent = msg; };
     const showEmpty = (title, msg) => { $("empty-title").textContent = title; $("empty-message").textContent = msg; emptyOverlay.hidden = false; };
@@ -677,14 +708,18 @@
           announce("No models available for lineup. Use Load .GLB or serve via HTTP.");
           updateUiState(); markDirty(); publishState(true, "No models loaded"); return;
         }
-        updateUiState(); markDirty(); announce("Showing All 6 Lineup (" + loaded.length + " of 6 models loaded)."); publishState(true); return;
+        const upd = pendingUpdatedVer ? ("Updated to " + pendingUpdatedVer + ". ") : "";
+        pendingUpdatedVer = "";
+        updateUiState(); markDirty(); announce(upd + "Showing All 6 Lineup (" + loaded.length + " of 6 models loaded)."); publishState(true); return;
       }
       try {
         announce("Loading " + (ANT_LABELS[antId] || antId) + " model…");
         const model = await fetchModel(antId);
         if (seq !== state.loadSeq) return;
+        const upd = pendingUpdatedVer ? ("Updated to " + pendingUpdatedVer + ". ") : "";
+        pendingUpdatedVer = "";
         buildScene([{ id: antId, model }]); updateUiState(); markDirty();
-        announce("Loaded " + (ANT_LABELS[antId] || antId) + " (" + model.triCount.toLocaleString() + " triangles)."); publishState(true);
+        announce(upd + "Loaded " + (ANT_LABELS[antId] || antId) + " (" + model.triCount.toLocaleString() + " triangles)."); publishState(true);
       } catch (err) {
         if (seq !== state.loadSeq) return;
         buildScene([]);
