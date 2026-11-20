@@ -622,8 +622,9 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
                     f"clearance_{b_val}", blink=b_val, eye_scale_left=sl, eye_scale_right=sr, eye_look=look
                 )
                 w_parts = sc_b.world_parts()
-                for side_sign, eye_key, lid_name in ((1.0, "eye_left", "eyelid_left_shell"), (-1.0, "eye_right", "eyelid_right_shell")):
-                    pivot = np.asarray(a_b[eye_key], dtype=np.float64)
+                for side_sign, lid_node, lid_name in ((1.0, "eyelid_left", "eyelid_left_shell"), (-1.0, "eyelid_right", "eyelid_right_shell")):
+                    lid_m = sc_b.get_world_matrix(lid_node)
+                    pivot = lid_m[:3, 3].astype(np.float64) if lid_m is not None else np.zeros(3, dtype=np.float64)
                     eye_verts = np.vstack(
                         [
                             p.positions.astype(np.float64)
@@ -738,6 +739,21 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
         self.assertAlmostEqual(st_expr["bbox_min"][1], 0.0, delta=1e-3)
         self.assertIn("Idle", st_expr["animations"])
         self.assertIn("Blink", st_expr["animations"])
+
+        # Default chin-up head_pitch_deg (-11.5) lifts pupils & mandibles UP (+Y) toward overhead camera
+        # and tilts cranium back (-Z) compared to neutral head_pitch_deg=0.0.
+        sc_flat, _ = base_ant.build_base_ant("pitch_flat", head_pitch_deg=0.0)
+        sc_up, _ = base_ant.build_base_ant("pitch_up")
+        wp_flat, wp_up = sc_flat.world_parts(), sc_up.world_parts()
+        eye_y_flat = float(np.mean([p.positions[:, 1].mean() for p in wp_flat if p.name.startswith("pupil_")]))
+        eye_y_up = float(np.mean([p.positions[:, 1].mean() for p in wp_up if p.name.startswith("pupil_")]))
+        jaw_y_flat = float(np.mean([p.positions[:, 1].mean() for p in wp_flat if p.name.startswith("mandible_claw")]))
+        jaw_y_up = float(np.mean([p.positions[:, 1].mean() for p in wp_up if p.name.startswith("mandible_claw")]))
+        cran_z_flat = float(next(p for p in wp_flat if p.name == "cranium").positions[:, 2].mean())
+        cran_z_up = float(next(p for p in wp_up if p.name == "cranium").positions[:, 2].mean())
+        self.assertGreater(eye_y_up, eye_y_flat + 0.02, "negative head_pitch_deg must lift eyes UP toward camera")
+        self.assertGreater(jaw_y_up, jaw_y_flat + 0.02, "negative head_pitch_deg must lift mandibles UP")
+        self.assertLess(cran_z_up, cran_z_flat - 0.02, "negative head_pitch_deg must tilt skull crown gently back")
 
     def test_base_ant_variants_and_arm_pose_overrides(self):
         _, a_idle = base_ant.build_base_ant("idle")

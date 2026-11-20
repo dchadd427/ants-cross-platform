@@ -582,6 +582,14 @@ def _build_body(scene: SceneBuilder, *, y_off: float = 0.0) -> Dict[str, Tuple[f
     )
     scene.add("body", neck_collar)
 
+    # Smooth dark neck ball joint centered at the throat pivot so pitching the head
+    # chin-up (-10 to -15 deg) never reveals a gap under the jaw or occiput.
+    neck_joint = (
+        ellipsoid(0.064, 0.064, 0.066, u_segs=18, v_segs=12, name="neck_joint", material="chitin_dark")
+        .translate(0.0, 0.526 + y_off, 0.016)
+    )
+    scene.add("body", neck_joint)
+
     # Fuller smooth ovoid team-colored chest carapace sitting cleanly proud of the dark core.
     chest_profile = [
         (0.000, -0.100),
@@ -1092,6 +1100,7 @@ def build_base_ant(
     eye_scale_left: float = 1.0,
     eye_scale_right: float = 1.0,
     eye_look: Tuple[float, float] = (0.0, 0.0),
+    head_pitch_deg: float = -11.5,
     head_tilt_deg: float = 0.0,
     head_yaw_deg: float = 0.0,
     antenna_asymmetry: float = 0.15,
@@ -1174,12 +1183,12 @@ def build_base_ant(
         scene.attach_world_node("antenna_left", "antennae")
         scene.attach_world_node("antenna_right", "antennae")
 
-    # Apply natural rest contrapposto & character head tilt/yaw AFTER parenting all children
+    # Apply natural rest contrapposto & character head pitch/tilt/yaw AFTER parenting all children
     # so the entire head assembly rotates cleanly around `neck_pivot` and Idle loops compose on top.
     if abs(sa) > 1e-6:
         scene.set_node_transform("upper_body", rotation=quat_from_euler_xyz(ry=0.055 * sa, rz=-0.025 * sa))
-    if abs(float(head_tilt_deg)) > 1e-6 or abs(float(head_yaw_deg)) > 1e-6:
-        apply_head_pose(scene, tilt_deg=head_tilt_deg, yaw_deg=head_yaw_deg)
+    if abs(float(head_pitch_deg)) > 1e-6 or abs(float(head_tilt_deg)) > 1e-6 or abs(float(head_yaw_deg)) > 1e-6:
+        apply_head_pose(scene, tilt_deg=head_tilt_deg, yaw_deg=head_yaw_deg, pitch_deg=head_pitch_deg)
 
     anchors: Dict[str, Any] = {
         "head_center": head_center,
