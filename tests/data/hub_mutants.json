@@ -433,9 +433,9 @@
   },
   {
    "id": "chat_commands_for_everybody",
-   "file": "hub/chat.py",
-   "old": "if mod and line.startswith(\"/\"):",
-   "new": "if line.startswith(\"/\"):",
+   "file": "hub/commands.py",
+   "old": "        if command is None or RANK[self.chat.roles.role_of(who.account_id)] < command.rank:",
+   "new": "        if command is None:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -1127,8 +1127,8 @@
   {
    "id": "stack_hub_turns_on_the_test_login",
    "file": "docker-compose.stack.yml",
-   "old": "      ANTS_HUB_OWNER: ${ANTS_HUB_OWNER:-}\n    volumes:\n      - ants-hub-data:/data",
-   "new": "      ANTS_HUB_OWNER: ${ANTS_HUB_OWNER:-}\n      ANTS_HUB_TEST_LOGIN: \"1\"\n    volumes:\n      - ants-hub-data:/data",
+   "old": "      ANTS_HUB_GAME_ADMIN_URL: ${ANTS_HUB_GAME_ADMIN_URL:-}\n    volumes:\n      - ants-hub-data:/data",
+   "new": "      ANTS_HUB_GAME_ADMIN_URL: ${ANTS_HUB_GAME_ADMIN_URL:-}\n      ANTS_HUB_TEST_LOGIN: \"1\"\n    volumes:\n      - ants-hub-data:/data",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
   },
   {

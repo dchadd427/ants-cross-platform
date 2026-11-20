@@ -8,12 +8,15 @@ Messages (JSON, "v":1; docs/HUB.md has the table):
         {"t":"pick","pick":"display"|"username"}     which of its two names the account is shown by (only an account that has a display name as well may); stored, then every socket of
                                                      the account is closed (the same call as a logout's: end_logins), and the page connects again and reads the new name in the welcome
   down  {"t":"welcome",...}  {"t":"line",...}  {"t":"del","id":n}  {"t":"online","n":n}  {"t":"who",...}  {"t":"err","code":"login|rate|quota|muted|banned|long|empty|young|bad|here|pick|pics|power|role|who"}
+        {"t":"cmds","rows":[...]}                    the commands that the account has (hub/commands.py): after the welcome of a login and with every `you` that a change of role makes
+        {"t":"reply","c":word,"r":code,...}          the private answer to a command of hub/commands.py (/help, /ignore, /unignore, /bots; a word that is not the account's own is `unknown`)
         {"t":"you","you":{...}}                      the whole `you` again, to every socket of an account whose role changed (hub/roles.py: who is a moderator or an administrator) or whose picture
                                                      arrived, went, was switched or blocked (hub/pictures.py `sync`)
-        {"t":"ok","c":"mute|unmute|del|kick|ban|unban"}   the private answer to a moderator's command that was done
+        {"t":"ok","c":"mute|unmute|del|kick|ban|unban|nopic|pic"}   the private answer to a moderator's command that was done
         {"t":"bans","rows":[{"u","at"}]}             the private answer to /bans (a username, never an id; the newest 50)
         {"t":"bye","why":"kicked|banned"}            to every socket of a person who was kicked or banned, just before the hub closes it
-A moderator's commands (docs/HUB.md, "Moderation") are /mute username minutes, /unmute username, /del id, /kick username, /ban username, /unban username and /bans, in any case. Who may do what to whom is
+A line that starts with one `/` is a command and never a line (hub/commands.py: the one table of the commands, their ranks and their answers; docs/HUB_COMMANDS.md); `//` says one slash as a line. A moderator's
+commands are /mute username minutes, /unmute username, /del id, /kick username, /ban username, /unban username, /bans, /mutes, /nopic username and /pic username, in any case. Who may do what to whom is
 one table (`allowed`); before an action the role of the one who acts and of the one acted on must have been answered by Discord within the last minute (hub/roles.py `fresh`, `confirm`), else an
 urgent lookup is waited for, and one that fails refuses the action (`err role`). Every action that is done is written to the moderators' log by a pseudonymous reference of the account (hub/pseudo.py),
 never the id; a kick or a ban is told to everybody as a line of the chat that names the person ("<name> was kicked.": a line of the account "" and the name `system`, kept like any other line).
@@ -27,20 +30,19 @@ import asyncio
 import collections
 import hashlib
 import hmac
+import io
 import json
 import os
 import re
 
-from . import PROTOCOL, presence as presencemod, pseudo, session as sessionmod, text as textrules
+from . import PROTOCOL, admin as adminmod, commands as commandsmod, presence as presencemod, pseudo, session as sessionmod, text as textrules
+from .commands import NEEDS, RANK
 from .limits import AccountLimits, RateByAccount, TokenBucket
 from .store import PICKS, StoreError
 from .store.base import SHOW_OFF, SHOW_ON
 
 NUMBER = re.compile(r"[0-9]{1,9}\Z")
 MAX_CHAT_MUTE_MINUTES = 10080               # a moderator's /mute: a week at the most (the command line has no such bound)
-COMMANDS = frozenset(("/mute", "/unmute", "/del", "/kick", "/ban", "/unban", "/bans", "/mutes"))     # the words of a moderator's commands: from an account with no role they are refused and never become a line of chat
-RANK = {"none": 0, "mod": 1, "admin": 2}
-NEEDS = {"mute": 1, "unmute": 1, "del": 1, "kick": 1, "ban": 2, "unban": 2, "bans": 2, "mutes": 1}       # the rank that a command needs
 SYSTEM = "system"                           # who a line of the hub's own is from: a reserved name (hub/text.py), which no account can have
 BANS_SHOWN = 50                             # the newest bans that /bans lists
 MUTES_SHOWN = 50                            # the mutes that /mutes lists (the ones that end soonest first)
@@ -84,6 +86,7 @@ class Chat:
         self.named_limits = RateByAccount(limits.named_lines_burst, limits.named_lines_refill_seconds)               # the kicks and the bans of a moderator: each one is a line for everybody
         self.pick_limits = RateByAccount(limits.pick_burst, limits.pick_refill_seconds)               # an account's switches between its two names, across all its tabs
         self.pics_limits = RateByAccount(limits.pics_burst, limits.pics_refill_seconds)               # an account's switches of its picture, across all its tabs (keyed by the run's key of the account)
+        self.commands = commandsmod.Commands(self, dumps)           # the table of the commands, who may use which, the answers, /ignore and /bots (hub/commands.py)
         self.pictures = None                        # hub/pictures.py Pictures on a hub that has the Discord login (the login sets it): none, and no picture field anywhere, on a hub without it
         self.salt = os.urandom(16)                  # the key of an account (key_of) is made with this: it changes with every start, so it names nobody for longer than the hub runs
         self.peers = presencemod.Peers()
@@ -126,6 +129,7 @@ class Chat:
             who = peer.identity
             if who is not None and who.account_id == account and not getattr(peer, "closed", False):
                 peer.send_text(dumps({"t": "you", "you": self.you_of(who)}))
+                self.commands.send_list(peer)                  # (the commands that the account has are the commands of its new role)
 
     def names_changed(self, account, nick, display):
         """The member answer of Discord says the account's server nickname (`nick`, '' for none that may be shown) and its display name (`display`, '' for none, None when the answer did not say). The
@@ -201,7 +205,7 @@ class Chat:
             self.roles.want(you.account_id)                       # (its role is asked at the front of the queue; the welcome says the last answer, and a `you` frame follows a new one)
             if self.pictures is not None:
                 self.pictures.want(you.account_id)                # (where the roles' check does not say what the picture is, its profile is asked for when that is due)
-        lines = self.recent()
+        lines = [l for l in self.recent() if not self.commands.hides(l, you)]        # (what a person ignores is not in the history that it is sent)
         names = self.usernames([l.account for l in lines]) if you is not None and self.is_mod(you.account_id) else None        # (only a moderator's welcome has the usernames)
         welcome = {"t": "welcome", "v": PROTOCOL, "you": self.you_of(you) if you else None, "login": bool(self.login), "presence": True,
                    "online": self.presence.people(), "history": [self.line_of(l, names) for l in lines]}
@@ -315,15 +319,12 @@ class Chat:
         line, why = textrules.clean_line(raw)
         if why:
             return self.mistake(peer, why)
+        if line.startswith("//"):
+            line = line[1:]                                        # (`//` is one slash of a line: it goes the way every line goes, with every limit)
+        elif line.startswith("/"):
+            return self.commands.run(peer, line)                   # (a command is never a line: not kept, not shown, not counted; the commands' own table says who has which)
         mod = self.is_mod(who.account_id)
         role = self.roles.role_of(who.account_id)
-        if mod and line.startswith("/"):
-            try:
-                return self.command(peer, line)
-            except StoreError as e:
-                return self.trouble(peer, e, "bad")                # (a moderator is told that the command did not happen, and may type it again)
-        if line.split(" ")[0].lower() in COMMANDS:
-            return self.mistake(peer, "bad")                       # (a command from an account that holds no role, or whose role is not known yet, is not posted for everybody to read)
         now = self.clock()
         try:
             full = self.store.size() >= self.limits.db_max_bytes
@@ -353,6 +354,8 @@ class Chat:
         moderators = dumps(dict(frame, u=username)) if username and username != entry.name else everybody
         for peer in list(self.peers):
             who = peer.identity
+            if self.commands.hides(entry, who):
+                continue                                           # (the line of a person that this account ignores: nothing is sent, and the author is told nothing)
             peer.send_text(moderators if who is not None and self.is_mod(who.account_id) else everybody)
 
     def on_pick(self, peer, msg):
@@ -410,7 +413,7 @@ class Chat:
             return name, words[1], int(words[2])
         if name == "ban" and len(words) == 3 and words[2] == "purge":
             return name, words[1], PURGE_MINUTES                    # (a ban that also takes the person's lines of the last hour off every screen: the same power as /ban)
-        if name in ("unmute", "kick", "ban", "unban") and len(words) == 2:
+        if name in ("unmute", "kick", "ban", "unban", "nopic", "pic") and len(words) == 2:
             return name, words[1], 0
         if name == "del" and len(words) == 2 and NUMBER.match(words[1]):
             return name, int(words[1]), 0
@@ -418,12 +421,9 @@ class Chat:
             return name, None, 0
         return None
 
-    def command(self, peer, line):
-        """A moderator's command (see the top of this file). Done at once when the roles of the accounts that it involves were all answered by Discord within the last minute; otherwise it waits (a task
-        of its own, one at a time for a socket; a second command meanwhile is `rate`) for an urgent lookup of them, and is refused `role` if that does not give them."""
-        job = self.parse(line)
-        if job is None:
-            return self.mistake(peer, "bad")
+    def command(self, peer, job):
+        """A moderator's command, read already (`parse`; hub/commands.py has the table that says who may type which). Done at once when the roles of the accounts that it involves were all answered by Discord
+        within the last minute; otherwise it waits (a task of its own, one at a time for a socket; a second command meanwhile is `rate`) for an urgent lookup of them, and is refused `role` if that does not give them."""
         if peer in self.busy:
             return self.mistake(peer, "rate", count=False)
         accounts, _, refusal = self.aim(peer.identity, job)
@@ -542,6 +542,11 @@ class Chat:
         elif name == "unban":
             if not self.store.unban(target, note=(by, "unban", whom, "")):
                 return self.mistake(peer, "bad")
+        elif name in ("nopic", "pic"):
+            setter = lambda show, note: self.store.set_picture_show(target, show, operator=True, note=(by,) + note[1:])
+            if adminmod.change_picture(self.store, name, whom, self.store.picture_state(target), setter, io.StringIO(), io.StringIO()):          # (the admin page's own change: its picture block and its lift)
+                return self.mistake(peer, "bad")
+            self.sync_pictures()
         elif name == "kick":
             sockets = self.sockets_of(target)
             shown = sockets[0].identity.name
