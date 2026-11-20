@@ -1203,7 +1203,7 @@ if lobbies()[0] == 200 and wa is not None and wb is not None and wc is not None:
     out['list_public'] = wait_listed('lob00001', 3.0)
     out['leader_sees_public'] = 'yes' if sees_public(a) else 'no'
     out['guest_sees_public_now'] = 'yes' if sees_public(b) else 'no'
-    leaks = [text for text in (wa[3:19].hex(), wa[3:19].hex().upper(), wb[3:19].hex(), wc[3:19].hex(), '127.0.0.1', 'Bea', 'Cy', 'lob00002', 'platform') if text in out['list_public']]
+    leaks = [text for text in (wa[3:19].hex(), wa[3:19].hex().upper(), wb[3:19].hex(), wc[3:19].hex(), '127.0.0.1', 'Bea', 'lob00002', 'platform') if text in out['list_public']]
     out['list_leaks'] = ','.join(leaks) if leaks else 'none'
     out['list_post'] = str(lobbies('POST')[0])
     out['list_query'] = str(lobbies('GET', '?a=1')[0])
@@ -1229,6 +1229,7 @@ if 'list_made_private' in out:                                                  
     time.sleep(0.6)
     out['list_leader_left'] = list_text()
     out['new_leader_sees_public'] = 'yes' if sees_public(b) else 'no'
+out['private_lists_leak'] = ','.join(sorted(set(code for key in ('list_private', 'list_after_guest', 'list_made_private', 'list_leader_left') for code in ('lob00001', 'lob00002') if code in out.get(key, '')))) or 'none'       # (while a room is private, its code is in no answer)
 for key in sorted(out):
     print('%s=%s' % (key, out[key]))
 PY
@@ -1253,13 +1254,14 @@ check "a Hello with a key makes no lobby room (NoSuchRoom)" "$([ "$(lobby_value 
 check "a code with an upper-case letter makes no lobby room (NoSuchRoom)" "$([ "$(lobby_value capital_letter)" = "reject-6" ]; echo $?)"
 check "the control interface sees the lobby: waiting, on the server's map, for four, with its two pages" "$([ "$(lobby_value status)" = "waiting/TINY.LVL/4" ] && [ "$(lobby_value joined)" = "2" ]; echo $?)"
 check "GET /busy counts the people of the lobbies as players and no match (a lobby never holds a deploy back)" "$([ "$(lobby_value busy)" = "0/4" ]; echo $?)"
-check "GET /lobbies of the public door (network protocol 22) lists nothing while every room is private (a new room is private)" "$([ "$(lobby_value list_private)" = '{"format":1,"lobbies":[],"count":0}' ]; echo $?)"
-check "... a guest's Visibility changes nothing (only the leader is heard)" "$([ "$(lobby_value list_after_guest)" = '{"format":1,"lobbies":[],"count":0}' ] && [ "$(lobby_value guest_sees_public)" = "no" ]; echo $?)"
-check "... the leader's Visibility makes the room public: the list holds its code, the leader's name, the map and the numbers, and both pages are told in the Room message (the flag, bit 3)" "$([ "$(lobby_value list_public)" = '{"format":1,"lobbies":[{"code":"lob00001","host":"Ada","map":"TINY.LVL","mode":"highest-score","people":2,"bots":0,"free":2,"size":4,"age":0}],"count":1}' ] && [ "$(lobby_value leader_sees_public)" = "yes" ] && [ "$(lobby_value guest_sees_public_now)" = "yes" ]; echo $?)"
-check "... the answer holds no key, no address, no other person's name, no platform and no private room's code" "$([ "$(lobby_value list_leaks)" = "none" ]; echo $?)"
+check "GET /lobbies of the public door (network protocol 22) lists the rooms that are private (a new room is private) as locked rows: the leader's name, the map and the numbers, no code, and nothing public" "$([ "$(lobby_value list_private)" = '{"format":1,"lobbies":[{"private":true,"host":"Ada","map":"TINY.LVL","mode":"highest-score","people":2,"bots":0,"free":2,"size":4},{"private":true,"host":"Cy","map":"TINY.LVL","mode":"highest-score","people":1,"bots":0,"free":3,"size":4}],"count":0}' ]; echo $?)"
+check "... a guest's Visibility changes nothing (only the leader is heard)" "$([ "$(lobby_value list_after_guest)" = '{"format":1,"lobbies":[{"private":true,"host":"Ada","map":"TINY.LVL","mode":"highest-score","people":2,"bots":0,"free":2,"size":4},{"private":true,"host":"Cy","map":"TINY.LVL","mode":"highest-score","people":1,"bots":0,"free":3,"size":4}],"count":0}' ] && [ "$(lobby_value guest_sees_public)" = "no" ]; echo $?)"
+check "... the leader's Visibility makes the room public: the list holds its code, the leader's name, the map and the numbers (and the other room, still private, as a locked row with no code), and both pages are told in the Room message (the flag, bit 3)" "$([ "$(lobby_value list_public)" = '{"format":1,"lobbies":[{"code":"lob00001","host":"Ada","map":"TINY.LVL","mode":"highest-score","people":2,"bots":0,"free":2,"size":4,"age":0},{"private":true,"host":"Cy","map":"TINY.LVL","mode":"highest-score","people":1,"bots":0,"free":3,"size":4}],"count":1}' ] && [ "$(lobby_value leader_sees_public)" = "yes" ] && [ "$(lobby_value guest_sees_public_now)" = "yes" ]; echo $?)"
+check "... the answer holds no key, no address, no guest's name, no platform and no private room's code (the leader of that room is named by its locked row)" "$([ "$(lobby_value list_leaks)" = "none" ]; echo $?)"
+check "... while a room is private its code is in no answer (the locked rows have none)" "$([ "$(lobby_value private_lists_leak)" = "none" ]; echo $?)"
 check "... the door answers GET only and no query (a POST is 405 and a query 404)" "$([ "$(lobby_value list_post)" = "405" ] && [ "$(lobby_value list_query)" = "404" ]; echo $?)"
-check "... and the leader's Visibility of private takes the room out of the list again" "$([ "$(lobby_value list_made_private)" = '{"format":1,"lobbies":[],"count":0}' ]; echo $?)"
-check "... a public room whose leader goes is private and off the list, and the person who leads next is told it is private (the choice was the leader's)" "$([ "$(lobby_value list_public_again)" != '{"format":1,"lobbies":[],"count":0}' ] && [ "$(lobby_value list_leader_left)" = '{"format":1,"lobbies":[],"count":0}' ] && [ "$(lobby_value new_leader_sees_public)" = "no" ]; echo $?)"
+check "... and the leader's Visibility of private takes the room out of the public rows again (it is a locked row)" "$([ "$(lobby_value list_made_private)" = '{"format":1,"lobbies":[{"private":true,"host":"Ada","map":"TINY.LVL","mode":"highest-score","people":2,"bots":0,"free":2,"size":4},{"private":true,"host":"Cy","map":"TINY.LVL","mode":"highest-score","people":1,"bots":0,"free":3,"size":4}],"count":0}' ]; echo $?)"
+check "... a public room whose leader goes is private and out of the public rows (a locked row of the leader who is next), and the person who leads next is told it is private (the choice was the leader's)" "$([ "$(lobby_value list_public_again)" = '{"format":1,"lobbies":[{"code":"lob00001","host":"Ada","map":"TINY.LVL","mode":"highest-score","people":2,"bots":0,"free":2,"size":4,"age":0},{"private":true,"host":"Cy","map":"TINY.LVL","mode":"highest-score","people":1,"bots":0,"free":3,"size":4}],"count":1}' ] && [ "$(lobby_value list_leader_left)" = '{"format":1,"lobbies":[{"private":true,"host":"Bea","map":"TINY.LVL","mode":"highest-score","people":1,"bots":0,"free":3,"size":4},{"private":true,"host":"Cy","map":"TINY.LVL","mode":"highest-score","people":1,"bots":0,"free":3,"size":4}],"count":0}' ] && [ "$(lobby_value new_leader_sees_public)" = "no" ]; echo $?)"
 stop_server
 ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-lobbies 0 > "$WORK/lobby0.log" 2>&1 &
 SERVER_PID=$!

@@ -734,7 +734,8 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         await step('Quick host asks again, and Private room is chosen', () => () => cardTitle(Pv) === 'Host a game' && (() => { const b = cardOf(Pv).findAll((n) => String(n.className).split(/\s+/).indexOf('btn') !== -1 && n.textContent === 'Private room')[0]; if (b) b.click(); return !!b; })(), 3000);
         await step('Private room makes a real room, and the switch says Private (no Visibility was asked for)', () => () => Pv.screen() === 'room' && Pv.root.findAll((n) => n.getAttribute && n.getAttribute('aria-pressed') === 'true' && /Private/.test(n.textContent) && String(n.className).indexOf('vbtn') !== -1).length === 1, 8000);
         await sleep(1500);
-        check('... and the real door does not list it (a private room is for the people who have its link)', !(await realRows()).some((x) => x.host === 'Qjpriv'));
+        const mineRows = (await realRows()).filter((x) => x.host === 'Qjpriv');
+        check('... and the real door lists it only as a locked row (private, no code: a private room is for the people who have its link, and nothing in the list leads to it)', mineRows.length === 1 && mineRows[0].private === true && !('code' in mineRows[0]) && !/[0-9a-f]{32}/.test(JSON.stringify(mineRows)), JSON.stringify(mineRows));
         Pv.roomBar('leave').click();
         await sleep(300);
 

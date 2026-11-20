@@ -4,8 +4,8 @@
   {
    "id": "listing_private_room_listed",
    "file": "src/ants_server/room.cpp",
-   "old": "if (!lobby_waiting() || !lobby_.is_public()) return false;",
-   "new": "if (!lobby_waiting()) return false;",
+   "old": "if (!lobby_joinable(free_now) || !lobby_.is_public()) return false;",
+   "new": "if (!lobby_joinable(free_now)) return false;",
    "build": [
     "test_server"
    ],
@@ -14,8 +14,8 @@
   {
    "id": "listing_match_state_listed",
    "file": "src/ants_server/room.cpp",
-   "old": "if (!lobby_waiting() || !lobby_.is_public()) return false;",
-   "new": "if (!spec_.lobby || !lobby_.is_public()) return false;",
+   "old": "if (!lobby_waiting()) return false;                                        // (a room that waits",
+   "new": "if (!spec_.lobby) return false;                                        // (a room that waits",
    "build": [
     "test_server"
    ],
@@ -54,8 +54,8 @@
   {
    "id": "listing_full_room_listed",
    "file": "src/ants_server/room.cpp",
-   "old": "    if (free_now == 0) return false;\n",
-   "new": "",
+   "old": "    return free_now != 0;\n",
+   "new": "    return true;\n",
    "build": [
     "test_server"
    ],
@@ -125,7 +125,7 @@
    "id": "listing_free_is_size_less_people",
    "file": "src/ants_server/room.cpp",
    "old": "out.free_colors = static_cast<uint8_t>(free_now);",
-   "new": "out.free_colors = static_cast<uint8_t>(lobby_.match_colors() - lobby_.people_colors());",
+   "new": "out.free_colors = static_cast<uint8_t>(lobby_.match_colors() - lobby_.people_colors()); (void)free_now;",
    "build": [
     "test_server"
    ],
@@ -154,8 +154,8 @@
   {
    "id": "lobbies_people_ascending",
    "file": "src/ants_server/room_manager.cpp",
-   "old": "if (a.people != b.people) return a.people > b.people;",
-   "new": "if (a.people != b.people) return a.people < b.people;",
+   "old": "std::sort(list.begin(), list.end(), [](const LobbyListing& a, const LobbyListing& b) {\n        if (a.people != b.people) return a.people > b.people;",
+   "new": "std::sort(list.begin(), list.end(), [](const LobbyListing& a, const LobbyListing& b) {\n        if (a.people != b.people) return a.people < b.people;",
    "build": [
     "test_server"
    ],
@@ -194,8 +194,8 @@
   {
    "id": "lobbies_no_cap",
    "file": "src/ants_server/room_manager.cpp",
-   "old": "if (list.size() > kMaxListedLobbies) list.resize(kMaxListedLobbies);",
-   "new": "",
+   "old": "        return a.code < b.code;\n    });\n    if (list.size() > kMaxListedLobbies) list.resize(kMaxListedLobbies);",
+   "new": "        return a.code < b.code;\n    });",
    "build": [
     "test_server"
    ],
@@ -1167,6 +1167,156 @@
     "test_server"
    ],
    "test": "ANTS_TEST_FILTER=S3.73 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "private_room_is_listed_as_a_public_one_too",
+   "file": "src/ants_server/room.cpp",
+   "old": "if (!lobby_joinable(free_now) || lobby_.is_public()) return false;",
+   "new": "if (!lobby_joinable(free_now)) return false;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "private_row_for_a_public_room_only",
+   "file": "src/ants_server/room.cpp",
+   "old": "if (!lobby_joinable(free_now) || lobby_.is_public()) return false;",
+   "new": "if (!lobby_joinable(free_now) || !lobby_.is_public()) return false;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "private_room_with_a_start_waiting_is_listed",
+   "file": "src/ants_server/room.cpp",
+   "old": "if (lobby_.starting() || lobby_.any_reserved()) return false;",
+   "new": "if (lobby_.any_reserved()) return false;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "listing_code_as_the_host",
+   "file": "src/ants_server/room.cpp",
+   "old": "out.host = leader_name.empty() ?",
+   "new": "out.host = spec_.code; if (leader_name.empty() && out.host.empty()) out.host = leader_name.empty() ?",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "listing_code_in_groups_as_the_host",
+   "file": "src/ants_server/room.cpp",
+   "old": "out.mode = lobby_.mode();\n    out.people = static_cast<uint8_t>(lobby_.people_colors());\n    out.bots",
+   "new": "out.mode = lobby_.mode();\n    out.host += \" \" + spec_.code.substr(0, 3) + \" \" + spec_.code.substr(3);\n    out.people = static_cast<uint8_t>(lobby_.people_colors());\n    out.bots",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "listing_code_in_capitals_in_the_map",
+   "file": "src/ants_server/room.cpp",
+   "old": "out.map = lobby_.map_name();\n    out.mode = lobby_.mode();\n    out.people = static_cast<uint8_t>(lobby_.people_colors());\n    out.bots",
+   "new": "out.map = lobby_.map_name();\n    for (const char ch : spec_.code) out.map.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));\n    out.mode = lobby_.mode();\n    out.people = static_cast<uint8_t>(lobby_.people_colors());\n    out.bots",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "private_row_has_the_flag_missing",
+   "file": "src/ants_server/control.cpp",
+   "old": "        e.set(\"private\", JsonValue::make_bool(true));\n",
+   "new": "",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "private_row_has_an_age",
+   "file": "src/ants_server/control.cpp",
+   "old": "        e.set(\"size\", JsonValue::make_int(l.size));\n        list.push_back(std::move(e));",
+   "new": "        e.set(\"size\", JsonValue::make_int(l.size));\n        e.set(\"age\", JsonValue::make_int(0));\n        list.push_back(std::move(e));",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "private_row_has_a_code_field",
+   "file": "src/ants_server/control.cpp",
+   "old": "        e.set(\"private\", JsonValue::make_bool(true));\n",
+   "new": "        e.set(\"private\", JsonValue::make_bool(true));\n        e.set(\"code\", JsonValue::make_string(l.host));\n",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "private_rows_before_public",
+   "file": "src/ants_server/control.cpp",
+   "old": "        e.set(\"size\", JsonValue::make_int(l.size));\n        list.push_back(std::move(e));",
+   "new": "        e.set(\"size\", JsonValue::make_int(l.size));\n        JsonValue front = JsonValue::make_array();\n        front.push_back(std::move(e));\n        for (const JsonValue& x : list.items()) front.push_back(x);\n        list = std::move(front);",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "private_rows_are_counted_in_count",
+   "file": "src/ants_server/control.cpp",
+   "old": "    o.set(\"count\", JsonValue::make_int(count));",
+   "new": "    o.set(\"count\", JsonValue::make_int(static_cast<int64_t>(list.items().size()) + 0 * count));",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "private_order_leaves_ties_to_the_codes",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "        if (a.people != b.people) return a.people > b.people;\n        if (a.map != b.map) return a.map < b.map;\n        if (a.host != b.host) return a.host < b.host;",
+   "new": "        if (a.people != b.people) return a.people > b.people;\n        return false;\n        if (a.host != b.host) return a.host < b.host;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "private_order_has_the_hosts_before_the_map",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "        if (a.map != b.map) return a.map < b.map;\n        if (a.host != b.host) return a.host < b.host;",
+   "new": "        if (a.host != b.host) return a.host < b.host;\n        if (a.map != b.map) return a.map < b.map;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "private_order_has_fewest_people_first",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "        if (a.people != b.people) return a.people > b.people;\n        if (a.map != b.map)",
+   "new": "        if (a.people != b.people) return a.people < b.people;\n        if (a.map != b.map)",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "private_rows_are_not_capped",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "        return a.size < b.size;\n    });\n    if (list.size() > kMaxListedLobbies) list.resize(kMaxListedLobbies);",
+   "new": "        return a.size < b.size;\n    });",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.23 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.24 timeout 900 ./build/tests/test_server/test_server"
   }
  ]
 }
