@@ -43,6 +43,7 @@
     const solo3dPill = document.getElementById("solo-3d-pill");
     const btnBackAll = document.getElementById("btn-back-all");
     const btnSoloReset = document.getElementById("btn-solo-reset-angle");
+    const btnPixelMode = document.getElementById("btn-pixel-mode");
     const btnIdle = document.getElementById("btn-idle");
     const btnSyncReset = document.getElementById("btn-sync-reset");
     const studioTab = document.getElementById("tab-studio");
@@ -54,17 +55,21 @@
     const badgeTeam = document.getElementById("badge-team");
     const badgeAngle = document.getElementById("badge-angle");
     const metaScale = document.getElementById("meta-scale");
+    const metaProj = document.getElementById("meta-proj");
     const metaPlay = document.getElementById("meta-play");
 
     if (!("focusGroup" in HTMLElement.prototype)) installToolbarRovingTabindex(toolbarEl);
 
     const cardCanvases = new Map();
     const cardCycles = new Map();
+    const card3dPills = [];
     for (const cls of ANT_CLASSES) {
       const cv = gridEl.querySelector(`[data-canvas-ant="${cls}"]`);
       if (cv) cardCanvases.set(cls, { canvas: cv, ctx: cv.getContext("2d") });
       const cy = gridEl.querySelector(`[data-cycle-for="${cls}"]`);
       if (cy) cardCycles.set(cls, cy);
+      const pill = gridEl.querySelector(`[data-card-ant="${cls}"] .compare-pill-right`);
+      if (pill) card3dPills.push(pill);
     }
     const soloOrigCtx = soloOrigCanvas.getContext("2d");
     const solo3dCtx = solo3dCanvas.getContext("2d");
@@ -87,6 +92,7 @@
     const qAngle = (params.get("angle") || "").toLowerCase();
     const qSpeed = Number(params.get("speed"));
     const qIdle = params.get("idle");
+    const qPixel = params.get("pixel");
     const qTime = params.has("t") ? Number(params.get("t")) : NaN;
     const darkMq = window.matchMedia("(prefers-color-scheme: dark)");
 
@@ -104,6 +110,9 @@
     const initIdle = qIdle !== null
       ? qIdle !== "0"
       : (savedState && typeof savedState.idle === "boolean" ? savedState.idle : true);
+    const initPixel = qPixel !== null
+      ? (qPixel === "1" || qPixel.toLowerCase() === "true")
+      : (savedState && typeof savedState.pixelMode === "boolean" ? savedState.pixelMode : false);
     const initSpeed = SPEEDS.includes(qSpeed)
       ? qSpeed
       : (savedState && SPEEDS.includes(savedState.speed) ? savedState.speed : 1);
@@ -113,6 +122,7 @@
       team: initTeam,
       angle: initAngle,
       idle: initIdle,
+      pixelMode: initPixel,
       speed: initSpeed,
       simTime: Number.isFinite(qTime) && qTime >= 0 ? qTime : 0,
       dark: darkMq.matches,
@@ -172,12 +182,15 @@
         ant: state.ant,
         team: state.team,
         angle: state.angle,
+        pitch: (ANGLES[state.angle] || ANGLES["301"]).pitch,
         idle: state.idle,
+        pixelMode: state.pixelMode,
         speed: state.speed,
         simTime: Number(state.simTime.toFixed(3)),
         soloOrbited: state.soloOrbited,
         loadedModels: state.loadedModels,
         origLoaded: Boolean(state.origBundle),
+        max3dRatio: Number(state.max3dRatio.toFixed(3)),
         scale: state.lastPxScaleLabel,
         error: state.error,
       };
@@ -188,6 +201,7 @@
       team: state.team,
       angle: state.angle,
       idle: state.idle,
+      pixelMode: state.pixelMode,
       speed: state.speed,
     });
 
@@ -221,6 +235,7 @@
         b.setAttribute("aria-pressed", String(Number(b.dataset.speed) === state.speed));
       });
       btnIdle.setAttribute("aria-pressed", String(state.idle));
+      if (btnPixelMode) btnPixelMode.setAttribute("aria-pressed", String(state.pixelMode));
 
       const isSolo = state.ant !== "all";
       gridEl.hidden = isSolo;
@@ -230,14 +245,23 @@
       badgeAnt.textContent = isSolo ? ANT_LABELS[state.ant] : "All 6";
       badgeTeam.textContent = TEAMS[state.team].label;
       badgeAngle.textContent = angleInfo.label;
+      if (metaProj) {
+        metaProj.textContent = state.pixelMode
+          ? `Ortho ${angleInfo.pitch}\u00b0 \u00b7 1\u00d7 Pixel`
+          : `Ortho ${angleInfo.pitch}\u00b0 \u00b7 Shared Ground`;
+      }
       metaPlay.textContent = `${state.idle ? "Playing" : "Paused"} \u00b7 ${state.speed}\u00d7`;
+
+      const pillLabel = state.pixelMode ? "Live 3D \u00b7 1\u00d7" : "Live 3D";
+      for (const pill of card3dPills) pill.textContent = pillLabel;
 
       if (isSolo) {
         soloTitleEl.textContent = ANT_LABELS[state.ant] + " Ant";
         btnSoloReset.disabled = !state.soloOrbited;
+        const modeTag = state.pixelMode ? "Live 3D \u00b7 1\u00d7" : "Live 3D";
         solo3dPill.textContent = state.soloOrbited
-          ? `Live 3D \u00b7 Yaw ${Math.round(state.soloCam.yaw)}\u00b0 Pitch ${Math.round(state.soloCam.pitch)}\u00b0`
-          : `Live 3D \u00b7 ${angleInfo.label}`;
+          ? `${modeTag} \u00b7 Yaw ${Math.round(state.soloCam.yaw)}\u00b0 Pitch ${Math.round(state.soloCam.pitch)}\u00b0`
+          : `${modeTag} \u00b7 ${angleInfo.label}`;
       }
 
       updateCycleLabels();
@@ -289,6 +313,13 @@
       updateUiState();
       markDirty();
       announce(state.idle ? `Idle playback resumed at ${state.speed}x.` : "Idle playback paused.");
+    }
+
+    function togglePixelMode() {
+      state.pixelMode = !state.pixelMode;
+      updateUiState();
+      markDirty();
+      announce(state.pixelMode ? "3D side switched to 1x 1998 pixel resolution." : "3D side switched to HD resolution.");
     }
 
     function selectSpeed(spd) {
@@ -500,20 +531,56 @@
       }
     }
 
-    function draw3dAnt(ctx, cls, x0, panelW, panelH, groundY, fixedHalfH, cam, useCanonicalAnchor) {
+    function draw3dAnt(ctx, cls, x0, panelW, panelH, groundY, fixedHalfH, pxScale, cam, useCanonicalAnchor) {
       const sc = state.scenes.get(cls);
       if (!sc) return;
-      ensureOffscreenSize(panelW, panelH);
       const canon = ANGLES[state.angle] || ANGLES["301"];
       const anchorYaw = useCanonicalAnchor ? canon.yaw : cam.yaw;
       const anchorPitch = useCanonicalAnchor ? canon.pitch : cam.pitch;
       const span = computeSpan(cls, anchorYaw, anchorPitch);
-      const gFrac = groundY / panelH;
-      const targetY = (span.vMin + fixedHalfH * (2 * gFrac - 1)) / Math.cos(anchorPitch * DEG);
 
       const shadowRx = Math.max(12, Math.min(panelW * 0.34, (panelH / (2 * fixedHalfH)) * sc.instances[0].model.size[0] * 0.38));
       drawContactShadow(ctx, x0 + panelW * 0.5, groundY, shadowRx, Math.max(4, shadowRx * 0.22));
 
+      if (state.pixelMode && pxScale > 1) {
+        const lowW = Math.max(16, Math.floor(panelW / pxScale));
+        const lowH = Math.max(16, Math.floor(panelH / pxScale));
+        const lowGroundY = Math.min(lowH - 1, Math.max(1, Math.round(groundY / pxScale)));
+        const lowGFrac = lowGroundY / lowH;
+        const lowFixedHalfH = fixedHalfH * ((lowH * pxScale) / panelH);
+        const targetY = (span.vMin + lowFixedHalfH * (2 * lowGFrac - 1)) / Math.cos(anchorPitch * DEG);
+        ensureOffscreenSize(lowW, lowH);
+        renderer.drawScene(sc, cam, {
+          width: lowW,
+          height: lowH,
+          transparent: true,
+          showPlinth: false,
+          dark: state.dark,
+          team: state.team,
+          blinkMode: "auto",
+          idleAnim: true,
+          fixedIdleTime: state.simTime,
+          overrideProj: "ortho",
+          fixedHalfH: lowFixedHalfH,
+          customTarget: [0, targetY, 0],
+        });
+        const dstW = lowW * pxScale;
+        const dstH = lowH * pxScale;
+        const dstX = Math.round(x0 + (panelW - dstW) * 0.5);
+        const dstY = Math.round(groundY - lowGroundY * pxScale);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x0, 0, panelW, panelH);
+        ctx.clip();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(offCanvas, 0, offCanvas.height - lowH, lowW, lowH, dstX, dstY, dstW, dstH);
+        ctx.restore();
+        return;
+      }
+
+      ensureOffscreenSize(panelW, panelH);
+      const gFrac = groundY / panelH;
+      const targetY = (span.vMin + fixedHalfH * (2 * gFrac - 1)) / Math.cos(anchorPitch * DEG);
       renderer.drawScene(sc, cam, {
         width: panelW,
         height: panelH,
@@ -573,7 +640,7 @@
           const halfHForCard = scParams.fixedHalfH * (sz.h / minH);
           drawStudioBackdrop(rec.ctx, sz.w, sz.h, groundY, true);
           drawOrigSprite(rec.ctx, cls, 0, sz.halfW, groundY, scParams.pxScale);
-          draw3dAnt(rec.ctx, cls, sz.halfW, rightW, sz.h, groundY, halfHForCard, canonCam, true);
+          draw3dAnt(rec.ctx, cls, sz.halfW, rightW, sz.h, groundY, halfHForCard, scParams.pxScale, canonCam, true);
         }
       } else {
         const [ow, oh] = syncCanvasBacking(soloOrigCanvas, dpr);
@@ -592,7 +659,7 @@
 
         const g3d = Math.round(rh * scParams.gFrac);
         drawStudioBackdrop(solo3dCtx, rw, rh, g3d, false);
-        draw3dAnt(solo3dCtx, state.ant, 0, rw, rh, g3d, scParams.fixedHalfH * (rh / panelH), state.soloCam, true);
+        draw3dAnt(solo3dCtx, state.ant, 0, rw, rh, g3d, scParams.fixedHalfH * (rh / panelH), scParams.pxScale, state.soloCam, true);
       }
     }
 
@@ -664,6 +731,7 @@
       else if (btn.dataset.team) selectTeam(btn.dataset.team);
       else if (btn.dataset.angle) selectAngle(btn.dataset.angle);
       else if (btn.dataset.speed) selectSpeed(Number(btn.dataset.speed));
+      else if (btn === btnPixelMode) togglePixelMode();
       else if (btn === btnIdle) toggleIdle();
       else if (btn === btnSyncReset) syncReset();
     });
@@ -770,6 +838,9 @@
       } else if (e.key === "i" || e.key === "I") {
         e.preventDefault();
         toggleIdle();
+      } else if (e.key === "p" || e.key === "P") {
+        e.preventDefault();
+        togglePixelMode();
       } else if ((e.key === "r" || e.key === "R") && document.activeElement !== solo3dCanvas) {
         e.preventDefault();
         syncReset();
