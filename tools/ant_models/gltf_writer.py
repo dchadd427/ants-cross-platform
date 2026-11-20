@@ -136,6 +136,28 @@ def _merge_primitive_streams(parts: Sequence[Any]) -> Tuple[bytes, bytes, bytes,
     return bytes(pos_buf), bytes(nrm_buf), bytes(idx_buf), v_total, i_total, pmin, pmax, int(imin), int(imax)
 
 
+def _pack_f32_scalars(vals: Sequence[float]) -> Tuple[bytes, int, float, float]:
+    nums = [float(v) for v in vals]
+    if not nums:
+        return b"", 0, 0.0, 0.0
+    for v in nums:
+        if not math.isfinite(v):
+            raise ValueError("Non-finite animation timestamp encountered")
+    return struct.pack(f"<{len(nums)}f", *nums), len(nums), min(nums), max(nums)
+
+
+def _pack_f32_tuples(vals: Sequence[Sequence[float]], width: int) -> Tuple[bytes, int]:
+    buf = bytearray()
+    for row in vals:
+        if len(row) != width:
+            raise ValueError(f"Expected {width}-tuple in animation track, got {len(row)}")
+        f_row = [float(c) for c in row]
+        if not all(math.isfinite(c) for c in f_row):
+            raise ValueError("Non-finite animation value encountered")
+        buf.extend(struct.pack(f"<{width}f", *f_row))
+    return bytes(buf), len(vals)
+
+
 def scene_to_glb_bytes(scene: Any) -> bytes:
     """Serialize a SceneBuilder into strictly valid glTF 2.0 binary (.glb) bytes."""
     used_materials_set = set()
@@ -162,8 +184,9 @@ def scene_to_glb_bytes(scene: Any) -> bytes:
     accessors: List[Dict[str, Any]] = []
     meshes: List[Dict[str, Any]] = []
     nodes: List[Dict[str, Any]] = [{"name": scene.name, "children": []}]
+    node_name_to_idx: Dict[str, int] = {}
 
-    def append_view(raw: bytes, target: int, byte_stride: int = 0) -> int:
+    def append_view(raw: bytes, target: int = 0, byte_stride: int = 0) -> int:
         while len(bin_blob) % 4 != 0:
             bin_blob.append(0)
         offset = len(bin_blob)
@@ -172,13 +195,16 @@ def scene_to_glb_bytes(scene: Any) -> bytes:
             "buffer": 0,
             "byteOffset": offset,
             "byteLength": len(raw),
-            "target": target,
         }
+        if target:
+            view["target"] = target
         if byte_stride:
             view["byteStride"] = byte_stride
         idx = len(buffer_views)
         buffer_views.append(view)
         return idx
+
+    get_xf = getattr(scene, "get_node_transform", None)
 
     for node_name, parts in active_nodes:
         # Group parts within this logical node by material (preserving order).
@@ -245,8 +271,69 @@ def scene_to_glb_bytes(scene: Any) -> bytes:
             mesh_idx = len(meshes)
             meshes.append({"name": node_name, "primitives": primitives})
             node_idx = len(nodes)
-            nodes.append({"name": node_name, "mesh": mesh_idx})
+            node_obj: Dict[str, Any] = {"name": node_name, "mesh": mesh_idx}
+            xf = get_xf(node_name) if callable(get_xf) else None
+            if xf is not None:
+                if any(abs(c) > 1e-7 for c in xf.translation):
+                    node_obj["translation"] = [round(float(c), 6) for c in xf.translation]
+                # Emit explicit rotation on pivoted nodes (including identity so animated tracks have an explicit baseline).
+                node_obj["rotation"] = [round(float(c), 6) for c in xf.rotation]
+                if any(abs(c - 1.0) > 1e-7 for c in xf.scale):
+                    node_obj["scale"] = [round(float(c), 6) for c in xf.scale]
+            nodes.append(node_obj)
             nodes[0]["children"].append(node_idx)
+            node_name_to_idx[node_name] = node_idx
+
+    gltf_animations: List[Dict[str, Any]] = []
+    for clip in getattr(scene, "animations", ()) or ():
+        samplers: List[Dict[str, Any]] = []
+        channels: List[Dict[str, Any]] = []
+        for ch in clip.channels:
+            if ch.target_node not in node_name_to_idx:
+                continue
+            if ch.path not in ("rotation", "translation", "scale"):
+                raise ValueError(f"Unsupported animation path {ch.path!r}")
+            t_raw, t_cnt, t_min, t_max = _pack_f32_scalars(ch.times)
+            width = 4 if ch.path == "rotation" else 3
+            v_raw, v_cnt = _pack_f32_tuples(ch.values, width)
+            if t_cnt == 0 or t_cnt != v_cnt:
+                raise ValueError(f"Animation channel {ch.target_node}.{ch.path}: time count {t_cnt} != value count {v_cnt}")
+
+            # glTF 2.0 spec: animation bufferViews omit `target`.
+            t_bv = append_view(t_raw)
+            t_acc = len(accessors)
+            accessors.append(
+                {
+                    "bufferView": t_bv,
+                    "byteOffset": 0,
+                    "componentType": COMPONENT_FLOAT,
+                    "count": t_cnt,
+                    "type": "SCALAR",
+                    "min": [t_min],
+                    "max": [t_max],
+                }
+            )
+            v_bv = append_view(v_raw)
+            v_acc = len(accessors)
+            accessors.append(
+                {
+                    "bufferView": v_bv,
+                    "byteOffset": 0,
+                    "componentType": COMPONENT_FLOAT,
+                    "count": v_cnt,
+                    "type": "VEC4" if width == 4 else "VEC3",
+                }
+            )
+            s_idx = len(samplers)
+            samplers.append({"input": t_acc, "interpolation": ch.interpolation, "output": v_acc})
+            channels.append(
+                {
+                    "sampler": s_idx,
+                    "target": {"node": node_name_to_idx[ch.target_node], "path": ch.path},
+                }
+            )
+        if channels:
+            gltf_animations.append({"name": clip.name, "samplers": samplers, "channels": channels})
 
     bin_bytes = _pad4(bytes(bin_blob), b"\x00")
     gltf_doc: Dict[str, Any] = {
@@ -263,6 +350,8 @@ def scene_to_glb_bytes(scene: Any) -> bytes:
         "bufferViews": buffer_views,
         "buffers": [{"byteLength": len(bin_bytes)}],
     }
+    if gltf_animations:
+        gltf_doc["animations"] = gltf_animations
 
     json_raw = json.dumps(gltf_doc, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
     json_bytes = _pad4(json_raw, b" ")
@@ -387,8 +476,98 @@ def parse_glb(path_or_bytes: Union[str, os.PathLike, bytes, bytearray, memoryvie
     return doc, bin_chunk
 
 
+def _read_accessor_floats(doc: Dict[str, Any], bin_data: bytes, acc_idx: int, expected_type: str) -> List[Tuple[float, ...]]:
+    type_widths = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}
+    width = type_widths[expected_type]
+    accessors = doc["accessors"]
+    views = doc["bufferViews"]
+    if not (0 <= acc_idx < len(accessors)):
+        raise ValueError(f"Accessor index {acc_idx} out of range")
+    acc = accessors[acc_idx]
+    if acc.get("componentType") != COMPONENT_FLOAT or acc.get("type") != expected_type:
+        raise ValueError(f"Accessor {acc_idx}: expected FLOAT {expected_type}")
+    bv_idx = acc["bufferView"]
+    if not (0 <= bv_idx < len(views)):
+        raise ValueError(f"Accessor {acc_idx}: bufferView {bv_idx} out of range")
+    bv = views[bv_idx]
+    count = int(acc["count"])
+    stride = int(bv.get("byteStride", width * 4))
+    if stride < width * 4:
+        raise ValueError(f"Accessor {acc_idx}: invalid byteStride {stride}")
+    base = int(bv.get("byteOffset", 0)) + int(acc.get("byteOffset", 0))
+    end = base + (count - 1) * stride + width * 4 if count > 0 else base
+    if base < 0 or end > len(bin_data):
+        raise ValueError(f"Accessor {acc_idx}: range [{base}, {end}) exceeds BIN buffer {len(bin_data)}")
+    fmt = f"<{width}f"
+    return [struct.unpack_from(fmt, bin_data, base + i * stride) for i in range(count)]
+
+
+def _mat4_mul(a: List[float], b: List[float]) -> List[float]:
+    # Column-major 4x4 matrices (glTF convention): out[col*4 + row] = sum_k a[k*4 + row] * b[col*4 + k]
+    out = [0.0] * 16
+    for col in range(4):
+        for row in range(4):
+            out[col * 4 + row] = sum(a[k * 4 + row] * b[col * 4 + k] for k in range(4))
+    return out
+
+
+def _node_local_matrix(node: Dict[str, Any]) -> List[float]:
+    if "matrix" in node:
+        return [float(x) for x in node["matrix"]]
+    tx, ty, tz = [float(x) for x in node.get("translation", (0.0, 0.0, 0.0))]
+    qx, qy, qz, qw = [float(x) for x in node.get("rotation", (0.0, 0.0, 0.0, 1.0))]
+    sx, sy, sz = [float(x) for x in node.get("scale", (1.0, 1.0, 1.0))]
+    n = math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
+    if n > 1e-12:
+        qx, qy, qz, qw = qx / n, qy / n, qz / n, qw / n
+    r00 = 1.0 - 2.0 * (qy * qy + qz * qz)
+    r01 = 2.0 * (qx * qy - qz * qw)
+    r02 = 2.0 * (qx * qz + qy * qw)
+    r10 = 2.0 * (qx * qy + qz * qw)
+    r11 = 1.0 - 2.0 * (qx * qx + qz * qz)
+    r12 = 2.0 * (qy * qz - qx * qw)
+    r20 = 2.0 * (qx * qz - qy * qw)
+    r21 = 2.0 * (qy * qz + qx * qw)
+    r22 = 1.0 - 2.0 * (qx * qx + qy * qy)
+    return [
+        r00 * sx, r10 * sx, r20 * sx, 0.0,
+        r01 * sy, r11 * sy, r21 * sy, 0.0,
+        r02 * sz, r12 * sz, r22 * sz, 0.0,
+        tx, ty, tz, 1.0,
+    ]
+
+
+def _compute_world_matrices(doc: Dict[str, Any]) -> Dict[int, List[float]]:
+    ident = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+    nodes = doc.get("nodes", [])
+    world: Dict[int, List[float]] = {}
+
+    def walk(idx: int, parent_m: List[float]) -> None:
+        m = _mat4_mul(parent_m, _node_local_matrix(nodes[idx]))
+        world[idx] = m
+        for c in nodes[idx].get("children", ()):
+            walk(int(c), m)
+
+    scenes = doc.get("scenes", [])
+    if scenes:
+        for root in scenes[doc.get("scene", 0)].get("nodes", ()):
+            walk(int(root), ident)
+    for i in range(len(nodes)):
+        if i not in world:
+            world[i] = _node_local_matrix(nodes[i])
+    return world
+
+
+def _transform_point(m: List[float], x: float, y: float, z: float) -> Tuple[float, float, float]:
+    return (
+        m[0] * x + m[4] * y + m[8] * z + m[12],
+        m[1] * x + m[5] * y + m[9] * z + m[13],
+        m[2] * x + m[6] * y + m[10] * z + m[14],
+    )
+
+
 def validate_glb(path_or_bytes: Union[str, os.PathLike, bytes, bytearray, memoryview]) -> Dict[str, Any]:
-    """Validate GLB structure, schema, geometry, unit normals, and indices.
+    """Validate GLB structure, schema, geometry, unit normals, indices, and animations.
 
     Pure Python stdlib (no numpy required). Raises ValueError on any error.
     """
@@ -422,6 +601,11 @@ def validate_glb(path_or_bytes: Union[str, os.PathLike, bytes, bytearray, memory
 
     mat_names = [str(m.get("name", f"material_{i}")) for i, m in enumerate(doc["materials"])]
     node_names = [str(n.get("name", f"node_{i}")) for i, n in enumerate(doc["nodes"])]
+    world_mats = _compute_world_matrices(doc)
+    mesh_nodes: Dict[int, List[int]] = {}
+    for n_i, n in enumerate(doc["nodes"]):
+        if "mesh" in n:
+            mesh_nodes.setdefault(int(n["mesh"]), []).append(n_i)
 
     total_vertices = 0
     total_triangles = 0
@@ -433,6 +617,9 @@ def validate_glb(path_or_bytes: Union[str, os.PathLike, bytes, bytearray, memory
         prims = mesh.get("primitives", [])
         if not prims:
             raise ValueError(f"Mesh {m_i} has no primitives")
+        mats_for_mesh = [world_mats[n_i] for n_i in mesh_nodes.get(m_i, ())] or [
+            [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+        ]
         for p_i, prim in enumerate(prims):
             primitive_count += 1
             attrs = prim.get("attributes", {})
@@ -475,6 +662,20 @@ def validate_glb(path_or_bytes: Union[str, os.PathLike, bytes, bytearray, memory
                     pmax[1] = y
                 if z > pmax[2]:
                     pmax[2] = z
+                for wm in mats_for_mesh:
+                    wx, wy, wz = _transform_point(wm, x, y, z)
+                    if wx < gmin[0]:
+                        gmin[0] = wx
+                    if wy < gmin[1]:
+                        gmin[1] = wy
+                    if wz < gmin[2]:
+                        gmin[2] = wz
+                    if wx > gmax[0]:
+                        gmax[0] = wx
+                    if wy > gmax[1]:
+                        gmax[1] = wy
+                    if wz > gmax[2]:
+                        gmax[2] = wz
 
             pos_acc = doc["accessors"][pos_idx]
             if "min" not in pos_acc or "max" not in pos_acc:
@@ -482,10 +683,6 @@ def validate_glb(path_or_bytes: Union[str, os.PathLike, bytes, bytearray, memory
             for k in range(3):
                 if abs(float(pos_acc["min"][k]) - pmin[k]) > 1e-4 or abs(float(pos_acc["max"][k]) - pmax[k]) > 1e-4:
                     raise ValueError(f"POSITION accessor {pos_idx} min/max bounds do not match vertex data")
-                if pmin[k] < gmin[k]:
-                    gmin[k] = pmin[k]
-                if pmax[k] > gmax[k]:
-                    gmax[k] = pmax[k]
 
             for n_i, (nx, ny, nz) in enumerate(normals):
                 if not (math.isfinite(nx) and math.isfinite(ny) and math.isfinite(nz)):
@@ -508,6 +705,50 @@ def validate_glb(path_or_bytes: Union[str, os.PathLike, bytes, bytearray, memory
     if total_triangles == 0:
         raise ValueError("GLB contains zero triangles")
 
+    anim_names: List[str] = []
+    for a_i, anim in enumerate(doc.get("animations", [])):
+        anim_names.append(str(anim.get("name", f"animation_{a_i}")))
+        samplers = anim.get("samplers", [])
+        channels = anim.get("channels", [])
+        if not samplers or not channels:
+            raise ValueError(f"Animation {a_i} missing samplers or channels")
+        for c_i, ch in enumerate(channels):
+            s_idx = int(ch["sampler"])
+            if not (0 <= s_idx < len(samplers)):
+                raise ValueError(f"Animation {a_i} channel {c_i}: sampler {s_idx} out of range")
+            target = ch.get("target", {})
+            n_idx = int(target.get("node", -1))
+            path = target.get("path")
+            if not (0 <= n_idx < len(doc["nodes"])):
+                raise ValueError(f"Animation {a_i} channel {c_i}: target node {n_idx} out of range")
+            if path not in ("rotation", "translation", "scale"):
+                raise ValueError(f"Animation {a_i} channel {c_i}: unsupported target path {path!r}")
+            sampler = samplers[s_idx]
+            in_idx = int(sampler["input"])
+            out_idx = int(sampler["output"])
+            times = [row[0] for row in _read_accessor_floats(doc, bin_data, in_idx, "SCALAR")]
+            if not times or any(not math.isfinite(t) for t in times):
+                raise ValueError(f"Animation {a_i} sampler {s_idx}: invalid timestamps")
+            for k in range(1, len(times)):
+                if times[k] <= times[k - 1]:
+                    raise ValueError(f"Animation {a_i} sampler {s_idx}: timestamps must be strictly increasing")
+            in_acc = doc["accessors"][in_idx]
+            if "min" not in in_acc or "max" not in in_acc:
+                raise ValueError(f"Animation {a_i} input accessor {in_idx} missing required min/max")
+            if abs(float(in_acc["min"][0]) - times[0]) > 1e-4 or abs(float(in_acc["max"][0]) - times[-1]) > 1e-4:
+                raise ValueError(f"Animation {a_i} input accessor {in_idx} min/max mismatch")
+            out_type = "VEC4" if path == "rotation" else "VEC3"
+            values = _read_accessor_floats(doc, bin_data, out_idx, out_type)
+            if len(values) != len(times):
+                raise ValueError(f"Animation {a_i} sampler {s_idx}: input/output count mismatch")
+            for v_i, vec in enumerate(values):
+                if not all(math.isfinite(c) for c in vec):
+                    raise ValueError(f"Animation {a_i} sampler {s_idx} key {v_i}: non-finite value")
+                if path == "rotation":
+                    qlen = math.sqrt(sum(c * c for c in vec))
+                    if abs(qlen - 1.0) > 1e-3:
+                        raise ValueError(f"Animation {a_i} sampler {s_idx} key {v_i}: non-unit quaternion {qlen:.6f}")
+
     dims = [round(gmax[k] - gmin[k], 5) for k in range(3)]
     return {
         "byte_length": byte_length,
@@ -518,6 +759,7 @@ def validate_glb(path_or_bytes: Union[str, os.PathLike, bytes, bytearray, memory
         "vertices": total_vertices,
         "triangles": total_triangles,
         "materials": mat_names,
+        "animations": anim_names,
         "bbox_min": [round(v, 5) for v in gmin],
         "bbox_max": [round(v, 5) for v in gmax],
         "dimensions": dims,

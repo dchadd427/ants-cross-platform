@@ -131,6 +131,77 @@ def _rotation_matrix_axis(axis: Vec3Like, angle: float) -> np.ndarray:
     )
 
 
+def quat_from_axis_angle(axis: Vec3Like, angle: float, *, degrees: bool = False) -> Tuple[float, float, float, float]:
+    """Return unit glTF quaternion (qx, qy, qz, qw) for rotation around `axis`."""
+    ang = math.radians(angle) if degrees else float(angle)
+    a = _as_vec3(axis)
+    n = float(np.linalg.norm(a))
+    if n <= 1e-12 or abs(ang) <= 1e-12:
+        return (0.0, 0.0, 0.0, 1.0)
+    s, c = math.sin(0.5 * ang), math.cos(0.5 * ang)
+    ax, ay, az = a / n
+    return (float(ax * s), float(ay * s), float(az * s), float(c))
+
+
+def quat_mul(q1: Tuple[float, float, float, float], q2: Tuple[float, float, float, float]) -> Tuple[float, float, float, float]:
+    x1, y1, z1, w1 = q1
+    x2, y2, z2, w2 = q2
+    return (
+        w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2, w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+        w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2, w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+    )
+
+
+def quat_from_euler_xyz(rx: float = 0.0, ry: float = 0.0, rz: float = 0.0, *, degrees: bool = False) -> Tuple[float, float, float, float]:
+    """Return unit glTF quaternion matching `rotate_xyz(rx, ry, rz)` (apply X, then Y, then Z)."""
+    q = quat_mul(
+        quat_from_axis_angle((0.0, 0.0, 1.0), rz, degrees=degrees),
+        quat_mul(quat_from_axis_angle((0.0, 1.0, 0.0), ry, degrees=degrees), quat_from_axis_angle((1.0, 0.0, 0.0), rx, degrees=degrees)),
+    )
+    n = math.sqrt(sum(c * c for c in q))
+    return tuple(c / n for c in q) if n > 1e-12 else (0.0, 0.0, 0.0, 1.0)
+
+
+@dataclass
+class NodeTransform:
+    """glTF 2.0 node TRS transform (applied as T * R * S)."""
+
+    translation: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    rotation: Tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
+    scale: Tuple[float, float, float] = (1.0, 1.0, 1.0)
+
+    def to_matrix(self) -> np.ndarray:
+        qx, qy, qz, qw = self.rotation
+        n = math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
+        if n > 1e-12:
+            qx, qy, qz, qw = qx / n, qy / n, qz / n, qw / n
+        r = np.array([
+            [1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qz * qw), 2 * (qx * qz + qy * qw)],
+            [2 * (qx * qy + qz * qw), 1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz - qx * qw)],
+            [2 * (qx * qz - qy * qw), 2 * (qy * qz + qx * qw), 1 - 2 * (qx * qx + qy * qy)],
+        ], dtype=np.float64)
+        m = np.eye(4, dtype=np.float64)
+        m[:3, :3], m[:3, 3] = r * np.asarray(self.scale, dtype=np.float64)[None, :], np.asarray(self.translation, dtype=np.float64)
+        return m
+
+
+@dataclass
+class AnimationChannel:
+    """Keyframe track targeting a named SceneBuilder node's TRS property."""
+    target_node: str
+    path: str
+    times: List[float]
+    values: List[Tuple[float, ...]]
+    interpolation: str = "LINEAR"
+
+
+@dataclass
+class AnimationClip:
+    """Named glTF 2.0 animation clip containing one or more keyframe channels."""
+    name: str
+    channels: List[AnimationChannel] = field(default_factory=list)
+
+
 @dataclass
 class MeshPart:
     """Immutable-style triangle mesh chunk with one named PBR material."""
@@ -254,10 +325,12 @@ def merge_parts(parts: Sequence[MeshPart], name: str = "merged", material: Optio
 
 @dataclass
 class SceneBuilder:
-    """Organizes MeshParts into named logical nodes for glTF export."""
+    """Organizes MeshParts into named logical nodes with optional local TRS pivots and animations."""
 
     name: str = "ant"
     nodes: Dict[str, List[MeshPart]] = field(default_factory=dict)
+    node_transforms: Dict[str, NodeTransform] = field(default_factory=dict)
+    animations: List[AnimationClip] = field(default_factory=list)
 
     def add(self, node_name: str, part: Union[MeshPart, Iterable[MeshPart]]) -> None:
         bucket = self.nodes.setdefault(node_name, [])
@@ -279,6 +352,37 @@ class SceneBuilder:
         self.add(node_name, right)
         return left, right
 
+    def set_node_transform(
+        self, node_name: str, *, translation: Optional[Vec3Like] = None,
+        rotation: Optional[Sequence[float]] = None, scale: Optional[Vec3Like] = None,
+    ) -> NodeTransform:
+        cur = self.node_transforms.get(node_name, NodeTransform())
+        t = tuple(float(c) for c in _as_vec3(translation)) if translation is not None else cur.translation
+        r = tuple(float(c) for c in rotation) if rotation is not None else cur.rotation
+        if len(r) != 4:
+            raise ValueError(f"rotation must be a 4-tuple (qx, qy, qz, qw), got {r}")
+        s = tuple(float(c) for c in _as_vec3(scale)) if scale is not None else cur.scale
+        xf = NodeTransform(translation=t, rotation=r, scale=s)
+        self.node_transforms[node_name] = xf
+        return xf
+
+    def get_node_transform(self, node_name: str) -> Optional[NodeTransform]:
+        return self.node_transforms.get(node_name)
+
+    def add_animation(self, name: str, channels: Sequence[AnimationChannel]) -> AnimationClip:
+        clip = AnimationClip(name=name, channels=list(channels))
+        self.animations.append(clip)
+        return clip
+
+    def add_blink_animation(
+        self, eyelid_nodes: Sequence[str] = ("eyelid_left", "eyelid_right"), closed_angle: float = 1.48, *, name: str = "Blink"
+    ) -> AnimationClip:
+        """Add a glTF 2.0 Blink clip keyframing eyelid rotation around local +X."""
+        times = [0.0, 2.40, 2.48, 2.56, 2.68, 3.00]
+        q_open, q_closed = (0.0, 0.0, 0.0, 1.0), quat_from_axis_angle((1.0, 0.0, 0.0), closed_angle)
+        vals = [q_open, q_open, q_closed, q_closed, q_open, q_open]
+        return self.add_animation(name, [AnimationChannel(n, "rotation", list(times), list(vals)) for n in eyelid_nodes if self.nodes.get(n)])
+
     def get_node(self, node_name: str) -> List[MeshPart]:
         return list(self.nodes.get(node_name, ()))
 
@@ -288,8 +392,17 @@ class SceneBuilder:
     def all_parts(self) -> List[MeshPart]:
         return [p for parts in self.nodes.values() for p in parts]
 
+    def world_parts(self) -> List[MeshPart]:
+        """Return all MeshParts transformed into world space (applying node TRS pivots)."""
+        out: List[MeshPart] = []
+        for k, parts in self.nodes.items():
+            xf = self.node_transforms.get(k)
+            mat = xf.to_matrix() if xf is not None else None
+            out.extend(p.transform(mat) if mat is not None else p for p in parts)
+        return out
+
     def bounds(self) -> Tuple[np.ndarray, np.ndarray]:
-        non_empty = [p.bounds() for p in self.all_parts() if len(p.positions) > 0]
+        non_empty = [p.bounds() for p in self.world_parts() if len(p.positions) > 0]
         if not non_empty:
             z = np.zeros(3, dtype=np.float32)
             return z, z
@@ -299,24 +412,45 @@ class SceneBuilder:
         return sum(p.triangle_count() for p in self.all_parts())
 
     def translate_all(self, dx: Union[float, Vec3Like], dy: Optional[float] = None, dz: Optional[float] = None) -> "SceneBuilder":
+        off = _as_vec3(dx, dy, dz)
         for k, parts in self.nodes.items():
-            self.nodes[k] = [p.translate(dx, dy, dz) for p in parts]
+            xf = self.node_transforms.get(k)
+            if xf is not None:
+                self.node_transforms[k] = NodeTransform(
+                    (xf.translation[0] + float(off[0]), xf.translation[1] + float(off[1]), xf.translation[2] + float(off[2])),
+                    xf.rotation, xf.scale,
+                )
+            else:
+                self.nodes[k] = [p.translate(off) for p in parts]
         return self
 
     def scale_all(self, sx: Union[float, Vec3Like], sy: Optional[float] = None, sz: Optional[float] = None) -> "SceneBuilder":
+        s = _as_vec3(sx, sy, sz)
         for k, parts in self.nodes.items():
-            self.nodes[k] = [p.scale(sx, sy, sz) for p in parts]
+            xf = self.node_transforms.get(k)
+            if xf is not None:
+                self.node_transforms[k] = NodeTransform(
+                    (xf.translation[0] * float(s[0]), xf.translation[1] * float(s[1]), xf.translation[2] * float(s[2])),
+                    xf.rotation, xf.scale,
+                )
+            self.nodes[k] = [p.scale(s) for p in parts]
         return self
 
     def rotate_all_xyz(self, rx: float = 0.0, ry: float = 0.0, rz: float = 0.0, *, degrees: bool = False) -> "SceneBuilder":
+        rot = _rotation_matrix_xyz(math.radians(rx) if degrees else rx, math.radians(ry) if degrees else ry, math.radians(rz) if degrees else rz)
+        q_rot = quat_from_euler_xyz(rx, ry, rz, degrees=degrees)
         for k, parts in self.nodes.items():
-            self.nodes[k] = [p.rotate_xyz(rx, ry, rz, degrees=degrees) for p in parts]
+            xf = self.node_transforms.get(k)
+            if xf is not None:
+                t_new = rot @ np.asarray(xf.translation, dtype=np.float64)
+                self.node_transforms[k] = NodeTransform((float(t_new[0]), float(t_new[1]), float(t_new[2])), quat_mul(q_rot, xf.rotation), xf.scale)
+            else:
+                self.nodes[k] = [p.rotate_xyz(rx, ry, rz, degrees=degrees) for p in parts]
         return self
 
     def ground_to_y(self, target_y: float = 0.0) -> float:
         """Shift all geometry vertically so `min_y == target_y`. Returns shift dy."""
-        bmin, _ = self.bounds()
-        dy = float(target_y - bmin[1])
+        dy = float(target_y - self.bounds()[0][1])
         if abs(dy) > 1e-7:
             self.translate_all(0.0, dy, 0.0)
         return dy
@@ -326,6 +460,14 @@ class SceneBuilder:
             target = f"{prefix}{k}" if prefix else k
             for p in parts:
                 self.add(target, p.copy())
+            if k in other.node_transforms:
+                xf = other.node_transforms[k]
+                self.node_transforms[target] = NodeTransform(xf.translation, xf.rotation, xf.scale)
+        for clip in other.animations:
+            self.animations.append(AnimationClip(
+                clip.name,
+                [AnimationChannel(f"{prefix}{ch.target_node}" if prefix else ch.target_node, ch.path, list(ch.times), list(ch.values), ch.interpolation) for ch in clip.channels],
+            ))
         return self
 
 
