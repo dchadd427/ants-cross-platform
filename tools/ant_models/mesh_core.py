@@ -162,6 +162,25 @@ def quat_from_euler_xyz(rx: float = 0.0, ry: float = 0.0, rz: float = 0.0, *, de
     return tuple(c / n for c in q) if n > 1e-12 else (0.0, 0.0, 0.0, 1.0)
 
 
+def _quat_from_rot3(r: np.ndarray) -> Tuple[float, float, float, float]:
+    """Convert a proper 3x3 rotation matrix into a unit glTF quaternion (qx, qy, qz, qw)."""
+    tr = float(r[0, 0] + r[1, 1] + r[2, 2])
+    if tr > 0.0:
+        s = 2.0 * math.sqrt(tr + 1.0)
+        q = ((r[2, 1] - r[1, 2]) / s, (r[0, 2] - r[2, 0]) / s, (r[1, 0] - r[0, 1]) / s, 0.25 * s)
+    elif r[0, 0] > r[1, 1] and r[0, 0] > r[2, 2]:
+        s = 2.0 * math.sqrt(1.0 + float(r[0, 0] - r[1, 1] - r[2, 2]))
+        q = (0.25 * s, (r[0, 1] + r[1, 0]) / s, (r[0, 2] + r[2, 0]) / s, (r[2, 1] - r[1, 2]) / s)
+    elif r[1, 1] > r[2, 2]:
+        s = 2.0 * math.sqrt(1.0 + float(r[1, 1] - r[0, 0] - r[2, 2]))
+        q = ((r[0, 1] + r[1, 0]) / s, 0.25 * s, (r[1, 2] + r[2, 1]) / s, (r[0, 2] - r[2, 0]) / s)
+    else:
+        s = 2.0 * math.sqrt(1.0 + float(r[2, 2] - r[0, 0] - r[1, 1]))
+        q = ((r[0, 2] + r[2, 0]) / s, (r[1, 2] + r[2, 1]) / s, 0.25 * s, (r[1, 0] - r[0, 1]) / s)
+    n = math.sqrt(sum(float(c) * float(c) for c in q))
+    return tuple(float(c) / n for c in q) if n > 1e-12 else (0.0, 0.0, 0.0, 1.0)
+
+
 @dataclass
 class NodeTransform:
     """glTF 2.0 node TRS transform (applied as T * R * S)."""
@@ -411,22 +430,37 @@ class SceneBuilder:
     def get_node_parent(self, node_name: str) -> Optional[str]:
         return self.node_parents.get(node_name)
 
-    def attach_world_node(self, node_name: str, parent: str) -> None:
-        """Reparent a world-authored node under `parent` while keeping its exact rest world pose."""
+    def attach_world_node(self, node_name: str, parent: str, *, preserve_world_pose: bool = True) -> None:
+        """Reparent a world-authored node under `parent`.
+
+        When `preserve_world_pose=True` (default), preserves the node's exact rest world
+        translation, rotation, and scale even if `parent` is rotated. Pass
+        `preserve_world_pose=False` for canonical gear authored against neutral anchors
+        so it inherits `parent`'s rest tilt/yaw in lockstep.
+        """
         if self.node_parents.get(node_name) == parent:
             return
         cur_w = self.get_world_matrix(node_name)
-        cur_t = cur_w[:3, 3] if cur_w is not None else np.zeros(3, dtype=np.float64)
+        cur_w = np.eye(4, dtype=np.float64) if cur_w is None else cur_w
         cur_xf = self.node_transforms.get(node_name)
         par_w = self.get_world_matrix(parent)
-        par_inv = np.linalg.inv(par_w) if par_w is not None else np.eye(4, dtype=np.float64)
-        local_t = par_inv[:3, :3] @ cur_t + par_inv[:3, 3]
+        par_w = np.eye(4, dtype=np.float64) if par_w is None else par_w
+        if preserve_world_pose:
+            local_m = np.linalg.inv(par_w) @ cur_w
+            local_t = local_m[:3, 3]
+            local_s = tuple(float(np.linalg.norm(local_m[:3, i])) for i in range(3))
+            rot_m = local_m[:3, :3] / np.maximum(1e-10, np.array(local_s, dtype=np.float64)[None, :])
+            local_r = _quat_from_rot3(rot_m)
+        else:
+            local_t = cur_w[:3, 3] - par_w[:3, 3]
+            local_r = cur_xf.rotation if cur_xf is not None else (0.0, 0.0, 0.0, 1.0)
+            local_s = cur_xf.scale if cur_xf is not None else (1.0, 1.0, 1.0)
         self.set_node_parent(node_name, parent)
         self.set_node_transform(
             node_name,
             translation=(float(local_t[0]), float(local_t[1]), float(local_t[2])),
-            rotation=cur_xf.rotation if cur_xf is not None else (0.0, 0.0, 0.0, 1.0),
-            scale=cur_xf.scale if cur_xf is not None else (1.0, 1.0, 1.0),
+            rotation=local_r,
+            scale=local_s,
         )
 
     def set_node_transform(
