@@ -544,7 +544,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     tap(joinOf(rowsOf(env)[0]));
     env.last().open().receive(reject(2));
     await flush();
-    check('a server that speaks another version: the page\'s own strip asks for a reload, the list says so too, the own room is kept', !env.$('banner').hidden && env.$('banner-x').textContent === 'Reload' && /newer version of Ants/.test(textOf(first(popOf(env), 'gpnote'))) && leaves(own) === 0);
+    check('a server that speaks another version: the page\'s own strip asks for a reload, the list says so too, the own room is kept', !env.$('banner').hidden && env.$('banner-x').textContent === 'Reload' && /new version of Ants/.test(textOf(first(popOf(env), 'gpnote'))) && leaves(own) === 0);
 }
 {   // a server that does not answer
     const env = await withList();
@@ -700,8 +700,8 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     first(popOf(old), 'joinbox').children[0].value = 'k7m2xq'; tap(first(popOf(old), 'gcgo'));
     old.$('name-step-go').click();
     old.last().open().receive(reject(2));
-    check('a server of another version: the strip asks for a reload', !old.$('banner').hidden && /A newer version of Ants is out/.test(old.$('banner-text').textContent) && old.$('banner-x').textContent === 'Reload');
-    check('... and the list is still open, with the words under the field', popOf(old).hidden === false && /newer version of Ants/.test(textOf(first(popOf(old), 'hint'))));
+    check('a server of another version: the strip asks for a reload', !old.$('banner').hidden && /A new version of Ants is out/.test(old.$('banner-text').textContent) && old.$('banner-x').textContent === 'Reload');
+    check('... and the list is still open, with the words under the field', popOf(old).hidden === false && /new version of Ants/.test(textOf(first(popOf(old), 'hint'))));
     const ok = await withList();
     const okOwn = myRoom(ok, ['Maya']);
     ok.roomBar('rhome').click();

@@ -175,6 +175,10 @@ class TheText(unittest.TestCase):
         found = [words for words, _ in locations() if "manifest" in words]
         self.assertEqual(found, ["= /manifest.webmanifest"])                                       # (an exact location: the fallback for an unknown address is the game page)
 
+    def test_the_update_notices_data_file_has_one_exact_location_of_its_own(self):
+        found = [words for words, _ in locations() if "whats_new" in words]
+        self.assertEqual(found, ["= /whats_new.json"])                                             # (an exact location: the fallback for an unknown address is the game page)
+
     def test_the_documents_name_what_is_built(self):
         text = stats.read("docs", "BUILD_AND_RUN.md")
         for needle in ("Strict-Transport-Security", "ants_noquery", "gzip_static", "test_nginx_headers.py"):
@@ -347,6 +351,8 @@ def expected(kind, host=SITE):
         return dict(cross, **no_page)
     if kind == "manifest":                                   # (the web app's manifest: the four headers of any static file, revalidated, its own type; no page header)
         return dict(cross, **dict(no_page, **{"cache-control": "no-cache, must-revalidate", "content-type": "application/manifest+json"}))
+    if kind == "data":                                       # (the update notice's data file: as the manifest, revalidated, JSON)
+        return dict(cross, **dict(no_page, **{"cache-control": "no-cache, must-revalidate", "content-type": "application/json"}))
     if kind == "icon":                                       # (the web app's icons: the picture rule, a week)
         return dict(cross, **dict(no_page, **{"cache-control": "public, max-age=604800, no-transform", "content-type": "image/png"}))
     if kind == "open":                                       # (the sprites and sounds that any site may use: their own cross-origin headers, none of the page's)
@@ -409,6 +415,8 @@ LIVE_ROWS = [
     ("a picture", "GET", "/front/logo.png", (), 200, "plain"),
     ("the web app's manifest", "GET", "/manifest.webmanifest", (), 200, "manifest"),
     ("the web app's manifest with a query", "GET", "/manifest.webmanifest?v=1", (), 200, "manifest"),
+    ("the update notice's data file", "GET", "/whats_new.json", (), 200, "data"),
+    ("the update notice's data file with a query", "GET", "/whats_new.json?x=1", (), 200, "data"),
     ("the web app's icon", "GET", "/app/icon-192.png?v=0a1b2c3d", (), 200, "icon"),
     ("the web app's Apple icon", "GET", "/app/apple-touch-icon.png", (), 200, "icon"),
     ("the favicon", "GET", "/favicon.png", (), 200, "plain"),
@@ -470,12 +478,15 @@ DEAD_ROWS = [
 ]
 
 
+WHATS_NEW = '{"version":"1.2.0","releases":[{"version":"1.2.0","date":"2026-01-02","items":[[["b","A thing."],["t"," It does something."]]],"fixes":[]}]}\n'
+
+
 def docroot_files():
     page = "<!doctype html><html><head><title>%s</title></head><body>" + "<p>a stand-in page of the site, long enough to be compressed on its way</p>" * 40 + "</body></html>\n"
     big = (b"ANTS " + bytes(range(32, 120))) * 4000
     files = {name: page % name for name in ("lobby.html", "index.html", "play.html", "matches.html", "match.html", "legal.html", "changelog.html", "mapmaker.html", "admin.html", "asset_catalog/index.html")}
     files.update({"front/classic.css": "body { color: #222; }\n" * 80, "front/big.css": ".a { color: red; }\n" * 400, "shapes.js": "var shapes = 1;\n" * 80, "home/home.js": "var home = 1;\n" * 80, "asset_catalog/catalog_data.js": "var data = 1;\n" * 80,
-                  "front/logo.png": "\x89PNG stand-in", "manifest.webmanifest": stats.read("web", "manifest.webmanifest"), "app/icon-192.png": "\x89PNG stand-in", "app/apple-touch-icon.png": "\x89PNG stand-in", "favicon.png": "\x89PNG stand-in", "favicon.ico": "ico stand-in", "front/click.wav": "RIFF stand-in", "mapmaker_atlas/atlas.json": '{"v":1}', "mapmaker_atlas/ground.png": "\x89PNG stand-in",
+                  "front/logo.png": "\x89PNG stand-in", "manifest.webmanifest": stats.read("web", "manifest.webmanifest"), "whats_new.json": WHATS_NEW, "app/icon-192.png": "\x89PNG stand-in", "app/apple-touch-icon.png": "\x89PNG stand-in", "favicon.png": "\x89PNG stand-in", "favicon.ico": "ico stand-in", "front/click.wav": "RIFF stand-in", "mapmaker_atlas/atlas.json": '{"v":1}', "mapmaker_atlas/ground.png": "\x89PNG stand-in",
                   "asset_catalog/sprites/s1.png": "\x89PNG stand-in", "asset_catalog/sounds/a.wav": "RIFF stand-in", "lvl_core.wasm": "\0asm stand-in", "index.js": big[:50000], "index.wasm": big[:120000], "index.data": big})
     return files
 
@@ -607,6 +618,22 @@ class TheFileRuns(unittest.TestCase):
             os.rename(path + ".away", path)
         self.assertEqual(fetch(self.live.port, "/manifest.webmanifest", "HEAD").status, 200)
         self.assertEqual(fetch(self.live.port, "/manifest.webmanifest", "POST", body=b"x").status, 405)
+
+    def test_the_update_notices_data_file_is_the_file_and_never_the_game_page_even_when_the_file_is_missing(self):
+        answer = fetch(self.live.port, "/whats_new.json")
+        self.assertEqual(answer.body, WHATS_NEW.encode("utf-8"))
+        self.assertNotIn(b"<html", answer.body.lower())
+        path = os.path.join(self.docroot, "whats_new.json")
+        os.rename(path, path + ".away")
+        try:
+            gone = fetch(self.live.port, "/whats_new.json")
+            self.assertEqual(gone.status, 404)                                                     # (an unknown address falls back to the game page: this one must not)
+            self.assertNotIn(b"a stand-in page", gone.body)
+            self.assertEqual(fetch(self.live.port, "/whats_new.json.x").status, 200)               # (only the exact address is special: any other unknown address is still the game page)
+        finally:
+            os.rename(path + ".away", path)
+        self.assertEqual(fetch(self.live.port, "/whats_new.json", "HEAD").status, 200)
+        self.assertEqual(fetch(self.live.port, "/whats_new.json", "POST", body=b"x").status, 405)
 
     def test_the_policy_of_the_pages_is_the_one_that_it_was_and_covers_the_manifest_and_the_icons_without_a_new_directive(self):
         for path in ("/", "/play", "/matches", "/legal"):

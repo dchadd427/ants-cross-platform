@@ -143,14 +143,16 @@ RUN cp /src/web/lobby.html /src/lobby.html && \
         if grep -q '@@SITE_' "$PAGE"; then echo "a site placeholder is left in $PAGE" >&2; exit 1; fi; \
     done
 
-# Build the changelog page (CHANGELOG.md -> changelog.html; no dependencies) after the compile layers so that editing the changelog does not rebuild the game
+# Build the changelog page (CHANGELOG.md -> changelog.html; no dependencies) after the compile layers so that editing the changelog does not rebuild the game, and with it the data file of the update notice
+# (whats_new.json: the live version and the lines that the changelog wrote for players, docs/SITE_NAV.md "The update notice"; the build stops when a line of those names the operator's side)
 COPY CHANGELOG.md /src/changelog/CHANGELOG.md
 COPY tools/changelog_to_html.py /src/changelog/changelog_to_html.py
 RUN cd /src/changelog && \
     GAME_VERSION="v$(head -n 1 /src/VERSION | tr -d '[:space:]')" && \
     BUILD_ID="$(cat /src/build_id.txt)" && \
     BUILD_DATE="$(cat /src/build_date.txt)" && \
-    python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --build-date "${BUILD_DATE}"
+    python3 changelog_to_html.py CHANGELOG.md changelog.html --version "${GAME_VERSION}" --build-id "${BUILD_ID}" --build-date "${BUILD_DATE}" --whats-new whats_new.json && \
+    test -s changelog.html && test -s whats_new.json
 
 # The map maker's sprite atlas (docs/MAP_EDITOR.md, "Sprites"): the game's pictures of the ground and of the objects that the editor offers, in two small sheets and an index, made by tools/map_atlas.py (Python
 # standard library only) from the public decoded sprites and the animation table that the sprite viewer's data holds (asset_catalog/catalog_data.js); the repository keeps no generated picture. After the
@@ -209,6 +211,9 @@ COPY --from=builder /src/match.html /usr/share/nginx/html/match.html
 COPY web/matches.css /usr/share/nginx/html/matches.css
 COPY web/site_nav.css /usr/share/nginx/html/site_nav.css
 COPY web/site_nav.js /usr/share/nginx/html/site_nav.js
+# The update notice (docs/SITE_NAV.md "The update notice"): the strip and the "What's new" window that every page with the version stamped loads (update_notice.js, update_notice.css); the data file whats_new.json is made below, with the changelog
+COPY web/update_notice.css /usr/share/nginx/html/update_notice.css
+COPY web/update_notice.js /usr/share/nginx/html/update_notice.js
 # The bar of the game page (docs/SITE_NAV.md "The game page"): the game page's own rules for the site bar and its part of the bar's script (the links that ask first during a match, the keys, the Menu's own lines)
 COPY web/game_bar.css /usr/share/nginx/html/game_bar.css
 COPY web/game_bar.js /usr/share/nginx/html/game_bar.js
@@ -264,7 +269,7 @@ COPY --from=builder /src/legal.html /usr/share/nginx/html/legal.html
 
 # The changelog page (built from CHANGELOG.md, linked from the game page); it is in the Classic look of the front page: it links
 # /front/classic.css, which the web/front/ copy above puts in the image
-COPY --from=builder /src/changelog/changelog.html /usr/share/nginx/html/
+COPY --from=builder /src/changelog/changelog.html /src/changelog/whats_new.json /usr/share/nginx/html/
 
 # Copy Asset Catalog & Viewer for reference on beta site
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/

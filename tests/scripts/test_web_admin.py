@@ -230,7 +230,7 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
         bar = re.search(r'<header class="sb".*?</header>', page, re.S).group(0)
         self.assertEqual(bar, re.search(r'<header class="sb".*?</header>', read("web", "legal.html"), re.S).group(0))          # (the very markup of the other pages' bar: the build stamps it)
         self.assertEqual(len(re.findall(r"<a\b", page)), len(re.findall(r"<a\b", bar)))                                 # (no link outside the bar)
-        self.assertEqual(re.findall(r'(?:href|src)="([^"]+)"', page.replace(bar, "")), ["/favicon.png?v=f34bea03", "/front/classic.css", "/site_nav.css", "admin.css", "/site_nav.js", "admin_map_pick.js", "admin_bots.js", "admin_page.js"])
+        self.assertEqual(re.findall(r'(?:href|src)="([^"]+)"', page.replace(bar, "")), ["/favicon.png?v=f34bea03", "/front/classic.css", "/site_nav.css", "/update_notice.css", "admin.css", "/site_nav.js", "/update_notice.js", "admin_map_pick.js", "admin_bots.js", "admin_page.js"])
         self.assertIn('<meta name="robots" content="noindex, nofollow">', page)
         self.assertNotRegex(page, r"<script>|<style|onclick|onload|javascript:")
         self.assertEqual(len(re.findall(r'<div id="app"></div>', page)), 1)

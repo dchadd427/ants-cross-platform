@@ -78,3 +78,5 @@ GAME_BAR_BUDGET, GAME_BAR_GZIP_BUDGET = 12_800, 4_250
 # the bar at the top of every page (web/site_nav.css, web/site_nav.js)
 NAV_CSS_BUDGET, NAV_CSS_GZIP_BUDGET = 4_900, 1_700
 NAV_JS_BUDGET, NAV_JS_GZIP_BUDGET = 8_200, 3_150
+# the update notice (web/update_notice.js and web/update_notice.css together: the strip and the "What's new" window that every page with the version stamped loads)
+UPDATE_NOTICE_BUDGET, UPDATE_NOTICE_GZIP_BUDGET = 24_000, 7_900
