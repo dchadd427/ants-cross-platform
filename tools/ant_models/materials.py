@@ -66,13 +66,13 @@ class MaterialSpec:
 _SPECS: Tuple[MaterialSpec, ...] = (
     MaterialSpec(
         name="chitin_team",
-        base_color=(0.24, 0.43, 0.27, 1.0),
+        base_color=(0.24, 0.44, 0.27, 1.0),
         metallic=0.06,
         roughness=0.50,
     ),
     MaterialSpec(
         name="chitin_dark",
-        base_color=(0.09, 0.08, 0.07, 1.0),
+        base_color=(0.16, 0.31, 0.19, 1.0),
         metallic=0.06,
         roughness=0.52,
     ),
@@ -165,20 +165,20 @@ MATERIALS: Dict[str, MaterialSpec] = {spec.name: spec for spec in _SPECS}
 
 TEAM_COLORS: Dict[str, Dict[str, List[float]]] = {
     "green": {
-        "chitin_team": [0.24, 0.43, 0.27, 1.0],
-        "chitin_dark": [0.09, 0.08, 0.07, 1.0],
+        "chitin_team": [0.24, 0.44, 0.27, 1.0],
+        "chitin_dark": [0.16, 0.31, 0.19, 1.0],
     },
     "red": {
-        "chitin_team": [0.50, 0.16, 0.17, 1.0],
-        "chitin_dark": [0.12, 0.06, 0.06, 1.0],
+        "chitin_team": [0.52, 0.16, 0.18, 1.0],
+        "chitin_dark": [0.36, 0.10, 0.12, 1.0],
     },
     "blue": {
-        "chitin_team": [0.20, 0.31, 0.52, 1.0],
-        "chitin_dark": [0.07, 0.08, 0.13, 1.0],
+        "chitin_team": [0.20, 0.32, 0.54, 1.0],
+        "chitin_dark": [0.13, 0.22, 0.39, 1.0],
     },
     "black": {
-        "chitin_team": [0.34, 0.36, 0.40, 1.0],
-        "chitin_dark": [0.08, 0.08, 0.09, 1.0],
+        "chitin_team": [0.35, 0.37, 0.42, 1.0],
+        "chitin_dark": [0.23, 0.25, 0.29, 1.0],
     },
 }
 
