@@ -229,7 +229,7 @@ public:
         if (p_.local) {
             cfg.default_map_path = (maps_folder() / p_.map).string();
             cfg.play_at_once = true;
-            app_ = std::make_unique<Application>();
+            app_ = make_application();
             if (!app_->init(cfg)) throw std::runtime_error("the application could not start");
             app_->hud().dismiss_match_start_modal();
             return;
@@ -254,7 +254,7 @@ public:
         cfg.net_room = "LINK-1";
         cfg.player_name = "Ann";
         cfg.net_link_maker = [this]() { return make_link(p_.link); };
-        app_ = std::make_unique<Application>();
+        app_ = make_application();
         if (!app_->init(cfg)) throw std::runtime_error("the application could not start");
         if (p_.use_peer) {
             run_ms(300);                                                              // (the application is in the room first: seat 0)
@@ -411,6 +411,15 @@ public:
     }
 
 private:
+    // The application, with a clock of its own that stands still (Application::set_clock). The session gives time to the application as the dt of each frame (app_frame), as the frame loop does, so the
+    // application must take no time of its own from the machine. A page that is shown again makes one wake-up that counts the time since the clocks were last advanced (Application::set_page_hidden): by the
+    // machine's clock that was the real time since the last show, 170 to 250 ms on a quiet machine and the whole second that a wake-up may count on a loaded one (kMaxWakeSeconds), paid to the network's clock at
+    // once, a burst of ticks in one frame that no virtual match has (LK10 saw an ant move by more than 20 px in one frame, on a slow machine only). With a clock that does not move, the wake-up counts nothing.
+    static std::unique_ptr<Application> make_application() {
+        auto app = std::make_unique<Application>();
+        app->set_clock([]() -> uint64_t { return 1u; });
+        return app;
+    }
     std::unique_ptr<net::Connection> make_link(const LinkSpec& spec) {
         net::LoopbackNetwork::Link link;
         link.latency_ms = std::max<uint32_t>(1u, spec.rtt_ms / 2u);

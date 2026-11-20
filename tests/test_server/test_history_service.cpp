@@ -1411,8 +1411,11 @@ int main() {
         }, 60000 * kSlow));
         std::cout << "\n    the program counted a recording " << elapsed_ms(began) << " ms after it appeared (its own settings)";
         if (!kThreadSanitizer) ASSERT_LT(elapsed_ms(began), int64_t{5000});
-        const ctl::JsonValue item = parse_text(http_get(port, "/history/" + id).body);
-        ASSERT_TRUE(item.get("id").str() == id && item.get("recording").str() == "watch");
+        ctl::JsonValue item;
+        ASSERT_TRUE(wait_for([&]() {                                                                               // (the HTTP side looks at the folder by itself, at most every http_look_ms: the match that the counter has
+            item = parse_text(http_get(port, "/history/" + id).body);                                              //  just counted shows its recording from that look on, and a request in between still says "removed")
+            return item.get("id").str() == id && item.get("recording").str() == "watch";
+        }, 20000 * kSlow));
         const Answer file = http_get(port, "/replays/" + history_recording_file(id));
         ASSERT_TRUE(file.status == 200 && file.body.size() == match_file(1).size());
         program.signal_it(SIGTERM);

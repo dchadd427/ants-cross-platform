@@ -1143,6 +1143,7 @@ class TheFreshCheck(FreshBase):
         self.assertEqual(self.mod.codes(), ["bad"])
 
     async def test_a_bug_in_a_waiting_command_is_reported_by_its_class_and_never_prints_a_text(self):
+        asyncio.get_running_loop().slow_callback_duration = 3600.0                                 # (this loop is in debug mode, which logs "Executing <Task> took N seconds" for a callback over a tenth of a second: the speed of the machine, not a report of the bug)
         records, errors = [], []
 
         class Catch(logging.Handler):

@@ -819,7 +819,9 @@ int main(int argc, char* argv[]) {
             s.app().set_page_hidden(true);                                                   // the prediction stops with the next update: the screen shows the confirmed engine
             ASSERT_TRUE(s.run_until([&]() { return !s.app().net()->predicting(); }, 500));
             players.play(700);
+            const double clock_before_show = s.app().net_clock_ms();
             s.app().set_page_hidden(false);                                                  // ... and begins again with the next tick
+            ASSERT_EQ(s.app().net_clock_ms(), clock_before_show);                            // (showing the page is no time that the match did not have: the virtual clock is the application's only one)
             ASSERT_TRUE(s.run_until([&]() { return s.app().net()->predicting(); }, 2000));
             players.play(1800);
             changes += 2;
