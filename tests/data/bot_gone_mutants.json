@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the food-gone batch of the computer players (docs/BOT_GONE.md, include/ants_ai/tactics.hpp LevelPlan::gone, src/ants_ai/standard_bot.cpp, standard_tasks.cpp, standard_tasks_raid.cpp, heal_task.cpp) and of the idle tally and the teams of the arena (src/ants_ai/arena.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): when the batch begins, the smaller loot of a raid, the last ant that fights only a team that has more to lose, the idle ant that heals, the idle swap of a Bomber or Swimmer for a Fire power-up, the Thief that an idle typed ant becomes, the game type 187 that has no batch, the odds that a fight with the food gone asks for, the teams of the arena and the idle tally. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_gone_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs all the cases of the batch (AI56).",
+  "note": "Mutants of the food-gone batch of the computer players (docs/BOT_GONE.md, include/ants_ai/tactics.hpp LevelPlan::gone, src/ants_ai/standard_bot.cpp, standard_tasks.cpp, standard_tasks_raid.cpp, heal_task.cpp) and of the idle tally and the teams of the arena (src/ants_ai/arena.cpp) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): when the batch begins, the smaller loot of a raid, the last ant that fights only a team that has more to lose, the idle ant that heals, the idle swap of a Bomber or Swimmer for a Fire power-up, the Thief that an idle typed ant becomes, the game type 187 that has no batch, the odds that a fight with the food gone asks for, the teams of the arena and the idle tally, and the stall detector's no-point rule that counts only the food the hill walks to (a lunchbox behind a wall of bombs is none). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_gone_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs all the cases of the batch (AI56).",
   "defaults": {
     "build": "test_ai"
   },
@@ -215,6 +215,30 @@
       "new": "return tactics_.gone && plan.gone",
       "test": "timeout 900 env ANTS_TEST_FILTER='AI56.9 ' ./build/tests/test_ai/test_ai",
       "expect": "AI56.9"
+    },
+    {
+      "id": "stall_counts_every_lunchbox",
+      "file": "src/ants_ai/standard_bot.cpp",
+      "old": "return map.ant_component(seat, p.anchor) >= 0 && map.ant_component(seat, p.anchor) == map.hill_component(seat);",
+      "new": "return true;",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.12 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.12"
+    },
+    {
+      "id": "stall_ignores_every_lunchbox",
+      "file": "src/ants_ai/standard_bot.cpp",
+      "old": "return map.ant_component(seat, p.anchor) >= 0 && map.ant_component(seat, p.anchor) == map.hill_component(seat);",
+      "new": "return false;",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.12 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.12"
+    },
+    {
+      "id": "stall_switch_ignored",
+      "file": "src/ants_ai/standard_bot.cpp",
+      "old": "if (map == nullptr || !plan.stall_walkable) {",
+      "new": "if (map == nullptr) {",
+      "test": "timeout 900 env ANTS_TEST_FILTER='AI56.12 ' ./build/tests/test_ai/test_ai",
+      "expect": "AI56.12"
     }
   ]
 }

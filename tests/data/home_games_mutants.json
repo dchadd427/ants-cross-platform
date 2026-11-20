@@ -2979,7 +2979,7 @@
   {
    "id": "locked_count_is_not_said",
    "file": "web/home/games.js",
-   "old": "if (p) parts.push(countText(p) + ' private');",
+   "old": "if (p) parts.push(countText(p) + ' invite only');",
    "new": "",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -3063,8 +3063,8 @@
   {
    "id": "quickjoin_card_says_plural_for_one",
    "file": "web/home/games.js",
-   "old": "(n === 1 ? '1 private room is locked, so Quick join skips it.' :",
-   "new": "(n === 0 ? '1 private room is locked, so Quick join skips it.' :",
+   "old": "(n === 1 ? '1 invite-only room is locked, so Quick join skips it.' :",
+   "new": "(n === 0 ? '1 invite-only room is locked, so Quick join skips it.' :",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -3142,6 +3142,41 @@
    "file": "web/home/games.js",
    "old": "if (!room || !room.lobby || room.isPublic || !leader) return -1;",
    "new": "if (!room || !room.lobby || room.isPublic || !leader || room.you !== room.leader) return -1;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "switch_calls_the_setting_private",
+   "file": "web/home/games.js",
+   "old": "private: 'Invite only', privateSub: 'locked',",
+   "new": "private: 'Private', privateSub: 'locked',",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "notice_calls_the_setting_private",
+   "file": "web/home/games.js",
+   "old": "hostChanged: 'This room is invite only again because the host changed.',",
+   "new": "hostChanged: 'This room is private again because the host changed.',",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "locked_card_tag_says_private",
+   "file": "web/home/games.js",
+   "old": "privateTag: 'Invite only', noneJoin:",
+   "new": "privateTag: 'Private', noneJoin:",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "screen_reader_says_private_room",
+   "file": "web/home/games.js",
+   "old": "'Invite-only room, cannot join. '",
+   "new": "'Private room, cannot join. '",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "quickjoin_line_says_private",
+   "file": "web/home/games.js",
+   "old": "countText(n) + ' invite-only rooms are locked, so Quick join skips them.'",
+   "new": "countText(n) + ' private rooms are locked, so Quick join skips them.'",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   }
  ]
