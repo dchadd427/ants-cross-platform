@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 
 try:
+    from .leg_rig import LEG_NODES, LEG_STYLES, add_leg_flex_channels, build_legs, sync_leg_flex_to_clip
     from .mesh_core import (
         AnimationChannel,
         AnimationClip,
@@ -37,6 +38,7 @@ try:
         torus_arc,
     )
 except ImportError:
+    from leg_rig import LEG_NODES, LEG_STYLES, add_leg_flex_channels, build_legs, sync_leg_flex_to_clip  # type: ignore
     from mesh_core import (  # type: ignore
         AnimationChannel,
         AnimationClip,
@@ -799,163 +801,6 @@ def _build_arm(
     )
 
 
-def _add_flowing_insect_leg(
-    scene: SceneBuilder,
-    label: str,
-    hip: Tuple[float, float, float],
-    knee: Tuple[float, float, float],
-    ankle: Tuple[float, float, float],
-    foot_pos: Tuple[float, float, float],
-    foot_yaw: float,
-    *,
-    side: int = 0,
-) -> None:
-    """Build one authentic 3-segment digitigrade insect leg (Hip -> forward KNEE > -> rearward ANKLE < -> foot).
-
-    Matches original 1998 `agst901` / `agst801` S/Z side profile with smooth organic chitin
-    segment articulation (no glued-on ball spheres) and a planted tapered tarsus claw on Y = 0.0.
-    Pass `side=0` to mirror symmetrically across X, or `side=+1/-1` for one individual leg.
-    """
-    s = 1.0 if side >= 0 else -1.0
-    p_hip = np.array([s * abs(hip[0]), hip[1], hip[2]], dtype=np.float64)
-    p_knee = np.array([s * abs(knee[0]), knee[1], knee[2]], dtype=np.float64)
-    p_ankle = np.array([s * abs(ankle[0]), ankle[1], ankle[2]], dtype=np.float64)
-    p_foot = np.array([s * abs(foot_pos[0]), 0.0, foot_pos[2]], dtype=np.float64)
-    yaw_s = s * foot_yaw
-    fwd = np.array([math.sin(yaw_s), 0.0, math.cos(yaw_s)], dtype=np.float64)
-
-    # Segment 1 (Femur): hip socket -> muscular upper thigh -> crisp forward-bent KNEE (>).
-    p_root = np.array([s * 0.044, p_hip[1] + 0.005, p_hip[2] * 0.70], dtype=np.float64)
-    femur_mid = 0.48 * p_hip + 0.52 * p_knee + np.array([s * 0.004, 0.016, 0.006])
-    pre_knee = 0.18 * p_hip + 0.82 * p_knee + np.array([s * 0.002, 0.006, 0.004])
-
-    # Segment 2 (Tibia): forward KNEE (>) -> sweeping backward-down -> crisp rearward-bent ANKLE (<).
-    post_knee = 0.82 * p_knee + 0.18 * p_ankle + np.array([s * 0.003, -0.004, 0.004])
-    tibia_mid = 0.48 * p_knee + 0.52 * p_ankle + np.array([s * 0.004, 0.0, -0.004])
-    pre_ankle = 0.16 * p_knee + 0.84 * p_ankle + np.array([s * 0.002, 0.004, -0.005])
-
-    # Segment 3 (Tarsus): rearward ANKLE (<) -> angling forward-down -> planted tapered tarsus tip on Y=0.
-    post_ankle = 0.80 * p_ankle + 0.20 * (p_foot + np.array([0.0, 0.018, 0.0])) + np.array([0.0, -0.005, -0.003])
-    tarsus_mid = 0.42 * p_ankle + 0.58 * (p_foot + np.array([0.0, 0.014, 0.0]))
-    tarsus_heel = p_foot + np.array([0.0, 0.014, 0.0]) - 0.006 * fwd
-    tarsus_ball = p_foot + np.array([0.0, 0.010, 0.0]) + 0.018 * fwd
-    tarsus_tip = p_foot + np.array([0.0, 0.0055, 0.0]) + 0.044 * fwd
-
-    leg_tube = curved_tube(
-        [
-            p_root, p_hip, femur_mid, pre_knee, p_knee,
-            post_knee, tibia_mid, pre_ankle, p_ankle,
-            post_ankle, tarsus_mid, tarsus_heel, tarsus_ball, tarsus_tip,
-        ],
-        [
-            (0.028, 0.032),  # root in petite thorax
-            (0.026, 0.030),  # hip
-            (0.029, 0.035),  # muscular femur belly
-            (0.024, 0.028),  # pre-knee taper
-            (0.022, 0.025),  # crisp articulated KNEE (>)
-            (0.020, 0.024),  # upper tibia
-            (0.019, 0.022),  # mid tibia
-            (0.017, 0.020),  # pre-ankle taper
-            (0.016, 0.019),  # crisp articulated ANKLE (<)
-            (0.015, 0.017),  # upper tarsus
-            (0.014, 0.016),  # mid tarsus
-            (0.014, 0.013),  # planted heel
-            (0.011, 0.010),  # ball of foot
-            (0.0055, 0.0045),  # tapered claw tip
-        ],
-        samples_per_seg=3,
-        radial_segs=12,
-        cap_rings=3,
-        name=f"leg_{label}",
-        material="chitin_dark",
-    )
-
-    # Gently seat only the underside contact patch flush on Y = 0.0 (organic grounded claw, never a flat ski).
-    def ground_tarsus(pos: np.ndarray) -> np.ndarray:
-        p = pos.copy()
-        p[:, 1] = np.maximum(p[:, 1], 0.0)
-        return p
-
-    leg_tube = leg_tube.deform(ground_tarsus)
-    if side == 0:
-        scene.add_mirrored("legs", leg_tube)
-    else:
-        scene.add("legs", leg_tube)
-
-
-def _build_legs(
-    scene: SceneBuilder,
-    *,
-    crouch: float = 0.0,
-    stance_asymmetry: float = 0.0,
-) -> Dict[str, Tuple[float, float, float]]:
-    """Build 4 digitigrade 3-segment insect legs with forward knee (>) and rearward ankle (<).
-
-    Crouch naturally compresses the Z-spring (knees flex forward/out, ankles flex back/out)
-    while all 4 tarsus feet remain solidly planted on Y = 0.0.
-    """
-    c = max(0.0, min(0.24, float(crouch)))
-    sa = max(-1.0, min(1.0, float(stance_asymmetry)))
-    dz_l = 0.014 * sa
-    dz_r = -0.012 * sa
-    mid_l = (0.152 + 0.08 * c, 0.0, 0.094 + dz_l)
-    mid_r = (-(0.152 + 0.08 * c), 0.0, 0.094 + dz_r)
-    rear_l = (0.160 + 0.08 * c, 0.0, -0.028 + 0.7 * dz_l)
-    rear_r = (-(0.160 + 0.08 * c), 0.0, -0.028 + 0.7 * dz_r)
-
-    mid_ankle_y = max(0.072, 0.148 - 0.36 * c)
-    rear_ankle_y = max(0.068, 0.136 - 0.36 * c)
-
-    if abs(sa) <= 1e-6:
-        _add_flowing_insect_leg(
-            scene,
-            "mid",
-            hip=(0.068, 0.326 - c, 0.014),
-            knee=(0.158 + 0.15 * c, 0.296 - 0.54 * c, 0.118 + 0.14 * c),
-            ankle=(0.156 + 0.10 * c, mid_ankle_y, 0.008 - 0.12 * c),
-            foot_pos=mid_l,
-            foot_yaw=0.18,
-        )
-        _add_flowing_insect_leg(
-            scene,
-            "rear",
-            hip=(0.066, 0.302 - c, -0.048),
-            knee=(0.168 + 0.15 * c, 0.278 - 0.54 * c, 0.022 + 0.12 * c),
-            ankle=(0.168 + 0.10 * c, rear_ankle_y, -0.098 - 0.12 * c),
-            foot_pos=rear_l,
-            foot_yaw=0.26,
-        )
-    else:
-        for side, tag, mf, rf, dz in ((+1, "left", mid_l, rear_l, dz_l), (-1, "right", mid_r, rear_r, dz_r)):
-            _add_flowing_insect_leg(
-                scene,
-                f"mid_{tag}",
-                hip=(0.068, 0.326 - c, 0.014),
-                knee=(0.158 + 0.15 * c, 0.296 - 0.54 * c, 0.118 + 0.14 * c + 0.5 * dz),
-                ankle=(0.156 + 0.10 * c, mid_ankle_y, 0.008 - 0.12 * c + 0.5 * dz),
-                foot_pos=mf,
-                foot_yaw=0.18,
-                side=side,
-            )
-            _add_flowing_insect_leg(
-                scene,
-                f"rear_{tag}",
-                hip=(0.066, 0.302 - c, -0.048),
-                knee=(0.168 + 0.15 * c, 0.278 - 0.54 * c, 0.022 + 0.12 * c + 0.4 * dz),
-                ankle=(0.168 + 0.10 * c, rear_ankle_y, -0.098 - 0.12 * c + 0.4 * dz),
-                foot_pos=rf,
-                foot_yaw=0.26,
-                side=side,
-            )
-
-    return {
-        "foot_mid_left": mid_l,
-        "foot_mid_right": mid_r,
-        "foot_rear_left": rear_l,
-        "foot_rear_right": rear_r,
-    }
-
-
 def add_idle_animation(
     scene: SceneBuilder,
     *,
@@ -973,13 +818,15 @@ def add_idle_animation(
     mandible_pitch: float = 0.036,
     breaths_per_cycle: int = 2,
     samples: int = 16,
+    leg_flex: bool = True,
     name: str = "Idle",
 ) -> AnimationClip:
     """Attach (or replace) a looping hierarchical glTF 2.0 Idle clip on `scene`.
 
     Default values match original 1998 Worker `agst301` (1,650 ms calm double-breath
-    bob with subtle head nod/sway, antenna twitch, and counter-phase gaster breath,
-    while keeping `legs` solidly planted on Y = 0.0).
+    settle-and-lift with subtle head nod/sway, antenna twitch, and counter-phase gaster
+    breath). With `leg_flex`, each individual leg compresses and extends about its planted
+    foot in step with the body (knees bend on the settle), every foot staying on Y = 0.0.
     """
     dur = max(0.20, float(cycle_s))
     n_steps = max(8, int(samples))
@@ -1002,8 +849,8 @@ def add_idle_animation(
             for k in range(n_steps + 1):
                 phase_b = 2.0 * math.pi * breaths * (k / n_steps)
                 phase_s = 2.0 * math.pi * (k / n_steps)
-                # Raised-cosine breath wave in [0, 1] peaking cleanly at mid-breath.
-                breath = 0.5 * (1.0 - math.cos(phase_b))
+                # Centered breath wave starting at rest: settle down (knees flex) then lift (knees extend).
+                breath = -0.65 * math.sin(phase_b)
                 sway = math.sin(phase_s)
                 t_vals.append((bx + bob_x * sway, by + bob_y * breath, bz + bob_z * breath))
             t_vals[-1] = t_vals[0]
@@ -1068,7 +915,10 @@ def add_idle_animation(
         r_vals[-1] = r_vals[0]
         channels.append(AnimationChannel("mandibles", "rotation", list(times), r_vals))
 
-    return scene.add_animation(name, channels, replace=True)
+    clip = scene.add_animation(name, channels, replace=True)
+    if leg_flex:
+        sync_leg_flex_to_clip(scene, name)
+    return clip
 
 
 def apply_head_pose(
@@ -1107,6 +957,7 @@ def build_base_ant(
     head_yaw_deg: float = 0.0,
     antenna_asymmetry: float = 0.15,
     stance_asymmetry: float = 0.0,
+    leg_style: str = "natural",
     crouch: float = 0.0,
     left_arm_pose: ArmPoseLike = None,
     right_arm_pose: ArmPoseLike = None,
@@ -1161,7 +1012,7 @@ def build_base_ant(
     body_anchors = _build_body(scene, y_off=-c)
     sh_l, hand_l, hdir_l = _build_arm(scene, left_arm_pose, side=+1, label="left", y_off=-c, stance_asymmetry=sa)
     sh_r, hand_r, hdir_r = _build_arm(scene, right_arm_pose, side=-1, label="right", y_off=-c, stance_asymmetry=sa)
-    leg_anchors = _build_legs(scene, crouch=c, stance_asymmetry=sa)
+    leg_anchors = build_legs(scene, crouch=c, stance_asymmetry=sa, leg_style=leg_style)
 
     # Assemble clean hierarchical animation rig while keeping `legs` rooted at Y = 0.0
     # and preserving exact world-space rest geometry via attach_world_node.

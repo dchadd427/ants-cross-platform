@@ -707,7 +707,7 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
             sc, anc = base_ant.build_base_ant(f"ant_crouch_{c_val}", crouch=c_val)
             self.assertAlmostEqual(anc["crouch"], c_val, places=5)
             self.assertAlmostEqual(a_up["head_top"][1] - anc["head_top"][1], c_val, delta=1e-3)
-            legs_min_y = min(float(p.bounds()[0][1]) for p in sc.get_node("legs"))
+            legs_min_y = min(float(p.bounds()[0][1]) for p in sc.world_parts() if p.name.startswith("leg_"))
             gaster_min_y = min(float(p.bounds()[0][1]) for p in sc.get_node("gaster"))
             self.assertAlmostEqual(legs_min_y, 0.0, delta=1e-3, msg=f"feet must stay planted at crouch={c_val}")
             self.assertGreater(gaster_min_y, 0.02, msg=f"gaster must clear ground at crouch={c_val}")
@@ -715,6 +715,54 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
             self.assertAlmostEqual(stats["bbox_min"][1], 0.0, delta=1e-3)
             self.assertIn("Idle", stats["animations"])
             self.assertIn("Blink", stats["animations"])
+
+    def test_organic_leg_stance_and_grounded_knee_flex(self):
+        from tools.ant_models import leg_rig
+
+        sc, anc = base_ant.build_base_ant("legs_natural")
+        sym, anc_sym = base_ant.build_base_ant("legs_sym", leg_style="symmetric")
+        with self.assertRaises(ValueError):
+            base_ant.build_base_ant("legs_bad", leg_style="wobbly")
+        # Four individual leg nodes under `legs`, each anchored on its own planted foot.
+        for node in leg_rig.LEG_NODES:
+            self.assertEqual(sc.get_node_parent(node), "legs")
+            foot = anc["foot_" + node[4:]]
+            self.assertAlmostEqual(foot[1], 0.0, places=6)
+            self.assertLess(float(np.linalg.norm(sc.get_world_matrix(node)[:3, 3][[0, 2]] - np.array(foot)[[0, 2]])), 0.03)
+        # Natural stance is not a mirrored copy; the symmetric style still mirrors exactly.
+        self.assertGreater(abs(anc["foot_mid_left"][2] - anc["foot_mid_right"][2]), 0.01)
+        self.assertAlmostEqual(anc_sym["foot_mid_left"][0], -anc_sym["foot_mid_right"][0], places=5)
+        self.assertAlmostEqual(anc_sym["foot_mid_left"][2], anc_sym["foot_mid_right"][2], places=5)
+
+        # Idle drives every leg with scale + rotation + translation, and every keyframe keeps the
+        # sole exactly on Y = 0.0 while the dip compresses the leg (knee bends) and the lift extends it.
+        clip = next(c for c in sc.animations if c.name == "Idle")
+        by_node: dict = {}
+        for ch in clip.channels:
+            if ch.target_node in leg_rig.LEG_NODES:
+                by_node.setdefault(ch.target_node, {})[ch.path] = ch
+        self.assertEqual(set(by_node), set(leg_rig.LEG_NODES))
+        for node, chans in by_node.items():
+            self.assertEqual(set(chans), {"scale", "rotation", "translation"})
+            local = np.vstack([p.positions for p in sc.get_node(node)]).astype(np.float64)
+            sys_ = [v[1] for v in chans["scale"].values]
+            self.assertLess(min(sys_), 0.985, node)
+            self.assertGreater(max(sys_), 1.015, node)
+            for k in range(len(chans["scale"].times)):
+                world = leg_rig._quat_rotate(chans["rotation"].values[k], local * np.array(chans["scale"].values[k]))
+                world = world + np.array(chans["translation"].values[k])
+                self.assertAlmostEqual(float(world[:, 1].min()), 0.0, delta=1e-5, msg=f"{node} key {k}")
+        st = gltf_writer.validate_glb(gltf_writer.scene_to_glb_bytes(sc))
+        self.assertAlmostEqual(st["bbox_min"][1], 0.0, delta=1e-4)
+        self.assertIn("legs", st["nodes"])
+
+        # Public helper for custom idles: per-key offsets in, matching leg channels out.
+        times = [0.0, 0.5, 1.0]
+        chans = base_ant.add_leg_flex_channels(sym, times, [0.0, -0.015, 0.0], upper_dxs=[0.0, 0.01, 0.0])
+        self.assertEqual(len(chans), 3 * len(leg_rig.LEG_NODES))
+        self.assertTrue(all(len(ch.values) == 3 for ch in chans))
+        with self.assertRaises(ValueError):
+            base_ant.add_leg_flex_channels(sym, times, [0.0, 0.1])
 
     def test_base_ant_character_expression_api(self):
         # All brow styles build cleanly; "none" omits brow caps and invalid styles raise ValueError.
