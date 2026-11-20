@@ -388,14 +388,20 @@
     }).filter(Boolean));
 
     const nodes = gltf.nodes || [], scene = gltf.scenes && gltf.scenes[gltf.scene || 0];
-    const rootIndices = scene && Array.isArray(scene.nodes) ? scene.nodes : nodes.map((_, i) => i);
+    const childIndices = new Set();
+    nodes.forEach((n) => { if (n && Array.isArray(n.children)) n.children.forEach((c) => childIndices.add(c)); });
+    const rootIndices = scene && Array.isArray(scene.nodes)
+      ? scene.nodes
+      : nodes.map((_, i) => i).filter((i) => !childIndices.has(i));
     const drawCalls = [], min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
     const nodeDefs = new Array(nodes.length), baseWorldMats = new Array(nodes.length), nodeOrder = [], eyelidNodes = [];
+    const visited = new Set();
     let nodeCount = 0, triCount = 0;
 
     function walkNode(nodeIdx, parentIdx, parentMat) {
       const node = nodes[nodeIdx];
-      if (!node) return;
+      if (!node || visited.has(nodeIdx)) return;
+      visited.add(nodeIdx);
       nodeCount++;
       const name = node.name || "";
       if (/eyelid/i.test(name)) eyelidNodes.push(nodeIdx);
@@ -419,11 +425,12 @@
     rootIndices.forEach((root) => walkNode(root, -1, mat4Identity()));
     if (!Number.isFinite(min[0])) { min.splice(0, 3, -0.5, 0, -0.5); max.splice(0, 3, 0.5, 1, 0.5); }
 
+    const animPaths = new Set(["translation", "rotation", "scale"]);
     const animations = (gltf.animations || []).map((anim) => {
       let duration = 0;
       const channels = (anim.channels || []).map((ch) => {
         const tgt = ch.target, smp = (anim.samplers || [])[ch.sampler];
-        if (!tgt || tgt.node === undefined || !tgt.path || !smp) return null;
+        if (!tgt || tgt.node === undefined || !animPaths.has(tgt.path) || !smp) return null;
         const times = readAccessor(gltf, buffers, smp.input), values = readAccessor(gltf, buffers, smp.output);
         if (times.length) duration = Math.max(duration, times[times.length - 1]);
         return { nodeIndex: tgt.node, path: tgt.path, times, values, interpolation: smp.interpolation || "LINEAR" };
