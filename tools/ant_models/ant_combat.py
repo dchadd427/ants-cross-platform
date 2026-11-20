@@ -255,10 +255,10 @@ def _build_torso(scene: SceneBuilder) -> np.ndarray:
     neck_ring = torus_arc(0.144, 0.013, u_segs=20, v_segs=8, plane="xz", name="neck_band", material="chitin_dark").scale(1.02, 1.0, 0.92).rotate_xyz(rx=0.08).translate(0.0, 0.850, 0.028)
     scene.add("body", [pelvis, neck, neck_ring])
 
-    # Smooth curved scale-plated armored pauldrons: upper cap on torso, outer deltoid cap on arm roots!
+    # Smooth curved scale-plated armored pauldrons seated cleanly on the outer shoulders outside the bandolier straps.
     pauldron_specs = (
-        ((0.308, 0.768, -0.022), (0.178, 0.072, 0.168), -0.44),
-        ((0.402, 0.656, -0.004), (0.146, 0.068, 0.148), -0.82),
+        ((0.336, 0.748, -0.022), (0.154, 0.066, 0.156), -0.48),
+        ((0.408, 0.654, -0.004), (0.146, 0.068, 0.148), -0.82),
     )
     plate_parts: List[MeshPart] = []
 
@@ -332,7 +332,9 @@ def _build_torso(scene: SceneBuilder) -> np.ndarray:
         )
         scene.add("gaster", ring)
 
-    shell = [core, dorsal, chest, left_pec, right_pec, pelvis] + abs_parts + plate_parts + [p.mirror_x() for p in plate_parts]
+    # Return strictly the core torso shell (excluding outer arm pauldrons so chest bandoliers
+    # drape taut and flush over the inner collarbone without hooking onto the outer shoulders!).
+    shell = [core, dorsal, chest, left_pec, right_pec, pelvis] + abs_parts
     return np.vstack([p.positions for p in shell]).astype(np.float64)
 
 
@@ -675,13 +677,15 @@ def _conform_belt_to_torso(
                 out[i] = float(np.max(proj[near]))
         return out
 
-    raw = needed(pts, 0.090)
+    raw = needed(pts, 0.056)
     shifts = np.where(np.isnan(raw), 0.0, raw + clearance)
-    for _ in range(3):
+    for _ in range(4):
         shifts = 0.25 * np.roll(shifts, 1) + 0.50 * shifts + 0.25 * np.roll(shifts, -1)
     moved = pts + shifts[:, None] * out_normals
-    extra = needed(moved, 0.080)
+    extra = needed(moved, 0.052)
     shifts += np.where(np.isnan(extra), 0.0, np.maximum(0.0, extra + 0.85 * clearance))
+    for _ in range(3):
+        shifts = 0.25 * np.roll(shifts, 1) + 0.50 * shifts + 0.25 * np.roll(shifts, -1)
     return pts + shifts[:, None] * out_normals
 
 
@@ -696,28 +700,32 @@ def _make_brass_bullet_pad(center: np.ndarray, width_dir: np.ndarray, out_n: np.
 
 
 def _build_bandoliers(scene: SceneBuilder, torso_verts: np.ndarray) -> None:
-    """Crossed ribbed woven-gold bullet bandoliers over BOTH chest and back with brass X-buckles."""
+    """Crossed ribbed woven-gold bullet bandoliers draped taut & flush over chest, collarbone, & back."""
     belt_ctrl = [
-        (0.218, 0.835, -0.042),   # over fuller left shoulder beside the elevated dark muscular neck
-        (0.228, 0.722, 0.155),    # upper-left chest
-        (0.122, 0.578, 0.248),    # left pectoral
-        (0.000, 0.474, 0.268),    # front chest X crossing
-        (-0.144, 0.390, 0.224),   # lower-right abdomen
-        (-0.244, 0.346, 0.100),   # right front hip
-        (-0.262, 0.352, -0.080),  # right side hip
-        (-0.194, 0.436, -0.268),  # lower-right back
-        (0.000, 0.562, -0.332),   # back X crossing across bigger dorsal carapace
-        (0.176, 0.726, -0.292),   # upper-left back
-        (0.218, 0.808, -0.175),   # rear left shoulder slope
+        (0.172, 0.806, -0.042),   # snugly over inner trapezius right beside the dark muscular neck
+        (0.176, 0.706, 0.146),    # straight, taut drape down inner collarbone & upper pec
+        (0.106, 0.576, 0.228),    # smooth diagonal across left pectoral
+        (0.000, 0.474, 0.254),    # front chest X crossing
+        (-0.142, 0.390, 0.214),   # lower-right abdomen
+        (-0.242, 0.348, 0.094),   # right front hip
+        (-0.260, 0.354, -0.082),  # right side hip
+        (-0.192, 0.438, -0.264),  # lower-right back
+        (0.000, 0.562, -0.326),   # back X crossing across big dorsal carapace
+        (0.166, 0.716, -0.278),   # upper-left back
+        (0.178, 0.788, -0.166),   # smooth rear inner-shoulder slope
     ]
     pivot = np.array([0.0, 0.535, -0.032])
-    crossings = {"front": np.array([0.0, 0.474, 0.294]), "back": np.array([0.0, 0.562, -0.360])}
+    crossings = {"front": np.array([0.0, 0.474, 0.282]), "back": np.array([0.0, 0.562, -0.354])}
 
     for belt_idx, sign in enumerate((1.0, -1.0)):
         raw = np.array([(sign * x, y, z) for x, y, z in belt_ctrl], dtype=np.float64)
         pts = catmull_rom_spline(raw, samples_per_seg=6, closed=True)
-        out_n = np.array([_normalize(p - pivot + (np.array([0.0, 0.28, 0.0]) if p[1] > 0.74 else 0.0)) for p in pts])
-        pts = _conform_belt_to_torso(pts, out_n, torso_verts, pivot, clearance=0.014)
+        # Smooth continuous upward normal ramp across collarbone (eliminates any front shoulder hook!).
+        out_n = np.array([
+            _normalize(p - pivot + np.array([0.0, 0.26 * max(0.0, min(1.0, (p[1] - 0.62) / 0.20)), 0.0]))
+            for p in pts
+        ])
+        pts = _conform_belt_to_torso(pts, out_n, torso_verts, pivot, clearance=0.011)
         if belt_idx == 1:
             pts = pts + (0.030 * np.exp(-((pts[:, 0] / 0.11) ** 2)))[:, None] * out_n
             for tag, mask in (("front", pts[:, 2] > 0.15), ("back", pts[:, 2] < -0.15)):

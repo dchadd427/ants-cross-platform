@@ -523,51 +523,50 @@ def _add_knot_and_tails(scene: SceneBuilder, caster: _CraniumCaster) -> None:
 
     scene.add(
         "gear_bandana",
-        superellipsoid(0.056, 0.050, 0.052, e1=0.72, e2=0.76, u_segs=18, v_segs=14, name="bandana_knot", material="gear_gold")
+        superellipsoid(0.048, 0.044, 0.046, e1=0.72, e2=0.76, u_segs=18, v_segs=14, name="bandana_knot", material="gear_gold")
         .rotate_xyz(rx=0.14, ry=-0.34, rz=0.18)
         .translate(knot),
     )
     scene.add(
         "gear_bandana",
-        torus_arc(0.040, 0.013, u_segs=18, v_segs=8, plane="xy", name="knot_cinch_fold", material="gear_gold")
+        torus_arc(0.035, 0.011, u_segs=18, v_segs=8, plane="xy", name="knot_cinch_fold", material="gear_gold")
         .rotate_xyz(rx=0.20, ry=1.26, rz=0.18)
-        .translate(knot + 0.012 * d),
+        .translate(knot + 0.010 * d),
     )
 
     up = np.array([0.0, 1.0, 0.0])
     out = _normalize(np.array([1.0, 0.0, -0.34]))
     back = _normalize(np.array([0.24, 0.0, -1.0]))
 
-    # Sleek sweeping upper cloth tail fanning more horizontally outward (+X) & back (-Z) (no bunny ear!).
+    # Compact, perky twin pleated bandana tails (~38% shorter per #191, matching `atst301`/`atst901`).
     upper = [
-        knot - 0.010 * out + 0.004 * up,
-        knot + 0.072 * out + 0.020 * up + 0.028 * back,
-        knot + 0.154 * out + 0.038 * up + 0.074 * back,
-        knot + 0.218 * out + 0.048 * up + 0.120 * back,
-        knot + 0.252 * out + 0.046 * up + 0.150 * back,
+        knot - 0.008 * out + 0.003 * up,
+        knot + 0.044 * out + 0.014 * up + 0.018 * back,
+        knot + 0.095 * out + 0.026 * up + 0.046 * back,
+        knot + 0.135 * out + 0.033 * up + 0.072 * back,
+        knot + 0.156 * out + 0.032 * up + 0.088 * back,
     ]
-    # Sweeping lower cloth tail fanning cleanly below and back-outward for a sleek horizontal-V scarf.
     lower = [
-        knot - 0.008 * out - 0.008 * up,
-        knot + 0.076 * out - 0.036 * up + 0.040 * back,
-        knot + 0.164 * out - 0.072 * up + 0.098 * back,
-        knot + 0.232 * out - 0.076 * up + 0.156 * back,
-        knot + 0.268 * out - 0.062 * up + 0.194 * back,
+        knot - 0.006 * out - 0.006 * up,
+        knot + 0.047 * out - 0.024 * up + 0.024 * back,
+        knot + 0.102 * out - 0.046 * up + 0.060 * back,
+        knot + 0.144 * out - 0.050 * up + 0.094 * back,
+        knot + 0.166 * out - 0.042 * up + 0.114 * back,
     ]
     tail_u = _pleated_cloth_tail(
         upper,
-        half_widths=[0.024, 0.052, 0.072, 0.054, 0.011],
-        half_thicknesses=[0.019, 0.020, 0.019, 0.015, 0.009],
+        half_widths=[0.021, 0.042, 0.052, 0.036, 0.010],
+        half_thicknesses=[0.017, 0.018, 0.016, 0.013, 0.008],
         face_hint=(-0.38, 0.34, 0.86),
-        twist_deg=(-8.0, 24.0),
+        twist_deg=(-8.0, 22.0),
         name="bandana_tail_upper",
     ).translate(-knot)
     tail_l = _pleated_cloth_tail(
         lower,
-        half_widths=[0.024, 0.048, 0.066, 0.048, 0.011],
-        half_thicknesses=[0.018, 0.019, 0.018, 0.014, 0.009],
+        half_widths=[0.021, 0.039, 0.048, 0.033, 0.010],
+        half_thicknesses=[0.016, 0.017, 0.015, 0.012, 0.008],
         face_hint=(-0.22, 0.58, 0.78),
-        twist_deg=(10.0, -20.0),
+        twist_deg=(10.0, -18.0),
         name="bandana_tail_lower",
     ).translate(-knot)
     scene.add("bandana_tails", [tail_u, tail_l])
