@@ -131,7 +131,7 @@
    "id": "start_is_not_logged",
    "file": "src/ants_server/bot_matches.cpp",
    "old": "record(who, now_s, \"bot_started\", std::to_string(total) + (total == 1 ? \" match\" : \" matches\"), bot_what_words(what));",
-   "new": "(void)batch;",
+   "new": "(void)total;",
    "build": "test_server",
    "test": "timeout 900 env ANTS_TEST_FILTER=S3.27 ./build/tests/test_server/test_server",
    "expect": "S3.275"
@@ -545,7 +545,7 @@
    "id": "a_change_of_a_list_is_not_logged",
    "file": "src/ants_server/bot_matches.cpp",
    "old": "record(who, now_s, \"bot_rotation_changed\",",
-   "new": "(void)0; (void)(",
+   "new": "(void)who; (void)(",
    "build": "test_server",
    "test": "timeout 900 env ANTS_TEST_FILTER=S3.28 ./build/tests/test_server/test_server",
    "expect": "S3.287"
@@ -572,7 +572,7 @@
    "id": "a_late_start_does_not_move_the_next",
    "file": "src/ants_server/bot_matches.cpp",
    "old": "if (later.batch == batch && !net::time_reached(later.due_ms, earliest)) later.due_ms = earliest;",
-   "new": "(void)later;",
+   "new": "(void)later; (void)batch; (void)earliest;",
    "build": "test_server",
    "test": "timeout 900 env ANTS_TEST_FILTER=S3.29 ./build/tests/test_server/test_server",
    "expect": "S3.295"
