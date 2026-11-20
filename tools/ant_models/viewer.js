@@ -46,18 +46,18 @@
     const savedTeam = !params.has("team") && savedView && (savedView.team === "custom" || TEAMS[savedView.team]) ? savedView.team : null;
     const initTeam = (pTeam === "custom" || TEAMS[pTeam]) ? pTeam : (pColor ? "custom" : (savedTeam || "green"));
     const savedAngle = !params.has("angle") && savedView && (ANGLES[savedView.angle] || savedView.angle === "custom") ? savedView.angle : null;
-    const initAngle = ANGLES[pAngle] ? pAngle : (savedAngle || "hero");
+    const initAngle = ANGLES[pAngle] ? pAngle : (savedAngle || "301");
     const initProj = pProj === "ortho" || pProj === "persp" ? pProj
       : (!params.has("proj") && savedView && (savedView.proj === "ortho" || savedView.proj === "persp") ? savedView.proj : (ANGLES[initAngle] && initAngle !== "hero" ? "ortho" : "persp"));
     const initTurn = pTurn === "0" || pTurn === "false" ? false : (pTurn === "1" || pTurn === "true" ? true
-      : (!params.has("turntable") && savedView && typeof savedView.turntable === "boolean" ? savedView.turntable : (!motionQuery.matches && !pAngle && initAnt !== "lineup")));
+      : (!params.has("turntable") && savedView && typeof savedView.turntable === "boolean" ? savedView.turntable : false));
     const initSprite = pSprite === "0" || pSprite === "false" ? false : (pSprite === "1" || pSprite === "true" ? true
       : (!params.has("sprite") && savedView && typeof savedView.sprite === "boolean" ? savedView.sprite : true));
     const initBlink = pBlink === "closed" ? "closed" : (pBlink === "open" ? "open" : (motionQuery.matches ? "open" : "auto"));
     const initIdle = fixedIdleTime !== null ? false : (pIdle === "0" || pIdle === "false" ? false : (pIdle === "1" || pIdle === "true" ? true
       : (!params.has("idle") && savedView && typeof savedView.idle === "boolean" ? savedView.idle : !motionQuery.matches)));
 
-    const preset = ANGLES[initAngle] || ANGLES.hero;
+    const preset = ANGLES[initAngle] || ANGLES["301"];
     const useSavedCam = !params.has("angle") && savedView && Number.isFinite(savedView.yaw) && Number.isFinite(savedView.pitch) && Number.isFinite(savedView.zoom);
     let pendingUpdatedVer = savedView && typeof savedView.updatedVersion === "string" ? savedView.updatedVersion : "";
     const state = {
@@ -360,7 +360,7 @@
       else if (btn.id === "btn-blink") triggerBlink();
       else if (btn.id === "btn-export-sheet") exportFiveAngleSheet();
       else if (btn.id === "btn-download-glb") downloadActiveGlb();
-      else if (btn.id === "btn-reset-view") { const key = ANGLES[state.angle] ? state.angle : "hero"; setAnglePreset(key); announce("View reset to " + ANGLES[key].full + "."); }
+      else if (btn.id === "btn-reset-view") { const key = ANGLES[state.angle] ? state.angle : "301"; setAnglePreset(key); announce("View reset to " + ANGLES[key].full + "."); }
       else if (btn.id === "btn-load-glb") fileInput.click();
     });
 
@@ -430,7 +430,7 @@
       else if (e.key === "i" || e.key === "I") { e.preventDefault(); toggleIdle(); return; }
       else {
         manual = false;
-        const key = (e.key === "r" || e.key === "R") ? (ANGLES[state.angle] ? state.angle : "hero")
+        const key = (e.key === "r" || e.key === "R") ? (ANGLES[state.angle] ? state.angle : "301")
           : (e.key >= "1" && e.key <= "5") ? SHEET_ANGLES[Number(e.key) - 1]
           : (e.key === "6" || e.key === "0") ? "hero" : null;
         if (!key) return;

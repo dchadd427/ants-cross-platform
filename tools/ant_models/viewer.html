@@ -26,7 +26,7 @@
       <div class="active-summary" id="active-summary" aria-label="Active selection summary">
         <span class="badge" id="badge-ant">All 6 Lineup</span>
         <span class="badge" id="badge-team">Green</span>
-        <span class="badge" id="badge-angle">Hero</span>
+        <span class="badge" id="badge-angle">301 S</span>
         <span class="badge badge-version" id="badge-version" title="Loaded 3D build version" hidden></span>
       </div>
     </header>
@@ -83,20 +83,20 @@
 
       <div class="toolbar-group" role="group" aria-label="Camera angle">
         <span class="group-label" aria-hidden="true">Angle</span>
-        <button type="button" data-angle="301" aria-pressed="false" title="301 South Front (yaw 0, pitch 33)">301 S</button>
+        <button type="button" data-angle="301" aria-pressed="true" title="301 South Front (yaw 0, pitch 33)">301 S</button>
         <button type="button" data-angle="201" aria-pressed="false" title="201 South-East 3/4 (yaw -45, pitch 33)">201 SE</button>
         <button type="button" data-angle="901" aria-pressed="false" title="901 East Side (yaw -90, pitch 33)">901 E</button>
         <button type="button" data-angle="801" aria-pressed="false" title="801 North-East Back 3/4 (yaw -135, pitch 33)">801 NE</button>
         <button type="button" data-angle="701" aria-pressed="false" title="701 North Back (yaw 180, pitch 33)">701 N</button>
-        <button type="button" data-angle="hero" aria-pressed="true" title="Hero Showcase (yaw -28, pitch 22)">Hero</button>
+        <button type="button" data-angle="hero" aria-pressed="false" title="Hero Showcase (yaw -28, pitch 22)">Hero</button>
       </div>
 
       <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
 
       <div class="toolbar-group" role="group" aria-label="Projection and viewport options">
         <span class="group-label" aria-hidden="true">View</span>
-        <button type="button" data-projection="ortho" aria-pressed="false" title="Orthographic isometric projection">Ortho</button>
-        <button type="button" data-projection="persp" aria-pressed="true" title="Perspective studio lens">Persp</button>
+        <button type="button" data-projection="ortho" aria-pressed="true" title="Orthographic isometric projection">Ortho</button>
+        <button type="button" data-projection="persp" aria-pressed="false" title="Perspective studio lens">Persp</button>
         <button type="button" id="btn-turntable" aria-pressed="false" title="Slow studio turntable rotation">Turntable</button>
         <button type="button" id="btn-idle" aria-pressed="true" title="Toggle idle animation loop (I)">Idle</button>
         <button type="button" id="btn-sprite-scale" aria-pressed="true" title="Toggle 48px game-sprite scale inset">Sprite Scale</button>
@@ -145,7 +145,7 @@
       <aside class="sprite-inset" id="sprite-inset" aria-label="Pixel-scale game sprite preview">
         <div class="sprite-inset-head">
           <span class="sprite-title">48px Sprite</span>
-          <span class="sprite-sub" id="sprite-angle-tag">Hero</span>
+          <span class="sprite-sub" id="sprite-angle-tag">301 S</span>
         </div>
         <div class="sprite-tile-bg">
           <canvas id="sprite-canvas" width="48" height="48" aria-hidden="true"></canvas>
@@ -177,7 +177,7 @@
         </div>
         <div class="meta-item">
           <dt>Active</dt>
-          <dd id="meta-active">All 6 Lineup &middot; Green &middot; Hero</dd>
+          <dd id="meta-active">All 6 Lineup &middot; Green &middot; 301 S</dd>
         </div>
       </dl>
       <p role="status" class="status-region" id="status-region">Initializing 3D viewer&hellip;</p>
