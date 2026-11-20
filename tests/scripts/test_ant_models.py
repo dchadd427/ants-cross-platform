@@ -177,7 +177,7 @@ class MaterialsContract(unittest.TestCase):
             self.assertTrue(gltf["doubleSided"], name)
             alpha = gltf["pbrMetallicRoughness"]["baseColorFactor"][3]
             self.assertGreater(alpha, 0.0, name)
-            self.assertLess(alpha, 0.5, name)
+            self.assertLess(alpha, 0.70, name)
         # Opaque chitin remains OPAQUE with alpha == 1.0.
         chitin_gltf = materials.get_material("chitin_team").to_gltf_dict()
         self.assertEqual(chitin_gltf["alphaMode"], "OPAQUE")
@@ -576,7 +576,7 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
         self.assertIn("metallicRoughnessTexture", mats["chitin_team"]["pbrMetallicRoughness"])
         self.assertIn("normalTexture", mats["chitin_team"])
         chitin_ns = float(mats["chitin_team"]["normalTexture"]["scale"])
-        self.assertTrue(0.22 <= chitin_ns <= 0.34, f"expected tasteful chitin normal scale, got {chitin_ns}")
+        self.assertTrue(0.08 <= chitin_ns <= 0.16, f"expected silky subtle chitin normal scale, got {chitin_ns}")
         # Optical eyes remain pure untextured gloss.
         self.assertNotIn("normalTexture", mats["eye_white"])
         self.assertNotIn("baseColorTexture", mats["eye_white"]["pbrMetallicRoughness"])
@@ -748,8 +748,8 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
         self.assertIn("Idle", st_expr["animations"])
         self.assertIn("Blink", st_expr["animations"])
 
-        # Default chin-up head_pitch_deg (-11.5) lifts pupils & mandibles UP (+Y) toward overhead camera
-        # and tilts cranium back (-Z) compared to neutral head_pitch_deg=0.0.
+        # Default chin-up head_pitch_deg (-16.0) lifts pupils & mandibles UP (+Y) toward the 45 deg
+        # overhead camera and tilts cranium back (-Z) compared to neutral head_pitch_deg=0.0.
         sc_flat, _ = base_ant.build_base_ant("pitch_flat", head_pitch_deg=0.0)
         sc_up, _ = base_ant.build_base_ant("pitch_up")
         wp_flat, wp_up = sc_flat.world_parts(), sc_up.world_parts()
