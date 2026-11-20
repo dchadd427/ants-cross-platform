@@ -154,6 +154,7 @@
 #include "ants_net/protocol.hpp"
 #include "ants_server/admin_audit.hpp"
 #include "ants_server/bot_matches.hpp"
+#include "ants_server/bot_rotation.hpp"
 #include "ants_server/private_files.hpp"
 #include "ants_server/control.hpp"
 #include "ants_db/database.hpp"
@@ -836,16 +837,17 @@ int main(int argc, char** argv) {
     // The matches of computer players that the server plays itself (bot_matches.hpp, docs/SERVER_REPLAYS.md): their schedules are kept in the database, or in memory when the server has none. The first start makes the schedule
     // that --bot-match-every-min asks for; from then on the admin page edits them. The admin page's calls are handed to BotMatches by the submissions door, behind its pass and token.
     ants::server::BotScheduleStore bot_store(database.is_open() ? &database : nullptr);
+    ants::server::BotRotationStore rotation_store(database.is_open() ? &database : nullptr);          // (the lists that "random:rotation" draws from, when an admin edited them: the defaults otherwise)
     std::unique_ptr<ants::server::BotMatches> bot_matches;
     {
         std::string why;
-        if (!bot_store.open(static_cast<int64_t>(std::time(nullptr)), why)) {
+        if (!bot_store.open(static_cast<int64_t>(std::time(nullptr)), why) || !rotation_store.open(why)) {
             log("matches of computer players are off: " + why);
         } else {
             if (o.bot_match_every_min > 0 && rooms.replay_store() != nullptr && bot_store.seed_default(static_cast<int>(o.bot_match_every_min), static_cast<int64_t>(std::time(nullptr)))) {
                 log("the schedule of matches of computer players that --bot-match-every-min asks for was made: one every " + std::to_string(o.bot_match_every_min) + " minutes, the first one in a minute");
             }
-            bot_matches = std::make_unique<ants::server::BotMatches>(rooms, bot_store, audit.get());
+            bot_matches = std::make_unique<ants::server::BotMatches>(rooms, bot_store, rotation_store, audit.get());
             if (o.bot_match_every_min == 0) {
                 bot_matches->set_scheduling(false);
                 log("scheduled matches of computer players are OFF (--bot-match-every-min 0): no schedule starts a match; the admin page's Start now still works");
