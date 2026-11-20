@@ -158,6 +158,18 @@ _SPECS: Tuple[MaterialSpec, ...] = (
         metallic=0.45,
         roughness=0.32,
     ),
+    MaterialSpec(
+        name="bomb_charge",
+        base_color=(0.84, 0.08, 0.55, 1.0),
+        metallic=0.04,
+        roughness=0.50,
+    ),
+    MaterialSpec(
+        name="bomb_cup_trim",
+        base_color=(0.24, 0.06, 0.09, 1.0),
+        metallic=0.18,
+        roughness=0.46,
+    ),
 )
 
 MATERIAL_ORDER: Tuple[str, ...] = tuple(spec.name for spec in _SPECS)

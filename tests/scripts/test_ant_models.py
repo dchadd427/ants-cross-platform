@@ -111,6 +111,8 @@ class MaterialsContract(unittest.TestCase):
         "eye_iris",
         "gear_steel",
         "gear_brass_trim",
+        "bomb_charge",
+        "bomb_cup_trim",
     )
 
     def test_all_canonical_materials_present(self):
