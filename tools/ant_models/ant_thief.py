@@ -84,8 +84,8 @@ _LID_DROOP: Dict[str, Tuple[float, float]] = {
     "eyelid_right": (0.36, -0.09),
 }
 
-# Stealthy low hiding crouch (`#162`) matching original `atst301` (~85% of Worker height, H ~ 0.86).
-THIEF_CROUCH = 0.155
+# Stealthy low hiding crouch (`#162`) tuned with Thief's sleek roguish skull (~85% of Worker height, H ~ 0.87).
+THIEF_CROUCH = 0.145
 
 # Nimble asymmetric rogue arm pose anchored cleanly at crouched shoulders (±0.106, 0.478 - c, 0.016).
 _THIEF_ARM_LEFT = [
@@ -139,18 +139,168 @@ class _CraniumCaster:
         return float(np.max(t[hit])) if np.any(hit) else 0.23
 
 
-def _mask_v_limits(theta: float) -> Tuple[float, float]:
-    """Outer bottom/top elevation bounds for the unified single-piece domino mask + headband.
+def _thief_head_deform(pos: np.ndarray) -> np.ndarray:
+    """Sculpt Thief's sleek, angular roguish ant head (neither a round ball nor a flat pancake).
 
-    Wraps plushly across the brow (below antenna sockets), dips gracefully underneath both
-    eyes along the upper cheeks (clearing the lobster-claw mandibles cleanly), arches subtly
-    at the lower nose bridge, and tapers smoothly into a bold wrap around temples and back.
+    Subtly lowers the crown into a taut organic dome, sharpens the temple planes and wide
+    roguish cheekbones, and sweeps down into a sleek tapered insectoid jaw framing the
+    lobster-claw mandibles (avoiding both bowling-ball roundness and a pointy alien chin).
+    """
+    p = pos.copy()
+    x, y, z = p[:, 0], p[:, 1], p[:, 2]
+    ax = np.abs(x)
+    front_mask = np.clip((z + 0.01) / 0.13, 0.0, 1.0)
+
+    # 1. Sleek lowered crown (gentle natural arch — removes the tall round dome without pancaking).
+    crown = np.clip((y - 0.082) / 0.080, 0.0, 1.0)
+    p[:, 1] -= 0.007 * (crown ** 1.65)
+    p[:, 0] *= 1.0 - 0.055 * (crown ** 1.75)
+    p[:, 2] *= 1.0 - 0.055 * (crown ** 1.75)
+
+    # 2. Wider roguish brow/cheekbones + crisper, subtly flatter side temple planes.
+    brow_flare = np.exp(-(((y - 0.016) / 0.064) ** 2)) * np.clip((ax - 0.07) / 0.11, 0.0, 1.0)
+    p[:, 0] += np.sign(x) * 0.009 * brow_flare
+    temple_flat = np.clip((ax - 0.140) / 0.055, 0.0, 1.0) * np.exp(-(((y - 0.032) / 0.075) ** 2))
+    p[:, 0] -= np.sign(x) * 0.009 * temple_flat
+
+    # 3. Sleek angled roguish brow ridge, subtle forehead Y-suture, and deeper recessed eye sockets.
+    brow_y = 0.058 + 0.065 * np.minimum(ax, 0.18)
+    brow_shelf = np.exp(-(((y - brow_y) / 0.028) ** 2)) * np.clip((z - 0.02) / 0.12, 0.0, 1.0)
+    p[:, 2] += 0.012 * brow_shelf
+
+    socket = (
+        np.exp(-(((ax - 0.083) / 0.064) ** 2 + ((y + 0.004) / 0.058) ** 2))
+        * np.clip((z - 0.02) / 0.12, 0.0, 1.0)
+    )
+    p[:, 2] -= 0.028 * socket
+
+    seam_stem = np.exp(-((ax / 0.014) ** 2)) * np.exp(-(((y - 0.060) / 0.048) ** 2)) * front_mask
+    branch_x = 0.014 + np.clip(y - 0.064, 0.0, 0.09) * 0.92
+    seam_branch = (
+        np.exp(-(((ax - branch_x) / 0.014) ** 2))
+        * np.clip((y - 0.060) / 0.020, 0.0, 1.0)
+        * np.clip((0.145 - y) / 0.036, 0.0, 1.0)
+        * np.clip((z + 0.02) / 0.12, 0.0, 1.0)
+    )
+    radial = p / np.maximum(1e-6, np.linalg.norm(p, axis=1, keepdims=True))
+    p -= (0.0052 * np.maximum(seam_stem, 0.68 * seam_branch))[:, None] * radial
+
+    # 4. Crisp roguish cheekbones tapering cleanly into a sleek angled ant jaw (zero round cheeks, zero alien chin!).
+    cheek = (
+        np.exp(-(((ax - 0.124) / 0.052) ** 2 + ((y + 0.028) / 0.040) ** 2))
+        * np.clip((z + 0.02) / 0.12, 0.0, 1.0)
+    )
+    p[:, 0] += np.sign(x) * 0.0085 * cheek
+    p[:, 2] += 0.007 * cheek
+
+    lower = np.clip((-y - 0.020) / 0.142, 0.0, 1.0)
+    p[:, 0] *= 1.0 - 0.25 * (lower ** 1.38)
+    p[:, 2] *= 1.0 - 0.14 * (lower ** 1.38)
+
+    clypeus = np.exp(-((x / 0.042) ** 2)) * np.exp(-(((y + 0.088) / 0.038) ** 2)) * front_mask
+    p[:, 2] += 0.011 * clypeus
+
+    # 5. Clean aerodynamic occipital taper behind the lower skull into the neck (sleek 901 E side profile!).
+    rear_low = np.clip((-z - 0.01) / 0.14, 0.0, 1.0) * np.clip((-y + 0.03) / 0.17, 0.0, 1.0)
+    p[:, 0] *= 1.0 - 0.16 * rear_low
+    p[:, 2] += 0.020 * rear_low
+    p[:, 1] += 0.014 * rear_low
+    return p
+
+
+def _paint_thief_cranium_colors(cranium: MeshPart) -> MeshPart:
+    """Paint warm anatomical face shading onto Thief's sleek cranium (works across all teams)."""
+    p = cranium.positions.astype(np.float64)
+    x, y, z = p[:, 0], p[:, 1], p[:, 2]
+    ax = np.abs(x)
+    front_mask = np.clip((z - 0.01) / 0.12, 0.0, 1.0)
+    socket_ring = (
+        np.exp(-(((ax - 0.083) / 0.064) ** 2 + ((y + 0.004) / 0.060) ** 2))
+        * np.clip((z - 0.02) / 0.11, 0.0, 1.0)
+    )
+    seam_stem = np.exp(-((ax / 0.016) ** 1.5)) * np.exp(-(((y - 0.060) / 0.048) ** 2)) * front_mask
+    mouth_shadow = np.exp(-((ax / 0.064) ** 2 + ((y + 0.118) / 0.040) ** 2)) * front_mask
+    cheek_hi = np.exp(-(((ax - 0.116) / 0.056) ** 2 + ((y + 0.036) / 0.042) ** 2)) * front_mask
+    brow_hi = np.exp(-(((ax - 0.083) / 0.054) ** 2 + ((y - 0.066) / 0.026) ** 2)) * front_mask
+    lum = (
+        0.89
+        + 0.09 * cheek_hi
+        + 0.08 * brow_hi
+        - 0.24 * socket_ring
+        - 0.14 * seam_stem
+        - 0.14 * mouth_shadow
+    )
+    lum = np.clip(lum, 0.62, 1.0).astype(np.float32)
+    cranium.colors = np.column_stack([lum, lum, lum]).astype(np.float32)
+    return cranium
+
+
+def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
+    """Replace `base_ant`'s rounder cranium with Thief's sleek tapered roguish skull and refit sockets."""
+    hx, hy, hz = anchors["head_center"]
+    cranium = (
+        superellipsoid(0.194, 0.161, 0.156, e1=0.68, e2=0.68, u_segs=38, v_segs=30, name="cranium", material="chitin_team")
+        .deform(_thief_head_deform)
+    )
+    cranium = _paint_thief_cranium_colors(cranium).translate(hx, hy, hz)
+
+    # Swap cranium inside `head` (vertices are in canonical neutral space; `head` transform applies -neck)
+    # and raise/pull in mouth_cleft + mandibles to seat flush beneath the sleek tapered cheeks.
+    jaw_dy, jaw_dz = 0.014, -0.016
+    head_parts = scene.get_node("head")
+    new_head_parts: List[MeshPart] = []
+    for p in head_parts:
+        if p.name == "cranium":
+            new_head_parts.append(cranium)
+        elif p.name == "mouth_cleft":
+            new_head_parts.append(p.translate(0.0, jaw_dy, jaw_dz))
+        else:
+            new_head_parts.append(p)
+    scene.nodes["head"] = new_head_parts
+
+    mand_xf = scene.get_node_transform("mandibles")
+    if mand_xf is not None:
+        mx, my, mz = mand_xf.translation
+        scene.set_node_transform(
+            "mandibles",
+            translation=(mx, my + jaw_dy, mz + jaw_dz),
+            rotation=mand_xf.rotation,
+            scale=mand_xf.scale,
+        )
+
+    # Seat both antenna bases snugly into the sleeker lower crown (zero floating sockets!).
+    for node_name, sign in (("antenna_left", 1.0), ("antenna_right", -1.0)):
+        axf = scene.get_node_transform(node_name)
+        if axf is not None:
+            ax0, ay0, az0 = axf.translation
+            scene.set_node_transform(
+                node_name,
+                translation=(ax0 + 0.004 * sign, ay0 - 0.015, az0 - 0.006),
+                rotation=axf.rotation,
+                scale=axf.scale,
+            )
+
+    # Refit eye anchors cleanly into the deeper orbital hollows so eyes nest harmoniously in the mask.
+    eye_y = hy - 0.004
+    eye_z = hz + 0.114
+    anchors["eye_left"] = (0.083, eye_y, eye_z)
+    anchors["eye_right"] = (-0.083, eye_y, eye_z)
+    anchors["eye_center"] = (0.0, eye_y, eye_z + 0.012)
+    return cranium
+
+
+def _mask_v_limits(theta: float) -> Tuple[float, float]:
+    """Outer bottom/top elevation bounds for Thief's sleek, tailored domino mask + headband.
+
+    Wraps cleanly across the lower brow (revealing Thief's sleek tapered green ant crown
+    above), sweeps cleanly beneath both eyes with a tailored domino cheek dip clearing the
+    mandibles, and tapers smoothly into a fitted wrap around the temples and back.
     """
     a = abs(math.atan2(math.sin(theta), math.cos(theta)))
-    v_top = 0.540 + 0.155 * math.exp(-((a / 1.15) ** 2))
-    cheek_dip = -0.315 * math.exp(-(((a - 0.56) / 0.42) ** 2))
-    nose_dip = -0.165 * math.exp(-((a / 0.28) ** 2))
-    v_bot = -0.115 + cheek_dip + nose_dip
+    v_top = 0.425 + 0.075 * math.exp(-((a / 1.05) ** 2))
+    cheek_dip = -0.295 * math.exp(-(((a - 0.58) / 0.38) ** 2))
+    nose_dip = -0.130 * math.exp(-((a / 0.25) ** 2))
+    v_bot = -0.068 + cheek_dip + nose_dip
     return v_bot, v_top
 
 
@@ -279,20 +429,20 @@ def _build_unified_domino_mask(
         ray_du[k], ray_dv[k] = du_n, dv_n
 
         # Binary search smallest angular radius clearing the 3D eyelid sphere cleanly.
-        lo, hi = 0.24, min(0.56, dist_perim * 0.72)
+        lo, hi = 0.24, min(0.56, dist_perim * 0.74)
         for _ in range(10):
             mid = 0.5 * (lo + hi)
             uu, vv = u_eye + mid * du_n, v_eye + mid * dv_n
             d = _direction(uu, vv)
-            p_surf = hc + d * (caster.radius(d) + 0.014)
+            p_surf = hc + d * (caster.radius(d) + 0.0085)
             if float(np.linalg.norm(p_surf - eye_l)) < target_clear:
                 lo = mid
             else:
                 hi = mid
-        # Keep lush continuous bridge (>= 0.135 rad) and under-eye cheek strip cleanly clear.
-        max_s = dist_perim * 0.75
+        # Keep lush continuous bridge (>= 0.125 rad) and under-eye cheek strip cleanly clear.
+        max_s = dist_perim * 0.76
         if du_n < -1e-4:
-            max_s = min(max_s, (u_eye - 0.135) / (-du_n))
+            max_s = min(max_s, (u_eye - 0.125) / (-du_n))
         hole_s[k] = min(hi, max(0.22, max_s))
 
     # Light circular smoothing so the punched oval eye cutout is silky-smooth with zero kinks.
@@ -377,28 +527,28 @@ def _build_unified_domino_mask(
         dirs[i] = d
         r_raw[i] = caster.radius(d)
 
-    # Smooth taut cloth bridging over the subtle forehead center crease using graph-neighbor averaging.
+    # Light taut cloth bridging (2 passes) so the fitted mask hugs & reveals the sleeker skull contours!
     adj: List[List[int]] = [[] for _ in range(n_surf)]
     for a, b, c in surf_tris:
         adj[a].extend((b, c))
         adj[b].extend((a, c))
         adj[c].extend((a, b))
     r_bridged = r_raw.copy()
-    for _ in range(4):
+    for _ in range(2):
         nxt = r_bridged.copy()
         for i in range(n_surf):
             if adj[i]:
-                nxt[i] = max(r_raw[i] + 0.002, 0.55 * r_bridged[i] + 0.45 * float(np.mean(r_bridged[adj[i]])))
+                nxt[i] = max(r_raw[i] + 0.0012, 0.65 * r_bridged[i] + 0.35 * float(np.mean(r_bridged[adj[i]])))
         r_bridged = nxt
 
     pos_out = np.zeros((n_surf, 3), dtype=np.float64)
     pos_in = np.zeros((n_surf, 3), dtype=np.float64)
     for i, (u, v) in enumerate(uv_list):
         edge_w = max(0.0, min(1.0, is_boundary_hint[i])) ** 0.55
-        fold = 0.0022 * math.sin(v * 14.0 + 0.6 * math.cos(u)) * edge_w
-        thick = 0.0115 + 0.0075 * edge_w + fold
+        fold = 0.0014 * math.sin(v * 14.0 + 0.6 * math.cos(u)) * edge_w
+        thick = 0.0062 + 0.0040 * edge_w + fold
         pos_out[i] = hc + dirs[i] * (r_bridged[i] + thick)
-        pos_in[i] = hc + dirs[i] * (r_bridged[i] - 0.008)
+        pos_in[i] = hc + dirs[i] * (r_bridged[i] - 0.0065)
 
     # Guarantee EVERY single outer-surface triangle faces strictly outward along +dirs.
     t_arr = np.asarray(surf_tris, dtype=np.int32)
@@ -425,8 +575,8 @@ def _build_unified_domino_mask(
     mid_pts: List[np.ndarray] = []
     for v_i in b_verts:
         mid_idx_map[v_i] = 2 * n_surf + len(mid_pts)
-        # Gently puff the bevel midpoint slightly outward along the cloth normal for a rolled-hem look.
-        mid_pts.append(0.58 * pos_out[v_i] + 0.42 * pos_in[v_i] + 0.0022 * dirs[v_i])
+        # Crisp tailored cloth bevel midpoint along the mask hems (no puffy donut lip).
+        mid_pts.append(0.56 * pos_out[v_i] + 0.44 * pos_in[v_i] + 0.0010 * dirs[v_i])
 
     all_pos = np.vstack([pos_out, pos_in, np.asarray(mid_pts, dtype=np.float64)]).astype(np.float32)
     all_tris: List[Tuple[int, int, int]] = [(int(a), int(b), int(c)) for a, b, c in t_arr]
@@ -519,20 +669,20 @@ def _add_knot_and_tails(scene: SceneBuilder, caster: _CraniumCaster) -> None:
     """Build the plump folded left-temple knot and two large sweeping pleated cloth tails."""
     theta = math.radians(104.0)
     e_b, e_t = _mask_v_limits(theta)
-    d = _direction(theta, 0.45 * (e_b + e_t) + 0.04)
-    knot = caster.center + d * (caster.radius(d) + 0.032)
+    d = _direction(theta, 0.48 * (e_b + e_t) + 0.02)
+    knot = caster.center + d * (caster.radius(d) + 0.019)
 
     scene.add(
         "gear_bandana",
-        superellipsoid(0.048, 0.044, 0.046, e1=0.72, e2=0.76, u_segs=18, v_segs=14, name="bandana_knot", material="gear_gold")
+        superellipsoid(0.043, 0.038, 0.040, e1=0.72, e2=0.76, u_segs=18, v_segs=14, name="bandana_knot", material="gear_gold")
         .rotate_xyz(rx=0.14, ry=-0.34, rz=0.18)
         .translate(knot),
     )
     scene.add(
         "gear_bandana",
-        torus_arc(0.035, 0.011, u_segs=18, v_segs=8, plane="xy", name="knot_cinch_fold", material="gear_gold")
+        torus_arc(0.031, 0.0095, u_segs=18, v_segs=8, plane="xy", name="knot_cinch_fold", material="gear_gold")
         .rotate_xyz(rx=0.20, ry=1.26, rz=0.18)
-        .translate(knot + 0.010 * d),
+        .translate(knot + 0.008 * d),
     )
 
     up = np.array([0.0, 1.0, 0.0])
@@ -586,8 +736,8 @@ def _add_shifty_eyes(scene: SceneBuilder, anchors: dict, blink: float, gaze: flo
     Returns the exact spherical `lid_outer_r` so the unified domino mask cutout clears the
     sweeping eyelid shell cleanly at every blink and gaze angle.
     """
-    sclera_r = 0.064
-    lid_outer_r = 0.079
+    sclera_r = 0.061
+    lid_outer_r = 0.075
     for side, sign in (("left", 1.0), ("right", -1.0)):
         eye = np.asarray(anchors[f"eye_{side}"], dtype=np.float64)
         yaw = 0.16 * sign
@@ -595,7 +745,7 @@ def _add_shifty_eyes(scene: SceneBuilder, anchors: dict, blink: float, gaze: flo
         # Clean sculpted dark orbital socket rim framing each expressive shifty eye.
         scene.add(
             "eyes",
-            torus_arc(0.069, 0.0072, u_segs=26, v_segs=8, plane="xy", name=f"eye_socket_rim_{side}", material="chitin_dark")
+            torus_arc(0.0655, 0.0068, u_segs=26, v_segs=8, plane="xy", name=f"eye_socket_rim_{side}", material="chitin_dark")
             .scale(0.97, 1.03, 0.85)
             .translate(0.0, 0.0, 0.005)
             .rotate_xyz(rx=-0.08, ry=yaw)
@@ -729,10 +879,9 @@ def _add_rogue_strap_and_loot_pouch(scene: SceneBuilder, anchors: dict) -> None:
     pts = catmull_rom_spline(strap_ctrl, samples_per_seg=6, closed=True)
     out_n = np.array([_normalize(p - pivot + (np.array([0.0, 0.16, 0.0]) if p[1] > 0.46 + dy_c else 0.0)) for p in pts])
 
-    # Push strap cleanly outside ONLY the neutral canonical thorax meshes (exclude gaster & petiole).
-    tc_vec = np.asarray(anchors["thorax_center"], dtype=np.float64)
+    # Push strap cleanly outside ONLY the neutral canonical thorax meshes (already in world coords).
     thorax_parts = [
-        p.translate(tc_vec) for p in scene.get_node("body")
+        p for p in scene.get_node("body")
         if not p.name.startswith(("gaster", "petiole"))
     ]
     body_verts = np.vstack([p.positions for p in thorax_parts]).astype(np.float64)
@@ -958,11 +1107,11 @@ def build_thief(blink: float = 0.0, gaze: float = -0.42) -> SceneBuilder:
         left_arm_pose=_THIEF_ARM_LEFT,
         right_arm_pose=_THIEF_ARM_RIGHT,
     )
+    # Sculpt Thief's sleek, wider, lower-crowned roguish ant skull and refit sockets before eyes/mask.
+    cranium = _refit_thief_head(scene, anchors)
     lid_outer_r = _add_shifty_eyes(scene, anchors, blink, gaze)
-    # Ray-cast against the canonical neutral (pre-tilt) cranium so mask & knot inherit head_group tilt 1:1!
+    # Ray-cast directly against canonical neutral `cranium` (already at `head_center`) so mask hugs tight!
     neck_vec = np.asarray(anchors["neck_center"], dtype=np.float64)
-    cranium_local = next(p for p in scene.get_node("head") if p.name == "cranium")
-    cranium = cranium_local.translate(neck_vec)
     caster = _CraniumCaster(cranium, anchors["head_center"])
     _build_unified_domino_mask(scene, caster, anchors, lid_outer_r)
     _add_knot_and_tails(scene, caster)
