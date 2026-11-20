@@ -1,13 +1,15 @@
-"""Sculpted organic insectoid base ant shared by Worker, Thief, Bomber, Swimmer, and Fire.
+"""Sculpted faceted insectoid base ant shared by Worker, Thief, Bomber, Swimmer, and Fire.
 
 Coordinate system (glTF 2.0 right-handed):
   +Y = up (tarsus tips grounded solidly on Y = 0.0)
   +Z = front (South / canonical camera 301)
   +X = ant's left (viewer's right from front), -X = ant's right (viewer's left)
 
-Matches original Ants (1998) slim upright Worker proportions (W/H ~ 0.48-0.54)
-and exports pivoted `eyelid_left` / `eyelid_right` nodes with a glTF 2.0
-"Blink" rotation animation clip.
+Features crisp angular insectoid carapace anatomy (chiseled shield head,
+overhanging brow ridges, 3-part eyes with pivoted glTF 2.0 "Blink" eyelids,
+blade-like toothed mandibles, pinched petiole waist, overlapping stepped
+tergite gaster plates, and hexagonal beveled segmented legs/arms) while
+matching original Ants (1998) slim upright Worker proportions (W/H ~ 0.46-0.52).
 """
 from __future__ import annotations
 
@@ -26,7 +28,6 @@ try:
         hemisphere_shell,
         lathe,
         quat_from_axis_angle,
-        sphere,
         superellipsoid,
         swept_tube,
         torus_arc,
@@ -41,7 +42,6 @@ except ImportError:
         hemisphere_shell,
         lathe,
         quat_from_axis_angle,
-        sphere,
         superellipsoid,
         swept_tube,
         torus_arc,
@@ -52,41 +52,41 @@ ArmPoseLike = Optional[Union[str, Sequence[Sequence[float]]]]
 EYELID_CLOSED_ANGLE = 1.48  # radians around local +X (~85 deg) to seal 100% of sclera/iris/pupil cleanly
 
 # Canonical left-side (+X) arm control curves: [shoulder, elbow, wrist, hand].
-# Narrow upright posture matching original agst sprites (front W/H ~ 0.50).
+# Narrow upright posture matching original agst sprites (front W/H ~ 0.48).
 _ARM_PRESETS_LEFT: Dict[str, List[Tuple[float, float, float]]] = {
     "idle": [
-        (0.114, 0.438, 0.022),
-        (0.206, 0.398, 0.078),
-        (0.184, 0.354, 0.182),
+        (0.106, 0.440, 0.020),
+        (0.204, 0.404, 0.076),
+        (0.182, 0.354, 0.182),
         (0.156, 0.348, 0.218),
     ],
     "hold_tool": [
-        (0.114, 0.438, 0.022),
-        (0.228, 0.408, 0.092),
+        (0.106, 0.440, 0.020),
+        (0.228, 0.410, 0.092),
         (0.232, 0.416, 0.216),
         (0.220, 0.436, 0.268),
     ],
     "hold_front": [
-        (0.114, 0.438, 0.022),
-        (0.228, 0.408, 0.092),
+        (0.106, 0.440, 0.020),
+        (0.228, 0.410, 0.092),
         (0.232, 0.416, 0.216),
         (0.220, 0.436, 0.268),
     ],
     "hold_high": [
-        (0.114, 0.438, 0.022),
-        (0.238, 0.452, 0.106),
+        (0.106, 0.440, 0.020),
+        (0.238, 0.454, 0.106),
         (0.246, 0.550, 0.220),
         (0.234, 0.594, 0.274),
     ],
     "akimbo": [
-        (0.114, 0.438, 0.022),
-        (0.240, 0.402, 0.052),
+        (0.106, 0.440, 0.020),
+        (0.240, 0.404, 0.052),
         (0.214, 0.336, 0.142),
         (0.186, 0.324, 0.172),
     ],
     "wide": [
-        (0.114, 0.438, 0.022),
-        (0.240, 0.402, 0.052),
+        (0.106, 0.440, 0.020),
+        (0.240, 0.404, 0.052),
         (0.214, 0.336, 0.142),
         (0.186, 0.324, 0.172),
     ],
@@ -94,85 +94,92 @@ _ARM_PRESETS_LEFT: Dict[str, List[Tuple[float, float, float]]] = {
 
 
 def _head_sculpt_fn(pos: np.ndarray) -> np.ndarray:
-    """Sculpt an organic beveled-crown insect carapace with brow arches and center furrow.
+    """Sculpt a chiseled shield/heart-shaped insect head carapace (anti-balloon).
 
-    Creates a flatter angled forehead crown with a crisp specular bevel edge,
-    arched chitin brow lobes over orbital sockets, a vertical center cranial
-    furrow, and a sleek tapered insect wedge jaw below the eyes.
+    Flattens cheek and temple planes, sharpens the beveled forehead crown and
+    overhanging brow ridges, carves a crisp vertical cranial plate seam and
+    recessed orbital sockets, and chamfers the occipital rear into the neck.
     """
     p = pos.copy()
     x, y, z = p[:, 0], p[:, 1], p[:, 2]
     ax = np.abs(x)
-    front_mask = np.clip((z - 0.02) / 0.18, 0.0, 1.0)
+    front_mask = np.clip((z - 0.01) / 0.17, 0.0, 1.0)
 
-    # 1. Crisp beveled crown plateau tilted slightly forward so overhead light catches the rim.
-    crown_y = 0.184 - 0.052 * np.clip((z + 0.07) / 0.28, 0.0, 1.0)
+    # 1. Flat-planed angled crown plateau with a sharp forehead bevel crest.
+    crown_y = 0.178 - 0.058 * np.clip((z + 0.08) / 0.28, 0.0, 1.0)
     over = np.maximum(0.0, y - crown_y)
-    p[:, 1] = y - 0.45 * over
+    p[:, 1] = y - 0.58 * over
 
-    # 2. Arched chitin brow ridges directly above each orbital socket (replaces cartoon eyebrows).
+    # 2. Chiseled planar temple sides (trims inflated balloon cheeks).
+    temple_limit = 0.216 - 0.048 * np.clip((-y + 0.03) / 0.24, 0.0, 1.0) - 0.030 * np.clip((-z - 0.04) / 0.18, 0.0, 1.0)
+    side_over = np.maximum(0.0, ax - temple_limit)
+    p[:, 0] = np.sign(x) * (ax - 0.52 * side_over)
+    ax = np.abs(p[:, 0])
+
+    # 3. Sharp overhanging brow ridge arches directly above each eye socket.
     brow_arch = (
-        np.exp(-((ax - 0.098) / 0.066) ** 2)
-        * np.exp(-((y - 0.086) / 0.044) ** 2)
+        np.exp(-((ax - 0.098) / 0.058) ** 2)
+        * np.exp(-((y - 0.088) / 0.036) ** 2)
         * front_mask
     )
-    p[:, 2] += 0.024 * brow_arch
-    p[:, 1] += 0.012 * brow_arch
+    p[:, 2] += 0.030 * brow_arch
+    p[:, 1] += 0.014 * brow_arch
 
-    # 3. Crisp center vertical cranial brow furrow between the two arched brow lobes.
+    # 4. Crisp vertical center cranial plate seam running up the forehead crown.
     furrow = (
-        np.exp(-((x / 0.024) ** 2))
-        * np.exp(-((y - 0.066) / 0.080) ** 2)
-        * front_mask
+        np.exp(-((x / 0.018) ** 2))
+        * np.exp(-((y - 0.082) / 0.095) ** 2)
+        * np.clip((z + 0.04) / 0.20, 0.0, 1.0)
     )
-    p[:, 2] -= 0.020 * furrow
-    p[:, 1] -= 0.006 * furrow
+    p[:, 2] -= 0.022 * furrow
+    p[:, 1] -= 0.009 * furrow
 
-    # 4. Shallow orbital depressions so eyes nestle organically inside the carapace.
+    # 5. Deep recessed orbital sockets so eyes sit inside sculpted armored rims.
     socket = (
-        np.exp(-(((ax - 0.094) / 0.060) ** 2 + ((y + 0.010) / 0.062) ** 2))
-        * np.clip((z - 0.07) / 0.15, 0.0, 1.0)
+        np.exp(-(((ax - 0.095) / 0.058) ** 2 + ((y + 0.012) / 0.060) ** 2))
+        * np.clip((z - 0.06) / 0.15, 0.0, 1.0)
     )
-    p[:, 2] -= 0.022 * socket
+    p[:, 2] -= 0.028 * socket
 
-    # 5. Sleek insect wedge taper below the eyes into the narrow jaw/clypeus bridge.
-    lower = np.clip((-y - 0.018) / 0.200, 0.0, 1.0)
-    p[:, 0] *= 1.0 - 0.34 * (lower ** 1.35)
-    p[:, 2] *= 1.0 - 0.14 * (lower ** 1.45)
+    # 6. Sharp shield/heart wedge taper below the eyes into a narrow chiseled jaw.
+    lower = np.clip((-y - 0.012) / 0.195, 0.0, 1.0)
+    p[:, 0] *= 1.0 - 0.42 * (lower ** 1.25)
+    p[:, 2] *= 1.0 - 0.16 * (lower ** 1.35)
 
-    # Subtle forward clypeus/snout bridge between the lower eyes toward the mandibles.
-    clypeus = np.exp(-((x / 0.068) ** 2)) * np.exp(-((y + 0.102) / 0.064) ** 2) * front_mask
-    p[:, 2] += 0.018 * clypeus
+    # Narrow angular clypeus ridge down the center muzzle bridge.
+    clypeus = np.exp(-((x / 0.052) ** 2)) * np.exp(-((y + 0.098) / 0.060) ** 2) * front_mask
+    p[:, 2] += 0.022 * clypeus
 
-    # Slight rear-lower chamfer so side and 3/4 silhouettes look chiseled into the neck.
-    rear_low = np.clip((-z - 0.04) / 0.17, 0.0, 1.0) * np.clip((-y + 0.02) / 0.21, 0.0, 1.0)
-    p[:, 0] *= 1.0 - 0.12 * rear_low
+    # 7. Angular occipital rear bevel tapering cleanly into the slender neck.
+    rear_low = np.clip((-z - 0.03) / 0.18, 0.0, 1.0) * np.clip((-y + 0.06) / 0.24, 0.0, 1.0)
+    p[:, 0] *= 1.0 - 0.20 * rear_low
+    p[:, 2] += 0.024 * rear_low
     return p
 
 
 def _build_mandibles(scene: SceneBuilder, head_center: Tuple[float, float, float], head_tilt_x: float) -> None:
-    """Build inward-curving toothed chitin pincer mandibles + recessed dark mouth cleft."""
+    """Build flattened, blade-like inward-curving toothed chitin mandibles + mouth cleft."""
     _, hy, hz = head_center
 
-    # Curved pincer mandible jaw (left side +X, mirrored cleanly to -X).
+    # Flattened beveled blade mandible (6-sided cross-section kills sausage puffiness).
     jaw_pts = [
-        (0.084, hy - 0.132, hz + 0.118),
-        (0.106, hy - 0.160, hz + 0.176),
-        (0.084, hy - 0.178, hz + 0.236),
-        (0.032, hy - 0.182, hz + 0.256),
+        (0.080, hy - 0.134, hz + 0.118),
+        (0.104, hy - 0.162, hz + 0.178),
+        (0.082, hy - 0.180, hz + 0.236),
+        (0.028, hy - 0.184, hz + 0.258),
     ]
     jaw_rads = [
-        (0.032, 0.034),
-        (0.036, 0.040),
-        (0.028, 0.031),
-        (0.013, 0.015),
+        (0.020, 0.030),
+        (0.022, 0.034),
+        (0.016, 0.026),
+        (0.007, 0.012),
     ]
-    jaw_left = curved_tube(
+    jaw_left = swept_tube(
         jaw_pts,
         jaw_rads,
-        samples_per_seg=4,
-        radial_segs=12,
-        cap_rings=3,
+        radial_segs=6,
+        smooth_subdiv=3,
+        cap_rings=2,
         name="mandible_jaw",
         material="chitin_team",
     )
@@ -180,24 +187,24 @@ def _build_mandibles(scene: SceneBuilder, head_center: Tuple[float, float, float
         jaw_left = jaw_left.translate(0.0, -hy, -hz).rotate_xyz(rx=head_tilt_x).translate(0.0, hy, hz)
     scene.add_mirrored("head", jaw_left)
 
-    # Two subtle sharp inner serration teeth along the biting edge of each mandible.
+    # Two sharp serrated inner chitin teeth along the biting edge of each mandible blade.
     for t_idx, (tx, ty, tz, rad, hgt, rz_deg) in enumerate(
         (
-            (0.056, hy - 0.177, hz + 0.232, 0.011, 0.026, 72.0),
-            (0.036, hy - 0.180, hz + 0.246, 0.009, 0.022, 84.0),
+            (0.056, hy - 0.178, hz + 0.232, 0.010, 0.028, 74.0),
+            (0.034, hy - 0.182, hz + 0.248, 0.008, 0.024, 86.0),
         )
     ):
         tooth = (
-            cone(rad, hgt, radial_segs=10, name=f"mandible_tooth_{t_idx}", material="chitin_team")
+            cone(rad, hgt, radial_segs=6, name=f"mandible_tooth_{t_idx}", material="chitin_team")
             .rotate_xyz(rx=12.0, ry=-18.0, rz=rz_deg, degrees=True)
             .translate(tx, ty, tz)
         )
         scene.add_mirrored("head", tooth)
 
-    # Recessed dark mouth/labrum cleft tucked between the mandible bases.
+    # Recessed dark mouth/labrum plate tucked cleanly between the mandible bases.
     mouth_cleft = (
-        ellipsoid(0.050, 0.030, 0.044, u_segs=14, v_segs=10, name="mouth_cleft", material="chitin_dark")
-        .translate(0.0, hy - 0.162, hz + 0.154)
+        superellipsoid(0.044, 0.024, 0.040, e1=0.60, e2=0.65, u_segs=12, v_segs=8, name="mouth_cleft", material="chitin_dark")
+        .translate(0.0, hy - 0.162, hz + 0.152)
     )
     scene.add("head", mouth_cleft)
 
@@ -205,7 +212,7 @@ def _build_mandibles(scene: SceneBuilder, head_center: Tuple[float, float, float
 def _build_head(scene: SceneBuilder, head_center: Tuple[float, float, float], head_tilt_x: float) -> None:
     hx, hy, hz = head_center
     cranium = (
-        superellipsoid(0.228, 0.222, 0.226, e1=0.64, e2=0.72, u_segs=36, v_segs=26, name="cranium", material="chitin_team")
+        superellipsoid(0.228, 0.222, 0.226, e1=0.56, e2=0.64, u_segs=36, v_segs=26, name="cranium", material="chitin_team")
         .deform(_head_sculpt_fn)
         .rotate_xyz(rx=head_tilt_x)
         .translate(hx, hy, hz)
@@ -252,7 +259,7 @@ def _build_eyes(
 
     # Dark sculpted orbital socket rim grounding each eye deeply into the carapace.
     socket_rim = (
-        torus_arc(0.066, 0.011, u_segs=22, v_segs=8, plane="xy", name="eye_socket_rim", material="chitin_dark")
+        torus_arc(0.066, 0.011, u_segs=20, v_segs=8, plane="xy", name="eye_socket_rim", material="chitin_dark")
         .scale(0.95, 1.04, 0.90)
         .rotate_xyz(rx=-0.18 + head_tilt_x, ry=0.20)
         .translate(eye_x, eye_y, eye_z + 0.006)
@@ -306,7 +313,7 @@ def _build_eyes(
             lid_pts,
             [0.008, 0.010, 0.007],
             samples_per_seg=3,
-            radial_segs=8,
+            radial_segs=6,
             cap_rings=2,
             name="eyelid_ridge",
             material="chitin_dark",
@@ -322,18 +329,18 @@ def _build_eyes(
 
 
 def _build_antennae(scene: SceneBuilder, head_center: Tuple[float, float, float]) -> Dict[str, Tuple[float, float, float]]:
-    """Build slender 2-segment kinked dark insect antennae with subtle clubbed tips."""
+    """Build slender hexagonal 2-segment kinked insect antennae with tapered sensory tips."""
     _, hy, hz = head_center
-    base_l = (0.102, hy + 0.172, hz + 0.044)
+    base_l = (0.100, hy + 0.172, hz + 0.044)
     elbow_l = (0.142, hy + 0.328, hz + 0.060)
     mid2_l = (0.164, hy + 0.344, hz + 0.120)
-    tip_l = (0.174, hy + 0.296, hz + 0.178)
+    tip_l = (0.174, hy + 0.298, hz + 0.180)
 
-    # Segment 1: slender scape rising cleanly from forehead socket to sharp elbow kink.
+    # Segment 1: slender hexagonal scape rising cleanly from forehead socket to angular kink.
     scape = swept_tube(
-        [base_l, (0.122, hy + 0.254, hz + 0.052), elbow_l],
-        [0.015, 0.012, 0.014],
-        radial_segs=10,
+        [base_l, (0.120, hy + 0.252, hz + 0.052), elbow_l],
+        [(0.012, 0.014), (0.009, 0.011), (0.012, 0.014)],
+        radial_segs=6,
         smooth_subdiv=2,
         cap_rings=2,
         name="antenna_scape",
@@ -341,27 +348,27 @@ def _build_antennae(scene: SceneBuilder, head_center: Tuple[float, float, float]
     )
     scene.add_mirrored("antennae", scape)
 
-    # Crisp elbow joint knuckle.
+    # Sharp faceted antenna elbow joint.
     scene.add_mirrored(
         "antennae",
-        sphere(0.016, u_segs=10, v_segs=8, name="antenna_joint", material="chitin_dark").translate(*elbow_l),
+        superellipsoid(0.014, 0.015, 0.014, e1=0.55, e2=0.55, u_segs=8, v_segs=6, name="antenna_joint", material="chitin_dark").translate(*elbow_l),
     )
 
-    # Segment 2: arched funiculus swelling gently into a subtle organic clubbed tip.
-    funiculus = curved_tube(
-        [elbow_l, mid2_l, tip_l],
-        [0.012, 0.017, 0.023],
-        samples_per_seg=4,
-        radial_segs=10,
-        cap_rings=3,
+    # Segment 2: hexagonal funiculus swelling to a sleek lanceolate club tip (not a balloon bulb).
+    funiculus = swept_tube(
+        [elbow_l, mid2_l, (0.172, hy + 0.316, hz + 0.160), tip_l],
+        [(0.010, 0.012), (0.013, 0.016), (0.016, 0.020), (0.008, 0.011)],
+        radial_segs=6,
+        smooth_subdiv=3,
+        cap_rings=2,
         name="antenna_club",
         material="chitin_dark",
     )
     scene.add_mirrored("antennae", funiculus)
 
-    # Recessed dark socket collar at cranium base.
+    # Recessed beveled antenna socket collar at cranium base.
     socket_left = (
-        ellipsoid(0.028, 0.016, 0.028, u_segs=12, v_segs=8, name="antenna_socket", material="chitin_dark")
+        superellipsoid(0.024, 0.014, 0.024, e1=0.55, e2=0.60, u_segs=10, v_segs=6, name="antenna_socket", material="chitin_dark")
         .rotate_xyz(rx=0.22, rz=-0.30)
         .translate(*base_l)
     )
@@ -373,77 +380,130 @@ def _build_antennae(scene: SceneBuilder, head_center: Tuple[float, float, float]
     }
 
 
+def _gaster_keel_fn(pos: np.ndarray) -> np.ndarray:
+    """Subtle dorsal armor keel and slightly flatter belly on the stepped insect gaster."""
+    p = pos.copy()
+    x, y, z = p[:, 0], p[:, 1], p[:, 2]
+    # Subtle faceted dorsal spine ridge along the top midline (+Y).
+    top_mask = np.clip(y / 0.12, 0.0, 1.0)
+    keel = np.exp(-((x / 0.045) ** 2)) * top_mask
+    p[:, 1] += 0.012 * keel
+    # Slightly flatten the lower ventral plate so the gaster reads armored, not egg-round.
+    ventral = np.clip((-y - 0.045) / 0.08, 0.0, 1.0)
+    p[:, 1] += 0.016 * ventral
+    # Subtle lateral armor bevels along mid-flanks.
+    flank = np.clip((np.abs(x) - 0.095) / 0.04, 0.0, 1.0)
+    p[:, 0] -= np.sign(x) * 0.008 * flank
+    return p
+
+
 def _build_body(scene: SceneBuilder) -> Dict[str, Tuple[float, float, float]]:
-    """Build sleek upright armored insect thorax and stepped-plate teardrop gaster."""
-    # Compact neck joint linking cranium to thorax.
+    """Build slimmer segmented thorax armor plates, pinched petiole waist, and stepped-tergite gaster."""
+    # Slender armored insect neck stem + beveled pronotum collar ring.
     neck = (
-        lathe([(0.082, 0.0), (0.068, 0.055), (0.082, 0.118)], radial_segs=16, name="neck", material="chitin_dark")
+        lathe([(0.056, 0.0), (0.048, 0.052), (0.058, 0.116)], radial_segs=10, name="neck", material="chitin_dark")
         .rotate_xyz(rx=0.14)
-        .translate(0.0, 0.440, 0.010)
+        .translate(0.0, 0.442, 0.010)
     )
     scene.add("body", neck)
-
-    # Sleek upright dark chitin thorax core.
-    thorax_core = (
-        superellipsoid(0.112, 0.152, 0.120, e1=0.76, e2=0.80, u_segs=20, v_segs=14, name="thorax_core", material="chitin_dark")
-        .rotate_xyz(rx=0.12)
-        .translate(0.0, 0.340, -0.010)
+    neck_collar = (
+        torus_arc(0.068, 0.012, u_segs=12, v_segs=6, plane="xz", name="neck_collar", material="chitin_dark")
+        .rotate_xyz(rx=0.14)
+        .translate(0.0, 0.456, 0.012)
     )
-    scene.add("body", thorax_core)
+    scene.add("body", neck_collar)
 
-    # Crisper beveled team-colored thoracic chest plate and dorsal pronotum shield.
+    # Slimmer angular 2-segment thorax: upper pronotum core + narrower lower metathorax waist.
+    pronotum_core = (
+        superellipsoid(0.096, 0.086, 0.104, e1=0.52, e2=0.58, u_segs=16, v_segs=12, name="pronotum_core", material="chitin_dark")
+        .rotate_xyz(rx=0.12)
+        .translate(0.0, 0.386, -0.004)
+    )
+    scene.add("body", pronotum_core)
+
+    metathorax = (
+        superellipsoid(0.084, 0.084, 0.092, e1=0.54, e2=0.60, u_segs=16, v_segs=10, name="metathorax_core", material="chitin_dark")
+        .rotate_xyz(rx=-0.10)
+        .translate(0.0, 0.278, -0.022)
+    )
+    scene.add("body", metathorax)
+
+    # Crisp beveled chitin_team armor plates on chest (sternum) and upper back (pronotum/mesonotum).
     chest_plate = (
-        superellipsoid(0.100, 0.116, 0.078, e1=0.66, e2=0.72, u_segs=18, v_segs=14, name="chest_plate", material="chitin_team")
-        .rotate_xyz(rx=0.16)
-        .translate(0.0, 0.346, 0.052)
+        superellipsoid(0.084, 0.082, 0.054, e1=0.46, e2=0.54, u_segs=16, v_segs=12, name="chest_plate", material="chitin_team")
+        .rotate_xyz(rx=0.18)
+        .translate(0.0, 0.376, 0.060)
     )
     scene.add("body", chest_plate)
 
-    dorsal_plate = (
-        superellipsoid(0.098, 0.114, 0.082, e1=0.66, e2=0.72, u_segs=18, v_segs=14, name="dorsal_plate", material="chitin_team")
+    lower_chest = (
+        superellipsoid(0.068, 0.054, 0.044, e1=0.48, e2=0.56, u_segs=14, v_segs=10, name="sternum_lower", material="chitin_team")
         .rotate_xyz(rx=-0.12)
-        .translate(0.0, 0.358, -0.060)
+        .translate(0.0, 0.278, 0.040)
+    )
+    scene.add("body", lower_chest)
+
+    dorsal_plate = (
+        superellipsoid(0.086, 0.084, 0.058, e1=0.46, e2=0.54, u_segs=16, v_segs=12, name="dorsal_plate", material="chitin_team")
+        .rotate_xyz(rx=-0.16)
+        .translate(0.0, 0.388, -0.062)
     )
     scene.add("body", dorsal_plate)
 
-    # Segmented petiole waist node connecting thorax to gaster.
-    petiole = (
-        superellipsoid(0.052, 0.052, 0.058, e1=0.78, e2=0.82, u_segs=14, v_segs=10, name="petiole", material="chitin_dark")
-        .translate(0.0, 0.248, -0.130)
+    # Distinct pinched insect petiole waist stalk + sharp dorsal petiole node crest (kills balloon look!).
+    petiole_stem = swept_tube(
+        [(0.0, 0.258, -0.088), (0.0, 0.244, -0.132), (0.0, 0.240, -0.172)],
+        [(0.032, 0.034), (0.022, 0.024), (0.030, 0.032)],
+        radial_segs=6,
+        smooth_subdiv=2,
+        cap_rings=2,
+        name="petiole_stem",
+        material="chitin_dark",
     )
-    scene.add("body", petiole)
+    scene.add("body", petiole_stem)
 
-    # Stepped overlapping-plate teardrop insect gaster extending cleanly backward (-Z).
+    petiole_node = (
+        superellipsoid(0.036, 0.046, 0.024, e1=0.48, e2=0.54, u_segs=12, v_segs=8, name="petiole_node", material="chitin_team")
+        .rotate_xyz(rx=-0.18)
+        .translate(0.0, 0.268, -0.132)
+    )
+    scene.add("body", petiole_node)
+
+    # Sleeker pointed insect gaster with 4 crisp overlapping stepped tergite armor rings!
     gaster_profile = [
-        (0.000, 0.000),  # crisp tapered insect tail tip (points toward -Z)
-        (0.026, 0.016),
-        (0.062, 0.054),
-        (0.090, 0.098),
-        (0.086, 0.106),  # intersegment groove 1
-        (0.106, 0.122),
-        (0.122, 0.176),
-        (0.117, 0.186),  # intersegment groove 2
-        (0.125, 0.202),
-        (0.122, 0.256),
-        (0.098, 0.312),
-        (0.058, 0.352),
-        (0.000, 0.370),  # front pole meeting petiole
+        (0.000, 0.000),  # sharp tapered tail apex (points toward -Z)
+        (0.018, 0.014),
+        (0.048, 0.048),
+        (0.072, 0.082),
+        (0.062, 0.088),  # crisp stepped tergite ledge 1
+        (0.086, 0.104),
+        (0.106, 0.148),
+        (0.095, 0.156),  # crisp stepped tergite ledge 2
+        (0.118, 0.172),
+        (0.124, 0.222),
+        (0.112, 0.230),  # crisp stepped tergite ledge 3
+        (0.122, 0.248),
+        (0.114, 0.298),
+        (0.086, 0.338),
+        (0.044, 0.362),
+        (0.000, 0.372),  # pinched front attachment into petiole
     ]
     gaster = (
-        lathe(gaster_profile, radial_segs=24, cap_bottom=False, cap_top=False, axis="z", name="gaster", material="chitin_team")
-        .scale(0.96, 0.88, 1.0)
+        lathe(gaster_profile, radial_segs=20, cap_bottom=False, cap_top=False, axis="z", name="gaster", material="chitin_team")
+        .deform(_gaster_keel_fn)
+        .scale(0.92, 0.86, 1.0)
         .rotate_xyz(rx=-0.16)
-        .translate(0.0, 0.214, -0.492)
+        .translate(0.0, 0.214, -0.506)
     )
     scene.add("body", gaster)
 
-    # Recessed dark chitin seam rings tucked cleanly into the stepped gaster grooves.
-    for idx, (z_off, maj_r) in enumerate([(-0.310, 0.119), (-0.388, 0.090)]):
-        dz = z_off - (-0.492)
+    # Crisp dark intersegment seam rings seated tightly under each overlapping tergite ledge.
+    for idx, (z_off, maj_r) in enumerate([(-0.278, 0.114), (-0.352, 0.098), (-0.420, 0.066)]):
+        dz = z_off - (-0.506)
         y_ring = 0.214 + dz * math.sin(0.16)
         band = (
-            torus_arc(maj_r, 0.0064, u_segs=24, v_segs=8, plane="xy", name=f"gaster_seam_{idx}", material="chitin_dark")
-            .scale(0.96, 0.88, 1.0)
+            torus_arc(maj_r, 0.0060, u_segs=20, v_segs=6, plane="xy", name=f"gaster_seam_{idx}", material="chitin_dark")
+            .scale(0.92, 0.86, 1.0)
             .rotate_xyz(rx=-0.16)
             .translate(0.0, y_ring, z_off)
         )
@@ -453,14 +513,14 @@ def _build_body(scene: SceneBuilder) -> Dict[str, Tuple[float, float, float]]:
         "neck_center": (0.0, 0.490, 0.014),
         "thorax_center": (0.0, 0.340, -0.010),
         "back_anchor": (0.0, 0.368, -0.142),
-        "gaster_center": (0.0, 0.248, -0.296),
-        "gaster_top": (0.0, 0.362, -0.272),
+        "gaster_center": (0.0, 0.248, -0.308),
+        "gaster_top": (0.0, 0.358, -0.282),
     }
 
 
 def _resolve_arm_points(pose: ArmPoseLike, side: int) -> List[Tuple[float, float, float]]:
     """Resolve arm control points for `side` (+1 = ant left/+X, -1 = ant right/-X)."""
-    shoulder = (side * 0.114, 0.438, 0.022)
+    shoulder = (side * 0.106, 0.440, 0.020)
     if pose is None:
         return [(side * x, y, z) for x, y, z in _ARM_PRESETS_LEFT["idle"]]
     if isinstance(pose, str):
@@ -483,26 +543,26 @@ def _build_arm(
     side: int,
     label: str,
 ) -> Tuple[Tuple[float, float, float], Tuple[float, float, float], Tuple[float, float, float]]:
-    """Build one sleek segmented dark insect forelimb + sharp pincer claw hand."""
+    """Build one hexagonal beveled insect forelimb + angular elbow spur + sharp pincer claws."""
     pts = _resolve_arm_points(pose, side)
     n_pts = len(pts)
 
     if n_pts == 4:
         p0, p1, p2, p3 = [np.array(p, dtype=np.float64) for p in pts]
         upper = swept_tube(
-            [p0, 0.5 * (p0 + p1) + np.array([0.0, 0.009, 0.0]), p1],
-            [0.023, 0.026, 0.020],
-            radial_segs=10,
-            smooth_subdiv=2,
+            [p0, 0.5 * (p0 + p1) + np.array([0.0, 0.008, 0.0]), p1],
+            [(0.015, 0.022), (0.018, 0.028), (0.013, 0.019)],
+            radial_segs=6,
+            smooth_subdiv=1,
             cap_rings=2,
             name=f"arm_upper_{label}",
             material="chitin_dark",
         )
         forearm = swept_tube(
             [p1, p2, p3],
-            [0.022, 0.017, 0.015],
-            radial_segs=10,
-            smooth_subdiv=2,
+            [(0.015, 0.023), (0.012, 0.018), (0.010, 0.014)],
+            radial_segs=6,
+            smooth_subdiv=1,
             cap_rings=2,
             name=f"arm_fore_{label}",
             material="chitin_dark",
@@ -510,32 +570,38 @@ def _build_arm(
         scene.add("arms", upper)
         scene.add("arms", forearm)
     else:
-        rads = list(np.linspace(0.024, 0.016, n_pts))
+        rads = [(float(r) * 0.72, float(r) * 1.15) for r in np.linspace(0.022, 0.014, n_pts)]
         arm_mesh = swept_tube(
             pts,
             rads,
-            radial_segs=10,
-            smooth_subdiv=2,
+            radial_segs=6,
+            smooth_subdiv=1,
             cap_rings=2,
             name=f"arm_{label}",
             material="chitin_dark",
         )
         scene.add("arms", arm_mesh)
 
-    # Crisp dark shoulder socket and angular elbow knuckle.
+    # Angular shoulder cap and sharp beveled elbow carina spur (not puffy round balls).
     sx, sy, sz = pts[0]
-    scene.add("arms", ellipsoid(0.030, 0.028, 0.030, u_segs=10, v_segs=8, name=f"shoulder_{label}", material="chitin_dark").translate(sx, sy, sz))
+    scene.add("arms", superellipsoid(0.026, 0.024, 0.026, e1=0.52, e2=0.58, u_segs=10, v_segs=6, name=f"shoulder_{label}", material="chitin_dark").translate(sx, sy, sz))
     ex, ey, ez = pts[1]
-    scene.add("arms", superellipsoid(0.024, 0.024, 0.024, e1=0.72, e2=0.72, u_segs=10, v_segs=8, name=f"elbow_{label}", material="chitin_dark").translate(ex, ey, ez))
+    scene.add("arms", superellipsoid(0.020, 0.022, 0.020, e1=0.46, e2=0.52, u_segs=8, v_segs=6, name=f"elbow_{label}", material="chitin_dark").translate(ex, ey, ez))
+    elbow_spur = (
+        cone(0.010, 0.026, radial_segs=6, name=f"elbow_spur_{label}", material="chitin_dark")
+        .rotate_xyz(rx=-0.45, rz=-side * 0.85)
+        .translate(ex + side * 0.010, ey + 0.008, ez - 0.008)
+    )
+    scene.add("arms", elbow_spur)
 
-    # Sleek tapered insect claw/pincer hand aligned to forearm direction.
+    # Sleek tapered angular insect claw/pincer hand aligned to forearm direction.
     hand = np.array(pts[-1], dtype=np.float64)
     prev = np.array(pts[-2], dtype=np.float64)
     hdir = hand - prev
     hlen = float(np.linalg.norm(hdir))
     hdir = hdir / hlen if hlen > 1e-8 else np.array([0.0, 0.0, 1.0])
 
-    palm = ellipsoid(0.024, 0.022, 0.026, u_segs=12, v_segs=8, name=f"hand_palm_{label}", material="chitin_dark").translate(hand)
+    palm = superellipsoid(0.018, 0.016, 0.022, e1=0.52, e2=0.58, u_segs=10, v_segs=6, name=f"hand_palm_{label}", material="chitin_dark").translate(hand)
     scene.add("arms", palm)
 
     up_ref = np.array([0.0, 1.0, 0.0]) if abs(hdir[1]) < 0.9 else np.array([1.0, 0.0, 0.0])
@@ -544,14 +610,14 @@ def _build_arm(
     up_v = np.cross(side_v, hdir)
 
     for finger_sign, fname in ((-1.0, "inner"), (1.0, "outer")):
-        f_base = hand + 0.008 * hdir + finger_sign * 0.013 * side_v + 0.004 * up_v
-        f_mid = hand + 0.030 * hdir + finger_sign * 0.016 * side_v
-        f_tip = hand + 0.050 * hdir + finger_sign * 0.005 * side_v - 0.007 * up_v
+        f_base = hand + 0.006 * hdir + finger_sign * 0.012 * side_v + 0.003 * up_v
+        f_mid = hand + 0.028 * hdir + finger_sign * 0.015 * side_v
+        f_tip = hand + 0.050 * hdir + finger_sign * 0.004 * side_v - 0.008 * up_v
         claw = swept_tube(
             [f_base, f_mid, f_tip],
-            [0.011, 0.009, 0.0045],
-            radial_segs=8,
-            smooth_subdiv=2,
+            [(0.007, 0.010), (0.005, 0.008), (0.0025, 0.0035)],
+            radial_segs=6,
+            smooth_subdiv=1,
             cap_rings=2,
             name=f"hand_claw_{fname}_{label}",
             material="chitin_dark",
@@ -566,21 +632,21 @@ def _build_arm(
 
 
 def _tapered_tarsus_foot(name: str, material: str = "chitin_dark") -> MeshPart:
-    """Create a sleek tapered dark insect tarsus claw-foot resting flat on Y = 0.0."""
+    """Create a sleek hexagonal tapered insect tarsus claw-blade resting flat on Y = 0.0."""
     tarsus_prof = [
-        (0.000, -0.022),
-        (0.014, -0.014),
-        (0.018, 0.004),
-        (0.014, 0.028),
-        (0.008, 0.048),
-        (0.000, 0.058),
+        (0.000, -0.020),
+        (0.012, -0.012),
+        (0.016, 0.004),
+        (0.012, 0.028),
+        (0.006, 0.048),
+        (0.000, 0.060),
     ]
-    foot = lathe(tarsus_prof, radial_segs=12, cap_bottom=False, cap_top=False, axis="z", name=name, material=material)
-    foot = foot.scale(1.02, 0.72, 1.0)
+    foot = lathe(tarsus_prof, radial_segs=6, cap_bottom=False, cap_top=False, axis="z", name=name, material=material)
+    foot = foot.scale(0.95, 0.68, 1.0)
 
     def ground_sole(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
-        p[:, 1] = np.maximum(p[:, 1], -0.010)
+        p[:, 1] = np.maximum(p[:, 1], -0.009)
         return p
 
     foot = foot.deform(ground_sole)
@@ -597,77 +663,83 @@ def _add_segmented_insect_leg(
     foot_pos: Tuple[float, float, float],
     foot_yaw: float,
 ) -> None:
-    """Build one angular segmented insect leg (coxa, femur, sharp knee, tapered tibia, claw foot)."""
+    """Build one angular hexagonal insect leg with flattened femur/tibia blades and sharp knee spur."""
     p_hip = np.array(hip, dtype=np.float64)
     p_knee = np.array(knee, dtype=np.float64)
     p_ankle = np.array(ankle, dtype=np.float64)
 
-    # Coxa/hip socket.
+    # Angular coxa/hip joint socket.
     scene.add_mirrored(
         "legs",
-        ellipsoid(0.032, 0.028, 0.032, u_segs=10, v_segs=8, name=f"coxa_{label}", material="chitin_dark").translate(p_hip),
+        superellipsoid(0.028, 0.024, 0.028, e1=0.52, e2=0.56, u_segs=8, v_segs=6, name=f"coxa_{label}", material="chitin_dark").translate(p_hip),
     )
 
-    # Muscular angular upper femur rising sharply toward the tucked knee.
+    # Flattened hexagonal blade-like femur rising sharply to the knee (zero balloon cylinder look).
     femur_mid = 0.5 * (p_hip + p_knee) + np.array([0.0, 0.014, 0.0])
     femur = swept_tube(
         [p_hip, femur_mid, p_knee],
-        [(0.020, 0.024), (0.026, 0.032), (0.019, 0.022)],
-        radial_segs=10,
-        smooth_subdiv=2,
+        [(0.014, 0.022), (0.017, 0.032), (0.013, 0.022)],
+        radial_segs=6,
+        smooth_subdiv=1,
         cap_rings=2,
         name=f"femur_{label}",
         material="chitin_dark",
     )
     scene.add_mirrored("legs", femur)
 
-    # Crisp angular knee joint cap.
+    # Crisp angular knee carina + outward pointed chitin knee spur.
     scene.add_mirrored(
         "legs",
-        superellipsoid(0.023, 0.026, 0.023, e1=0.62, e2=0.68, u_segs=10, v_segs=8, name=f"knee_{label}", material="chitin_dark").translate(p_knee),
+        superellipsoid(0.020, 0.024, 0.020, e1=0.44, e2=0.50, u_segs=8, v_segs=6, name=f"knee_{label}", material="chitin_dark").translate(p_knee),
     )
+    knee_spur = (
+        cone(0.012, 0.032, radial_segs=6, name=f"knee_spur_{label}", material="chitin_dark")
+        .rotate_xyz(rx=0.18 if p_knee[2] >= 0.0 else -0.18, rz=-0.62)
+        .translate(float(p_knee[0] + 0.012), float(p_knee[1] + 0.016), float(p_knee[2]))
+    )
+    scene.add_mirrored("legs", knee_spur)
 
-    # Slender sharply-tapered lower tibia plunging down to the narrow stance ankle.
+    # Slender hexagonal tapered lower tibia blade plunging down to the ankle.
     tibia_mid = 0.45 * p_knee + 0.55 * p_ankle + np.array([0.008, 0.0, 0.0])
     tibia = swept_tube(
         [p_knee, tibia_mid, p_ankle],
-        [0.021, 0.016, 0.011],
-        radial_segs=10,
-        smooth_subdiv=2,
+        [(0.014, 0.022), (0.010, 0.016), (0.007, 0.011)],
+        radial_segs=6,
+        smooth_subdiv=1,
         cap_rings=2,
         name=f"tibia_{label}",
         material="chitin_dark",
     )
     scene.add_mirrored("legs", tibia)
 
-    # Small ankle knuckle + sleek tapered tarsus claw foot resting flush on Y = 0.0.
+    # Crisp ankle cuff + sleek hexagonal tarsus claw blade resting flush on Y = 0.0.
     scene.add_mirrored(
         "legs",
-        sphere(0.014, u_segs=8, v_segs=6, name=f"ankle_{label}", material="chitin_dark").translate(p_ankle),
+        superellipsoid(0.012, 0.012, 0.012, e1=0.52, e2=0.55, u_segs=8, v_segs=6, name=f"ankle_{label}", material="chitin_dark").translate(p_ankle),
     )
     foot = _tapered_tarsus_foot(f"tarsus_{label}").rotate_xyz(ry=foot_yaw).translate(*foot_pos)
     scene.add_mirrored("legs", foot)
 
 
 def _build_legs(scene: SceneBuilder) -> None:
-    # Tucked narrow upright stance matching original agst301 proportions (width ~0.48-0.50).
+    # Tucked narrow upright stance matching original agst301 proportions (width ~0.46-0.50).
     _add_segmented_insect_leg(
         scene,
         "mid",
-        hip=(0.094, 0.292, 0.024),
-        knee=(0.204, 0.302, 0.084),
-        ankle=(0.174, 0.024, 0.140),
-        foot_pos=(0.174, 0.0, 0.142),
+        hip=(0.088, 0.292, 0.022),
+        knee=(0.200, 0.304, 0.084),
+        ankle=(0.172, 0.022, 0.140),
+        foot_pos=(0.172, 0.0, 0.142),
         foot_yaw=0.28,
     )
 
     _add_segmented_insect_leg(
         scene,
         "rear",
-        hip=(0.092, 0.264, -0.068),
-        knee=(0.210, 0.294, -0.140),
-        ankle=(0.178, 0.024, -0.190),
-        foot_pos=(0.178, 0.0, -0.192),
+        hip=(0.086, 0.264, -0.066),
+        knee=(0.206, 0.296, -0.140),
+        ankle=(0.176, 0.022, -0.190),
+        foot_pos=(0.176, 0.0, -0.192),
         foot_yaw=math.pi - 0.30,
     )
 
@@ -684,29 +756,7 @@ def build_base_ant(
     blink: float = 0.0,
     scale: float = 1.0,
 ) -> Tuple[SceneBuilder, Dict[str, Any]]:
-    """Build the sculpted insectoid base ant and return `(SceneBuilder, anchors)`.
-
-    Parameters
-    ----------
-    scene_name:
-        Root node name in the exported glTF scene (e.g., "ant_worker").
-    include_antennae:
-        Set False for helmeted classes (e.g., Fire Ant) whose headwear covers them.
-    include_eyes / include_brows:
-        Toggle 3-part eyes + blinkable eyelids (default True) or optional subtle
-        eyelid ridge (default False; sculpted chitin brow arches provide the brow).
-    left_arm_pose / right_arm_pose:
-        Preset name ("idle", "hold_tool", "hold_front", "hold_high", "akimbo",
-        "wide") or an explicit list of 3D control points for that side.
-        Remember: +X is ant's left (viewer's right), -X is ant's right.
-    head_tilt_x:
-        Additional pitch offset in radians around +X.
-    blink:
-        Resting eyelid closure in [0.0, 1.0] (0.0 = open, 1.0 = fully closed).
-        The glTF 2.0 "Blink" animation clip is always exported when eyes exist.
-    scale:
-        Uniform world-space scale factor (grounded to Y = 0.0 after scaling).
-    """
+    """Build the sculpted insectoid base ant and return `(SceneBuilder, anchors)`."""
     scene = SceneBuilder(name=scene_name)
     head_center = (0.0, 0.724, 0.050)
     head_radii = (0.228, 0.222, 0.226)
@@ -722,8 +772,8 @@ def build_base_ant(
         eye_anchors = _build_eyes(scene, head_center, head_tilt_x, include_brows=include_brows, blink=blink)
 
     ant_anchors = {
-        "antenna_base_left": (0.102, head_center[1] + 0.172, head_center[2] + 0.044),
-        "antenna_base_right": (-0.102, head_center[1] + 0.172, head_center[2] + 0.044),
+        "antenna_base_left": (0.100, head_center[1] + 0.172, head_center[2] + 0.044),
+        "antenna_base_right": (-0.100, head_center[1] + 0.172, head_center[2] + 0.044),
     }
     if include_antennae:
         ant_anchors = _build_antennae(scene, head_center)
