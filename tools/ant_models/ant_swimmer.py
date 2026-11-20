@@ -838,6 +838,7 @@ def build_swimmer(blink: float = 0.0) -> SceneBuilder:
         brow_style="wonder",
         head_tilt_deg=4.0,
         head_yaw_deg=-2.5,
+        head_pitch_deg=-12.0,
         eye_look=(0.04, 0.10),
         antenna_asymmetry=0.30,
         stance_asymmetry=0.25,

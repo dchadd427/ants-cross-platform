@@ -517,6 +517,7 @@ def build_fire(blink: float = 0.0) -> SceneBuilder:
         brow_style="plucky",
         head_tilt_deg=3.5,
         head_yaw_deg=-3.0,
+        head_pitch_deg=-11.0,
         eye_look=(0.05, 0.04),
         stance_asymmetry=0.35,
         include_idle=False,
