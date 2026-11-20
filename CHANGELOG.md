@@ -26,6 +26,265 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.18.0 - 2026-11-19 - Dropped food can be taken only once
+
+**For players:**
+- **Food dropped by a dying ant can be taken only once.** When a thief carrying food died on a spot where a food pile had already been emptied, its lunch box could be eaten again and again for full points. Now the first ant to take it empties it, and it is gone. The 1998 game has the same flaw; this fix is a deliberate change from it.
+
+**Rules / network:** the original game's rules number moves from 9 to 13 (game mode 187 keeps 12); recordings of earlier numbers still play as they were recorded. Network protocol 25: a v0.17 page or game cannot join a v0.18 match, so reload the page.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/837d81c1...9e729c46)
+
+## v0.17.13 - 2026-11-19 - Phone fixes: keyboard in Options, watch bar, countdown, full-screen exit
+
+**For players:**
+- **Phones: the quick chat keys (F9 - F12) in Options open the keyboard** when tapped, and keep what you type.
+- **Phones: the watch page's controls fit on one row** at every phone width; the settings gear sits above the end of the timeline.
+- **Phones: no Fullscreen button covers the players on a small countdown card;** the Full button at the top is the way.
+- **iPhone held sideways in full screen:** the round exit button sits in the black margin beside the picture, no longer over the minimap.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.12 page or game still joins.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b842a06e...11d4a225)
+
+## v0.17.12 - 2026-11-19 - New windows, a Fullscreen button, live matches at once, alerts
+
+**For players:**
+- **A new look for the game's windows.** Options, Quick Help, the quit question and the other windows over the match get brushed-metal buttons, sliders and switches with the New art; Classic keeps the original's. The game behind an open window is darkened evenly.
+- **A Fullscreen button in the game's top bar,** right of Quit. On an iPhone, where Safari has no full screen for pages, it uses the page's own full screen.
+- **Matches show as in progress the moment they start,** with Watch. A match between people is shown to watchers 30 seconds late; matches of computer players are shown almost live.
+- **Alerts on Ants & Uncles:** a note when someone joins your room, and the tab blinks when your match starts while you are in another tab. Both can be turned off under the bell, next to the menu button.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.11 page or game still joins. Under the hood: the game, the game server and the web pages are rebuilt.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/30ddce44...9548c0a5)
+
+## v0.17.11 - 2026-11-18 - Your orders act at once online, one window for watching
+
+**For players:**
+- **Your own orders act at once in online matches.** Your ants now answer a click right away on your screen, as in a game on your own computer, whatever your connection. Attack clicks on a moving ant land far more often, and a well-timed re-order on mud works again with a slow connection. The server still decides every result, so nothing changes for the other players.
+- **Watching no longer leaves you with two front pages.** Watch and Matches open in the same tab; while you sit in a room they open a new tab, and Home in that tab closes it and brings you back to your room.
+- **The Games count includes matches in progress.**
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.10 page or game still joins. Under the hood: the game and the web pages are rebuilt. To switch the new behavior off for one game, add `?prediction=off` to the game page's address.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/cb9b01b0...c59ad097)
+
+## v0.17.10 - 2026-11-18 - Bot matches on the administration page, longer replay storage
+
+**For players:**
+- **Replays are kept longer.** The server now keeps up to 1 GB of matches for up to 90 days, and matches of computer players have their own smaller share, so they do not push out matches played by people.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.9 page or game still joins. Under the hood: the game server and the web pages are rebuilt.
+
+**For operators:**
+- **Computer-player matches can be started and scheduled from the site's administration page.** Start one or several at once, stop them, and set repeating schedules in Pacific time. Setting `ANTS_BOT_MATCH_EVERY_MIN=0` switches schedules off on the server.
+- **The database moves to schema 9 on the first start.** An older server cannot open it afterward.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/109000f6...4a6b395e)
+
+## v0.17.9 - 2026-11-18 - New pointers, Map Maker clumps and real map pictures
+
+**For players:**
+- **New pointers with the New HUD art.** Every cursor is redrawn to match the new look, sharp at larger window sizes, and the two places where the frame's pieces met badly are mended. Classic keeps the original's.
+- **Map Maker clumps.** Each tap in Clump puts a new clump of up to 250 ants and leaves the earlier ones where they are. Pick up moves one clump, and Erase takes away only the clump you touch.
+- **Better pictures for players' maps.** Submitted, approved and test maps now get a picture drawn by the game itself, like the library's maps.
+- **More maps in the computer players' own matches.** POPcOrN, HELLRAISER and Bombz Away join Highest score, and Fight Island joins 187.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.8 page or game still joins. Under the hood: the game server and the web pages are rebuilt, and the new front page at playants.org may read the public match numbers.
+
+**Fixes:**
+- On a phone, the Map Maker's map could stay stretched after choosing a tool, so a tap landed on the wrong cell.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/7c0381af...0469f31d)
+
+## v0.17.8 - 2026-11-17 - Hard computer players keep hitting
+
+**For players:**
+- **Hard computer players keep hitting.** In a fight a Hard bot now gives its next blow far sooner, so an ant it attacks gets away less often. Medium and Easy play as before.
+- **Computer players on ISLANDS** no longer send an ant over a bridge that is about to go.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.7 page or game still joins. Under the hood: the game server and the web pages are rebuilt.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/48c230ad...6c9f09fc)
+
+## v0.17.7 - 2026-11-17 - Back to the room after a match, ISLANDS bridges, Map Maker edges
+
+**For players:**
+- **Back to the room after a match.** The game's own Leave Game on the results screen now brings you back to your room, like the button under the game, and a public room stays public for the rematch.
+- **Hosting and watching a replay.** While you are in a room, Matches opens in a new tab, so your room stays yours; a page that comes back within a minute takes its seat again, and a seat that ended says so.
+- **Computer players on ISLANDS dig bridges** (Hard): a Swimmer digs the cheapest flower link first, a bridge home for hurt or stranded ants, to food on another island and to a Fire or Bomber power-up.
+- **Map Maker:** edge pieces show while you paint (no black squares), new water gets a ring of mud beside it with Auto edges on, and places where the game has no edge piece are marked.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.6 page or game still joins. Under the hood: the game server and the web pages are rebuilt.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b7ff8ec0...845c2214)
+
+## v0.17.6 - 2026-11-17 - One admin secret, and a closed admin page says why
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.5 page or game still joins. Under the hood: the chat hub, the game server and the web pages are rebuilt.
+
+**For operators:**
+- **For the site's admins:** the admin page needs one secret setting instead of two, and when it is closed it now says which part is off. Players see no change.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d148d9ea...711aff60)
+
+## v0.17.5 - 2026-11-17 - A new look for the match screen, faster match history, 187 computer-player matches
+
+**For players:**
+- **A new look for the match screen.** The frame, the panel, the pedestals and the buttons are redrawn, sharp on phones and big screens, in the original's colors and shapes. The original's art stays one setting away (the settings menu: HUD art, New or Classic).
+- **Matches show up in the history within seconds** of their end, also while the server's own computer-player matches run, and a player's own approved map shows its picture in the history and in Open games.
+- **The server's computer-player matches play 187 too:** a coin decides each one, and the Live list marks a 187 match.
+- **Map Maker:** typing in a box (the maker's name, the numbers of the Ants panel, the description) keeps the cursor in it.
+- **Chat:** an administrator's long message no longer draws over the next one on a phone.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.4 page or game still joins. Under the hood: the game server and the web pages are rebuilt; the web download is larger (the new art: about 12 MB on the wire).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1ec8e125...dd11f9f7)
+
+## v0.17.4 - 2026-11-17 - The screen stays on, steadier Menu, bots that cross bomb fields, a Discord admin page
+
+**For players:**
+- **The screen stays on.** A phone or tablet no longer goes dark while you play a match or watch a replay (where the browser supports it); a paused replay lets it sleep again.
+- **The front page's Menu button stays put** while the page loads on a phone, instead of jumping from the left to the right.
+- **Computer players handle bomb fields better.** They walk several tiles per order through a bomb field instead of one, take a power-up they are standing on by clicking their own tile, hop over a fire wall and a lake to reach a power-up, never plant a bomb under an ant, and try a fresh plan when they get stuck (POPcOrN, the CrUnChY BiTe maps and the other bomb-field maps).
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.3 page or game still joins. Under the hood: the game server's database moves to version 8 (the old admin accounts are removed; an older server cannot open the new file), and the chat hub and the web pages are rebuilt.
+
+**For operators:**
+- **A new admin page.** Site admins sign in with Discord on the admin page to review the maps players send, handle chat bans and mutes, read the moderators' log and see how the site is doing; the old admin passwords are gone. Players see no change.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/433de635...4fb44bf6)
+
+## v0.17.3 - 2026-11-16 - A Shift button for touch screens, moderation from the Players list, cleaner scores
+
+**For players:**
+- **A Shift button for touch screens.** The hotkey row on a phone or tablet has a Shift button: tap it and your next tap or drag on the map is a Shift-tap, as with a keyboard's Shift (add an ant to the selection or take one out, so a Bomber can be picked on its own); press and hold it to keep Shift on until you tap it again.
+- **Moderators act from the Players list.** A moderator or admin opens the same moderation sheet from a person in the front page's Players list, not only from a chat line. Players see no change.
+- **Cleaner scores and clock.** The scores and the match clock in the game's top bar use the game's numbers without the black outline.
+- **ISLANDS computer players (Hard) waste fewer ants.** Spare ants go and take the Swimmer the flower drops, and corner rows that nobody works are reached on foot.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.2 page or game still joins. Under the hood: the game server, the chat hub and the web pages are rebuilt.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/6fb219d9...81ef4f92)
+
+## v0.17.2 - 2026-11-16 - Fairer computer players in 187, chat moderation from a phone
+
+**For players:**
+- **Fairer computer players in 187.** Each computer player now opens on a different side instead of all of them rushing the same one (on TINY that was always the first seat), and a side down to four ants or fewer sends one ant at each enemy instead of two that get in each other's way.
+- **Chat moderators can act from a phone.** A moderator or admin right-clicks a line in the front page chat, or presses and holds it on a phone (or picks it with the arrow keys and Enter), to delete it, mute, kick or ban its writer, or see that person's recent messages in the chat. Players see no change.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.1 page or game still joins. Under the hood: the game server and the web pages are rebuilt.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/da6092fb...443b5fbb)
+
+## v0.17.1 - 2026-11-16 - Longer chat lines, bold numbers on every results column, computer players defend better against Thieves
+
+**For players:**
+- **Longer chat lines and a faster pace.** A line in the front page chat can be 1,000 characters (was 200). You can send 10 lines at once and then two a second, up to 600 lines an hour and 3,000 a day. The emoji picker follows the new length. The room chat in a game is unchanged.
+- **Every number on the results page is bold.** Ants lost, ants killed and hatched now use the same bold face with an outline as the score, on the normal and the 187 results page. In the narrow columns of the classic page a three-digit number is squeezed to fit, where the old face cut off its last digit.
+- **Computer players defend better against Thieves.** A Thief on its way to a raid looks again: when walls, bombs or a closed way meet it, it turns to another hill; a Fire Ant is no longer sent to a bank it cannot walk home from.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.0 page or game still joins. Under the hood: the chat server (it reconnects by itself within seconds), the game server and the web pages are rebuilt.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d63874e8...4a74eadd)
+
+## v0.17.0 - 2026-11-15 - 187 drops nothing, leave your room from Home, a better emoji picker, bots walk round bombs
+
+**For players:**
+- **187 puts nothing on the ground.** In a 187 match an ant of a special type (Combat, Bomber, Fire, Swimmer, Thief and the rest) that dies no longer drops its power-up, so a 187 match has no power-ups, no food and no healing from start to end. The original's game is unchanged: there a special ant still drops its power-up.
+- **Leave your room from Home.** A small red X on the corner of the My room button leaves the room (when other people are in it you are asked first), and the button now reads My room with its count at every window size. The Games button is gone from Home's top bar: the open games are always on Home, and a phone's bottom strip has Games.
+- **A better emoji picker** in the front page chat: 879 emoji in nine groups, a search field (type cat, heart, ant...), your recently used ones, a name line, full keyboard use, and on a phone held upright a sheet that takes the keyboard's place.
+- **Computer players walk round bombs** they can see instead of into them, a Bomber clears a bomb that blocks the way to food, and they skip food piles they cannot reach. A Bomber's flight checks its landing spot first, so it no longer lands in the water when something lies there.
+
+**Rules / network:** network protocol 24: a v0.16.11 page or game cannot join (an old page says that a newer version is out: reload it). The replay rules number of 187 is 12; 187 recordings made before keep their old rule and play as they were recorded. The original's game, its rules number and its recordings are unchanged. Under the hood: the game server and the web pages are rebuilt; matches running at the update end.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/06727fbd...2f426f13)
+
+## v0.16.11 - 2026-11-15 - Away on the Players list, press outside a dialog to cancel, computer players that walk where they go
+
+**For players:**
+- **People who leave the page stay on the Players list as Away.** When you switch tabs, minimize the window or lock your phone, your name stays in the list for 10 minutes, dimmed, in an Away group at the bottom (staff who are away stay under Staff). It goes back to normal the moment the page returns, and the chat reconnects at once if the connection dropped while the page slept. Logging out, a kick or a ban removes the row right away. Nothing about Away is saved on disk.
+- **Press outside a dialog to cancel it.** On every popup (host a game, How it works, the map list, the in-game menu, the Map Maker's boxes, the admin page's boxes) a press on the dimmed page around the box does what Cancel does. A drag that starts inside the box, a text selection or a scroll does not close it. In the game menu with the Leave game question showing, it means Stay.
+- **Computer players no longer give orders an ant cannot walk to.** The "Can't go there" messages from computer players on ISLANDS are almost gone, and their ants no longer waste time on those orders.
+- **Hard computer players on ISLANDS fly the Bomber to the ring pile earlier.** A Bomber is no longer held back by a mine it cannot reach, so the flight starts much earlier. Easy, Medium and the other maps play as before.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.10 page or game still joins. Under the hood: the chat server, the game server and the web pages are rebuilt.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/25a64658...6b375eeb)
+
+## v0.16.10 - 2026-11-15 - Chat box on one row, computer players take back power-ups and contest the ISLANDS ring
+
+**For players:**
+- **The chat box starts as one row.** On the front page the field, the emoji and microphone buttons and Send are on one row in every window. When your words need a second line, the field takes the top row and the buttons and Send move to a row under it at the right; it goes back to one row when the words fit again. The box has the same rounded corners as the site's buttons.
+- **Computer players take back power-ups.** Medium and Hard computer players now pick up a power-up that was dropped by an ant of a kind their team has lost, such as a Combat or Swimmer power-up. Hard also goes for dropped Fire, Bomber and Thief power-ups of other sides. Easy plays as before.
+- **Hard computer players on ISLANDS contest the ring.** One of their Bombers flies to the island of a ring pile and lays mines on the way to it, so a rival's Swimmers are thrown back. A Swimmer that was hit is sent back to work, each ring pile gets three Swimmers, and the crew digs the one tile that links the ring to the flower strip beside it so that Swimmer power-ups can be fetched. Easy, Medium and the other maps are unchanged.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.9 page or game still joins. Under the hood: the game server and the web pages are rebuilt; the chat server is unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/491ca15c...c52809d1)
+
+## v0.16.9 - 2026-11-14 - Numbers in the game's font, chat links and times, Discord server nicknames, a resizable front page
+
+**For players:**
+- **Numbers in the game's own font.** Hit points (Ctrl+L), damage and heal numbers and score numbers are drawn in the same letters as the game's labels, white with a thin dark outline (heal numbers pale green) and sharp at every window size. A damage or heal number now starts on the middle of the ant, keeps one size, floats up, fades and shrinks as it goes.
+- **Chat links and times.** An address that starts with http://, https:// or www. in a chat line is a link that opens in a new tab (long ones are shortened in the middle; the whole address is in its tip). Every line starts with the time, in your own time zone and clock style, with a small Today / Yesterday / date divider between days. Lines no longer show numbers; staff see the number in the tip of the time.
+- **Your Discord server nickname is your chat name.** The name shown is now your nickname in the project's Discord server, else your Discord display name, else your username. The switch in the chat menu still offers the username. A changed nickname shows from the next roles check, within a few minutes; old lines keep the name they had.
+- **A front page you can resize.** On a wide window (701 pixels and up), drag the join between Open games and Players, or the top of Global chat, to give one more room. Arrow keys move a handle, Enter or a double click puts it back, and the sizes are kept in this browser. A phone has no handles.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.8 page or game still joins. Under the hood: the chat server changed, so it restarts and chat reconnects by itself within seconds; it also holds code for a future admin page that no page uses yet.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/a364d921...f2d101bf)
+
+## v0.16.8 - 2026-11-14 - Game page top bar, Playing in the Players list, one chat box, Discord pictures without a new login
+
+**For players:**
+- **The game page has the site's top bar.** A game against the computer, a joined match, a recording and a live view show the same bar as every other page: Home, the links, the Settings gear, Fullscreen and Menu. The footer is gone; the version is the last line of the Menu. During a match, Home asks first and the other links open in a new tab, and while the Menu is open the keys stay with the bar and go back to the game afterwards. Reload page, which asks first during a game, is in the Menu.
+- **The Players list shows who is Playing.** A public match shows its map and players, a private room or game shows a lock and no details, and a game against the computer reads "<map> . vs computer". The Games list no longer shows an empty "In progress" box while no match is running.
+- **One chat box everywhere.** The box with the field on top and the emoji, microphone and Send buttons under it is now used in every window; the field grows to two lines on a wide window and the chat area is a little taller.
+- **Discord pictures arrive without logging in again.** A picture is picked up while you are logged in: within a few minutes for members of the project's Discord server, otherwise about a day. The Legal page says so.
+- **Live mark.** The red "N live" mark reads "N live: see them on the front page", shows its dot in forced-colors mode and updates when you come back to the tab. The old Live now addresses lead to the front page in any letter case.
+- **Chat staff commands.** Staff can name a person by the number of the chat line or by their row in the Players list, list the mutes with /mutes, and a ban can also delete that person's lines of the last hour.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.7 page or game still joins. Under the hood: the chat server changed, so it restarts and chat reconnects by itself within seconds.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f6d76998...1b43c0b5)
+
+## v0.16.7 - 2026-11-14 - Phone hotkey buttons, damage and heal numbers, Automatic picture shape
+
+**For players:**
+- **Hotkey buttons on a phone.** While you play, a phone shows buttons for the game's keys, All ants first, then Stop, Home, Next and None, and a More button for the other keys. Held sideways they form a rail beside the picture, held upright a row under it. The "Touch buttons" row of the game's Settings turns them off.
+- **Damage and heal numbers over the ants.** A small -N shows over an ant that loses hit points and a +N over an ant that is healed at its hill. They are on by default, never shown under fog of war, and the "Damage & heal numbers" row of the game's Settings (Video) switches them off.
+- **Automatic picture shape.** The Picture shape list starts with "Automatic": the shape nearest your screen when the phone is held sideways, 16:9 when held upright, following the way you hold it. A shape you pick is kept for the way the phone was held; every browser starts on Automatic once.
+- **The countdown card's Fullscreen button fits the card on a phone.** It takes the size and place of the card's own button and stays inside the card.
+- **Quick host, My room and Join use your Discord name when you are logged in.** A guest answer is no longer kept until the page is reloaded.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.6 page or game still joins. Under the hood: the numbers change nothing in a match.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f9011b41...a795f86a)
+
+## v0.16.6 - 2026-11-13 - Chat roles from Discord and Discord pictures in the Players list
+
+**For players:**
+- **Chat moderators and administrators now come from the project's Discord server roles.** Whoever holds the moderator or administrator role there has those powers in the front page chat, within a few minutes of getting or losing the role, and the chat shows them: staff names get a color, the Players list puts them first, and moderators see line numbers. The commands are /mute, /unmute, /del and /kick for both roles, and /ban, /unban and /bans for administrators; a moderator cannot act on another staff member. If the check with Discord cannot be made, no power is given and the chat keeps working. The old hand list setting (ANTS_HUB_MODS) no longer does anything.
+- **Discord profile pictures in the Players list.** When you log in with Discord, the site keeps one small copy of your profile picture, only while you have a login, and shows it in your circle in the Players list and in the account button at the top. It is shown to everyone who opens the front page unless you switch it off with "Show my Discord picture" in the account menu, or the site's operator hides it. Chat lines still show names only. Switching it off deletes the copy at once. The Legal page says what is kept and for how long.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.5 page or game still joins. Under the hood: the chat server gained the role and picture code and its tests.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/59cbc736...3b57c6ae)
+
+## v0.16.5 - 2026-11-13 - A countdown card for solo play, computer players stay out of your base, Settings anywhere and no Live now page
+
+**For players:**
+- **A countdown card with a Fullscreen button when you play alone against computer players.** A server room with one person in it (with or without computer players) opens with the "Get ready. Fullscreen is one press away." card for 10 seconds, and a game on this computer in the browser does the same, showing the name you typed (the desktop game keeps its 5-second dialog unless asked). Rooms with two or more people keep the 30-second countdown; recordings, live views and rejoins get no card. A server setting, --solo-countdown-seconds (default 10), sets the one-person time.
+- **Computer players leave your base alone.** Medium and Hard computer players no longer walk into another player's base to defuse bombs or put out fire walls: a player's own walls and bombs at home are left to that player, an ally's hazards follow the same rule, and the last ants of a computer player stay home.
+- **The game's Settings work before a match too.** The gear opens a small panel with Fullscreen, Picture shape and Fullscreen mouse on the game's own screens. This corrects the v0.16.4 note: outside a match the gear was greyed out (its tip said "Not now"), and now it works anywhere. Held keys no longer reach the game when the panel is open.
+- **The Live now page is gone.** Running matches are listed on the front page with a Watch button, and the page's old addresses lead there. While matches run, the top bar shows a small red "N live" mark that leads to the front page. The installed app's Live now shortcut is gone too.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.4 page or game still joins. Under the hood: several tests are steadier.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/fb6cf52c...13968e10)
+
 ## v0.16.4 - 2026-11-13 - The phone chat box, Settings rows in the game, a new icon, no logo and faster site updates
 
 **For players:**
@@ -238,272 +497,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/10bc34ae...6bd2e893)
 
-## v0.12.146 - 2026-10-27 - Map Maker: the game's pictures at every zoom
+## Older versions (v0.12.146 and before)
 
-**For players:**
-- **The Map Maker now draws the game's pictures at every zoom.** Before, a map under 10 pixels a cell (a whole 60 x 60 map on a short window or a phone, every 81 x 100 map, any big Extended map zoomed out) turned into flat colored squares. Now the grass, rocks, toys, food and hills stay pictures at any size, up to a whole 512 x 512 map.
-- Under 4 pixels a cell, or when more than 12,000 cells are in view, the ground itself is its smooth average color (a tile's texture in 2 or 3 pixels is only a lattice, and a picture for every cell costs time); the objects are still pictures on it. Start ants are small team-colored dots under 12 pixels a cell, a little smaller under 5.
-- Speed, measured in a slow test browser with no graphics card (no real phone was tried): a whole 81 x 100 map takes about 100 ms to draw (4 ms before) and a whole 480 x 480 map about 250 to 300 ms (30 before); panning stays cheap. Maps of 40 x 40 or smaller never went under 10 pixels, so they look as before.
-- Only the picture on the screen changes: no map, file or game rule is touched. Map Maker v1.6.1.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/305c793f...4f724792)
-
-## v0.12.145 - 2026-10-27 - Map Maker: clearer hills on the small map, and a small map you can hide, move and lock
-
-**For players:**
-- **The hills on the small map are easy to see.** Each team's hill is a square with a 1 pixel edge (black, or white for the black team) and a bright fill for green, red and blue (the black team keeps a dark fill), at least 10 pixels wide on any map, so it no longer disappears on dirt, mud or water or on a 480 x 480 map. The starting ants are small squares, left out beside their own hill.
-- **Hide it.** A Hide button on the small map takes it away and leaves a small Show map button in its place, so the corner of the map can be reached. A phone's small map is smaller too (108 pixels, no caption).
-- **Move it.** Drag the grip (the dots at the top left of the small map) anywhere inside the map, with a mouse or a finger; the arrow keys move it 16 pixels from the grip, Home or a double tap puts it back in the corner. A smaller window brings it back inside.
-- **Lock it.** The lock button next to Hide keeps the small map where it is: it cannot be dragged or moved by the keys until it is unlocked. Hide and Show still work. The place, the lock and the hiding are remembered in this browser. Map Maker v1.6.0.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the web page only). No map of the library changes.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/bbf956a1...3b60fa2f)
-
-## v0.12.144 - 2026-10-27 - Big selections: the ants nearest the click are ordered first
-
-**For players:**
-- **A move or an attack on a big selection orders the ants nearest the clicked tile first.** A selection of more than 32 ants goes out as several commands, and until now only the ants inside each command of 32 were ordered nearest first, so ants standing at the cursor could be ordered after ants from far away that had already taken the free tiles around it, and then find none and stop. The whole selection is now sorted by distance to the clicked tile (as the original's group order does) before it is cut, and ants at the same distance keep their selection order.
-- **A click of 32 ants or fewer, a special order (steal, bomb, fire, bridge) and Stop send exactly what they sent before.**
-- **The 1,536 ants per click limit stays, and what it leaves out changes:** a move or an attack beyond it now leaves out the farthest ants from the clicked tile (it was the last selected ones); "Only 1536 ants ordered." says it as before.
-- Still true: an ant that finds no free tile within four tiles of the clicked one stops, as in the original, and 1,500 ants still get their paths one every 50 ms (the original's rule), so the last of a very big crowd starts later.
-
-**Rules / network:** none; the rules and network protocol 21 are unchanged, and a recording made before plays as before (the change is only in the order of the ants the screen puts into its commands).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c119406e...3d620f1c)
-
-## v0.12.143 - 2026-10-27 - Big-map warning moves from 300 to 2,400 starting ants
-
-**For players:**
-- **The big-map warning now starts at 2,400 starting ants, not 300.** The amber "Many ants: may run slowly" chip on a map in the map picker, and the one warning line in the Map Maker's Play this map dialog (both tabs), now show only when a map starts more than 2,400 ants (the start markers of the four colors added up). A map with more than 2,400 ants still warns, and no map is refused for its ants.
-- No map of the library changes: the most that any of the 540 starts is 248, so none was marked before and none is now. Only maps made in the Map Maker (or uploaded) with 301 to 2,400 ants lose the warning.
-- Why: in a real headless Chromium (software rendering, no real GPU) a 2,772-ant map ran with a worst tick of 9 to 11 ms (the budget is 50), and the 6,000-ant map now has a worst tick of 14 to 19 ms after v0.12.141 and v0.12.142.
-- What that did not cover: no phone and no real graphics card, no match between people (lockstep), and not what a match costs the server. The runs were 60 seconds of passive play plus one mass order.
-
-**Rules / network:** none; the rules and network protocol 21 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f011f5c1...3970dcf6)
-
-## v0.12.142 - 2026-10-27 - Faster: team-mates' claims on a tile found at once
-
-**For players:**
-- **Faster ticks on a huge map.** When many combat ants end a fight in the same instant, each looks for a free goal tile, and each used to look at every ant of the map to see whether a team-mate had already claimed that tile. The game now keeps a list of the ants that claim each tile. Measured here, worst tick in milliseconds before and after, on the real 6,000-ant map (about 1.4 s into the match): 31 and 4.2 on the desktop, 54 and 8.7 in the web build run in Node (not a browser); 4 x 1,500 combat ants on 120 x 120: 11.8 and 5.8. The average tick of that map goes from 3.3 to 2.1 on the desktop.
-- Not changed: an order given by command, outside the tick, still looks at every ant (in bot play about half of the questions come that way), and a mass order to thousands of ants still takes seconds in the command phase (probably the path planner, not scans).
-- In the web build run in Node (not a browser), no tick of the first 100 seconds of that map went over 7 ms in two runs (the budget is 50).
-- Nothing about a match changes: the state is the same as before at every tick that was compared (big worlds and dozens of maps), and the state of all 540 maps of the library is the same at ticks 0, 200 and 2,400; the web build gives the same state as the desktop on the 6,000-ant map and big combat worlds.
-
-**Rules / network:** none; the rules and network protocol 21 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ea2c4cc5...26810844)
-
-## v0.12.141 - 2026-10-26 - Faster: orders after a fight no longer look at every ant
-
-**For players:**
-- **Faster: the one slow moment of a huge map is about half as long.** When many combat ants end their fight in the same instant, each looks for its goal tile again, and each of them used to look at every ant of the map to do it. Measured here, slowest tick in milliseconds before and after, on the real 6,000-ant map (about 1.4 s into the match): 67 and 36 on the desktop, 94 and 56 in the web build (run in Node here, not in a browser); 4 x 1,500 combat ants packed on 120 x 120: 31 and 11.5. The average tick of that map goes from 2.2 to 1.8.
-- That tick is still over the web build's 50 ms budget; the next step (a team-mate's claim on a tile is still found by looking at every ant) is a separate change.
-- Nothing about a match changes: every tick has the same state as before (all 540 maps of the library play identically on the desktop build, and the web build gives the same state as the desktop on the 6,000-ant map and two big combat worlds).
-
-**Rules / network:** none; the rules and network protocol 21 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/aa8c3591...2e3cea5f)
-
-## v0.12.140 - 2026-10-26 - Map Maker: the bar under the map stays one row, and the tools fit
-
-**For players:**
-- **Map Maker: the map no longer jumps when the pointer first touches it, and a whole 60 x 60 map keeps its pictures.** The bar under the map wrapped to a second row as soon as it had words to show, which made the map 40 pixels lower and a whole map under 10 pixels a cell, where the page draws flat colors. The position ("Row 30, column 30", "Whole map") is now a small label in the top left corner of the map, so the bar stays one row.
-- On a desktop window under 861 pixels high (a 1280 x 800 screen, a laptop's 1366 x 768 or 1280 x 720) the tools column, with Ground, Objects, Hills or Food chosen, and the side panel with a long description are no longer cut off: the tool buttons are a little shorter and show the short note, the side panel leaves out the kind tags (the top bar shows them) and shows two lines of the description (all of it is in Edit).
-- On a phone held sideways the tile button (Gravel and the like) sits beside Pan and shows the picture and the arrow, so it is inside the tools card; the tile's name is in the sheet that it opens. A phone held upright looks as before. Map Maker v1.5.10.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the web page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/aa8c3591...79aab92d)
-
-## v0.12.139 - 2026-10-26 - Show health as: Number is the original's number
-
-**For players:**
-- **Show health as: Number is now the original's number:** white digits in the original's own small fixed font, at the lower right of the ant, as its Ctrl+L prints them. The colored, outlined numbers of v0.12.134 are gone; the numbers are as they were before it, at every zoom and one size (small on a phone, as in the original).
-- **Ant health still says which ants** (Hurt ants, All ants, Off; Ctrl+L flips it), and a dying ant shows its 0 as it does in the original. The bar and its three colors are as they were.
-
-**Rules / network:** none: drawing only; the rules, replays and network protocol 21 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/1e36d1f6...89f64530)
-
-## v0.12.138 - 2026-10-25 - Faster: the next ant to move is found at once
-
-**For players:**
-- **Faster: a big map plays quicker because the game finds the next ant to move at once.** It used to look at every ant of the map for every step, and that was most of the time of a crowded tick. Measured here, milliseconds a tick before and after: a real map of 6,000 ants fighting 114 and 6.6 (walking 110 and 6.0), a real map of 2,772 ants 13.5 and 1.2, 4 x 1,500 ants on 150 x 150 91 and 0.7 standing, 87 and 2.7 crossing the map spread out, 94 and 2.8 packed, 91 and 2.6 piled up. In the web build the first 10 seconds of the 6,000-ant map cost 8.5 ms a tick (before: 130; the budget is 50), and 99 ticks in 100 take under 22 ms.
-- One tick about 1.4 s into that match still takes 100 ms (170 ms in the web build): many combat ants end their reflex fight at the same moment and each looks for its goal tile again. That is the next thing to make faster.
-- Games of a few hundred ants are as fast as before or faster (4 x 100 ants crossing the map: 1.9 ms and 1.6 ms a tick).
-- Nothing about a match changes: every tick has the same state as before (all 540 maps of the library and worlds of up to 6,000 ants play identically, in the desktop and the web build).
-
-**Rules / network:** none; the rules and network protocol 21 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/437c6f9b...b5001338)
-
-## v0.12.137 - 2026-10-25 - Cleanup: unused code removed
-
-**For players:**
-- Cleanup: nothing you can see changes. Unused code is gone and the server's map-submission options are documented.
-
-**Rules / network:** none: the rules, replays and network protocol 21 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/32ad1087...f3847677)
-
-## v0.12.136 - 2026-10-25 - Health numbers at every zoom, and the settings menu scrolls in fullscreen
-
-**For players:**
-- **Health numbers now show at every zoom down to 0.5** (the four wheel steps out from 1), where they used to vanish at the third step out and left no mark at all with Show health as: Number. Below 0.5 a ten would be wider than the tile of its ant, so they stay left out there; the bars are as they were.
-- **The settings menu scrolls with the mouse wheel in fullscreen,** so the lower rows (Map scroll speed in Video, the end of the Controls list) can be reached there; in a window and with a finger it always did.
-
-**Fixes:**
-- The wheel over the settings panel was cancelled by the fullscreen page's guard over the black bars; only the bars (and a Ctrl + wheel) are cancelled now.
-- The health numbers' lowest zoom was the bars' second size edge by accident (0.6); the two are separate now.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/cddbaf07...51169738)
-
-## v0.12.135 - 2026-10-25 - Faster: crowds that pile up
-
-**For players:**
-- **Faster: a crowd that piles up plays quicker.** The game now keeps a list of the ants on each tile, so a tile with several ants (a pile-up, a fire wall, a bomb) no longer makes it look at every ant of the map. Measured here, milliseconds a tick before and after: 4 x 693 ants stacked on shared tiles and sent across a 90 x 90 map 19.6 and 12.5, 4 x 1,500 on 150 x 150 103 and 81, a real map of 2,772 ants fighting 16.3 and 12.9 (walking 17.4 and 12.5; its worst ticks 108 ms and 24 ms), a map of 6,000 ants fighting 122 and 111.
-- Ants that are spread out, one to a tile, are as fast as before (4 x 1,500 across 150 x 150: 84 ms either way). 6,000 ants fighting still cost more than 100 ms a tick (the budget is 50): the biggest cost left is how the game picks the next ant to move, and the next release removes it.
-- Nothing about a match changes: every tick has the same state as before (all 540 maps of the library and crowds of 6,000 ants play identically).
-
-**Rules / network:** none; the rules and network protocol 21 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/cddbaf07...a3811168)
-
-## v0.12.134 - 2026-10-25 - Health bars over the ants
-
-**For players:**
-- **New: health bars over the ants.** A bar over every hurt ant shows its hit points out of 10: green at 9 or 10, amber at 3 to 8, red at 1 or 2. Full ants have none. On for everybody, for every ant you can see, yours and the enemy's.
-- **Choose:** Settings (Esc), Video: **Ant health** (Hurt ants, All ants, Off) and **Show health as** (Bar, Number). A number has the same colors, an outline, and is left out below zoom 0.6. Ctrl+L turns it off and on again. Bars are thicker on a phone held upright.
-- **The white numbers on every ant are gone.** To get numbers: All ants and Number. If you had turned the old numbers off, the marks start off too.
-
-**Rules / network:** none: only what is drawn changes; the rules, replays and network protocol 21 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/fe195f16...2abf0410)
-
-## v0.12.133 - 2026-10-25 - Map Maker: the footer line is no longer cut off by the screen's frame
-
-**For players:**
-- **The line at the foot of the Map Maker page (the version, the Lobby, Match history, Changelog and Legal links) is whole again.** It sat on the red edge of the page's frame, which hid the lower half of the words; it now has its own room above the edge, on a desktop window of any size and on a phone. The map is as large as before. Map Maker v1.5.9.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the web page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/736c9486...7f6588ed)
-
-## v0.12.132 - 2026-10-25 - Faster: big maps with thousands of ants
-
-**For players:**
-- **Faster: a map with thousands of ants plays quicker.** Two questions that looked at every ant (which ant has this number, and does an ant wait for a path) are now answered at once. A tick with 4 x 693 ants walking across a 90 x 90 map takes 11 ms instead of 26 ms (2,772 ants packed in the corners: 10 ms instead of 38 ms), and 4 x 1,500 ants on 150 x 150 take 47 ms instead of 112 ms (packed: 46 instead of 119); the browser build gains the same (27 to 12 ms and 115 to 49 ms).
-- A crowd that only stands and fights is not faster yet (6,000 ants in a brawl cost about 47 ms a tick: still too much for a slow computer); the next releases remove the other scans.
-- Nothing about a match changes: every tick has the same state as before (all 540 maps of the library and crowds of 6,000 ants play identically).
-
-**Rules / network:** none; the rules and network protocol 21 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c03ec4c0...fbb14974)
-
-## v0.12.131 - 2026-10-25 - Big maps now warn: "may run slowly"
-
-**For players:**
-- **No map is refused for its ants.** A map that starts more than 300 ants (all colors together: 75 a color on four) only gets a warning, because a game on it may run slowly, most on phones and older computers. The number 300 is where the warning starts; it changes nothing else.
-- **The map picker** shows an amber chip, "Many ants: may run slowly", on the row of such a map. The map can be chosen as any other, for a room too.
-- **Map Maker, Play this map:** both *Against bots* and *With other players* say "This map starts with N ants, so a game may run slowly, especially on phones and older computers." right under the first sentence of the dialog. The buttons stay on.
-- We scanned the 540 maps of the library: none starts more than 300 ants (0 of 540; the most starts 248), so no map in the picker is marked today.
-
-**Rules / network:** none: the rules and network protocol 21 are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/99261f5d...85c01ad8), [the warning](docs/MAP_SUBMISSIONS.md#older-games-and-big-maps)
-
-## v0.12.130 - 2026-10-25 - Map Maker: hold Shift or Ctrl to paint a straight line
-
-**For players:**
-- **Map Maker: hold Shift or Ctrl while you paint and the stroke stays on one straight line.** It works for Ground (with Auto edges), Objects (rocks and power-ups) and Erase, with the mouse. The line goes straight across or straight down through the square where you pressed, whichever way your first move away from that square goes farther (exactly diagonal goes across), and it stays that way until you let go of the mouse button. Until you leave the first square only that square is painted, and a line that runs off the map ends at the edge.
-- **Let go of the key in the middle of a stroke and you paint freely again** from where the line ended; press it again and the square you are on starts a new line. Press the key before the mouse button and the line starts where you press. On a Mac use Shift, because Ctrl-click is a right click there.
-- Painting with no key is exactly as before, a finger on a touch screen is unchanged, and tools that put a whole thing with a tap, Fill, Pan, Pick up and the Ants box do not change. Map Maker v1.5.8.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the web page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/99261f5d...24364af2)
-
-## v0.12.129 - 2026-10-25 - Big selections follow the original's rules
-
-**For players:**
-- **A big selection is ordered with the original's rules for every ant.** Ctrl+A or a drag over any number of ants, then a right click: every selected ant gets the move, attack or Stop order (one click orders up to 1,536 ants; "Only 1536 ants ordered." beyond that). The limit of v0.12.126 for a move is gone. Ants that find no free spot near the clicked tile stop where they stand, as in the original; a move onto an enemy hill makes thieves raid and stops the other ants.
-- **Special orders stay one ant at a time:** steal, bomb, fire and bridge orders go to the first 32 selected ants at the most, as before v0.12.126, so a crowd cannot steal from one ant or drop 80 bombs on one square. Order those ants one by one.
-- A move of a whole army makes the game work hard for a moment while the ants look for a spot. One player's click on a big army costs a few to tens of milliseconds; it is only noticeable when four players' big clicks land together (about 1,500 ants each costs more than a second on a desktop, and a phone is several times slower).
-
-**Rules / network:** none; network protocol 21 is unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0ba63ac2...961523be)
-
-## v0.12.128 - 2026-10-25 - The Picture dropdown opens in fullscreen
-
-**For players:**
-- **The Picture dropdown now opens in fullscreen.** Watching a replay or a live match in fullscreen with the mouse held (the default, "Locked"), a click on the dropdown in the Picture window did nothing: the browser's own list cannot be opened by the game's held mouse. The control is now the page's own button and list, so a click or a tap opens it and a click or a tap on a shape chooses it, in fullscreen, in the settings menu (Esc), under the game and in the Picture window, on every browser. It looks as before.
-- **Keys:** Enter, Space, ArrowDown or ArrowUp open the list; the arrows, Home, End, a letter or a number ("4" for Classic 4:3) move the mark; Enter or Space chooses; Esc closes the list and only the list (the Picture window or the settings menu stays open). On a closed dropdown the arrow keys no longer change the picture (they did on Windows and Linux); they open the list, the same on every browser. The front page's Picture row is unchanged.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the web page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/0ba63ac2...025710cf)
-
-## v0.12.127 - 2026-10-24 - Map Maker: the Pick up bar no longer covers the map
-
-**For players:**
-- Map Maker, Pick up: the bar with Move, Copy here, Delete and Cancel no longer covers the bottom of the map. On a desktop it has a row of its own under the map, so the map ends above it and can be panned until its last row is above the bar; a thing picked near the bottom is brought into view, and the map keeps its top row and its zoom when the bar comes and goes. A phone's bar stays at the foot of the screen, and the page can be scrolled until its last line is above it. Map Maker v1.5.7.
-
-**Fixes:**
-- On a short screen the Hide button sits on the line of the words, so the bar is lower; a map under 300 pixels high shows the smaller map of the whole map, without its caption, so that it never reaches into the bar.
-- While a thing is on its way the bar keeps the height it has had, so the map no longer grows and shrinks under the mouse near the foot; a phone that is turned with the bar open leaves room for all of it below the page, and a window that is resized while a thing is on its way logs no "ResizeObserver loop" message.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/50b7ae4b...67a05f86)
-
-## v0.12.126 - 2026-10-24 - Orders for big selections
-
-**For players:**
-- **Ctrl+A or a drag over more than 32 ants no longer orders only the first 32.** A click or Stop on a bigger selection is sent as several orders of 32 ants each, in the order you selected them, together in that click. A click on 32 ants or fewer works exactly as before.
-- **A move now names up to 81 ants:** the game gives a free tile within four tiles of the clicked spot to 81 ants at the most (fewer near walls or water), so the first 81 of a bigger selection walk there; the rest are left alone and keep what they were doing, and the status line says "Up to 81 walk here." Thieves sent to an enemy hill are not limited. A wider search is planned for the next rules release.
-- Attack, special and Stop orders reach up to 1,536 ants in one click ("Only 1536 ants ordered." beyond that). A held Stop key (S) now stops once, not twenty times a second.
-- A big click adds to a recording (a move about 350 bytes, a Stop of 1,500 ants about 6 KB), so a very long match on a big map can pass the size a recording may have and then keeps none.
-
-**Rules / network:** none in the rules; network protocol 21 is unchanged (several ordinary commands). A server holds up to 1,024 waiting commands of a player (it was 256) so that a burst of big clicks is carried, not refused.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ac6454fd...50b7ae4b)
-
-## v0.12.125 - 2026-10-24 - Replays can carry their map
-
-**For players:**
-- Under the hood: a replay file can now hold the map it was played on (an optional part, up to 1 MiB, checked against the map's hash), so that a match on a map that the server keeps only for a while can be watched later; `replay_tool map FILE OUT` takes the map out. Nothing records one yet. The game, the tool and the replay page read it already, and every replay that exists plays as before.
-
-**Rules / network:** none: network protocol 21, the simulation rules and the replay format (1) are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d157bf3...dcda43d2)
-
-## v0.12.124 - 2026-10-24 - Three more picture shapes, and one dropdown to pick them
-
-**For players:**
-- **Three more picture shapes:** 3:2 (960 x 640, tablets and Surface-style laptops), 20:9 (1200 x 540, phones held sideways) and 32:9 (1920 x 540, super-ultrawide monitors). The list is now Classic 4:3, 3:2, 16:10, 16:9, 20:9, 21:9 and 32:9. A wider picture shows more of the map at the first zoom (32:9 shows about 2.3 times what 16:9 does) and less when zoomed all the way out; everybody picks their own shape, so no match changes.
-- **One dropdown instead of the buttons:** the Picture control under the game, in the front page's Picture row, in the settings menu (Esc: on Windows and Linux the arrow keys change the picture of the running game at once and the menu stays open; on macOS the arrows open the list and Enter picks; Esc with the list open is the browser's own and has not been checked in each browser yet) and in a recording's bar is a dropdown that lists each shape with its size. A quiet line under it ("16:10 fills your screen") names the shape closest to your screen. On an upright phone the dropdown has its own line and the page no longer scrolls sideways.
-- **The first visit** counts the new shapes too: a 3:2 tablet starts in 3:2, a 3840 x 1080 monitor in 32:9, a phone held sideways in 20:9. Anything you picked, and `?aspect=` in the address (which also takes `3:2`, `20:9` and `32:9`), still wins.
-- On a wide monitor the 32:9 picture is shown at its real size (the game area is no longer cut at 1280 pixels).
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (what a player sees: nobody's shape is sent to the server or to the other players).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b9a0ab04...c66cf43e)
-
-## v0.12.123 - 2026-10-24 - The Map Maker draws each tile the way the game does
-
-**For players:**
-- **The Map Maker now draws each tile the way the game does.** A map keeps a list of names for its tiles, and the game draws the picture that the name says; the editor used to draw the picture of the tile's number. So a pile of jacks showed as a pink eraser and a purple ring as a yellow one on EatClanMap, and the same shift is in 121 library maps. They now look as they do in the game.
-- **A tile whose name is "." is not drawn, as in the game:** the ground there is black, and the flowers, grass and objects of such tiles are not in the picture (about 6,100 cells of 187 library maps). Only the picture changes: the maps, their files and the game are as they were.
-- The see-through picture of a tile you are about to put or a thing you pick up, and the before and after pictures of Fix edges, follow the same rule. Map Maker v1.5.6.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ac6454fd...b9a0ab04)
-
-## Older versions (v0.12.122 and before)
-
-Every release before v0.12.123, and the long notes of v0.12.122 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.147, and the long notes of v0.12.146 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
