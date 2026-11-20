@@ -62,6 +62,10 @@
 // A room is public because its leader said so: when another person leads (the leader left or was thrown out), it is private again and the new leader chooses for itself. The rematch's lobby keeps the choice: a public
 // room is public again for its leader of the match (Rematch::public_by), who leads again when back; while nobody is back it is not listed (a kept seat is not an open place).
 //
+// (9) Ready up (protocol 27, docs/READY_UP.md). A person who is a page and does not lead says Ready (ReadyMsg, within a budget of its own: flood.hpp); the room shows the marks to everybody (RoomMsg::ready) and the leader's StartRequest is
+// not taken until every such person has said it (the leader is told who has not: kNoticeNotReady). The leader does not ready, a computer player is always ready, and a person whose game is open needs no Ready. A map, a plan or a color move
+// leaves the marks as they are (a mark goes with its person when the colors change places); a person whose link ends, a person who takes the seat over and a person who becomes the leader start with no mark.
+//
 // Both classes are pure logic over Connection, driven from the main loop like the sessions. The connections stay owned by the caller; when the match
 // begins the host lobby hands them (seat -> connection) to the HostSession.
 
@@ -328,6 +332,14 @@ public:
     uint32_t ignored_removes() const noexcept { return ignored_removes_; }
     /// People that the leader removed (a RemoveMsg that was done)
     uint32_t removals() const noexcept { return removals_; }
+    /// ReadyMsgs that were heard and not acted on (the sender leads or is a game, the room is no open lobby room, the START waits): no offence up to kIgnoredReadyAllowed per guest, a violation each after those
+    uint32_t ignored_ready() const noexcept { return ignored_ready_; }
+    /// Ready marks that changed (a ReadyMsg that was done: one that said what the mark already was is not counted)
+    uint32_t ready_changes() const noexcept { return ready_changes_; }
+    /// The person of `seat` is one whom the START waits for and has said Ready (a lobby room; the leader's, a game's and an empty seat's never)
+    bool ready(uint8_t seat) const noexcept;
+    /// Every person who must say Ready has (a seat that a person holds as a page and that does not lead): the leader's START is taken. True for a room that is no lobby room
+    bool everyone_ready() const noexcept;
     /// Protocol 22: the room is public (its leader said so, and neither the idle time nor another person's lead has made it private since). Always false for a room that is no lobby room.
     bool is_public() const noexcept { return public_; }
     /// ... since when, by the clock of update() (the Visibility that made it public), as an age at `now_ms`: how long it has been listed, in ms (0 for a private room); it stops growing at kLobbyListedAgeCapMs
@@ -356,7 +368,7 @@ public:
     /// A number that goes up whenever the people of the room do something with it: somebody is welcomed, a color moves, the plan or a name changes, a person is removed, a line of chat is said, a START is asked for
     /// (a ping, a link that comes back, a seat that is held or gives up are not; a Visibility that was done is, protocol 22). A room in which it has stood still for a long time has people who are not using it: a link that answers its pings is alive and no use, and the server may give
     /// the place of such a room up when it needs it.
-    uint32_t activity() const noexcept { return static_cast<uint32_t>(joins_ + seat_moves_ + plan_changes_ + renames_ + removals_ + start_arms_ + visibility_acts_ + chat_.total()); }
+    uint32_t activity() const noexcept { return static_cast<uint32_t>(joins_ + seat_moves_ + plan_changes_ + renames_ + removals_ + start_arms_ + visibility_acts_ + ready_changes_ + chat_.total()); }
 
     /// The rematch (see (7) above). What this lobby room's match was made of: its plan and every person that its Start seated with a key whose game played in a web browser or did not say what it runs on (empty
     /// `people` for a room that is no lobby room or whose match has not begun). The color of a person whose game is not in a browser is left free (its plan is the match's: an open color).
@@ -408,6 +420,9 @@ private:
         uint32_t ignored_removes{0};             // ... and those that were ignored (the first kIgnoredRemovesAllowed are free)
         ChatBudget visibility;                   // the VisibilityMsgs of this guest that could be heard (flood.hpp: a burst of kVisibilityBurst, then kVisibilityPerSecond a second)
         uint32_t ignored_visibility{0};          // ... and those that were ignored (the first kIgnoredVisibilityAllowed are free)
+        ChatBudget readies;                      // the ReadyMsgs of this guest that could be heard (flood.hpp: a burst of kReadyBurst, then kReadyPerSecond a second)
+        uint32_t ignored_ready{0};               // ... and those that were ignored (the first kIgnoredReadyAllowed are free)
+        bool ready{false};                       // protocol 27: the person said Ready (it goes with the guest when the colors change places; the leader's and a game's mark is never shown)
         uint32_t forgive_at_ms{0};               // a lobby room: when one violation and one ignored request of each kind are forgiven next
         bool reserved{false};                    // a lobby room that was opened again after its match: the seat waits for its person of the match (see (7) above), since reserved_since_ms
         uint32_t reserved_since_ms{0};
@@ -457,6 +472,9 @@ private:
     void forgive(Guest& g, uint32_t now_ms) const noexcept;
     void apply_plan(const PlanMsg& plan);
     void apply_visibility(bool want_public, uint32_t now_ms);             // protocol 22: the leader's choice (already heard: the leader, an open room, within the budget)
+    void apply_ready(uint8_t seat, bool want_ready);                       // protocol 27: a person's Ready (already heard: a page that does not lead, an open room, within the budget)
+    bool must_ready(uint8_t seat) const noexcept;                          // protocol 27: a person who is a page and does not lead: the START waits for their Ready
+    std::string not_ready_notice() const;                                  // protocol 27: the leader's notice of a START that waits for the persons who have not said Ready
     bool open_color(uint8_t seat) const noexcept;                          // nobody holds the color and the plan calls it Open
     void watch_idle(uint32_t now_ms);                                      // protocol 22: a public room in which nothing has been done for public_idle_ms becomes private
     void rename(uint8_t seat, const std::string& raw);                    // protocol 16: the person of `seat` goes by this name (a name that looks like a bot's is not taken)
@@ -496,6 +514,8 @@ private:
     uint32_t public_by_{0};                  // ... by the guest with this join_order, the leader who said so: when somebody else leads, the room is private again (elect_leader)
     uint32_t ignored_visibility_{0};
     uint32_t visibility_acts_{0};
+    uint32_t ignored_ready_{0};
+    uint32_t ready_changes_{0};
     uint32_t unlists_{0};
     uint32_t seen_activity_{0};              // activity() at the last look of watch_idle, and since when it is what it is
     uint32_t active_ms_{0};
@@ -579,6 +599,9 @@ public:
     /// The leader of a lobby room (protocol 22) makes the room public or private (VisibilityMsg). False (nothing is sent) unless this machine leads an open room that the last Room message shows as a lobby room whose START does
     /// not wait. True means the request was sent, not that the server did it: the Room message shows the flag when it did. Saying public to a room that is public is the refresh that keeps it so (see (8) at the top).
     bool request_visibility(bool make_public);
+    /// A person of a lobby room (protocol 27) tells the server that they are ready to start, or not (ReadyMsg). False (nothing is sent) unless this machine sits in an open room that the last Room message shows as a lobby room whose START does not
+    /// wait, does not lead it and is a page (a game needs no Ready). True means the request was sent, not that the server did it: the Room message shows the mark when it did.
+    bool request_ready(bool ready);
     /// The last Room message shows the room as public
     bool room_is_public() const noexcept { return room_.is_public(); }
     /// Says a line in the room (protocol 11): in the waiting room, while the map loads and while this machine waits for the match to begin. Printable ASCII, at most kMaxChatChars characters
