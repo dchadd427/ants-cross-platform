@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.17.13 - 2026-11-19 - Phone fixes: keyboard in Options, watch bar, countdown, full-screen exit
+
+**For players:**
+- **Phones: the quick chat keys (F9 - F12) in Options open the keyboard** when tapped, and keep what you type.
+- **Phones: the watch page's controls fit on one row** at every phone width; the settings gear sits above the end of the timeline.
+- **Phones: no Fullscreen button covers the players on a small countdown card;** the Full button at the top is the way.
+- **iPhone held sideways in full screen:** the round exit button sits in the black margin beside the picture, no longer over the minimap.
+
+**Rules / network:** none: network protocol 24 and the rules numbers are unchanged, so a v0.17.12 page or game still joins.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b842a06e...11d4a225)
+
 ## v0.17.12 - 2026-11-19 - New windows, a Fullscreen button, live matches at once, alerts
 
 **For players:**
