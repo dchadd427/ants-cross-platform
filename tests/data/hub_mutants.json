@@ -1568,7 +1568,7 @@
   {
    "id": "stack_hub_log_grows_for_ever",
    "file": "docker-compose.stack.yml",
-   "old": "    logging:\n      driver: json-file\n      options:\n        max-size: \"10m\"\n        max-file: \"3\"\n",
+   "old": "    # the hub writes a few lines for each connection: the log is kept small (docker's own default keeps all of it)\n    logging:\n      driver: json-file\n      options:\n        max-size: \"10m\"\n        max-file: \"3\"\n",
    "new": "",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
   },

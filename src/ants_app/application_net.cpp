@@ -160,6 +160,9 @@ void Application::tick_net_countdown() {
     }
     const int64_t left = std::max<int64_t>(0, static_cast<int64_t>(std::ceil(countdown_deadline_ms_ - net_time_ms_)));
     hud_.set_match_countdown_left_ms(left);
+    if (net_ != nullptr) {                                   // protocol 26: how this machine is connected to each other person (the row's mark: relay, direct)
+        for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) hud_.set_countdown_link(seat, net_->peer_link(seat));
+    }
     const int32_t shown = countdown_seconds_shown(left);
     if (shown != countdown_status_shown_) {                  // the status line lives 5 s: it is said again at every second
         countdown_status_shown_ = shown;

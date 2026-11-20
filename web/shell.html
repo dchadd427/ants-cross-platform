@@ -1129,7 +1129,7 @@
 
     <div class="toast" id="toast" role="status" hidden></div>
 
-    <script src="site_nav.js"></script><script src="game_bar.js"></script><script src="update_notice.js" data-window="no"></script><script src="rejoin_key.js"></script><script src="hub_here.js"></script><script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="alert_core.js"></script><script src="hud_fullscreen.js"></script><script src="wake_lock.js"></script><script src="touch_keys.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
+    <script src="site_nav.js"></script><script src="game_bar.js"></script><script src="update_notice.js" data-window="no"></script><script src="rejoin_key.js"></script><script src="hub_here.js"></script><script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="alert_core.js"></script><script src="hud_fullscreen.js"></script><script src="wake_lock.js"></script><script src="p2p.js"></script><script src="touch_keys.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -1420,6 +1420,8 @@
                         if (roomLeaderStart) out.args.push('--room-leader-start');
                     }
                     if (platform) out.args.push('--platform', platform);
+                    if (q.get('p2p') === 'off') out.args.push('--no-p2p');                 // (protocol 26: ?p2p=off opens no data channel to the other players)
+                    else if (window.AntsP2p && window.AntsP2p.directSetting()) out.args.push('--direct', 'on');       // the choice that the player made in the room (off: nothing is said, and every channel goes through the relay)
                     if (seat && /^[0-3]$/.test(seat)) out.args.push('--seat', seat);
                     if (fill) out.args.push('--fill-bots', fill);
                     if (teams) out.args.push('--teams', teams);

@@ -162,8 +162,9 @@ class TheText(unittest.TestCase):
             for name in files:
                 if name.endswith(".conf"):
                     found.append(os.path.relpath(os.path.join(base, name), REPO))
-        self.assertEqual(sorted(found), ["docker/nginx.conf", "docker/trusted-proxies.conf"])
+        self.assertEqual(sorted(found), ["docker/nginx.conf", "docker/trusted-proxies.conf", "docker/turnserver.conf"])       # (the third is the relay's coturn, which Dockerfile.turn copies: no nginx in it)
         self.assertNotIn("server {", stats.read("docker", "trusted-proxies.conf"))
+        self.assertNotIn("server {", stats.read("docker", "turnserver.conf"))
 
     def test_no_page_script_or_style_builds_an_address_with_dot_html_for_a_page_that_has_a_clean_one(self):
         pat = re.compile(r"""["'`(=]/?(?:play|matches|match|live|legal|changelog|mapmaker|lobby|index)\.html\b""")

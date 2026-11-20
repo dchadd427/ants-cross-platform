@@ -28,8 +28,8 @@
   {
    "id": "stack_adds_a_capability",
    "file": "docker-compose.stack.yml",
-   "old": "    pids_limit: 64\n",
-   "new": "    pids_limit: 64\n    cap_add: [CHOWN]\n",
+   "old": "    pids_limit: 64\n\n  # The global chat",
+   "new": "    pids_limit: 64\n    cap_add: [CHOWN]\n\n  # The global chat",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_server_user"
   },
   {
