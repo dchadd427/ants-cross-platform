@@ -51,12 +51,12 @@ except ImportError:
         torus_arc,
     )
 
-# Confident natural ready-carry right-arm pose starting at compact-head shoulder (-0.106, 0.478, 0.016).
+# Relaxed confident right-arm pose holding the upright shovel shaft beside his right hip/side.
 _SWIMMER_RIGHT_ARM: List[Tuple[float, float, float]] = [
     (-0.106, 0.478, 0.016),
-    (-0.208, 0.426, 0.048),
-    (-0.250, 0.422, 0.134),
-    (-0.260, 0.432, 0.174),
+    (-0.206, 0.416, 0.044),
+    (-0.258, 0.402, 0.128),
+    (-0.278, 0.412, 0.168),
 ]
 
 
@@ -579,10 +579,10 @@ def _build_shovel(
     right_hand: Tuple[float, float, float],
     right_hand_dir: Tuple[float, float, float],
 ) -> None:
-    """Build an unmistakable classic spade shovel gripped naturally mid-shaft in right hand (-X).
+    """Build an unmistakable classic spade shovel carried upright with its wide yellow blade pointing UP.
 
-    Local coordinates: (0, 0, 0) sits directly inside the ant's right pincer-grip pocket on the straight
-    wooden shaft; +Y rises to the yellow D-grip handle, -Y descends to the broad scooped yellow spade.
+    Local coordinates: (0, 0, 0) sits directly inside the ant's right pincer-grip pocket on the lower-mid
+    wooden shaft; -Y descends to the yellow D-grip handle, +Y rises to the widened scooped yellow spade.
     """
     hx, hy, hz = right_hand
     dx, dy, dz = right_hand_dir
@@ -593,8 +593,8 @@ def _build_shovel(
     parts: List[MeshPart] = []
 
     # 1. Sturdy straight cylindrical wooden shaft (`prop_brown`) gripped solidly at local Y = 0.
-    shaft_bot_y = -0.142
-    shaft_top_y = +0.096
+    shaft_bot_y = -0.116
+    shaft_top_y = +0.168
     shaft_len = shaft_top_y - shaft_bot_y
     shaft = (
         cylinder(0.0175, 0.0175, shaft_len, radial_segs=18, bevel=0.0035, axis="y", name="shovel_shaft", material="prop_brown")
@@ -602,24 +602,24 @@ def _build_shovel(
     )
     parts.append(shaft)
 
-    # 2. Classic chunky yellow D-grip handle capping the top end of the wooden shaft cleanly.
-    top_collar = (
-        cylinder(0.021, 0.023, 0.024, radial_segs=16, bevel=0.004, axis="y", name="shovel_d_collar", material="gear_gold_metal")
-        .translate(0.0, shaft_top_y + 0.005, 0.0)
+    # 2. Classic chunky yellow D-grip handle capping the bottom end of the wooden shaft cleanly.
+    bot_collar = (
+        cylinder(0.023, 0.021, 0.024, radial_segs=16, bevel=0.004, axis="y", name="shovel_d_collar", material="gear_gold_metal")
+        .translate(0.0, shaft_bot_y - 0.005, 0.0)
     )
-    parts.append(top_collar)
+    parts.append(bot_collar)
 
-    d_base_y = shaft_top_y + 0.014
-    d_top_y = d_base_y + 0.072
+    d_base_y = shaft_bot_y - 0.014
+    d_bot_y = d_base_y - 0.072
     d_yoke = curved_tube(
         [
-            (-0.044, d_top_y, 0.0),
-            (-0.050, d_base_y + 0.038, 0.0),
-            (-0.024, d_base_y + 0.007, 0.0),
+            (-0.044, d_bot_y, 0.0),
+            (-0.050, d_base_y - 0.038, 0.0),
+            (-0.024, d_base_y - 0.007, 0.0),
             (0.000, d_base_y, 0.0),
-            (+0.024, d_base_y + 0.007, 0.0),
-            (+0.050, d_base_y + 0.038, 0.0),
-            (+0.044, d_top_y, 0.0),
+            (+0.024, d_base_y - 0.007, 0.0),
+            (+0.050, d_base_y - 0.038, 0.0),
+            (+0.044, d_bot_y, 0.0),
         ],
         0.013,
         samples_per_seg=4,
@@ -632,45 +632,45 @@ def _build_shovel(
 
     d_crossbar = (
         capsule(0.0145, 0.092, radial_segs=14, cap_rings=4, axis="x", name="shovel_d_bar", material="gear_gold")
-        .translate(0.0, d_top_y + 0.002, 0.0)
+        .translate(0.0, d_bot_y - 0.002, 0.0)
     )
     parts.append(d_crossbar)
 
     for s_sign, tag in ((-1.0, "left"), (+1.0, "right")):
         d_cap = (
             cylinder(0.016, 0.016, 0.012, radial_segs=14, bevel=0.003, axis="x", name=f"shovel_d_collar_{tag}", material="gear_gold_metal")
-            .translate(s_sign * 0.036, d_top_y + 0.002, 0.0)
+            .translate(s_sign * 0.036, d_bot_y - 0.002, 0.0)
         )
         parts.append(d_cap)
 
-    # 3. Tapered brass blade-socket ferrule with twin steel rivets transitioning cleanly into the spade.
-    ferrule_top_y = shaft_bot_y + 0.010
-    ferrule_bot_y = shaft_bot_y - 0.054
+    # 3. Tapered brass blade-socket ferrule with twin steel rivets flaring upward into the spade base.
+    ferrule_bot_y = shaft_top_y - 0.010
+    ferrule_top_y = shaft_top_y + 0.054
     ferrule = (
-        cylinder(0.027, 0.020, ferrule_top_y - ferrule_bot_y, radial_segs=18, bevel=0.004, axis="y", name="shovel_ferrule", material="gear_gold_metal")
-        .translate(0.0, 0.5 * (ferrule_top_y + ferrule_bot_y), 0.002)
+        cylinder(0.020, 0.027, ferrule_top_y - ferrule_bot_y, radial_segs=18, bevel=0.004, axis="y", name="shovel_ferrule", material="gear_gold_metal")
+        .translate(0.0, 0.5 * (ferrule_bot_y + ferrule_top_y), 0.002)
     )
     parts.append(ferrule)
 
     for z_sign, tag in ((+1.0, "front"), (-1.0, "back")):
         rivet = (
             sphere(0.0058, u_segs=8, v_segs=6, name=f"shovel_rivet_{tag}", material="gear_steel")
-            .translate(0.0, ferrule_top_y - 0.018, z_sign * 0.022)
+            .translate(0.0, ferrule_bot_y + 0.018, z_sign * 0.022)
         )
         parts.append(rivet)
 
-    # 4. Classic broad scooped yellow spade blade (~28% wider with crisp stepped foot-treads + rounded nose).
+    # 4. Classic broad scooped yellow spade blade pointing UP (stepped bottom foot-treads + rounded top nose).
     blade_w = 0.236
     blade_l = 0.220
-    blade_top_y = ferrule_bot_y + 0.008
-    blade_cy = blade_top_y - 0.5 * blade_l
+    blade_base_y = ferrule_top_y - 0.008
+    blade_cy = blade_base_y + 0.5 * blade_l
 
     def _sculpt_classic_shovel_blade(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
-        # u = 0.0 at flat stepped top tread shoulder -> u = 1.0 at classic rounded spade nose.
-        u = np.clip((0.5 * blade_l - p[:, 1]) / blade_l, 0.0, 1.0)
+        # u = 0.0 at flat stepped tread shoulder near ferrule -> u = 1.0 at classic rounded top spade tip.
+        u = np.clip((p[:, 1] + 0.5 * blade_l) / blade_l, 0.0, 1.0)
 
-        # Classic broad garden/trench spade planform: full wide sides down to 52%, then graceful rounded point.
+        # Classic broad garden/trench spade planform: full wide sides up to 52%, then graceful rounded point.
         t_tip = np.clip((u - 0.50) / 0.50, 0.0, 1.0)
         width_scale = (1.0 - 0.84 * (t_tip ** 2.05)) ** 0.54
         t_corner = np.clip((0.06 - u) / 0.06, 0.0, 1.0)
@@ -678,9 +678,9 @@ def _build_shovel(
         p[:, 0] *= width_scale
 
         nx = p[:, 0] / max(1e-6, 0.5 * blade_w)
-        # Smooth concave scoop dish curving forward (+Z) along side walls and nose.
+        # Smooth concave scoop dish curving forward (+Z) along side walls and top nose.
         cup_z = 0.031 * (nx * nx) + 0.021 * (u ** 1.7)
-        # Crisp turned-forward top foot-tread shoulders flanking the socket.
+        # Crisp turned-forward foot-tread shoulders flanking the socket collar.
         shoulder_mask = np.clip((np.abs(nx) - 0.18) / 0.16, 0.0, 1.0)
         tread_step = 0.023 * (np.clip((0.12 - u) / 0.12, 0.0, 1.0) ** 1.5) * shoulder_mask
         thick_scale = 1.0 - 0.40 * (u ** 1.25)
@@ -694,26 +694,26 @@ def _build_shovel(
     )
     parts.append(blade_core)
 
-    # Smooth tapered central socket spine rib running down the upper half of the spade blade.
+    # Smooth tapered central socket spine rib rising up the lower half of the spade blade.
     blade_rib = (
         lathe(
-            [(0.000, -0.092), (0.011, -0.068), (0.017, -0.032), (0.023, 0.000)],
+            [(0.023, 0.000), (0.017, 0.032), (0.011, 0.068), (0.000, 0.092)],
             radial_segs=14,
-            cap_bottom=False,
-            cap_top=True,
+            cap_bottom=True,
+            cap_top=False,
             axis="y",
             name="shovel_blade_rib",
             material="gear_gold_metal",
         )
         .scale(1.0, 1.0, 0.68)
-        .translate(0.0, blade_top_y - 0.006, 0.003)
+        .translate(0.0, blade_base_y + 0.006, 0.003)
     )
     parts.append(blade_rib)
 
-    # Keep shovel parts in hand-grip-local coordinates with node transform at the right fist pivot so
-    # the shovel rides with `upper_body` AND rocks gently around his grip during the 0.90s Idle sway.
+    # Proud relaxed upright carry beside right side/shoulder: wide yellow spade points UP with a gentle
+    # outward-back lean clearing the scuba mask, tank, and arm while the D-grip hangs cleanly below the fist.
     for part in parts:
-        placed = part.rotate_xyz(rx=-29.0, ry=-24.0, rz=12.0, degrees=True)
+        placed = part.rotate_xyz(rx=-10.0, ry=-20.0, rz=14.0, degrees=True)
         scene.add("shovel", placed)
     scene.set_node_transform("shovel", translation=(grip_x, grip_y, grip_z))
 
