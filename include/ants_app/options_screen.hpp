@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 
 #include "ants_app/config_store.hpp"
@@ -94,6 +95,14 @@ public:
     void on_key(int32_t key_id);
     /// Typed text (SDL's text input): every printable ASCII character is a key of the original
     void on_text(const std::string& text);
+
+    /// A phone's keyboard (the page's real text field, Application::web_chat_do): which of the four fields has the focus, a field given the focus (the others lose it), the text that the keyboard
+    /// leaves in a field (shown at once, printable ASCII, at most 100 characters; true when it changed) and the text written to the profile, as the typed keys write it. The page leaves the text
+    /// of a whole edit and then commits it, so that one edit is one write.
+    std::optional<size_t> focused_edit() const noexcept;
+    void focus_edit(size_t index, uint32_t now_ms);
+    bool set_edit_text(size_t index, const std::string& text);
+    void commit_edit(size_t index);
 
     /// Called with the setting that a callback has just changed (the owner applies and stores it)
     void set_on_change(std::function<void(OptionSetting)> cb) { on_change_ = std::move(cb); }
