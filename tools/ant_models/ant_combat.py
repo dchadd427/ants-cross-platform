@@ -70,7 +70,6 @@ EYE_OFFSET: Vec3 = (0.086, -0.012, 0.164)  # left eye relative to head center (b
 
 # Left (+X) arm joints; the right arm mirrors them.
 SHOULDER: Vec3 = (0.330, 0.865, -0.010)
-BICEP_MID: Vec3 = (0.428, 0.735, -0.030)
 ELBOW: Vec3 = (0.462, 0.590, -0.020)
 WRIST: Vec3 = (0.428, 0.425, 0.155)
 FIST: Vec3 = (0.410, 0.382, 0.225)
@@ -120,6 +119,18 @@ def _rivet(pos: np.ndarray, normal: np.ndarray, name: str, radius: float = 0.013
     z = np.cross(x, n)
     dome = ellipsoid(radius, 0.55 * radius, radius, u_segs=10, v_segs=6, name=name, material="gear_steel")
     return dome.transform(_frame(pos, x, n, z))
+
+
+def _facet(part: MeshPart) -> MeshPart:
+    """Hard-surface shading: unweld every triangle and give it its flat face normal."""
+    tri = part.positions.astype(np.float64)[part.indices.reshape(-1, 3)]
+    fn = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+    lens = np.linalg.norm(fn, axis=1)
+    keep = lens > 1e-12
+    tri, fn = tri[keep], fn[keep] / lens[keep, None]
+    pos = tri.reshape(-1, 3).astype(np.float32)
+    nrm = np.repeat(fn, 3, axis=0).astype(np.float32)
+    return MeshPart(part.name, part.material, pos, nrm, np.arange(len(pos), dtype=np.uint32))
 
 
 def _super_top(rx: float, ry: float, rz: float, e1: float, e2: float, lx: float, lz: float) -> float:
@@ -209,56 +220,61 @@ def _build_torso(scene: SceneBuilder) -> np.ndarray:
 
     Returns the torso shell vertices the bandoliers conform over.
     """
-    core = superellipsoid(0.235, 0.245, 0.200, e1=0.72, e2=0.76, u_segs=24, v_segs=16, name="thorax_core", material="chitin_dark").translate(0.0, 0.710, -0.030)
+    core = superellipsoid(0.225, 0.240, 0.192, e1=0.60, e2=0.62, u_segs=24, v_segs=16, name="thorax_core", material="chitin_dark").translate(0.0, 0.715, -0.030)
     dorsal = (
-        superellipsoid(0.265, 0.215, 0.205, e1=0.58, e2=0.66, u_segs=28, v_segs=18, name="dorsal_carapace", material="chitin_team")
+        superellipsoid(0.262, 0.212, 0.200, e1=0.34, e2=0.42, u_segs=28, v_segs=18, name="dorsal_carapace", material="chitin_team")
         .deform(_hunch_deform)
         .rotate_xyz(rx=0.12)
         .translate(0.0, 0.800, -0.070)
     )
-    chest = superellipsoid(0.232, 0.190, 0.130, e1=0.50, e2=0.60, u_segs=24, v_segs=16, name="breastplate", material="chitin_team").rotate_xyz(rx=0.10).translate(0.0, 0.735, 0.095)
-    pec_l = superellipsoid(0.118, 0.105, 0.070, e1=0.52, e2=0.62, u_segs=16, v_segs=12, name="pectoral_plate", material="chitin_team").rotate_xyz(rx=0.14, ry=0.28).translate(0.112, 0.775, 0.170)
+    # Chamfered breastplate: flat front plane, crisp bevels, plus angled pectoral plates.
+    chest = superellipsoid(0.228, 0.186, 0.124, e1=0.28, e2=0.36, u_segs=24, v_segs=16, name="breastplate", material="chitin_team").rotate_xyz(rx=0.10).translate(0.0, 0.735, 0.092)
+    pec_l = _facet(superellipsoid(0.114, 0.100, 0.060, e1=0.30, e2=0.34, u_segs=8, v_segs=6, name="pectoral_plate", material="chitin_team").rotate_xyz(rx=0.14, ry=0.30, rz=-0.06).translate(0.112, 0.778, 0.170))
     left_pec, right_pec = scene.add_mirrored("body", pec_l)
     scene.add("body", [core, dorsal, chest])
 
-    # Stacked segmented abdominal plates with dark seams between them.
+    # Stacked segmented abdominal plates with dark seams, pinching into a narrow waist.
     abs_parts = []
-    for i, (y, rx, rz, z) in enumerate(((0.565, 0.168, 0.110, 0.090), (0.492, 0.146, 0.098, 0.068))):
-        abs_parts.append(superellipsoid(rx, 0.044, rz, e1=0.45, e2=0.60, u_segs=18, v_segs=10, name=f"ab_plate_{i}", material="chitin_team").rotate_xyz(rx=0.12).translate(0.0, y, z))
+    for i, (y, rx, rz, z) in enumerate(((0.572, 0.160, 0.104, 0.088), (0.506, 0.130, 0.090, 0.066))):
+        abs_parts.append(_facet(superellipsoid(rx, 0.036, rz, e1=0.30, e2=0.34, u_segs=10, v_segs=6, name=f"ab_plate_{i}", material="chitin_team").rotate_xyz(rx=0.12).translate(0.0, y, z)))
     scene.add("body", abs_parts)
-    pelvis = superellipsoid(0.182, 0.110, 0.168, e1=0.78, e2=0.82, u_segs=20, v_segs=12, name="pelvis_core", material="chitin_dark").translate(0.0, 0.478, -0.060)
-    neck = superellipsoid(0.128, 0.085, 0.118, e1=0.80, e2=0.84, u_segs=16, v_segs=10, name="neck_collar", material="chitin_dark").rotate_xyz(rx=0.30).translate(0.0, 0.875, 0.100)
-    scene.add("body", [pelvis, neck])
+    pelvis = superellipsoid(0.150, 0.092, 0.142, e1=0.55, e2=0.60, u_segs=20, v_segs=12, name="pelvis_core", material="chitin_dark").translate(0.0, 0.468, -0.060)
+    petiole = _facet(superellipsoid(0.070, 0.062, 0.070, e1=0.45, e2=0.50, u_segs=8, v_segs=6, name="petiole", material="chitin_dark").translate(0.0, 0.452, -0.205))
+    neck = superellipsoid(0.124, 0.082, 0.114, e1=0.60, e2=0.64, u_segs=16, v_segs=10, name="neck_collar", material="chitin_dark").rotate_xyz(rx=0.30).translate(0.0, 0.875, 0.100)
+    scene.add("body", [pelvis, petiole, neck])
 
-    # Riveted two-plate lamellar pauldrons cascading outward over each shoulder.
+    # Riveted faceted lamellar pauldrons cascading outward, each with a raised outer flange.
     pauldron_specs = (
-        ((0.285, 0.960, -0.015), (0.160, 0.074, 0.160), -0.40),
-        ((0.372, 0.885, -0.015), (0.128, 0.062, 0.138), -0.80),
+        ((0.285, 0.960, -0.015), (0.160, 0.070, 0.160), -0.40),
+        ((0.372, 0.885, -0.015), (0.128, 0.058, 0.138), -0.80),
     )
     plate_parts: List[MeshPart] = []
     for idx, (ctr, (rx, ry, rz), roll) in enumerate(pauldron_specs):
-        e1, e2 = 0.42, 0.66
-        plate = superellipsoid(rx, ry, rz, e1=e1, e2=e2, u_segs=22, v_segs=12, name=f"pauldron_{idx}", material="chitin_team").rotate_xyz(rz=roll).translate(*ctr)
+        e1, e2 = 0.30, 0.42
+        plate = _facet(superellipsoid(rx, ry, rz, e1=e1, e2=e2, u_segs=16, v_segs=8, name=f"pauldron_{idx}", material="chitin_team").rotate_xyz(rz=roll).translate(*ctr))
         plate_parts.append(plate)
         rot = np.array([[math.cos(roll), -math.sin(roll), 0.0], [math.sin(roll), math.cos(roll), 0.0], [0.0, 0.0, 1.0]])
-        for r_i, (lx, lz) in enumerate(((0.62 * rx, 0.0), (0.38 * rx, 0.62 * rz), (0.38 * rx, -0.62 * rz))):
+        flange = _facet(superellipsoid(0.030, 0.75 * ry, 0.96 * rz, e1=0.30, e2=0.36, u_segs=10, v_segs=6, name=f"pauldron_flange_{idx}", material="chitin_team"))
+        scene.add_mirrored("body", flange.rotate_xyz(rz=roll - 0.35).translate(*(rot @ np.array([0.92 * rx, 0.10 * ry, 0.0]) + np.asarray(ctr))))
+        for r_i, (lx, lz) in enumerate(((0.55 * rx, 0.0), (0.30 * rx, 0.62 * rz), (0.30 * rx, -0.62 * rz))):
             local = np.array([lx, _super_top(rx, ry, rz, e1, e2, lx, lz) - 0.002, lz])
             normal = rot @ np.array([0.0, 1.0, 0.0])
             scene.add_mirrored("body", _rivet(rot @ local + np.asarray(ctr), normal, f"pauldron_rivet_{idx}_{r_i}"))
-        trim = torus_arc(0.86 * rz, 0.008, u_segs=24, v_segs=6, plane="xz", name=f"pauldron_seam_{idx}", material="chitin_dark").scale(rx / rz, 1.0, 1.0).translate(0.0, -0.35 * ry, 0.0).rotate_xyz(rz=roll).translate(*ctr)
+        trim = torus_arc(0.90 * rz, 0.008, u_segs=24, v_segs=6, plane="xz", name=f"pauldron_seam_{idx}", material="chitin_dark").scale(rx / rz, 1.0, 1.0).translate(0.0, -0.45 * ry, 0.0).rotate_xyz(rz=roll).translate(*ctr)
         scene.add_mirrored("body", trim)
     for plate in plate_parts:
         scene.add_mirrored("body", plate)
 
-    # Compact pointed gaster tucked low behind the hips.
-    gaster_profile = [(0.000, 0.000), (0.042, 0.026), (0.092, 0.074), (0.130, 0.140), (0.150, 0.214), (0.143, 0.284), (0.108, 0.342), (0.000, 0.372)]
+    # Compact pointed gaster with crisp overlapping stepped tergite plates (faceted, 12-sided).
+    gaster_profile = [
+        (0.000, 0.000), (0.040, 0.030), (0.080, 0.072), (0.068, 0.080),
+        (0.110, 0.112), (0.124, 0.152), (0.110, 0.160),
+        (0.142, 0.192), (0.152, 0.232), (0.138, 0.242),
+        (0.150, 0.264), (0.148, 0.300), (0.112, 0.345), (0.000, 0.372),
+    ]
     tilt = -0.26
-    gaster = lathe(gaster_profile, radial_segs=22, cap_bottom=False, cap_top=False, axis="z", name="gaster", material="chitin_team").scale(1.04, 0.92, 1.0).rotate_xyz(rx=tilt).translate(0.0, 0.452, -0.555)
+    gaster = _facet(lathe(gaster_profile, radial_segs=12, cap_bottom=False, cap_top=False, axis="z", name="gaster", material="chitin_team").scale(1.04, 0.92, 1.0).rotate_xyz(rx=tilt).translate(0.0, 0.452, -0.555))
     scene.add("body", gaster)
-    for idx, (z_ring, maj_r) in enumerate(((-0.355, 0.142), (-0.428, 0.118))):
-        y_ring = 0.452 + (z_ring + 0.555) * math.sin(-tilt)
-        ring = torus_arc(maj_r, 0.009, u_segs=22, v_segs=8, plane="xy", name=f"gaster_seam_{idx}", material="chitin_dark").scale(1.04, 0.92, 1.0).rotate_xyz(rx=tilt).translate(0.0, y_ring, z_ring)
-        scene.add("body", ring)
 
     shell = [core, dorsal, chest, left_pec, right_pec, pelvis] + abs_parts + plate_parts + [p.mirror_x() for p in plate_parts]
     return np.vstack([p.positions for p in shell]).astype(np.float64)
@@ -304,11 +320,11 @@ def _build_head(scene: SceneBuilder, blink: float) -> None:
 
 def _sculpt_head(scene: SceneBuilder, blink: float) -> None:
     hx, hy, hz = HEAD_CENTER
-    cranium = superellipsoid(0.205, 0.180, 0.192, e1=0.55, e2=0.62, u_segs=34, v_segs=24, name="cranium", material="chitin_team").deform(_armored_head_deform).translate(hx, hy, hz)
+    cranium = superellipsoid(0.205, 0.180, 0.192, e1=0.40, e2=0.48, u_segs=34, v_segs=24, name="cranium", material="chitin_team").deform(_armored_head_deform).translate(hx, hy, hz)
     scene.add("head", cranium)
 
     # Heavy angled V brow ledge overhanging the eyes (sculpted chitin, no painted brows).
-    brow = superellipsoid(0.100, 0.026, 0.062, e1=0.36, e2=0.56, u_segs=18, v_segs=10, name="brow_ledge", material="chitin_team").rotate_xyz(rx=0.24, ry=0.42, rz=0.38).translate(0.088, hy + 0.054, hz + 0.168)
+    brow = _facet(superellipsoid(0.102, 0.026, 0.064, e1=0.22, e2=0.30, u_segs=12, v_segs=6, name="brow_ledge", material="chitin_team").rotate_xyz(rx=0.24, ry=0.42, rz=0.38).translate(0.088, hy + 0.054, hz + 0.168))
     scene.add_mirrored("head", brow)
 
     # Deep dark orbital sockets and 3-part eyes (cream sclera, olive-gold iris, obsidian pupil).
@@ -326,7 +342,7 @@ def _sculpt_head(scene: SceneBuilder, blink: float) -> None:
     scene.add_blink_animation(("eyelid_left", "eyelid_right"), closed_angle=EYELID_CLOSED_ANGLE, name="Blink")
 
     # Clypeus plate and stout inward-curving toothed pincer mandibles.
-    scene.add("head", superellipsoid(0.060, 0.030, 0.040, e1=0.50, e2=0.62, u_segs=14, v_segs=10, name="clypeus", material="chitin_team").rotate_xyz(rx=0.35).translate(0.0, hy - 0.098, hz + 0.178))
+    scene.add("head", _facet(superellipsoid(0.060, 0.030, 0.040, e1=0.30, e2=0.36, u_segs=10, v_segs=6, name="clypeus", material="chitin_team").rotate_xyz(rx=0.35).translate(0.0, hy - 0.098, hz + 0.178)))
     scene.add("head", ellipsoid(0.058, 0.032, 0.046, u_segs=14, v_segs=10, name="mouth_cleft", material="chitin_dark").translate(0.0, hy - 0.142, hz + 0.170))
     jaw = curved_tube(
         [(0.076, hy - 0.118, hz + 0.118), (0.104, hy - 0.150, hz + 0.180), (0.078, hy - 0.168, hz + 0.240), (0.024, hy - 0.174, hz + 0.262)],
@@ -353,29 +369,30 @@ def _sculpt_head(scene: SceneBuilder, blink: float) -> None:
 
 def _build_arms(scene: SceneBuilder) -> None:
     """Build segmented armored arms, plated gauntlets, and dark clawed fists (left, mirrored)."""
-    sh, mid, el, wr, fi = (np.asarray(v, dtype=np.float64) for v in (SHOULDER, BICEP_MID, ELBOW, WRIST, FIST))
+    sh, el, wr, fi = (np.asarray(v, dtype=np.float64) for v in (SHOULDER, ELBOW, WRIST, FIST))
+    oct_ = 8  # octagonal hard-surface armor segments
     parts: List[MeshPart] = [
-        sphere(0.090, u_segs=16, v_segs=12, name="shoulder_joint", material="chitin_dark").translate(sh),
-        curved_tube([sh, mid, el], [0.080, 0.088, 0.074], samples_per_seg=5, radial_segs=16, cap_rings=3, name="upper_arm", material="chitin_team"),
-        _segment_lathe(sh + 0.25 * (mid - sh), mid + 0.10 * (el - mid), [(0.086, 0.0), (0.096, 0.15), (0.097, 0.80), (0.090, 1.0)], name="bicep_bracer", material="chitin_team"),
-        _ring_on_segment(sh, el, 0.40, 0.094, 0.0075, name="bracer_seam_0", material="chitin_dark"),
-        _ring_on_segment(sh, el, 0.86, 0.082, 0.0075, name="bracer_seam_1", material="chitin_dark"),
-        sphere(0.074, u_segs=14, v_segs=10, name="elbow_joint", material="chitin_dark").translate(el),
-        superellipsoid(0.064, 0.052, 0.040, e1=0.50, e2=0.62, u_segs=14, v_segs=10, name="elbow_cop", material="chitin_team").rotate_xyz(rx=0.5, rz=-0.3).translate(el + np.array([0.018, 0.006, -0.060])),
-        _segment_lathe(el, wr, [(0.070, 0.0), (0.090, 0.10), (0.104, 0.42), (0.100, 0.82), (0.088, 1.0)], name="gauntlet", material="chitin_team"),
-        _ring_on_segment(el, wr, 0.36, 0.1035, 0.008, name="gauntlet_seam_0", material="chitin_dark"),
-        _ring_on_segment(el, wr, 0.68, 0.1015, 0.008, name="gauntlet_seam_1", material="chitin_dark"),
-        _ring_on_segment(el, wr, 0.98, 0.088, 0.012, name="gauntlet_cuff", material="chitin_dark"),
+        sphere(0.088, u_segs=16, v_segs=12, name="shoulder_joint", material="chitin_dark").translate(sh),
+        _facet(_segment_lathe(sh, el, [(0.070, 0.0), (0.084, 0.10), (0.090, 0.55), (0.078, 1.0)], name="upper_arm", material="chitin_team", segs=oct_)),
+        _facet(_segment_lathe(sh + 0.20 * (el - sh), sh + 0.78 * (el - sh), [(0.090, 0.0), (0.100, 0.10), (0.100, 0.72), (0.094, 1.0)], name="bicep_bracer", material="chitin_team", segs=oct_)),
+        _facet(_segment_lathe(sh + 0.40 * (el - sh), sh + 0.44 * (el - sh), [(0.102, 0.0), (0.102, 1.0)], name="bracer_seam", material="chitin_dark", segs=oct_)),
+        sphere(0.072, u_segs=14, v_segs=10, name="elbow_joint", material="chitin_dark").translate(el),
+        _facet(superellipsoid(0.066, 0.052, 0.040, e1=0.28, e2=0.34, u_segs=10, v_segs=6, name="elbow_cop", material="chitin_team").rotate_xyz(rx=0.5, rz=-0.3).translate(el + np.array([0.018, 0.006, -0.060]))),
+        # Angular chamfered gauntlet: flared octagonal plates with dark seam bands and a cuff.
+        _facet(_segment_lathe(el, wr, [(0.064, 0.0), (0.090, 0.08), (0.108, 0.40), (0.104, 0.80), (0.086, 1.0)], name="gauntlet", material="chitin_team", segs=oct_)),
+        _facet(_segment_lathe(el + 0.33 * (wr - el), el + 0.37 * (wr - el), [(0.1095, 0.0), (0.1095, 1.0)], name="gauntlet_seam_0", material="chitin_dark", segs=oct_)),
+        _facet(_segment_lathe(el + 0.64 * (wr - el), el + 0.68 * (wr - el), [(0.108, 0.0), (0.108, 1.0)], name="gauntlet_seam_1", material="chitin_dark", segs=oct_)),
+        _facet(_segment_lathe(el + 0.94 * (wr - el), el + 1.02 * (wr - el), [(0.092, 0.0), (0.094, 0.5), (0.088, 1.0)], name="gauntlet_cuff", material="chitin_dark", segs=oct_)),
     ]
     for part in parts:
         scene.add_mirrored("arms", part)
 
-    # Steel rivet ring around the gauntlet cuff.
+    # Steel rivets centered on alternate flats of the octagonal gauntlet near the cuff.
     mat, length = _axis_frame(el, wr)
-    for k in range(6):
-        ang = 2.0 * math.pi * k / 6.0 + 0.3
-        local_n = np.array([math.cos(ang), 0.0, math.sin(ang)])
-        local_p = local_n * 0.0985 + np.array([0.0, 0.84 * length, 0.0])
+    for k in range(4):
+        ang = (2 * k + 0.5) * math.pi / 4.0
+        local_n = np.array([math.sin(ang), 0.0, math.cos(ang)])
+        local_p = local_n * (0.1035 * math.cos(math.pi / 8.0)) + np.array([0.0, 0.82 * length, 0.0])
         world_p = (mat @ np.append(local_p, 1.0))[:3]
         world_n = mat[:3, :3] @ local_n
         scene.add_mirrored("arms", _rivet(world_p, world_n, f"gauntlet_rivet_{k}", radius=0.012))
@@ -396,9 +413,9 @@ def _build_arms(scene: SceneBuilder) -> None:
 
 def _tarsus_foot(name: str) -> MeshPart:
     prof = [(0.000, -0.034), (0.022, -0.022), (0.028, 0.006), (0.022, 0.044), (0.012, 0.074), (0.000, 0.090)]
-    foot = lathe(prof, radial_segs=12, cap_bottom=False, cap_top=False, axis="z", name=name, material="chitin_dark").scale(1.05, 0.72, 1.0)
+    foot = lathe(prof, radial_segs=6, cap_bottom=False, cap_top=False, axis="z", name=name, material="chitin_dark").scale(1.05, 0.72, 1.0)
     foot = foot.deform(lambda p: np.column_stack([p[:, 0], np.maximum(p[:, 1], -0.015), p[:, 2]]))
-    return foot.translate(0.0, -float(foot.bounds()[0][1]), 0.0)
+    return _facet(foot.translate(0.0, -float(foot.bounds()[0][1]), 0.0))
 
 
 def _build_leg(scene: SceneBuilder, label: str, hip: Vec3, knee: Vec3, ankle: Vec3, foot_yaw: float) -> None:
@@ -406,11 +423,14 @@ def _build_leg(scene: SceneBuilder, label: str, hip: Vec3, knee: Vec3, ankle: Ve
     p_hip, p_knee, p_ankle = (np.asarray(v, dtype=np.float64) for v in (hip, knee, ankle))
     femur_mid = 0.5 * (p_hip + p_knee) + np.array([0.0, 0.022, 0.0])
     tibia_mid = 0.45 * p_knee + 0.55 * p_ankle + np.array([0.012, 0.0, 0.0])
+    # Knee spur points up-outward, away from the body.
+    spur_dir = _normalize(np.array([0.55, 0.75, 0.0]) + 0.35 * _normalize(p_knee - p_hip))
     parts = [
         ellipsoid(0.058, 0.050, 0.058, u_segs=12, v_segs=8, name=f"coxa_{label}", material="chitin_dark").translate(p_hip),
-        swept_tube([p_hip, femur_mid, p_knee], [(0.040, 0.046), (0.050, 0.060), (0.038, 0.042)], radial_segs=12, smooth_subdiv=2, cap_rings=2, name=f"femur_{label}", material="chitin_dark"),
-        superellipsoid(0.044, 0.048, 0.044, e1=0.58, e2=0.66, u_segs=12, v_segs=8, name=f"knee_{label}", material="chitin_dark").translate(p_knee),
-        swept_tube([p_knee, tibia_mid, p_ankle], [0.040, 0.031, 0.021], radial_segs=12, smooth_subdiv=2, cap_rings=2, name=f"tibia_{label}", material="chitin_dark"),
+        _facet(swept_tube([p_hip, femur_mid, p_knee], [(0.040, 0.046), (0.050, 0.060), (0.038, 0.042)], radial_segs=6, cap_rings=2, name=f"femur_{label}", material="chitin_dark")),
+        _facet(superellipsoid(0.044, 0.048, 0.044, e1=0.40, e2=0.45, u_segs=8, v_segs=6, name=f"knee_{label}", material="chitin_dark").translate(p_knee)),
+        _facet(cone(0.022, 0.060, radial_segs=6, name=f"knee_spur_{label}", material="chitin_dark").rotate_axis(np.cross([0.0, 1.0, 0.0], spur_dir), math.acos(float(np.clip(spur_dir[1], -1.0, 1.0)))).translate(p_knee + 0.050 * spur_dir)),
+        _facet(swept_tube([p_knee, tibia_mid, p_ankle], [0.040, 0.031, 0.021], radial_segs=6, cap_rings=2, name=f"tibia_{label}", material="chitin_dark")),
         sphere(0.024, u_segs=10, v_segs=6, name=f"ankle_{label}", material="chitin_dark").translate(p_ankle),
         _tarsus_foot(f"tarsus_{label}").rotate_xyz(ry=foot_yaw).translate(p_ankle[0], 0.0, p_ankle[2] + 0.004),
     ]
@@ -531,13 +551,13 @@ def _build_bandoliers(scene: SceneBuilder, torso_verts: np.ndarray) -> None:
 def _build_right_bicep_bow(scene: SceneBuilder) -> None:
     """Weathered crimson cloth ribbon tied in a two-loop bow around the RIGHT (-X) bicep."""
     sh, el = np.array([-SHOULDER[0], SHOULDER[1], SHOULDER[2]]), np.array([-ELBOW[0], ELBOW[1], ELBOW[2]])
-    center = np.array([-BICEP_MID[0], BICEP_MID[1], BICEP_MID[2]]) + 0.10 * (el - sh)
+    center = sh + 0.56 * (el - sh)
     t = _normalize(el - sh)
     out_x = _normalize(np.array([-1.0, 0.0, -0.15]) - np.dot(np.array([-1.0, 0.0, -0.15]), t) * t)
     fwd = _normalize(np.cross(t, out_x))
     out_x = _normalize(np.cross(fwd, t))
 
-    band_r = 0.106
+    band_r = 0.100  # snug on the octagonal bracer flats
     angs = np.linspace(0.0, 2.0 * math.pi, 32, endpoint=False)
     band_out = np.array([math.cos(a) * out_x + math.sin(a) * fwd for a in angs])
     scene.add("gear_bow", _sculpted_ribbon_mesh(center[None, :] + band_r * band_out, band_out, np.full(32, 0.026), np.full(32, 0.010), closed=True, profile_segs=10, name="bicep_ribbon_band", material="gear_accent"))
