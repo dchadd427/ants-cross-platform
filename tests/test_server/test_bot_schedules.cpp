@@ -1,7 +1,8 @@
 // Tests of the schedules of the server's own matches of computer players (pacific_time.hpp, bot_match_spec.hpp, bot_schedules.hpp, db_schema.cpp version 9; docs/SERVER_REPLAYS.md "Schedules"): the Pacific clock written by hand
 // (the changes of 2026 to 2028 against the zone database's own seconds, and the two odd days: the hour that does not happen and the hour that happens twice), when a schedule runs next (every N minutes, at times of the
 // day, after a restart), the words that a batch and a schedule are made of, and the rows that the database keeps (a restart reads them back, the default is made once, a deleted default stays deleted, a copy of a
-// version 8 database migrates to 9 and keeps what it had). The routes and the limits are in the server suite (bot_admin_tests.hpp). No sockets, no rooms.
+// version 8 database migrates to 9 and keeps what it had; the spacing of a batch is kept with the rest of what a schedule starts, and the longest batch fits the column). The routes and the limits are in the server suite
+// (bot_admin_tests.hpp, bot_stagger_tests.hpp). No sockets, no rooms.
 #include <algorithm>
 #include <cstdlib>
 #include <fstream>
