@@ -504,10 +504,13 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
         self.assertLess(anchors["right_hand"][0], 0.0)
         self.assertTrue(0.85 <= anchors["head_top"][1] <= 0.96, f"unexpected head_top {anchors['head_top'][1]}")
         hrx, hry, hrz = anchors["head_radii"]
-        self.assertLessEqual(hrx, 0.21, "head should stay compact (not an oversized bobblehead)")
-        self.assertGreater(hrx, hry, "compact soft-cube head should be slightly wider than tall")
+        self.assertTrue(0.20 <= hrx <= 0.24, f"unexpected iconic 1998 head radius {hrx}")
+        self.assertGreater(hrx, hry, "soft-cube head should be slightly wider than tall")
         self.assertGreater(hry, hrz, "head should be narrower front-to-back than tall")
         self.assertGreater(anchors["eyelid_closed_angle"], 0.9)
+        # Petite 1998 thorax should be noticeably slimmer than the iconic head (~half head width).
+        thorax_w = max(float(p.bounds()[1][0] - p.bounds()[0][0]) for p in scene.get_node("body") if p.name == "thorax_core")
+        self.assertLess(thorax_w, hrx * 1.15, f"expected petite thorax narrower than head, got {thorax_w:.3f}")
 
         glb_bytes = gltf_writer.scene_to_glb_bytes(scene)
         stats = gltf_writer.validate_glb(glb_bytes)
