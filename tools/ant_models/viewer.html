@@ -82,6 +82,7 @@
         <button type="button" data-projection="ortho" aria-pressed="false" title="Orthographic isometric projection">Ortho</button>
         <button type="button" data-projection="persp" aria-pressed="true" title="Perspective studio lens">Persp</button>
         <button type="button" id="btn-turntable" aria-pressed="false" title="Slow studio turntable rotation">Turntable</button>
+        <button type="button" id="btn-idle" aria-pressed="true" title="Toggle idle animation loop (I)">Idle</button>
         <button type="button" id="btn-sprite-scale" aria-pressed="true" title="Toggle 48px game-sprite scale inset">Sprite Scale</button>
         <button type="button" id="btn-blink-hold" aria-pressed="false" title="Hold eyelids closed to inspect blink pose">Eyes Closed</button>
       </div>
@@ -109,7 +110,7 @@
       <canvas
         id="stage"
         tabindex="0"
-        aria-label="Interactive 3D ant model viewport. Drag to orbit, scroll or pinch to zoom. Press arrow keys to orbit, plus or minus to zoom, R to reset view, and 1 through 5 for canonical camera angles."
+        aria-label="Interactive 3D ant model viewport. Drag to orbit, scroll or pinch to zoom. Press arrow keys to orbit, plus or minus to zoom, I to toggle idle animation, B to blink, R to reset view, and 1 through 5 for canonical camera angles."
       ></canvas>
 
       <div class="drop-overlay" id="drop-overlay" aria-hidden="true">
@@ -136,7 +137,7 @@
       </aside>
 
       <div class="controls-hint" aria-hidden="true">
-        Drag: Orbit &middot; Scroll/Pinch: Zoom &middot; Arrows: Orbit &middot; +/-: Zoom &middot; 1&ndash;5: Angles &middot; B: Blink &middot; R: Reset
+        Drag: Orbit &middot; Scroll/Pinch: Zoom &middot; Arrows: Orbit &middot; +/-: Zoom &middot; 1&ndash;5: Angles &middot; I: Idle &middot; B: Blink &middot; R: Reset
       </div>
     </main>
 

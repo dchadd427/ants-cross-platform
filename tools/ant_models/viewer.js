@@ -312,7 +312,9 @@
         const qx = [Math.sin(0.575 * amt), 0, 0, Math.cos(0.575 * amt)];
         for (const ni of bi.eyelidNodes) {
           const nd = m.nodeDefs[ni];
-          overrides.set(ni, { rotation: quatMul(nd ? nd.r : [0, 0, 0, 1], qx) });
+          let ov = overrides.get(ni);
+          if (!ov) { ov = {}; overrides.set(ni, ov); }
+          ov.rotation = quatMul(ov.rotation || (nd ? nd.r : [0, 0, 0, 1]), qx);
         }
       }
     }
@@ -577,7 +579,8 @@
     const initSprite = pSprite === "0" || pSprite === "false" ? false : (pSprite === "1" || pSprite === "true" ? true
       : (!params.has("sprite") && savedView && typeof savedView.sprite === "boolean" ? savedView.sprite : true));
     const initBlink = pBlink === "closed" ? "closed" : (pBlink === "open" ? "open" : (motionQuery.matches ? "open" : "auto"));
-    const initIdle = fixedIdleTime !== null ? false : (pIdle === "0" || pIdle === "false" ? false : (pIdle === "1" || pIdle === "true" ? true : !motionQuery.matches));
+    const initIdle = fixedIdleTime !== null ? false : (pIdle === "0" || pIdle === "false" ? false : (pIdle === "1" || pIdle === "true" ? true
+      : (!params.has("idle") && savedView && typeof savedView.idle === "boolean" ? savedView.idle : !motionQuery.matches)));
 
     const preset = ANGLES[initAngle] || ANGLES.hero;
     const useSavedCam = !params.has("angle") && savedView && Number.isFinite(savedView.yaw) && Number.isFinite(savedView.pitch) && Number.isFinite(savedView.zoom);
@@ -597,7 +600,7 @@
     window.__antViewerGetState = () => ({
       ant: state.ant === "custom" ? "" : state.ant,
       team: state.team, angle: state.angle, proj: state.cam.projection,
-      turntable: state.turntable, sprite: state.spritePreview,
+      turntable: state.turntable, idle: state.idleAnim, sprite: state.spritePreview,
       yaw: state.cam.yaw, pitch: state.cam.pitch, zoom: state.cam.zoom,
     });
 
@@ -620,13 +623,15 @@
       const totalW = multi ? widths.reduce((a, b) => a + b, 0) + gap * (entries.length - 1) : entries[0].model.size[0];
       let cursor = multi ? -totalW * 0.5 : 0, maxH = 0, maxD = 0, triCount = 0, meshCount = 0, nodeCount = 0;
       const instances = [], shadows = [];
+      const phaseStagger = [0.0, 1.13, 0.47, 1.89, 0.78, 2.31];
       entries.forEach((e, i) => {
         const m = e.model, slotX = multi ? cursor + widths[i] * 0.5 : 0;
         if (multi) cursor += widths[i] + gap;
         const yLift = Math.abs(m.bounds.min[1]) > 0.02 ? -m.bounds.min[1] : 0;
         instances.push({
           id: e.id, model: m, offsetMat: mat4Translate(slotX - m.center[0], yLift, -m.center[2]),
-          blink: { active: false, elapsed: 0, wait: 1.3 + i * 0.65 + Math.random() * 2.1 }, idleTime: multi ? i * 0.45 : 0,
+          blink: { active: false, elapsed: 0, wait: 1.3 + i * 0.65 + Math.random() * 2.1 },
+          idleTime: multi ? phaseStagger[i % phaseStagger.length] : 0,
         });
         shadows.push([slotX, 0, Math.max(0.30, m.size[0] * 0.52), Math.max(0.30, m.size[2] * 0.52)]);
         maxH = Math.max(maxH, m.size[1]); maxD = Math.max(maxD, m.size[2]);
@@ -652,7 +657,7 @@
 
     function syncDebugState() {
       window.__antViewer = {
-        ready: state.ready, ant: state.ant, team: state.team, angle: state.angle, blink: state.blinkMode,
+        ready: state.ready, ant: state.ant, team: state.team, angle: state.angle, blink: state.blinkMode, idle: state.idleAnim,
         hasBlinkAnim: state.scene.instances.some((inst) => inst.model.blinkInfo && inst.model.blinkInfo.hasBlink),
         idleAnims: state.scene.instances.flatMap((inst) => (inst.model.idleAnims || []).map((a) => a.name)),
         textureCount: state.scene.instances.reduce((sum, inst) => sum + (inst.model.textureCount || 0), 0),
@@ -672,6 +677,7 @@
         toolbarEl.querySelectorAll("button[data-" + attr + "]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset[attr] === val)));
       }
       $("btn-turntable").setAttribute("aria-pressed", String(state.turntable));
+      $("btn-idle").setAttribute("aria-pressed", String(state.idleAnim));
       $("btn-sprite-scale").setAttribute("aria-pressed", String(state.spritePreview));
       $("btn-blink-hold").setAttribute("aria-pressed", String(state.blinkMode === "closed"));
       spriteInset.hidden = !state.spritePreview;
@@ -840,6 +846,12 @@
       updateUiState(); markDirty(); announce(state.blinkMode === "closed" ? "Eyelids held closed." : "Eyelids released.");
     }
 
+    function toggleIdle() {
+      state.idleAnim = !state.idleAnim;
+      state.fixedIdleTime = null;
+      updateUiState(); markDirty(); announce("Idle animation " + (state.idleAnim ? "enabled." : "paused."));
+    }
+
     toolbarEl.addEventListener("click", (e) => {
       const btn = e.target.closest("button");
       if (!btn) return;
@@ -848,6 +860,7 @@
       else if (btn.dataset.angle) { setAnglePreset(btn.dataset.angle); announce("Camera set to " + ANGLES[btn.dataset.angle].full + "."); }
       else if (btn.dataset.projection) { state.cam.projection = btn.dataset.projection === "ortho" ? "ortho" : "persp"; updateUiState(); markDirty(); announce("Projection set to " + (state.cam.projection === "ortho" ? "Orthographic." : "Perspective.")); }
       else if (btn.id === "btn-turntable") { state.turntable = !state.turntable; state.camTarget = null; updateUiState(); markDirty(false); announce("Turntable spin " + (state.turntable ? "enabled." : "paused.")); }
+      else if (btn.id === "btn-idle") toggleIdle();
       else if (btn.id === "btn-sprite-scale") { state.spritePreview = !state.spritePreview; updateUiState(); markDirty(true); announce("48px sprite-scale preview " + (state.spritePreview ? "shown." : "hidden.")); }
       else if (btn.id === "btn-blink-hold") toggleBlinkHold();
       else if (btn.id === "btn-blink") triggerBlink();
@@ -901,6 +914,7 @@
       else if (e.key === "+" || e.key === "=") state.cam.zoom = clamp(state.cam.zoom * 0.88, 0.35, 3.2);
       else if (e.key === "-" || e.key === "_") state.cam.zoom = clamp(state.cam.zoom * 1.14, 0.35, 3.2);
       else if (e.key === "b" || e.key === "B") { e.preventDefault(); if (e.shiftKey) toggleBlinkHold(); else triggerBlink(); return; }
+      else if (e.key === "i" || e.key === "I") { e.preventDefault(); toggleIdle(); return; }
       else {
         manual = false;
         const key = (e.key === "r" || e.key === "R") ? (ANGLES[state.angle] ? state.angle : "hero")
