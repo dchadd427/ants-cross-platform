@@ -48,11 +48,8 @@ import json
 import math
 import os
 import re
-import shutil
 import struct
-import subprocess
 import sys
-import tempfile
 import threading
 import time
 import zlib
@@ -67,6 +64,7 @@ class NotReachable(Exception):
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from web_hidden_check import DevTools, find_browser, free_port  # noqa: E402  (the DevTools client of the hidden-tab check)
+import browser_process  # noqa: E402  (how the browser is started and stopped)
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # a PNG reader (8 bit RGB / RGBA, not interlaced: what a screenshot of the browser is)
@@ -544,32 +542,29 @@ class EventDevTools(DevTools):
 
 class Browser:
     def __init__(self, browser_path):
-        self.profile = tempfile.mkdtemp(prefix="ants_aspect_profile.")
         self.port = free_port()
-        self.process = subprocess.Popen(
-            [browser_path, "--headless=new", "--remote-debugging-port=%d" % self.port, "--user-data-dir=" + self.profile, "--no-first-run", "--no-default-browser-check",
-             "--disable-extensions", "--autoplay-policy=no-user-gesture-required", "about:blank"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.process, self.profile = browser_process.start(
+            [browser_path, "--headless=new", "--remote-debugging-port=%d" % self.port, "--user-data-dir={profile}", "--no-first-run", "--no-default-browser-check",
+             "--disable-extensions", "--autoplay-policy=no-user-gesture-required", "about:blank"], "ants_aspect_profile.")
         self.devtools = None
-        for _ in range(100):
-            try:
-                self.devtools = EventDevTools(self.port)
-                break
-            except (OSError, ValueError, ConnectionError):
-                time.sleep(0.2)
-        if self.devtools is None:
-            raise NotReachable("the browser did not start")
-        for t in self.devtools.call("Target.getTargets")["targetInfos"]:
-            if t["type"] == "page":
-                self.devtools.close_tab(t["targetId"])
+        try:
+            for _ in range(100):
+                try:
+                    self.devtools = EventDevTools(self.port)
+                    break
+                except (OSError, ValueError, ConnectionError):
+                    time.sleep(0.2)
+            if self.devtools is None:
+                raise NotReachable("the browser did not start")
+            for t in self.devtools.call("Target.getTargets")["targetInfos"]:
+                if t["type"] == "page":
+                    self.devtools.close_tab(t["targetId"])
+        except BaseException:
+            self.close()                                            # (a browser that did not come up is not left running)
+            raise
 
     def close(self):
-        self.process.terminate()
-        try:
-            self.process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            self.process.kill()
-        shutil.rmtree(self.profile, ignore_errors=True)
+        browser_process.stop(self.process, self.profile)
 
 
 class Tab:
@@ -678,7 +673,7 @@ def exit_code_checks(args):
 
     base = [sys.executable, os.path.abspath(__file__), "--browser", path, "--ready-timeout", "6", "--quick"]
     closed = free_port()                                                     # (nothing listens there)
-    r = subprocess.run(base + ["--web", "http://127.0.0.1:%d/" % closed], capture_output=True, text=True, timeout=180)
+    r = browser_process.run_check(base + ["--web", "http://127.0.0.1:%d/" % closed], 180)
     check(r.returncode == 3 and "SKIP" in r.stdout, "a closed port: the check is skipped, exit status 3 (status %d)" % r.returncode)
 
     class Hang(http.server.BaseHTTPRequestHandler):
@@ -696,7 +691,7 @@ def exit_code_checks(args):
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Hang)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
-        r = subprocess.run(base + ["--web", "http://127.0.0.1:%d/" % server.server_address[1]], capture_output=True, text=True, timeout=180)
+        r = browser_process.run_check(base + ["--web", "http://127.0.0.1:%d/" % server.server_address[1]], 180)
         check(r.returncode == 1 and "FAIL" in r.stdout and "SKIP" not in r.stdout, "a page that loads and never gets its game ready: a failure, exit status 1 (status %d)" % r.returncode)
     finally:
         server.shutdown()

@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the settings menu for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the page's script web/game_menu.js against tests/scripts/web_game_menu_check.js (node, on a strict fake of the DOM), and the game's side (src/ants_app/game_menu.cpp, application_game_menu.cpp, the HUD's Esc, the event loop's gate, the mixer's gain) against tests/test_app/test_game_menu.cpp and the mixer's case 4.5b of test_app_integration. Run from the checkout: tools/mutate.py tests/data/game_menu_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_game_menu.py runs the script's mutants on a copy of the files.",
+  "note": "Mutants of the settings menu for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the page's script web/game_menu.js against tests/scripts/web_game_menu_check.js (node, on a strict fake of the DOM), and the game's side (src/ants_app/game_menu.cpp, application_game_menu.cpp, the HUD's Esc, the event loop's gate, the mixer's gain) against tests/test_app/test_game_menu.cpp and the mixer's case 4.5b of test_app_integration. Run from the checkout: tools/mutate.py tests/data/game_menu_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_game_menu.py runs the script's mutants, the scrolling's and the style's on a copy of the files.",
   "mutants": [
     {
       "id": "held_esc_closes",
@@ -1679,6 +1679,34 @@
       "old": "hit = down && e.target === node; down = false; });",
       "new": "hit = e.target === node; down = false; });",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "gear_placed_on_the_bar_over_the_picture",
+      "file": "web/game_menu.css",
+      "old": ".rbar:not(.over) .gm-bar { position: absolute;",
+      "new": ".rbar .gm-bar { position: absolute;",
+      "test": "python3 tests/scripts/test_web_game_menu.py TheStyle"
+    },
+    {
+      "id": "gear_placed_on_a_wide_window",
+      "file": "web/game_menu.css",
+      "old": "@media (max-width: 700px) {\n    .rbar .gm-bar .gm-txt",
+      "new": "@media (max-width: 7000px) {\n    .rbar .gm-bar .gm-txt",
+      "test": "python3 tests/scripts/test_web_game_menu.py TheStyle"
+    },
+    {
+      "id": "header_button_placed",
+      "file": "web/game_menu.css",
+      "old": ".btn.gm-top { min-height: 44px; }",
+      "new": ".btn.gm-top { min-height: 44px; position: fixed; top: 8px; right: 8px; }",
+      "test": "python3 tests/scripts/test_web_game_menu.py TheStyle"
+    },
+    {
+      "id": "gear_of_the_bar_over_the_picture_fixed",
+      "file": "web/game_menu.css",
+      "old": "/* the dimmed screen and the panel */",
+      "new": ".rbar.over .gm-bar { position: fixed; top: 8px; right: 8px; }\n\n/* the dimmed screen and the panel */",
+      "test": "python3 tests/scripts/test_web_game_menu.py TheStyle"
     }
   ]
 }

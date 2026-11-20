@@ -28,17 +28,15 @@ import argparse
 import asyncio
 import os
 import random
-import shutil
 import signal
 import statistics
-import subprocess
 import sys
-import tempfile
 import threading
 import time
 import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import browser_process  # noqa: E402  (how the browser is started and stopped)
 import web_hidden_check as hidden  # noqa: E402  (the DevTools helpers, the hook that records the games' state hashes, the control interface)
 
 WINDOW = (1000, 640)
@@ -302,13 +300,11 @@ def main():
             print("  SKIP: %s" % error)
             return 3
         link = "a link delayed by %d ms (round trip) plus 0 to %d ms of jitter a chunk each way" % (args.rtt, args.jitter)
-    profile = tempfile.mkdtemp(prefix="ants_prediction_profile.")
     port = hidden.free_port()
-    process = subprocess.Popen(
-        [browser, "--headless=new", "--remote-debugging-port=%d" % port, "--user-data-dir=" + profile, "--no-first-run", "--no-default-browser-check", "--disable-extensions",
+    process, profile = browser_process.start(
+        [browser, "--headless=new", "--remote-debugging-port=%d" % port, "--user-data-dir={profile}", "--no-first-run", "--no-default-browser-check", "--disable-extensions",
          "--autoplay-policy=no-user-gesture-required", "--window-size=%d,%d" % WINDOW, "--disable-background-timer-throttling", "--disable-renderer-backgrounding",
-         "--disable-backgrounding-occluded-windows", "about:blank"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+         "--disable-backgrounding-occluded-windows", "about:blank"], "ants_prediction_profile.")
     devtools = None
     try:
         for _ in range(100):
@@ -354,15 +350,7 @@ def main():
                 devtools.call("Browser.close", timeout=5)
             except Exception:  # noqa: BLE001
                 pass
-        try:
-            process.terminate()
-            process.wait(timeout=10)
-        except Exception:  # noqa: BLE001
-            try:
-                process.kill()
-            except Exception:  # noqa: BLE001
-                pass
-        shutil.rmtree(profile, ignore_errors=True)
+        browser_process.stop(process, profile)
         if proxy is not None:
             proxy.stop()
 

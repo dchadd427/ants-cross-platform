@@ -1,0 +1,127 @@
+{
+ "note": "Mutants of the Room's Direct connection switch (web/front/lobby_direct.js; docs/P2P_HINTS.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_lobby_direct_check.js (a fake DOM and storage): the default, what turns it on, the first-time explanation and its answers, the choice that is kept, read back and named as the game page reads it, a browser that refuses it or has no WebRTC, and the words (the risk is said, the network's words are not).",
+ "baseline": {
+  "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
+ },
+ "mutants": [
+  {
+   "id": "it_is_on_by_default",
+   "file": "web/front/lobby_direct.js",
+   "old": "return !!storage && read(storage, KEY) === '1';",
+   "new": "return !storage || read(storage, KEY) !== '0';",
+   "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
+  },
+  {
+   "id": "any_word_turns_it_on",
+   "file": "web/front/lobby_direct.js",
+   "old": "return !!storage && read(storage, KEY) === '1';",
+   "new": "return !!storage && !!read(storage, KEY);",
+   "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
+  },
+  {
+   "id": "the_first_press_turns_it_on_without_asking",
+   "file": "web/front/lobby_direct.js",
+   "old": "            asking = true;\n            paint();\n            yes.focus();",
+   "new": "            return set(true);",
+   "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
+  },
+  {
+   "id": "it_asks_every_time",
+   "file": "web/front/lobby_direct.js",
+   "old": "if (read(storage, SEEN) === '1') return set(true);       // (it was explained once: one press)",
+   "new": "if (false) return set(true);",
+   "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
+  },
+  {
+   "id": "turning_it_off_asks",
+   "file": "web/front/lobby_direct.js",
+   "old": "if (isOn(storage)) return set(false);",
+   "new": "if (isOn(storage)) { asking = true; paint(); return; }",
+   "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
+  },
+  {
+   "id": "keep_it_off_turns_it_on",
+   "file": "web/front/lobby_direct.js",
+   "old": "no.addEventListener('click', function () { asking = false; paint(); sw.focus(); });",
+   "new": "no.addEventListener('click', function () { set(true); sw.focus(); });",
+   "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
+  },
+  {
+   "id": "escape_does_not_close_the_explanation",
+   "file": "web/front/lobby_direct.js",
+   "old": "if (e.key === 'Escape') { asking = false; paint(); sw.focus(); }",
+   "new": "if (false) { asking = false; paint(); sw.focus(); }",
+   "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
+  },
+  {
+   "id": "the_explanation_is_not_remembered",
+   "file": "web/front/lobby_direct.js",
+   "old": "yes.addEventListener('click', function () { write(storage, SEEN, '1'); set(true); sw.focus(); });",
+   "new": "yes.addEventListener('click', function () { set(true); sw.focus(); });",
+   "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
+  },
+  {
+   "id": "the_choice_is_not_read_back",
+   "file": "web/front/lobby_direct.js",
+   "old": "return read(storage, key) === value; } catch (e) { return false; } }",
+   "new": "return true; } catch (e) { return false; } }",
+   "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
+  },
+  {
+   "id": "a_browser_that_refuses_the_choice_can_be_pressed",
+   "file": "web/front/lobby_direct.js",
+   "old": "sw.disabled = stuck;",
+   "new": "sw.disabled = false;",
+   "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
+  },
+  {
+   "id": "a_browser_that_refuses_the_choice_says_nothing",
+   "file": "web/front/lobby_direct.js",
+   "old": "help.textContent = stuck ? WORDS.stuck : WORDS.help;",
+   "new": "help.textContent = WORDS.help;",
+   "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
+  },
+  {
+   "id": "the_choice_is_kept_under_another_name",
+   "file": "web/front/lobby_direct.js",
+   "old": "var KEY = 'ants.direct', SEEN",
+   "new": "var KEY = 'ants.direct.on', SEEN",
+   "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
+  },
+  {
+   "id": "a_browser_with_no_webrtc_has_the_switch",
+   "file": "web/front/lobby_direct.js",
+   "old": "if (!ready) { host.hidden = true;",
+   "new": "if (false) { host.hidden = true;",
+   "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
+  },
+  {
+   "id": "the_explanation_leaves_out_the_address",
+   "file": "web/front/lobby_direct.js",
+   "old": "Those players can see your IP address, which tells roughly where you are. ",
+   "new": "Those players can see you. ",
+   "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
+  },
+  {
+   "id": "the_help_leaves_out_the_address",
+   "file": "web/front/lobby_direct.js",
+   "old": "Players you connect to directly can see your IP address.",
+   "new": "Players you connect to directly can see you.",
+   "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
+  },
+  {
+   "id": "the_words_use_the_networks_words",
+   "file": "web/front/lobby_direct.js",
+   "old": "Direct connection',\n        help:",
+   "new": "Direct connection (WebRTC)',\n        help:",
+   "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
+  },
+  {
+   "id": "the_switch_does_not_say_what_it_is",
+   "file": "web/front/lobby_direct.js",
+   "old": "sw.setAttribute('aria-checked', on ? 'true' : 'false');",
+   "new": "sw.setAttribute('aria-checked', 'false');",
+   "test": "node tests/scripts/web_lobby_direct_check.js web/front/lobby_direct.js"
+  }
+ ]
+}

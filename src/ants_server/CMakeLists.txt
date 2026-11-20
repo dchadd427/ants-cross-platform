@@ -3,6 +3,7 @@ add_library(ants_server_core STATIC
     map_store.cpp
     bot_match_spec.cpp
     bot_schedules.cpp
+    bot_rotation.cpp
     bot_matches.cpp
     pacific_time.cpp
     online_limits.cpp

@@ -805,6 +805,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE void ants_set_page_fullscreen(int on) {
 // The touch model, for the page's browser check (tests/scripts/web_touch_check.py): 30: the taps, 31: the holds, 32: the drags, 33: the two-finger gestures, 34: the fingers that are tracked, 35: what the model
 // is doing (touch_control.hpp Mode: 0 idle, 1 waiting, 2 left button, 3 right button, 4 minimap, 5 two fingers), 36: the slop in picture pixels times 100.
 // The picking, for the page's browser check of a replay (tests/scripts/web_camera_check.py): 50: the ants that are picked, plus 1000 when a base is picked and 100000 when an ant is inspected (0: nothing is picked; -1 outside a match).
+// Hints (protocol 26, docs/P2P_HINTS.md): 80: the hints that this game sent (its own orders, to the other players' channels), 81: the hints that the server sent (a computer player's orders), 82: the hints
+// that the channels delivered, 83: the hints that the prediction took, 84: ... that a sealed turn confirmed, 85: ... that arrived after their turn or were dropped, 86: the rebuilds that a hint caused (-1: no game).
 // The countdown card (protocol 21), for the page's Fullscreen button (web/countdown_button.js): 60 - 65, see Application::countdown_probe (application_net.cpp).
 // The HUD's own Fullscreen button, for the page (web/hud_fullscreen.js): 70 - 76, see Application::hud_probe (application_net.cpp); the page tells the game whether it is fullscreen (ants_set_page_fullscreen).
 // Anything else, or no game: -1.
@@ -850,6 +852,22 @@ extern "C" EMSCRIPTEN_KEEPALIVE int ants_probe(int what) {
             g_frame_work_max_ms = 0.0;
             g_frame_work_frames = 0;
             return 0;
+        case 80: case 81: case 82: case 83: case 84: case 85: case 86: {
+            const net::NetGame* game = g_web_app->net();
+            if (game == nullptr) return -1;
+            const net::NetGame::HintCounts& counts = game->hint_counts();
+            const net::Prediction::Stats empty;
+            const net::Prediction::Stats& st = game->prediction() != nullptr ? game->prediction()->stats() : empty;
+            switch (what) {
+                case 80: return static_cast<int>(counts.sent);
+                case 81: return static_cast<int>(counts.from_server);
+                case 82: return static_cast<int>(counts.from_peers);
+                case 83: return static_cast<int>(st.hints_accepted);
+                case 84: return static_cast<int>(st.hints_confirmed + st.hints_confirmed_moved);
+                case 85: return static_cast<int>(st.hints_late + st.hints_dropped);
+                default: return static_cast<int>(st.rebuilds_hint);
+            }
+        }
         case 20: return g_web_app->match_running() ? static_cast<int>(g_web_app->sim().roster_mask()) : -1;
         case 21: case 22: case 23: case 24: {
             if (!g_web_app->match_running()) return -1;

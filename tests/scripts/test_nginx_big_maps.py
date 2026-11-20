@@ -85,7 +85,7 @@ class BigMapsThroughNginx(unittest.TestCase):
             self.assertEqual(status, 200, "%d x %d through nginx: %d %r" % (side, side, status, body[:80]))
             self.assertEqual(hashlib.sha256(body).hexdigest(), hashlib.sha256(direct).hexdigest())
             self.assertIn(("cache-control", "public, max-age=300"), headers)
-            status, headers, picture = self.rig.ask("GET", self.target("previews", side))
+            status, headers, picture = live.wait_for_picture(lambda: self.rig.ask("GET", self.target("previews", side)))      # (the picture maker draws it behind the approval, one map at a time: a 404 until it is there)
             self.assertEqual((status, picture[:4]), (200, b"\x89PNG"), "%d x %d: the picture" % (side, side))
 
     def test_a_downloaded_big_map_is_a_map_that_the_checker_accepts(self):

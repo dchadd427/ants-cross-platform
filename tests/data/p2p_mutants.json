@@ -1,0 +1,232 @@
+{
+ "note": "Mutants of the page's data channels (web/p2p.js; docs/P2P_HINTS.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_p2p_check.js (a fake RTCPeerConnection): the rule of the address (a candidate or an address sent or accepted for a pair that did not both allow direct, the policy, the STUN server, the SDP's candidates and addresses, the related address, the browser's chosen path), the marks, the three copies, the channel that is not open, the heartbeat, the limit of what waits for the game, the seat of a hint, who offers, the retries, the wait for the credential and for readiness, the channel that has said nothing, and the setting.",
+ "baseline": {
+  "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+ },
+ "mutants": [
+  {
+   "id": "a_host_candidate_is_sent_to_a_peer_that_did_not_allow_direct",
+   "file": "web/p2p.js",
+   "old": "if (c.indexOf('candidate:') !== 0 || typeOf(c) !== 'relay') return null;",
+   "new": "if (c.indexOf('candidate:') !== 0) return null;",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_srflx_candidate_passes_when_the_type_is_only_a_prefix",
+   "file": "web/p2p.js",
+   "old": "typeOf(c) !== 'relay') return null;",
+   "new": "c.indexOf('typ relay') < 0) return null;",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_candidate_with_no_type_passes",
+   "file": "web/p2p.js",
+   "old": "if (c.indexOf('candidate:') !== 0 || typeOf(c) !== 'relay') return null;",
+   "new": "if (c.indexOf('candidate:') !== 0 || (typeOf(c) !== 'relay' && typeOf(c) !== '')) return null;",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "an_incoming_host_candidate_is_accepted",
+   "file": "web/p2p.js",
+   "old": "var c = passCandidate(p.direct, text);",
+   "new": "var c = text;",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "an_outgoing_candidate_is_not_checked",
+   "file": "web/p2p.js",
+   "old": "passCandidate(direct, (e.candidate.sdpMLineIndex || 0) + '|' + e.candidate.candidate) : '0|';",
+   "new": "(e.candidate.sdpMLineIndex || 0) + '|' + e.candidate.candidate : '0|';",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "the_policy_is_always_all",
+   "file": "web/p2p.js",
+   "old": "iceTransportPolicy: direct ? 'all' : 'relay'",
+   "new": "iceTransportPolicy: 'all'",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "either_player_allowing_direct_makes_a_pair_direct",
+   "file": "web/p2p.js",
+   "old": "return myDirect && ((directMask >> seat) & 1) === 1 && ((directMask >> me) & 1) === 1;",
+   "new": "return myDirect || ((directMask >> seat) & 1) === 1;",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "the_other_player_alone_makes_a_pair_direct",
+   "file": "web/p2p.js",
+   "old": "return myDirect && ((directMask >> seat) & 1) === 1 && ((directMask >> me) & 1) === 1;",
+   "new": "return ((directMask >> seat) & 1) === 1;",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_relay_only_pair_is_given_the_stun_server",
+   "file": "web/p2p.js",
+   "old": "if (pairDirect && stun.length) out.push({ urls: stun });",
+   "new": "if (stun.length) out.push({ urls: stun });",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "an_sdp_keeps_its_candidates",
+   "file": "web/p2p.js",
+   "old": "filter(function (l) { return !/^a=(candidate:|end-of-candidates)/.test(l); })",
+   "new": "filter(function (l) { return true; })",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "an_sdp_keeps_its_connection_address",
+   "file": "web/p2p.js",
+   "old": "return l.replace(/^(c=IN (IP[46]) ).*/, function (m, a, v) { return a + (v === 'IP4' ? '0.0.0.0' : '::'); })",
+   "new": "return l",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "an_sdp_keeps_its_rtcp_address",
+   "file": "web/p2p.js",
+   "old": "\n                    .replace(/^(a=rtcp:\\d+ IN (IP[46]) ).*/, function (m, a, v) { return a + (v === 'IP4' ? '0.0.0.0' : '::'); });",
+   "new": "\n                    ;",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_relay_candidate_keeps_its_related_address",
+   "file": "web/p2p.js",
+   "old": "return text.slice(0, bar + 1) + blankRelated(c);",
+   "new": "return text;",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_path_that_is_not_the_relays_is_kept_for_a_pair_that_did_not_allow_direct",
+   "file": "web/p2p.js",
+   "old": "else { stats.policyBreaks++; drop(p.seat, true); }",
+   "new": "else { p.link = LINK.direct; }",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_direct_path_is_marked_relay",
+   "file": "web/p2p.js",
+   "old": "else if (p.direct) p.link = LINK.direct;",
+   "new": "else if (p.direct) p.link = LINK.relay;",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_relay_path_is_marked_direct",
+   "file": "web/p2p.js",
+   "old": "if (lc.candidateType === 'relay') p.link = LINK.relay;",
+   "new": "if (lc.candidateType === 'relay') p.link = LINK.direct;",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_hint_is_sent_once",
+   "file": "web/p2p.js",
+   "old": "COPIES = 3",
+   "new": "COPIES = 1",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_hint_is_sent_on_a_channel_that_is_not_open",
+   "file": "web/p2p.js",
+   "old": "if (!p.up || p.dc.readyState !== 'open') continue;",
+   "new": "if (!p.up) continue;",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "the_heartbeat_is_given_to_the_game",
+   "file": "web/p2p.js",
+   "old": "if (b.length < 2 || inbox.length >= MAX_INBOX) return;",
+   "new": "if (b.length < 1 || inbox.length >= MAX_INBOX) return;",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "the_inbox_is_not_limited",
+   "file": "web/p2p.js",
+   "old": "if (b.length < 2 || inbox.length >= MAX_INBOX) return;",
+   "new": "if (b.length < 2) return;",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_hint_is_handed_up_with_the_wrong_seat",
+   "file": "web/p2p.js",
+   "old": "inbox.push({ from: seat, bytes: b });",
+   "new": "inbox.push({ from: me, bytes: b });",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "the_higher_seat_offers",
+   "file": "web/p2p.js",
+   "old": "initiator: me < seat,",
+   "new": "initiator: me > seat,",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "an_offer_to_the_lower_seat_is_taken",
+   "file": "web/p2p.js",
+   "old": "if (me < seat) return;                      // (the lower seat offers; an offer to the lower seat is a mistake)",
+   "new": "                      // (taken)",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_failed_channel_is_not_tried_again",
+   "file": "web/p2p.js",
+   "old": "var again = p.initiator && p.tries < MAX_RETRIES &&",
+   "new": "var again = false &&",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_channel_that_never_comes_up_is_kept",
+   "file": "web/p2p.js",
+   "old": "p.timer = timer(function () { if (!p.up) failed(p); }, GIVE_UP_MS);",
+   "new": "p.timer = 0;",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_signal_before_the_credential_is_used",
+   "file": "web/p2p.js",
+   "old": "if (!ice) return;\n            var wait = [];",
+   "new": "var wait = [];",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_signal_of_a_seat_that_is_not_ready_is_used",
+   "file": "web/p2p.js",
+   "old": "if (((ready >> q.from) & 1) === 1 || q.kind === KIND.bye) accept",
+   "new": "accept",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_seat_that_is_no_longer_ready_keeps_its_channel",
+   "file": "web/p2p.js",
+   "old": "if (!isReady && peers[s]) drop(s, false);",
+   "new": "if (false) drop(s, false);",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "a_channel_that_has_said_nothing_is_a_mark",
+   "file": "web/p2p.js",
+   "old": "if (p.up && now() - p.heard > SILENT_MS) return LINK.connecting;",
+   "new": "if (false) return LINK.connecting;",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "the_setting_is_on_for_any_word",
+   "file": "web/p2p.js",
+   "old": "return (storage || root.localStorage).getItem(SETTING) === '1';",
+   "new": "return !!(storage || root.localStorage).getItem(SETTING);",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "the_channel_is_ordered",
+   "file": "web/p2p.js",
+   "old": "ordered: false, maxRetransmits: 0",
+   "new": "ordered: true",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  },
+  {
+   "id": "the_channel_is_not_negotiated",
+   "file": "web/p2p.js",
+   "old": "negotiated: true, id: 1,",
+   "new": "id: 1,",
+   "test": "node tests/scripts/web_p2p_check.js web/p2p.js"
+  }
+ ]
+}
