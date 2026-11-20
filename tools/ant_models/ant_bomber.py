@@ -656,12 +656,18 @@ def _add_bomber_idle(scene: SceneBuilder) -> AnimationClip:
 
 
 def build_bomber(blink: float = 0.0) -> SceneBuilder:
-    """Build the sculpted 3D Bomber Ant SceneBuilder with Blink + calm 1.70s Idle clips."""
+    """Build the sculpted 3D Bomber Ant SceneBuilder with feisty expression, Blink, and 1.70s Idle."""
     scene, anchors = build_base_ant(
         scene_name="ant_bomber",
         include_antennae=True,
         include_eyes=True,
         include_brows=False,
+        brow_style="eager",
+        head_tilt_deg=-5.5,
+        head_yaw_deg=3.5,
+        eye_look=(-0.06, 0.04),
+        antenna_asymmetry=0.45,
+        stance_asymmetry=0.40,
         include_idle=False,
         crouch=0.12,
         left_arm_pose="idle",
@@ -679,8 +685,11 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
     head_back = anchors.get("head_back", (0.0, anchors["head_center"][1], anchors["head_center"][2] - anchors["head_radii"][2]))
     _build_dynamite_pack(scene, anchors["back_anchor"], anchors["thorax_center"], float(head_back[2]))
 
-    scene.attach_world_node("goggles", "head_group")
-    scene.attach_world_node("dynamite_pack", "upper_body")
+    scene.attach_world_node("goggles", "head_group", preserve_world_pose=False)
+    head_xf = scene.get_node_transform("head")
+    if head_xf is not None:
+        scene.set_node_transform("goggles", translation=head_xf.translation)
+    scene.attach_world_node("dynamite_pack", "upper_body", preserve_world_pose=False)
     _add_bomber_idle(scene)
     return scene
 

@@ -544,34 +544,37 @@ def _make_diving_flipper(name: str, length: float = 0.155, blade_w: float = 0.08
 
 
 def _build_flippers(scene: SceneBuilder, anchors: Dict[str, Any]) -> None:
-    """Attach sculpted dark rubber diving flippers solidly onto foot anchors at Y = 0.0."""
-    mid_x, _, mid_z = anchors.get("foot_mid_left", (0.156, 0.0, 0.098))
-    rear_x, _, rear_z = anchors.get("foot_rear_left", (0.160, 0.0, -0.122))
+    """Attach sculpted dark rubber diving flippers individually onto all 4 contrapposto foot anchors at Y = 0.0."""
+    mid_l = anchors.get("foot_mid_left", (0.162, 0.0, 0.100))
+    mid_r = anchors.get("foot_mid_right", (-mid_l[0], 0.0, mid_l[2]))
+    rear_l = anchors.get("foot_rear_left", (0.166, 0.0, -0.124))
+    rear_r = anchors.get("foot_rear_right", (-rear_l[0], 0.0, rear_l[2]))
 
     rear_yaw = math.pi - 0.26
     mid_yaw = 0.24
 
-    rear_fin = _make_diving_flipper("flipper_rear", length=0.158, blade_w=0.088)
-    rear_placed = rear_fin.rotate_xyz(ry=rear_yaw).translate(rear_x, 0.0, rear_z)
-    scene.add_mirrored("flippers", rear_placed)
+    for tag, foot_pos, length, blade_w, yaw_signed in (
+        ("rear_left", rear_l, 0.158, 0.088, +rear_yaw),
+        ("rear_right", rear_r, 0.158, 0.088, -rear_yaw),
+        ("mid_left", mid_l, 0.144, 0.082, +mid_yaw),
+        ("mid_right", mid_r, 0.144, 0.082, -mid_yaw),
+    ):
+        fx, _, fz = foot_pos
+        fin = _make_diving_flipper(f"flipper_{tag}", length=length, blade_w=blade_w)
+        scene.add("flippers", fin.rotate_xyz(ry=yaw_signed).translate(fx, 0.0, fz))
 
-    mid_fin = _make_diving_flipper("flipper_mid", length=0.144, blade_w=0.082)
-    mid_placed = mid_fin.rotate_xyz(ry=mid_yaw).translate(mid_x, 0.0, mid_z)
-    scene.add_mirrored("flippers", mid_placed)
-
-    for tag, fx, fz, fyaw in (("rear", rear_x, rear_z, rear_yaw), ("mid", mid_x, mid_z, mid_yaw)):
         boot_vamp = (
             superellipsoid(0.026, 0.019, 0.042, e1=0.72, e2=0.76, u_segs=14, v_segs=10, name=f"flipper_boot_{tag}", material="gear_dark")
             .translate(0.0, 0.021, 0.018)
-            .rotate_xyz(ry=fyaw)
+            .rotate_xyz(ry=yaw_signed)
             .translate(fx, 0.0, fz)
         )
         collar = (
             cylinder(0.027, 0.021, 0.036, radial_segs=14, bevel=0.005, axis="y", name=f"flipper_collar_{tag}", material="gear_dark")
             .translate(fx, 0.026, fz)
         )
-        scene.add_mirrored("flippers", boot_vamp)
-        scene.add_mirrored("flippers", collar)
+        scene.add("flippers", boot_vamp)
+        scene.add("flippers", collar)
 
 
 def _build_shovel(
@@ -826,12 +829,18 @@ def _add_swimmer_idle(scene: SceneBuilder) -> AnimationClip:
 
 
 def build_swimmer(blink: float = 0.0) -> SceneBuilder:
-    """Build the sculpted 3D Swimmer Ant SceneBuilder with Blink + 0.90s aquatic sway Idle clips."""
+    """Build the sculpted 3D Swimmer Ant SceneBuilder with earnest wonder expression, Blink, and 1.80s Idle."""
     scene, anchors = build_base_ant(
         scene_name="ant_swimmer",
         include_antennae=True,
         include_eyes=True,
         include_brows=False,
+        brow_style="wonder",
+        head_tilt_deg=4.0,
+        head_yaw_deg=-2.5,
+        eye_look=(0.04, 0.10),
+        antenna_asymmetry=0.30,
+        stance_asymmetry=0.25,
         include_idle=False,
         left_arm_pose="idle",
         right_arm_pose=_SWIMMER_RIGHT_ARM,
@@ -844,10 +853,13 @@ def build_swimmer(blink: float = 0.0) -> SceneBuilder:
     _build_flippers(scene, anchors)
     _build_shovel(scene, anchors["right_hand"], anchors["right_hand_dir"])
 
-    scene.attach_world_node("scuba_mask", "head_group")
-    scene.attach_world_node("snorkel", "head_group")
-    scene.attach_world_node("scuba_tank", "upper_body")
-    scene.attach_world_node("shovel", "upper_body")
+    head_xf = scene.get_node_transform("head")
+    for h_node in ("scuba_mask", "snorkel"):
+        scene.attach_world_node(h_node, "head_group", preserve_world_pose=False)
+        if head_xf is not None:
+            scene.set_node_transform(h_node, translation=head_xf.translation)
+    scene.attach_world_node("scuba_tank", "upper_body", preserve_world_pose=False)
+    scene.attach_world_node("shovel", "upper_body", preserve_world_pose=False)
     _add_swimmer_idle(scene)
     return scene
 

@@ -53,12 +53,12 @@ except ImportError:
         torus_arc,
     )
 
-# Natural flowing bent-elbow right-arm hold starting at compact-head shoulder (-0.106, 0.478, 0.016).
+# Inquisitive bent-elbow right-arm hold lifting the magnifying glass as if inspecting for sparks.
 _FIRE_RIGHT_ARM: List[Tuple[float, float, float]] = [
     (-0.106, 0.478, 0.016),
-    (-0.206, 0.436, 0.072),
-    (-0.214, 0.468, 0.174),
-    (-0.204, 0.494, 0.228),
+    (-0.206, 0.440, 0.072),
+    (-0.212, 0.482, 0.178),
+    (-0.198, 0.512, 0.234),
 ]
 
 
@@ -436,10 +436,10 @@ def _build_magnifying_glass(
     )
     parts.append(lens)
 
-    # Keep magnifying glass in grip-local coordinates with node pivot at the right pincer pocket so
-    # it follows `upper_body` and adds a subtle eager wrist tilt during the 0.60s firefighter bounce.
+    # Keep magnifying glass in grip-local coordinates with node pivot at the right pincer pocket,
+    # angled slightly inquisitively forward as if inspecting for sparks during the calm 1.50s Idle.
     for part in parts:
-        placed = part.rotate_xyz(rx=24.0, ry=-22.0, rz=14.0, degrees=True)
+        placed = part.rotate_xyz(rx=18.0, ry=-12.0, rz=10.0, degrees=True)
         scene.add("magnifying_glass", placed)
     scene.set_node_transform("magnifying_glass", translation=(grip_x, grip_y, grip_z))
 
@@ -508,12 +508,17 @@ def _add_fire_idle(scene: SceneBuilder) -> AnimationClip:
 
 
 def build_fire(blink: float = 0.0) -> SceneBuilder:
-    """Build the sculpted 3D Fire Ant SceneBuilder with Blink + 0.60s brisk bounce Idle clips."""
+    """Build the sculpted 3D Fire Ant SceneBuilder with plucky hero expression, Blink, and 1.50s Idle."""
     scene, anchors = build_base_ant(
         scene_name="ant_fire",
         include_antennae=False,
         include_eyes=True,
         include_brows=False,
+        brow_style="plucky",
+        head_tilt_deg=3.5,
+        head_yaw_deg=-3.0,
+        eye_look=(0.05, 0.04),
+        stance_asymmetry=0.35,
         include_idle=False,
         left_arm_pose="idle",
         right_arm_pose=_FIRE_RIGHT_ARM,
@@ -529,8 +534,11 @@ def build_fire(blink: float = 0.0) -> SceneBuilder:
     )
     _build_magnifying_glass(scene, anchors["right_hand"], anchors["right_hand_dir"])
 
-    scene.attach_world_node("fire_helmet", "head_group")
-    scene.attach_world_node("magnifying_glass", "upper_body")
+    scene.attach_world_node("fire_helmet", "head_group", preserve_world_pose=False)
+    head_xf = scene.get_node_transform("head")
+    if head_xf is not None:
+        scene.set_node_transform("fire_helmet", translation=head_xf.translation)
+    scene.attach_world_node("magnifying_glass", "upper_body", preserve_world_pose=False)
     _add_fire_idle(scene)
     return scene
 
