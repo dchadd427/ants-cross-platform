@@ -120,7 +120,7 @@ class ThePages(unittest.TestCase):
         self.assertIn("label: 'File'", read("web", "front", "mapmaker_dialog.js"))
 
     def test_the_admin_page_has_the_bar_and_no_other_page_links_to_it(self):
-        for name in ("admin.html", "admin_page.js", "admin_bots.js", "admin.css"):
+        for name in ("admin.html", "admin_page.js", "admin_bots.js", "admin_map_pick.js", "admin.css"):
             self.assertTrue(read("web", name))
         self.assertIn("site_nav", read("web", "admin.html"))
         for name, (page, marked, live) in PAGES.items():

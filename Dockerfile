@@ -247,6 +247,9 @@ COPY web/hud_fullscreen.js /usr/share/nginx/html/hud_fullscreen.js
 # The screen stays on while a match is played or a recording plays (docs/PLAY_IN_BROWSER.md "The screen stays on"): the game page asks the browser for a Screen Wake Lock (wake_lock.js)
 COPY web/wake_lock.js /usr/share/nginx/html/wake_lock.js
 
+# The data channels to the other players of a match (docs/P2P_HINTS.md): the game's hints travel between the browsers through the operator's relay (p2p.js, called by the game's wasm_rtc.cpp)
+COPY web/p2p.js /usr/share/nginx/html/p2p.js
+
 # The touch buttons for the game's hotkeys (docs/TOUCH.md "The hotkey buttons"): the game page makes them on a touch screen during a match (touch_keys.js, touch_keys.css)
 COPY web/touch_keys.js /usr/share/nginx/html/touch_keys.js
 COPY web/touch_keys.css /usr/share/nginx/html/touch_keys.css
@@ -277,6 +280,7 @@ COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/
 # The admin page (docs/MAP_SUBMISSIONS.md "The admin page"): the address /admin is typed, nothing links to it; its API and the logon are paths of docker/nginx.conf
 COPY --from=builder /src/web/admin.html /usr/share/nginx/html/admin.html
 COPY web/admin.css /usr/share/nginx/html/admin.css
+COPY web/admin_map_pick.js /usr/share/nginx/html/admin_map_pick.js
 COPY web/admin_bots.js /usr/share/nginx/html/admin_bots.js
 COPY web/admin_page.js /usr/share/nginx/html/admin_page.js
 

@@ -28,6 +28,7 @@ int main() {
     run_protocol17_tests();
     run_protocol21_tests();
     run_restart_tests();
+    run_p2p_tests();
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";
     if (g_test_count == 0) {                                      // (a misspelt or forgotten filter must not turn the suite green)

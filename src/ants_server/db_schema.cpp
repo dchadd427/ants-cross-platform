@@ -1,4 +1,4 @@
-// The migrations of the server's database (docs/SERVER.md "The database"). Version 1 is the foundation (`meta`); version 2 holds the match history (docs/REPLAYS.md "The match history"); version 3 the play counts of the maps; version 4 the site statistics; version 7 the map of deaths of a match; version 8 retires the accounts of the admin page.
+// The migrations of the server's database (docs/SERVER.md "The database"). Version 1 is the foundation (`meta`); version 2 holds the match history (docs/REPLAYS.md "The match history"); version 3 the play counts of the maps; version 4 the site statistics; version 7 the map of deaths of a match; version 8 retires the accounts of the admin page; version 9 the schedules of the server's own bot matches; version 10 the lists of their rotation.
 #include "ants_server/db_schema.hpp"
 
 namespace ants::server {
@@ -265,6 +265,16 @@ const char* const kBotSchedulesSql =
     " created_at INTEGER NOT NULL"
     ");";
 
+// Version 10. bot_rotation: the two lists that "random:rotation" draws from (docs/SERVER_REPLAYS.md "The lists", ants_server/bot_rotation.hpp), edited on the admin page. One row for each rules that an admin changed: `rules` is
+// 'highest-score' (the original's game) or '187', `maps` the JSON text of the list (an array of {"file", "approved"}, in the order of the draws; at most 16,000 characters, which holds the 100 maps that a list may have under
+// the longest names), `updated_at` the second of the change. A rules with no row has the lists that the server was made with: "Back to the defaults" deletes the row, and nothing is written at the first start.
+const char* const kBotRotationSql =
+    "CREATE TABLE bot_rotation ("
+    " rules TEXT PRIMARY KEY NOT NULL CHECK (rules IN ('highest-score', '187')),"
+    " maps TEXT NOT NULL CHECK (length(maps) <= 16000),"
+    " updated_at INTEGER NOT NULL DEFAULT 0"
+    ") WITHOUT ROWID;";
+
 }  // namespace
 
 const std::vector<db::Migration>& db_migrations() {
@@ -278,6 +288,7 @@ const std::vector<db::Migration>& db_migrations() {
         {7, "history_deaths", kDeathsSql},
         {8, "admin_pass", kAdminPassSql, true},                // (the old password hashes and names are in free pages of the file until it is rewritten)
         {9, "bot_schedules", kBotSchedulesSql},
+        {10, "bot_rotation", kBotRotationSql},
     };
     return list;
 }

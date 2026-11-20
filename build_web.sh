@@ -71,6 +71,7 @@ cp -f "${SCRIPT_DIR}/web/countdown_button.js" "${DIST_DIR}/"                    
 cp -f "${SCRIPT_DIR}/web/alert_core.js" "${DIST_DIR}/"                                                                                                                                                   # the alerts that need no permission: the switches, the tab alert, the sound table (docs/HOME_SCREEN.md "Alerts")
 cp -f "${SCRIPT_DIR}/web/hud_fullscreen.js" "${DIST_DIR}/"                                                                                                                                                # the HUD's own Fullscreen button
 cp -f "${SCRIPT_DIR}/web/wake_lock.js" "${DIST_DIR}/"                                                                                                                                                    # ... and the screen that stays on while a match is played or a recording plays
+cp -f "${SCRIPT_DIR}/web/p2p.js" "${DIST_DIR}/"                                                                                                                                      # the data channels to the other players (docs/P2P_HINTS.md)
 cp -f "${SCRIPT_DIR}/web/touch_keys.js" "${SCRIPT_DIR}/web/touch_keys.css" "${DIST_DIR}/"                                                                                  # ... the hotkey buttons of a touch screen (made by the game page)
 cp -f "${SCRIPT_DIR}/web/game_menu.js" "${SCRIPT_DIR}/web/game_menu.css" "${DIST_DIR}/"                                                                                  # ... the settings menu's panel (loaded by the game page once the game runs)
 cp -f "${BUILD_DIR}/lvl_core/lvl_core.js" "${BUILD_DIR}/lvl_core/lvl_core.wasm" "${DIST_DIR}/"                                                                                    # the map core for the browser (docs/MAP_FORMAT.md, "In the browser")
@@ -78,7 +79,7 @@ cp -f "${SCRIPT_DIR}/web/lvl_core_api.js" "${DIST_DIR}/"
 MAPMAKER_VERSION="v$(head -n 1 "${SCRIPT_DIR}/web/MAPMAKER_VERSION" | tr -d '[:space:]')" && grep -q "data-maker=\"${MAPMAKER_VERSION}\"" "${SCRIPT_DIR}/web/mapmaker.html"
 sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" "${SCRIPT_DIR}/web/mapmaker.html" > "${DIST_DIR}/mapmaker.html"   # the map maker (docs/MAP_EDITOR.md); its scripts are in front/
 sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" "${SCRIPT_DIR}/web/admin.html" > "${DIST_DIR}/admin.html"   # the admin page (docs/MAP_SUBMISSIONS.md): typed by hand, with the bar and its stamps
-cp -f "${SCRIPT_DIR}/web/admin.css" "${SCRIPT_DIR}/web/admin_bots.js" "${SCRIPT_DIR}/web/admin_page.js" "${DIST_DIR}/"
+cp -f "${SCRIPT_DIR}/web/admin.css" "${SCRIPT_DIR}/web/admin_map_pick.js" "${SCRIPT_DIR}/web/admin_bots.js" "${SCRIPT_DIR}/web/admin_page.js" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.js" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.wasm" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.data" "${DIST_DIR}/"
