@@ -66,6 +66,10 @@ void ClientSession::leave() {
     if (reconnecting()) mode_ = Mode::Lost;           // a machine that is on its way back and quits has no more attempts to make
 }
 
+bool ClientSession::send_p2p(const std::vector<uint8_t>& message) {
+    return mode_ == Mode::Normal && conn_ != nullptr && conn_->is_open() && conn_->send(message);
+}
+
 bool ClientSession::chat(const std::string& text, bool team) {
     if (!started_ || mode_ != Mode::Normal || !connected()) return false;
     ChatMsg m;
@@ -185,6 +189,12 @@ void ClientSession::poll_host(uint32_t now_ms) {
                 if (cfg_.reconnect && decode(msg, r)) reject(r.reason);
                 break;
             }
+            case MsgType::Hint:
+            case MsgType::IceConfig:
+            case MsgType::P2pPeers:
+            case MsgType::Signal:                    // hints and channels (protocol 26): the caller decodes them; they are no part of the match
+                if (on_p2p_) on_p2p_(msg);
+                break;
             default:
                 break;                               // anything else is ignored by a client
         }

@@ -7,6 +7,7 @@
 
 #include "ants_server/admin_pass.hpp"
 #include "ants_server/bot_matches.hpp"
+#include "ants_server/bot_rotation.hpp"
 #include "ants_server/bot_schedules.hpp"
 #include "ants_db/database.hpp"
 #include "ants_db/migrations.hpp"
@@ -41,6 +42,7 @@ struct BotDoor {
     std::unique_ptr<AdminAudit> audit;
     std::unique_ptr<SubmissionApi> api;
     std::unique_ptr<BotScheduleStore> schedules;
+    std::unique_ptr<BotRotationStore> rotation;
     std::unique_ptr<BotMatches> bots;
     uint64_t counter{0x3000};
     int64_t wall{kBotWall0};
@@ -70,7 +72,9 @@ struct BotDoor {
         api = std::make_unique<SubmissionApi>(*store, *audit, sc);
         schedules = std::make_unique<BotScheduleStore>(&database);
         schedules->open(wall, why);
-        bots = std::make_unique<BotMatches>(w.mgr, *schedules, audit.get());
+        rotation = std::make_unique<BotRotationStore>(&database);
+        rotation->open(why);
+        bots = std::make_unique<BotMatches>(w.mgr, *schedules, *rotation, audit.get());
         if (hook) {
             api->set_bot_routes([this](const ctl::HttpRequest& request, const AdminIdentity& who, const std::string& tail, const ctl::JsonValue& body, int64_t now_s, uint32_t now_ms) {
                 return bots->handle(request, who, tail, body, now_s, now_ms);
@@ -110,7 +114,9 @@ struct BotDoor {
     }
     static ctl::JsonValue json(const ctl::HttpResponse& r) {
         ctl::JsonValue v;
-        ctl::parse_json(r.body, v, nullptr);
+        ctl::JsonLimits limits;
+        limits.max_bytes = 4u * 1024u * 1024u;                      // (the catalog of the server's maps is about 90 kB: the default 64 kB is for what a visitor sends)
+        ctl::parse_json(r.body, v, nullptr, limits);
         return v;
     }
     std::vector<AuditEntry> log() { return audit->list(200); }
@@ -130,6 +136,16 @@ BotMatchSpec fight_island_spec() {
     s.rules = BotRules::Kills187;
     s.bots = 2;
     return s;
+}
+
+// How many maps of the list of the rotation for those rules a room can play now (the draw skips the others)
+size_t drawable(const RoomManager& m, bool kills_187) {
+    size_t n = 0;
+    for (const BotRotationEntry& e : m.bot_rotation(kills_187)) {
+        uint32_t minutes = 0;
+        if (m.bot_map_refusal(e.file, e.approved, minutes).empty()) ++n;
+    }
+    return n;
 }
 
 // Starts matches of `spec` one after another until one is refused, or `most`; the codes of those that were made
@@ -383,16 +399,16 @@ void run_bot_admin_tests() {
             BotMatchSpec nothing;                                                        // (a map that is not one of the choices, or that this server cannot play now)
             nothing.map = "Nowhere.lvl";
             ASSERT_FALSE(w.mgr.start_bot_match(w.now, nothing, code, reason, &refusal));
-            ASSERT_TRUE(refusal == BotRefusal::NoMap && reason.find("not one that") != std::string::npos);
-            nothing.map = "tiny.lvl";                                                    // (the name is exact: the choices are the files of the lists)
+            ASSERT_TRUE(refusal == BotRefusal::NoMap && reason.find("not one of the maps of this server") != std::string::npos);
+            nothing.map = "tiny.lvl";                                                    // (the name is exact: the choices are the files of the catalog)
             ASSERT_FALSE(w.mgr.start_bot_match(w.now, nothing, code, reason, &refusal) || refusal != BotRefusal::NoMap);
             World bare;
             ASSERT_TRUE(bare.mgr.enable_replays(replay_config("botadmin-choice-bare", &clock), false, why));
             (void)bare.mgr.take_notices();
             BotMatchSpec library;
-            library.map = "POPcOrN.lvl";
+            library.map = "POPcOrN.lvl";                                                 // (a server without the library does not have the map: it is not one of its maps)
             ASSERT_FALSE(bare.mgr.start_bot_match(bare.now, library, code, reason, &refusal));
-            ASSERT_TRUE(refusal == BotRefusal::NoMap && reason.find("cannot be played now") != std::string::npos);
+            ASSERT_TRUE(refusal == BotRefusal::NoMap && reason.find("not one of the maps of this server") != std::string::npos);
             BotMatchSpec mine;
             mine.map = kBotMapPlayers;
             ASSERT_FALSE(bare.mgr.start_bot_match(bare.now, mine, code, reason, &refusal));
@@ -404,19 +420,29 @@ void run_bot_admin_tests() {
         ReplayClock clock;
         std::string why;
         {
-            ListedWorld w("botadmin-list-maps");
-            std::vector<std::string> files;
-            for (const BotMapOption& o : w.mgr.bot_map_options()) files.push_back(o.group + ":" + o.file + ":" + std::to_string(o.places));
-            ASSERT_EQ(files, (std::vector<std::string>{"original:TINY.LVL:1", "original:SMALL.LVL:1", "original:MEDIUM.LVL:1", "original:GAUNTLET.LVL:1", "original:TREASURE.LVL:1", "original:ISLANDS.LVL:1",
-                                                      "library:POPcOrN.lvl:1", "library:HELLRAISER.lvl:1", "library:Bombz Away.lvl:1", "players:Fight Island.lvl:3"}));
-            const std::vector<BotMapOption> options = w.mgr.bot_map_options();
-            ASSERT_TRUE(options.back().width == 150 && options.back().height == 150);
-            ASSERT_TRUE(w.mgr.bot_rotation_maps(false) == 9 && w.mgr.bot_rotation_maps(true) == 6);
-            w.mgr.mutable_store().set_approved({});                                      // (the maintainer takes the map down: it is not a choice, and the lists are one shorter)
-            ASSERT_EQ(w.mgr.bot_map_options().size(), size_t{9});
-            ASSERT_EQ(w.mgr.bot_rotation_maps(true), size_t{5});
+            ListedWorld w("botadmin-list-maps");                                         // (the original's six, the library of the repository and the made-up approved map of the players)
+            const std::vector<BotMapOption> options = w.mgr.bot_map_options(kBotLoadAll);
+            ASSERT_EQ(options.size(), size_t{541});                                      // (every map that the server has: 6 + 534 + 1)
+            std::vector<std::string> first;
+            for (size_t i = 0; i < 6; ++i) first.push_back(options[i].group + ":" + options[i].file + ":" + std::to_string(options[i].places));
+            ASSERT_EQ(first, (std::vector<std::string>{"original:TINY.LVL:1", "original:SMALL.LVL:1", "original:MEDIUM.LVL:1", "original:GAUNTLET.LVL:1", "original:TREASURE.LVL:1", "original:ISLANDS.LVL:1"}));
+            std::map<std::string, BotMapOption> by_file;
+            size_t library = 0;
+            for (const BotMapOption& o : options) {
+                by_file[o.file] = o;
+                library += o.group == "library" ? size_t{1} : size_t{0};
+                ASSERT_TRUE(o.checked && o.playable && o.reason.empty() && o.width > 0 && o.height > 0 && o.players > 0 && o.minutes > 0);
+            }
+            ASSERT_EQ(library, size_t{534});
+            ASSERT_TRUE(by_file["POPcOrN.lvl"].group == "library" && by_file["POPcOrN.lvl"].places == 1);
+            ASSERT_TRUE(by_file["Fight Island.lvl"].group == "players" && by_file["Fight Island.lvl"].width == 150 && by_file["Fight Island.lvl"].height == 150 && by_file["Fight Island.lvl"].places == 3 && by_file["Fight Island.lvl"].players == 4);
+            ASSERT_TRUE(w.mgr.bot_rotation(false).size() == 9 && w.mgr.bot_rotation(true).size() == 6);
+            ASSERT_TRUE(drawable(w.mgr, false) == 9 && drawable(w.mgr, true) == 6);
+            w.mgr.mutable_store().set_approved({});                                      // (the maintainer takes the map down: it is not in the catalog, and the list of 187 is one shorter now)
+            ASSERT_EQ(w.mgr.bot_map_options(kBotLoadAll).size(), size_t{540});
+            ASSERT_EQ(drawable(w.mgr, true), size_t{5});
             World bare;
-            ASSERT_TRUE(bare.mgr.bot_map_options().size() == 6 && bare.mgr.bot_rotation_maps(false) == 6 && bare.mgr.bot_rotation_maps(true) == 5);
+            ASSERT_TRUE(bare.mgr.bot_map_options(kBotLoadAll).size() == 6 && drawable(bare.mgr, false) == 6 && drawable(bare.mgr, true) == 5);
         }
         {
             ListedWorld w("botadmin-info-maps");
@@ -520,11 +546,13 @@ void run_bot_admin_tests() {
             const char* tail;
         };
         const Route routes[] = {{"GET", "bot-matches"},          {"GET", "bot-options"},         {"GET", "bot-schedules"},    {"POST", "bot-matches"},          {"POST", "bot-matches/stop-all"},
-                                {"POST", "bot-matches/m1/stop"}, {"POST", "bot-schedules"},      {"POST", "bot-schedules/1"}, {"POST", "bot-schedules/1/delete"}};
+                                {"POST", "bot-matches/m1/stop"}, {"POST", "bot-schedules"},      {"POST", "bot-schedules/1"}, {"POST", "bot-schedules/1/delete"}, {"GET", "bot-rotation"},
+                                {"POST", "bot-rotation"},        {"POST", "bot-rotation/reset"}};
         const std::string start = batch_body(2, "TINY.LVL", "highest-score", "2");
         const std::string schedule = "{\"name\":\"x\",\"when\":{\"kind\":\"every\",\"minutes\":30},\"what\":" + batch_body(1) + "}";
-        const auto body_of = [&](const Route& r) { return std::string(r.tail) == "bot-schedules" ? schedule : start; };
-        const auto nothing_done = [&]() { return d.w.mgr.bot_match_count() == 0 && d.schedules->list().empty() && d.log().empty(); };
+        const std::string rotation_body = "{\"rules\":\"highest-score\",\"maps\":[\"TINY.LVL\"]}";
+        const auto body_of = [&](const Route& r) { return std::string(r.tail) == "bot-schedules" ? schedule : std::string(r.tail) == "bot-rotation" || std::string(r.tail) == "bot-rotation/reset" ? rotation_body : start; };
+        const auto nothing_done = [&]() { return d.w.mgr.bot_match_count() == 0 && d.schedules->list().empty() && d.log().empty() && !d.rotation->edited(false) && !d.rotation->edited(true); };
         const auto closed = [](const ctl::HttpResponse& r) { return r.status == 403 && r.body == kBotClosed; };
         const std::string token = d.csrf();
         for (const Route& r : routes) {
@@ -694,9 +722,9 @@ void run_bot_admin_tests() {
         {   // the options
             BotDoor d("botadmin-options");
             const ctl::JsonValue o = BotDoor::json(d.get("bot-options"));
-            ASSERT_TRUE(o.get("maps").size() == 10 && o.get("rotation").get("highest-score").as_int_or(0) == 9 && o.get("rotation").get("187").as_int_or(0) == 6);
-            const ctl::JsonValue& last = o.get("maps").at(9);
-            ASSERT_TRUE(last.get("file").str() == "Fight Island.lvl" && last.get("name").str() == "Fight Island" && last.get("group").str() == "players" && last.get("width").as_int_or(0) == 150 && last.get("places").as_int_or(0) == 3);
+            ASSERT_EQ(o.get("maps").size(), size_t{541});                                // (every map: the first call judges some of them and lists the rest as not checked: bot_rotation_tests.hpp)
+            const ctl::JsonValue& last = o.get("maps").at(540);
+            ASSERT_TRUE(last.get("file").str() == "Fight Island.lvl" && last.get("name").str() == "Fight Island" && last.get("group").str() == "players" && last.get("width").as_int_or(0) == 150 && last.get("players").as_int_or(0) == 4);
             ASSERT_TRUE(o.get("untrusted").as_bool_or(false) && o.get("untrusted_fields").size() == 1 && o.get("untrusted_fields").at(0).str() == "name");
         }
     } TEST_END();
@@ -889,7 +917,8 @@ void run_bot_admin_tests() {
             const int64_t up = kBotWall0 + 3 * 3600;
             BotScheduleStore store(&d.database);
             ASSERT_TRUE(store.open(up, why));
-            BotMatches bots(d.w.mgr, store, nullptr);
+            BotRotationStore bots_rotation(nullptr);
+            BotMatches bots(d.w.mgr, store, bots_rotation, nullptr);
             bots.update(up, d.w.now);
             bots.update(up + 59, d.w.now);
             ASSERT_EQ(d.w.mgr.bot_match_count(), size_t{0});
@@ -1110,12 +1139,12 @@ void run_bot_admin_tests() {
 
     TEST_CASE("S3.283 What A Room Can Do With A Map Is Judged Once: The Lists Load Each Map File One Time (Not At Every Call, Every Start And Every Page), A File That Was Replaced Is Judged Again, A Map That Was Taken Down Is Never Answered From What Was Kept, And A File That Went Bad Is Not Played On Its Old Verdict") {
         BotDoor d("botadmin-verdicts");
-        const std::vector<BotMapOption> first = d.w.mgr.bot_map_options();
+        const std::vector<BotMapOption> first = d.w.mgr.bot_map_options(kBotLoadAll);
         const size_t loads = d.w.mgr.bot_map_loads();
         ASSERT_TRUE(loads >= first.size() && loads > 0);
-        (void)d.w.mgr.bot_map_options();
-        (void)d.w.mgr.bot_rotation_maps(false);
-        (void)d.w.mgr.bot_rotation_maps(true);
+        (void)d.w.mgr.bot_map_options(kBotLoadAll);
+        (void)drawable(d.w.mgr, false);
+        (void)drawable(d.w.mgr, true);
         ASSERT_EQ(d.w.mgr.bot_map_loads(), loads);                                                                              // (asked again: nothing is loaded)
         std::string code, reason;
         for (int i = 0; i < 10; ++i) {
@@ -1134,20 +1163,23 @@ void run_bot_admin_tests() {
         // the file is replaced by another one (a bigger map): judged again, once, and the new size is what the list says
         ApprovedMap bigger = made_up_fight_island("botadmin-verdicts-b", 170, 170);
         d.w.mgr.mutable_store().set_approved({bigger});
-        const std::vector<BotMapOption> second = d.w.mgr.bot_map_options();
+        const std::vector<BotMapOption> second = d.w.mgr.bot_map_options(kBotLoadAll);
         ASSERT_EQ(d.w.mgr.bot_map_loads(), loads + 1);
         uint32_t width = 0;
         for (const BotMapOption& o : second) width = o.file == "Fight Island.lvl" ? o.width : width;
         ASSERT_EQ(width, 170u);
-        (void)d.w.mgr.bot_map_options();
+        (void)d.w.mgr.bot_map_options(kBotLoadAll);
         ASSERT_EQ(d.w.mgr.bot_map_loads(), loads + 1);
-        // the same name and path, the file rewritten as bytes that are no map: the old "can be played" is not trusted
+        // the same name and path, the file rewritten as bytes that are no map: the old "can be played" is not trusted (the catalog still lists it, and says why a room cannot play it)
         { std::ofstream out(bigger.path, std::ios::binary | std::ios::trunc); out << "this is not a map of the game"; }
         bigger.size = 29;
         d.w.mgr.mutable_store().set_approved({bigger});
-        bool still = false;
-        for (const BotMapOption& o : d.w.mgr.bot_map_options()) still = still || o.file == "Fight Island.lvl";
-        ASSERT_FALSE(still);
+        bool still = false, playable = true;
+        for (const BotMapOption& o : d.w.mgr.bot_map_options(kBotLoadAll)) {
+            still = still || o.file == "Fight Island.lvl";
+            if (o.file == "Fight Island.lvl") playable = o.playable || o.reason.find("cannot play") == std::string::npos;
+        }
+        ASSERT_TRUE(still && !playable);
         BotRefusal refusal = BotRefusal::None;
         BotMatchSpec named;
         named.map = "Fight Island.lvl";
@@ -1158,11 +1190,11 @@ void run_bot_admin_tests() {
         ApprovedMap good = made_up_fight_island("botadmin-verdicts-c");
         d.w.mgr.mutable_store().set_approved({good});
         bool back = false;
-        for (const BotMapOption& o : d.w.mgr.bot_map_options()) back = back || o.file == "Fight Island.lvl";
+        for (const BotMapOption& o : d.w.mgr.bot_map_options(kBotLoadAll)) back = back || (o.file == "Fight Island.lvl" && o.playable);
         ASSERT_TRUE(back);
         d.w.mgr.mutable_store().set_approved({});
         bool gone = true;
-        for (const BotMapOption& o : d.w.mgr.bot_map_options()) gone = gone && o.file != "Fight Island.lvl";
+        for (const BotMapOption& o : d.w.mgr.bot_map_options(kBotLoadAll)) gone = gone && o.file != "Fight Island.lvl";
         ASSERT_TRUE(gone);
         ASSERT_FALSE(d.w.mgr.start_bot_match(d.w.now, named, code, reason, &refusal));
         ASSERT_TRUE(refusal == BotRefusal::NoMap);
@@ -1177,7 +1209,7 @@ void run_bot_admin_tests() {
         d.w.mgr.mutable_store().set_approved({longer, shorter, d.w.mgr.store().approved_maps().empty() ? shorter : d.w.mgr.store().approved_maps()[0]});
         d.w.mgr.mutable_store().set_approved({longer, shorter});
         std::map<std::string, BotMapOption> by_file;
-        for (const BotMapOption& o : d.w.mgr.bot_map_options()) by_file[o.file] = o;
+        for (const BotMapOption& o : d.w.mgr.bot_map_options(kBotLoadAll)) by_file[o.file] = o;
         ASSERT_TRUE(by_file.count("Long Haul.lvl") == 1 && by_file["Long Haul.lvl"].minutes == 45 && !by_file["Long Haul.lvl"].random);
         ASSERT_TRUE(by_file.count("Short Hop.lvl") == 1 && by_file["Short Hop.lvl"].minutes == 12 && by_file["Short Hop.lvl"].random);
         for (const char* file : {"TINY.LVL", "ISLANDS.LVL", "POPcOrN.lvl"}) ASSERT_TRUE(by_file[file].minutes > 0 && by_file[file].minutes <= kBotRandomMaxMinutes && by_file[file].random);
@@ -1214,13 +1246,21 @@ void run_bot_admin_tests() {
         BotRefusal refusal = BotRefusal::None;
         ASSERT_FALSE(d.w.mgr.start_bot_match(d.w.now, players, code, reason, &refusal));
         ASSERT_TRUE(refusal == BotRefusal::NoMap);
-        // the rotation of 187 draws the players' map of its list only when that map is short enough
+        // a list of the rotation may hold a long map on purpose: the list of 187 draws the players' map at 45 minutes as it does at 20 (the random picks of the original's and of the players' maps are the ones that skip it)
         ApprovedMap fight_long = made_up_fight_island("botadmin-minutes-fi", 60, 60, "Fight Island.lvl", 45);
         d.w.mgr.mutable_store().set_approved({fight_long});
-        ASSERT_EQ(d.w.mgr.bot_rotation_maps(true), size_t{5});                                                                  // (five of its six: the sixth plays 45 minutes)
-        ApprovedMap fight_short = made_up_fight_island("botadmin-minutes-fs", 60, 60, "Fight Island.lvl", 20);
-        d.w.mgr.mutable_store().set_approved({fight_short});
-        ASSERT_EQ(d.w.mgr.bot_rotation_maps(true), size_t{6});
+        ASSERT_EQ(drawable(d.w.mgr, true), size_t{6});
+        BotMatchSpec rotation;
+        rotation.rules = BotRules::Kills187;
+        rotation.bots = 2;
+        std::set<std::string> from_list;
+        for (int i = 0; i < 40; ++i) {
+            ASSERT_TRUE(d.w.mgr.start_bot_match(d.w.now, rotation, code, reason));
+            for (const BotMatchInfo& m : d.w.mgr.bot_matches(d.w.now)) from_list.insert(m.map);
+            d.w.mgr.stop_bot_matches(d.w.now);
+            d.w.run(1200);
+        }
+        ASSERT_TRUE(from_list.count("Fight Island.lvl") == 1 && from_list.size() == 6);
     } TEST_END();
 
 }

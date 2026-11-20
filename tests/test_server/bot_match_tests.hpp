@@ -5,6 +5,7 @@
 #pragma once
 
 #include "ants_server/bot_matches.hpp"
+#include "ants_server/bot_rotation.hpp"
 #include "ants_server/bot_schedules.hpp"
 #include "big_map_fixtures.hpp"
 
@@ -185,7 +186,8 @@ void run_bot_match_tests() {
             ASSERT_TRUE(w.mgr.take_notices().size() == 1);                   // (what the store found when it opened)
             w.mgr.seed_bot_matches(20261009u);
             BotScheduleStore schedules(nullptr);
-            BotMatches bots(w.mgr, schedules, nullptr);
+            BotRotationStore bots_rotation(nullptr);
+            BotMatches bots(w.mgr, schedules, bots_rotation, nullptr);
             ASSERT_TRUE(schedules.seed_default(5, wall0));                   // (what --bot-match-every-min 5 makes: one match every five minutes, the first a minute after the start)
             uint32_t elapsed_ms = 0;
             const auto run = [&](uint32_t ms) {
@@ -220,7 +222,8 @@ void run_bot_match_tests() {
         World bare;                                                          // no replays: a match that nobody could watch or look at again is not played
         bare.mgr.seed_bot_matches(7u);
         BotScheduleStore schedules(nullptr);
-        BotMatches bots(bare.mgr, schedules, nullptr);
+        BotRotationStore bots_rotation(nullptr);
+        BotMatches bots(bare.mgr, schedules, bots_rotation, nullptr);
         ASSERT_TRUE(schedules.seed_default(5, wall0));
         bots.update(wall0 + 61, bare.now);
         ASSERT_TRUE(bare.mgr.list(bare.now).empty());
@@ -231,7 +234,8 @@ void run_bot_match_tests() {
         (void)off.mgr.take_notices();
         off.mgr.seed_bot_matches(7u);
         BotScheduleStore off_schedules(nullptr);
-        BotMatches off_bots(off.mgr, off_schedules, nullptr);
+        BotRotationStore off_bots_rotation(nullptr);
+        BotMatches off_bots(off.mgr, off_schedules, off_bots_rotation, nullptr);
         ASSERT_TRUE(off_schedules.seed_default(5, wall0));
         BotSchedulePatch turn_off;
         turn_off.has_on = true;

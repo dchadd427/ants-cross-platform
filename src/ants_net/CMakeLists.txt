@@ -15,12 +15,14 @@ add_library(ants_net STATIC
     lobby.cpp
     netgame.cpp
     netgame_match.cpp
+    p2p.cpp
+    seal_phase.cpp
 )
 
 # Raw sockets (TCP, the UDP of the LAN discovery, and the WebSocket server for browsers behind a proxy) exist on native platforms only (a browser itself
 # uses WebRTC / WebSocket as a client)
 if(NOT EMSCRIPTEN)
-    target_sources(ants_net PRIVATE tcp.cpp lan.cpp ws.cpp)
+    target_sources(ants_net PRIVATE tcp.cpp lan.cpp ws.cpp turn.cpp)
     if(WIN32)
         target_link_libraries(ants_net PUBLIC ws2_32)
     endif()
@@ -28,7 +30,7 @@ endif()
 
 # The browser's WebSocket client (the page's own WebSocket through Emscripten's library: -lwebsocket.js)
 if(EMSCRIPTEN)
-    target_sources(ants_net PRIVATE wasm_ws.cpp)
+    target_sources(ants_net PRIVATE wasm_ws.cpp wasm_rtc.cpp)
     target_link_libraries(ants_net PUBLIC websocket.js)
 endif()
 

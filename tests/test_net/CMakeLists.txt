@@ -7,6 +7,7 @@ add_executable(test_lockstep
     test_lockstep_reconnect_session.cpp
     test_lockstep_protocols.cpp
     test_lockstep_countdown.cpp
+    test_lockstep_p2p.cpp
 )
 
 target_link_libraries(test_lockstep PRIVATE
@@ -81,6 +82,7 @@ add_test(NAME test_lobby COMMAND test_lobby)
 add_executable(test_netgame
     test_netgame.cpp
     test_netgame_teams.cpp
+    test_netgame_p2p.cpp
 )
 
 target_link_libraries(test_netgame PRIVATE
@@ -162,3 +164,21 @@ target_include_directories(test_prediction PRIVATE
 
 add_test(NAME test_prediction COMMAND test_prediction)
 set_tests_properties(test_prediction PROPERTIES COST 35)
+
+# The hints of the prediction (another player's order, or a computer player's, ahead of its turn): the same rig
+add_executable(test_prediction_hints
+    test_prediction_hints.cpp
+)
+
+target_link_libraries(test_prediction_hints PRIVATE
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+target_include_directories(test_prediction_hints PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_prediction_hints COMMAND test_prediction_hints)
+set_tests_properties(test_prediction_hints PROPERTIES COST 20)

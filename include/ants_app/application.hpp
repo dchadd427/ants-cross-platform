@@ -27,6 +27,7 @@
 #include "ants_net/cue_router.hpp"
 #include "ants_net/latency.hpp"
 #include "ants_net/netgame.hpp"
+#include "ants_net/p2p_transport.hpp"
 #include "ants_replay/recorder.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_app/renderer.hpp"
@@ -93,6 +94,11 @@ struct ApplicationConfig {
     /// --prediction on | off (--no-prediction is --prediction off): whether a match of the network shows the player's own orders at once (net::Prediction, docs/NETWORK_PORT.md). On by default;
     /// a game of one machine never predicts.
     bool prediction{true};
+    /// --no-p2p (and the page's ?p2p=off): the browser build opens no data channels to the other players of a match and the game takes no hint, from a channel or from the server (protocol 26, docs/P2P_HINTS.md). On by default; only the browser build has channels.
+    bool p2p{true};
+    /// --direct on | off: this player allows direct connections to the other players who allow them too (their address is then visible to each other). Off by default: every channel goes through the
+    /// operator's relay and no player's address reaches another. The page passes the choice that the player made in the room (the browser remembers it).
+    bool direct{false};
     /// --hud-art new | classic (the settings key `hud_art` when the command line does not say): the look of the match screen's frame, buttons and panel (hud_art.hpp): the new pictures (the default) or the
     /// original's own. `hud_art_given` is true when the command line said it (the settings key then does not count, and it is not written). `hud_art_dir`: the folder of the new pictures.
     bool hud_art_new{true};
@@ -751,6 +757,7 @@ private:
     std::vector<std::unique_ptr<sim::CommandSink>> bot_sinks_;   // where the bots' commands go (declared before bots_: the controller is destroyed first)
     std::unique_ptr<ai::BotController> bots_;
     std::unique_ptr<RejoinStore> rejoin_store_;           // the keys of the seats (before net_: its callbacks write here, and leave() writes last)
+    std::unique_ptr<net::P2pTransport> p2p_;           // the browser's data channels (protocol 26; none in a native build); declared before net_, which uses it and ends first
     std::unique_ptr<net::NetGame> net_;
     net::CueRouter cue_router_;                           // which of the two engines each cue is heard from (a match of the network that predicts); reset with every match
     net::FeltDelayMeter felt_delay_;                      // what the player feels of an order while the prediction is on (the corner's "delay"); reset with every match

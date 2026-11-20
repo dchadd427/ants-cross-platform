@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the page's Bot matches section (web/admin_bots.js and the Log of web/admin_page.js): each breaks a rule of the section (what a button sends, what is asked before something cannot be undone, what is shown as typed text, the limits) and the node check of the page (tests/scripts/web_admin_check.js) must notice. Run: python3 tools/mutate.py tests/data/bot_admin_page_mutants.json --keep-going",
+ "note": "Mutants of the page's Bot matches section (web/admin_bots.js, the list of maps web/admin_map_pick.js and the Log of web/admin_page.js): each breaks a rule of the section (what a button sends, what is asked before something cannot be undone, what is shown as typed text, the limits) and the node check of the page (tests/scripts/web_admin_check.js) must notice. Run: python3 tools/mutate.py tests/data/bot_admin_page_mutants.json --keep-going",
  "defaults": {
   "build": [],
   "test": "node tests/scripts/web_admin_check.js web/admin_page.js web/admin_bots.js"
@@ -28,10 +28,10 @@
   },
   {
    "id": "bots_the_name_of_a_map_of_a_player_is_not_marked_as_player_text",
-   "file": "web/admin_bots.js",
-   "old": "if (m.group === 'players') o.setAttribute('data-untrusted', UNTRUSTED);",
-   "new": "",
-   "why": "the name of a map of a player is not marked as player text"
+   "file": "web/admin_map_pick.js",
+   "old": "add(left, typed('span', 'mn', m.name), el('span', 'ms', mapMeta(m)));",
+   "new": "add(left, el('span', 'mn', m.name), el('span', 'ms', mapMeta(m)));",
+   "why": "the name of a map in the list of maps is not marked as typed text"
   },
   {
    "id": "bots_delete_asks_no_question",
@@ -43,8 +43,8 @@
   {
    "id": "bots_stop_all_asks_no_question",
    "file": "web/admin_bots.js",
-   "old": "button('Stop all ' + n, 'bad', function () { askStopAll(); })",
-   "new": "button('Stop all ' + n, 'bad', function () { call('POST', '/admin/api/bot-matches/stop-all', {}).then(function () { loadAll(true); }); })",
+   "old": "button('Stop all ' + (n + k), 'bad', function () { askStopAll(); })",
+   "new": "button('Stop all ' + (n + k), 'bad', function () { call('POST', '/admin/api/bot-matches/stop-all', {}).then(function () { loadAll(true); }); })",
    "why": "Stop all asks no question"
   },
   {
@@ -148,8 +148,8 @@
   {
    "id": "bots_a_server_with_no_routes_is_not_told",
    "file": "web/admin_bots.js",
-   "old": "rs[0].json.error === 'bots_off'",
-   "new": "rs[0].json.error === 'never'",
+   "old": "matches.json.error === 'bots_off'",
+   "new": "matches.json.error === 'never'",
    "why": "a server with no routes is not told"
   },
   {
@@ -176,8 +176,8 @@
   {
    "id": "bots_a_start_that_is_old_an_old_token_is_not_told",
    "file": "web/admin_bots.js",
-   "old": "if (r.status === 403 && e === 'csrf') return",
-   "new": "if (false) return",
+   "old": "if (r.status === 403 && e === 'csrf') return [",
+   "new": "if (false) return [",
    "why": "a start that is old (an old token) is not told"
   },
   {
@@ -319,6 +319,244 @@
    "old": "call('GET', '/admin/api/audit?kind=bots')",
    "new": "call('GET', '/admin/api/audit?kind=maps')",
    "why": "the Bot matches filter shows the map decisions"
+  },
+  {
+   "id": "bots_a_map_that_cannot_be_played_can_be_chosen",
+   "file": "web/admin_map_pick.js",
+   "old": "var off = cannot || inList, b = el('button'",
+   "new": "var off = inList, b = el('button'",
+   "why": "a map that a room cannot play can be chosen"
+  },
+  {
+   "id": "bots_the_reason_of_a_map_that_cannot_be_played_is_not_said",
+   "file": "web/admin_map_pick.js",
+   "old": "if (cannot) add(left, el('span', 'mr', cannotWords(m)));",
+   "new": "",
+   "why": "a map that cannot be played does not say why"
+  },
+  {
+   "id": "bots_a_map_of_the_list_can_be_added_twice",
+   "file": "web/admin_map_pick.js",
+   "old": "inList = o.mode === 'add' && o.isIn(m.file)",
+   "new": "inList = false",
+   "why": "a map that the list has can be added again"
+  },
+  {
+   "id": "bots_islands_in_187_is_added_without_a_question",
+   "file": "web/admin_map_pick.js",
+   "old": "asked = o.mode === 'add' && (m.random === false || (o.rules === '187' && m.file === ISLANDS));",
+   "new": "asked = o.mode === 'add' && m.random === false;",
+   "why": "ISLANDS is put in the 187 list without the question"
+  },
+  {
+   "id": "bots_a_long_map_is_added_without_a_question",
+   "file": "web/admin_map_pick.js",
+   "old": "asked = o.mode === 'add' && (m.random === false ||",
+   "new": "asked = o.mode === 'add' && (false ||",
+   "why": "a map over 30 minutes is put in a list without the question"
+  },
+  {
+   "id": "bots_a_search_shows_every_map_that_it_finds",
+   "file": "web/admin_map_pick.js",
+   "old": "var MAX_ROWS = 40;",
+   "new": "var MAX_ROWS = 4000;",
+   "why": "a search shows every map that it finds"
+  },
+  {
+   "id": "bots_the_search_puts_the_longer_name_first",
+   "file": "web/admin_map_pick.js",
+   "old": "|| a.name.length - b.name.length || byName(a, b);",
+   "new": "|| b.name.length - a.name.length || byName(a, b);",
+   "why": "a search shows the longer name before the shorter"
+  },
+  {
+   "id": "bots_two_letters_of_the_library_stay_open",
+   "file": "web/admin_map_pick.js",
+   "old": "if (openLetter === L) letters[L].forEach(function (m) { add(list, row(m, false)); });",
+   "new": "if (openLetter === L || (L === 'P' && openLetter !== '')) letters[L].forEach(function (m) { add(list, row(m, false)); });",
+   "why": "a letter of the library stays open when another is opened"
+  },
+  {
+   "id": "bots_the_box_of_maps_does_not_close_with_escape",
+   "file": "web/admin_map_pick.js",
+   "old": "if (e.key === 'Escape') { close(); return; }",
+   "new": "",
+   "why": "Escape does not close the list of maps"
+  },
+  {
+   "id": "bots_the_page_behind_the_box_of_maps_is_not_inert",
+   "file": "web/admin_map_pick.js",
+   "old": "inertOthers(shell.node);",
+   "new": "",
+   "why": "the page behind the list of maps is not inert"
+  },
+  {
+   "id": "bots_tab_leaves_the_box_of_maps",
+   "file": "web/admin_map_pick.js",
+   "old": "if (at < 0 || (e.shiftKey && at === 0) || (!e.shiftKey && at === items.length - 1)) { e.preventDefault();",
+   "new": "if (false) { e.preventDefault();",
+   "why": "Tab leaves the list of maps"
+  },
+  {
+   "id": "bots_the_focus_does_not_return_to_the_map_button",
+   "file": "web/admin_bots.js",
+   "old": "onClose: function () { mapBtn.setAttribute('aria-expanded', 'false'); mapBtn.focus(); }",
+   "new": "onClose: function () { mapBtn.setAttribute('aria-expanded', 'false'); }",
+   "why": "the focus does not go back to the Map button"
+  },
+  {
+   "id": "bots_the_chosen_map_is_not_marked",
+   "file": "web/admin_map_pick.js",
+   "old": "if (m.file === o.current) add(tags, el('span', 'tg active', 'Chosen'));",
+   "new": "",
+   "why": "the chosen map is not marked in the list"
+  },
+  {
+   "id": "bots_an_empty_list_can_be_saved",
+   "file": "web/admin_bots.js",
+   "old": "var empty = ROT_KEYS.some(function (k) { return listDirty(k) && !st.draft[k].length; });",
+   "new": "var empty = false;",
+   "why": "an empty list can be saved"
+  },
+  {
+   "id": "bots_save_sends_the_maps_in_another_order",
+   "file": "web/admin_bots.js",
+   "old": "maps: filesOf(st.draft[k]) }",
+   "new": "maps: filesOf(st.draft[k]).sort() }",
+   "why": "Save sends the maps in another order than the list has"
+  },
+  {
+   "id": "bots_an_added_map_is_sent_at_once",
+   "file": "web/admin_bots.js",
+   "old": "st.dirty[key] = true;\n                        st.rotMsg = null;\n                        drawRot();",
+   "new": "st.dirty[key] = true;\n                        st.rotMsg = null;\n                        saveRot();",
+   "why": "an added map is sent at once, before Save"
+  },
+  {
+   "id": "bots_remove_is_sent_at_once",
+   "file": "web/admin_bots.js",
+   "old": "st.rotMsg = null;\n                drawRot();\n            }\n            function discardRot()",
+   "new": "st.rotMsg = null;\n                saveRot();\n            }\n            function discardRot()",
+   "why": "a removed map is sent at once, before Save"
+  },
+  {
+   "id": "bots_discard_keeps_the_changes",
+   "file": "web/admin_bots.js",
+   "old": "st.draft = clone(st.rotLists);\n                st.dirty = {};",
+   "new": "st.dirty = {};",
+   "why": "Discard keeps the changes in the lists"
+  },
+  {
+   "id": "bots_back_to_the_defaults_asks_no_question",
+   "file": "web/admin_bots.js",
+   "old": "button('Back to the defaults', 'ghost', function () { askDefaults(key); })",
+   "new": "button('Back to the defaults', 'ghost', function () { call('POST', '/admin/api/bot-rotation/reset', { rules: key }).then(function () { loadRotation().then(drawRot); }); })",
+   "why": "Back to the defaults asks no question"
+  },
+  {
+   "id": "bots_back_to_the_defaults_resets_the_other_list",
+   "file": "web/admin_bots.js",
+   "old": "call('POST', '/admin/api/bot-rotation/reset', { rules: key })",
+   "new": "call('POST', '/admin/api/bot-rotation/reset', { rules: key === '187' ? 'highest-score' : '187' })",
+   "why": "Back to the defaults resets the other list"
+  },
+  {
+   "id": "bots_a_list_that_is_the_defaults_offers_to_go_back",
+   "file": "web/admin_bots.js",
+   "old": "if (isDef && !listDirty(key)) { again.disabled = true;",
+   "new": "if (false) { again.disabled = true;",
+   "why": "a list that is the defaults offers Back to the defaults"
+  },
+  {
+   "id": "bots_a_skipped_map_is_not_marked",
+   "file": "web/admin_bots.js",
+   "old": "if (e.state === 'skipped') add(nm, el('span', 'tg bad', 'Skipped now'));",
+   "new": "",
+   "why": "a map of a list that is skipped is not marked"
+  },
+  {
+   "id": "bots_the_spacing_is_sent_in_minutes",
+   "file": "web/admin_bots.js",
+   "old": "function everyTyped() { v.every_s = everySeconds(everyI.value); changed(); }",
+   "new": "function everyTyped() { v.every_s = Math.round(everySeconds(everyI.value) / 60); changed(); }",
+   "why": "the spacing is sent in minutes, not seconds"
+  },
+  {
+   "id": "bots_a_spacing_of_four_hours_is_taken",
+   "file": "web/admin_bots.js",
+   "old": "var EVERY_MAX_MIN = 120;",
+   "new": "var EVERY_MAX_MIN = 240;",
+   "why": "a spacing over two hours is taken by the page"
+  },
+  {
+   "id": "bots_one_match_is_sent_with_a_spacing",
+   "file": "web/admin_bots.js",
+   "old": "if (withSpacing && v.count < 2) o.every_s = 0;",
+   "new": "",
+   "why": "one match is sent with a spacing"
+  },
+  {
+   "id": "bots_a_waiting_start_cannot_be_stopped",
+   "file": "web/admin_bots.js",
+   "old": "add(r, l, add(el('div', 'bb'), button('Stop', 'bad', function () { stopOne(w); })));",
+   "new": "add(r, l);",
+   "why": "a start that waits has no Stop"
+  },
+  {
+   "id": "bots_stop_all_does_not_name_the_waiting_starts",
+   "file": "web/admin_bots.js",
+   "old": "var what = n && k ?",
+   "new": "var what = false ?",
+   "why": "the question of Stop all does not name the waiting starts"
+  },
+  {
+   "id": "bots_a_waiting_start_does_not_say_when_it_starts",
+   "file": "web/admin_bots.js",
+   "old": "add(bs, doc.createTextNode(startsIn(w, env.now()) + ' · '",
+   "new": "add(bs, doc.createTextNode(' · '",
+   "why": "a start that waits does not say when it starts"
+  },
+  {
+   "id": "bots_the_page_does_not_say_that_a_wait_is_lost_on_a_restart",
+   "file": "web/admin_bots.js",
+   "old": "'A start that waits is lost if the server restarts. They show on the live list in a few seconds.';",
+   "new": "'They show on the live list in a few seconds.';",
+   "why": "the page does not say that a waiting start is lost if the server restarts"
+  },
+  {
+   "id": "bots_a_waiting_start_that_is_held_is_not_said",
+   "file": "web/admin_bots.js",
+   "old": "if (w.held) return 'its time has come: it waits for a free place';",
+   "new": "",
+   "why": "a start that waits for a place does not say so"
+  },
+  {
+   "id": "bots_a_schedule_whose_map_is_gone_is_not_said",
+   "file": "web/admin_bots.js",
+   "old": "function mapGone(s) { return st.maps.length > 0 &&",
+   "new": "function mapGone(s) { return false && st.maps.length > 0 &&",
+   "why": "a schedule whose map is gone is not marked"
+  },
+  {
+   "id": "bots_the_maps_that_are_not_judged_are_not_asked_again",
+   "file": "web/admin_bots.js",
+   "old": "else if (!st.checkTimer && !st.dead && env.setTimeout && st.checkTries < 30) {",
+   "new": "else if (false) {",
+   "why": "the maps that the server has not judged are not asked about again"
+  },
+  {
+   "id": "bots_the_log_does_not_word_a_change_of_the_rotation",
+   "file": "web/admin_bots.js",
+   "old": "bot_rotation_changed: 'Changed the rotation list ', ",
+   "new": "",
+   "why": "the log does not word a change of a rotation list"
+  },
+  {
+   "id": "bots_the_log_does_not_word_a_cancelled_start",
+   "file": "web/admin_bots.js",
+   "old": "bot_waiting_stopped: 'Cancelled a waiting start on ', ",
+   "new": "",
+   "why": "the log does not word a cancelled waiting start"
   }
  ]
 }

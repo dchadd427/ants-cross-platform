@@ -220,7 +220,7 @@ int main() {
         ASSERT_TRUE(what.count == 3 && what.spec.map == "Fight Island.lvl" && what.spec.rules == BotRules::Kills187 && what.spec.bots == 4 && what.spec.teams == BotTeamsChoice::Split && what.spec.split == 1);
         ASSERT_TRUE(what.spec.levels[0] == BotLevelChoice::Hard && what.spec.levels[2] == BotLevelChoice::Medium && what.spec.levels[3] == BotLevelChoice::Easy);
         const ctl::JsonValue back = bot_what_json(what);
-        ASSERT_EQ(ctl::to_json(back), std::string("{\"count\":3,\"map\":\"Fight Island.lvl\",\"rules\":\"187\",\"bots\":\"4\",\"levels\":[\"hard\",\"hard\",\"medium\",\"easy\"],\"teams\":\"split\",\"split\":\"13-24\"}"));
+        ASSERT_EQ(ctl::to_json(back), std::string("{\"count\":3,\"every_s\":0,\"map\":\"Fight Island.lvl\",\"rules\":\"187\",\"bots\":\"4\",\"levels\":[\"hard\",\"hard\",\"medium\",\"easy\"],\"teams\":\"split\",\"split\":\"13-24\"}"));
         BotWhat again;
         ASSERT_TRUE(parse_bot_what(back, again, error) && ctl::to_json(bot_what_json(again)) == ctl::to_json(back));
         // the default: the rotation, every draw open
@@ -254,6 +254,21 @@ int main() {
             ASSERT_FALSE(parse_bot_what(parsed(b.body), what, error));
             ASSERT_EQ(error, std::string(b.code));
         }
+        // the spacing of a batch (docs/SERVER_REPLAYS.md "Start one every X minutes"): left out it is 0, every match at once; else whole steps of 30 seconds from 0 to two hours; kept and worded as it came
+        const std::string rest = ",\"map\":\"random:rotation\",\"rules\":\"random\",\"bots\":\"2\",\"levels\":[],\"teams\":\"ffa\"}";
+        ASSERT_TRUE(parse_bot_what(parsed("{\"count\":5" + rest), what, error) && what.every_s == 0);
+        for (const uint32_t ok : {0u, 30u, 60u, 90u, 180u, 3600u, 7200u}) {
+            ASSERT_TRUE(parse_bot_what(parsed("{\"count\":5,\"every_s\":" + std::to_string(ok) + rest), what, error) && what.every_s == ok);
+            ASSERT_TRUE(parse_bot_what(bot_what_json(what), again, error) && again.every_s == ok);
+        }
+        for (const char* wrong : {"-30", "1", "15", "45", "7230", "7260", "999999999999", "\"180\"", "1.5", "true", "null", "[]"}) {
+            error.clear();
+            ASSERT_FALSE(parse_bot_what(parsed(std::string("{\"count\":5,\"every_s\":") + wrong + rest), what, error));
+            ASSERT_EQ(error, std::string("bad_spacing"));
+        }
+        ASSERT_TRUE(parse_bot_what(parsed("{\"count\":5,\"every_s\":180" + rest), what, error));
+        ASSERT_TRUE(bot_what_words(what).find(", one every 3 minutes") != std::string::npos && bot_spacing_words(30) == "one every 0.5 minutes" && bot_spacing_words(60) == "one every 1 minute" && bot_spacing_words(90) == "one every 1.5 minutes" && bot_spacing_words(7200) == "one every 120 minutes");
+        ASSERT_TRUE(parse_bot_what(parsed("{\"count\":1,\"every_s\":180" + rest), what, error) && bot_what_words(what).find("one every") == std::string::npos);          // (one match has nothing to space)
         ASSERT_TRUE(bot_map_name_shape_ok("Bombz Away.lvl") && bot_map_name_shape_ok("TINY.LVL") && !bot_map_name_shape_ok("a/b.lvl") && !bot_map_name_shape_ok(".lvl") && !bot_map_name_shape_ok(std::string(100, 'a') + ".lvl"));
     } TEST_END();
 
@@ -346,7 +361,7 @@ int main() {
         ASSERT_EQ(memory.list().size(), size_t{1});
         const BotSchedule& d = memory.list()[0];
         ASSERT_TRUE(d.id == 1 && d.name == "Hourly rotation" && d.is_default && d.on && d.kind == BotSchedule::Kind::Every && d.minutes == 60 && d.next_run == kNow + 60 && d.last_run == 0);
-        ASSERT_EQ(ctl::to_json(bot_what_json(d.what)), std::string("{\"count\":1,\"map\":\"random:rotation\",\"rules\":\"random\",\"bots\":\"random\",\"levels\":[\"rmh\",\"rmh\",\"rmh\",\"rmh\"],\"teams\":\"random\",\"split\":\"\"}"));
+        ASSERT_EQ(ctl::to_json(bot_what_json(d.what)), std::string("{\"count\":1,\"every_s\":0,\"map\":\"random:rotation\",\"rules\":\"random\",\"bots\":\"random\",\"levels\":[\"rmh\",\"rmh\",\"rmh\",\"rmh\"],\"teams\":\"random\",\"split\":\"\"}"));
         ASSERT_FALSE(memory.seed_default(60, kNow));                                           // (a list that has a schedule is not seeded again)
         BotScheduleStore other(nullptr);
         ASSERT_TRUE(other.seed_default(45, kNow) && other.list()[0].name == "Rotation, every 45 minutes" && other.list()[0].minutes == 45);
@@ -509,6 +524,7 @@ int main() {
         const std::vector<db::Migration> every = db_migrations();
         ASSERT_TRUE(every.size() >= 9 && every[7].version == 8 && every[8].version == 9);
         const std::vector<db::Migration> v8(every.begin(), every.begin() + 8);
+        const std::vector<db::Migration> v9(every.begin(), every.begin() + 9);                   // (this program's later versions: test_bot_rotation.cpp)
         {
             db::Database old;
             int version = 0;
@@ -522,7 +538,7 @@ int main() {
         {
             db::Database db9;
             int version = 0;
-            ASSERT_TRUE(db::open_and_migrate(db9, live, every, db::OpenOptions(), &version).ok() && version == 9 && version == db_schema_version());
+            ASSERT_TRUE(db::open_and_migrate(db9, live, v9, db::OpenOptions(), &version).ok() && version == 9);
             ASSERT_EQ(scalar(db9, "SELECT COUNT(*) FROM bot_schedules"), int64_t{0});
             ASSERT_EQ(scalar(db9, "SELECT COUNT(*) FROM admin_audit"), int64_t{1});
             ASSERT_EQ(text_of(db9, "SELECT actor || '|' || action || '|' || target FROM admin_audit"), std::string("dave|map_approved|Run One"));
@@ -535,7 +551,7 @@ int main() {
             db9.close();
             db::Database again;
             version = 0;
-            ASSERT_TRUE(db::open_and_migrate(again, live, every, db::OpenOptions(), &version).ok() && version == 9);              // (idempotent)
+            ASSERT_TRUE(db::open_and_migrate(again, live, v9, db::OpenOptions(), &version).ok() && version == 9);                // (idempotent)
             ASSERT_EQ(scalar(again, "SELECT COUNT(*) FROM schema_version"), int64_t{9});
             ASSERT_EQ(scalar(again, "SELECT COUNT(*) FROM bot_schedules"), int64_t{1});
             again.close();

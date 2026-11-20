@@ -692,10 +692,11 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(s.app().net()->predicting());
         const net::Prediction::Stats& st = s.app().net()->prediction()->stats();
         ASSERT_EQ(st.commands_lost, 0u);
-        ASSERT_TRUE(st.rebuilds_foreign > 0);                                              // (the bots gave orders)
+        ASSERT_TRUE(st.rebuilds_foreign + st.rebuilds_hint > 0);                           // (the bots gave orders: each is learned from its hint, protocol 26, or from its turn)
+        ASSERT_TRUE(st.hints_accepted > 10 && st.hints_confirmed > 5);                      // (the server sent every order of a bot ahead of its turn, and the turns confirmed them)
         ASSERT_EQ(st.cooldowns, 0u);
         std::printf("\n    %llu orders, %llu rebuilds (%llu for the bots' orders), %.3f ms the longest\n", static_cast<unsigned long long>(st.commands_predicted), static_cast<unsigned long long>(st.rebuilds),
-                    static_cast<unsigned long long>(st.rebuilds_foreign), static_cast<double>(st.rebuild_ns_max) / 1.0e6);
+                    static_cast<unsigned long long>(st.rebuilds_foreign + st.rebuilds_hint), static_cast<double>(st.rebuild_ns_max) / 1.0e6);
         ASSERT_TRUE(s.run_until([&]() { return s.room_finished(); }, 90000));                // (the minute is over)
         s.run_ms(1500);
         ASSERT_TRUE(s.app().sim().is_match_over());

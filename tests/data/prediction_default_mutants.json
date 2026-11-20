@@ -26,8 +26,8 @@
     {
       "id": "order_not_predicted",
       "file": "src/ants_net/netgame_match.cpp",
-      "old": "    if (prediction_ && prediction_->submit(c, result)) return result;",
-      "new": "    if (false && prediction_ && prediction_->submit(c, result)) return result;",
+      "old": "    if (prediction_ && prediction_->submit(c, result)) {",
+      "new": "    if (false && prediction_ && prediction_->submit(c, result)) {",
       "build": [
         "test_prediction_link"
       ],

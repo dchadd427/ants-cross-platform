@@ -282,6 +282,7 @@ void run_migration_tests();
 void run_reject_tests();
 void run_room_chat_tests();
 void run_start_delay_tests();
+void run_p2p_netgame_tests();
 void run_team_tests();
 void run_seat_move_tests();
 void run_prediction_tests();
