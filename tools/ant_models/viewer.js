@@ -318,10 +318,12 @@
     const eyelidSet = new Set(eyelidNodes);
     const blinkAnim = animations.find((a) => /blink/i.test(a.name))
       || animations.find((a) => a.channels.some((c) => eyelidSet.has(c.nodeIndex))) || null;
+    const idleAnims = animations.filter((a) => a !== blinkAnim && a.duration > 0 && a.channels.length > 0);
     const blinkInfo = { anim: blinkAnim, eyelidNodes, closedTime: 0, startTime: 0, endTime: 0.24, hasBlink: Boolean(blinkAnim || eyelidNodes.length) };
     if (blinkAnim && blinkAnim.channels.length) {
-      const refCh = blinkAnim.channels.find((c) => c.path === "rotation") || blinkAnim.channels[0];
-      const restQ = (nodeDefs[refCh.nodeIndex] && nodeDefs[refCh.nodeIndex].r) || [0, 0, 0, 1], times = refCh.times;
+      const refCh = blinkAnim.channels.find((c) => c.path === "rotation") || blinkAnim.channels[0], times = refCh.times;
+      const restQ = (refCh.path === "rotation" && times.length ? sampleChannel(refCh, times[0]) : null)
+        || (nodeDefs[refCh.nodeIndex] && nodeDefs[refCh.nodeIndex].r) || [0, 0, 0, 1];
       let maxAng = -1, pFirst = 0, pLast = 0, sIdx = 0, eIdx = times.length - 1;
       const angs = Array.from(times, (tm) => { const q = refCh.path === "rotation" ? sampleChannel(refCh, tm) : null; return q ? quatAngle(q, restQ) : 0; });
       angs.forEach((a, i) => { if (a > maxAng + 1e-4) { maxAng = a; pFirst = pLast = i; } else if (Math.abs(a - maxAng) <= 1e-4) pLast = i; });
@@ -332,10 +334,10 @@
       blinkInfo.endTime = Math.max(blinkInfo.startTime + 0.08, times[eIdx] || blinkAnim.duration || 0.24);
     }
 
-    const isBlend = (dc) => (dc.prim.material.alphaMode === "BLEND" || dc.prim.material.baseColor[3] < 0.99 ? 1 : 0);
+    const isBlend = (dc) => (dc.prim.material.isTranslucent ? 1 : 0);
     drawCalls.sort((a, b) => isBlend(a) - isBlend(b));
     return {
-      drawCalls, nodeDefs, nodeOrder, baseWorldMats, animations, blinkInfo, bounds: { min, max },
+      drawCalls, nodeDefs, nodeOrder, baseWorldMats, animations, idleAnims, blinkInfo, bounds: { min, max },
       size: [max[0] - min[0], max[1] - min[1], max[2] - min[2]],
       center: [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5, (min[2] + max[2]) * 0.5],
       triCount, meshCount: uploadedMeshes.length, nodeCount, rawBytes: arrayBuffer,
@@ -572,29 +574,40 @@
     return 2;
   }
 
-  function evaluateWorldMats(inst, blinkMode) {
+  function applyAnimChannels(overrides, channels, t) {
+    for (const ch of channels) {
+      const val = sampleChannel(ch, t);
+      if (!val) continue;
+      let ov = overrides.get(ch.nodeIndex);
+      if (!ov) { ov = {}; overrides.set(ch.nodeIndex, ov); }
+      ov[ch.path] = val;
+    }
+  }
+
+  function evaluateWorldMats(inst, opts) {
     const m = inst.model, bi = m.blinkInfo;
-    if (!bi || !bi.hasBlink) return m.baseWorldMats;
-    const isClosed = blinkMode === "closed", isPulsing = !isClosed && inst.blink && inst.blink.active;
-    if (!isClosed && !isPulsing) return m.baseWorldMats;
+    const isClosed = opts.blinkMode === "closed", isPulsing = !isClosed && inst.blink && inst.blink.active;
+    const hasIdle = m.idleAnims && m.idleAnims.length > 0 && (opts.idleAnim || opts.fixedIdleTime !== null);
+    if (!hasIdle && (!bi || !bi.hasBlink || (!isClosed && !isPulsing))) return m.baseWorldMats;
 
     const overrides = new Map();
-    if (bi.anim && bi.anim.channels.length) {
-      const t = isClosed ? bi.closedTime : Math.min(bi.endTime, bi.startTime + inst.blink.elapsed);
-      for (const ch of bi.anim.channels) {
-        const val = sampleChannel(ch, t);
-        if (!val) continue;
-        let ov = overrides.get(ch.nodeIndex);
-        if (!ov) { ov = {}; overrides.set(ch.nodeIndex, ov); }
-        ov[ch.path] = val;
+    if (hasIdle) {
+      for (const anim of m.idleAnims) {
+        const rawT = opts.fixedIdleTime !== null ? opts.fixedIdleTime : (inst.idleTime || 0);
+        applyAnimChannels(overrides, anim.channels, ((rawT % anim.duration) + anim.duration) % anim.duration);
       }
-    } else if (bi.eyelidNodes.length) {
-      const u = inst.blink ? inst.blink.elapsed / 0.22 : 1;
-      const amt = isClosed ? 1 : (u < 0.35 ? u / 0.35 : (u < 0.60 ? 1 : Math.max(0, (1 - u) / 0.40)));
-      const qx = [Math.sin(0.575 * amt), 0, 0, Math.cos(0.575 * amt)];
-      for (const ni of bi.eyelidNodes) {
-        const nd = m.nodeDefs[ni];
-        overrides.set(ni, { rotation: quatMul(nd ? nd.r : [0, 0, 0, 1], qx) });
+    }
+    if (bi && bi.hasBlink && (isClosed || isPulsing)) {
+      if (bi.anim && bi.anim.channels.length) {
+        applyAnimChannels(overrides, bi.anim.channels, isClosed ? bi.closedTime : Math.min(bi.endTime, bi.startTime + inst.blink.elapsed));
+      } else if (bi.eyelidNodes.length) {
+        const u = inst.blink ? inst.blink.elapsed / 0.22 : 1;
+        const amt = isClosed ? 1 : (u < 0.35 ? u / 0.35 : (u < 0.60 ? 1 : Math.max(0, (1 - u) / 0.40)));
+        const qx = [Math.sin(0.575 * amt), 0, 0, Math.cos(0.575 * amt)];
+        for (const ni of bi.eyelidNodes) {
+          const nd = m.nodeDefs[ni];
+          overrides.set(ni, { rotation: quatMul(nd ? nd.r : [0, 0, 0, 1], qx) });
+        }
       }
     }
     if (!overrides.size) return m.baseWorldMats;
@@ -705,7 +718,7 @@
       gl.uniform3fv(this.uPbr.u_skyColor, pal.sky); gl.uniform3fv(this.uPbr.u_groundColor, pal.ground);
 
       // 2-pass rendering across all instances: Pass 0 opaque, Pass 1 translucent glass lenses
-      const instMats = scene.instances.map((inst) => evaluateWorldMats(inst, opts.blinkMode));
+      const instMats = scene.instances.map((inst) => evaluateWorldMats(inst, opts));
       for (let pass = 0; pass < 2; pass++) {
         const wantBlend = pass === 1;
         if (wantBlend) {
@@ -817,16 +830,18 @@
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const params = new URLSearchParams(window.location.search), getP = (k) => (params.get(k) || "").toLowerCase();
     const pLineup = getP("lineup") === "1" || getP("lineup") === "true";
-    const pAnt = getP("ant"), pTeam = getP("team"), pAngle = getP("angle"), pProj = getP("proj"), pTurn = getP("turntable"), pBlink = getP("blink");
+    const pAnt = getP("ant"), pTeam = getP("team"), pAngle = getP("angle"), pProj = getP("proj"), pTurn = getP("turntable"), pBlink = getP("blink"), pIdle = getP("idle");
+    const pIdleTimeRaw = params.get("idleTime"), fixedIdleTime = pIdleTimeRaw !== null && Number.isFinite(Number(pIdleTimeRaw)) ? Number(pIdleTimeRaw) : null;
     const initAnt = pLineup ? "lineup" : (ANT_CLASSES.includes(pAnt) || pAnt === "lineup" ? pAnt : "worker");
     const initTeam = TEAMS[pTeam] ? pTeam : "green", initAngle = ANGLES[pAngle] ? pAngle : "hero";
     const initProj = pProj === "ortho" || pProj === "persp" ? pProj : (ANGLES[pAngle] && pAngle !== "hero" ? "ortho" : "persp");
     const initTurn = pTurn === "0" || pTurn === "false" ? false : (pTurn === "1" || pTurn === "true" ? true : (!motionQuery.matches && !pAngle && !pLineup));
     const initBlink = pBlink === "closed" ? "closed" : (pBlink === "open" ? "open" : (motionQuery.matches ? "open" : "auto"));
+    const initIdle = fixedIdleTime !== null ? false : (pIdle === "0" || pIdle === "false" ? false : (pIdle === "1" || pIdle === "true" ? true : !motionQuery.matches));
 
     const preset = ANGLES[initAngle];
     const state = {
-      ant: initAnt, customLabel: "", team: initTeam, angle: initAngle, blinkMode: initBlink,
+      ant: initAnt, customLabel: "", team: initTeam, angle: initAngle, blinkMode: initBlink, idleAnim: initIdle, fixedIdleTime,
       dark: darkQuery.matches, turntable: initTurn, spritePreview: !(getP("sprite") === "0" || getP("sprite") === "false"),
       cam: { yaw: preset.yaw, pitch: preset.pitch, zoom: 1.0, projection: initProj },
       camTarget: null, dirty: true, spriteDirty: true, lastSpriteTime: 0, loadSeq: 0, ready: false, error: "",
@@ -858,7 +873,7 @@
         const yLift = Math.abs(m.bounds.min[1]) > 0.02 ? -m.bounds.min[1] : 0;
         instances.push({
           id: e.id, model: m, offsetMat: mat4Translate(slotX - m.center[0], yLift, -m.center[2]),
-          blink: { active: false, elapsed: 0, wait: 1.3 + i * 0.65 + Math.random() * 2.1 },
+          blink: { active: false, elapsed: 0, wait: 1.3 + i * 0.65 + Math.random() * 2.1 }, idleTime: multi ? i * 0.45 : 0,
         });
         shadows.push([slotX, 0, Math.max(0.30, m.size[0] * 0.52), Math.max(0.30, m.size[2] * 0.52)]);
         maxH = Math.max(maxH, m.size[1]); maxD = Math.max(maxD, m.size[2]);
@@ -886,6 +901,7 @@
       window.__antViewer = {
         ready: state.ready, ant: state.ant, team: state.team, angle: state.angle, blink: state.blinkMode,
         hasBlinkAnim: state.scene.instances.some((inst) => inst.model.blinkInfo && inst.model.blinkInfo.hasBlink),
+        idleAnims: state.scene.instances.flatMap((inst) => (inst.model.idleAnims || []).map((a) => a.name)),
         projection: state.cam.projection, yaw: Math.round(wrapAngleDeg(state.cam.yaw)), pitch: Math.round(state.cam.pitch),
         lineup: state.ant === "lineup", loadedCount: state.scene.instances.length, triCount: state.scene.triCount, error: state.error,
       };
@@ -1022,7 +1038,8 @@
       SHEET_ANGLES.forEach((key, idx) => {
         const info = ANGLES[key], x = idx * size;
         const img = renderer.renderOffscreenPixels(size, size, state.scene, { yaw: info.yaw, pitch: info.pitch, zoom: 1, projection: "ortho" }, {
-          transparent: true, showPlinth: false, dark: false, team: state.team, blinkMode: state.blinkMode, overrideProj: "ortho",
+          transparent: true, showPlinth: false, dark: false, team: state.team, blinkMode: state.blinkMode,
+          idleAnim: state.idleAnim, fixedIdleTime: state.fixedIdleTime, overrideProj: "ortho",
         });
         tCtx.putImageData(img, 0, 0); ctx.drawImage(tmp, x, 0);
         ctx.fillStyle = "rgba(20, 24, 31, 0.86)"; ctx.beginPath();
@@ -1153,6 +1170,15 @@
         state.cam.yaw = wrapAngleDeg(state.cam.yaw - dt * 22); updateCameraReadout(); state.dirty = true;
         if (now - state.lastSpriteTime > 80) state.spriteDirty = true;
       }
+      if (state.idleAnim) {
+        for (const inst of state.scene.instances) {
+          if (inst.model.idleAnims && inst.model.idleAnims.length) {
+            inst.idleTime = (inst.idleTime || 0) + dt;
+            state.dirty = true;
+            if (now - state.lastSpriteTime > 65) state.spriteDirty = true;
+          }
+        }
+      }
       if (state.blinkMode !== "closed") {
         for (const inst of state.scene.instances) {
           const bi = inst.model.blinkInfo, bl = inst.blink;
@@ -1170,7 +1196,10 @@
       }
       if (state.dirty) {
         const [w, h] = renderer.resize();
-        renderer.drawScene(state.scene, state.cam, { width: w, height: h, transparent: false, showPlinth: true, dark: state.dark, team: state.team, blinkMode: state.blinkMode });
+        renderer.drawScene(state.scene, state.cam, {
+          width: w, height: h, transparent: false, showPlinth: true, dark: state.dark, team: state.team,
+          blinkMode: state.blinkMode, idleAnim: state.idleAnim, fixedIdleTime: state.fixedIdleTime,
+        });
         state.dirty = false;
       }
       if (state.spriteDirty && state.spritePreview) {
@@ -1179,7 +1208,8 @@
         if (state.scene.instances.length) {
           const spriteCam = { yaw: state.cam.yaw, pitch: state.cam.pitch, zoom: 1.0, projection: "ortho" };
           spriteCtx.putImageData(renderer.renderOffscreenPixels(spriteCanvas.width, spriteCanvas.height, state.scene, spriteCam, {
-            transparent: true, showPlinth: false, dark: false, team: state.team, blinkMode: state.blinkMode, overrideProj: "ortho",
+            transparent: true, showPlinth: false, dark: false, team: state.team,
+            blinkMode: state.blinkMode, idleAnim: state.idleAnim, fixedIdleTime: state.fixedIdleTime, overrideProj: "ortho",
           }), 0, 0);
         }
       }
