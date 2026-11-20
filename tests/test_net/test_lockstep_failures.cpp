@@ -1623,7 +1623,7 @@ void run_protocol12_tests() {
 
 void run_protocol17_tests() {
     TEST_CASE("N2.112 Protocol 17, The Game Mode: The Start, The Room And The Plan End With One Byte, 0 (The Original's Highest Score) Or 1 (187); Every Byte Above sim::kLastGameMode Is Refused In Each Of Them (Never Played As Another Mode), So Are The Layouts Of Protocol 16 (No Byte), A Byte More And Every Truncation; The Mode Is Not Part Of The Seating Hash; The Words Of The Modes Parse Exactly") {
-        ASSERT_TRUE(kProtocolVersion == 25 && sim::kLastGameMode == 1 && sim::valid_game_mode(0) && sim::valid_game_mode(1) && !sim::valid_game_mode(2) && !sim::valid_game_mode(255));
+        ASSERT_TRUE(kProtocolVersion == 26 && sim::kLastGameMode == 1 && sim::valid_game_mode(0) && sim::valid_game_mode(1) && !sim::valid_game_mode(2) && !sim::valid_game_mode(255));
         ASSERT_TRUE(static_cast<uint8_t>(sim::GameMode::HighestScore) == 0 && static_cast<uint8_t>(sim::GameMode::Kills187) == 1);
         // the Start: the last byte, after the platforms of the four seats
         {
