@@ -9,6 +9,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib
 import json
 import math
@@ -92,6 +93,44 @@ def discover_available_classes(include_base: bool = False) -> List[str]:
     return found
 
 
+VIEWER_FILES: Tuple[str, ...] = ("viewer.html", "viewer.css", "viewer.js", "viewer_version.js")
+
+
+def _file_sha256_hex(path: str, length: int = 12) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()[:length]
+
+
+def _compute_manifest_hashes(entries: Sequence[Dict[str, Any]]) -> Tuple[str, str, str]:
+    """Return deterministic (version, build_hash, models_hash) across models + viewer files."""
+    sorted_models = sorted(entries, key=lambda e: str(e.get("id", "")))
+    m_hasher = hashlib.sha256()
+    for e in sorted_models:
+        m_hasher.update(f"{e['id']}:{e.get('sha256', '')}\n".encode("utf-8"))
+    models_hash = m_hasher.hexdigest()[:16]
+
+    b_hasher = hashlib.sha256()
+    b_hasher.update(f"models:{models_hash}\n".encode("utf-8"))
+    for fname in sorted(VIEWER_FILES):
+        fpath = os.path.join(THIS_DIR, fname)
+        if os.path.isfile(fpath):
+            b_hasher.update(f"{fname}:{_file_sha256_hex(fpath, length=64)}\n".encode("utf-8"))
+    build_hash = b_hasher.hexdigest()[:16]
+    version = f"v-{build_hash[:8]}"
+    return version, build_hash, models_hash
+
+
+def _model_sort_key(entry: Dict[str, Any]) -> Tuple[int, str]:
+    ant_id = str(entry.get("id", ""))
+    try:
+        return (ANT_CLASSES.index(ant_id), ant_id)
+    except ValueError:
+        return (len(ANT_CLASSES), ant_id)
+
+
 def build_all(
     out_dir: str = DEFAULT_OUT_DIR,
     only: Optional[Sequence[str]] = None,
@@ -102,8 +141,26 @@ def build_all(
     """Build available models into `out_dir`, write manifest.json, return (manifest, built_scenes)."""
     os.makedirs(out_dir, exist_ok=True)
     targets = list(only) if only else (["base"] + list(ANT_CLASSES) if include_base else list(ANT_CLASSES))
+    manifest_path = os.path.join(out_dir, "manifest.json")
 
-    manifest_models: List[Dict[str, Any]] = []
+    # Preserve untouched model entries when performing a partial `--only` rebuild.
+    preserved: Dict[str, Dict[str, Any]] = {}
+    if only and os.path.isfile(manifest_path):
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                prev = json.load(f)
+            for item in prev.get("models", []):
+                mid = item.get("id")
+                mfile = item.get("file")
+                if mid and mfile and os.path.isfile(os.path.join(out_dir, mfile)):
+                    entry_copy = dict(item)
+                    if not entry_copy.get("sha256"):
+                        entry_copy["sha256"] = _file_sha256_hex(os.path.join(out_dir, mfile), 12)
+                    preserved[mid] = entry_copy
+        except (OSError, ValueError, TypeError):
+            preserved = {}
+
+    built_entries: Dict[str, Dict[str, Any]] = dict(preserved) if only else {}
     built_scenes: List[Tuple[str, Any]] = []
 
     for ant_id in targets:
@@ -115,9 +172,11 @@ def build_all(
         filename = f"{ant_id}.glb"
         out_path = os.path.join(out_dir, filename)
         stats = write_glb(scene, out_path)
+        sha12 = _file_sha256_hex(out_path, 12)
         entry = {
             "id": ant_id,
             "file": filename,
+            "sha256": sha12,
             "byte_length": stats["byte_length"],
             "triangles": stats["triangles"],
             "vertices": stats["vertices"],
@@ -128,22 +187,26 @@ def build_all(
             "bbox_max": stats["bbox_max"],
             "dimensions": stats["dimensions"],
         }
-        manifest_models.append(entry)
+        built_entries[ant_id] = entry
         built_scenes.append((ant_id, scene))
         if not quiet:
             dims = stats["dimensions"]
             print(
                 f"  [ok]   {ant_id:8s} -> {filename} "
-                f"({stats['triangles']} tris, {stats['byte_length']:,} B, "
+                f"({stats['triangles']} tris, {stats['byte_length']:,} B, sha={sha12}, "
                 f"size {dims[0]:.2f}x{dims[1]:.2f}x{dims[2]:.2f}, min_y={stats['bbox_min'][1]:.4f})"
             )
 
+    manifest_models = sorted(built_entries.values(), key=_model_sort_key)
+    version, build_hash, models_hash = _compute_manifest_hashes(manifest_models)
     manifest = {
-        "version": 1,
+        "schema_version": 1,
+        "version": version,
+        "build_hash": build_hash,
+        "models_hash": models_hash,
         "coordinate_system": "glTF 2.0 right-handed (+Y up, +Z front, +X ant-left, feet at Y=0)",
         "models": manifest_models,
     }
-    manifest_path = os.path.join(out_dir, "manifest.json")
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
         f.write("\n")

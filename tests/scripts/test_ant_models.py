@@ -502,7 +502,31 @@ class BaseAntAndBuildPipeline(unittest.TestCase):
             rc = build_all.main(["--only", "base,worker", "--out", tmp, "--quiet"])
             self.assertEqual(rc, 0)
             self.assertTrue(os.path.isfile(os.path.join(tmp, "base.glb")))
-            self.assertTrue(os.path.isfile(os.path.join(tmp, "manifest.json")))
+            manifest_path = os.path.join(tmp, "manifest.json")
+            self.assertTrue(os.path.isfile(manifest_path))
+            with open(manifest_path, encoding="utf-8") as f:
+                m1 = json.load(f)
+            self.assertRegex(m1["version"], r"^v-[0-9a-f]{8}$")
+            self.assertRegex(m1["build_hash"], r"^[0-9a-f]{16}$")
+            self.assertRegex(m1["models_hash"], r"^[0-9a-f]{16}$")
+            self.assertEqual(m1["version"], "v-" + m1["build_hash"][:8])
+            for entry in m1["models"]:
+                self.assertRegex(entry["sha256"], r"^[0-9a-f]{12}$")
+
+            # Seed an untouched fake model entry and confirm `--only base` preserves it.
+            fake_glb = os.path.join(tmp, "custom.glb")
+            with open(fake_glb, "wb") as f:
+                f.write(b"fake-glb-bytes")
+            m1["models"].append({"id": "custom", "file": "custom.glb", "sha256": "deadbeef1234"})
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(m1, f)
+
+            m2, _ = build_all.build_all(out_dir=tmp, only=["base"], quiet=True)
+            ids = {e["id"] for e in m2["models"]}
+            self.assertIn("base", ids)
+            self.assertIn("custom", ids)
+            self.assertNotEqual(m2["models_hash"], m1["models_hash"])
+            self.assertEqual(m2["version"], "v-" + m2["build_hash"][:8])
 
 
 @unittest.skipUnless(HAS_NUMPY and HAS_PIL, "numpy and Pillow are needed")
