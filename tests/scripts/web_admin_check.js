@@ -2,11 +2,13 @@
 // see (signed out, a player, a moderator, an admin, the owner), the shell (the chip and its menu, the four sections as tabs and as a select), the Maps section (the lists, the questions before Approve and Take down, the
 // empty states), the Chat section (the form that mutes or bans and its question, the lists, the pictures), the Log (one list, three filters), the Status (all well, trouble, a part that does not answer), what every
 // button sends and with which token, and that nothing a person typed becomes markup and no Discord id is shown or sent. tests/scripts/test_web_admin.py runs this with node (the quick tier).
-// usage: node web_admin_check.js web/admin_page.js [web/admin_bots.js]     (exit 0: every check holds; every failure is printed)
+// usage: node web_admin_check.js web/admin_page.js [web/admin_bots.js [web/admin_map_pick.js]]     (exit 0: every check holds; every failure is printed)
 'use strict';
 const path = require('path');
 const { makeDocument } = require('./web_mapmaker_fake_dom.js');
 // the section "Bot matches" is the page's second file, loaded before it: the page finds it as the global AntsAdminBots (a broken copy of it is checked by naming it as the third argument)
+// (and the list of the server's maps that it uses, the page's other file: admin_map_pick.js, loaded before it; a broken copy of that is the fourth argument)
+global.AntsAdminMapPick = require(process.argv[4] ? path.resolve(process.argv[4]) : path.join(__dirname, '..', '..', 'web', 'admin_map_pick.js'));
 global.AntsAdminBots = require(process.argv[3] ? path.resolve(process.argv[3]) : path.join(__dirname, '..', '..', 'web', 'admin_bots.js'));
 const A = require(path.resolve(process.argv[2]));
 
@@ -49,10 +51,21 @@ function map(id, extra) {
 function who(name, role, csrf) {                        // the answer of GET /admin/api/me for a person who is let in
     return { status: 200, json: { name, ref: '0123456789abcdef', role: role || 'admin', csrf: csrf || 'csrf-token-1', untrusted: true, untrusted_fields: ['name'] } };
 }
+// one map of the server's catalog (GET bot-options): what the page shows of it and what a room can do with it
+function catalogRow(file, group, width, height, players, minutes, places, extra) {
+    return Object.assign({ file, name: file.replace(/\.lvl$/i, ''), group, width, height, players, minutes, places: places || 1, random: minutes <= 30, playable: true }, extra || {});
+}
+const ROTATION_DEFAULTS = { 'highest-score': ['TINY.LVL', 'SMALL.LVL', 'MEDIUM.LVL', 'GAUNTLET.LVL', 'TREASURE.LVL', 'ISLANDS.LVL', 'POPcOrN.lvl', 'HELLRAISER.lvl', 'Bombz Away.lvl'], '187': ['TINY.LVL', 'SMALL.LVL', 'MEDIUM.LVL', 'GAUNTLET.LVL', 'TREASURE.LVL', 'Fight Island.lvl'] };
+// the entry of a list of the rotation (GET bot-rotation): the map's row, and whether the list can draw it
+function rotationEntry(maps, file) {
+    const m = maps.filter((x) => x.file === file)[0];
+    if (!m) return { file, name: file.replace(/\.lvl$/i, ''), group: 'library', state: 'skipped', reason: 'not on this server' };
+    return Object.assign({}, m, m.playable === false ? { state: 'skipped', reason: m.reason } : { state: 'ok' });
+}
 // the matches of computer players of the pictures (the section "Bot matches"): the four that go, the maps that may be named, the three schedules
 function botWorld() {
     const seats = (levels) => levels.map((level, i) => ({ seat: i, level }));
-    const sch = (id, name, rest) => Object.assign({ id, name, default: false, on: true, last: 0, next: null, when: { kind: 'every', minutes: 60 }, what: { count: 1, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' } }, rest);
+    const sch = (id, name, rest) => Object.assign({ id, name, default: false, on: true, last: 0, next: null, when: { kind: 'every', minutes: 60 }, what: { count: 1, every_s: 0, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' } }, rest);
     return {
         replays: true,
         places: { people: 14, total: 48, bots: 4, bots_max: 16 },
@@ -63,16 +76,20 @@ function botWorld() {
             { id: 'm4', name: 'TINY', rules: 'highest-score', seats: seats(['medium', 'medium', 'hard', 'hard']), teams: '02-13', started: at('2026-10-18T19:59:00Z'), live: null, by: 'tess' }
         ],
         maps: [
-            { file: 'TINY.LVL', name: 'TINY', group: 'original', width: 32, height: 32, places: 1, minutes: 6, random: true }, { file: 'ISLANDS.LVL', name: 'ISLANDS', group: 'original', width: 96, height: 96, places: 1, minutes: 20, random: true },
-            { file: 'POPcOrN.lvl', name: 'POPcOrN', group: 'library', width: 64, height: 64, places: 1, minutes: 12, random: true },
-            { file: 'Fight Island.lvl', name: 'Fight Island', group: 'players', width: 150, height: 150, places: 3, minutes: 20, random: true }, { file: 'Evil.lvl', name: '<img src=x onerror=alert(1)>', group: 'players', width: 31, height: 31, places: 1, minutes: 12, random: true },
-            { file: 'Ultimate Chess.lvl', name: 'Ultimate Chess', group: 'players', width: 120, height: 120, places: 2, minutes: 60, random: false }
+            catalogRow('TINY.LVL', 'original', 31, 31, 4, 6), catalogRow('SMALL.LVL', 'original', 40, 40, 4, 8), catalogRow('MEDIUM.LVL', 'original', 60, 60, 4, 10), catalogRow('GAUNTLET.LVL', 'original', 60, 60, 4, 10),
+            catalogRow('TREASURE.LVL', 'original', 60, 60, 4, 12), catalogRow('ISLANDS.LVL', 'original', 60, 60, 4, 12),
+            catalogRow('Bombz Away.lvl', 'library', 31, 31, 4, 20), catalogRow('HELLRAISER.lvl', 'library', 31, 31, 4, 15), catalogRow('Killing Trez.LVL', 'library', 48, 48, 4, 9), catalogRow('POPcOrN.lvl', 'library', 31, 31, 4, 14),
+            catalogRow('POPcOrN 3.lvl', 'library', 31, 31, 4, 15), catalogRow('Zebra Run.lvl', 'library', 40, 40, 2, 11), catalogRow('1st Light.lvl', 'library', 31, 31, 4, 8),
+            catalogRow('Fight Island.lvl', 'players', 150, 150, 4, 20, 3), catalogRow('Evil.lvl', 'players', 31, 31, 4, 12, 1, { name: '<img src=x onerror=alert(1)>' }),
+            catalogRow('Ultimate Chess.lvl', 'players', 120, 120, 4, 60, 2), catalogRow('Big Meadow.lvl', 'players', 200, 160, 4, 15, 1, { playable: false, reason: 'it starts too many ants for a room' })
         ],
-        rotation: { 'highest-score': 9, '187': 6 },
+        checking: 0,
+        waiting: [],
+        rotation_lists: null,                                                   // (the lists that the server keeps once an admin edited them: null is the defaults, made from the maps)
         schedules: [
             sch(1, 'Hourly rotation', { default: true, last: at('2026-10-18T19:14:00Z'), next: at('2026-10-18T20:14:00Z') }),
-            sch(2, 'Evening swarm', { when: { kind: 'times', times: ['18:00', '20:00', '22:00'] }, what: { count: 4, map: 'random:rotation', rules: 'highest-score', bots: '4', levels: ['hard', 'hard', 'medium', 'medium'], teams: 'random', split: '' }, last: at('2026-10-17T20:00:00Z'), next: at('2026-10-19T01:00:00Z') }),
-            sch(3, 'ISLANDS practice', { on: false, when: { kind: 'every', minutes: 30 }, what: { count: 2, map: 'ISLANDS.LVL', rules: 'highest-score', bots: 'random', levels: ['easy', 'easy', 'easy', 'easy'], teams: 'ffa', split: '' }, last: at('2026-10-17T20:30:00Z') })
+            sch(2, 'Evening swarm', { when: { kind: 'times', times: ['18:00', '20:00', '22:00'] }, what: { count: 4, every_s: 0, map: 'random:rotation', rules: 'highest-score', bots: '4', levels: ['hard', 'hard', 'medium', 'medium'], teams: 'random', split: '' }, last: at('2026-10-17T20:00:00Z'), next: at('2026-10-19T01:00:00Z') }),
+            sch(3, 'ISLANDS practice', { on: false, when: { kind: 'every', minutes: 30 }, what: { count: 2, every_s: 0, map: 'ISLANDS.LVL', rules: 'highest-score', bots: 'random', levels: ['easy', 'easy', 'easy', 'easy'], teams: 'ffa', split: '' }, last: at('2026-10-17T20:30:00Z') })
         ]
     };
 }
@@ -124,10 +141,28 @@ function world(overrides) {
             if (key.startsWith(pattern)) { const r = w.replies[pattern]; return typeof r === 'function' ? r() : reply(r.status, r.json); }
         }
         if (url.indexOf('/admin/api/bot-') === 0 && w.botsOff) return reply(503, { error: 'bots_off', message: 'Bot matches are not available on this server.' });
-        if (method === 'GET' && url === '/admin/api/bot-matches') return reply(200, { matches: w.bots.matches, cap: 8, places: w.bots.places, replays: w.bots.replays, untrusted: true, untrusted_fields: ['name', 'by', 'schedule'] });
-        if (method === 'GET' && url === '/admin/api/bot-options') return reply(200, { maps: w.bots.maps, rotation: w.bots.rotation, random_max_minutes: 30, untrusted: true, untrusted_fields: ['name'] });
+        if (method === 'GET' && url === '/admin/api/bot-matches') return reply(200, { matches: w.bots.matches, waiting: w.bots.waiting, waiting_max: 32, cap: 8, places: w.bots.places, replays: w.bots.replays, untrusted: true, untrusted_fields: ['name', 'by', 'schedule'] });
+        if (method === 'GET' && url === '/admin/api/bot-options') return reply(200, { maps: w.bots.maps, checking: w.bots.checking, random_max_minutes: 30, untrusted: true, untrusted_fields: ['name'] });
+        if (method === 'GET' && url === '/admin/api/bot-rotation') {
+            const lists = {}, defaults = {};
+            for (const k of Object.keys(ROTATION_DEFAULTS)) {
+                lists[k] = (w.bots.rotation_lists ? w.bots.rotation_lists[k] : ROTATION_DEFAULTS[k]).map((f) => rotationEntry(w.bots.maps, f));
+                defaults[k] = ROTATION_DEFAULTS[k].map((f) => ({ file: f, name: f.replace(/\.lvl$/i, '') }));
+            }
+            return reply(200, { lists, defaults, max: 100, checking: w.bots.checking, untrusted: true, untrusted_fields: ['name'] });
+        }
         if (method === 'GET' && url === '/admin/api/bot-schedules') return reply(200, { schedules: w.bots.schedules, max: 20, scheduling: w.bots.scheduling !== false, untrusted: true, untrusted_fields: ['name'] });
-        if (method === 'POST' && url.indexOf('/admin/api/bot-') === 0) return reply(200, url === '/admin/api/bot-matches' ? { started: JSON.parse(init.body).count, asked: JSON.parse(init.body).count } : url.endsWith('/stop-all') ? { stopped: w.bots.matches.length } : { ok: true });
+        if (method === 'POST' && url === '/admin/api/bot-rotation') {                                // (the server keeps the list that it was sent, as the names that it has)
+            const sent = JSON.parse(init.body);
+            w.bots.rotation_lists = Object.assign({}, w.bots.rotation_lists || ROTATION_DEFAULTS, { [sent.rules]: sent.maps });
+            return reply(200, { count: sent.maps.length, changed: true });
+        }
+        if (method === 'POST' && url === '/admin/api/bot-rotation/reset') {
+            const sent = JSON.parse(init.body);
+            w.bots.rotation_lists = Object.assign({}, w.bots.rotation_lists || ROTATION_DEFAULTS, { [sent.rules]: ROTATION_DEFAULTS[sent.rules] });
+            return reply(200, { count: ROTATION_DEFAULTS[sent.rules].length, changed: true });
+        }
+        if (method === 'POST' && url.indexOf('/admin/api/bot-') === 0) return reply(200, url === '/admin/api/bot-matches' ? { started: JSON.parse(init.body).count, asked: JSON.parse(init.body).count } : url.endsWith('/stop-all') ? { stopped: w.bots.matches.length, dropped: w.bots.waiting.length } : { ok: true });
         if (url === '/admin/api/me') return reply(w.me.status, w.me.json);
         if (url === '/hub/admin/api/me') return reply(w.hubMe.status, w.hubMe.json);
         if (url === '/hub/me') return reply(w.hubYou.status, w.hubYou.json);
@@ -1392,25 +1427,137 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
         const pick = async (app, id, value) => { const s = all(app, 'select').filter((n) => n.id === id)[0]; s.value = value; s.fire('change', {}); await settle(); };
         const posts = (w) => w.calls.filter((c) => c.method === 'POST');
         const opened = async (overrides) => { const w = world(overrides); const o = await open(w); await section(o.app, 'Bot matches'); w.calls.length = 0; return Object.assign({ w }, o); };
+        // the list of the server's maps (a box over the page): open it from the button of a form, find a row, search, choose
+        const mapButton = (app, pre) => all(app, 'button').filter((b) => b.id === pre + '-map')[0];
+        const mapWords = (app, pre) => mapButton(app, pre).textContent;
+        const openMapBox = async (app, pre) => { mapButton(app, pre).click(); await settle(); };
+        const boxRows = (app) => all(app, '.dlg.mp .mrow');
+        const rowName = (r) => r.querySelector('.mn').textContent;
+        const rowOf = (app, name) => boxRows(app).filter((r) => rowName(r) === name)[0];
+        const searchBox = async (app, text) => { const q = app.querySelector('.mp-q'); q.value = text; q.fire('input', {}); await settle(); };
+        const chooseMap = async (app, pre, query, name) => { await openMapBox(app, pre); await searchBox(app, query); rowOf(app, name).click(); await settle(); };
+        const boxChip = async (app, label) => { all(app, '.dlg.mp .mp-chips .chip').filter((b) => b.textContent.indexOf(label) === 0)[0].click(); await settle(); };
+        const boxHeads = (app) => all(app, '.dlg.mp .mgh').map((n) => n.textContent);
 
         {   // the tab, the panels and the first look
             const w = world();
             const { app } = await open(w);
             await section(app, 'Bot matches');
-            same('the section asks for the matches, the maps and the schedules, once each (the badge asked first, on opening the page)', w.calls.map((c) => c.url), ['/admin/api/me', '/admin/api/maps?state=waiting', '/admin/api/bot-matches', '/admin/api/bot-matches', '/admin/api/bot-options', '/admin/api/bot-schedules']);
-            same('three panels: Start now, Running and Schedules, each with its count', [texts(app, '.panel h2'), all(app, '.b-now').length, all(app, '.b-run').length, all(app, '.b-sched').length], [['Start now', 'Running(4)', 'Schedules(3)'], 1, 1, 1]);
-            same('Start now: one match, the rotation, random rules, a random number of bots, every level drawn from Medium and Hard, random teams, and the button says how many', [texts(app, '.b-now .stepv'), chipOn(app, 'now-rules'), chipOn(app, 'now-bots'), chipOn(app, 'now-teams'), all(app, '.b-now select').filter((s) => s.id === 'now-map')[0].value, all(app, '.b-now .startrow .btn').map((b) => b.textContent)],
-                [['1'], ['Random'], ['Random'], ['Random'], 'random:rotation', ['Start 1 bot match']]);
+            same('the section asks for the matches, the maps, the schedules and the rotation, once each (the badge asked first, on opening the page)', w.calls.map((c) => c.url), ['/admin/api/me', '/admin/api/maps?state=waiting', '/admin/api/bot-matches', '/admin/api/bot-matches', '/admin/api/bot-options', '/admin/api/bot-schedules', '/admin/api/bot-rotation']);
+            same('four panels: Start now, Running, Schedules and Rotation, each with its count', [texts(app, '.panel h2'), all(app, '.b-now').length, all(app, '.b-run').length, all(app, '.b-sched').length, all(app, '.b-rot').length], [['Start now', 'Running(4)', 'Schedules(3)', 'Rotation'], 1, 1, 1, 1]);
+            same('Start now: one match, the rotation, random rules, a random number of bots, every level drawn from Medium and Hard, random teams, and the button says how many', [texts(app, '.b-now .stepv'), chipOn(app, 'now-rules'), chipOn(app, 'now-bots'), chipOn(app, 'now-teams'), mapWords(app, 'now'), all(app, '.b-now .startrow .btn').map((b) => b.textContent)],
+                [['1'], ['Random'], ['Random'], ['Random'], 'Random from the rotation9 maps for Highest score, 6 for 187', ['Start 1 bot match']]);
             same('Start now: the choices of each part, in the words of the pictures', [chipTexts(app, 'now-rules'), chipTexts(app, 'now-bots'), chipTexts(app, 'now-teams'), all(app, '.b-now option').filter((o) => o.value === 'rmh').length, all(app, '.b-now .lv label').map((l) => l.textContent)],
                 [['Highest score', '187', 'Random'], ['2', '3', '4', 'Random'], ['Free for all', 'A split', 'Random'], 4, ['Bot 1', 'Bot 2', 'Bot 3', 'Bot 4']]);
-            same('Start now: the maps are the three random lists, then the original\'s maps, the library\'s and the players\' (with their size), and the hint says how many the rotation has', [all(app, '.b-now select').filter((s) => s.id === 'now-map')[0].children.map((n) => n.tagName === 'optgroup' ? n.label : n.textContent), texts(app, '.b-now .fh')[0]],
-                [['Random from the rotation', 'Random from the original maps', 'Random from the players’ maps', 'The original’s maps', 'The library (in the rotation)', 'The players’ maps (approved)'], '8 at the most, with the ones that run now.']);
-            const players = all(app, '.b-now optgroup').filter((g) => g.label === 'The players’ maps (approved)')[0].children;
-            same('a map of a player is player text and its name is text: no markup is made of it', [players.map((o) => o.textContent), players.map((o) => o.getAttribute('data-untrusted')), all(app, '.b-now optgroup').filter((g) => g.label === 'The original’s maps')[0].children.map((o) => o.getAttribute('data-untrusted'))],
-                [['Fight Island (150 x 150)', '<img src=x onerror=alert(1)> (31 x 31)', 'Ultimate Chess (120 x 120)'], ['player-text', 'player-text', 'player-text'], [null, null]]);
-            same('the hint under the map says what the rotation is', texts(app, '.b-now .f .fh').filter((s) => /rotation/.test(s)), ['The rotation: 9 maps for Highest score, 6 for 187.']);
+            same('the Map is a button that opens a box (not a select), named by its label, and the one-match form has no field of the spacing', [mapButton(app, 'now').tagName, mapButton(app, 'now').getAttribute('aria-haspopup'), mapButton(app, 'now').getAttribute('aria-expanded'), all(app, 'select').filter((n) => n.id === 'now-map').length, all(app, '.b-now input').filter((n) => n.id === 'now-every')[0].parentNode.parentNode.parentNode.hidden],
+                ['button', 'dialog', 'false', 0, true]);
+            same('the hint under the map says what the rotation is and where to change it', texts(app, '.b-now .f .fh').filter((s) => /rotation/.test(s)), ['The rotation: 9 maps for Highest score, 6 for 187. You can change the lists under “Rotation”, lower on this page.']);
             same('every control that can be touched is a button or a field of its own, and Start is a green big button', [all(app, '.b-now .startrow .btn')[0].className, all(app, '.b-now .step .btn').map((b) => b.getAttribute('aria-label'))], ['btn big ok', ['One less', 'One more']]);
             same('a split cannot be chosen while the number of bots is drawn, and the page says why', [chipsOf(app, 'now-teams').children[1].getAttribute('aria-disabled'), chipsOf(app, 'now-teams').children[1].className, texts(app, '.b-now .fh').filter((s) => /split/i.test(s))], ['true', 'chip dis', ['A split needs a number of bots: choose 2, 3 or 4.']]);
+        }
+        {   // the list of the server's maps: what it shows, how it narrows, what cannot be chosen, how it closes
+            const { w, app, doc } = await opened();
+            await openMapBox(app, 'now');
+            const box = app.querySelector('.dlg.mp');
+            same('the button opens a dialog over the page: modal, titled, with a search, the six chips with their counts and one Cancel; the page behind is inert and the button says it is open', [!!box, box.getAttribute('role'), box.getAttribute('aria-modal'), texts(app, '.dlg.mp h2'), app.querySelector('.mp-q').getAttribute('placeholder'), texts(app, '.dlg.mp .mp-chips .chip'), texts(app, '.dlg.mp .dlg-foot .btn'), all(app, '[inert]').length > 0, mapButton(app, 'now').getAttribute('aria-expanded')],
+                [true, 'dialog', 'true', ['Choose a map'], 'Search 17 maps by name', ['All 17', 'Original 6', 'Players’ 4', 'Library 7', 'Rotation 10', 'Over 30 min 1'], ['Cancel'], true, 'true']);
+            same('with nothing typed: the count says how many maps and how many a room can play, then the three random picks (the chosen one marked), the original\'s six, the players\' maps and the library in letters', [texts(app, '.dlg.mp .mp-count'), boxHeads(app), boxRows(app).slice(0, 3).map((r) => r.textContent), boxRows(app).length],
+                [['17 maps on this server, 16 that a room can play. Search by name, or open a group.'], ['Random pick', 'The original’s six6 maps', 'Players’ maps (approved)4 maps', 'The library, A to Z7 maps'],
+                    ['Random from the rotation9 maps for Highest score, 6 for 187Chosen', 'Random from the original mapsTINY, SMALL, MEDIUM, GAUNTLET, TREASURE, ISLANDS', 'Random from the players’ maps3 approved maps of the players'], 13]);
+            same('a row is the name, the size, the seats and the minutes, with a tag for each list of the rotation that holds the map', [rowOf(app, 'TINY').textContent, rowOf(app, 'Fight Island').textContent, rowOf(app, 'ISLANDS').textContent], ['TINY31 x 31 · 4 players · 6 minHighest score187', 'Fight Island150 x 150 · 4 players · 20 min187' + '3 places', 'ISLANDS60 x 60 · 4 players · 12 minHighest score']);
+            same('the library is in letters (# first), each with its count and none open, so that a few hundred maps can be had without a search', [all(app, '.dlg.mp .mlet').map((b) => b.textContent), all(app, '.dlg.mp .mlet').map((b) => b.getAttribute('aria-expanded'))], [['#1 map', 'B1 map', 'H1 map', 'K1 map', 'P2 maps', 'Z1 map'], ['false', 'false', 'false', 'false', 'false', 'false']]);
+            all(app, '.dlg.mp .mlet').filter((b) => b.textContent.charAt(0) === 'P')[0].click(); await settle();
+            same('a letter opens its maps', [boxRows(app).slice(13).map(rowName), all(app, '.dlg.mp .mlet').filter((b) => b.getAttribute('aria-expanded') === 'true').map((b) => b.textContent)], [['POPcOrN', 'POPcOrN 3'], ['P2 maps']]);
+            all(app, '.dlg.mp .mlet').filter((b) => b.textContent.charAt(0) === 'B')[0].click(); await settle();
+            same('one letter is open at a time', [boxRows(app).slice(13).map(rowName), all(app, '.dlg.mp .mlet').filter((b) => b.getAttribute('aria-expanded') === 'true').map((b) => b.textContent)], [['Bombz Away'], ['B1 map']]);
+            // a map that a room cannot play: dim, not to be chosen, and its reason in plain words
+            const big = rowOf(app, 'Big Meadow');
+            same('a map that a room cannot play is dim, says why in plain words, and is the last of its group', [big.getAttribute('aria-disabled'), big.className.indexOf('dis') >= 0, big.textContent, boxRows(app).filter((r) => r.getAttribute('aria-disabled') === 'true').length, boxRows(app).slice(9, 13).map(rowName)],
+                ['true', true, 'Big Meadow200 x 160 · 4 players · 15 minCannot be played: it starts too many ants for a room.', 1, ['Fight Island', '<img src=x onerror=alert(1)>', 'Ultimate Chess', 'Big Meadow']]);
+            big.click(); await settle();
+            same('a press on it chooses nothing: the box stays and the choice is as it was', [all(app, '.dlg.mp').length, mapWords(app, 'now')], [1, 'Random from the rotation9 maps for Highest score, 6 for 187']);
+            // a player's map name is text
+            const evil = rowOf(app, '<img src=x onerror=alert(1)>');
+            same('the name of a map of a player is text, marked as typed: no markup is made of it', [evil.querySelector('.mn').getAttribute('data-untrusted'), boxRows(app).filter((r) => r.className.indexOf('rand') < 0).every((r) => r.querySelector('.mn').getAttribute('data-untrusted') === 'typed-text')], ['typed-text', true]);
+            noMarkup('the list of maps with markup in the name of a map', app);
+            // the search
+            await searchBox(app, 'pop');
+            same('a search says how many maps match, the shorter name first, with the group of each, and the clear button shows', [texts(app, '.dlg.mp .mp-count'), boxRows(app).map(rowName), boxRows(app)[0].textContent, all(app, '.dlg.mp .mp-clear').map((b) => b.hidden)], [['2 maps match “pop”.'], ['POPcOrN', 'POPcOrN 3'], 'POPcOrN31 x 31 · 4 players · 14 minLibraryHighest score', [false]]);
+            await searchBox(app, 'zzz');
+            same('a search that finds nothing says so and shows no row', [texts(app, '.dlg.mp .mp-count'), boxRows(app).length], [['No map matches “zzz”. Check the spelling, or choose All.'], 0]);
+            all(app, '.dlg.mp .mp-clear')[0].click(); await settle();
+            same('the clear button empties the search and brings the groups back', [app.querySelector('.mp-q').value, boxRows(app).length > 3, all(app, '.dlg.mp .mp-clear').map((b) => b.hidden)], ['', true, [true]]);
+            await searchBox(app, '  TINY ');
+            same('a search is not case sensitive and ignores the blanks around it', boxRows(app).map(rowName), ['TINY']);
+            await searchBox(app, '');
+            // the chips
+            await boxChip(app, 'Over 30');
+            same('a chip narrows the list: the maps that play over 30 minutes', [texts(app, '.dlg.mp .mp-count'), boxRows(app).map(rowName), boxRows(app)[0].textContent], [['1 map play over 30 minutes.'], ['Ultimate Chess'], 'Ultimate Chess120 x 120 · 4 players · 60 minPlayers’ mapOver 30 min2 places']);
+            await boxChip(app, 'Rotation');
+            same('the Rotation chip holds the maps of the two lists', [boxRows(app).length, texts(app, '.dlg.mp .mp-count')], [10, ['10 maps are in the rotation lists now.']]);
+            await boxChip(app, 'Library');
+            same('the Library chip is the letters', [all(app, '.dlg.mp .mlet').length, boxRows(app).length, texts(app, '.dlg.mp .mp-count')], [6, 0, ['7 maps of the library, A to Z. Open a letter.']]);
+            await boxChip(app, 'Players');
+            same('the Players chip is their maps, those that cannot be played last', [boxRows(app).map(rowName), boxHeads(app)], [['Fight Island', '<img src=x onerror=alert(1)>', 'Ultimate Chess', 'Big Meadow'], ['Players’ maps (approved)4 maps']]);
+            await boxChip(app, 'All');
+            // keys, closing
+            const tabAt = (node, shift) => { node.focus(); return doc.key('Tab', { shiftKey: !!shift }); };
+            const items = () => all(app, '.dlg.mp').length ? app.querySelector('.dlg.mp').querySelectorAll('button, input, a').filter((n) => !n.disabled && !n.hidden) : [];
+            const last = items()[items().length - 1], first = items()[0];
+            same('the first control is the search and the last is Cancel', [first.id, last.textContent], ['mp-q', 'Cancel']);
+            const e1 = tabAt(last, false);
+            same('Tab from the last control goes to the first (the focus stays in the box)', [e1.prevented, doc.activeElement === first], [true, true]);
+            const e2 = tabAt(first, true);
+            same('Shift+Tab from the first control goes to the last', [e2.prevented, doc.activeElement === last], [true, true]);
+            const e3 = tabAt(rowOf(app, 'TINY'), false);
+            same('Tab between two controls inside the box is left to the browser', [e3.prevented, doc.activeElement === rowOf(app, 'TINY')], [false, true]);
+            doc.key('Escape'); await settle();
+            same('Escape closes the box, takes the page out of its inert state, gives the focus back to the Map button and leaves no key listener behind; nothing was chosen or sent', [all(app, '.dlg').length, all(app, '[inert]').length, doc.activeElement === mapButton(app, 'now'), (doc.listeners.keydown || []).length, mapButton(app, 'now').getAttribute('aria-expanded'), mapWords(app, 'now'), w.calls.filter((c) => c.method === 'POST').length], [0, 0, true, 0, 'false', 'Random from the rotation9 maps for Highest score, 6 for 187', 0]);
+            await openMapBox(app, 'now');
+            await press(app, 'Cancel');
+            same('Cancel closes it too', [all(app, '.dlg').length, (doc.listeners.keydown || []).length], [0, 0]);
+            await openMapBox(app, 'now');
+            await backdrop(app, 'scrim', 'scrim');
+            same('a press on the dimmed page closes it; a drag from inside the box to the dimmed page does not', [all(app, '.dlg').length], [0]);
+            await openMapBox(app, 'now');
+            await backdrop(app, 'dlg', 'scrim');
+            same('...a drag that began in the box leaves it open', all(app, '.dlg.mp').length, 1);
+            // choosing: a random pick, then a named map
+            rowOf(app, 'Random from the original maps').click(); await settle();
+            same('a random pick is chosen with one press: the box closes and the button and the hint say what it is', [all(app, '.dlg').length, mapWords(app, 'now'), texts(app, '.b-now .f .fh').filter((t) => /ISLANDS only/.test(t))], [0, 'Random from the original mapsTINY, SMALL, MEDIUM, GAUNTLET, TREASURE, ISLANDS', ['TINY, SMALL, MEDIUM, GAUNTLET, TREASURE and ISLANDS (ISLANDS only in Highest score).']]);
+            await chooseMap(app, 'now', 'killing', 'Killing Trez');
+            same('a named map is chosen with one press on its row: the button shows its name, size, seats and minutes, and the hint its time', [all(app, '.dlg').length, mapWords(app, 'now'), texts(app, '.b-now .f .fh').filter((t) => /plays up to/.test(t))], [0, 'Killing Trez48 x 48 · 4 players · 9 min', ['Killing Trez plays up to 9 minutes.']]);
+            await openMapBox(app, 'now');
+            same('the box opens again with that map marked as chosen', [rowOf(app, 'Random from the rotation').textContent.indexOf('Chosen') < 0, texts(app, '.dlg.mp .mp-count').length], [true, 1]);
+            await searchBox(app, 'killing');
+            same('...and the chosen map is marked in its row', [rowOf(app, 'Killing Trez').textContent, rowOf(app, 'Killing Trez').getAttribute('aria-pressed')], ['Killing Trez48 x 48 · 4 players · 9 minLibraryChosen', 'true']);
+            await press(app, 'Cancel');
+        }
+        {   // a search shows at most 40 rows and says how many more there are; a list that was not judged yet is asked again
+            const world2 = world();
+            for (let i = 1; i <= 55; i++) world2.bots.maps.push(catalogRow('Ant Hill ' + (i < 10 ? '0' : '') + i + '.lvl', 'library', 31, 31, 4, 10));
+            const { app, w } = await opened({ bots: world2.bots });
+            await openMapBox(app, 'now');
+            await searchBox(app, 'ant hill');
+            same('a search that finds 55 maps shows 40 rows and says to type more', [texts(app, '.dlg.mp .mp-count'), boxRows(app).length], [['55 maps match “ant hill”. Showing the first 40: type more of the name to narrow it down.'], 40]);
+            await searchBox(app, 'ant hill 5');
+            same('more of the name narrows it', [texts(app, '.dlg.mp .mp-count'), boxRows(app).length], [['6 maps match “ant hill 5”.'], 6]);
+            await press(app, 'Cancel');
+            // the server has judged only a few of the maps: the rest are listed as not checked, and the page asks again in a moment
+            const cold = world();
+            cold.bots.maps = cold.bots.maps.map((m, i) => (i >= 10 && m.group === 'library' ? Object.assign({}, m, { checked: false, playable: true }) : m));
+            cold.bots.checking = 3;
+            const c = await opened({ bots: cold.bots });
+            await openMapBox(c.app, 'now');
+            same('maps that the server has not judged yet say Checking, and the count says how many', [texts(c.app, '.dlg.mp .mp-count'), c.timers.length], [['17 maps on this server, 16 that a room can play. Search by name, or open a group. Checking 3 maps…'], 1]);
+            await press(c.app, 'Cancel');
+            cold.bots.maps.forEach((m) => { delete m.checked; });
+            cold.bots.checking = 0;
+            c.timers[0]();
+            await settle();
+            await openMapBox(c.app, 'now');
+            same('the page asked again, once, for the maps and the rotation (not for the matches), and the list is whole now', [c.w.calls.map((x) => x.url), texts(c.app, '.dlg.mp .mp-count'), c.timers.length], [['/admin/api/bot-options', '/admin/api/bot-rotation'], ['17 maps on this server, 16 that a room can play. Search by name, or open a group.'], 1]);
+            await press(c.app, 'Cancel');
         }
         {   // the choices change what is shown, and what Start sends is what was chosen
             const { w, app } = await opened();
@@ -1424,7 +1571,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             await settle();
             same('and at least one', [texts(app, '.b-now .stepv'), all(app, '.b-now .startrow .btn')[0].textContent], [['1'], 'Start 1 bot match']);
             plus.click(); plus.click(); await settle();
-            await pick(app, 'now-map', 'Fight Island.lvl');
+            await chooseMap(app, 'now', 'fight', 'Fight Island');
             same('a big map says how many places a match on it takes', texts(app, '.b-now .f .fh').filter((s) => /big map/.test(s)), ['Fight Island plays up to 20 minutes. It is a big map: each match on it counts as 3 places of the server.']);
             await chip(app, 'now-rules', '187');
             await chip(app, 'now-bots', '4');
@@ -1437,13 +1584,13 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             await press(app, 'Start 3 bot matches');
             const sent = posts(w);
             same('Start sends one call, with the page\'s token, JSON and what was chosen', [sent.length, sent[0].url, sent[0].headers['X-Ants-Csrf'], sent[0].headers['Content-Type'], sent[0].credentials], [1, '/admin/api/bot-matches', 'csrf-token-1', 'application/json', 'same-origin']);
-            same('...and the body is the batch in the server\'s words', sent[0].body, { count: 3, map: 'Fight Island.lvl', rules: '187', bots: '4', levels: ['hard', 'hard', 'medium', 'easy'], teams: 'split', split: '13-24' });
-            same('the answer is told, and the lists are asked again', [texts(app, '.b-now .msg.ok'), w.calls.filter((c) => c.method === 'GET').map((c) => c.url)], [['Started 3 bot matches. They show on the live list in a few seconds.'], ['/admin/api/bot-matches', '/admin/api/bot-options', '/admin/api/bot-schedules']]);
+            same('...and the body is the batch in the server\'s words', sent[0].body, { count: 3, every_s: 0, map: 'Fight Island.lvl', rules: '187', bots: '4', levels: ['hard', 'hard', 'medium', 'easy'], teams: 'split', split: '13-24' });
+            same('the answer is told, and the lists are asked again', [texts(app, '.b-now .msg.ok'), w.calls.filter((c) => c.method === 'GET').map((c) => c.url)], [['Started 3 bot matches. They show on the live list in a few seconds.'], ['/admin/api/bot-matches', '/admin/api/bot-schedules']]);
             same('the form keeps what was chosen after a start', [texts(app, '.b-now .stepv'), chipOn(app, 'now-rules'), chipOn(app, 'now-bots')], [['3'], ['187'], ['4']]);
             // the default batch
             const d = await opened();
             await press(d.app, 'Start 1 bot match');
-            same('with nothing changed the body is the rotation with every draw open', posts(d.w)[0].body, { count: 1, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' });
+            same('with nothing changed the body is the rotation with every draw open', posts(d.w)[0].body, { count: 1, every_s: 0, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' });
             // three bots: the splits of three, and fewer boxes
             const e = await opened();
             await chip(e.app, 'now-bots', '3');
@@ -1452,7 +1599,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             await chip(e.app, 'now-bots', '2');
             same('two bots: free for all only (the split is taken back to random)', [chipOn(e.app, 'now-teams'), chipsOf(e.app, 'now-teams').children[1].className, texts(e.app, '.b-now .fh').filter((s) => /Two bots/.test(s))], [['Random'], 'chip dis', ['Two bots can only play free for all.']]);
             // ISLANDS in 187
-            await pick(e.app, 'now-map', 'ISLANDS.LVL');
+            await chooseMap(e.app, 'now', 'islands', 'ISLANDS');
             await chip(e.app, 'now-rules', '187');
             same('ISLANDS in 187: the hint says so in red', [all(e.app, '.b-now .fh.bad').map((n) => n.textContent)], [['ISLANDS is not played in 187: its water joins no two hills, so nobody could be struck. Choose another map or the rules Highest score.']]);
         }
@@ -1503,12 +1650,12 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             same('Running: Watch opens the live match in a new tab, and is off while the live list does not have the match', [all(app, '.b-run .brow').map((r) => (r.querySelectorAll('a.btn')[0] || {}).tagName || 'off'), all(app, '.b-run a.btn').map((a) => a.getAttribute('href')), all(app, '.b-run a.btn').map((a) => a.getAttribute('target') + ' ' + a.getAttribute('rel')), all(app, '.b-run .brow')[3].querySelectorAll('button')[0].disabled],
                 [['a', 'a', 'a', 'off'], ['/play?live=MEDIUM-20261018-195400Z', '/play?live=TREASURE-20261018-195600Z', '/play?live=Fight%20Island-20261018-195600Z'], ['_blank noopener', '_blank noopener', '_blank noopener'], true]);
             same('Running: every name that came from the server is marked as typed text', [all(app, '.b-run .brow [data-untrusted]').map((n) => n.getAttribute('data-untrusted') + ':' + n.textContent)], [['typed-text:MEDIUM', 'typed-text:Hourly rotation', 'typed-text:TREASURE', 'typed-text:basil', 'typed-text:Fight Island', 'typed-text:basil', 'typed-text:TINY', 'typed-text:tess']]);
-            same('Running: the note says the limit and the numbers that the server gave', texts(app, '.b-run .note'), ['The limit is 8 bot matches at once, from the schedules and from Start now together. A start is also refused while people’s matches use most of the server: 14 of its 48 places now. A big map counts as more places.']);
+            same('Running: the note says the limit and the numbers that the server gave', texts(app, '.b-run .note'), ['The limit is 8 bot matches at once, from the schedules and from Start now together. A start is also refused while people’s matches use most of the server: 14 of its 48 places now. A big map counts as more places. A start that waits is not kept if the server restarts: a schedule is.']);
             // Stop (the fake server forgets the match, as the real one does)
             w.bots.matches = w.bots.matches.filter((m) => m.id !== 'm2');
             await press(app, 'Stop', 1);
             same('the badge follows the number of matches that go', [texts(app, '.atab .cnt'), texts(app, '.b-run .cap')], [['2', '3'], ['3 of 8 places taken']]);
-            same('Stop sends one call for that match (its own name, never the room\'s) and asks the lists again', [posts(w).map((c) => c.url), posts(w)[0].body, w.calls.filter((c) => c.method === 'GET').length], [['/admin/api/bot-matches/m2/stop'], {}, 3]);
+            same('Stop sends one call for that match (its own name, never the room\'s) and asks the lists again', [posts(w).map((c) => c.url), posts(w)[0].body, w.calls.filter((c) => c.method === 'GET').map((c) => c.url)], [['/admin/api/bot-matches/m2/stop'], {}, ['/admin/api/bot-matches', '/admin/api/bot-schedules']]);
             // Stop all asks first
             w.calls.length = 0;
             await press(app, 'Stop all 3');
@@ -1565,7 +1712,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             await settle();
             await pick(app, 'sc-lv3', 'easy');
             await press(app, 'Save');
-            same('Save sends the whole schedule for its own number', [posts(w).length, posts(w)[0].url, posts(w)[0].body], [1, '/admin/api/bot-schedules/2', { name: 'Evening swarm', on: true, when: { kind: 'times', times: ['07:05', '08:00', '09:00'] }, what: { count: 4, map: 'random:rotation', rules: 'highest-score', bots: '4', levels: ['hard', 'hard', 'medium', 'easy'], teams: 'random', split: '' } }]);
+            same('Save sends the whole schedule for its own number', [posts(w).length, posts(w)[0].url, posts(w)[0].body], [1, '/admin/api/bot-schedules/2', { name: 'Evening swarm', on: true, when: { kind: 'times', times: ['07:05', '08:00', '09:00'] }, what: { count: 4, every_s: 0, map: 'random:rotation', rules: 'highest-score', bots: '4', levels: ['hard', 'hard', 'medium', 'easy'], teams: 'random', split: '' } }]);
             same('and the form is closed, the list is drawn again', [all(app, '.sform').length, all(app, '.b-sched .brow').length], [0, 3]);
             // every N minutes, refused by the server's own words
             w.calls.length = 0;
@@ -1591,7 +1738,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             delete w.replies['POST /admin/api/bot-schedules'];
             await press(app, 'Save');
             same('the name is sent as it was typed (the server cleans it)', posts(w)[posts(w).length - 1].body.name, '<b>Loud</b>');
-            w.bots.schedules.push({ id: 9, name: '<b>Loud</b>', default: false, on: true, last: 0, next: at('2026-10-18T21:00:00Z'), when: { kind: 'every', minutes: 120 }, what: { count: 1, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' } });
+            w.bots.schedules.push({ id: 9, name: '<b>Loud</b>', default: false, on: true, last: 0, next: at('2026-10-18T21:00:00Z'), when: { kind: 'every', minutes: 120 }, what: { count: 1, every_s: 0, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' } });
             await press(app, 'Refresh');
             same('a name that is markup is text, marked as typed', [all(app, '.b-sched .brow .bn [data-untrusted]').map((n) => n.textContent).slice(-1), all(app, '.b-sched .brow .bn [data-untrusted]').every((n) => n.getAttribute('data-untrusted') === 'typed-text'), texts(app, '.b-sched .brow .bs').slice(-3)[2]], [['<b>Loud</b>'], true, 'Next start today, 14:00 · no start yet']);
             noMarkup('Bot matches with markup in the name of a schedule, of a map and of a match', app);
@@ -1611,10 +1758,10 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             same('the question\'s Delete sends the call for that schedule', posts(w).map((c) => c.url), ['/admin/api/bot-schedules/2/delete']);
         }
         {   // the findings of the review: levels of a schedule with fewer than four bots, a double click, why a batch stopped short, the minutes of a map, the operator's off switch, the default's question
-            const sched = (id, name, rest) => Object.assign({ id, name, default: false, on: true, last: 0, next: at('2026-10-18T21:00:00Z'), when: { kind: 'every', minutes: 60 }, what: { count: 1, map: 'random:rotation', rules: 'highest-score', bots: '2', levels: ['hard', 'easy'], teams: 'ffa', split: '' } }, rest);
+            const sched = (id, name, rest) => Object.assign({ id, name, default: false, on: true, last: 0, next: at('2026-10-18T21:00:00Z'), when: { kind: 'every', minutes: 60 }, what: { count: 1, every_s: 0, map: 'random:rotation', rules: 'highest-score', bots: '2', levels: ['hard', 'easy'], teams: 'ffa', split: '' } }, rest);
             for (const [label, bots, levels, wanted] of [['two bots', '2', ['hard', 'easy'], ['hard', 'easy', 'rmh', 'rmh']], ['three bots', '3', ['medium', 'hard', 'easy'], ['medium', 'hard', 'easy', 'rmh']], ['a list with a word that is none', '2', ['hard', 'loud'], ['hard', 'rmh', 'rmh', 'rmh']]]) {
                 const w = botWorld();
-                w.schedules = [sched(7, 'Short list', { what: { count: 1, map: 'random:rotation', rules: 'highest-score', bots, levels, teams: 'ffa', split: '' } })];
+                w.schedules = [sched(7, 'Short list', { what: { count: 1, every_s: 0, map: 'random:rotation', rules: 'highest-score', bots, levels, teams: 'ffa', split: '' } })];
                 const o = await opened({ bots: w });
                 await press(o.app, 'Edit');
                 await chip(o.app, 'sc-bots', '4');
@@ -1627,7 +1774,7 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             }
             {   // the same page, the server giving four levels for two bots (what it does now)
                 const w = botWorld();
-                w.schedules = [sched(7, 'Four levels', { what: { count: 1, map: 'random:rotation', rules: 'highest-score', bots: '2', levels: ['hard', 'easy', 'rmh', 'rmh'], teams: 'ffa', split: '' } })];
+                w.schedules = [sched(7, 'Four levels', { what: { count: 1, every_s: 0, map: 'random:rotation', rules: 'highest-score', bots: '2', levels: ['hard', 'easy', 'rmh', 'rmh'], teams: 'ffa', split: '' } })];
                 const o = await opened({ bots: w });
                 same('a schedule row for two bots says the levels of the two', texts(o.app, '.b-sched .brow .bs')[1], '1 match · a random map of the rotation · rules Highest score · 2 bots · levels Hard, Easy · free for all');
             }
@@ -1667,11 +1814,11 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
             }
             {   // the minutes of a map are shown before it is started; a random pick leaves out the long ones
                 const { app } = await opened();
-                await pick(app, 'now-map', 'Ultimate Chess.lvl');
-                same('a map chosen by name: its minutes, its places, and that a random pick never takes it', texts(app, '.b-now .f .fh').filter((t) => /Ultimate Chess/.test(t)), ['Ultimate Chess plays up to 60 minutes. It is a big map: each match on it counts as 2 places of the server. A random pick never takes it (over 30 minutes); only a choice that names it does.']);
-                await pick(app, 'now-map', 'TINY.LVL');
+                await chooseMap(app, 'now', 'ultimate', 'Ultimate Chess');
+                same('a map chosen by name: its minutes, its places, and that a random pick never takes it', texts(app, '.b-now .f .fh').filter((t) => /Ultimate Chess/.test(t)), ['Ultimate Chess plays up to 60 minutes. It is a big map: each match on it counts as 2 places of the server. A random pick never takes it (over 30 minutes); only a choice that names it, or a rotation list that you put it in, does.']);
+                await chooseMap(app, 'now', 'tiny', 'TINY');
                 same('a map of 6 minutes says so', texts(app, '.b-now .f .fh').filter((t) => /^TINY plays/.test(t)), ['TINY plays up to 6 minutes.']);
-                await pick(app, 'now-map', 'random:players');
+                await openMapBox(app, 'now'); rowOf(app, 'Random from the players’ maps').click(); await settle();
                 same('the players’ maps: how many, and how many of them a random pick may take', texts(app, '.b-now .f .fh').filter((t) => /players that you approved/.test(t)), ['The maps of the players that you approved: 3 now, 2 of them for a random pick (the others play over 30 minutes: name one to play it).']);
             }
             {   // the operator's off switch: the schedules are shown and kept, and the page says that none of them runs
@@ -1690,6 +1837,259 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
                 same('Delete of a default that runs every 90 minutes says 90, not an hour', texts(o.app, '.dlg .lead'), ['It starts nothing from now on. This is the schedule that the server began with (every 90 minutes): until you add another, nothing starts by itself. Matches that it started and that still run go on.']);
             }
         }
+        {   // one match every X minutes: the field, what Start sends, what the page says of the batch, the starts that wait and what stops them
+            const { w, app } = await opened();
+            const everyBox = (a) => all(a, 'input').filter((n) => n.id === 'now-every')[0];
+            const everyField = (a) => everyBox(a).parentNode.parentNode.parentNode;
+            same('with one match there is nothing to space: the field is not shown', [everyField(app).hidden, w.calls.length], [true, 0]);
+            const plus = all(app, '.b-now .step .btn')[1];
+            for (let i = 0; i < 4; i++) plus.click();
+            await settle();
+            same('with five matches the field is shown: "Start one every", at 0 minutes (all at once), with the presets and a hint', [everyField(app).hidden, texts(app, '.b-now label').filter((t) => /^Start one every/.test(t)), everyBox(app).value, texts(app, '.b-now .minrow .chip'), texts(app, '.b-now .minrow .unit'), texts(app, '.b-now .fh').filter((t) => /start at once/.test(t))],
+                [false, ['Start one every'], '0', ['All at once', '1 min', '2 min', '3 min', '5 min', '10 min', '30 min'], ['minutes'], ['All 5 start at once. Give a time to start the first now and the others one after another.']]);
+            await press(app, '3 min');
+            same('a preset puts its minutes in the box, and the hint says how it goes: the first now, then one every 3 minutes, the last in 12', [everyBox(app).value, texts(app, '.b-now .fh').filter((t) => /^The first starts now/.test(t))], ['3', ['The first starts now, then one every 3 minutes: the last in 12 minutes. A start that waits is lost if the server restarts; a schedule is kept.']]);
+            everyBox(app).value = '1,5'; everyBox(app).fire('input', {});
+            await settle();
+            same('half minutes are allowed, with a comma or a point', texts(app, '.b-now .fh').filter((t) => /^The first starts now/.test(t)), ['The first starts now, then one every 1.5 minutes: the last in 6 minutes. A start that waits is lost if the server restarts; a schedule is kept.']);
+            for (const bad of ['0.25', '121', 'abc', '-1', '1e1', '']) {
+                everyBox(app).value = bad; everyBox(app).fire('input', {});
+                await settle();
+                same('a spacing that is not whole or half minutes from 0 to 120 is told in red, and the box is marked: ' + JSON.stringify(bad), [texts(app, '.b-now .fh.bad'), everyBox(app).className], [['Whole or half minutes, from 0 to 120.'], 'tinput err']);
+            }
+            everyBox(app).value = '3'; everyBox(app).fire('input', {});
+            await settle();
+            w.replies['POST /admin/api/bot-matches'] = { status: 200, json: { started: 1, asked: 5, queued: 4, every_s: 180 } };
+            await press(app, 'Start 5 bot matches');
+            same('Start sends the spacing in seconds with the batch', posts(w)[0].body, { count: 5, every_s: 180, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' });
+            same('the page says what started now, how many wait and how they come, and that a waiting start does not survive a restart', texts(app, '.b-now .msg.ok'), ['Started 1 bot match now. 4 more wait: one every 3 minutes, the last in 12 minutes. A start that waits is lost if the server restarts. They show on the live list in a few seconds.']);
+            for (const [every, queued, words] of [[30, 4, 'one every 0.5 minutes, the last in 2 minutes'], [90, 2, 'one every 1.5 minutes, the last in 3 minutes'], [60, 1, 'one every 1 minute, the last in 1 minute'], [7200, 4, 'one every 120 minutes, the last in 480 minutes']]) {
+                w.replies['POST /admin/api/bot-matches'] = { status: 200, json: { started: 1, asked: queued + 1, queued, every_s: every } };
+                await press(app, 'Start 5 bot matches');
+                same('the words of a spacing of ' + every + ' seconds', texts(app, '.b-now .msg.ok')[0].replace(/^Started 1 bot match now\. \d more waits?: /, '').replace(/\. A start that waits.*$/, ''), words);
+            }
+            w.replies['POST /admin/api/bot-matches'] = { status: 200, json: { started: 1, asked: 5, queued: 2, every_s: 180, stopped_for: 'queue' } };
+            await press(app, 'Start 5 bot matches');
+            same('a batch whose waiting starts did not all fit says so', texts(app, '.b-now .msg.ok'), ['Started 1 bot match now. 2 more wait: one every 3 minutes, the last in 6 minutes. The server holds only so many starts that wait for their time, so the rest were not started. A start that waits is lost if the server restarts. They show on the live list in a few seconds.']);
+            for (const [why, reply, words] of [
+                ['too many waiting starts', { status: 409, json: { error: 'queue_full', waiting: 30, asked: 4, max: 32 } }, 'Not started: 4 more starts would wait with the 30 that wait already, and the server holds 32 at the most. Stop some first, or choose fewer matches.'],
+                ['a spacing that the server refuses', { status: 400, json: { error: 'bad_spacing' } }, 'Not started: start one every 0 to 120 minutes, in whole or half minutes.']]) {
+                w.replies['POST /admin/api/bot-matches'] = reply;
+                await press(app, 'Start 5 bot matches');
+                same('Start refused, ' + why + ': the words', texts(app, '.b-now .msg.bad'), [words]);
+            }
+            delete w.replies['POST /admin/api/bot-matches'];
+            // a spacing of 0 (all at once) with five matches is sent as 0; one match sends 0 whatever the box held
+            everyBox(app).value = '0'; everyBox(app).fire('input', {});
+            await settle();
+            w.calls.length = 0;
+            await press(app, 'Start 5 bot matches');
+            same('a spacing of 0 is the batch as it always was', posts(w)[0].body.every_s, 0);
+            for (let i = 0; i < 4; i++) all(app, '.b-now .step .btn')[0].click();
+            await settle();
+            everyBox(app).value = '3'; everyBox(app).fire('input', {});
+            w.calls.length = 0;
+            await press(app, 'Start 1 bot match');
+            same('one match sends no spacing, whatever the box held', posts(w)[0].body.every_s, 0);
+            // the schedule form has no such field: a schedule starts its matches at once, and keeps a spacing that it has
+            await press(app, 'Add a schedule');
+            same('the form of a schedule has no spacing field', [all(app, 'input').filter((n) => n.id === 'sc-every').length], [0]);
+            await press(app, 'Cancel');
+        }
+        {   // the starts that wait are listed in Running, each with its time, each can be stopped, and Stop all ends them with the matches
+            const wb = botWorld();
+            wb.waiting = [
+                { id: 'w5', name: 'the rotation', what: { count: 1, every_s: 0, map: 'random:rotation', rules: 'random', bots: 'random', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'random', split: '' }, n: 2, of: 5, at: at('2026-10-18T20:06:00Z'), held: false, by: 'basil' },
+                { id: 'w6', name: 'TREASURE', what: { count: 1, every_s: 0, map: 'TREASURE.LVL', rules: '187', bots: '4', levels: ['hard', 'hard', 'hard', 'hard'], teams: 'ffa', split: '' }, n: 3, of: 5, at: at('2026-10-18T20:09:00Z'), held: true, by: 'basil' },
+                { id: 'w7', name: '<b>Loud</b>', what: { count: 1, every_s: 0, map: '<b>Loud</b>.lvl', rules: 'highest-score', bots: '2', levels: ['rmh', 'rmh', 'rmh', 'rmh'], teams: 'ffa', split: '' }, n: 4, of: 5, at: at('2026-10-18T20:00:20Z'), held: false, schedule: 'Evening swarm' }
+            ];
+            const { w, app } = await opened({ bots: wb });
+            same('Running lists the starts that wait, under the matches, with how many and the time of each (the oldest first)', [texts(app, '.b-run .mgh'), all(app, '.b-run .bwait .brow').length, all(app, '.b-run .bwait .bn').map((n) => n.textContent), all(app, '.b-run .bwait .bs').map((n) => n.textContent)],
+                [['Waiting for their time3 starts'], 3, ['A map of the rotation2 of 5', 'TREASURE3 of 5187Waiting for a place', '<b>Loud</b>4 of 5Highest score'],
+                    ['starts in 6 min · Start now by basil', 'its time has come: it waits for a free place · Start now by basil', 'starts in under a minute · schedule Evening swarm']]);
+            same('the places and the badge count the matches that go, not the starts that wait; Stop all counts both', [texts(app, '.b-run .cap'), texts(app, '.atab .cnt'), button(app, 'Stop all 7').length], [['4 of 8 places taken'], ['2', '4'], 1]);
+            same('every name of a waiting start that came from the server is marked as typed text, and no markup is made of it', [all(app, '.b-run .bwait [data-untrusted]').map((n) => n.textContent)], [['basil', 'TREASURE', 'basil', '<b>Loud</b>', 'Evening swarm']]);
+            noMarkup('Running with a waiting start whose name is markup', app);
+            same('the note says that a waiting start does not survive a restart', texts(app, '.b-run .note').filter((t) => /not kept if the server restarts/.test(t)).length, 1);
+            w.bots.waiting = w.bots.waiting.filter((x) => x.id !== 'w6');
+            await press(app, 'Stop', 5);
+            same('Stop of a waiting start sends one call for its own name, and the lists are asked again', [posts(w).map((c) => c.url), all(app, '.b-run .bwait .brow').length], [['/admin/api/bot-matches/w6/stop'], 2]);
+            w.calls.length = 0;
+            await press(app, 'Stop all 6');
+            same('Stop all asks first and names both: the matches and the starts that wait', [texts(app, '.dlg h2'), posts(w).length, texts(app, '.dlg .lead')], [['Stop all 4 bot matches and 2 waiting starts?'], 0, ['Every bot match on the server ends now, the ones that you started and the ones that a schedule started. A match that has run for 30 seconds is kept as a replay up to where it stopped. Every start that waits for its time is cancelled, so the batch ends. The schedules go on.']]);
+            await press(app, 'Cancel');
+            const only = botWorld();
+            only.matches = [];
+            only.waiting = wb.waiting.slice(0, 2);
+            const o = await opened({ bots: only });
+            same('with starts that wait and no match that goes: the line for the matches, the starts, and a Stop all for them', [texts(o.app, '.b-run .none'), all(o.app, '.b-run .bwait .brow').length, button(o.app, 'Stop all 2').length], [['No bot match is running.'], 2, 1]);
+            await press(o.app, 'Stop all 2');
+            same('...and its question speaks of the starts alone', [texts(o.app, '.dlg h2'), texts(o.app, '.dlg .lead')], [['Stop all 2 waiting starts?'], ['Every start that waits for its time is cancelled, so the batch ends. The schedules go on.']]);
+            guard.step = 1000;
+            await press(o.app, 'Stop all 2', 1);
+            same('Stop all sends one call and says how many matches it stopped and starts it cancelled', [posts(o.w).map((c) => c.url), texts(o.app, '.b-now .msg.ok')], [['/admin/api/bot-matches/stop-all'], ['Stopped 0 bot matches and cancelled 2 waiting starts.']]);
+            // while starts wait, the Running list is asked again by itself (a timer of the page), once, and it stops when none waits
+            const timed = await opened({ bots: Object.assign(botWorld(), { waiting: wb.waiting.slice(0, 1) }) });
+            same('a timer was set to ask the list again', timed.timers.length, 1);
+            timed.w.bots.waiting = [];
+            timed.timers[0]();
+            await settle();
+            same('it asked for the matches and the schedules and the starts are gone from the list; no new timer was set', [timed.w.calls.map((c) => c.url), all(timed.app, '.b-run .bwait').length, timed.timers.length], [['/admin/api/bot-matches', '/admin/api/bot-schedules'], 0, 1]);
+        }
+        {   // the Rotation: the two lists, adding a map in the box, removing, Save and Discard, the questions, the refusals
+            const { w, app } = await opened();
+            const rotOf = (a, k) => all(a, '.b-rot .rcol')[k];
+            const rotNames = (a, k) => rotOf(a, k).querySelectorAll('.rrow .rnm').map((n) => n.firstChild.textContent);
+            same('the Rotation has the two lists as the server has them: each with its name, "Defaults", how many maps, and a row for each map with its size, seats and minutes', [texts(app, '.b-rot .rhead'), rotNames(app, 0), rotNames(app, 1), texts(app, '.b-rot .rsub'), rotOf(app, 1).querySelectorAll('.rrow')[5].textContent],
+                [['Highest scoreDefaults9 maps', '187Defaults6 maps'], ['TINY', 'SMALL', 'MEDIUM', 'GAUNTLET', 'TREASURE', 'ISLANDS', 'POPcOrN', 'HELLRAISER', 'Bombz Away'], ['TINY', 'SMALL', 'MEDIUM', 'GAUNTLET', 'TREASURE', 'Fight Island'], ['Draws from all 9 maps.', 'Draws from all 6 maps.'], 'Fight Island3 places150 x 150 · 4 players · 20 minRemove']);
+            same('Add a map is a button of each list; Back to the defaults is off and says so while a list is the defaults; nothing is unsaved', [all(app, '.b-rot .rfoot').map((f) => f.querySelectorAll('button').map((b) => b.textContent).join('/')), all(app, '.b-rot .rfoot .btn.ghost').map((b) => b.disabled), all(app, '.b-rot .rsave').length], [['Add a map/These are the defaults', 'Add a map/These are the defaults'], [true, true], 0]);
+            same('the note says what the lists are for, the most a list holds and that the Log has every change', texts(app, '.b-rot .note'), ['The lists are not used by “Random from the original maps” or “Random from the players’ maps”. A list may hold up to 100 maps. The server keeps the lists, and every change is in the Log.']);
+            // add: the box is the list of maps, with "In the list" on the maps that the list has
+            await press(app, 'Add a map', 0);
+            same('Add a map opens the box of maps for that list: its own title, no random picks, no Cancel but one Done', [texts(app, '.dlg.mp h2'), boxHeads(app).filter((t) => /Random/.test(t)).length, texts(app, '.dlg.mp .dlg-foot .btn')], [['Add a map to Highest score'], 0, ['Done']]);
+            same('a map that the list has says "In the list" and cannot be chosen', [rowOf(app, 'TINY').textContent.indexOf('In the list') >= 0, rowOf(app, 'TINY').getAttribute('aria-disabled')], [true, 'true']);
+            await searchBox(app, 'popcorn 3');
+            rowOf(app, 'POPcOrN 3').click(); await settle();
+            same('a map is added with one press; the box stays open, says what was added and shows the map as in the list; nothing is sent', [all(app, '.dlg.mp').length, texts(app, '.dlg.mp .mp-added'), rowOf(app, 'POPcOrN 3').textContent.indexOf('In the list') >= 0, posts(w).length], [1, ['Added POPcOrN 3.'], true, 0]);
+            await searchBox(app, 'killing');
+            rowOf(app, 'Killing Trez').click(); await settle();
+            same('several maps can be added in one visit', [texts(app, '.dlg.mp .mp-added'), rotNames(app, 0).slice(9)], [['Added Killing Trez.'], ['POPcOrN 3', 'Killing Trez']]);
+            await press(app, 'Done');
+            same('Done closes the box, and the focus goes back to the list', [all(app, '.dlg').length, all(app, '[inert]').length], [0, 0]);
+            same('the list shows the two maps as Added, the heading says Edited with 11 maps, and a bar says what is not saved yet, with Discard and Save', [all(app, '.b-rot .rrow.new').length, texts(app, '.b-rot .rhead')[0], texts(app, '.b-rot .rsave .rsw'), texts(app, '.b-rot .rsave .btn'), rotOf(app, 0).querySelectorAll('.rrow')[9].textContent],
+                [2, 'Highest scoreEdited11 maps', ['Not saved yet. Highest score: 2 maps added.'], ['Discard these changes', 'Save the rotation'], 'POPcOrN 3Added31 x 31 · 4 players · 15 minRemove']);
+            same('nothing was sent, and the other list is as it was', [posts(w).length, rotNames(app, 1).length], [0, 6]);
+            // remove
+            await press(app, 'Remove', 2);
+            same('Remove takes a map out of the draft at once (nothing is sent) and the bar counts it', [rotNames(app, 0).indexOf('MEDIUM'), texts(app, '.b-rot .rsave .rsw'), posts(w).length], [-1, ['Not saved yet. Highest score: 2 maps added, 1 map removed.'], 0]);
+            same('Remove has a name for a screen reader: the map and the list', all(app, '.b-rot .rrow .btn')[0].getAttribute('aria-label'), 'Remove TINY from Highest score');
+            // discard
+            await press(app, 'Discard these changes');
+            same('Discard puts the lists back as the server has them and takes the bar away', [rotNames(app, 0).length, all(app, '.b-rot .rsave').length, all(app, '.b-rot .rrow.new').length], [9, 0, 0]);
+            // add and save
+            await press(app, 'Add a map', 0);
+            await searchBox(app, 'popcorn 3');
+            rowOf(app, 'POPcOrN 3').click(); await settle();
+            await press(app, 'Done');
+            await press(app, 'Remove', 0);
+            w.calls.length = 0;
+            await press(app, 'Save the rotation');
+            same('Save sends the whole list, the file names in the order of the draws, to its own route with the page\'s token; then asks for the lists again', [posts(w).map((c) => c.url), posts(w)[0].body, posts(w)[0].headers['X-Ants-Csrf'], w.calls.filter((c) => c.method === 'GET').map((c) => c.url)],
+                [['/admin/api/bot-rotation'], { rules: 'highest-score', maps: ['SMALL.LVL', 'MEDIUM.LVL', 'GAUNTLET.LVL', 'TREASURE.LVL', 'ISLANDS.LVL', 'POPcOrN.lvl', 'HELLRAISER.lvl', 'Bombz Away.lvl', 'POPcOrN 3.lvl'] }, 'csrf-token-1', ['/admin/api/bot-rotation']]);
+            same('the page says that it is saved, the bar is gone and the list is what the server keeps (it is not marked Added any more)', [texts(app, '.b-rot .msg.ok'), all(app, '.b-rot .rsave').length, all(app, '.b-rot .rrow.new').length, rotNames(app, 0).length, texts(app, '.b-rot .rhead')[0]], [['Saved. The next match that draws from the rotation uses these lists.'], 0, 0, 9, 'Highest scoreEdited9 maps']);
+            same('Start now says it too: the hint of the rotation counts what the lists hold now', texts(app, '.b-now .f .fh').filter((t) => /^The rotation/.test(t)), ['The rotation: 9 maps for Highest score, 6 for 187. You can change the lists under “Rotation”, lower on this page.']);
+            // back to the defaults: a question, saved at once
+            same('an edited list offers Back to the defaults', [all(app, '.b-rot .rfoot .btn.ghost').map((b) => b.textContent), all(app, '.b-rot .rfoot .btn.ghost').map((b) => b.disabled)], [['Back to the defaults', 'These are the defaults'], [false, true]]);
+            w.calls.length = 0;
+            await press(app, 'Back to the defaults');
+            same('the question says what the list goes back to, what leaves, what comes back, that it is saved at once and what is not touched; nothing is sent yet', [texts(app, '.dlg h2'), texts(app, '.dlg .lead p'), posts(w).length, texts(app, '.dlg .dlg-foot .btn')], [['Put Highest score back to its defaults?'], [
+                'Highest score goes back to the 9 maps that the server came with.', 'TINY, SMALL, MEDIUM, GAUNTLET, TREASURE, ISLANDS, POPcOrN, HELLRAISER, Bombz Away', 'These leave the list (you added them): POPcOrN 3.', 'These come back (you took them out): TINY.',
+                'It is saved at once. The other list, the schedules and the matches that go are not touched.'], 0, ['Cancel', 'Back to the defaults']]);
+            await press(app, 'Cancel');
+            same('Cancel changes nothing', [posts(w).length, rotNames(app, 0).length], [0, 9]);
+            await press(app, 'Back to the defaults');
+            guard.step = 1000;
+            await press(app, 'Back to the defaults', 1);
+            same('Back to the defaults sends the reset of that list alone, and the page says so', [posts(w).map((c) => [c.url, c.body]), texts(app, '.b-rot .msg.ok'), rotNames(app, 0).length, texts(app, '.b-rot .rhead')[0], all(app, '.b-rot .rfoot .btn.ghost').map((b) => b.disabled)],
+                [[['/admin/api/bot-rotation/reset', { rules: 'highest-score' }]], ['Highest score is back to its 9 default maps.'], 9, 'Highest scoreDefaults9 maps', [true, true]]);
+            // a list may not be saved empty
+            for (let i = 0; i < 6; i++) await press(app, 'Remove', 9);
+            same('a list that is emptied says so in red, cannot be saved, and the bar still says what is unsaved', [texts(app, '.b-rot .rcol')[1].indexOf('Add at least one map: a list with no map would never be drawn, so it cannot be saved.') >= 0, all(app, '.b-rot .rsave .btn.ok')[0].disabled, texts(app, '.b-rot .rsave .rsw'), rotOf(app, 1).querySelectorAll('.rrow').length],
+                [true, true, ['Not saved yet. 187: 6 maps removed.'], 0]);
+            w.calls.length = 0;
+            await press(app, 'Save the rotation');
+            same('...and a press on the disabled Save sends nothing', posts(w).length, 0);
+            await press(app, 'Discard these changes');
+            // ISLANDS in 187: asked once, then added; a long map: asked once, with its minutes
+            await press(app, 'Add a map', 1);
+            await searchBox(app, 'islands');
+            same('ISLANDS can be chosen for the 187 list (not refused): a question comes first', [rowOf(app, 'ISLANDS').getAttribute('aria-disabled'), rowOf(app, 'ISLANDS').textContent.indexOf('Highest score') >= 0], [null, true]);
+            rowOf(app, 'ISLANDS').click(); await settle();
+            same('the question says that nobody can be struck there, and offers Not now and Add anyway; nothing was added', [texts(app, '.dlg.mp .mwt'), texts(app, '.dlg.mp .mwp'), texts(app, '.dlg.mp .mwb .btn'), all(app, '.dlg.mp .mwarn').map((n) => n.getAttribute('role')), texts(app, '.dlg.mp .mp-added')],
+                [['ISLANDS is not played in 187.'], ['Its water joins no two hills, so nobody could be struck there: a 187 match on it would run to its time limit with no kills. The list draws it as often as any other map of the list. Put it in the 187 list anyway?'], ['Not now', 'Add anyway'], ['alert'], ['']]);
+            await press(app, 'Not now');
+            same('Not now takes the question away and adds nothing', [all(app, '.dlg.mp .mwarn').length, texts(app, '.dlg.mp .mp-added')], [0, ['']]);
+            rowOf(app, 'ISLANDS').click(); await settle();
+            await press(app, 'Add anyway');
+            same('Add anyway adds it to the 187 list', [texts(app, '.dlg.mp .mp-added'), rowOf(app, 'ISLANDS').textContent.indexOf('In the list') >= 0], [['Added ISLANDS.'], true]);
+            await searchBox(app, 'ultimate');
+            rowOf(app, 'Ultimate Chess').click(); await settle();
+            same('a map over 30 minutes is asked about once, with its minutes and what it costs', [texts(app, '.dlg.mp .mwt'), texts(app, '.dlg.mp .mwp')], [['Ultimate Chess plays up to 60 minutes.'], ['A match on it can run that long and holds one of the 8 places for bot matches all that time. The list draws it as often as any other map of the list. Put it in the list anyway?']]);
+            await press(app, 'Add anyway');
+            await press(app, 'Done');
+            same('both are in the draft of the 187 list, the long map with its tag', [rotNames(app, 1).slice(6), rotOf(app, 1).querySelectorAll('.rrow')[7].textContent], [['ISLANDS', 'Ultimate Chess'], 'Ultimate ChessAddedOver 30 min2 places120 x 120 · 4 players · 60 minRemove']);
+            // the same map in a list of Highest score is not asked about (a list that already has it cannot be added twice, and ISLANDS is fine there)
+            w.calls.length = 0;
+            await press(app, 'Save the rotation');
+            same('Save sends the list of 187 alone (the other was not changed)', [posts(w).map((c) => [c.url, c.body.rules, c.body.maps.length])], [[['/admin/api/bot-rotation', '187', 8]]]);
+            same('...and what the server keeps shows: the long map is in the list with its tag and no other mark', [rotNames(app, 1), all(app, '.b-rot .rrow.skip').length], [['TINY', 'SMALL', 'MEDIUM', 'GAUNTLET', 'TREASURE', 'Fight Island', 'ISLANDS', 'Ultimate Chess'], 0]);
+        }
+        {   // the refusals of a save, in plain words; a map that the server lost, shown as skipped
+            const refusals = [
+                ['a list with no map', { status: 400, json: { error: 'empty' } }, 'Highest score would have no map. A list needs at least one: add another before you save.'],
+                ['more than a hundred maps', { status: 400, json: { error: 'too_many', max: 100 } }, 'A list holds 100 maps at the most.'],
+                ['a map that the server does not have', { status: 400, json: { error: 'bad_map' } }, 'One of the maps is not on the server any more. Remove it from the list and save again.'],
+                ['a map that cannot be played', { status: 409, json: { error: 'no_map', file: 'Big Meadow.lvl', why: 'it starts too many ants for a room' } }, 'Not saved: Big Meadow cannot be played now (it starts too many ants for a room). Remove it from the list, or choose another map.'],
+                ['a database that refuses', { status: 503, json: { error: 'db' } }, 'The server’s database did not take the list. Try again.'],
+                ['an old token', { status: 403, json: { error: 'csrf' } }, 'The page’s token is old. Reload the page.'],
+                ['too many requests', { status: 429, json: {} }, 'Too many requests. Wait a few seconds and try again.'],
+                ['an answer that is no JSON', { status: 500, json: {} }, 'That did not work. Reload the page.']
+            ];
+            for (const [why, reply, words] of refusals) {
+                const { w, app } = await opened();
+                await press(app, 'Remove', 0);
+                w.replies['POST /admin/api/bot-rotation'] = reply;
+                await press(app, 'Save the rotation');
+                same('Save refused, ' + why + ': the words, in a line that is an alert, and what was changed stays', [texts(app, '.b-rot .msg.bad'), all(app, '.b-rot .msg.bad')[0].getAttribute('role'), all(app, '.b-rot .rsave').length, all(app, '.b-rot .rcol')[0].querySelectorAll('.rrow').length], [[words], 'alert', 1, 8]);
+            }
+            const n = await opened();
+            await press(n.app, 'Remove', 0);
+            n.w.replies['POST /admin/api/bot-rotation'] = () => { throw new Error('no answer'); };
+            await press(n.app, 'Save the rotation');
+            same('Save with no answer from the server: the line says so, and the draft stays', [texts(n.app, '.b-rot .msg.bad'), all(n.app, '.b-rot .rsave .btn.ok')[0].disabled], [['The server did not answer. Try again.'], false]);
+            const l = await opened();
+            await press(l.app, 'Remove', 0);
+            l.w.replies['POST /admin/api/bot-rotation'] = { status: 401, json: { error: 'not_signed_in' } };
+            await press(l.app, 'Save the rotation');
+            same('a login that ended: the card for nobody logged in, not a line in the list', [shown(l.app), all(l.app, '.b-rot').length], ['login', 0]);
+            // a double click on Save sends one call
+            const d = await opened();
+            await press(d.app, 'Remove', 0);
+            const save = button(d.app, 'Save the rotation')[0];
+            save.click(); save.click();
+            await settle();
+            same('a double click on Save sends one call', posts(d.w).length, 1);
+            // a map of a list that the server lost, and one it cannot play now, are shown as skipped, with their reason
+            const wb = botWorld();
+            wb.rotation_lists = { 'highest-score': ROTATION_DEFAULTS['highest-score'].concat(['Mossy Ridge.lvl']), '187': ROTATION_DEFAULTS['187'] };
+            wb.maps = wb.maps.filter((m) => m.file !== 'Fight Island.lvl');
+            wb.maps.push(Object.assign({}, catalogRow('Big Meadow 2.lvl', 'players', 200, 160, 4, 15), { playable: false, reason: 'it has no place for four seats' }));
+            wb.rotation_lists['highest-score'].push('Big Meadow 2.lvl');
+            const s = await opened({ bots: wb });
+            same('a map of a list that the server does not have any more is dashed and says so, with a Remove; a map that a room cannot play says why; the line counts what can be drawn', [all(s.app, '.b-rot .rrow.skip').length, texts(s.app, '.b-rot .rrow.skip .tg'), texts(s.app, '.b-rot .rrow.skip .mr'), texts(s.app, '.b-rot .rsub')],
+                [3, ['Skipped now', 'Skipped now', 'Skipped now'], ['It is not on this server now, so it is skipped. Remove it here.', 'Skipped: it has no place for four seats.', 'It is not on this server now, so it is skipped. Remove it here.'], ['Draws from 9 of 11 maps now. The others are skipped, and are drawn again if they come back.', 'Draws from 5 of 6 maps now. The others are skipped, and are drawn again if they come back.']]);
+            same('Start now counts only what can be drawn', texts(s.app, '.b-now .f .fh').filter((t) => /^The rotation/.test(t)), ['The rotation: 9 maps for Highest score, 5 for 187. You can change the lists under “Rotation”, lower on this page.']);
+            // the same: a taken-down map of the players is worded as that
+            const td = botWorld();
+            td.rotation_lists = { 'highest-score': ROTATION_DEFAULTS['highest-score'], '187': ROTATION_DEFAULTS['187'] };
+            td.maps = td.maps.filter((m) => m.file !== 'Fight Island.lvl');
+            const t2 = await opened({ bots: td });
+            same('a map that is not on the server shows its name and the words for a map that is gone', [texts(t2.app, '.b-rot .rrow.skip .rnm'), texts(t2.app, '.b-rot .rrow.skip .mr')], [['Fight IslandSkipped now'], ['It is not on this server now, so it is skipped. Remove it here.']]);
+            // a Rotation that cannot be had
+            const none = await opened({ replies: { 'GET /admin/api/bot-rotation': { status: 500, json: {} } } });
+            same('a rotation that cannot be had is said, and Start now and the maps are there', [texts(none.app, '.b-rot .msg'), all(none.app, '.b-now').length, mapWords(none.app, 'now')], [['The rotation could not be loaded.'], 1, 'Random from the rotation0 maps for Highest score, 0 for 187']);
+        }
+        {   // a schedule that names a map that the server does not have: a tag, a line, and its runs are skipped
+            const wb = botWorld();
+            wb.maps = wb.maps.filter((m) => m.file !== 'ISLANDS.LVL');
+            const { app } = await opened({ bots: wb });
+            same('Schedules: a schedule whose map is gone has a tag and a red line, and its row names the map and says that it is not on the server', [texts(app, '.b-sched .brow')[2].indexOf('Map not on the server') >= 0, texts(app, '.b-sched .brow .mr'), texts(app, '.b-sched .brow .bs').filter((t) => /ISLANDS/.test(t))],
+                [true, ['The map is not on the server now, so each run is skipped until you choose another map.'], ['2 matches · ISLANDS (not on the server now) · rules Highest score · 2 to 4 bots · levels all Easy · free for all']]);
+            await press(app, 'Edit', 2);
+            same('Edit shows the gone map on the Map button, in red, and the hint says what to do', [mapWords(app, 'sc'), texts(app, '.sform .fh.bad')], [['ISLANDSNot on the server now'].join(''), ['This map is not on the server now, so a match cannot be started on it. Choose another.']]);
+            await chooseMap(app, 'sc', 'tiny', 'TINY');
+            same('another map can be chosen in the schedule form, with the same box', [mapWords(app, 'sc'), texts(app, '.sform .fh.bad')], ['TINY31 x 31 · 4 players · 6 min', []]);
+        }
         {   // a server with no way to run them, and an answer that is no list
             const { app } = await opened({ botsOff: true });
             same('a server with no routes: one line instead of the panels', [texts(app, '.msg'), all(app, '.b-now').length, all(app, '.b-run').length], [['Bot matches are not available on this server.'], 0, 0]);
@@ -1706,27 +2106,32 @@ process.on('unhandledRejection', (e) => { console.log('FAIL an error was thrown 
                 { at: at('2026-10-18T18:00:00Z'), who: 'basil', ref: '22b2222222222222', action: 'bot_schedule_off', target: 'ISLANDS practice', detail: '' },
                 { at: at('2026-10-17T22:00:00Z'), who: 'tess', ref: '44d4444444444444', action: 'bot_stopped_all', target: '5 matches', detail: '' },
                 { at: at('2026-10-17T21:00:00Z'), who: 'tess', ref: '44d4444444444444', action: 'bot_something_new', target: 'x', detail: '' },
+                { at: at('2026-10-17T20:30:00Z'), who: 'basil', ref: '22b2222222222222', action: 'bot_rotation_changed', target: 'Highest score', detail: '+2 -1, 10 maps' },
+                { at: at('2026-10-17T20:20:00Z'), who: 'tess', ref: '44d4444444444444', action: 'bot_rotation_reset', target: '187', detail: '6 maps' },
+                { at: at('2026-10-17T20:10:00Z'), who: 'tess', ref: '44d4444444444444', action: 'bot_waiting_stopped', target: 'TREASURE', detail: '' },
                 { at: at('2026-10-17T20:00:00Z'), who: 'basil', ref: '22b2222222222222', action: 'map_approved', target: 'Mossy Ridge', detail: '' }
             ];
             const w = world({ audit: rows });
             const { app } = await open(w);
             await section(app, 'Log');
-            same('Log: the fourth filter, and the counts: the maps are not counted twice', [texts(app, '.lhead .chip'), texts(app, '.alead')], [['All (13)', 'Chat actions (6)', 'Map decisions (1)', 'Bot matches (6)'], ['Chat actions (the last 30 days), map decisions and bot matches, newest first.']]);
-            await press(app, 'Bot matches (6)');
-            same('Bot matches: only those rows, with no tag, and the words of each action', [all(app, '.arow2').length, all(app, '.arow2 .src').length, all(app, '.arow2 .wt').map((n) => n.textContent), texts(app, '.alead')], [6, 0, [
+            same('Log: the fourth filter, and the counts: the maps are not counted twice', [texts(app, '.lhead .chip'), texts(app, '.alead')], [['All (16)', 'Chat actions (6)', 'Map decisions (1)', 'Bot matches (9)'], ['Chat actions (the last 30 days), map decisions and bot matches, newest first.']]);
+            await press(app, 'Bot matches (9)');
+            same('Bot matches: only those rows, with no tag, and the words of each action (the rotation lists and the starts that were cancelled too)', [all(app, '.arow2').length, all(app, '.arow2 .src').length, all(app, '.arow2 .wt').map((n) => n.textContent), texts(app, '.alead')], [9, 0, [
                 'Started bot matches: 2 matches 2 matches, TREASURE.LVL, rules 187, 4 bots', 'Stopped the bot match on GAUNTLET', 'Added the schedule <script>x</script> every 60 minutes, 4 matches', 'Turned off the schedule ISLANDS practice',
-                'Stopped all bot matches: 5 matches', 'x bot_something_new'], ['What was started and stopped, and the schedules that were added, changed or deleted.']]);
+                'Stopped all bot matches: 5 matches', 'x bot_something_new', 'Changed the rotation list Highest score +2 -1, 10 maps', 'Put the rotation list back to its defaults: 187 6 maps', 'Cancelled a waiting start on TREASURE'],
+                ['What was started and stopped, the schedules that were added, changed or deleted, and the changes of the rotation lists.']]);
             same('Bot matches: every admin, schedule, map and detail is typed text and marked (markup in a name stays text), and the words of the page are not', [all(app, '.arow2 [data-untrusted]').every((n) => n.getAttribute('data-untrusted') === 'typed-text'), all(app, '.arow2 [data-untrusted]').map((n) => n.textContent).sort()],
-                [true, ['basil', 'basil', 'basil', 'tess', 'tess', 'tess', '2 matches', '2 matches, TREASURE.LVL, rules 187, 4 bots', 'GAUNTLET', '<script>x</script>', 'every 60 minutes, 4 matches', 'ISLANDS practice', '5 matches', 'x', 'bot_something_new'].sort()]);
-            await press(app, 'All (13)');
-            same('All: a bot line has its own tag, and a map line its own', all(app, '.arow2 .src').map((n) => n.className).filter((c) => c !== 'src chat'), ['src bot', 'src bot', 'src bot', 'src bot', 'src bot', 'src bot', 'src map']);
+                [true, ['basil', 'basil', 'basil', 'basil', 'tess', 'tess', 'tess', 'tess', 'tess', '2 matches', '2 matches, TREASURE.LVL, rules 187, 4 bots', 'GAUNTLET', '<script>x</script>', 'every 60 minutes, 4 matches', 'ISLANDS practice', '5 matches', 'x', 'bot_something_new', '+2 -1, 10 maps', 'Highest score', '187', '6 maps', 'TREASURE'].sort()]);
+            await press(app, 'All (16)');
+            same('All: a bot line has its own tag, and a map line its own', all(app, '.arow2 .src').map((n) => n.className).filter((c) => c !== 'src chat'), ['src bot', 'src bot', 'src bot', 'src bot', 'src bot', 'src bot', 'src bot', 'src bot', 'src bot', 'src map']);
             noMarkup('Log with bot lines', app);
         }
     }
     // what the whole run sent, seen from outside: the bot calls of the page went to the routes of the admin API and to no other address, with the methods that those routes take
     const botCalls = seenUrls.filter((u) => /\/admin\/api\/bot-/.test(u));
+    const BOT_ROUTE = /^(GET \/admin\/api\/bot-(matches|options|schedules|rotation)|POST \/admin\/api\/bot-matches(\/stop-all|\/[mw]\d+\/stop)?|POST \/admin\/api\/bot-rotation(\/reset)?|POST \/admin\/api\/bot-schedules(\/\d+(\/delete)?)?)$/;
     check('the run made bot calls', botCalls.length > 50, botCalls.length);
-    check('every bot call went to one of the routes of the admin API, with the method that the route takes', botCalls.every((u) => /^GET \/admin\/api\/bot-(matches|options|schedules)$/.test(u) || /^POST \/admin\/api\/bot-matches(\/stop-all|\/m\d+\/stop)?$/.test(u) || /^POST \/admin\/api\/bot-schedules(\/\d+(\/delete)?)?$/.test(u)), botCalls.filter((u) => !/^(GET \/admin\/api\/bot-(matches|options|schedules)|POST \/admin\/api\/bot-matches(\/stop-all|\/m\d+\/stop)?|POST \/admin\/api\/bot-schedules(\/\d+(\/delete)?)?)$/.test(u))[0]);
+    check('every bot call went to one of the routes of the admin API, with the method that the route takes', botCalls.every((u) => BOT_ROUTE.test(u)), botCalls.filter((u) => !BOT_ROUTE.test(u))[0]);
     check('no page of the run asked for an address outside the site (every address is a path of its own)', seenUrls.every((u) => /^(GET|POST|DELETE) \/[^/]/.test(u)), seenUrls.filter((u) => !/^(GET|POST|DELETE) \/[^/]/.test(u))[0]);
     console.log(checks + ' checks, ' + failures + ' failed');
     process.exit(failures === 0 ? 0 : 1);

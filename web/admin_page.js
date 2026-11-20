@@ -23,7 +23,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var BOTS = typeof AntsAdminBots === 'object' ? AntsAdminBots : null;       // the section "Bot matches" (web/admin_bots.js): without that file the page has four sections
+    var BOTS = typeof AntsAdminBots === 'object' && typeof AntsAdminMapPick === 'object' ? AntsAdminBots : null;       // the section "Bot matches" (web/admin_bots.js, with the list of maps of web/admin_map_pick.js, both loaded before this file): without them the page has four sections
     var TIME_ZONE = 'America/Los_Angeles';                 // the maintainer's times are Pacific time
     var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     var TABS = [['waiting', 'Waiting'], ['approved', 'Approved'], ['declined', 'Declined'], ['taken_down', 'Taken down']];
@@ -982,7 +982,7 @@
                     add(chips, b);
                 });
                 add(tools, chips);
-                lead.textContent = st.mode === 'bots' ? 'What was started and stopped, and the schedules that were added, changed or deleted.' : st.mode === 'maps' ? 'What was decided about the maps that players sent.' : st.mode === 'chat' ? 'What moderators and admins did in the chat, the last 30 days.' : 'Chat actions (the last 30 days), map decisions and bot matches, newest first.';
+                lead.textContent = st.mode === 'bots' ? 'What was started and stopped, the schedules that were added, changed or deleted, and the changes of the rotation lists.' : st.mode === 'maps' ? 'What was decided about the maps that players sent.' : st.mode === 'chat' ? 'What moderators and admins did in the chat, the last 30 days.' : 'Chat actions (the last 30 days), map decisions and bot matches, newest first.';
                 body.textContent = '';
                 if (st.chat === null) add(body, message('The chat’s log could not be loaded.'));
                 if (st.maps === null) add(body, message('The map decisions could not be loaded.'));
