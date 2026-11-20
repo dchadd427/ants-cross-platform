@@ -16,10 +16,10 @@
   const rgbLinear = (rgb) => rgb.map(srgbToLinear);
   const DEFAULT_CUSTOM_HEX = "#7c3aed";
   const TEAMS = {
-    green: { label: "Green", team: rgbLinear([0.34, 0.59, 0.43]), dark: rgbLinear([0.17, 0.34, 0.28]) },
-    red: { label: "Red", team: rgbLinear([0.56, 0.18, 0.22]), dark: rgbLinear([0.27, 0.08, 0.11]) },
-    blue: { label: "Blue", team: rgbLinear([0.34, 0.42, 0.66]), dark: rgbLinear([0.15, 0.20, 0.38]) },
-    black: { label: "Black", team: rgbLinear([0.45, 0.46, 0.51]), dark: rgbLinear([0.22, 0.23, 0.27]) },
+    green: { label: "Green", team: rgbLinear([0.28, 0.51, 0.35]), dark: rgbLinear([0.13, 0.27, 0.21]) },
+    red: { label: "Red", team: rgbLinear([0.52, 0.16, 0.20]), dark: rgbLinear([0.24, 0.07, 0.10]) },
+    blue: { label: "Blue", team: rgbLinear([0.28, 0.36, 0.60]), dark: rgbLinear([0.12, 0.17, 0.33]) },
+    black: { label: "Black", team: rgbLinear([0.39, 0.40, 0.45]), dark: rgbLinear([0.17, 0.18, 0.22]) },
   };
   const ANGLES = {
     "301": { label: "301 S", full: "301 S (Front)", yaw: 0, pitch: 45 },
@@ -71,12 +71,12 @@
     light: {
       bgTop: [0.855, 0.880, 0.918], bgMid: [0.958, 0.966, 0.978], bgBot: [0.780, 0.816, 0.862],
       plinthTop: [0.68, 0.71, 0.76], plinthSide: [0.42, 0.46, 0.52], plinthRing: [0.45, 0.49, 0.56],
-      sky: [0.72, 0.80, 0.90], ground: [0.44, 0.46, 0.50], rimBoost: 0.58,
+      sky: [0.62, 0.72, 0.82], ground: [0.34, 0.36, 0.40], rimBoost: 0.54,
     },
     dark: {
       bgTop: [0.072, 0.092, 0.130], bgMid: [0.136, 0.168, 0.220], bgBot: [0.052, 0.068, 0.098],
       plinthTop: [0.095, 0.114, 0.148], plinthSide: [0.048, 0.060, 0.082], plinthRing: [0.19, 0.25, 0.32],
-      sky: [0.56, 0.68, 0.82], ground: [0.32, 0.36, 0.44], rimBoost: 0.86,
+      sky: [0.46, 0.58, 0.72], ground: [0.22, 0.26, 0.32], rimBoost: 0.80,
     },
   };
 
@@ -201,40 +201,40 @@
 
     float coatW = u_matKind == 1 ? 0.34 * (1.0 - smoothstep(0.18, 0.42, rough)) : 0.0;
     vec3 F0 = mix(vec3(0.045), albedo, met), specAcc = vec3(0.0);
-    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.98, 0.94) * 2.55, N, V, albedo, met, rough, F0, coatW, specAcc)
-            + evalLight(u_fillDir, vec3(0.84, 0.92, 1.0) * 1.12, N, V, albedo, met, rough, F0, coatW, specAcc)
-            + evalLight(u_rimDir, vec3(0.88, 0.96, 1.0) * 1.40, N, V, albedo, met, rough, F0, coatW, specAcc);
+    vec3 Lo = evalLight(u_keyDir, vec3(1.0, 0.97, 0.93) * 1.98, N, V, albedo, met, rough, F0, coatW, specAcc)
+            + evalLight(u_fillDir, vec3(0.84, 0.92, 1.0) * 0.84, N, V, albedo, met, rough, F0, coatW, specAcc)
+            + evalLight(u_rimDir, vec3(0.88, 0.96, 1.0) * 1.12, N, V, albedo, met, rough, F0, coatW, specAcc);
 
     vec3 bakedAo = clamp(v_color, 0.0, 1.0);
-    vec3 aoSoft = mix(vec3(1.0), bakedAo, 0.55);
+    vec3 aoSoft = mix(vec3(1.0), bakedAo, 0.72);
     float aoScalar = dot(aoSoft, vec3(0.2126, 0.7152, 0.0722)) * microCav;
-    float geoAo = mix(0.88, 1.0, smoothstep(0.0, 0.24, v_worldPos.y)) * mix(0.86, 1.0, smoothstep(-0.42, 0.48, N.y));
-    vec3 directAo = mix(vec3(1.0), aoSoft, u_alpha < 0.99 ? 0.14 : 0.42);
+    float geoAo = mix(0.84, 1.0, smoothstep(0.0, 0.24, v_worldPos.y)) * mix(0.82, 1.0, smoothstep(-0.42, 0.48, N.y));
+    vec3 directAo = mix(vec3(1.0), aoSoft, u_alpha < 0.99 ? 0.16 : 0.54);
 
     vec3 R = reflect(-V, N); float NoV = max(dot(N, V), 0.0);
     float specOccl = clamp(pow(NoV + aoScalar, exp2(-16.0 * rough - 1.0)) - 1.0 + aoScalar, 0.0, 1.0);
-    vec3 ambDiff = mix(u_groundColor * 1.22, u_skyColor * 1.12, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.56 * aoSoft * geoAo;
+    vec3 ambDiff = mix(u_groundColor * 1.08, u_skyColor, N.y * 0.5 + 0.5) * albedo * (1.0 - met) * 0.42 * aoSoft * geoAo;
     float envAtten = (1.0 - rough) * (1.0 - rough);
     vec3 F_env = F0 + (max(vec3(1.0 - rough), F0) - F0) * pow(1.0 - NoV, 5.0);
-    vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.18, 1.02, envAtten) * mix(envAtten, 1.0, met) * specOccl * geoAo;
-    vec3 envCoat = studioEnv(R, 0.14) * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * 0.40 * specOccl;
+    vec3 envSpec = studioEnv(R, rough) * F_env * mix(0.16, 0.92, envAtten) * mix(envAtten, 1.0, met) * specOccl * geoAo;
+    vec3 envCoat = studioEnv(R, 0.14) * ((0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * coatW) * 0.36 * specOccl;
 
     vec3 sssBounce = vec3(0.0);
     if (u_matKind == 2) {
-      float wrapKey = clamp((dot(N, u_keyDir) + 0.34) / 1.34, 0.0, 1.0);
+      float wrapKey = clamp((dot(N, u_keyDir) + 0.30) / 1.30, 0.0, 1.0);
       float termBand = wrapKey * (1.0 - max(dot(N, u_keyDir), 0.0));
-      sssBounce = (albedo * vec3(1.16, 1.10, 0.96) + vec3(0.014, 0.014, 0.010)) * termBand * 0.46 * aoSoft * geoAo;
+      sssBounce = (albedo * vec3(1.14, 1.08, 0.94) + vec3(0.010, 0.010, 0.007)) * termBand * 0.34 * aoSoft * geoAo;
     }
     float fresnelRim = pow(1.0 - NoV, 3.2) * smoothstep(-0.25, 0.72, N.y);
     float rimMask = mix(0.45, 1.0, clamp(dot(N, u_rimDir) * 0.55 + 0.55, 0.0, 1.0));
     vec3 rimTint = mix(vec3(0.76, 0.92, 1.0), albedo * 1.45 + vec3(0.28, 0.36, 0.42), u_matKind == 2 ? 0.42 : 0.18);
-    vec3 rimGlow = rimTint * fresnelRim * rimMask * (u_matKind == 1 ? 0.36 : (u_matKind == 2 ? 0.32 : 0.22)) * u_rimBoost * aoSoft * geoAo;
+    vec3 rimGlow = rimTint * fresnelRim * rimMask * (u_matKind == 1 ? 0.32 : (u_matKind == 2 ? 0.26 : 0.18)) * u_rimBoost * aoSoft * geoAo;
 
-    vec3 outCol = linearToSrgb(acesFilm((Lo * directAo + ambDiff + envSpec + envCoat + sssBounce + rimGlow + u_emissive) * 1.03));
+    vec3 outCol = linearToSrgb(acesFilm((Lo * directAo + ambDiff + envSpec + envCoat + sssBounce + rimGlow + u_emissive) * 0.94));
     float outAlpha = 1.0;
     if (u_alpha < 0.99) {
       float baseA = clamp(u_alpha * baseSample.a, 0.0, 1.0);
-      float specLuma = dot(acesFilm((specAcc * directAo + envSpec + envCoat + rimGlow) * 1.03), vec3(0.2126, 0.7152, 0.0722));
+      float specLuma = dot(acesFilm((specAcc * directAo + envSpec + envCoat + rimGlow) * 0.94), vec3(0.2126, 0.7152, 0.0722));
       outAlpha = clamp(baseA + pow(1.0 - NoV, 3.0) * 0.44 + specLuma * 0.58, 0.0, 0.90);
     }
     fragColor = vec4(outCol, outAlpha);
