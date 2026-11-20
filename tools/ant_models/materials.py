@@ -96,7 +96,7 @@ class MaterialSpec:
 _SPECS: Tuple[MaterialSpec, ...] = (
     MaterialSpec(
         name="chitin_team",
-        base_color=(0.24, 0.45, 0.27, 1.0),
+        base_color=(0.34, 0.59, 0.44, 1.0),
         metallic=0.06,
         roughness=0.50,
         texture_family="chitin",
@@ -104,7 +104,7 @@ _SPECS: Tuple[MaterialSpec, ...] = (
     ),
     MaterialSpec(
         name="chitin_dark",
-        base_color=(0.10, 0.22, 0.13, 1.0),
+        base_color=(0.17, 0.34, 0.28, 1.0),
         metallic=0.06,
         roughness=0.54,
         texture_family="chitin",
@@ -124,7 +124,7 @@ _SPECS: Tuple[MaterialSpec, ...] = (
     ),
     MaterialSpec(
         name="gear_gold",
-        base_color=(0.86, 0.68, 0.20, 1.0),
+        base_color=(0.91, 0.67, 0.23, 1.0),
         metallic=0.04,
         roughness=0.64,
         texture_family="cloth",
@@ -207,7 +207,7 @@ _SPECS: Tuple[MaterialSpec, ...] = (
     ),
     MaterialSpec(
         name="gear_yellow_plastic",
-        base_color=(0.96, 0.79, 0.14, 1.0),
+        base_color=(0.97, 0.78, 0.16, 1.0),
         metallic=0.04,
         roughness=0.32,
         texture_family=None,
@@ -251,20 +251,20 @@ MATERIALS: Dict[str, MaterialSpec] = {spec.name: spec for spec in _SPECS}
 
 TEAM_COLORS: Dict[str, Dict[str, List[float]]] = {
     "green": {
-        "chitin_team": [0.24, 0.45, 0.27, 1.0],
-        "chitin_dark": [0.10, 0.22, 0.13, 1.0],
+        "chitin_team": [0.34, 0.59, 0.44, 1.0],
+        "chitin_dark": [0.17, 0.34, 0.28, 1.0],
     },
     "red": {
         "chitin_team": [0.54, 0.16, 0.18, 1.0],
         "chitin_dark": [0.24, 0.06, 0.07, 1.0],
     },
     "blue": {
-        "chitin_team": [0.20, 0.33, 0.56, 1.0],
-        "chitin_dark": [0.08, 0.14, 0.28, 1.0],
+        "chitin_team": [0.34, 0.42, 0.66, 1.0],
+        "chitin_dark": [0.15, 0.20, 0.38, 1.0],
     },
     "black": {
-        "chitin_team": [0.36, 0.38, 0.43, 1.0],
-        "chitin_dark": [0.14, 0.15, 0.18, 1.0],
+        "chitin_team": [0.45, 0.46, 0.51, 1.0],
+        "chitin_dark": [0.22, 0.23, 0.27, 1.0],
     },
 }
 
