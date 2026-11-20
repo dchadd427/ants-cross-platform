@@ -7,6 +7,7 @@ Coordinate system (glTF 2.0 right-handed):
 """
 from __future__ import annotations
 
+import math
 from typing import List, Tuple
 
 import numpy as np
@@ -19,10 +20,12 @@ try:
         curved_tube,
         cylinder,
         ellipsoid,
+        extrude_polygon,
         hemisphere_shell,
         lathe,
         rounded_box,
         sphere,
+        swept_tube,
         torus_arc,
     )
 except ImportError:
@@ -33,10 +36,12 @@ except ImportError:
         curved_tube,
         cylinder,
         ellipsoid,
+        extrude_polygon,
         hemisphere_shell,
         lathe,
         rounded_box,
         sphere,
+        swept_tube,
         torus_arc,
     )
 
@@ -49,8 +54,30 @@ _FIRE_RIGHT_ARM: List[Tuple[float, float, float]] = [
 ]
 
 
+_HELMET_RX = 0.242
+_HELMET_RY = 0.240
+_HELMET_RZ = 0.246
+
+
+def _brim_radial_and_y(theta: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compute horizontal-sweeping traditional firefighter helmet brim flare & height vs azimuth."""
+    cos_t = np.cos(theta)
+    sin_t = np.sin(theta)
+    front_w = np.clip(cos_t, 0.0, 1.0) ** 1.4
+    side_w = sin_t * sin_t
+    rear_w = (0.5 * (1.0 - cos_t)) ** 1.35
+
+    # Classic traditional firefighter oval brim: sleek horizontal side flare (~0.68 W total)
+    # with clean front bill and longer gently sloped horizontal rear brim (NOT a wide circular hat).
+    x_flare = 0.24 * front_w + 0.26 * side_w + 0.30 * rear_w
+    z_flare = 0.34 * front_w + 0.26 * side_w + 0.66 * rear_w
+    # Front/sides stay cleanly level-horizontal with gentle curl; rear slopes smoothly down ~14 deg.
+    y_shift = 0.018 * front_w - 0.006 * side_w - 0.056 * rear_w
+    return x_flare, z_flare, y_shift
+
+
 def _helmet_shell_deform(pos: np.ndarray) -> np.ndarray:
-    """Sculpt classic sleek hard-hat dome with compact uniform safety rim and neat front sun bill."""
+    """Sculpt classic American traditional firefighter helmet: rounded bell dome + horizontal sweeping brim."""
     p = pos.copy()
     x, y, z = p[:, 0], p[:, 1], p[:, 2]
 
@@ -58,73 +85,57 @@ def _helmet_shell_deform(pos: np.ndarray) -> np.ndarray:
     y_max = float(y.max())
     h = np.clip((y - y_min) / max(1e-6, y_max - y_min), 0.0, 1.0)
 
-    # Compact, crisp hard-hat brim flare kicking in cleanly only at the bottom rim (no droopy rear skirt!).
-    brim = np.clip(1.0 - h / 0.24, 0.0, 1.0) ** 1.75
+    # Crisp horizontal bell-to-brim transition across the lower 30% of the dome shell.
+    brim = np.clip(1.0 - h / 0.30, 0.0, 1.0) ** 1.85
 
-    # Azimuth around +Y: theta = 0 at front (+Z), +-pi at back (-Z).
     theta = np.arctan2(x, z)
-    cos_t = np.cos(theta)
-    sin_t = np.sin(theta)
+    x_flare, z_flare, y_shift = _brim_radial_and_y(theta)
 
-    # Front hard-hat sun bill peak centered cleanly over the brow; uniform compact gutter rim around sides & back.
-    front_bill = np.clip(cos_t, 0.0, 1.0) ** 2.2
-    side_back = 1.0 - front_bill
+    p[:, 0] = x * (1.0 + brim * x_flare)
+    p[:, 2] = z * (1.0 + brim * z_flare)
 
-    # Slight clean flattening on the upper front emblem face so the bold crimson 'A' reads razor-sharp.
-    front_panel = (np.clip(cos_t, 0.0, 1.0) ** 2.8) * np.clip((h - 0.26) / 0.54, 0.0, 1.0) * (1.0 - 0.45 * np.clip((h - 0.72) / 0.28, 0.0, 1.0))
-    p[:, 2] -= 0.015 * front_panel
-
-    # Classic regular hard-hat brim: uniform compact ~12% side/rear rim + crisp forward sun bill (+32% Z).
-    x_scale = 1.0 + brim * (0.12 * side_back + 0.14 * front_bill)
-    z_scale = 1.0 + brim * (0.12 * side_back + 0.34 * front_bill)
-    p[:, 0] = x * x_scale
-    p[:, 2] = z * z_scale
-
-    # Level, clean hard-hat rim height: gentle upward curl on side/rear gutter, subtle sleek front bill pitch.
-    p[:, 1] = y + brim * (0.010 * side_back + 0.012 * front_bill - 0.008 * (sin_t * sin_t))
+    # Slight crisp upturned lip curl right at the very outer rim edge (h < 0.06).
+    lip_curl = 0.012 * (np.clip(1.0 - h / 0.06, 0.0, 1.0) ** 2) * (0.5 + 0.5 * np.cos(theta))
+    p[:, 1] = y + brim * y_shift + lip_curl
     return p
 
 
 def _build_letter_a() -> List[MeshPart]:
-    """Build a bold, rugged 3D embossed dark-crimson capital 'A' with crisp serif feet."""
+    """Build a bold, sharp 3D embossed dark-crimson capital 'A' centered cleanly on the front shield."""
     parts: List[MeshPart] = []
-    thickness = 0.024
-    stroke_w = 0.032
-    leg_len = 0.156
-    tilt_deg = 22.0
+    thickness = 0.022
+    stroke_w = 0.028
+    leg_len = 0.132
+    tilt_deg = 21.5
 
-    # Left and right diagonal legs with smooth matte bevels.
     left_leg = (
-        rounded_box(stroke_w, leg_len, thickness, bevel=0.005, segs=3, name="letter_a_left", material="gear_accent")
+        rounded_box(stroke_w, leg_len, thickness, bevel=0.0045, segs=3, name="letter_a_left", material="gear_accent")
         .rotate_xyz(rz=-tilt_deg, degrees=True)
-        .translate(-0.029, 0.0, 0.0)
+        .translate(-0.025, 0.0, 0.0)
     )
     right_leg = (
-        rounded_box(stroke_w, leg_len, thickness, bevel=0.005, segs=3, name="letter_a_right", material="gear_accent")
+        rounded_box(stroke_w, leg_len, thickness, bevel=0.0045, segs=3, name="letter_a_right", material="gear_accent")
         .rotate_xyz(rz=+tilt_deg, degrees=True)
-        .translate(+0.029, 0.0, 0.0)
+        .translate(+0.025, 0.0, 0.0)
     )
     parts.extend([left_leg, right_leg])
 
-    # Clean apex peak join.
     apex = (
-        rounded_box(0.034, 0.024, thickness, bevel=0.005, segs=2, name="letter_a_apex", material="gear_accent")
-        .translate(0.0, 0.068, 0.0)
+        rounded_box(0.030, 0.022, thickness, bevel=0.0045, segs=2, name="letter_a_apex", material="gear_accent")
+        .translate(0.0, 0.056, 0.0)
     )
     parts.append(apex)
 
-    # Bold horizontal crossbar leaving a crisp open triangular window above.
     crossbar = (
-        rounded_box(0.090, 0.025, thickness, bevel=0.0045, segs=2, name="letter_a_bar", material="gear_accent")
-        .translate(0.0, -0.025, 0.0)
+        rounded_box(0.078, 0.022, thickness, bevel=0.004, segs=2, name="letter_a_bar", material="gear_accent")
+        .translate(0.0, -0.021, 0.0)
     )
     parts.append(crossbar)
 
-    # Subtle classic serif foot pads matching the HD reference 'A'.
     for side_sign, tag in ((-1.0, "left"), (+1.0, "right")):
         serif = (
-            rounded_box(0.050, 0.018, thickness, bevel=0.004, segs=2, name=f"letter_a_serif_{tag}", material="gear_accent")
-            .translate(side_sign * 0.058, -0.070, 0.0)
+            rounded_box(0.044, 0.016, thickness, bevel=0.0035, segs=2, name=f"letter_a_serif_{tag}", material="gear_accent")
+            .translate(side_sign * 0.050, -0.059, 0.0)
         )
         parts.append(serif)
 
@@ -132,24 +143,24 @@ def _build_letter_a() -> List[MeshPart]:
 
 
 def _build_fire_helmet(scene: SceneBuilder, head_center: Tuple[float, float, float]) -> None:
-    """Build classic yellow safety hard-hat with clean center crown rib, compact front bill, and crimson 'A'."""
+    """Build classic yellow ribbed American firefighter helmet with rolled brim and scalloped 'A' shield."""
     hx, hy, hz = head_center
-    # Seat cleanly right above Pass 2 brow arches & blinking eyelids (eye_y=0.712, eyelid top ~0.790).
-    shell_y = hy + 0.114  # ~0.838, keeping deep-set eyes & blinking eyelids 100% unobstructed
-    shell_z = hz + 0.004  # ~0.054, centered symmetrically on the cranium like a true hard hat
+    # Seated cleanly above Pass 3 wide-alert eyes & blinking eyelids (eyes y <= 0.796).
+    shell_y = hy + 0.112  # ~0.836
+    shell_z = hz - 0.006  # ~0.044, balanced over the head with classic horizontal rear brim sweep
 
-    # 1. Classic sleek rounded hard-hat shell with compact uniform gutter rim + crisp front bill.
+    # 1. Smooth rounded bell dome + wide horizontal-sweeping brim.
     dome = (
         hemisphere_shell(
-            0.256,
-            0.264,
-            0.262,
-            thickness=0.026,
-            start_phi=-0.06,
-            u_segs=48,
-            v_segs=20,
-            e1=0.86,
-            e2=0.86,
+            _HELMET_RX,
+            _HELMET_RY,
+            _HELMET_RZ,
+            thickness=0.024,
+            start_phi=-0.04,
+            u_segs=52,
+            v_segs=22,
+            e1=0.94,
+            e2=0.94,
             deform_fn=_helmet_shell_deform,
             name="helmet_dome",
             material="gear_gold",
@@ -158,84 +169,151 @@ def _build_fire_helmet(scene: SceneBuilder, head_center: Tuple[float, float, flo
     )
     scene.add("fire_helmet", dome)
 
-    # Dark inner suspension liner ring tucked snugly inside the hard hat above the brow line.
+    # Clean rolled outer edge beading loop wrapping smoothly around the entire horizontal brim perimeter.
+    n_lip = 56
+    lip_pts: List[Tuple[float, float, float]] = []
+    start_phi = -0.04
+    c_phi = math.cos(start_phi)
+    s_phi = math.sin(start_phi)
+    y_base = _HELMET_RY * s_phi
+    for i in range(n_lip):
+        ang = (i / n_lip) * 2.0 * math.pi
+        bx = _HELMET_RX * c_phi * math.sin(ang)
+        bz = _HELMET_RZ * c_phi * math.cos(ang)
+        xf, zf, ys = _brim_radial_and_y(np.array([ang]))
+        curl = 0.012 * (0.5 + 0.5 * math.cos(ang))
+        lx = hx + bx * (1.0 + float(xf[0]))
+        ly = shell_y + y_base + float(ys[0]) + curl - 0.004
+        lz = shell_z + bz * (1.0 + float(zf[0]))
+        lip_pts.append((lx, ly, lz))
+
+    brim_lip = swept_tube(
+        lip_pts,
+        0.0155,
+        radial_segs=10,
+        closed=True,
+        name="helmet_brim_lip",
+        material="gear_gold",
+    )
+    scene.add("fire_helmet", brim_lip)
+
+    # Dark inner head-liner band tucked cleanly inside the dome above the brow line.
     liner = (
-        cylinder(0.222, 0.228, 0.040, radial_segs=26, bevel=0.006, axis="y", name="helmet_liner", material="gear_dark")
-        .translate(hx, shell_y + 0.012, hz)
+        cylinder(0.220, 0.226, 0.040, radial_segs=26, bevel=0.006, axis="y", name="helmet_liner", material="gear_dark")
+        .translate(hx, shell_y + 0.016, hz)
     )
     scene.add("fire_helmet", liner)
 
-    # 2. Iconic crisp center hard-hat crown rib arching cleanly front-to-back over the dome apex.
-    rib_pts = [
-        (hx, shell_y + 0.214, shell_z + 0.172),
-        (hx, shell_y + 0.268, shell_z + 0.095),
-        (hx, shell_y + 0.282, shell_z + 0.000),
-        (hx, shell_y + 0.264, shell_z - 0.105),
-        (hx, shell_y + 0.194, shell_z - 0.194),
-        (hx, shell_y + 0.082, shell_z - 0.246),
-    ]
-    center_rib = curved_tube(
-        rib_pts,
-        [
-            (0.016, 0.024),
-            (0.026, 0.036),
-            (0.030, 0.040),
-            (0.028, 0.038),
-            (0.022, 0.030),
-            (0.012, 0.018),
-        ],
-        samples_per_seg=6,
-        radial_segs=14,
-        cap_rings=3,
-        name="helmet_center_rib",
-        material="gear_gold",
+    # 2. Classic 8 radiating molded firefighter crown ribs meeting cleanly at the domed apex star!
+    # Azimuths: 0 (front to shield), 180 (back), +-90 (sides), +-48 (front-diagonals), +-132 (rear-diagonals).
+    rib_specs = (
+        (0.0, 0.42, 0.021, "front"),
+        (180.0, 0.08, 0.023, "back"),
+        (90.0, 0.12, 0.019, "left"),
+        (-90.0, 0.12, 0.019, "right"),
+        (46.0, 0.14, 0.018, "fl"),
+        (-46.0, 0.14, 0.018, "fr"),
+        (134.0, 0.10, 0.018, "bl"),
+        (-134.0, 0.10, 0.018, "br"),
     )
-    scene.add("fire_helmet", center_rib)
-
-    # Subtle side step-bevel accent ribs flanking the center hard-hat ridge cleanly on top.
-    for side_sign, tag in ((+1.0, "left"), (-1.0, "right")):
-        flank_pts = [
-            (hx + side_sign * 0.088, shell_y + 0.210, shell_z + 0.130),
-            (hx + side_sign * 0.102, shell_y + 0.244, shell_z + 0.015),
-            (hx + side_sign * 0.096, shell_y + 0.216, shell_z - 0.115),
-            (hx + side_sign * 0.076, shell_y + 0.118, shell_z - 0.215),
-        ]
-        flank = curved_tube(
-            flank_pts,
-            [0.010, 0.014, 0.013, 0.009],
-            samples_per_seg=5,
+    for az_deg, phi_end, peak_rad, tag in rib_specs:
+        az = math.radians(az_deg)
+        sa, ca = math.sin(az), math.cos(az)
+        phis = np.linspace(0.5 * math.pi, phi_end, 6)
+        r_pts: List[Tuple[float, float, float]] = []
+        r_rads: List[float] = []
+        for k, phi in enumerate(phis):
+            cp = float(abs(math.cos(phi)) ** 0.94)
+            sp = float(abs(math.sin(phi)) ** 0.94)
+            # Lift slightly proud of dome shell along the rib arc, blending smoothly at base.
+            t_arc = k / (len(phis) - 1)
+            lift = 0.012 * (1.0 - 0.55 * (t_arc * t_arc))
+            px = hx + (_HELMET_RX + lift) * cp * sa
+            py = shell_y + (_HELMET_RY + lift) * sp
+            pz = shell_z + (_HELMET_RZ + lift) * cp * ca
+            r_pts.append((px, py, pz))
+            r_rads.append(peak_rad * (0.95 - 0.35 * t_arc))
+        rib = curved_tube(
+            r_pts,
+            r_rads,
+            samples_per_seg=4,
             radial_segs=10,
             cap_rings=2,
-            name=f"helmet_side_ridge_{tag}",
+            name=f"helmet_rib_{tag}",
             material="gear_gold",
         )
-        scene.add("fire_helmet", flank)
+        scene.add("fire_helmet", rib)
 
-    # 3. Three small weathered bronze/copper side vent studs (`gear_brass_trim`) flush on each side.
-    vent_specs = (
-        (0.244, 0.112, +0.068, 0.015),
-        (0.246, 0.128, +0.002, 0.016),
-        (0.240, 0.138, -0.064, 0.014),
+    # Smooth sculpted central crown boss joining all 8 radiating ribs cleanly at the peak.
+    crown_hub = (
+        ellipsoid(0.044, 0.026, 0.052, u_segs=16, v_segs=10, name="helmet_crown_hub", material="gear_gold")
+        .translate(hx, shell_y + _HELMET_RY + 0.010, shell_z)
     )
-    for v_idx, (vx, vy_off, vz_off, vrad) in enumerate(vent_specs):
-        stud_ring = (
-            torus_arc(vrad, 0.0055, u_segs=14, v_segs=8, plane="yz", name=f"helmet_vent_ring_{v_idx}", material="gear_brass_trim")
-            .translate(vx, shell_y + vy_off, shell_z + vz_off)
-        )
-        stud_core = (
-            cylinder(vrad * 0.78, vrad * 0.72, 0.016, radial_segs=12, bevel=0.003, axis="x", name=f"helmet_vent_core_{v_idx}", material="gear_brass_trim")
-            .translate(vx - 0.006, shell_y + vy_off, shell_z + vz_off)
-        )
-        scene.add_mirrored("fire_helmet", stud_ring)
-        scene.add_mirrored("fire_helmet", stud_core)
+    scene.add("fire_helmet", crown_hub)
 
-    # 4. Bold dark-crimson 3D embossed capital letter 'A' emblazoned sharply on the front hard-hat crown!
-    a_tilt_x = -24.0
-    a_pos = (hx, shell_y + 0.138, shell_z + 0.236)
+    # 3. Classic scalloped firefighter front shield badge holding the bold 3D crimson 'A'!
+    # Peaked top crown, graceful inward side scallops, wide lower cheeks, flat-curved base resting on front brim.
+    shield_poly = [
+        (0.000, +0.128),
+        (+0.034, +0.104),
+        (+0.076, +0.094),
+        (+0.096, +0.074),
+        (+0.086, +0.022),
+        (+0.096, -0.024),
+        (+0.092, -0.078),
+        (+0.054, -0.098),
+        (0.000, -0.104),
+        (-0.054, -0.098),
+        (-0.092, -0.078),
+        (-0.096, -0.024),
+        (-0.086, +0.022),
+        (-0.096, +0.074),
+        (-0.076, +0.094),
+        (-0.034, +0.104),
+    ]
+    shield_tilt_x = -20.0
+    shield_pos = (hx, shell_y + 0.118, shell_z + 0.252)
+
+    shield_plate = (
+        extrude_polygon(shield_poly, depth=0.020, name="helmet_shield_plate", material="gear_gold_metal")
+        .rotate_xyz(rx=shield_tilt_x, degrees=True)
+        .translate(*shield_pos)
+    )
+    scene.add("fire_helmet", shield_plate)
+
+    # Crisp dark-trimmed metallic scalloped border hugging the shield edge cleanly.
+    border_pts = [(px, py, 0.008) for px, py in shield_poly]
+    shield_border = (
+        curved_tube(
+            border_pts,
+            0.009,
+            samples_per_seg=3,
+            radial_segs=10,
+            closed=True,
+            name="helmet_shield_border",
+            material="gear_dark",
+        )
+        .rotate_xyz(rx=shield_tilt_x, degrees=True)
+        .translate(*shield_pos)
+    )
+    scene.add("fire_helmet", shield_border)
+
+    # Three crisp metallic shield mounting rivets (top crown peak + lower-left + lower-right).
+    for rv_idx, (rvx, rvy) in enumerate(((0.0, 0.098), (-0.072, -0.068), (+0.072, -0.068))):
+        rivet = (
+            sphere(0.0085, u_segs=10, v_segs=8, name=f"helmet_shield_rivet_{rv_idx}", material="gear_steel")
+            .translate(rvx, rvy, 0.015)
+            .rotate_xyz(rx=shield_tilt_x, degrees=True)
+            .translate(*shield_pos)
+        )
+        scene.add("fire_helmet", rivet)
+
+    # Bold dark-crimson 3D embossed capital letter 'A' centered proudly inside the scalloped shield.
     for part in _build_letter_a():
         placed = (
-            part.rotate_xyz(rx=a_tilt_x, degrees=True)
-            .translate(*a_pos)
+            part.translate(0.0, -0.006, 0.016)
+            .rotate_xyz(rx=shield_tilt_x, degrees=True)
+            .translate(*shield_pos)
         )
         scene.add("fire_helmet", placed)
 

@@ -81,21 +81,21 @@ def _hollow_ring_lathe(
 def _build_goggle_barrel(side_sign: float) -> List[MeshPart]:
     """Build one true hollow copper-and-brass demolition goggle barrel with thin see-through lens.
 
-    Centered in eye-local coordinates around (0, 0, 0) so the ant's 3-part eye and blinking
-    eyelid (radius <= 0.074) sit cleanly inside the hollow bore (inner radius >= 0.078) with
-    zero opaque blocking and zero clipping.
+    Centered in eye-local coordinates around (0, 0, 0) so the ant's wide-alert 3-part eye and
+    blinking eyelid (max radial sweep ~0.080, max Z ~0.077) clear the hollow bore (inner radius
+    >= 0.083, lens back >= 0.084) cleanly across open, half, and closed blink poses.
     """
     parts: List[MeshPart] = []
     tag = "left" if side_sign > 0 else "right"
 
     # 1. Rear dark rubber hollow eye-cup gasket hugging the cranium around the eye socket.
     cushion_prof = [
-        (0.078, -0.026),
-        (0.088, -0.028),
-        (0.095, -0.012),
-        (0.095, +0.020),
-        (0.086, +0.024),
-        (0.078, +0.022),
+        (0.086, -0.026),
+        (0.095, -0.028),
+        (0.102, -0.012),
+        (0.102, +0.020),
+        (0.094, +0.024),
+        (0.086, +0.022),
     ]
     parts.append(
         _hollow_ring_lathe(
@@ -108,12 +108,12 @@ def _build_goggle_barrel(side_sign: float) -> List[MeshPart]:
 
     # 2. Rugged hollow copper-bronze mid-barrel sleeve around the clear open eye bore.
     copper_prof = [
-        (0.078, +0.018),
-        (0.094, +0.018),
-        (0.096, +0.026),
-        (0.096, +0.062),
-        (0.091, +0.068),
-        (0.078, +0.068),
+        (0.085, +0.018),
+        (0.100, +0.018),
+        (0.103, +0.026),
+        (0.103, +0.064),
+        (0.098, +0.070),
+        (0.085, +0.070),
     ]
     parts.append(
         _hollow_ring_lathe(
@@ -126,14 +126,14 @@ def _build_goggle_barrel(side_sign: float) -> List[MeshPart]:
 
     # 3. Weathered yellow-gold hollow stepped front lens hood bezel framing the open viewport.
     hood_prof = [
-        (0.076, +0.064),
-        (0.093, +0.064),
-        (0.097, +0.072),
-        (0.097, +0.096),
-        (0.090, +0.104),
-        (0.076, +0.104),
-        (0.074, +0.096),
-        (0.074, +0.070),
+        (0.084, +0.066),
+        (0.100, +0.066),
+        (0.104, +0.074),
+        (0.104, +0.100),
+        (0.097, +0.108),
+        (0.084, +0.108),
+        (0.083, +0.100),
+        (0.083, +0.072),
     ]
     parts.append(
         _hollow_ring_lathe(
@@ -146,34 +146,34 @@ def _build_goggle_barrel(side_sign: float) -> List[MeshPart]:
 
     # Crisp metallic brass front lip ring around the lens opening.
     front_ring = (
-        torus_arc(0.085, 0.0085, u_segs=28, v_segs=10, plane="xy", name=f"goggle_brass_ring_{tag}", material="gear_gold_metal")
-        .translate(0.0, 0.0, 0.101)
+        torus_arc(0.093, 0.0085, u_segs=28, v_segs=10, plane="xy", name=f"goggle_brass_ring_{tag}", material="gear_gold_metal")
+        .translate(0.0, 0.0, 0.105)
     )
     parts.append(front_ring)
 
-    # Recessed dark inner lens gasket ring lining the front bore edge (open center!).
+    # Recessed dark inner lens gasket ring lining the front bore edge (open center >= 0.0815!).
     inner_seat = (
-        torus_arc(0.075, 0.005, u_segs=24, v_segs=8, plane="xy", name=f"goggle_inner_seat_{tag}", material="gear_dark")
-        .translate(0.0, 0.0, 0.092)
+        torus_arc(0.085, 0.0035, u_segs=24, v_segs=8, plane="xy", name=f"goggle_inner_seat_{tag}", material="gear_dark")
+        .translate(0.0, 0.0, 0.096)
     )
     parts.append(inner_seat)
 
-    # Thin translucent optical glass lens seated cleanly at the front of the hollow barrel
-    # (z_local = +0.089, strictly clear of sweeping closed eyelids at z_local <= +0.074).
+    # Thin translucent optical glass lens seated cleanly ahead of the full eyelid blink sweep
+    # (z_local = +0.093, back surface at +0.0845 vs closed eyelid max_z = +0.0766).
     lens = (
-        ellipsoid(0.077, 0.077, 0.009, u_segs=26, v_segs=14, name=f"goggle_lens_{tag}", material="glass_tinted")
-        .translate(0.0, 0.0, 0.089)
+        ellipsoid(0.086, 0.086, 0.0085, u_segs=26, v_segs=14, name=f"goggle_lens_{tag}", material="glass_tinted")
+        .translate(0.0, 0.0, 0.093)
     )
     parts.append(lens)
 
     # Three small raised golden rivets arrayed along the upper-outer copper barrel rim.
     for r_idx, ang_deg in enumerate((22.0, 56.0, 92.0)):
         ang = math.radians(ang_deg)
-        rx = side_sign * 0.095 * math.sin(ang)
-        ry = 0.095 * math.cos(ang)
+        rx = side_sign * 0.102 * math.sin(ang)
+        ry = 0.102 * math.cos(ang)
         rivet = (
             sphere(0.010, u_segs=10, v_segs=8, name=f"goggle_rivet_{tag}_{r_idx}", material="gear_gold_metal")
-            .translate(rx, ry, 0.044)
+            .translate(rx, ry, 0.046)
         )
         parts.append(rivet)
 
@@ -192,11 +192,13 @@ def _build_goggles(
     ez = 0.5 * (eye_left[2] + eye_right[2])
 
     for side_sign, eye_pos in ((+1.0, eye_left), (-1.0, eye_right)):
-        # Match Pass 2 eye gaze orientation (rx=-0.18, ry=+-0.20) so eyes center cleanly in bore.
+        # Match Pass 3 eye gaze orientation (rx=-0.16, ry=+-0.20) with tiny +0.004 outward offset
+        # so the wider 0.101 outer barrels kiss cleanly at the nose bridge without intersecting.
         yaw = side_sign * 0.19
         pitch = -0.16
+        mount = (eye_pos[0] + side_sign * 0.004, eye_pos[1], eye_pos[2])
         for part in _build_goggle_barrel(side_sign):
-            placed = part.rotate_xyz(rx=pitch, ry=yaw).translate(*eye_pos)
+            placed = part.rotate_xyz(rx=pitch, ry=yaw).translate(*mount)
             scene.add("goggles", placed)
 
     # Sculpted copper-bronze nose bridge joining the twin hollow barrels cleanly between the eyes.
@@ -452,17 +454,17 @@ def _build_dynamite_pack(scene: SceneBuilder, back_anchor: Tuple[float, float, f
     )
     scene.add("dynamite_pack", chest_belt)
 
-    # Curved dark holster rack bar & brass center buckle cradling the 4 back-mounted bombs.
+    # Curved dark holster rack bar & brass center buckle cradling the 4 compact back-mounted bombs.
     rack_pts = [
-        (-0.205, pack_y + 0.072, pack_z - 0.018),
-        (-0.112, pack_y + 0.126, pack_z - 0.078),
-        (0.000, pack_y + 0.148, pack_z - 0.096),
-        (0.112, pack_y + 0.126, pack_z - 0.078),
-        (0.205, pack_y + 0.072, pack_z - 0.018),
+        (-0.168, pack_y + 0.058, pack_z - 0.014),
+        (-0.092, pack_y + 0.102, pack_z - 0.062),
+        (0.000, pack_y + 0.118, pack_z - 0.078),
+        (0.092, pack_y + 0.102, pack_z - 0.062),
+        (0.168, pack_y + 0.058, pack_z - 0.014),
     ]
     rack_strap = curved_tube(
         rack_pts,
-        (0.022, 0.016),
+        (0.019, 0.014),
         samples_per_seg=5,
         radial_segs=10,
         cap_rings=2,
@@ -472,25 +474,26 @@ def _build_dynamite_pack(scene: SceneBuilder, back_anchor: Tuple[float, float, f
     scene.add("dynamite_pack", rack_strap)
 
     rack_buckle = (
-        rounded_box(0.058, 0.052, 0.026, bevel=0.008, segs=3, name="bomb_rack_buckle", material="gear_gold_metal")
-        .rotate_xyz(rx=-0.30)
-        .translate(0.0, pack_y + 0.148, pack_z - 0.106)
+        rounded_box(0.050, 0.044, 0.022, bevel=0.007, segs=3, name="bomb_rack_buckle", material="gear_gold_metal")
+        .rotate_xyz(rx=-0.28)
+        .translate(0.0, pack_y + 0.118, pack_z - 0.086)
     )
     scene.add("dynamite_pack", rack_buckle)
 
-    # Four compact riveted open-cup bombs fanned cleanly upright behind shoulders/head (~0.61 W total).
+    # Four compact (~0.76x) riveted open-cup bombs packed tightly & slightly lower behind shoulders/head
+    # so Bomber fits neatly inside original abst301's compact silhouette (~0.52 W total).
     # Positive rz leans +Y toward -X (ant right); negative rz leans +Y toward +X (ant left).
     # Each tuple: (splay_rz_deg, tilt_back_rx_deg, base_ox, base_oy, base_oz, cup_h, fuse_dx).
     pack_specs = (
-        (+26.0, -18.0, -0.154, 0.088, -0.028, 0.104, -0.044),
-        (+9.0, -22.0, -0.062, 0.188, -0.076, 0.112, -0.036),
-        (-9.0, -22.0, +0.062, 0.188, -0.076, 0.112, +0.036),
-        (-26.0, -18.0, +0.154, 0.088, -0.028, 0.104, +0.044),
+        (+18.0, -14.0, -0.116, 0.054, -0.018, 0.080, -0.028),
+        (+6.0, -18.0, -0.048, 0.130, -0.054, 0.084, -0.024),
+        (-6.0, -18.0, +0.048, 0.130, -0.054, 0.084, +0.024),
+        (-18.0, -14.0, +0.116, 0.054, -0.018, 0.080, +0.028),
     )
     for idx, (rz_deg, rx_deg, ox, oy, oz, cup_h, fuse_dx) in enumerate(pack_specs):
         # Small dark socket holster pad anchoring each bomb cup base firmly to the rack.
         holster = (
-            cylinder(0.45 * cup_h, 0.42 * cup_h, 0.040, radial_segs=14, bevel=0.006, axis="y", name=f"pack_holster_{idx}", material="gear_dark")
+            cylinder(0.45 * cup_h, 0.42 * cup_h, 0.034, radial_segs=14, bevel=0.005, axis="y", name=f"pack_holster_{idx}", material="gear_dark")
             .rotate_xyz(rx=rx_deg, rz=rz_deg, degrees=True)
             .translate(bx + ox, pack_y + oy, pack_z + oz)
         )
@@ -505,17 +508,17 @@ def _build_dynamite_pack(scene: SceneBuilder, back_anchor: Tuple[float, float, f
 
 
 def _build_handheld_bomb(scene: SceneBuilder, right_hand: Tuple[float, float, float]) -> None:
-    """Build a handheld riveted open-cup team bomb with lit rope fuse tucked cleanly in right hand."""
+    """Build a compact handheld riveted open-cup team bomb tucked neatly in Bomber's right hand."""
     hx, hy, hz = right_hand
-    cup_h = 0.092
-    parts = _build_cup_bomb("hand_bomb", cup_h, fuse_curve_x=-0.042, lit=True, rivet_count=10)
+    cup_h = 0.080
+    parts = _build_cup_bomb("hand_bomb", cup_h, fuse_curve_x=-0.034, lit=True, rivet_count=10)
 
-    # Grip squarely around the tapered team-colored cup waist well inside Bomber's compact width (~0.61).
+    # Tucked closely against the gripped right hand well inside Bomber's compact width (~0.52).
     for part in parts:
         placed = (
             part.translate(0.0, -0.45 * cup_h, 0.0)
-            .rotate_xyz(rx=14.0, ry=12.0, rz=8.0, degrees=True)
-            .translate(hx - 0.022, hy + 0.012, hz + 0.046)
+            .rotate_xyz(rx=12.0, ry=10.0, rz=6.0, degrees=True)
+            .translate(hx - 0.010, hy + 0.008, hz + 0.032)
         )
         scene.add("handheld_bomb", placed)
 
