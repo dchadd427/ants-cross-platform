@@ -207,6 +207,9 @@ void TcpConnection::pump() {
     if (fd_ < 0) return;
     const socket_t s = static_cast<socket_t>(fd_);
     if (state_ == State::Connecting) {
+#ifndef _WIN32
+        if (s >= FD_SETSIZE) return fail();                         // (select() cannot hold a descriptor of 1024 or more, and FD_SET would write past the set: such a connection fails, as one that could not be made would)
+#endif
         fd_set wset;
         fd_set eset;
         FD_ZERO(&wset);
