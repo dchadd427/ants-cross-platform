@@ -100,7 +100,7 @@ class Converter:
 
     @staticmethod
     def read_head(raw):
-        """(status, length of the body) of the head of an answer, read strictly: HTTP/1.x, a status, `Content-Length` once and no `Transfer-Encoding`, `Content-Encoding` or redirect."""
+        """(status, length of the body) of the head of an answer, read strictly: HTTP/1.x, a status, `Content-Length` once and no `Transfer-Encoding` or `Content-Encoding` (a status that `exchange` has no use for is `down`: nothing is ever followed)."""
         lines = raw.decode("latin-1").split("\r\n")[:-2]
         parts = lines[0].split(" ", 2)
         if len(parts) < 2 or parts[0] not in ("HTTP/1.0", "HTTP/1.1") or not (parts[1].isdigit() and len(parts[1]) == 3):
@@ -116,7 +116,7 @@ class Converter:
                 length = value.strip()
             elif name in ("transfer-encoding", "content-encoding"):
                 raise ConverterError("down")
-        if not (length and length.isdigit() and len(length) <= 8) or 300 <= status < 400:
+        if not (length and length.isdigit() and len(length) <= 8):
             raise ConverterError("down")
         return status, int(length)
 
