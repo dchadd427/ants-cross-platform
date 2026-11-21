@@ -21,9 +21,12 @@ try:
         SceneBuilder,
         curved_tube,
         cylinder,
+        ellipsoid,
+        ensure_outward_winding,
         lathe,
         quat_from_euler_xyz,
         quat_mul,
+        recompute_smooth_normals,
         rounded_box,
         superellipsoid,
         swept_tube,
@@ -38,9 +41,12 @@ except ImportError:
         SceneBuilder,
         curved_tube,
         cylinder,
+        ellipsoid,
+        ensure_outward_winding,
         lathe,
         quat_from_euler_xyz,
         quat_mul,
+        recompute_smooth_normals,
         rounded_box,
         superellipsoid,
         swept_tube,
@@ -411,98 +417,102 @@ def _build_scuba_tank(
     back_anchor: Tuple[float, float, float],
     thorax_center: Tuple[float, float, float],
 ) -> None:
-    """Build compact brushed-steel scuba air tank with brass gauge, valve, and harness on back-right (-X, -Z)."""
+    """Build centered brushed-steel scuba backpack tank with brass gauge, valve, and symmetric harness."""
     bx, by, bz = back_anchor
     _, ty, tz = thorax_center
-    tank_x = bx - 0.168
-    tank_y = by + 0.252
-    tank_z = bz - 0.072
+    # Centered squarely on Swimmer's dorsal back (`x = 0.0`), clear above gaster & behind pitched head/strap.
+    tank_x = 0.0
+    tank_y = by + 0.068
+    tank_z = bz - 0.104
 
     parts: List[MeshPart] = []
 
     tank_prof = [
-        (0.000, -0.132),
-        (0.032, -0.128),
-        (0.052, -0.112),
-        (0.054, -0.090),
-        (0.054, +0.084),
-        (0.046, +0.112),
-        (0.025, +0.128),
-        (0.017, +0.140),
-        (0.000, +0.142),
+        (0.000, -0.124),
+        (0.032, -0.120),
+        (0.052, -0.104),
+        (0.054, -0.082),
+        (0.054, +0.082),
+        (0.046, +0.108),
+        (0.025, +0.124),
+        (0.017, +0.136),
+        (0.000, +0.138),
     ]
     tank_body = lathe(tank_prof, radial_segs=24, cap_bottom=False, cap_top=False, axis="y", name="scuba_tank_body", material="gear_steel")
     parts.append(tank_body)
 
     boot = (
-        cylinder(0.057, 0.056, 0.040, radial_segs=22, bevel=0.006, axis="y", name="scuba_tank_boot", material="gear_dark")
-        .translate(0.0, -0.106, 0.0)
+        cylinder(0.057, 0.056, 0.038, radial_segs=22, bevel=0.006, axis="y", name="scuba_tank_boot", material="gear_dark")
+        .translate(0.0, -0.098, 0.0)
     )
     parts.append(boot)
 
-    for b_idx, by_off in enumerate((-0.030, +0.054)):
+    for b_idx, by_off in enumerate((-0.028, +0.050)):
         band = (
-            cylinder(0.058, 0.058, 0.021, radial_segs=22, bevel=0.004, axis="y", name=f"scuba_tank_band_{b_idx}", material="gear_dark")
+            cylinder(0.058, 0.058, 0.020, radial_segs=22, bevel=0.004, axis="y", name=f"scuba_tank_band_{b_idx}", material="gear_dark")
             .translate(0.0, by_off, 0.0)
         )
         parts.append(band)
 
     brass_collar = (
         torus_arc(0.055, 0.0058, u_segs=22, v_segs=8, plane="xz", name="scuba_tank_brass_ring", material="gear_gold_metal")
-        .translate(0.0, +0.076, 0.0)
+        .translate(0.0, +0.072, 0.0)
     )
     parts.append(brass_collar)
 
     valve_neck = (
-        cylinder(0.017, 0.015, 0.042, radial_segs=16, bevel=0.003, axis="y", name="scuba_valve_neck", material="gear_steel")
-        .translate(0.0, +0.156, 0.0)
+        cylinder(0.017, 0.015, 0.040, radial_segs=16, bevel=0.003, axis="y", name="scuba_valve_neck", material="gear_steel")
+        .translate(0.0, +0.150, 0.0)
     )
     parts.append(valve_neck)
 
     valve_block = (
         rounded_box(0.044, 0.028, 0.032, bevel=0.006, segs=2, name="scuba_valve_block", material="gear_dark")
-        .translate(0.0, +0.178, 0.0)
+        .translate(0.0, +0.172, 0.0)
     )
     parts.append(valve_block)
 
     valve_wheel = (
         cylinder(0.021, 0.021, 0.015, radial_segs=16, bevel=0.004, axis="y", name="scuba_valve_wheel", material="gear_dark")
-        .translate(0.0, +0.200, 0.0)
+        .translate(0.0, +0.194, 0.0)
     )
     parts.append(valve_wheel)
 
     side_knob = (
         cylinder(0.013, 0.013, 0.026, radial_segs=14, bevel=0.003, axis="x", name="scuba_valve_knob", material="gear_steel")
-        .translate(-0.026, +0.178, 0.0)
+        .translate(-0.026, +0.172, 0.0)
     )
     parts.append(side_knob)
 
     gauge = (
         cylinder(0.016, 0.016, 0.013, radial_segs=16, bevel=0.003, axis="z", name="scuba_pressure_gauge", material="gear_gold_metal")
-        .translate(+0.025, +0.176, +0.020)
+        .translate(+0.025, +0.170, -0.020)
     )
     parts.append(gauge)
 
     for part in parts:
         placed = (
-            part.rotate_xyz(rx=-10.0, rz=7.0, degrees=True)
+            part.rotate_xyz(rx=-22.0, degrees=True)
             .translate(tank_x, tank_y, tank_z)
         )
         scene.add("scuba_tank", placed)
 
+    # Centered dark rubber backpack mounting plate bridging dorsal carapace cleanly into the tank.
     bracket = (
-        rounded_box(0.128, 0.080, 0.040, bevel=0.012, segs=3, name="scuba_tank_bracket", material="gear_dark")
-        .rotate_xyz(ry=-0.20)
-        .translate(bx - 0.078, by + 0.124, bz - 0.032)
+        rounded_box(0.118, 0.132, 0.056, bevel=0.012, segs=3, name="scuba_tank_bracket", material="gear_dark")
+        .rotate_xyz(rx=-22.0, degrees=True)
+        .translate(bx, tank_y - 0.004, bz - 0.040)
     )
     scene.add("scuba_tank", bracket)
 
+    # Symmetric dark rubber backpack straps sweeping over both shoulders and down Swimmer's petite chest.
     for side_sign, tag in ((+1.0, "left"), (-1.0, "right")):
         h_pts = [
-            (bx - 0.062 + side_sign * 0.044, by + 0.130, bz - 0.024),
-            (side_sign * 0.066, ty + 0.106, tz - 0.026),
-            (side_sign * 0.064, ty + 0.094, tz + 0.050),
-            (side_sign * 0.058, ty + 0.016, tz + 0.094),
+            (side_sign * 0.048, tank_y + 0.032, bz - 0.034),
+            (side_sign * 0.066, ty + 0.106, tz - 0.024),
+            (side_sign * 0.064, ty + 0.092, tz + 0.050),
+            (side_sign * 0.058, ty + 0.022, tz + 0.094),
+            (side_sign * 0.052, ty - 0.026, tz + 0.084),
         ]
         h_strap = curved_tube(
             h_pts,
@@ -514,6 +524,24 @@ def _build_scuba_tank(
             material="gear_dark",
         )
         scene.add("scuba_tank", h_strap)
+
+    # Lower waist/chest cross-belt tying the centered backpack harness snugly around Swimmer's thorax.
+    chest_belt = curved_tube(
+        [
+            (-0.070, ty - 0.020, tz + 0.048),
+            (-0.044, ty - 0.020, tz + 0.094),
+            (0.000, ty - 0.020, tz + 0.102),
+            (0.044, ty - 0.020, tz + 0.094),
+            (0.070, ty - 0.020, tz + 0.048),
+        ],
+        (0.011, 0.008),
+        samples_per_seg=4,
+        radial_segs=8,
+        cap_rings=2,
+        name="scuba_harness_belt",
+        material="gear_dark",
+    )
+    scene.add("scuba_tank", chest_belt)
 
 
 def _make_diving_flipper(name: str, length: float = 0.155, blade_w: float = 0.084) -> MeshPart:
@@ -574,42 +602,103 @@ def _build_flippers(scene: SceneBuilder, anchors: Dict[str, Any]) -> None:
         scene.add("flippers", collar)
 
 
+def _subdivided_slab(
+    sx: float,
+    sy: float,
+    sz: float,
+    bevel: float,
+    nx: int,
+    ny: int,
+    nz: int,
+    *,
+    name: str,
+    material: str,
+) -> MeshPart:
+    """Build a watertight finely-subdivided rounded slab for smooth wide U-shaped sandbox scoop shaping."""
+    nx, ny, nz = max(2, int(nx)), max(2, int(ny)), max(2, int(nz))
+    hx, hy, hz = 0.5 * float(sx), 0.5 * float(sy), 0.5 * float(sz)
+    r = min(max(1e-4, float(bevel)), 0.45 * min(float(sx), float(sy), float(sz)))
+    core = np.array([hx - r, hy - r, hz - r], dtype=np.float64)
+
+    vert_map: Dict[Tuple[int, int, int], int] = {}
+    grid_pts: List[Tuple[float, float, float]] = []
+
+    def _vid(ix: int, iy: int, iz: int) -> int:
+        key = (ix, iy, iz)
+        idx = vert_map.get(key)
+        if idx is None:
+            idx = len(grid_pts)
+            vert_map[key] = idx
+            grid_pts.append((2.0 * ix / nx - 1.0, 2.0 * iy / ny - 1.0, 2.0 * iz / nz - 1.0))
+        return idx
+
+    tris: List[Tuple[int, int, int]] = []
+    for iz, flip in ((nz, False), (0, True)):
+        for j in range(ny):
+            for i in range(nx):
+                a, b, c, d = _vid(i, j, iz), _vid(i + 1, j, iz), _vid(i + 1, j + 1, iz), _vid(i, j + 1, iz)
+                tris.extend([(a, c, b), (a, d, c)] if flip else [(a, b, c), (a, c, d)])
+    for ix, flip in ((nx, False), (0, True)):
+        for k in range(nz):
+            for j in range(ny):
+                a, b, c, d = _vid(ix, j, k), _vid(ix, j + 1, k), _vid(ix, j + 1, k + 1), _vid(ix, j, k + 1)
+                tris.extend([(a, b, c), (a, c, d)] if flip else [(a, c, b), (a, d, c)])
+    for iy, flip in ((ny, False), (0, True)):
+        for k in range(nz):
+            for i in range(nx):
+                a, b, c, d = _vid(i, iy, k), _vid(i + 1, iy, k), _vid(i + 1, iy, k + 1), _vid(i, iy, k + 1)
+                tris.extend([(a, b, c), (a, c, d)] if flip else [(a, c, b), (a, d, c)])
+
+    g = np.asarray(grid_pts, dtype=np.float64)
+    q = np.column_stack([g[:, 0] * hx, g[:, 1] * hy, g[:, 2] * hz])
+    clamped = np.clip(q, -core, core)
+    diff = q - clamped
+    dnorm = np.linalg.norm(diff, axis=1, keepdims=True)
+    pos = np.where(dnorm > 1e-10, clamped + r * diff / np.maximum(1e-10, dnorm), q).astype(np.float32)
+    idx_arr = ensure_outward_winding(pos, np.asarray(tris, dtype=np.uint32).reshape(-1))
+    return MeshPart(name, material, pos, recompute_smooth_normals(pos, idx_arr), idx_arr)
+
+
 def _build_shovel(
     scene: SceneBuilder,
     right_hand: Tuple[float, float, float],
     right_hand_dir: Tuple[float, float, float],
 ) -> None:
-    """Build Swimmer's authentic horizontal one-piece yellow plastic sandbox hand shovel (`asst901`).
+    """Build Swimmer's short-handled wide flat-front square yellow plastic beach shovel.
 
-    Local coordinates: (0, 0, 0) sits directly inside Swimmer's lowered right fist at hip height;
-    -Z extends backward into the hollow rounded-square D-handle loop (open along X so side view 901 E
-    sees right through the loop!), and +Z extends forward into the wide rounded-leaf beach sand-scoop.
-    All parts use smooth molded `gear_yellow_plastic` (zero wood shaft, zero woven canvas texture).
+    Classic one-piece molded `gear_yellow_plastic` sandbox shovel:
+    - Short compact handle with straight-back D-handle arch at `-Z`
+    - Wide flat-front square U-shaped scoop blade (`blade_w = 0.252`, zero pointed tip!) with rounded
+      rear shoulders, flat tray floor, and crisp raised U-rim walls along back & parallel sides.
+    - Carried at a low sporty bowl-up tilt (`rz = 26 deg`) so the wide flat-front scoop reads broadly
+      in `301 S`, `201 SE`, and `901 E` while staying cleanly clear of legs and diving flippers.
     """
     hx, hy, hz = right_hand
     dx, dy, dz = right_hand_dir
-    grip_x = hx + 0.020 * dx
-    grip_y = hy + 0.020 * dy
+    grip_x = hx + 0.020 * dx - 0.016
+    grip_y = hy + 0.020 * dy + 0.008
     grip_z = hz + 0.020 * dz
     parts: List[MeshPart] = []
 
-    # 1. Rear hollow rounded-square D-ring handle loop lying in the YZ plane (visible open hole in 901 E!).
-    d_front_z = -0.128
-    d_back_z = -0.236
-    d_half_y = 0.044
+    # 1. Classic plastic D-handle at rear (-Z): straight flat grip bar at back + smooth rounded D-arch into shaft.
+    d_front_z = -0.116
+    d_back_z = -0.214
+    d_half_y = 0.048
     d_loop_pts = [
-        (0.0, +d_half_y * 0.55, d_front_z),
-        (0.0, +d_half_y, d_front_z - 0.018),
-        (0.0, +d_half_y, d_back_z + 0.016),
-        (0.0, +d_half_y * 0.55, d_back_z),
-        (0.0, -d_half_y * 0.55, d_back_z),
-        (0.0, -d_half_y, d_back_z + 0.016),
-        (0.0, -d_half_y, d_front_z - 0.018),
-        (0.0, -d_half_y * 0.55, d_front_z),
+        (0.0, +0.014, d_front_z),
+        (0.0, +d_half_y * 0.72, d_front_z - 0.024),
+        (0.0, +d_half_y, d_front_z - 0.062),
+        (0.0, +d_half_y, d_back_z + 0.008),
+        (0.0, +d_half_y * 0.65, d_back_z),
+        (0.0, -d_half_y * 0.65, d_back_z),
+        (0.0, -d_half_y, d_back_z + 0.008),
+        (0.0, -d_half_y, d_front_z - 0.062),
+        (0.0, -d_half_y * 0.72, d_front_z - 0.024),
+        (0.0, -0.014, d_front_z),
     ]
     d_loop = curved_tube(
         d_loop_pts,
-        (0.015, 0.015),
+        (0.0145, 0.0145),
         samples_per_seg=3,
         radial_segs=12,
         closed=True,
@@ -618,70 +707,78 @@ def _build_shovel(
     )
     parts.append(d_loop)
 
-    # Molded junction boss joining the rear D-handle loop smoothly into the horizontal shaft.
     d_boss = (
-        cylinder(0.022, 0.020, 0.028, radial_segs=16, bevel=0.005, axis="z", name="shovel_d_boss", material="gear_yellow_plastic")
+        cylinder(0.021, 0.019, 0.026, radial_segs=16, bevel=0.005, axis="z", name="shovel_d_boss", material="gear_yellow_plastic")
         .translate(0.0, 0.0, d_front_z + 0.010)
     )
     parts.append(d_boss)
 
-    # 2. Short chunky molded yellow plastic horizontal shaft gripped right through local (0, 0, 0).
+    # 2. Short compact molded yellow plastic shaft gripped right through local (0, 0, 0).
     shaft_back_z = d_front_z + 0.016
-    shaft_front_z = +0.092
+    shaft_front_z = +0.088
     shaft = (
-        cylinder(0.0185, 0.0195, shaft_front_z - shaft_back_z, radial_segs=18, bevel=0.004, axis="z", name="shovel_shaft", material="gear_yellow_plastic")
+        cylinder(0.0180, 0.0190, shaft_front_z - shaft_back_z, radial_segs=18, bevel=0.004, axis="z", name="shovel_shaft", material="gear_yellow_plastic")
         .translate(0.0, 0.0, 0.5 * (shaft_back_z + shaft_front_z))
     )
     parts.append(shaft)
 
-    # Smooth flared one-piece molded plastic neck transitioning from shaft into the wide sand scoop.
-    neck_back_z = shaft_front_z - 0.012
-    neck_front_z = shaft_front_z + 0.048
+    neck_back_z = shaft_front_z - 0.010
+    neck_front_z = shaft_front_z + 0.044
     neck = (
-        cylinder(0.020, 0.032, neck_front_z - neck_back_z, radial_segs=18, bevel=0.005, axis="z", name="shovel_neck", material="gear_yellow_plastic")
-        .scale(1.18, 0.82, 1.0)
-        .translate(0.0, -0.002, 0.5 * (neck_back_z + neck_front_z))
+        cylinder(0.019, 0.030, neck_front_z - neck_back_z, radial_segs=18, bevel=0.005, axis="z", name="shovel_neck", material="gear_yellow_plastic")
+        .scale(1.22, 0.78, 1.0)
+        .translate(0.0, 0.004, 0.5 * (neck_back_z + neck_front_z))
     )
     parts.append(neck)
 
-    # 3. Wide chunky rounded-leaf / beach sand-scoop blade pointing FORWARD (+Z) horizontally at hip height.
-    blade_w = 0.220
-    blade_l = 0.256
-    blade_start_z = neck_front_z - 0.014
+    # 3. Wide flat-front square U-shaped sandbox scoop blade (`blade_w = 0.252`, ZERO pointed tip!).
+    blade_w = 0.252
+    blade_l = 0.246
+    blade_start_z = neck_front_z - 0.016
     blade_cz = blade_start_z + 0.5 * blade_l
 
-    def _sculpt_beach_scoop(pos: np.ndarray) -> np.ndarray:
+    def _sculpt_square_scoop(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
-        # u = 0.0 at rear rounded shoulder -> u = 1.0 at friendly wide rounded beach-scoop nose.
+        # u = 0.0 at rounded rear heel shoulders -> u = 1.0 at wide, straight, flat-front digging edge.
         u = np.clip((p[:, 2] + 0.5 * blade_l) / blade_l, 0.0, 1.0)
 
-        # Classic plump rounded-leaf sandbox shovel planform: flares smoothly out from neck, wide mid belly, rounded nose.
-        t_rear = np.clip((0.26 - u) / 0.26, 0.0, 1.0)
-        t_tip = np.clip((u - 0.44) / 0.56, 0.0, 1.0)
-        rear_taper = 1.0 - 0.56 * (t_rear ** 1.75)
-        tip_taper = (1.0 - 0.86 * (t_tip ** 2.05)) ** 0.55
-        p[:, 0] *= rear_taper * tip_taper
+        # Rounded rear heel shoulders flaring quickly to FULL wide straight parallel walls (subtle +4% front flare).
+        t_rear = np.clip((0.30 - u) / 0.30, 0.0, 1.0)
+        rear_curve = np.sqrt(np.clip(1.0 - 0.76 * (t_rear ** 2.2), 0.16, 1.0))
+        front_flare = 1.0 + 0.04 * np.clip((u - 0.30) / 0.70, 0.0, 1.0)
+        # Gentle tiny corner bevel only at the very front corners (keeps front edge wide, straight, and flat!).
+        t_corner = np.clip((u - 0.90) / 0.10, 0.0, 1.0)
+        corner_soft = 1.0 - 0.06 * (t_corner ** 2.0)
+        p[:, 0] *= rear_curve * front_flare * corner_soft
 
-        nx = p[:, 0] / max(1e-6, 0.5 * blade_w)
-        # Deep chunky molded plastic sand-scoop dish (concave upward +Y along side walls & front lip).
-        scoop_y = 0.038 * (nx * nx) + 0.024 * (u ** 1.75)
-        # Raised curved rear heel lip hugging behind the neck like a real sandbox toy scoop.
-        heel_lip = 0.022 * (np.clip((0.18 - u) / 0.18, 0.0, 1.0) ** 1.6) * (0.35 + 0.65 * (nx * nx))
-        thick_scale = 1.0 - 0.32 * (u ** 1.2)
-        p[:, 1] = p[:, 1] * thick_scale + scoop_y + heel_lip - 0.016
+        half_w_local = np.maximum(1e-4, 0.5 * blade_w * rear_curve * front_flare * corner_soft)
+        nx = np.abs(p[:, 0]) / half_w_local
+
+        # Flat tray floor across the wide center (|nx| < 0.74), curving sharply UP into crisp molded U-rim walls
+        # along both parallel sides AND around the rounded rear heel, tapering smoothly open at the flat front edge!
+        side_wall = np.clip((nx - 0.72) / 0.28, 0.0, 1.0) ** 1.65
+        rear_wall = np.clip((0.24 - u) / 0.24, 0.0, 1.0) ** 1.75
+        front_open = 1.0 - 0.85 * (np.clip((u - 0.84) / 0.16, 0.0, 1.0) ** 1.5)
+        u_wall = np.maximum(side_wall * front_open, rear_wall)
+
+        # Subtle flat tray floor camber + tall crisp 34 mm molded U-side walls.
+        wall_lift = 0.036 * u_wall
+        floor_camber = 0.004 * (nx * nx) * (1.0 - 0.5 * u)
+        thick_scale = 1.0 - 0.30 * (u ** 1.2)
+        p[:, 1] = p[:, 1] * thick_scale + wall_lift + floor_camber - 0.014
         return p
 
     blade_core = (
-        rounded_box(blade_w, 0.022, blade_l, bevel=0.008, segs=6, name="shovel_blade", material="gear_yellow_plastic")
-        .deform(_sculpt_beach_scoop)
+        _subdivided_slab(blade_w, 0.018, blade_l, bevel=0.005, nx=22, ny=4, nz=20, name="shovel_blade", material="gear_yellow_plastic")
+        .deform(_sculpt_square_scoop)
         .translate(0.0, 0.0, blade_cz)
     )
     parts.append(blade_core)
 
-    # Molded central plastic strengthening spine tapering cleanly into the scoop dish.
+    # Molded central rear strengthening rib flaring cleanly from shaft neck into the rear heel.
     blade_spine = (
         lathe(
-            [(0.024, 0.000), (0.018, 0.036), (0.011, 0.076), (0.000, 0.104)],
+            [(0.023, 0.000), (0.017, 0.028), (0.010, 0.058), (0.000, 0.080)],
             radial_segs=14,
             cap_bottom=True,
             cap_top=False,
@@ -689,17 +786,75 @@ def _build_shovel(
             name="shovel_spine",
             material="gear_yellow_plastic",
         )
-        .scale(1.0, 0.65, 1.0)
-        .translate(0.0, -0.006, blade_start_z + 0.004)
+        .scale(1.15, 0.58, 1.0)
+        .translate(0.0, 0.004, blade_start_z + 0.006)
     )
     parts.append(blade_spine)
 
-    # Horizontal waist-level carry matching asst901 & asst201: bold upright scoop roll exposes the chunky
-    # rounded-leaf yellow blade broadly in BOTH 901 E side and 301 S front views while clearing legs & fins.
+    # Low sporty bowl-up carry angle (`rz = 26 deg`) so the wide flat-front square scoop reads BROADLY
+    # from 301 S front 45 deg, 201 SE 45 deg, AND 901 E side 45 deg while clearing right leg & flippers.
     for part in parts:
-        placed = part.rotate_xyz(rx=5.0, ry=-6.0, rz=62.0, degrees=True)
+        placed = part.rotate_xyz(rx=10.0, ry=-12.0, rz=26.0, degrees=True)
         scene.add("shovel", placed)
     scene.set_node_transform("shovel", translation=(grip_x, grip_y, grip_z))
+
+
+def _build_clubbed_antennae(scene: SceneBuilder, anchors: Dict[str, Any]) -> None:
+    """Replace base thin antennae with chunky bulbous-clubbed Swimmer antennae clearing the +X snorkel."""
+    head_xf = scene.get_node_transform("head")
+    neck_pivot = (
+        (-head_xf.translation[0], -head_xf.translation[1], -head_xf.translation[2])
+        if head_xf is not None
+        else anchors["neck_center"]
+    )
+    # Sleek tapered stem swelling boldly into ~1.9x bigger bulbous rounded club tips (matching asst301).
+    club_rads = [
+        (0.018, 0.018),
+        (0.015, 0.015),
+        (0.013, 0.013),
+        (0.015, 0.015),
+        (0.024, 0.025),
+        (0.032, 0.033),
+        (0.022, 0.023),
+    ]
+    for side, tag, orig_key in ((+1.0, "left", "antenna_base_left"), (-1.0, "right", "antenna_base_right")):
+        node_name = f"antenna_{tag}"
+        base_p = anchors[orig_key]
+        bx, by, bz = base_p
+        # Keep +X (left) antenna arching cleanly inboard/upward away from the tall +X yellow snorkel!
+        out_x = 0.018 if side > 0 else 0.034
+        h_off = 0.008 if side > 0 else -0.006
+        pts = [
+            (bx - side * 0.004, by - 0.016, bz - 0.004),
+            base_p,
+            (bx + side * (0.40 * out_x), by + 0.068 + 0.4 * h_off, bz + 0.018),
+            (bx + side * (0.75 * out_x), by + 0.128 + 0.8 * h_off, bz + 0.044),
+            (bx + side * (0.95 * out_x), by + 0.148 + h_off, bz + 0.082),
+            (bx + side * (1.05 * out_x), by + 0.132 + h_off, bz + 0.114),
+            (bx + side * (1.08 * out_x), by + 0.112 + h_off, bz + 0.128),
+        ]
+        stalk = swept_tube(
+            pts,
+            club_rads,
+            radial_segs=14,
+            smooth_subdiv=3,
+            cap_rings=3,
+            name=f"antenna_stalk_{tag}",
+            material="chitin_dark",
+        )
+        sock = (
+            ellipsoid(0.022, 0.011, 0.022, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark")
+            .rotate_xyz(rx=0.16, rz=-side * 0.22)
+            .translate(*base_p)
+        )
+        scene.nodes[node_name] = [
+            stalk.translate(-bx, -by, -bz),
+            sock.translate(-bx, -by, -bz),
+        ]
+        scene.set_node_transform(
+            node_name,
+            translation=(bx - neck_pivot[0], by - neck_pivot[1], bz - neck_pivot[2]),
+        )
 
 
 def _add_swimmer_idle(scene: SceneBuilder) -> AnimationClip:
@@ -832,6 +987,7 @@ def build_swimmer(blink: float = 0.0) -> SceneBuilder:
         blink=blink,
     )
     closed_angle = float(anchors.get("eyelid_closed_angle", 1.80))
+    _build_clubbed_antennae(scene, anchors)
     clip_anchor = _build_scuba_mask(scene, anchors["head_center"], anchors["head_radii"], anchors["eye_left"], closed_angle)
     _build_snorkel(scene, anchors["head_center"], anchors["head_top"], clip_anchor)
     _build_scuba_tank(scene, anchors["back_anchor"], anchors["thorax_center"])

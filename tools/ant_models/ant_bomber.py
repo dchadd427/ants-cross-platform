@@ -121,28 +121,28 @@ def _build_aviator_cup(
     bore_r: float,
     lens_z: float,
 ) -> List[MeshPart]:
-    """Build one narrow, forward-projecting copper-and-gold aviator goggle barrel (7 gold studs).
+    """Build one compact, sleek, forward-projecting copper-and-gold aviator goggle barrel (7 gold studs).
 
-    Keeps a sleek narrow outer radius hugging the compact eyes while extending ~1.45x deeper along +Z
-    so the twin projecting barrels read crisply in 201 SE and 901 E with clear see-through lenses.
+    Keeps a compact circle diameter sitting cleanly inside the head width while projecting neatly
+    forward so the twin barrels read crisply in 301 S, 201 SE, and 901 E with clear lenses.
     """
     parts: List[MeshPart] = []
     tag = "left" if side_sign > 0 else "right"
 
-    z_back = -0.020
-    z_copper_start = 0.008
-    z_rim_start = lens_z - 0.018
-    z_rim_front = lens_z + 0.019
+    z_back = -0.022
+    z_copper_start = 0.006
+    z_rim_start = lens_z - 0.015
+    z_rim_front = lens_z + 0.016
 
     r_in = bore_r
-    r_copper_out = bore_r + 0.0135
-    r_rim_out = bore_r + 0.0120
+    r_copper_out = bore_r + 0.0100
+    r_rim_out = bore_r + 0.0090
 
     # 1. Snug dark rubber face cushion tucking neatly onto the orbital rim.
     cushion_prof = [
         (r_in + 0.001, z_back),
-        (r_copper_out - 0.003, z_back - 0.002),
-        (r_copper_out + 0.001, z_back + 0.014),
+        (r_copper_out - 0.0025, z_back - 0.002),
+        (r_copper_out + 0.0008, z_back + 0.014),
         (r_copper_out, z_copper_start + 0.004),
         (r_in + 0.001, z_copper_start + 0.004),
     ]
@@ -155,14 +155,14 @@ def _build_aviator_cup(
         )
     )
 
-    # 2. Elongated warm copper / orange-brass binocular barrel wall projecting cleanly forward.
+    # 2. Sleek warm copper / orange-brass binocular barrel wall projecting cleanly forward.
     z_mid = z_copper_start + 0.55 * (z_rim_start - z_copper_start)
     copper_prof = [
         (r_in, z_copper_start),
-        (r_copper_out - 0.001, z_copper_start),
-        (r_copper_out + 0.0018, z_copper_start + 0.024),
-        (r_copper_out + 0.0022, z_mid),
-        (r_copper_out + 0.001, z_rim_start + 0.004),
+        (r_copper_out - 0.0008, z_copper_start),
+        (r_copper_out + 0.0014, z_copper_start + 0.020),
+        (r_copper_out + 0.0016, z_mid),
+        (r_copper_out + 0.0008, z_rim_start + 0.004),
         (r_in, z_rim_start + 0.004),
     ]
     parts.append(
@@ -174,22 +174,22 @@ def _build_aviator_cup(
         )
     )
 
-    # Subtle mid-barrel metallic brass accent ring adding sculptural definition along the longer barrel.
+    # Subtle mid-barrel metallic brass accent ring adding sculptural definition along the barrel.
     mid_band = (
-        torus_arc(r_copper_out + 0.001, 0.0032, u_segs=28, v_segs=8, plane="xy", name=f"goggle_mid_band_{tag}", material="gear_gold_metal")
+        torus_arc(r_copper_out + 0.0008, 0.0024, u_segs=28, v_segs=8, plane="xy", name=f"goggle_mid_band_{tag}", material="gear_gold_metal")
         .translate(0.0, 0.0, z_copper_start + 0.30 * (z_rim_start - z_copper_start))
     )
     parts.append(mid_band)
 
-    # 3. Bold beveled bright yellow-gold front lens hood rim framing the recessed clear glass lens.
+    # 3. Crisp beveled bright yellow-gold front lens hood rim framing the recessed clear glass lens.
     rim_prof = [
         (r_in - 0.001, z_rim_start),
-        (r_rim_out - 0.002, z_rim_start),
-        (r_rim_out + 0.0015, z_rim_start + 0.009),
-        (r_rim_out + 0.001, z_rim_front - 0.006),
-        (r_rim_out - 0.004, z_rim_front),
-        (r_in + 0.003, z_rim_front),
-        (r_in - 0.001, z_rim_front - 0.005),
+        (r_rim_out - 0.0015, z_rim_start),
+        (r_rim_out + 0.0012, z_rim_start + 0.007),
+        (r_rim_out + 0.0008, z_rim_front - 0.005),
+        (r_rim_out - 0.0030, z_rim_front),
+        (r_in + 0.0024, z_rim_front),
+        (r_in - 0.001, z_rim_front - 0.004),
         (r_in - 0.001, z_rim_start + 0.004),
     ]
     parts.append(
@@ -203,27 +203,27 @@ def _build_aviator_cup(
 
     # Crisp thin dark inner gasket ring right behind the glass edge.
     inner_gasket = (
-        torus_arc(r_in, 0.0028, u_segs=26, v_segs=8, plane="xy", name=f"goggle_inner_gasket_{tag}", material="gear_dark")
-        .translate(0.0, 0.0, lens_z + 0.004)
+        torus_arc(r_in, 0.0022, u_segs=26, v_segs=8, plane="xy", name=f"goggle_inner_gasket_{tag}", material="gear_dark")
+        .translate(0.0, 0.0, lens_z + 0.003)
     )
     parts.append(inner_gasket)
 
     # 4. Thin see-through tinted optical glass lens seated inside the projecting front hood.
     lens = (
-        ellipsoid(r_in + 0.001, r_in + 0.001, 0.006, u_segs=28, v_segs=14, name=f"goggle_lens_{tag}", material="glass_tinted")
+        ellipsoid(r_in + 0.001, r_in + 0.001, 0.0055, u_segs=28, v_segs=14, name=f"goggle_lens_{tag}", material="glass_tinted")
         .translate(0.0, 0.0, lens_z)
     )
     parts.append(lens)
 
     # 5. Seven crisp bright yellow-gold rivets studded around the projecting copper wall.
-    stud_r = r_copper_out + 0.0026
-    stud_z = z_mid + 0.012
+    stud_r = r_copper_out + 0.0018
+    stud_z = z_mid + 0.010
     for r_idx, ang_deg in enumerate((-26.0, 4.0, 34.0, 64.0, 94.0, 124.0, 154.0)):
         ang = math.radians(ang_deg)
         sx = side_sign * stud_r * math.sin(ang)
         sy = stud_r * math.cos(ang)
         rivet = (
-            sphere(0.0062, u_segs=10, v_segs=8, name=f"goggle_stud_{tag}_{r_idx}", material="gear_gold")
+            sphere(0.0046, u_segs=10, v_segs=8, name=f"goggle_stud_{tag}_{r_idx}", material="gear_gold")
             .translate(sx, sy, stud_z)
         )
         parts.append(rivet)
@@ -239,14 +239,14 @@ def _build_goggles(
     eye_right: Tuple[float, float, float],
     closed_angle: float,
 ) -> None:
-    """Build narrow-width, forward-projecting copper-and-gold aviator goggles & rear strap."""
+    """Build compact, sleek, forward-projecting copper-and-gold aviator goggles & snug rear strap."""
     hx, _, hz = head_center
     hrx, _, hrz = head_radii
     ey = 0.5 * (eye_left[1] + eye_right[1])
     ez = 0.5 * (eye_left[2] + eye_right[2])
 
-    pitch = -0.13
-    yaw_mag = 0.21
+    pitch = -0.11
+    yaw_mag = 0.13
     mount_dx = 0.0
     mount_dz = 0.001
 
@@ -257,9 +257,9 @@ def _build_goggles(
         goggle_yaw=yaw_mag,
         mount_offset=(mount_dx, 0.0, mount_dz),
     )
-    # Narrow radial fit around Bomber's compact head + bold projecting binocular barrel length.
-    bore_r = max(0.0785, max_lid_r + 0.0036)
-    lens_z = max(0.114, max_lid_z + 0.038)
+    # Compact sleek circular barrels sitting cleanly inside Bomber's head width (abst301/201/901).
+    bore_r = max(0.058, max_lid_r + 0.0048)
+    lens_z = max(0.096, max_lid_z + 0.036)
 
     for side_sign, eye_pos in ((+1.0, eye_left), (-1.0, eye_right)):
         mount = (eye_pos[0] + side_sign * mount_dx, eye_pos[1], eye_pos[2] + mount_dz)
@@ -276,32 +276,51 @@ def _build_goggles(
                 placed = placed.deform(_clamp_nose_midline)
             scene.add("goggles", placed)
 
-    # Sleek copper nose bridge & gold center rivet joining the two projecting barrels cleanly.
-    bridge_z = ez + lens_z * 0.68
+    # Sleek copper nose bridge & gold center rivet joining the two compact projecting barrels cleanly.
+    bridge_z = ez + lens_z * 0.66
     bridge = (
-        rounded_box(0.036, 0.022, 0.026, bevel=0.006, segs=3, name="goggle_bridge", material="gear_brass_trim")
-        .translate(hx, ey + 0.011, bridge_z)
+        rounded_box(0.030, 0.018, 0.022, bevel=0.005, segs=3, name="goggle_bridge", material="gear_brass_trim")
+        .translate(hx, ey + 0.009, bridge_z)
     )
     scene.add("goggles", bridge)
 
     bridge_stud = (
-        cylinder(0.0072, 0.0072, 0.010, radial_segs=14, bevel=0.0022, axis="z", name="goggle_bridge_stud", material="gear_gold")
-        .translate(hx, ey + 0.011, bridge_z + 0.013)
+        cylinder(0.0056, 0.0056, 0.008, radial_segs=14, bevel=0.0018, axis="z", name="goggle_bridge_stud", material="gear_gold")
+        .translate(hx, ey + 0.009, bridge_z + 0.011)
     )
     scene.add("goggles", bridge_stud)
 
-    # Compact temple hinges connecting outer goggle cups smoothly into the dark rear head strap.
-    rx_strap = hrx + 0.008
-    rz_strap = hrz + 0.009
-    for side_sign, tag in ((+1.0, "left"), (-1.0, "right")):
+    # Compact temple hinges & angled strap tabs bridging the sleek barrels smoothly into the rear head strap.
+    rx_strap = hrx + 0.007
+    rz_strap = hrz + 0.008
+    for side_sign, tag, eye_pos in ((+1.0, "left", eye_left), (-1.0, "right", eye_right)):
+        cup_side_x = eye_pos[0] + side_sign * (bore_r + 0.006)
+        cup_side_z = eye_pos[2] + 0.020
+        temple_x = hx + side_sign * (rx_strap * _spow(math.sin(math.radians(52.0)), 0.76))
+        temple_z = hz + rz_strap * _spow(math.cos(math.radians(52.0)), 0.76)
+        tab = curved_tube(
+            [
+                (cup_side_x, ey + 0.004, cup_side_z),
+                (0.5 * (cup_side_x + temple_x) + side_sign * 0.012, ey + 0.004, 0.5 * (cup_side_z + temple_z) + 0.010),
+                (temple_x, ey + 0.005, temple_z),
+            ],
+            (0.018, 0.009),
+            samples_per_seg=4,
+            radial_segs=10,
+            cap_rings=2,
+            name=f"goggle_temple_tab_{tag}",
+            material="gear_dark",
+        )
+        scene.add("goggles", tab)
+
         clasp = (
-            rounded_box(0.022, 0.038, 0.040, bevel=0.007, segs=3, name=f"goggle_clasp_{tag}", material="gear_brass_trim")
-            .rotate_xyz(ry=side_sign * 0.34)
-            .translate(hx + side_sign * (hrx - 0.010), ey + 0.004, hz + hrz * 0.56)
+            rounded_box(0.018, 0.030, 0.032, bevel=0.006, segs=3, name=f"goggle_clasp_{tag}", material="gear_brass_trim")
+            .rotate_xyz(ry=side_sign * 0.36)
+            .translate(temple_x - side_sign * 0.006, ey + 0.004, temple_z + 0.004)
         )
         scene.add("goggles", clasp)
 
-    # Snug dark rubber head strap hugging the compact soft-cube cranium contour (e2=0.76).
+    # Snug dark rubber head strap hugging the compact flattened soft-cube cranium contour (e2=0.76).
     strap_pts: List[Tuple[float, float, float]] = []
     n_arc = 28
     start_ang = math.radians(52.0)
@@ -310,12 +329,12 @@ def _build_goggles(
         ang = start_ang + (end_ang - start_ang) * (i / n_arc)
         sx = hx + rx_strap * _spow(math.sin(ang), 0.76)
         sz = hz + rz_strap * _spow(math.cos(ang), 0.76)
-        rear_lift = 0.012 * (0.5 * (1.0 - math.cos(ang)))
+        rear_lift = 0.008 * (0.5 * (1.0 - math.cos(ang)))
         strap_pts.append((sx, ey + 0.005 + rear_lift, sz))
 
     strap = swept_tube(
         strap_pts,
-        (0.024, 0.011),
+        (0.020, 0.0095),
         radial_segs=12,
         cap_start=True,
         cap_end=True,
@@ -327,8 +346,8 @@ def _build_goggles(
     scene.add("goggles", strap)
 
     rear_buckle = (
-        rounded_box(0.062, 0.056, 0.022, bevel=0.007, segs=3, name="goggle_rear_buckle", material="gear_gold_metal")
-        .translate(hx, ey + 0.018, hz - rz_strap - 0.003)
+        rounded_box(0.052, 0.046, 0.018, bevel=0.006, segs=3, name="goggle_rear_buckle", material="gear_gold_metal")
+        .translate(hx, ey + 0.013, hz - rz_strap - 0.002)
     )
     scene.add("goggles", rear_buckle)
 
@@ -520,11 +539,11 @@ def _build_dynamite_pack(
     scene.add("dynamite_pack", chest_belt)
 
     rack_pts = [
-        (-0.158, pack_y + 0.054, pack_z - 0.068),
-        (-0.088, pack_y + 0.098, pack_z - 0.110),
-        (0.000, pack_y + 0.114, pack_z - 0.124),
-        (0.088, pack_y + 0.098, pack_z - 0.110),
-        (0.158, pack_y + 0.054, pack_z - 0.068),
+        (-0.158, pack_y + 0.054, pack_z - 0.080),
+        (-0.088, pack_y + 0.098, pack_z - 0.122),
+        (0.000, pack_y + 0.114, pack_z - 0.136),
+        (0.088, pack_y + 0.098, pack_z - 0.122),
+        (0.158, pack_y + 0.054, pack_z - 0.080),
     ]
     rack_strap = curved_tube(
         rack_pts,
@@ -540,16 +559,16 @@ def _build_dynamite_pack(
     rack_buckle = (
         rounded_box(0.048, 0.042, 0.022, bevel=0.007, segs=3, name="bomb_rack_buckle", material="gear_gold_metal")
         .rotate_xyz(rx=-0.26)
-        .translate(0.0, pack_y + 0.114, pack_z - 0.132)
+        .translate(0.0, pack_y + 0.114, pack_z - 0.144)
     )
     scene.add("dynamite_pack", rack_buckle)
 
-    # Set back cleanly behind the -16 deg chin-up pitched cranium & rear goggle strap/buckle.
+    # Set back cleanly behind Bomber's lively chin-up pitched head, rear strap, and floppy antennae.
     pack_specs = (
-        (+18.0, -18.0, -0.112, 0.062, -0.076, 0.080, -0.026),
-        (+6.0, -23.0, -0.046, 0.140, -0.106, 0.084, -0.022),
-        (-6.0, -23.0, +0.046, 0.140, -0.106, 0.084, +0.022),
-        (-18.0, -18.0, +0.112, 0.062, -0.076, 0.080, +0.026),
+        (+18.0, -18.0, -0.112, 0.062, -0.088, 0.080, -0.026),
+        (+6.0, -23.0, -0.046, 0.140, -0.118, 0.084, -0.022),
+        (-6.0, -23.0, +0.046, 0.140, -0.118, 0.084, +0.022),
+        (-18.0, -18.0, +0.112, 0.062, -0.088, 0.080, +0.026),
     )
     for idx, (rz_deg, rx_deg, ox, oy, oz, cup_h, fuse_dx) in enumerate(pack_specs):
         holster = (
@@ -609,9 +628,9 @@ def _add_bomber_idle(scene: SceneBuilder) -> AnimationClip:
         quat_mul(
             r0_head,
             quat_from_euler_xyz(
-                rx=0.038 * math.sin(4.0 * math.pi * (k / n_steps)),
-                ry=-0.085 * math.sin(2.0 * math.pi * (k / n_steps)),
-                rz=0.034 * math.sin(2.0 * math.pi * (k / n_steps) - 0.2),
+                rx=0.088 * math.sin(4.0 * math.pi * (k / n_steps)),
+                ry=-0.205 * math.sin(2.0 * math.pi * (k / n_steps)),
+                rz=0.082 * math.sin(2.0 * math.pi * (k / n_steps) - 0.18),
             ),
         )
         for k in range(n_steps + 1)
@@ -631,15 +650,19 @@ def _add_bomber_idle(scene: SceneBuilder) -> AnimationClip:
         ]
         g_r[-1] = g_r[0]
         channels.append(AnimationChannel("gaster_group", "rotation", list(times), g_r))
-    for node_name, side, poff in (("antenna_left", 1.0, 0.0), ("antenna_right", -1.0, 0.8)):
+    # Visibly floppy secondary-lag antennae bouncing ~0.65 rad behind Bomber's lively head nod & glance!
+    for node_name, side, lag in (("antenna_left", 1.0, 0.58), ("antenna_right", -1.0, 0.78)):
         if node_name in scene.nodes and scene.get_node(node_name):
             r0_a = _rest_r(node_name)
             vals = [
                 quat_mul(
                     r0_a,
                     quat_from_euler_xyz(
-                        rx=0.052 * math.sin(4.0 * math.pi * (k / n_steps) + poff),
-                        rz=side * 0.032 * math.sin(2.0 * math.pi * (k / n_steps)),
+                        rx=-0.148 * math.sin(4.0 * math.pi * (k / n_steps) - lag)
+                        + 0.042 * math.sin(2.0 * math.pi * (k / n_steps) - lag),
+                        ry=side * 0.055 * math.sin(2.0 * math.pi * (k / n_steps) - lag),
+                        rz=-0.105 * math.sin(2.0 * math.pi * (k / n_steps) - lag)
+                        + side * 0.040 * math.sin(4.0 * math.pi * (k / n_steps) - lag),
                     ),
                 )
                 for k in range(n_steps + 1)
@@ -663,7 +686,9 @@ def _scale_bomber_head_and_tall_antennae(
     scene: SceneBuilder,
     anchors: dict,
     *,
-    head_scale: float = 0.90,
+    head_scale_xz: float = 0.90,
+    head_scale_y: float = 0.77,
+    eye_inward_dx: float = -0.004,
 ) -> Tuple[
     Tuple[float, float, float],
     Tuple[float, float, float],
@@ -671,10 +696,11 @@ def _scale_bomber_head_and_tall_antennae(
     Tuple[float, float, float],
     float,
 ]:
-    """Scale Bomber's head/eyes/eyelids/mandibles ~10% slimmer and sculpt tall, bold upright antennae.
+    """Flatten Bomber's cranium vertically while keeping eyes/eyelids spherical and antennae tall & flush.
 
-    Matches `abst301` compact slim head silhouette (`~21px` wide) topped by tall bold dark antennae
-    towering prominently above the goggles and pink back-pack bombs.
+    Matches `abst301`/`abst901`: sleek flatter crown (`sy=0.77, sx=sz=0.90`) topped by tall bold dark
+    antennae seated cleanly on the lowered crown, with uniformly spherical compact eyes & eyelids so
+    circular blink rotation never distorts.
     """
     hc = anchors["head_center"]
     hrx, hry, hrz = anchors["head_radii"]
@@ -684,71 +710,102 @@ def _scale_bomber_head_and_tall_antennae(
         if head_xf is not None
         else anchors["neck_center"]
     )
-    # Anchor scaling slightly below head center so the slimmer skull stays seated flush on neck_joint.
+    # Anchor scaling slightly below head center so the flatter skull stays seated flush on neck_joint.
     piv = (hc[0], hc[1] - 0.052, hc[2])
     p_hg = (piv[0] - neck_pivot[0], piv[1] - neck_pivot[1], piv[2] - neck_pivot[2])
-    s = float(head_scale)
+    sx = float(head_scale_xz)
+    sy = float(head_scale_y)
+    sz = float(head_scale_xz)
+    s_uni = float(head_scale_xz)
 
-    # 1. Uniformly scale `head` & `eyes` parts around `piv` in neutral world space (t stays -neck_pivot).
-    for node_name in ("head", "eyes"):
+    def _scale_pt_aniso(pt: Tuple[float, float, float]) -> Tuple[float, float, float]:
+        return (
+            piv[0] + sx * (pt[0] - piv[0]),
+            piv[1] + sy * (pt[1] - piv[1]),
+            piv[2] + sz * (pt[2] - piv[2]),
+        )
+
+    # 1. Anisotropically flatten `head` cranium around `piv` (less-tall crown matching abst301/abst901).
+    if "head" in scene.nodes:
+        scene.nodes["head"] = [
+            part.translate(-piv[0], -piv[1], -piv[2]).scale(sx, sy, sz).translate(*piv)
+            for part in scene.nodes["head"]
+        ]
+
+    # 2. Keep `eyes`, `eyelid_left`, and `eyelid_right` UNIFORMLY scaled (100% spherical blink!)
+    # while moving each eye cleanly onto its flattened orbital socket position.
+    orig_eye_l = anchors["eye_left"]
+    orig_eye_r = anchors["eye_right"]
+    raw_el = _scale_pt_aniso(orig_eye_l)
+    raw_er = _scale_pt_aniso(orig_eye_r)
+    new_eye_l = (raw_el[0] - eye_inward_dx, raw_el[1], raw_el[2])
+    new_eye_r = (raw_er[0] + eye_inward_dx, raw_er[1], raw_er[2])
+
+    if "eyes" in scene.nodes:
+        rebuilt_eyes: List[MeshPart] = []
+        for part in scene.nodes["eyes"]:
+            is_left = part.name.endswith("_left") or float(part.positions[:, 0].mean()) >= 0.0
+            src_c = orig_eye_l if is_left else orig_eye_r
+            dst_c = new_eye_l if is_left else new_eye_r
+            rebuilt_eyes.append(
+                part.translate(-src_c[0], -src_c[1], -src_c[2]).scale(s_uni, s_uni, s_uni).translate(*dst_c)
+            )
+        scene.nodes["eyes"] = rebuilt_eyes
+
+    for node_name, dst_c in (("eyelid_left", new_eye_l), ("eyelid_right", new_eye_r)):
         if node_name in scene.nodes:
-            scene.nodes[node_name] = [
-                part.translate(-piv[0], -piv[1], -piv[2]).scale(s, s, s).translate(*piv)
-                for part in scene.nodes[node_name]
-            ]
+            scene.nodes[node_name] = [part.scale(s_uni, s_uni, s_uni) for part in scene.nodes[node_name]]
+            scene.set_node_transform(
+                node_name,
+                translation=(dst_c[0] - neck_pivot[0], dst_c[1] - neck_pivot[1], dst_c[2] - neck_pivot[2]),
+            )
 
-    # 2. Scale locally-pivoted `mandibles`, `eyelid_left`, `eyelid_right` around their own (0,0,0) hinges
-    # and shift their `head_group`-local pivot positions toward `p_hg` so blink & jaw pivots stay exact.
-    for node_name in ("mandibles", "eyelid_left", "eyelid_right"):
-        if node_name in scene.nodes:
-            scene.nodes[node_name] = [part.scale(s, s, s) for part in scene.nodes[node_name]]
-            xf = scene.get_node_transform(node_name)
-            if xf is not None:
-                tx, ty, tz = xf.translation
-                scene.set_node_transform(
-                    node_name,
-                    translation=(
-                        p_hg[0] + s * (tx - p_hg[0]),
-                        p_hg[1] + s * (ty - p_hg[1]),
-                        p_hg[2] + s * (tz - p_hg[2]),
-                    ),
-                )
+    # Uniformly scale `mandibles` around its jaw hinge and seat its pivot cleanly on the flatter chin.
+    if "mandibles" in scene.nodes:
+        scene.nodes["mandibles"] = [part.scale(s_uni, s_uni, s_uni) for part in scene.nodes["mandibles"]]
+        xf = scene.get_node_transform("mandibles")
+        if xf is not None:
+            tx, ty, tz = xf.translation
+            scene.set_node_transform(
+                "mandibles",
+                translation=(
+                    p_hg[0] + sx * (tx - p_hg[0]),
+                    p_hg[1] + sy * (ty - p_hg[1]),
+                    p_hg[2] + sz * (tz - p_hg[2]),
+                ),
+            )
 
-    def _scale_pt(pt: Tuple[float, float, float]) -> Tuple[float, float, float]:
-        return (piv[0] + s * (pt[0] - piv[0]), piv[1] + s * (pt[1] - piv[1]), piv[2] + s * (pt[2] - piv[2]))
-
-    new_hc = _scale_pt(hc)
-    new_hr = (hrx * s, hry * s, hrz * s)
-    new_eye_l = _scale_pt(anchors["eye_left"])
-    new_eye_r = _scale_pt(anchors["eye_right"])
+    new_hc = _scale_pt_aniso(hc)
+    new_hr = (hrx * sx, hry * sy, hrz * sz)
     new_head_back_z = new_hc[2] - new_hr[2]
 
-    # 3. Replace antennae with tall, thick, bold upright Bomber antennae (~1.52x taller, ~1.38x thicker)
-    # anchored onto the scaled skull crown so they tower cleanly above goggles & bombs like `abst301`.
+    # 3. Seat sleek, tall, slicked-back (-Z) Bomber antennae flush ON the lowered flatter crown surface
+    # matching abst901/abst801/abst201 (sweeping up-and-backward over the crown, never forward over goggles!).
     ant_rads = [
-        (0.024, 0.024),
-        (0.020, 0.021),
-        (0.017, 0.018),
+        (0.023, 0.023),
         (0.019, 0.020),
-        (0.024, 0.026),
-        (0.028, 0.030),
-        (0.015, 0.017),
+        (0.016, 0.017),
+        (0.018, 0.019),
+        (0.023, 0.025),
+        (0.026, 0.028),
+        (0.014, 0.016),
     ]
     for side, tag, orig_key in ((+1.0, "left", "antenna_base_left"), (-1.0, "right", "antenna_base_right")):
         node_name = f"antenna_{tag}"
-        base_p = _scale_pt(anchors[orig_key])
-        # Subtle playful jaunty asymmetry while keeping BOTH antennae boldly tall & upright.
-        h_boost = 0.022 if side > 0 else -0.014
-        z_lean = 0.016 if side > 0 else -0.014
+        raw_base = _scale_pt_aniso(anchors[orig_key])
+        # Embed socket cleanly flush into the lowered flatter cranium surface (0 mm floating gap).
+        base_p = (raw_base[0] * 0.95, raw_base[1] - 0.010, raw_base[2] - 0.004)
+        h_boost = 0.020 if side > 0 else -0.014
+        z_extra = -0.016 if side > 0 else +0.012
         bx, by, bz = base_p
         pts = [
-            (bx - side * 0.006, by - 0.018, bz - 0.004),
+            (bx - side * 0.005, by - 0.020, bz + 0.004),
             base_p,
-            (bx + side * 0.018, by + 0.115 + 0.4 * h_boost, bz + 0.008 + 0.3 * z_lean),
-            (bx + side * 0.034, by + 0.215 + 0.8 * h_boost, bz + 0.024 + 0.6 * z_lean),
-            (bx + side * 0.044, by + 0.258 + h_boost, bz + 0.068 + 0.9 * z_lean),
-            (bx + side * 0.048, by + 0.244 + h_boost, bz + 0.104 + z_lean),
-            (bx + side * 0.050, by + 0.212 + 0.9 * h_boost, bz + 0.122 + 1.1 * z_lean),
+            (bx + side * 0.014, by + 0.110 + 0.35 * h_boost, bz - 0.032 + 0.3 * z_extra),
+            (bx + side * 0.028, by + 0.198 + 0.70 * h_boost, bz - 0.088 + 0.6 * z_extra),
+            (bx + side * 0.038, by + 0.238 + 0.95 * h_boost, bz - 0.150 + 0.9 * z_extra),
+            (bx + side * 0.044, by + 0.232 + h_boost, bz - 0.200 + z_extra),
+            (bx + side * 0.048, by + 0.204 + 0.90 * h_boost, bz - 0.230 + 1.1 * z_extra),
         ]
         stalk = swept_tube(
             pts,
@@ -760,8 +817,8 @@ def _scale_bomber_head_and_tall_antennae(
             material="chitin_dark",
         )
         sock = (
-            ellipsoid(0.026, 0.013, 0.026, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark")
-            .rotate_xyz(rx=0.18, rz=-side * 0.24)
+            ellipsoid(0.025, 0.013, 0.025, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark")
+            .rotate_xyz(rx=-0.28, rz=-side * 0.22)
             .translate(*base_p)
         )
         scene.nodes[node_name] = [
@@ -777,7 +834,7 @@ def _scale_bomber_head_and_tall_antennae(
 
 
 def build_bomber(blink: float = 0.0) -> SceneBuilder:
-    """Build the sculpted 3D Bomber Ant SceneBuilder with slim head, tall antennae, Blink, and 1.70s Idle."""
+    """Build the sculpted 3D Bomber Ant SceneBuilder with flatter crown, compact goggles, Blink, and 1.70s Idle."""
     scene, anchors = build_base_ant(
         scene_name="ant_bomber",
         include_antennae=True,
@@ -787,6 +844,8 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
         head_tilt_deg=-5.5,
         head_yaw_deg=3.5,
         head_pitch_deg=-16.0,
+        eye_scale_left=0.78,
+        eye_scale_right=0.78,
         eye_look=(-0.06, 0.04),
         antenna_asymmetry=0.45,
         stance_asymmetry=0.40,
@@ -797,7 +856,12 @@ def build_bomber(blink: float = 0.0) -> SceneBuilder:
         right_arm_pose="idle",
         blink=blink,
     )
-    head_c, head_r, eye_l, eye_r, head_back_z = _scale_bomber_head_and_tall_antennae(scene, anchors, head_scale=0.90)
+    head_c, head_r, eye_l, eye_r, head_back_z = _scale_bomber_head_and_tall_antennae(
+        scene,
+        anchors,
+        head_scale_xz=0.90,
+        head_scale_y=0.77,
+    )
     _build_goggles(
         scene,
         head_c,
