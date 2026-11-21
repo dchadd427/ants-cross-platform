@@ -53,6 +53,9 @@ EM_JS(int, ants_p2p_take_hint, (unsigned char* buf, int capacity), {
 EM_JS(int, ants_p2p_link, (int seat), {
     try { return window.antsP2p ? window.antsP2p.link(seat) : 0; } catch (e) { return 0; }
 });
+EM_JS(int, ants_p2p_rtt, (int seat), {
+    try { return window.antsP2p ? window.antsP2p.rtt(seat) | 0 : -1; } catch (e) { return -1; }
+});
 EM_JS(void, ants_p2p_close, (), {
     try { if (window.antsP2p) window.antsP2p.close(); } catch (e) { console.error("p2p close", e); }
 });
@@ -104,6 +107,7 @@ public:
         const int v = ants_p2p_link(seat);
         return v == 3 ? PeerLink::Direct : v == 2 ? PeerLink::Relay : v == 1 ? PeerLink::Connecting : PeerLink::None;
     }
+    int32_t rtt_ms(uint8_t seat) const noexcept override { return static_cast<int32_t>(ants_p2p_rtt(seat)); }
     void close() override { ants_p2p_close(); }
 };
 

@@ -6,11 +6,14 @@
    the way out (a candidate or an SDP that shows an address is never sent to a peer that has not allowed direct), on the way in (never accepted from one) and again in what the browser chose (a
    channel whose chosen path is not the relay's, for a pair that did not both allow direct, is closed); the server keeps it too (ants_net/p2p.hpp, signal_allowed).
 
-   The game (C++, ants_net/wasm_rtc.cpp) calls open / peers / signal / sendHint / takeSignal / takeHint / link / close. The rules and the channels are one object made by AntsP2p.create(env) with the
+   THE ECHO. A channel also carries one-byte messages of its own, once a second each way: 0x00 the old heartbeat, 0x40|n a ping (n is 0 to 15), 0x80|n its answer, which a page sends at once. rtt(seat) is the
+   mean of the last five round trips of an answer to the last ping this page sent, or -1: no answer for a while, no channel, or a page of the old kind (it drops a message of one byte and never answers).
+
+   The game (C++, ants_net/wasm_rtc.cpp) calls open / peers / signal / sendHint / takeSignal / takeHint / link / rtt / close. The rules and the channels are one object made by AntsP2p.create(env) with the
    browser's parts in `env` (the tests give fakes); the rules alone are AntsP2p.rules. */
 (function (root) {
     'use strict';
-    var COPIES = 3, HEARTBEAT_MS = 1000, SILENT_MS = 4000, GIVE_UP_MS = 12000, MAX_INBOX = 256, MAX_OUTBOX = 256, MAX_RETRIES = 3;
+    var COPIES = 3, PING_MS = 1000, SILENT_MS = 4000, RTT_KEPT = 5, PING = 0x40, PONG = 0x80, GIVE_UP_MS = 12000, MAX_INBOX = 256, MAX_OUTBOX = 256, MAX_RETRIES = 3;
     var LINK = { none: 0, connecting: 1, relay: 2, direct: 3 }, KIND = { offer: 1, answer: 2, candidate: 3, bye: 4 };
     var SETTING = 'ants.direct';
 
@@ -50,7 +53,8 @@
         env = env || {};
         var PC = env.RTCPeerConnection || root.RTCPeerConnection, now = env.now || function () { return Date.now(); };
         var timer = env.setTimeout || function (f, ms) { return root.setTimeout(f, ms); }, untimer = env.clearTimeout || function (h) { root.clearTimeout(h); };
-        var me = -1, myDirect = false, ice = null, ready = 0, directMask = 0, peers = {}, queued = [], outbox = [], inbox = [], hb = null;
+        var every = env.setInterval || function (f, ms) { return root.setInterval(f, ms); }, unevery = env.clearInterval || function (h) { root.clearInterval(h); };
+        var me = -1, myDirect = false, ice = null, ready = 0, directMask = 0, peers = {}, queued = [], outbox = [], inbox = [], tick = null;
         var stats = { refusedIn: 0, refusedOut: 0, policyBreaks: 0, hintsOut: 0, hintsIn: 0, opened: 0 };
 
         function pairDirect(seat) { return myDirect && ((directMask >> seat) & 1) === 1 && ((directMask >> me) & 1) === 1; }
@@ -93,8 +97,27 @@
             judge(p);
             timer(function () { if (peers[p.seat] === p && p.link === LINK.connecting) judge(p); }, 1500);
         }
+        function echo(p, byte) {                           // a ping is answered at once; an answer counts only for the last ping sent
+            var kind = byte & 0xF0, n = byte & 0x0F;
+            if (kind === PING) { try { if (p.dc.readyState === 'open') p.dc.send(new Uint8Array([PONG | n])); } catch (e) { /* closing */ } }
+            else if (kind === PONG && p.waiting && n === p.pingN) {
+                var t = now(), ms = t - p.pingAt;
+                p.waiting = false;
+                if (ms < 0 || ms > SILENT_MS) return;
+                p.rtts.push(ms);
+                if (p.rtts.length > RTT_KEPT) p.rtts.shift();
+                p.answered = t;
+            }
+        }
+        function ping(p) {
+            p.pingN = (p.pingN + 1) & 15;
+            p.pingAt = now();
+            p.waiting = true;
+            try { p.dc.send(new Uint8Array([PING | p.pingN])); } catch (e) { /* closing */ }
+        }
         function begin(seat) {
-            var direct = pairDirect(seat), p = { seat: seat, direct: direct, initiator: me < seat, up: false, link: LINK.connecting, heard: 0, pending: [], remote: false, tries: 0, timer: null };
+            var direct = pairDirect(seat), p = { seat: seat, direct: direct, initiator: me < seat, up: false, link: LINK.connecting, heard: 0, pending: [], remote: false, tries: 0, timer: null,
+                pingN: 15, pingAt: 0, waiting: false, rtts: [], answered: 0 };
             peers[seat] = p;
             p.pc = new PC({ iceServers: serversFor(ice, direct), iceTransportPolicy: direct ? 'all' : 'relay' });
             p.dc = p.pc.createDataChannel('hints', { negotiated: true, id: 1, ordered: false, maxRetransmits: 0 });
@@ -103,7 +126,8 @@
             p.dc.onmessage = function (e) {
                 p.heard = now();
                 var b = new Uint8Array(e.data);
-                if (b.length < 2 || inbox.length >= MAX_INBOX) return;       // (the heartbeat is one byte: the game never sees it)
+                if (b.length === 1) echo(p, b[0]);
+                if (b.length < 2 || inbox.length >= MAX_INBOX) return;       // (a message of one byte is the channel's own: the game never sees it)
                 inbox.push({ from: seat, bytes: b });
                 stats.hintsIn++;
             };
@@ -161,9 +185,9 @@
         var api = {
             open: function (seat, direct, config) {
                 me = seat; myDirect = !!direct; ice = config;
-                if (!hb) hb = root.setInterval ? root.setInterval(function () {
-                    for (var s in peers) { var p = peers[s]; if (p.up && p.dc.readyState === 'open') { try { p.dc.send(new Uint8Array([0])); } catch (e) { /* closing */ } } }
-                }, HEARTBEAT_MS) : null;
+                if (tick === null) tick = every(function () {              // the ping of each second (it is the channel's heartbeat too)
+                    for (var s in peers) { var p = peers[s]; if (p.up && p.dc.readyState === 'open') ping(p); }
+                }, PING_MS);
                 reconsider();
                 drain();
             },
@@ -190,7 +214,13 @@
                 if (p.up && now() - p.heard > SILENT_MS) return LINK.connecting;         // a channel that has said nothing for a while is no mark
                 return p.link;
             },
-            close: function () { for (var s in peers) drop(+s, true); if (hb && root.clearInterval) { root.clearInterval(hb); hb = null; } ice = null; me = -1; queued.length = 0; },
+            rtt: function (seat) {                           // the mean of the last five round trips in ms, or -1: no channel, no answer for a while, or a page that does not answer
+                var p = peers[seat], sum = 0, i;
+                if (!p || !p.up || p.dc.readyState !== 'open' || !p.rtts.length || now() - p.answered > SILENT_MS) return -1;
+                for (i = 0; i < p.rtts.length; i++) sum += p.rtts[i];
+                return Math.round(sum / p.rtts.length);
+            },
+            close: function () { for (var s in peers) drop(+s, true); if (tick !== null) { unevery(tick); tick = null; } ice = null; me = -1; queued.length = 0; },
             stats: function () { return stats; }
         };
         return api;
