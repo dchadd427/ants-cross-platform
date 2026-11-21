@@ -645,6 +645,38 @@ void run_start_menu_app_play_tests() {
         ASSERT_TRUE(door.term->app_bytes_up > 0);
     } TEST_END();
 
+    TEST_CASE("A4.1c The command line joins through the encrypted door too: --join-url wss://... --room CODE makes the same TLS link (the certificate checked for the name, the written URL kept for the key), and the same game runs as with the menu") {
+        TempDir temp;
+        Server server;
+        SecureDoor& door = server.open_secure_door();
+        ASSERT_TRUE(server.make_room("cli-wss-1", 2));
+        Application app;
+        Hall hall{&server, &app, {}, nullptr, false};
+        ApplicationConfig cfg;
+        cfg.headless = true;
+        cfg.lan_port = 0;
+        cfg.settings_path = temp.file("s.ini");
+        cfg.player_name = "Cli";
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_url = door.url();
+        cfg.net_room = "cli-wss-1";
+        cfg.net_extra_ca_pem = door.ca.pem();
+        ASSERT_TRUE(app.init(cfg));
+        ASSERT_TRUE(hall.until([&]() { return app.net() != nullptr && app.net()->phase() == net::NetGame::Phase::Room; }, 12000));
+        ASSERT_TRUE(app.net()->join_target().url == door.url() && app.net()->join_target().address.empty());
+        ASSERT_EQ(door.term->handshakes, 1u);
+        ASSERT_EQ(server.status("cli-wss-1").joined, 1u);
+        Application untrusting;                                                              // the same without the authority: the game does not start, and says why on the console (init fails)
+        ApplicationConfig bad = cfg;
+        bad.net_extra_ca_pem.clear();
+        bad.settings_path = temp.file("t.ini");
+        ASSERT_TRUE(untrusting.init(bad));                                                   // (the link is made later: the room never comes)
+        Hall hall2{&server, &untrusting, {}, nullptr, false};
+        ASSERT_TRUE(hall2.until([&]() { return untrusting.net() != nullptr && untrusting.net()->phase() == net::NetGame::Phase::Failed; }, 12000));
+        ASSERT_FALSE(untrusting.net()->link_failure_text().empty());
+        ASSERT_EQ(server.status("cli-wss-1").joined, 1u);                                    // (the refused one never reached the room)
+    } TEST_END();
+
     TEST_CASE("A5.5 A server whose certificate the game does not trust ends the attempt on the panel with a line that says so, before any byte of the game goes out: no room, no name, nothing reached the server") {
         TempDir temp;
         Server server;

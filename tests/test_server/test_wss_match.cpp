@@ -184,6 +184,33 @@ void run_wss_match_tests() {
         ASSERT_FALSE(a.net.desynced() || b.net.desynced());
     } TEST_END();
 
+    TEST_CASE("WM1.2b A longer match with the cable pulled five times (every link of both machines, each time in a different second of play): both machines come back every time with a TLS link of their own, no seat is dropped, and the machines and the referee end in one state") {
+        WssWorld w;
+        ASSERT_TRUE(w.mgr->create_room(held_spec("WSS-2B"), w.now).ok);
+        Machine& a = w.join("Ann", "WSS-2B");
+        Machine& b = w.join("Bob", "WSS-2B");
+        ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 16000 + kPre));
+        for (uint32_t round = 1; round <= 5; ++round) {
+            w.run(9000 + round * 1300);                                                          // (a different moment of the second each time)
+            const uint32_t before = w.status("WSS-2B").rejoins;
+            w.term->cut_all();
+            ASSERT_TRUE(w.run_until([&]() { return w.status("WSS-2B").rejoins >= before + 2 && !w.status("WSS-2B").paused && !a.net.pause_info().reconnecting && !b.net.pause_info().reconnecting &&
+                                                   !a.net.pause_info().catching_up && !b.net.pause_info().catching_up; }, 60000));
+            ASSERT_EQ(a.net.phase(), NetGame::Phase::Playing);
+            ASSERT_EQ(b.net.phase(), NetGame::Phase::Playing);
+            ASSERT_TRUE(hashes_agree(a, b) && !a.net.desynced() && !b.net.desynced());
+        }
+        ASSERT_GE(w.term->handshakes, 12u);                                                     // two to begin with, two for every pull
+        ASSERT_TRUE(w.status("WSS-2B").absent.empty());
+        ASSERT_EQ(a.count(NetGame::Event::Type::Rejoined), size_t{5});
+        ASSERT_EQ(b.count(NetGame::Event::Type::Rejoined), size_t{5});
+        a.quit();
+        ASSERT_TRUE(w.run_until([&]() { return w.finished("WSS-2B") && a.sim.is_match_over() && b.sim.is_match_over(); }, 40000));
+        w.run(1000);
+        const RoomStatus end = w.ended("WSS-2B");
+        ASSERT_TRUE(all_equal({&a, &b}) && a.sim.state_hash().total == end.referee_hash && end.referee_hash != 0);
+    } TEST_END();
+
     TEST_CASE("WM1.3 A machine that starts from nothing (a game started again) joins with its key over wss: the room gives it its seat and the match from the server's log, and it is back in the match") {
         WssWorld w;
         ASSERT_TRUE(w.mgr->create_room(held_spec("WSS-3"), w.now).ok);
