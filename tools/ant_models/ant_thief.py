@@ -266,45 +266,46 @@ def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
             scale=mand_xf.scale,
         )
 
-    # Rebuild Thief's antennae sweeping cleanly UP-AND-BACKWARD (`-Z`, streamlined stealth silhouette
-    # with chunky clubbed distal tips matching `atst301`/`atst901`/`atst201`) on Thief's bigger crown!
+    # Rebuild Thief's antennae boldly larger (~1.34x longer, ~1.30x thicker shafts + chunky rounded clubbed
+    # tips) rising proudly UP-OUT-AND-BACK (`+Y/-Z` V silhouette matching `atst301`/`atst201`/`atst901`/`atst701`)
+    # so they stay bold and unmistakable even after `0.81x` head assembly scaling!
     neck_vec = np.asarray(anchors["neck_center"], dtype=np.float64)
     ant_rads = [
-        (0.020, 0.020),
-        (0.016, 0.017),
-        (0.015, 0.016),
-        (0.020, 0.022),
-        (0.028, 0.030),
-        (0.033, 0.035),
-        (0.024, 0.026),
+        (0.026, 0.026),
+        (0.022, 0.023),
+        (0.021, 0.022),
+        (0.026, 0.028),
+        (0.036, 0.039),
+        (0.043, 0.046),
+        (0.032, 0.035),
     ]
     ant_defs = (
         (
             "antenna_left",
             "left",
-            (+0.088, hy + 0.122, hz + 0.024),
+            (+0.088, hy + 0.120, hz + 0.024),
             [
-                (-0.004, -0.020, 0.002),
+                (-0.005, -0.024, 0.002),
                 (0.000, 0.000, 0.000),
-                (+0.022, +0.056, -0.032),
-                (+0.042, +0.104, -0.078),
-                (+0.052, +0.130, -0.124),
-                (+0.056, +0.132, -0.160),
-                (+0.058, +0.116, -0.178),
+                (+0.032, +0.084, -0.018),
+                (+0.062, +0.162, -0.048),
+                (+0.084, +0.214, -0.086),
+                (+0.096, +0.238, -0.114),
+                (+0.102, +0.232, -0.134),
             ],
         ),
         (
             "antenna_right",
             "right",
-            (-0.088, hy + 0.122, hz + 0.022),
+            (-0.088, hy + 0.120, hz + 0.022),
             [
-                (+0.004, -0.020, 0.002),
+                (+0.005, -0.024, 0.002),
                 (0.000, 0.000, 0.000),
-                (-0.026, +0.050, -0.038),
-                (-0.050, +0.094, -0.092),
-                (-0.062, +0.114, -0.140),
-                (-0.066, +0.112, -0.172),
-                (-0.068, +0.096, -0.188),
+                (-0.026, +0.088, -0.022),
+                (-0.048, +0.170, -0.056),
+                (-0.064, +0.224, -0.096),
+                (-0.074, +0.246, -0.124),
+                (-0.078, +0.238, -0.144),
             ],
         ),
     )
@@ -318,7 +319,7 @@ def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
             name=f"antenna_stalk_{tag}",
             material="chitin_dark",
         )
-        socket = ellipsoid(0.027, 0.015, 0.027, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark").translate(0.0, -0.004, 0.0)
+        socket = ellipsoid(0.034, 0.019, 0.034, u_segs=12, v_segs=8, name=f"antenna_socket_{tag}", material="chitin_dark").translate(0.0, -0.004, 0.0)
         scene.nodes[node_name] = [stalk, socket]
         rel = np.asarray(base_w, dtype=np.float64) - neck_vec
         scene.set_node_transform(node_name, translation=(float(rel[0]), float(rel[1]), float(rel[2])))
