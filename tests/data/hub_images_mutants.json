@@ -255,7 +255,7 @@
   {
    "id": "images_reply_types_not_checked",
    "file": "hub/imgdoor.py",
-   "old": "        if x not in SIGNATURES or None in sizes or",
+   "old": "        if type(x) is not str or x not in SIGNATURES or None in sizes or",
    "new": "        if None in sizes or",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheConverter"
   },
