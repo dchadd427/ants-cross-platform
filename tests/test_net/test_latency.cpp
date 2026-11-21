@@ -3,7 +3,7 @@
 // 40 ms in each direction: the delay must come out as the way there + the wait for the next 50 ms turn + the way back + the runner's jitter buffer, one turn of 50 ms on a
 // steady link). And what the player sees when the game waits: "stalled for" is the time since a tick was due and had no turn, so the "Waiting for the other players..."
 // message goes when the turns come again; and what a stall, a bunch of turns, a hitch or a hidden window leaves behind in the runner (nothing: the buffer is rebuilt, the
-// queue is run down).
+// queue is run down). And the scale of the ping colors (ping_quality), which a table shared with the page's copy of it holds.
 #include "ants_net/latency.hpp"
 #include "ants_net/lobby.hpp"
 #include "ants_net/loopback.hpp"
@@ -16,12 +16,15 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <fstream>
 #include <functional>
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
+#include "../common/ants_test_paths.hpp"
 #include "../common/test_assert.hpp"
 
 using namespace ants;
@@ -1294,6 +1297,30 @@ int main() {
         m.on_tick_shown();
         m.on_frame_end(3010);
         ASSERT_EQ(m.last_ms(), 61u);                                     // (nothing new was felt: the last number is still the one of the newest of the sixteen)
+    } TEST_END();
+
+    TEST_CASE("N9.40 ping_quality: The Scale Of The Ping Colors (Good Under 80 ms, Fair Under 150, Poor From There, None For No Number), Held To The Table That The Page's Copy Of It Is Held To Too") {
+        std::ifstream in(std::string(TEST_DATA_DIR) + "/ping_quality_table.json");
+        ASSERT_TRUE(in.good());
+        std::stringstream buffer;
+        buffer << in.rdbuf();
+        const std::string text = buffer.str();
+        const auto word = [](PingQuality q) { return std::string(q == PingQuality::Good ? "good" : q == PingQuality::Fair ? "fair" : q == PingQuality::Poor ? "poor" : "none"); };
+        size_t cases = 0;
+        std::string wrong;
+        for (size_t at = text.find("\"ms\":"); at != std::string::npos; at = text.find("\"ms\":", at + 1)) {       // (a case is {"ms": number, "quality": "word"}, one to a line)
+            const long long ms = std::strtoll(text.c_str() + at + 5, nullptr, 10);
+            const size_t key = text.find("\"quality\":", at);
+            const size_t open = key == std::string::npos ? key : text.find('"', key + 10);
+            const size_t close = open == std::string::npos ? open : text.find('"', open + 1);
+            ASSERT_TRUE(close != std::string::npos && ms >= INT32_MIN && ms <= INT32_MAX);
+            const std::string want = text.substr(open + 1, close - open - 1), got = word(ping_quality(static_cast<int32_t>(ms)));
+            if (got != want) wrong += " " + std::to_string(ms) + " is " + got + " (the table says " + want + ");";
+            ++cases;
+        }
+        if (!wrong.empty()) std::cout << "\n    ping_quality differs from the table:" << wrong << "\n";
+        ASSERT_TRUE(wrong.empty());
+        ASSERT_TRUE(cases >= 12);                                        // (the boundaries 79, 80, 149 and 150, none, zero and huge numbers: a table that was read as empty is no pass)
     } TEST_END();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count

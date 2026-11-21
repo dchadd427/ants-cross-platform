@@ -2,7 +2,7 @@
 //
 // What is checked: an order that the prediction applied is sent to the other players as a hint (with the tick it was applied at and the player's own number for it); what a channel delivers goes
 // to the prediction only when it is a hint of the channel's own seat; a computer player's order that the server sends goes to the prediction; a server with no relay opens nothing; and none of it
-// changes what the machines run.
+// changes what the machines run; and the round trip that the game reports for each other player's channel.
 #include "netgame_fixtures.hpp"
 
 #include <tuple>
@@ -24,6 +24,7 @@ public:
     std::vector<std::tuple<uint8_t, SignalKind, std::string>> to_signal;
     int closed{0};
     PeerLink state{PeerLink::None};
+    std::array<int32_t, 4> rtts{{-1, -1, -1, -1}};                         // what rtt_ms says for each seat (the page's measurement)
 
     void open(uint8_t seat, bool direct, const IceConfigMsg& ice) override { opened.push_back(Opened{seat, direct, ice}); }
     void peers(uint8_t ready, uint8_t direct) override { peer_masks.emplace_back(ready, direct); }
@@ -43,7 +44,21 @@ public:
         return true;
     }
     PeerLink link(uint8_t) const override { return state; }
+    int32_t rtt_ms(uint8_t seat) const noexcept override { return seat < rtts.size() ? rtts[seat] : -1; }
     void close() override { ++closed; }
+};
+
+// A transport that measures nothing: the answer of the interface itself
+class MutePage final : public P2pTransport {
+public:
+    void open(uint8_t, bool, const IceConfigMsg&) override {}
+    void peers(uint8_t, uint8_t) override {}
+    void signal(uint8_t, SignalKind, const std::string&) override {}
+    void send_hint(const std::vector<uint8_t>&) override {}
+    bool poll_signal(uint8_t&, SignalKind&, std::string&) override { return false; }
+    bool poll_hint(uint8_t&, std::vector<uint8_t>&) override { return false; }
+    PeerLink link(uint8_t) const override { return PeerLink::Relay; }
+    void close() override {}
 };
 
 // A match of a host (seat 0) and one guest (seat 1) that is running, the guest with channels of the test's
@@ -222,6 +237,21 @@ void run_hint_netgame_tests() {
             ASSERT_TRUE(decode(m.channels.sent_hints[i], h));
             ASSERT_EQ(uint64_t{h.tick}, named[i]);
         }
+    } TEST_END();
+
+    TEST_CASE("N25.7 The Game Reports The Round Trip Over The Channel To Each Other Player In Milliseconds; No Number (-1) Without A Transport, For The Player's Own Seat, For A Seat That Is Not One, For A Channel With No Answer, And From A Transport That Measures Nothing") {
+        HintMatch m;
+        ASSERT_TRUE(m.ok);
+        ASSERT_EQ(m.guest->net.peer_rtt_ms(0), -1);                      // (the page has no answer yet)
+        m.channels.rtts = {{42, 77, 130, 0}};
+        ASSERT_TRUE(m.guest->net.peer_rtt_ms(0) == 42 && m.guest->net.peer_rtt_ms(2) == 130 && m.guest->net.peer_rtt_ms(3) == 0);
+        ASSERT_EQ(m.guest->net.peer_rtt_ms(1), -1);                      // (the guest is seat 1: there is no channel to oneself, whatever the page says)
+        ASSERT_TRUE(m.guest->net.peer_rtt_ms(4) == -1 && m.guest->net.peer_rtt_ms(255) == -1);
+        m.channels.rtts = {{-5, -1, 20, -1}};
+        ASSERT_TRUE(m.guest->net.peer_rtt_ms(0) == -1 && m.guest->net.peer_rtt_ms(3) == -1 && m.guest->net.peer_rtt_ms(2) == 20);   // (every negative number is the same: none)
+        ASSERT_EQ(m.host->net.peer_rtt_ms(1), -1);                       // (the host has no transport)
+        MutePage mute;
+        ASSERT_EQ(static_cast<const P2pTransport&>(mute).rtt_ms(0), -1);
     } TEST_END();
 }
 
