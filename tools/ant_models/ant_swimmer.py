@@ -32,8 +32,10 @@ try:
         swept_tube,
         torus_arc,
     )
+    from .hit_clips_special import add_swimmer_hit_animation
 except ImportError:
     from base_ant import build_base_ant, sync_arm_idle_to_clip, sync_leg_flex_to_clip  # type: ignore
+    from hit_clips_special import add_swimmer_hit_animation  # type: ignore
     from mesh_core import (  # type: ignore
         AnimationChannel,
         AnimationClip,
@@ -1282,6 +1284,7 @@ def build_swimmer(blink: float = 0.0) -> SceneBuilder:
         scene.set_node_transform("shovel", translation=(gx - er[0], gy - er[1], gz - er[2]))
     _add_swimmer_idle(scene)
     _add_swimmer_attack(scene, water_origin)
+    add_swimmer_hit_animation(scene)
     return scene
 
 
