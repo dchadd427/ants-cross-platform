@@ -27,6 +27,7 @@ try:
         quat_mul,
         rounded_box,
         sphere,
+        superellipsoid,
         swept_tube,
         torus_arc,
     )
@@ -45,6 +46,7 @@ except ImportError:
         quat_mul,
         rounded_box,
         sphere,
+        superellipsoid,
         swept_tube,
         torus_arc,
     )
@@ -1128,38 +1130,60 @@ def _bomber_arm_pose(side: int, crouch: float) -> List[Tuple[float, float, float
     ]
 
 
-def _rebuild_bomber_legs(scene: SceneBuilder, crouch: float) -> None:
-    """Rebuild Bomber's 4 legs in a narrow upright athletic stance (~17% tighter X-splay, zero phasing).
+def _oriented_joint_armor(
+    center: np.ndarray,
+    prev_pt: np.ndarray,
+    next_pt: np.ndarray,
+    radii: Tuple[float, float, float],
+    push: float,
+    *,
+    name: str,
+    material: str,
+) -> MeshPart:
+    """Build a flared exoskeleton joint condyle/collar shell oriented along the exterior bend bisector."""
+    v1 = center - prev_pt
+    v1 /= max(1e-8, float(np.linalg.norm(v1)))
+    v2 = center - next_pt
+    v2 /= max(1e-8, float(np.linalg.norm(v2)))
+    bis = v1 + v2
+    if float(np.linalg.norm(bis)) < 1e-4:
+        bis = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+    bis /= max(1e-8, float(np.linalg.norm(bis)))
+    hy = np.cross(v1, v2)
+    if float(np.linalg.norm(hy)) < 1e-4:
+        hy = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+    hy /= max(1e-8, float(np.linalg.norm(hy)))
+    hx = np.cross(hy, bis)
+    hx /= max(1e-8, float(np.linalg.norm(hx)))
+    hy = np.cross(bis, hx)
+    mat = np.eye(4, dtype=np.float64)
+    mat[:3, 0], mat[:3, 1], mat[:3, 2] = hx, hy, bis
+    mat[:3, 3] = center + push * bis
+    return superellipsoid(
+        radii[0], radii[1], radii[2], e1=0.62, e2=0.66, u_segs=14, v_segs=10, name=name, material=material
+    ).transform(mat)
 
-    Matches ORIG abst301/abst701 narrow compact width while keeping mid legs strictly forward of Z=0
-    and rear legs strictly behind Z=0 (zero Z-crossing!), medial hip roots safely separated across X=0,
-    and feet grounded solidly on Y = 0.0.
+
+def _rebuild_bomber_legs(scene: SceneBuilder, crouch: float) -> None:
+    """Rebuild Bomber's 4 legs as segmented glossy dark-brown (`leg_chitin`) exoskeleton insect legs.
+
+    Sculpts pinched hip/knee/ankle joints, muscular spindle femurs, flared armored knee condyles and
+    ankle collars, tapered angular tibias, and 2-segment pointed claw tarsi grounded on Y = 0.0 while
+    preserving Bomber's narrow upright stance and zero leg-vs-leg / arm-vs-leg phasing.
     """
     c = float(crouch)
+    leg_mat = "leg_chitin"
     radii = [
-        (0.031, 0.035), (0.030, 0.035), (0.034, 0.039), (0.028, 0.033), (0.026, 0.030),
-        (0.024, 0.028), (0.023, 0.027), (0.021, 0.025), (0.020, 0.024),
-        (0.019, 0.0215), (0.018, 0.0205), (0.0175, 0.016), (0.0145, 0.0135), (0.0085, 0.0075),
+        (0.027, 0.031), (0.017, 0.019), (0.029, 0.035), (0.034, 0.042), (0.027, 0.033), (0.022, 0.026),
+        (0.0155, 0.018), (0.022, 0.027), (0.024, 0.030), (0.019, 0.024),
+        (0.0135, 0.0155), (0.0185, 0.021), (0.0125, 0.0135), (0.0175, 0.0165), (0.0145, 0.0135), (0.0068, 0.0062),
     ]
     lift = np.array([0.0, 1.0, 0.0], dtype=np.float64)
     specs = (
-        # (label, side, hip_x, hip_y, hip_z, knee, ankle, foot, foot_yaw, root_z)
-        (
-            "mid_left", +1, 0.062, 0.326 - c, +0.044,
-            (0.122, 0.214, +0.146), (0.118, 0.104, +0.076), (0.114, 0.0, +0.138), +0.15, +0.038,
-        ),
-        (
-            "mid_right", -1, 0.062, 0.326 - c, +0.044,
-            (0.118, 0.218, +0.140), (0.114, 0.106, +0.072), (0.110, 0.0, +0.132), -0.14, +0.038,
-        ),
-        (
-            "rear_left", +1, 0.060, 0.302 - c, -0.062,
-            (0.132, 0.194, -0.040), (0.128, 0.094, -0.132), (0.122, 0.0, -0.068), +0.20, -0.058,
-        ),
-        (
-            "rear_right", -1, 0.060, 0.302 - c, -0.062,
-            (0.128, 0.198, -0.046), (0.124, 0.096, -0.138), (0.118, 0.0, -0.074), -0.18, -0.058,
-        ),
+        ("mid_left", +1, 0.062, 0.326 - c, +0.044, (0.122, 0.214, +0.146), (0.118, 0.104, +0.076), (0.114, 0.0, +0.138), +0.15, +0.038),
+        ("mid_right", -1, 0.062, 0.326 - c, +0.044, (0.118, 0.218, +0.140), (0.114, 0.106, +0.072), (0.110, 0.0, +0.132), -0.14, +0.038),
+        ("rear_left", +1, 0.060, 0.302 - c, -0.062, (0.132, 0.194, -0.040), (0.128, 0.094, -0.132), (0.122, 0.0, -0.068), +0.20, -0.058),
+        ("rear_right", -1, 0.060, 0.302 - c, -0.062, (0.128, 0.198, -0.046), (0.124, 0.096, -0.138), (0.118, 0.0, -0.074), -0.18, -0.058),
     )
     for label, side, hx, hy, hz, knee, ankle, foot, foot_yaw, root_z in specs:
         s = 1.0 if side >= 0 else -1.0
@@ -1170,41 +1194,48 @@ def _rebuild_bomber_legs(scene: SceneBuilder, crouch: float) -> None:
         p_foot = np.array([s * foot[0], 0.0, foot[2]], dtype=np.float64)
         fwd = np.array([math.sin(foot_yaw), 0.0, math.cos(foot_yaw)], dtype=np.float64)
 
-        femur_mid = 0.48 * p_hip + 0.52 * p_knee + np.array([s * 0.004, 0.012, 0.005])
-        pre_knee = 0.18 * p_hip + 0.82 * p_knee + np.array([s * 0.002, 0.005, 0.003])
-        post_knee = 0.82 * p_knee + 0.18 * p_ankle + np.array([s * 0.003, -0.004, 0.004])
-        tibia_mid = 0.48 * p_knee + 0.52 * p_ankle + np.array([s * 0.004, 0.0, -0.004])
-        pre_ankle = 0.16 * p_knee + 0.84 * p_ankle + np.array([s * 0.002, 0.004, -0.005])
-        post_ankle = 0.80 * p_ankle + 0.20 * (p_foot + 0.020 * lift) + np.array([0.0, -0.005, -0.003])
-        tarsus_mid = 0.42 * p_ankle + 0.58 * (p_foot + 0.017 * lift)
-        tarsus_heel = p_foot + 0.0165 * lift - 0.006 * fwd
+        femur_lo = 0.76 * p_hip + 0.24 * p_knee + np.array([s * 0.002, 0.007, 0.003])
+        femur_mid = 0.46 * p_hip + 0.54 * p_knee + np.array([s * 0.004, 0.015, 0.006])
+        femur_hi = 0.22 * p_hip + 0.78 * p_knee + np.array([s * 0.002, 0.007, 0.004])
+        pre_knee = 0.08 * p_hip + 0.92 * p_knee + np.array([s * 0.001, 0.002, 0.002])
+        post_knee = 0.90 * p_knee + 0.10 * p_ankle + np.array([s * 0.002, -0.002, 0.003])
+        tibia_mid = 0.54 * p_knee + 0.46 * p_ankle + np.array([s * 0.004, 0.001, -0.004])
+        pre_ankle = 0.16 * p_knee + 0.84 * p_ankle + np.array([s * 0.002, 0.003, -0.005])
+        tarsus_1 = 0.70 * p_ankle + 0.30 * (p_foot + 0.020 * lift) + np.array([0.0, -0.004, -0.002])
+        tarsus_joint = 0.36 * p_ankle + 0.64 * (p_foot + 0.017 * lift)
+        tarsus_heel = p_foot + 0.0165 * lift - 0.005 * fwd
         tarsus_ball = p_foot + 0.0135 * lift + 0.018 * fwd
         tarsus_tip = p_foot + 0.0075 * lift + 0.044 * fwd
 
         leg_tube = curved_tube(
             [
-                p_root, p_hip, femur_mid, pre_knee, p_knee,
-                post_knee, tibia_mid, pre_ankle, p_ankle,
-                post_ankle, tarsus_mid, tarsus_heel, tarsus_ball, tarsus_tip,
+                p_root, p_hip, femur_lo, femur_mid, femur_hi, pre_knee,
+                p_knee, post_knee, tibia_mid, pre_ankle,
+                p_ankle, tarsus_1, tarsus_joint, tarsus_heel, tarsus_ball, tarsus_tip,
             ],
             radii,
             samples_per_seg=3,
-            radial_segs=12,
+            radial_segs=10,
             cap_rings=3,
             name=f"leg_{label}",
-            material="chitin_dark",
+            material=leg_mat,
         )
+        coxa = ellipsoid(0.023, 0.023, 0.023, u_segs=12, v_segs=8, name=f"leg_coxa_{label}", material=leg_mat).translate(*p_hip)
+        kneecap = _oriented_joint_armor(p_knee, femur_hi, post_knee, (0.021, 0.019, 0.026), 0.005, name=f"leg_kneecap_{label}", material=leg_mat)
+        ankle_cap = _oriented_joint_armor(p_ankle, pre_ankle, tarsus_1, (0.017, 0.015, 0.021), 0.004, name=f"leg_anklecap_{label}", material=leg_mat)
 
         def _ground_sole(pos: np.ndarray) -> np.ndarray:
             p = pos.copy()
             p[:, 1] = np.maximum(p[:, 1], 0.0)
             return p
 
-        leg_tube = leg_tube.deform(_ground_sole)
         ball = p_foot + 0.018 * fwd
         pivot = (float(ball[0]), 0.0, float(ball[2]))
         node = f"leg_{label}"
-        scene.nodes[node] = [leg_tube.translate(-pivot[0], 0.0, -pivot[2])]
+        scene.nodes[node] = [
+            part.deform(_ground_sole).translate(-pivot[0], 0.0, -pivot[2])
+            for part in (leg_tube, coxa, kneecap, ankle_cap)
+        ]
         scene.set_node_parent(node, "legs")
         scene.set_node_transform(node, translation=pivot)
 
