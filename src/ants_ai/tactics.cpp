@@ -352,6 +352,12 @@ void without_thief_batch(LevelPlan& p) noexcept {
     p.fire_home_only = false;
 }
 
+void without_unstick_batch(LevelPlan& p) noexcept {
+    p.plugs = false;
+    p.refusal_memory = false;
+    p.rescue_thief = false;
+}
+
 void without_kill_batch(LevelPlan& p) noexcept {
     p.opportunity = false;
     p.reach_fights = false;
@@ -731,6 +737,30 @@ bool reachable_by(const MapInfo& map, uint8_t team, sim::TileCoord tile) noexcep
     for (int32_t dy = -1; dy <= 1; ++dy) {
         for (int32_t dx = -1; dx <= 1; ++dx) {
             if (map.component(team, sim::TileCoord{tile.x + dx, tile.y + dy}) == home) return true;
+        }
+    }
+    return false;
+}
+
+bool has_shut_in_thief(const BotView& view, const MapInfo& map) noexcept {
+    for (const AntView& a : view.mine()) {
+        if (a.type != sim::AntType::Thief || a.state != sim::UnitState::CantGo) continue;
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+            if (map.hill(t).present && map.hill(t).raid == a.tile) return true;
+        }
+    }
+    return false;
+}
+
+bool shuts_in_own_thief(const BotView& view, const MapInfo& map, sim::TileCoord wall) noexcept {
+    for (const AntView& a : view.mine()) {
+        if (a.type != sim::AntType::Thief || a.state != sim::UnitState::CantGo) continue;
+        for (uint8_t t = 0; t < sim::MAX_PLAYERS; ++t) {
+            const HillInfo& h = map.hill(t);
+            if (!h.present || h.raid != a.tile) continue;
+            for (const sim::TileCoord& e : east_tiles(h)) {
+                if (e == wall) return true;
+            }
         }
     }
     return false;
