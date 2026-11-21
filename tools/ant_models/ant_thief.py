@@ -33,7 +33,7 @@ from typing import Dict, List, Sequence, Tuple
 import numpy as np
 
 try:
-    from .base_ant import EYELID_CLOSED_ANGLE, build_base_ant
+    from .base_ant import EYELID_CLOSED_ANGLE, build_base_ant, sync_leg_flex_to_clip
     from .mesh_core import (
         AnimationChannel,
         MeshPart,
@@ -54,7 +54,7 @@ try:
         torus_arc,
     )
 except ImportError:
-    from base_ant import EYELID_CLOSED_ANGLE, build_base_ant  # type: ignore
+    from base_ant import EYELID_CLOSED_ANGLE, build_base_ant, sync_leg_flex_to_clip  # type: ignore
     from mesh_core import (  # type: ignore
         AnimationChannel,
         MeshPart,
@@ -248,20 +248,23 @@ def _refit_thief_head(scene: SceneBuilder, anchors: dict) -> MeshPart:
     )
     cranium = _paint_thief_cranium_colors(cranium).translate(hx, hy, hz)
 
-    # Swap cranium inside `head` (vertices are in canonical neutral space; `head` transform applies -neck)
-    # and seat `core`'s plump bean mandibles flush beneath Thief's compact sleek jaw.
-    jaw_dy, jaw_dz = 0.030, -0.012
+    # Swap cranium inside `head` (vertices are in canonical neutral space; `head` transform applies -neck),
+    # scale Thief's tusks cleanly down to ~0.78x around their local mouth hinge, and tuck flush under jaw.
+    jaw_dy, jaw_dz = 0.024, -0.004
     head_parts = scene.get_node("head")
     new_head_parts: List[MeshPart] = []
     for p in head_parts:
         if p.name == "cranium":
             new_head_parts.append(cranium)
         elif p.name == "mouth_cleft":
-            new_head_parts.append(p.translate(0.0, jaw_dy, jaw_dz))
+            new_head_parts.append(p.scale(0.84, 0.84, 0.84).translate(0.0, jaw_dy, jaw_dz))
         else:
             new_head_parts.append(p)
     scene.nodes["head"] = new_head_parts
 
+    mand_parts = scene.get_node("mandibles")
+    if mand_parts:
+        scene.nodes["mandibles"] = [p.scale(0.78, 0.78, 0.78) for p in mand_parts]
     mand_xf = scene.get_node_transform("mandibles")
     if mand_xf is not None:
         mx, my, mz = mand_xf.translation
@@ -1136,6 +1139,7 @@ def _add_thief_idle_animation(scene: SceneBuilder) -> None:
         channels.append(AnimationChannel("gaster_group", "rotation", list(times), g_vals))
 
     scene.add_animation("Idle", channels, replace=True)
+    sync_leg_flex_to_clip(scene, "Idle")
 
 
 def build_thief(blink: float = 0.0, gaze: float = -1.0) -> SceneBuilder:
@@ -1156,6 +1160,7 @@ def build_thief(blink: float = 0.0, gaze: float = -1.0) -> SceneBuilder:
         head_yaw_deg=4.0,
         antenna_asymmetry=0.40,
         stance_asymmetry=0.45,
+        leg_style="thief",
         crouch=THIEF_CROUCH,
         left_arm_pose=_THIEF_ARM_LEFT,
         right_arm_pose=_THIEF_ARM_RIGHT,

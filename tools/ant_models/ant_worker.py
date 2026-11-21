@@ -102,6 +102,7 @@ def build_worker(blink: float = 0.0) -> SceneBuilder:
         eye_aspect_right=1.18,
         antenna_asymmetry=0.35,
         stance_asymmetry=0.35,
+        leg_style="worker",
         left_arm_pose="idle",
         right_arm_pose="idle",
         blink=blink,
