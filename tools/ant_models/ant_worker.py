@@ -16,14 +16,16 @@ Coordinate system (glTF 2.0 right-handed):
 """
 from __future__ import annotations
 
+from typing import List, Tuple
+
 import numpy as np
 
 try:
-    from .base_ant import build_base_ant
-    from .mesh_core import SceneBuilder, superellipsoid
+    from .base_ant import build_base_ant, sync_leg_flex_to_clip
+    from .mesh_core import AnimationChannel, SceneBuilder, quat_from_euler_xyz, quat_mul, superellipsoid
 except ImportError:
-    from base_ant import build_base_ant  # type: ignore
-    from mesh_core import SceneBuilder, superellipsoid  # type: ignore
+    from base_ant import build_base_ant, sync_leg_flex_to_clip  # type: ignore
+    from mesh_core import AnimationChannel, SceneBuilder, quat_from_euler_xyz, quat_mul, superellipsoid  # type: ignore
 
 
 def _add_carapace_details(scene: SceneBuilder, anchors: dict) -> None:
@@ -205,6 +207,212 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
         )
 
 
+def _add_worker_attack_animation(scene: SceneBuilder) -> None:
+    """Attach authentic 1998 Worker `agat` 0.42s diving headbutt-lunge & chomp `"Attack"` clip.
+
+    6-frame cadence `[60, 60, 60, 90, 60, 90]` ms (`0.42 s`):
+    - f0 (0.00s): diving forward windup
+    - f1 (0.06s): deep horizontal headbutt dive (`+1.18 rad`), gaster kicking high behind
+    - f2 (0.12s): low power lunge forward, arms splayed wide, mandibles flung wide open
+    - f3 (0.18s..0.24s, 90ms): peak forward lunge & fierce mandible chomp snap shut
+    - f4 (0.27s): snaps tall & proudly upright with arms flaring excitedly
+    - f5 (0.33s..0.38s -> 0.42s): upright settle looping cleanly back into f0
+    """
+    times = [0.00, 0.06, 0.12, 0.18, 0.23, 0.25, 0.27, 0.33, 0.38, 0.42]
+
+    def _rest_t(node: str) -> Tuple[float, float, float]:
+        xf = scene.get_node_transform(node)
+        return xf.translation if xf is not None else (0.0, 0.0, 0.0)
+
+    def _rest_r(node: str) -> Tuple[float, float, float, float]:
+        xf = scene.get_node_transform(node)
+        return xf.rotation if xf is not None else (0.0, 0.0, 0.0, 1.0)
+
+    def _rot_track(node: str, eulers: List[Tuple[float, float, float]]) -> AnimationChannel:
+        r0 = _rest_r(node)
+        qs: List[Tuple[float, float, float, float]] = []
+        for rx, ry, rz in eulers:
+            q = quat_mul(r0, quat_from_euler_xyz(rx=rx, ry=ry, rz=rz))
+            if qs and sum(a * b for a, b in zip(qs[-1], q)) < 0.0:
+                q = (-q[0], -q[1], -q[2], -q[3])
+            qs.append(q)
+        qs[-1] = qs[0] if (len(qs) < 2 or sum(a * b for a, b in zip(qs[-2], qs[0])) >= 0.0) else tuple(-c for c in qs[0])
+        return AnimationChannel(node, "rotation", list(times), qs)
+
+    channels: List[AnimationChannel] = []
+    bx, by, bz = _rest_t("upper_body")
+    body_dxyz = [
+        (0.000, -0.018, +0.024),  # f0 0.00s: dive start
+        (0.000, -0.044, +0.056),  # f1 0.06s: deep horizontal headbutt dive
+        (0.000, -0.036, +0.088),  # f2 0.12s: low spring lunge
+        (0.000, -0.028, +0.104),  # f3 0.18s: peak forward lunge & chomp
+        (0.000, -0.024, +0.096),  # f3 hold 0.23s
+        (0.000, +0.004, +0.058),  # rebound mid 0.25s (keeps hip-tracking sub-mm!)
+        (0.000, +0.032, +0.024),  # f4 0.27s: snap tall & upright
+        (0.000, +0.010, +0.004),  # f5 0.33s: upright settle
+        (0.000, -0.004, +0.012),  # f5->f0 0.38s
+        (0.000, -0.018, +0.024),  # wrap 0.42s == f0
+    ]
+    channels.append(
+        AnimationChannel(
+            "upper_body",
+            "translation",
+            list(times),
+            [(bx + dx, by + dy, bz + dz) for dx, dy, dz in body_dxyz],
+        )
+    )
+    channels.append(
+        _rot_track(
+            "upper_body",
+            [
+                (+0.58, 0.0, 0.0),
+                (+1.14, 0.0, 0.0),
+                (+1.00, 0.0, 0.0),
+                (+0.78, 0.0, 0.0),
+                (+0.68, 0.0, 0.0),
+                (+0.26, 0.0, 0.0),
+                (-0.16, 0.0, 0.0),
+                (-0.04, 0.0, 0.0),
+                (+0.24, 0.0, 0.0),
+                (+0.58, 0.0, 0.0),
+            ],
+        )
+    )
+    channels.append(
+        _rot_track(
+            "head_group",
+            [
+                (+0.10, 0.0, 0.0),
+                (-0.14, 0.0, 0.0),
+                (-0.26, 0.0, 0.0),
+                (-0.34, 0.0, 0.0),
+                (-0.30, 0.0, 0.0),
+                (-0.18, 0.0, 0.0),
+                (-0.06, 0.0, 0.0),
+                (+0.00, 0.0, 0.0),
+                (+0.06, 0.0, 0.0),
+                (+0.10, 0.0, 0.0),
+            ],
+        )
+    )
+    channels.append(
+        _rot_track(
+            "gaster_group",
+            [
+                (+0.16, 0.0, 0.0),
+                (+0.34, 0.0, 0.0),
+                (+0.28, 0.0, 0.0),
+                (+0.20, 0.0, 0.0),
+                (+0.16, 0.0, 0.0),
+                (+0.02, 0.0, 0.0),
+                (-0.14, 0.0, 0.0),
+                (-0.04, 0.0, 0.0),
+                (+0.06, 0.0, 0.0),
+                (+0.16, 0.0, 0.0),
+            ],
+        )
+    )
+    # Fierce mandible chomp: flare wide open on dive/lunge (f1-f2), snap sharply shut at f3 impact!
+    if "mandibles" in scene.nodes and scene.get_node("mandibles"):
+        channels.append(
+            _rot_track(
+                "mandibles",
+                [
+                    (+0.12, 0.0, 0.0),
+                    (+0.24, 0.0, 0.0),
+                    (+0.30, 0.0, 0.0),
+                    (-0.22, 0.0, 0.0),
+                    (-0.24, 0.0, 0.0),
+                    (-0.06, 0.0, 0.0),
+                    (+0.10, 0.0, 0.0),
+                    (+0.02, 0.0, 0.0),
+                    (+0.06, 0.0, 0.0),
+                    (+0.12, 0.0, 0.0),
+                ],
+            )
+        )
+        channels.append(
+            AnimationChannel(
+                "mandibles",
+                "scale",
+                list(times),
+                [
+                    (1.06, 1.0, 0.98),
+                    (1.14, 1.0, 0.96),
+                    (1.18, 1.0, 0.95),
+                    (0.82, 1.0, 1.08),
+                    (0.80, 1.0, 1.08),
+                    (0.94, 1.0, 1.04),
+                    (1.06, 1.0, 1.00),
+                    (1.00, 1.0, 1.00),
+                    (1.03, 1.0, 0.99),
+                    (1.06, 1.0, 0.98),
+                ],
+            )
+        )
+    # Expressive arms: tuck & brace out-back during deep dive (zero leg clipping!), flare wide on upright snap!
+    for arm_n, fore_n, s in (("arm_left", "forearm_left", +1.0), ("arm_right", "forearm_right", -1.0)):
+        if arm_n in scene.nodes:
+            channels.append(
+                _rot_track(
+                    arm_n,
+                    [
+                        (-0.22, 0.0, s * 0.34),
+                        (-0.62, 0.0, s * 0.62),
+                        (-0.52, 0.0, s * 0.78),
+                        (-0.60, 0.0, s * 0.62),
+                        (-0.54, 0.0, s * 0.56),
+                        (-0.36, 0.0, s * 0.55),
+                        (-0.20, 0.0, s * 0.54),
+                        (-0.04, 0.0, s * 0.14),
+                        (-0.12, 0.0, s * 0.24),
+                        (-0.22, 0.0, s * 0.34),
+                    ],
+                )
+            )
+        if fore_n in scene.nodes:
+            channels.append(
+                _rot_track(
+                    fore_n,
+                    [
+                        (-0.18, 0.0, s * 0.12),
+                        (-0.34, 0.0, s * 0.24),
+                        (-0.22, 0.0, s * 0.32),
+                        (-0.28, 0.0, s * 0.24),
+                        (-0.24, 0.0, s * 0.20),
+                        (-0.17, 0.0, s * 0.20),
+                        (-0.10, 0.0, s * 0.20),
+                        (0.00, 0.0, 0.00),
+                        (-0.08, 0.0, s * 0.06),
+                        (-0.18, 0.0, s * 0.12),
+                    ],
+                )
+            )
+    # Antennae whip back into the lunge and perk excitedly on the upright rebound!
+    for ant_n, s in (("antenna_left", +1.0), ("antenna_right", -1.0)):
+        if ant_n in scene.nodes and scene.get_node(ant_n):
+            channels.append(
+                _rot_track(
+                    ant_n,
+                    [
+                        (-0.18, 0.0, s * 0.06),
+                        (-0.34, 0.0, s * 0.12),
+                        (-0.40, 0.0, s * 0.14),
+                        (-0.32, 0.0, s * 0.10),
+                        (-0.26, 0.0, s * 0.08),
+                        (-0.02, 0.0, s * 0.11),
+                        (+0.22, 0.0, s * 0.14),
+                        (+0.06, 0.0, s * 0.04),
+                        (-0.06, 0.0, s * 0.05),
+                        (-0.18, 0.0, s * 0.06),
+                    ],
+                )
+            )
+
+    scene.add_animation("Attack", channels, replace=True)
+    sync_leg_flex_to_clip(scene, "Attack")
+
+
 def build_worker(blink: float = 0.0) -> SceneBuilder:
     """Build the curious, charming classic Worker Ant (`blink` in [0, 1] sets resting eyelid closure)."""
     scene, anchors = build_base_ant(
@@ -230,6 +438,7 @@ def build_worker(blink: float = 0.0) -> SceneBuilder:
     _slim_worker_torso_and_tail(scene, anchors)
     _add_carapace_details(scene, anchors)
     scene.ground_to_y(0.0)
+    _add_worker_attack_animation(scene)
     return scene
 
 
