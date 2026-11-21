@@ -139,20 +139,20 @@ def _subdivided_rounded_box(
 
 
 def _brim_radial_and_y(theta: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Compute Option 3 traditional swept firefighter brim: wider upturned sides & plump rounded-oval rear tail."""
+    """Compute sleek longitudinal firefighter brim: compact upturned sides & plump rounded-oval rear tail."""
     cos_t = np.cos(theta)
     sin_t = np.sin(theta)
     front_w = np.clip(cos_t, 0.0, 1.0) ** 1.35
     side_w = sin_t * sin_t
-    # Broad flat-topped C^1 rear lobe `s^2 * (2 - s^2)` (strictly zero across front & sides so the rear
-    # neck-guard never pulls side brims down, and broadly plump across theta=135..225 deg so `701 N`
-    # forms a smooth rounded firefighter U-oval matching `afst701` instead of a pointy V-beak!).
+    # Broad flat-topped C^1 rear lobe `s^2 * (2 - s^2)` plus gentle rear-quarter fullness `side_w * rear_w`
+    # so lateral sides stay narrow and parallel into a plump rounded U-oval rear tail matching `afst701`.
     s_rear = np.clip(-cos_t, 0.0, 1.0)
     rear_w = (s_rear * s_rear) * (2.0 - s_rear * s_rear)
+    rear_quarter_w = side_w * rear_w
 
-    x_flare = 0.24 * front_w + 0.37 * side_w + 0.25 * rear_w
-    z_flare = 0.30 * front_w + 0.16 * side_w + 0.60 * rear_w
-    y_shift = -0.004 * front_w + 0.014 * side_w * (1.0 - 0.80 * rear_w) - 0.124 * rear_w
+    x_flare = 0.16 * front_w + 0.19 * side_w + 0.22 * rear_w + 0.28 * rear_quarter_w
+    z_flare = 0.28 * front_w + 0.15 * side_w + 0.60 * rear_w
+    y_shift = -0.004 * front_w + 0.012 * side_w * (1.0 - 0.80 * rear_w) - 0.125 * rear_w
     return x_flare, z_flare, y_shift
 
 
@@ -189,7 +189,7 @@ def _helmet_shell_deform_bounds(pos: np.ndarray, y_min: float, y_max: float) -> 
     front_lip_curl = 0.004 * np.clip(cos_t, 0.0, 1.0) * edge_mask
     # Crisp, tasteful upward tilt along the outer left & right side brims matching afst301.
     side_edge_mask = np.clip(1.0 - h / 0.15, 0.0, 1.0) ** 1.75
-    side_curl = 0.045 * (sin_t * sin_t) * (1.0 - 0.85 * rear_w) * side_edge_mask
+    side_curl = 0.039 * (sin_t * sin_t) * (1.0 - 0.85 * rear_w) * side_edge_mask
     # Subtle vintage flute relief along dome height too so top ridges pop under overhead 45 deg lighting.
     flute_y = 0.010 * flute_mask * (lobe - 0.5)
     p[:, 1] = y + flatten_lift + brim * y_shift + front_lip_curl + side_curl + flute_y
@@ -285,26 +285,26 @@ def _build_giant_letter_a(
     parts: List[MeshPart] = []
     thickness = 0.020  # [-0.010, +0.010] -> shifted +0.004 => [-0.006 inside, +0.014 proud]
     front_z = 0.5 * shield_depth
-    stroke_w = 0.039
-    leg_len = 0.162
-    tilt_deg = 24.5
+    stroke_w = 0.036
+    leg_len = 0.158
+    tilt_deg = 22.8
 
     left_leg = (
         _subdivided_rounded_box(stroke_w, leg_len, thickness, bevel=0.004, nx=6, ny=12, nz=4, name="letter_a_left", material="gear_accent")
         .rotate_xyz(rz=-tilt_deg, degrees=True)
-        .translate(-0.039, y_offset, 0.004)
+        .translate(-0.035, y_offset, 0.004)
     )
     right_leg = (
         _subdivided_rounded_box(stroke_w, leg_len, thickness, bevel=0.004, nx=6, ny=12, nz=4, name="letter_a_right", material="gear_accent")
         .rotate_xyz(rz=+tilt_deg, degrees=True)
-        .translate(+0.039, y_offset, 0.004)
+        .translate(+0.035, y_offset, 0.004)
     )
     apex = (
-        _subdivided_rounded_box(0.050, 0.030, thickness, bevel=0.004, nx=8, ny=4, nz=4, name="letter_a_apex", material="gear_accent")
-        .translate(0.0, 0.062 + y_offset, 0.004)
+        _subdivided_rounded_box(0.046, 0.030, thickness, bevel=0.004, nx=8, ny=4, nz=4, name="letter_a_apex", material="gear_accent")
+        .translate(0.0, 0.061 + y_offset, 0.004)
     )
     crossbar = (
-        _subdivided_rounded_box(0.120, 0.029, thickness, bevel=0.004, nx=12, ny=4, nz=4, name="letter_a_bar", material="gear_accent")
+        _subdivided_rounded_box(0.108, 0.028, thickness, bevel=0.004, nx=12, ny=4, nz=4, name="letter_a_bar", material="gear_accent")
         .translate(0.0, -0.022 + y_offset, 0.004)
     )
     raw_parts = [left_leg, right_leg, apex, crossbar]
@@ -359,10 +359,10 @@ def _build_fire_helmet(
     # Seat the yellow brim snugly above his cute eyes while preserving clean blink clearance (~9+ mm across blink=0..1).
     shell_y = max(eyelid_top_y - 0.031, head_top[1] - 0.136)
     shell_z = hz - 0.008
-    # Keep the helmet dome proudly oversized relative to Fire's 0.95x head (matching afst301..701).
-    dome_rx = max(hrx + 0.038, orig_hrx + 0.020)
+    # Sleek longitudinal firefighter dome (W <= D) proportioned cleanly above Fire's 0.95x head (matching afst301..701).
+    dome_rx = max(hrx + 0.022, orig_hrx + 0.010)
     dome_ry = max(0.284, (head_top[1] - shell_y) + 0.144)
-    dome_rz = max(hrz + 0.038, orig_hrz + 0.022)
+    dome_rz = max(hrz + 0.044, orig_hrz + 0.028)
 
     # 1. Option 3 deeply-fluted vintage ribbed dome + traditional swept firefighter brim (80x32 high-res!).
     u_segs = 80
@@ -394,14 +394,14 @@ def _build_fire_helmet(
     scene.add("fire_helmet", dome)
 
     # Smooth rolled yellow plastic outer brim edge bead hugging the exact beveled rim of dome
-    # (`p_out[:u_segs]`, `p_in[:u_segs]`, `p_lip` -> max_outside <= 5 mm proud, 0.000 mm drift!).
+    # (`p_out[:u_segs]`, `p_in[:u_segs]`, `p_lip` -> max_outside <= 4.5 mm proud, 0.000 mm drift!).
     n_out = (len(dome.positions) - u_segs) // 2
     rim_mid = 0.5 * (dome.positions[:u_segs] + dome.positions[n_out : n_out + u_segs])
-    rim_center = 0.76 * rim_mid + 0.24 * dome.positions[-u_segs:]
+    rim_center = 0.88 * rim_mid + 0.12 * dome.positions[-u_segs:]
     lip_pts = [(float(pt[0]), float(pt[1]), float(pt[2])) for pt in rim_center]
     brim_lip = swept_tube(
         lip_pts,
-        0.0098,
+        0.0085,
         radial_segs=10,
         closed=True,
         name="helmet_brim_lip",
@@ -473,13 +473,13 @@ def _build_fire_helmet(
     )
     scene.add("fire_helmet", crest)
 
-    # 3. Option 3's proud vintage framed front shield at Option 2's extra-wide outline width + flush crimson 'A'.
-    shield_w = dome_rx * 1.66
+    # 3. Option 3's proud vintage framed front shield proportioned to the sleeker dome + flush crimson 'A'.
+    shield_w = dome_rx * 1.62
     shield_h = dome_ry * 0.86
-    shield_depth = 0.104
-    curve_depth = 0.088
+    shield_depth = 0.100
+    curve_depth = 0.080
     shield_tilt_x = -8.5
-    shield_pos = (hx, shell_y + 0.170, shell_z + dome_rz - 0.032)
+    shield_pos = (hx, shell_y + 0.170, shell_z + dome_rz - 0.034)
 
     shield = (
         _build_option3_wide_shield(shield_w, shield_h, shield_depth, curve_depth)
