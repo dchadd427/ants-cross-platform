@@ -266,6 +266,24 @@ try {
         bad.start();
         poll(bad);
         expect('a card that says no edge (an older game): no button', bad.button.hidden, true);
+        const nowidth = page();
+        nowidth.game.width = -1;
+        nowidth.start();
+        poll(nowidth);
+        expect('a card that says no width (an older game): no button', nowidth.button.hidden, true);
+        // a card that is narrower than the button's floor: the card wins (60 CSS px at 0.6)
+        const narrow = page();
+        narrow.game.width = 100;
+        narrow.start();
+        poll(narrow);
+        expect('a card narrower than the least width of a button: never wider than the card', [narrow.button.hidden, Math.abs(parseFloat(narrow.button.style.width) - 60) <= 0.01], [false, true]);
+        // a card whose bottom edge is only 3 canvas pixels under the place: the button keeps its 2 px above that edge, the card wins over the place
+        const low = page();
+        low.game.bottom = low.game.button[1] + low.game.button[3] + 3;
+        low.start();
+        poll(low);
+        const lowTop = parseFloat(low.button.style.top), lowH = parseFloat(low.button.style.height);
+        expect('a card with its bottom edge 3 canvas pixels under the place: the button is still there and ends 2 px above the edge', [low.button.hidden, lowTop + lowH <= low.game.bottom * 0.6 - 2 + 0.01], [false, true]);
     }
 
     // ---- when it is hidden

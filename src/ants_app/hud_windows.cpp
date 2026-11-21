@@ -1,7 +1,9 @@
 // The windows of the match in the new look (hud.hpp, window_art.hpp): the quit and alliance questions, "Get ready to play!", the quick help, the options window's veil, the countdown card, and the
 // Fullscreen button. Each draws the HUD art's pieces when the set has every piece of the window and fits the places of the original's, and the original's own pictures otherwise (window_pieces).
 #include <algorithm>
+#include <cmath>
 #include <string>
+#include <vector>
 
 #include "ants_app/hud.hpp"
 #include "ants_app/renderer.hpp"

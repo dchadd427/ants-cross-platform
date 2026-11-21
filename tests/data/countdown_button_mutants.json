@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the countdown card's Fullscreen button (web/countdown_button.js, docs/PLAY_IN_BROWSER.md 'The countdown') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_countdown_check.js (the button's box for a phone held sideways and a desktop window) and tests/scripts/test_web_countdown.py: the old 44 px height, a floor of 32, no floor on the height, a width that keeps the slot's shape, the text not scaled, the page's own minimum height and padding left on the button, a button wider than the card, one that reaches below the card's bottom edge or up into the hint line; every one must be caught (tools/mutate.py tests/data/countdown_button_mutants.json --keep-going --jobs 1).",
+ "note": "Mutants of the countdown card's Fullscreen button (web/countdown_button.js, docs/PLAY_IN_BROWSER.md 'The countdown') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_countdown_check.js (the button's box for a phone held sideways and a desktop window) and tests/scripts/test_web_countdown.py: the old 44 px height, a floor of 32, no floor on the height, a width that keeps the slot's shape, the text not scaled, the page's own minimum height and padding left on the button, a button wider than the card, one that reaches below the card's bottom edge or up over the rows, a card too small for it that gets a button, a card that gives no edges, the fade that is not followed or asked of a game that is not ready; every one must be caught (tools/mutate.py tests/data/countdown_button_mutants.json --keep-going --jobs 1).",
  "mutants": [
   {
    "id": "old_min_height_44",
@@ -60,22 +60,57 @@
   {
    "id": "wider_than_the_card",
    "file": "web/countdown_button.js",
-   "old": "w = Math.min(w, CARD_W * fx, rect.width);",
+   "old": "w = Math.min(w, cardW * fx, rect.width);",
    "new": "w = Math.min(w, rect.width);",
    "test": "python3 tests/scripts/test_web_countdown.py && node tests/scripts/web_countdown_check.js web/countdown_button.js"
   },
   {
    "id": "below_the_card_bottom",
    "file": "web/countdown_button.js",
-   "old": "            top = Math.min(top, slotBottom + CARD_BELOW * fy - 2 - h);                     // and inside the card's bottom edge, which wins\n",
+   "old": "            top = Math.min(top, slotBottom + below * fy - 2 - h);                          // and inside the card's bottom edge, which wins\n",
    "new": "\n",
    "test": "python3 tests/scripts/test_web_countdown.py && node tests/scripts/web_countdown_check.js web/countdown_button.js"
   },
   {
-   "id": "up_into_the_hint_line",
+   "id": "up_over_the_rows",
    "file": "web/countdown_button.js",
-   "old": "            top = Math.max(top, slotTop - HINT_GAP * fy);                                  // not up into the hint line\n",
+   "old": "            top = Math.max(top, slotTop - above * fy);                                     // not up over the rows\n",
    "new": "\n",
+   "test": "python3 tests/scripts/test_web_countdown.py && node tests/scripts/web_countdown_check.js web/countdown_button.js"
+  },
+  {
+   "id": "fade_not_followed",
+   "file": "web/countdown_button.js",
+   "old": "button.style.opacity = opacity >= 0 && opacity < 255 ? String(Math.round(opacity / 255 * 100) / 100) : '';",
+   "new": "button.style.opacity = '';",
+   "test": "python3 tests/scripts/test_web_countdown.py && node tests/scripts/web_countdown_check.js web/countdown_button.js"
+  },
+  {
+   "id": "fade_of_a_game_not_ready",
+   "file": "web/countdown_button.js",
+   "old": "            if (!page.ready()) return;                               // (before the game is up",
+   "new": "            // (before the game is up",
+   "test": "python3 tests/scripts/test_web_countdown.py && node tests/scripts/web_countdown_check.js web/countdown_button.js"
+  },
+  {
+   "id": "small_card_gets_a_button",
+   "file": "web/countdown_button.js",
+   "old": "if (MIN_H - (slotH + (below + above) * fy - 2) > MAX_INTRUDE) return false;",
+   "new": "if (false) return false;",
+   "test": "python3 tests/scripts/test_web_countdown.py && node tests/scripts/web_countdown_check.js web/countdown_button.js"
+  },
+  {
+   "id": "rows_intrusion_allowed",
+   "file": "web/countdown_button.js",
+   "old": "var MAX_INTRUDE = 0; ",
+   "new": "var MAX_INTRUDE = 6; ",
+   "test": "python3 tests/scripts/test_web_countdown.py && node tests/scripts/web_countdown_check.js web/countdown_button.js"
+  },
+  {
+   "id": "card_that_says_nothing_gets_a_button",
+   "file": "web/countdown_button.js",
+   "old": "if (!(below >= 0 && above >= 0 && cardW > 0)) return false;",
+   "new": "",
    "test": "python3 tests/scripts/test_web_countdown.py && node tests/scripts/web_countdown_check.js web/countdown_button.js"
   }
  ]
