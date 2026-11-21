@@ -719,14 +719,16 @@ def add_drown(scene: SceneBuilder, ant_class: str) -> AnimationClip:
 
 
 def add_hazard_clips(scene: SceneBuilder, ant_class: str) -> List[AnimationClip]:
-    """Attach all 4 authentic 1998 shared hazard clips (`BlownBack`, `BlownUp`, `Stunned`, `Drown`)."""
+    """Attach authentic 1998 shared hazard clips (`BlownBack`, `BlownUp`, `Stunned`, and `Drown` on land ants)."""
     cls = ant_class.strip().lower()
-    return [
+    clips = [
         add_blown_back(scene, cls),
         add_blown_up(scene, cls),
         add_stunned(scene, cls),
-        add_drown(scene, cls),
     ]
+    if cls != "swimmer":
+        clips.append(add_drown(scene, cls))
+    return clips
 
 
 __all__ = [

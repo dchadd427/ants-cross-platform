@@ -31,6 +31,7 @@ if np is not None:
             quat_from_euler_xyz,
             quat_mul,
         )
+        from .shared_clips_hazards import add_hazard_clips
         from .shared_clips_loco import add_shared_loco_clips
     except ImportError:
         from base_ant import sync_leg_flex_to_clip  # type: ignore
@@ -41,6 +42,7 @@ if np is not None:
             quat_from_euler_xyz,
             quat_mul,
         )
+        from shared_clips_hazards import add_hazard_clips  # type: ignore
         from shared_clips_loco import add_shared_loco_clips  # type: ignore
 
 Vec3 = Tuple[float, float, float]
@@ -456,6 +458,7 @@ def add_thief_hit_animation(scene: SceneBuilder) -> AnimationClip:
     sync_leg_flex_to_clip(scene, "Hit", knee_bow=1.05, splay=0.25, swivel=0.0)
     _solve_root_channels(scene, clip, times, root_eulers, root_z_com, min_air_y, com_y=0.34)
     add_shared_loco_clips(scene, "thief")
+    add_hazard_clips(scene, "thief")
     return clip
 
 
@@ -568,6 +571,7 @@ def add_bomber_hit_animation(scene: SceneBuilder) -> AnimationClip:
     sync_leg_flex_to_clip(scene, "Hit", knee_bow=1.05, splay=0.25, swivel=0.0)
     _solve_root_channels(scene, clip, times, root_eulers, root_z_com, min_air_y, com_y=0.38)
     add_shared_loco_clips(scene, "bomber")
+    add_hazard_clips(scene, "bomber")
     return clip
 
 
@@ -717,6 +721,7 @@ def add_swimmer_hit_animation(scene: SceneBuilder) -> AnimationClip:
     sync_leg_flex_to_clip(scene, "Hit", knee_bow=1.05, splay=0.25, swivel=0.0)
     _solve_root_channels(scene, clip, times, root_eulers, root_z_com, min_air_y, com_y=0.45)
     add_shared_loco_clips(scene, "swimmer")
+    add_hazard_clips(scene, "swimmer")
     return clip
 
 
