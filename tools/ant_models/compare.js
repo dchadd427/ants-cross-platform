@@ -10,6 +10,14 @@
 
   const ORIGINAL_TEAMS = ["green", "red", "blue", "black"];
   const SPEEDS = [0.5, 1, 1.5];
+  const RETRO_STEP_SEC = {
+    worker: 0.150,
+    combat: 0.125,
+    thief: 0.100,
+    bomber: 0.100,
+    swimmer: 0.150,
+    fire: 0.100,
+  };
   const GROUND_FRAC = 0.87;
   const CANONICAL_PITCH = ANGLES["301"].pitch;
   const RELOAD_STATE_KEY = "ants_viewer_reload_state_v1";
@@ -42,16 +50,36 @@
     return Number.isFinite(sec) && sec > 0 ? sec.toFixed(2) + "s" : "\u2014";
   }
 
-  function pickOrigFrame(entry, simTimeSec) {
-    if (!entry || !Array.isArray(entry.steps) || entry.steps.length <= 1 || !entry.total_ms) return 0;
+  function pickOrigStep(entry, simTimeSec) {
+    if (!entry || !Array.isArray(entry.steps) || entry.steps.length <= 1 || !entry.total_ms) {
+      return { frameIdx: 0, quantizedSec: simTimeSec, stepDurSec: 0.125 };
+    }
     const total = entry.total_ms;
+    const totalSec = total / 1000;
+    const cycles = Math.floor(simTimeSec / totalSec);
     const tMs = (((simTimeSec * 1000) % total) + total) % total;
     let acc = 0;
     for (let i = 0; i < entry.steps.length; i++) {
-      acc += entry.steps[i].ms;
-      if (tMs < acc) return entry.steps[i].f;
+      const ms = entry.steps[i].ms;
+      if (tMs < acc + ms) {
+        return {
+          frameIdx: entry.steps[i].f,
+          quantizedSec: cycles * totalSec + acc / 1000,
+          stepDurSec: ms / 1000,
+        };
+      }
+      acc += ms;
     }
-    return entry.steps[entry.steps.length - 1].f;
+    const last = entry.steps[entry.steps.length - 1];
+    return {
+      frameIdx: last.f,
+      quantizedSec: cycles * totalSec + Math.max(0, total - last.ms) / 1000,
+      stepDurSec: last.ms / 1000,
+    };
+  }
+
+  function pickOrigFrame(entry, simTimeSec) {
+    return pickOrigStep(entry, simTimeSec).frameIdx;
   }
 
   function initCompare() {
@@ -70,6 +98,7 @@
     const btnSoloReset = document.getElementById("btn-solo-reset-angle");
     const btnPixelMode = document.getElementById("btn-pixel-mode");
     const btnSilhouette = document.getElementById("btn-silhouette");
+    const btnRetroFps = document.getElementById("btn-retro-fps");
     const btnIdle = document.getElementById("btn-idle");
     const btnSyncReset = document.getElementById("btn-sync-reset");
     const studioTab = document.getElementById("tab-studio");
@@ -124,6 +153,7 @@
     const qIdle = params.get("idle");
     const qPixel = params.get("pixel");
     const qSil = params.get("silhouette");
+    const qRetro = params.get("retrofps");
     const qTime = params.has("t") ? Number(params.get("t")) : NaN;
     const darkMq = window.matchMedia("(prefers-color-scheme: dark)");
 
@@ -152,6 +182,9 @@
     const initSil = qSil !== null
       ? (qSil === "1" || qSil.toLowerCase() === "true")
       : (savedState && typeof savedState.silhouette === "boolean" ? savedState.silhouette : false);
+    const initRetro = qRetro !== null
+      ? (qRetro === "1" || qRetro.toLowerCase() === "true")
+      : (savedState && typeof savedState.retroFps === "boolean" ? savedState.retroFps : false);
     const initSpeed = SPEEDS.includes(qSpeed)
       ? qSpeed
       : (savedState && SPEEDS.includes(savedState.speed) ? savedState.speed : 1);
@@ -168,6 +201,7 @@
       idle: initIdle,
       pixelMode: initPixel,
       silhouette: initSil,
+      retroFps: initRetro,
       speed: initSpeed,
       simTime: Number.isFinite(qTime) && qTime >= 0 ? qTime : 0,
       dark: darkMq.matches,
@@ -238,6 +272,7 @@
         q.set("proj", "ortho");
       }
       if (state.silhouette) q.set("silhouette", "1");
+      if (state.retroFps) q.set("retrofps", "1");
       studioTab.setAttribute("href", "viewer.html?" + q.toString());
     }
 
@@ -256,6 +291,7 @@
         idle: state.idle,
         pixelMode: state.pixelMode,
         silhouette: state.silhouette,
+        retroFps: state.retroFps,
         speed: state.speed,
         simTime: Number(state.simTime.toFixed(3)),
         soloOrbited: state.soloOrbited,
@@ -276,6 +312,7 @@
       idle: state.idle,
       pixelMode: state.pixelMode,
       silhouette: state.silhouette,
+      retroFps: state.retroFps,
       speed: state.speed,
     });
 
@@ -318,6 +355,7 @@
       btnIdle.setAttribute("aria-pressed", String(state.idle));
       if (btnPixelMode) btnPixelMode.setAttribute("aria-pressed", String(state.pixelMode));
       if (btnSilhouette) btnSilhouette.setAttribute("aria-pressed", String(state.silhouette));
+      if (btnRetroFps) btnRetroFps.setAttribute("aria-pressed", String(state.retroFps));
 
       const isSolo = state.ant !== "all";
       gridEl.hidden = isSolo;
@@ -336,7 +374,7 @@
         if (state.silhouette) modeBits.push("Silhouette");
         metaProj.textContent = modeBits.join(" \u00b7 ");
       }
-      metaPlay.textContent = `${state.idle ? "Playing" : "Paused"} \u00b7 ${state.speed}\u00d7`;
+      metaPlay.textContent = `${state.idle ? "Playing" : "Paused"} \u00b7 ${state.speed}\u00d7${state.retroFps ? " \u00b7 1998 FPS" : ""}`;
 
       const origCardLabel = comp.flip ? "1998 Orig \u00b7 flip" : "1998 Original";
       for (const pill of cardOrigPills) pill.textContent = origCardLabel;
@@ -417,6 +455,23 @@
       updateUiState();
       markDirty();
       announce(state.silhouette ? "Silhouette view enabled on both sides." : "Silhouette view disabled.");
+    }
+
+    function toggleRetroFps() {
+      state.retroFps = !state.retroFps;
+      updateUiState();
+      markDirty();
+      if (!state.retroFps) {
+        announce("1998 FPS off (smooth 60 fps 3D playback).");
+        return;
+      }
+      const step = RETRO_STEP_SEC[state.ant];
+      if (step) {
+        const fps = (1 / step).toFixed(1).replace(/\.0$/, "");
+        announce(`1998 FPS on (${ANT_LABELS[state.ant]} \u00b7 ${fps} fps, ${Math.round(step * 1000)}ms step).`);
+      } else {
+        announce("1998 FPS on (6.7\u201310 fps, frame-locked to 1998 sprites).");
+      }
     }
 
     function selectSpeed(spd) {
@@ -654,6 +709,17 @@
       }
     }
 
+    function sampled3dTiming(cls) {
+      if (!state.retroFps) return { idleTime: state.simTime, stepSec: 0 };
+      const origEntry = state.origBundle && state.origBundle.sprites[cls] && state.origBundle.sprites[cls][state.angle];
+      if (origEntry && Array.isArray(origEntry.steps) && origEntry.steps.length > 1 && origEntry.total_ms) {
+        const st = pickOrigStep(origEntry, state.simTime);
+        return { idleTime: st.quantizedSec, stepSec: st.stepDurSec };
+      }
+      const step = RETRO_STEP_SEC[cls] || 0.125;
+      return { idleTime: Math.floor(state.simTime / step) * step, stepSec: step };
+    }
+
     function draw3dAnt(ctx, cls, x0, panelW, panelH, groundY, fixedHalfH, pxScale, cam) {
       const sc = state.scenes.get(cls);
       if (!sc) return;
@@ -664,63 +730,79 @@
       const shadowRx = Math.max(12, Math.min(panelW * 0.34, (panelH / (2 * fixedHalfH)) * sc.instances[0].model.size[0] * 0.38));
       drawContactShadow(ctx, x0 + panelW * 0.5, groundY, shadowRx, Math.max(4, shadowRx * 0.22));
 
-      if (state.pixelMode && pxScale > 1) {
-        const lowW = Math.max(16, Math.floor(panelW / pxScale));
-        const lowH = Math.max(16, Math.floor(panelH / pxScale));
-        const lowGroundY = Math.min(lowH - 1, Math.max(1, Math.round(groundY / pxScale)));
-        const lowGFrac = lowGroundY / lowH;
-        const lowFixedHalfH = fixedHalfH * ((lowH * pxScale) / panelH);
-        const targetY = (span.vMin + lowFixedHalfH * (2 * lowGFrac - 1)) / Math.cos(anchorPitch * DEG);
-        ensureOffscreenSize(lowW, lowH);
+      const timing = sampled3dTiming(cls);
+      const inst = sc.instances[0];
+      const bl = inst && inst.blink;
+      let savedBlink = null;
+      if (state.retroFps && bl && bl.active) {
+        savedBlink = bl.elapsed;
+        const bi = inst.model.blinkInfo;
+        const pulseDur = bi && bi.anim ? (bi.endTime - bi.startTime) : 0.22;
+        const bStep = Math.min(timing.stepSec || 0.125, Math.max(0.04, pulseDur * 0.5));
+        bl.elapsed = Math.floor(savedBlink / bStep) * bStep;
+      }
+
+      try {
+        if (state.pixelMode && pxScale > 1) {
+          const lowW = Math.max(16, Math.floor(panelW / pxScale));
+          const lowH = Math.max(16, Math.floor(panelH / pxScale));
+          const lowGroundY = Math.min(lowH - 1, Math.max(1, Math.round(groundY / pxScale)));
+          const lowGFrac = lowGroundY / lowH;
+          const lowFixedHalfH = fixedHalfH * ((lowH * pxScale) / panelH);
+          const targetY = (span.vMin + lowFixedHalfH * (2 * lowGFrac - 1)) / Math.cos(anchorPitch * DEG);
+          ensureOffscreenSize(lowW, lowH);
+          renderer.drawScene(sc, cam, {
+            width: lowW,
+            height: lowH,
+            transparent: true,
+            showPlinth: false,
+            dark: state.dark,
+            team: state.team,
+            blinkMode: "auto",
+            idleAnim: true,
+            fixedIdleTime: timing.idleTime,
+            silhouette: state.silhouette,
+            overrideProj: "ortho",
+            fixedHalfH: lowFixedHalfH,
+            customTarget: [0, targetY, 0],
+          });
+          const dstW = lowW * pxScale;
+          const dstH = lowH * pxScale;
+          const dstX = Math.round(x0 + (panelW - dstW) * 0.5);
+          const dstY = Math.round(groundY - lowGroundY * pxScale);
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(x0, 0, panelW, panelH);
+          ctx.clip();
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(offCanvas, 0, offCanvas.height - lowH, lowW, lowH, dstX, dstY, dstW, dstH);
+          ctx.restore();
+          return;
+        }
+
+        ensureOffscreenSize(panelW, panelH);
+        const gFrac = groundY / panelH;
+        const targetY = (span.vMin + fixedHalfH * (2 * gFrac - 1)) / Math.cos(anchorPitch * DEG);
         renderer.drawScene(sc, cam, {
-          width: lowW,
-          height: lowH,
+          width: panelW,
+          height: panelH,
           transparent: true,
           showPlinth: false,
           dark: state.dark,
           team: state.team,
           blinkMode: "auto",
           idleAnim: true,
-          fixedIdleTime: state.simTime,
+          fixedIdleTime: timing.idleTime,
           silhouette: state.silhouette,
           overrideProj: "ortho",
-          fixedHalfH: lowFixedHalfH,
+          fixedHalfH,
           customTarget: [0, targetY, 0],
         });
-        const dstW = lowW * pxScale;
-        const dstH = lowH * pxScale;
-        const dstX = Math.round(x0 + (panelW - dstW) * 0.5);
-        const dstY = Math.round(groundY - lowGroundY * pxScale);
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(x0, 0, panelW, panelH);
-        ctx.clip();
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(offCanvas, 0, offCanvas.height - lowH, lowW, lowH, dstX, dstY, dstW, dstH);
-        ctx.restore();
-        return;
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(offCanvas, 0, offCanvas.height - panelH, panelW, panelH, x0, 0, panelW, panelH);
+      } finally {
+        if (savedBlink !== null && bl) bl.elapsed = savedBlink;
       }
-
-      ensureOffscreenSize(panelW, panelH);
-      const gFrac = groundY / panelH;
-      const targetY = (span.vMin + fixedHalfH * (2 * gFrac - 1)) / Math.cos(anchorPitch * DEG);
-      renderer.drawScene(sc, cam, {
-        width: panelW,
-        height: panelH,
-        transparent: true,
-        showPlinth: false,
-        dark: state.dark,
-        team: state.team,
-        blinkMode: "auto",
-        idleAnim: true,
-        fixedIdleTime: state.simTime,
-        silhouette: state.silhouette,
-        overrideProj: "ortho",
-        fixedHalfH,
-        customTarget: [0, targetY, 0],
-      });
-      ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(offCanvas, 0, offCanvas.height - panelH, panelW, panelH, x0, 0, panelW, panelH);
     }
 
     function syncCanvasBacking(cv, dpr) {
@@ -859,6 +941,7 @@
       else if (btn.dataset.speed) selectSpeed(Number(btn.dataset.speed));
       else if (btn === btnPixelMode) togglePixelMode();
       else if (btn === btnSilhouette) toggleSilhouette();
+      else if (btn === btnRetroFps) toggleRetroFps();
       else if (btn === btnIdle) toggleIdle();
       else if (btn === btnSyncReset) syncReset();
     });
@@ -1006,6 +1089,9 @@
       } else if (e.key === "s" || e.key === "S") {
         e.preventDefault();
         toggleSilhouette();
+      } else if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        toggleRetroFps();
       } else if ((e.key === "r" || e.key === "R") && document.activeElement !== solo3dCanvas) {
         e.preventDefault();
         syncReset();

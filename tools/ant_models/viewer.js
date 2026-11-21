@@ -7,6 +7,15 @@
     wrapAngleDeg, normalizeHex, resolveTeam, AntRenderer, installToolbarRovingTabindex,
   } = window.__antRender;
 
+  const RETRO_STEP_SEC = {
+    worker: 0.150,
+    combat: 0.125,
+    thief: 0.100,
+    bomber: 0.100,
+    swimmer: 0.150,
+    fire: 0.100,
+  };
+
   const emptyScene = () => ({
     instances: [], target: [0, 0.55, 0], fitRadius: 0.9, halfWidth: 0.7,
     plinthSpanX: 0, plinthRadius: 0.72, shadows: [], boundsSize: [0, 0, 0], triCount: 0, meshCount: 0, nodeCount: 0,
@@ -37,7 +46,7 @@
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const params = new URLSearchParams(window.location.search), getP = (k) => (params.get(k) || "").toLowerCase();
     const pLineup = getP("lineup") === "1" || getP("lineup") === "true";
-    const pAnt = getP("ant"), pTeam = getP("team"), pColor = normalizeHex(params.get("color")), pAngle = getP("angle"), pProj = getP("proj"), pTurn = getP("turntable"), pBlink = getP("blink"), pIdle = getP("idle"), pSprite = getP("sprite"), pSil = getP("silhouette");
+    const pAnt = getP("ant"), pTeam = getP("team"), pColor = normalizeHex(params.get("color")), pAngle = getP("angle"), pProj = getP("proj"), pTurn = getP("turntable"), pBlink = getP("blink"), pIdle = getP("idle"), pSprite = getP("sprite"), pSil = getP("silhouette"), pRetro = getP("retrofps");
     const pIdleTimeRaw = params.get("idleTime"), fixedIdleTime = pIdleTimeRaw !== null && Number.isFinite(Number(pIdleTimeRaw)) ? Number(pIdleTimeRaw) : null;
     const pYaw = params.has("yaw") && Number.isFinite(Number(params.get("yaw"))) ? wrapAngleDeg(Number(params.get("yaw"))) : null;
     const pPitch = params.has("pitch") && Number.isFinite(Number(params.get("pitch"))) ? clamp(Number(params.get("pitch")), -10, 85) : null;
@@ -57,6 +66,8 @@
       : (!params.has("sprite") && savedView && typeof savedView.sprite === "boolean" ? savedView.sprite : true));
     const initSil = pSil === "1" || pSil === "true" ? true : (pSil === "0" || pSil === "false" ? false
       : (!params.has("silhouette") && savedView && typeof savedView.silhouette === "boolean" ? savedView.silhouette : false));
+    const initRetro = pRetro === "1" || pRetro === "true" ? true : (pRetro === "0" || pRetro === "false" ? false
+      : (!params.has("retrofps") && savedView && typeof savedView.retroFps === "boolean" ? savedView.retroFps : false));
     const initBlink = pBlink === "closed" ? "closed" : (pBlink === "open" ? "open" : (motionQuery.matches ? "open" : "auto"));
     const initIdle = fixedIdleTime !== null ? false : (pIdle === "0" || pIdle === "false" ? false : (pIdle === "1" || pIdle === "true" ? true
       : (!params.has("idle") && savedView && typeof savedView.idle === "boolean" ? savedView.idle : !motionQuery.matches)));
@@ -66,7 +77,7 @@
     let pendingUpdatedVer = savedView && typeof savedView.updatedVersion === "string" ? savedView.updatedVersion : "";
     const state = {
       ant: initAnt, customLabel: "", team: initTeam, customColor: initCustomColor, angle: initAngle, blinkMode: initBlink, idleAnim: initIdle, fixedIdleTime,
-      dark: darkQuery.matches, turntable: initTurn, spritePreview: initSprite, silhouette: initSil,
+      dark: darkQuery.matches, turntable: initTurn, spritePreview: initSprite, silhouette: initSil, retroFps: initRetro,
       cam: {
         yaw: pYaw !== null ? pYaw : (useSavedCam ? wrapAngleDeg(savedView.yaw) : preset.yaw),
         pitch: pPitch !== null ? pPitch : (useSavedCam ? clamp(savedView.pitch, -10, 85) : preset.pitch),
@@ -80,7 +91,7 @@
     window.__antViewerGetState = () => ({
       ant: state.ant === "custom" ? "" : state.ant,
       team: state.team, customColor: state.customColor, angle: state.angle, proj: state.cam.projection,
-      turntable: state.turntable, idle: state.idleAnim, sprite: state.spritePreview, silhouette: state.silhouette,
+      turntable: state.turntable, idle: state.idleAnim, sprite: state.spritePreview, silhouette: state.silhouette, retroFps: state.retroFps,
       yaw: state.cam.yaw, pitch: state.cam.pitch, zoom: state.cam.zoom,
     });
 
@@ -143,13 +154,14 @@
       if (SHEET_ANGLES.includes(state.angle)) q.set("angle", state.angle);
       else if (state.angle === "custom") q.set("yaw", String(Math.round(state.cam.yaw)));
       if (state.silhouette) q.set("silhouette", "1");
+      if (state.retroFps) q.set("retrofps", "1");
       const qs = q.toString();
       compareTab.setAttribute("href", qs ? ("compare.html?" + qs) : "compare.html");
     }
 
     function syncDebugState() {
       window.__antViewer = {
-        ready: state.ready, ant: state.ant, team: state.team, customColor: state.customColor, angle: state.angle, blink: state.blinkMode, idle: state.idleAnim, silhouette: state.silhouette,
+        ready: state.ready, ant: state.ant, team: state.team, customColor: state.customColor, angle: state.angle, blink: state.blinkMode, idle: state.idleAnim, silhouette: state.silhouette, retroFps: state.retroFps,
         hasBlinkAnim: state.scene.instances.some((inst) => inst.model.blinkInfo && inst.model.blinkInfo.hasBlink),
         idleAnims: state.scene.instances.flatMap((inst) => (inst.model.idleAnims || []).map((a) => a.name)),
         textureCount: state.scene.instances.reduce((sum, inst) => sum + (inst.model.textureCount || 0), 0),
@@ -174,6 +186,7 @@
       $("btn-idle").setAttribute("aria-pressed", String(state.idleAnim));
       $("btn-sprite-scale").setAttribute("aria-pressed", String(state.spritePreview));
       if ($("btn-silhouette")) $("btn-silhouette").setAttribute("aria-pressed", String(state.silhouette));
+      if ($("btn-retro-fps")) $("btn-retro-fps").setAttribute("aria-pressed", String(state.retroFps));
       $("btn-blink-hold").setAttribute("aria-pressed", String(state.blinkMode === "closed"));
       spriteInset.hidden = !state.spritePreview;
       const antLabel = state.ant === "custom" ? (state.customLabel || "Custom .GLB") : (ANT_LABELS[state.ant] || state.ant);
@@ -354,6 +367,43 @@
       updateUiState(); markDirty(); announce("Silhouette view " + (state.silhouette ? "enabled." : "disabled."));
     }
 
+    function toggleRetroFps() {
+      state.retroFps = !state.retroFps;
+      updateUiState(); markDirty();
+      if (!state.retroFps) { announce("1998 FPS off (smooth 60 fps playback)."); return; }
+      const step = RETRO_STEP_SEC[state.ant];
+      if (step) {
+        const fps = (1 / step).toFixed(1).replace(/\.0$/, "");
+        announce(`1998 FPS on (${ANT_LABELS[state.ant]} · ${fps} fps, ${Math.round(step * 1000)}ms step).`);
+      } else {
+        announce("1998 FPS on (6.7\u201310 fps per class).");
+      }
+    }
+
+    function withQuantizedTiming(fn) {
+      if (!state.retroFps || state.fixedIdleTime !== null) return fn();
+      const saved = state.scene.instances.map((inst) => {
+        const step = RETRO_STEP_SEC[inst.id] || 0.125;
+        const origIdle = inst.idleTime || 0;
+        inst.idleTime = Math.floor(origIdle / step) * step;
+        let origBlink = null;
+        const bl = inst.blink, bi = inst.model.blinkInfo;
+        if (bl && bl.active) {
+          origBlink = bl.elapsed;
+          const pulseDur = bi && bi.anim ? (bi.endTime - bi.startTime) : 0.22;
+          const bStep = Math.min(step, Math.max(0.04, pulseDur * 0.5));
+          bl.elapsed = Math.floor(origBlink / bStep) * bStep;
+        }
+        return [inst, origIdle, origBlink];
+      });
+      try { return fn(); } finally {
+        for (const [inst, origIdle, origBlink] of saved) {
+          inst.idleTime = origIdle;
+          if (origBlink !== null && inst.blink) inst.blink.elapsed = origBlink;
+        }
+      }
+    }
+
     toolbarEl.addEventListener("click", (e) => {
       const btn = e.target.closest("button");
       if (!btn) return;
@@ -369,6 +419,7 @@
       else if (btn.id === "btn-idle") toggleIdle();
       else if (btn.id === "btn-sprite-scale") { state.spritePreview = !state.spritePreview; updateUiState(); markDirty(true); announce("48px sprite-scale preview " + (state.spritePreview ? "shown." : "hidden.")); }
       else if (btn.id === "btn-silhouette") toggleSilhouette();
+      else if (btn.id === "btn-retro-fps") toggleRetroFps();
       else if (btn.id === "btn-blink-hold") toggleBlinkHold();
       else if (btn.id === "btn-blink") triggerBlink();
       else if (btn.id === "btn-export-sheet") exportFiveAngleSheet();
@@ -442,6 +493,7 @@
       else if (e.key === "b" || e.key === "B") { e.preventDefault(); if (e.shiftKey) toggleBlinkHold(); else triggerBlink(); return; }
       else if (e.key === "i" || e.key === "I") { e.preventDefault(); toggleIdle(); return; }
       else if (e.key === "s" || e.key === "S") { e.preventDefault(); toggleSilhouette(); return; }
+      else if (e.key === "f" || e.key === "F") { e.preventDefault(); toggleRetroFps(); return; }
       else {
         manual = false;
         const key = (e.key === "r" || e.key === "R") ? (ANGLES[state.angle] ? state.angle : "301")
@@ -458,6 +510,7 @@
       if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
       if (document.activeElement === stageCanvas) return;
       if (e.key === "s" || e.key === "S") { e.preventDefault(); toggleSilhouette(); }
+      else if (e.key === "f" || e.key === "F") { e.preventDefault(); toggleRetroFps(); }
     });
 
     new ResizeObserver(() => markDirty(false)).observe(stageCanvas);
@@ -504,10 +557,10 @@
       }
       if (state.dirty) {
         const [w, h] = renderer.resize();
-        renderer.drawScene(state.scene, state.cam, {
+        withQuantizedTiming(() => renderer.drawScene(state.scene, state.cam, {
           width: w, height: h, transparent: false, showPlinth: true, dark: state.dark, team: state.team, teamColors: activeTeam(),
           blinkMode: state.blinkMode, idleAnim: state.idleAnim, fixedIdleTime: state.fixedIdleTime, silhouette: state.silhouette,
-        });
+        }));
         state.dirty = false;
       }
       if (state.spriteDirty && state.spritePreview) {
@@ -515,10 +568,10 @@
         spriteCtx.clearRect(0, 0, spriteCanvas.width, spriteCanvas.height);
         if (state.scene.instances.length) {
           const spriteCam = { yaw: state.cam.yaw, pitch: state.cam.pitch, zoom: 1.0, projection: "ortho" };
-          spriteCtx.putImageData(renderer.renderOffscreenPixels(spriteCanvas.width, spriteCanvas.height, state.scene, spriteCam, {
+          spriteCtx.putImageData(withQuantizedTiming(() => renderer.renderOffscreenPixels(spriteCanvas.width, spriteCanvas.height, state.scene, spriteCam, {
             transparent: true, showPlinth: false, dark: state.dark, team: state.team, teamColors: activeTeam(),
             blinkMode: state.blinkMode, idleAnim: state.idleAnim, fixedIdleTime: state.fixedIdleTime, silhouette: state.silhouette, overrideProj: "ortho",
-          }), 0, 0);
+          })), 0, 0);
         }
       }
       requestAnimationFrame(frame);
