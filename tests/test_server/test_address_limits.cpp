@@ -373,7 +373,7 @@ void run_address_limit_tests() {
 #endif
     } TEST_END();
 
-    TEST_CASE("S3.354 A Household Is Never Limited: Four People From One Address Host And Play Two Rooms At Once And Keep Two Lobbies With Not One Refusal, Everybody Joins A Room Of The Address As Often As They Like, And Four Quiet Rooms Are Not Closed (Four Rooms Are Not Many)") {
+    TEST_CASE("S3.354 A Household Is Never Limited: Four People From One Address Host And Play Two Rooms At Once And Keep Two Lobbies With Not One Refusal, Everybody Joins A Room Of The Address As Often As They Like, And Eight Quiet Rooms Are Not Closed (Eight Are The Rooms That An Address May Hold Quietly)") {
         {
             World w(server_limits());
             w.next_address = kHousehold;
@@ -394,22 +394,20 @@ void run_address_limit_tests() {
             w.run(2000);
             ASSERT_EQ(w.mgr.address_refusals().total(), uint64_t{0});
         }
-        {   // four rooms that nobody does anything in, for six minutes (the idle time is five): the address holds as many as it may, and none is closed
+        {   // eight rooms that nobody does anything in, for six minutes (the idle time is five): that is as many as the address may hold quietly, and none is closed
             World w(server_limits());
             w.next_address = kHousehold;
-            w.connect_page("AnnPage", "lob00001", lobby_block_of());
-            w.connect_page("CyPage", "lob00002", lobby_block_of());
-            w.connect_creating("Ann", "ann00001", block_of("TINY.LVL", 4));
-            w.connect_creating("Cy", "cy000001", block_of("TINY.LVL", 4));
+            for (int k = 0; k < 4; ++k) w.connect_page("Page" + std::to_string(k), code_of("lob", k), lobby_block_of());
+            for (int k = 0; k < 4; ++k) w.connect_creating("Host" + std::to_string(k), code_of("pub", k), block_of("TINY.LVL", 4));
             w.run(6 * 60 * 1000);
-            ASSERT_EQ(lobbies(w), size_t{2});
-            ASSERT_TRUE(w.status("ann00001").state == RoomState::Waiting && w.status("cy000001").state == RoomState::Waiting);
+            ASSERT_EQ(lobbies(w), size_t{4});
+            for (int k = 0; k < 4; ++k) ASSERT_TRUE(w.status(code_of("pub", k)).state == RoomState::Waiting);
             ASSERT_EQ(w.mgr.address_refusals().total(), uint64_t{0});
         }
     } TEST_END();
 
-    TEST_CASE("S3.355 A Burst Of Rooms From One Address Is Refused Politely: Eight Are Made And The Rest Are Answered As A Server With No Place Answers (NoSuchRoom, Which The Pages And The Game Word As 'try again'); Other Addresses Are Not Touched; A Room That Closes Gives Its Place Back; The Minute's Count Is A Sliding Window")  {
-        {   // rooms open: eight, then none, however slowly they come
+    TEST_CASE("S3.355 A Burst Of Rooms From One Address Is Refused Politely: Ten Are Made In A Minute And The Rest Are Answered As A Server With No Place Answers (NoSuchRoom, Which The Pages And The Game Word As 'try again'); Other Addresses Are Not Touched; The Minute Is A Sliding Window; Sixteen Open Rooms Are The Most, And A Room That Closes Gives Its Place Back")  {
+        {   // rooms in a minute: ten of twelve, the rest refused until the first are a minute old
             World w(server_limits());
             std::vector<Client*> made;
             w.next_address = kHousehold;
@@ -421,50 +419,52 @@ void run_address_limit_tests() {
                 ok += in_room(*c) ? 1u : 0u;
                 refused += answered(*c) == net::RejectReason::NoSuchRoom ? 1u : 0u;
             }
-            ASSERT_EQ(ok, size_t{8});
-            ASSERT_EQ(refused, size_t{4});
-            ASSERT_EQ(w.mgr.address_refusals().rooms_open, uint64_t{4});
-            for (int k = 8; k < 12; ++k) ASSERT_TRUE(w.status(code_of("brst", k)).code.empty());                // (the refused ones were not made)
+            ASSERT_EQ(ok, size_t{10});
+            ASSERT_EQ(refused, size_t{2});
+            ASSERT_EQ(w.mgr.address_refusals().rooms_rate, uint64_t{2});
+            ASSERT_EQ(w.mgr.address_refusals().rooms_open, uint64_t{0});
+            for (int k = 10; k < 12; ++k) ASSERT_TRUE(w.status(code_of("brst", k)).code.empty());                // (the refused ones were not made)
             w.next_address = kCarrier;                                                                         // another address makes its room in the same minute
             Client& other = w.connect_creating("Other", "othr0001", block_of("TINY.LVL", 4));
             ASSERT_TRUE(in_room(other));
             w.next_address = kHousehold;
-            w.run(61000);                                                                                      // a minute later the count of rooms made is empty, the rooms are still open: still refused
-            Client& again = w.connect_creating("Again", "brst0100", block_of("TINY.LVL", 4));
-            w.run(300);
-            ASSERT_EQ(answered(again), net::RejectReason::NoSuchRoom);
-            ASSERT_TRUE(w.mgr.close_room("brst0000", w.now));                                                  // a room that closes gives its place back
-            w.run(11000);                                                                                      // (it is over; its keep time passes)
-            Client& placed = w.connect_creating("Placed", "brst0101", block_of("TINY.LVL", 4));
-            ASSERT_TRUE(in_room(placed));
-        }
-        {   // rooms in a minute: ten, then none until the first of them is a minute old (the rooms open are not limiting here)
-            ServerLimits l = server_limits();
-            l.address.rooms_open = 255;
-            World w(l);
-            std::vector<Client*> made;
-            w.next_address = kHousehold;
-            for (int k = 0; k < 12; ++k) made.push_back(&w.connect_creating("Host" + std::to_string(k), code_of("rate", k), block_of("TINY.LVL", 4)));
-            w.run(300);
-            size_t ok = 0;
-            for (Client* c : made) ok += in_room(*c) ? 1u : 0u;
-            ASSERT_EQ(ok, size_t{10});
-            ASSERT_EQ(w.mgr.address_refusals().rooms_rate, uint64_t{2});
             w.run(50000);
-            Client& early = w.connect_creating("Early", "rate0100", block_of("TINY.LVL", 4));
+            Client& early = w.connect_creating("Early", "brst0100", block_of("TINY.LVL", 4));
             w.run(300);
             ASSERT_EQ(answered(early), net::RejectReason::NoSuchRoom);                                         // (the ten are 50 s old)
             w.run(12000);
-            Client& later = w.connect_creating("Later", "rate0101", block_of("TINY.LVL", 4));
+            Client& later = w.connect_creating("Later", "brst0101", block_of("TINY.LVL", 4));
             ASSERT_TRUE(in_room(later));                                                                       // (they have left the minute)
+        }
+        {   // rooms open: sixteen (lobbies and public rooms together), however slowly they come, and a room that closes gives its place back
+            World w(server_limits());
+            w.next_address = kHousehold;
+            const auto make = [&](int k) {
+                const std::string name = "Host" + std::to_string(k);
+                return in_room(k % 2 == 0 ? w.connect_page(name, code_of("open", k), lobby_block_of()) : w.connect_creating(name, code_of("open", k), block_of("TINY.LVL", 4)));
+            };
+            for (int k = 0; k < 10; ++k) ASSERT_TRUE(make(k));
+            w.run(61000);                                                                                      // the ten have left the minute; they are still open
+            for (int k = 10; k < 16; ++k) ASSERT_TRUE(make(k));
+            Client& over = w.connect_creating("Over", "open0100", block_of("TINY.LVL", 4));
+            Client& over_page = w.connect_page("OverPage", "open0101", lobby_block_of());
+            w.run(300);
+            ASSERT_EQ(answered(over), net::RejectReason::NoSuchRoom);
+            ASSERT_EQ(answered(over_page), net::RejectReason::NoSuchRoom);
+            ASSERT_EQ(w.mgr.address_refusals().rooms_open, uint64_t{2});
+            ASSERT_EQ(w.mgr.address_refusals().rooms_rate, uint64_t{0});
+            ASSERT_TRUE(w.mgr.close_room("open0001", w.now));                                                  // a room that closes gives its place back
+            w.run(11000);                                                                                      // (it is over; its keep time passes)
+            Client& placed = w.connect_page("Placed", "open0102", lobby_block_of());
+            ASSERT_TRUE(in_room(placed));
         }
         {   // lobby rooms are rooms too: the page's lobby block is counted the same way
             World w(server_limits());
             w.next_address = kHousehold;
             size_t ok = 0;
             for (int k = 0; k < 12; ++k) ok += in_room(w.connect_page("Page" + std::to_string(k), code_of("lbb", k), lobby_block_of())) ? 1u : 0u;
-            ASSERT_EQ(ok, size_t{8});
-            ASSERT_EQ(lobbies(w), size_t{8});
+            ASSERT_EQ(ok, size_t{10});
+            ASSERT_EQ(lobbies(w), size_t{10});
         }
     } TEST_END();
 
@@ -644,7 +644,7 @@ void run_address_limit_tests() {
         ASSERT_EQ(stats.get("addresses_tracked").as_int_or(-1), 0);
         ctl::JsonValue limits;
         ASSERT_TRUE(call("GET", "/limits").status == 200 && ctl::parse_json(call("GET", "/limits").body, limits, nullptr));
-        ASSERT_EQ(limits.get("rooms_open").as_int_or(-1), 8);
+        ASSERT_EQ(limits.get("rooms_open").as_int_or(-1), 16);
         // a change takes effect at once, and a refusal shows in the counts
         ASSERT_EQ(call("POST", "/limits", "{\"rooms_open\":1,\"rooms_per_minute\":0}").status, 200);
         ASSERT_EQ(w.mgr.address_limits().rooms_open, 1u);

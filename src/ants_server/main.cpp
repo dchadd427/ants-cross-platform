@@ -143,7 +143,7 @@
 //   --address-connections-per-second N, --address-rooms-per-minute N, --address-rooms-open N, --address-wrong-codes-per-minute N, --address-crowded-rooms N, --address-crowded-idle-seconds N, --address-relay-per-hour N
 //                      the limits per network address (docs/ADDRESS_LIMITS.md; each takes 0 to switch it off, and the control interface's GET and POST /limits show and change them by the same names with
 //                      '_'): connections in a second, rooms made in a minute, rooms open at once, answers at once to Hellos for rooms that do not exist in a minute, and the open rooms above which an address's idle
-//                      lobbies are closed after the idle seconds, relay credentials in an hour. They are ON by default (20, 10, 8, 30, 4, 300, 24); --no-address-limits switches all of them off
+//                      lobbies are closed after the idle seconds, relay credentials in an hour. They are ON by default (20, 10, 16, 30, 8, 300, 24); --no-address-limits switches all of them off
 //   --trusted-proxies LIST
 //                      the reverse proxies whose X-Client-Address the WebSocket door believes: addresses and networks separated by commas ("10.0.0.0/8,2001:db8::/32"; "none": nobody). Without the option the
 //                      environment variable ANTS_TRUSTED_PROXIES, and without that the loopback address and the private networks, which is where the site's own proxy connects from

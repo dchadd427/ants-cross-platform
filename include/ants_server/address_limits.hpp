@@ -49,9 +49,9 @@ struct AddressLimitField {
 inline constexpr std::array<AddressLimitField, 7> kAddressLimitFields{{
     {"connections_per_second", &AddressLimits::connections_per_second, 1, 1000, 20, "new connections from one address in a second"},
     {"rooms_per_minute", &AddressLimits::rooms_per_minute, 1, 1000, 10, "rooms made from one address in a minute"},
-    {"rooms_open", &AddressLimits::rooms_open, 1, 255, 8, "rooms from one address that are open at once"},
+    {"rooms_open", &AddressLimits::rooms_open, 1, 255, 16, "rooms from one address that are open at once"},
     {"wrong_codes_per_minute", &AddressLimits::wrong_codes_per_minute, 1, 10000, 30, "Hellos for a room that does not exist, answered at once, in a minute"},
-    {"crowded_rooms", &AddressLimits::crowded_rooms, 1, 255, 4, "open rooms of one address above which its idle lobbies are closed sooner"},
+    {"crowded_rooms", &AddressLimits::crowded_rooms, 1, 255, 8, "open rooms of one address above which its idle lobbies are closed sooner"},
     {"crowded_idle_seconds", &AddressLimits::crowded_idle_s, 30, 86400, 300, "seconds of quiet after which such a lobby is closed"},
     {"relay_per_hour", &AddressLimits::relay_per_hour, 1, 10000, 24, "relay credentials for the players of one address in an hour"},
 }};
