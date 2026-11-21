@@ -481,6 +481,12 @@ class TheFlag(WorldTest):
         self.assertEqual(len(set(frames)), 1, "the same bytes")
         self.assertEqual(json.loads(frames[0]), {"c": "unknown", "r": "unknown", "t": "reply"})
         self.assertEqual(self.w.images.state_of(ALICE.account_id), "on")
+        self.w.command(self.dave, "/noimages alice")
+        self.w.command(self.carol, "/images alice")
+        self.assertEqual(self.w.images.state_of(ALICE.account_id), "off", "a moderator cannot give posting back")
+        self.assertEqual(json.loads(json.dumps(self.carol.kinds("reply")[-1], sort_keys=True)), {"c": "unknown", "r": "unknown", "t": "reply"})
+        self.w.command(self.dave, "/images alice")
+        self.assertEqual(self.w.images.state_of(ALICE.account_id), "on")
         self.w.command(self.alice, "/noimages bob")
         self.assertEqual(self.w.images.state_of(BOB.account_id), "role", "a person with no role: nothing either")
 

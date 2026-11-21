@@ -57,7 +57,7 @@ def reply(x="jpg", full=None, thumb=None, **override):
 
 
 class FakeConverter:
-    """The converter of the stack as a test wants it: `mode` is `ok`, `refuse:<code>`, `close` (no answer), `hang`, `hold` (waits for `release`), or `raw:<name>` (a answer that is not exactly the converter's)."""
+    """The converter of the stack as a test wants it: `mode` is `ok`, `refuse:<code>`, `close` (no answer), `hang`, `hold` (waits for `release`), or `raw:<name>` (a answer that is not exactly the converter's) or `rawhold:<name>` (the same, and the connection stays open)."""
 
     def __init__(self):
         self.mode = "ok"
@@ -91,6 +91,15 @@ class FakeConverter:
                     return self.send(422 if mode[7:] != "big" else 413, json.dumps({"error": mode[7:]}).encode())
                 if mode.startswith("raw:"):
                     return self.write_raw(outer.raw[mode[4:]])
+                if mode.startswith("rawhold:"):                # (some of an answer, and then the connection stays open: a hub that waits for what was promised waits for the whole time that it has)
+                    try:
+                        self.wfile.write(outer.raw[mode[8:]])
+                        self.wfile.flush()
+                    except OSError:
+                        pass
+                    outer.release.wait(15)
+                    self.close_connection = True
+                    return
                 self.send(200, reply(outer.x))
 
             def send(self, status, body):
@@ -572,6 +581,7 @@ class TheConverter(ImgTest):
             "a jpg that is animated": with_head(anim=True),
             "animated and still": with_head("gif", still=True),
             "lengths that do not add up": with_head(full=len(JPEG_FULL) + 1),
+            "a second thumbnail behind the first, so that both ends look right": json.dumps(head).encode() + b"\n" + JPEG_FULL + JPEG_THUMB + JPEG_THUMB,
             "a length that is not a number": with_head(full="5"),
             "a bool for a size": with_head(w=True),
             "zero size": with_head(w=0),
@@ -609,6 +619,11 @@ class TheConverter(ImgTest):
         self.converter.mode = "raw:big"
         self.converter.raw["big"] = ("HTTP/1.1 200 OK\r\nContent-Length: %d\r\nConnection: close\r\n\r\n" % len(too_much)).encode() + too_much
         self.failed(503, "down")
+        self.converter.mode = "rawhold:promise"
+        self.converter.raw["promise"] = b"HTTP/1.1 200 OK\r\nContent-Length: 99999999\r\nConnection: close\r\n\r\n" + b"x" * 100
+        started = time.monotonic()
+        self.failed(503, "down")
+        self.assertLess(time.monotonic() - started, 4, "a length over the cap is refused at once, not waited for until the converter's time is out")
 
     def test_the_hub_checks_its_own_ends_even_for_an_honest_answer_at_the_edges(self):
         full = b"\xff\xd8\xff" + b"x" * (self.rig.hub.limits.image_reply_max - 10 - 200) + b"\xff\xd9"
@@ -649,6 +664,11 @@ class TheRole(ImgTest):
         for account, state in ((HOLDER, "on"), (MOD, "on"), (ADMIN, "on"), (PLAIN, "role")):
             self.assertEqual(self.know(account).you["img"], state, NAMES[account])
         self.assertEqual([self.upload(a).status for a in (HOLDER, MOD, ADMIN, PLAIN)], [200, 200, 200, 403])
+
+    def test_a_person_with_some_other_role_of_the_server_is_a_person_with_no_images_role(self):
+        self.fake.members[PLAIN] = [fd.ROLE_OTHER]
+        self.assertEqual(self.know(PLAIN).you["img"], "role")
+        self.assertEqual(self.upload(PLAIN).status, 403)
 
     def test_a_role_that_is_taken_away_is_found_at_the_next_answer_and_the_page_is_told(self):
         holder = self.know(HOLDER)

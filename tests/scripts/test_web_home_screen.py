@@ -40,6 +40,7 @@ PLAYERS_FILES = ("players.js", "players.css")         # the players list, loaded
 VP_FILES = ("vp.js",)                                 # the screen numbers of "/?vp", loaded only for that address: its own budget and tests are tests/scripts/test_web_home_height.py
 ALERTS_FILES = ("alerts.js", "alerts.css")              # the alerts sheet and the join alert of Home, loaded after the first paint: its own budgets and tests are tests/scripts/test_web_home_alerts.py
 SPLIT_FILES = ("split.js", "split.css")                 # the drag handles of Home, loaded after the first paint: its own budgets and tests are tests/scripts/test_web_home_split.py
+IMAGES_FILES = ("pics.js", "pics.css", "post.js", "post.css")      # the images of the chat (the thumbnails and the viewer, the poster), loaded by the dock: its own budgets and tests are tests/scripts/test_web_home_images.py
 TALK_FILES = ("talk.js", "talk.css")                  # the emoji and microphone buttons of the chat, loaded after the dock: its own budgets and tests are tests/scripts/test_web_home_talk.py
 ROOM_FILES = ("room.css", "roomchat.js", "roomchat.css")   # the room inside Home (its layout, and the room's tab of the chat box): the budgets and the tests of these are in tests/scripts/test_web_home_room.py
 MOD_FILES = ("mod.js", "mod.css")                     # the moderation sheet of the chat, loaded after the dock for a visitor with a role only: its own budgets and tests are tests/scripts/test_web_home_mod.py
@@ -142,7 +143,7 @@ class ThePage(unittest.TestCase):
 
 class TheFolder(unittest.TestCase):
     def test_it_holds_the_two_screens_the_games_list_the_chat_dock_and_the_players_list_and_nothing_else(self):
-        self.assertEqual(sorted(n for n in os.listdir(HOME) if not n.endswith(".mutbak")), sorted(FILES + LATER + CHAT_FILES + PLAYERS_FILES + TALK_FILES + MOD_FILES + CMDS_FILES + SPLIT_FILES + ALERTS_FILES + VP_FILES + ROOM_FILES))      # (tools/mutate.py keeps FILE.mutbak while it changes a file)
+        self.assertEqual(sorted(n for n in os.listdir(HOME) if not n.endswith(".mutbak")), sorted(FILES + LATER + CHAT_FILES + PLAYERS_FILES + TALK_FILES + IMAGES_FILES + MOD_FILES + CMDS_FILES + SPLIT_FILES + ALERTS_FILES + VP_FILES + ROOM_FILES))      # (tools/mutate.py keeps FILE.mutbak while it changes a file)
 
     def test_it_is_under_its_budgets(self):
         raw = zipped = 0
@@ -169,7 +170,7 @@ class TheFolder(unittest.TestCase):
         self.assertIn("if (goingTimer !== null) clearTimeout(goingTimer);", js, "a second hand-off starts the time again")
 
     def test_nothing_of_it_is_in_the_folder_that_has_its_cap_already(self):
-        for name in FILES + LATER + CHAT_FILES + PLAYERS_FILES + TALK_FILES + MOD_FILES + CMDS_FILES + SPLIT_FILES + ALERTS_FILES + ("home",):
+        for name in FILES + LATER + CHAT_FILES + PLAYERS_FILES + TALK_FILES + IMAGES_FILES + MOD_FILES + CMDS_FILES + SPLIT_FILES + ALERTS_FILES + ("home",):
             self.assertNotIn(name, os.listdir(FRONT))
 
     def test_the_script_is_plain_es5_and_names_no_other_site(self):

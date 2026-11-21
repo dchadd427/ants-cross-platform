@@ -1,5 +1,5 @@
 // The images in Home's chat, for everybody who reads it (docs/HUB_IMAGES.md, docs/HOME_CHAT.md "Images"): the thumbnail of a line that carries an image, the box that shows it full size, the way an animated one plays
-// and rests, and the reader's switch for animation. Loaded by web/home/chat.js (env.load) the first time that a line with an image is drawn, with web/home/pics.css; a visit with no image downloads none of it. ES5, no
+// and rests, and the reader's switch for animation. Loaded by the chat dock (env.load) the first time that a line with an image is drawn, with web/home/pics.css; a visit with no image downloads none of it. ES5, no
 // module system: a page gets AntsHomePics, node gets module.exports (tests/scripts/web_home_images_check.js).
 //   * The hub names an image by 32 lower-case hex digits and a type (`img` of a `line`); chat.js has checked both, and this file checks them again: the only address that it makes is /hub/img/<name>.<jpg|png|gif> or
 //     <name>.t.jpg, from constants and those two checked parts. No text of a line is ever an address of an image; nothing is put in the page as markup (createElement, textContent, setAttribute only).
@@ -61,6 +61,7 @@
             if (!checked(img)) return;
             b.type = 'button'; b.setAttribute('aria-label', e.text ? TEXT.open + ': ' + e.text : TEXT.open + ' by ' + e.who);
             im = el('img'); im.setAttribute('alt', still); im.setAttribute('width', String(img.tw)); im.setAttribute('height', String(img.th)); im.setAttribute('loading', 'lazy'); im.setAttribute('decoding', 'async'); im.setAttribute('draggable', 'false');
+            if (im.style && im.style.setProperty) { im.style.setProperty('--tw', String(img.tw)); im.style.setProperty('--th', String(img.th)); }
             im.setAttribute('src', address(img, true));
             im.addEventListener('error', function () {
                 if (im.parentNode) im.parentNode.removeChild(im);

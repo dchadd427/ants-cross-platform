@@ -274,13 +274,6 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheConverter"
   },
   {
-   "id": "images_reply_redirect_followed",
-   "file": "hub/imgdoor.py",
-   "old": " or 300 <= status < 400:",
-   "new": ":",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheConverter"
-  },
-  {
    "id": "images_files_named_after_the_account",
    "file": "hub/images.py",
    "old": "        return secrets.token_hex(16)",

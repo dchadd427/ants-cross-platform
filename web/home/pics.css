@@ -3,7 +3,8 @@
 /* ---- a picture in the log: the thumbnail under the line's words, in the text's own column ---- */
 .gc-pic { display: block; margin: 5px 0 3px; }
 .gc-thumb { position: relative; display: inline-block; max-width: 100%; margin: 0; padding: 0; font: inherit; line-height: 0; color: inherit; background: #0b1117; border: 2px solid #24574a; border-radius: 6px; box-shadow: 0 0 0 1px #000; cursor: zoom-in; overflow: hidden; }
-.gc-thumb img { display: block; width: auto; height: auto; max-width: 180px; max-height: 104px; }
+/* the picture's box is made from the sizes that the hub gave (--tw and --th, set by the script) before the file has come, so that the log does not jump when it loads: the thumbnail's own size, at most --mw wide and --mh high */
+.gc-thumb img { --mw: 180px; --mh: 104px; display: block; height: auto; aspect-ratio: var(--tw) / var(--th); width: min(calc(var(--tw) * 1px), var(--mw), calc(var(--mh) * var(--tw) / var(--th))); }
 .gc-thumb:hover { border-color: var(--gold); }
 .gc-thumb:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .gc-thumb .gc-zoom { position: absolute; right: 4px; bottom: 4px; width: 22px; height: 22px; padding: 3px; box-sizing: border-box; color: var(--cream); background: rgba(5, 9, 12, .78); border-radius: 4px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
@@ -11,10 +12,10 @@
 .gc-thumb.gc-nopic svg { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 @media (min-width: 701px) {       /* a window: the dock is a strip (about 100 px of log), so the picture stands after the words, on the line's own row, small */
     .gc-pic { display: inline-block; vertical-align: top; margin: 1px 0 3px 10px; }
-    .gc-thumb img { max-width: 144px; max-height: 81px; }
+    .gc-thumb img { --mw: 144px; --mh: 81px; }
 }
-@media (max-width: 700px) { .gc-thumb img { max-width: 100%; max-height: 150px; } .gc-pic { margin-top: 6px; } .gp-card .gp-th { width: 96px; height: 64px; } }
-@media (max-height: 500px) and (orientation: landscape) { .gc-thumb img { max-height: 84px; } }
+@media (max-width: 700px) { .gc-thumb img { --mw: 100%; --mh: 150px; } .gc-pic { margin-top: 6px; } .gp-card .gp-th { width: 96px; height: 64px; } }
+@media (max-height: 500px) and (orientation: landscape) { .gc-thumb img { --mh: 84px; } }
 
 /* ---- the picture opened full size: a box over the page (a sheet that fills the screen on a phone) ---- */
 .gv-scrim { position: fixed; z-index: 70; inset: 0; display: flex; align-items: center; justify-content: center; padding: 18px; box-sizing: border-box; background: rgba(2, 6, 8, .985); backdrop-filter: blur(6px); }

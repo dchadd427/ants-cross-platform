@@ -28,7 +28,7 @@ const IMG = (o) => Object.assign({ n: NAME, x: 'png', w: 1280, h: 720, tw: 360, 
 // ---- a small fake page --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const writes = [];                                  // (every write of markup: none is allowed)
 class El {
-    constructor(tag, doc) { this.tagName = String(tag).toLowerCase(); this.doc = doc; this.children = []; this.parentNode = null; this.attrs = {}; this.listeners = {}; this.className = ''; this._text = ''; this.hidden = false; this.disabled = false; this.value = ''; this.checked = false; this.files = []; this.style = {}; }
+    constructor(tag, doc) { this.tagName = String(tag).toLowerCase(); this.doc = doc; this.children = []; this.parentNode = null; this.attrs = {}; this.listeners = {}; this.className = ''; this._text = ''; this.hidden = false; this.disabled = false; this.value = ''; this.checked = false; this.files = []; this.style = { props: {}, setProperty(k, v) { this.props[k] = v; } }; }
     set textContent(v) { this.children.forEach((c) => { c.parentNode = null; }); this.children = []; this._text = String(v); }
     get textContent() { return this._text + this.children.map((c) => c.textContent).join(''); }
     set innerHTML(v) { writes.push(String(v)); }
@@ -86,8 +86,8 @@ const byClass = (root, c) => root.all((e) => has(e, c));
     const png = { type: 'image/png' }, gif = { type: 'image/gif' }, pdf = { type: 'application/pdf' };
     check('which file is an image: the first of a list that is PNG, JPEG, WebP or GIF; none of the others', Post.imageOf([pdf, png]) === png && Post.imageOf([pdf]) === null && Post.imageOf([{ type: 'image/svg+xml' }, { type: 'image/bmp' }, { type: 'image/heic' }]) === null && Post.imageOf(null) === null && Post.imageOf([gif]) === gif);
     check('which drag carries files', Post.hasFile({ types: ['text/plain', 'Files'] }) && !Post.hasFile({ types: ['text/plain'] }) && !Post.hasFile(null) && Post.hasFile({ types: [], files: [png] }));
-    same('chat.js reads `img` of a line: a checked name and a type; a line with no words is still a line when it has a good image', [Chat.lineOf({ id: 1, who: 'a', text: '', img: IMG() }).img.n, Chat.lineOf({ id: 1, who: 'a', text: '', img: { n: 'nope' } }), Chat.lineOf({ id: 1, who: 'a', text: '' }), Chat.lineOf({ id: 1, who: 'a', text: 'hi', img: 'x' }).img, Chat.lineOf({ id: 1, who: 'a', text: 'hi', sys: true, img: IMG() }).img],
-        [NAME, null, null, null, null]);
+    same('chat.js reads `img` of a line: a checked name and a type; a line with no words is still a line when it has a good image', [Chat.lineOf({ id: 1, who: 'a', text: '', img: IMG() }).img.n, Chat.lineOf({ id: 1, who: 'a', text: '', img: { n: 'nope' } }), Chat.lineOf({ id: 1, who: 'a', text: '', img: { n: 'abc123' } }), Chat.lineOf({ id: 1, who: 'a', text: '', img: { n: NAME.toUpperCase() } }), Chat.lineOf({ id: 1, who: 'a', text: '', img: { n: NAME + 'a' } }), Chat.lineOf({ id: 1, who: 'a', text: '' }), Chat.lineOf({ id: 1, who: 'a', text: 'hi', img: 'x' }).img, Chat.lineOf({ id: 1, who: 'a', text: 'hi', sys: true, img: IMG() }).img],
+        [NAME, null, null, null, null, null, null, null]);
     same('...and `you.img`: on, role, off, wait, and nothing else', [Chat.youOf({ name: 'a', img: 'on' }).img, Chat.youOf({ name: 'a', img: 'role' }).img, Chat.youOf({ name: 'a', img: 'off' }).img, Chat.youOf({ name: 'a', img: 'wait' }).img, Chat.youOf({ name: 'a', img: 'yes' }).img, Chat.youOf({ name: 'a' }).img], ['on', 'role', 'off', 'wait', '', '']);
     same('the words for a refusal of a line with an image are the dock\'s own', [Chat.ERR.img, Chat.ERR.imgid, /Active Anters/.test(Chat.ERR.imgrole), /ask a moderator/.test(Chat.ERR.imgoff), /Messages still work/.test(Chat.ERR.imgwait)], ['You cannot post images now', 'That image is not there any more: add it again', true, true, true]);
 }
@@ -109,6 +109,7 @@ function line(r, e) { const row = new El('div', r.p.doc); row.className = 'gc-li
     const b = byClass(row, 'gc-thumb')[0], im = b && b.querySelector('img');
     check('a thumbnail: a button in a span after the words, with an img of the still', !!b && b.tagName === 'button' && b.type === 'button' && !!im && im.getAttribute('src') === '/hub/img/' + NAME + '.t.jpg' && has(b.parentNode, 'gc-pic'));
     check('...the frame\'s own size (the log does not jump), lazy, async, not draggable, the caption for its alt', im.getAttribute('width') === '360' && im.getAttribute('height') === '203' && im.getAttribute('loading') === 'lazy' && im.getAttribute('decoding') === 'async' && im.getAttribute('alt') === 'a map' && im.getAttribute('draggable') === 'false');
+    check('...and the box is made from the hub\'s sizes before the file has come (the log does not jump when it loads)', im.style.props['--tw'] === '360' && im.style.props['--th'] === '203');
     check('...a name for a screen reader that says what a press does', /Open the image/.test(b.getAttribute('aria-label')) && /a map/.test(b.getAttribute('aria-label')));
     const bare = line(r, { id: 8, who: 'pebble', text: '', img: IMG({ n: OTHER, x: 'jpg' }) });
     check('an image with no words: "Image from NAME" is its alt, and its name for a screen reader says who', byClass(bare, 'gc-thumb')[0].querySelector('img').getAttribute('alt') === 'Image from pebble' && /by pebble/.test(byClass(bare, 'gc-thumb')[0].getAttribute('aria-label')));
@@ -140,7 +141,7 @@ function line(r, e) { const row = new El('div', r.p.doc); row.className = 'gc-li
     again.fire('click', { target: again });
     check('a press on the dimmed page around the box closes it', !r.p.doc.body.querySelector('.gv-scrim'));
 }
-for (const [who, role, own, word, how] of [['a moderator', 'mod', false, 'Delete this image', ['command', '/del 7']], ['an administrator', 'admin', false, 'Delete this image', ['command', '/del 7']], ['the author', 'none', true, 'Delete my image', ['delimg', 7]]]) {
+for (const [who, role, own, word, how] of [['a moderator', 'mod', false, 'Delete this image', ['command', '/del 7']], ['an administrator', 'admin', false, 'Delete this image', ['command', '/del 7']], ['a moderator who is the author too', 'mod', true, 'Delete this image', ['command', '/del 7']], ['the author', 'none', true, 'Delete my image', ['delimg', 7]]]) {
     const r = reader({ role, own }), row = line(r, { id: 7, who: 'maple', text: 'a map', img: IMG() });
     byClass(row, 'gc-thumb')[0].click();
     let scrim = r.p.doc.body.querySelector('.gv-scrim'), del = scrim.all((e) => e.tagName === 'button' && e.textContent === word)[0];
@@ -298,7 +299,8 @@ const file = (type, size, name) => ({ type, size, name: name === undefined ? 'sh
     check('a dock that cannot send the line (offline) leaves the image waiting too', /did not take it/.test(w.form.querySelector('.gp-card').textContent) && !w.api.state().busy);
 }
 for (const [status, body, words, again] of [[413, '{"error":"big"}', /too big/, true], [415, '{"error":"type"}', /not an image/, true], [422, '{"error":"pixels"}', /too many pixels/, true], [422, '{"error":"bad"}', /could not be read/, true], [422, '{"error":"frames"}', /too long/, true], [429, '{"error":"rate"}', /too fast/, false],
-    [429, '{"error":"busy"}', /busy converting/, false], [503, '{"error":"down"}', /not available right now/, false], [503, '{"error":"full"}', /no room/, false], [403, '{"error":"images"}', /cannot post images/, false], [401, '{"error":"login"}', /Log in/, false], [500, 'not json', /did not work/, false]]) {
+    [429, '{"error":"busy"}', /busy converting/, false], [503, '{"error":"down"}', /not available right now/, false], [503, '{"error":"full"}', /no room/, false], [403, '{"error":"images"}', /cannot post images/, false], [401, '{"error":"login"}', /Log in/, false], [500, 'not json', /did not work/, false],
+    [403, 'a page, not JSON', /cannot post images/, false], [401, '', /Log in/, false], [413, '<html>', /too big/, true], [415, '', /not an image/, true], [429, '<html>', /too fast/, false], [503, '<html>', /not available right now/, false]]) {
     const r = poster(); r.api.add(file('image/png', 100)); r.field.value = 'words'; r.submit();
     const req = r.p.win.requests[0]; req.status = status; req.responseText = body; req.onload();
     const card = r.form.querySelector('.gp-card');

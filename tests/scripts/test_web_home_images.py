@@ -145,7 +145,8 @@ class TheStyle(unittest.TestCase):
     def test_the_viewer_covers_the_page_and_a_picture_never_runs_out_of_its_box(self):
         self.assertRegex(self.pics, r"\.gv-scrim \{[^}]*position: fixed;[^}]*inset: 0;")
         self.assertRegex(self.pics, r"\.gv-img \{[^}]*max-width: 100%;[^}]*max-height: calc")
-        self.assertRegex(self.pics, r"\.gc-thumb img \{[^}]*max-width: 180px;[^}]*max-height: 104px;")
+        self.assertRegex(self.pics, r"\.gc-thumb img \{[^}]*--mw: 180px; --mh: 104px;[^}]*aspect-ratio: var\(--tw\) / var\(--th\);")
+        self.assertRegex(self.pics, r"@media \(min-width: 701px\) \{[^@]*--mw: 144px; --mh: 81px;")
 
 
 class TheWayIntoTheImage(unittest.TestCase):

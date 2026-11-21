@@ -79,7 +79,7 @@ class ThePageAndTheOtherPages(unittest.TestCase):
                     naming_the_socket.add(rel)
         self.assertEqual(sorted(naming_the_dock), ["web/home/chat.css", "web/home/chat.js", "web/home/home.js"], "the front page's own script asks for the dock; no other page does")
         self.assertEqual(sorted(naming_the_socket), ["web/home/chat.js", "web/hub_here.js"], "only the dock's script knows the address of the hub's socket: a page that opens a socket to it is a page that has a chat")
-        self.assertEqual(sorted(naming_the_door), ["web/admin_page.js", "web/front/player_name.js", "web/home/chat.js", "web/hub_here.js"], "the other scripts that name the hub: the one that asks for the name to play under (its one page, GET /hub/me: tests/scripts/test_web_player_name.py) and the admin page, whose one link is the hub's Discord login (tests/scripts/test_web_admin.py)")
+        self.assertEqual(sorted(naming_the_door), ["web/admin_page.js", "web/front/player_name.js", "web/home/chat.js", "web/home/pics.js", "web/home/post.js", "web/hub_here.js"], "the other scripts that name the hub: the one that asks for the name to play under (its one page, GET /hub/me: tests/scripts/test_web_player_name.py), the admin page, whose one link is the hub's Discord login (tests/scripts/test_web_admin.py), and the two parts of the chat's images, which name the site's addresses of the images and of the upload (/hub/img/: tests/scripts/test_web_home_images.py)")
 
     def test_the_game_server_and_the_game_never_open_the_hub(self):
         for rel in (("web", "shell.html"), ("web", "front", "lobby_net.js"), ("web", "front", "lobby_chat.js")):
