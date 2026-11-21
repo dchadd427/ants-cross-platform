@@ -21,10 +21,17 @@ QH = (640, 480)
 BODY = 9.4            # the quick help's small text (canvas pixels): the largest size at which Libre Baskerville keeps the original's line breaks in the original's boxes
 FOOD_PAD = (226, 344, 32, 32)          # the pad under the food cursor (the original shows it on the clay)
 
-COUNTDOWN = (400, 346)                 # include/ants_app/countdown_card.hpp
-COUNT_BOX = (115, 80, 170, 122)        # the box with the count, card numbers
-SEAT_SIZE = (180, 28)
+COUNTDOWN = (480, 236)                 # the card, in its own numbers (include/ants_app/countdown_card.hpp): low and wide; the panel is the game's, laid with the panel pieces at this size
+COUNT_WELL = (24, 74, 140, 106)        # the well of the count: its dark ground (x, y, w, h), card numbers
+ROW_WELL = (188, 268, 21)              # a player's row: the left, the width and the height of its dark ground (the game puts a row where it wants: 21 high, 30 apart)
+ROW_DRAWN_AT = 102                     # the row's sprite is drawn with the top of its ground here (its brushing is laid from the card's corner, so every row the game draws from it has this brushing)
+WELL_MARGIN = 5                        # a well's picture starts this far left of and above its ground: the bezel is 4 wide (field() in dialog_kit.py), the 5th is the soft edge of its shadow
+DOT_SIZE = 11                          # the color square of a row: a dark rim of one pixel round the color
 DOT_COLORS = ('#3fae6a', '#d14b55', '#5c6fe0', '#6e6e76')
+FULLSCREEN_AT = (364, 196)             # the card's Fullscreen button: the top left of its face, card numbers (the button is the face plus 3 across and 4 down)
+TITLE = ('Get ready to play!', 240, 37, 15.5, 1.7)           # the words, the middle x, the baseline, the height of a capital and the space between letters: card numbers
+TITLE_MOVES = ((1.12, 0, -4), (.92, 1, 3), (1.0, -1, -2), (.95, 1, 4), (1.06, 0, -3), (.9, -1, 2), (1.0, 1, -4), (1.05, 0, 3))      # (size factor, lift, tilt) of each letter that is not a space
+TITLE_STRIP = 56                       # the height of the strip the title is drawn in: from the card's top, it holds the letters with their shadows and the descenders
 
 # the title's letters: (letter, middle x, middle y, height of the capital, tilt clockwise, width factor), in the window's numbers. The numbers are the original title's own letter boxes, each letter is
 # set from the face and then moved: nothing is traced
@@ -147,31 +154,36 @@ def quickhelp_layer():
 
 # ---- the countdown card -----------------------------------------------------------------------------------------------------------------------------------------
 def countdown_title():
-    """the card's title, (w, h, svg): a 400 wide strip of the card's own numbers, the baseline at 44, the letters centered"""
+    """the card's title, (w, h, svg): the card's width and TITLE_STRIP high, from the card's top left, the letters set as in TITLE"""
     u = K.new_uid()
-    w, h = COUNTDOWN[0], 64
-    return w, h, K.svg(w, h, text('Get ready to play!', w / 2.0, 44, 27, 'jade', 'middle'), u)
+    w, h = COUNTDOWN[0], TITLE_STRIP
+    words, mid, base, hgt, sp = TITLE
+    return w, h, K.svg(w, h, K.jade_letters(K.playful(words, mid, base, hgt, sp, TITLE_MOVES)), u)
 
 
-COUNT_BOX_PICTURE = (176, 128)        # the bezel of the count box with its cast shadow and the shadow's soft edge: from (x - 4, y - 4) of the ground
+WELL_PICTURE = (12, 13)               # what a well's picture holds beyond its ground of w x h: w + 12 wide and h + 13 high, from (x - WELL_MARGIN, y - WELL_MARGIN): the bezel, its cast shadow and the shadow's soft edge (measured: a pixel with an alpha of 3 of 255 or more is inside, only the faintest tail is cut)
 
 
-def countdown_count_box():
-    """the count box's bezel and ground, (w, h, svg): the ground is the box inset by 3 on every side (164 x 116), its bezel starts one pixel outside the box, which is the picture's top left"""
+def _well(x, y, w, h):
+    """a well (the dark ground at (x, y), w x h, in its bezel of brushed steel), (w, h, svg) of its picture: from (x - WELL_MARGIN, y - WELL_MARGIN), drawn at its card numbers so that the brushing falls as in the card"""
     u = K.new_uid()
-    w, h = COUNT_BOX_PICTURE
-    origin = (COUNT_BOX[0] - 1, COUNT_BOX[1] - 1)
-    return w, h, K.svg(w, h, K.field(u, COUNT_BOX[0] + 3, COUNT_BOX[1] + 3, COUNT_BOX[2] - 6, COUNT_BOX[3] - 6), u, origin)
+    pw, ph = w + WELL_PICTURE[0], h + WELL_PICTURE[1]
+    return pw, ph, K.svg(pw, ph, K.field(u, x, y, w, h), u, (x - WELL_MARGIN, y - WELL_MARGIN))
 
 
-def countdown_seat():
-    """one seat row without its color and its words, (w, h, svg): the sunken well"""
-    u = K.new_uid()
-    w, h = SEAT_SIZE
-    return w, h, K.svg(w, h, K.S.sunken(u + 'r', 0, 0, w, h, 2, '#0b0f0d', wd='#010604', wl='#2e7159'), u)
+def countdown_count_well():
+    """the well of the count, (w, h, svg): its picture starts WELL_MARGIN left of and above COUNT_WELL's ground"""
+    return _well(*COUNT_WELL)
+
+
+def countdown_row_well():
+    """the well of one player's row, (w, h, svg): its picture starts WELL_MARGIN left of and above the row's ground, so the game draws it at (row x - WELL_MARGIN, row y - WELL_MARGIN)"""
+    x, w, h = ROW_WELL
+    return _well(x, ROW_DRAWN_AT, w, h)
 
 
 def countdown_dot(i):
-    """the color of seat i, (w, h, svg): a dark square with the color inside"""
+    """the color of seat i, (w, h, svg): a dark square with the color inside, one pixel in"""
     u = K.new_uid()
-    return 12, 12, K.svg(12, 12, K.S.rrect(0, 0, 12, 12, 2, '#06150e') + K.S.rrect(1, 1, 10, 10, 1.5, DOT_COLORS[i]), u)
+    n = DOT_SIZE
+    return n, n, K.svg(n, n, K.S.rrect(0, 0, n, n, 2, '#020806') + K.S.rrect(1, 1, n - 2, n - 2, 1.5, DOT_COLORS[i]), u)

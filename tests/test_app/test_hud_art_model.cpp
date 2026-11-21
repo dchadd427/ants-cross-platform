@@ -158,7 +158,7 @@ void test_manifest() {
     if (arc.load_chd(std::string(ORIGINAL_ASSETS_DIR) + "/ants.chd")) arc_ptr = &arc;
     check(arc_ptr != nullptr, "the original's archive is read");
     // the set's own animations: the pieces of its windows that the original draws in another way (a switch held down, the window's fixed pieces, the countdown card's); every other is one of the original's
-    const std::set<std::string> own = {"op_conh", "op_coffh", "op_honh", "op_hoffh", "op_window", "qh_window", "cd_card"};
+    const std::set<std::string> own = {"op_conh", "op_coffh", "op_honh", "op_hoffh", "op_window", "qh_window", "cd_card", "cd_row"};
     for (const hud_art::Animation& a : art.animations()) {
         check(own.count(a.name) != 0 || (arc_ptr != nullptr && arc.find_animation(a.name) != nullptr), "the art's animation " + a.name + " is one of the original's (a name that the game knows) or one of the windows' own");
         for (const hud_art::Frame& f : a.frames) {
@@ -572,7 +572,9 @@ void test_window_pieces(const assets::AssetArchive& arc, const Art& art) {
         {"the quick help's pieces", without_anim(text, "qh_window"), &window_art::Pieces::quick_help},
         {"the quick help's Return button", without_anim(text, "qh_return2"), &window_art::Pieces::quick_help},
         {"the countdown card's pieces", without_anim(text, "cd_card"), &window_art::Pieces::countdown},
-        {"the countdown card's seat row", without_record(text, "sprite cd_seat "), &window_art::Pieces::countdown},
+        {"the countdown card's row", without_anim(text, "cd_row"), &window_art::Pieces::countdown},
+        {"the countdown card's color square for the third color", without_record(text, "sprite cd_dot_2 "), &window_art::Pieces::countdown},
+        {"the countdown card's pressed Fullscreen button", without_record(text, "sprite dlg_btn_fullscreen_down "), &window_art::Pieces::countdown},
         {"a picture of the Fullscreen button", without_record(text, "sprite button_fullscreen_leave_down "), &window_art::Pieces::fullscreen},
     };
     for (const auto& d : damaged) {
