@@ -331,8 +331,8 @@
   {
    "id": "the_dock_sends_for_a_person_who_may_not",
    "file": "web/home/chat.js",
-   "old": ": you.img !== 'on' ? 'img' :",
-   "new": ":",
+   "old": "you.img !== 'on' ? 'img' : points(text) > LIMIT.line",
+   "new": "points(text) > LIMIT.line",
    "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
   },
   {
@@ -401,15 +401,15 @@
   {
    "id": "a_caption_with_markup_goes",
    "file": "web/home/chat.js",
-   "old": "/[<>]/.test(text) ? 'markup' : '';",
-   "new": "false ? 'markup' : '';",
+   "old": "/[<>]/.test(text) ? 'markup' : '') : 'readonly'",
+   "new": "false ? 'markup' : '') : 'readonly'",
    "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
   },
   {
    "id": "a_banned_person_sends_an_image",
    "file": "web/home/chat.js",
-   "old": "removed === 'banned' ? 'banned' : you.img !== 'on'",
-   "new": "you.img !== 'on'",
+   "old": "you ? (removed === 'banned' ? 'banned' : you.img",
+   "new": "you ? (you.img",
    "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
   },
   {
@@ -422,8 +422,8 @@
   {
    "id": "a_long_caption_goes",
    "file": "web/home/chat.js",
-   "old": "you.img !== 'on' ? 'img' : points(text) > LIMIT.line ? 'long'",
-   "new": "you.img !== 'on' ? 'img' : false ? 'long'",
+   "old": "you.img !== 'on' ? 'img' : points(text) > LIMIT.line ? 'long' :",
+   "new": "you.img !== 'on' ? 'img' : false ? 'long' :",
    "test": "node tests/scripts/web_home_images_check.js web/lobby.html && node tests/scripts/web_home_images_dock_check.js web/lobby.html"
   }
  ]

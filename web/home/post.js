@@ -1,5 +1,5 @@
 // Posting an image in Home's chat (docs/HUB_IMAGES.md, docs/HOME_CHAT.md "Images"): the button beside the emoji and the microphone, a paste or a drop of an image, the card above the field that shows it (the field is its
-// caption), and the upload and the line that follow. Loaded by web/home/chat.js (env.load) only when the hub's `you` says `img: "on"`, with web/home/post.css; nobody else downloads it. ES5, no module system: a page
+// caption), and the upload and the line that follow. Loaded by the chat dock (env.load) only when the hub's `you` says `img: "on"`, with web/home/post.css; nobody else downloads it. ES5, no module system: a page
 // gets AntsHomePost, node gets module.exports (tests/scripts/web_home_images_check.js).
 //   * Nothing here decides anything: the hub decides who may post, what an image is, how big, and what comes of it (the converter writes a new file; the original is never kept). This file only makes the page nicer:
 //     it says at once what the hub would say (not an image, too big), and shrinks a big picture before it goes up (a canvas, no more than 2,048 px on its longer side) so that a phone's photo is a fraction of its size.

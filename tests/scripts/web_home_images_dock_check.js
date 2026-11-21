@@ -143,6 +143,10 @@ for (const [mode, words] of [['role', /Active Anters/], ['off', /turned off for 
     const ev = { clipboardData: { types: ['Files'], files: [file('image/png', 5)] }, type: 'paste', defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
     r.field().fire('paste', ev);
     check('a person who may post is not told off for a paste (the poster takes it)', t.say.hidden === true && r.requests.length === 0);
+    const none = rig(); none.live({ you: YOU(undefined) }); const u = none.talk();
+    const again = { clipboardData: { types: ['Files'], files: [file('image/png', 5)] }, type: 'paste', defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+    none.field().fire('paste', again);
+    check('a hub that has no images says nothing of them: a paste of a file is left to the browser, no words, no poster', !again.defaultPrevented && u.say.hidden === true && none.loads.length === 0);
 }
 
 // ---- 2. the line ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -171,11 +175,17 @@ for (const [mode, words] of [['role', /Active Anters/], ['off', /turned off for 
     const before = r.sent().length;
     post.add(file('image/png', 5000)); r.field().value = 'a < b'; r.submit(); upload(r);
     check('a caption with markup is refused before it goes out: nothing is sent, the image waits', r.sent().length === before && post.state().waiting && /did not take it/.test(byClass(r.form(), 'gp-card')[0].textContent));
-    r.field().value = 'x'.repeat(1001); r.submit();
-    check('...and so is one over the limit, with the dock\'s words', r.sent().length === before && post.state().waiting);
+    r.field().value = 'x'.repeat(1001); r.submit(); upload(r);
+    check('...and so is one over the limit, with the dock\'s words', r.sent().length === before && post.state().waiting && /too long/.test(one(r.root, 'gc-note').textContent), one(r.root, 'gc-note').textContent);
     post.clear();
     post.add(file('image/png', 5000)); r.field().value = ''; r.submit(); upload(r);
     check('a caption may be empty: the line goes out with `text` empty', r.sent().slice(-1)[0].text === '' && r.sent().slice(-1)[0].img === NAME);
+}
+{
+    const r = rig(); r.live({ you: YOU('on') }); r.talk();
+    r.field().value = 'a line'; r.submit(); r.recv({ t: 'err', code: 'banned' });
+    r.posters[0].add(file('image/png', 5000)); r.submit(); upload(r);
+    check('after the hub has said that the person is banned, an image line is not sent (the card keeps the image)', r.sent().filter((m) => m.img).length === 0 && r.posters[0].state().waiting);
 }
 {
     const r = rig(); r.live({ you: YOU('on') }); r.talk();

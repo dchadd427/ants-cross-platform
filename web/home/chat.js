@@ -667,7 +667,7 @@
             entry.timer = setTimeout(guard(function () { var at = unanswered.indexOf(entry); if (at >= 0) unanswered.splice(at, 1); entry.done('silent'); }), MS.pending);
         }
         function sendImage(id, words, done) {                                    // a line that carries an upload: '' when it went out, else the code that says why not
-            var text = plain(String(words || '')), why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline' : !you ? 'readonly' : removed === 'banned' ? 'banned' : you.img !== 'on' ? 'img' : points(text) > LIMIT.line ? 'long' : /[<>]/.test(text) ? 'markup' : '';
+            var text = plain(String(words || '')), why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline' : you ? (removed === 'banned' ? 'banned' : you.img !== 'on' ? 'img' : points(text) > LIMIT.line ? 'long' : /[<>]/.test(text) ? 'markup' : '') : 'readonly';
             if (why) { tell(why); return why; }
             holdFor({ text: text, key: '', at: now(), cmd: false, img: true, done: done }, { t: 'say', text: text, img: id });
             return '';
@@ -678,8 +678,12 @@
             if (oldest(true) >= 0) { tell1(function () { done('rate'); }); return; }
             delWait.push({ id: id, entry: entry }); holdFor(entry, { t: 'delimg', id: id });
         }
+        function note1(from, cls) {                                              // the first element under `from` with the class (a walk: the dock makes no selector)
+            for (var i = 0, c = from.children || [], hit; i < c.length; i++) if ((hit = (' ' + c[i].className + ' ').indexOf(' ' + cls + ' ') !== -1 ? c[i] : note1(c[i], cls))) return hit;
+            return null;
+        }
         function noImage(ev) {                                                   // a paste or a drop of a file by a person who may not post one: a few words, and the page is not taken away
-            var d = ev.clipboardData || ev.dataTransfer, t = d && d.types, i, file = false, s = form.querySelector ? form.querySelector('.gt-say') : null, code;
+            var d = ev.clipboardData || ev.dataTransfer, t = d && d.types, i, file = false, s = note1(form, 'gt-say'), code;
             for (i = 0; t && i < t.length; i++) if (t[i] === 'Files') file = true;
             if (!file || !you || you.img === 'on' || !you.img) return;
             ev.preventDefault();
