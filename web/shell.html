@@ -1524,6 +1524,16 @@
                 return kept.length ? '?' + kept.join('&') : '';
             }
 
+            // The name that an address carries is the game's only when the front page of this tab put it there on purpose: web/lobby.html keeps the name in this tab's storage just before it takes the tab here, and this
+            // page takes it out once. A link that somebody else wrote has no such entry, so its name is not the game's: the address comes back without it, and the page asks, like for any shared link.
+            function vouched(search, storage) {
+                var text = String(search), given = null, kept = null;
+                try { given = new URLSearchParams(text).get('name'); } catch (e) { return withoutName(text); }
+                if (given === null) return text;
+                try { kept = storage.getItem('ants.joinas'); storage.removeItem('ants.joinas'); } catch (e) { kept = null; }
+                return typeof kept === 'string' && kept === given ? text : withoutName(text);
+            }
+
             // The address with `seat` set to the seat that the room gave this window (replacing the one that was there, the others kept in their order): a reload then asks for this seat and takes its key.
             // Without it the game takes the newest key of the room, which is another window's when two windows of one browser play one room (they share the storage). Not a seat of a player: unchanged.
             function withSeat(search, seat) {
@@ -1580,7 +1590,7 @@
             }
 
             return { parseAspect: AntsShapes.parse, shapeNumber: AntsShapes.placeOf, shapeForScreen: AntsShapes.forScreen, slotVars: slotVars, resolveAspect: resolveAspect, cssFor: cssFor, fitBox: fitBox, snapOffset: snapOffset, edgePixel: edgePixel, clientFor: clientFor,
-                     marginPixel: marginPixel, overControl: overControl, overTouchKeys: overTouchKeys, lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, releasesMouseLock: releasesMouseLock, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, localArguments: localArguments, startCardArguments: startCardArguments, asksForName: asksForName, codeText: codeText, withoutName: withoutName, withSeat: withSeat, cancelsBrowserKey: cancelsBrowserKey, badDownload: badDownload,
+                     marginPixel: marginPixel, overControl: overControl, overTouchKeys: overTouchKeys, lockStart: lockStart, moveLocked: moveLocked, lockSetting: lockSetting, releasesMouseLock: releasesMouseLock, makeFrameLimiter: makeFrameLimiter, joinArguments: joinArguments, localArguments: localArguments, startCardArguments: startCardArguments, asksForName: asksForName, codeText: codeText, withoutName: withoutName, vouched: vouched, withSeat: withSeat, cancelsBrowserKey: cancelsBrowserKey, badDownload: badDownload,
                      downloadWithRetries: downloadWithRetries };
         })();
 
@@ -1610,6 +1620,14 @@
         var ANTS_LIVE_MODE = ANTS_REPLAY_MODE && !ANTS_OWN_MODE && !/(^|[?&])replay=/.test(window.location.search);
         var ANTS_EMBED = ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && !ANTS_OWN_MODE && /(^|[?&])embed=1(&|$)/.test(window.location.search);      // the frame of a match page (web/match.html): the picture and the bar only
         var ANTS_LIVE_ID = ANTS_LIVE_MODE ? window.AntsReplay.liveIdOf(window.location.search) : null;
+        (function () {                                                       // (the name in the address is the game's only when the front page of this tab vouched for it: ANTS_PAGE.vouched; the address is read below as it comes back)
+            var storage = { getItem: function () { return null; }, removeItem: function () { /* no storage: nothing is vouched for */ } };
+            try { storage = window.sessionStorage || storage; } catch (e) { /* the fake storage above */ }
+            var search = ANTS_PAGE.vouched(window.location.search, storage);
+            if (search !== window.location.search) {
+                try { window.history.replaceState(null, '', window.location.pathname + search + window.location.hash); } catch (e) { /* the address stays as it is */ }
+            }
+        })();
         (function () {
             if (ANTS_REPLAY_MODE) return;
             var joined = ANTS_PAGE.joinArguments(window.location.search, window.location.protocol === 'https:', window.location.host);

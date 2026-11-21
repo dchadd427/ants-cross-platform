@@ -5,7 +5,8 @@
 # a build that starts from a clean emsdk. This stage does it with a small program (docker/emsdk_warm.cpp) before any file of the game is copied, in the two flavours that CMake builds (the game's
 # flags of src/ants_app/CMakeLists.txt, the map core's of CMakeLists.txt), so that its layers are reused by every build until the version below or the program changes. The build log of the
 # stage after it must show no "generating system library" and no "retrieving port" line. ccache (the compile of the stage after it uses it through EM_COMPILER_WRAPPER) is installed here too.
-FROM emscripten/emsdk:3.1.58 AS emsdk-warm
+# The base image is pinned by tag and digest: the digest is what is pulled, the tag is for the reader and for Dependabot (.github/dependabot.yml), which raises the pair to a newer one in a pull request that CI builds.
+FROM emscripten/emsdk:3.1.58@sha256:b640884dffe6ffd6270b4e61548dc2c597f01aaf2c8d7b788009cb7f4719dd20 AS emsdk-warm
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ccache && \
@@ -165,7 +166,8 @@ RUN python3 tools/map_atlas.py mapmaker_atlas && test -s mapmaker_atlas/atlas.js
 # =============================================================================
 # Stage 2: High-Performance Lightweight Nginx Web Server
 # =============================================================================
-FROM nginx:alpine AS runner
+# Pinned by tag and digest, like the base image of the first stage.
+FROM nginx:alpine@sha256:fb4658584bd9a916ffb6f6e365f97c25cfdb2923801f551ea08356e695f14ff7 AS runner
 
 # Clear default static files
 RUN rm -rf /usr/share/nginx/html/*

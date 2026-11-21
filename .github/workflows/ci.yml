@@ -39,6 +39,7 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+# The token is read-only, and every checkout keeps no credentials (`persist-credentials: false`): no job pushes, and the code of a pull request runs in them (tests/scripts/test_ci_workflow.py).
 permissions:
   contents: read
 
@@ -123,6 +124,8 @@ jobs:
       CCACHE_MAXSIZE: 400M
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # python3-yaml: tests/scripts/test_ci_workflow.py reads this file with PyYAML (its checks of the legs are skipped without it, and a test fails on these machines when it is missing)
       # python3-pil: tests/scripts/test_img_converter.py runs the image converter's real decoder (docs/HUB_IMAGES.md); this leg requires it (ANTS_REQUIRE_PILLOW below), a machine without it skips those tests
@@ -257,6 +260,8 @@ jobs:
       CCACHE_MAXSIZE: 400M
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # Not `brew install sdl2`: Homebrew's sdl2 is now sdl2-compat (the SDL2 interface on top of SDL3), under which eight test programs failed in the first run of this job
       # (pointer, window and canvas checks, pixel fingerprints, one crash). The game is written for SDL2, so SDL2 and SDL2_ttf (with HarfBuzz, as Homebrew's and the distributions'
@@ -410,6 +415,8 @@ jobs:
       SCCACHE_CACHE_SIZE: 600M
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Restore the compiler cache
         uses: actions/cache@v6
@@ -541,6 +548,8 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # The Docker layer cache: a buildx builder of its own (the default builder cannot keep a cache in a folder) with the cache in a folder that actions/cache keeps. The key is a hash of the files that
       # the compile layers read (the Dockerfile, the build files and the sources; a change of the pages, VERSION, web/shell.html or Original-Ants/ does not change it, because the Dockerfile copies them
@@ -606,6 +615,8 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # The Docker layer cache: a buildx builder of its own (the default builder cannot keep a cache in a folder) with the cache in a folder that actions/cache keeps. The key is a hash of the files that
       # the compile layers read (the Dockerfile, the build files, the sources and third_party/; a change of VERSION or of tools/ does not change it: the Dockerfile copies VERSION after the first compile and

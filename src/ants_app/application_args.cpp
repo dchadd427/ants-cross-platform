@@ -1,8 +1,11 @@
 // The command line of the game (application.hpp, ApplicationConfig): every option of the program, what it sets and which combinations it refuses.
 
 #include <algorithm>
+#include <charconv>
+#include <climits>
 #include <cstdlib>
 #include <cstring>
+#include <system_error>
 
 #include "ants_app/application.hpp"
 #include "ants_ai/bot.hpp"
@@ -17,6 +20,22 @@ std::string room_map_file(const std::string& text) {
     std::string file;
     for (const char c : text) file.push_back(static_cast<char>(c >= 'a' && c <= 'z' ? c - 'a' + 'A' : c));
     return file + ".LVL";
+}
+
+// A whole number out of the text of an option: digits (and a leading minus where `low` is below 0) and nothing else, from `low` to `high`. False for anything else, `out` unchanged: the option is then a
+// startup error (refuse_number), never an exception that ends the program.
+bool whole_number(const char* text, long long low, long long high, long long& out) {
+    const char* end = text + std::strlen(text);
+    long long value = 0;
+    const std::from_chars_result done = std::from_chars(text, end, value);
+    if (done.ec != std::errc() || done.ptr != end || value < low || value > high) return false;
+    out = value;
+    return true;
+}
+
+// The startup error of an option whose number is none (the first error stays the one that is reported)
+void refuse_number(ApplicationConfig& cfg, const char* option, const char* text, const char* wants) {
+    if (cfg.startup_error.empty()) cfg.startup_error = std::string(option) + " needs " + wants + ", not \"" + text + "\"";
 }
 
 } // anonymous namespace
@@ -44,19 +63,27 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
         } else if (std::strcmp(argv[i], "--settings") == 0 && i + 1 < argc) {
             cfg.settings_path = argv[++i];
         } else if (std::strcmp(argv[i], "--seed") == 0 && i + 1 < argc) {
-            cfg.random_seed = static_cast<uint32_t>(std::stoul(argv[++i]));
+            long long seed = 0;
+            if (whole_number(argv[++i], 0, 4294967295LL, seed)) cfg.random_seed = static_cast<uint32_t>(seed);
+            else refuse_number(cfg, "--seed", argv[i], "a whole number from 0 to 4294967295");
         } else if (std::strcmp(argv[i], "--fullscreen") == 0) {
             cfg.fullscreen = true;
         } else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc) {
             cfg.screenshot_path = argv[++i];
             mode_given = true;
         } else if (std::strcmp(argv[i], "--frames") == 0 && i + 1 < argc) {
-            cfg.screenshot_frames = std::stoi(argv[++i]);
+            long long frames = 0;
+            if (whole_number(argv[++i], 0, INT_MAX, frames)) cfg.screenshot_frames = static_cast<int>(frames);
+            else refuse_number(cfg, "--frames", argv[i], "a whole number of frames");
         } else if (std::strcmp(argv[i], "--select-ant") == 0 && i + 1 < argc) {
-            cfg.select_ant_id = std::stoi(argv[++i]);
+            long long ant = 0;
+            if (whole_number(argv[++i], -1, INT_MAX, ant)) cfg.select_ant_id = static_cast<int>(ant);
+            else refuse_number(cfg, "--select-ant", argv[i], "the number of an ant");
             mode_given = true;
         } else if (std::strcmp(argv[i], "--select-base") == 0 && i + 1 < argc) {
-            cfg.select_base_team = std::stoi(argv[++i]);
+            long long team = 0;
+            if (whole_number(argv[++i], -1, INT_MAX, team)) cfg.select_base_team = static_cast<int>(team);
+            else refuse_number(cfg, "--select-base", argv[i], "the number of a team");
             mode_given = true;
         } else if (std::strcmp(argv[i], "--open-options") == 0) {
             cfg.open_options = true;
@@ -68,7 +95,9 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             cfg.start_in_map_select = true;
             mode_given = true;                                                 // "start on the setup screen": today's start, without the menu
         } else if (std::strcmp(argv[i], "--player") == 0 && i + 1 < argc) {
-            cfg.local_player_id = static_cast<uint8_t>(std::stoi(argv[++i]));
+            long long player = 0;
+            if (whole_number(argv[++i], 0, 255, player)) cfg.local_player_id = static_cast<uint8_t>(player);
+            else refuse_number(cfg, "--player", argv[i], "a number from 0 to 255");
             mode_given = true;
         } else if (std::strcmp(argv[i], "--scorecard") == 0) {
             cfg.show_scorecard = true;
@@ -90,7 +119,9 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             cfg.net_role = ApplicationConfig::NetRole::Host;
             mode_given = true;
             if (i + 1 < argc && argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9') {   // an optional port
-                cfg.net_port = static_cast<uint16_t>(std::stoul(argv[++i]));
+                long long port = 0;
+                if (whole_number(argv[++i], 0, 65535, port)) cfg.net_port = static_cast<uint16_t>(port);
+                else refuse_number(cfg, "--host", argv[i], "a port from 0 to 65535, or none");
             }
         } else if (std::strcmp(argv[i], "--join") == 0 && i + 1 < argc) {
             cfg.net_role = ApplicationConfig::NetRole::Join;
@@ -98,7 +129,9 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             std::string target = argv[++i];                                    // host or host:port
             const size_t colon = target.rfind(':');
             if (colon != std::string::npos && target.find(':') == colon) {
-                cfg.net_port = static_cast<uint16_t>(std::stoul(target.substr(colon + 1)));
+                long long port = 0;
+                if (whole_number(target.c_str() + colon + 1, 1, 65535, port)) cfg.net_port = static_cast<uint16_t>(port);
+                else refuse_number(cfg, "--join", target.c_str(), "HOST or HOST:PORT with a port from 1 to 65535");
                 target.resize(colon);
             }
             cfg.net_address = target;
@@ -107,11 +140,15 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             mode_given = true;
             cfg.net_url = argv[++i];                                           // ws:// or wss://: through a game server's WebSocket door
         } else if (std::strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
-            cfg.net_port = static_cast<uint16_t>(std::stoul(argv[++i]));
+            long long port = 0;
+            if (whole_number(argv[++i], 0, 65535, port)) cfg.net_port = static_cast<uint16_t>(port);
+            else refuse_number(cfg, "--port", argv[i], "a port from 0 to 65535");
         } else if (std::strcmp(argv[i], "--loopback") == 0) {
             cfg.net_loopback_only = true;
         } else if (std::strcmp(argv[i], "--lan-port") == 0 && i + 1 < argc) {
-            cfg.lan_port = static_cast<uint16_t>(std::stoul(argv[++i]));
+            long long port = 0;
+            if (whole_number(argv[++i], 0, 65535, port)) cfg.lan_port = static_cast<uint16_t>(port);
+            else refuse_number(cfg, "--lan-port", argv[i], "a port from 0 to 65535 (0: not announced)");
         } else if (std::strcmp(argv[i], "--no-lan") == 0) {
             cfg.lan_port = 0;                                                  // the room is not announced on the local network
         } else if (std::strcmp(argv[i], "--room") == 0 && i + 1 < argc) {

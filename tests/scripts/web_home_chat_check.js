@@ -2106,9 +2106,11 @@ process.env.TZ = 'UTC';       // (the local day and hour of these checks; one of
     const idn = links('http://exаmple.com/x')[0];
     check('a look-alike host (a Cyrillic "a") is shown as typed, goes to the punycode address, and its title names the punycode host first', idn && idn.s === 'http://exаmple.com/x' && /^https:\/\/|^http:\/\/xn--/.test(idn.url) && idn.url.indexOf('xn--') !== -1 && idn.title.indexOf('xn--') === 0 && idn.title.indexOf(idn.url) !== -1 && !/[^\x00-\x7f]/.test(idn.url), JSON.stringify(idn));
     const long = 'https://example.com/' + 'a'.repeat(100), shown = links(long)[0];
-    check('a long address is shortened in the middle (48 characters with the ellipsis), the title has all of it, the address is whole', shown.s.length === 48 && shown.s.indexOf('…') === 30 && shown.s.slice(0, 30) === long.slice(0, 30) && shown.s.slice(-17) === long.slice(-17) && shown.title === long && shown.url === long);
+    check('a long address shows its host whole, then "/…" and the last 17 characters; the title has all of it, the address is whole', shown.s === 'example.com/…' + long.slice(-17) && shown.title === long && shown.url === long);
+    const far = 'https://login.discord.com.account-verification-service.example.net/' + 'x'.repeat(40), cutFar = links(far)[0];
+    check('a cut is never in the host: a long host is shown whole, with the end of the address after it', cutFar.s === 'login.discord.com.account-verification-service.example.net/…' + far.slice(-17) && cutFar.url === far);
     const edge = 'https://example.com/' + 'b'.repeat(28);
-    same('an address of exactly 48 characters is not shortened, one of 49 is', [edge.length, links(edge)[0].s.length, links(edge + 'c')[0].s.length], [48, 48, 48]);
+    same('an address of exactly 48 characters is not shortened, one of 49 is', [edge.length, links(edge)[0].s, links(edge + 'c')[0].s], [48, edge, 'example.com/…' + (edge + 'c').slice(-17)]);
     check('a cut never leaves half of an emoji', (() => { const l = links('https://example.com/' + '😀'.repeat(40))[0]; return !/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(l.s); })());
     const six = Array.from({ length: 6 }, (_, i) => 'https://example.com/' + i).join(' ');
     check('six links in one line: five are links, the sixth is text, and nothing is lost', links(six).length === 5 && kinds(six).slice(-1)[0] === 't: https://example.com/5' && P.partsOf(six).map((x) => x.s).join('') === six);

@@ -264,6 +264,46 @@ const STRIP = [
 for (const [search, want] of STRIP) same('withoutName(' + search + ')', P.withoutName(search), want);
 check('a copy of the address of a game that was given a name is a shared link', P.asksForName(P.withoutName('?join=/ws&room=ABC&seat=1&name=Bob')) === true);
 
+// The name in the address (ANTS_PAGE.vouched): the game's only when the front page of this tab vouched for that very name, once; a link that somebody wrote has none, so it asks like any shared link
+const store = (value) => { const s = { value, got: 0, removed: 0, getItem(k) { s.got++; return k === 'ants.joinas' ? s.value : null; }, removeItem(k) { if (k === 'ants.joinas') { s.removed++; s.value = null; } } }; return s; };
+const JOIN = '?join=/ws&room=k7m2xq&seat=1&name=Bob';
+{
+    const mine = store('Bob');
+    same('vouched: the front page of this tab put this name in the address: the address is as it is, and the note is taken out (once)', [P.vouched(JOIN, mine), mine.value, mine.removed], [JOIN, null, 1]);
+    check('... so the link asks for no name (the page that made it chose it), and the game is given the name', P.asksForName(P.vouched(JOIN, store('Bob'))) === false && P.joinArguments(P.vouched(JOIN, store('Bob')), false, 'h').args.indexOf('Bob') !== -1);
+    same('... the same note does not vouch for the same address a second time', [P.vouched(JOIN, mine) === P.withoutName(JOIN), mine.removed], [true, 2]);
+}
+for (const [label, search, kept] of [
+    ['a link that somebody wrote: no note in this tab', JOIN, null],
+    ['a note for another name', JOIN, 'Alice'],
+    ['a note for the same name in other letters', JOIN, 'bob'],
+    ['an empty note and a name in the address', JOIN, ''],
+    ['a name of a game on this computer, with no note', '?map=tiny&name=Mallory', null],
+]) {
+    const s = store(kept), out = P.vouched(search, s);
+    same('not vouched (' + label + '): the address comes back without its name', out, P.withoutName(search));
+    check('... and a link to a room asks for the name, where the address had one', !/^\?join=/.test(search) || (P.asksForName(out) === true && P.joinArguments(out, false, 'h').args.indexOf('--name') === -1));
+}
+{
+    same('a name that was chosen as none (an empty name, and a note that says so) stays: the Rejoin button', P.vouched('?join=/ws&room=k7m2xq&seat=1&name=', store('')), '?join=/ws&room=k7m2xq&seat=1&name=');
+    same('a name in the address with a storage that throws, or none: not vouched', [P.vouched(JOIN, { getItem() { throw new Error('no storage'); }, removeItem() {} }), P.vouched(JOIN, null), P.vouched(JOIN, undefined)], [P.withoutName(JOIN), P.withoutName(JOIN), P.withoutName(JOIN)]);
+    const idle = store('Bob');
+    same('an address with no name is left alone, and the note is not touched', [P.vouched('?join=/ws&room=k7m2xq', idle), P.vouched('', idle), idle.got, idle.value], ['?join=/ws&room=k7m2xq', '', 0, 'Bob']);
+}
+const vouchBlock = between(lobbyText, 'VOUCH_BEGIN', 'VOUCH_END', lobbyPath);
+{
+    const vouch = new Function(vouchBlock + '\nreturn vouchName;')();
+    const kept = {}, win = { sessionStorage: { setItem(k, v) { kept[k] = v; } } };
+    vouch(win, 'Bob'); vouch(win, ''); 
+    same('the front page keeps the name that it puts in an address, as text, under one key, in this tab', [kept], [{ 'ants.joinas': '' }]);
+    vouch(win, 'Eve');
+    same('... the last name is the one (a tab goes to one game page at a time)', kept, { 'ants.joinas': 'Eve' });
+    check('... and no storage, or a storage that throws, is no error: the game page asks for the name', (() => { vouch({}, 'x'); vouch({ get sessionStorage() { throw new Error('denied'); } }, 'x'); return true; })());
+    const navigations = lobbyText.match(/window\.location\.assign\(new URL\((?:'\.\/' \+ rejoinQuery|address)/g) || [];
+    const vouches = lobbyText.match(/vouchName\(window, [^)]*\);\n\s*window\.location\.assign\(new URL\((?:'\.\/' \+ rejoinQuery|address)/g) || [];
+    check('the three places that take this tab from the front page to a game with a name in its address each vouch for it first (a click needs a browser: this is read from the page)', navigations.length === 3 && vouches.length === 3, navigations.length + ' ' + vouches.length);
+}
+
 // The seat in the address (the review's L2): the game tells the page the seat that the room gave this window, and the address carries it, so that a reload of this window takes its own seat and its key
 const SEATS = [
     ['a link with no seat gets it, at the end', '?join=/ws&room=ABC', 0, '?join=/ws&room=ABC&seat=0'],
@@ -282,8 +322,8 @@ for (const [label, search, seat, want] of SEATS) same('withSeat: ' + label + ' (
 for (const seat of [4, -1, 255, 1.5, NaN, '1', null, undefined]) same('withSeat: ' + String(seat) + ' is no seat of a player: the address is as it was', P.withSeat('?join=/ws&room=ABC', seat), '?join=/ws&room=ABC');
 {
     const doc = { getElementById() { return { setAttribute() {}, classList: { add() {} } }; }, querySelectorAll() { return []; }, body: { classList: { add() {} }, style: { setProperty() {} } } };
-    const pageAt = (search, throws) => {
-        const win = { location: { search, protocol: 'http:', host: 'h', pathname: '/play', hash: '#x' }, localStorage: null, urls: [] };
+    const pageAt = (search, throws, vouchedName = 'Bob') => {
+        const win = { location: { search, protocol: 'http:', host: 'h', pathname: '/play', hash: '#x' }, localStorage: null, urls: [], sessionStorage: { getItem: () => vouchedName, removeItem() {} } };       // (the front page of this tab vouched for the name "Bob", or for what the test says)
         win.history = {
             replaceState(state, title, url) {
                 if (throws) throw new Error('refused');
@@ -303,6 +343,10 @@ for (const seat of [4, -1, 255, 1.5, NaN, '1', null, undefined]) same('withSeat:
     same('... told the same seat again, it leaves the address alone', told.urls.length, 1);
     told.antsSeatKnown(2);
     same('... another seat replaces it', told.urls[1], '/play?join=/ws&room=ABC&name=Bob&seat=2#x');
+    const stranger = pageAt('?join=/ws&room=ABC&seat=1&name=Mallory', false);
+    same('a link of somebody else that carries a name is brought back without it as the page starts, so that the page asks (the front page of this tab vouched for another name)', stranger.urls, ['/play?join=/ws&room=ABC&seat=1#x']);
+    same('... and a link that the front page of this tab made is left as it is', pageAt('?join=/ws&room=ABC&seat=1&name=Mallory', false, 'Mallory').urls, []);
+    same('... and so is a link with no name', pageAt('?join=/ws&room=ABC', false, null).urls, []);
     const local = pageAt('?map=TINY.LVL&bots=easy', false);
     local.antsSeatKnown(0);
     same('a game on this computer leaves its address alone', local.urls, []);

@@ -144,10 +144,10 @@ def parse_dockerfile(text):
 
 
 def emscripten_version(steps):
-    """The Emscripten version of the Dockerfile's `FROM emscripten/emsdk:X.Y.Z`."""
+    """The Emscripten version of the Dockerfile's `FROM emscripten/emsdk:X.Y.Z` (the image is also pinned by a digest: `emscripten/emsdk:X.Y.Z@sha256:...`)."""
     for step in steps:
         if step.op == "FROM":
-            match = re.fullmatch(r"emscripten/emsdk:(\d+\.\d+\.\d+)", step.words[0] if step.words else "")
+            match = re.fullmatch(r"emscripten/emsdk:(\d+\.\d+\.\d+)(?:@sha256:[0-9a-f]{64})?", step.words[0] if step.words else "")
             if match:
                 return match.group(1)
     raise ToolError("no stage of the Dockerfile is `FROM emscripten/emsdk:X.Y.Z`: this tool does not know how to get its compiler")

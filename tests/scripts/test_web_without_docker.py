@@ -92,7 +92,7 @@ class TheDockerfileIsRead(unittest.TestCase):
         self.assertTrue(all(s.text.strip() for s in self.steps))
 
     def test_the_emscripten_version_is_the_one_of_the_from_line(self):
-        self.assertEqual(wd.emscripten_version(self.steps), re.search(r"^FROM emscripten/emsdk:(\S+) AS emsdk-warm", self.text, re.M).group(1))
+        self.assertEqual(wd.emscripten_version(self.steps), re.search(r"^FROM emscripten/emsdk:([0-9.]+)(?:@\S+)? AS emsdk-warm", self.text, re.M).group(1))
 
     def test_a_dockerfile_without_the_emsdk_image_is_an_error(self):
         with self.assertRaises(wd.ToolError):

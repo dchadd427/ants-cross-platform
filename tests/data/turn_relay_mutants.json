@@ -126,6 +126,34 @@
    "old": "\"--listening-port=$port\"",
    "new": "\"--listening-port=3478\"",
    "test": "python3 -I tests/scripts/test_turn_relay.py"
+  },
+  {
+   "id": "secret_is_on_the_command_line_again",
+   "file": "docker/turn-entrypoint.sh",
+   "old": "exec /usr/local/bin/docker-entrypoint.sh -c \"$conf\" \"$@\"",
+   "new": "exec /usr/local/bin/docker-entrypoint.sh -c \"$conf\" \"--static-auth-secret=$ANTS_TURN_SECRET\" \"$@\"",
+   "test": "python3 -I tests/scripts/test_turn_relay.py"
+  },
+  {
+   "id": "secret_file_is_readable_by_everybody",
+   "file": "docker/turn-entrypoint.sh",
+   "old": "( umask 077 && rm -f",
+   "new": "( rm -f",
+   "test": "python3 -I tests/scripts/test_turn_relay.py"
+  },
+  {
+   "id": "secret_file_keeps_the_permissions_of_an_old_one",
+   "file": "docker/turn-entrypoint.sh",
+   "old": "&& rm -f \"$conf\" && cat",
+   "new": "&& cat",
+   "test": "python3 -I tests/scripts/test_turn_relay.py"
+  },
+  {
+   "id": "secret_with_a_line_break_is_taken",
+   "file": "docker/turn-entrypoint.sh",
+   "old": "    *[[:space:]]*) echo",
+   "new": "    *[[:space:]]X*) echo",
+   "test": "python3 -I tests/scripts/test_turn_relay.py"
   }
  ]
 }

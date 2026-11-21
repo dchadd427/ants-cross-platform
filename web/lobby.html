@@ -271,6 +271,11 @@
         // isShape(text) says whether a text names one (an address, a remembered value), aspectQuery(shape) is the `&aspect=` part of a hand-off to the game (only a pick goes in it: see `pickedShape` below).
         function isShape(text) { return AntsShapes.parse(text) !== null; }
         function aspectQuery(shape) { return isShape(shape) ? '&aspect=' + shape : ''; }
+        // VOUCH_BEGIN (tests/scripts/web_name_check.js runs this block)
+        // The game page believes the `name` of an address only when this tab's front page vouches for it: the name is kept in this tab's storage just before the tab is taken to the game page, which takes it out once
+        // (web/shell.html, ANTS_PAGE.vouched). A link that somebody else wrote has no such entry, so its name is not the game's and the page asks for one, as for any shared link.
+        function vouchName(win, name) { try { win.sessionStorage.setItem('ants.joinas', String(name)); } catch (e) { /* no storage: the game page asks for the name */ } }
+        // VOUCH_END
         // SHAPES_END
         // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
         // THE PLAYER'S NAME is not typed on the web: a person who is logged in with Discord plays under the login's name, anybody else under a guest name (front/player_name.js). The game takes printable ASCII only, the blanks at
@@ -383,6 +388,7 @@
         }
         $('rejoin-go').addEventListener('click', function () {
             if (!rejoinOffered) return;
+            vouchName(window, '');
             window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, '', pickedShape), window.location.href).href);
         });
         window.addEventListener('storage', function () { showRejoin(); });
@@ -737,6 +743,7 @@
             try { window.localStorage.setItem(entry.name, entry.text); } catch (e) { /* the key is not kept: the game page can take the seat for this load only, and a reload of it cannot take the seat back */ }
             var seat = client.seat, code = client.code, name = client.name;
             forgetSession(); leaveBack();              // (Back from the match makes a room again: this one is the match's now)
+            vouchName(window, name);
             window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, pickedShape), window.location.href).href);
         }
         function stalled(words) {                     // Home's 15 s are up and the hand-off is still here (and again when a minute is up, with other words): this page's room is frozen (a page on its way takes no message) and its seat may still be the game's, so say it, with the Reload that gets the seat back ("Rejoin it")
@@ -930,6 +937,7 @@
         function startAlone() {
             var address = soloAddress(model, client.name, pickedShape); if (!address) { say('This map cannot be played alone: the game does not take its file name. Choose another map.'); return; }
             handing = true; client.leave(); forgetSession();
+            vouchName(window, client.name || 'Player');
             window.location.assign(new URL(address, window.location.href).href);
         }
 
