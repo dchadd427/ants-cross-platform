@@ -205,18 +205,16 @@ def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
                 scale=xf.scale,
             )
 
-    # Enlarge & widen BOTH tusks cleanly (~1.30x wider than old 0.88x, ~1.15x fuller Y/Z)
-    # so bold chunky lobster-claw mandibles frame Worker's lower cheeks right beneath his eyes (`ORIG agst301`).
+    # Keep both crusher mandibles close together around center (~1.00x X offset) while preserving
+    # chunky fullness (`1.12x X, 1.12x Y, 1.10x Z`) so Worker inherits `@core`'s close-set `#1` claws cleanly!
     if "mandibles" in scene.nodes:
         new_mands = []
         for p in scene.get_node("mandibles"):
             cx = float(p.positions[:, 0].mean())
-            side = 1.0 if cx >= 0.0 else -1.0
-            # Widen each individual tusk around its own X center (+28% wider vs 0.88x) & nudge subtly lower/outward.
             part = (
                 p.translate(-cx, 0.0, 0.0)
-                .scale(1.22, 1.15, 1.14)
-                .translate(cx * 1.08 + side * 0.004, -0.004, 0.004)
+                .scale(1.12, 1.12, 1.10)
+                .translate(cx, -0.004, 0.004)
             )
             new_mands.append(part)
         scene.nodes["mandibles"] = new_mands
