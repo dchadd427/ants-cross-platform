@@ -83,7 +83,7 @@ class TheText(unittest.TestCase):
     def test_the_type_is_from_the_extension_and_the_headers_are_the_ones_that_make_a_file_run_nothing(self):
         self.assertIn("types { image/jpeg jpg; image/png png; image/gif gif; }", FILES)
         for header in ('Content-Security-Policy "default-src \'none\'; sandbox" always', 'Cross-Origin-Resource-Policy "same-origin" always', 'Referrer-Policy "no-referrer" always',
-                       'X-Content-Type-Options "nosniff" always', 'Cache-Control "private, max-age=3600"'):
+                       'X-Content-Type-Options "nosniff" always', 'Cache-Control "private, no-cache"'):
             self.assertIn("add_header %s;" % header, FILES, header)
         self.assertNotIn("public", FILES)
         for name in SECURITY:                                            # (a location that sets a header does not inherit the server's: its four are repeated)
@@ -235,7 +235,7 @@ class TheFilesRun(unittest.TestCase):
             r = self.nginx.ask("GET", path)
             self.assertEqual((r.status, r.body), (200, body), path)
             wanted = {"content-type": kind, "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; sandbox", "cross-origin-resource-policy": "same-origin",
-                      "referrer-policy": "no-referrer", "cache-control": "private, max-age=3600", "cross-origin-opener-policy": "same-origin", "cross-origin-embedder-policy": "require-corp",
+                      "referrer-policy": "no-referrer", "cache-control": "private, no-cache", "cross-origin-opener-policy": "same-origin", "cross-origin-embedder-policy": "require-corp",
                       "strict-transport-security": "max-age=604800"}
             for name, value in wanted.items():
                 self.assertEqual(names(r, name), [value], "%s %s" % (path, name))
