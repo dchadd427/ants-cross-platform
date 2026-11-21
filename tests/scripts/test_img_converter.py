@@ -12,7 +12,9 @@ Every picture here is made by the test (a made-up location, a made-up camera); n
 import http.client
 import io
 import json
+import multiprocessing
 import os
+import random
 import struct
 import sys
 import threading
@@ -238,6 +240,17 @@ class TheCaps(unittest.TestCase):
         im = Image.open(io.BytesIO(r.full))
         self.assertEqual(im.size, (r.w, r.h))
 
+    def test_a_drawing_that_is_too_big_as_a_png_is_not_kept_as_one(self):
+        """Few colors make a PNG the choice, but 200 colors in no order do not compress: the file that is kept is never over 1.5 MiB, whatever its type."""
+        size = (1800, 1800)
+        pixels = random.Random(5).randbytes(size[0] * size[1]).translate(bytes(i % 200 for i in range(256)))
+        drawing = Image.frombytes("P", size, pixels)
+        drawing.putpalette([c for i in range(200) for c in (i, 255 - i, (i * 7) % 256)])
+        data = save(drawing, "PNG")
+        self.assertGreater(len(data), 1_572_864, "the test's own picture is a PNG that is too big")
+        r = convert.convert(data)
+        self.assertLessEqual(len(r.full), 1_572_864)
+
     def test_the_thumbnail_is_a_jpeg_of_360_on_its_longer_side_and_the_image_is_not_made_larger(self):
         r = convert.convert(save(gradient((700, 300)), "PNG"))
         self.assertEqual(Image.open(io.BytesIO(r.thumb)).format, "JPEG")
@@ -401,6 +414,7 @@ class TheServer(unittest.TestCase):
             started = time.monotonic()
             self.assertEqual(server.run_child(b"x", wall=0.5), ("error", "bad"))
             self.assertLess(time.monotonic() - started, 5)
+            self.assertEqual(multiprocessing.active_children(), [], "the child that did not finish is gone when the call is over")
             convert.convert = lambda data: os._exit(3)
             self.assertEqual(server.run_child(b"x"), ("error", "bad"))
         finally:
