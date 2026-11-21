@@ -59,8 +59,8 @@ class TheMarkupAndTheStyle(unittest.TestCase):
         self.assertIn("[hidden] { display: none !important; }", self.style)                # (the strip is a flex row: this rule is what hides it)
         self.assertRegex(self.style, r"\.rejoin \{ display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 0 0 14px;")       # (a row that wraps: on a phone the button goes under the sentence)
         self.assertIn(".rejoin span { flex: 1 1 220px; }", self.style)                     # (the sentence takes the row and the button stays beside it)
-        lobby_grid = re.search(r"\.grid \{[^}]*\}", self.style).group(0)
-        self.assertNotIn("rejoin", lobby_grid)                                             # (it is not a cell of the lobby's grid, whose columns stay as they were)
+        room_style = read("web", "home", "room.css")
+        self.assertNotIn("rejoin", room_style)                                             # (it is no cell of the room's panel, whose rows and columns stay as they were)
 
     def test_it_is_the_pages_button_in_a_gold_frame_with_the_pages_focus_outline(self):
         self.assertIn(":focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }", self.style)       # (the outline of every control of the page: the Rejoin button is one)

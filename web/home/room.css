@@ -39,7 +39,7 @@ body[data-screen="room"] .hbar .hmine .mine[aria-pressed="true"] { color: var(--
 .leave:hover { background-color: #b5222c; }
 .r-link { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; margin-top: 4px; }
 .invite { display: flex; gap: 10px; flex: 0 1 470px; min-width: 260px; }
-.invite input { appearance: none; min-height: 42px; padding: 6px 12px; font-size: 15px; flex: 1 1 auto; min-width: 0; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+.invite input { appearance: none; min-height: 42px; padding: 6px 12px; font-size: 15px; text-overflow: ellipsis; flex: 1 1 auto; min-width: 0; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
 .invite .btn { min-height: 44px; padding: 6px 14px; font-size: 16px; }
 .share { display: none; }
 .r-notes { flex: 1 1 260px; min-width: 0; display: grid; gap: 2px; align-content: center; }

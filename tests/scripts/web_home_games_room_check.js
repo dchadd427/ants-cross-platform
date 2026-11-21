@@ -87,6 +87,7 @@ const OTHERS = ['Maya', 'Sage'];
     myRoom(narrow, ['Maya']);
     const orderNarrow = narrow.root.children.map((c) => c.id || classes(c)[0]);
     check('the line of the switch is the first of the notes beside the link (#r-notes), on a wide window and on a phone alike', [wide, narrow].every((e) => noteOf(e).parent === e.$('r-notes') && e.$('r-notes').children[0] === noteOf(e)));
+    check('the switch is in the heading line (the one that holds the room\'s name), not among the notes, on a wide window and on a phone alike', [wide, narrow].every((e) => { const h = e.$('room-h'); return visOf(e).parent === (h.parent.parent || h.parent) && visOf(e).parent !== e.$('r-notes'); }));
     check('(there is one switch, one chip and one line, however often the window is laid out again)', [orderWide, orderNarrow].every((o) => o.filter((n) => n === 'vis').length === 1 && o.filter((n) => n === 'vistag').length === 1) && [wide, narrow].every((e) => e.$('r-notes').children.filter((c) => classes(c).indexOf('visnote') !== -1).length === 1));
 }
 {   // the words: the setting is called "Invite only" (the maintainer's word), and nothing that a person reads about it says "link only" or "private" (web_home_games_check.js holds the same rule for the Games list)
