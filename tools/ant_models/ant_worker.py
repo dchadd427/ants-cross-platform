@@ -27,27 +27,27 @@ except ImportError:
 
 
 def _add_carapace_details(scene: SceneBuilder, anchors: dict) -> None:
-    """Subtle smooth organic chitin accents fitted flush onto the petite slim base thorax."""
-    # Petite curved breastplate crest hugging the slim chest carapace (`z_max ~ 0.096`).
+    """Subtle smooth organic chitin accents fitted flush onto Worker's slimmer 0.80x thorax."""
+    # Petite curved breastplate crest hugging the slimmer chest carapace (`z_max ~ 0.076`).
     crest = (
-        superellipsoid(0.042, 0.048, 0.018, e1=0.80, e2=0.84, u_segs=16, v_segs=12, name="chest_crest", material="chitin_team")
+        superellipsoid(0.034, 0.046, 0.015, e1=0.80, e2=0.84, u_segs=16, v_segs=12, name="chest_crest", material="chitin_team")
         .rotate_xyz(rx=0.10)
-        .translate(0.0, 0.402, 0.080)
+        .translate(0.0, 0.402, 0.062)
     )
-    # Sleek dorsal pronotum ridge sitting flush atop the slim rear dorsal carapace (`z_min ~ -0.096`).
+    # Sleek dorsal pronotum ridge sitting flush atop the slimmer rear dorsal carapace (`z_min ~ -0.078`).
     ridge = (
-        superellipsoid(0.036, 0.024, 0.034, e1=0.80, e2=0.84, u_segs=16, v_segs=10, name="dorsal_ridge", material="chitin_team")
+        superellipsoid(0.029, 0.022, 0.028, e1=0.80, e2=0.84, u_segs=16, v_segs=10, name="dorsal_ridge", material="chitin_team")
         .rotate_xyz(rx=-0.16)
-        .translate(0.0, 0.432, -0.072)
+        .translate(0.0, 0.432, -0.058)
     )
     scene.add("worker_carapace", [crest, ridge])
 
-    # Subtle curved team-colored shoulder fairings anchored dynamically onto the narrow shoulders.
+    # Subtle curved team-colored shoulder fairings anchored cleanly onto the slimmer shoulders.
     sh_l = anchors["shoulder_left"]
     cap = (
-        superellipsoid(0.024, 0.018, 0.022, e1=0.80, e2=0.84, u_segs=14, v_segs=10, name="shoulder_cap", material="chitin_team")
+        superellipsoid(0.020, 0.016, 0.019, e1=0.80, e2=0.84, u_segs=14, v_segs=10, name="shoulder_cap", material="chitin_team")
         .rotate_xyz(rz=-0.34)
-        .translate(sh_l[0], sh_l[1] + 0.008, sh_l[2])
+        .translate(sh_l[0] * 0.82, sh_l[1] + 0.006, sh_l[2] * 0.82)
     )
     scene.add_mirrored("worker_carapace", cap)
 
@@ -56,34 +56,112 @@ def _add_carapace_details(scene: SceneBuilder, anchors: dict) -> None:
     scene.attach_world_node("worker_carapace", "upper_body", preserve_world_pose=False)
 
 
+def _slim_worker_torso_and_tail(scene: SceneBuilder, anchors: dict) -> None:
+    """Slim Worker's thorax (~0.80x X/Z) and pointed gaster (~0.76x radial thickness) to match
+    `ORIG agst901`/`agst301`'s slender torso & tapered tail while keeping neck, petiole, arms,
+    and all 4 leg hip roots seamlessly embedded with zero gaps!
+    """
+    tc = np.asarray(anchors["thorax_center"], dtype=np.float64)
+    # 1. Slim thorax shell parts cleanly around `thorax_center` (keeping neck_joint & petiole seamless).
+    slim_names = {"thorax_core", "chest_plate", "dorsal_plate", "thorax_seam"}
+    new_body = []
+    for p in scene.get_node("body"):
+        if p.name in slim_names:
+            new_body.append(
+                p.translate(-tc[0], -tc[1], -tc[2])
+                .scale(0.80, 1.0, 0.80)
+                .translate(tc[0], tc[1], tc[2])
+            )
+        elif p.name == "neck_collar":
+            new_body.append(
+                p.translate(-tc[0], -tc[1], -tc[2])
+                .scale(0.88, 1.0, 0.88)
+                .translate(tc[0], tc[1], tc[2])
+            )
+        else:
+            new_body.append(p)
+    scene.nodes["body"] = new_body
+
+    # Tuck shoulder arm pivots gently inward (-12 mm X) so upper arms emerge flush from slimmer thorax.
+    for arm_node, sign in (("arm_left", +1.0), ("arm_right", -1.0)):
+        xf = scene.get_node_transform(arm_node)
+        if xf is not None:
+            tx, ty, tz = xf.translation
+            scene.set_node_transform(
+                arm_node,
+                translation=(tx - sign * 0.012, ty, tz),
+                rotation=xf.rotation,
+                scale=xf.scale,
+            )
+
+    # 2. Slim gaster radially (~0.76x cross-section) around its tilted axis from the petiole hinge,
+    #    keeping full pointed length & seamless petiole junction (`agst901`).
+    gp = (0.0, 0.278, -0.112)
+    g_tilt = -0.24
+    if "gaster" in scene.nodes:
+        scene.nodes["gaster"] = [
+            p.translate(-gp[0], -gp[1], -gp[2])
+            .rotate_xyz(rx=-g_tilt)
+            .scale(0.76, 0.76, 1.00)
+            .rotate_xyz(rx=g_tilt)
+            .translate(gp[0], gp[1], gp[2])
+            for p in scene.get_node("gaster")
+        ]
+
+
 def _smoothstep(edge0: float, edge1: float, val: np.ndarray) -> np.ndarray:
     t = np.clip((val - edge0) / (edge1 - edge0), 0.0, 1.0)
     return t * t * (3.0 - 2.0 * t)
 
 
-def _lift_worker_rear_crown(scene: SceneBuilder, anchors: dict) -> None:
-    """Smoothly lift Worker's upper-rear occipital crown (+0.036 Y, -0.014 Z) while leaving
-    the front forehead, brows, eyes, and Blink eyelids at their exact original height (`agst901`).
+def _sculpt_worker_head_profile(scene: SceneBuilder, anchors: dict) -> None:
+    """Refine Worker's side profile (`agst901`): slim front-to-back cranium depth (~0.86x Z)
+    while keeping eyes, concentric Blink eyelids, and mandibles flush-seated on the face,
+    and smoothly lifting the upper-rear occipital crown (+0.036 Y, -0.012 Z).
     """
     hc = np.asarray(anchors["head_center"], dtype=np.float64)
     nc = np.asarray(anchors["neck_center"], dtype=np.float64)
+    z_scale = 0.86
+    face_dz = -0.022  # keeps front facial features flush on the 0.86x compressed cranium face
 
-    def _deform_crown(pos: np.ndarray) -> np.ndarray:
+    def _deform_head(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
         ry = p[:, 1] - hc[1]
         rz = p[:, 2] - hc[2]
+        # 1. Slimmer front-to-back head depth (`agst901` ~16 px deep vs 18.6 px raw).
+        p[:, 2] = hc[2] + z_scale * rz
+        # 2. Smoothly lift upper-rear occipital crown while leaving front forehead/brows untouched.
         up_w = _smoothstep(-0.015, 0.145, ry)
-        rear_w = _smoothstep(0.060, -0.105, rz)
+        rear_w = _smoothstep(0.055, -0.105, rz)
         w = up_w * rear_w
         p[:, 1] += 0.036 * w
-        p[:, 2] -= 0.014 * w
+        p[:, 2] -= 0.012 * w
         return p
 
     head_parts = scene.get_node("head")
-    scene.nodes["head"] = [
-        p.deform(_deform_crown) if p.name == "cranium" else p
-        for p in head_parts
-    ]
+    new_head = []
+    for p in head_parts:
+        if p.name == "cranium":
+            new_head.append(p.deform(_deform_head))
+        elif p.name == "mouth_cleft":
+            new_head.append(p.translate(0.0, 0.0, face_dz))
+        else:
+            new_head.append(p)
+    scene.nodes["head"] = new_head
+
+    # Shift eyes, concentric Blink eyelid pivots, and mandibles cleanly backward to sit flush!
+    if "eyes" in scene.nodes:
+        scene.nodes["eyes"] = [p.translate(0.0, 0.0, face_dz) for p in scene.get_node("eyes")]
+    for node_name in ("eyelid_left", "eyelid_right", "mandibles"):
+        xf = scene.get_node_transform(node_name)
+        if xf is not None:
+            tx, ty, tz = xf.translation
+            scene.set_node_transform(
+                node_name,
+                translation=(tx, ty, tz + face_dz),
+                rotation=xf.rotation,
+                scale=xf.scale,
+            )
 
     # Nudge both antenna sockets by the exact local crown delta so sockets stay flush-embedded.
     for ant_node in ("antenna_left", "antenna_right"):
@@ -92,7 +170,7 @@ def _lift_worker_rear_crown(scene: SceneBuilder, anchors: dict) -> None:
             continue
         base_canon = np.asarray(xf.translation, dtype=np.float64) + nc
         sample = np.array([[base_canon[0], hc[1] + 0.185, base_canon[2]]], dtype=np.float64)
-        delta = _deform_crown(sample)[0] - sample[0]
+        delta = _deform_head(sample)[0] - sample[0]
         tx, ty, tz = xf.translation
         scene.set_node_transform(
             ant_node,
@@ -107,8 +185,8 @@ def build_worker(blink: float = 0.0) -> SceneBuilder:
     scene, anchors = build_base_ant(
         scene_name="ant_worker",
         include_brows=False,
-        brow_style="curious",
-        head_pitch_deg=-18.0,
+        brow_style="none",
+        head_pitch_deg=-26.0,
         head_tilt_deg=4.5,
         head_yaw_deg=-3.5,
         eye_look=(0.06, 0.05),
@@ -123,7 +201,8 @@ def build_worker(blink: float = 0.0) -> SceneBuilder:
         right_arm_pose="idle",
         blink=blink,
     )
-    _lift_worker_rear_crown(scene, anchors)
+    _sculpt_worker_head_profile(scene, anchors)
+    _slim_worker_torso_and_tail(scene, anchors)
     _add_carapace_details(scene, anchors)
     scene.ground_to_y(0.0)
     return scene

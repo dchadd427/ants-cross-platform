@@ -581,28 +581,56 @@ def _build_unified_domino_mask(
         dirs[i] = d
         r_raw[i] = caster.radius(d)
 
-    # Light taut cloth bridging (2 passes) so the fitted mask hugs & reveals the sleeker skull contours!
+    # Taut tied-cloth bridging (8 passes) so the fabric spans naturally across brow/cheek/temple
+    # hollows like real woven cloth instead of vacuum-suctioning into every cranium dimple!
     adj: List[List[int]] = [[] for _ in range(n_surf)]
     for a, b, c in surf_tris:
         adj[a].extend((b, c))
         adj[b].extend((a, c))
         adj[c].extend((a, b))
     r_bridged = r_raw.copy()
-    for _ in range(2):
+    for _ in range(8):
         nxt = r_bridged.copy()
         for i in range(n_surf):
             if adj[i]:
-                nxt[i] = max(r_raw[i] + 0.0012, 0.65 * r_bridged[i] + 0.35 * float(np.mean(r_bridged[adj[i]])))
+                nxt[i] = max(r_raw[i] + 0.0038, 0.55 * r_bridged[i] + 0.45 * float(np.mean(r_bridged[adj[i]])))
         r_bridged = nxt
 
+    # Build proud folded tied-cloth shell (`0.012-0.017` stand-off) with crisp hemmed top/bottom rims
+    # flaring subtly off the skull and 3 gathered fabric tension folds pinching into the +X side knot!
+    theta_knot = math.radians(100.0)
     pos_out = np.zeros((n_surf, 3), dtype=np.float64)
     pos_in = np.zeros((n_surf, 3), dtype=np.float64)
+    fold_shade = np.zeros(n_surf, dtype=np.float64)
     for i, (u, v) in enumerate(uv_list):
-        edge_w = max(0.0, min(1.0, is_boundary_hint[i])) ** 0.55
-        fold = 0.0014 * math.sin(v * 14.0 + 0.6 * math.cos(u)) * edge_w
-        thick = 0.0062 + 0.0040 * edge_w + fold
-        pos_out[i] = hc + dirs[i] * (r_bridged[i] + thick)
-        pos_in[i] = hc + dirs[i] * (r_bridged[i] - 0.0065)
+        vb, vt = _mask_v_limits(u)
+        v_norm = max(0.0, min(1.0, (v - vb) / max(1e-5, vt - vb)))
+        # Detect top/bottom outer bandana hems (separate from inner eye cutout boundaries!).
+        hem_dist = min(v_norm, 1.0 - v_norm)
+        outer_hem = max(0.0, 1.0 - hem_dist / 0.14)
+        # Subtle outward cloth-hem lift & rolled folded border so top/bottom edges cast real shadow!
+        hem_bead = 0.0034 * math.sin(min(1.0, hem_dist / 0.14) * 0.5 * math.pi) * outer_hem
+        hem_flare = 0.0040 * (outer_hem ** 1.6)
+        # Keep eye cutout openings neatly trimmed (`is_boundary_hint == 0` while away from outer hems).
+        eye_rim_w = 1.0 - max(0.0, min(1.0, is_boundary_hint[i])) if hem_dist > 0.12 else 0.0
+
+        # 3 soft gathered horizontal tension folds wrapping around the temples & pinching into +X knot.
+        du_knot = math.atan2(math.sin(u - theta_knot), math.cos(u - theta_knot))
+        knot_prox = 0.42 + 0.58 * math.exp(-((du_knot / 0.95) ** 2))
+        bridge_calm = 1.0 - 0.55 * math.exp(-((u / 0.34) ** 2))
+        # Subtle cinch pulling the vertical tension lines gently toward the side knot center!
+        v_cinch = v_norm + 0.12 * (0.5 - v_norm) * math.exp(-((du_knot / 0.50) ** 2))
+        wave1 = math.sin(v_cinch * 3.0 * math.pi + 0.50 * math.sin(u - theta_knot))
+        wave2 = math.cos(v_cinch * 5.0 * math.pi - 0.35 * u)
+        fold_amp = (0.0038 * wave1 + 0.0017 * wave2) * knot_prox * bridge_calm * (1.0 - 0.65 * eye_rim_w)
+        fold_shade[i] = (0.65 * wave1 + 0.35 * wave2) * knot_prox * bridge_calm - 0.45 * outer_hem
+
+        base_standoff = 0.0128 - 0.0024 * eye_rim_w
+        thick_out = base_standoff + hem_bead + hem_flare + fold_amp
+        # Inner surface hugs just inside/at the skull (`+0.0015` under outer hems -> real cloth edge shadow!).
+        in_offset = -0.0038 + 0.0050 * outer_hem
+        pos_out[i] = hc + dirs[i] * (r_bridged[i] + thick_out)
+        pos_in[i] = hc + dirs[i] * (r_bridged[i] + in_offset)
 
     # Guarantee EVERY single outer-surface triangle faces strictly outward along +dirs.
     t_arr = np.asarray(surf_tris, dtype=np.int32)
@@ -613,7 +641,7 @@ def _build_unified_domino_mask(
         t_arr[flipped] = t_arr[flipped][:, [0, 2, 1]]
 
     # Automatically discover ALL open boundary half-edges (top hem, bottom hem, left/right eye cutouts)
-    # and seal them with a soft rounded bevel mid-ring into one 100% watertight solid cloth shell!
+    # and seal them with a crisp folded cloth bevel mid-ring into one 100% watertight solid cloth shell!
     edge_counts: Dict[Tuple[int, int], int] = {}
     dir_edges: List[Tuple[int, int]] = []
     for a, b, c in t_arr:
@@ -623,14 +651,15 @@ def _build_unified_domino_mask(
             dir_edges.append((e0, e1))
     boundary_edges = [(e0, e1) for e0, e1 in dir_edges if edge_counts[(e0, e1) if e0 < e1 else (e1, e0)] == 1]
 
-    # Build soft rounded bevel ring for every boundary vertex (flush cushion, zero inward eye shrink).
+    # Build crisp folded-fabric edge ring for every boundary vertex (proud cloth hem, zero eye shrink).
     b_verts = sorted({v for e in boundary_edges for v in e})
     mid_idx_map: Dict[int, int] = {}
     mid_pts: List[np.ndarray] = []
+    mid_lums: List[float] = []
     for v_i in b_verts:
         mid_idx_map[v_i] = 2 * n_surf + len(mid_pts)
-        # Crisp tailored cloth bevel midpoint along the mask hems (no puffy donut lip).
-        mid_pts.append(0.56 * pos_out[v_i] + 0.44 * pos_in[v_i] + 0.0010 * dirs[v_i])
+        mid_pts.append(0.58 * pos_out[v_i] + 0.42 * pos_in[v_i] + 0.0022 * dirs[v_i])
+        mid_lums.append(0.84)
 
     all_pos = np.vstack([pos_out, pos_in, np.asarray(mid_pts, dtype=np.float64)]).astype(np.float32)
     all_tris: List[Tuple[int, int, int]] = [(int(a), int(b), int(c)) for a, b, c in t_arr]
@@ -647,6 +676,11 @@ def _build_unified_domino_mask(
 
     indices = np.asarray(all_tris, dtype=np.uint32).reshape(-1)
     mask = MeshPart("bandit_mask", "gear_gold", all_pos, recompute_smooth_normals(all_pos, indices), indices).ensure_outward()
+    # Subtle baked cloth-fold AO shading (warmer shadow in fold valleys & hem edges, sunlit ridges).
+    out_lum = np.clip(0.92 + 0.08 * fold_shade, 0.78, 1.0)
+    in_lum = np.full(n_surf, 0.72, dtype=np.float64)
+    all_lum = np.concatenate([out_lum, in_lum, np.asarray(mid_lums, dtype=np.float64)]).astype(np.float32)
+    mask.colors = np.column_stack([all_lum, all_lum, all_lum]).astype(np.float32)
     scene.add("gear_bandana", mask)
 
 
@@ -724,7 +758,7 @@ def _add_knot_and_tails(scene: SceneBuilder, caster: _CraniumCaster) -> None:
     theta = math.radians(100.0)
     e_b, e_t = _mask_v_limits(theta)
     d = _direction(theta, 0.48 * (e_b + e_t) + 0.01)
-    knot = caster.center + d * (caster.radius(d) + 0.016)
+    knot = caster.center + d * (caster.radius(d) + 0.022)
 
     scene.add(
         "gear_bandana",
@@ -1183,7 +1217,7 @@ def build_thief(blink: float = 0.0, gaze: float = -1.0) -> SceneBuilder:
         include_brows=False,
         include_idle=False,
         brow_style="sneaky",
-        head_pitch_deg=3.0,
+        head_pitch_deg=-16.0,
         head_tilt_deg=-4.5,
         head_yaw_deg=4.0,
         antenna_asymmetry=0.40,
