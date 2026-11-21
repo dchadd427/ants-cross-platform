@@ -13,7 +13,7 @@ from typing import List, Tuple
 import numpy as np
 
 try:
-    from .base_ant import build_base_ant
+    from .base_ant import build_base_ant, sync_leg_flex_to_clip
     from .mesh_core import (
         AnimationChannel,
         AnimationClip,
@@ -22,17 +22,18 @@ try:
         curved_tube,
         cylinder,
         ellipsoid,
+        ensure_outward_winding,
         hemisphere_shell,
         lathe,
         quat_from_euler_xyz,
         quat_mul,
-        rounded_box,
+        recompute_smooth_normals,
         sphere,
         swept_tube,
         torus_arc,
     )
 except ImportError:
-    from base_ant import build_base_ant  # type: ignore
+    from base_ant import build_base_ant, sync_leg_flex_to_clip  # type: ignore
     from mesh_core import (  # type: ignore
         AnimationChannel,
         AnimationClip,
@@ -41,11 +42,12 @@ except ImportError:
         curved_tube,
         cylinder,
         ellipsoid,
+        ensure_outward_winding,
         hemisphere_shell,
         lathe,
         quat_from_euler_xyz,
         quat_mul,
-        rounded_box,
+        recompute_smooth_normals,
         sphere,
         swept_tube,
         torus_arc,
@@ -62,33 +64,104 @@ _FIRE_RIGHT_ARM: List[Tuple[float, float, float]] = [
 ]
 
 
+def _spow_scalar(val: float, exp: float) -> float:
+    return math.copysign(abs(val) ** exp, val)
+
+
+def _subdivided_rounded_box(
+    sx: float,
+    sy: float,
+    sz: float,
+    bevel: float,
+    nx: int,
+    ny: int,
+    nz: int,
+    *,
+    name: str,
+    material: str,
+) -> MeshPart:
+    """Build a watertight subdivided rounded box with dense interior face vertices for smooth curving."""
+    nx, ny, nz = max(2, int(nx)), max(2, int(ny)), max(2, int(nz))
+    hx, hy, hz = 0.5 * float(sx), 0.5 * float(sy), 0.5 * float(sz)
+    r = min(max(1e-4, float(bevel)), 0.45 * min(float(sx), float(sy), float(sz)))
+    core = np.array([hx - r, hy - r, hz - r], dtype=np.float64)
+
+    vert_map: dict = {}
+    grid_pts: List[Tuple[float, float, float]] = []
+
+    def _vid(ix: int, iy: int, iz: int) -> int:
+        key = (ix, iy, iz)
+        idx = vert_map.get(key)
+        if idx is None:
+            idx = len(grid_pts)
+            vert_map[key] = idx
+            grid_pts.append((2.0 * ix / nx - 1.0, 2.0 * iy / ny - 1.0, 2.0 * iz / nz - 1.0))
+        return idx
+
+    tris: List[Tuple[int, int, int]] = []
+    # +Z and -Z faces (subdivided nx x ny)
+    for iz, flip in ((nz, False), (0, True)):
+        for j in range(ny):
+            for i in range(nx):
+                a, b, c, d = _vid(i, j, iz), _vid(i + 1, j, iz), _vid(i + 1, j + 1, iz), _vid(i, j + 1, iz)
+                if flip:
+                    tris.extend([(a, c, b), (a, d, c)])
+                else:
+                    tris.extend([(a, b, c), (a, c, d)])
+    # +X and -X faces (subdivided ny x nz)
+    for ix, flip in ((nx, False), (0, True)):
+        for k in range(nz):
+            for j in range(ny):
+                a, b, c, d = _vid(ix, j, k), _vid(ix, j + 1, k), _vid(ix, j + 1, k + 1), _vid(ix, j, k + 1)
+                if flip:
+                    tris.extend([(a, b, c), (a, c, d)])
+                else:
+                    tris.extend([(a, c, b), (a, d, c)])
+    # +Y and -Y faces (subdivided nx x nz)
+    for iy, flip in ((ny, False), (0, True)):
+        for k in range(nz):
+            for i in range(nx):
+                a, b, c, d = _vid(i, iy, k), _vid(i + 1, iy, k), _vid(i + 1, iy, k + 1), _vid(i, iy, k + 1)
+                if flip:
+                    tris.extend([(a, b, c), (a, c, d)])
+                else:
+                    tris.extend([(a, c, b), (a, d, c)])
+
+    g = np.asarray(grid_pts, dtype=np.float64)
+    q = np.column_stack([g[:, 0] * hx, g[:, 1] * hy, g[:, 2] * hz])
+    clamped = np.clip(q, -core, core)
+    diff = q - clamped
+    dnorm = np.linalg.norm(diff, axis=1, keepdims=True)
+    pos = np.where(dnorm > 1e-10, clamped + r * diff / np.maximum(1e-10, dnorm), q).astype(np.float32)
+    idx_arr = ensure_outward_winding(pos, np.asarray(tris, dtype=np.uint32).reshape(-1))
+    nrm = recompute_smooth_normals(pos, idx_arr)
+    return MeshPart(name, material, pos, nrm, idx_arr)
+
+
 def _brim_radial_and_y(theta: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Compute oversized Option A cowboy-curled wide brim (upturned front wings) + sweeping rear ducktail."""
+    """Compute clean flat horizontal Option A flared firefighter brim + proportionate rear neck-guard."""
     cos_t = np.cos(theta)
     sin_t = np.sin(theta)
     front_w = np.clip(cos_t, 0.0, 1.0) ** 1.35
-    side_w = (sin_t * sin_t) ** 1.15
+    side_w = sin_t * sin_t
     rear_w = (0.5 * (1.0 - cos_t)) ** 1.45
 
-    # Bold oversized wide brim (~1.24x expanse) with classic cowboy-hat upward side curl (afst301),
-    # low front brow shelf sitting right over the eyes, and broad downward-sweeping rear neck guard.
-    x_flare = 0.44 * front_w + 0.56 * side_w + 0.46 * rear_w
-    z_flare = 0.52 * front_w + 0.36 * side_w + 1.18 * rear_w
-    y_shift = -0.012 * front_w + 0.088 * side_w - 0.160 * rear_w
+    # Clean flat horizontal wide front & side firefighter brim (zero cowboy upward curl)
+    # transitioning smoothly into a crisp, proportionate rear neck-guard tucked over the shoulders.
+    x_flare = 0.42 * front_w + 0.42 * side_w + 0.30 * rear_w
+    z_flare = 0.46 * front_w + 0.24 * side_w + 0.44 * rear_w
+    y_shift = -0.014 * front_w - 0.004 * side_w - 0.085 * rear_w
     return x_flare, z_flare, y_shift
 
 
-def _helmet_shell_deform(pos: np.ndarray) -> np.ndarray:
-    """Sculpt Option A rounded yellow plastic dome + cowboy-curled wide brim + sweeping rear ducktail."""
+def _helmet_shell_deform_bounds(pos: np.ndarray, y_min: float, y_max: float) -> np.ndarray:
+    """Apply the exact Option A dome + flat horizontal brim deformation using fixed `(y_min, y_max)`."""
     p = pos.copy()
     x, y, z = p[:, 0], p[:, 1], p[:, 2]
 
-    y_min = float(y.min())
-    y_max = float(y.max())
     h = np.clip((y - y_min) / max(1e-6, y_max - y_min), 0.0, 1.0)
-
-    brim_t = np.clip(1.0 - h / 0.28, 0.0, 1.0)
-    brim = brim_t ** 1.45
+    brim_t = np.clip(1.0 - h / 0.26, 0.0, 1.0)
+    brim = brim_t ** 1.55
 
     theta = np.arctan2(x, z)
     x_flare, z_flare, y_shift = _brim_radial_and_y(theta)
@@ -96,90 +169,105 @@ def _helmet_shell_deform(pos: np.ndarray) -> np.ndarray:
     p[:, 0] = x * (1.0 + brim * x_flare)
     p[:, 2] = z * (1.0 + brim * z_flare)
 
-    # Keep front brim low over the eyes, curl outer left/right brim wings cleanly UPWARD like afst301,
-    # and sweep the rear ducktail generously back-and-down over the neck.
-    sin_t = np.sin(theta)
-    side_w = (sin_t * sin_t) ** 1.15
     rear_w = (0.5 * (1.0 - np.cos(theta))) ** 1.45
-    flatten_lift = 0.040 * (1.0 - 0.45 * rear_w) * (brim_t ** 1.30)
-    edge_mask = np.clip(1.0 - h / 0.09, 0.0, 1.0) ** 1.8
-    lip_curl = (0.008 * np.clip(np.cos(theta), 0.0, 1.0) + 0.028 * side_w) * edge_mask
+    flatten_lift = 0.044 * (1.0 - 0.35 * rear_w) * (brim_t ** 1.35)
+    edge_mask = np.clip(1.0 - h / 0.07, 0.0, 1.0) ** 2.0
+    lip_curl = 0.006 * (0.5 + 0.5 * np.cos(theta)) * edge_mask
     p[:, 1] = y + flatten_lift + brim * y_shift + lip_curl
     return p
+
+
+def _billboard_z_curve(
+    x: np.ndarray,
+    y: np.ndarray,
+    billboard_w: float,
+    billboard_h: float,
+    curve_depth: float,
+) -> np.ndarray:
+    """Shared parametric front-face Z curvature used identically by the billboard and crimson 'A'."""
+    u_y = np.clip((y + 0.5 * billboard_h) / max(1e-6, billboard_h), 0.0, 1.0)
+    nx = x / max(1e-6, 0.5 * billboard_w)
+    return -curve_depth * (nx * nx) - 0.022 * (u_y ** 1.75)
 
 
 def _build_option_a_billboard(
     billboard_w: float,
     billboard_h: float,
+    billboard_depth: float,
     curve_depth: float,
 ) -> MeshPart:
-    """Build Option A's extra-wide, gently-curved vertical yellow plastic front billboard crown face."""
+    """Build Option A's finely-subdivided smooth curved solid yellow plastic front billboard crown face."""
     def _sculpt_billboard(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
-        # u_y: 0.0 at brim base -> 1.0 at gently arched wide top crest.
         u_y = np.clip((p[:, 1] + 0.5 * billboard_h) / max(1e-6, billboard_h), 0.0, 1.0)
-        # Mild trapezoidal taper toward top so the wide front billboard stays bold & broad like afst301.
         taper = 1.0 - 0.14 * (u_y ** 1.35)
         p[:, 0] *= taper
         nx = p[:, 0] / max(1e-6, 0.5 * billboard_w)
-        # Broad gentle arch across the top edge.
         top_mask = np.clip((u_y - 0.52) / 0.48, 0.0, 1.0)
-        p[:, 1] -= 0.022 * (nx * nx) * top_mask
-        # Smooth horizontal wrap AND gentle upper crown sweep back so top/sides melt seamlessly into the dome.
-        p[:, 2] -= curve_depth * (nx * nx) + 0.022 * (u_y ** 1.75)
+        p[:, 1] -= 0.020 * (nx * nx) * top_mask
+        p[:, 2] += _billboard_z_curve(p[:, 0], p[:, 1], billboard_w, billboard_h, curve_depth)
         return p
 
-    return rounded_box(
+    return _subdivided_rounded_box(
         billboard_w,
         billboard_h,
-        0.124,
-        bevel=0.020,
-        segs=5,
+        billboard_depth,
+        bevel=0.018,
+        nx=26,
+        ny=16,
+        nz=6,
         name="helmet_front_billboard",
         material=_HAT_MAT,
     ).deform(_sculpt_billboard)
 
 
-def _build_giant_letter_a(billboard_w: float, billboard_h: float, curve_depth: float) -> List[MeshPart]:
-    """Build a giant, extra-wide, bold sans-serif crimson 'A' curving smoothly onto the yellow billboard.
+def _build_giant_letter_a(
+    billboard_w: float,
+    billboard_h: float,
+    billboard_depth: float,
+    curve_depth: float,
+    *,
+    y_offset: float = -0.014,
+) -> List[MeshPart]:
+    """Build a giant bold sans-serif crimson 'A' embedded flush into the curved yellow billboard front.
 
-    Sits directly on the bright yellow billboard face with ZERO dark backing plaque or shield.
+    Back face embeds 0.006 inside the billboard front surface; front face stands +0.014 proud,
+    conforming identically to `_billboard_z_curve` with ZERO air gap and ZERO backing plaque.
     """
     parts: List[MeshPart] = []
-    thickness = 0.024
-    stroke_w = 0.042
-    leg_len = 0.178
-    tilt_deg = 26.0
+    thickness = 0.020  # [-0.010, +0.010] -> shifted +0.004 => [-0.006 inside, +0.014 proud]
+    front_z = 0.5 * billboard_depth
+    stroke_w = 0.040
+    leg_len = 0.172
+    tilt_deg = 25.0
 
     left_leg = (
-        rounded_box(stroke_w, leg_len, thickness, bevel=0.006, segs=3, name="letter_a_left", material="gear_accent")
+        _subdivided_rounded_box(stroke_w, leg_len, thickness, bevel=0.004, nx=6, ny=12, nz=4, name="letter_a_left", material="gear_accent")
         .rotate_xyz(rz=-tilt_deg, degrees=True)
-        .translate(-0.044, 0.0, 0.0)
+        .translate(-0.041, y_offset, 0.004)
     )
     right_leg = (
-        rounded_box(stroke_w, leg_len, thickness, bevel=0.006, segs=3, name="letter_a_right", material="gear_accent")
+        _subdivided_rounded_box(stroke_w, leg_len, thickness, bevel=0.004, nx=6, ny=12, nz=4, name="letter_a_right", material="gear_accent")
         .rotate_xyz(rz=+tilt_deg, degrees=True)
-        .translate(+0.044, 0.0, 0.0)
+        .translate(+0.041, y_offset, 0.004)
     )
     apex = (
-        rounded_box(0.056, 0.032, thickness, bevel=0.006, segs=2, name="letter_a_apex", material="gear_accent")
-        .translate(0.0, 0.068, 0.0)
+        _subdivided_rounded_box(0.052, 0.032, thickness, bevel=0.004, nx=8, ny=4, nz=4, name="letter_a_apex", material="gear_accent")
+        .translate(0.0, 0.066 + y_offset, 0.004)
     )
     crossbar = (
-        rounded_box(0.132, 0.032, thickness, bevel=0.0055, segs=2, name="letter_a_bar", material="gear_accent")
-        .translate(0.0, -0.022, 0.0)
+        _subdivided_rounded_box(0.126, 0.030, thickness, bevel=0.004, nx=12, ny=4, nz=4, name="letter_a_bar", material="gear_accent")
+        .translate(0.0, -0.022 + y_offset, 0.004)
     )
     raw_parts = [left_leg, right_leg, apex, crossbar]
 
-    def _curve_onto_billboard(pos: np.ndarray) -> np.ndarray:
+    def _conform_to_billboard(pos: np.ndarray) -> np.ndarray:
         p = pos.copy()
-        u_y = np.clip((p[:, 1] - 0.004 + 0.5 * billboard_h) / max(1e-6, billboard_h), 0.0, 1.0)
-        nx = p[:, 0] / max(1e-6, 0.5 * billboard_w)
-        p[:, 2] -= curve_depth * (nx * nx) + 0.022 * (u_y ** 1.75)
+        p[:, 2] += front_z + _billboard_z_curve(p[:, 0], p[:, 1], billboard_w, billboard_h, curve_depth)
         return p
 
     for part in raw_parts:
-        parts.append(part.deform(_curve_onto_billboard))
+        parts.append(part.deform(_conform_to_billboard))
     return parts
 
 
@@ -220,28 +308,37 @@ def _build_fire_helmet(
     orig_hrx, _, orig_hrz = orig_head_radii
     eyelid_top_y = _measure_eyelid_max_y(scene, eye_left, closed_angle)
 
-    # Seat the oversized yellow brim noticeably LOWER down right over the upper rim of his cute eyes
-    # (keeping clean blink clearance!) so the big helmet rests snugly low on Fire's smaller head.
-    shell_y = max(eyelid_top_y - 0.040, head_top[1] - 0.146)
+    # Seat the oversized yellow brim snugly low over the upper rim of his cute eyes while preserving
+    # clean blink clearance (~8+ mm across blink=0..1) on Fire's smaller 0.88x head.
+    shell_y = max(eyelid_top_y - 0.031, head_top[1] - 0.136)
     shell_z = hz - 0.008
     # Keep the helmet dome proudly oversized relative to Fire's smaller 0.88x head (matching afst301..701).
     dome_rx = max(hrx + 0.038, orig_hrx + 0.020)
     dome_ry = max(0.284, (head_top[1] - shell_y) + 0.144)
     dome_rz = max(hrz + 0.038, orig_hrz + 0.022)
 
-    # 1. Smooth sunny-yellow plastic dome + oversized cowboy-curled wide brim + sweeping rear ducktail.
+    # 1. Smooth sunny-yellow plastic dome + clean flat horizontal flared brim + proportionate rear neck-guard.
+    u_segs = 56
+    start_phi = -0.04
+    e_dom = 0.92
+    y_min_raw = dome_ry * _spow_scalar(math.sin(start_phi), e_dom)
+    y_max_raw = dome_ry
+
+    def _deform_dome(pos: np.ndarray) -> np.ndarray:
+        return _helmet_shell_deform_bounds(pos, y_min_raw, y_max_raw)
+
     dome = (
         hemisphere_shell(
             dome_rx,
             dome_ry,
             dome_rz,
             thickness=0.022,
-            start_phi=-0.04,
-            u_segs=56,
+            start_phi=start_phi,
+            u_segs=u_segs,
             v_segs=26,
-            e1=0.92,
-            e2=0.92,
-            deform_fn=_helmet_shell_deform,
+            e1=e_dom,
+            e2=e_dom,
+            deform_fn=_deform_dome,
             name="helmet_dome",
             material=_HAT_MAT,
         )
@@ -249,32 +346,15 @@ def _build_fire_helmet(
     )
     scene.add("fire_helmet", dome)
 
-    # Smooth rolled yellow plastic outer brim edge bead hugging the exact oversized cowboy-curled perimeter.
-    n_lip = 64
-    lip_pts: List[Tuple[float, float, float]] = []
-    start_phi = -0.04
-    c_phi = math.cos(start_phi)
-    s_phi = math.sin(start_phi)
-    y_base = dome_ry * s_phi
-    for i in range(n_lip):
-        ang = (i / n_lip) * 2.0 * math.pi
-        bx = dome_rx * c_phi * math.sin(ang)
-        bz = dome_rz * c_phi * math.cos(ang)
-        xf, zf, ys = _brim_radial_and_y(np.array([ang]))
-        cos_a = math.cos(ang)
-        sin_a = math.sin(ang)
-        sw = (sin_a * sin_a) ** 1.15
-        rw = (0.5 * (1.0 - cos_a)) ** 1.45
-        lift = 0.040 * (1.0 - 0.45 * rw)
-        curl = 0.008 * max(0.0, cos_a) + 0.028 * sw
-        lx = hx + bx * (1.0 + float(xf[0]))
-        ly = shell_y + y_base + lift + float(ys[0]) + curl - 0.003
-        lz = shell_z + bz * (1.0 + float(zf[0]))
-        lip_pts.append((lx, ly, lz))
-
+    # Smooth rolled yellow plastic outer brim edge bead hugging the exact beveled rim of dome
+    # (`p_out[:u_segs]`, `p_in[:u_segs]`, `p_lip` -> surf_max <= 5 mm proud, 0.000 mm drift all 360 deg!).
+    n_out = (len(dome.positions) - u_segs) // 2
+    rim_mid = 0.5 * (dome.positions[:u_segs] + dome.positions[n_out : n_out + u_segs])
+    rim_center = 0.72 * rim_mid + 0.28 * dome.positions[-u_segs:]
+    lip_pts = [(float(pt[0]), float(pt[1]), float(pt[2])) for pt in rim_center]
     brim_lip = swept_tube(
         lip_pts,
-        0.0145,
+        0.0105,
         radial_segs=10,
         closed=True,
         name="helmet_brim_lip",
@@ -282,38 +362,36 @@ def _build_fire_helmet(
     )
     scene.add("fire_helmet", brim_lip)
 
-    # Dark inner head-liner band tucked cleanly inside the oversized shell around Fire's smaller cranium.
+    # Dark inner head-liner band tucked cleanly inside the lower shell around Fire's smaller 0.88x cranium.
     liner = (
         cylinder(hrx * 0.96, hrx * 1.00, 0.036, radial_segs=26, bevel=0.006, axis="y", name="helmet_liner", material="gear_dark")
         .scale(1.0, 1.0, hrz / max(1e-6, hrx))
-        .translate(hx, shell_y + 0.054, hz)
+        .translate(hx, shell_y + 0.064, hz)
     )
     scene.add("fire_helmet", liner)
 
-    # 2. Clean subtle molded ribs along the side & back dome behind the wide front billboard.
+    def _sample_dome_surface(phi: float, theta: float) -> Tuple[float, float, float]:
+        cp = _spow_scalar(math.cos(phi), e_dom)
+        sp = _spow_scalar(math.sin(phi), e_dom)
+        st = _spow_scalar(math.sin(theta), e_dom)
+        ct = _spow_scalar(math.cos(theta), e_dom)
+        raw = np.array([[dome_rx * cp * st, dome_ry * sp, dome_rz * cp * ct]], dtype=np.float64)
+        deformed = _deform_dome(raw)[0]
+        return (hx + float(deformed[0]), shell_y + float(deformed[1]), shell_z + float(deformed[2]))
+
+    # 2. Molded ribs sampled directly ON the exact deformed dome surface (lift=0 -> half-embedded, zero gap!).
     rib_specs = (
-        (180.0, 0.22, 0.019, "back"),
-        (86.0, 0.24, 0.016, "left"),
-        (-86.0, 0.24, 0.016, "right"),
-        (132.0, 0.22, 0.016, "bl"),
-        (-132.0, 0.22, 0.016, "br"),
+        (180.0, 0.24, 0.0155, "back"),
+        (88.0, 0.26, 0.0140, "left"),
+        (-88.0, 0.26, 0.0140, "right"),
+        (134.0, 0.24, 0.0140, "bl"),
+        (-134.0, 0.24, 0.0140, "br"),
     )
     for az_deg, phi_end, peak_rad, tag in rib_specs:
         az = math.radians(az_deg)
-        sa, ca = math.sin(az), math.cos(az)
-        phis = np.linspace(0.5 * math.pi, phi_end, 6)
-        r_pts: List[Tuple[float, float, float]] = []
-        r_rads: List[float] = []
-        for k, phi in enumerate(phis):
-            cp = float(abs(math.cos(phi)) ** 0.92)
-            sp = float(abs(math.sin(phi)) ** 0.92)
-            t_arc = k / (len(phis) - 1)
-            lift = 0.010 * (1.0 - 0.55 * (t_arc * t_arc))
-            px = hx + (dome_rx + lift) * cp * sa
-            py = shell_y + (dome_ry + lift) * sp
-            pz = shell_z + (dome_rz + lift) * cp * ca
-            r_pts.append((px, py, pz))
-            r_rads.append(peak_rad * (0.95 - 0.35 * t_arc))
+        phis = np.linspace(0.49 * math.pi, phi_end, 7)
+        r_pts = [_sample_dome_surface(float(phi), az) for phi in phis]
+        r_rads = [peak_rad * (0.95 - 0.30 * (k / (len(phis) - 1))) for k in range(len(phis))]
         rib = curved_tube(
             r_pts,
             r_rads,
@@ -325,15 +403,20 @@ def _build_fire_helmet(
         )
         scene.add("fire_helmet", rib)
 
-    # Subtle top crown spine ridge running smoothly from the billboard top back into the rear dome.
-    crest_pts = [
-        (hx, shell_y + dome_ry + 0.002, shell_z + dome_rz * 0.45),
-        (hx, shell_y + dome_ry + 0.011, shell_z + 0.010),
-        (hx, shell_y + dome_ry - 0.004, shell_z - dome_rz * 0.42),
+    # Top crown spine ridge sampled directly ON the exact deformed sagittal dome surface (zero floating!).
+    crest_samples = [
+        (0.76, 0.0),
+        (1.06, 0.0),
+        (1.34, 0.0),
+        (0.5 * math.pi, 0.0),
+        (1.30, math.pi),
+        (1.02, math.pi),
+        (0.72, math.pi),
     ]
+    crest_pts = [_sample_dome_surface(phi, az) for phi, az in crest_samples]
     crest = curved_tube(
         crest_pts,
-        [0.018, 0.022, 0.018],
+        [0.012, 0.014, 0.015, 0.0155, 0.015, 0.014, 0.012],
         samples_per_seg=4,
         radial_segs=10,
         cap_rings=2,
@@ -342,28 +425,24 @@ def _build_fire_helmet(
     )
     scene.add("fire_helmet", crest)
 
-    # 3. Option A's extra-wide curved vertical yellow front billboard face + wide giant red 'A' directly on it.
-    billboard_w = dome_rx * 1.72  # Wide iconic afst301 front billboard (~0.380 wide)
-    billboard_h = dome_ry * 0.84  # Tall proud vertical front panel (~0.238 tall)
-    curve_depth = 0.088
+    # 3. Option A's wide subdivided curved yellow front billboard + flush-embedded giant crimson 'A'.
+    billboard_w = dome_rx * 1.66
+    billboard_h = dome_ry * 0.78
+    billboard_depth = 0.104  # Deep solid curved block embedded cleanly into dome without poking under front brow.
+    curve_depth = 0.082
     billboard_tilt_x = -12.0
-    # Seat billboard deep into front dome so rear & top edges merge seamlessly with zero step in 201/901.
-    billboard_pos = (hx, shell_y + 0.148, shell_z + dome_rz - 0.036)
+    billboard_pos = (hx, shell_y + 0.158, shell_z + dome_rz - 0.032)
 
     billboard = (
-        _build_option_a_billboard(billboard_w, billboard_h, curve_depth)
+        _build_option_a_billboard(billboard_w, billboard_h, billboard_depth, curve_depth)
         .rotate_xyz(rx=billboard_tilt_x, degrees=True)
         .translate(*billboard_pos)
     )
     scene.add("fire_helmet", billboard)
 
-    # Giant bold crimson 'A' sitting cleanly and directly on the wide yellow front billboard (zero plaque!).
-    for part in _build_giant_letter_a(billboard_w, billboard_h, curve_depth):
-        placed = (
-            part.translate(0.0, -0.016, 0.058)
-            .rotate_xyz(rx=billboard_tilt_x, degrees=True)
-            .translate(*billboard_pos)
-        )
+    # Giant bold crimson 'A' embedded 0.006 inside the billboard front face & raised +0.014 proud (zero gap!).
+    for part in _build_giant_letter_a(billboard_w, billboard_h, billboard_depth, curve_depth, y_offset=-0.012):
+        placed = part.rotate_xyz(rx=billboard_tilt_x, degrees=True).translate(*billboard_pos)
         scene.add("fire_helmet", placed)
 
 
@@ -519,7 +598,9 @@ def _add_fire_idle(scene: SceneBuilder) -> AnimationClip:
         j_r[-1] = j_r[0]
         channels.append(AnimationChannel("mandibles", "rotation", list(times), j_r))
 
-    return scene.add_animation("Idle", channels, replace=True)
+    clip = scene.add_animation("Idle", channels, replace=True)
+    sync_leg_flex_to_clip(scene, "Idle")
+    return clip
 
 
 def _scale_fire_head(
@@ -592,6 +673,7 @@ def build_fire(blink: float = 0.0, *, hold_magnifying_glass: bool = False) -> Sc
         head_pitch_deg=-15.5,
         eye_look=(0.05, 0.04),
         stance_asymmetry=0.35,
+        leg_style="fire",
         include_idle=False,
         left_arm_pose="idle",
         right_arm_pose=_FIRE_RIGHT_ARM if hold_magnifying_glass else "idle",
