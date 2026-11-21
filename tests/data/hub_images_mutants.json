@@ -15,6 +15,9 @@
   },
   {
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
+  },
+  {
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheUpload.test_the_status_says_how_long_ago_the_newest_image_was_kept_and_nothing_of_who"
   }
  ],
  "mutants": [
@@ -437,6 +440,13 @@
    "old": "        if ($http_sec_fetch_site != \"same-origin\") { return 403; }\n        access_log off;\n        limit_req zone=ants_hub_imgup",
    "new": "        access_log off;\n        limit_req zone=ants_hub_imgup",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_img"
+  },
+  {
+   "id": "the_status_has_no_age_of_the_newest_image",
+   "file": "hub/admindoor.py",
+   "old": "\"last\": None if last is None else max(0, int(store.clock() - last))}",
+   "new": "\"last\": None}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_images_door.TheUpload.test_the_status_says_how_long_ago_the_newest_image_was_kept_and_nothing_of_who"
   }
  ]
 }
